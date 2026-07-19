@@ -689,15 +689,13 @@ describe("useChatFlow stream isolation", () => {
       partialAssistantText: "ABC",
       partialStreamBlocks: [expectedStreamBlock({ reasoning: "R1", text: "ABC" })],
     });
-    expect(refreshMessageById).toHaveBeenCalledTimes(1);
-    expect(refreshMessageById.mock.calls[0]?.[0]).toMatchObject({
-      conversationId: "conversation-1",
-    });
+    expect(refreshMessageById).not.toHaveBeenCalled();
     expect(onReloadMessages).toHaveBeenCalledTimes(0);
     expect(allMessages.value).toHaveLength(2);
     const stoppedAssistant = allMessages.value[1];
     expect(stoppedAssistant.role).toBe("assistant");
-    expect(stoppedAssistant.parts).toEqual([{ type: "text", text: "ABC" }]);
+    expect(stoppedAssistant.parts).toEqual([{ type: "text", text: "" }]);
+    expect(stoppedAssistant.contentBlocks).toEqual([expectedStreamBlock({ reasoning: "R1", text: "ABC" })]);
     expect(stoppedAssistant.providerMeta?._streaming).toBeUndefined();
     expect(projectMessageForDisplay(stoppedAssistant).activityItems.map((item) => item.kind === "tool" ? item.name : item.text)).toEqual([
       "R1",
@@ -791,12 +789,16 @@ describe("useChatFlow stream isolation", () => {
     });
     await flushAsyncSteps();
 
-    const finalMessage = allMessages.value.find((message) => message.id === "a-final");
+    const finalMessage = allMessages.value.find((message) => message.role === "assistant");
     const projection = projectMessageForDisplay(finalMessage as ChatMessage);
-    expect(projection.activityItems).toHaveLength(1);
+    expect(projection.activityItems).toHaveLength(2);
     expect(projection.activityItems[0]).toMatchObject({
       kind: "reasoning",
       text: "先判断用户提到的工具指代。",
+    });
+    expect(projection.activityItems[1]).toMatchObject({
+      kind: "content",
+      text: "不太确定，展开说说？",
     });
     expect(streamBlocks.value).toEqual([]);
     expect(chatting.value).toBe(false);
@@ -895,7 +897,7 @@ describe("useChatFlow stream isolation", () => {
     expect(toolStatusState.value).toBe("running");
 
     const draft = allMessages.value.find((message) => message.role === "assistant" && message.id.startsWith("__draft_assistant__:"));
-    expect((draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks).toEqual([]);
+    expect(draft?.contentBlocks).toEqual([]);
     const projection = projectMessageForDisplay(draft as ChatMessage);
     expect(projection.activityItems).toEqual([]);
 
@@ -986,7 +988,7 @@ describe("useChatFlow stream isolation", () => {
 
     const draft = allMessages.value.find((message) => String(message.id || "").startsWith("__draft_assistant__:"));
     expect(streamBlocks.value).toEqual([expectedStreamBlock({ reasoning: "", text: "A" })]);
-    expect((draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks).toEqual(streamBlocks.value);
+    expect(draft?.contentBlocks).toEqual(streamBlocks.value);
   });
 
   it("keeps current streaming round visible until history_flushed switches to next round", async () => {
@@ -1244,7 +1246,7 @@ describe("useChatFlow stream isolation", () => {
       text: "你好",
     })]);
     const draft = allMessages.value.find((message) => String(message.id || "").startsWith("__draft_assistant__:"));
-    expect((draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks).toEqual(streamBlocks.value);
+    expect(draft?.contentBlocks).toEqual(streamBlocks.value);
     expect(projectMessageForDisplay(draft as ChatMessage).activityItems.map((item) => item.text)).toEqual([
       "正在分析流式块。",
       "你好",
@@ -1319,7 +1321,7 @@ describe("useChatFlow stream isolation", () => {
       text: "",
     })]);
     const draft = allMessages.value.find((message) => String(message.id || "").startsWith("__draft_assistant__:"));
-    expect((draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks).toEqual(streamBlocks.value);
+    expect(draft?.contentBlocks).toEqual(streamBlocks.value);
     expect(projectMessageForDisplay(draft as ChatMessage).activityItems.map((item) => item.text)).toEqual([
       "正在分析不同 activation 的当前通道事件。",
     ]);
@@ -1383,7 +1385,7 @@ describe("useChatFlow stream isolation", () => {
     await flushAsyncSteps();
 
     const draft = allMessages.value.find((message) => String(message.id || "").startsWith("__draft_assistant__:"));
-    expect((draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks).toEqual([expectedStreamBlock({
+    expect(draft?.contentBlocks).toEqual([expectedStreamBlock({
       reasoning: "直接从快照写入草稿。",
       text: "",
     })]);
@@ -1492,8 +1494,8 @@ describe("useChatFlow stream isolation", () => {
     expect(latestAssistantText.value).toBe("等待完成，现在汇报。");
 
     const draft = allMessages.value.find((message) => String(message.id || "").startsWith("__draft_assistant__:"));
-    expect(draft?.parts).toEqual([{ type: "text", text: "等待完成，现在汇报。 [toolcall:tool-1]" }]);
-    expect((draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks).toEqual([expectedStreamBlock({
+    expect(draft?.parts).toEqual([{ type: "text", text: "" }]);
+    expect(draft?.contentBlocks).toEqual([expectedStreamBlock({
       reasoning: "先等一下。",
       text: "等待完成，现在汇报。",
       tools: [{
@@ -1637,7 +1639,7 @@ describe("useChatFlow stream isolation", () => {
     await flushAsyncSteps();
 
     const draft = allMessages.value.find((message) => String(message.id || "").startsWith("__draft_assistant__:"));
-    const blocks = (draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks;
+    const blocks = draft?.contentBlocks;
     expect(blocks).toEqual([expectedStreamBlock({
       reasoning: "思维链1",
       text: "",
@@ -1739,7 +1741,7 @@ describe("useChatFlow stream isolation", () => {
     const draft = allMessages.value.find((message) => String(message.id || "").startsWith("__draft_assistant__:"));
     expect(toolStatusText.value).toBe("正在执行 operate");
     expect(toolStatusState.value).toBe("running");
-    expect((draft?.providerMeta as Record<string, unknown> | undefined)?._streamBlocks).toEqual([expectedStreamBlock({
+    expect(draft?.contentBlocks).toEqual([expectedStreamBlock({
       reasoning: "思维链1",
       text: "",
     })]);
@@ -1942,6 +1944,7 @@ describe("useChatFlowStop", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       speakerAgentId: "agent-1",
       parts: [{ type: "text", text: "" }],
+      contentBlocks: streamBlocks.value,
       providerMeta: {
         _streaming: true,
       },
@@ -2000,10 +2003,7 @@ describe("useChatFlowStop", () => {
           return {
             ...message,
             parts: [{ type: "text", text: latestAssistantText.value }],
-            providerMeta: {
-              ...(message.providerMeta || {}),
-              _streamBlocks: rawBlocks,
-            },
+            contentBlocks: rawBlocks,
           };
         });
       },
@@ -2015,15 +2015,12 @@ describe("useChatFlowStop", () => {
     await stop.stopChat();
 
     expect(invokeStopChatMessage).toHaveBeenCalledTimes(1);
-    expect(refreshMessageById).toHaveBeenCalledWith({
-      conversationId: "conversation-1",
-      messageId: "assistant-1",
-    });
+    expect(refreshMessageById).not.toHaveBeenCalled();
     expect(onReloadMessages).toHaveBeenCalledTimes(0);
     expect(chatting.value).toBe(false);
     expect(round.phase).toBe("idle");
     expect(allMessages.value).toHaveLength(1);
-    expect(allMessages.value[0].parts).toEqual([{ type: "text", text: "ABC" }]);
+    expect(allMessages.value[0].contentBlocks).toEqual(streamBlocks.value);
     expect(allMessages.value[0].providerMeta?._streaming).toBeUndefined();
   });
 
@@ -2040,9 +2037,9 @@ describe("useChatFlowStop", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       speakerAgentId: "agent-1",
       parts: [{ type: "text", text: "" }],
+      contentBlocks: streamBlocks.value,
       providerMeta: {
         _streaming: true,
-        _streamBlocks: [{ reasoning: "R1", text: "ABC" }],
       },
     }]);
     let round: { phase: "streaming"; gen: number; messageId: string } | { phase: "idle" } = {
@@ -2126,10 +2123,7 @@ describe("useChatFlowStop", () => {
           return {
             ...message,
             parts: [{ type: "text", text: latestAssistantText.value }],
-            providerMeta: {
-              ...(message.providerMeta || {}),
-              _streamBlocks: rawBlocks,
-            },
+            contentBlocks: rawBlocks,
           };
         });
       },
@@ -2140,15 +2134,11 @@ describe("useChatFlowStop", () => {
 
     await stop.stopChat();
 
-    expect(refreshMessageById).toHaveBeenCalledWith({
-      conversationId: "conversation-1",
-      messageId: "assistant-1",
-    });
-    expect(allMessages.value[0].parts).toEqual([{ type: "text", text: "正式文本" }]);
+    expect(refreshMessageById).not.toHaveBeenCalled();
+    expect(allMessages.value[0].contentBlocks).toEqual(streamBlocks.value);
     expect(projectMessageForDisplay(allMessages.value[0]).activityItems.map((item) => item.kind === "tool" ? item.name : item.text)).toEqual([
-      "正式思考",
-      "正式文本 [toolcall:tool-1]",
-      "read_file",
+      "R1",
+      "ABC",
     ]);
   });
 });

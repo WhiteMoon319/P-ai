@@ -10,6 +10,7 @@ import {
   type AssistantDeltaEvent,
   type ContextUsageUpdatePayload,
 } from "./use-chat-flow-events";
+import type { ConversationRuntimeStreamCacheSnapshot } from "./use-chat-flow-stream-cache";
 import type { PendingTerminalEvent, RoundState } from "./use-chat-flow-types";
 
 type UseChatFlowStreamingEventsOptions = {
@@ -23,6 +24,10 @@ type UseChatFlowStreamingEventsOptions = {
   clearConversationStreamCache: (conversationId?: string | null) => void;
   getConversationId?: () => string;
   setActiveActivationId: (value: string) => void;
+  applyConversationStreamCacheSnapshotToDisplay: (
+    conversationId: string,
+    snapshot: ConversationRuntimeStreamCacheSnapshot,
+  ) => boolean;
   handleRoundCompleted: (
     gen: number,
     result: {
@@ -120,16 +125,31 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
       parsed.kind === "activity_reasoning_delta"
       || parsed.kind === "assistant_tool_event"
       || parsed.kind === "assistant_tool_result";
-    let receivedCanonicalBlocks = false;
+    let receivedCanonicalSnapshot = false;
     if (conversationId && parsed.streamCache) {
       const streamCacheMessageId = String(parsed.streamCache.persistedAssistantMessageId || "").trim();
       if (streamCacheMessageId && currentRound.messageId && streamCacheMessageId !== currentRound.messageId) {
         return;
       }
       const snapshotBlocks = normalizeAssistantStreamBlocks(parsed.streamCache.streamBlocks);
-      if (currentRound.phase === "streaming" && snapshotBlocks.length > 0) {
+      const snapshotHasVisibleProgress = !!(
+        String(parsed.streamCache.assistantText || "").trim()
+        || String(parsed.streamCache.toolStatusText || "").trim()
+        || String(parsed.streamCache.toolStatusState || "").trim()
+        || snapshotBlocks.length > 0
+      );
+      if (currentRound.phase === "streaming" && snapshotHasVisibleProgress) {
+        options.applyConversationStreamCacheSnapshotToDisplay(conversationId, parsed.streamCache);
         options.syncStreamBlocksToMessage(currentRound.messageId, snapshotBlocks);
-        receivedCanonicalBlocks = true;
+        options.updateMessageText(
+          currentRound.messageId,
+          undefined,
+          undefined,
+          "",
+          snapshotBlocks,
+          { preserveActivityProjection: true },
+        );
+        receivedCanonicalSnapshot = true;
       }
     }
 
@@ -147,7 +167,7 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
       if (delta && options.reasoningStartedAtMs.value === 0) options.reasoningStartedAtMs.value = Date.now();
     }
 
-    if (parsed.kind === "tool_status" || isActivityProjectionEvent || receivedCanonicalBlocks) {
+    if (parsed.kind === "tool_status" || isActivityProjectionEvent || receivedCanonicalSnapshot) {
       return;
     }
 

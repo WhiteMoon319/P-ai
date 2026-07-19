@@ -236,6 +236,28 @@ fn delegate_conversation_store_read_block_page(
 mod delegate_conversation_store_tests {
     use super::*;
 
+    fn test_delegate_entry(data_path: &PathBuf) -> DelegateEntry {
+        delegate_store_create_delegate(
+            data_path,
+            &DelegateCreateInput {
+                kind: "delegate".to_string(),
+                conversation_id: "root-conversation".to_string(),
+                parent_delegate_id: None,
+                source_department_id: "source-department".to_string(),
+                target_department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
+                source_agent_id: "source-agent".to_string(),
+                target_agent_id: DEFAULT_AGENT_ID.to_string(),
+                title: "委托会话".to_string(),
+                why: "测试委托会话存储".to_string(),
+                goal: "验证委托会话存储".to_string(),
+                todo: "写入并读取会话".to_string(),
+                notify_assistant_when_done: false,
+                call_stack: Vec::new(),
+            },
+        )
+        .expect("create delegate record")
+    }
+
     fn test_message(id: &str, role: &str) -> ChatMessage {
         ChatMessage {
             id: id.to_string(),
@@ -298,7 +320,8 @@ mod delegate_conversation_store_tests {
             Uuid::new_v4()
         ));
         let data_path = root.join("app_data.json");
-        let conversation = test_delegate_conversation("delegate-b");
+        let entry = test_delegate_entry(&data_path);
+        let conversation = test_delegate_conversation(&entry.delegate_id);
 
         delegate_conversation_store_write(&data_path, &conversation).expect("write delegate");
         let page = delegate_conversation_store_read_block_page(&data_path, &conversation.id, None)
@@ -317,7 +340,8 @@ mod delegate_conversation_store_tests {
             Uuid::new_v4()
         ));
         let data_path = root.join("app_data.json");
-        let conversation = test_delegate_conversation("delegate-c");
+        let entry = test_delegate_entry(&data_path);
+        let conversation = test_delegate_conversation(&entry.delegate_id);
         delegate_conversation_store_write(&data_path, &conversation).expect("write delegate");
         let shard_dir = delegate_conversation_store_dir(&data_path).join(&conversation.id);
 

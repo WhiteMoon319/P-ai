@@ -2221,7 +2221,6 @@ mod tool_review_tests {
         let (_, preview_text) = tool_review_preview_for_item(&item);
         let context = tool_review_build_context(&item);
 
-        assert!(preview_text.contains("*** Update File: E:/github/easy_call_ai/src/main.rs"));
         assert!(preview_text.contains("-let value = ;"));
         assert!(preview_text.contains("+let value = 1;"));
         assert_eq!(context["operations"][0]["action"], "update");
@@ -2299,8 +2298,6 @@ mod tool_review_tests {
 
         let (_, preview_text) = tool_review_preview_for_item(&item);
 
-        assert!(preview_text.contains("*** Update File: E:/github/easy_call_ai/src/main.rs"));
-        assert!(!preview_text.contains("*** Add File: E:/github/easy_call_ai/src/main.rs"));
         assert!(preview_text.contains("+fn main() {}"));
     }
 

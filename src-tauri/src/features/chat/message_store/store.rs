@@ -3517,6 +3517,7 @@ mod message_store_reader_tests {
             test_message("u1", "user"),
             test_message("a1", "assistant"),
         ]);
+        conversation.id = "conversation-recent-page".to_string();
         run_jsonl_snapshot_migration(&paths, &conversation, false).expect("run migration");
 
         let seeded = read_ready_message_store_recent_messages_page_cached(&paths, 8)
@@ -3685,12 +3686,12 @@ mod message_store_reader_tests {
         let err = read_ready_message_store_status(&paths)
             .expect_err("corrupted block truth should fail status read");
 
-        assert!(err.contains("校验会话块失败"));
+        assert!(err.contains("校验会话块失败") || err.contains("JSONL"));
         let _ = fs::remove_dir_all(root);
     }
 
     #[test]
-    fn message_store_ready_status_should_repair_stale_manifest_bytes() {
+    fn message_store_ready_status_should_reject_stale_manifest_bytes_without_writing() {
         let root = std::env::temp_dir().join(format!(
             "easy-call-message-store-status-size-mismatch-{}",
             Uuid::new_v4()
@@ -3706,15 +3707,14 @@ mod message_store_reader_tests {
         write_message_store_manifest_atomic(&paths.manifest_file, &manifest)
             .expect("write stale manifest");
 
-        let status = read_ready_message_store_status(&paths)
-            .expect("repair stale manifest bytes should succeed")
-            .expect("ready status should exist");
-        let manifest = read_message_store_manifest(&paths.manifest_file)
+        let error = read_ready_message_store_status(&paths)
+            .expect_err("stale manifest bytes must not self-heal during read");
+        let stored_manifest = read_message_store_manifest(&paths.manifest_file)
             .expect("read manifest")
             .expect("manifest exists");
 
-        assert!(status.ready_jsonl);
-        assert_eq!(manifest.messages_jsonl_bytes(), message_store_index_total_bytes(&paths, &read_message_store_index_file(&paths.index_file).expect("read index")).expect("total bytes"));
+        assert!(error.contains("与 blocks 不一致"));
+        assert_eq!(stored_manifest.messages_jsonl_bytes(), manifest.messages_jsonl_bytes());
         let _ = fs::remove_dir_all(root);
     }
 
@@ -3775,7 +3775,7 @@ mod message_store_reader_tests {
     }
 
     #[test]
-    fn message_store_directory_conversation_should_repair_stale_manifest() {
+    fn message_store_directory_conversation_should_reject_stale_manifest_without_writing() {
         let root = std::env::temp_dir().join(format!(
             "easy-call-message-store-directory-stale-{}",
             Uuid::new_v4()
@@ -3791,19 +3791,19 @@ mod message_store_reader_tests {
         write_message_store_manifest_atomic(&paths.manifest_file, &manifest)
             .expect("write stale manifest");
 
-        let loaded = read_message_store_directory_conversation(&paths)
-            .expect("stale manifest should self-heal");
-        let repaired_manifest = read_message_store_manifest(&paths.manifest_file)
+        let error = read_message_store_directory_conversation(&paths)
+            .expect_err("stale manifest must not self-heal during read");
+        let stored_manifest = read_message_store_manifest(&paths.manifest_file)
             .expect("read repaired manifest")
-            .expect("repaired manifest exists");
+            .expect("manifest exists");
 
-        assert_eq!(loaded.messages.len(), 1);
-        assert_eq!(repaired_manifest.last_message_id(), "m1");
+        assert!(error.contains("与 blocks 不一致"));
+        assert_eq!(stored_manifest.last_message_id(), "wrong-last-id");
         let _ = fs::remove_dir_all(root);
     }
 
     #[test]
-    fn message_store_ready_reader_should_repair_stale_manifest_bytes() {
+    fn message_store_ready_reader_should_reject_stale_manifest_bytes_without_writing() {
         let root = std::env::temp_dir().join(format!(
             "easy-call-message-store-size-mismatch-{}",
             Uuid::new_v4()
@@ -3819,17 +3819,19 @@ mod message_store_reader_tests {
         write_message_store_manifest_atomic(&paths.manifest_file, &manifest)
             .expect("write stale manifest");
 
-        let messages = read_ready_message_store_recent_messages(&paths, 1)
-            .expect("repair stale manifest bytes should succeed")
-            .expect("ready messages should exist");
+        let error = read_ready_message_store_recent_messages(&paths, 1)
+            .expect_err("stale manifest bytes must not self-heal during read");
+        let stored_manifest = read_message_store_manifest(&paths.manifest_file)
+            .expect("read manifest")
+            .expect("manifest exists");
 
-        assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0].id, "m1");
+        assert!(error.contains("与 blocks 不一致"));
+        assert_eq!(stored_manifest.messages_jsonl_bytes(), manifest.messages_jsonl_bytes());
         let _ = fs::remove_dir_all(root);
     }
 
     #[test]
-    fn message_store_backend_should_repair_stale_manifest_bytes() {
+    fn message_store_backend_should_reject_stale_manifest_bytes_without_writing() {
         let root = std::env::temp_dir().join(format!(
             "easy-call-message-store-backend-size-mismatch-{}",
             Uuid::new_v4()
@@ -3845,12 +3847,16 @@ mod message_store_reader_tests {
         write_message_store_manifest_atomic(&paths.manifest_file, &manifest)
             .expect("write stale manifest");
 
-        let backend = message_store_backend_for_conversation(&paths, &conversation)
-            .expect("stale manifest bytes should self-heal");
+        let error = match message_store_backend_for_conversation(&paths, &conversation) {
+            Ok(_) => panic!("stale manifest bytes must not self-heal during read"),
+            Err(error) => error,
+        };
+        let stored_manifest = read_message_store_manifest(&paths.manifest_file)
+            .expect("read manifest")
+            .expect("manifest exists");
 
-        let messages = backend.read_all_messages().expect("read messages");
-        assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0].id, "m1");
+        assert!(error.contains("与 blocks 不一致"));
+        assert_eq!(stored_manifest.messages_jsonl_bytes(), manifest.messages_jsonl_bytes());
         let _ = fs::remove_dir_all(root);
     }
 

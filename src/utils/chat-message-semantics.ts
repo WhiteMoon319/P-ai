@@ -396,6 +396,17 @@ export function projectChatActivityForDisplay(message: ChatMessage): {
       ...chatActivityStats(messageItems, false),
     };
   }
+  const canonicalBlocks = assistantContentBlocksFromMessage(message);
+  if (canonicalBlocks.length > 0) {
+    const items = streamBlocksToActivityItems(
+      canonicalBlocks,
+      Boolean((message.providerMeta as Record<string, unknown> | undefined)?._streaming),
+    );
+    return {
+      items,
+      ...chatActivityStats(items, Boolean((message.providerMeta as Record<string, unknown> | undefined)?._streaming)),
+    };
+  }
   const events = normalizeMessageToolHistoryEvents(message, "display");
   const items: ChatActivityItem[] = [];
   for (let eventIndex = 0; eventIndex < events.length; eventIndex += 1) {
@@ -1266,6 +1277,9 @@ export function projectMessageForDisplay(
   taskTriggerLabels?: TaskTriggerDisplayLabels,
 ): ChatMessageDisplayProjection {
   const rendered = removeBinaryPlaceholders(renderMessage(message));
+  const canonicalAssistantText = message.role === "assistant"
+    ? assistantTextFromStreamBlocks(assistantContentBlocksFromMessage(message))
+    : "";
   const meta = (message.providerMeta || {}) as Record<string, unknown>;
   const toolSummary = summarizeToolActivityForDisplay(message);
   const activity = projectChatActivityForDisplay(message);
@@ -1292,7 +1306,7 @@ export function projectMessageForDisplay(
         return true;
       }).join("\n")
       : message.role === "assistant"
-        ? mergedAssistantDisplayText(message, rendered.trim())
+        ? mergedAssistantDisplayText(message, canonicalAssistantText || rendered.trim())
         : rendered;
   const displayTextWithMeme = applyMemeAnnotationReplacements(displayText, message.memeAnnotations);
   return {

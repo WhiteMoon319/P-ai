@@ -25,7 +25,7 @@ function baseActivityForMessage(
   isStreaming: boolean,
   streamBlocks: ReturnType<typeof normalizeAssistantStreamBlocks>,
 ) {
-  if (isStreaming && streamBlocks.length > 0) {
+  if (isStreaming) {
     return projectStreamingChatActivityForDisplay({
       activityItems: projection.activityItems,
       streamBlocks,

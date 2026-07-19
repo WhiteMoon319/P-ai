@@ -1228,6 +1228,8 @@ mod terminal_workspace_tests {
             .expect("write custom conversation");
         let mut archived_conversation = build_workspace_test_conversation("conv-archived-workspace");
         archived_conversation.summary = "已归档".to_string();
+        archived_conversation.status = "archived".to_string();
+        archived_conversation.archived_at = Some(now_iso());
         write_conversation_shard(&state.data_path, &archived_conversation)
             .expect("write archived conversation");
 

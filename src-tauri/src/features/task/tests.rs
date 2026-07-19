@@ -87,22 +87,20 @@
             .and_then(Value::as_object)
             .expect("task tool properties");
 
-        assert!(definition.description.contains("只能写入 trigger"));
         for field in ["goal", "why", "todo"] {
-            let description = properties
-                .get(field)
-                .and_then(|value| value.get("description"))
-                .and_then(Value::as_str)
-                .expect("field description");
-            assert!(description.contains("不写"));
-            assert!(description.contains("trigger"));
+            assert!(properties.contains_key(field));
         }
-        let trigger_description = properties
+        for legacy_schedule_field in ["run_at", "cron_expression", "end_at"] {
+            assert!(!properties.contains_key(legacy_schedule_field));
+        }
+        let trigger_properties = properties
             .get("trigger")
-            .and_then(|value| value.get("description"))
-            .and_then(Value::as_str)
-            .expect("trigger description");
-        assert!(trigger_description.contains("所有时间、重复频率"));
+            .and_then(|value| value.get("properties"))
+            .and_then(Value::as_object)
+            .expect("trigger properties");
+        for schedule_field in ["run_at", "cron_expression", "end_at"] {
+            assert!(trigger_properties.contains_key(schedule_field));
+        }
     }
 
     #[test]

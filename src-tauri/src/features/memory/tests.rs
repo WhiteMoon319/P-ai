@@ -39,10 +39,9 @@
 
         let xml =
             build_memory_board_xml(&memories, &search_text, "").expect("should have one hit");
-        assert!(xml.starts_with("<memory_context>\n<id:m-user>\n"));
-        assert!(xml.ends_with("\n</memory_context>"));
+        assert!(xml.starts_with("[id:m-user]\n"));
         assert!(xml.contains("user-hit"));
-        assert!(xml.contains("</id:m-user>"));
+        assert!(!xml.contains("<memory_context>"));
         assert!(!xml.contains("assistant-only-hit"));
     }
 
@@ -186,7 +185,7 @@
         let xml =
             build_memory_board_xml(&memories, &search_text, "").expect("should produce board");
 
-        assert!(xml.starts_with("<memory_context>\n<id:m1>\n"));
+        assert!(xml.starts_with("[id:m1]\n"));
         assert_eq!(xml.matches("\n> ").count(), 7);
         assert!(xml.contains("rank-8"));
         assert!(xml.contains("rank-2"));
@@ -219,10 +218,9 @@
         }];
 
         let xml = build_memory_board_xml(&memories, &search_text, "简洁").expect("should produce board");
-        assert!(xml.contains("<id:m-reasoning>"));
+        assert!(xml.contains("[id:m-reasoning]"));
         assert!(xml.contains("用户偏好简洁回答"));
         assert!(xml.contains("> 用户多次要求简短"));
-        assert!(xml.contains("</id:m-reasoning>"));
     }
 
     #[test]
@@ -247,7 +245,7 @@
         }];
 
         let xml = build_memory_board_xml(&memories, &search_text, "记忆").expect("should produce board");
-        assert!(xml.contains("<id:m-empty-reasoning>"));
+        assert!(xml.contains("[id:m-empty-reasoning]"));
         assert!(xml.contains("> 无"));
     }
 

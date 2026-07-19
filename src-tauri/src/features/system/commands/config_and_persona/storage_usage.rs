@@ -2546,7 +2546,28 @@ mod storage_usage_tests {
             Uuid::new_v4()
         ));
         let data_path = root.join("app_data.json");
-        let ready = storage_usage_test_conversation("delegate-ready", CONVERSATION_KIND_DELEGATE);
+        let entry = delegate_store_create_delegate(
+            &data_path,
+            &DelegateCreateInput {
+                kind: "delegate".to_string(),
+                conversation_id: "root-conversation".to_string(),
+                parent_delegate_id: None,
+                source_department_id: "source-department".to_string(),
+                target_department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
+                source_agent_id: "source-agent".to_string(),
+                target_agent_id: DEFAULT_AGENT_ID.to_string(),
+                title: "清理测试委托".to_string(),
+                why: "验证存储清理".to_string(),
+                goal: "写入委托快照".to_string(),
+                todo: "完成测试".to_string(),
+                notify_assistant_when_done: false,
+                call_stack: Vec::new(),
+            },
+        )
+        .expect("create delegate record");
+        let mut ready = storage_usage_test_conversation(&entry.delegate_id, CONVERSATION_KIND_DELEGATE);
+        ready.delegate_id = Some(entry.delegate_id.clone());
+        ready.root_conversation_id = Some(entry.conversation_id.clone());
         let legacy_only =
             storage_usage_test_conversation("delegate-legacy", CONVERSATION_KIND_DELEGATE);
         delegate_conversation_store_write(&data_path, &ready).expect("write ready delegate store");

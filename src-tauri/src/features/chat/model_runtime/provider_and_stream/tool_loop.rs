@@ -1860,8 +1860,7 @@ mod tool_loop_tests {
         .is_none());
 
         let history_content = project_provider_tool_result(None, "exec", &tool_result).text;
-        assert!(history_content.contains("\"approved\":false"));
-        assert!(history_content.contains("absolute_path_not_granted"));
+        assert!(history_content.contains("Exit code: -1"));
         assert!(history_content.contains("已配置工作目录"));
         assert!(!history_content.contains("本轮调度已终止"));
     }

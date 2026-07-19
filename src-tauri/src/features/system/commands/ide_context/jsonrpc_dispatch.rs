@@ -89,6 +89,16 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "convert_private_agent_to_main"
             | "get_chat_shell_workspace"
             | "update_chat_shell_workspace_layout"
+            | "create_side_chat_conversation"
+            | "open_file_reader_window_command"
+            | "read_local_binary_file"
+            | "remote_im_get_default_group_response_guidance"
+            | "remote_im_patch_contact_settings"
+            | "remote_im_reconfigure_channel_behavior"
+            | "remote_im_subscribe_contact_dashboard"
+            | "remote_im_sync_contact_dashboard"
+            | "remote_im_unsubscribe_contact_dashboard"
+            | "set_chat_window_side_expanded"
     )
 }
 
@@ -415,7 +425,11 @@ mod web_native_capability_tests {
             let path = entry.path();
             if path.is_dir() {
                 collect_frontend_source_files(&path, out);
-            } else if matches!(path.extension().and_then(|value| value.to_str()), Some("ts" | "vue")) {
+            } else if matches!(path.extension().and_then(|value| value.to_str()), Some("ts" | "vue"))
+                && !path.file_name().and_then(|value| value.to_str()).is_some_and(|name| {
+                    name.ends_with(".spec.ts") || name.ends_with(".test.ts")
+                })
+            {
                 out.push(path);
             }
         }

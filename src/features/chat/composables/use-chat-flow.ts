@@ -220,6 +220,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
       pendingTerminalEvent = event;
     },
     clearConversationStreamCache,
+    applyConversationStreamCacheSnapshotToDisplay,
     getConversationId: options.getConversationId,
     setActiveActivationId: (value) => {
       activeActivationId = value;

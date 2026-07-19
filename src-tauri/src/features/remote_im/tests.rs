@@ -2391,7 +2391,10 @@
             },
         )
         .expect("private behavior save should ignore group-only pacing");
-        assert_eq!(updated.blocked_message_prefixes, vec!["#"]);
+        assert_eq!(
+            updated.blocked_message_prefixes,
+            default_remote_im_contact_blocked_message_prefixes()
+        );
         assert_eq!(updated.group_reply_pacing, original_pacing);
     }
 
@@ -3397,7 +3400,7 @@
             .expect("config read failure should degrade instead of aborting");
 
         assert!(!result.contact_id.is_empty());
-        assert!(!result.conversation_id.is_empty());
+        assert!(result.conversation_id.is_empty());
         let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
     }
 

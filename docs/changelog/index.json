@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-17T14:22:51.558Z",
-  "latestVersion": "v0.35.0",
+  "generatedAt": "2026-07-19T06:22:43.388Z",
+  "latestVersion": "v0.36.0",
   "releases": [
+    {
+      "version": "v0.36.0",
+      "path": "docs/changelog/releases/v0.36.0.md",
+      "summary": "远程会话新增能量仪表盘，可直接看到当前能量、恢复速度和在线状态；回到前台后会自动补齐期间错过的状态更新。"
+    },
     {
       "version": "v0.35.0",
       "path": "docs/changelog/releases/v0.35.0.md",

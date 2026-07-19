@@ -715,7 +715,7 @@
 
         let history_extra = prepared.history_messages[0].extra_text_blocks.join("\n");
         assert_eq!(history_extra.matches("用户很喜欢猫咪").count(), 1);
-        assert!(history_extra.contains("因为用户妈妈从小养猫"));
+        assert!(!history_extra.contains("因为用户妈妈从小养猫"));
         assert!(!history_extra.contains("用户对花生过敏"));
         assert!(prepared.latest_user_extra_text.contains("用户对花生过敏"));
         assert_eq!(prepared.latest_user_extra_text.matches("用户很喜欢猫咪").count(), 0);
@@ -1263,7 +1263,7 @@
 
         let messages = prepared_prompt_to_messages_json(&prepared);
 
-        assert_eq!(messages.len(), 5);
+        assert_eq!(messages.len(), 6);
         assert_eq!(messages[1]["role"], "user");
         assert_eq!(messages[2]["role"], "assistant");
         assert_eq!(
@@ -1475,7 +1475,7 @@
 
         let messages = prepared_prompt_to_messages_json(&prepared);
 
-        assert_eq!(messages.len(), 2);
+        assert_eq!(messages.len(), 3);
         assert_eq!(messages[1]["role"], "assistant");
         assert_eq!(messages[1]["content"].as_str(), Some("这是结论"));
         assert_eq!(
@@ -1724,7 +1724,7 @@
     }
 
     #[test]
-    fn prepared_prompt_to_messages_json_should_omit_empty_latest_user_turn() {
+    fn prepared_prompt_to_messages_json_should_keep_blank_latest_user_turn_for_provider_compatibility() {
         let prepared = PreparedPrompt {
             preamble: "sys".to_string(),
             history_messages: vec![
@@ -1760,9 +1760,11 @@
         };
 
         let messages = prepared_prompt_to_messages_json(&prepared);
-        assert_eq!(messages.len(), 3);
+        assert_eq!(messages.len(), 4);
         assert_eq!(messages[1].get("role").and_then(Value::as_str), Some("user"));
         assert_eq!(messages[2].get("role").and_then(Value::as_str), Some("assistant"));
+        assert_eq!(messages[3].get("role").and_then(Value::as_str), Some("user"));
+        assert_eq!(messages[3].get("content").and_then(Value::as_str), Some(" "));
     }
 
     #[test]
@@ -4186,9 +4188,16 @@
         let _snapshot = read_app_bootstrap_snapshot(&state).expect("read bootstrap snapshot");
 
         let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
-        assert_eq!(chat_index.conversations.len(), 1);
-        assert_eq!(chat_index.conversations[0].id, conversation.id);
-        assert_eq!(chat_index.conversations[0].status, conversation.status);
+        let archived_item = chat_index
+            .conversations
+            .iter()
+            .find(|item| item.id == conversation.id)
+            .expect("archived conversation should remain indexed");
+        assert_eq!(archived_item.status, conversation.status);
+        assert!(chat_index
+            .conversations
+            .iter()
+            .any(|item| item.id == SYSTEM_NOTIFICATION_CONVERSATION_ID));
         assert!(!app_layout_chat_index_path(&state.data_path).exists());
     }
 
@@ -5906,11 +5915,30 @@
     fn conversation_service_v2_should_bootstrap_delegate_in_delegate_store() {
         let state = test_chat_runtime_state();
         let now = now_iso();
+        let entry = delegate_store_create_delegate(
+            &state.data_path,
+            &DelegateCreateInput {
+                kind: "delegate".to_string(),
+                conversation_id: "root-conversation".to_string(),
+                parent_delegate_id: None,
+                source_department_id: "source-department".to_string(),
+                target_department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
+                source_agent_id: "source-agent".to_string(),
+                target_agent_id: DEFAULT_AGENT_ID.to_string(),
+                title: "委托启动测试".to_string(),
+                why: "验证委托会话启动".to_string(),
+                goal: "初始化助理消息".to_string(),
+                todo: "写入会话".to_string(),
+                notify_assistant_when_done: false,
+                call_stack: Vec::new(),
+            },
+        )
+        .expect("create delegate record");
         let mut conversation =
-            test_chat_conversation("delegate-bootstrap-store", "active", &now);
+            test_chat_conversation(&entry.delegate_id, "active", &now);
         conversation.conversation_kind = CONVERSATION_KIND_DELEGATE.to_string();
-        conversation.root_conversation_id = Some("root-conversation".to_string());
-        conversation.delegate_id = Some(conversation.id.clone());
+        conversation.root_conversation_id = Some(entry.conversation_id.clone());
+        conversation.delegate_id = Some(entry.delegate_id.clone());
         conversation
             .messages
             .push(test_text_message("user", "执行委托任务", &now));
@@ -11129,6 +11157,8 @@
             .expect("format later");
         let mut source = test_chat_conversation("conversation-main", "active", &now);
         source.summary = "archived summary".to_string();
+        source.status = "archived".to_string();
+        source.archived_at = Some(now.clone());
         let mut data = AppData::default();
         data.main_conversation_id = Some(source.id.clone());
         data.conversations = vec![
@@ -11170,6 +11200,8 @@
         let now = now_iso();
         let mut source = test_chat_conversation("conversation-main", "active", &now);
         source.summary = "archived summary".to_string();
+        source.status = "archived".to_string();
+        source.archived_at = Some(now.clone());
         let mut data = AppData::default();
         data.main_conversation_id = Some(source.id.clone());
         data.conversations = vec![source.clone()];
