@@ -54,10 +54,17 @@ function formatShareTime(input?: string): string {
   });
 }
 
+export function isDarkShareTheme(themeName: string, colorScheme: string): boolean {
+  const theme = String(themeName || "").trim().toLowerCase();
+  const scheme = String(colorScheme || "").trim().toLowerCase();
+  return scheme.split(/\s+/).includes("dark")
+    || ["dark", "night", "dracula", "business", "coffee", "dim", "halloween", "forest", "luxury"].includes(theme);
+}
+
 function isDarkTheme(): boolean {
   const theme = String(document.documentElement.getAttribute("data-theme") || "").trim().toLowerCase();
-  if (!theme) return false;
-  return ["dark", "night", "dracula", "business", "coffee", "dim", "halloween", "forest", "luxury"].includes(theme);
+  const colorScheme = getComputedStyle(document.documentElement).colorScheme;
+  return isDarkShareTheme(theme, colorScheme);
 }
 
 function isOwnMessage(message: ChatMessage, speakerAgentId: string): boolean {
