@@ -1722,7 +1722,6 @@
                     "private",
                     "remote-a",
                     Some("platform-atomic-1"),
-                    &[],
                 )
             }));
         }

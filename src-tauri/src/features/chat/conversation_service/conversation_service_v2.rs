@@ -1911,7 +1911,6 @@ impl ConversationServiceV2 {
         remote_contact_type: &str,
         remote_contact_id: &str,
         platform_message_id: Option<&str>,
-        memory_recall_ids: &[String],
     ) -> Result<Option<ChatMessage>, String> {
         let conversation_id = conversation_id.trim();
         if conversation_id.is_empty() {
@@ -1972,15 +1971,6 @@ impl ConversationServiceV2 {
                 metadata_conversation.unread_count = unread_count;
                 metadata_conversation.updated_at = updated_at.clone();
                 metadata_conversation.last_user_at = Some(updated_at.clone());
-                for memory_id in memory_recall_ids {
-                    if !metadata_conversation
-                        .memory_recall_table
-                        .iter()
-                        .any(|item| item == memory_id)
-                    {
-                        metadata_conversation.memory_recall_table.push(memory_id.clone());
-                    }
-                }
                 cached.apply_metadata_fields_from_conversation(&metadata_conversation);
                 cached.apply_appended_messages(std::slice::from_ref(message));
                 Ok(())

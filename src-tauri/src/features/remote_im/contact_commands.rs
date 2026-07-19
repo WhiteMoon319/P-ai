@@ -1547,38 +1547,6 @@ pub(crate) fn remote_im_enqueue_message_internal(
             contact_id, conversation_id, message.id, err
         ));
     }
-    let recall_payload = match state_read_agents_cached(state) {
-        Ok(agents) => match with_memory_lock(state, "remote_im_direct_user_message_recall", || {
-            collect_recall_payload_for_user_message(
-                &state.data_path,
-                &agents,
-                &agent_id,
-                &message,
-            )
-        }) {
-            Ok(payload) => payload,
-            Err(err) => {
-                runtime_log_warn(format!(
-                    "[远程IM] 记忆召回降级，contact_id={}，conversation_id={}，message_id={}，error={}",
-                    contact_id, conversation_id, message.id, err
-                ));
-                UserMessageRecallPayload::default()
-            }
-        },
-        Err(err) => {
-            runtime_log_warn(format!(
-                "[远程IM] 助理配置读取失败，跳过本条记忆召回，contact_id={}，conversation_id={}，message_id={}，error={}",
-                contact_id, conversation_id, message.id, err
-            ));
-            UserMessageRecallPayload::default()
-        }
-    };
-    if !recall_payload.stored_ids.is_empty() {
-        write_retrieved_memory_ids_into_provider_meta(
-            &mut message.provider_meta,
-            &recall_payload.stored_ids,
-        );
-    }
     let persisted_message = conversation_service_v2().append_remote_im_user_message_if_new(
         state,
         &conversation_id,
@@ -1587,7 +1555,6 @@ pub(crate) fn remote_im_enqueue_message_internal(
         input.remote_contact_type.trim(),
         input.remote_contact_id.trim(),
         input.platform_message_id.as_deref(),
-        &recall_payload.raw_ids,
     )?;
     let Some(persisted_message) = persisted_message else {
         runtime_log_info(format!(
