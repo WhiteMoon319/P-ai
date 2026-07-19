@@ -350,6 +350,7 @@
                 :is-dark="markdownIsDark"
                 variant="document"
                 :local-image-base-path="directoryFromPath(activeTab.path)"
+                @open-image-preview="openMarkdownImagePreview"
               />
             </div>
             <div
@@ -626,6 +627,29 @@
         </template>
       </div>
     </Teleport>
+    <ChatImagePreviewDialog
+      :open="imagePreviewOpen"
+      :data-url="imagePreviewDataUrl"
+      :zoom="imagePreviewZoom"
+      :min-zoom="IMAGE_PREVIEW_MIN_ZOOM"
+      :max-zoom="IMAGE_PREVIEW_MAX_ZOOM"
+      :offset-x="previewOffsetX"
+      :offset-y="previewOffsetY"
+      :dragging="previewDragging"
+      :local-path="imagePreviewLocalPath"
+      :copy-status="imagePreviewCopyStatus"
+      :save-status="imagePreviewSaveStatus"
+      @close="closeImagePreview"
+      @zoom-in="zoomInPreview"
+      @zoom-out="zoomOutPreview"
+      @reset="resetPreviewZoom"
+      @wheel="onPreviewWheel"
+      @pointer-down="onPreviewPointerDown"
+      @pointer-move="onPreviewPointerMove"
+      @pointer-up="onPreviewPointerUp"
+      @copy-image="handleCopyMarkdownImage"
+      @save-image="handleSaveMarkdownImage"
+    />
   </div>
 </template>
 
@@ -638,6 +662,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { ChevronDown, ChevronRight, Check, Code2, Copy, Eye, ExternalLink, FilePlus, Folders, MessageSquarePlus, RefreshCw, Search, SquareTerminal } from "@lucide/vue";
 import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
+import ChatImagePreviewDialog from "../../chat/components/dialogs/ChatImagePreviewDialog.vue";
+import { useChatImagePreview } from "../../chat/composables/use-chat-image-preview";
 import { isAbsoluteLocalPath, normalizeLocalLinkHref, parseLocalFileReference } from "../../chat/utils/local-link";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import PanelTabStrip from "../../shared/components/PanelTabStrip.vue";
@@ -778,6 +804,8 @@ const selectedDirectoryOpenTargetKind = ref("explorer");
 const directoryOpenTargetDropdownOpen = ref(false);
 const directoryOpenTargetDropdownRef = ref<HTMLElement | null>(null);
 const directoryNodes = ref<Record<string, DirectoryNode>>({});
+const imagePreviewCopyStatus = ref<"idle" | "doing">("idle");
+const imagePreviewSaveStatus = ref<"idle" | "doing">("idle");
 const fileDragActive = ref(false);
 const fileReaderLayoutRoot = ref<HTMLElement | null>(null);
 const addressScroller = ref<HTMLElement | null>(null);
@@ -858,6 +886,26 @@ const {
   isRawMode: isTabRawMode,
   requestFileBlock: requestFileReaderFileBlock,
 });
+const {
+  imagePreviewOpen,
+  imagePreviewDataUrl,
+  imagePreviewLocalPath,
+  imagePreviewZoom,
+  IMAGE_PREVIEW_MIN_ZOOM,
+  IMAGE_PREVIEW_MAX_ZOOM,
+  previewOffsetX,
+  previewOffsetY,
+  previewDragging,
+  zoomInPreview,
+  zoomOutPreview,
+  resetPreviewZoom,
+  onPreviewWheel,
+  openImagePreview,
+  closeImagePreview,
+  onPreviewPointerDown,
+  onPreviewPointerMove,
+  onPreviewPointerUp,
+} = useChatImagePreview();
 
 const directoryTreeRoot = computed(() => {
   const rootPath = normalizePath(directoryRootPath.value);
@@ -1904,6 +1952,40 @@ async function openMarkdownFileLink(event: MouseEvent) {
   event.preventDefault();
   event.stopPropagation();
   await openPath(targetPath, { targetLine: reference?.line });
+}
+
+function openMarkdownImagePreview(payload: { src?: string; localPath?: string; alt?: string }) {
+  const src = String(payload?.src || "").trim();
+  const localPath = String(payload?.localPath || "").trim();
+  if (src) {
+    openImagePreview({ mime: "image/png", dataUrl: src, localPath });
+    return;
+  }
+  if (localPath) {
+    openImagePreview({ mime: "image/png", dataUrl: convertFileSrc(localPath), localPath });
+  }
+}
+
+async function handleCopyMarkdownImage(path: string) {
+  imagePreviewCopyStatus.value = "doing";
+  try {
+    await invokeTauri("copy_local_chat_image_to_clipboard", { input: { path } });
+  } catch (error) {
+    console.warn("[文件浏览器预览] 复制图片失败", error);
+  } finally {
+    imagePreviewCopyStatus.value = "idle";
+  }
+}
+
+async function handleSaveMarkdownImage(path: string) {
+  imagePreviewSaveStatus.value = "doing";
+  try {
+    await invokeTauri("save_local_chat_image_as", { input: { path } });
+  } catch (error) {
+    console.warn("[文件浏览器预览] 保存图片失败", error);
+  } finally {
+    imagePreviewSaveStatus.value = "idle";
+  }
 }
 
 async function openDroppedPaths(paths: string[]) {

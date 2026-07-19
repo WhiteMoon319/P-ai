@@ -8,6 +8,12 @@ type MarkdownImageSource =
   | { kind: "local"; path: string }
   | { kind: "blocked"; label: string };
 
+export type MarkdownImagePreviewPayload = {
+  src?: string;
+  localPath?: string;
+  alt?: string;
+};
+
 const markdownImageThumbnailCache = new Map<string, string>();
 const markdownImageThumbnailPromiseCache = new Map<string, Promise<string>>();
 const MARKDOWN_IMAGE_THUMBNAIL_SESSION_PREFIX = "easy_call.markdown_thumbnail.v1:";
@@ -109,6 +115,10 @@ const MarkdownImage = defineComponent({
     src: { type: String, required: true },
     alt: { type: String, default: "" },
     localImageBasePath: { type: String, default: "" },
+    onOpenPreview: {
+      type: Function as import("vue").PropType<(payload: MarkdownImagePreviewPayload) => void>,
+      default: undefined,
+    },
   },
   setup(imageProps) {
     const thumbnailSrc = ref("");
@@ -167,35 +177,60 @@ const MarkdownImage = defineComponent({
     return () => {
       const current = source.value;
       const alt = String(imageProps.alt || "").trim();
+      const emitOpenPreview = () => {
+        if (typeof imageProps.onOpenPreview !== "function") return;
+        if (current.kind === "remote") {
+          imageProps.onOpenPreview({ src: current.src, alt });
+          return;
+        }
+        if (current.kind === "local") {
+          imageProps.onOpenPreview({ localPath: current.path, alt: alt || current.path });
+        }
+      };
       const memeImageClass = current.kind === "local" && isMemeImagePath(current.path)
         ? "ecall-md-meme-image"
         : "";
       if (current.kind === "remote") {
         return h("img", {
-          class: "ecall-md-image",
+          class: "ecall-md-image cursor-zoom-in",
           src: current.src,
           alt,
           loading: "lazy",
           decoding: "async",
+          onClick: (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+            emitOpenPreview();
+          },
         });
       }
       if (current.kind === "local") {
         const title = alt || current.path;
         if (thumbnailSrc.value) {
           return h("img", {
-            class: ["ecall-md-image", "ecall-md-local-image", memeImageClass],
+            class: ["ecall-md-image", "ecall-md-local-image", memeImageClass, "cursor-zoom-in"],
             src: thumbnailSrc.value,
             alt: title,
             title,
             loading: "lazy",
             decoding: "async",
             "data-local-image-path": current.path,
+            onClick: (event: MouseEvent) => {
+              event.preventDefault();
+              event.stopPropagation();
+              emitOpenPreview();
+            },
           });
         }
         return h("span", {
-          class: ["ecall-md-image-placeholder", loadError.value ? "ecall-md-image-error" : ""],
+          class: ["ecall-md-image-placeholder", loadError.value ? "ecall-md-image-error" : "", "cursor-zoom-in"],
           title,
           "data-local-image-path": current.path,
+          onClick: (event: MouseEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+            emitOpenPreview();
+          },
         }, alt || current.path.split(/[\\/]/).filter(Boolean).pop() || current.path);
       }
       return h("span", { class: "ecall-md-image-placeholder ecall-md-image-error" }, alt || current.label || imageProps.src);
@@ -204,4 +239,3 @@ const MarkdownImage = defineComponent({
 });
 
 export default MarkdownImage;
-

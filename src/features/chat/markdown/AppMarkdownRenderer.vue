@@ -12,6 +12,7 @@
       :streaming="streaming"
       :local-image-base-path="localImageBasePath"
       :footnote-index-map="footnoteIndexMap"
+      :on-image-preview="(payload) => emit('openImagePreview', payload)"
     />
   </div>
   <Teleport to="body">
@@ -91,7 +92,8 @@ import {
   consumeGroupedToolcallRefs,
 } from "./toolcall-ref-group";
 import CodeBlock from "./CodeBlock";
-import MarkdownImage from "./MarkdownImage";
+import LazyMarkdownImage from "./LazyMarkdownImage";
+import type { MarkdownImagePreviewPayload } from "./MarkdownImage";
 import { stableMarkdownRuntimeKey } from "./markdown-runtime-key";
 
 defineOptions({
@@ -110,6 +112,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "click", event: MouseEvent): void;
   (e: "mathContextMenu", payload: { clientX: number; clientY: number; copyText: string }): void;
+  (e: "openImagePreview", payload: MarkdownImagePreviewPayload): void;
 }>();
 const attrs = useAttrs();
 
@@ -500,6 +503,10 @@ const InlineRenderer = defineComponent({
       type: Object as PropType<Record<string, number>>,
       default: () => ({}),
     },
+    onImagePreview: {
+      type: Function as PropType<(payload: MarkdownImagePreviewPayload) => void>,
+      default: undefined,
+    },
   },
   setup(inlineProps) {
     return () => renderSegments(
@@ -509,6 +516,7 @@ const InlineRenderer = defineComponent({
       {
         onToolcallClick: toggleToolcallPreview,
         footnoteIndexMap: inlineProps.footnoteIndexMap,
+        onImagePreview: inlineProps.onImagePreview,
       },
     );
   },
@@ -527,6 +535,10 @@ const BlockRenderer = defineComponent({
     footnoteIndexMap: {
       type: Object as PropType<Record<string, number>>,
       default: () => ({}),
+    },
+    onImagePreview: {
+      type: Function as PropType<(payload: MarkdownImagePreviewPayload) => void>,
+      default: undefined,
     },
   },
   setup(blockProps) {
@@ -562,6 +574,7 @@ const BlockRenderer = defineComponent({
             segments: parseInlineSegments(block.text),
             localImageBasePath: blockProps.localImageBasePath,
             footnoteIndexMap: blockProps.footnoteIndexMap,
+            onImagePreview: blockProps.onImagePreview,
           }),
         ]);
       }
@@ -574,6 +587,7 @@ const BlockRenderer = defineComponent({
             streaming: blockProps.streaming,
             localImageBasePath: blockProps.localImageBasePath,
             footnoteIndexMap: blockProps.footnoteIndexMap,
+            onImagePreview: blockProps.onImagePreview,
           }),
         ]);
       }
@@ -590,6 +604,7 @@ const BlockRenderer = defineComponent({
             segments: parseInlineSegments(item.text),
             localImageBasePath: blockProps.localImageBasePath,
             footnoteIndexMap: blockProps.footnoteIndexMap,
+            onImagePreview: blockProps.onImagePreview,
           }),
         ])));
       }
@@ -602,6 +617,7 @@ const BlockRenderer = defineComponent({
                   segments: parseInlineSegments(cell),
                   localImageBasePath: blockProps.localImageBasePath,
                   footnoteIndexMap: blockProps.footnoteIndexMap,
+                  onImagePreview: blockProps.onImagePreview,
                 }),
               ]))),
             ]),
@@ -610,6 +626,7 @@ const BlockRenderer = defineComponent({
                 segments: parseInlineSegments(cell),
                 localImageBasePath: blockProps.localImageBasePath,
                 footnoteIndexMap: blockProps.footnoteIndexMap,
+                onImagePreview: blockProps.onImagePreview,
               }),
             ]))))),
           ]),
@@ -650,6 +667,7 @@ const BlockRenderer = defineComponent({
               segments: parseInlineSegments(block.summary),
               localImageBasePath: blockProps.localImageBasePath,
               footnoteIndexMap: blockProps.footnoteIndexMap,
+              onImagePreview: blockProps.onImagePreview,
             }),
           ]),
           block.body
@@ -660,6 +678,7 @@ const BlockRenderer = defineComponent({
                 streaming: blockProps.streaming,
                 localImageBasePath: blockProps.localImageBasePath,
                 footnoteIndexMap: blockProps.footnoteIndexMap,
+                onImagePreview: blockProps.onImagePreview,
               }),
             ])
             : null,
@@ -676,6 +695,7 @@ const BlockRenderer = defineComponent({
               segments: parseInlineSegments(item.text),
               localImageBasePath: blockProps.localImageBasePath,
               footnoteIndexMap: blockProps.footnoteIndexMap,
+              onImagePreview: blockProps.onImagePreview,
             }),
           ]))),
         ]);
@@ -688,6 +708,7 @@ const BlockRenderer = defineComponent({
           segments: parseInlineSegments(block.text),
           localImageBasePath: blockProps.localImageBasePath,
           footnoteIndexMap: blockProps.footnoteIndexMap,
+          onImagePreview: blockProps.onImagePreview,
         }),
       ]);
     };
@@ -724,6 +745,7 @@ const BlockRenderer = defineComponent({
                     {
                       onToolcallClick: toggleToolcallPreview,
                       footnoteIndexMap: blockProps.footnoteIndexMap,
+                      onImagePreview: blockProps.onImagePreview,
                     },
                   )
                   : []),
@@ -743,6 +765,7 @@ const BlockRenderer = defineComponent({
               {
                 onToolcallClick: toggleToolcallPreview,
                 footnoteIndexMap: blockProps.footnoteIndexMap,
+                onImagePreview: blockProps.onImagePreview,
               },
             ));
           }
@@ -764,6 +787,7 @@ const BlockRenderer = defineComponent({
               {
                 onToolcallClick: toggleToolcallPreview,
                 footnoteIndexMap: blockProps.footnoteIndexMap,
+                onImagePreview: blockProps.onImagePreview,
               },
             )));
           } else if (grouped.endIndex > index && !grouped.stripLeadingOnEnd) {
@@ -785,6 +809,7 @@ const BlockRenderer = defineComponent({
 type RenderSegmentOptions = {
   onToolcallClick?: (ids: string[], anchorEl: HTMLButtonElement | null) => void;
   footnoteIndexMap?: Record<string, number>;
+  onImagePreview?: (payload: MarkdownImagePreviewPayload) => void;
 };
 
 function footnoteDomId(rawId: string): string {
@@ -919,20 +944,22 @@ function renderSegments(
       continue;
     }
     if (segment.type === "image") {
-      nodes.push(h(MarkdownImage, {
+      nodes.push(h(LazyMarkdownImage, {
         key: `${keyPrefix}-img-${index}`,
         src: segment.src,
         alt: segment.alt,
         localImageBasePath,
+        onOpenPreview: options.onImagePreview,
       }));
       continue;
     }
     if (segment.type === "imageLink") {
       const href = sanitizeMarkdownHref(segment.href);
-      const imageNode = h(MarkdownImage, {
+      const imageNode = h(LazyMarkdownImage, {
         src: segment.src,
         alt: segment.alt,
         localImageBasePath,
+        onOpenPreview: options.onImagePreview,
       });
       if (!href) {
         nodes.push(imageNode);
