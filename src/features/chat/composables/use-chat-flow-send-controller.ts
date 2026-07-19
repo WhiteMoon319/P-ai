@@ -102,6 +102,7 @@ type UseChatFlowSendControllerOptions = {
     text: string,
     images: StreamUserImageAttachment[],
     attachments: Array<{ fileName: string; path: string; mime: string }>,
+    extraTextBlocks: string[],
     mentions: ChatMentionTarget[],
   ) => string;
   resetDisplayState: () => void;
@@ -203,22 +204,35 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
         : true;
       const userMessageId = String((submitResult as { userMessageId?: string } | null)?.userMessageId || "").trim();
       const assistantMessageId = String((submitResult as { assistantMessageId?: string } | null)?.assistantMessageId || "").trim();
+      if (import.meta.env.DEV) {
+        console.info("[主聊天发送] 收到发送结果", {
+          conversationId: sendConversationId,
+          userMessageId,
+          assistantMessageId,
+          accepted,
+          ingress,
+          textLength: plainText.length,
+          sentImageCount: sentImages.length,
+          attachmentCount: attachments.length,
+          extraTextBlockCount: extraTextBlocks.length,
+        });
+      }
+      if (userMessageId) {
+        options.insertUserDraft(userMessageId, gen, plainText, sentImages, attachments, extraTextBlocks, selectedMentions);
+      }
       if (!hasForegroundRoundInFlight && accepted && ingress !== "queued") {
-        if (userMessageId) {
-          options.insertUserDraft(userMessageId, gen, plainText, sentImages, attachments, selectedMentions);
-        }
         if (selectedMentions.length === 0 && assistantMessageId) {
           queuedAssistantMessageId = assistantMessageId;
           options.setRound({ phase: "queued", gen, messageId: queuedAssistantMessageId });
           options.updateQueuedAssistantMessageStatus(queuedAssistantMessageId, options.t("chat.statusPreparingMessage"));
           options.onAssistantDraftInserted?.();
         }
-        if (userMessageId) {
-          options.onOwnUserDraftInserted?.({
-            conversationId: String(submitResult.conversationId || sendConversationId || "").trim(),
-            messageId: userMessageId,
-          });
-        }
+      }
+      if (userMessageId) {
+        options.onOwnUserDraftInserted?.({
+          conversationId: String(submitResult.conversationId || sendConversationId || "").trim(),
+          messageId: userMessageId,
+        });
       }
       if (!hasForegroundRoundInFlight && (ingress === "queued" || !accepted)) {
         options.removeMessage(queuedAssistantMessageId);

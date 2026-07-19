@@ -27,6 +27,18 @@ export function buildPersonasSnapshotJson(personas: PersonaProfile[]) {
 }
 
 export function useChatWindowMessageHelpers(bindings: Record<string, any>) {
+  function summarizeMessageParts(parts: ChatMessage["parts"] | undefined) {
+    return Array.isArray(parts)
+      ? parts.map((part: ChatMessage["parts"][number]) => ({
+          type: String(part?.type || ""),
+          path: "path" in (part || {}) ? String((part as { path?: unknown }).path || "").trim() : "",
+          mime: "mime" in (part || {}) ? String((part as { mime?: unknown }).mime || "").trim() : "",
+          name: "name" in (part || {}) ? String((part as { name?: unknown }).name || "").trim() : "",
+          textLength: "text" in (part || {}) ? String((part as { text?: unknown }).text || "").length : 0,
+        }))
+      : [];
+  }
+
   function syncUserAliasFromPersona() {
     const next = (bindings.userPersona.value?.name || "").trim() || bindings.t("archives.roleUser");
     if (bindings.userAlias.value !== next) {
@@ -69,6 +81,14 @@ export function useChatWindowMessageHelpers(bindings: Record<string, any>) {
     const draftIndex = bindings.allMessages.value.findIndex((message: ChatMessage) => isOptimisticOwnUserDraft(message));
     if (draftIndex < 0) return null;
     const draftMessage = bindings.allMessages.value[draftIndex] as ChatMessage | undefined;
+    if (import.meta.env.DEV) {
+      console.info("[历史刷新快替] 替换前", {
+        committedId: String(committedMessage.id || "").trim(),
+        draftId: String(draftMessage?.id || "").trim(),
+        committedParts: summarizeMessageParts(committedMessage.parts),
+        committedExtraTextBlockCount: Array.isArray(committedMessage.extraTextBlocks) ? committedMessage.extraTextBlocks.length : 0,
+      });
+    }
     const committedMessageForDisplay = applyStableRenderIdFromDraft(committedMessage, draftMessage);
 
     const committedId = String(committedMessage.id || "").trim();
@@ -89,6 +109,14 @@ export function useChatWindowMessageHelpers(bindings: Record<string, any>) {
     bindings.allMessages.value = bindings.allMessages.value.map((message: ChatMessage, index: number) =>
       index === draftIndex ? committedMessageForDisplay : message
     );
+    if (import.meta.env.DEV) {
+      const replaced = bindings.allMessages.value.find((message: ChatMessage) => String(message.id || "").trim() === committedId);
+      console.info("[历史刷新快替] 替换后", {
+        committedId,
+        parts: summarizeMessageParts(replaced?.parts),
+        extraTextBlockCount: Array.isArray(replaced?.extraTextBlocks) ? replaced.extraTextBlocks.length : 0,
+      });
+    }
     bindings.foregroundTailLatestReady.value = true;
     return { messageId: committedId };
   }

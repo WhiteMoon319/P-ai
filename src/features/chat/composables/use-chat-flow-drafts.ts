@@ -112,6 +112,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     text: string,
     images: Array<{ mime: string; bytesBase64: string; savedPath?: string }>,
     attachments: Array<{ fileName: string; path: string; mime: string }>,
+    extraTextBlocks: string[],
     mentions: ChatMentionTarget[],
   ): string {
     const messageId = String(rawMessageId || "").trim();
@@ -146,6 +147,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
       createdAt: new Date().toISOString(),
       speakerAgentId: "user-persona",
       parts,
+      extraTextBlocks: Array.isArray(extraTextBlocks) ? extraTextBlocks.filter((item) => !!String(item || "").trim()) : [],
       providerMeta: {
         message_meta: mentions.length > 0
           ? {
@@ -157,7 +159,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
                 departmentName: item.departmentName,
               })),
             }
-          : undefined,
+        : undefined,
       },
     };
     const stableMsg = messageWithStableRenderId(msg, messageId);

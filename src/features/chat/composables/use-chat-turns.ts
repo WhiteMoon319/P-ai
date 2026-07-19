@@ -358,6 +358,25 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
       activityRunning: activity.activityRunning,
       activityStatus: activity.activityStatus,
     } satisfies ChatMessageBlock;
+    if (import.meta.env.DEV && message.role === "user") {
+      const attachmentCount = Array.isArray(baseBlock.attachmentFiles) ? baseBlock.attachmentFiles.length : 0;
+      const extraRefCount = Array.isArray(baseBlock.extraTextReferences) ? baseBlock.extraTextReferences.length : 0;
+      console.info("[消息投影] 用户消息块", {
+        messageId: String(message.id || "").trim(),
+        rawTextLength: String(baseBlock.text || "").length,
+        attachmentCount,
+        extraRefCount,
+        blockWillRender: !!(
+          baseBlock.text
+          || baseBlock.images.length > 0
+          || baseBlock.audios.length > 0
+          || attachmentCount > 0
+          || extraRefCount > 0
+          || baseBlock.activityItems.length > 0
+          || baseBlock.activityRunning
+        ),
+      });
+    }
 
     const blocks: ChatMessageBlock[] = [];
     if (

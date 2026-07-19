@@ -854,10 +854,23 @@ function showAssistantPreStreamingDots(block: ChatMessageBlock): boolean {
 }
 
 function bubbleContentEmpty(block: ChatMessageBlock): boolean {
-  if (isOwnMessage(block)) return !ownBubbleHasContent(block);
-  if (assistantUsesSegmentedMarkdown.value && !!assistantRenderedText.value) return true;
-  if (showAssistantPreStreamingDots(block)) return true;
-  return !assistantBubbleHasContent(block);
+  const own = isOwnMessage(block);
+  const ownHasContent = own ? ownBubbleHasContent(block) : false;
+  const assistantSegOverride = !own && assistantUsesSegmentedMarkdown.value && !!assistantRenderedText.value;
+  const assistantDots = !own && showAssistantPreStreamingDots(block);
+  const assistantHasContent = !own ? assistantBubbleHasContent(block) : false;
+  const empty = own ? !ownHasContent : assistantSegOverride || assistantDots || !assistantHasContent;
+  if (import.meta.env.DEV && own && !ownHasContent) {
+    console.info("[气泡判空] 用户气泡被判定为空", {
+      messageId: String(block.id || "").trim(),
+      textLength: String(ownMessageDisplayText(block) || "").trim().length,
+      attachmentCount: Array.isArray(block.attachmentFiles) ? block.attachmentFiles.length : 0,
+      extraRefCount: Array.isArray(block.extraTextReferences) ? block.extraTextReferences.length : 0,
+      imageCount: Array.isArray(block.images) ? block.images.length : 0,
+      audioCount: Array.isArray(block.audios) ? block.audios.length : 0,
+    });
+  }
+  return empty;
 }
 
 function ownBubbleHasContent(block: ChatMessageBlock): boolean {
