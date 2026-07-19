@@ -19,33 +19,24 @@ describe("ide-context-reference-groups", () => {
     expect(groups[0]?.references.map((item) => item.id)).toEqual(["attached-file"]);
   });
 
-  it("按最终展示文本去重，避免同名文件标签重复出现", () => {
-    const first = {
-      id: "first",
-      filePath: "E:/repo/a/AGENTS.md",
-      relativePath: "a/AGENTS.md",
-      displayLabel: "AGENTS.md",
+  it("补出的无行号文件标签仍然保留同一路径引用", () => {
+    const ranged = {
+      id: "ranged",
+      filePath: "E:/repo/AGENTS.md",
+      relativePath: "AGENTS.md",
       fileName: "AGENTS.md",
-      startLine: 0,
-      endLine: 0,
-    } as IdeContextReferenceItem;
-    const second = {
-      id: "second",
-      filePath: "E:/repo/b/AGENTS.md",
-      relativePath: "b/AGENTS.md",
-      displayLabel: "AGENTS.md",
-      fileName: "AGENTS.md",
-      startLine: 0,
-      endLine: 0,
+      displayLabel: "AGENTS.md:3-32",
+      startLine: 3,
+      endLine: 32,
     } as IdeContextReferenceItem;
 
     const groups = mergeComposerIdeContextGroups([
-      { workspacePath: "", workspaceName: "", references: [first, second] },
+      { workspacePath: "", workspaceName: "", references: [ranged] },
     ], []);
 
-    expect(groups).toHaveLength(1);
-    expect(groups[0]?.references.map((item) => item.displayLabel)).toEqual([
-      "AGENTS.md",
-    ]);
+    const fileOnly = groups[0]?.references.find((item) => item.displayLabel === "AGENTS.md");
+    expect(fileOnly?.filePath).toBe("E:/repo/AGENTS.md");
+    expect(fileOnly?.startLine).toBe(0);
+    expect(fileOnly?.endLine).toBe(0);
   });
 });

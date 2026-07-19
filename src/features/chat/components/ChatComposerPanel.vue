@@ -647,19 +647,19 @@ const mergedIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() => mergeC
   props.ideContextGroups || [],
   props.attachedIdeContextReferences || [],
 ));
-const mergedIdeContextDisplayLabels = computed(() => new Set(
+function normalizedComposerPathKey(value: string): string {
+  return String(value || "").trim().replace(/\\/g, "/").toLowerCase();
+}
+const mergedIdeContextPathKeys = computed(() => new Set(
   mergedIdeContextGroups.value
     .flatMap((group) => group.references || [])
-    .map((item) => {
-      const parts = ideContextReferenceDisplayParts(item);
-      return `${parts.fileName}${parts.lineSuffix}`.trim().toLowerCase();
-    })
+    .map((item) => normalizedComposerPathKey(item.filePath || item.relativePath || ""))
     .filter(Boolean),
 ));
 const visibleQueuedAttachmentNotices = computed(() =>
   (Array.isArray(props.queuedAttachmentNotices) ? props.queuedAttachmentNotices : []).filter((item) => {
-    const displayLabel = String(item.fileName || "").trim().toLowerCase();
-    return !displayLabel || !mergedIdeContextDisplayLabels.value.has(displayLabel);
+    const pathKey = normalizedComposerPathKey(item.path || "");
+    return !pathKey || !mergedIdeContextPathKeys.value.has(pathKey);
   }),
 );
 
