@@ -85,13 +85,17 @@ export function useChatImagePreview() {
 
   function onPreviewPointerDown(event: PointerEvent) {
     if (imagePreviewZoom.value <= 1) return;
+    event.preventDefault();
     previewDragging.value = true;
     previewPointerId = event.pointerId;
     previewDragStartX = event.clientX;
     previewDragStartY = event.clientY;
     previewDragOriginOffsetX = previewOffsetX.value;
     previewDragOriginOffsetY = previewOffsetY.value;
-    (event.currentTarget as HTMLElement | null)?.setPointerCapture?.(event.pointerId);
+    const target = event.target;
+    if (target instanceof HTMLElement) {
+      target.setPointerCapture?.(event.pointerId);
+    }
   }
 
   function onPreviewPointerMove(event: PointerEvent) {

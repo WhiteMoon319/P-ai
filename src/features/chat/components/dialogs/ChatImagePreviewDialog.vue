@@ -1,30 +1,31 @@
 <template>
-  <dialog class="modal" :class="{ 'modal-open': open }" @cancel.prevent="emit('close')">
-    <div class="modal-box flex h-[90vh] max-h-[90vh] w-[90vw] max-w-[90vw] flex-col p-2 bg-base-100">
-      <div class="mb-2 flex shrink-0 items-center justify-end gap-1">
-        <button class="btn btn-xs" :disabled="zoom <= minZoom" @click="emit('zoomOut')">
-          <Minus class="h-3 w-3" />
+  <dialog class="modal ecall-image-preview-modal" :class="{ 'modal-open': open }" @cancel.prevent="emit('close')">
+    <div class="modal-box relative flex h-full max-h-full w-screen max-w-none flex-col overflow-hidden rounded-none bg-black/95 p-0 text-white shadow-none">
+      <div class="absolute bottom-4 left-1/2 z-10 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-0.5 rounded-lg border border-white/10 bg-black/45 p-1">
+        <button class="btn btn-sm btn-ghost border-0 text-white/80 shadow-none hover:bg-white/10 hover:text-white" :disabled="zoom <= minZoom" @click="emit('zoomOut')">
+          <Minus class="h-4 w-4" />
         </button>
-        <button class="btn btn-xs" :disabled="zoom >= maxZoom" @click="emit('zoomIn')">
-          <Plus class="h-3 w-3" />
+        <button class="btn btn-sm btn-ghost border-0 text-white/80 shadow-none hover:bg-white/10 hover:text-white" :disabled="zoom >= maxZoom" @click="emit('zoomIn')">
+          <Plus class="h-4 w-4" />
         </button>
-        <button class="btn btn-xs" :disabled="Math.abs(zoom - 1) < 0.001" @click="emit('reset')">
+        <button class="btn btn-sm min-w-14 border-0 bg-transparent text-white/80 shadow-none hover:bg-white/10 hover:text-white" :disabled="Math.abs(zoom - 1) < 0.001" @click="emit('reset')">
           {{ Math.round(zoom * 100) }}%
         </button>
         <template v-if="localPath">
-          <button class="btn btn-xs" :disabled="copyStatus === 'doing'" @click="emit('copyImage', localPath)">
-            <Copy class="h-3 w-3" />
+          <button class="btn btn-sm btn-ghost border-0 text-white/80 shadow-none hover:bg-white/10 hover:text-white" :disabled="copyStatus === 'doing'" @click="emit('copyImage', localPath)">
+            <Copy class="h-4 w-4" />
           </button>
-          <button class="btn btn-xs" :disabled="saveStatus === 'doing'" @click="emit('saveImage', localPath)">
-            <Download class="h-3 w-3" />
+          <button class="btn btn-sm btn-ghost border-0 text-white/80 shadow-none hover:bg-white/10 hover:text-white" :disabled="saveStatus === 'doing'" @click="emit('saveImage', localPath)">
+            <Download class="h-4 w-4" />
           </button>
         </template>
-        <button class="btn btn-xs btn-ghost btn-square" type="button" title="关闭" aria-label="关闭" @click="emit('close')">
-          <X class="h-3.5 w-3.5" />
+        <span class="mx-1 h-4 w-px shrink-0 bg-white/15" aria-hidden="true"></span>
+        <button class="btn btn-sm btn-ghost btn-square border-0 text-white/80 shadow-none hover:bg-white/10 hover:text-white" type="button" title="返回" aria-label="返回" @click="emit('close')">
+          <ArrowLeft class="h-4 w-4" />
         </button>
       </div>
       <div
-        class="flex min-h-0 flex-1 items-center justify-center overflow-hidden"
+        class="flex min-h-0 flex-1 items-center justify-center overflow-hidden p-0"
         :class="zoom > 1 ? (dragging ? 'cursor-grabbing' : 'cursor-grab') : ''"
         @wheel.prevent="emit('wheel', $event)"
         @pointermove="emit('pointerMove', $event)"
@@ -36,7 +37,9 @@
           v-if="dataUrl"
           :src="dataUrl"
           class="max-h-full max-w-full object-contain rounded select-none"
-          :style="{ transform: `translate(${offsetX}px, ${offsetY}px) scale(${zoom})`, transformOrigin: 'center center' }"
+          draggable="false"
+          :style="{ transform: `translate(${offsetX}px, ${offsetY}px) scale(${zoom})`, transformOrigin: 'center center', touchAction: 'none' }"
+          @dragstart.prevent
           @pointerdown="emit('pointerDown', $event)"
         />
       </div>
@@ -48,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { Copy, Download, Minus, Plus, X } from "@lucide/vue";
+import { ArrowLeft, Copy, Download, Minus, Plus } from "@lucide/vue";
 
 defineProps<{
   open: boolean;
@@ -77,3 +80,10 @@ const emit = defineEmits<{
   (e: "saveImage", path: string): void;
 }>();
 </script>
+
+<style>
+.ecall-image-preview-modal {
+  top: 2.5rem;
+  height: calc(100vh - 2.5rem);
+}
+</style>
