@@ -954,6 +954,7 @@ fn main() {
 
             // ========== 阶段 1：最小启动，尽快让前端可见 ==========
             let app_state = app_handle.state::<AppState>();
+            initialize_window_layout_store(&app_handle);
             attach_window_layout_persistence(&app_handle);
             hide_on_close(&app_handle);
             let startup_window_label = match state_read_config_cached(app_state.inner()) {

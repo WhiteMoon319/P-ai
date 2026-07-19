@@ -5,6 +5,7 @@ const WINDOW_LAYOUTS_FILE_NAME: &str = "window_layouts.json";
 const WINDOW_DIAGNOSTIC_LOG_FILE_NAME: &str = "window_diagnostics.log";
 const FILE_READER_WINDOW_LABEL: &str = "file-reader";
 const NEAR_FULLSCREEN_RESTORE_RATIO: f64 = 0.92;
+const WINDOW_LAYOUT_SAVE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
 
 static DETACHED_CHAT_WINDOWS: OnceLock<Mutex<std::collections::HashMap<String, String>>> =
     OnceLock::new();
@@ -13,6 +14,9 @@ static OFFSCREEN_LAYOUT_LOGGED_ONCE: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
 static CHAT_WINDOW_SIDE_EXPANSION: OnceLock<Mutex<ChatWindowSideExpansion>> = OnceLock::new();
+static WINDOW_LAYOUT_STORE: OnceLock<Arc<Mutex<WindowLayoutStore>>> = OnceLock::new();
+static WINDOW_LAYOUT_SAVE_SENDER: OnceLock<std::sync::mpsc::Sender<PersistedWindowLayouts>> =
+    OnceLock::new();
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct ChatWindowSideExpansion {
@@ -26,6 +30,11 @@ struct PhysicalWindowRect {
     y: i32,
     width: u32,
     height: u32,
+}
+
+#[derive(Debug)]
+struct WindowLayoutStore {
+    layouts: PersistedWindowLayouts,
 }
 
 fn chat_window_side_expansion() -> &'static Mutex<ChatWindowSideExpansion> {
@@ -158,16 +167,21 @@ mod chat_window_side_expansion_tests {
         let target = calculate_chat_window_collapse_target(rect(180, 920), "left", 320);
         assert_eq!(target, Some(rect(500, 600)));
     }
+
+    #[test]
+    fn chat_window_default_size_matches_tauri_config() {
+        assert_eq!(default_window_size("chat"), (618, 1000));
+    }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct PersistedWindowLayouts {
     #[serde(default)]
     windows: std::collections::HashMap<String, PersistedWindowLayout>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct PersistedWindowLayout {
     #[serde(default)]
@@ -201,12 +215,12 @@ fn append_window_diagnostic_log(app: &AppHandle, message: String) {
     }
 }
 
-fn load_window_layouts(data_path: &PathBuf) -> PersistedWindowLayouts {
+fn read_window_layouts(data_path: &PathBuf) -> Result<PersistedWindowLayouts, String> {
     let path = window_layouts_path(data_path);
     if !path.exists() {
-        return PersistedWindowLayouts::default();
+        return Ok(PersistedWindowLayouts::default());
     }
-    read_json_file::<PersistedWindowLayouts>(&path, "window layouts").unwrap_or_default()
+    read_json_file::<PersistedWindowLayouts>(&path, "window layouts")
 }
 
 fn save_window_layouts(data_path: &PathBuf, layouts: &PersistedWindowLayouts) -> Result<(), String> {
@@ -217,21 +231,130 @@ fn save_window_layouts(data_path: &PathBuf, layouts: &PersistedWindowLayouts) ->
     )
 }
 
-fn upsert_window_layout<F>(app: &AppHandle, label: &str, update: F) -> Result<(), String>
+fn window_layout_store() -> Result<Arc<Mutex<WindowLayoutStore>>, String> {
+    WINDOW_LAYOUT_STORE
+        .get()
+        .cloned()
+        .ok_or_else(|| "窗口布局内存缓存尚未初始化".to_string())
+}
+
+fn window_layouts_snapshot() -> Result<PersistedWindowLayouts, String> {
+    let store = window_layout_store()?;
+    store
+        .lock()
+        .map(|state| state.layouts.clone())
+        .map_err(|err| format!("读取窗口布局内存缓存失败：{err}"))
+}
+
+fn enqueue_window_layout_save(layouts: PersistedWindowLayouts) {
+    let Some(sender) = WINDOW_LAYOUT_SAVE_SENDER.get() else {
+        runtime_log_warn("[窗口布局] 保存队列尚未初始化，跳过异步写盘".to_string());
+        return;
+    };
+    if let Err(err) = sender.send(layouts) {
+        runtime_log_warn(format!("[窗口布局] 写入异步保存队列失败：{err}"));
+    }
+}
+
+fn run_window_layout_save_worker(
+    data_path: PathBuf,
+    receiver: std::sync::mpsc::Receiver<PersistedWindowLayouts>,
+) {
+    let mut pending = match receiver.recv() {
+        Ok(layouts) => layouts,
+        Err(_) => return,
+    };
+    let mut next_save_at = std::time::Instant::now() + WINDOW_LAYOUT_SAVE_INTERVAL;
+    loop {
+        let wait = next_save_at.saturating_duration_since(std::time::Instant::now());
+        match receiver.recv_timeout(wait) {
+            Ok(layouts) => pending = layouts,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                if let Err(err) = save_window_layouts(&data_path, &pending) {
+                    runtime_log_warn(format!(
+                        "[窗口布局] 异步写盘失败，将在下一轮重试：error={err}"
+                    ));
+                    next_save_at = std::time::Instant::now() + WINDOW_LAYOUT_SAVE_INTERVAL;
+                    continue;
+                }
+                next_save_at = std::time::Instant::now() + WINDOW_LAYOUT_SAVE_INTERVAL;
+                match receiver.try_recv() {
+                    Ok(layouts) => pending = layouts,
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {
+                        pending = match receiver.recv() {
+                            Ok(layouts) => layouts,
+                            Err(_) => return,
+                        };
+                        next_save_at = std::time::Instant::now() + WINDOW_LAYOUT_SAVE_INTERVAL;
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => return,
+                }
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
+        }
+    }
+}
+
+fn initialize_window_layout_store(app: &AppHandle) {
+    if WINDOW_LAYOUT_STORE.get().is_some() {
+        return;
+    }
+    let state = app.state::<AppState>();
+    let data_path = state.data_path.clone();
+    let (layouts, repair_needed) = match read_window_layouts(&data_path) {
+        Ok(layouts) => (layouts, false),
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[窗口布局] 读取布局失败，已使用新的内存布局：error={err}"
+            ));
+            (PersistedWindowLayouts::default(), true)
+        }
+    };
+    let initial_layouts = layouts.clone();
+    let (sender, receiver) = std::sync::mpsc::channel::<PersistedWindowLayouts>();
+    let store = Arc::new(Mutex::new(WindowLayoutStore {
+        layouts,
+    }));
+    if WINDOW_LAYOUT_STORE.set(store).is_err() {
+        return;
+    }
+    if WINDOW_LAYOUT_SAVE_SENDER.set(sender).is_err() {
+        return;
+    }
+    if repair_needed {
+        enqueue_window_layout_save(initial_layouts);
+    }
+    std::thread::Builder::new()
+        .name("window-layout-save".to_string())
+        .spawn(move || run_window_layout_save_worker(data_path, receiver))
+        .ok();
+}
+
+fn upsert_window_layout<F>(label: &str, update: F) -> Result<(), String>
 where
     F: FnOnce(&mut PersistedWindowLayout),
 {
-    let state = app.state::<AppState>();
-    let mut layouts = load_window_layouts(&state.data_path);
-    let entry = layouts.windows.entry(label.to_string()).or_default();
-    update(entry);
-    save_window_layouts(&state.data_path, &layouts)
+    let store = window_layout_store()?;
+    let snapshot = {
+        let mut state = store
+            .lock()
+            .map_err(|err| format!("更新窗口布局内存缓存失败：{err}"))?;
+        let entry = state.layouts.windows.entry(label.to_string()).or_default();
+        let previous = entry.clone();
+        update(entry);
+        if *entry == previous {
+            return Ok(());
+        }
+        state.layouts.clone()
+    };
+    enqueue_window_layout_save(snapshot);
+    Ok(())
 }
 
 fn default_window_size(label: &str) -> (u32, u32) {
     match label {
         "main" => (900_u32, 900_u32),
-        "chat" => (900_u32, 900_u32),
+        "chat" => (618_u32, 1000_u32),
         "archives" => (900_u32, 900_u32),
         "quick-setup" => (800_u32, 600_u32),
         FILE_READER_WINDOW_LABEL => (1040_u32, 760_u32),
@@ -432,7 +555,7 @@ fn monitor_logical_size(monitor: &tauri::Monitor) -> tauri::LogicalSize<f64> {
 
 fn default_window_size_for_monitor(label: &str, monitor: &tauri::Monitor) -> (u32, u32) {
     let fallback = default_window_size(label);
-    if matches!(label, "quick-setup") {
+    if matches!(label, "chat" | "quick-setup") {
         return fallback;
     }
     let logical = monitor_logical_size(monitor);
@@ -510,12 +633,12 @@ fn window_size_is_near_fullscreen(width: u32, height: u32, monitor: &tauri::Moni
 }
 
 fn saved_window_layout_is_near_fullscreen(
-    app: &AppHandle,
     label: &str,
     monitor: &tauri::Monitor,
 ) -> bool {
-    let state = app.state::<AppState>();
-    let layouts = load_window_layouts(&state.data_path);
+    let Ok(layouts) = window_layouts_snapshot() else {
+        return false;
+    };
     let Some(saved) = layouts.windows.get(label) else {
         return false;
     };
@@ -887,8 +1010,7 @@ fn apply_window_layout_before_show(app: &AppHandle, label: &str) -> Result<(), S
         min_width as f64,
         min_height as f64,
     ))));
-    let state = app.state::<AppState>();
-    let layouts = load_window_layouts(&state.data_path);
+    let layouts = window_layouts_snapshot()?;
     let saved = layouts.windows.get(label);
     let fallback_monitor = preferred_window_monitor(&window);
 
@@ -1027,7 +1149,7 @@ fn persist_window_layout_snapshot_with_reason(
         Some((width, height, x, outer_pos.y))
     };
 
-    upsert_window_layout(app, label, |entry| {
+    upsert_window_layout(label, |entry| {
         if let Some((width, height, x, y)) = size_and_position {
             entry.width = Some(width);
             entry.height = Some(height);
@@ -1152,7 +1274,7 @@ fn toggle_window_maximize_with_default_restore(
     let restore_monitor = preferred_window_monitor(&window);
     let saved_layout_near_fullscreen = restore_monitor
         .as_ref()
-        .map(|monitor| saved_window_layout_is_near_fullscreen(app, label, monitor))
+        .map(|monitor| saved_window_layout_is_near_fullscreen(label, monitor))
         .unwrap_or(false);
     window
         .unmaximize()
