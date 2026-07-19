@@ -74,6 +74,34 @@ fn tool_loop_round_tool_calls_json(tool_calls: &[genai::chat::ToolCall]) -> Vec<
         .collect::<Vec<_>>()
 }
 
+fn tool_loop_assistant_message(
+    turn_text: &str,
+    turn_tool_calls: &[genai::chat::ToolCall],
+    turn_reasoning: &str,
+) -> genai::chat::ChatMessage {
+    let mut assistant_parts = turn_tool_calls
+        .first()
+        .and_then(|tool_call| tool_call.thought_signatures.as_ref())
+        .into_iter()
+        .flatten()
+        .cloned()
+        .map(genai::chat::ContentPart::ThoughtSignature)
+        .collect::<Vec<_>>();
+    if !turn_text.is_empty() {
+        assistant_parts.push(genai::chat::ContentPart::from_text(turn_text.to_string()));
+    }
+    assistant_parts.extend(
+        turn_tool_calls
+            .iter()
+            .cloned()
+            .map(genai::chat::ContentPart::ToolCall),
+    );
+    genai::chat::ChatMessage::assistant(genai::chat::MessageContent::from_parts(
+        assistant_parts,
+    ))
+    .with_reasoning_content(Some(turn_reasoning.trim().to_string()))
+}
+
 fn tool_loop_round_response_value(
     turn_text: &str,
     turn_reasoning: &str,
@@ -592,18 +620,8 @@ async fn run_genai_tool_loop(
             });
         }
 
-        let mut assistant_parts = Vec::<genai::chat::ContentPart>::new();
-        if !turn_text.is_empty() {
-            assistant_parts.push(genai::chat::ContentPart::from_text(turn_text.clone()));
-        }
-        for tool_call in &turn_tool_calls {
-            assistant_parts.push(genai::chat::ContentPart::ToolCall(tool_call.clone()));
-        }
-        let mut assistant_message = genai::chat::ChatMessage::assistant(
-            genai::chat::MessageContent::from_parts(assistant_parts),
-        );
-        assistant_message =
-            assistant_message.with_reasoning_content(Some(turn_reasoning.trim().to_string()));
+        let assistant_message =
+            tool_loop_assistant_message(&turn_text, &turn_tool_calls, &turn_reasoning);
         messages.push(assistant_message);
         let mut deferred_outcome = None::<DeferredToolLoopOutcome>;
         let mut guided_close_requested = false;
@@ -1917,6 +1935,32 @@ mod tool_loop_tests {
             Some("先读取目标文件确认结构")
         );
         assert!(response["toolCalls"].as_array().is_some_and(|items| items.is_empty()));
+    }
+
+    #[test]
+    fn tool_loop_assistant_message_should_preserve_gemini_thought_signatures() {
+        let tool_calls = vec![genai::chat::ToolCall {
+            call_id: "call-read-media".to_string(),
+            fn_name: "read_media".to_string(),
+            fn_arguments: serde_json::json!({"path": "image.png"}),
+            thought_signatures: Some(vec!["gemini-signature".to_string()]),
+        }];
+
+        let message = tool_loop_assistant_message("我来读取图片", &tool_calls, "先检查图片内容");
+        let parts = message.content.parts();
+
+        assert!(matches!(
+            parts.first(),
+            Some(genai::chat::ContentPart::ThoughtSignature(signature)) if signature == "gemini-signature"
+        ));
+        assert!(matches!(
+            parts.get(1),
+            Some(genai::chat::ContentPart::Text(text)) if text == "我来读取图片"
+        ));
+        assert!(matches!(
+            parts.get(2),
+            Some(genai::chat::ContentPart::ToolCall(tool_call)) if tool_call.fn_name == "read_media"
+        ));
     }
 
     #[test]
