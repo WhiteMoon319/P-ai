@@ -203,7 +203,17 @@ fn ide_context_line_suffix(start_line: Option<u32>, end_line: Option<u32>) -> St
     }
 }
 
+const IDE_CONTEXT_TEXT_BLOCK_CONTENT_LIMIT: usize = 2000;
+
 fn ide_context_text_block(file_path: &str, reference: &IdeContextReference) -> String {
+    let location = format!(
+        "{}{}",
+        file_path,
+        ide_context_line_suffix(reference.start_line, reference.end_line)
+    );
+    if reference.content.chars().count() > IDE_CONTEXT_TEXT_BLOCK_CONTENT_LIMIT {
+        return format!("用户引用了文件片段：{location}");
+    }
     if reference.source.trim() == "active_file" {
         return ["[IDE 上下文引用]".to_string(), format!("文件: {file_path}")].join("\n");
     }

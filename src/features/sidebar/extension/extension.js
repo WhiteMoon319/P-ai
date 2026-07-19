@@ -7,6 +7,7 @@ const DISCOVERY_FILE = "p-ai-ide-context-bridge.json";
 const IDE_CONTEXT_CLIENT_ID = `vscode-${process.pid}`;
 const MAX_CONTEXT_LINES = 240;
 const MAX_CONTEXT_CHARS = 40000;
+const CONTEXT_TEXT_BLOCK_CONTENT_LIMIT = 2000;
 const IDE_CONTEXT_DEBOUNCE_MS = 200;
 const IDE_CONTEXT_HEARTBEAT_MS = 10000;
 
@@ -82,18 +83,23 @@ function lineSuffix(startLine, endLine) {
 }
 
 function textBlockForReference(reference) {
+  const lineText = reference.endLine && reference.endLine > reference.startLine
+    ? `${reference.startLine}-${reference.endLine}`
+    : String(reference.startLine || reference.endLine || "");
+  const location = `${reference.filePath}${lineText ? `:${lineText}` : ""}`;
+  const content = String(reference.content || "");
+  if (content.length > CONTEXT_TEXT_BLOCK_CONTENT_LIMIT) {
+    return `用户引用了文件片段：${location}`;
+  }
   const lines = ["[IDE 上下文引用]", `文件: ${reference.filePath}`];
   if (reference.startLine || reference.endLine) {
-    const lineText = reference.endLine && reference.endLine > reference.startLine
-      ? `${reference.startLine}-${reference.endLine}`
-      : String(reference.startLine || reference.endLine || "");
     if (lineText) lines.push(`行号: ${lineText}`);
   }
   if (reference.languageId) lines.push(`语言: ${reference.languageId}`);
   if (reference.source) lines.push(`来源: ${reference.source}`);
   if (reference.capturedAt) lines.push(`采集时间: ${reference.capturedAt}`);
   lines.push("内容:");
-  lines.push(reference.content || "");
+  lines.push(content);
   return lines.join("\n");
 }
 

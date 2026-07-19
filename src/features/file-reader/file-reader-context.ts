@@ -187,7 +187,7 @@ function buildContextTextBlock(input: {
 }): string {
   const location = `${input.filePath}${formatLineSuffix(input.lineRange.startLine, input.lineRange.endLine)}`;
   if (input.content.length > CONTEXT_TEXT_BLOCK_CONTENT_LIMIT) {
-    return `${input.t("fileReader.referenceFile", { location })}${input.t("fileReader.referenceTruncated", { count: input.content.length })}`;
+    return input.t("fileReader.referenceFile", { location });
   }
   return [input.t("fileReader.referenceFile", { location }), "```text", input.content, "```"].join("\n");
 }

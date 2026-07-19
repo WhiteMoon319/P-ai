@@ -46,6 +46,21 @@ describe("file-reader-context", () => {
     expect(reference.textBlock).toContain("```text");
   });
 
+  it("超过 2000 字符时只保留路径和行号", () => {
+    const reference = buildFileReaderContextReference({
+      tab,
+      initialRootPath: "E:/repo",
+      source: "selection",
+      lineRange: { startLine: 3, endLine: 4 },
+      content: "a".repeat(2001),
+      displayLabel: "src/app.ts:3-4",
+      capturedAt: "2026-07-19T00:00:00Z",
+      t,
+    });
+
+    expect(reference.textBlock).toBe('fileReader.referenceFile:{"location":"E:/repo/src/app.ts:3-4"}');
+  });
+
   it("文件行号引用继续复用标准后缀规则", () => {
     expect(fileReaderLineReference("E:\\repo\\src\\app.ts", { startLine: 8, endLine: 8 }))
       .toBe("E:/repo/src/app.ts:8");
