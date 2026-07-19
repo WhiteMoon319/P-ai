@@ -159,46 +159,6 @@ async fn apply_compaction_preserved_gate_after_tool_round(
     }
 }
 
-fn terminal_task_complete_result(tool_name: &str, tool_args: &str, tool_result: &ProviderToolResult) -> Option<String> {
-    if tool_name != "task" || tool_result.is_error {
-        return None;
-    }
-
-    let args_value = serde_json::from_str::<Value>(tool_args).ok()?;
-    let action = json_string_field(&args_value, &["action"])?;
-    if !action.eq_ignore_ascii_case("complete") {
-        return None;
-    }
-
-    let completion_conclusion = json_string_field(
-        &args_value,
-        &["completion_conclusion", "completionConclusion"],
-    )
-    .or_else(|| match &tool_result.metadata.control {
-        ProviderToolControl::Task { completion_conclusion, .. } => completion_conclusion.clone(),
-        _ => None,
-    });
-    let completion_state = json_string_field(
-        &args_value,
-        &["completion_state", "completionState"],
-    )
-    .or_else(|| match &tool_result.metadata.control {
-        ProviderToolControl::Task { completion_state, .. } => completion_state.clone(),
-        _ => None,
-    })
-    .unwrap_or_default();
-
-    Some(completion_conclusion.unwrap_or_else(|| {
-        if completion_state.eq_ignore_ascii_case("failed_completed") {
-            "任务已按失败结束。".to_string()
-        } else if completion_state.eq_ignore_ascii_case("completed") {
-            "任务已完成。".to_string()
-        } else {
-            "任务已结束。".to_string()
-        }
-    }))
-}
-
 fn plan_tool_result_state(
     tool_name: &str,
     tool_args: &str,

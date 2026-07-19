@@ -211,7 +211,6 @@ fn tool_loop_guided_close_reply(
 #[derive(Debug, Clone)]
 enum DeferredToolLoopOutcome {
     OrganizeContext,
-    TaskComplete(String),
     PlanPresent(TerminalToolResultMessage),
 }
 
@@ -222,9 +221,6 @@ fn deferred_tool_loop_outcome_from_result(
 ) -> Option<DeferredToolLoopOutcome> {
     if organize_context_succeeded(tool_name, tool_result) {
         return Some(DeferredToolLoopOutcome::OrganizeContext);
-    }
-    if let Some(final_text) = terminal_task_complete_result(tool_name, tool_args, tool_result) {
-        return Some(DeferredToolLoopOutcome::TaskComplete(final_text));
     }
     terminal_plan_present_result(tool_name, tool_args, tool_result)
         .map(DeferredToolLoopOutcome::PlanPresent)
@@ -245,17 +241,6 @@ fn finalize_deferred_tool_loop_outcome(
             tool_history_events: tool_history_without_organize_context(tool_history_events),
             suppress_assistant_message: true,
             trusted_input_tokens: None,
-            usage: None,
-            round_logs_recorded_internally: true,
-        },
-        DeferredToolLoopOutcome::TaskComplete(final_text) => ModelReply {
-            assistant_text: final_text.clone(),
-            final_response_text: final_text,
-            activity_reasoning_text: full_activity_reasoning_text,
-            assistant_provider_meta: None,
-            tool_history_events,
-            suppress_assistant_message: false,
-            trusted_input_tokens,
             usage: None,
             round_logs_recorded_internally: true,
         },
@@ -1746,23 +1731,6 @@ mod tool_loop_tests {
     }
 
     #[test]
-    fn terminal_task_complete_result_prefers_completion_conclusion_from_args() {
-        let tool_result = provider_tool_result_from_value("task", serde_json::json!({
-                "taskId": "task-1",
-                "completionState": "completed",
-                "completionConclusion": "工具结果里的结论"
-            }));
-
-        let final_text = terminal_task_complete_result(
-            "task",
-            r#"{"action":"complete","task_id":"task-1","completion_state":"completed","completion_conclusion":"用户应直接看到这句"}"#,
-            &tool_result,
-        );
-
-        assert_eq!(final_text.as_deref(), Some("用户应直接看到这句"));
-    }
-
-    #[test]
     fn tool_history_without_organize_context_should_keep_prior_business_tools() {
         let read_call_id = "call-read";
         let organize_call_id = "call-organize";
@@ -1814,77 +1782,29 @@ mod tool_loop_tests {
     }
 
     #[test]
-    fn terminal_task_complete_result_reads_typed_metadata() {
-        let tool_result = provider_tool_result_from_value("task", serde_json::json!({
-                "taskId": "task-1",
-                "completionState": "failed_completed",
-                "completionConclusion": "因为缺少权限，任务已按失败结束"
-            }));
-
-        let final_text = terminal_task_complete_result(
-            "task",
-            r#"{"action":"complete","task_id":"task-1","completion_state":"failed_completed"}"#,
-            &tool_result,
-        );
-
-        assert_eq!(
-            final_text.as_deref(),
-            Some("因为缺少权限，任务已按失败结束")
-        );
-    }
-
-    #[test]
-    fn terminal_task_complete_result_ignores_non_complete_actions() {
+    fn task_complete_should_remain_tool_result_instead_of_ending_the_round() {
         let tool_result = provider_tool_result_from_value("task", serde_json::json!({
                 "taskId": "task-1",
                 "completionState": "completed",
-                "completionConclusion": "不会被使用"
+                "completionConclusion": "任务完成结论"
             }));
 
-        let final_text = terminal_task_complete_result(
+        let deferred = deferred_tool_loop_outcome_from_result(
             "task",
-            r#"{"action":"update","task_id":"task-1"}"#,
+            r#"{"action":"complete","task_id":"task-1","completion_state":"completed","completion_conclusion":"任务完成结论"}"#,
             &tool_result,
         );
+        let projection = project_provider_tool_result(None, "task", &tool_result);
 
-        assert_eq!(final_text, None);
-    }
-
-    #[test]
-    fn deferred_tool_loop_outcome_should_keep_first_terminal_signal_in_batch() {
-        let mut deferred = None::<DeferredToolLoopOutcome>;
-
-        let task_result = provider_tool_result_from_value("task", serde_json::json!({
-                "taskId": "task-1",
-                "completionState": "completed",
-                "completionConclusion": "先完成任务"
-            }));
-        if deferred.is_none() {
-            deferred = deferred_tool_loop_outcome_from_result(
-                "task",
-                r#"{"action":"complete","task_id":"task-1","completion_state":"completed"}"#,
-                &task_result,
-            );
-        }
-
-        let plan_result = provider_tool_result_from_value("plan", serde_json::json!({
-                "action": "present",
-                "path": "E:\\demo\\.pai\\plan\\plan.md"
-            }));
-        if deferred.is_none() {
-            deferred = deferred_tool_loop_outcome_from_result(
-                "plan",
-                r#"{"action":"present","path":"E:\\demo\\.pai\\plan\\plan.md"}"#,
-                &plan_result,
-            );
-        }
-
-        match deferred {
-            Some(DeferredToolLoopOutcome::TaskComplete(text)) => {
-                assert_eq!(text, "先完成任务");
-            }
-            other => panic!("unexpected deferred outcome: {:?}", other),
-        }
+        assert!(deferred.is_none());
+        assert!(projection.text.contains("任务完成结论"));
+        assert!(matches!(
+            &projection.metadata.control,
+            ProviderToolControl::Task {
+                completion_state: Some(state),
+                completion_conclusion: Some(conclusion),
+            } if state == "completed" && conclusion == "任务完成结论"
+        ));
     }
 
     #[test]
@@ -1932,14 +1852,6 @@ mod tool_loop_tests {
                 "message": "写入类命令只能作用于已配置工作目录；未纳管绝对路径仅允许读取。"
             }));
 
-        assert_eq!(
-            terminal_task_complete_result(
-                "exec",
-                r#"{"command":"echo hi > E:\\outside.txt"}"#,
-                &tool_result,
-            ),
-            None
-        );
         assert!(terminal_plan_present_result(
             "exec",
             r#"{"command":"echo hi > E:\\outside.txt"}"#,

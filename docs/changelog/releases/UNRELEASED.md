@@ -11,6 +11,7 @@
 
 ## 修复
 
+- 修复（task）：`task.complete` 恢复为普通工具结果，仅更新任务终态并将结果回喂模型，不再错误终止当前 LLM 调度或直接将完成结论替代助理回复。
 - 修复（window）：窗口布局启动时仅读取一次并常驻内存，变化后由单一队列最多每 60 秒异步写盘，避免开发重启期间窗口事件并发读写导致聊天窗口概率性恢复为小方窗；无有效布局时恢复为聊天窗口默认纵向尺寸。
 - 修复（read-media）：统一模型协议动态解析为“手动协议优先，Auto 先匹配 Base URL、再匹配完整模型名”，并按路径优先识别百炼、DeepSeek、火山、Kimi、Mimo 及 Token Plan 的 OpenAI/Anthropic 兼容端点；直连 QWEN 使用独立媒体载荷且音频发送裸 Base64 与 `format`，OpenCode Go 的 QWEN 仅在 `read_media` 内按官方 `/messages` 与 `x-api-key` 兼容并明确拒绝该端点不支持的音频，Mimo/OpenCode Go 的 OpenAI 兼容端点继续使用 Bearer。
 - 修复（remote-im）：群聊从离场重新入场时，当前 block 在触发消息前少于 14 条消息将直接进入应答，不再无意义写入唤醒压缩摘要；计数仅取 block 消息数减去触发消息，走 SQLite/JSONL 索引且不改变既有索引格式。
