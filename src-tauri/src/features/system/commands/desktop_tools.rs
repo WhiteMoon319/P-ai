@@ -760,6 +760,24 @@ struct GitWorkspaceRootCheckOutput {
     error: Option<String>,
 }
 
+// 仅在用户打开工作目录面板时由前端调用；进程存活期间同一路径绝不重复探测。
+static GIT_WORKSPACE_ROOT_CHECK_CACHE: OnceLock<
+    Mutex<std::collections::HashMap<String, GitWorkspaceRootCheckOutput>>,
+> = OnceLock::new();
+
+fn git_workspace_root_check_cache(
+) -> &'static Mutex<std::collections::HashMap<String, GitWorkspaceRootCheckOutput>> {
+    GIT_WORKSPACE_ROOT_CHECK_CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
+
+fn git_workspace_root_check_cache_lock(
+) -> std::sync::MutexGuard<'static, std::collections::HashMap<String, GitWorkspaceRootCheckOutput>> {
+    match git_workspace_root_check_cache().lock() {
+        Ok(cache) => cache,
+        Err(poisoned) => poisoned.into_inner(),
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct OpenFileReaderDirectoryTargetInput {
@@ -1721,44 +1739,49 @@ async fn check_git_workspace_root(
     let canonical_workspace = workspace_path
         .canonicalize()
         .map_err(|err| format!("无法读取目录：{err}"))?;
+    let cache_key = normalize_terminal_path_for_compare(&canonical_workspace);
+    if let Some(cached) = git_workspace_root_check_cache_lock().get(&cache_key).cloned() {
+        return Ok(cached);
+    }
     let mut command = tokio::process::Command::new("git");
     command
         .current_dir(&canonical_workspace)
         .args(["rev-parse", "--show-toplevel"]);
-    let output = match tokio::time::timeout(std::time::Duration::from_secs(5), command.output()).await {
-        Ok(Ok(output)) => output,
-        Ok(Err(err)) => {
-            return Ok(GitWorkspaceRootCheckOutput {
-                is_git_root: false,
-                checked: false,
-                error: Some(format!("无法运行 Git：{err}")),
-            });
-        }
-        Err(_) => {
-            return Ok(GitWorkspaceRootCheckOutput {
-                is_git_root: false,
-                checked: false,
-                error: Some("Git 仓库检测超时".to_string()),
-            });
-        }
-    };
-    if !output.status.success() {
-        return Ok(GitWorkspaceRootCheckOutput {
+    #[cfg(target_os = "windows")]
+    {
+        // 避免 Git 进程在 GUI 应用中创建短暂可见的控制台窗口。
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let result = match tokio::time::timeout(std::time::Duration::from_secs(5), command.output()).await {
+        Ok(Ok(output)) if !output.status.success() => GitWorkspaceRootCheckOutput {
             is_git_root: false,
             checked: true,
             error: None,
-        });
-    }
-    let reported_root = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let canonical_root = PathBuf::from(reported_root)
-        .canonicalize()
-        .map_err(|err| format!("无法解析 Git 根目录：{err}"))?;
-    Ok(GitWorkspaceRootCheckOutput {
-        is_git_root: normalize_terminal_path_for_compare(&canonical_root)
-            == normalize_terminal_path_for_compare(&canonical_workspace),
-        checked: true,
-        error: None,
-    })
+        },
+        Ok(Ok(output)) => {
+            let reported_root = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let canonical_root = PathBuf::from(reported_root)
+                .canonicalize()
+                .map_err(|err| format!("无法解析 Git 根目录：{err}"))?;
+            GitWorkspaceRootCheckOutput {
+                is_git_root: normalize_terminal_path_for_compare(&canonical_root) == cache_key,
+                checked: true,
+                error: None,
+            }
+        }
+        Ok(Err(err)) => GitWorkspaceRootCheckOutput {
+            is_git_root: false,
+            checked: false,
+            error: Some(format!("无法运行 Git：{err}")),
+        },
+        Err(_) => GitWorkspaceRootCheckOutput {
+            is_git_root: false,
+            checked: false,
+            error: Some("Git 仓库检测超时".to_string()),
+        },
+    };
+    git_workspace_root_check_cache_lock().insert(cache_key, result.clone());
+    Ok(result)
 }
 
 #[tauri::command]

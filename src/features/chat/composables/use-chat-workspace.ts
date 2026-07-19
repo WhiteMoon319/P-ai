@@ -169,7 +169,6 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
         input: { apiConfigId, agentId, conversationId: conversationId || null },
       });
       applyChatWorkspaceState(state);
-      void checkChatWorkspaceGitRoot(chatWorkspaceRootPath.value);
     } catch (error) {
       console.warn("[工作区] refresh chat workspace failed:", error);
     }
@@ -177,6 +176,8 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
 
   function openChatWorkspacePicker() {
     chatWorkspacePickerOpen.value = true;
+    // Git 探测只允许由用户显式打开工作目录面板触发，不能跟随前端刷新或会话切换。
+    void checkChatWorkspaceGitRoot(chatWorkspaceRootPath.value);
   }
 
   function closeChatWorkspacePicker() {
