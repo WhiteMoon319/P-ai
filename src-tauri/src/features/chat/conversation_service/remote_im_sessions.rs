@@ -801,6 +801,59 @@ impl ConversationServiceV2 {
         }
     }
 
+    fn prune_expired_remote_im_fast_request_turns(
+        &self,
+        state: &AppState,
+        cutoff: OffsetDateTime,
+    ) -> Result<(usize, Vec<String>), String> {
+        let index = state_read_chat_index_cached(state)?;
+        let mut removed = 0usize;
+        let mut errors = Vec::new();
+        for item in index.conversations {
+            let mutation_gate = match conversation_mutation_gate(&state.data_path, &item.id) {
+                Ok(gate) => gate,
+                Err(err) => {
+                    errors.push(format!("conversation_id={}，获取变更锁失败：{}", item.id, err));
+                    continue;
+                }
+            };
+            let _guard = match mutation_gate.lock() {
+                Ok(guard) => guard,
+                Err(err) => {
+                    errors.push(format!("conversation_id={}，获取变更锁失败：{}", item.id, err));
+                    continue;
+                }
+            };
+            let meta = match self.get_conversation_meta(state, &item.id) {
+                Ok(meta) => meta,
+                Err(err) => {
+                    errors.push(format!("conversation_id={}，读取元数据失败：{}", item.id, err));
+                    continue;
+                }
+            };
+            if !meta.is_remote_im_contact || meta.fast_request_turns.is_empty() {
+                continue;
+            }
+            let expired_count = meta.fast_request_turns.iter()
+                .filter(|turn| remote_im_maintenance_is_expired_at(&turn.created_at, cutoff))
+                .count();
+            if expired_count == 0 {
+                continue;
+            }
+            let result = state_update_conversation_meta_cached_unlocked(state, &item.id, |stored| {
+                stored.retain_fast_request_turns(|turn| {
+                    !remote_im_maintenance_is_expired_at(&turn.created_at, cutoff)
+                });
+                Ok(())
+            });
+            match result {
+                Ok(_) => removed = removed.saturating_add(expired_count),
+                Err(err) => errors.push(format!("conversation_id={}，清理杂务失败：{}", item.id, err)),
+            }
+        }
+        Ok((removed, errors))
+    }
+
     fn get_active_goal(
         &self,
         state: &AppState,

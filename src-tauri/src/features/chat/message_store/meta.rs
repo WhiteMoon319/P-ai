@@ -425,6 +425,13 @@ impl ConversationShardMeta {
         self.fast_request_turns.push(turn);
     }
 
+    pub(super) fn retain_fast_request_turns(
+        &mut self,
+        keep: impl FnMut(&FastRequestTurn) -> bool,
+    ) {
+        self.fast_request_turns.retain(keep);
+    }
+
     pub(super) fn cumulative_usage(&self) -> &ConversationCumulativeUsage {
         &self.cumulative_usage
     }

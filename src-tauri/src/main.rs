@@ -69,6 +69,7 @@ include!("features/remote_im/onebot_v11_ws.rs");
 include!("features/remote_im/dingtalk_stream.rs");
 include!("features/remote_im/weixin_oc.rs");
 include!("features/remote_im.rs");
+include!("features/remote_im/maintenance.rs");
 include!("features/remote_im_adapters.rs");
 
 // ==================== 系统窗口与命令 ====================

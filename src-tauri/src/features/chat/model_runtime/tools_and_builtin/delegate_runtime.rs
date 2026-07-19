@@ -364,6 +364,10 @@ async fn delegate_run_thread_to_completion(
                     status_err
                 ));
             }
+            remote_im_request_24h_maintenance_for_conversation(
+                app_state.clone(),
+                &delegate.conversation_id,
+            );
             if let Err(status_err) = emit_conversation_delegate_status_updated(
                 &app_state,
                 &delegate.conversation_id,
@@ -454,6 +458,10 @@ async fn delegate_run_thread_to_completion(
                     err
                 ));
             }
+            remote_im_request_24h_maintenance_for_conversation(
+                app_state.clone(),
+                &delegate.conversation_id,
+            );
             if let Err(err) = emit_conversation_delegate_status_updated(
                 &app_state,
                 &delegate.conversation_id,
@@ -511,6 +519,10 @@ async fn delegate_run_thread_to_completion(
                     status_err
                 ));
             }
+            remote_im_request_24h_maintenance_for_conversation(
+                app_state.clone(),
+                &delegate.conversation_id,
+            );
             if let Err(status_err) = emit_conversation_delegate_status_updated(
                 &app_state,
                 &delegate.conversation_id,

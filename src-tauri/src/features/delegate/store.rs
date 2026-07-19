@@ -1016,6 +1016,16 @@ fn delegate_store_get_delegate(data_path: &PathBuf, delegate_id: &str) -> Result
     .map_err(|err| format!("读取委托记录失败: {err}"))
 }
 
+fn delegate_store_delete_terminal_delegate(data_path: &PathBuf, delegate_id: &str) -> Result<bool, String> {
+    let conn = delegate_store_open(data_path)?;
+    let affected = conn.execute(
+        "DELETE FROM delegate_record WHERE delegate_id = ?1 AND status IN (?2, ?3)",
+        params![delegate_id.trim(), DELEGATE_STATUS_COMPLETED, DELEGATE_STATUS_FAILED],
+    )
+    .map_err(|err| format!("删除已终结委托记录失败，delegate_id={}，error={err}", delegate_id.trim()))?;
+    Ok(affected > 0)
+}
+
 fn delegate_store_update_status(
     data_path: &PathBuf,
     delegate_id: &str,

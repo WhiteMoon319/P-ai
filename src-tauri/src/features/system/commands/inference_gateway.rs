@@ -173,7 +173,11 @@ fn record_fast_request_turn_best_effort(
     match conversation_service_v2()
         .append_fast_request_turn_if_unarchived_exists(state, normalized_conversation_id, turn)
     {
-        Ok(_) => {}
+        Ok(true) => remote_im_request_24h_maintenance_for_conversation(
+            state.clone(),
+            normalized_conversation_id,
+        ),
+        Ok(false) => {}
         Err(err) => runtime_log_warn(format!(
             "[快速请求记录] 失败，任务=追加会话快速请求记录，conversation_id={}，kind={}，error={}",
             normalized_conversation_id,

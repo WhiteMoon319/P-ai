@@ -557,6 +557,7 @@ fn remote_im_reply_delegate_finalize(
             runtime.delegate_id, status, err
         ));
     }
+    remote_im_request_24h_maintenance_for_conversation(state.clone(), &runtime.conversation_id);
     if let Err(err) = emit_conversation_delegate_status_updated(
         state,
         &runtime.conversation_id,
