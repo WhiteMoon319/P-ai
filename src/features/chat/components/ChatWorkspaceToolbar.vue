@@ -131,7 +131,7 @@
           />
         </label>
       </li>
-      <li>
+      <li v-if="SIDE_FILE_TAGS_AVAILABLE">
         <label class="flex cursor-pointer items-center justify-between gap-3 px-2 py-2">
           <span class="text-sm">{{ t("appearance.inputPanelSideFileTags") }}</span>
           <input
@@ -274,7 +274,7 @@ import { useI18n } from "vue-i18n";
 import { ClipboardCheck, ClipboardList, ExternalLink, Folder, Grip, ListTodo, Package, Send, Split } from "@lucide/vue";
 import type { ChatMentionEntry, ConversationDelegateStatusSummary } from "../../../types/app";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
-import { useChatComposerAppearance } from "../../shell/composables/use-chat-composer-appearance";
+import { SIDE_FILE_TAGS_AVAILABLE, useChatComposerAppearance } from "../../shell/composables/use-chat-composer-appearance";
 import SessionControlPanel from "./SessionControlPanel.vue";
 
 defineOptions({

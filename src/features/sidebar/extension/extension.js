@@ -15,7 +15,6 @@ function readIdeContextConfig() {
   const config = vscode.workspace.getConfiguration("paiSidebar");
   return {
     autoSendIdeContext: Boolean(config.get("autoSendIdeContext", true)),
-    includeVisibleRange: Boolean(config.get("includeVisibleRange", true)),
   };
 }
 
@@ -118,10 +117,11 @@ function createReference(document, source, startLineZeroBased, endLineZeroBased,
   const workspace = workspaceForFile(filePath);
   const relativePath = relativePathForFile(filePath, workspace.path);
   const fileName = path.basename(filePath);
-  const startLine = Math.max(1, startLineZeroBased + 1);
-  const endLine = Math.max(startLine, endLineZeroBased + 1);
+  const hasLineRange = source !== "active_file";
+  const startLine = hasLineRange ? Math.max(1, startLineZeroBased + 1) : undefined;
+  const endLine = hasLineRange ? Math.max(startLine, endLineZeroBased + 1) : undefined;
   const reference = {
-    id: `${source}:${filePath}:${startLine}:${endLine}`,
+    id: hasLineRange ? `${source}:${filePath}:${startLine}:${endLine}` : `${source}:${filePath}`,
     workspacePath: workspace.path,
     workspaceName: workspace.name || path.basename(workspace.path || "") || "Workspace",
     filePath,
@@ -136,48 +136,37 @@ function createReference(document, source, startLineZeroBased, endLineZeroBased,
     capturedAt,
     textBlock: "",
   };
-  if (!reference.content) return null;
+  if (!reference.content && source !== "active_file") return null;
   reference.textBlock = textBlockForReference(reference);
   return reference;
 }
 
-function collectIdeContextReferences(configInput) {
-  const config = configInput || readIdeContextConfig();
+function collectIdeContextReferences() {
   const capturedAt = nowIso();
-  const references = [];
-  const seen = new Set();
+  const referencesByFile = new Map();
   const visibleEditors = vscode.window.visibleTextEditors || [];
   for (const editor of visibleEditors) {
     const document = editor.document;
     if (!document || document.uri.scheme !== "file") continue;
-    const selectionReferences = [];
-    for (const selection of editor.selections || []) {
-      if (!selection || selection.isEmpty) continue;
+    let reference = null;
+    const selection = editor.selection;
+    if (selection && !selection.isEmpty) {
       const start = selection.start.isBefore(selection.end) ? selection.start : selection.end;
       const end = selection.end.isAfter(selection.start) ? selection.end : selection.start;
       const content = document.getText(new vscode.Range(start, end)).slice(0, MAX_CONTEXT_CHARS);
-      const reference = createReference(document, "selection", start.line, end.line, content, capturedAt);
-      if (reference) selectionReferences.push(reference);
+      reference = createReference(document, "selection", start.line, end.line, content, capturedAt);
     }
-    if (selectionReferences.length > 0) {
-      for (const reference of selectionReferences) {
-        if (seen.has(reference.id)) continue;
-        seen.add(reference.id);
-        references.push(reference);
-      }
-      continue;
+    if (!reference) {
+      reference = createReference(document, "active_file", 0, 0, "", capturedAt);
     }
-    if (!config.includeVisibleRange) continue;
-    for (const visibleRange of editor.visibleRanges || []) {
-      const content = readDocumentLineRange(document, visibleRange.start.line, visibleRange.end.line);
-      const reference = createReference(document, "visible_range", visibleRange.start.line, visibleRange.end.line, content, capturedAt);
-      if (reference && !seen.has(reference.id)) {
-        seen.add(reference.id);
-        references.push(reference);
-      }
+    if (!reference) continue;
+    const fileKey = path.resolve(reference.filePath).replace(/\\/g, "/").toLowerCase();
+    const existing = referencesByFile.get(fileKey);
+    if (!existing || (reference.source === "selection" && existing.source !== "selection")) {
+      referencesByFile.set(fileKey, reference);
     }
   }
-  return references;
+  return Array.from(referencesByFile.values());
 }
 
 function ideContextSignature(references) {
@@ -473,7 +462,7 @@ class PaiSidebarProvider {
       this.sendIdeContextSnapshot(bridgeUrl, this._lastIdeContextPayload);
       return;
     }
-    const references = collectIdeContextReferences(config);
+    const references = collectIdeContextReferences();
     const signature = ideContextSignature(references);
     if (signature === this._lastIdeContextSignature && !heartbeatDue) {
       this._ideContextDirty = false;

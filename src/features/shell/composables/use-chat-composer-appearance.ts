@@ -6,6 +6,7 @@ import type { IdeContextReferenceItem, IdeContextWorkspaceGroup } from "../../..
 const SIDE_FILE_TAGS_STORAGE_KEY = "easy-call.chat.composer-side-file-tags.v1";
 const IDE_BRIDGE_FILE_TAGS_STORAGE_KEY = "easy-call.chat.composer-ide-bridge-file-tags.v1";
 const CHAT_COMPOSER_APPEARANCE_CHANGED_EVENT = "easy-call:chat-composer-appearance-changed";
+export const SIDE_FILE_TAGS_AVAILABLE = false;
 
 type ChatComposerAppearancePayload = {
   sideFileTagsEnabled?: boolean;
@@ -22,7 +23,7 @@ type VisibleComposerContextGroupsInput = {
   host?: "default" | "vscode";
 };
 
-const sideFileTagsEnabled = ref(readBooleanPreference(SIDE_FILE_TAGS_STORAGE_KEY));
+const sideFileTagsEnabled = ref(false);
 const ideBridgeFileTagsEnabled = ref(readBooleanPreference(IDE_BRIDGE_FILE_TAGS_STORAGE_KEY));
 let initialized = false;
 let eventUnlisten: UnlistenFn | null = null;
@@ -38,16 +39,14 @@ function persistBooleanPreference(storageKey: string, enabled: boolean) {
 }
 
 function applyPayload(payload: ChatComposerAppearancePayload | undefined) {
-  if (typeof payload?.sideFileTagsEnabled === "boolean") {
-    sideFileTagsEnabled.value = payload.sideFileTagsEnabled;
-  }
+  sideFileTagsEnabled.value = false;
   if (typeof payload?.ideBridgeFileTagsEnabled === "boolean") {
     ideBridgeFileTagsEnabled.value = payload.ideBridgeFileTagsEnabled;
   }
 }
 
 function restoreFromStorage() {
-  sideFileTagsEnabled.value = readBooleanPreference(SIDE_FILE_TAGS_STORAGE_KEY);
+  sideFileTagsEnabled.value = false;
   ideBridgeFileTagsEnabled.value = readBooleanPreference(IDE_BRIDGE_FILE_TAGS_STORAGE_KEY);
 }
 
@@ -92,7 +91,7 @@ export function visibleChatComposerContextGroups(
 ): IdeContextWorkspaceGroup[] {
   const groups: IdeContextWorkspaceGroup[] = [];
   const isVsCodeHost = input.host === "vscode";
-  if (!isVsCodeHost && input.sideFileTagsEnabled && input.sideReferences.length > 0) {
+  if (SIDE_FILE_TAGS_AVAILABLE && !isVsCodeHost && input.sideFileTagsEnabled && input.sideReferences.length > 0) {
     groups.push({
       workspacePath: String(input.sideWorkspacePath || "").trim(),
       workspaceName: String(input.sideWorkspaceName || "").trim(),
@@ -108,9 +107,9 @@ export function visibleChatComposerContextGroups(
 export function useChatComposerAppearance() {
   initChatComposerAppearance();
 
-  function setSideFileTagsEnabled(enabled: boolean) {
-    sideFileTagsEnabled.value = enabled;
-    persistBooleanPreference(SIDE_FILE_TAGS_STORAGE_KEY, enabled);
+  function setSideFileTagsEnabled(_enabled: boolean) {
+    sideFileTagsEnabled.value = false;
+    persistBooleanPreference(SIDE_FILE_TAGS_STORAGE_KEY, false);
     emitAppearanceChanged();
   }
 

@@ -111,8 +111,8 @@ pnpm dlx @vscode/vsce publish --packagePath src/features/sidebar/extension/pai-t
 
 - 现在扩展目录没有单独的 `repository` 元数据和 `LICENSE` 文件，所以脚本里临时带了 `--allow-missing-repository` 和 `--skip-license`
 - 这对内部测试和先发版本够用，但如果要长期公开维护，最好后续把扩展自己的 README、CHANGELOG、LICENSE、repository 信息补齐
-- 扩展设置页只保留两个用户意图开关：`paiSidebar.autoSendIdeContext` 控制是否自动同步，`paiSidebar.includeVisibleRange` 控制无选区时是否同步可见代码
-- IDE 上下文会在编辑器变化时自动同步，并用低频 heartbeat 续租静止窗口，避免 PAI 侧 TTL 清掉仍在线的 VS Code 引用
+- 扩展设置页只保留 `paiSidebar.autoSendIdeContext`，控制是否自动同步 IDE 上下文；不再捕获编辑器可视区域
+- IDE 上下文按文件只同步一份：有选区时发送带行号的选区，没有选区时发送不带行号的当前文件引用；同时用低频 heartbeat 续租静止窗口，避免 PAI 侧 TTL 清掉仍在线的 VS Code 引用
 - 官方文档还要求：
   - `package.json` 里的扩展图标不能用 SVG
   - `README.md` / `CHANGELOG.md` 里的图片链接应该是 `https`

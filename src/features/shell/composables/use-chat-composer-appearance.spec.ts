@@ -20,7 +20,7 @@ describe("use-chat-composer-appearance", () => {
     expect(appearance.ideBridgeFileTagsEnabled.value).toBe(false);
   });
 
-  it("只返回已开启来源的候选标签组", () => {
+  it("侧边文件标签永久关闭，只返回已开启的 IDE 桥标签组", () => {
     const baseInput = {
       sideReferences: [sideReference],
       sideWorkspacePath: "E:/repo",
@@ -37,12 +37,20 @@ describe("use-chat-composer-appearance", () => {
       ...baseInput,
       sideFileTagsEnabled: true,
       ideBridgeFileTagsEnabled: false,
-    }).map((group) => group.references[0]?.id)).toEqual(["side-file"]);
+    })).toEqual([]);
     expect(visibleChatComposerContextGroups({
       ...baseInput,
       sideFileTagsEnabled: false,
       ideBridgeFileTagsEnabled: true,
     }).map((group) => group.references[0]?.id)).toEqual(["ide-file"]);
+  });
+
+  it("无法通过 setter 重新开启侧边文件标签", () => {
+    const appearance = useChatComposerAppearance();
+
+    appearance.setSideFileTagsEnabled(true);
+
+    expect(appearance.sideFileTagsEnabled.value).toBe(false);
   });
 
   it("VS Code 宿主固定显示 IDE 桥标签并隐藏侧边文件标签", () => {

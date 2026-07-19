@@ -72,7 +72,7 @@
       <div class="card-body gap-3 p-4">
         <h3 class="card-title text-base">{{ t("appearance.inputPanel") }}</h3>
         <div class="grid gap-3">
-          <label class="flex cursor-pointer items-center justify-between gap-3 rounded-box bg-base-200/40 px-3 py-2">
+          <label v-if="SIDE_FILE_TAGS_AVAILABLE" class="flex cursor-pointer items-center justify-between gap-3 rounded-box bg-base-200/40 px-3 py-2">
             <span class="text-sm font-medium">{{ t("appearance.inputPanelSideFileTags") }}</span>
             <input
               :checked="sideFileTagsEnabled"
@@ -180,7 +180,7 @@ import {
   useMarkdownAppearance,
 } from "../../../shell/composables/use-markdown-appearance";
 import { useChatMessageAppearance } from "../../../shell/composables/use-chat-message-appearance";
-import { useChatComposerAppearance } from "../../../shell/composables/use-chat-composer-appearance";
+import { SIDE_FILE_TAGS_AVAILABLE, useChatComposerAppearance } from "../../../shell/composables/use-chat-composer-appearance";
 
 const props = defineProps<{
   uiLanguage: "zh-CN" | "en-US" | "zh-TW";
