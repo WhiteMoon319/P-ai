@@ -491,6 +491,7 @@ fn build_branch_conversation_record_from_selection_runtime_meta_view(
     conversation.shell_workspace_path = source_meta.shell_workspace_path.clone();
     conversation.shell_workspaces = source_meta.shell_workspaces.clone();
     conversation.shell_autonomous_mode = source_meta.shell_autonomous_mode;
+    conversation.shell_work_mode = normalize_shell_work_mode_text(&source_meta.shell_work_mode);
     conversation.current_todos = source_meta.current_todos.clone();
     let user_profile_snapshot = agents
         .iter()
@@ -758,6 +759,7 @@ fn read_conversation_for_backup_cleanup(
         shell_workspace_path: conversation_meta.shell_workspace_path,
         shell_workspaces: conversation_meta.shell_workspaces,
         shell_autonomous_mode: conversation_meta.shell_autonomous_mode,
+        shell_work_mode: normalize_shell_work_mode_text(&conversation_meta.shell_work_mode),
         archived_at: conversation_meta.archived_at,
         messages,
         fast_request_turns: conversation_meta.fast_request_turns,

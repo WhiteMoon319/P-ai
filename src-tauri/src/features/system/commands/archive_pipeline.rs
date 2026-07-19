@@ -1594,6 +1594,7 @@ mod archive_pipeline_tests {
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
             shell_autonomous_mode: false,
+            shell_work_mode: default_shell_work_mode(),
             archived_at: None,
             messages: vec![
                 test_message("m1", "user", "前置问题"),

@@ -26,6 +26,8 @@ pub(super) struct ConversationPersistMeta {
     shell_workspace_path: Option<String>,
     shell_workspaces: Vec<ShellWorkspaceConfig>,
     shell_autonomous_mode: bool,
+    #[serde(default = "default_shell_work_mode")]
+    shell_work_mode: String,
     archived_at: Option<String>,
     current_todos: Vec<ConversationTodoItem>,
     memory_recall_table: Vec<String>,
@@ -166,6 +168,8 @@ pub(super) struct ConversationShardMeta {
     shell_workspaces: Vec<ShellWorkspaceConfig>,
     #[serde(default)]
     shell_autonomous_mode: bool,
+    #[serde(default = "default_shell_work_mode")]
+    shell_work_mode: String,
     #[serde(default)]
     archived_at: Option<String>,
     #[serde(default)]
@@ -409,6 +413,10 @@ impl ConversationShardMeta {
         self.shell_autonomous_mode
     }
 
+    pub(super) fn shell_work_mode(&self) -> &str {
+        self.shell_work_mode.as_str()
+    }
+
     pub(super) fn plan_mode_enabled(&self) -> bool {
         self.plan_mode_enabled
     }
@@ -467,6 +475,7 @@ impl ConversationShardMeta {
         target.shell_workspace_path = self.shell_workspace_path.clone();
         target.shell_workspaces = self.shell_workspaces.clone();
         target.shell_autonomous_mode = self.shell_autonomous_mode;
+        target.shell_work_mode = self.shell_work_mode.clone();
         target.archived_at = self.archived_at.clone();
         target.current_todos = self.current_todos.clone();
         target.memory_recall_table = self.memory_recall_table.clone();
@@ -500,6 +509,7 @@ impl ConversationShardMeta {
         self.shell_workspace_path = source.shell_workspace_path.clone();
         self.shell_workspaces = source.shell_workspaces.clone();
         self.shell_autonomous_mode = source.shell_autonomous_mode;
+        self.shell_work_mode = source.shell_work_mode.clone();
         self.archived_at = source.archived_at.clone();
         self.current_todos = source.current_todos.clone();
         self.memory_recall_table = source.memory_recall_table.clone();
@@ -533,6 +543,7 @@ impl ConversationShardMeta {
         self.shell_workspace_path = source.shell_workspace_path.clone();
         self.shell_workspaces = source.shell_workspaces.clone();
         self.shell_autonomous_mode = source.shell_autonomous_mode;
+        self.shell_work_mode = source.shell_work_mode.clone();
         self.archived_at = source.archived_at.clone();
         self.current_todos = source.current_todos.clone();
         self.memory_recall_table = source.memory_recall_table.clone();
@@ -564,6 +575,7 @@ impl ConversationShardMeta {
         self.shell_workspace_path = source.shell_workspace_path.clone();
         self.shell_workspaces = source.shell_workspaces.clone();
         self.shell_autonomous_mode = source.shell_autonomous_mode;
+        self.shell_work_mode = source.shell_work_mode.clone();
         self.archived_at = source.archived_at.clone();
         self.current_todos = source.current_todos.clone();
         self.plan_mode_enabled = source.plan_mode_enabled;
@@ -808,6 +820,7 @@ impl ConversationShardMeta {
             shell_workspace_path: conversation.shell_workspace_path.clone(),
             shell_workspaces: conversation.shell_workspaces.clone(),
             shell_autonomous_mode: conversation.shell_autonomous_mode,
+            shell_work_mode: normalize_shell_work_mode_text(&conversation.shell_work_mode),
             archived_at: conversation.archived_at.clone(),
             current_todos: conversation.current_todos.clone(),
             memory_recall_table: conversation.memory_recall_table.clone(),
@@ -903,6 +916,7 @@ impl ConversationShardMeta {
             shell_workspace_path: meta.shell_workspace_path.clone(),
             shell_workspaces: meta.shell_workspaces.clone(),
             shell_autonomous_mode: meta.shell_autonomous_mode,
+            shell_work_mode: normalize_shell_work_mode_text(&meta.shell_work_mode),
             archived_at: meta.archived_at.clone(),
             current_todos: meta.current_todos.clone(),
             memory_recall_table: meta.memory_recall_table.clone(),
@@ -949,6 +963,7 @@ impl ConversationShardMeta {
             shell_workspace_path: self.shell_workspace_path.clone(),
             shell_workspaces: self.shell_workspaces.clone(),
             shell_autonomous_mode: self.shell_autonomous_mode,
+            shell_work_mode: normalize_shell_work_mode_text(&self.shell_work_mode),
             archived_at: self.archived_at.clone(),
             current_todos: self.current_todos.clone(),
             memory_recall_table: self.memory_recall_table.clone(),
@@ -994,6 +1009,7 @@ impl ConversationShardMeta {
             shell_workspace_path: self.shell_workspace_path,
             shell_workspaces: self.shell_workspaces,
             shell_autonomous_mode: self.shell_autonomous_mode,
+            shell_work_mode: normalize_shell_work_mode_text(&self.shell_work_mode),
             archived_at: self.archived_at,
             messages,
             fast_request_turns: self.fast_request_turns,
@@ -1081,6 +1097,7 @@ mod message_store_meta_tests {
                 built_in: false,
             }],
             shell_autonomous_mode: false,
+            shell_work_mode: default_shell_work_mode(),
             archived_at: None,
             messages: vec![test_message("m1"), test_message("m2")],
             fast_request_turns: vec![FastRequestTurn {
@@ -1144,6 +1161,20 @@ mod message_store_meta_tests {
         assert_eq!(restored.active_goal, conversation.active_goal);
         assert_eq!(restored.fast_request_turns, conversation.fast_request_turns);
         assert_eq!(persist_meta.fast_request_turns, conversation.fast_request_turns);
+    }
+
+    #[test]
+    fn legacy_conversation_without_shell_work_mode_should_default_to_directory() {
+        let conversation = test_conversation();
+        let mut value = serde_json::to_value(&conversation).expect("serialize conversation");
+        value
+            .as_object_mut()
+            .expect("conversation object")
+            .remove("shellWorkMode");
+
+        let restored: Conversation = serde_json::from_value(value).expect("deserialize legacy conversation");
+
+        assert_eq!(restored.shell_work_mode, SHELL_WORK_MODE_DIRECTORY);
     }
 
     #[test]

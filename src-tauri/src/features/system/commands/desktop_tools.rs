@@ -741,6 +741,8 @@ struct SaveChatShellWorkspacesInput {
     workspaces: Vec<ShellWorkspaceConfig>,
     #[serde(default)]
     autonomous_mode: Option<bool>,
+    #[serde(default)]
+    shell_work_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -748,6 +750,14 @@ struct SaveChatShellWorkspacesInput {
 struct ShellWorkspacePathInput {
     #[serde(default)]
     workspace_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitWorkspaceRootCheckOutput {
+    is_git_root: bool,
+    checked: bool,
+    error: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -794,6 +804,7 @@ struct ChatShellWorkspaceOutput {
     root_path: String,
     workspaces: Vec<ShellWorkspaceConfig>,
     autonomous_mode: bool,
+    shell_work_mode: String,
 }
 
 fn resolve_chat_tool_session_id(
@@ -865,6 +876,7 @@ fn apply_conversation_chat_workspace_changes(
     shell_workspace_path: Option<Option<String>>,
     shell_workspaces: Option<Vec<ShellWorkspaceConfig>>,
     shell_autonomous_mode: Option<bool>,
+    shell_work_mode: Option<String>,
 ) -> Result<Conversation, String> {
     if delegate_runtime_thread_conversation_get(state, conversation_id)?.is_some() {
         let next_path = shell_workspace_path.clone();
@@ -873,6 +885,7 @@ fn apply_conversation_chat_workspace_changes(
             let original_path = thread.conversation.shell_workspace_path.clone();
             let original_workspaces = thread.conversation.shell_workspaces.clone();
             let original_autonomous_mode = thread.conversation.shell_autonomous_mode;
+            let original_work_mode = thread.conversation.shell_work_mode.clone();
             if let Some(value) = next_path.clone() {
                 thread.conversation.shell_workspace_path = value;
             }
@@ -882,6 +895,9 @@ fn apply_conversation_chat_workspace_changes(
             if let Some(value) = shell_autonomous_mode {
                 thread.conversation.shell_autonomous_mode = value;
             }
+            if let Some(value) = shell_work_mode.clone() {
+                thread.conversation.shell_work_mode = normalize_shell_work_mode_text(&value);
+            }
             if thread.conversation.shell_workspace_path.as_deref().map(str::trim).filter(|value| !value.is_empty()).is_some()
                 && terminal_workspace_path_from_conversation(state, &thread.conversation).is_none()
             {
@@ -890,6 +906,7 @@ fn apply_conversation_chat_workspace_changes(
             if thread.conversation.shell_workspace_path == original_path
                 && thread.conversation.shell_workspaces == original_workspaces
                 && thread.conversation.shell_autonomous_mode == original_autonomous_mode
+                && thread.conversation.shell_work_mode == original_work_mode
             {
                 return Ok(());
             }
@@ -909,6 +926,7 @@ fn apply_conversation_chat_workspace_changes(
         shell_workspace_path,
         shell_workspaces,
         shell_autonomous_mode,
+        shell_work_mode,
     )?;
     mark_prompt_cache_rebuild_for_system_environment_by_conversation(state, conversation_id);
     Ok(updated)
@@ -969,6 +987,9 @@ fn build_chat_shell_workspace_output(
         root_path: root.to_string_lossy().to_string(),
         workspaces: build_chat_shell_workspace_list(state, conversation),
         autonomous_mode: conversation.map(|value| value.shell_autonomous_mode).unwrap_or(false),
+        shell_work_mode: conversation
+            .map(|value| normalize_shell_work_mode_text(&value.shell_work_mode))
+            .unwrap_or_else(default_shell_work_mode),
     }
 }
 
@@ -1687,6 +1708,60 @@ async fn migrate_shell_workspace_directory(
 }
 
 #[tauri::command]
+async fn check_git_workspace_root(
+    input: ShellWorkspacePathInput,
+) -> Result<GitWorkspaceRootCheckOutput, String> {
+    let raw_path = input
+        .workspace_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "workspacePath is required".to_string())?;
+    let workspace_path = PathBuf::from(raw_path);
+    let canonical_workspace = workspace_path
+        .canonicalize()
+        .map_err(|err| format!("无法读取目录：{err}"))?;
+    let mut command = tokio::process::Command::new("git");
+    command
+        .current_dir(&canonical_workspace)
+        .args(["rev-parse", "--show-toplevel"]);
+    let output = match tokio::time::timeout(std::time::Duration::from_secs(5), command.output()).await {
+        Ok(Ok(output)) => output,
+        Ok(Err(err)) => {
+            return Ok(GitWorkspaceRootCheckOutput {
+                is_git_root: false,
+                checked: false,
+                error: Some(format!("无法运行 Git：{err}")),
+            });
+        }
+        Err(_) => {
+            return Ok(GitWorkspaceRootCheckOutput {
+                is_git_root: false,
+                checked: false,
+                error: Some("Git 仓库检测超时".to_string()),
+            });
+        }
+    };
+    if !output.status.success() {
+        return Ok(GitWorkspaceRootCheckOutput {
+            is_git_root: false,
+            checked: true,
+            error: None,
+        });
+    }
+    let reported_root = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let canonical_root = PathBuf::from(reported_root)
+        .canonicalize()
+        .map_err(|err| format!("无法解析 Git 根目录：{err}"))?;
+    Ok(GitWorkspaceRootCheckOutput {
+        is_git_root: normalize_terminal_path_for_compare(&canonical_root)
+            == normalize_terminal_path_for_compare(&canonical_workspace),
+        checked: true,
+        error: None,
+    })
+}
+
+#[tauri::command]
 fn get_chat_shell_workspace(
     input: ChatShellWorkspaceInput,
     state: State<'_, AppState>,
@@ -1732,6 +1807,7 @@ fn update_chat_shell_workspace_layout(
         Some(None),
         Some(normalized_workspaces),
         input.autonomous_mode,
+        input.shell_work_mode,
     )?;
     {
         let mut roots = state

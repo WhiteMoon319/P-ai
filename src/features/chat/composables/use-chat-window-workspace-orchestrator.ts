@@ -13,12 +13,16 @@ export function useChatWindowWorkspaceOrchestrator(bindings: Record<string, any>
   const picker = useChatWorkspacePickerFlow({
     chatWorkspaceChoices: workspace.chatWorkspaceChoices,
     chatWorkspaceAutonomousMode: workspace.chatWorkspaceAutonomousMode,
+    chatWorkspaceWorkMode: workspace.chatWorkspaceWorkMode,
     openChatWorkspacePickerBase: workspace.openChatWorkspacePicker,
     closeChatWorkspacePickerBase: workspace.closeChatWorkspacePicker,
     saveChatWorkspaces: workspace.saveChatWorkspaces,
     setStatus: bindings.setStatus,
     setStatusError: bindings.setStatusError,
     workspaceAlreadyExistsText: bindings.tr("config.tools.workspaceAlreadyExists"),
+    worktreeRequiresApprovalText: bindings.tr("chat.workspaceWorktreeRequiresApproval"),
+    worktreeUnavailableText: bindings.tr("chat.workspaceWorktreeUnavailable"),
+    checkChatWorkspaceGitRoot: workspace.checkChatWorkspaceGitRoot,
   });
 
   return {

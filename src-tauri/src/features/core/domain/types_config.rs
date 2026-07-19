@@ -1,6 +1,8 @@
 const SHELL_WORKSPACE_LEVEL_SYSTEM: &str = "system";
 const SHELL_WORKSPACE_LEVEL_MAIN: &str = "main";
 const SHELL_WORKSPACE_LEVEL_SECONDARY: &str = "secondary";
+const SHELL_WORK_MODE_DIRECTORY: &str = "directory";
+const SHELL_WORK_MODE_ISOLATED_WORKTREE: &str = "isolated_worktree";
 
 const SHELL_WORKSPACE_ACCESS_APPROVAL: &str = "approval";
 const SHELL_WORKSPACE_ACCESS_FULL_ACCESS: &str = "full_access";
@@ -12,6 +14,17 @@ fn default_shell_workspace_level() -> String {
 
 fn default_shell_workspace_access() -> String {
     SHELL_WORKSPACE_ACCESS_READ_ONLY.to_string()
+}
+
+fn default_shell_work_mode() -> String {
+    SHELL_WORK_MODE_DIRECTORY.to_string()
+}
+
+fn normalize_shell_work_mode_text(raw: &str) -> String {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        SHELL_WORK_MODE_ISOLATED_WORKTREE => SHELL_WORK_MODE_ISOLATED_WORKTREE.to_string(),
+        _ => SHELL_WORK_MODE_DIRECTORY.to_string(),
+    }
 }
 
 const CODEX_AUTH_MODE_READ_LOCAL: &str = "read_local";

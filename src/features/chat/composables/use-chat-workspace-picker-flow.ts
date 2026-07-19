@@ -3,21 +3,28 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 import { toErrorMessage } from "../../../utils/error";
 import type { ChatWorkspaceChoice } from "./use-chat-workspace";
+import type { ShellWorkMode } from "../../../types/app";
 
 type UseChatWorkspacePickerFlowOptions = {
   chatWorkspaceChoices: Ref<ChatWorkspaceChoice[]>;
   chatWorkspaceAutonomousMode: Ref<boolean>;
+  chatWorkspaceWorkMode: Ref<ShellWorkMode>;
   openChatWorkspacePickerBase: () => void;
   closeChatWorkspacePickerBase: () => void;
-  saveChatWorkspaces: (items: ChatWorkspaceChoice[], autonomousMode?: boolean) => Promise<void>;
+  saveChatWorkspaces: (items: ChatWorkspaceChoice[], autonomousMode?: boolean, workMode?: ShellWorkMode) => Promise<void>;
   setStatus: (message: string) => void;
   setStatusError: (key: string, error: unknown) => void;
   workspaceAlreadyExistsText: string;
+  worktreeRequiresApprovalText: string;
+  worktreeUnavailableText: string;
+  checkChatWorkspaceGitRoot: (path: string) => Promise<boolean>;
 };
 
 export function useChatWorkspacePickerFlow(options: UseChatWorkspacePickerFlowOptions) {
   const chatWorkspaceDraftChoices = ref<ChatWorkspaceChoice[]>([]);
   const chatWorkspaceDraftAutonomousMode = ref(false);
+  const chatWorkspaceDraftWorkMode = ref<ShellWorkMode>("directory");
+  const chatWorkspaceDraftError = ref("");
   const chatWorkspacePickerSaving = ref(false);
   const tauriRuntimeAvailable = isTauriRuntimeAvailable();
 
@@ -34,6 +41,8 @@ export function useChatWorkspacePickerFlow(options: UseChatWorkspacePickerFlowOp
   function syncChatWorkspaceDraftFromCurrentState() {
     chatWorkspaceDraftChoices.value = cloneChatWorkspaceChoices(options.chatWorkspaceChoices.value);
     chatWorkspaceDraftAutonomousMode.value = Boolean(options.chatWorkspaceAutonomousMode.value);
+    chatWorkspaceDraftWorkMode.value = options.chatWorkspaceWorkMode.value;
+    chatWorkspaceDraftError.value = "";
   }
 
   function openChatWorkspacePicker() {
@@ -71,12 +80,18 @@ export function useChatWorkspacePickerFlow(options: UseChatWorkspacePickerFlowOp
         access: hasMain ? "read_only" : "approval",
       });
       chatWorkspaceDraftChoices.value = draft;
+      if (hasMain === false && chatWorkspaceDraftWorkMode.value === "isolated_worktree") {
+        const isGitRoot = await options.checkChatWorkspaceGitRoot(nextPath);
+        if (!isGitRoot) chatWorkspaceDraftWorkMode.value = "directory";
+      }
     } catch (error) {
       options.setStatusError("status.requestFailed", error);
     }
   }
 
   async function setChatWorkspaceAsMain(workspaceId: string) {
+    chatWorkspaceDraftError.value = "";
+    const previousWorkMode = chatWorkspaceDraftWorkMode.value;
     const draft: ChatWorkspaceChoice[] = cloneChatWorkspaceChoices(chatWorkspaceDraftChoices.value).map((item): ChatWorkspaceChoice => {
       if (item.level === "system") return item;
       if (item.id === workspaceId) {
@@ -88,9 +103,18 @@ export function useChatWorkspacePickerFlow(options: UseChatWorkspacePickerFlowOp
       return item;
     });
     chatWorkspaceDraftChoices.value = draft;
+    const selected = draft.find((item) => item.id === workspaceId);
+    const isGitRoot = await options.checkChatWorkspaceGitRoot(selected?.path || "");
+    if (!isGitRoot) {
+      chatWorkspaceDraftWorkMode.value = "directory";
+      if (previousWorkMode === "isolated_worktree") {
+        options.setStatus(options.worktreeUnavailableText);
+      }
+    }
   }
 
   function setChatWorkspaceAccess(workspaceId: string, access: ChatWorkspaceChoice["access"]) {
+    chatWorkspaceDraftError.value = "";
     const draft = cloneChatWorkspaceChoices(chatWorkspaceDraftChoices.value);
     const target = draft.find((item) => item.id === workspaceId);
     if (!target) return;
@@ -99,7 +123,9 @@ export function useChatWorkspacePickerFlow(options: UseChatWorkspacePickerFlowOp
     chatWorkspaceDraftChoices.value = draft;
   }
 
-  function removeChatWorkspace(workspaceId: string) {
+  async function removeChatWorkspace(workspaceId: string) {
+    chatWorkspaceDraftError.value = "";
+    const previousWorkMode = chatWorkspaceDraftWorkMode.value;
     const current = cloneChatWorkspaceChoices(chatWorkspaceDraftChoices.value);
     const removing = current.find((item) => item.id === workspaceId);
     const draft = current.filter((item) => item.id !== workspaceId || item.level === "system");
@@ -117,10 +143,23 @@ export function useChatWorkspacePickerFlow(options: UseChatWorkspacePickerFlowOp
       }
     }
     chatWorkspaceDraftChoices.value = draft;
+    const promoted = draft.find((item) => item.level === "main");
+    if (promoted && previousWorkMode === "isolated_worktree") {
+      const isGitRoot = await options.checkChatWorkspaceGitRoot(promoted.path);
+      if (!isGitRoot) {
+        chatWorkspaceDraftWorkMode.value = "directory";
+        options.setStatus(options.worktreeUnavailableText);
+      }
+    }
   }
 
   function setChatWorkspaceAutonomousMode(enabled: boolean) {
     chatWorkspaceDraftAutonomousMode.value = Boolean(enabled);
+  }
+
+  function setChatWorkspaceWorkMode(mode: ShellWorkMode) {
+    chatWorkspaceDraftError.value = "";
+    chatWorkspaceDraftWorkMode.value = mode;
   }
 
   async function openChatWorkspaceDir(workspaceId: string) {
@@ -143,7 +182,13 @@ export function useChatWorkspacePickerFlow(options: UseChatWorkspacePickerFlowOp
     chatWorkspacePickerSaving.value = true;
     try {
       const draft = cloneChatWorkspaceChoices(chatWorkspaceDraftChoices.value);
-      await options.saveChatWorkspaces(draft, chatWorkspaceDraftAutonomousMode.value);
+      const mainWorkspace = draft.find((item) => item.level === "main");
+      if (chatWorkspaceDraftWorkMode.value === "isolated_worktree" && mainWorkspace?.access === "read_only") {
+        chatWorkspaceDraftError.value = options.worktreeRequiresApprovalText;
+        options.setStatus(options.worktreeRequiresApprovalText);
+        return;
+      }
+      await options.saveChatWorkspaces(draft, chatWorkspaceDraftAutonomousMode.value, chatWorkspaceDraftWorkMode.value);
       options.closeChatWorkspacePickerBase();
       syncChatWorkspaceDraftFromCurrentState();
     } finally {
@@ -154,6 +199,8 @@ export function useChatWorkspacePickerFlow(options: UseChatWorkspacePickerFlowOp
   return {
     chatWorkspaceDraftChoices,
     chatWorkspaceDraftAutonomousMode,
+    chatWorkspaceDraftWorkMode,
+    chatWorkspaceDraftError,
     chatWorkspacePickerSaving,
     openChatWorkspacePicker,
     closeChatWorkspacePicker,
@@ -161,6 +208,7 @@ export function useChatWorkspacePickerFlow(options: UseChatWorkspacePickerFlowOp
     setChatWorkspaceAsMain,
     setChatWorkspaceAccess,
     setChatWorkspaceAutonomousMode,
+    setChatWorkspaceWorkMode,
     removeChatWorkspace,
     openChatWorkspaceDir,
     saveChatWorkspacePicker,

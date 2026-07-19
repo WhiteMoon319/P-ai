@@ -180,6 +180,7 @@ fn delegate_parent_shell_workspace(
             shell_workspace_path: conversation_meta.shell_workspace_path,
             shell_workspaces: conversation_meta.shell_workspaces,
             shell_autonomous_mode: conversation_meta.shell_autonomous_mode,
+            shell_work_mode: normalize_shell_work_mode_text(&conversation_meta.shell_work_mode),
             messages: Vec::new(),
             fast_request_turns: conversation_meta.fast_request_turns,
             current_todos: conversation_meta.current_todos,
@@ -196,6 +197,7 @@ struct DelegateWorkspaceSnapshot {
     shell_workspace_path: Option<String>,
     shell_workspaces: Vec<ShellWorkspaceConfig>,
     shell_autonomous_mode: bool,
+    shell_work_mode: String,
 }
 
 fn delegate_workspace_snapshot_from_conversation(
@@ -208,13 +210,18 @@ fn delegate_workspace_snapshot_from_conversation(
         .filter(|value| !value.is_empty())
         .is_some();
     let has_workspaces = !conversation.shell_workspaces.is_empty();
-    if !has_locked_root && !has_workspaces && !conversation.shell_autonomous_mode {
+    if !has_locked_root
+        && !has_workspaces
+        && !conversation.shell_autonomous_mode
+        && normalize_shell_work_mode_text(&conversation.shell_work_mode) == SHELL_WORK_MODE_DIRECTORY
+    {
         return None;
     }
     Some(DelegateWorkspaceSnapshot {
         shell_workspace_path: conversation.shell_workspace_path.clone(),
         shell_workspaces: conversation.shell_workspaces.clone(),
         shell_autonomous_mode: conversation.shell_autonomous_mode,
+        shell_work_mode: normalize_shell_work_mode_text(&conversation.shell_work_mode),
     })
 }
 
@@ -270,6 +277,7 @@ fn delegate_runtime_thread_build(
         conversation.shell_workspace_path = workspace_snapshot.shell_workspace_path;
         conversation.shell_workspaces = workspace_snapshot.shell_workspaces;
         conversation.shell_autonomous_mode = workspace_snapshot.shell_autonomous_mode;
+        conversation.shell_work_mode = workspace_snapshot.shell_work_mode;
     }
     runtime_log_info(format!(
         "[委托工作目录] 写入子代理 delegate_id={} shell_workspace_path={} shell_workspaces={} shell_autonomous_mode={}",

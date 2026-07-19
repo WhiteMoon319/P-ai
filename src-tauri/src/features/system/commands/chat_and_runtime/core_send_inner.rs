@@ -783,6 +783,7 @@ async fn send_chat_message_inner(
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
             shell_autonomous_mode: false,
+            shell_work_mode: default_shell_work_mode(),
             archived_at: None,
             messages: Vec::new(),
             fast_request_turns: Vec::new(),
@@ -888,6 +889,7 @@ async fn send_chat_message_inner(
                     shell_workspace_path: None,
                     shell_workspaces: Vec::new(),
                     shell_autonomous_mode: false,
+                    shell_work_mode: default_shell_work_mode(),
                     archived_at: summary_item.archived_at.clone(),
                     messages: Vec::new(),
                     fast_request_turns: Vec::new(),
@@ -925,6 +927,7 @@ async fn send_chat_message_inner(
                 requested_conversation.shell_workspace_path = parent.shell_workspace_path;
                 requested_conversation.shell_workspaces = parent.shell_workspaces;
                 requested_conversation.shell_autonomous_mode = parent.shell_autonomous_mode;
+                requested_conversation.shell_work_mode = normalize_shell_work_mode_text(&parent.shell_work_mode);
             }
         }
         let runtime_state = state_read_runtime_state_cached(state)?;
@@ -973,7 +976,8 @@ async fn send_chat_message_inner(
                 user_profile_snapshot: String::new(),
                 shell_workspace_path: None,
                 shell_workspaces: Vec::new(),
-                shell_autonomous_mode: false,
+                    shell_autonomous_mode: false,
+                    shell_work_mode: default_shell_work_mode(),
                 archived_at: summary_item.archived_at.clone(),
                 messages: Vec::new(),
                 fast_request_turns: Vec::new(),
@@ -3220,6 +3224,7 @@ mod core_send_inner_tests {
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
             shell_autonomous_mode: false,
+            shell_work_mode: default_shell_work_mode(),
             archived_at: None,
             messages,
             fast_request_turns: Vec::new(),
@@ -3934,6 +3939,7 @@ mod core_send_inner_tests {
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
             shell_autonomous_mode: false,
+            shell_work_mode: default_shell_work_mode(),
             archived_at: None,
             messages: vec![ChatMessage {
                 id: "assistant-existing".to_string(),

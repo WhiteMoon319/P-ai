@@ -917,6 +917,21 @@ fn terminal_prompt_trusted_roots_block(
             "{}：当前工作目录（Session Working Directory）",
             terminal_path_for_user(&default_workspace.path)
         ));
+        if conversation
+            .map(|value| normalize_shell_work_mode_text(&value.shell_work_mode))
+            .as_deref()
+            == Some(SHELL_WORK_MODE_ISOLATED_WORKTREE)
+        {
+            let root = terminal_path_for_user(&default_workspace.path);
+            lines.push(format!(
+                "用户希望在隔离工作树中工作。请以「{}」作为 Git 仓库根目录，根据任务需要在「{}/.pai/.worktree/」下创建或复用 Git worktree，并在对应工作树中完成修改；不要直接修改仓库根工作区的项目文件。",
+                root, root
+            ));
+            lines.push("创建前检查仓库根工作区是否存在未提交改动；如果任务依赖这些改动，先询问用户，不得自行提交、暂存、stash 或复制。".to_string());
+            lines.push("注意不要让 .pai/ 被 Git 追踪。不要自动删除工作树或分支，除非用户明确要求。".to_string());
+        } else {
+            lines.push("用户希望直接在当前工作目录中工作，请将其作为本次任务的默认读取、修改和命令执行根目录。".to_string());
+        }
     }
     let shell_block = prompt_xml_block("shell workspace", lines.join("\n"));
     let assistant_block = assistant_space.map(|workspace| {
@@ -1474,6 +1489,7 @@ mod terminal_workspace_tests {
                 built_in: false,
             }],
             shell_autonomous_mode: false,
+            shell_work_mode: default_shell_work_mode(),
             archived_at: None,
             messages: Vec::new(),
             fast_request_turns: Vec::new(),
@@ -1555,6 +1571,7 @@ mod terminal_workspace_tests {
                 built_in: false,
             }],
             shell_autonomous_mode: false,
+            shell_work_mode: default_shell_work_mode(),
             archived_at: None,
             messages: Vec::new(),
             fast_request_turns: Vec::new(),
@@ -1689,6 +1706,48 @@ mod terminal_workspace_tests {
         assert!(block.contains("助理空间是 PAI 的配置目录与助理个人长期目录"));
         assert!(block.contains("</shell workspace>\n<assistant space>"));
 
+        let _ = std::fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn terminal_prompt_trusted_roots_block_should_describe_isolated_worktree_mode() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "easy-call-ai-terminal-worktree-prompt-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp_root).expect("create workspace");
+        let state = build_test_state(temp_root.clone());
+        let mut config = AppConfig::default();
+        config.shell_workspaces = vec![ShellWorkspaceConfig {
+            id: "workspace-main".to_string(),
+            name: "项目".to_string(),
+            path: temp_root.to_string_lossy().to_string(),
+            level: SHELL_WORKSPACE_LEVEL_MAIN.to_string(),
+            access: SHELL_WORKSPACE_ACCESS_APPROVAL.to_string(),
+            built_in: false,
+        }];
+        state_write_config_cached(&state, &config).expect("write config");
+        let mut conversation = build_workspace_test_conversation("worktree-prompt");
+        conversation.shell_workspaces = config.shell_workspaces.clone();
+        conversation.shell_work_mode = SHELL_WORK_MODE_ISOLATED_WORKTREE.to_string();
+        let mut api = ApiConfig::default();
+        api.enable_tools = true;
+        api.tools = vec![ApiToolConfig {
+            id: "exec".to_string(),
+            command: String::new(),
+            args: Vec::new(),
+            enabled: true,
+            values: Value::Null,
+        }];
+
+        let block = terminal_prompt_trusted_roots_block(&state, &api, Some(&conversation))
+            .expect("terminal block");
+
+        assert!(block.contains("在隔离工作树中工作"));
+        assert!(block.contains(".pai/.worktree/"));
+        assert!(block.contains("不要让 .pai/ 被 Git 追踪"));
+        assert!(block.contains("不得自行提交、暂存、stash 或复制"));
+        assert!(!block.contains("用户希望直接在当前工作目录中工作"));
         let _ = std::fs::remove_dir_all(temp_root);
     }
 }

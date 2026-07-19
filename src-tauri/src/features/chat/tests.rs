@@ -3930,6 +3930,7 @@
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
             shell_autonomous_mode: false,
+            shell_work_mode: default_shell_work_mode(),
             archived_at: None,
             messages: Vec::new(),
             fast_request_turns: Vec::new(),
@@ -4557,6 +4558,7 @@
                 Some(Some(state.llm_workspace_path.to_string_lossy().to_string())),
                 None,
                 Some(true),
+                None,
             )
             .expect("set workspace metadata");
         conversation_service_v2()
@@ -8945,6 +8947,7 @@
                 built_in: false,
             }],
             shell_autonomous_mode: false,
+            shell_work_mode: default_shell_work_mode(),
             archived_at: None,
             messages: Vec::new(),
             fast_request_turns: Vec::new(),
@@ -10904,6 +10907,7 @@
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
             shell_autonomous_mode: false,
+            shell_work_mode: default_shell_work_mode(),
             archived_at: None,
             messages: Vec::new(),
             fast_request_turns: Vec::new(),
@@ -10961,6 +10965,7 @@
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
             shell_autonomous_mode: false,
+            shell_work_mode: default_shell_work_mode(),
             archived_at: None,
             messages: Vec::new(),
             fast_request_turns: Vec::new(),
@@ -11031,6 +11036,7 @@
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
             shell_autonomous_mode: false,
+            shell_work_mode: default_shell_work_mode(),
             archived_at: None,
             messages: Vec::new(),
             fast_request_turns: Vec::new(),

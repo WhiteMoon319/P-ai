@@ -1244,6 +1244,7 @@ fn main() {
             migrate_shell_workspace_directory,
             get_default_chat_shell_workspace_path,
             get_chat_shell_workspace,
+            check_git_workspace_root,
             update_chat_shell_workspace_layout,
             upsert_ide_context_snapshot,
             query_ide_context_references,

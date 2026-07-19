@@ -45,7 +45,23 @@
                     class="min-w-0 flex-1 truncate text-sm font-medium"
                     :title="item.path"
                   >{{ item.name }}</span>
-                  <span v-if="levelLabel(item.level)" class="badge shrink-0" :class="levelClass(item.level)">{{ levelLabel(item.level) }}</span>
+                  <select
+                    v-if="item.level === 'main'"
+                    class="select select-sm select-bordered w-40 shrink-0"
+                    :value="workMode"
+                    :disabled="saving"
+                    :title="worktreeCheckMessage || undefined"
+                    @change="onWorkModeChange"
+                  >
+                    <option value="directory">{{ t("chat.workspaceWorkModeDirectory") }}</option>
+                    <option
+                      v-if="worktreeAvailable || workMode === 'isolated_worktree' || Boolean(worktreeCheckMessage)"
+                      value="isolated_worktree"
+                      :disabled="!worktreeAvailable && workMode !== 'isolated_worktree'"
+                    >
+                      {{ t("chat.workspaceWorkModeIsolated") }}
+                    </option>
+                  </select>
                 </div>
               </div>
               <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
@@ -99,13 +115,16 @@
         <button v-if="!hideAddWorkspace" class="btn btn-sm" type="button" :disabled="saving" @click="emit('addWorkspace')">
           {{ t("config.tools.addWorkspace") }}
         </button>
-        <div class="flex items-center gap-2">
+        <div class="ml-auto flex min-w-0 items-center gap-3">
+          <span v-if="validationMessage" class="max-w-72 text-right text-xs text-error">{{ validationMessage }}</span>
+          <div class="flex items-center gap-2">
           <button class="btn btn-sm btn-ghost" type="button" :disabled="saving" @click="emit('close')">
           {{ t("common.cancel") }}
           </button>
           <button class="btn btn-sm btn-primary" type="button" :disabled="saving" @click="emit('save')">
             {{ saving ? t("common.saving") : t("common.save") }}
           </button>
+          </div>
         </div>
       </div>
     </div>
@@ -117,12 +136,17 @@ import { computed } from "vue";
 import { SquareTerminal, Trash2 } from "@lucide/vue";
 import { useI18n } from "vue-i18n";
 import type { ChatWorkspaceChoice } from "../../composables/use-chat-workspace";
+import type { ShellWorkMode } from "../../../../types/app";
 
 const props = withDefaults(defineProps<{
   open: boolean;
   saving: boolean;
   workspaces: ChatWorkspaceChoice[];
   autonomousMode: boolean;
+  workMode: ShellWorkMode;
+  worktreeAvailable: boolean;
+  worktreeCheckMessage?: string;
+  validationMessage?: string;
   hideAddWorkspace?: boolean;
 }>(), {
   hideAddWorkspace: false,
@@ -134,6 +158,7 @@ const emit = defineEmits<{
   (e: "setMain", workspaceId: string): void;
   (e: "setAccess", workspaceId: string, access: ChatWorkspaceChoice["access"]): void;
   (e: "setAutonomousMode", enabled: boolean): void;
+  (e: "setWorkMode", mode: ShellWorkMode): void;
   (e: "removeWorkspace", workspaceId: string): void;
   (e: "openDir", workspaceId: string): void;
   (e: "save"): void;
@@ -152,17 +177,6 @@ function canSetAsTerminalDirectory(item: ChatWorkspaceChoice): boolean {
   return item.level !== "system" && !isCurrentTerminalDirectory(item);
 }
 
-function levelLabel(level: string): string {
-  if (level === "system") return t("config.tools.workspaceLevelSystem");
-  if (level === "main") return t("config.tools.workspaceLevelMain");
-  return "";
-}
-
-function levelClass(level: string): string {
-  if (level === "main") return "badge-primary";
-  return "badge-ghost";
-}
-
 function accessLabel(access: string): string {
   if (access === "approval") return t("config.tools.workspaceAccessApproval");
   if (access === "full_access") return t("config.tools.workspaceAccessFullAccess");
@@ -179,5 +193,11 @@ function onAccessChange(workspaceId: string, event: Event) {
 
 function onAutonomousModeChange(event: Event) {
   emit("setAutonomousMode", Boolean((event.target as HTMLInputElement | null)?.checked));
+}
+
+function onWorkModeChange(event: Event) {
+  const nextMode = String((event.target as HTMLSelectElement | null)?.value || "").trim();
+  if (nextMode !== "directory" && nextMode !== "isolated_worktree") return;
+  emit("setWorkMode", nextMode);
 }
 </script>

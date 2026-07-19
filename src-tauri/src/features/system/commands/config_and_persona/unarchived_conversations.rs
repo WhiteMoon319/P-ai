@@ -767,6 +767,7 @@ fn create_side_chat_conversation_blocking(
     side_chat.shell_workspace_path = parent.shell_workspace_path.clone();
     side_chat.shell_workspaces = parent.shell_workspaces.clone();
     side_chat.shell_autonomous_mode = parent.shell_autonomous_mode;
+    side_chat.shell_work_mode = normalize_shell_work_mode_text(&parent.shell_work_mode);
     side_chat.current_todos = parent.current_todos.clone();
     side_chat.plan_mode_enabled = parent.plan_mode_enabled;
     side_chat.user_profile_snapshot = parent.user_profile_snapshot.clone();
@@ -1252,6 +1253,7 @@ fn build_branch_conversation_record_from_selection(
     conversation.shell_workspace_path = source.shell_workspace_path.clone();
     conversation.shell_workspaces = source.shell_workspaces.clone();
     conversation.shell_autonomous_mode = source.shell_autonomous_mode;
+    conversation.shell_work_mode = normalize_shell_work_mode_text(&source.shell_work_mode);
     conversation.current_todos = source.current_todos.clone();
     let user_profile_snapshot = data
         .agents
@@ -3595,6 +3597,7 @@ mod unarchived_conversations_tests {
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
             shell_autonomous_mode: false,
+            shell_work_mode: default_shell_work_mode(),
             archived_at: None,
             messages: vec![build_test_message("m1", "hello"), build_test_message("m2", "world")],
             fast_request_turns: Vec::new(),

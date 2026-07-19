@@ -2438,6 +2438,7 @@ mod storage_usage_tests {
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
             shell_autonomous_mode: false,
+            shell_work_mode: default_shell_work_mode(),
             archived_at: None,
             messages: vec![
                 storage_usage_test_message("m1", "user"),

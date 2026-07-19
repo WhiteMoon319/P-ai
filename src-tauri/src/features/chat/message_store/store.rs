@@ -2930,6 +2930,7 @@ mod message_store_reader_tests {
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
             shell_autonomous_mode: false,
+            shell_work_mode: default_shell_work_mode(),
             archived_at: None,
             messages,
             fast_request_turns: Vec::new(),

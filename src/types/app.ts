@@ -163,6 +163,7 @@ export type ApiProviderConfigItem = {
 export type ShellWorkspaceLevel = "system" | "main" | "secondary";
 
 export type ShellWorkspaceAccess = "approval" | "full_access" | "read_only";
+export type ShellWorkMode = "directory" | "isolated_worktree";
 export type GithubUpdateMethod = "auto" | "direct" | "proxy";
 
 export type ShellWorkspace = {
@@ -180,6 +181,7 @@ export type ChatShellWorkspaceState = {
   rootPath: string;
   workspaces?: ShellWorkspace[];
   autonomousMode?: boolean;
+  shellWorkMode?: ShellWorkMode;
 };
 
 export type IdeContextWorkspaceInput = {

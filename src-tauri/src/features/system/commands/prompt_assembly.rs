@@ -642,6 +642,7 @@ mod prompt_assembly_tests {
             shell_workspace_path: None,
             shell_workspaces: workspaces,
             shell_autonomous_mode: false,
+            shell_work_mode: default_shell_work_mode(),
             archived_at: None,
             messages: Vec::new(),
             fast_request_turns: Vec::new(),

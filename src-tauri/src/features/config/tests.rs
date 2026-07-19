@@ -1800,6 +1800,7 @@ model = "gpt-4.1"
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
             shell_autonomous_mode: false,
+            shell_work_mode: default_shell_work_mode(),
             archived_at: None,
             messages: vec![ChatMessage {
                 id: format!("{id}-message-1"),

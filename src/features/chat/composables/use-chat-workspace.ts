@@ -1,7 +1,7 @@
 import { computed, ref, type ComputedRef } from "vue";
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../services/tauri-api";
-import type { ChatShellWorkspaceState, ShellWorkspace } from "../../../types/app";
+import type { ChatShellWorkspaceState, ShellWorkspace, ShellWorkMode } from "../../../types/app";
 import {
   defaultWorkspaceNameFromPath,
   inferWorkspaceName,
@@ -35,6 +35,10 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
   const chatWorkspacePickerOpen = ref(false);
   const chatWorkspaceItems = ref<ShellWorkspace[]>([]);
   const chatWorkspaceAutonomousMode = ref(false);
+  const chatWorkspaceWorkMode = ref<ShellWorkMode>("directory");
+  const chatWorkspaceWorktreeAvailable = ref(false);
+  const chatWorkspaceWorktreeCheckMessage = ref("");
+  let gitCheckSequence = 0;
 
   function normalizeWorkspaceChoice(item: ShellWorkspace, index: number): ChatWorkspaceChoice {
     const path = String(item.path || "").trim();
@@ -97,8 +101,37 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
     chatWorkspaceRootPath.value = nextPath;
     chatWorkspaceItems.value = Array.isArray(state.workspaces) ? state.workspaces : [];
     chatWorkspaceAutonomousMode.value = Boolean(state.autonomousMode);
+    chatWorkspaceWorkMode.value = state.shellWorkMode === "isolated_worktree" ? "isolated_worktree" : "directory";
     chatWorkspaceName.value = resolveWorkspaceDisplayName(nextPath, String(state.workspaceName || "").trim());
     chatWorkspacePath.value = nextPath;
+  }
+
+  async function checkChatWorkspaceGitRoot(path: string): Promise<boolean> {
+    const checkSequence = ++gitCheckSequence;
+    const normalizedPath = String(path || "").trim();
+    if (!normalizedPath) {
+      chatWorkspaceWorktreeAvailable.value = false;
+      chatWorkspaceWorktreeCheckMessage.value = "";
+      return false;
+    }
+    chatWorkspaceWorktreeAvailable.value = false;
+    chatWorkspaceWorktreeCheckMessage.value = t("chat.workspaceWorktreeChecking");
+    try {
+      const result = await invokeTauri<{ isGitRoot?: boolean; checked?: boolean; error?: string }>("check_git_workspace_root", {
+        input: { workspacePath: normalizedPath },
+      });
+      if (checkSequence !== gitCheckSequence) return Boolean(result.isGitRoot);
+      chatWorkspaceWorktreeAvailable.value = Boolean(result.isGitRoot);
+      chatWorkspaceWorktreeCheckMessage.value = result.error
+        ? String(result.error)
+        : (result.checked ? "" : "无法确认 Git 仓库");
+      return chatWorkspaceWorktreeAvailable.value;
+    } catch (error) {
+      if (checkSequence !== gitCheckSequence) return false;
+      chatWorkspaceWorktreeAvailable.value = false;
+      chatWorkspaceWorktreeCheckMessage.value = error instanceof Error ? error.message : String(error);
+      return false;
+    }
   }
 
   function applyChatWorkspaceDraft(workspaces: ChatWorkspaceChoice[]) {
@@ -126,6 +159,9 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
       chatWorkspaceRootPath.value = "";
       chatWorkspaceItems.value = [];
       chatWorkspaceAutonomousMode.value = false;
+      chatWorkspaceWorkMode.value = "directory";
+      chatWorkspaceWorktreeAvailable.value = false;
+      chatWorkspaceWorktreeCheckMessage.value = "";
       return;
     }
     try {
@@ -133,6 +169,7 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
         input: { apiConfigId, agentId, conversationId: conversationId || null },
       });
       applyChatWorkspaceState(state);
+      void checkChatWorkspaceGitRoot(chatWorkspaceRootPath.value);
     } catch (error) {
       console.warn("[工作区] refresh chat workspace failed:", error);
     }
@@ -146,7 +183,7 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
     chatWorkspacePickerOpen.value = false;
   }
 
-  async function saveChatWorkspaces(workspaces: ChatWorkspaceChoice[], autonomousMode?: boolean) {
+  async function saveChatWorkspaces(workspaces: ChatWorkspaceChoice[], autonomousMode?: boolean, workMode: ShellWorkMode = chatWorkspaceWorkMode.value) {
     const apiConfigId = String(options.activeApiConfigId.value || "").trim();
     const agentId = String(options.activeAgentId.value || "").trim();
     const conversationId = String(options.activeConversationId.value || "").trim();
@@ -158,8 +195,10 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
     const previousItems = [...chatWorkspaceItems.value];
     const previousName = chatWorkspaceName.value;
     const previousAutonomousMode = chatWorkspaceAutonomousMode.value;
+    const previousWorkMode = chatWorkspaceWorkMode.value;
     applyChatWorkspaceDraft(workspaces);
     chatWorkspaceAutonomousMode.value = Boolean(autonomousMode);
+    chatWorkspaceWorkMode.value = workMode === "isolated_worktree" ? "isolated_worktree" : "directory";
     try {
       const state = await invokeTauri<ChatShellWorkspaceState>("update_chat_shell_workspace_layout", {
         input: {
@@ -167,6 +206,7 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
           agentId,
           conversationId: conversationId || null,
           autonomousMode: Boolean(autonomousMode),
+          shellWorkMode: chatWorkspaceWorkMode.value,
           workspaces: workspaces
             .filter((item) => item.level !== "system")
             .map((item) => ({
@@ -184,6 +224,7 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
       chatWorkspaceItems.value = previousItems;
       chatWorkspaceName.value = previousName;
       chatWorkspaceAutonomousMode.value = previousAutonomousMode;
+      chatWorkspaceWorkMode.value = previousWorkMode;
       options.setStatusError("status.requestFailed", error);
       throw error;
     }
@@ -196,9 +237,13 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
     chatWorkspacePickerOpen,
     chatWorkspaceChoices,
     chatWorkspaceAutonomousMode,
+    chatWorkspaceWorkMode,
+    chatWorkspaceWorktreeAvailable,
+    chatWorkspaceWorktreeCheckMessage,
     chatWorkspacePermissionLabel,
     chatWorkspaceDisplayName,
     refreshChatWorkspaceState,
+    checkChatWorkspaceGitRoot,
     openChatWorkspacePicker,
     closeChatWorkspacePicker,
     saveChatWorkspaces,

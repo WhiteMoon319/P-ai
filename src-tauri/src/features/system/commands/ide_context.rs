@@ -474,6 +474,7 @@ fn ide_chat_conversation_from_meta_view(conversation_meta: &ConversationMetaView
         shell_workspace_path: conversation_meta.shell_workspace_path.clone(),
         shell_workspaces: conversation_meta.shell_workspaces.clone(),
         shell_autonomous_mode: conversation_meta.shell_autonomous_mode,
+        shell_work_mode: normalize_shell_work_mode_text(&conversation_meta.shell_work_mode),
         archived_at: conversation_meta.archived_at.clone(),
         messages: Vec::new(),
         fast_request_turns: conversation_meta.fast_request_turns.clone(),
