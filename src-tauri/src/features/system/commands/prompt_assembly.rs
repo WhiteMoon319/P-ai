@@ -20,8 +20,6 @@ struct ChatPromptOverrides {
 #[allow(dead_code)]
 enum LatestUserPayloadIntent {
     ChatRequest {
-        trigger_only: bool,
-        submitted_user_text: String,
         include_task_board: bool,
         include_todo_board: bool,
         attachment_relative_paths: Vec<String>,
@@ -917,6 +915,78 @@ mod prompt_assembly_tests {
         assert!(prepared.preamble.contains("当前 shell: PowerShell"));
         assert!(!prepared.preamble.contains("这一句只属于用户消息"));
         assert_eq!(prepared.latest_user_text, "这一句只属于用户消息");
+    }
+
+    #[test]
+    fn chat_request_latest_user_payload_should_append_extra_blocks_without_dup_user_text() {
+        let agent = default_agent();
+        let agents = vec![agent.clone()];
+        let departments = default_departments("api-1");
+        let mut conversation = build_test_conversation(Vec::new());
+        conversation.messages.push(build_test_message("user", "洛伊是谁"));
+
+        let prepared = build_prepared_prompt_for_mode(
+            PromptBuildMode::Chat,
+            &conversation,
+            &agent,
+            &agents,
+            &departments,
+            "测试用户",
+            "",
+            "default",
+            "zh-CN",
+            None,
+            None,
+            None,
+            Some(ChatPromptOverrides {
+                latest_user_intent: Some(LatestUserPayloadIntent::ChatRequest {
+                    include_task_board: false,
+                    include_todo_board: false,
+                    attachment_relative_paths: vec!["downloads/loi.txt".to_string()],
+                }),
+                ..Default::default()
+            }),
+            None,
+            Some(&ApiConfig::default()),
+            None,
+            Some(false),
+        )
+        .expect("build prepared prompt");
+
+        assert_eq!(prepared.latest_user_text, "洛伊是谁");
+
+        let blocks = prepared_prompt_latest_user_text_blocks(&prepared);
+        assert_eq!(
+            blocks,
+            vec![
+                prepared.latest_user_meta_text.clone(),
+                "洛伊是谁".to_string(),
+                build_attachment_notice_text(0, "downloads/loi.txt"),
+            ]
+        );
+
+        let messages = prepared_prompt_to_messages_json(&prepared);
+        let user_messages = messages
+            .iter()
+            .filter(|message| message.get("role").and_then(Value::as_str) == Some("user"))
+            .collect::<Vec<_>>();
+        assert_eq!(user_messages.len(), 1);
+        let content = user_messages[0]
+            .get("content")
+            .and_then(Value::as_array)
+            .expect("latest user content array");
+        let text_blocks = content
+            .iter()
+            .filter_map(|block| block.get("text").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            text_blocks,
+            vec![
+                prepared.latest_user_meta_text.as_str(),
+                "洛伊是谁",
+                build_attachment_notice_text(0, "downloads/loi.txt").as_str(),
+            ]
+        );
     }
 
     #[test]

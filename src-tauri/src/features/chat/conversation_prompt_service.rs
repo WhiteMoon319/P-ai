@@ -920,26 +920,10 @@ impl ConversationPromptService {
         };
         match intent {
             LatestUserPayloadIntent::ChatRequest {
-                trigger_only,
-                submitted_user_text,
                 include_task_board,
                 include_todo_board,
                 attachment_relative_paths,
             } => {
-                let latest_user_text = if *trigger_only {
-                    conversation
-                        .messages
-                        .iter()
-                        .rev()
-                        .find(|message| {
-                            prompt_role_for_message(message, &agent.id).as_deref()
-                                == Some("user")
-                        })
-                        .map(render_prompt_user_text_only)
-                        .unwrap_or_default()
-                } else {
-                    submitted_user_text.clone()
-                };
                 let mut extra_blocks = Vec::<String>::new();
                 if *include_task_board {
                     if let Some(state) = state {
@@ -970,7 +954,7 @@ impl ConversationPromptService {
                     log_stage("prepare_context.attachment_hints_ready");
                 }
                 (
-                    latest_user_text,
+                    prepared.latest_user_text.clone(),
                     prepared.latest_user_meta_text.clone(),
                     extra_blocks,
                     LatestUserExtraBlocksMode::Append,

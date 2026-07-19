@@ -1724,15 +1724,22 @@ async fn send_chat_message_inner(
             &input.payload,
             used_canonical_latest_user_text,
         );
+        let has_chat_request_extra_blocks =
+            !trigger_only
+                && (!is_delegate_conversation
+                    || todo_enabled
+                    || attachment_relative_paths
+                        .iter()
+                        .any(|path| !path.trim().is_empty()));
         let chat_overrides = ChatPromptOverrides {
             executor_department_id: Some(effective_department_id.clone()),
-            latest_user_intent: Some(LatestUserPayloadIntent::ChatRequest {
-                trigger_only,
-                submitted_user_text: latest_user_text.clone(),
-                include_task_board: !trigger_only && !is_delegate_conversation,
-                include_todo_board: !trigger_only && todo_enabled,
-                attachment_relative_paths,
-            }),
+            latest_user_intent: has_chat_request_extra_blocks.then_some(
+                LatestUserPayloadIntent::ChatRequest {
+                    include_task_board: !is_delegate_conversation,
+                    include_todo_board: todo_enabled,
+                    attachment_relative_paths,
+                },
+            ),
             todo_tool_enabled: todo_enabled,
             remote_im_activation_sources: remote_im_activation_sources.clone(),
             latest_images: (!trigger_only).then_some(effective_images.clone()),
