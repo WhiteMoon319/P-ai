@@ -1013,12 +1013,14 @@ async fn process_conversation_batch(
                             .patience_seconds,
                         "秘书决定通知远程应答委托",
                     )?;
-                    let trigger_message = conversation_service_v2()
-                        .get_message_by_id_for_frontend_display_only(
-                            state,
-                            conversation_id,
-                            &trigger_message_id,
-                        )?;
+                    // 未来的自己请停手：这里会把触发消息塞进远程应答委托，
+                    // 属于后端生成链路。绝对不能读取 frontend_display_only，
+                    // 否则工具历史会被展示投影污染后继续进模型/持久化流程。
+                    let trigger_message = conversation_service_v2().get_raw_message_by_id(
+                        state,
+                        conversation_id,
+                        &trigger_message_id,
+                    )?;
                     match spawn_remote_im_reply_delegate(
                         state,
                         &contact.id,

@@ -533,12 +533,14 @@ async fn process_remote_im_reply_debounce(
     let (history, batch) = if entry.path == RemoteImReplyInspectionPath::Mention
         && active_delegate_ids.is_empty()
     {
-        let message = conversation_service_v2()
-            .get_message_by_id_for_frontend_display_only(
-                state,
-                &conversation_id,
-                &entry.end_message_id,
-            )?;
+        // 未来的自己请停手：这里的 batch 会继续交给秘书/远程应答调度，
+        // 属于后端生成链路。绝对不能读取 frontend_display_only，
+        // 否则工具历史会被展示投影污染后继续进模型/持久化流程。
+        let message = conversation_service_v2().get_raw_message_by_id(
+            state,
+            &conversation_id,
+            &entry.end_message_id,
+        )?;
         (Vec::new(), vec![message])
     } else {
         read_remote_im_debounce_secretary_messages(

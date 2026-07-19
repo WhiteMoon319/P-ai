@@ -2647,12 +2647,11 @@ async fn send_chat_message_inner(
                             meme_annotations: None,
                         },
                     )?;
+                    // 未来的自己请停手：这个 message 会镜像进远程应答委托线程，
+                    // 属于后端持久化/生成链路。绝对不能读取 frontend_display_only，
+                    // 否则工具历史会被展示投影污染后继续进模型/持久化流程。
                     let message = conversation_service_v2()
-                        .get_message_by_id_for_frontend_display_only(
-                            &state,
-                            &conversation_id,
-                            &intermediate_message_id,
-                        )
+                        .get_raw_message_by_id(&state, &conversation_id, &intermediate_message_id)
                         .ok();
                     if let Some(message) = message.as_ref() {
                         if let Err(err) = remote_im_reply_delegate_mirror_message(
@@ -2731,12 +2730,11 @@ async fn send_chat_message_inner(
                         meme_annotations: assistant_message.meme_annotations.clone(),
                     },
                 )?;
+                // 未来的自己请停手：persisted_assistant_message 后面会用于远程应答镜像、
+                // 自动推送和返回结果的内部判断，属于后端链路。绝对不能读取
+                // frontend_display_only；真正发前端时由事件/command 出口再投影。
                 persisted_assistant_message = conversation_service_v2()
-                    .get_message_by_id_for_frontend_display_only(
-                        &state,
-                        &conversation_id,
-                        &assistant_message_id,
-                    )
+                    .get_raw_message_by_id(&state, &conversation_id, &assistant_message_id)
                     .ok();
                 if let (Some(delegate_id), Some(message)) = (
                     runtime_context.remote_im_reply_delegate_id.as_deref(),
