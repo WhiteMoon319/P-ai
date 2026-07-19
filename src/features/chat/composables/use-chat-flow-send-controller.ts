@@ -204,19 +204,6 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
         : true;
       const userMessageId = String((submitResult as { userMessageId?: string } | null)?.userMessageId || "").trim();
       const assistantMessageId = String((submitResult as { assistantMessageId?: string } | null)?.assistantMessageId || "").trim();
-      if (import.meta.env.DEV) {
-        console.info("[主聊天发送] 收到发送结果", {
-          conversationId: sendConversationId,
-          userMessageId,
-          assistantMessageId,
-          accepted,
-          ingress,
-          textLength: plainText.length,
-          sentImageCount: sentImages.length,
-          attachmentCount: attachments.length,
-          extraTextBlockCount: extraTextBlocks.length,
-        });
-      }
       if (userMessageId) {
         options.insertUserDraft(userMessageId, gen, plainText, sentImages, attachments, extraTextBlocks, selectedMentions);
       }

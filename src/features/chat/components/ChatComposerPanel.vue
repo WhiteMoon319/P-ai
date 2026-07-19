@@ -74,9 +74,9 @@
       </button>
     </div>
     <template v-else>
-    <div v-if="queuedAttachmentNotices.length > 0" class="mb-2 flex flex-wrap gap-1">
+    <div v-if="visibleQueuedAttachmentNotices.length > 0" class="mb-2 flex flex-wrap gap-1">
       <div
-        v-for="(file, idx) in queuedAttachmentNotices"
+        v-for="(file, idx) in visibleQueuedAttachmentNotices"
         :key="file.id"
         class="badge badge-ghost gap-1 py-3"
       >
@@ -647,6 +647,21 @@ const mergedIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() => mergeC
   props.ideContextGroups || [],
   props.attachedIdeContextReferences || [],
 ));
+const mergedIdeContextDisplayLabels = computed(() => new Set(
+  mergedIdeContextGroups.value
+    .flatMap((group) => group.references || [])
+    .map((item) => {
+      const parts = ideContextReferenceDisplayParts(item);
+      return `${parts.fileName}${parts.lineSuffix}`.trim().toLowerCase();
+    })
+    .filter(Boolean),
+));
+const visibleQueuedAttachmentNotices = computed(() =>
+  (Array.isArray(props.queuedAttachmentNotices) ? props.queuedAttachmentNotices : []).filter((item) => {
+    const displayLabel = String(item.fileName || "").trim().toLowerCase();
+    return !displayLabel || !mergedIdeContextDisplayLabels.value.has(displayLabel);
+  }),
+);
 
 function isIdeContextAttached(referenceId: string): boolean {
   return attachedIdeContextReferenceIds.value.has(referenceId);

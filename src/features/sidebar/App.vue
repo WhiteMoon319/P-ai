@@ -2091,20 +2091,6 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
     .filter(Boolean);
   if ((!text && images.length === 0 && attachments.length === 0 && extraTextBlocks.length === 0) || !activeConversationId.value || sendSubmitting.value) return;
   const hadForegroundRound = busy.value;
-  if (import.meta.env.DEV) {
-    console.info("[侧边栏发送] 发送前", {
-      conversationId: String(activeConversationId.value || "").trim(),
-      textLength: text.length,
-      imageCount: images.length,
-      attachmentCount: attachments.length,
-      extraTextBlockCount: extraTextBlocks.length,
-      attachments: attachments.map((item) => ({
-        fileName: String(item.fileName || "").trim(),
-        path: String(item.path || "").trim(),
-        mime: String(item.mime || "").trim(),
-      })),
-    });
-  }
   const optimisticDraftId = insertOptimisticOwnUserDraft({ text, attachments, extraTextBlocks });
   const previousClipboardImages = clipboardImages.value.map((item) => ({ ...item }));
   const previousQueuedAttachmentEntries = queuedAttachmentEntries.value.map((item) => ({ ...item }));
@@ -2147,17 +2133,6 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
         apiConfigId: preferredChatModelId.value || null,
       },
     });
-    if (import.meta.env.DEV) {
-      console.info("[侧边栏发送] 收到发送结果", {
-        optimisticDraftId,
-        accepted: result?.accepted,
-        duplicate: result?.duplicate,
-        ingress: String(result?.ingress || "").trim(),
-        userMessageId: String(result?.userMessageId || "").trim(),
-        assistantMessageId: String(result?.assistantMessageId || "").trim(),
-        partTypes: parts.map((part) => String(part?.type || "")).filter(Boolean),
-      });
-    }
     const userMessageId = String(result?.userMessageId || "").trim();
     const assistantMessageId = String(result?.assistantMessageId || "").trim();
     if (optimisticDraftId && userMessageId) {
@@ -2604,15 +2579,6 @@ function insertOptimisticOwnUserDraft(input: {
       _optimistic: true,
     },
   } satisfies ChatMessage, draftId);
-  if (import.meta.env.DEV) {
-    console.info("[侧边栏草稿] 插入乐观用户消息", {
-      draftId,
-      textLength: normalizedText.length,
-      attachmentCount: input.attachments.length,
-      extraTextBlockCount: input.extraTextBlocks.length,
-      partTypes: parts.map((part) => String(part?.type || "")).filter(Boolean),
-    });
-  }
   messages.value = [...messages.value, message];
   return draftId;
 }
@@ -2653,22 +2619,6 @@ function replaceOptimisticOwnUserDraftById(draftId: string, committedId: string)
   const draftIndex = messages.value.findIndex((item) => String(item.id || "").trim() === normalizedDraftId);
   if (draftIndex < 0) return false;
   const draftMessage = messages.value[draftIndex];
-  if (import.meta.env.DEV) {
-    console.info("[侧边栏草稿] 用正式 ID 替换草稿前", {
-      draftId: normalizedDraftId,
-      committedId: normalizedCommittedId,
-      draftParts: Array.isArray(draftMessage?.parts)
-        ? draftMessage.parts.map((part) => ({
-            type: String(part?.type || ""),
-            path: "path" in (part || {}) ? String((part as { path?: unknown }).path || "").trim() : "",
-            mime: "mime" in (part || {}) ? String((part as { mime?: unknown }).mime || "").trim() : "",
-            name: "name" in (part || {}) ? String((part as { name?: unknown }).name || "").trim() : "",
-            textLength: "text" in (part || {}) ? String((part as { text?: unknown }).text || "").length : 0,
-          }))
-        : [],
-      draftExtraTextBlockCount: Array.isArray(draftMessage?.extraTextBlocks) ? draftMessage.extraTextBlocks.length : 0,
-    });
-  }
   const committedMessage = messageWithStableRenderId(
     {
       ...draftMessage,
@@ -2686,22 +2636,6 @@ function replaceOptimisticOwnUserDraftById(draftId: string, committedId: string)
     if (index === draftIndex) return true;
     return String(item.id || "").trim() !== normalizedCommittedId;
   });
-  if (import.meta.env.DEV) {
-    const replaced = messages.value.find((item) => String(item.id || "").trim() === normalizedCommittedId);
-    console.info("[侧边栏草稿] 用正式 ID 替换草稿后", {
-      committedId: normalizedCommittedId,
-      parts: Array.isArray(replaced?.parts)
-        ? replaced.parts.map((part) => ({
-            type: String(part?.type || ""),
-            path: "path" in (part || {}) ? String((part as { path?: unknown }).path || "").trim() : "",
-            mime: "mime" in (part || {}) ? String((part as { mime?: unknown }).mime || "").trim() : "",
-            name: "name" in (part || {}) ? String((part as { name?: unknown }).name || "").trim() : "",
-            textLength: "text" in (part || {}) ? String((part as { text?: unknown }).text || "").length : 0,
-          }))
-        : [],
-      extraTextBlockCount: Array.isArray(replaced?.extraTextBlocks) ? replaced.extraTextBlocks.length : 0,
-    });
-  }
   return true;
 }
 
