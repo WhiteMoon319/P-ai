@@ -400,6 +400,12 @@
           <span>{{ t('chat.selection.copyImageAsImage') }}</span>
         </button>
       </li>
+      <li v-if="isDevBuild">
+        <button type="button" @click="handleContextMenuAction('showRawData')">
+          <Braces class="h-4 w-4" />
+          <span>显示消息原始数据</span>
+        </button>
+      </li>
       <li v-if="mathContextCopyText">
         <button type="button" @click="handleContextMenuAction('copyMath')">
           <Copy class="h-4 w-4" />
@@ -420,12 +426,33 @@
       </li>
     </ul>
   </Teleport>
+
+  <Teleport to="body">
+    <div
+      v-if="rawMessageDataOpen"
+      class="fixed inset-0 z-[1300] flex items-center justify-center bg-black/40 p-4"
+      @click.self="closeRawMessageData"
+    >
+      <section
+        class="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-box border border-base-300 bg-base-100 text-base-content shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-label="消息原始数据"
+      >
+        <header class="flex items-center justify-between border-b border-base-300 px-4 py-3">
+          <h2 class="font-semibold">消息原始数据</h2>
+          <button type="button" class="btn btn-ghost btn-sm" @click="closeRawMessageData">关闭</button>
+        </header>
+        <pre class="m-0 overflow-auto whitespace-pre-wrap break-all p-4 text-xs leading-relaxed"><code>{{ rawMessageData }}</code></pre>
+      </section>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect, watchPostEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { Copy, FileText, ImageIcon, ListCheck, Split, Undo2 } from "@lucide/vue";
+import { Braces, Copy, FileText, ImageIcon, ListCheck, Split, Undo2 } from "@lucide/vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ChatActivityItem, ChatMessageBlock } from "../../../types/app";
 import {
@@ -556,6 +583,15 @@ const contextMenuRef = ref<HTMLElement | null>(null);
 const contextMenuX = ref(0);
 const contextMenuY = ref(0);
 const mathContextCopyText = ref("");
+const rawMessageDataOpen = ref(false);
+const isDevBuild = import.meta.env.DEV;
+const rawMessageData = computed(() => {
+  try {
+    return JSON.stringify(props.block, null, 2);
+  } catch (error) {
+    return `无法序列化消息数据：${error instanceof Error ? error.message : String(error)}`;
+  }
+});
 const relativeTimeNowTick = ref(Date.now());
 let relativeTimeNowTimer = 0;
 
@@ -1250,6 +1286,10 @@ function closeContextMenu() {
   window.removeEventListener("pointerdown", handleGlobalPointerDownForContextMenu, true);
 }
 
+function closeRawMessageData() {
+  rawMessageDataOpen.value = false;
+}
+
 async function copyTextToClipboard(text: string) {
   if (!String(text || "").trim()) return;
   try {
@@ -1268,6 +1308,8 @@ function handleContextMenuAction(action: string) {
     void copyTextToClipboard(mathCopyText);
   } else if (action === "copyAsImage") {
     void copyCurrentMessageAsImage();
+  } else if (action === "showRawData") {
+    if (isDevBuild) rawMessageDataOpen.value = true;
   } else if (action === "branchFromMessage") {
     const turnId = recallTurnId(props.block);
     if (!turnId) return;
