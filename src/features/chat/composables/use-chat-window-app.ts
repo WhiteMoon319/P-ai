@@ -1,6 +1,5 @@
 import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { emit } from "@tauri-apps/api/event";
 import { invokeTauri } from "../../../services/tauri-api";
 import { useAppCore } from "../../shell/composables/use-app-core";
@@ -31,6 +30,7 @@ import { resolveConversationDisplayTitle } from "../utils/conversation-title";
 import { ensureConversationMessageIds } from "../utils/message-id";
 import { useChatWindowConfigOrchestrator } from "./use-chat-window-config-orchestrator";
 import { resolveSideChatSelectionAfterClose } from "./side-chat-tabs";
+import { useChatWindowPaneExpansion } from "./use-chat-window-pane-expansion";
 
 type ConversationActionsBridge = {
   refreshChatUnarchivedConversations: () => Promise<void>;
@@ -57,8 +57,9 @@ export function useChatWindowApp() {
     startDrag,
     toggleAlwaysOnTop,
     minimizeWindow,
-    toggleMaximizeWindow,
+    toggleMaximizeWindow: toggleMaximizeWindowBase,
   } = useWindowShell();
+  const chatWindowPaneExpansion = useChatWindowPaneExpansion();
   const {
     currentTheme,
     generatedThemeControls,
@@ -245,6 +246,12 @@ export function useChatWindowApp() {
     },
     searchConfigTabs,
     resolveConfigLocale: () => normalizeLocale(config.uiLanguage),
+    windowPaneExpansion: {
+      beforeOpen: chatWindowPaneExpansion.beforeOpen,
+      afterOpen: chatWindowPaneExpansion.afterOpen,
+      beforeClose: chatWindowPaneExpansion.beforeClose,
+      afterClose: chatWindowPaneExpansion.afterClose,
+    },
   });
   const {
     configTab,
@@ -278,6 +285,31 @@ export function useChatWindowApp() {
     clearMatchingConversationChatErrors,
     clearChatError,
   } = chatUiState;
+  function currentPaneVisibility() {
+    return {
+      leftVisible: sideConversationListVisible.value,
+      rightVisible: toolReviewPanelOpenVisible.value,
+      leftWidth: chatSidePanelWidths.value.leftWidth,
+      rightWidth: chatSidePanelWidths.value.rightWidth,
+    };
+  }
+
+  async function toggleMaximizeWindow() {
+    await chatWindowPaneExpansion.collapseVisiblePanes(currentPaneVisibility());
+    await toggleMaximizeWindowBase();
+    if (!maximized.value) {
+      await chatWindowPaneExpansion.syncVisiblePanes(currentPaneVisibility());
+    }
+  }
+
+  watch(
+    windowReady,
+    (ready) => {
+      if (!ready || viewMode.value !== "chat") return;
+      void chatWindowPaneExpansion.syncVisiblePanes(currentPaneVisibility());
+    },
+    { immediate: true },
+  );
   useChatComposerDrafts({
     activeConversationId: currentChatConversationId,
     chatInput,

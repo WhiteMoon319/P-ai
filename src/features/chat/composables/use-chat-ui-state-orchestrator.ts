@@ -1,4 +1,4 @@
-import { computed, ref, watch, type Ref } from "vue";
+import { computed, nextTick, ref, watch, type Ref } from "vue";
 import type { ConfigSearchTab, ConfigSearchResult } from "../../config/search/config-search";
 import type { ChatMentionTarget } from "../../../types/app";
 import type { ConversationPipelineStatus } from "../../shell/composables/use-pipeline-status";
@@ -24,6 +24,14 @@ import {
   type ChatMonitorPanelMode,
   type ChatRightPanelMode,
 } from "./chat-ui-layout-storage";
+import type { ChatWindowPaneSide } from "./use-chat-window-pane-expansion";
+
+type ChatWindowPaneExpansionBindings = {
+  beforeOpen: (side: ChatWindowPaneSide, width: number) => Promise<void>;
+  afterOpen: () => Promise<void>;
+  beforeClose: () => Promise<void>;
+  afterClose: (side: ChatWindowPaneSide) => Promise<void>;
+};
 
 export type ChatUiStateBindings = {
   viewMode: Ref<"chat" | "archives" | "config">;
@@ -32,6 +40,7 @@ export type ChatUiStateBindings = {
   clearConversationStatus: (conversationId: string, status?: ConversationPipelineStatus) => void;
   searchConfigTabs: typeof searchConfigTabs;
   resolveConfigLocale: () => Parameters<typeof searchConfigTabs>[1];
+  windowPaneExpansion?: ChatWindowPaneExpansionBindings;
 };
 
 export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
@@ -50,6 +59,39 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
 
   const conversationChatErrorTextMap = ref<Record<string, string>>({});
   const fallbackChatErrorText = ref("");
+
+  async function setSidePanelVisibility(side: ChatWindowPaneSide, visible: boolean) {
+    const expansion = bindings.windowPaneExpansion;
+    const width = side === "left"
+      ? chatSidePanelWidths.value.leftWidth
+      : chatSidePanelWidths.value.rightWidth;
+    if (visible) {
+      await expansion?.beforeOpen(side, width);
+      if (side === "left") {
+        sideConversationListVisible.value = true;
+        storeChatSidePanelVisibility("left", true);
+      } else {
+        toolReviewPanelOpenVisible.value = true;
+        storeChatSidePanelVisibility("right", true);
+      }
+      await nextTick();
+      await expansion?.afterOpen();
+      return;
+    }
+    await expansion?.beforeClose();
+    const shouldStoreRightVisibility = side === "left"
+      || visible
+      || String(bindings.currentChatConversationId.value || "").trim();
+    if (side === "left") {
+      sideConversationListVisible.value = false;
+      storeChatSidePanelVisibility("left", false);
+    } else {
+      toolReviewPanelOpenVisible.value = false;
+      if (shouldStoreRightVisibility) storeChatSidePanelVisibility("right", false);
+    }
+    await nextTick();
+    await expansion?.afterClose(side);
+  }
 
   function getConversationChatErrorText(conversationId: string) {
     const cid = String(conversationId || "").trim();
@@ -155,15 +197,11 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
   }
 
   function handleSideConversationListVisibleChange(value: boolean) {
-    sideConversationListVisible.value = value;
-    storeChatSidePanelVisibility("left", value);
+    void setSidePanelVisibility("left", value);
   }
 
   function handleToolReviewPanelOpenChange(value: boolean) {
-    toolReviewPanelOpenVisible.value = value;
-    if (value || String(bindings.currentChatConversationId.value || "").trim()) {
-      storeChatSidePanelVisibility("right", value);
-    }
+    void setSidePanelVisibility("right", value);
   }
 
   function updateConversationListTab(value: ChatLeftPanelMode) {
@@ -180,8 +218,7 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     storeChatLeftPanelMode(nextMode);
     storeConversationListTab(nextMode);
     if (!sideConversationListVisible.value && bindings.viewMode.value === "chat") {
-      sideConversationListVisible.value = true;
-      storeChatSidePanelVisibility("left", true);
+      void setSidePanelVisibility("left", true);
     }
   }
 
@@ -193,8 +230,7 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
       storeChatRightPanelMode(nextMode, conversationId);
     }
     if (!toolReviewPanelOpenVisible.value && bindings.viewMode.value === "chat") {
-      toolReviewPanelOpenVisible.value = true;
-      storeChatSidePanelVisibility("right", true);
+      void setSidePanelVisibility("right", true);
     }
   }
 
@@ -216,14 +252,12 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
 
   async function toggleSideConversationList() {
     const nextVisible = !sideConversationListVisible.value;
-    sideConversationListVisible.value = nextVisible;
-    storeChatSidePanelVisibility("left", nextVisible);
+    await setSidePanelVisibility("left", nextVisible);
   }
 
   async function toggleToolReviewPanel() {
     const nextVisible = !toolReviewPanelOpenVisible.value;
-    toolReviewPanelOpenVisible.value = nextVisible;
-    storeChatSidePanelVisibility("right", nextVisible);
+    await setSidePanelVisibility("right", nextVisible);
   }
 
   const configSearchResults = computed<ConfigSearchResult[]>(() => {

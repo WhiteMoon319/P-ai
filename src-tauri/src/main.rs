@@ -1000,6 +1000,7 @@ fn main() {
             hide_current_window,
             toggle_current_window_maximize,
             start_current_window_drag,
+            set_chat_window_side_expanded,
             complete_quick_setup_and_open_chat,
             set_chat_window_active,
             get_github_update_state,

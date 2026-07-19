@@ -32,7 +32,7 @@
     </div>
 
     <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-      <div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
+      <div data-chat-center-pane="true" class="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <div
           v-if="mediaDragActive && !chatting && !frozen && !conversationInteractionBusy"
           class="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-base-100/70 backdrop-blur-[1px]"

@@ -12,6 +12,154 @@ static DETACHED_CHAT_WINDOWS: OnceLock<Mutex<std::collections::HashMap<String, S
 static OFFSCREEN_LAYOUT_LOGGED_ONCE: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
+static CHAT_WINDOW_SIDE_EXPANSION: OnceLock<Mutex<ChatWindowSideExpansion>> = OnceLock::new();
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct ChatWindowSideExpansion {
+    left_physical: u32,
+    right_physical: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PhysicalWindowRect {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+}
+
+fn chat_window_side_expansion() -> &'static Mutex<ChatWindowSideExpansion> {
+    CHAT_WINDOW_SIDE_EXPANSION.get_or_init(|| Mutex::new(ChatWindowSideExpansion::default()))
+}
+
+fn read_chat_window_side_expansion() -> Result<ChatWindowSideExpansion, String> {
+    chat_window_side_expansion()
+        .lock()
+        .map(|state| *state)
+        .map_err(|err| format!("读取聊天窗口侧栏外扩状态失败：{err}"))
+}
+
+fn write_chat_window_side_expansion(
+    update: impl FnOnce(&mut ChatWindowSideExpansion),
+) -> Result<ChatWindowSideExpansion, String> {
+    let mut state = chat_window_side_expansion()
+        .lock()
+        .map_err(|err| format!("更新聊天窗口侧栏外扩状态失败：{err}"))?;
+    update(&mut state);
+    Ok(*state)
+}
+
+fn calculate_chat_window_expand_target(
+    window: PhysicalWindowRect,
+    screen: PhysicalWindowRect,
+    side: &str,
+    requested_width: u32,
+) -> Option<PhysicalWindowRect> {
+    if requested_width == 0 {
+        return None;
+    }
+    if side != "left" && side != "right" {
+        return None;
+    }
+    if window.width.saturating_add(requested_width) > screen.width {
+        return None;
+    }
+    Some(PhysicalWindowRect {
+        x: if side == "left" {
+            window.x.saturating_sub(requested_width as i32)
+        } else {
+            window.x
+        },
+        y: window.y,
+        width: window.width.saturating_add(requested_width),
+        height: window.height,
+    })
+}
+
+fn calculate_chat_window_collapse_target(
+    window: PhysicalWindowRect,
+    side: &str,
+    applied_width: u32,
+) -> Option<PhysicalWindowRect> {
+    if applied_width == 0 || window.width <= applied_width {
+        return None;
+    }
+    Some(PhysicalWindowRect {
+        x: if side == "left" {
+            window.x.saturating_add(applied_width as i32)
+        } else {
+            window.x
+        },
+        y: window.y,
+        width: window.width - applied_width,
+        height: window.height,
+    })
+}
+
+#[cfg(test)]
+mod chat_window_side_expansion_tests {
+    use super::*;
+
+    fn rect(x: i32, width: u32) -> PhysicalWindowRect {
+        PhysicalWindowRect {
+            x,
+            y: 40,
+            width,
+            height: 900,
+        }
+    }
+
+    #[test]
+    fn expands_left_when_full_width_fits() {
+        let target = calculate_chat_window_expand_target(
+            rect(500, 600),
+            rect(0, 1920),
+            "left",
+            320,
+        );
+        assert_eq!(target, Some(rect(180, 920)));
+    }
+
+    #[test]
+    fn keeps_current_layout_when_expanded_window_would_exceed_screen_width() {
+        let target = calculate_chat_window_expand_target(
+            rect(100, 1700),
+            rect(0, 1920),
+            "left",
+            320,
+        );
+        assert_eq!(target, None);
+    }
+
+    #[test]
+    fn allows_left_position_to_extend_past_screen_edge_when_total_width_fits() {
+        let target = calculate_chat_window_expand_target(
+            rect(100, 600),
+            rect(0, 1920),
+            "left",
+            320,
+        );
+        assert_eq!(target, Some(rect(-220, 920)));
+    }
+
+    #[test]
+    fn expands_right_without_moving_the_left_edge() {
+        let target = calculate_chat_window_expand_target(
+            rect(500, 600),
+            rect(0, 1920),
+            "right",
+            320,
+        );
+        assert_eq!(target, Some(rect(500, 920)));
+    }
+
+    #[test]
+    fn collapses_left_back_to_the_base_rect() {
+        let target = calculate_chat_window_collapse_target(rect(180, 920), "left", 320);
+        assert_eq!(target, Some(rect(500, 600)));
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct PersistedWindowLayouts {
@@ -393,6 +541,181 @@ fn webview_window_inner_size_logical(
     ))
 }
 
+fn apply_physical_window_rect(
+    window: &tauri::WebviewWindow,
+    current: PhysicalWindowRect,
+    target: PhysicalWindowRect,
+) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER,
+        };
+
+        let hwnd = window
+            .hwnd()
+            .map_err(|err| format!("读取聊天窗口句柄失败：{err}"))?;
+        let outer_size = window
+            .outer_size()
+            .map_err(|err| format!("读取聊天窗口外框尺寸失败：{err}"))?;
+        let width_delta = target.width as i64 - current.width as i64;
+        let height_delta = target.height as i64 - current.height as i64;
+        let target_outer_width = (outer_size.width as i64 + width_delta).max(1) as i32;
+        let target_outer_height = (outer_size.height as i64 + height_delta).max(1) as i32;
+        let ok = unsafe {
+            SetWindowPos(
+                hwnd.0,
+                std::ptr::null_mut(),
+                target.x,
+                target.y,
+                target_outer_width,
+                target_outer_height,
+                SWP_NOACTIVATE | SWP_NOZORDER,
+            )
+        };
+        if ok == 0 {
+            return Err("原子调整聊天窗口位置和尺寸失败".to_string());
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    let position_changed = current.x != target.x || current.y != target.y;
+    #[cfg(not(target_os = "windows"))]
+    if position_changed {
+        window
+            .set_position(Position::Physical(PhysicalPosition::new(target.x, target.y)))
+            .map_err(|err| format!("调整聊天窗口位置失败：{err}"))?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    if current.width != target.width || current.height != target.height {
+        if let Err(err) = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(
+            target.width,
+            target.height,
+        ))) {
+            if position_changed {
+                let _ = window.set_position(Position::Physical(PhysicalPosition::new(
+                    current.x,
+                    current.y,
+                )));
+            }
+            return Err(format!("调整聊天窗口尺寸失败：{err}"));
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    Ok(())
+}
+
+fn current_physical_window_rect(
+    window: &tauri::WebviewWindow,
+) -> Result<PhysicalWindowRect, String> {
+    let position = window
+        .outer_position()
+        .map_err(|err| format!("读取聊天窗口位置失败：{err}"))?;
+    let size = window
+        .inner_size()
+        .map_err(|err| format!("读取聊天窗口内容尺寸失败：{err}"))?;
+    Ok(PhysicalWindowRect {
+        x: position.x,
+        y: position.y,
+        width: size.width,
+        height: size.height,
+    })
+}
+
+fn current_monitor_bounds(window: &tauri::WebviewWindow) -> Result<PhysicalWindowRect, String> {
+    let monitor = window
+        .current_monitor()
+        .map_err(|err| format!("读取聊天窗口所在显示器失败：{err}"))?
+        .ok_or_else(|| "未找到聊天窗口所在显示器".to_string())?;
+    Ok(PhysicalWindowRect {
+        x: monitor.position().x,
+        y: monitor.position().y,
+        width: monitor.size().width,
+        height: monitor.size().height,
+    })
+}
+
+#[tauri::command]
+fn set_chat_window_side_expanded(
+    app: AppHandle,
+    window: tauri::Window,
+    side: String,
+    expanded: bool,
+    width_physical: u32,
+) -> Result<bool, String> {
+    if window.label() != "chat" || (side != "left" && side != "right") {
+        return Ok(false);
+    }
+    let webview = app
+        .get_webview_window(window.label())
+        .ok_or_else(|| "未找到聊天窗口".to_string())?;
+    let maximized = webview
+        .is_maximized()
+        .map_err(|err| format!("读取聊天窗口最大化状态失败：{err}"))?;
+    let previous_state = read_chat_window_side_expansion()?;
+    let previous_width = if side == "left" {
+        previous_state.left_physical
+    } else {
+        previous_state.right_physical
+    };
+
+    if expanded {
+        if maximized || previous_width > 0 {
+            return Ok(previous_width > 0);
+        }
+        let current = current_physical_window_rect(&webview)?;
+        let screen_bounds = current_monitor_bounds(&webview)?;
+        let requested_width = width_physical.max(1);
+        let Some(target) = calculate_chat_window_expand_target(
+            current,
+            screen_bounds,
+            &side,
+            requested_width,
+        ) else {
+            return Ok(false);
+        };
+        write_chat_window_side_expansion(|state| {
+            if side == "left" {
+                state.left_physical = requested_width;
+            } else {
+                state.right_physical = requested_width;
+            }
+        })?;
+        if let Err(err) = apply_physical_window_rect(&webview, current, target) {
+            let _ = write_chat_window_side_expansion(|state| *state = previous_state);
+            return Err(err);
+        }
+        persist_window_layout_snapshot_with_reason(&app, "chat", "side_panel_expanded")?;
+        return Ok(true);
+    }
+
+    if previous_width == 0 {
+        return Ok(false);
+    }
+    write_chat_window_side_expansion(|state| {
+        if side == "left" {
+            state.left_physical = 0;
+        } else {
+            state.right_physical = 0;
+        }
+    })?;
+    if maximized {
+        return Ok(false);
+    }
+    let current = current_physical_window_rect(&webview)?;
+    let Some(target) = calculate_chat_window_collapse_target(current, &side, previous_width) else {
+        let _ = write_chat_window_side_expansion(|state| *state = previous_state);
+        return Err("聊天窗口侧栏外扩尺寸无效，无法收回".to_string());
+    };
+    if let Err(err) = apply_physical_window_rect(&webview, current, target) {
+        let _ = write_chat_window_side_expansion(|state| *state = previous_state);
+        return Err(err);
+    }
+    persist_window_layout_snapshot_with_reason(&app, "chat", "side_panel_collapsed")?;
+    Ok(true)
+}
+
 fn current_window_size_is_near_fullscreen(
     window: &tauri::WebviewWindow,
     monitor: &tauri::Monitor,
@@ -682,11 +1005,26 @@ fn persist_window_layout_snapshot_with_reason(
     let size_and_position = if maximized {
         None
     } else {
-        let (width, height) = webview_window_inner_size_logical(&window)?;
+        let (mut width, height) = webview_window_inner_size_logical(&window)?;
         let outer_pos = window
             .outer_position()
             .map_err(|err| format!("Read window outer position failed: {err}"))?;
-        Some((width, height, outer_pos.x, outer_pos.y))
+        let mut x = outer_pos.x;
+        if label == "chat" {
+            let expansion = read_chat_window_side_expansion()?;
+            let scale_factor = window
+                .scale_factor()
+                .map_err(|err| format!("Read window scale factor failed: {err}"))?
+                .max(0.1);
+            let expanded_logical_width = (((expansion.left_physical as u64
+                + expansion.right_physical as u64) as f64)
+                / scale_factor)
+                .round()
+                .max(0.0) as u32;
+            width = width.saturating_sub(expanded_logical_width).max(1);
+            x = x.saturating_add(expansion.left_physical as i32);
+        }
+        Some((width, height, x, outer_pos.y))
     };
 
     upsert_window_layout(app, label, |entry| {
@@ -770,7 +1108,13 @@ fn sync_default_tray_icon(app: &AppHandle) -> Result<(), String> {
 }
 
 fn show_window(app: &AppHandle, label: &str) -> Result<(), String> {
-    apply_window_layout_before_show(app, label)?;
+    let chat_side_expanded = label == "chat"
+        && read_chat_window_side_expansion()
+            .map(|state| state.left_physical > 0 || state.right_physical > 0)
+            .unwrap_or(false);
+    if !chat_side_expanded {
+        apply_window_layout_before_show(app, label)?;
+    }
     let window = app
         .get_webview_window(label)
         .ok_or_else(|| format!("Window '{label}' not found"))?;
