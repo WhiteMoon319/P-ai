@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-19T06:34:01.142Z",
-  "latestVersion": "v0.36.0",
+  "generatedAt": "2026-07-19T15:22:55.457Z",
+  "latestVersion": "v0.36.1",
   "releases": [
+    {
+      "version": "v0.36.1",
+      "path": "docs/changelog/releases/v0.36.1.md",
+      "summary": "修复远程联系人私聊发言可能重复的问题。"
+    },
     {
       "version": "v0.36.0",
       "path": "docs/changelog/releases/v0.36.0.md",
