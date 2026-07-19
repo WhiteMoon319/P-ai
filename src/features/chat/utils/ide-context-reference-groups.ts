@@ -1,5 +1,18 @@
 import type { IdeContextReferenceItem, IdeContextWorkspaceGroup } from "../../../types/app";
 
+function referenceTextBlock(item: IdeContextReferenceItem): string {
+  const filePath = String(item.filePath || item.relativePath || item.fileName || item.displayLabel || "").trim();
+  if (!filePath) return "";
+  const startLine = Number(item.startLine || 0);
+  const endLine = Number(item.endLine || 0);
+  const lineSuffix = startLine > 0 && endLine > startLine
+    ? `:${startLine}-${endLine}`
+    : startLine > 0
+      ? `:${startLine}`
+      : "";
+  return `用户引用了文件片段：${filePath}${lineSuffix}`;
+}
+
 function referencePathKey(item: IdeContextReferenceItem): string {
   return String(item.filePath || item.relativePath || item.displayLabel || item.id || "")
     .trim()
@@ -47,6 +60,7 @@ export function mergeComposerIdeContextGroups(
           textBlock: "",
           content: "",
         };
+        fileOnlyItem.textBlock = referenceTextBlock(fileOnlyItem);
         const fileOnlyIdentity = referenceIdentityKey(fileOnlyItem);
         if (
           fileOnlyIdentity

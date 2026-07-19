@@ -38,5 +38,6 @@ describe("ide-context-reference-groups", () => {
     expect(fileOnly?.filePath).toBe("E:/repo/AGENTS.md");
     expect(fileOnly?.startLine).toBe(0);
     expect(fileOnly?.endLine).toBe(0);
+    expect(fileOnly?.textBlock).toBe("用户引用了文件片段：E:/repo/AGENTS.md");
   });
 });
