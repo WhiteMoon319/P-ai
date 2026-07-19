@@ -234,6 +234,14 @@
                     {{ chip }}
                   </span>
                 </div>
+                <ChatAttachmentList
+                  v-if="message.attachments?.length"
+                  :attachments="message.attachments"
+                  :align="message.tone === 'user' ? 'end' : 'start'"
+                  :interactive-kinds="['audio']"
+                  :playing-id="playingBubbleDemoAudioId"
+                  @activate="handleBubbleDemoAttachmentActivate"
+                />
               </div>
               <template #footer>
                 <span v-if="message.footer">{{ message.footer }}</span>
@@ -262,9 +270,11 @@ import { invokeTauri } from "../../../../services/tauri-api";
 import ConfigTemplate from "../../components/ConfigTemplate.vue";
 import type { ConfigTemplateGroup } from "../../components/config-template";
 import ChatBubbleShell from "../../../chat/components/ChatBubbleShell.vue";
+import ChatAttachmentList from "../../../chat/components/ChatAttachmentList.vue";
 import DelegateCard from "../../../chat/components/DelegateCard.vue";
 import SessionControlPanel from "../../../chat/components/SessionControlPanel.vue";
 import type { AppConfig, ConversationDelegateStatusSummary, PersonaProfile } from "../../../../types/app";
+import type { ChatAttachmentView } from "../../../chat/utils/chat-attachment-display";
 
 type NativeNotificationDemoResult = {
   permissionBefore: string;
@@ -290,6 +300,7 @@ type BubbleDemoMessage = {
   }>;
   lines: string[];
   chips?: string[];
+  attachments?: ChatAttachmentView[];
   footer?: string;
   canRecall?: boolean;
   streaming?: boolean;
@@ -330,7 +341,12 @@ const configTemplateDemo = ref<Record<string, unknown>>({
 });
 const bubbleDemoActivityOpenMap = ref<Record<string, boolean>>({});
 const bubbleDemoActivityItemOpenKey = ref("");
+const playingBubbleDemoAudioId = ref("");
 const { t } = useI18n();
+
+const bubbleDemoAttachmentImage = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="520" height="300" viewBox="0 0 520 300"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#dbeafe"/><stop offset="1" stop-color="#c4b5fd"/></linearGradient></defs><rect width="520" height="300" rx="24" fill="url(#g)"/><rect x="38" y="38" width="444" height="224" rx="16" fill="#111827" fill-opacity=".82"/><path d="M72 92h156M72 126h260M72 160h208M72 194h300" stroke="#bfdbfe" stroke-linecap="round" stroke-width="12"/><circle cx="418" cy="104" r="28" fill="#a7f3d0" fill-opacity=".9"/><text x="72" y="238" fill="#e0e7ff" font-family="Segoe UI, sans-serif" font-size="18">screenshot.png</text></svg>',
+ )}`;
 const configTemplateGroups: ConfigTemplateGroup[] = [
   {
     title: t("config.demo.generalSection"),
@@ -466,7 +482,28 @@ const bubbleDemoMessages: BubbleDemoMessage[] = [
     lines: [
       "右侧也保持同一套结构：头像在右，名称和气泡右对齐，不再依赖 DaisyUI chat 的网格。",
     ],
-    chips: ["附件: screenshot.png", "附件: design-notes.md"],
+    attachments: [
+      { kind: "file", label: "screenshot.png" },
+      { kind: "file", label: "design-notes.md" },
+    ],
+    canRecall: true,
+  },
+  {
+    id: "user-all-attachments",
+    side: "right",
+    tone: "user",
+    personaSlot: "user",
+    name: "我",
+    meta: "刚刚",
+    avatarText: "我",
+    lines: ["这是一条全附件气泡，用来观察不同附件内容放在一起时的层级。"],
+    attachments: [
+      { kind: "image", label: "screenshot.png", src: bubbleDemoAttachmentImage },
+      { id: "demo-meeting-note", kind: "audio", label: "meeting-note.m4a", detail: "0:18" },
+      { kind: "file", label: "design-notes.md" },
+      { kind: "context", label: "ChatMessageItem.vue" },
+      { kind: "text", label: "保持附件标签轻量，避免重复说明。" },
+    ],
     canRecall: true,
   },
   {
@@ -591,6 +628,15 @@ function bubbleDemoActivityItemOpen(messageId: string, itemKey: string): boolean
 
 function bubbleDemoToolItemKey(tool: BubbleDemoTool, index: number): string {
   return `tool:${index}:${String(tool.name || "").trim()}`;
+}
+
+function toggleBubbleDemoAudio(attachmentId: string): void {
+  playingBubbleDemoAudioId.value = playingBubbleDemoAudioId.value === attachmentId ? "" : attachmentId;
+}
+
+function handleBubbleDemoAttachmentActivate(payload: { attachment: ChatAttachmentView }): void {
+  if (payload.attachment.kind !== "audio" || !payload.attachment.id) return;
+  toggleBubbleDemoAudio(payload.attachment.id);
 }
 
 function onBubbleDemoActivityToggle(messageId: string, event: Event): void {

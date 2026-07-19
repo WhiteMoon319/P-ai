@@ -238,39 +238,34 @@
                 <span class="loading loading-spinner loading-xs mr-2"></span>
                 <span>{{ t('chat.messageItem.imageLoading') }}</span>
               </div>
-              <div v-else-if="isPdfMime(img.mime)" class="badge badge-ghost gap-1 py-3 w-fit">
-                <FileText class="h-3.5 w-3.5" />
-                <span class="text-[11px]">PDF</span>
-              </div>
+              <ChatAttachmentItem
+                v-else-if="isPdfMime(img.mime)"
+                :attachment="{ kind: 'file', label: 'PDF' }"
+              />
             </template>
           </div>
           <div v-if="block.audios.length > 0" :class="block.taskTrigger || block.text || block.images.length > 0 ? 'mt-2 flex flex-col gap-1' : 'flex flex-col gap-1'">
-            <button
+            <ChatAttachmentItem
               v-for="(aud, idx) in block.audios"
               :key="`${block.id}-aud-${idx}`"
-              class="btn btn-sm bg-base-100/70 w-fit"
-              @click="emit('toggleAudioPlayback', { id: `${block.id}-aud-${idx}`, audio: aud })"
-            >
-              <Pause v-if="playingAudioId === `${block.id}-aud-${idx}`" class="h-3 w-3" />
-              <Play v-else class="h-3 w-3" />
-              <span>{{ t("chat.voice", { index: idx + 1 }) }}</span>
-            </button>
+              :attachment="{ kind: 'audio', label: aud.name ? displayFileName(aud.name) : t('chat.voice', { index: idx + 1 }) }"
+              :interactive="true"
+              :playing="playingAudioId === `${block.id}-aud-${idx}`"
+              @activate="emit('toggleAudioPlayback', { id: `${block.id}-aud-${idx}`, audio: aud })"
+            />
           </div>
           <div
             v-if="block.attachmentFiles.length > 0"
             :class="block.taskTrigger || block.text || block.images.length > 0 || block.audios.length > 0 ? 'mt-2 flex flex-wrap gap-1' : 'flex flex-wrap gap-1'"
           >
-            <button
+            <ChatAttachmentItem
               v-for="(file, idx) in block.attachmentFiles"
               :key="`${block.id}-file-${idx}`"
-              type="button"
-              class="badge badge-ghost gap-1 py-3"
+              :attachment="{ kind: 'file', label: displayFileName(file.fileName, file.path) }"
+              :interactive="true"
               :title="file.path"
-              @click.stop="openAttachmentPath(file.path)"
-            >
-              <FileText class="h-3.5 w-3.5" />
-              <span class="text-[11px]">{{ file.fileName }}</span>
-            </button>
+              @activate="openAttachmentPath(file.path)"
+            />
           </div>
         </div>
       </template>
@@ -286,15 +281,11 @@
             v-if="block.extraTextReferences && block.extraTextReferences.length > 0"
             :class="block.text ? 'mt-2 flex flex-wrap justify-end gap-1' : 'flex flex-wrap justify-end gap-1'"
           >
-            <div
+            <ChatAttachmentItem
               v-for="(reference, idx) in block.extraTextReferences"
               :key="`${block.id}-extra-ref-${idx}`"
-              class="badge badge-ghost gap-1 py-3"
-              :title="reference.label"
-            >
-              <FileText class="h-3.5 w-3.5" />
-              <span class="max-w-64 truncate text-[11px]">{{ reference.label }}</span>
-            </div>
+              :attachment="{ kind: 'context', label: reference.label }"
+            />
           </div>
           <div v-if="block.images.length > 0" :class="block.taskTrigger || block.text ? 'mt-2 grid justify-items-end gap-1' : 'grid justify-items-end gap-1'">
             <template v-for="(img, idx) in block.images" :key="`${block.id}-img-${idx}`">
@@ -313,39 +304,34 @@
                 <span class="loading loading-spinner loading-xs mr-2"></span>
                 <span>{{ t('chat.messageItem.imageLoading') }}</span>
               </div>
-              <div v-else-if="isPdfMime(img.mime)" class="badge badge-ghost gap-1 py-3 w-fit">
-                <FileText class="h-3.5 w-3.5" />
-                <span class="text-[11px]">PDF</span>
-              </div>
+              <ChatAttachmentItem
+                v-else-if="isPdfMime(img.mime)"
+                :attachment="{ kind: 'file', label: 'PDF' }"
+              />
             </template>
           </div>
           <div v-if="block.audios.length > 0" :class="block.taskTrigger || block.text || block.images.length > 0 ? 'mt-2 flex flex-col items-end gap-1' : 'flex flex-col items-end gap-1'">
-            <button
+            <ChatAttachmentItem
               v-for="(aud, idx) in block.audios"
               :key="`${block.id}-aud-${idx}`"
-              class="btn btn-sm bg-base-100/70 w-fit"
-              @click="emit('toggleAudioPlayback', { id: `${block.id}-aud-${idx}`, audio: aud })"
-            >
-              <Pause v-if="playingAudioId === `${block.id}-aud-${idx}`" class="h-3 w-3" />
-              <Play v-else class="h-3 w-3" />
-              <span>{{ t("chat.voice", { index: idx + 1 }) }}</span>
-            </button>
+              :attachment="{ kind: 'audio', label: aud.name ? displayFileName(aud.name) : t('chat.voice', { index: idx + 1 }) }"
+              :interactive="true"
+              :playing="playingAudioId === `${block.id}-aud-${idx}`"
+              @activate="emit('toggleAudioPlayback', { id: `${block.id}-aud-${idx}`, audio: aud })"
+            />
           </div>
           <div
             v-if="block.attachmentFiles.length > 0"
             :class="block.taskTrigger || block.text || block.images.length > 0 || block.audios.length > 0 ? 'mt-2 flex flex-wrap justify-end gap-1' : 'flex flex-wrap justify-end gap-1'"
           >
-            <button
+            <ChatAttachmentItem
               v-for="(file, idx) in block.attachmentFiles"
               :key="`${block.id}-file-${idx}`"
-              type="button"
-              class="badge badge-ghost gap-1 py-3"
+              :attachment="{ kind: 'file', label: displayFileName(file.fileName, file.path) }"
+              :interactive="true"
               :title="file.path"
-              @click.stop="openAttachmentPath(file.path)"
-            >
-              <FileText class="h-3.5 w-3.5" />
-              <span class="text-[11px]">{{ file.fileName }}</span>
-            </button>
+              @activate="openAttachmentPath(file.path)"
+            />
           </div>
         </div>
       </template>
@@ -439,7 +425,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect, watchPostEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { Copy, FileText, ImageIcon, ListCheck, Pause, Play, Split, Undo2 } from "@lucide/vue";
+import { Copy, FileText, ImageIcon, ListCheck, Split, Undo2 } from "@lucide/vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ChatActivityItem, ChatMessageBlock } from "../../../types/app";
 import {
@@ -455,7 +441,9 @@ import { textContentSignature } from "../utils/text-signature";
 import { createToolCallPresentation } from "../utils/tool-call-presentation";
 import { buildToolcallPreviewMap } from "../utils/toolcall-preview";
 import { generateShareFromMessageIds } from "../utils/share-generator";
+import { displayFileName } from "../utils/chat-attachment-display";
 import ChatBubbleShell from "./ChatBubbleShell.vue";
+import ChatAttachmentItem from "./ChatAttachmentItem.vue";
 import SidebarLightMarkdown from "./SidebarLightMarkdown.vue";
 
 initKatex();

@@ -18,6 +18,7 @@ import {
   streamBlocksToActivityItems,
   streamBlocksToToolCalls,
 } from "../../../utils/chat-message-semantics";
+import { displayLabelFromExtraTextReference } from "../utils/chat-attachment-display";
 
 function baseActivityForMessage(
   projection: ReturnType<typeof projectMessageForDisplay>,
@@ -68,9 +69,7 @@ function positiveNumberFromProviderMeta(meta: Record<string, unknown>, key: stri
 }
 
 function extraTextReferenceLabel(text: string): string {
-  const trimmed = String(text || "").trim();
-  const matched = trimmed.match(/^用户引用了文件片段：([^\n（]+)/);
-  return matched?.[1]?.trim() || trimmed.split("\n")[0]?.replace(/^用户引用了文件片段：/, "").trim() || "文件片段";
+  return displayLabelFromExtraTextReference(text);
 }
 
 function buildExtraTextReferences(message: ChatMessage): Array<{ label: string; text: string }> {

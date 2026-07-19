@@ -78,13 +78,23 @@
       <div
         v-for="(file, idx) in queuedAttachmentNotices"
         :key="file.id"
-        class="badge badge-ghost gap-1 py-3"
+        class="contents"
       >
-        <FileText class="h-3.5 w-3.5" />
-        <span class="text-[11px]">{{ file.fileName }}</span>
-        <button class="btn btn-ghost btn-sm btn-square" @click="emit('removeQueuedAttachmentNotice', idx)">
-          <X class="h-3 w-3" />
-        </button>
+        <ChatAttachmentItem
+          :attachment="{ kind: 'file', label: displayFileName(file.fileName, file.path) }"
+          :title="file.path"
+        >
+          <template #suffix>
+            <button
+              type="button"
+              class="inline-flex size-5 shrink-0 items-center justify-center rounded-full text-base-content/55 hover:bg-base-content/10 hover:text-base-content"
+              aria-label="删除附件"
+              @click.stop="emit('removeQueuedAttachmentNotice', idx)"
+            >
+              <X class="size-3" />
+            </button>
+          </template>
+        </ChatAttachmentItem>
       </div>
     </div>
     <div v-if="transcribing" class="mb-1 text-[11px] opacity-80 flex items-center gap-1">
@@ -111,26 +121,20 @@
       <div v-for="group in mergedIdeContextGroups" :key="group.workspacePath" class="flex flex-col gap-1">
         <div v-if="showIdeWorkspaceGroupLabel" class="px-1 text-[11px] opacity-60">{{ group.workspaceName }}</div>
         <div class="flex flex-wrap gap-1">
-          <button
+          <ChatAttachmentItem
             v-for="item in group.references"
             :key="item.id"
-            type="button"
-            class="gap-1 py-3 max-w-full"
-            :class="isIdeContextAttached(item.id) ? 'badge badge-primary' : 'badge badge-ghost'"
+            :attachment="{ id: item.id, kind: 'context', label: ideContextReferenceLabel(item) }"
+            :interactive="true"
+            :selected="isIdeContextAttached(item.id)"
             :title="ideContextReferenceTitle(item)"
-            @mousedown.prevent
-            @click="toggleIdeContextReference(item)"
+            @activate="toggleIdeContextReference(item)"
           >
-            <Minus v-if="isIdeContextAttached(item.id)" class="h-3.5 w-3.5 shrink-0" />
-            <Plus v-else class="h-3.5 w-3.5 shrink-0" />
-            <span class="flex min-w-0 max-w-72 items-center text-[11px]">
-              <span class="min-w-0 truncate">{{ ideContextReferenceDisplayParts(item).fileName }}</span>
-              <span
-                v-if="ideContextReferenceDisplayParts(item).lineSuffix"
-                class="shrink-0 whitespace-nowrap"
-              >{{ ideContextReferenceDisplayParts(item).lineSuffix }}</span>
-            </span>
-          </button>
+            <template #leading>
+              <Minus v-if="isIdeContextAttached(item.id)" class="size-3.5 shrink-0" />
+              <Plus v-else class="size-3.5 shrink-0" />
+            </template>
+          </ChatAttachmentItem>
         </div>
       </div>
     </div>
@@ -382,12 +386,14 @@ import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, Cha
 import { invokeTauri } from "../../../services/tauri-api";
 import ChatQueuePreview from "./ChatQueuePreview.vue";
 import ChatSelectionActionPanel from "./ChatSelectionActionPanel.vue";
+import ChatAttachmentItem from "./ChatAttachmentItem.vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import { useChatQueue } from "../composables/use-chat-queue";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
 import { formatApiConfigOptionLabel } from "../../config/utils/api-config-display";
 import { ideContextReferenceDisplayParts } from "../utils/ide-context-reference-display";
 import { mergeComposerIdeContextGroups } from "../utils/ide-context-reference-groups";
+import { displayFileName } from "../utils/chat-attachment-display";
 
 type BinaryAttachment = { mime: string; bytesBase64: string };
 type QueuedAttachmentNotice = { id: string; fileName: string; path: string; mime: string };
@@ -673,6 +679,10 @@ function ideContextReferenceTitle(item: IdeContextReferenceItem): string {
     return `${relativePath}:${startLine}`;
   }
   return relativePath;
+}
+
+function ideContextReferenceLabel(item: IdeContextReferenceItem): string {
+  return ideContextReferenceDisplayParts(item).fileName;
 }
 
 const showStopAction = computed(() =>
