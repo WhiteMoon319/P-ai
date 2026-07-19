@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   displayFileName,
   displayLabelFromExtraTextReference,
+  extraTextReferenceDisplayParts,
   fileNameFromPath,
 } from "./chat-attachment-display";
 
@@ -20,8 +21,21 @@ describe("chat attachment display", () => {
     expect(displayLabelFromExtraTextReference([
       "[IDE 上下文引用]",
       "文件: E:/repo/src/ChatMessageItem.vue",
+      "行号: 260-348",
       "内容:",
-    ].join("\n"))).toBe("ChatMessageItem.vue");
+    ].join("\n"))).toBe("ChatMessageItem.vue:260-348");
     expect(displayLabelFromExtraTextReference("用户引用了文件片段：src/components/DemoTab.vue（第 20 行）")).toBe("DemoTab.vue");
+  });
+
+  it("从 IDE 文本块中保留行号后缀", () => {
+    expect(extraTextReferenceDisplayParts([
+      "[IDE 上下文引用]",
+      "文件: E:/repo/src/ChatMessageItem.vue",
+      "行号: 260-348",
+      "内容:",
+    ].join("\n"))).toEqual({
+      fileName: "ChatMessageItem.vue",
+      lineSuffix: ":260-348",
+    });
   });
 });

@@ -284,7 +284,7 @@
             <ChatAttachmentItem
               v-for="(reference, idx) in block.extraTextReferences"
               :key="`${block.id}-extra-ref-${idx}`"
-              :attachment="{ kind: 'context', label: reference.label }"
+              :attachment="{ kind: 'context', label: extraTextReferenceDisplayParts(reference.text).fileName, detail: extraTextReferenceDisplayParts(reference.text).lineSuffix }"
             />
           </div>
           <div v-if="block.images.length > 0" :class="block.taskTrigger || block.text ? 'mt-2 grid justify-items-end gap-1' : 'grid justify-items-end gap-1'">
@@ -468,7 +468,7 @@ import { textContentSignature } from "../utils/text-signature";
 import { createToolCallPresentation } from "../utils/tool-call-presentation";
 import { buildToolcallPreviewMap } from "../utils/toolcall-preview";
 import { generateShareFromMessageIds } from "../utils/share-generator";
-import { displayFileName } from "../utils/chat-attachment-display";
+import { displayFileName, extraTextReferenceDisplayParts } from "../utils/chat-attachment-display";
 import ChatBubbleShell from "./ChatBubbleShell.vue";
 import ChatAttachmentItem from "./ChatAttachmentItem.vue";
 import SidebarLightMarkdown from "./SidebarLightMarkdown.vue";
