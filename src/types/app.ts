@@ -730,6 +730,8 @@ export type ChatSnapshot = {
 
 export type ChatMessageBlock = {
   id: string;
+  /** 仅供开发诊断使用：生成展示块时对应的原始 ChatMessage。 */
+  rawMessage?: ChatMessage;
   sourceMessageId?: string;
   isExtraTextBlock?: boolean;
   role: ChatRole;

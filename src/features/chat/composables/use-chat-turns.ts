@@ -242,6 +242,7 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
     if (messageKind === "plan_confirm_continue") {
       return [{
         id: message.id,
+        rawMessage: message,
         sourceMessageId: message.id,
         isExtraTextBlock: false,
         role: "system",
@@ -323,6 +324,7 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
     const extraTextReferences = buildExtraTextReferences(message);
     const baseBlock = {
       id: message.id,
+      rawMessage: message,
       sourceMessageId: message.id,
       isExtraTextBlock: false,
       role: message.role,
@@ -379,6 +381,7 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
         if (!text) return;
         blocks.push({
           id: `${message.id}::extra:${index}`,
+          rawMessage: message,
           sourceMessageId: message.id,
           isExtraTextBlock: true,
           role: message.role,

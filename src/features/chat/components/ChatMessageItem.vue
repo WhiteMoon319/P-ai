@@ -403,7 +403,7 @@
       <li v-if="isDevBuild">
         <button type="button" @click="handleContextMenuAction('showRawData')">
           <Braces class="h-4 w-4" />
-          <span>显示消息原始数据</span>
+          <span>显示原始 ChatMessage</span>
         </button>
       </li>
       <li v-if="mathContextCopyText">
@@ -437,10 +437,10 @@
         class="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-box border border-base-300 bg-base-100 text-base-content shadow-2xl"
         role="dialog"
         aria-modal="true"
-        aria-label="消息原始数据"
+        aria-label="原始 ChatMessage"
       >
         <header class="flex items-center justify-between border-b border-base-300 px-4 py-3">
-          <h2 class="font-semibold">消息原始数据</h2>
+          <h2 class="font-semibold">原始 ChatMessage</h2>
           <button type="button" class="btn btn-ghost btn-sm" @click="closeRawMessageData">关闭</button>
         </header>
         <pre class="m-0 overflow-auto whitespace-pre-wrap break-all p-4 text-xs leading-relaxed"><code>{{ rawMessageData }}</code></pre>
@@ -587,7 +587,7 @@ const rawMessageDataOpen = ref(false);
 const isDevBuild = import.meta.env.DEV;
 const rawMessageData = computed(() => {
   try {
-    return JSON.stringify(props.block, null, 2);
+    return JSON.stringify(props.block.rawMessage || props.block, null, 2);
   } catch (error) {
     return `无法序列化消息数据：${error instanceof Error ? error.message : String(error)}`;
   }
