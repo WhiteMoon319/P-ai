@@ -374,6 +374,7 @@ fn message_origin_string<'a>(message: &'a ChatMessage, key: &str) -> Option<&'a 
     origin_value_string(origin, key)
 }
 
+#[cfg(test)]
 fn message_has_remote_im_platform_message(
     message: &ChatMessage,
     channel_id: &str,
@@ -386,39 +387,6 @@ fn message_has_remote_im_platform_message(
         && message_origin_string(message, "contact_type") == Some(remote_contact_type)
         && message_origin_string(message, "contact_id") == Some(remote_contact_id)
         && message_origin_string(message, "platform_message_id") == Some(platform_message_id)
-}
-
-fn ready_store_has_remote_im_platform_message(
-    state: &AppState,
-    conversation_id: &str,
-    channel_id: &str,
-    remote_contact_type: &str,
-    remote_contact_id: &str,
-    platform_message_id: &str,
-) -> Result<bool, String> {
-    let paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
-    let Some(page) = message_store::read_ready_message_store_block_page(&paths, None)? else {
-        return Ok(false);
-    };
-    for block in page.blocks.into_iter().rev() {
-        let Some(block_page) =
-            message_store::read_ready_message_store_block_page(&paths, Some(block.block_id))?
-        else {
-            continue;
-        };
-        if block_page.messages.iter().any(|message| {
-            message_has_remote_im_platform_message(
-                message,
-                channel_id,
-                remote_contact_type,
-                remote_contact_id,
-                platform_message_id,
-            )
-        }) {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 
 struct ValidatedEnqueueInput {

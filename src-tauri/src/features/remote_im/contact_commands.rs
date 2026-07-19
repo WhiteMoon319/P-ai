@@ -46,6 +46,50 @@ fn remote_im_get_contact_by_id(
         .ok_or_else(|| format!("未找到远程联系人：{contact_id}"))
 }
 
+// ========== 远程入站瞬时去重 ==========
+
+const REMOTE_IM_INBOUND_RECENT_PLATFORM_MESSAGE_ID_LIMIT: usize = 10;
+
+static REMOTE_IM_INBOUND_RECENT_PLATFORM_MESSAGE_IDS: OnceLock<
+    Mutex<std::collections::HashMap<String, std::collections::VecDeque<String>>>,
+> = OnceLock::new();
+
+fn remote_im_inbound_recent_platform_message_ids(
+) -> &'static Mutex<std::collections::HashMap<String, std::collections::VecDeque<String>>> {
+    REMOTE_IM_INBOUND_RECENT_PLATFORM_MESSAGE_IDS
+        .get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
+
+fn remote_im_remember_inbound_platform_message_id(
+    channel_id: &str,
+    platform_message_id: Option<&str>,
+) -> Result<bool, String> {
+    let channel_id = channel_id.trim();
+    let platform_message_id = platform_message_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let Some(platform_message_id) = platform_message_id else {
+        return Ok(false);
+    };
+    if channel_id.is_empty() {
+        return Ok(false);
+    }
+    let mut store = remote_im_inbound_recent_platform_message_ids()
+        .lock()
+        .map_err(|_| "远程入站去重表不可用".to_string())?;
+    let recent_ids = store
+        .entry(channel_id.to_string())
+        .or_insert_with(std::collections::VecDeque::new);
+    if recent_ids.iter().any(|item| item == platform_message_id) {
+        return Ok(true);
+    }
+    recent_ids.push_back(platform_message_id.to_string());
+    while recent_ids.len() > REMOTE_IM_INBOUND_RECENT_PLATFORM_MESSAGE_ID_LIMIT {
+        recent_ids.pop_front();
+    }
+    Ok(false)
+}
+
 // ========== 远程会话能量仪表盘 ==========
 
 const REMOTE_IM_CONTACT_DASHBOARD_UPDATED_EVENT: &str =
@@ -1348,16 +1392,6 @@ pub(crate) fn remote_im_enqueue_message_internal(
             }
         }
     };
-    let runtime = match state_read_runtime_state_cached(state) {
-        Ok(runtime) => runtime,
-        Err(err) => {
-            runtime_log_warn(format!(
-                "[远程IM] 入站联系人快照读取失败，跳过预过滤并尝试原子接入，channel_id={}，error={}",
-                input.channel_id.trim(), err
-            ));
-            RuntimeStateFile::default()
-        }
-    };
     let channel = validated.channel;
     let channel_label = if channel.name.trim().is_empty() {
         input.im_name.trim().to_string()
@@ -1369,24 +1403,16 @@ pub(crate) fn remote_im_enqueue_message_internal(
     let audios = validated.audios;
     let attachments = validated.attachments;
 
-    let existing_contact = remote_im_find_contact_for_inbound(&runtime, &input);
     let channel_behavior = remote_im_channel_behavior_settings_from_channel(&channel);
     let blocked_prefixes = channel_behavior.blocked_message_prefixes;
     if let Some(prefix) = remote_im_blocked_inbound_message_prefix(&text, &blocked_prefixes) {
-        let contact_id = existing_contact
-            .map(|contact| contact.id.clone())
-            .unwrap_or_default();
-        let contact_label = existing_contact
-            .map(remote_im_contact_log_label)
-            .unwrap_or_else(|| {
-                input
-                    .remote_contact_name
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|name| !name.is_empty())
-                    .unwrap_or("未知联系人")
-                    .to_string()
-            });
+        let contact_label = input
+            .remote_contact_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .unwrap_or("未知联系人")
+            .to_string();
         runtime_log_info(format!(
             "[远程IM] 入站消息跳过：渠道={}，联系人={}，原因=命中消息头过滤，过滤前缀={}，文本长度={}",
             channel_label,
@@ -1400,19 +1426,58 @@ pub(crate) fn remote_im_enqueue_message_internal(
                 prefix,
                 text.chars().count()
             );
-        if let Some(contact) = existing_contact {
-            remote_im_append_contact_log(contact, "info", log_message);
-        } else {
-            remote_im_append_channel_log(input.channel_id.trim(), "info", log_message);
-        }
+        remote_im_append_channel_log(input.channel_id.trim(), "info", log_message);
         return Ok(RemoteImEnqueueResult {
             event_id: String::new(),
             conversation_id: String::new(),
             activate_assistant: false,
-            contact_id,
+            contact_id: String::new(),
+        });
+    }
+    if remote_im_remember_inbound_platform_message_id(
+        input.channel_id.trim(),
+        input.platform_message_id.as_deref(),
+    )? {
+        runtime_log_info(format!(
+            "[远程IM] 入站消息跳过：渠道={}，原因=命中最近平台消息ID去重，platform_message_id={}",
+            channel_label,
+            input
+                .platform_message_id
+                .as_deref()
+                .map(str::trim)
+                .unwrap_or_default()
+        ));
+        remote_im_append_channel_log(
+            input.channel_id.trim(),
+            "info",
+            format!(
+                "[联系人消息] 去重跳过: channel={}, platform_message_id={}",
+                channel_label,
+                input
+                    .platform_message_id
+                    .as_deref()
+                    .map(str::trim)
+                    .unwrap_or_default()
+            ),
+        );
+        return Ok(RemoteImEnqueueResult {
+            event_id: String::new(),
+            conversation_id: String::new(),
+            activate_assistant: false,
+            contact_id: String::new(),
         });
     }
 
+    let runtime = match state_read_runtime_state_cached(state) {
+        Ok(runtime) => runtime,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[远程IM] 入站联系人快照读取失败，跳过预过滤并尝试原子接入，channel_id={}，error={}",
+                input.channel_id.trim(), err
+            ));
+            RuntimeStateFile::default()
+        }
+    };
     let now = now_iso();
     let persisted_contact = state_mutate_runtime_state_cached(state, |latest_runtime| {
             let contact_id =
@@ -1530,7 +1595,7 @@ pub(crate) fn remote_im_enqueue_message_internal(
             remote_im_preview_text(&text, 100)
         ),
     );
-    let mut message = build_chat_message_from_input(
+    let message = build_chat_message_from_input(
         state,
         &input,
         &conversation_id,
@@ -1541,85 +1606,6 @@ pub(crate) fn remote_im_enqueue_message_internal(
         &audios,
         &attachments,
     );
-    if let Err(err) = externalize_message_parts_to_media_refs(&mut message.parts, &state.data_path) {
-        runtime_log_warn(format!(
-            "[远程IM] 入站附件外部化降级，contact_id={}，conversation_id={}，message_id={}，error={}",
-            contact_id, conversation_id, message.id, err
-        ));
-    }
-    let persisted_message = conversation_service_v2().append_remote_im_user_message_if_new(
-        state,
-        &conversation_id,
-        &message,
-        input.channel_id.trim(),
-        input.remote_contact_type.trim(),
-        input.remote_contact_id.trim(),
-        input.platform_message_id.as_deref(),
-    )?;
-    let Some(persisted_message) = persisted_message else {
-        runtime_log_info(format!(
-            "[远程IM] 重复消息跳过：渠道={}，联系人={}，内容={}",
-            channel_label,
-            remote_im_contact_log_label(&contact_for_log),
-            remote_im_preview_text(&text, 100)
-        ));
-        remote_im_append_contact_log(
-            &contact_for_log,
-            "info",
-            format!(
-                "[联系人消息] 去重跳过: channel={}, contact={}, preview={}",
-                channel_label,
-                remote_im_contact_log_label(&contact_for_log),
-                remote_im_preview_text(&text, 100)
-            ),
-        );
-        return Ok(RemoteImEnqueueResult {
-            event_id: String::new(),
-            conversation_id,
-            activate_assistant: false,
-            contact_id,
-        });
-    };
-    if let Err(err) = state_mutate_runtime_state_cached(state, |runtime| {
-        remote_im_update_checkpoint_latest_seen_in_list(
-            &mut runtime.remote_im_contact_checkpoints,
-            &contact_id,
-            Some(&persisted_message.id),
-            &now,
-        );
-        Ok(())
-    }) {
-        runtime_log_warn(format!(
-            "[远程IM] 已收消息标记更新失败：渠道={}，联系人={}，内容={}，error={}",
-            channel_label,
-            remote_im_contact_log_label(&contact_for_log),
-            remote_im_preview_text(&text, 100),
-            err
-        ));
-    }
-    let (activate_assistant, state_reason) = match remote_im_prepare_enqueue_runtime_state(
-        state,
-        &contact_for_log,
-        &text,
-    ) {
-        Ok(result) => result,
-        Err(err) => {
-            runtime_log_warn(format!(
-                "[远程IM] 入库后入场判定失败，本次只保留消息，contact_id={}，conversation_id={}，error={}",
-                contact_id, conversation_id, err
-            ));
-            (false, "入场判定失败，仅保留已入库消息".to_string())
-        }
-    };
-    runtime_log_info(format!(
-        "[远程联系人状态机] 入站判定完成：渠道={}，联系人={}，发送人={}，内容={}，入场={}，原因={}",
-        channel_label,
-        remote_im_contact_log_label(&contact_for_log),
-        sender_label,
-        remote_im_preview_text(&text, 100),
-        remote_im_yes_no(activate_assistant),
-        state_reason
-    ));
 
     let sender_info = RemoteImMessageSource {
         channel_id: input.channel_id.trim().to_string(),
@@ -1643,6 +1629,60 @@ pub(crate) fn remote_im_enqueue_message_internal(
         .trim()
         .eq_ignore_ascii_case("group")
     {
+        let mut persisted_message = message.clone();
+        if let Err(err) =
+            externalize_message_parts_to_media_refs(&mut persisted_message.parts, &state.data_path)
+        {
+            runtime_log_warn(format!(
+                "[远程IM] 入站附件外部化降级，contact_id={}，conversation_id={}，message_id={}，error={}",
+                contact_id, conversation_id, persisted_message.id, err
+            ));
+        }
+        let persisted_message = conversation_service_v2().append_remote_im_user_message(
+            state,
+            &conversation_id,
+            &persisted_message,
+        )?;
+        if let Err(err) = state_mutate_runtime_state_cached(state, |runtime| {
+            remote_im_update_checkpoint_latest_seen_in_list(
+                &mut runtime.remote_im_contact_checkpoints,
+                &contact_id,
+                Some(&persisted_message.id),
+                &now,
+            );
+            Ok(())
+        }) {
+            runtime_log_warn(format!(
+                "[远程IM] 已收消息标记更新失败：渠道={}，联系人={}，内容={}，error={}",
+                channel_label,
+                remote_im_contact_log_label(&contact_for_log),
+                remote_im_preview_text(&text, 100),
+                err
+            ));
+        }
+        let (activate_assistant, state_reason) = match remote_im_prepare_enqueue_runtime_state(
+            state,
+            &contact_for_log,
+            &text,
+        ) {
+            Ok(result) => result,
+            Err(err) => {
+                runtime_log_warn(format!(
+                    "[远程IM] 入库后入场判定失败，本次只保留消息，contact_id={}，conversation_id={}，error={}",
+                    contact_id, conversation_id, err
+                ));
+                (false, "入场判定失败，仅保留已入库消息".to_string())
+            }
+        };
+        runtime_log_info(format!(
+            "[远程联系人状态机] 入站判定完成：渠道={}，联系人={}，发送人={}，内容={}，入场={}，原因={}",
+            channel_label,
+            remote_im_contact_log_label(&contact_for_log),
+            sender_label,
+            remote_im_preview_text(&text, 100),
+            remote_im_yes_no(activate_assistant),
+            state_reason
+        ));
         if activate_assistant {
             let event = create_pending_event(
                 event_id.clone(),
@@ -1673,33 +1713,30 @@ pub(crate) fn remote_im_enqueue_message_internal(
             contact_id,
         });
     }
-    if !activate_assistant {
-        return Ok(RemoteImEnqueueResult {
-            event_id,
-            conversation_id,
-            activate_assistant: false,
-            contact_id,
-        });
-    }
-    let mut event = create_pending_event(
+    runtime_log_info(format!(
+        "[远程IM] 私聊入站交接：渠道={}，联系人={}，发送人={}，内容={}，处理=绑定会话引导",
+        channel_label,
+        remote_im_contact_log_label(&contact_for_log),
+        sender_label,
+        remote_im_preview_text(&text, 100)
+    ));
+    let event = create_pending_event(
         event_id.clone(),
         conversation_id.clone(),
-        Vec::new(),
+        vec![message],
         true,
         session_info,
         sender_info,
     );
-    event.persisted_message_ids = vec![message.id.clone()];
     let ingress = ingress_chat_event(state, event)?;
     remote_im_append_contact_log(
         &contact_for_log,
         "info",
         format!(
-            "[联系人状态] 已交接: action=绑定会话调度, channel={}, contact={}, message={}, reason={}",
+            "[联系人状态] 已交接: action=绑定会话引导, channel={}, contact={}, message={}",
             channel_label,
             remote_im_contact_log_label(&contact_for_log),
-            remote_im_preview_text(&text, 100),
-            state_reason
+            remote_im_preview_text(&text, 100)
         ),
     );
     if matches!(&ingress, ChatEventIngress::Queued { .. }) {

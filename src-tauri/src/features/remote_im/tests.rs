@@ -1675,80 +1675,40 @@
     }
 
     #[test]
-    fn remote_im_direct_append_should_atomically_dedup_platform_message() {
-        let state = remote_im_test_state();
-        write_config(&state.config_path, &AppConfig::default()).expect("write config");
-        let mut contact = remote_im_test_contact("contact-direct-append", "");
-        contact.bound_conversation_id = None;
-        let conversation_id = ensure_remote_im_contact_conversation_id(&state, &mut contact)
-            .expect("ensure contact conversation");
-        let build_message = |id: &str| ChatMessage {
-            id: id.to_string(),
-            role: "user".to_string(),
-            created_at: "2026-07-18T01:02:03Z".to_string(),
-            speaker_agent_id: None,
-            parts: vec![MessagePart::Text {
-                text: "并发远程消息".to_string(),
-                reasoning_content: None,
-            }],
-            extra_text_blocks: Vec::new(),
-            provider_meta: Some(serde_json::json!({
-                "origin": {
-                    "kind": "remote_im",
-                    "channel_id": "channel-a",
-                    "contact_type": "private",
-                    "contact_id": "remote-a",
-                    "platform_message_id": "platform-atomic-1"
-                }
-            })),
-            tool_call: None,
-            mcp_call: None,
-            meme_annotations: None,
-        };
-        let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
-        let mut handles = Vec::new();
-        for index in 0..2 {
-            let state = state.clone();
-            let conversation_id = conversation_id.clone();
-            let barrier = barrier.clone();
-            let message = build_message(&format!("direct-append-{index}"));
-            handles.push(std::thread::spawn(move || {
-                barrier.wait();
-                conversation_service_v2().append_remote_im_user_message_if_new(
-                    &state,
-                    &conversation_id,
-                    &message,
-                    "channel-a",
-                    "private",
-                    "remote-a",
-                    Some("platform-atomic-1"),
-                )
-            }));
+    fn remote_im_inbound_dedup_should_keep_recent_ten_platform_ids_per_channel() {
+        let channel_a = format!("channel-a-{}", Uuid::new_v4());
+        let channel_b = format!("channel-b-{}", Uuid::new_v4());
+
+        assert!(!remote_im_remember_inbound_platform_message_id(
+            &channel_a,
+            Some("platform-1"),
+        )
+        .expect("remember first id"));
+        assert!(remote_im_remember_inbound_platform_message_id(
+            &channel_a,
+            Some("platform-1"),
+        )
+        .expect("dedup repeated id"));
+        assert!(!remote_im_remember_inbound_platform_message_id(
+            &channel_b,
+            Some("platform-1"),
+        )
+        .expect("same id in another channel should be accepted"));
+
+        for index in 2..=11 {
+            assert!(!remote_im_remember_inbound_platform_message_id(
+                &channel_a,
+                Some(&format!("platform-{index}")),
+            )
+            .expect("remember rolling id"));
         }
-        let inserted = handles
-            .into_iter()
-            .map(|handle| handle.join().expect("join append").expect("append message"))
-            .filter(Option::is_some)
-            .count();
-        assert_eq!(inserted, 1);
-        let messages = conversation_service_v2()
-            .get_conversation_recent_messages(&state, &conversation_id, 10)
-            .expect("read appended messages");
-        let matched = messages
-            .iter()
-            .filter(|message| {
-                message_has_remote_im_platform_message(
-                    message,
-                    "channel-a",
-                    "private",
-                    "remote-a",
-                    "platform-atomic-1",
-                )
-            })
-            .collect::<Vec<_>>();
-        assert_eq!(matched.len(), 1);
-        assert_eq!(matched[0].created_at, "2026-07-18T01:02:03Z");
-        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+        assert!(!remote_im_remember_inbound_platform_message_id(
+            &channel_a,
+            Some("platform-1"),
+        )
+        .expect("old id should be evicted after ten newer ids"));
+        assert!(!remote_im_remember_inbound_platform_message_id(&channel_a, None)
+            .expect("missing platform id should not dedup"));
     }
 
     #[test]
@@ -2223,6 +2183,95 @@
             .expect("group inspection scheduled");
         assert_eq!(batch.phase, RemoteImGroupReplyPhase::MentionScheduled);
         assert_eq!(batch.event.conversation_id, result.conversation_id);
+        let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
+    }
+
+    #[test]
+    fn remote_im_private_inbound_should_enqueue_guided_message_without_keyword() {
+        let state = remote_im_test_state();
+        let config = AppConfig {
+            remote_im_channels: vec![remote_im_test_channel(
+                "channel-a",
+                RemoteImChannelBehaviorSettings::default(),
+            )],
+            ..AppConfig::default()
+        };
+        write_config(&state.config_path, &config).expect("write config");
+
+        let mut contact = remote_im_test_contact("contact-private-guided", "");
+        contact.remote_contact_type = "private".to_string();
+        contact.remote_contact_id = "remote-private-guided".to_string();
+        contact.remote_contact_name = "测试联系人".to_string();
+        contact.activation_mode = "keyword".to_string();
+        contact.activation_keywords = vec!["派".to_string()];
+        contact.bound_conversation_id = None;
+        let conversation_id = ensure_remote_im_contact_conversation_id(&state, &mut contact)
+            .expect("ensure private conversation");
+        let mut runtime = RuntimeStateFile::default();
+        runtime.remote_im_contacts.push(contact);
+        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+        set_conversation_runtime_state_and_emit(
+            &state,
+            &conversation_id,
+            MainSessionState::AssistantStreaming,
+        )
+        .expect("mark conversation busy");
+
+        let result = remote_im_enqueue_message_internal(
+            RemoteImEnqueueInput {
+                channel_id: "channel-a".to_string(),
+                platform: RemoteImPlatform::OnebotV11,
+                im_name: "QQ".to_string(),
+                remote_contact_type: "private".to_string(),
+                remote_contact_id: "remote-private-guided".to_string(),
+                remote_contact_name: Some("测试联系人".to_string()),
+                sender_id: "remote-private-guided".to_string(),
+                sender_name: "测试联系人".to_string(),
+                sender_avatar_url: None,
+                platform_message_id: Some(format!("message-{}", Uuid::new_v4())),
+                dingtalk_session_webhook: None,
+                dingtalk_session_webhook_expired_time: None,
+                session: SessionSelector {
+                    api_config_id: None,
+                    department_id: None,
+                    agent_id: String::new(),
+                    conversation_id: None,
+                },
+                payload: ChatInputPayload {
+                    text: Some("普通私聊消息".to_string()),
+                    display_text: None,
+                    parts: None,
+                    images: None,
+                    audios: None,
+                    attachments: None,
+                    model: None,
+                    extra_text_blocks: None,
+                    mentions: None,
+                    provider_meta: None,
+                },
+            },
+            &state,
+        )
+        .expect("enqueue private message");
+
+        assert!(result.activate_assistant);
+        assert_eq!(result.conversation_id, conversation_id);
+        let queue = get_queue_snapshot(&state).expect("read queue");
+        let queued = queue
+            .iter()
+            .find(|event| event.id == result.event_id)
+            .expect("guided private event should be queued");
+        assert_eq!(queued.queue_mode, ChatQueueMode::Guided);
+        assert_eq!(queued.message_text, "普通私聊消息");
+        let recent_messages = conversation_service_v2()
+            .get_conversation_recent_messages(&state, &conversation_id, 8)
+            .expect("read recent messages");
+        assert!(!recent_messages.iter().any(|message| {
+            message.parts.iter().any(|part| match part {
+                MessagePart::Text { text, .. } => text == "普通私聊消息",
+                _ => false,
+            })
+        }));
         let _ = std::fs::remove_dir_all(app_root_from_data_path(&state.data_path));
     }
 

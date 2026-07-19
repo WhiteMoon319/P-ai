@@ -1900,18 +1900,13 @@ impl ConversationServiceV2 {
         Ok(())
     }
 
-    /// 远程入站专用追加：平台消息去重与 ready-store 写入必须共享同一会话门。
-    /// 返回 `None` 表示平台消息已经存在；返回 `Some` 表示本次完成了正式追加。
-    fn append_remote_im_user_message_if_new(
+    /// 远程入站专用追加：只负责把远程消息正式写入会话历史。
+    fn append_remote_im_user_message(
         &self,
         state: &AppState,
         conversation_id: &str,
         message: &ChatMessage,
-        channel_id: &str,
-        remote_contact_type: &str,
-        remote_contact_id: &str,
-        platform_message_id: Option<&str>,
-    ) -> Result<Option<ChatMessage>, String> {
+    ) -> Result<ChatMessage, String> {
         let conversation_id = conversation_id.trim();
         if conversation_id.is_empty() {
             return Err("远程入站追加缺少 conversation_id".to_string());
@@ -1934,26 +1929,6 @@ impl ConversationServiceV2 {
             return Err(format!("远程入站目标会话不存在：{conversation_id}"));
         }
         let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
-        let platform_message_id = platform_message_id
-            .map(str::trim)
-            .filter(|value| !value.is_empty());
-        if let Some(platform_message_id) = platform_message_id {
-            ensure_ready_message_store_from_legacy_conversation(
-                state,
-                conversation_id,
-                &store_paths,
-            )?;
-            if ready_store_has_remote_im_platform_message(
-                state,
-                conversation_id,
-                channel_id.trim(),
-                remote_contact_type.trim(),
-                remote_contact_id.trim(),
-                platform_message_id,
-            )? {
-                return Ok(None);
-            }
-        }
         let updated_at = message.created_at.clone();
         let unread_count = if self.conversation_has_active_chat_view(state, conversation_id)
             || conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT
@@ -1998,7 +1973,7 @@ impl ConversationServiceV2 {
             ));
         }
         emit_conversation_message_appended_event(state, conversation_id, message);
-        Ok(Some(message.clone()))
+        Ok(message.clone())
     }
 
     fn increment_unread_count_if_background(

@@ -267,7 +267,6 @@ fn task_enqueue_conversation_trigger(
         source: ChatEventSource::Task,
         queue_mode: ChatQueueMode::Normal,
         messages: vec![build_task_trigger_message(task)],
-        persisted_message_ids: Vec::new(),
         activate_assistant: true,
         assistant_message_id: None,
         session_info: ChatSessionInfo {

@@ -369,7 +369,6 @@ fn remote_im_group_reply_advance_after_settlement(
         }
         let mut next_event = current.event.clone();
         next_event.messages.clear();
-        next_event.persisted_message_ids.clear();
         let next_generation = remote_im_group_reply_next_generation(&mut store);
         store.by_contact.insert(
             key.clone(),
@@ -1025,7 +1024,6 @@ fn observe_remote_im_persisted_event(
                         event: {
                             let mut reference = event.clone();
                             reference.messages.clear();
-                            reference.persisted_message_ids.clear();
                             reference
                         },
                         due_at: std::time::Instant::now() + delay,

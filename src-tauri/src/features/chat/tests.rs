@@ -2644,7 +2644,6 @@
                 source: ChatEventSource::RemoteIm,
                 queue_mode: ChatQueueMode::Normal,
                 messages: vec![test_text_message("user", "来自张三的第一条消息", &created_at)],
-                persisted_message_ids: Vec::new(),
                 activate_assistant: true,
                 assistant_message_id: None,
                 session_info: ChatSessionInfo {
@@ -2661,7 +2660,6 @@
                 source: ChatEventSource::RemoteIm,
                 queue_mode: ChatQueueMode::Normal,
                 messages: vec![test_text_message("user", "来自张三的第二条消息", &created_at)],
-                persisted_message_ids: Vec::new(),
                 activate_assistant: true,
                 assistant_message_id: None,
                 session_info: ChatSessionInfo {
@@ -2678,7 +2676,6 @@
                 source: ChatEventSource::RemoteIm,
                 queue_mode: ChatQueueMode::Normal,
                 messages: vec![test_text_message("user", "来自李四的消息", &created_at)],
-                persisted_message_ids: Vec::new(),
                 activate_assistant: true,
                 assistant_message_id: None,
                 session_info: ChatSessionInfo {
@@ -2695,7 +2692,6 @@
                 source: ChatEventSource::User,
                 queue_mode: ChatQueueMode::Normal,
                 messages: vec![test_text_message("user", "普通用户消息", &now_iso())],
-                persisted_message_ids: Vec::new(),
                 activate_assistant: true,
                 assistant_message_id: None,
                 session_info: ChatSessionInfo {
@@ -2772,7 +2768,6 @@
             source: ChatEventSource::RemoteIm,
             queue_mode: ChatQueueMode::Normal,
             messages: vec![test_text_message("user", "忙碌期间来的新消息", &created_at)],
-            persisted_message_ids: Vec::new(),
             activate_assistant: true,
             assistant_message_id: None,
             session_info: ChatSessionInfo {
@@ -3849,7 +3844,6 @@
             source: ChatEventSource::User,
             queue_mode: ChatQueueMode::Normal,
             messages: vec![test_text_message("user", "hello", &created_at)],
-            persisted_message_ids: Vec::new(),
             activate_assistant: true,
             assistant_message_id: None,
             session_info: ChatSessionInfo {

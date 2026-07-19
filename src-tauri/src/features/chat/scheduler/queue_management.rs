@@ -120,13 +120,7 @@ pub(crate) fn get_queue_snapshot(state: &AppState) -> Result<Vec<ChatQueueEventS
                         _ => None,
                     })
                 })
-                .unwrap_or_else(|| {
-                    if event.persisted_message_ids.is_empty() {
-                        String::new()
-                    } else {
-                        "（消息已保存，等待处理）".to_string()
-                    }
-                });
+                .unwrap_or_default();
             let preview = if message_preview.chars().count() > 50 {
                 format!(
                     "{}...",

@@ -433,7 +433,6 @@ async fn confirm_plan_and_continue_inner(
         source: ChatEventSource::System,
         queue_mode: ChatQueueMode::Normal,
         messages: vec![plan_continue_confirmation_message()],
-        persisted_message_ids: Vec::new(),
         activate_assistant: true,
         assistant_message_id: Some(assistant_message_id),
         session_info: ChatSessionInfo {
@@ -1648,7 +1647,6 @@ async fn submit_chat_message_inner(
         source: ChatEventSource::User,
         queue_mode: ChatQueueMode::Normal,
         messages: vec![user_message],
-        persisted_message_ids: Vec::new(),
         activate_assistant: !has_user_mentions,
         assistant_message_id: assistant_message_id.clone(),
         session_info: ChatSessionInfo {
@@ -1916,7 +1914,6 @@ async fn send_chat_message(
         source: ChatEventSource::User,
         queue_mode: ChatQueueMode::Normal,
         messages: vec![user_message],
-        persisted_message_ids: Vec::new(),
         activate_assistant: !has_user_mentions,
         assistant_message_id: None,
         session_info: ChatSessionInfo {
@@ -2134,7 +2131,6 @@ async fn send_user_mention_message_inner(
         source: ChatEventSource::User,
         queue_mode: ChatQueueMode::Normal,
         messages: vec![user_message],
-        persisted_message_ids: Vec::new(),
         activate_assistant: false,
         assistant_message_id: None,
         session_info: ChatSessionInfo {
