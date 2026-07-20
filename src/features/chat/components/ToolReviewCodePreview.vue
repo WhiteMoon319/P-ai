@@ -58,7 +58,7 @@ async function updateHighlightedCode() {
   try {
     const html = await codeToHtml(code, {
       lang: language,
-      theme: "github-dark",
+      theme: props.isDark ? "github-dark" : "github-light",
     });
     if (signal.aborted) return;
     highlightedHtml.value = normalizeShikiLineHtml(html, code, props.mode);
@@ -152,7 +152,7 @@ function escapeHtmlAttribute(value: string) {
 }
 
 watch(
-  () => [props.code, props.mode, props.lang, props.showLineNumbers] as const,
+  () => [props.code, props.mode, props.lang, props.isDark, props.showLineNumbers] as const,
   () => {
     void updateHighlightedCode();
   },
