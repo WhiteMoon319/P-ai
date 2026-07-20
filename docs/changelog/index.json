@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-19T16:12:20.386Z",
-  "latestVersion": "v0.36.1",
+  "generatedAt": "2026-07-20T11:50:39.072Z",
+  "latestVersion": "v0.36.2",
   "releases": [
+    {
+      "version": "v0.36.2",
+      "path": "docs/changelog/releases/v0.36.2.md",
+      "summary": "新增 75%–150% 的连续界面尺寸调节，文字与常用控件会同步变化。"
+    },
     {
       "version": "v0.36.1",
       "path": "docs/changelog/releases/v0.36.1.md",
