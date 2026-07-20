@@ -463,6 +463,7 @@ import {
 import { formatIsoToLocalDateTime } from "../../../utils/time";
 import { useChatMessageAppearance } from "../../shell/composables/use-chat-message-appearance";
 import { AppMarkdownRenderer, groupMarkdownSegments, initKatex, parseMarkdownBlocks, type MarkdownBlock, type MarkdownSegment } from "../markdown";
+import { hideIncompleteInlineMath } from "../markdown/streaming-math";
 import { normalizeLocalLinkHref } from "../utils/local-link";
 import { textContentSignature } from "../utils/text-signature";
 import { createToolCallPresentation } from "../utils/tool-call-presentation";
@@ -1441,46 +1442,6 @@ function hideIncompleteDisplayMath(text: string): string {
   return text.slice(0, openMathStart);
 }
 
-function hideIncompleteInlineMath(text: string): string {
-  if (!text.includes("$")) return text;
-
-  const lines = text.split("\n");
-  let offset = 0;
-
-  for (const line of lines) {
-    if (/^\s*```/.test(line)) {
-      offset += line.length + 1;
-      continue;
-    }
-    let openMathStartInLine = -1;
-    let searchFrom = 0;
-    while (searchFrom < line.length) {
-      const delimiterIndex = findUnescapedSingleDollar(line, searchFrom);
-      if (delimiterIndex < 0) break;
-      if (openMathStartInLine < 0) {
-        openMathStartInLine = delimiterIndex;
-      } else {
-        const content = line.slice(openMathStartInLine + 1, delimiterIndex);
-        if (inlineMathCanRender(content)) {
-          openMathStartInLine = -1;
-        } else {
-          openMathStartInLine = delimiterIndex;
-        }
-      }
-      searchFrom = delimiterIndex + 1;
-    }
-    if (openMathStartInLine >= 0) {
-      const pendingContent = line.slice(openMathStartInLine + 1);
-      if (inlineMathCanRender(pendingContent)) {
-        return text.slice(0, offset + openMathStartInLine);
-      }
-    }
-    offset += line.length + 1;
-  }
-  
-  return text;
-}
-
 function findUnescapedDoubleDollar(text: string, from: number): number {
   let cursor = Math.max(0, from);
   while (cursor < text.length) {
@@ -1494,35 +1455,6 @@ function findUnescapedDoubleDollar(text: string, from: number): number {
     cursor = index + 2;
   }
   return -1;
-}
-
-function findUnescapedSingleDollar(text: string, from: number): number {
-  let cursor = Math.max(0, from);
-  while (cursor < text.length) {
-    const index = text.indexOf("$", cursor);
-    if (index < 0) return -1;
-    if (text[index - 1] === "$" || text[index + 1] === "$") {
-      cursor = index + 1;
-      continue;
-    }
-    let backslashCount = 0;
-    for (let i = index - 1; i >= 0 && text[i] === "\\"; i -= 1) {
-      backslashCount += 1;
-    }
-    if (backslashCount % 2 === 0) return index;
-    cursor = index + 1;
-  }
-  return -1;
-}
-
-function normalizeMathText(text: string): string {
-  return String(text || "").replace(/\s+/g, " ").trim();
-}
-
-function inlineMathCanRender(text: string): boolean {
-  const content = normalizeMathText(text);
-  if (!content) return false;
-  return !/[\r\n]/.test(content);
 }
 
 function normalizeRenderedLocalLinks() {
