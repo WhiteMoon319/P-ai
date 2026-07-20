@@ -51,7 +51,7 @@
                     <span class="block min-w-0 flex-1 truncate whitespace-nowrap text-xs font-normal text-base-content">
                       {{ kindLabel(turn.kind) }}
                     </span>
-                    <div v-if="timeLabel(turn.createdAt).dateLabel" class="shrink-0 text-right text-[11px] leading-4 text-base-content/55">
+                    <div v-if="timeLabel(turn.createdAt).dateLabel" class="shrink-0 text-right text-xs leading-4 text-base-content/55">
                       {{ timeLabel(turn.createdAt).dateLabel }}
                     </div>
                   </div>

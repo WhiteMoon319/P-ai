@@ -31,7 +31,7 @@
         :title="selected ? t('chat.messageItem.cancelSelect') : t('chat.messageItem.selectMessage')"
         @click.stop="emit('toggleMessageSelected', selectionKey)"
       >
-        <span class="text-[10px] leading-none">✓</span>
+        <span class="text-caption leading-none">✓</span>
       </button>
     </div>
     <ChatBubbleShell
@@ -233,7 +233,7 @@
               />
               <div
                 v-else-if="isImageMime(img.mime)"
-                class="flex h-28 w-28 items-center justify-center rounded bg-base-200/70 text-[11px] text-base-content/55"
+                class="flex h-28 w-28 items-center justify-center rounded bg-base-200/70 text-xs text-base-content/55"
               >
                 <span class="loading loading-spinner loading-xs mr-2"></span>
                 <span>{{ t('chat.messageItem.imageLoading') }}</span>
@@ -299,7 +299,7 @@
               />
               <div
                 v-else-if="isImageMime(img.mime)"
-                class="flex h-28 w-28 items-center justify-center rounded bg-base-200/70 text-[11px] text-base-content/55"
+                class="flex h-28 w-28 items-center justify-center rounded bg-base-200/70 text-xs text-base-content/55"
               >
                 <span class="loading loading-spinner loading-xs mr-2"></span>
                 <span>{{ t('chat.messageItem.imageLoading') }}</span>
@@ -1704,7 +1704,7 @@ function openAttachmentPath(path: string) {
   height: 4rem;
   border-radius: 0.5rem;
   opacity: 0.5;
-  font-size: 0.85rem;
+  font-size: var(--app-text-sm-size);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -1718,7 +1718,7 @@ function openAttachmentPath(path: string) {
   height: 3rem;
   border-radius: 0.5rem;
   opacity: 0.3;
-  font-size: 0.75rem;
+  font-size: var(--app-text-xs-size);
   border: 1px dashed currentColor;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1782,7 +1782,7 @@ function openAttachmentPath(path: string) {
   max-height: none !important;
   height: auto !important;
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: var(--app-text-sm-size);
   line-height: 1.5;
 }
 
@@ -1841,19 +1841,19 @@ function openAttachmentPath(path: string) {
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(h1,.heading-node.heading-1)) {
-  font-size: 1.02rem;
+  font-size: var(--app-text-markdown-heading-1-size);
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(h2,.heading-node.heading-2)) {
-  font-size: 0.98rem;
+  font-size: var(--app-text-markdown-heading-2-size);
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(h3,.heading-node.heading-3)) {
-  font-size: 0.94rem;
+  font-size: var(--app-text-markdown-heading-3-size);
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(h4,.heading-node.heading-4)) {
-  font-size: 0.9rem;
+  font-size: var(--app-text-markdown-heading-4-size);
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(ul,ol,.list-node)) {
@@ -1886,11 +1886,11 @@ function openAttachmentPath(path: string) {
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(:not(pre) > code,.inline-code):not(.code-block-container *)) {
-  font-size: 0.86em;
+  font-size: var(--app-text-xs-size);
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(table,.table-node)) {
-  font-size: 0.9rem;
+  font-size: var(--app-text-sm-size);
 }
 
 .assistant-markdown :deep(.ecall-markdown-content ._mermaid) {
@@ -1959,7 +1959,7 @@ function openAttachmentPath(path: string) {
 }
 
 .ecall-assistant-bubble {
-  font-size: 0.875rem;
+  font-size: var(--app-text-sm-size);
   transition:
     box-shadow 220ms ease,
     transform 220ms ease,

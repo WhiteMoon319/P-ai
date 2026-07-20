@@ -65,7 +65,7 @@
       {{ emptyHint }}
     </div>
     <div v-else class="flex flex-1 min-h-0 flex-col gap-2">
-      <div v-if="mode !== 'system'" class="text-[11px] opacity-70">
+      <div v-if="mode !== 'system'" class="text-xs opacity-70">
         {{ latestInputLengthText }}: {{ latestUserText.length }} |
         {{ imagesText }}: {{ latestImages }} |
         {{ audiosText }}: {{ latestAudios }}

@@ -16,7 +16,7 @@
         <div class="min-w-0 flex-1 overflow-hidden">
           <div class="flex min-w-0 items-start justify-between gap-2">
             <span class="block min-w-0 flex-1 truncate whitespace-nowrap text-xs font-normal text-base-content">{{ title }}</span>
-            <div v-if="timeDateLabel" class="shrink-0 text-right text-[11px] leading-4 text-base-content/55">{{ timeDateLabel }}</div>
+            <div v-if="timeDateLabel" class="shrink-0 text-right text-xs leading-4 text-base-content/55">{{ timeDateLabel }}</div>
           </div>
           <div class="mt-1 flex min-w-0 items-start justify-between gap-2 text-xs text-base-content/65">
             <div class="min-w-0 flex-1 truncate">{{ reviewOpinionText }}</div>
@@ -27,12 +27,12 @@
         </div>
         <span v-if="loading" class="loading loading-spinner loading-xs shrink-0 text-base-content/55"></span>
       </button>
-      <div v-if="item.hasReview" class="shrink-0 text-[11px] leading-5 text-base-content/45">
+      <div v-if="item.hasReview" class="shrink-0 text-xs leading-5 text-base-content/45">
         {{ t("chat.toolReview.evaluated") }}
       </div>
       <div
         v-else
-        class="shrink-0 text-[11px] leading-5 text-base-content/45"
+        class="shrink-0 text-xs leading-5 text-base-content/45"
       >
         {{ t("chat.toolReview.unevaluated") }}
       </div>

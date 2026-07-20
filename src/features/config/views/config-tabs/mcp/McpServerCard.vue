@@ -35,7 +35,7 @@
       </div>
 
       <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-2 text-[11px]">
+        <div class="flex items-center gap-2 text-xs">
           <span class="opacity-70">{{ t('config.mcpServerCard.status') }}</span>
           <span v-if="draft.lastStatus === 'ready' || draft.lastStatus === 'deployed'" class="badge badge-sm badge-success">已就绪</span>
           <span v-else-if="draft.lastStatus === 'stopped'" class="badge badge-sm badge-neutral">已停止</span>

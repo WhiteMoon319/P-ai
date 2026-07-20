@@ -2789,7 +2789,7 @@ defineExpose({
   overflow-x: hidden;
   color: inherit;
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: var(--app-text-base-size);
   line-height: 1.65;
 }
 .file-reader-content :deep(.ecall-markdown-content :where(hr,.hr-node)) {
@@ -2797,7 +2797,7 @@ defineExpose({
 }
 .file-reader-content :deep(.ecall-markdown-content :where(table,.table-node)) {
   width: 100%;
-  font-size: 0.92rem;
+  font-size: var(--app-text-sm-size);
 }
 .file-reader-media-stage {
   display: flex;
@@ -2871,13 +2871,13 @@ defineExpose({
 .file-reader-code-virtual-block-raw {
   width: 100%;
   font-family: var(--app-code-font-family);
-  font-size: 14px;
+  font-size: var(--app-text-sm-size);
   line-height: 21px;
 }
 .file-reader-code-virtual-block-shiki {
   width: max-content;
   font-family: var(--app-code-font-family);
-  font-size: 14px;
+  font-size: var(--app-text-sm-size);
   line-height: 21px;
 }
 .file-reader-code-virtual-gutter {

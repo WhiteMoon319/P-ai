@@ -16,7 +16,7 @@
         <span
           v-for="paramText in toolParameterSummary(item.id)"
           :key="`${item.id}-param-${paramText}`"
-          class="text-[10px] px-1.5 py-0.5 rounded bg-base-200 border border-base-300/70 opacity-80"
+          class="text-caption px-1.5 py-0.5 rounded bg-base-200 border border-base-300/70 opacity-80"
         >
           {{ paramText }}
         </span>
@@ -25,7 +25,7 @@
         <pre
           v-for="example in toolParameterExamples(item.id)"
           :key="`${item.id}-example-${example}`"
-          class="text-[10px] leading-4 px-2 py-1 rounded bg-base-200 border border-base-300/70 opacity-90 whitespace-pre-wrap overflow-x-auto"
+          class="text-caption leading-4 px-2 py-1 rounded bg-base-200 border border-base-300/70 opacity-90 whitespace-pre-wrap overflow-x-auto"
         >{{ example }}</pre>
       </div>
     </template>

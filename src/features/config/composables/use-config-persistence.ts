@@ -17,7 +17,7 @@ import type {
 import type { SupportedLocale } from "../../../i18n";
 import { normalizeApiRequestFormat } from "../utils/api-request-format";
 import { normalizeDepartmentChildIds } from "../utils/department-graph";
-import { applyUiSizePreset, normalizeUiSizePreset } from "../../shell/composables/use-ui-size-appearance";
+import { applyUiSizeScale, normalizeUiSizeScale } from "../../shell/composables/use-ui-size-appearance";
 
 const DEFAULT_CODEX_ORIGINATOR = "codex-tui";
 
@@ -273,8 +273,8 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     options.config.hotkey = cfg.hotkey;
     options.config.uiLanguage = options.normalizeLocale(cfg.uiLanguage);
     options.config.uiFont = String((cfg as { uiFont?: unknown }).uiFont ?? "");
-    options.config.uiSizePreset = normalizeUiSizePreset((cfg as { uiSizePreset?: unknown }).uiSizePreset);
-    applyUiSizePreset(options.config.uiSizePreset);
+    options.config.uiSizeScale = normalizeUiSizeScale((cfg as { uiSizeScale?: unknown }).uiSizeScale);
+    applyUiSizeScale(options.config.uiSizeScale);
     options.config.webAccessPort = normalizeWebAccessPort((cfg as { webAccessPort?: unknown }).webAccessPort);
     options.config.webAccessEnabled = (cfg as { webAccessEnabled?: unknown }).webAccessEnabled !== false;
     options.config.webAccessPassword = String((cfg as { webAccessPassword?: unknown }).webAccessPassword || "").trim();
@@ -502,8 +502,8 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
       options.config.hotkey = saved.hotkey;
       options.config.uiLanguage = options.normalizeLocale(saved.uiLanguage);
       options.config.uiFont = String((saved as { uiFont?: unknown }).uiFont ?? "");
-      options.config.uiSizePreset = normalizeUiSizePreset((saved as { uiSizePreset?: unknown }).uiSizePreset);
-      applyUiSizePreset(options.config.uiSizePreset);
+      options.config.uiSizeScale = normalizeUiSizeScale((saved as { uiSizeScale?: unknown }).uiSizeScale);
+      applyUiSizeScale(options.config.uiSizeScale);
       options.config.webAccessPort = normalizeWebAccessPort((saved as { webAccessPort?: unknown }).webAccessPort);
       options.config.webAccessEnabled = (saved as { webAccessEnabled?: unknown }).webAccessEnabled !== false;
       options.config.webAccessPassword = String((saved as { webAccessPassword?: unknown }).webAccessPassword || "").trim();

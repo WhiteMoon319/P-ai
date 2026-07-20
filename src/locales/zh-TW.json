@@ -2119,14 +2119,8 @@
     "tone": "飽和度",
     "textStrength": "文字強度",
     "radius": "統一圓角",
-    "uiSizePreset": "UI 介面尺寸",
-    "uiSizePresetHint": "同步調整介面字體與控制項尺寸。",
-    "sizePresets": {
-      "small": "小（75%）",
-      "default": "預設（100%）",
-      "large": "大（125%）",
-      "extraLarge": "極大（150%）"
-    },
+    "uiSizeScale": "UI 介面尺寸",
+    "uiSizeScaleHint": "連續調整介面字體與控制項尺寸（75%–150%）。",
     "depthEnabled": "層次效果",
     "noiseEnabled": "紋理效果",
     "language": "界面语言",

@@ -776,7 +776,7 @@ onBeforeUnmount(() => {
   max-width: 100%;
   overflow-x: hidden;
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: var(--app-text-sm-size);
   line-height: 1.5;
 }
 
@@ -835,19 +835,19 @@ onBeforeUnmount(() => {
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(h1,.heading-node.heading-1)) {
-  font-size: 1.02rem;
+  font-size: var(--app-text-markdown-heading-1-size);
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(h2,.heading-node.heading-2)) {
-  font-size: 0.98rem;
+  font-size: var(--app-text-markdown-heading-2-size);
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(h3,.heading-node.heading-3)) {
-  font-size: 0.94rem;
+  font-size: var(--app-text-markdown-heading-3-size);
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(h4,.heading-node.heading-4)) {
-  font-size: 0.9rem;
+  font-size: var(--app-text-markdown-heading-4-size);
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(ul,ol,.list-node)) {
@@ -879,11 +879,11 @@ onBeforeUnmount(() => {
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(:not(pre) > code,.inline-code):not(.code-block-container *)) {
-  font-size: 0.86em;
+  font-size: var(--app-text-xs-size);
 }
 
 .assistant-markdown :deep(.ecall-markdown-content :where(table,.table-node)) {
-  font-size: 0.9rem;
+  font-size: var(--app-text-sm-size);
 }
 
 .assistant-markdown :deep(.ecall-markdown-content ._mermaid) {

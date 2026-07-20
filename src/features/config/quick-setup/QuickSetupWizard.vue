@@ -30,7 +30,7 @@
           <div class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
             <button class="btn btn-sm" type="button" :disabled="stepIndex === 0 || saving" @click="stepIndex -= 1">{{ t("quickSetup.actions.previous") }}</button>
             <div class="min-w-0">
-                <div class="text-[11px] opacity-60">{{ t("quickSetup.stepCounter", { current: stepIndex + 1, total: visibleSteps.length }) }}</div>
+                <div class="text-xs opacity-60">{{ t("quickSetup.stepCounter", { current: stepIndex + 1, total: visibleSteps.length }) }}</div>
                 <h1 class="mt-1 text-base font-semibold">{{ currentStep.title }}</h1>
                 <p class="mt-1 text-xs opacity-70">{{ currentStep.summary }}</p>
             </div>
@@ -351,7 +351,7 @@ import type { ApiProviderConfigItem, ApiRequestFormat, AppBootstrapSnapshot, App
 import responseStylesJson from "../../../constants/response-styles.json";
 import { useAvatarCache } from "../../chat/composables/use-avatar-cache";
 import { isDarkAppTheme, useAppTheme } from "../../shell/composables/use-app-theme";
-import { applyUiSizePreset } from "../../shell/composables/use-ui-size-appearance";
+import { applyUiSizeScale } from "../../shell/composables/use-ui-size-appearance";
 import { defaultToolBindings } from "../utils/builtin-tools";
 import { normalizeApiRequestFormat } from "../utils/api-request-format";
 import { apiConfigDisplayName } from "../utils/api-config-display";
@@ -601,7 +601,7 @@ function defaultConfig(): AppConfig {
     hotkey: "Alt+·",
     uiLanguage: "zh-CN",
     uiFont: "auto",
-    uiSizePreset: "default",
+    uiSizeScale: 100,
     webAccessPort: 8429,
     webAccessEnabled: true,
     webAccessPassword: "",
@@ -639,7 +639,7 @@ function defaultChatSettings(): ChatSettings {
 
 function applySnapshot(snapshot: AppBootstrapSnapshot) {
   Object.assign(config, defaultConfig(), snapshot.config || {});
-  config.uiSizePreset = applyUiSizePreset(config.uiSizePreset);
+  config.uiSizeScale = applyUiSizeScale(config.uiSizeScale);
   Object.assign(chatSettings, defaultChatSettings(), snapshot.chatSettings || {});
   if (!responseStyleOptions.some((style) => style.id === chatSettings.responseStyleId)) {
     chatSettings.responseStyleId = "concise";

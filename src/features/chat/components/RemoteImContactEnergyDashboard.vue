@@ -23,7 +23,7 @@
       >
         <div class="flex items-center justify-between gap-3">
           <span class="text-xs font-semibold">远程会话能量</span>
-          <span class="inline-flex items-center gap-1.5 text-[11px]" :class="presenceClass">
+          <span class="inline-flex items-center gap-1.5 text-xs" :class="presenceClass">
             <span class="size-1.5 rounded-full" :class="presenceDotClass"></span>
             {{ presenceText }}
           </span>
@@ -39,11 +39,11 @@
             :style="{ width: `${energyFillPercent}%` }"
           ></div>
         </div>
-        <div class="mt-3 flex items-center justify-between gap-3 text-[11px] text-base-content/60">
+        <div class="mt-3 flex items-center justify-between gap-3 text-xs text-base-content/60">
           <span>恢复速率</span>
           <span class="tabular-nums">{{ recoveryText }}</span>
         </div>
-        <div v-if="lastPresenceText" class="mt-1 flex items-center justify-between gap-3 text-[11px] text-base-content/60">
+        <div v-if="lastPresenceText" class="mt-1 flex items-center justify-between gap-3 text-xs text-base-content/60">
           <span>最近在场</span>
           <span class="tabular-nums">{{ lastPresenceText }}</span>
         </div>

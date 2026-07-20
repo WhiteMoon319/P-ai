@@ -97,14 +97,30 @@
     <div class="card bg-base-100 border border-base-300">
       <div class="card-body gap-3 p-4">
         <div>
-          <h3 class="card-title text-base">{{ t("appearance.uiSizePreset") }}</h3>
-          <p class="mt-1 text-xs text-base-content/60">{{ t("appearance.uiSizePresetHint") }}</p>
+          <h3 class="card-title text-base">{{ t("appearance.uiSizeScale") }}</h3>
+          <p class="mt-1 text-xs text-base-content/60">{{ t("appearance.uiSizeScaleHint") }}</p>
         </div>
-        <SegmentedControl
-          :model-value="uiSizePreset"
-          :options="uiSizePresetOptions"
-          @change="$emit('update:uiSizePreset', $event)"
-        />
+        <div class="grid gap-2">
+          <div class="flex items-center gap-3">
+            <input
+              class="range range-primary flex-1"
+              type="range"
+              min="75"
+              max="150"
+              step="1"
+              :value="uiSizeScale"
+              :aria-label="t('appearance.uiSizeScale')"
+              @input="$emit('update:uiSizeScale', Number(($event.target as HTMLInputElement).value))"
+            />
+            <output class="w-12 text-right text-sm font-medium tabular-nums">{{ uiSizeScale }}%</output>
+          </div>
+          <div class="flex justify-between px-0.5 text-caption text-base-content/55 tabular-nums">
+            <span>75%</span>
+            <span>100%</span>
+            <span>125%</span>
+            <span>150%</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -178,12 +194,12 @@ const props = defineProps<{
   currentTheme: string;
   generatedThemeControls: GeneratedThemeControls;
   generatedThemeTokens: GeneratedThemeTokens;
-  uiSizePreset: "small" | "default" | "large" | "extraLarge";
+  uiSizeScale: number;
 }>();
 
 const emit = defineEmits<{
   (e: "update:uiLanguage", value: string): void;
-  (e: "update:uiSizePreset", value: "small" | "default" | "large" | "extraLarge"): void;
+  (e: "update:uiSizeScale", value: number): void;
   (e: "setTheme", value: string): void;
   (e: "activateGeneratedTheme"): void;
   (e: "updateGeneratedThemeControls", value: Partial<GeneratedThemeControls>): void;
@@ -192,12 +208,6 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const activeTab = ref<"preset" | "generated">("generated");
-const uiSizePresetOptions = computed(() => [
-  { value: "small" as const, label: t("appearance.sizePresets.small") },
-  { value: "default" as const, label: t("appearance.sizePresets.default") },
-  { value: "large" as const, label: t("appearance.sizePresets.large") },
-  { value: "extraLarge" as const, label: t("appearance.sizePresets.extraLarge") },
-]);
 const markdownFontScaleOptions = computed(() => [
   { value: 0, label: t("appearance.markdownFontScaleLight") },
   { value: 1, label: t("appearance.markdownFontScaleHeavy") },

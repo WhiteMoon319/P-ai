@@ -61,7 +61,7 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
     backgroundVoiceScreenshotKeywords: bindings.backgroundVoiceScreenshotKeywords,
     backgroundVoiceScreenshotMode: bindings.backgroundVoiceScreenshotMode,
     instructionPresets: bindings.instructionPresets,
-    normalizeUiSizePreset: bindings.normalizeUiSizePreset,
+    normalizeUiSizeScale: bindings.normalizeUiSizeScale,
     updateGithubUpdateMethod: bindings.updateGithubUpdateMethod,
     normalizeRuntimeConfigNumbers: bindings.normalizeRuntimeConfigNumbers,
     createApiConfig: bindings.createApiConfig,

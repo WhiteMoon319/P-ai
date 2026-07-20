@@ -218,9 +218,9 @@
             :current-theme="currentTheme"
             :generated-theme-controls="generatedThemeControls"
             :generated-theme-tokens="generatedThemeTokens"
-            :ui-size-preset="uiSizePreset"
+            :ui-size-scale="uiSizeScale"
             @update:ui-language="$emit('update:uiLanguage', $event)"
-            @update:ui-size-preset="$emit('update:uiSizePreset', $event)"
+            @update:ui-size-scale="$emit('update:uiSizeScale', $event)"
             @set-theme="$emit('setTheme', $event)"
             @activate-generated-theme="$emit('activateGeneratedTheme')"
             @update-generated-theme-controls="$emit('updateGeneratedThemeControls', $event)"
@@ -294,7 +294,7 @@
           <button class="btn btn-sm" :disabled="!avatarEditorTargetId || avatarSaving" @click="openAvatarPickerForEditor">{{ t("config.persona.uploadAvatar") }}</button>
           <button class="btn btn-sm btn-ghost" :disabled="!avatarEditorTargetHasAvatar || avatarSaving" @click="clearAvatarFromEditor">{{ t("config.persona.clearAvatar") }}</button>
         </div>
-        <div class="mt-2 text-[11px] opacity-60">{{ t("config.persona.pasteImageHint") }}</div>
+        <div class="mt-2 text-xs opacity-60">{{ t("config.persona.pasteImageHint") }}</div>
         <div v-if="avatarError" class="mt-2 text-sm text-error break-all">{{ avatarError }}</div>
       </div>
       <div class="modal-action mt-2">
@@ -454,7 +454,7 @@ const props = defineProps<{
   currentTheme: string;
   generatedThemeControls: GeneratedThemeControls;
   generatedThemeTokens: GeneratedThemeTokens;
-  uiSizePreset: "small" | "default" | "large" | "extraLarge";
+  uiSizeScale: number;
   selectedApiConfig: ApiConfigItem | null;
   toolApiConfig: ApiConfigItem | null;
   baseUrlReference: string;
@@ -507,7 +507,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "update:configTab", value: ConfigTab): void;
   (e: "update:uiLanguage", value: string): void;
-  (e: "update:uiSizePreset", value: "small" | "default" | "large" | "extraLarge"): void;
+  (e: "update:uiSizeScale", value: number): void;
   (e: "update:githubUpdateMethod", value: AppConfig["githubUpdateMethod"]): void;
   (e: "update:personaEditorId", value: string): void;
   (e: "update:assistantDepartmentAgentId", value: string): void;

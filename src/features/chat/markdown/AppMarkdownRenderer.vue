@@ -23,7 +23,7 @@
       :style="toolcallPopupStyle"
       data-toolcall-popup="true"
     >
-      <div class="border-b border-base-300/70 px-2 py-1.5 text-[11px] font-semibold text-base-content/80">
+      <div class="border-b border-base-300/70 px-2 py-1.5 text-xs font-semibold text-base-content/80">
         {{ activeToolcallPopupTitle }}
       </div>
       <div
@@ -43,7 +43,7 @@
               :class="index > 0 ? 'border-t border-base-300/60' : ''"
             >
               <div class="grid grid-cols-[1.1rem_minmax(0,1fr)] items-start gap-x-1.5 text-xs leading-relaxed text-base-content/75">
-                <span class="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-base-200 text-[10px] font-medium leading-none text-base-content/65">
+                <span class="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-base-200 text-caption font-medium leading-none text-base-content/65">
                   {{ index + 1 }}
                 </span>
                 <div class="min-w-0 whitespace-normal break-all font-normal leading-relaxed">
@@ -68,7 +68,7 @@
               </div>
               <pre
                 v-if="preview.body"
-                class="ml-[1.6rem] mt-1 m-0 whitespace-pre-wrap break-all rounded bg-base-200/50 p-1 text-[11px] leading-4 text-base-content/75"
+                class="ml-[1.6rem] mt-1 m-0 whitespace-pre-wrap break-all rounded bg-base-200/50 p-1 text-xs leading-4 text-base-content/75"
               ><code>{{ preview.body }}</code></pre>
             </div>
           </div>
@@ -1119,7 +1119,7 @@ const MathBlock = defineComponent({
   max-width: 100%;
   overflow-wrap: anywhere;
   white-space: normal;
-  font-size: 0.875rem;
+  font-size: var(--app-text-sm-size);
   line-height: 1.5;
   font-weight: var(--ecall-md-body-weight-setting, var(--app-font-weight, 400));
   font-variation-settings: "wght" var(--ecall-md-body-weight-setting, var(--app-font-weight, 400));
@@ -1141,10 +1141,10 @@ const MathBlock = defineComponent({
   line-height: 1.45;
 }
 
-h1.ecall-md-heading { font-size: 1.02rem; }
-h2.ecall-md-heading { font-size: 0.98rem; }
-h3.ecall-md-heading { font-size: 0.94rem; }
-h4.ecall-md-heading { font-size: 0.9rem; }
+h1.ecall-md-heading { font-size: var(--app-text-markdown-heading-1-size); }
+h2.ecall-md-heading { font-size: var(--app-text-markdown-heading-2-size); }
+h3.ecall-md-heading { font-size: var(--app-text-markdown-heading-3-size); }
+h4.ecall-md-heading { font-size: var(--app-text-markdown-heading-4-size); }
 
 /* ==================== Paragraph ==================== */
 .ecall-md-paragraph {
@@ -1183,7 +1183,7 @@ h4.ecall-md-heading { font-size: 0.9rem; }
 }
 
 .ecall-md-toolcall-ref-count {
-  font-size: 0.62rem;
+  font-size: var(--app-text-micro-size);
   font-weight: 700;
   line-height: 1;
   pointer-events: none;
@@ -1203,7 +1203,7 @@ h4.ecall-md-heading { font-size: 0.9rem; }
 /* ==================== Footnotes ==================== */
 .ecall-md-footnote-ref {
   margin-left: 0.08rem;
-  font-size: 0.72em;
+  font-size: var(--app-text-caption-size);
   font-weight: var(--ecall-md-strong-weight-setting, var(--app-font-strong-weight, 600));
   font-variation-settings: "wght" var(--ecall-md-strong-weight-setting, var(--app-font-strong-weight, 600));
   line-height: 0;
@@ -1230,7 +1230,7 @@ h4.ecall-md-heading { font-size: 0.9rem; }
   padding-top: 0.45rem;
   border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent);
   color: color-mix(in srgb, currentColor 76%, transparent);
-  font-size: 0.78rem;
+  font-size: var(--app-text-xs-size);
   line-height: 1.45;
 }
 
@@ -1305,7 +1305,7 @@ ul.ecall-md-list {
   border-spacing: 0;
   border: 1px solid color-mix(in srgb, var(--color-base-300) 72%, transparent);
   border-radius: inherit;
-  font-size: 0.84rem;
+  font-size: var(--app-text-xs-size);
   line-height: 1.45;
   overflow: hidden;
 }
@@ -1356,7 +1356,7 @@ ul.ecall-md-list {
 }
 
 .ecall-md-code-lang {
-  font-size: 0.72rem;
+  font-size: var(--app-text-caption-size);
   color: color-mix(in srgb, currentColor 80%, transparent);
 }
 
@@ -1371,7 +1371,7 @@ ul.ecall-md-list {
   border: none;
   background: none;
   padding: 0.1rem 0.35rem;
-  font-size: 0.72rem;
+  font-size: var(--app-text-caption-size);
   color: color-mix(in srgb, currentColor 80%, transparent);
   cursor: pointer;
   border-radius: 0.25rem;
@@ -1401,7 +1401,7 @@ ul.ecall-md-list {
   font-family: var(--app-code-font-family);
   font-weight: var(--ecall-md-code-weight-setting, var(--app-font-medium-weight, 500));
   font-variation-settings: "wght" var(--ecall-md-code-weight-setting, var(--app-font-medium-weight, 500));
-  font-size: 0.82rem;
+  font-size: var(--app-text-xs-size);
   line-height: 1.55;
   margin: 0 !important;
   white-space: pre;
@@ -1463,7 +1463,7 @@ ul.ecall-md-list {
   font-family: var(--app-code-font-family);
   font-weight: var(--ecall-md-code-weight-setting, var(--app-font-medium-weight, 500));
   font-variation-settings: "wght" var(--ecall-md-code-weight-setting, var(--app-font-medium-weight, 500));
-  font-size: 0.86em;
+  font-size: var(--app-text-xs-size);
 }
 
 /* ==================== Links ==================== */
@@ -1511,7 +1511,7 @@ ul.ecall-md-list {
   border: 1px dashed color-mix(in srgb, currentColor 28%, transparent);
   border-radius: 0.5rem;
   color: color-mix(in srgb, currentColor 62%, transparent);
-  font-size: 0.78rem;
+  font-size: var(--app-text-xs-size);
   line-height: 1.25;
   vertical-align: middle;
   cursor: zoom-in;
@@ -1592,7 +1592,7 @@ ul.ecall-md-list {
   padding: 0.5rem 2.2rem 0.5rem 0.65rem;
   background: color-mix(in srgb, currentColor 8%, transparent);
   border-radius: 0.4rem;
-  font-size: 0.82rem;
+  font-size: var(--app-text-xs-size);
   overflow-x: auto;
 }
 
@@ -1644,7 +1644,7 @@ ul.ecall-md-list {
   justify-content: center;
   text-align: center;
   color: color-mix(in srgb, currentColor 55%, transparent);
-  font-size: 0.82rem;
+  font-size: var(--app-text-xs-size);
 }
 
 .ecall-md-mermaid-error {
@@ -1655,19 +1655,19 @@ ul.ecall-md-list {
   padding: 0.5rem 2.2rem 0.5rem 0.65rem;
   background: color-mix(in srgb, currentColor 8%, transparent);
   border-radius: 0.4rem;
-  font-size: 0.82rem;
+  font-size: var(--app-text-xs-size);
   overflow-x: auto;
 }
 
 .ecall-md-mermaid-error-msg {
   margin-top: 0.25rem;
-  font-size: 0.75rem;
+  font-size: var(--app-text-xs-size);
   color: var(--color-error, #ef4444);
 }
 
 /* ==================== Document Variant ==================== */
 .ecall-md-document {
-  font-size: 0.95rem;
+  font-size: var(--app-text-base-size);
   line-height: 1.7;
 }
 
@@ -1678,10 +1678,10 @@ ul.ecall-md-list {
   line-height: 1.35;
 }
 
-.ecall-md-document h1.ecall-md-heading { font-size: 1.5rem; }
-.ecall-md-document h2.ecall-md-heading { font-size: 1.28rem; }
-.ecall-md-document h3.ecall-md-heading { font-size: 1.12rem; }
-.ecall-md-document h4.ecall-md-heading { font-size: 1.02rem; }
+.ecall-md-document h1.ecall-md-heading { font-size: var(--app-text-markdown-document-heading-1-size); }
+.ecall-md-document h2.ecall-md-heading { font-size: var(--app-text-markdown-document-heading-2-size); }
+.ecall-md-document h3.ecall-md-heading { font-size: var(--app-text-markdown-document-heading-3-size); }
+.ecall-md-document h4.ecall-md-heading { font-size: var(--app-text-markdown-document-heading-4-size); }
 
 .ecall-md-document h1.ecall-md-heading,
 .ecall-md-document h2.ecall-md-heading {
@@ -1703,7 +1703,7 @@ ul.ecall-md-list {
 .ecall-md-document .ecall-md-footnotes {
   margin: 1.1rem 0 0.45rem;
   padding-top: 0.65rem;
-  font-size: 0.84rem;
+  font-size: var(--app-text-xs-size);
   line-height: 1.65;
 }
 
@@ -1722,7 +1722,7 @@ ul.ecall-md-list {
 }
 
 .ecall-md-document .ecall-md-table {
-  font-size: 0.88rem;
+  font-size: var(--app-text-sm-size);
   line-height: 1.55;
 }
 
@@ -1741,7 +1741,7 @@ ul.ecall-md-list {
 
 .ecall-md-document .ecall-md-code-body {
   padding: 0.85rem 1.1rem;
-  font-size: 0.85rem;
+  font-size: var(--app-text-sm-size);
   line-height: 1.6;
 }
 

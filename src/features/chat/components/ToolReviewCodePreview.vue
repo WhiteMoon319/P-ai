@@ -197,7 +197,7 @@ onBeforeUnmount(() => {
   color: var(--color-base-content);
   background: var(--color-base-200);
   font-family: var(--app-code-font-family);
-  font-size: 12px;
+  font-size: var(--app-text-xs-size);
   line-height: 1.5;
 }
 

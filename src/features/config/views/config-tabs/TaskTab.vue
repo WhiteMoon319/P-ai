@@ -44,8 +44,8 @@
                 <div class="font-medium text-sm wrap-break-word">{{ task.goal }}</div>
                 <span class="badge badge-ghost">{{ completionStateLabel(task.completionState) }}</span>
               </div>
-              <div class="mt-1 text-[11px] opacity-60 line-clamp-2">{{ task.todo || t("config.task.noTodo") }}</div>
-              <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] opacity-50">
+              <div class="mt-1 text-xs opacity-60 line-clamp-2">{{ task.todo || t("config.task.noTodo") }}</div>
+              <div class="mt-2 flex flex-wrap items-center gap-2 text-xs opacity-50">
                 <span>#{{ task.orderIndex }}</span>
                 <span v-if="task.trigger.next_run_at">{{ formatTaskTime(task.trigger.next_run_at) }}</span>
                 <span v-else>{{ formatTaskTime(task.updatedAtLocal) }}</span>

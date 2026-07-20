@@ -159,7 +159,7 @@
                     :open="bubbleDemoActivityOpen(message.id)"
                     @toggle="onBubbleDemoActivityToggle(message.id, $event)"
                   >
-                    <summary class="collapse-title px-0 py-0.5 min-h-0 text-[12px] font-normal flex items-center gap-1.5 text-base-content/42 hover:bg-base-200">
+                    <summary class="collapse-title px-0 py-0.5 min-h-0 text-sm font-normal flex items-center gap-1.5 text-base-content/42 hover:bg-base-200">
                       <span class="flex min-w-0 flex-1 items-center gap-1.5">
                         <span class="shrink-0">思考与工具</span>
                         <span v-if="message.tools?.length" class="inline-flex h-3 items-center text-base-content/30">·</span>

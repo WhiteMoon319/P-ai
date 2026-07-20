@@ -177,7 +177,7 @@ function handleWorkspaceAutonomousModeChange(requestId: string) {
 
         <div
           v-if="item.canRememberWorkspace && workspaceRememberLabel(item)"
-          class="mt-2 text-[11px] text-base-content/45"
+          class="mt-2 text-xs text-base-content/45"
         >
           {{ workspaceRememberLabel(item) }}
         </div>

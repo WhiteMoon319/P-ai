@@ -94,7 +94,7 @@
                 {{ card.current }}
                 <div
                   v-if="card.installerKind && runtimeInstallStatus[card.installerKind]"
-                  class="mt-1 text-[11px]"
+                  class="mt-1 text-xs"
                   :class="runtimeInstallStatusError[card.installerKind] ? 'text-error' : 'text-success'"
                 >
                   {{ runtimeInstallStatus[card.installerKind] }}

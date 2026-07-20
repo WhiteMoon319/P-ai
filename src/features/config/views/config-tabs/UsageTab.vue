@@ -192,8 +192,8 @@
                       </div>
                       <div class="min-w-0">
                         <div class="truncate font-medium">{{ displayConversationTitle(item) }}</div>
-                        <div class="text-[11px] opacity-60">{{ item.conversationId }}</div>
-                        <div class="text-[11px] opacity-60">{{ formatConversationMeta(item) }}</div>
+                        <div class="text-xs opacity-60">{{ item.conversationId }}</div>
+                        <div class="text-xs opacity-60">{{ formatConversationMeta(item) }}</div>
                       </div>
                     </div>
                   </td>

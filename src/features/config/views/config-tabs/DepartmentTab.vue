@@ -84,7 +84,7 @@
 
           <div class="divide-y divide-base-300">
             <div class="min-w-0 px-4 py-4">
-              <div class="mb-2 text-[11px] uppercase tracking-wide opacity-40">{{ t("config.department.name") }}</div>
+              <div class="mb-2 text-xs uppercase tracking-wide opacity-40">{{ t("config.department.name") }}</div>
               <input
                 v-model.trim="selectedDepartment.name"
                 class="input input-bordered input-sm w-full"
@@ -101,7 +101,7 @@
             </div>
 
             <div class="px-4 py-4">
-              <div class="mb-2 text-[11px] uppercase tracking-wide opacity-40">{{ t("config.department.assignee") }}</div>
+              <div class="mb-2 text-xs uppercase tracking-wide opacity-40">{{ t("config.department.assignee") }}</div>
               <div class="grid gap-2">
                 <div v-if="availableAssigneePersonas.length === 0" class="text-sm opacity-60">
                   {{ t("config.department.assigneePlaceholder") }}
@@ -126,7 +126,7 @@
             </div>
 
             <div class="px-4 py-4">
-              <div class="mb-2 text-[11px] uppercase tracking-wide opacity-40">{{ t("config.department.model") }}</div>
+              <div class="mb-2 text-xs uppercase tracking-wide opacity-40">{{ t("config.department.model") }}</div>
               <div class="grid min-w-0 gap-3">
                 <div
                   v-for="(apiId, idx) in selectedDepartmentVisibleApiConfigIds"
@@ -199,7 +199,7 @@
                 />
                 <span class="min-w-0">
                   <span class="block text-xs font-normal">{{ t("config.department.modelFailureFallback") }}</span>
-                  <span class="block text-[11px] opacity-55">
+                  <span class="block text-xs opacity-55">
                     {{ selectedDepartmentModelFailureFallbackEnabled
                       ? t("config.department.modelFallbackHint")
                       : t("config.department.singleModelHint") }}
@@ -212,11 +212,11 @@
               >
                 {{ t("config.department.modelSwitchCostWarning") }}
               </div>
-              <div class="mt-1 text-[11px] opacity-40">{{ t("config.department.allowedModelsNote") }}</div>
+              <div class="mt-1 text-xs opacity-40">{{ t("config.department.allowedModelsNote") }}</div>
             </div>
 
             <div class="px-4 py-4">
-              <div class="mb-2 text-[11px] uppercase tracking-wide opacity-40">{{ t("config.department.summary") }}</div>
+              <div class="mb-2 text-xs uppercase tracking-wide opacity-40">{{ t("config.department.summary") }}</div>
               <textarea
                 v-model="selectedDepartment.summary"
                 class="textarea textarea-bordered textarea-sm min-h-20 w-full"
@@ -227,7 +227,7 @@
             </div>
 
             <div class="px-4 py-4">
-              <div class="mb-2 text-[11px] uppercase tracking-wide opacity-40">{{ t("config.department.guide") }}</div>
+              <div class="mb-2 text-xs uppercase tracking-wide opacity-40">{{ t("config.department.guide") }}</div>
               <textarea
                 v-model="selectedDepartment.guide"
                 class="textarea textarea-bordered textarea-sm min-h-28 w-full"
@@ -235,13 +235,13 @@
                 :disabled="selectedDepartmentIsLockedPreset"
                 @input="touchSelectedDepartment"
               />
-              <div class="mt-2 text-[11px] opacity-40">{{ t("config.department.guideHint") }}</div>
+              <div class="mt-2 text-xs opacity-40">{{ t("config.department.guideHint") }}</div>
             </div>
 
             <div class="px-4 py-4">
               <div class="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <div class="text-[11px] uppercase tracking-wide opacity-40">{{ t("config.department.permissionTitle") }}</div>
+                  <div class="text-xs uppercase tracking-wide opacity-40">{{ t("config.department.permissionTitle") }}</div>
                   <div class="mt-1 text-xs opacity-60">{{ t("config.department.permissionHint") }}</div>
                 </div>
                 <input

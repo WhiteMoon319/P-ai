@@ -818,8 +818,8 @@ fn default_ui_font() -> String {
     "auto".to_string()
 }
 
-fn default_ui_size_preset() -> String {
-    "default".to_string()
+fn default_ui_size_scale() -> u16 {
+    100
 }
 
 fn default_web_access_port() -> u16 {
@@ -874,11 +874,33 @@ fn normalize_skipped_github_update_version(value: &str) -> String {
     value.trim().to_string()
 }
 
-fn normalize_ui_size_preset(value: &str) -> String {
-    match value.trim() {
-        "small" | "default" | "large" | "extraLarge" => value.trim().to_string(),
-        _ => default_ui_size_preset(),
-    }
+fn normalize_ui_size_scale(value: u16) -> u16 {
+    value.clamp(75, 150)
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum UiSizeScaleValue {
+    Scale(u16),
+    LegacyPreset(String),
+}
+
+fn deserialize_ui_size_scale<'de, D>(deserializer: D) -> Result<u16, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = UiSizeScaleValue::deserialize(deserializer)?;
+    let scale = match value {
+        UiSizeScaleValue::Scale(scale) => scale,
+        UiSizeScaleValue::LegacyPreset(preset) => match preset.trim() {
+            "small" => 75,
+            "default" => 100,
+            "large" => 125,
+            "extraLarge" => 150,
+            _ => default_ui_size_scale(),
+        },
+    };
+    Ok(normalize_ui_size_scale(scale))
 }
 
 fn default_terminal_shell_kind() -> String {
@@ -1024,8 +1046,13 @@ struct AppConfig {
     ui_language: String,
     #[serde(default = "default_ui_font")]
     ui_font: String,
-    #[serde(default = "default_ui_size_preset")]
-    ui_size_preset: String,
+    #[serde(
+        default = "default_ui_size_scale",
+        alias = "uiSizePreset",
+        alias = "ui_size_preset",
+        deserialize_with = "deserialize_ui_size_scale"
+    )]
+    ui_size_scale: u16,
     #[serde(default = "default_web_access_port")]
     web_access_port: u16,
     #[serde(default = "default_web_access_enabled")]
@@ -1088,7 +1115,7 @@ impl Default for AppConfig {
             hotkey: "Alt+·".to_string(),
             ui_language: default_ui_language(),
             ui_font: default_ui_font(),
-            ui_size_preset: default_ui_size_preset(),
+            ui_size_scale: default_ui_size_scale(),
             web_access_port: default_web_access_port(),
             web_access_enabled: default_web_access_enabled(),
             web_access_password: default_web_access_password(),

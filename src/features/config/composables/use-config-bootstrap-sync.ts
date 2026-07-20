@@ -1,5 +1,5 @@
 import type { Ref } from "vue";
-import { applyUiSizePreset } from "../../shell/composables/use-ui-size-appearance";
+import { applyUiSizeScale } from "../../shell/composables/use-ui-size-appearance";
 import type { AppConfig, PromptCommandPreset } from "../../../types/app";
 
 type RuntimeNumberNormalizer = (
@@ -74,16 +74,16 @@ export function applyConfigBootstrapUpdate(bindings: {
   createApiConfig: (id: string) => AppConfig["apiConfigs"][number];
   buildConfigSnapshotJson: () => string;
   lastSavedConfigJson: Ref<string>;
-  normalizeUiSizePreset: (value: unknown) => AppConfig["uiSizePreset"];
+  normalizeUiSizeScale: (value: unknown) => AppConfig["uiSizeScale"];
   updateGithubUpdateMethod: (value: unknown) => void;
   normalizeRuntimeConfigNumbers?: RuntimeNumberNormalizer;
 }, payload: Record<string, unknown>) {
   if (!payload || typeof payload !== "object") return;
   if ("hotkey" in payload) bindings.config.hotkey = String(payload.hotkey ?? "").trim();
   if ("uiFont" in payload) bindings.config.uiFont = String(payload.uiFont ?? "");
-  if ("uiSizePreset" in payload) {
-    bindings.config.uiSizePreset = bindings.normalizeUiSizePreset(payload.uiSizePreset);
-    applyUiSizePreset(bindings.config.uiSizePreset);
+  if ("uiSizeScale" in payload) {
+    bindings.config.uiSizeScale = bindings.normalizeUiSizeScale(payload.uiSizeScale);
+    applyUiSizeScale(bindings.config.uiSizeScale);
   }
   if ("webAccessPort" in payload) bindings.config.webAccessPort = normalizeWebAccessPort(payload.webAccessPort);
   if ("webAccessEnabled" in payload) bindings.config.webAccessEnabled = payload.webAccessEnabled !== false;

@@ -15,13 +15,13 @@
               {{ hotkeyCapturing ? t("config.hotkey.recording") : t("config.hotkey.recordButton") }}
             </button>
           </div>
-          <div class="text-[11px] opacity-70">{{ hotkeyCaptureHint }}</div>
+          <div class="text-xs opacity-70">{{ hotkeyCaptureHint }}</div>
           <div>
             <button class="btn btn-sm btn-primary shrink-0" @click="$emit('summonChatNow')">
               {{ t("config.hotkey.callNowButton") }}
             </button>
           </div>
-          <div class="text-[11px] opacity-60">{{ t("config.hotkey.callNowHint") }}</div>
+          <div class="text-xs opacity-60">{{ t("config.hotkey.callNowHint") }}</div>
         </div>
       </div>
     </div>

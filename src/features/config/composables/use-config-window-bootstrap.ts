@@ -40,7 +40,7 @@ export function useConfigWindowBootstrap(bindings: Record<string, any>) {
         createApiConfig: bindings.createApiConfig,
         buildConfigSnapshotJson: bindings.buildConfigSnapshotJson,
         lastSavedConfigJson: bindings.lastSavedConfigJson,
-        normalizeUiSizePreset: bindings.normalizeUiSizePreset,
+        normalizeUiSizeScale: bindings.normalizeUiSizeScale,
         updateGithubUpdateMethod: bindings.updateGithubUpdateMethod,
         normalizeRuntimeConfigNumbers: bindings.normalizeRuntimeConfigNumbers,
       }, payload);

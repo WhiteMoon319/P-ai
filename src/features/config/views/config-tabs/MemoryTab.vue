@@ -436,7 +436,7 @@
                             >
                               {{ kw }}
                             </span>
-                            <span v-if="showMemoryTags && !memory.tags.length" class="opacity-40 text-[11px]">{{ t('config.memory.noTags') }}</span>
+                            <span v-if="showMemoryTags && !memory.tags.length" class="opacity-40 text-xs">{{ t('config.memory.noTags') }}</span>
                           </span>
                           <button
                             class="btn btn-sm btn-ghost btn-circle"
@@ -448,7 +448,7 @@
 
                         <!-- 搜索分数 -->
                         <div v-if="isSearchMode" class="pt-2">
-                          <div class="flex flex-wrap gap-3 text-[11px] opacity-60">
+                          <div class="flex flex-wrap gap-3 text-xs opacity-60">
                             <span>BM25: {{ (memory.bm25Score ?? 0).toFixed(3) }}</span>
                             <span>{{ t('sidebar.memoryVectorScore') }}: {{ (memory.vectorScore ?? 0).toFixed(3) }}</span>
                             <span>{{ t('config.memory.rerankScoreLabel') }}: {{ (memory.rerankScore ?? 0).toFixed(3) }}</span>

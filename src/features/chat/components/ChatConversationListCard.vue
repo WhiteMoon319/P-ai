@@ -85,7 +85,7 @@
                     </div>
                     <span
                       v-if="isRecentConversationSection(section.key)"
-                      class="pointer-events-none absolute bottom-0 left-1/2 z-20 inline-block max-w-10 -translate-x-1/2 translate-y-1/3 truncate rounded-full bg-neutral px-1.5 py-[1px] text-[9px] font-normal leading-3 text-neutral-content shadow-sm"
+                      class="pointer-events-none absolute bottom-0 left-1/2 z-20 inline-block max-w-10 -translate-x-1/2 translate-y-1/3 truncate rounded-full bg-neutral px-1.5 py-[1px] text-micro font-normal leading-3 text-neutral-content shadow-sm"
                       :title="conversationSourceBadgeLabel(item)"
                     >
                       {{ conversationSourceBadgeLabel(item) }}
@@ -122,7 +122,7 @@
                     </div>
                   </div>
                   <div class="flex shrink-0 items-center gap-1">
-                    <span class="conversation-time-label text-[11px] text-base-content/60">
+                    <span class="conversation-time-label text-xs text-base-content/60">
                       {{ formatConversationTime(item.updatedAt) }}
                     </span>
                     <FloatingConversationMenu
@@ -195,10 +195,10 @@
                   <div class="flex shrink-0 items-center gap-2">
                     <span v-if="conversationBusy(item)" class="loading loading-spinner loading-xs text-primary" :title="conversationStatusText(item)"></span>
                     <span v-else-if="conversationPipelineStatus(item) === 'error'" class="badge badge-error badge-xs">{{ t("common.failed") }}</span>
-                    <span v-else-if="conversationStatusText(item)" class="text-[11px] text-base-content/60">{{ conversationStatusText(item) }}</span>
+                    <span v-else-if="conversationStatusText(item)" class="text-xs text-base-content/60">{{ conversationStatusText(item) }}</span>
                     <span
                       v-if="unreadCountBadge(item)"
-                      class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-error px-1.5 text-[11px] font-medium text-error-content"
+                      class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-error px-1.5 text-xs font-medium text-error-content"
                     >
                       {{ unreadCountBadge(item) }}
                     </span>

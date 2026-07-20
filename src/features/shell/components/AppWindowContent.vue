@@ -16,7 +16,7 @@
       :current-theme="currentTheme"
       :generated-theme-controls="generatedThemeControls"
       :generated-theme-tokens="generatedThemeTokens"
-      :ui-size-preset="config.uiSizePreset ?? 'default'"
+      :ui-size-scale="config.uiSizeScale ?? 100"
       :selected-api-config="selectedApiConfig"
       :tool-api-config="toolApiConfig"
       :base-url-reference="baseUrlReference"
@@ -75,7 +75,7 @@
       @update:instruction-presets="updateInstructionPresets"
       @patch-conversation-api-settings="patchConversationApiSettings"
       @patch-chat-settings="patchChatSettings"
-      @update:ui-size-preset="updateUiSizePreset"
+      @update:ui-size-scale="updateUiSizeScale"
       @update:github-update-method="updateGithubUpdateMethod"
       @set-theme="setTheme"
       @activate-generated-theme="activateGeneratedTheme"
@@ -724,7 +724,7 @@ const props = defineProps<{
   updateInstructionPresets: (value: PromptCommandPreset[]) => void;
   patchConversationApiSettings: (value: import("../../../types/app").ConversationApiSettingsPatch) => void;
   patchChatSettings: (value: import("../../../types/app").ChatSettingsPatch) => void;
-  updateUiSizePreset: (value: "small" | "default" | "large" | "extraLarge") => void;
+  updateUiSizeScale: (value: number) => void;
   updateGithubUpdateMethod: (value: import("../../../types/app").GithubUpdateMethod) => void;
   setTheme: (value: string) => void;
   activateGeneratedTheme: () => void;

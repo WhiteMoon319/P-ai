@@ -82,7 +82,7 @@
             <div class="flex items-center justify-between gap-2">
               <div>
                 <div class="text-xs font-medium uppercase tracking-wide opacity-70">Rate Limits</div>
-                <div class="text-[11px] opacity-60">{{ t("config.api.codexRateLimitHint") }}</div>
+                <div class="text-xs opacity-60">{{ t("config.api.codexRateLimitHint") }}</div>
               </div>
               <span v-if="currentCodexRateLimitBusy" class="loading loading-spinner loading-xs"></span>
             </div>
@@ -120,7 +120,7 @@
                       <span class="font-medium">{{ resolveCodexWindowLabel(snapshot.primary, "5h") }}</span>
                       <span class="text-xs opacity-80">{{ formatCodexRemainingText(snapshot.primary) }}</span>
                     </div>
-                    <div v-if="snapshot.primary.resetsAt" class="mt-1 text-[11px] opacity-70">
+                    <div v-if="snapshot.primary.resetsAt" class="mt-1 text-xs opacity-70">
                       {{ t("config.api.codexResetAt", { time: formatCodexResetAt(snapshot.primary.resetsAt) }) }}
                     </div>
                   </div>
@@ -133,7 +133,7 @@
                       <span class="font-medium">{{ resolveCodexWindowLabel(snapshot.secondary, "weekly") }}</span>
                       <span class="text-xs opacity-80">{{ formatCodexRemainingText(snapshot.secondary) }}</span>
                     </div>
-                    <div v-if="snapshot.secondary.resetsAt" class="mt-1 text-[11px] opacity-70">
+                    <div v-if="snapshot.secondary.resetsAt" class="mt-1 text-xs opacity-70">
                       {{ t("config.api.codexResetAt", { time: formatCodexResetAt(snapshot.secondary.resetsAt) }) }}
                     </div>
                   </div>
@@ -192,7 +192,7 @@
           </div>
         </div>
 
-        <div class="text-[11px] text-error">{{ modelRefreshError || " " }}</div>
+        <div class="text-xs text-error">{{ modelRefreshError || " " }}</div>
 
         <div class="grid gap-3">
           <div v-for="modelCard in provider.models" :key="modelCard.id" class="card border border-base-300 bg-base-200/50">

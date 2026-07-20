@@ -28,7 +28,7 @@
               >
                 {{ kw }}
               </span>
-              <span v-if="memory.tags.length === 0" class="text-[11px] opacity-60">-</span>
+              <span v-if="memory.tags.length === 0" class="text-xs opacity-60">-</span>
             </div>
           </div>
         </div>

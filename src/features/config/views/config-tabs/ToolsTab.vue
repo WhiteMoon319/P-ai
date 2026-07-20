@@ -25,7 +25,7 @@
           </div>
         </div>
         <div v-if="isWindowsHost" class="grid gap-2">
-          <div class="text-[12px] font-medium">{{ t("config.tools.terminalRuntime") }}</div>
+          <div class="text-sm font-medium">{{ t("config.tools.terminalRuntime") }}</div>
           <select
             class="select select-bordered select-sm w-full"
             :value="terminalShellKindValue"
@@ -36,10 +36,10 @@
               {{ item.label }}
             </option>
           </select>
-          <div v-if="t('config.tools.terminalRuntimeHint')" class="text-[11px] opacity-70">
+          <div v-if="t('config.tools.terminalRuntimeHint')" class="text-xs opacity-70">
             {{ t("config.tools.terminalRuntimeHint") }}
           </div>
-          <div v-if="showGitInstallHintInWorkspace" class="text-[11px] bg-warning/10 text-base-content rounded px-2 py-1 flex items-center gap-2">
+          <div v-if="showGitInstallHintInWorkspace" class="text-xs bg-warning/10 text-base-content rounded px-2 py-1 flex items-center gap-2">
             <span>{{ t("config.tools.gitRequiredHint") }}</span>
             <button class="btn btn-sm bg-base-100" @click="openGitDownloadLink">
               {{ t("config.tools.installGit") }}
@@ -47,10 +47,10 @@
           </div>
         </div>
       </div>
-      <div class="mt-3 px-4 pb-4 text-[11px] opacity-70">
+      <div class="mt-3 px-4 pb-4 text-xs opacity-70">
         {{ t('config.tools.workspaceHint') }}
       </div>
-      <div v-if="shellWorkspaceStatus" class="px-4 pb-4 text-[11px]" :class="shellWorkspaceStatusError ? 'text-error' : 'opacity-70'">
+      <div v-if="shellWorkspaceStatus" class="px-4 pb-4 text-xs" :class="shellWorkspaceStatusError ? 'text-error' : 'opacity-70'">
         {{ shellWorkspaceStatus }}
       </div>
     </div>
@@ -59,7 +59,7 @@
       <div class="px-4 py-3 border-b border-base-300 flex items-center justify-between gap-3">
         <div>
           <div class="font-medium">{{ t("config.tools.systemCatalogTitle") }}</div>
-          <div class="text-[11px] opacity-60">{{ t("config.tools.systemCatalogReadonly") }}</div>
+          <div class="text-xs opacity-60">{{ t("config.tools.systemCatalogReadonly") }}</div>
         </div>
       </div>
 
@@ -71,12 +71,12 @@
         >
           <div class="min-w-0">
             <div class="font-medium">{{ item.function.name }}</div>
-            <div class="text-[11px] opacity-60 whitespace-pre-wrap">{{ item.function.description || t("config.mcpToolList.noDescription") }}</div>
+            <div class="text-xs opacity-60 whitespace-pre-wrap">{{ item.function.description || t("config.mcpToolList.noDescription") }}</div>
             <div v-if="toolParameterSummary(item.function.name).length" class="mt-1 flex flex-wrap gap-1">
               <span
                 v-for="paramText in toolParameterSummary(item.function.name)"
                 :key="`${item.function.name}-param-${paramText}`"
-                class="text-[10px] px-1.5 py-0.5 rounded bg-base-200 border border-base-300/70 opacity-80"
+                class="text-caption px-1.5 py-0.5 rounded bg-base-200 border border-base-300/70 opacity-80"
               >
                 {{ paramText }}
               </span>
@@ -85,7 +85,7 @@
               <pre
                 v-for="example in toolParameterExamples(item.function.name)"
                 :key="`${item.function.name}-example-${example}`"
-                class="text-[10px] leading-4 px-2 py-1 rounded bg-base-200 border border-base-300/70 opacity-90 whitespace-pre-wrap overflow-x-auto"
+                class="text-caption leading-4 px-2 py-1 rounded bg-base-200 border border-base-300/70 opacity-90 whitespace-pre-wrap overflow-x-auto"
               >{{ example }}</pre>
             </div>
           </div>

@@ -19,7 +19,7 @@
     <Transition name="wdc-content">
       <span
         v-if="autoPushActive"
-        class="inline-flex h-8 flex-none items-center rounded-full bg-info/15 px-2 text-[11px] font-medium text-info"
+        class="inline-flex h-8 flex-none items-center rounded-full bg-info/15 px-2 text-xs font-medium text-info"
         :title="autoPushTitle"
       >
         {{ autoPushLabel }}

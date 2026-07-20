@@ -57,7 +57,7 @@
 
         <div class="px-4 py-4">
           <div class="mb-3 flex items-center justify-between gap-3">
-            <div class="text-[11px] uppercase tracking-wide opacity-40">{{ t("config.departmentTree.directChildren") }}</div>
+            <div class="text-xs uppercase tracking-wide opacity-40">{{ t("config.departmentTree.directChildren") }}</div>
             <div class="text-xs opacity-50">{{ selectedChildIds.length }} / {{ candidateDepartments.length }}</div>
           </div>
           <div class="mb-3 text-sm opacity-60">

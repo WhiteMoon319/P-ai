@@ -81,13 +81,13 @@
         class="badge badge-ghost gap-1 py-3"
       >
         <FileText class="h-3.5 w-3.5" />
-        <span class="text-[11px]">{{ file.fileName }}</span>
+        <span class="text-xs">{{ file.fileName }}</span>
         <button class="btn btn-ghost btn-sm btn-square" @click="emit('removeQueuedAttachmentNotice', idx)">
           <X class="h-3 w-3" />
         </button>
       </div>
     </div>
-    <div v-if="transcribing" class="mb-1 text-[11px] opacity-80 flex items-center gap-1">
+    <div v-if="transcribing" class="mb-1 text-xs opacity-80 flex items-center gap-1">
       <span class="loading loading-spinner loading-sm"></span>
       <span>{{ t("chat.transcribing") }}</span>
     </div>
@@ -109,7 +109,7 @@
     </div>
     <div v-if="attachedIdeContextReferences.length > 0 || mergedIdeContextGroups.length > 0" class="mb-2 flex flex-col gap-2">
       <div v-for="group in mergedIdeContextGroups" :key="group.workspacePath" class="flex flex-col gap-1">
-        <div v-if="showIdeWorkspaceGroupLabel" class="px-1 text-[11px] opacity-60">{{ group.workspaceName }}</div>
+        <div v-if="showIdeWorkspaceGroupLabel" class="px-1 text-xs opacity-60">{{ group.workspaceName }}</div>
         <div class="flex flex-wrap gap-1">
           <button
             v-for="item in group.references"
@@ -123,7 +123,7 @@
           >
             <Minus v-if="isIdeContextAttached(item.id)" class="h-3.5 w-3.5 shrink-0" />
             <Plus v-else class="h-3.5 w-3.5 shrink-0" />
-            <span class="flex min-w-0 max-w-72 items-center text-[11px]">
+            <span class="flex min-w-0 max-w-72 items-center text-xs">
               <span class="min-w-0 truncate">{{ ideContextReferenceDisplayParts(item).fileName }}</span>
               <span
                 v-if="ideContextReferenceDisplayParts(item).lineSuffix"
@@ -171,7 +171,7 @@
               />
               <div v-else class="ecall-chat-composer-file-preview">
                 <FileText class="h-5 w-5" />
-                <span class="text-[11px]">{{ isPdfMime(img.mime) ? `PDF ${idx + 1}` : t("chat.image", { index: idx + 1 }) }}</span>
+                <span class="text-xs">{{ isPdfMime(img.mime) ? `PDF ${idx + 1}` : t("chat.image", { index: idx + 1 }) }}</span>
               </div>
               <button
                 type="button"
@@ -226,7 +226,7 @@
                   <div class="indicator shrink-0">
                     <span
                       v-if="isMentionSelected(item)"
-                      class="indicator-item inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-content"
+                      class="indicator-item inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-micro font-bold text-primary-content"
                     >
                       @
                     </span>
@@ -238,7 +238,7 @@
                           :alt="item.agentName"
                           class="w-7 h-7 rounded-full object-cover"
                         />
-                        <div v-else class="bg-neutral text-neutral-content w-7 h-7 rounded-full flex items-center justify-center text-[10px]">
+                        <div v-else class="bg-neutral text-neutral-content w-7 h-7 rounded-full flex items-center justify-center text-caption">
                           {{ avatarInitial(item.agentName) }}
                         </div>
                       </div>
@@ -248,7 +248,7 @@
                     <div class="truncate text-sm leading-5">@{{ mentionDisplayLabel(item) }}</div>
                     <div
                       v-if="!item.mentionable && item.unavailableReason"
-                      class="truncate text-[11px] leading-4 text-base-content/60"
+                      class="truncate text-xs leading-4 text-base-content/60"
                     >
                       {{ item.unavailableReason }}
                     </div>

@@ -5,120 +5,141 @@ import { isTauriRuntimeAvailable } from "../../../services/tauri-api";
 const UI_SIZE_STORAGE_KEY = "easy-call.ui-size.v1";
 const UI_SIZE_CHANGED_EVENT = "easy-call:ui-size-changed";
 
-export const UI_SIZE_PRESETS = ["small", "default", "large", "extraLarge"] as const;
-export type UiSizePreset = typeof UI_SIZE_PRESETS[number];
+export const UI_SIZE_MIN_SCALE = 75;
+export const UI_SIZE_MAX_SCALE = 150;
+export const UI_SIZE_DEFAULT_SCALE = 100;
+export const UI_SIZE_SCALE_MARKS = [75, 100, 125, 150] as const;
+export type UiSizeScale = number;
 
 type UiSizePayload = {
+  scale?: unknown;
   preset?: unknown;
 };
 
 type UiSizeTokens = {
+  textMicro: string;
+  textCaption: string;
   textXs: string;
   textSm: string;
   textBase: string;
   textLg: string;
   textXl: string;
   text2Xl: string;
+  markdownHeading1: string;
+  markdownHeading2: string;
+  markdownHeading3: string;
+  markdownHeading4: string;
+  markdownDocumentHeading1: string;
+  markdownDocumentHeading2: string;
+  markdownDocumentHeading3: string;
+  markdownDocumentHeading4: string;
   sizeField: string;
   sizeSelector: string;
   border: string;
 };
 
-const UI_SIZE_TOKEN_MAP: Record<UiSizePreset, UiSizeTokens> = {
-  small: {
-    textXs: "9px",
-    textSm: "10.5px",
-    textBase: "12px",
-    textLg: "13.5px",
-    textXl: "15px",
-    text2Xl: "18px",
-    sizeField: "0.195rem",
-    sizeSelector: "0.195rem",
-    border: "1px",
-  },
-  default: {
-    textXs: "12px",
-    textSm: "14px",
-    textBase: "16px",
-    textLg: "18px",
-    textXl: "20px",
-    text2Xl: "24px",
-    sizeField: "0.26rem",
-    sizeSelector: "0.26rem",
-    border: "1px",
-  },
-  large: {
-    textXs: "15px",
-    textSm: "17.5px",
-    textBase: "20px",
-    textLg: "22.5px",
-    textXl: "25px",
-    text2Xl: "30px",
-    sizeField: "0.325rem",
-    sizeSelector: "0.325rem",
-    border: "1.25px",
-  },
-  extraLarge: {
-    textXs: "18px",
-    textSm: "21px",
-    textBase: "24px",
-    textLg: "27px",
-    textXl: "30px",
-    text2Xl: "36px",
-    sizeField: "0.39rem",
-    sizeSelector: "0.39rem",
-    border: "1.5px",
-  },
+const LEGACY_UI_SIZE_SCALE_MAP: Record<string, UiSizeScale> = {
+  small: 75,
+  default: 100,
+  large: 125,
+  extraLarge: 150,
 };
 
-const uiSizePreset = ref<UiSizePreset>("default");
+const uiSizeScale = ref<UiSizeScale>(UI_SIZE_DEFAULT_SCALE);
 let initialized = false;
 let eventUnlisten: UnlistenFn | null = null;
 
-export function normalizeUiSizePreset(value: unknown): UiSizePreset {
-  return UI_SIZE_PRESETS.includes(value as UiSizePreset) ? value as UiSizePreset : "default";
+function scaledPx(value: number, scale: UiSizeScale): string {
+  return `${Math.round(value * scale) / 100}px`;
 }
 
-function readStoredUiSizePreset(): UiSizePreset {
-  if (typeof window === "undefined") return "default";
-  return normalizeUiSizePreset(window.localStorage.getItem(UI_SIZE_STORAGE_KEY));
+export function normalizeUiSizeScale(value: unknown): UiSizeScale {
+  if (value == null || (typeof value === "string" && !value.trim())) {
+    return UI_SIZE_DEFAULT_SCALE;
+  }
+  if (typeof value === "string" && value.trim() in LEGACY_UI_SIZE_SCALE_MAP) {
+    return LEGACY_UI_SIZE_SCALE_MAP[value.trim()];
+  }
+  const numeric = Math.round(Number(value));
+  if (!Number.isFinite(numeric)) return UI_SIZE_DEFAULT_SCALE;
+  return Math.min(UI_SIZE_MAX_SCALE, Math.max(UI_SIZE_MIN_SCALE, numeric));
 }
 
-function persistUiSizePreset(preset: UiSizePreset) {
+export function uiSizeTokensFor(value: unknown): UiSizeTokens {
+  const scale = normalizeUiSizeScale(value);
+  return {
+    textMicro: scaledPx(9, scale),
+    textCaption: scaledPx(11, scale),
+    textXs: scaledPx(12, scale),
+    textSm: scaledPx(14, scale),
+    textBase: scaledPx(16, scale),
+    textLg: scaledPx(18, scale),
+    textXl: scaledPx(20, scale),
+    text2Xl: scaledPx(24, scale),
+    markdownHeading1: scaledPx(16.32, scale),
+    markdownHeading2: scaledPx(15.68, scale),
+    markdownHeading3: scaledPx(15.04, scale),
+    markdownHeading4: scaledPx(14.4, scale),
+    markdownDocumentHeading1: scaledPx(24, scale),
+    markdownDocumentHeading2: scaledPx(20.48, scale),
+    markdownDocumentHeading3: scaledPx(17.92, scale),
+    markdownDocumentHeading4: scaledPx(16.32, scale),
+    sizeField: scaledPx(4.16, scale),
+    sizeSelector: scaledPx(4.16, scale),
+    border: scaledPx(1, scale),
+  };
+}
+
+function readStoredUiSizeScale(): UiSizeScale {
+  if (typeof window === "undefined") return UI_SIZE_DEFAULT_SCALE;
+  return normalizeUiSizeScale(window.localStorage.getItem(UI_SIZE_STORAGE_KEY));
+}
+
+function persistUiSizeScale(scale: UiSizeScale) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(UI_SIZE_STORAGE_KEY, preset);
+  window.localStorage.setItem(UI_SIZE_STORAGE_KEY, String(scale));
 }
 
-export function applyUiSizePreset(value: unknown) {
-  const preset = normalizeUiSizePreset(value);
-  uiSizePreset.value = preset;
-  if (typeof document === "undefined") return preset;
-  const tokens = UI_SIZE_TOKEN_MAP[preset];
+export function applyUiSizeScale(value: unknown): UiSizeScale {
+  const scale = normalizeUiSizeScale(value);
+  uiSizeScale.value = scale;
+  if (typeof document === "undefined") return scale;
+  const tokens = uiSizeTokensFor(scale);
   const root = document.documentElement.style;
+  root.setProperty("--app-text-micro-size", tokens.textMicro);
+  root.setProperty("--app-text-caption-size", tokens.textCaption);
   root.setProperty("--app-text-xs-size", tokens.textXs);
   root.setProperty("--app-text-sm-size", tokens.textSm);
   root.setProperty("--app-text-base-size", tokens.textBase);
   root.setProperty("--app-text-lg-size", tokens.textLg);
   root.setProperty("--app-text-xl-size", tokens.textXl);
   root.setProperty("--app-text-2xl-size", tokens.text2Xl);
+  root.setProperty("--app-text-markdown-heading-1-size", tokens.markdownHeading1);
+  root.setProperty("--app-text-markdown-heading-2-size", tokens.markdownHeading2);
+  root.setProperty("--app-text-markdown-heading-3-size", tokens.markdownHeading3);
+  root.setProperty("--app-text-markdown-heading-4-size", tokens.markdownHeading4);
+  root.setProperty("--app-text-markdown-document-heading-1-size", tokens.markdownDocumentHeading1);
+  root.setProperty("--app-text-markdown-document-heading-2-size", tokens.markdownDocumentHeading2);
+  root.setProperty("--app-text-markdown-document-heading-3-size", tokens.markdownDocumentHeading3);
+  root.setProperty("--app-text-markdown-document-heading-4-size", tokens.markdownDocumentHeading4);
   root.setProperty("--size-field", tokens.sizeField);
   root.setProperty("--size-selector", tokens.sizeSelector);
   root.setProperty("--border", tokens.border);
-  return preset;
+  return scale;
 }
 
 function handleStorageEvent(event: StorageEvent) {
-  if (event.key === UI_SIZE_STORAGE_KEY) applyUiSizePreset(event.newValue);
+  if (event.key === UI_SIZE_STORAGE_KEY) applyUiSizeScale(event.newValue);
 }
 
 export function initUiSizeAppearance() {
   if (initialized) return;
   initialized = true;
-  applyUiSizePreset(readStoredUiSizePreset());
+  applyUiSizeScale(readStoredUiSizeScale());
   if (typeof window !== "undefined") window.addEventListener("storage", handleStorageEvent);
   if (!isTauriRuntimeAvailable()) return;
   void listen<UiSizePayload>(UI_SIZE_CHANGED_EVENT, (event) => {
-    applyUiSizePreset(event.payload?.preset);
+    applyUiSizeScale(event.payload?.scale ?? event.payload?.preset);
   }).then((unlisten) => {
     eventUnlisten = unlisten;
   }).catch((error) => {
@@ -129,16 +150,16 @@ export function initUiSizeAppearance() {
 export function useUiSizeAppearance() {
   initUiSizeAppearance();
 
-  function setUiSizePreset(value: unknown) {
-    const preset = applyUiSizePreset(value);
-    persistUiSizePreset(preset);
+  function setUiSizeScale(value: unknown): UiSizeScale {
+    const scale = applyUiSizeScale(value);
+    persistUiSizeScale(scale);
     if (isTauriRuntimeAvailable()) {
-      void emit(UI_SIZE_CHANGED_EVENT, { preset }).catch((error) => {
+      void emit(UI_SIZE_CHANGED_EVENT, { scale }).catch((error) => {
         console.warn("[界面尺寸] 同步尺寸变化失败", error);
       });
     }
-    return preset;
+    return scale;
   }
 
-  return { uiSizePreset, setUiSizePreset };
+  return { uiSizeScale, setUiSizeScale };
 }

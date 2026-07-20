@@ -251,7 +251,7 @@
       :update-instruction-presets="updateInstructionPresets"
       :patch-conversation-api-settings="patchConversationApiSettings"
       :patch-chat-settings="patchChatSettings"
-      :update-ui-size-preset="updateUiSizePreset"
+      :update-ui-size-scale="updateUiSizeScale"
       :update-github-update-method="updateGithubUpdateMethod"
       :set-theme="setTheme"
       :activate-generated-theme="activateGeneratedTheme"
@@ -445,7 +445,7 @@
             <div class="font-medium">{{ startupOverlayMessage }}</div>
             <div class="mt-1 text-xs opacity-70">{{ startupOverlayDetail }}</div>
           </div>
-          <div class="shrink-0 text-[11px] opacity-50">
+          <div class="shrink-0 text-xs opacity-50">
             {{ Math.min(startupOverlayProgressCurrent, startupOverlayProgressTotal) }}/{{ startupOverlayProgressTotal }}
           </div>
         </div>

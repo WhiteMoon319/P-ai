@@ -57,7 +57,7 @@ const props = defineProps<{
             :wide="entry.tone === 'assistant'"
           >
             <template v-if="entry.thinkingSummary" #activity>
-              <div class="text-[12px] font-normal text-base-content/55">
+              <div class="text-sm font-normal text-base-content/55">
                 {{ entry.thinkingSummary }}
               </div>
             </template>
@@ -124,7 +124,7 @@ const props = defineProps<{
         <a class="link link-primary mt-1 block break-all text-xs" :href="projectUrl">{{ projectUrl }}</a>
       </div>
       <div v-if="qrDataUrl" class="flex shrink-0 items-center gap-2.5">
-        <div class="text-right text-[11px] leading-snug text-base-content/55">
+        <div class="text-right text-xs leading-snug text-base-content/55">
           扫码查看项目
         </div>
         <img
@@ -150,7 +150,7 @@ const props = defineProps<{
 
 .assistant-markdown :deep(.ecall-markdown-content) {
   color: var(--color-base-content);
-  font-size: 0.95rem;
+  font-size: var(--app-text-base-size);
   line-height: 1.7;
 }
 

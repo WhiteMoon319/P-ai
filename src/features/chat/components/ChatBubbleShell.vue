@@ -243,7 +243,7 @@ const surfaceStyle = computed<StyleValue | undefined>(() => {
   border-radius: 999px;
   background: var(--color-neutral);
   color: var(--color-neutral-content);
-  font-size: 0.86rem;
+  font-size: var(--app-text-sm-size);
   font-weight: 650;
   line-height: 1;
 }
@@ -287,7 +287,7 @@ const surfaceStyle = computed<StyleValue | undefined>(() => {
   min-width: 0;
   overflow: hidden;
   color: color-mix(in srgb, var(--color-base-content) 86%, transparent);
-  font-size: 0.78rem;
+  font-size: var(--app-text-xs-size);
   font-weight: 560;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -296,13 +296,13 @@ const surfaceStyle = computed<StyleValue | undefined>(() => {
 
 .ecall-chat-bubble-meta {
   color: color-mix(in srgb, var(--color-base-content) 55%, transparent);
-  font-size: 0.78rem;
+  font-size: var(--app-text-xs-size);
   line-height: 1.2;
 }
 
 .ecall-chat-bubble-footer {
   color: color-mix(in srgb, var(--color-base-content) 42%, transparent);
-  font-size: 0.78rem;
+  font-size: var(--app-text-xs-size);
   line-height: 1.2;
 }
 
@@ -311,7 +311,7 @@ const surfaceStyle = computed<StyleValue | undefined>(() => {
   align-items: center;
   gap: 0.2rem;
   color: var(--color-primary);
-  font-size: 0.72rem;
+  font-size: var(--app-text-caption-size);
 }
 
 .ecall-chat-bubble-streaming-meta .loading {

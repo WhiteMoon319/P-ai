@@ -172,7 +172,7 @@
               <div v-for="log in logs" :key="log.id" class="py-3 text-sm first:pt-0 last:pb-0">
                 <div class="flex items-center justify-between gap-2">
                   <span class="badge badge-sm" :class="runLogBadgeClass(log.outcome)">{{ runLogLabel(log.outcome) }}</span>
-                  <span class="text-[11px]">{{ formatTaskTime(log.triggeredAtLocal) }}</span>
+                  <span class="text-xs">{{ formatTaskTime(log.triggeredAtLocal) }}</span>
                 </div>
                 <div v-if="log.note" class="mt-1 whitespace-pre-wrap wrap-break-word">{{ log.note }}</div>
               </div>

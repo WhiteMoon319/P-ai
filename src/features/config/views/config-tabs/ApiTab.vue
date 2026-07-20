@@ -248,7 +248,7 @@
               </div>
 
               <div
-                class="text-[11px]"
+                class="text-xs"
                 :class="props.modelRefreshError
                   ? 'text-error'
                   : props.modelRefreshOk

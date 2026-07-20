@@ -3,7 +3,7 @@
     <div class="flex items-center gap-2 px-3 py-2 border-b border-base-300/70">
       <div class="font-medium">{{ title }}<span v-if="showCount">（{{ items.length }}）</span></div>
       <div class="ml-auto flex items-center gap-2">
-        <span v-if="typeof elapsedMs === 'number'" class="text-[11px] opacity-70">{{ elapsedLabel }}: {{ elapsedMs }}ms</span>
+        <span v-if="typeof elapsedMs === 'number'" class="text-xs opacity-70">{{ elapsedLabel }}: {{ elapsedMs }}ms</span>
         <button
           v-if="refreshable"
           type="button"
@@ -35,7 +35,7 @@
               <div class="font-medium">{{ item.name }}</div>
               <span v-if="item.running" class="loading loading-spinner loading-sm"></span>
             </div>
-            <div class="text-[11px] opacity-60">{{ item.description || noDescriptionText }}</div>
+            <div class="text-xs opacity-60">{{ item.description || noDescriptionText }}</div>
             <slot name="item-extra" :item="item" />
             <slot name="item-debug" :item="item" />
           </div>

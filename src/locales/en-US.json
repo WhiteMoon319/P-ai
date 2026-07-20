@@ -2119,14 +2119,8 @@
     "tone": "Saturation",
     "textStrength": "Text Strength",
     "radius": "Unified Radius",
-    "uiSizePreset": "UI Size",
-    "uiSizePresetHint": "Adjust interface typography and control sizes together.",
-    "sizePresets": {
-      "small": "Small (75%)",
-      "default": "Default (100%)",
-      "large": "Large (125%)",
-      "extraLarge": "Extra Large (150%)"
-    },
+    "uiSizeScale": "UI Size",
+    "uiSizeScaleHint": "Continuously adjust interface typography and control sizes (75%–150%).",
     "depthEnabled": "Depth Effect",
     "noiseEnabled": "Noise Effect",
     "language": "UI Language",

@@ -33,15 +33,15 @@
       <div class="min-w-0 flex-1">
         <div class="flex items-start justify-between gap-1.5">
           <div class="min-w-0 truncate text-sm font-medium">{{ displayTitle(item) }}</div>
-          <span class="shrink-0 text-[11px] text-base-content/60">{{ formatDate(item.lastMessageAt || item.updatedAt) }}</span>
+          <span class="shrink-0 text-xs text-base-content/60">{{ formatDate(item.lastMessageAt || item.updatedAt) }}</span>
         </div>
         <div class="mt-1 flex items-center justify-between gap-2 text-xs">
           <span class="min-w-0 truncate opacity-60">{{ previewLine(item) }}</span>
           <div class="flex shrink-0 items-center gap-2">
-            <span v-if="runtimeStateText(item)" class="text-[11px] text-base-content/60">{{ runtimeStateText(item) }}</span>
+            <span v-if="runtimeStateText(item)" class="text-xs text-base-content/60">{{ runtimeStateText(item) }}</span>
             <span
               v-if="unreadCount(item)"
-              class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-error px-1.5 text-[11px] font-medium text-error-content"
+              class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-error px-1.5 text-xs font-medium text-error-content"
             >
               {{ unreadCount(item) }}
             </span>

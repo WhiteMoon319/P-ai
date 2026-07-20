@@ -132,7 +132,7 @@
             hotkey: "Alt+·".to_string(),
             ui_language: default_ui_language(),
             ui_font: default_ui_font(),
-            ui_size_preset: default_ui_size_preset(),
+            ui_size_scale: default_ui_size_scale(),
             web_access_port: default_web_access_port(),
             web_access_enabled: default_web_access_enabled(),
             web_access_password: default_web_access_password(),
@@ -236,7 +236,7 @@
             hotkey: "Alt+·".to_string(),
             ui_language: default_ui_language(),
             ui_font: default_ui_font(),
-            ui_size_preset: default_ui_size_preset(),
+            ui_size_scale: default_ui_size_scale(),
             web_access_port: default_web_access_port(),
             web_access_enabled: default_web_access_enabled(),
             web_access_password: default_web_access_password(),
@@ -504,7 +504,7 @@
             hotkey: "Alt+·".to_string(),
             ui_language: default_ui_language(),
             ui_font: default_ui_font(),
-            ui_size_preset: default_ui_size_preset(),
+            ui_size_scale: default_ui_size_scale(),
             web_access_port: default_web_access_port(),
             web_access_enabled: default_web_access_enabled(),
             web_access_password: default_web_access_password(),
@@ -689,7 +689,7 @@
             hotkey: "Alt+·".to_string(),
             ui_language: default_ui_language(),
             ui_font: default_ui_font(),
-            ui_size_preset: default_ui_size_preset(),
+            ui_size_scale: default_ui_size_scale(),
             web_access_port: default_web_access_port(),
             web_access_enabled: default_web_access_enabled(),
             web_access_password: default_web_access_password(),
@@ -1029,6 +1029,19 @@ enableTools = true
         assert!(persisted.contains("enableAudio = false"));
 
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn app_config_should_map_legacy_ui_size_presets_to_scales() {
+        for (preset, expected_scale) in [("small", 75), ("default", 100), ("large", 125), ("extraLarge", 150)] {
+            let mut doc = toml::Value::try_from(AppConfig::default()).expect("serialize default config");
+            let table = doc.as_table_mut().expect("config is a TOML table");
+            table.remove("uiSizeScale");
+            table.insert("uiSizePreset".to_string(), toml::Value::String(preset.to_string()));
+
+            let config: AppConfig = doc.try_into().expect("legacy preset should deserialize");
+            assert_eq!(config.ui_size_scale, expected_scale, "preset: {preset}");
+        }
     }
 
     #[test]

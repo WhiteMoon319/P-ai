@@ -4,7 +4,7 @@ import { emit } from "@tauri-apps/api/event";
 import { invokeTauri } from "../../../services/tauri-api";
 import { useAppCore } from "../../shell/composables/use-app-core";
 import { useAppTheme } from "../../shell/composables/use-app-theme";
-import { normalizeUiSizePreset, useUiSizeAppearance } from "../../shell/composables/use-ui-size-appearance";
+import { normalizeUiSizeScale, useUiSizeAppearance } from "../../shell/composables/use-ui-size-appearance";
 import { useGithubUpdateMethod } from "../../shell/composables/use-github-update-method";
 import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
 import { applyUiFont, normalizeUiFont } from "../../shell/composables/use-ui-font";
@@ -227,7 +227,7 @@ export function useChatWindowApp() {
     status,
     perfDebug: PERF_DEBUG,
   });
-  const { setUiSizePreset } = useUiSizeAppearance();
+  const { setUiSizeScale } = useUiSizeAppearance();
   const { updateGithubUpdateMethod } = useGithubUpdateMethod(config, setStatusError);
   const { clearConversationStatus } = usePipelineStatus({
     activeConversationId: computed(() => String(currentChatConversationId.value || "").trim()),
@@ -823,7 +823,7 @@ export function useChatWindowApp() {
     applyTheme,
     restoreThemeFromStorage,
     normalizeLocale,
-    normalizeUiSizePreset,
+    normalizeUiSizeScale,
     updateGithubUpdateMethod,
     applyUiFont,
     chatWindowEventUnlisteners,
@@ -917,8 +917,8 @@ export function useChatWindowApp() {
     }
   }
 
-  function updateUiSizePreset(value: unknown) {
-    config.uiSizePreset = setUiSizePreset(value);
+  function updateUiSizeScale(value: unknown) {
+    config.uiSizeScale = setUiSizeScale(value);
   }
 
   return {
@@ -991,7 +991,7 @@ export function useChatWindowApp() {
     lastSavedConfigJson,
     setStatus,
     localeOptions,
-    updateUiSizePreset,
+    updateUiSizeScale,
     updateGithubUpdateMethod,
     toolReviewRefreshTick,
     currentChatTodos,

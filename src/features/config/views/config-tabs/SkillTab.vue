@@ -40,7 +40,7 @@
         <div class="flex flex-col gap-2 p-4">
           <div class="text-xs opacity-60">正文</div>
           <div class="text-sm whitespace-pre-wrap break-words max-h-[60vh] overflow-auto">{{ selectedSkill.content || "(无正文)" }}</div>
-          <div class="text-[11px] opacity-60 break-all">{{ selectedSkill.path }}</div>
+          <div class="text-xs opacity-60 break-all">{{ selectedSkill.path }}</div>
         </div>
       </div>
     </div>

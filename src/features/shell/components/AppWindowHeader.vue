@@ -1348,7 +1348,7 @@ onBeforeUnmount(() => {
 .config-changelog-markdown:deep(.ecall-markdown-content) {
   color: inherit;
   line-height: 1.75;
-  font-size: 0.95rem;
+  font-size: var(--app-text-base-size);
 }
 
 .config-changelog-markdown:deep(.ecall-markdown-content :where(p,ul,ol,blockquote,pre,table,figure,.paragraph-node,.list-node,.blockquote,.table-node-wrapper,.code-block-container,._mermaid,.vmr-container)) {

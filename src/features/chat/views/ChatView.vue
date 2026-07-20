@@ -58,7 +58,7 @@
           <div class="ecall-chat-history-flow flex min-w-0 shrink-0 flex-col">
             <div
               v-if="showNoMoreHistoryDivider"
-              class="mx-auto flex w-full max-w-225 items-center gap-3 px-4 pb-2 pt-1 text-[11px] text-base-content/45"
+              class="mx-auto flex w-full max-w-225 items-center gap-3 px-4 pb-2 pt-1 text-xs text-base-content/45"
             >
               <div class="h-px flex-1 bg-base-300/70"></div>
               <span class="shrink-0 font-semibold text-base-content/55">{{ t("chat.noMoreHistory") }}</span>
@@ -76,7 +76,7 @@
               >
                 <div
                   v-if="entry.item.kind === 'compaction'"
-                  class="mt-4 flex items-center gap-3 text-[11px] text-base-content/45"
+                  class="mt-4 flex items-center gap-3 text-xs text-base-content/45"
                 >
                   <div class="h-px flex-1 bg-base-300/80"></div>
                   <button type="button" class="btn btn-ghost btn-xs shrink-0 gap-1.5 px-2 text-base-content/60 hover:text-base-content"
@@ -87,7 +87,7 @@
                   </button>
                   <div class="h-px flex-1 bg-base-300/80"></div>
                 </div>
-                <div v-else-if="entry.item.kind === 'plan_started'" class="mt-4 flex items-center gap-3 text-[11px] text-base-content/45">
+                <div v-else-if="entry.item.kind === 'plan_started'" class="mt-4 flex items-center gap-3 text-xs text-base-content/45">
                   <div class="h-px flex-1 bg-base-300/80"></div>
                   <span class="shrink-0 rounded-full border border-base-300/80 bg-base-100 px-3 py-1 text-base-content/55">{{ t("chat.planStartedDivider") }}</span>
                   <div class="h-px flex-1 bg-base-300/80"></div>
@@ -260,7 +260,7 @@
               class="pointer-events-none absolute inset-x-0 top-0 z-30 flex -translate-y-full justify-center px-2 pb-2 pt-0"
             >
               <div
-                class="pointer-events-auto max-h-36 w-fit max-w-full overflow-hidden rounded-box border px-4 py-2 text-[12px] shadow-sm backdrop-blur-md"
+                class="pointer-events-auto max-h-36 w-fit max-w-full overflow-hidden rounded-box border px-4 py-2 text-sm shadow-sm backdrop-blur-md"
                 :class="chatStatusBanner.tone === 'error'
                   ? 'border-error/30 bg-error/12 text-error'
                   : chatStatusBanner.tone === 'info' || chatStatusBanner.text === t('chat.statusCompactingContext')

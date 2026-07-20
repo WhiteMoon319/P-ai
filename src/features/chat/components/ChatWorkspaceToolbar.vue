@@ -1,7 +1,7 @@
 <template>
   <div
     v-bind="attrs"
-    class="rounded-box bg-base-100/70 px-2 py-1.5 shadow backdrop-blur-md flex items-center justify-between gap-2 text-[11px]"
+    class="rounded-box bg-base-100/70 px-2 py-1.5 shadow backdrop-blur-md flex items-center justify-between gap-2 text-xs"
     @contextmenu.prevent.stop="openFileTagsContextMenu"
   >
     <div class="flex min-w-0 flex-1 items-center gap-1.5">
@@ -173,13 +173,13 @@
                 <div class="indicator shrink-0">
                   <span
                     v-if="entry.selected"
-                    class="indicator-item indicator-top indicator-end inline-flex h-4 w-4 translate-x-1/4 -translate-y-1/4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-content"
+                    class="indicator-item indicator-top indicator-end inline-flex h-4 w-4 translate-x-1/4 -translate-y-1/4 items-center justify-center rounded-full bg-primary text-micro font-bold text-primary-content"
                   >
                     @
                   </span>
                   <span
                     v-else-if="entry.hasBackgroundTask"
-                    class="indicator-item indicator-bottom indicator-end inline-flex min-w-5 translate-x-1/4 translate-y-1/4 items-center justify-center rounded-full border border-base-300 bg-base-100 px-1 py-0.5 text-[9px] text-base-content shadow-sm"
+                    class="indicator-item indicator-bottom indicator-end inline-flex min-w-5 translate-x-1/4 translate-y-1/4 items-center justify-center rounded-full border border-base-300 bg-base-100 px-1 py-0.5 text-micro text-base-content shadow-sm"
                   >
                     <span class="loading loading-dots loading-xs"></span>
                   </span>
@@ -194,7 +194,7 @@
                       />
                       <div
                         v-else
-                        class="w-7 h-7 rounded-full flex items-center justify-center text-[10px]"
+                        class="w-7 h-7 rounded-full flex items-center justify-center text-caption"
                         :class="frontSpeakingMuted(entry)
                           ? 'bg-base-300 text-base-content/70'
                           : 'bg-neutral text-neutral-content'"
@@ -206,7 +206,7 @@
                 </div>
                 <div class="min-w-0 flex-1 pr-0.5">
                   <div class="truncate text-sm leading-5">@{{ entry.agentName }}</div>
-                  <div class="truncate text-[11px] leading-4 text-base-content/60">
+                  <div class="truncate text-xs leading-4 text-base-content/60">
                     {{ entry.departmentName || t("chat.defaultDepartment") }}
                   </div>
                 </div>
@@ -247,14 +247,14 @@
                     :alt="entry.agentName"
                     class="w-7 h-7 rounded-full object-cover"
                   />
-                  <div v-else class="bg-neutral text-neutral-content w-7 h-7 rounded-full flex items-center justify-center text-[10px]">
+                  <div v-else class="bg-neutral text-neutral-content w-7 h-7 rounded-full flex items-center justify-center text-caption">
                     {{ avatarInitial(entry.agentName) }}
                   </div>
                 </div>
               </div>
               <div class="min-w-0 flex-1 pr-0.5">
                 <div class="truncate text-sm leading-5">@{{ entry.agentName }}</div>
-                <div class="truncate text-[11px] leading-4 text-base-content/60">
+                <div class="truncate text-xs leading-4 text-base-content/60">
                   {{ entry.departmentName || t("chat.defaultDepartment") }}
                 </div>
               </div>

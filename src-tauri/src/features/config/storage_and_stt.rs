@@ -1237,7 +1237,7 @@ fn normalize_app_config(config: &mut AppConfig) {
     };
     // Font compatibility is disabled in UI; ignore persisted custom font values.
     config.ui_font = default_ui_font();
-    config.ui_size_preset = normalize_ui_size_preset(&config.ui_size_preset);
+    config.ui_size_scale = normalize_ui_size_scale(config.ui_size_scale);
     config.web_access_port = normalize_web_access_port(config.web_access_port);
     config.web_access_password = normalize_web_access_password(&config.web_access_password);
     config.github_update_method = normalize_github_update_method(&config.github_update_method);

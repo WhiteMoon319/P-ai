@@ -27,13 +27,13 @@
                 <div class="truncate text-sm font-semibold">
                   {{ ch.name || t('config.remoteIm.channelName') }}
                 </div>
-                <div class="mt-1 text-[11px] opacity-60 truncate">
+                <div class="mt-1 text-xs opacity-60 truncate">
                   {{ platformLabelText(ch.platform) }}
                 </div>
                 <div class="mt-2 flex flex-wrap gap-1.5">
                   <button
                     type="button"
-                    class="badge badge-sm h-7 shrink-0 whitespace-nowrap px-3 text-[11px] leading-none transition-colors"
+                    class="badge badge-sm h-7 shrink-0 whitespace-nowrap px-3 text-xs leading-none transition-colors"
                     :class="ch.filterMarkdown ? 'badge-accent text-accent-content' : 'bg-base-300 text-base-content border-transparent'"
                     :title="t('config.remoteIm.filterMarkdownHint')"
                     :disabled="saving || isChannelOperationBusy(ch.id)"
@@ -415,7 +415,7 @@
               <div class="border-b-base-content/5 flex items-start justify-between gap-3 border-b border-dashed py-2">
                 <div class="flex flex-col gap-1">
                   <span>{{ t("config.remoteIm.filterMarkdown") }}</span>
-                  <span class="max-w-80 text-[11px] opacity-60">{{ t("config.remoteIm.filterMarkdownHint") }}</span>
+                  <span class="max-w-80 text-xs opacity-60">{{ t("config.remoteIm.filterMarkdownHint") }}</span>
                 </div>
                 <input v-model="selectedChannel.filterMarkdown" type="checkbox" class="toggle toggle-primary toggle-sm mt-0.5" />
               </div>
@@ -606,7 +606,7 @@
                     :show-model="false"
                     :disabled="contactsDisabled"
                   />
-                  <span class="text-[11px] opacity-60">{{ contactDraftRoutingHint }}</span>
+                  <span class="text-xs opacity-60">{{ contactDraftRoutingHint }}</span>
                 </div>
               </li>
 
@@ -620,7 +620,7 @@
                     <option value="continuous">{{ t("config.remoteIm.processingModeContinuous") }}</option>
                     <option value="qa">{{ t("config.remoteIm.processingModeQa") }}</option>
                   </select>
-                  <span class="text-[11px] opacity-60">{{ contactDraftProcessingHint }}</span>
+                  <span class="text-xs opacity-60">{{ contactDraftProcessingHint }}</span>
                 </div>
               </li>
 
@@ -639,7 +639,7 @@
                       {{ option.label }}
                     </option>
                   </select>
-                  <span class="text-[11px] opacity-60">{{ contactDraftActivationHint }}</span>
+                  <span class="text-xs opacity-60">{{ contactDraftActivationHint }}</span>
                   <input
                     v-if="!isPrivateContact(selectedContact) && contactDraft.activationMode === 'keyword'"
                     type="text"
@@ -663,7 +663,7 @@
                     <option value="always_reply">{{ t("config.remoteIm.responseStrategyAlways") }}</option>
                     <option value="smart_judge">{{ t("config.remoteIm.responseStrategySmart") }}</option>
                   </select>
-                  <span class="text-[11px] opacity-60">{{ contactDraftResponseStrategyHint }}</span>
+                  <span class="text-xs opacity-60">{{ contactDraftResponseStrategyHint }}</span>
                 </div>
               </li>
 
@@ -681,7 +681,7 @@
               <li class="list-row flex flex-col gap-2 pt-3 mt-2 border-t border-base-300">
                 <div class="flex items-center justify-between">
                   <div class="font-medium">{{ t("config.remoteIm.workspace") }}</div>
-                  <span class="text-[11px] opacity-50">{{ t("config.remoteIm.systemWorkspaceReadonly") }}</span>
+                  <span class="text-xs opacity-50">{{ t("config.remoteIm.systemWorkspaceReadonly") }}</span>
                 </div>
                 <div
                   v-if="contactDraft.shellWorkspaces.length === 0"
@@ -756,7 +756,7 @@
                 </div>
               </li>
 
-          <div class="mt-2 text-[11px] opacity-60 leading-5">
+          <div class="mt-2 text-xs opacity-60 leading-5">
             {{ t("config.remoteIm.contactConversationHint") }}
           </div>
           </div>

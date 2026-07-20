@@ -100,7 +100,7 @@
                     >
                       {{ kw }}
                     </span>
-                    <span v-if="!sample.tags.length" class="opacity-40 text-[11px]">
+                    <span v-if="!sample.tags.length" class="opacity-40 text-xs">
                       {{ t("config.memory.noTags") }}
                     </span>
                   </div>

@@ -936,7 +936,7 @@ function resolvedArchiveImageSrc(
   border: 1px dashed currentColor;
   border-radius: 0.5rem;
   opacity: 0.45;
-  font-size: 0.78rem;
+  font-size: var(--app-text-xs-size);
   line-height: 1.25;
 }
 
@@ -969,15 +969,15 @@ function resolvedArchiveImageSrc(
 }
 
 .archive-markdown-content:deep(:where(h1,.heading-node.heading-1)) {
-  font-size: 1.18rem;
+  font-size: var(--app-text-xl-size);
 }
 
 .archive-markdown-content:deep(:where(h2,.heading-node.heading-2)) {
-  font-size: 1.08rem;
+  font-size: var(--app-text-lg-size);
 }
 
 .archive-markdown-content:deep(:where(h3,.heading-node.heading-3,h4,.heading-node.heading-4)) {
-  font-size: 1rem;
+  font-size: var(--app-text-base-size);
 }
 
 .archive-markdown-content:deep(:where(ul,ol,.list-node)) {

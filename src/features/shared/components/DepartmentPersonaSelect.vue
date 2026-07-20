@@ -93,7 +93,7 @@
                       <span class="max-w-full truncate text-center text-xs leading-tight">
                         {{ option.agentName }}
                       </span>
-                      <span v-if="option.unavailable" class="text-[10px] leading-none text-warning">
+                      <span v-if="option.unavailable" class="text-caption leading-none text-warning">
                         已移除
                       </span>
                     </button>
