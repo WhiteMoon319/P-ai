@@ -107,15 +107,12 @@
     </div>
 
     <div v-if="showModelSelector" class="min-w-0 pt-2">
-      <select
-        :value="selectedApiConfigId"
-        class="select select-bordered w-full"
-        @change="handleModelChange"
-      >
-        <option v-for="config in textApiConfigs" :key="config.id" :value="config.id">
-          {{ config.name }}
-        </option>
-      </select>
+      <ApiConfigTreeSelect
+        :model-value="selectedApiConfigId"
+        :api-configs="textApiConfigs"
+        :disabled="disabled"
+        @update:model-value="handleModelSelect"
+      />
     </div>
   </div>
 </template>
@@ -125,6 +122,7 @@ import { ChevronDown } from "@lucide/vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { ApiConfigItem, DepartmentConfig, PersonaProfile } from "../../../types/app";
 import ChatConversationFloatingScroll from "../../chat/components/ChatConversationFloatingScroll.vue";
+import ApiConfigTreeSelect from "../../config/components/ApiConfigTreeSelect.vue";
 import {
   buildDepartmentPersonaOptions,
   departmentPersonaOptionId,
@@ -320,9 +318,8 @@ function clearSelection() {
   dropdownOpen.value = false;
 }
 
-function handleModelChange(event: Event) {
-  const value = String((event.target as HTMLSelectElement | null)?.value || "").trim();
-  emit("update:apiConfigId", value);
+function handleModelSelect(value: string) {
+  emit("update:apiConfigId", String(value || "").trim());
 }
 
 function resolveAvatarUrl(agentId: string): string {

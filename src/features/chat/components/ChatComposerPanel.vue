@@ -355,18 +355,31 @@
     >
       <div class="relative overflow-hidden rounded-box border border-base-300 bg-base-100 text-base-content shadow-xl">
         <div ref="modelDropdownScrollRef" class="ecall-model-dropdown-scroll max-h-[80vh] overflow-y-auto p-2">
-          <ul class="w-full">
-            <li v-for="item in normalizedChatModelOptions" :key="item.id" class="list-none">
-              <button
-                type="button"
-                class="flex w-full items-center rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-base-200"
-                :class="{ 'bg-primary/10': item.id === activeModelOptionId }"
-                @click="selectConversationPreferredModel(item.id)"
-              >
-                <span class="min-w-0 break-all">{{ item.name }}</span>
-              </button>
-            </li>
-          </ul>
+          <div class="w-72 p-2">
+            <section v-for="provider in chatModelTree" :key="provider.id" class="mb-2 last:mb-0">
+              <div class="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-base-content/55">
+                {{ provider.name }}
+              </div>
+              <div v-for="model in provider.models" :key="model.key" class="mb-1 rounded-lg bg-base-200/60 p-1 last:mb-0">
+                <div class="px-2 py-1.5 text-sm font-medium">
+                  <div class="truncate">{{ model.name }}</div>
+                  <div v-if="model.summaryFields.length > 0" class="mt-0.5 truncate text-xs font-normal text-base-content/60">
+                    {{ modelSummary(model.representative, model.summaryFields) }}
+                  </div>
+                </div>
+                <button
+                  v-for="item in model.leaves"
+                  :key="item.id"
+                  type="button"
+                  class="flex w-full items-center rounded-md px-3 py-1.5 text-left text-sm transition-colors hover:bg-base-100"
+                  :class="{ 'bg-primary/10': item.id === activeModelOptionId }"
+                  @click="selectConversationPreferredModel(item.id)"
+                >
+                  <span class="min-w-0 break-all">{{ item.label }}</span>
+                </button>
+              </div>
+            </section>
+          </div>
         </div>
         <FloatingScrollbar ref="modelDropdownScrollbarRef" :target="modelDropdownScrollRef" />
       </div>
@@ -385,7 +398,11 @@ import ChatSelectionActionPanel from "./ChatSelectionActionPanel.vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import { useChatQueue } from "../composables/use-chat-queue";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
-import { formatApiConfigOptionLabel } from "../../config/utils/api-config-display";
+import {
+  apiConfigSelectionSummary,
+  buildApiConfigSelectionTree,
+  type ApiConfigSelectionSummaryField,
+} from "../../config/utils/api-config-selection-tree";
 import { ideContextReferenceDisplayParts } from "../utils/ide-context-reference-display";
 import { mergeComposerIdeContextGroups } from "../utils/ide-context-reference-groups";
 
@@ -605,10 +622,23 @@ const normalizedChatModelOptions = computed(() =>
   (Array.isArray(props.chatModelOptions) ? props.chatModelOptions : [])
     .map((item) => ({
       id: String(item?.id || "").trim(),
-      name: formatApiConfigOptionLabel(item, t),
+      name: [String(item?.name || "").trim(), String(item?.model || "").trim()].find(Boolean) || "",
     }))
     .filter((item) => !!item.id && !!item.name),
 );
+const chatModelTree = computed(() => buildApiConfigSelectionTree(props.chatModelOptions, t));
+const chatModelSummaryLabels = computed<Record<ApiConfigSelectionSummaryField, string>>(() => ({
+  contextWindowTokens: t("config.api.contextWindow"),
+  maxOutputTokens: t("config.api.maxOutputTokens"),
+  temperature: t("config.api.temperature"),
+  enableTools: t("config.api.capTools"),
+  enableImage: t("config.api.capImage"),
+  enableAudio: t("config.api.capAudio"),
+  enableVideo: t("config.api.capVideo"),
+}));
+function modelSummary(item: ApiConfigItem, fields: ApiConfigSelectionSummaryField[]): string {
+  return apiConfigSelectionSummary(item, fields, chatModelSummaryLabels.value);
+}
 const localModelOptionId = ref("");
 
 function modelOptionIdFromProps(): string {

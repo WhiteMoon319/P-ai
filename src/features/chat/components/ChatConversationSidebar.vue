@@ -333,15 +333,11 @@
                 <label class="block text-sm font-medium" for="batch-archive-model">
                   {{ t("chat.batchArchive.modelLabel") }}
                 </label>
-                <select id="batch-archive-model" v-model="batchArchiveSelectedModelId" class="select select-bordered w-full">
-                  <option
-                    v-for="option in batchArchiveModelOptions"
-                    :key="option.id"
-                    :value="option.id"
-                  >
-                    {{ option.label }}
-                  </option>
-                </select>
+                <ApiConfigTreeSelect
+                  id="batch-archive-model"
+                  v-model="batchArchiveSelectedModelId"
+                  :api-configs="batchArchiveApiConfigs"
+                />
               </div>
             </div>
             <label class="mt-4 flex items-start gap-3 px-1 py-1">
@@ -441,8 +437,8 @@ import { stripToolcallMarkers } from "../../../utils/chat-message-semantics";
 import type { TaskEntry } from "../../config/views/config-tabs/task-editor";
 import { invokeTauri } from "../../../services/tauri-api";
 import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
+import ApiConfigTreeSelect from "../../config/components/ApiConfigTreeSelect.vue";
 import { formatConversationListTime } from "../utils/conversation-time";
-import { formatApiConfigOptionLabel } from "../../config/utils/api-config-display";
 import {
   applyConversationSectionOrder,
   buildRecentConversationSection,
@@ -607,14 +603,11 @@ const userAvatarInitial = computed(() => {
   return text.charAt(0).toUpperCase() || "U";
 });
 
-const batchArchiveModelOptions = computed<Array<{ id: string; label: string }>>(() =>
-  props.chatModelOptions
-    .filter((item) => item.enableText)
-    .map((item) => ({
-      id: String(item.id || "").trim(),
-      label: formatApiConfigOptionLabel(item, t),
-    }))
-    .filter((item) => !!item.id && !!item.label),
+const batchArchiveApiConfigs = computed(() => props.chatModelOptions.filter((item) => item.enableText));
+const batchArchiveModelOptions = computed<Array<{ id: string }>>(() =>
+  batchArchiveApiConfigs.value
+    .map((item) => ({ id: String(item.id || "").trim() }))
+    .filter((item) => !!item.id),
 );
 
 const batchArchiveCandidateConversations = computed(() => {

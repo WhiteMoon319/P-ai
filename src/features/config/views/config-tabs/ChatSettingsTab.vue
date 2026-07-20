@@ -18,17 +18,23 @@
 
           <div>
             <h4 class="text-sm font-semibold">{{ t("config.chatSettings.toolReviewApi") }}</h4>
-            <select :value="config.toolReviewApiConfigId ?? ''" class="select select-bordered select-sm mt-3 w-full" @change="onToolReviewSelectChange">
-              <option v-for="a in textCapableApiConfigs" :key="a.id" :value="a.id">{{ a.name }}</option>
-            </select>
+            <ApiConfigTreeSelect
+              class="mt-3"
+              :model-value="config.toolReviewApiConfigId ?? ''"
+              :api-configs="textCapableApiConfigs"
+              @update:model-value="onToolReviewSelect"
+            />
             <div class="mt-3 text-xs opacity-70">{{ t("config.chatSettings.toolReviewApiHint") }}</div>
           </div>
 
           <div>
             <h4 class="text-sm font-semibold">{{ t("config.chatSettings.expertChatModelTitle") }}</h4>
-            <select :value="config.assistantDepartmentApiConfigId || ''" class="select select-bordered select-sm mt-3 w-full" @change="onExpertSelectChange">
-              <option v-for="a in textCapableApiConfigs" :key="a.id" :value="a.id">{{ a.name }}</option>
-            </select>
+            <ApiConfigTreeSelect
+              class="mt-3"
+              :model-value="config.assistantDepartmentApiConfigId || ''"
+              :api-configs="textCapableApiConfigs"
+              @update:model-value="onExpertSelect"
+            />
             <div class="mt-3 text-xs opacity-70">{{ t("config.chatSettings.expertChatModelHint") }}</div>
           </div>
 
@@ -135,6 +141,7 @@ import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { Plus, Trash2 } from "@lucide/vue";
 import SegmentedControl from "../../components/SegmentedControl.vue";
+import ApiConfigTreeSelect from "../../components/ApiConfigTreeSelect.vue";
 import type { AppConfig, ApiConfigItem, ChatSettingsPatch, ConversationApiSettingsPatch, PromptCommandPreset, ResponseStyleOption } from "../../../../types/app";
 
 const props = defineProps<{
@@ -177,15 +184,15 @@ function onVisionSelectChange(event: Event) {
   });
 }
 
-function onToolReviewSelectChange(event: Event) {
-  props.config.toolReviewApiConfigId = ((event.target as HTMLSelectElement).value || undefined);
+function onToolReviewSelect(value: string) {
+  props.config.toolReviewApiConfigId = value || undefined;
   emit("patchConversationApiSettings", {
     toolReviewApiConfigId: props.config.toolReviewApiConfigId ?? null,
   });
 }
 
-function onExpertSelectChange(event: Event) {
-  props.config.assistantDepartmentApiConfigId = (event.target as HTMLSelectElement).value || "";
+function onExpertSelect(value: string) {
+  props.config.assistantDepartmentApiConfigId = value || "";
   emit("patchConversationApiSettings", {
     assistantDepartmentApiConfigId: props.config.assistantDepartmentApiConfigId,
   });

@@ -259,17 +259,17 @@
               </div>
 
               <div class="grid gap-3">
-                <div v-for="modelCard in (selectedProvider.models || []).filter((item) => !item.deprecated)" :key="modelCard.id"
+                <div v-for="modelCard in activeModelCards" :key="modelCard.id"
                   class="card border border-base-300 bg-base-200/50 transition"
                   :class="selectedModel?.id === modelCard.id ? '' : ''">
                   <div class="card-body gap-3 p-4">
                     <div class="flex items-start justify-between gap-2">
                       <button class="min-w-0 flex-1 text-left" type="button" @click="selectModelCard(modelCard.id)">
-                        <div class="card-title text-base mb-1">{{ modelDisplayLabel(selectedProvider, modelCard) }}</div>
+                        <div class="card-title text-base mb-1">{{ modelGroupDisplayLabel(modelCard) }}</div>
                       </button>
                       <button class="btn btn-sm btn-square btn-ghost" type="button"
-                        :class="activeModelCount(selectedProvider) <= 1 ? 'text-base-content/30' : 'text-error'"
-                        :disabled="activeModelCount(selectedProvider) <= 1" @click="removeModelCard(modelCard.id)">
+                        :class="activeModelGroups.length <= 1 ? 'text-base-content/30' : 'text-error'"
+                        :disabled="activeModelGroups.length <= 1" @click="removeModelGroup(modelCard)">
                         <Trash2 class="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -391,18 +391,20 @@
                         {{ t("config.api.viewModelDocumentation") }}
                       </button>
 
-                      <label v-if="showReasoningEffort(modelCard)" class="flex flex-col gap-1">
+                      <div v-if="showReasoningEffort(modelCard)" class="flex flex-col gap-2">
                         <span class="text-sm font-medium">{{ t("config.api.reasoningEffort") }}</span>
-                        <select
-                          :value="reasoningEffortValue(modelCard)"
-                          class="select select-bordered select-sm"
-                          @change="setReasoningEffort(modelCard, ($event.target as HTMLSelectElement).value)"
-                        >
-                          <option v-for="item in reasoningEffortItems(modelCard)" :key="item.value" :value="item.value">
-                            {{ item.label }}
-                          </option>
-                        </select>
-                      </label>
+                        <div class="flex flex-wrap gap-x-4 gap-y-2">
+                          <label v-for="item in reasoningEffortItems(modelCard)" :key="item.value" class="flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              class="checkbox checkbox-sm"
+                              :checked="groupHasReasoningEffort(modelCard, item.value)"
+                              @change="setGroupReasoningEffort(modelCard, item.value, ($event.target as HTMLInputElement).checked)"
+                            />
+                            <span>{{ item.label }}</span>
+                          </label>
+                        </div>
+                      </div>
 
                       <label v-if="modelCard.customTemperatureEnabled" class="flex flex-col gap-1">
                         <span class="text-sm font-medium">{{ t("config.api.temperature") }}</span>
@@ -470,7 +472,7 @@ import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
 import { invokeTauri } from "../../../../services/tauri-api";
 import CodexProviderPanel from "./CodexProviderPanel.vue";
 import { normalizeApiRequestFormat } from "../../utils/api-request-format";
-import { apiConfigDisplayName, reasoningEffortDisplayLabel as sharedReasoningEffortDisplayLabel } from "../../utils/api-config-display";
+import { reasoningEffortDisplayLabel as sharedReasoningEffortDisplayLabel } from "../../utils/api-config-display";
 import { buildModelCapability, type ModelCapabilitySnapshot } from "../../utils/model-capability";
 
 type ApiCapability = "text" | "voice" | "embedding" | "rerank";
@@ -500,6 +502,11 @@ type FetchModelMetadataResult = {
 };
 type ModelCapabilityLimits = Partial<ModelCapabilitySnapshot> & {
   metadataFound?: boolean;
+};
+type ActiveModelGroup = {
+  key: string;
+  primary: ApiModelConfigItem;
+  cards: ApiModelConfigItem[];
 };
 
 const SLIDER_CONTEXT_MIN = 16_000;
@@ -728,10 +735,10 @@ function modelDisplayLabel(
 ): string {
   const providerLabel = String(provider?.name || provider?.id || "").trim();
   const modelLabel = String(model?.model || "").trim() || t("config.api.unnamedModel");
-  const reasoningValue = provider && model
-    ? normalizedModelReasoningEffort(provider, model)
-    : String(model?.reasoningEffort || "").trim();
-  return apiConfigDisplayName(providerLabel, modelLabel, reasoningValue, t);
+  const reasoningValue = String(model?.reasoningEffort || "").trim();
+  const reasoningLabel = reasoningEffortDisplayLabel(reasoningValue);
+  const base = providerLabel ? `${providerLabel}/${modelLabel}` : modelLabel;
+  return reasoningLabel ? `${base} · ${reasoningLabel}` : base;
 }
 
 const providerList = computed(() => props.config.apiProviders || []);
@@ -745,6 +752,58 @@ const selectedProvider = computed(() => {
   const [providerId] = String(props.config.selectedApiConfigId || "").split("::");
   return activeProviderList.value.find((provider) => provider.id === providerId) ?? activeProviderList.value[0] ?? null;
 });
+
+function modelGroupKey(model: ApiModelConfigItem): string {
+  return JSON.stringify({
+    model: String(model.model || "").trim(),
+    enableImage: !!model.enableImage,
+    enableAudio: !!model.enableAudio,
+    enableVideo: !!model.enableVideo,
+    enableTools: model.enableTools !== false,
+    temperature: Number(model.temperature ?? 1),
+    customTemperatureEnabled: !!model.customTemperatureEnabled,
+    contextWindowTokens: Math.round(Number(model.contextWindowTokens ?? AUTO_CONTEXT_WINDOW_TOKENS)),
+    customMaxOutputTokensEnabled: !!model.customMaxOutputTokensEnabled,
+    maxOutputTokens: Number(model.maxOutputTokens ?? 4096),
+  });
+}
+
+const activeModelGroups = computed<ActiveModelGroup[]>(() => {
+  const groups = new Map<string, ActiveModelGroup>();
+  for (const model of selectedProvider.value?.models || []) {
+    if (isModelDeprecated(model)) continue;
+    const key = modelGroupKey(model);
+    const existing = groups.get(key);
+    if (existing) {
+      existing.cards.push(model);
+    } else {
+      groups.set(key, { key, primary: model, cards: [model] });
+    }
+  }
+  return Array.from(groups.values());
+});
+const activeModelCards = computed(() => activeModelGroups.value.map((group) => group.primary));
+
+function modelGroupForCard(modelCard: ApiModelConfigItem): ActiveModelGroup | null {
+  return activeModelGroups.value.find((group) => group.cards.some((card) => card.id === modelCard.id)) ?? null;
+}
+
+function modelGroupDisplayLabel(modelCard: ApiModelConfigItem): string {
+  const group = modelGroupForCard(modelCard);
+  const modelName = String(modelCard.model || "").trim() || t("config.api.unnamedModel");
+  const sameNameGroups = activeModelGroups.value.filter((candidate) => candidate.primary.model === modelCard.model);
+  if (!group || sameNameGroups.length <= 1) return modelName;
+  const peers = sameNameGroups.map((candidate) => candidate.primary);
+  const summary: string[] = [];
+  if (new Set(peers.map((item) => item.contextWindowTokens)).size > 1) summary.push(`${t("config.api.contextWindow")} ${Math.round(Number(modelCard.contextWindowTokens || 0) / 1000)}K`);
+  if (new Set(peers.map((item) => item.maxOutputTokens)).size > 1) summary.push(`${t("config.api.maxOutputTokens")} ${Math.round(Number(modelCard.maxOutputTokens || 0) / 1000)}K`);
+  if (new Set(peers.map((item) => item.temperature)).size > 1) summary.push(`${t("config.api.temperature")} ${Number(modelCard.temperature || 0).toFixed(1)}`);
+  if (new Set(peers.map((item) => item.enableTools)).size > 1) summary.push(`${t("config.api.capTools")} ${modelCard.enableTools ? "✓" : "—"}`);
+  if (new Set(peers.map((item) => item.enableImage)).size > 1) summary.push(`${t("config.api.capImage")} ${modelCard.enableImage ? "✓" : "—"}`);
+  if (new Set(peers.map((item) => item.enableAudio)).size > 1) summary.push(`${t("config.api.capAudio")} ${modelCard.enableAudio ? "✓" : "—"}`);
+  if (new Set(peers.map((item) => item.enableVideo)).size > 1) summary.push(`${t("config.api.capVideo")} ${modelCard.enableVideo ? "✓" : "—"}`);
+  return summary.length > 0 ? `${modelName} · ${summary.join(" · ")}` : modelName;
+}
 const activeCapability = computed<ApiCapability>(() => capabilityFromRequestFormat(selectedProvider.value?.requestFormat || "openai"));
 const scopedProviderList = computed(() =>
   activeProviderList.value.filter((provider) => capabilityFromRequestFormat(provider.requestFormat) === activeCapability.value),
@@ -931,37 +990,73 @@ function setDeepSeekReasoningEffort(modelCard: ApiModelConfigItem, value: string
 }
 
 function reasoningCapability(modelCard: ApiModelConfigItem): ModelCapabilityLimits | undefined {
-  return modelCapabilityById.value[modelCard.id];
+  const group = modelGroupForCard(modelCard);
+  for (const card of group?.cards || [modelCard]) {
+    const capability = modelCapabilityById.value[card.id];
+    if (capability) return capability;
+  }
+  return undefined;
 }
 
 function reasoningEffortItems(modelCard: ApiModelConfigItem): Array<{ value: string; label: string }> {
+  const group = modelGroupForCard(modelCard);
+  const existing = (group?.cards || [modelCard])
+    .map((item) => String(item.reasoningEffort || "").trim().toLowerCase() || "default");
   const capability = reasoningCapability(modelCard);
-  const options = capability?.reasoning?.reasoningEffortOptions || [];
-  return options.map((value) => ({
+  const options = [...existing, ...(capability?.reasoning?.reasoningEffortOptions || [])];
+  return Array.from(new Set(options)).map((value) => ({
     value,
-    label: reasoningEffortDisplayLabel(value),
-  })).filter((item) => !!item.label);
+    label: reasoningEffortDisplayLabel(value) || value,
+  }));
 }
 
 function showReasoningEffort(modelCard: ApiModelConfigItem): boolean {
   if (activeCapability.value !== "text") return false;
   const capability = reasoningCapability(modelCard);
+  const existing = reasoningEffortItems(modelCard).some((item) => item.value !== "default");
+  if (existing) return true;
   if (!capability) return false;
   if (capability.metadataFound === false) return reasoningEffortItems(modelCard).length > 0;
   return !!capability.reasoning?.supportsReasoning && reasoningEffortItems(modelCard).length > 0;
 }
 
-function reasoningEffortValue(modelCard: ApiModelConfigItem): string {
-  const options = reasoningEffortItems(modelCard).map((item) => item.value);
-  const current = String(modelCard.reasoningEffort || "").trim().toLowerCase();
-  if (options.includes(current)) return current;
-  return options[0] || DEFAULT_REASONING_EFFORT;
+function groupHasReasoningEffort(modelCard: ApiModelConfigItem, effort: string): boolean {
+  const normalized = String(effort || "").trim().toLowerCase() || "default";
+  return (modelGroupForCard(modelCard)?.cards || [modelCard])
+    .some((item) => (String(item.reasoningEffort || "").trim().toLowerCase() || "default") === normalized);
 }
 
-function setReasoningEffort(modelCard: ApiModelConfigItem, value: string) {
-  const options = reasoningEffortItems(modelCard).map((item) => item.value);
-  modelCard.reasoningEffort = options.includes(value) ? value : (options[0] || DEFAULT_REASONING_EFFORT);
+function setGroupReasoningEffort(modelCard: ApiModelConfigItem, effort: string, enabled: boolean) {
+  const provider = selectedProvider.value;
+  const group = modelGroupForCard(modelCard);
+  if (!provider || !group) return;
+  const normalized = String(effort || "").trim().toLowerCase() || "default";
+  const matchingCards = group.cards.filter((item) =>
+    (String(item.reasoningEffort || "").trim().toLowerCase() || "default") === normalized,
+  );
+  if (enabled) {
+    if (matchingCards.length > 0) return;
+    provider.models.push({
+      ...group.primary,
+      id: `api-model-${buildProviderSeed()}`,
+      deprecated: false,
+      reasoningEffort: normalized,
+    });
+    return;
+  }
+  if (matchingCards.length === 0) return;
+  if (matchingCards.length === group.cards.length) {
+    if (normalized === "default") return;
+    provider.models.push({
+      ...group.primary,
+      id: `api-model-${buildProviderSeed()}`,
+      deprecated: false,
+      reasoningEffort: "default",
+    });
+  }
+  deprecateModelCards(provider, matchingCards);
 }
+
 
 function modelDocumentationUrl(modelCard: ApiModelConfigItem): string {
   const capability = reasoningCapability(modelCard);
@@ -1083,21 +1178,8 @@ function cloneProvider(provider: ApiProviderConfigItem): ApiProviderConfigItem {
   };
 }
 
-function normalizedModelReasoningEffort(provider: ApiProviderConfigItem, model: ApiModelConfigItem): string {
-  const value = String(model.reasoningEffort || "").trim().toLowerCase();
-  if (value === "default") {
-    return "default";
-  }
-  if (provider.requestFormat === "gemini") {
-    return value === "low" ? "low" : DEFAULT_GEMINI_REASONING_EFFORT;
-  }
-  if (provider.requestFormat === "deepseek") {
-    return deepseekReasoningEffortOptions.value.some((item) => item.value === value) ? value : DEFAULT_DEEPSEEK_REASONING_EFFORT;
-  }
-  if (provider.requestFormat === "openai" || provider.requestFormat === "openai_responses") {
-    return openaiReasoningEffortOptions.value.some((item) => item.value === value) ? value : DEFAULT_OPENAI_REASONING_EFFORT;
-  }
-  return value || DEFAULT_REASONING_EFFORT;
+function normalizedModelReasoningEffort(_provider: ApiProviderConfigItem, model: ApiModelConfigItem): string {
+  return String(model.reasoningEffort || "").trim().toLowerCase() || DEFAULT_REASONING_EFFORT;
 }
 
 function normalizeProviderForCompare(provider: ApiProviderConfigItem) {
@@ -1230,7 +1312,7 @@ function createModel(seed: string, name = "gpt-4o-mini"): ApiModelConfigItem {
     enableAudio: false,
     enableVideo: false,
     enableTools: true,
-    reasoningEffort: DEFAULT_REASONING_EFFORT,
+    reasoningEffort: "default",
     temperature: 1,
     customTemperatureEnabled: false,
     contextWindowTokens: AUTO_CONTEXT_WINDOW_TOKENS,
@@ -1477,23 +1559,33 @@ function addModelCard() {
   activeModelPickerId.value = model.id;
 }
 
+function deprecateModelCards(provider: ApiProviderConfigItem, models: ApiModelConfigItem[]) {
+  const removedIds = models.map((model) => `${provider.id}::${model.id}`);
+  const removedModelIds = new Set(models.map((model) => model.id));
+  for (const model of provider.models || []) {
+    if (removedModelIds.has(model.id)) model.deprecated = true;
+  }
+  clearRemovedApiConfigReferences(removedIds);
+  props.normalizeApiBindingsAction();
+  const fallback = firstActiveModel(provider);
+  props.config.selectedApiConfigId = fallback
+    ? `${provider.id}::${fallback.id}`
+    : firstActiveApiConfigIdExcluding(new Set(removedIds));
+}
+
+function removeModelGroup(modelCard: ApiModelConfigItem) {
+  const provider = selectedProvider.value;
+  const group = modelGroupForCard(modelCard);
+  if (!provider || !group || activeModelGroups.value.length <= 1) return;
+  deprecateModelCards(provider, group.cards);
+}
+
 function removeModelCard(modelId: string) {
   const provider = selectedProvider.value;
   if (!provider) return;
-  const activeModels = (provider.models || []).filter((item) => !isModelDeprecated(item));
-  if (activeModels.length <= 1) return;
-  const idx = provider.models.findIndex((item) => item.id === modelId);
-  if (idx < 0) return;
-  const removedId = `${provider.id}::${modelId}`;
-  provider.models[idx].deprecated = true;
-  clearRemovedApiConfigReferences([removedId]);
-  props.normalizeApiBindingsAction();
-  const fallback = firstActiveModel(provider);
-  if (fallback) {
-    props.config.selectedApiConfigId = `${provider.id}::${fallback.id}`;
-  } else {
-    props.config.selectedApiConfigId = firstActiveApiConfigIdExcluding(new Set([removedId]));
-  }
+  const model = provider.models.find((item) => item.id === modelId && !item.deprecated);
+  if (!model || activeModelCount(provider) <= 1) return;
+  deprecateModelCards(provider, [model]);
 }
 
 function openModelPicker(modelId: string) {
@@ -2017,6 +2109,46 @@ watch(
     void syncModelMetadata(modelCard);
   },
   { immediate: true },
+);
+
+let synchronizingModelGroupFields = false;
+watch(
+  () => (selectedProvider.value?.models || [])
+    .filter((model) => !model.deprecated)
+    .map((model) => ({ id: model.id, key: modelGroupKey(model) })),
+  (current, previous) => {
+    if (synchronizingModelGroupFields) {
+      synchronizingModelGroupFields = false;
+      return;
+    }
+    const previousById = new Map((previous || []).map((item) => [item.id, item.key]));
+    const changed = current.find((item) => {
+      const previousKey = previousById.get(item.id);
+      return previousKey !== undefined && previousKey !== item.key;
+    });
+    if (!changed) return;
+    const previousKey = previousById.get(changed.id);
+    if (!previousKey) return;
+    const provider = selectedProvider.value;
+    const source = provider?.models.find((model) => model.id === changed.id);
+    if (!provider || !source) return;
+    const siblingIds = (previous || []).filter((item) => item.key === previousKey && item.id !== source.id).map((item) => item.id);
+    if (siblingIds.length === 0) return;
+    synchronizingModelGroupFields = true;
+    for (const sibling of provider.models || []) {
+      if (!siblingIds.includes(sibling.id)) continue;
+      sibling.model = source.model;
+      sibling.enableImage = source.enableImage;
+      sibling.enableAudio = source.enableAudio;
+      sibling.enableVideo = source.enableVideo;
+      sibling.enableTools = source.enableTools;
+      sibling.temperature = source.temperature;
+      sibling.customTemperatureEnabled = source.customTemperatureEnabled;
+      sibling.contextWindowTokens = source.contextWindowTokens;
+      sibling.customMaxOutputTokensEnabled = source.customMaxOutputTokensEnabled;
+      sibling.maxOutputTokens = source.maxOutputTokens;
+    }
+  },
 );
 
 onUnmounted(() => {

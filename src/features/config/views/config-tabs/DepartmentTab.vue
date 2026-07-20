@@ -133,14 +133,13 @@
                   :key="`${selectedDepartment.id}-api-${idx}`"
                   class="flex items-center gap-2"
                 >
-                  <select
-                    class="select select-bordered select-sm flex-1"
-                    :value="apiId"
-                    @change="updateDepartmentApiConfigAt(idx, ($event.target as HTMLSelectElement).value)"
-                  >
-                    <option v-for="role in availableDepartmentRoleOptionsForIndex(idx)" :key="role.id" :value="role.id">{{ role.name }}</option>
-                    <option v-for="api in availableDepartmentApiConfigsForIndex(idx)" :key="api.id" :value="api.id">{{ api.name }}</option>
-                  </select>
+                  <ApiConfigTreeSelect
+                    class="flex-1"
+                    :model-value="apiId"
+                    :api-configs="availableDepartmentApiConfigsForIndex(idx)"
+                    :extra-options="availableDepartmentRoleOptionsForIndex(idx).map((role) => ({ id: role.id, label: role.name }))"
+                    @update:model-value="updateDepartmentApiConfigAt(idx, $event)"
+                  />
 
                   <div class="join">
                     <button
@@ -437,9 +436,10 @@ import {
 } from "../../utils/department-basic-editor";
 import { validateDepartmentConfig } from "../../utils/department-validation";
 import { normalizeDepartmentChildIds } from "../../utils/department-graph";
-import { MODEL_ROLE_EXPERT_API_CONFIG_ID, MODEL_ROLE_QUICK_API_CONFIG_ID, isModelRoleApiConfigId } from "../../utils/model-role-options";
+import { MODEL_ROLE_EXPERT_API_CONFIG_ID, MODEL_ROLE_QUICK_API_CONFIG_ID } from "../../utils/model-role-options";
 import { EXPLORER_DEPARTMENT_DEFAULT, LEADER_DEPARTMENT_DEFAULT, REMOTE_CUSTOMER_SERVICE_DEPARTMENT_DEFAULT } from "../../constants/department-defaults";
 import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
+import ApiConfigTreeSelect from "../../components/ApiConfigTreeSelect.vue";
 
 const props = defineProps<{
   config: AppConfig;
