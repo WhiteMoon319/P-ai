@@ -79,6 +79,7 @@ import { computed, defineComponent, h, onBeforeUnmount, ref, type VNodeChild } f
 import { useI18n } from "vue-i18n";
 import { Maximize2 } from "@lucide/vue";
 import CodeBlockPreviewDialog from "./dialogs/CodeBlockPreviewDialog.vue";
+import { findNextMarkdownAutoLink } from "../markdown/markdown-auto-link";
 
 type LightMarkdownBlock =
   | { type: "paragraph"; text: string; key: string }
@@ -103,7 +104,6 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
-const URL_PATTERN = /(https?:\/\/[^\s<>()]+|file:\/\/\/[^\s<>()]+)/g;
 const MARKDOWN_LINK_PATTERN = /!?\[([^\]\n]+)\]\(([^)\n]+)\)/g;
 const copiedCodeKey = ref("");
 const previewDialogOpen = ref(false);
@@ -464,14 +464,11 @@ function nextMarkdownLink(input: string, from: number): LinkMatch | null {
 }
 
 function nextAutoLink(input: string, from: number): LinkMatch | null {
-  URL_PATTERN.lastIndex = from;
-  const match = URL_PATTERN.exec(input);
+  const match = findNextMarkdownAutoLink(input, from);
   if (!match) return null;
   return {
     kind: "auto",
-    start: match.index,
-    end: match.index + match[0].length,
-    href: match[0],
+    ...match,
   };
 }
 

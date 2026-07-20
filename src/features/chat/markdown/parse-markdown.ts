@@ -1,3 +1,5 @@
+import { findNextMarkdownAutoLink } from "./markdown-auto-link";
+
 // ==================== Markdown Block Parser ====================
 // Lightweight markdown parser based on SidebarLightMarkdown's approach,
 // extended with math block detection ($$...$$ and $...$) and mermaid awareness.
@@ -484,7 +486,6 @@ export function parseMarkdownBlocks(input: string, streaming = false): MarkdownB
 
 // ==================== Inline Parser ====================
 
-const URL_PATTERN = /(https?:\/\/[^\s<>()]+|file:\/\/\/[^\s<>()]+)/g;
 const MARKDOWN_IMAGE_LINK_PATTERN = /\[!\[([^\]\n]*)\]\(([^)\n]+)\)\]\(([^)\n]+)\)/g;
 const MARKDOWN_LINK_PATTERN = /!?\[([^\]\n]*)\]\(([^)\n]+)\)/g;
 const TOOLCALL_REF_PATTERN = /\[toolcall:([^\]\n]+)\]/g;
@@ -554,14 +555,11 @@ function nextMarkdownLink(input: string, from: number): LinkMatch | null {
 }
 
 function nextAutoLink(input: string, from: number): LinkMatch | null {
-  URL_PATTERN.lastIndex = from;
-  const match = URL_PATTERN.exec(input);
+  const match = findNextMarkdownAutoLink(input, from);
   if (!match) return null;
   return {
     kind: "auto",
-    start: match.index,
-    end: match.index + match[0].length,
-    href: match[0],
+    ...match,
   };
 }
 
