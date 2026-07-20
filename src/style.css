@@ -5,6 +5,20 @@
 @source not "../src-tauri/gen";
 @source not "../src-tauri/icons";
 
+@font-face {
+  font-family: "Easy Call JetBrains Mono";
+  src: url("./assets/fonts/JetBrainsMono-wght.ttf") format("truetype");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+  /* 仅让英文、数字与 ASCII 代码符号使用 JetBrains Mono。 */
+  unicode-range: U+0000-007F;
+}
+
+:root {
+  --app-code-font-family: "Easy Call JetBrains Mono", var(--app-font-family, system-ui, sans-serif);
+}
+
 .ecall-shimmer-text {
   position: relative;
   display: inline-block;

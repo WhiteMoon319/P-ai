@@ -1392,6 +1392,7 @@ ul.ecall-md-list {
 .ecall-md-code-body {
   overflow-x: auto;
   padding: 0.75rem;
+  font-family: var(--app-code-font-family);
   font-size: 0.82rem;
   line-height: 1.55;
   margin: 0 !important;

@@ -185,6 +185,7 @@ onBeforeUnmount(() => {
 .tool-review-code-view {
   height: 100%;
   min-height: 100%;
+  font-family: var(--app-code-font-family);
   background: var(--color-base-200);
 }
 
@@ -195,11 +196,13 @@ onBeforeUnmount(() => {
   white-space: pre;
   color: var(--color-base-content);
   background: var(--color-base-200);
+  font-family: var(--app-code-font-family);
   font-size: 12px;
   line-height: 1.5;
 }
 
 :deep(.tool-review-code-view .shiki) {
+  font-family: var(--app-code-font-family) !important;
   min-height: 100%;
   margin: 0;
   padding: 0.75rem 0;

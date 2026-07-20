@@ -2835,6 +2835,7 @@ defineExpose({
   margin: 0;
   padding: 0.75rem 1rem;
   white-space: pre;
+  font-family: var(--app-code-font-family);
   color: inherit;
   background: transparent;
 }
@@ -2869,13 +2870,13 @@ defineExpose({
 }
 .file-reader-code-virtual-block-raw {
   width: 100%;
-  font-family: inherit;
+  font-family: var(--app-code-font-family);
   font-size: 14px;
   line-height: 21px;
 }
 .file-reader-code-virtual-block-shiki {
   width: max-content;
-  font-family: inherit;
+  font-family: var(--app-code-font-family);
   font-size: 14px;
   line-height: 21px;
 }

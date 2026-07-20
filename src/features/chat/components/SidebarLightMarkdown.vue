@@ -640,7 +640,7 @@ ol.ecall-sidebar-light-list {
   background: color-mix(in srgb, currentColor 8%, transparent);
   padding: 1.8rem 0.65rem 0.55rem;
   white-space: pre;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family: var(--app-code-font-family);
   font-size: 0.82rem;
   line-height: 1.45;
 }
@@ -692,7 +692,7 @@ ol.ecall-sidebar-light-list {
   border-radius: 0.28rem;
   background: color-mix(in srgb, currentColor 10%, transparent);
   padding: 0.08rem 0.28rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family: var(--app-code-font-family);
   font-size: 0.86em;
 }
 
