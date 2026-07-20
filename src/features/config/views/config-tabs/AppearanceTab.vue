@@ -114,11 +114,18 @@
             />
             <output class="w-12 text-right text-sm font-medium tabular-nums">{{ uiSizeScale }}%</output>
           </div>
-          <div class="flex justify-between px-0.5 text-caption text-base-content/55 tabular-nums">
-            <span>75%</span>
-            <span>100%</span>
-            <span>125%</span>
-            <span>150%</span>
+          <div class="grid grid-cols-4 gap-1">
+            <button
+              v-for="scale in uiSizeScaleMarks"
+              :key="scale"
+              class="btn btn-xs text-caption tabular-nums"
+              :class="uiSizeScale === scale ? 'btn-primary' : 'btn-ghost text-base-content/60'"
+              :aria-pressed="uiSizeScale === scale"
+              type="button"
+              @click="$emit('update:uiSizeScale', scale)"
+            >
+              {{ scale }}%
+            </button>
           </div>
         </div>
       </div>
@@ -207,6 +214,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const uiSizeScaleMarks = [75, 100, 125, 150] as const;
 const activeTab = ref<"preset" | "generated">("generated");
 const markdownFontScaleOptions = computed(() => [
   { value: 0, label: t("appearance.markdownFontScaleLight") },
