@@ -2089,8 +2089,8 @@
   },
   "appearance": {
     "theme": "主题",
-    "markdownFontScale": "Markdown 字體",
-    "markdownFontScaleHint": "調整 Markdown 字重。",
+    "markdownFontScale": "全域字重",
+    "markdownFontScaleHint": "調整全域介面與 Markdown 字重。",
     "markdownFontScaleLight": "正常",
     "markdownFontScaleHeavy": "粗體",
     "chatBubble": "氣泡",

@@ -2089,8 +2089,8 @@
   },
   "appearance": {
     "theme": "Theme",
-    "markdownFontScale": "Markdown Font",
-    "markdownFontScaleHint": "Adjust Markdown font weight.",
+    "markdownFontScale": "Global Font Weight",
+    "markdownFontScaleHint": "Adjust font weight across the interface and Markdown.",
     "markdownFontScaleLight": "Normal",
     "markdownFontScaleHeavy": "Bold",
     "chatBubble": "Bubble",
