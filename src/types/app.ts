@@ -283,7 +283,7 @@ export type AppConfig = {
   hotkey: string;
   uiLanguage: "zh-CN" | "en-US" | "zh-TW";
   uiFont: string;
-  webviewZoomPercent?: number;
+  uiSizePreset?: "small" | "default" | "large" | "extraLarge";
   webAccessPort?: number;
   webAccessEnabled?: boolean;
   webAccessPassword?: string;

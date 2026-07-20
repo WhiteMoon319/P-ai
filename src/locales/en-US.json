@@ -2100,8 +2100,6 @@
     "inputPanel": "Input Panel Appearance",
     "inputPanelSideFileTags": "Show side file tags",
     "inputPanelIdeBridgeFileTags": "Show IDE bridge file tags",
-    "webviewZoom": "Interface Zoom",
-    "webviewZoomHint": "Adjust the real WebView zoom level.",
     "themeTabs": {
       "preset": "Preset",
       "generated": "Custom"
@@ -2122,10 +2120,12 @@
     "textStrength": "Text Strength",
     "radius": "Unified Radius",
     "uiSizePreset": "UI Size",
+    "uiSizePresetHint": "Adjust interface typography and control sizes together.",
     "sizePresets": {
-      "compact": "Compact",
-      "default": "Default",
-      "comfortable": "Comfortable"
+      "small": "Small (75%)",
+      "default": "Default (100%)",
+      "large": "Large (125%)",
+      "extraLarge": "Extra Large (150%)"
     },
     "depthEnabled": "Depth Effect",
     "noiseEnabled": "Noise Effect",

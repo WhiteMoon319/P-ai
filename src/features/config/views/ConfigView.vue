@@ -218,9 +218,9 @@
             :current-theme="currentTheme"
             :generated-theme-controls="generatedThemeControls"
             :generated-theme-tokens="generatedThemeTokens"
-            :webview-zoom-percent="webviewZoomPercent"
+            :ui-size-preset="uiSizePreset"
             @update:ui-language="$emit('update:uiLanguage', $event)"
-            @update:webview-zoom-percent="$emit('update:webviewZoomPercent', $event)"
+            @update:ui-size-preset="$emit('update:uiSizePreset', $event)"
             @set-theme="$emit('setTheme', $event)"
             @activate-generated-theme="$emit('activateGeneratedTheme')"
             @update-generated-theme-controls="$emit('updateGeneratedThemeControls', $event)"
@@ -454,7 +454,7 @@ const props = defineProps<{
   currentTheme: string;
   generatedThemeControls: GeneratedThemeControls;
   generatedThemeTokens: GeneratedThemeTokens;
-  webviewZoomPercent: number;
+  uiSizePreset: "small" | "default" | "large" | "extraLarge";
   selectedApiConfig: ApiConfigItem | null;
   toolApiConfig: ApiConfigItem | null;
   baseUrlReference: string;
@@ -507,7 +507,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "update:configTab", value: ConfigTab): void;
   (e: "update:uiLanguage", value: string): void;
-  (e: "update:webviewZoomPercent", value: number): void;
+  (e: "update:uiSizePreset", value: "small" | "default" | "large" | "extraLarge"): void;
   (e: "update:githubUpdateMethod", value: AppConfig["githubUpdateMethod"]): void;
   (e: "update:personaEditorId", value: string): void;
   (e: "update:assistantDepartmentAgentId", value: string): void;

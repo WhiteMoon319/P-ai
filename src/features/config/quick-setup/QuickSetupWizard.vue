@@ -351,6 +351,7 @@ import type { ApiProviderConfigItem, ApiRequestFormat, AppBootstrapSnapshot, App
 import responseStylesJson from "../../../constants/response-styles.json";
 import { useAvatarCache } from "../../chat/composables/use-avatar-cache";
 import { isDarkAppTheme, useAppTheme } from "../../shell/composables/use-app-theme";
+import { applyUiSizePreset } from "../../shell/composables/use-ui-size-appearance";
 import { defaultToolBindings } from "../utils/builtin-tools";
 import { normalizeApiRequestFormat } from "../utils/api-request-format";
 import { apiConfigDisplayName } from "../utils/api-config-display";
@@ -600,7 +601,7 @@ function defaultConfig(): AppConfig {
     hotkey: "Alt+·",
     uiLanguage: "zh-CN",
     uiFont: "auto",
-    webviewZoomPercent: 100,
+    uiSizePreset: "default",
     webAccessPort: 8429,
     webAccessEnabled: true,
     webAccessPassword: "",
@@ -638,6 +639,7 @@ function defaultChatSettings(): ChatSettings {
 
 function applySnapshot(snapshot: AppBootstrapSnapshot) {
   Object.assign(config, defaultConfig(), snapshot.config || {});
+  config.uiSizePreset = applyUiSizePreset(config.uiSizePreset);
   Object.assign(chatSettings, defaultChatSettings(), snapshot.chatSettings || {});
   if (!responseStyleOptions.some((style) => style.id === chatSettings.responseStyleId)) {
     chatSettings.responseStyleId = "concise";

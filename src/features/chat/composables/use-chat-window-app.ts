@@ -4,7 +4,8 @@ import { emit } from "@tauri-apps/api/event";
 import { invokeTauri } from "../../../services/tauri-api";
 import { useAppCore } from "../../shell/composables/use-app-core";
 import { useAppTheme } from "../../shell/composables/use-app-theme";
-import { useWebviewZoomOrchestrator } from "../../shell/composables/use-webview-zoom-orchestrator";
+import { normalizeUiSizePreset, useUiSizeAppearance } from "../../shell/composables/use-ui-size-appearance";
+import { useGithubUpdateMethod } from "../../shell/composables/use-github-update-method";
 import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
 import { applyUiFont, normalizeUiFont } from "../../shell/composables/use-ui-font";
 import { useMessageStoreMigrationGate } from "../../shell/composables/use-message-store-migration-gate";
@@ -226,14 +227,8 @@ export function useChatWindowApp() {
     status,
     perfDebug: PERF_DEBUG,
   });
-  const {
-    normalizeWebviewZoomPercent,
-    updateWebviewZoomPercent,
-    updateGithubUpdateMethod,
-  } = useWebviewZoomOrchestrator({
-    config,
-    setStatusError,
-  });
+  const { setUiSizePreset } = useUiSizeAppearance();
+  const { updateGithubUpdateMethod } = useGithubUpdateMethod(config, setStatusError);
   const { clearConversationStatus } = usePipelineStatus({
     activeConversationId: computed(() => String(currentChatConversationId.value || "").trim()),
   });
@@ -828,7 +823,7 @@ export function useChatWindowApp() {
     applyTheme,
     restoreThemeFromStorage,
     normalizeLocale,
-    normalizeWebviewZoomPercent,
+    normalizeUiSizePreset,
     updateGithubUpdateMethod,
     applyUiFont,
     chatWindowEventUnlisteners,
@@ -922,6 +917,10 @@ export function useChatWindowApp() {
     }
   }
 
+  function updateUiSizePreset(value: unknown) {
+    config.uiSizePreset = setUiSizePreset(value);
+  }
+
   return {
     messageText,
     extractMessageImages,
@@ -992,7 +991,7 @@ export function useChatWindowApp() {
     lastSavedConfigJson,
     setStatus,
     localeOptions,
-    updateWebviewZoomPercent,
+    updateUiSizePreset,
     updateGithubUpdateMethod,
     toolReviewRefreshTick,
     currentChatTodos,

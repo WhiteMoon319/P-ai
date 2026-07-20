@@ -15,7 +15,6 @@
     "core:window:allow-set-always-on-top",
     "core:window:allow-is-always-on-top",
     "core:window:allow-set-size",
-    "core:webview:allow-set-webview-zoom",
     "global-shortcut:default",
     "dialog:allow-open",
     "dialog:allow-save",

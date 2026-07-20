@@ -19,7 +19,6 @@
             <span class="badge badge-sm badge-secondary">A</span>
             <span class="badge badge-sm badge-accent">A</span>
             <span class="badge badge-sm badge-neutral">A</span>
-            <span class="badge badge-sm badge-ghost">{{ sizePresetLabel }}</span>
           </div>
         </div>
       </div>
@@ -154,18 +153,6 @@
           />
         </label>
 
-        <div class="space-y-2">
-          <div class="flex items-center justify-between gap-3 text-sm">
-            <span>{{ t("appearance.uiSizePreset") }}</span>
-            <span class="text-xs text-base-content/65">{{ sizePresetLabel }}</span>
-          </div>
-          <SegmentedControl
-            :model-value="props.controls.uiSizePreset"
-            :options="sizePresetOptions"
-            @change="patchUiSizePreset"
-          />
-        </div>
-
         <div class="grid gap-2 md:grid-cols-2">
           <label class="label cursor-pointer justify-start gap-3 rounded-box border border-base-300 bg-base-200 px-3 py-2">
             <input
@@ -202,7 +189,6 @@ import {
 import type {
   GeneratedThemeControls,
   GeneratedThemeTokens,
-  GeneratedUiSizePreset,
 } from "../../shell/theme/theme-types";
 
 const props = defineProps<{
@@ -215,22 +201,13 @@ const emit = defineEmits<{
   (e: "reset"): void;
 }>();
 
-const { t, te } = useI18n();
-
-const sizePresets: GeneratedUiSizePreset[] = ["compact", "default", "comfortable"];
+const { t } = useI18n();
 
 const previewStyle = computed(() => generatedThemeTokensToCssVariables(props.tokens));
-const sizePresetLabel = computed(() => sizePresetLabelFor(props.controls.uiSizePreset));
 const modeOptions = computed(() => [
   { value: "light" as const, label: t("appearance.modeOptions.light") },
   { value: "dark" as const, label: t("appearance.modeOptions.dark") },
 ]);
-const sizePresetOptions = computed(() =>
-  sizePresets.map((preset) => ({
-    value: preset,
-    label: sizePresetLabelFor(preset),
-  })),
-);
 const brightnessLabel = computed(() =>
   props.controls.mode === "dark" ? t("appearance.darkness") : t("appearance.brightness"),
 );
@@ -241,15 +218,6 @@ function patchControls(patch: Partial<GeneratedThemeControls>) {
 
 function patchMode(mode: "light" | "dark") {
   patchControls({ mode });
-}
-
-function patchUiSizePreset(uiSizePreset: GeneratedUiSizePreset) {
-  patchControls({ uiSizePreset });
-}
-
-function sizePresetLabelFor(preset: GeneratedUiSizePreset) {
-  const key = `appearance.sizePresets.${preset}`;
-  return te(key) ? t(key) : preset;
 }
 
 function patchSlider(key: "themeHue" | "contrast" | "brightness" | "tint" | "tone" | "textStrength" | "radius", event: Event) {

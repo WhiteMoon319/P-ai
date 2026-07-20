@@ -3,7 +3,6 @@ import type {
   AppThemeState,
   GeneratedThemeControls,
   GeneratedThemeTokens,
-  GeneratedUiSizePreset,
   ThemeMode,
 } from "./theme-types";
 
@@ -12,12 +11,6 @@ type OklchColor = {
   l: number;
   c: number;
   h: number;
-};
-
-type SizePresetTokens = {
-  sizeField: string;
-  sizeSelector: string;
-  border: string;
 };
 
 const toRgb = converter("rgb");
@@ -49,30 +42,9 @@ const SHAPE_ROLES: Array<[keyof GeneratedThemeTokens, string]> = [
   ["radiusBox", "--radius-box"],
   ["radiusField", "--radius-field"],
   ["radiusSelector", "--radius-selector"],
-  ["sizeField", "--size-field"],
-  ["sizeSelector", "--size-selector"],
-  ["border", "--border"],
   ["depth", "--depth"],
   ["noise", "--noise"],
 ];
-
-const UI_SIZE_PRESET_MAP: Record<GeneratedUiSizePreset, SizePresetTokens> = {
-  compact: {
-    sizeField: "0.22rem",
-    sizeSelector: "0.22rem",
-    border: "1px",
-  },
-  default: {
-    sizeField: "0.26rem",
-    sizeSelector: "0.26rem",
-    border: "1px",
-  },
-  comfortable: {
-    sizeField: "0.32rem",
-    sizeSelector: "0.32rem",
-    border: "1.5px",
-  },
-};
 
 export const GENERATED_THEME_NAME = "generated";
 export const GENERATED_THEME_LIGHT_ID = "generated-light";
@@ -87,7 +59,6 @@ export const LIGHT_GENERATED_THEME_CONTROLS: GeneratedThemeControls = {
   tone: 90,
   textStrength: 88,
   radius: 16,
-  uiSizePreset: "default",
   depthEnabled: false,
   noiseEnabled: false,
 };
@@ -101,7 +72,6 @@ export const DARK_GENERATED_THEME_CONTROLS: GeneratedThemeControls = {
   tone: 90,
   textStrength: 88,
   radius: 16,
-  uiSizePreset: "default",
   depthEnabled: false,
   noiseEnabled: false,
 };
@@ -125,7 +95,6 @@ const LEGACY_GENERATED_THEME_CONTROLS: GeneratedThemeControls = {
   tone: 58,
   textStrength: 88,
   radius: 16,
-  uiSizePreset: "default",
   depthEnabled: false,
   noiseEnabled: false,
 };
@@ -253,10 +222,6 @@ function softenBaseContent(content: OklchColor, background: OklchColor, strength
   return adjustForContrast(seeded, background, 4.8, direction);
 }
 
-function sizePresetTokens(preset: GeneratedUiSizePreset): SizePresetTokens {
-  return UI_SIZE_PRESET_MAP[preset] || UI_SIZE_PRESET_MAP.default;
-}
-
 function radiusToToken(radius: number): string {
   const normalizedRadius = clamp(Number.isFinite(radius) ? radius : DARK_GENERATED_THEME_CONTROLS.radius, 0, 28);
   return `${round(normalizedRadius / 16, 3)}rem`;
@@ -332,10 +297,6 @@ export function normalizeGeneratedThemeControls(
       0,
       28,
     ),
-    uiSizePreset:
-      input?.uiSizePreset === "compact" || input?.uiSizePreset === "comfortable"
-        ? input.uiSizePreset
-        : "default",
     depthEnabled: !!input?.depthEnabled,
     noiseEnabled: !!input?.noiseEnabled,
   };
@@ -488,7 +449,6 @@ export function generateGeneratedThemeTokens(controlsInput: GeneratedThemeContro
     3,
   );
 
-  const { sizeField, sizeSelector, border } = sizePresetTokens(controls.uiSizePreset);
   const radius = radiusToToken(controls.radius);
 
   return {
@@ -515,9 +475,6 @@ export function generateGeneratedThemeTokens(controlsInput: GeneratedThemeContro
     radiusBox: radius,
     radiusField: radius,
     radiusSelector: radius,
-    sizeField,
-    sizeSelector,
-    border,
     depth: controls.depthEnabled ? "1" : "0",
     noise: controls.noiseEnabled ? "1" : "0",
     colorScheme: controls.mode,

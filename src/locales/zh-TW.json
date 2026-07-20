@@ -2100,8 +2100,6 @@
     "inputPanel": "輸入面板外觀",
     "inputPanelSideFileTags": "顯示側邊檔案標籤",
     "inputPanelIdeBridgeFileTags": "顯示 IDE 橋接檔案標籤",
-    "webviewZoom": "介面縮放",
-    "webviewZoomHint": "調整整個 WebView 的真實縮放比例。",
     "themeTabs": {
       "preset": "預設",
       "generated": "自訂"
@@ -2121,11 +2119,13 @@
     "tone": "飽和度",
     "textStrength": "文字強度",
     "radius": "統一圓角",
-    "uiSizePreset": "介面尺寸",
+    "uiSizePreset": "UI 介面尺寸",
+    "uiSizePresetHint": "同步調整介面字體與控制項尺寸。",
     "sizePresets": {
-      "compact": "緊湊",
-      "default": "預設",
-      "comfortable": "寬鬆"
+      "small": "小（75%）",
+      "default": "預設（100%）",
+      "large": "大（125%）",
+      "extraLarge": "極大（150%）"
     },
     "depthEnabled": "層次效果",
     "noiseEnabled": "紋理效果",

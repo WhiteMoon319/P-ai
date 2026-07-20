@@ -251,7 +251,7 @@
       :update-instruction-presets="updateInstructionPresets"
       :patch-conversation-api-settings="patchConversationApiSettings"
       :patch-chat-settings="patchChatSettings"
-      :update-webview-zoom-percent="updateWebviewZoomPercent"
+      :update-ui-size-preset="updateUiSizePreset"
       :update-github-update-method="updateGithubUpdateMethod"
       :set-theme="setTheme"
       :activate-generated-theme="activateGeneratedTheme"

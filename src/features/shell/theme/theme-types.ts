@@ -1,7 +1,5 @@
 export type ThemeMode = "light" | "dark";
 
-export type GeneratedUiSizePreset = "compact" | "default" | "comfortable";
-
 export type GeneratedThemeControls = {
   mode: ThemeMode;
   themeHue: number;
@@ -11,7 +9,6 @@ export type GeneratedThemeControls = {
   tone: number;
   textStrength: number;
   radius: number;
-  uiSizePreset: GeneratedUiSizePreset;
   depthEnabled: boolean;
   noiseEnabled: boolean;
 };
@@ -42,9 +39,6 @@ export type GeneratedThemeTokens = {
   radiusBox: string;
   radiusField: string;
   radiusSelector: string;
-  sizeField: string;
-  sizeSelector: string;
-  border: string;
   depth: string;
   noise: string;
   colorScheme: ThemeMode;

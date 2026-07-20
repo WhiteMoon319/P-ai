@@ -51,7 +51,7 @@
         :current-theme="currentTheme"
         :generated-theme-controls="generatedThemeControls"
         :generated-theme-tokens="generatedThemeTokens"
-        :webview-zoom-percent="config.webviewZoomPercent ?? 100"
+        :ui-size-preset="config.uiSizePreset ?? 'default'"
         :selected-api-config="selectedApiConfig"
         :tool-api-config="toolApiConfig"
         :base-url-reference="baseUrlReference"
@@ -110,7 +110,7 @@
         @update:instruction-presets="updateInstructionPresets"
         @patch-conversation-api-settings="patchConversationApiSettings"
         @patch-chat-settings="patchChatSettings"
-        @update:webview-zoom-percent="updateWebviewZoomPercent"
+        @update:ui-size-preset="config.uiSizePreset = setUiSizePreset($event)"
         @update:github-update-method="updateGithubUpdateMethod"
         @set-theme="setTheme"
         @activate-generated-theme="activateGeneratedTheme"
@@ -281,7 +281,8 @@ import { useConfigEditors } from "./features/config/composables/use-config-edito
 import { useAppWatchers } from "./features/shell/composables/use-app-watchers";
 import { searchConfigTabs, type ConfigSearchTab } from "./features/config/search/config-search";
 import { applyUiFont, normalizeUiFont } from "./features/shell/composables/use-ui-font";
-import { useWebviewZoomOrchestrator } from "./features/shell/composables/use-webview-zoom-orchestrator";
+import { normalizeUiSizePreset, useUiSizeAppearance } from "./features/shell/composables/use-ui-size-appearance";
+import { useGithubUpdateMethod } from "./features/shell/composables/use-github-update-method";
 import { useGithubUpdateView } from "./features/shell/composables/use-github-update-view";
 import { useConfigSaveErrorDialog } from "./features/shell/composables/use-config-save-error-dialog";
 import { useWindowActions } from "./features/shell/composables/use-window-actions";
@@ -326,7 +327,7 @@ const config = reactive<AppConfig>({
   hotkey: "Alt+·",
   uiLanguage: "zh-CN",
   uiFont: "auto",
-  webviewZoomPercent: 100,
+  uiSizePreset: "default",
   webAccessPort: 8429,
   webAccessEnabled: true,
   webAccessPassword: "",
@@ -437,14 +438,8 @@ const {
 });
 const startupOverlayVisible = ref(false);
 const startupOverlayMessage = ref("等待后端加载中...");
-const {
-  normalizeWebviewZoomPercent,
-  updateWebviewZoomPercent,
-  updateGithubUpdateMethod,
-} = useWebviewZoomOrchestrator({
-  config,
-  setStatusError,
-});
+const { setUiSizePreset } = useUiSizeAppearance();
+const { updateGithubUpdateMethod } = useGithubUpdateMethod(config, setStatusError);
 
 const {
   selectedApiConfig,
@@ -841,7 +836,7 @@ const appBootstrap = useConfigWindowBootstrap({
   createApiConfig,
   buildConfigSnapshotJson,
   lastSavedConfigJson,
-  normalizeWebviewZoomPercent,
+  normalizeUiSizePreset,
   updateGithubUpdateMethod,
   normalizeRuntimeConfigNumbers,
 });
@@ -892,10 +887,11 @@ useAppWatchers({
 });
 
 watch(
-  () => ({ uiFont: config.uiFont, uiLanguage: config.uiLanguage }),
-  ({ uiFont, uiLanguage }) => {
+  () => ({ uiFont: config.uiFont, uiLanguage: config.uiLanguage, uiSizePreset: config.uiSizePreset }),
+  ({ uiFont, uiLanguage, uiSizePreset }) => {
     applyUiFont(uiFont, uiLanguage);
     config.uiFont = normalizeUiFont(uiFont);
+    config.uiSizePreset = setUiSizePreset(uiSizePreset);
   },
   { immediate: true },
 );

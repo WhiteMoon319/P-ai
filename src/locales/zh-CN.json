@@ -2100,8 +2100,6 @@
     "inputPanel": "输入面板外观",
     "inputPanelSideFileTags": "显示侧边文件标签",
     "inputPanelIdeBridgeFileTags": "显示 IDE 桥文件标签",
-    "webviewZoom": "界面缩放",
-    "webviewZoomHint": "调节整个 WebView 的真实缩放比例。",
     "themeTabs": {
       "preset": "预设",
       "generated": "自定义"
@@ -2121,11 +2119,13 @@
     "tone": "饱和度",
     "textStrength": "文字强度",
     "radius": "统一圆角",
-    "uiSizePreset": "界面尺寸",
+    "uiSizePreset": "UI 界面尺寸",
+    "uiSizePresetHint": "同步调整界面字体与控件尺寸。",
     "sizePresets": {
-      "compact": "紧凑",
-      "default": "默认",
-      "comfortable": "宽松"
+      "small": "小（75%）",
+      "default": "默认（100%）",
+      "large": "大（125%）",
+      "extraLarge": "极大（150%）"
     },
     "depthEnabled": "层次效果",
     "noiseEnabled": "纹理效果",

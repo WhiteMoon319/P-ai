@@ -1031,7 +1031,6 @@ fn main() {
             list_system_fonts,
             update_record_hotkey,
             update_record_background_wake,
-            set_webview_zoom_percent,
             save_config,
             load_agents,
             save_agents,

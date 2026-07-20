@@ -17,6 +17,7 @@ import type {
 import type { SupportedLocale } from "../../../i18n";
 import { normalizeApiRequestFormat } from "../utils/api-request-format";
 import { normalizeDepartmentChildIds } from "../utils/department-graph";
+import { applyUiSizePreset, normalizeUiSizePreset } from "../../shell/composables/use-ui-size-appearance";
 
 const DEFAULT_CODEX_ORIGINATOR = "codex-tui";
 
@@ -121,15 +122,6 @@ function normalizeLlmRoundLogCapacity(value: unknown): 1 | 3 | 10 {
   if (numeric < 3) return 1;
   if (numeric < 10) return 3;
   return 10;
-}
-
-function normalizeWebviewZoomPercent(value: unknown): number {
-  const numeric = Math.round(Number(value));
-  const options = [80, 90, 100, 110, 120, 150];
-  if (!Number.isFinite(numeric)) return 100;
-  return options.reduce((best, item) => (
-    Math.abs(item - numeric) < Math.abs(best - numeric) ? item : best
-  ), 100);
 }
 
 function normalizeWebAccessPort(value: unknown): number {
@@ -281,7 +273,8 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     options.config.hotkey = cfg.hotkey;
     options.config.uiLanguage = options.normalizeLocale(cfg.uiLanguage);
     options.config.uiFont = String((cfg as { uiFont?: unknown }).uiFont ?? "");
-    options.config.webviewZoomPercent = normalizeWebviewZoomPercent((cfg as { webviewZoomPercent?: unknown }).webviewZoomPercent);
+    options.config.uiSizePreset = normalizeUiSizePreset((cfg as { uiSizePreset?: unknown }).uiSizePreset);
+    applyUiSizePreset(options.config.uiSizePreset);
     options.config.webAccessPort = normalizeWebAccessPort((cfg as { webAccessPort?: unknown }).webAccessPort);
     options.config.webAccessEnabled = (cfg as { webAccessEnabled?: unknown }).webAccessEnabled !== false;
     options.config.webAccessPassword = String((cfg as { webAccessPassword?: unknown }).webAccessPassword || "").trim();
@@ -509,7 +502,8 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
       options.config.hotkey = saved.hotkey;
       options.config.uiLanguage = options.normalizeLocale(saved.uiLanguage);
       options.config.uiFont = String((saved as { uiFont?: unknown }).uiFont ?? "");
-      options.config.webviewZoomPercent = normalizeWebviewZoomPercent((saved as { webviewZoomPercent?: unknown }).webviewZoomPercent);
+      options.config.uiSizePreset = normalizeUiSizePreset((saved as { uiSizePreset?: unknown }).uiSizePreset);
+      applyUiSizePreset(options.config.uiSizePreset);
       options.config.webAccessPort = normalizeWebAccessPort((saved as { webAccessPort?: unknown }).webAccessPort);
       options.config.webAccessEnabled = (saved as { webAccessEnabled?: unknown }).webAccessEnabled !== false;
       options.config.webAccessPassword = String((saved as { webAccessPassword?: unknown }).webAccessPassword || "").trim();

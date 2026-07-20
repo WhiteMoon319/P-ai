@@ -55,7 +55,6 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "show_quick_setup_window"
             | "complete_quick_setup_and_open_chat"
             | "open_runtime_logs_window"
-            | "set_webview_zoom_percent"
             | "sync_tray_icon"
             | "get_github_update_state"
             | "check_github_update"
@@ -538,7 +537,6 @@ mod web_native_capability_tests {
             "demo_send_native_notification",
             "demo_restart_app",
             "show_main_window",
-            "set_webview_zoom_percent",
             "sync_tray_icon",
             "get_github_update_state",
             "check_github_update",

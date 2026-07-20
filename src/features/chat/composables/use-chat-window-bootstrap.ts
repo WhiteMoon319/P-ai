@@ -56,7 +56,7 @@ export function useChatWindowBootstrap(bindings: Record<string, any>) {
         createApiConfig: bindings.createApiConfig,
         buildConfigSnapshotJson: bindings.buildConfigSnapshotJson,
         lastSavedConfigJson: bindings.lastSavedConfigJson,
-        normalizeWebviewZoomPercent: bindings.normalizeWebviewZoomPercent,
+        normalizeUiSizePreset: bindings.normalizeUiSizePreset,
         updateGithubUpdateMethod: bindings.updateGithubUpdateMethod,
         normalizeRuntimeConfigNumbers: bindings.normalizeRuntimeConfigNumbers,
       }, payload);

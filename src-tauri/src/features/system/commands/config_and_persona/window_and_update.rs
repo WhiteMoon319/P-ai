@@ -47,12 +47,6 @@ fn complete_quick_setup_and_open_chat(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WebviewZoomUpdatedPayload {
-    percent: u32,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct UpdateRecordHotkeyInput {
@@ -72,35 +66,6 @@ struct RecordHotkeyUpdateResult {
     record_background_wake_enabled: bool,
     min_record_seconds: u32,
     max_record_seconds: u32,
-}
-
-fn emit_webview_zoom_percent_updated(app: &AppHandle, percent: u32) {
-    let _ = app.emit(
-        "easy-call:webview-zoom-updated",
-        WebviewZoomUpdatedPayload { percent },
-    );
-}
-
-fn apply_webview_zoom_percent(app: &AppHandle, percent: u32) -> Result<u32, String> {
-    let normalized = normalize_webview_zoom_percent(percent);
-    let scale_factor = normalized as f64 / 100.0;
-    let mut failed = Vec::new();
-    for (label, window) in app.webview_windows() {
-        if let Err(err) = window.set_zoom(scale_factor) {
-            failed.push(format!("{label}: {err}"));
-        }
-    }
-    if !failed.is_empty() {
-        return Err(format!("应用界面缩放失败：{}", failed.join("；")));
-    }
-    Ok(normalized)
-}
-
-#[tauri::command]
-fn set_webview_zoom_percent(percent: u32, app: AppHandle) -> Result<u32, String> {
-    let normalized = apply_webview_zoom_percent(&app, percent)?;
-    emit_webview_zoom_percent_updated(&app, normalized);
-    Ok(normalized)
 }
 
 #[tauri::command]
@@ -785,10 +750,6 @@ fn save_config_inner(
             )
             .await;
         });
-    }
-    match apply_webview_zoom_percent(&app, main_config.webview_zoom_percent) {
-        Ok(percent) => emit_webview_zoom_percent_updated(&app, percent),
-        Err(err) => runtime_log_error(format!("[外观] 应用界面缩放失败：{}", err)),
     }
     let runtime_config = runtime_config_with_private_organization(&state, &main_config, &data)
         .map_err(|err| format!("配置已保存，但运行时配置刷新失败：{err}"))?;

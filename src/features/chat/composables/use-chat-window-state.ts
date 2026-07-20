@@ -29,7 +29,7 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
     hotkey: "Alt+·",
     uiLanguage: "zh-CN",
     uiFont: "auto",
-    webviewZoomPercent: 100,
+    uiSizePreset: "default",
     webAccessPort: 8429,
     webAccessEnabled: true,
     webAccessPassword: "",

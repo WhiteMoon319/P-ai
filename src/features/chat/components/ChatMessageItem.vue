@@ -60,7 +60,7 @@
             @toggle="onActivityToggle"
           >
             <summary
-              class="collapse-title px-0 py-0.5 min-h-0 text-[12px] font-normal flex items-center gap-1.5 text-base-content/55"
+              class="collapse-title px-0 py-0.5 min-h-0 text-xs font-normal flex items-center gap-1.5 text-base-content/55"
               :class="showActivityPanel(block) ? 'hover:bg-base-200 cursor-pointer' : 'cursor-default'"
             >
               <span class="flex min-w-0 flex-1 items-center gap-1.5">

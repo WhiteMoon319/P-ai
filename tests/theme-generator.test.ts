@@ -43,16 +43,12 @@ describe("theme generator", () => {
     const tokens = generateGeneratedThemeTokens({
       ...DEFAULT_GENERATED_THEME_CONTROLS,
       mode: "dark",
-      uiSizePreset: "comfortable",
       depthEnabled: true,
       noiseEnabled: true,
     });
 
     expect(readLightness(tokens.base100)).toBeGreaterThan(readLightness(tokens.base200));
     expect(readLightness(tokens.base200)).toBeGreaterThan(readLightness(tokens.base300));
-    expect(tokens.sizeField).toBe("0.32rem");
-    expect(tokens.sizeSelector).toBe("0.32rem");
-    expect(tokens.border).toBe("1.5px");
     expect(tokens.depth).toBe("1");
     expect(tokens.noise).toBe("1");
   });

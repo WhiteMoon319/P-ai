@@ -1,4 +1,5 @@
 import type { Ref } from "vue";
+import { applyUiSizePreset } from "../../shell/composables/use-ui-size-appearance";
 import type { AppConfig, PromptCommandPreset } from "../../../types/app";
 
 type RuntimeNumberNormalizer = (
@@ -73,14 +74,17 @@ export function applyConfigBootstrapUpdate(bindings: {
   createApiConfig: (id: string) => AppConfig["apiConfigs"][number];
   buildConfigSnapshotJson: () => string;
   lastSavedConfigJson: Ref<string>;
-  normalizeWebviewZoomPercent: (value: unknown) => number;
+  normalizeUiSizePreset: (value: unknown) => AppConfig["uiSizePreset"];
   updateGithubUpdateMethod: (value: unknown) => void;
   normalizeRuntimeConfigNumbers?: RuntimeNumberNormalizer;
 }, payload: Record<string, unknown>) {
   if (!payload || typeof payload !== "object") return;
   if ("hotkey" in payload) bindings.config.hotkey = String(payload.hotkey ?? "").trim();
   if ("uiFont" in payload) bindings.config.uiFont = String(payload.uiFont ?? "");
-  if ("webviewZoomPercent" in payload) bindings.config.webviewZoomPercent = bindings.normalizeWebviewZoomPercent(payload.webviewZoomPercent);
+  if ("uiSizePreset" in payload) {
+    bindings.config.uiSizePreset = bindings.normalizeUiSizePreset(payload.uiSizePreset);
+    applyUiSizePreset(bindings.config.uiSizePreset);
+  }
   if ("webAccessPort" in payload) bindings.config.webAccessPort = normalizeWebAccessPort(payload.webAccessPort);
   if ("webAccessEnabled" in payload) bindings.config.webAccessEnabled = payload.webAccessEnabled !== false;
   if ("webAccessPassword" in payload) bindings.config.webAccessPassword = String(payload.webAccessPassword || "").trim();

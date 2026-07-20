@@ -175,6 +175,7 @@ import { useAppBootstrap } from "./features/shell/composables/use-app-bootstrap"
 import { useAppLifecycle } from "./features/shell/composables/use-app-lifecycle";
 import { useAppCore } from "./features/shell/composables/use-app-core";
 import { applyUiFont, normalizeUiFont } from "./features/shell/composables/use-ui-font";
+import { applyUiSizePreset, normalizeUiSizePreset } from "./features/shell/composables/use-ui-size-appearance";
 import { useArchivesView } from "./features/chat/composables/use-archives-view";
 import { useArchiveImport } from "./features/chat/composables/use-archive-import";
 import { useMessageStoreMigrationGate } from "./features/shell/composables/use-message-store-migration-gate";
@@ -189,7 +190,7 @@ const config = reactive<AppConfig>({
   hotkey: "Alt+·",
   uiLanguage: "zh-CN",
   uiFont: "auto",
-  webviewZoomPercent: 100,
+  uiSizePreset: "default",
   githubUpdateMethod: "auto",
   skippedGithubUpdateVersion: "",
   recordHotkey: "CapsLock",
@@ -367,6 +368,7 @@ async function refreshArchivesWindowData() {
     const snapshot = await invokeTauri<AppBootstrapSnapshot>("load_app_bootstrap_snapshot");
     config.uiLanguage = normalizeLocale(snapshot.config.uiLanguage);
     config.uiFont = String(snapshot.config.uiFont || "");
+    config.uiSizePreset = normalizeUiSizePreset(snapshot.config.uiSizePreset);
     personas.value = Array.isArray(snapshot.agents) ? snapshot.agents : [];
     userAlias.value = String(snapshot.chatSettings?.userAlias || "").trim() || t("archives.roleUser");
   } catch (error) {
@@ -392,6 +394,10 @@ const appBootstrap = useAppBootstrap({
     if (!payload || typeof payload !== "object") return;
     if ("uiFont" in payload) {
       config.uiFont = String(payload.uiFont ?? "");
+    }
+    if ("uiSizePreset" in payload) {
+      config.uiSizePreset = normalizeUiSizePreset(payload.uiSizePreset);
+      applyUiSizePreset(config.uiSizePreset);
     }
   },
   onChatSettingsUpdated: (payload) => {
@@ -420,10 +426,11 @@ useAppLifecycle({
 });
 
 watch(
-  () => ({ uiFont: config.uiFont, uiLanguage: config.uiLanguage }),
-  ({ uiFont, uiLanguage }) => {
+  () => ({ uiFont: config.uiFont, uiLanguage: config.uiLanguage, uiSizePreset: config.uiSizePreset }),
+  ({ uiFont, uiLanguage, uiSizePreset }) => {
     applyUiFont(uiFont, uiLanguage);
     config.uiFont = normalizeUiFont(uiFont);
+    config.uiSizePreset = applyUiSizePreset(uiSizePreset);
   },
   { immediate: true },
 );
