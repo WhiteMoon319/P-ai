@@ -204,7 +204,8 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
         : true;
       const userMessageId = String((submitResult as { userMessageId?: string } | null)?.userMessageId || "").trim();
       const assistantMessageId = String((submitResult as { assistantMessageId?: string } | null)?.assistantMessageId || "").trim();
-      if (userMessageId) {
+      const shouldProjectUserMessage = accepted && ingress !== "queued" && !!userMessageId;
+      if (shouldProjectUserMessage) {
         options.insertUserDraft(userMessageId, gen, plainText, sentImages, attachments, extraTextBlocks, selectedMentions);
       }
       if (!hasForegroundRoundInFlight && accepted && ingress !== "queued") {
@@ -215,7 +216,7 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
           options.onAssistantDraftInserted?.();
         }
       }
-      if (userMessageId) {
+      if (shouldProjectUserMessage) {
         options.onOwnUserDraftInserted?.({
           conversationId: String(submitResult.conversationId || sendConversationId || "").trim(),
           messageId: userMessageId,

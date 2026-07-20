@@ -121,7 +121,7 @@ describe("useChatFlow stream isolation", () => {
       },
     ]);
 
-    drafts.insertUserDraft("user-1", 1, "local user", [], [], []);
+    drafts.insertUserDraft("user-1", 1, "local user", [], [], [], []);
 
     expect(allMessages.value).toHaveLength(1);
     expect(allMessages.value[0].parts).toEqual([{ type: "text", text: "flushed user" }]);
@@ -132,12 +132,45 @@ describe("useChatFlow stream isolation", () => {
   it("keeps a local real user message out of pending draft cleanup", () => {
     const { allMessages, drafts } = createDraftHarness([]);
 
-    drafts.insertUserDraft("user-real-1", 1, "real user", [], [], []);
+    drafts.insertUserDraft("user-real-1", 1, "real user", [], [], [], []);
 
     expect(allMessages.value).toHaveLength(1);
     expect(allMessages.value[0].id).toBe("user-real-1");
     expect(allMessages.value[0].providerMeta?._optimistic).toBeUndefined();
     expect(drafts.getPendingUserDraftId()).toBe("");
+  });
+
+  it("does not project or cache a user message when a busy conversation queues it", async () => {
+    const chatting = ref(true);
+    const onOwnUserDraftInserted = vi.fn();
+    const allMessages = shallowRef<ChatMessage[]>([textMessage("assistant-1", "assistant", "正在回复")]);
+    const flow = useChatFlow({
+      chatting,
+      trimming: ref(false),
+      getConversationId: () => "conversation-1",
+      getSession: () => ({ apiConfigId: "api-1", agentId: "agent-1" }),
+      chatInput: ref("排队消息"),
+      clipboardImages: ref([]),
+      latestUserText: ref(""),
+      latestUserImages: ref([]),
+      latestAssistantText: ref("正在回复"),
+      toolStatusText: ref(""),
+      toolStatusState: ref<"running" | "done" | "failed" | "">(""),
+      chatErrorText: ref(""),
+      allMessages,
+      visibleMessageBlockCount: ref(1),
+      t: (key) => key,
+      formatRequestFailed: (error) => String(error),
+      removeBinaryPlaceholders: (text) => text,
+      invokeSendChatMessage: vi.fn(async () => acceptedSendResult({ ingress: "queued" })),
+      onOwnUserDraftInserted,
+      onReloadMessages: vi.fn(async () => {}),
+    });
+
+    await flow.sendChat();
+
+    expect(allMessages.value).toEqual([textMessage("assistant-1", "assistant", "正在回复")]);
+    expect(onOwnUserDraftInserted).not.toHaveBeenCalled();
   });
 
   it("does not downgrade an active assistant stream to a queued waiting bubble for the same id", () => {
