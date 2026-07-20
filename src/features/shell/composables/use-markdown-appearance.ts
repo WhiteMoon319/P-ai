@@ -27,6 +27,10 @@ function markdownWeightsForScale(scale: number) {
   const normalized = clampFontScale(scale);
   const bold = normalized >= 1;
   return {
+    app: bold ? 600 : 400,
+    appMedium: bold ? 700 : 500,
+    appStrong: bold ? 800 : 600,
+    appBold: bold ? 900 : 700,
     body: bold ? 850 : 400,
     heading: bold ? 900 : 600,
     strong: bold ? 900 : 700,
@@ -62,6 +66,10 @@ function applyMarkdownFontScale(scale: unknown) {
   const weights = markdownWeightsForScale(normalized);
   const root = document.documentElement.style;
   root.setProperty("--ecall-md-font-scale", String(normalized));
+  root.setProperty("--app-font-weight", String(weights.app));
+  root.setProperty("--app-font-medium-weight", String(weights.appMedium));
+  root.setProperty("--app-font-strong-weight", String(weights.appStrong));
+  root.setProperty("--app-font-bold-weight", String(weights.appBold));
   root.setProperty("--ecall-md-body-weight-setting", String(weights.body));
   root.setProperty("--ecall-md-heading-weight-setting", String(weights.heading));
   root.setProperty("--ecall-md-strong-weight-setting", String(weights.strong));

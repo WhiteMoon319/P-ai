@@ -86,6 +86,8 @@ body,
 #app {
   width: 100%;
   height: 100%;
+  font-weight: var(--app-font-weight, 400);
+  font-variation-settings: "wght" var(--app-font-weight, 400);
   font-family: var(
     --app-font-family,
     system-ui,
@@ -97,6 +99,50 @@ body,
     Arial,
     sans-serif
   );
+}
+
+button,
+input,
+select,
+textarea,
+.btn,
+.input,
+.select,
+.textarea,
+.label,
+.tab,
+.menu,
+.dropdown-content,
+.card-title {
+  font-weight: inherit;
+  font-variation-settings: inherit;
+}
+
+.card-title {
+  font-weight: var(--app-font-strong-weight, 600);
+  font-variation-settings: "wght" var(--app-font-strong-weight, 600);
+}
+
+.font-normal {
+  font-weight: var(--app-font-weight, 400);
+  font-variation-settings: "wght" var(--app-font-weight, 400);
+}
+
+.font-medium {
+  font-weight: var(--app-font-medium-weight, 500);
+  font-variation-settings: "wght" var(--app-font-medium-weight, 500);
+}
+
+.font-semibold {
+  font-weight: var(--app-font-strong-weight, 600);
+  font-variation-settings: "wght" var(--app-font-strong-weight, 600);
+}
+
+strong,
+b,
+.font-bold {
+  font-weight: var(--app-font-bold-weight, 700);
+  font-variation-settings: "wght" var(--app-font-bold-weight, 700);
 }
 
 body {

@@ -546,6 +546,8 @@ function findNextInlineMarker(
   white-space: normal;
   font-size: 0.875rem;
   line-height: 1.5;
+  font-weight: var(--ecall-md-body-weight-setting, var(--app-font-weight, 400));
+  font-variation-settings: "wght" var(--ecall-md-body-weight-setting, var(--app-font-weight, 400));
 }
 
 .ecall-sidebar-light-heading,
@@ -557,7 +559,8 @@ function findNextInlineMarker(
 }
 
 .ecall-sidebar-light-heading {
-  font-weight: 650;
+  font-weight: var(--ecall-md-heading-weight-setting, var(--app-font-strong-weight, 600));
+  font-variation-settings: "wght" var(--ecall-md-heading-weight-setting, var(--app-font-strong-weight, 600));
   line-height: 1.45;
 }
 
@@ -624,7 +627,8 @@ ol.ecall-sidebar-light-list {
 }
 
 .ecall-sidebar-light-table th {
-  font-weight: 650;
+  font-weight: var(--ecall-md-table-heading-weight-setting, var(--app-font-strong-weight, 600));
+  font-variation-settings: "wght" var(--ecall-md-table-heading-weight-setting, var(--app-font-strong-weight, 600));
   background: color-mix(in srgb, currentColor 7%, transparent);
 }
 
@@ -641,6 +645,8 @@ ol.ecall-sidebar-light-list {
   padding: 1.8rem 0.65rem 0.55rem;
   white-space: pre;
   font-family: var(--app-code-font-family);
+  font-weight: var(--ecall-md-code-weight-setting, var(--app-font-medium-weight, 500));
+  font-variation-settings: "wght" var(--ecall-md-code-weight-setting, var(--app-font-medium-weight, 500));
   font-size: 0.82rem;
   line-height: 1.45;
 }
@@ -693,6 +699,8 @@ ol.ecall-sidebar-light-list {
   background: color-mix(in srgb, currentColor 10%, transparent);
   padding: 0.08rem 0.28rem;
   font-family: var(--app-code-font-family);
+  font-weight: var(--ecall-md-code-weight-setting, var(--app-font-medium-weight, 500));
+  font-variation-settings: "wght" var(--ecall-md-code-weight-setting, var(--app-font-medium-weight, 500));
   font-size: 0.86em;
 }
 
@@ -704,7 +712,8 @@ ol.ecall-sidebar-light-list {
 }
 
 .ecall-sidebar-light-strong {
-  font-weight: 700;
+  font-weight: var(--ecall-md-strong-weight-setting, var(--app-font-strong-weight, 600));
+  font-variation-settings: "wght" var(--ecall-md-strong-weight-setting, var(--app-font-strong-weight, 600));
 }
 
 .ecall-sidebar-light-em {

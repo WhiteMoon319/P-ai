@@ -1121,6 +1121,8 @@ const MathBlock = defineComponent({
   white-space: normal;
   font-size: 0.875rem;
   line-height: 1.5;
+  font-weight: var(--ecall-md-body-weight-setting, var(--app-font-weight, 400));
+  font-variation-settings: "wght" var(--ecall-md-body-weight-setting, var(--app-font-weight, 400));
 }
 
 .ecall-md-renderer > :first-child {
@@ -1134,7 +1136,8 @@ const MathBlock = defineComponent({
 /* ==================== Headings ==================== */
 .ecall-md-heading {
   margin: 0.25rem 0;
-  font-weight: 650;
+  font-weight: var(--ecall-md-heading-weight-setting, var(--app-font-strong-weight, 600));
+  font-variation-settings: "wght" var(--ecall-md-heading-weight-setting, var(--app-font-strong-weight, 600));
   line-height: 1.45;
 }
 
@@ -1201,7 +1204,8 @@ h4.ecall-md-heading { font-size: 0.9rem; }
 .ecall-md-footnote-ref {
   margin-left: 0.08rem;
   font-size: 0.72em;
-  font-weight: 650;
+  font-weight: var(--ecall-md-strong-weight-setting, var(--app-font-strong-weight, 600));
+  font-variation-settings: "wght" var(--ecall-md-strong-weight-setting, var(--app-font-strong-weight, 600));
   line-height: 0;
   vertical-align: super;
 }
@@ -1245,7 +1249,8 @@ h4.ecall-md-heading { font-size: 0.9rem; }
 
 .ecall-md-footnote-item::marker {
   color: color-mix(in srgb, currentColor 72%, transparent);
-  font-weight: 650;
+  font-weight: var(--ecall-md-strong-weight-setting, var(--app-font-strong-weight, 600));
+  font-variation-settings: "wght" var(--ecall-md-strong-weight-setting, var(--app-font-strong-weight, 600));
 }
 
 .ecall-md-footnote-item:target,
@@ -1316,7 +1321,8 @@ ul.ecall-md-list {
 }
 
 .ecall-md-table th {
-  font-weight: 650;
+  font-weight: var(--ecall-md-table-heading-weight-setting, var(--app-font-strong-weight, 600));
+  font-variation-settings: "wght" var(--ecall-md-table-heading-weight-setting, var(--app-font-strong-weight, 600));
   background: var(--color-base-300);
 }
 
@@ -1393,6 +1399,8 @@ ul.ecall-md-list {
   overflow-x: auto;
   padding: 0.75rem;
   font-family: var(--app-code-font-family);
+  font-weight: var(--ecall-md-code-weight-setting, var(--app-font-medium-weight, 500));
+  font-variation-settings: "wght" var(--ecall-md-code-weight-setting, var(--app-font-medium-weight, 500));
   font-size: 0.82rem;
   line-height: 1.55;
   margin: 0 !important;
@@ -1452,6 +1460,9 @@ ul.ecall-md-list {
   border-radius: 0.28rem;
   background: color-mix(in srgb, currentColor 10%, transparent);
   padding: 0.08rem 0.28rem;
+  font-family: var(--app-code-font-family);
+  font-weight: var(--ecall-md-code-weight-setting, var(--app-font-medium-weight, 500));
+  font-variation-settings: "wght" var(--ecall-md-code-weight-setting, var(--app-font-medium-weight, 500));
   font-size: 0.86em;
 }
 
@@ -1513,7 +1524,8 @@ ul.ecall-md-list {
 
 /* ==================== Emphasis ==================== */
 .ecall-md-strong {
-  font-weight: 700;
+  font-weight: var(--ecall-md-strong-weight-setting, var(--app-font-strong-weight, 600));
+  font-variation-settings: "wght" var(--ecall-md-strong-weight-setting, var(--app-font-strong-weight, 600));
 }
 
 .ecall-md-em {
@@ -1661,7 +1673,8 @@ ul.ecall-md-list {
 
 .ecall-md-document .ecall-md-heading {
   margin: 1.2rem 0 0.5rem;
-  font-weight: 700;
+  font-weight: var(--ecall-md-heading-weight-setting, var(--app-font-strong-weight, 600));
+  font-variation-settings: "wght" var(--ecall-md-heading-weight-setting, var(--app-font-strong-weight, 600));
   line-height: 1.35;
 }
 

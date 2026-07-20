@@ -7,6 +7,7 @@ import "katex/dist/katex.min.css";
 import "./assets/sidebar-theme.css";
 import { LUCIDE_CONTEXT } from "../../lucide-context";
 import { useAppTheme } from "../shell/composables/use-app-theme";
+import { initMarkdownAppearance } from "../shell/composables/use-markdown-appearance";
 import { installNativeSelectionGuard } from "../../utils/native-selection";
 
 function isVsCodeSidebarHost(): boolean {
@@ -25,6 +26,7 @@ function prepareSidebarThemeHost() {
 }
 
 installNativeSelectionGuard();
+initMarkdownAppearance();
 prepareSidebarThemeHost();
 
 createApp(App).use(i18n).provide(LUCIDE_CONTEXT, {}).mount("#app");

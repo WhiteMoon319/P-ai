@@ -2,9 +2,11 @@ import { createApp } from "vue";
 import RuntimeLogsApp from "./apps/runtime-logs/RuntimeLogsApp.vue";
 import "./style.css";
 import { LUCIDE_CONTEXT } from "./lucide-context";
+import { initMarkdownAppearance } from "./features/shell/composables/use-markdown-appearance";
 import { installNativeSelectionGuard } from "./utils/native-selection";
 
 installNativeSelectionGuard();
+initMarkdownAppearance();
 
 window.addEventListener("error", (event) => {
   const error = event.error || event;
