@@ -101,9 +101,8 @@ async fn ensure_models_dev_cache_current(state: &AppState) -> Result<ModelsDevCa
     }
 }
 
-fn read_models_dev_cache_only(state: &AppState) -> Result<ModelsDevCacheFile, String> {
-    read_models_dev_cache_file(state)?
-        .ok_or_else(|| "暂无模型元数据缓存，请先手动刷新模型列表。".to_string())
+fn read_models_dev_cache_only(state: &AppState) -> Result<Option<ModelsDevCacheFile>, String> {
+    read_models_dev_cache_file(state)
 }
 
 async fn fetch_models_gemini_native(input: &RefreshModelsInput) -> Result<Vec<String>, String> {
@@ -419,29 +418,37 @@ struct ModelMetadataCandidate {
     enable_tools: bool,
     enable_audio: bool,
     enable_video: bool,
+    reasoning: Option<bool>,
+    reasoning_effort_options: Vec<String>,
+    documentation_url: Option<String>,
 }
 
 fn normalize_model_metadata_base_url(value: &str) -> String {
     let raw = value.trim();
     let Ok(mut parsed) = reqwest::Url::parse(raw) else {
-        return raw.trim_end_matches('/').to_string();
+        return raw
+            .trim_end_matches('/')
+            .trim_end_matches("/v1")
+            .to_string();
     };
     let scheme = parsed.scheme().to_ascii_lowercase();
     let _ = parsed.set_scheme(&scheme);
     if let Some(host) = parsed.host_str() {
         let _ = parsed.set_host(Some(&host.to_ascii_lowercase()));
     }
-    if parsed.path() != "/" {
-        let path = parsed.path().trim_end_matches('/').to_string();
-        parsed.set_path(&path);
+    let normalized_path = parsed.path().trim_end_matches('/').to_string();
+    if normalized_path.eq_ignore_ascii_case("/v1") || normalized_path == "/" {
+        parsed.set_path("");
+    } else {
+        parsed.set_path(&normalized_path);
     }
-    parsed.to_string()
+    parsed.to_string().trim_end_matches('/').to_string()
 }
 
 fn select_model_metadata_candidates<'a>(
     candidates: &'a [ModelMetadataCandidate],
     requested_base_url: &str,
-) -> (Vec<&'a ModelMetadataCandidate>, &'static str) {
+) -> (Vec<&'a ModelMetadataCandidate>, Vec<&'a ModelMetadataCandidate>, &'static str) {
     let url_matched = candidates
         .iter()
         .filter(|candidate| {
@@ -450,14 +457,113 @@ fn select_model_metadata_candidates<'a>(
         })
         .collect::<Vec<_>>();
     if url_matched.is_empty() {
-        (candidates.iter().collect(), "未匹配URL，候选合并最大值")
+        (candidates.iter().collect(), Vec::new(), "未匹配URL，候选合并最大值")
     } else {
-        (url_matched, "URL精准匹配")
+        (url_matched.clone(), url_matched, "URL精准匹配")
     }
+}
+
+fn parse_documentation_url(model_obj: &serde_json::Map<String, Value>) -> Option<String> {
+    for key in [
+        "documentation_url",
+        "documentationUrl",
+        "docs_url",
+        "docsUrl",
+        "doc_url",
+        "docUrl",
+        "docs",
+        "doc",
+        "website",
+        "reference",
+        "url",
+    ] {
+        if let Some(value) = model_obj.get(key).and_then(Value::as_str) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
+}
+
+fn parse_reasoning_effort_options(model_obj: &serde_json::Map<String, Value>) -> Vec<String> {
+    let mut values = Vec::<String>::new();
+    let Some(items) = model_obj.get("reasoning_options").and_then(Value::as_array) else {
+        return values;
+    };
+    for item in items {
+        let Some(entry) = item.as_object() else {
+            continue;
+        };
+        let option_type = entry
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase();
+        if option_type != "effort" {
+            continue;
+        }
+        let Some(raw_values) = entry.get("values") else {
+            continue;
+        };
+        let Some(raw_values) = raw_values.as_array() else {
+            continue;
+        };
+        for raw_value in raw_values {
+            let normalized = raw_value
+                .as_str()
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase();
+            if normalized.is_empty() || values.iter().any(|item| item == &normalized) {
+                continue;
+            }
+            values.push(normalized);
+        }
+    }
+    values
+}
+
+fn merge_reasoning_flag(selected_candidates: &[&ModelMetadataCandidate]) -> Option<bool> {
+    if selected_candidates.iter().any(|candidate| candidate.reasoning == Some(true)) {
+        Some(true)
+    } else if selected_candidates
+        .iter()
+        .any(|candidate| candidate.reasoning == Some(false))
+    {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+fn merge_reasoning_effort_options(selected_candidates: &[&ModelMetadataCandidate]) -> Vec<String> {
+    let mut merged = Vec::<String>::new();
+    for candidate in selected_candidates {
+        for value in &candidate.reasoning_effort_options {
+            if merged.iter().any(|item| item == value) {
+                continue;
+            }
+            merged.push(value.clone());
+        }
+    }
+    merged
+}
+
+fn merge_documentation_url(selected_candidates: &[&ModelMetadataCandidate]) -> Option<String> {
+    selected_candidates
+        .iter()
+        .filter_map(|candidate| candidate.documentation_url.as_ref())
+        .map(|value| value.trim())
+        .find(|value| !value.is_empty())
+        .map(|value| value.to_string())
 }
 
 fn merge_model_metadata_candidates(
     selected_candidates: &[&ModelMetadataCandidate],
+    documentation_candidates: &[&ModelMetadataCandidate],
 ) -> FetchModelMetadataOutput {
     FetchModelMetadataOutput {
         found: true,
@@ -476,6 +582,9 @@ fn merge_model_metadata_candidates(
         enable_tools: Some(selected_candidates.iter().any(|candidate| candidate.enable_tools)),
         enable_audio: Some(selected_candidates.iter().any(|candidate| candidate.enable_audio)),
         enable_video: Some(selected_candidates.iter().any(|candidate| candidate.enable_video)),
+        reasoning: merge_reasoning_flag(selected_candidates),
+        reasoning_effort_options: merge_reasoning_effort_options(selected_candidates),
+        documentation_url: merge_documentation_url(documentation_candidates),
     }
 }
 
@@ -495,7 +604,21 @@ async fn fetch_model_metadata_inner(
     if requested_model.is_empty() {
         return Err("Model is empty.".to_string());
     }
-    let cache = read_models_dev_cache_only(&state)?;
+    let Some(cache) = read_models_dev_cache_only(&state)? else {
+        return Ok(FetchModelMetadataOutput {
+            found: false,
+            matched_model_id: None,
+            context_window_tokens: None,
+            max_output_tokens: None,
+            enable_image: None,
+            enable_tools: None,
+            enable_audio: None,
+            enable_video: None,
+            reasoning: None,
+            reasoning_effort_options: Vec::new(),
+            documentation_url: None,
+        });
+    };
     let root = cache.root;
     let providers = root
         .as_object()
@@ -550,6 +673,10 @@ async fn fetch_model_metadata_inner(
                 .get("tool_call")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
+            let reasoning = model_obj.get("reasoning").and_then(Value::as_bool);
+            let reasoning_effort_options = parse_reasoning_effort_options(model_obj);
+            let documentation_url = parse_documentation_url(provider_obj)
+                .or_else(|| parse_documentation_url(model_obj));
             candidates.push(ModelMetadataCandidate {
                 provider_api: provider_api.clone(),
                 model_id: model_id.to_string(),
@@ -559,6 +686,9 @@ async fn fetch_model_metadata_inner(
                 enable_tools,
                 enable_audio,
                 enable_video,
+                reasoning,
+                reasoning_effort_options,
+                documentation_url,
             });
         }
     }
@@ -572,11 +702,14 @@ async fn fetch_model_metadata_inner(
             enable_tools: None,
             enable_audio: None,
             enable_video: None,
+            reasoning: None,
+            reasoning_effort_options: Vec::new(),
+            documentation_url: None,
         });
     }
-    let (selected_candidates, _) =
+    let (selected_candidates, documentation_candidates, _) =
         select_model_metadata_candidates(&candidates, &requested_base_url);
-    let merged = merge_model_metadata_candidates(&selected_candidates);
+    let merged = merge_model_metadata_candidates(&selected_candidates, &documentation_candidates);
     Ok(merged)
 }
 
@@ -1011,6 +1144,9 @@ mod model_metadata_selection_tests {
             enable_tools: true,
             enable_audio,
             enable_video,
+            reasoning: None,
+            reasoning_effort_options: Vec::new(),
+            documentation_url: None,
         }
     }
 
@@ -1046,9 +1182,9 @@ mod model_metadata_selection_tests {
         let requested_base_url =
             normalize_model_metadata_base_url("https://token-plan-cn.xiaomimimo.com/v1/");
 
-        let (selected, strategy) =
+        let (selected, documentation_candidates, strategy) =
             select_model_metadata_candidates(&candidates, &requested_base_url);
-        let merged = merge_model_metadata_candidates(&selected);
+        let merged = merge_model_metadata_candidates(&selected, &documentation_candidates);
 
         assert_eq!(strategy, "URL精准匹配");
         assert_eq!(selected.len(), 1);
@@ -1062,22 +1198,69 @@ mod model_metadata_selection_tests {
     }
 
     #[test]
+    fn model_metadata_should_treat_root_and_v1_as_same_provider_api() {
+        let candidates = vec![candidate(
+            "https://api.deepseek.com",
+            256_000,
+            8_192,
+            true,
+            false,
+        )];
+        let requested_base_url =
+            normalize_model_metadata_base_url("https://api.deepseek.com/v1");
+
+        let (selected, _documentation_candidates, strategy) =
+            select_model_metadata_candidates(&candidates, &requested_base_url);
+
+        assert_eq!(strategy, "URL精准匹配");
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].provider_api, "https://api.deepseek.com");
+    }
+
+    #[test]
+    fn model_metadata_should_keep_documentation_url_from_selected_candidate() {
+        let mut exact = candidate(
+            "https://api.deepseek.com",
+            256_000,
+            8_192,
+            true,
+            false,
+        );
+        exact.documentation_url = Some("https://api-docs.deepseek.com".to_string());
+        let mut fallback = candidate("", 512_000, 16_384, false, false);
+        fallback.documentation_url = Some("https://fallback.invalid".to_string());
+        let requested_base_url =
+            normalize_model_metadata_base_url("https://api.deepseek.com/v1");
+
+        let binding = [fallback, exact];
+        let (selected, documentation_candidates, _) =
+            select_model_metadata_candidates(&binding, &requested_base_url);
+        let merged = merge_model_metadata_candidates(&selected, &documentation_candidates);
+
+        assert_eq!(
+            merged.documentation_url.as_deref(),
+            Some("https://api-docs.deepseek.com")
+        );
+    }
+
+    #[test]
     fn model_metadata_should_merge_all_candidates_when_provider_api_url_is_unknown() {
-        let candidates = vec![
-            candidate("", 1_050_000, 131_100, false, false),
-            candidate(
-                "https://api.xiaomimimo.com/v1",
-                1_048_576,
-                131_072,
-                true,
-                true,
-            ),
-        ];
+        let mut first = candidate("", 1_050_000, 131_100, false, false);
+        first.documentation_url = Some("https://wrong.example.com/docs".to_string());
+        let mut second = candidate(
+            "https://api.xiaomimimo.com/v1",
+            1_048_576,
+            131_072,
+            true,
+            true,
+        );
+        second.documentation_url = Some("https://api.xiaomimimo.com/docs".to_string());
+        let candidates = vec![first, second];
         let requested_base_url = normalize_model_metadata_base_url("https://proxy.example.com/v1");
 
-        let (selected, strategy) =
+        let (selected, documentation_candidates, strategy) =
             select_model_metadata_candidates(&candidates, &requested_base_url);
-        let merged = merge_model_metadata_candidates(&selected);
+        let merged = merge_model_metadata_candidates(&selected, &documentation_candidates);
 
         assert_eq!(strategy, "未匹配URL，候选合并最大值");
         assert_eq!(selected.len(), 2);
@@ -1085,11 +1268,12 @@ mod model_metadata_selection_tests {
         assert_eq!(merged.max_output_tokens, Some(131_100));
         assert_eq!(merged.enable_audio, Some(true));
         assert_eq!(merged.enable_video, Some(true));
+        assert_eq!(merged.documentation_url, None);
     }
 
     #[test]
-    fn model_metadata_base_url_should_preserve_case_sensitive_path() {
-        assert_ne!(
+    fn model_metadata_base_url_should_treat_v1_and_root_as_same_provider_api() {
+        assert_eq!(
             normalize_model_metadata_base_url("https://api.example.com/V1"),
             normalize_model_metadata_base_url("https://api.example.com/v1"),
         );

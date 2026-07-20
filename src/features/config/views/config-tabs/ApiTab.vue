@@ -382,40 +382,23 @@
                         </div>
                       </label>
 
-                      <label v-if="showGeminiReasoningEffort(modelCard)" class="flex flex-col gap-1">
-                        <span class="text-sm font-medium">{{ t("config.api.googleReasoningEffort") }}</span>
-                        <select
-                          :value="geminiReasoningEffortValue(modelCard)"
-                          class="select select-bordered select-sm"
-                          @change="setGeminiReasoningEffort(modelCard, ($event.target as HTMLSelectElement).value)"
-                        >
-                          <option v-for="item in geminiReasoningEffortOptions" :key="item.value" :value="item.value">
-                            {{ item.label }}
-                          </option>
-                        </select>
-                      </label>
+                      <button
+                        v-if="modelDocumentationUrl(modelCard)"
+                        type="button"
+                        class="btn btn-outline btn-sm justify-start"
+                        @click="openModelDocumentation(modelCard)"
+                      >
+                        {{ t("config.api.viewModelDocumentation") }}
+                      </button>
 
-                      <label v-if="showOpenaiReasoningEffort(modelCard)" class="flex flex-col gap-1">
+                      <label v-if="showReasoningEffort(modelCard)" class="flex flex-col gap-1">
                         <span class="text-sm font-medium">{{ t("config.api.reasoningEffort") }}</span>
                         <select
-                          :value="openaiReasoningEffortValue(modelCard)"
+                          :value="reasoningEffortValue(modelCard)"
                           class="select select-bordered select-sm"
-                          @change="setOpenaiReasoningEffort(modelCard, ($event.target as HTMLSelectElement).value)"
+                          @change="setReasoningEffort(modelCard, ($event.target as HTMLSelectElement).value)"
                         >
-                          <option v-for="item in openaiReasoningEffortOptions" :key="item.value" :value="item.value">
-                            {{ item.label }}
-                          </option>
-                        </select>
-                      </label>
-
-                      <label v-if="showDeepSeekReasoningEffort(modelCard)" class="flex flex-col gap-1">
-                        <span class="text-sm font-medium">{{ t("config.api.reasoningEffort") }}</span>
-                        <select
-                          :value="deepseekReasoningEffortValue(modelCard)"
-                          class="select select-bordered select-sm"
-                          @change="setDeepSeekReasoningEffort(modelCard, ($event.target as HTMLSelectElement).value)"
-                        >
-                          <option v-for="item in deepseekReasoningEffortOptions" :key="item.value" :value="item.value">
+                          <option v-for="item in reasoningEffortItems(modelCard)" :key="item.value" :value="item.value">
                             {{ item.label }}
                           </option>
                         </select>
@@ -488,6 +471,7 @@ import { invokeTauri } from "../../../../services/tauri-api";
 import CodexProviderPanel from "./CodexProviderPanel.vue";
 import { normalizeApiRequestFormat } from "../../utils/api-request-format";
 import { apiConfigDisplayName, reasoningEffortDisplayLabel as sharedReasoningEffortDisplayLabel } from "../../utils/api-config-display";
+import { buildModelCapability, type ModelCapabilitySnapshot } from "../../utils/model-capability";
 
 type ApiCapability = "text" | "voice" | "embedding" | "rerank";
 type ProviderPresetCategory = "official" | "domestic" | "openaiCompatible" | "local";
@@ -510,15 +494,12 @@ type FetchModelMetadataResult = {
   enableVideo?: boolean | null;
   enableTools?: boolean | null;
   enableAudio?: boolean | null;
+  reasoning?: boolean | null;
+  reasoningEffortOptions?: string[] | null;
+  documentationUrl?: string | null;
 };
-type ModelCapabilityLimits = {
+type ModelCapabilityLimits = Partial<ModelCapabilitySnapshot> & {
   metadataFound?: boolean;
-  contextWindowMax?: number;
-  maxOutputTokensMax?: number;
-  enableImage?: boolean;
-  enableVideo?: boolean;
-  enableAudio?: boolean;
-  enableTools?: boolean;
 };
 
 const SLIDER_CONTEXT_MIN = 16_000;
@@ -859,24 +840,6 @@ const currentProviderDirty = computed(() => {
   return JSON.stringify(normalizeProviderForCompare(provider)) !== JSON.stringify(normalizeProviderForCompare(savedProvider));
 });
 
-function normalizeGeminiReasoningEffort(model: ApiModelConfigItem) {
-  if (!["low", "high"].includes(String(model.reasoningEffort || "").trim().toLowerCase())) {
-    model.reasoningEffort = DEFAULT_GEMINI_REASONING_EFFORT;
-  }
-}
-
-function normalizeOpenaiReasoningEffort(model: ApiModelConfigItem) {
-  if (!openaiReasoningEffortOptions.value.some((item) => item.value === String(model.reasoningEffort || "").trim().toLowerCase())) {
-    model.reasoningEffort = DEFAULT_OPENAI_REASONING_EFFORT;
-  }
-}
-
-function normalizeDeepSeekReasoningEffort(model: ApiModelConfigItem) {
-  if (!deepseekReasoningEffortOptions.value.some((item) => item.value === String(model.reasoningEffort || "").trim().toLowerCase())) {
-    model.reasoningEffort = DEFAULT_DEEPSEEK_REASONING_EFFORT;
-  }
-}
-
 function isGoogleModelAdapter(adapter: string | undefined): boolean {
   return String(adapter || "").trim().toLowerCase() === "gemini";
 }
@@ -965,6 +928,55 @@ function deepseekReasoningEffortValue(modelCard: ApiModelConfigItem): string {
 
 function setDeepSeekReasoningEffort(modelCard: ApiModelConfigItem, value: string) {
   modelCard.reasoningEffort = deepseekReasoningEffortOptions.value.some((item) => item.value === value) ? value : DEFAULT_DEEPSEEK_REASONING_EFFORT;
+}
+
+function reasoningCapability(modelCard: ApiModelConfigItem): ModelCapabilityLimits | undefined {
+  return modelCapabilityById.value[modelCard.id];
+}
+
+function reasoningEffortItems(modelCard: ApiModelConfigItem): Array<{ value: string; label: string }> {
+  const capability = reasoningCapability(modelCard);
+  const options = capability?.reasoning?.reasoningEffortOptions || [];
+  return options.map((value) => ({
+    value,
+    label: reasoningEffortDisplayLabel(value),
+  })).filter((item) => !!item.label);
+}
+
+function showReasoningEffort(modelCard: ApiModelConfigItem): boolean {
+  if (activeCapability.value !== "text") return false;
+  const capability = reasoningCapability(modelCard);
+  if (!capability) return false;
+  if (capability.metadataFound === false) return reasoningEffortItems(modelCard).length > 0;
+  return !!capability.reasoning?.supportsReasoning && reasoningEffortItems(modelCard).length > 0;
+}
+
+function reasoningEffortValue(modelCard: ApiModelConfigItem): string {
+  const options = reasoningEffortItems(modelCard).map((item) => item.value);
+  const current = String(modelCard.reasoningEffort || "").trim().toLowerCase();
+  if (options.includes(current)) return current;
+  return options[0] || DEFAULT_REASONING_EFFORT;
+}
+
+function setReasoningEffort(modelCard: ApiModelConfigItem, value: string) {
+  const options = reasoningEffortItems(modelCard).map((item) => item.value);
+  modelCard.reasoningEffort = options.includes(value) ? value : (options[0] || DEFAULT_REASONING_EFFORT);
+}
+
+function modelDocumentationUrl(modelCard: ApiModelConfigItem): string {
+  const capability = reasoningCapability(modelCard);
+  if (capability?.metadataFound === false) return "";
+  return String(capability?.documentationUrl || "").trim();
+}
+
+async function openModelDocumentation(modelCard: ApiModelConfigItem) {
+  const url = modelDocumentationUrl(modelCard);
+  if (!url) return;
+  try {
+    await invokeTauri("open_external_url", { url });
+  } catch (error) {
+    console.warn("[API] 打开模型文档失败:", error);
+  }
 }
 
 function capabilityFromRequestFormat(format: ApiRequestFormat | string): ApiCapability {
@@ -1073,6 +1085,9 @@ function cloneProvider(provider: ApiProviderConfigItem): ApiProviderConfigItem {
 
 function normalizedModelReasoningEffort(provider: ApiProviderConfigItem, model: ApiModelConfigItem): string {
   const value = String(model.reasoningEffort || "").trim().toLowerCase();
+  if (value === "default") {
+    return "default";
+  }
   if (provider.requestFormat === "gemini") {
     return value === "low" ? "low" : DEFAULT_GEMINI_REASONING_EFFORT;
   }
@@ -1572,19 +1587,6 @@ async function syncModelMetadata(modelCard: ApiModelConfigItem) {
         ...resolvedAdapterByModelId.value,
         [modelCard.id]: adapter,
       };
-      if (isGoogleModelAdapter(adapter)) {
-        normalizeGeminiReasoningEffort(modelCard);
-      } else if (isDeepSeekModelAdapter(adapter)) {
-        normalizeDeepSeekReasoningEffort(modelCard);
-      } else if (isOpenaiModelAdapter(adapter)) {
-        normalizeOpenaiReasoningEffort(modelCard);
-      }
-    } else if (provider.requestFormat === "gemini") {
-      normalizeGeminiReasoningEffort(modelCard);
-    } else if (provider.requestFormat === "deepseek") {
-      normalizeDeepSeekReasoningEffort(modelCard);
-    } else if (provider.requestFormat === "openai" || provider.requestFormat === "openai_responses") {
-      normalizeOpenaiReasoningEffort(modelCard);
     }
     const metadata = await invokeTauri<FetchModelMetadataResult>("fetch_model_metadata", {
       input: {
@@ -1593,41 +1595,35 @@ async function syncModelMetadata(modelCard: ApiModelConfigItem) {
         baseUrl: provider.baseUrl,
       },
     });
-    if (!metadata?.found) {
-      modelCapabilityById.value = {
-        ...modelCapabilityById.value,
-        [modelCard.id]: { metadataFound: false },
-      };
-      applyAutoContextWindowTokens(modelCard);
-      clampModelCardValues(modelCard);
-      return;
-    }
-    const nextLimits: ModelCapabilityLimits = { metadataFound: true };
-    if (Number.isFinite(Number(metadata.contextWindowTokens))) {
-      nextLimits.contextWindowMax = Number(metadata.contextWindowTokens);
-    }
-    if (Number.isFinite(Number(metadata.maxOutputTokens))) {
-      nextLimits.maxOutputTokensMax = Number(metadata.maxOutputTokens);
-    }
-    nextLimits.enableImage = metadata.enableImage === true;
-    nextLimits.enableVideo = metadata.enableVideo === true;
-    if (typeof metadata.enableAudio === "boolean") {
-      nextLimits.enableAudio = metadata.enableAudio;
-    }
-    if (typeof metadata.enableTools === "boolean") {
-      nextLimits.enableTools = metadata.enableTools;
-    }
+    const nextCapability: ModelCapabilityLimits = metadata?.found
+      ? {
+          metadataFound: true,
+          ...buildModelCapability({
+            metadataFound: true,
+            contextWindowTokens: metadata.contextWindowTokens,
+            maxOutputTokens: metadata.maxOutputTokens,
+            enableImage: metadata.enableImage,
+            enableVideo: metadata.enableVideo,
+            enableAudio: metadata.enableAudio,
+            enableTools: metadata.enableTools,
+            documentationUrl: metadata.documentationUrl,
+            reasoning: metadata.reasoning,
+            reasoningEffortOptions: metadata.reasoningEffortOptions,
+          }),
+        }
+      : {
+          metadataFound: false,
+          ...buildModelCapability({
+            metadataFound: false,
+          }),
+        };
     modelCapabilityById.value = {
       ...modelCapabilityById.value,
-      [modelCard.id]: nextLimits,
+      [modelCard.id]: nextCapability,
     };
     applyAutoContextWindowTokens(modelCard);
     clampModelCardValues(modelCard);
   } catch (error) {
-    const message = String(error || "").trim();
-    if (message.includes("暂无模型元数据缓存")) {
-      return;
-    }
     console.warn("[API] 获取模型元数据失败:", error);
   }
 }
@@ -2004,6 +2000,21 @@ watch(
   },
   () => {
     void refreshResolvedAdaptersForSelectedProvider();
+  },
+  { immediate: true },
+);
+
+watch(
+  () => [
+    selectedProvider.value?.id || "",
+    selectedProvider.value?.baseUrl || "",
+    selectedProvider.value?.requestFormat || "",
+    selectedModel.value?.id || "",
+  ].join("\0"),
+  () => {
+    const modelCard = selectedModel.value;
+    if (!modelCard) return;
+    void syncModelMetadata(modelCard);
   },
   { immediate: true },
 );

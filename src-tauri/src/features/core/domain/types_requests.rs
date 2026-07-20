@@ -397,6 +397,10 @@ struct FetchModelMetadataOutput {
     enable_tools: Option<bool>,
     enable_audio: Option<bool>,
     enable_video: Option<bool>,
+    reasoning: Option<bool>,
+    #[serde(default)]
+    reasoning_effort_options: Vec<String>,
+    documentation_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

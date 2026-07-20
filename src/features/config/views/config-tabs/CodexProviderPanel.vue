@@ -295,6 +295,7 @@ const codexRateLimitBusyByProvider = ref<Record<string, boolean>>({});
 const codexRateLimitErrorByProvider = ref<Record<string, string>>({});
 const codexResetBusy = ref(false);
 const reasoningEffortOptions = computed(() => [
+  { value: "default", label: t("config.api.reasoningDefault") },
   { value: "low", label: t("config.api.reasoningLow") },
   { value: "medium", label: t("config.api.reasoningMedium") },
   { value: "high", label: t("config.api.reasoningHigh") },

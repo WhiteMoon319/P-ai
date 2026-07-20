@@ -482,36 +482,13 @@ fn strip_model_namespace_for_request_format(value: &str) -> &str {
         .unwrap_or(value)
 }
 
-fn request_format_uses_gemini_reasoning_effort(request_format: RequestFormat, model: &str) -> bool {
-    if request_format.is_gemini() {
-        return true;
-    }
-    if !request_format.is_auto() {
-        return false;
-    }
-    let adapter_probe = strip_model_namespace_for_request_format(model).to_ascii_lowercase();
-    matches!(
-        genai::adapter::AdapterKind::from_model(&adapter_probe),
-        Ok(genai::adapter::AdapterKind::Gemini)
-    )
-}
-
-fn normalize_gemini_reasoning_effort(value: &str) -> String {
-    if value.trim().eq_ignore_ascii_case("low") {
-        "low".to_string()
-    } else {
-        "high".to_string()
-    }
-}
-
 fn selected_reasoning_effort_for_runtime(selected: &ApiConfig) -> Option<String> {
-    if selected.request_format.is_codex() {
-        return Some(normalize_reasoning_effort(&selected.reasoning_effort));
+    let normalized = selected.reasoning_effort.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "default" | "" => None,
+        "low" | "high" | "xhigh" | "none" | "minimal" | "max" | "medium" => Some(normalized),
+        _ => None,
     }
-    if request_format_uses_gemini_reasoning_effort(selected.request_format, &selected.model) {
-        return Some(normalize_gemini_reasoning_effort(&selected.reasoning_effort));
-    }
-    Some(normalize_reasoning_effort(&selected.reasoning_effort))
 }
 
 fn normalize_api_tools(config: &mut AppConfig) {

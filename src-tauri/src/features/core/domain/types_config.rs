@@ -59,13 +59,18 @@ fn default_reasoning_effort() -> String {
 }
 
 fn normalize_reasoning_effort(value: &str) -> String {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "low" => "low".to_string(),
-        "high" => "high".to_string(),
-        "xhigh" => "xhigh".to_string(),
-        "none" => "none".to_string(),
-        "minimal" => "minimal".to_string(),
-        _ => "medium".to_string(),
+    let normalized = value.trim().to_ascii_lowercase();
+    if normalized == "default"
+        || normalized == "low"
+        || normalized == "high"
+        || normalized == "xhigh"
+        || normalized == "none"
+        || normalized == "minimal"
+        || normalized == "max"
+    {
+        normalized
+    } else {
+        normalized
     }
 }
 

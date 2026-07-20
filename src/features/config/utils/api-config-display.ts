@@ -1,19 +1,21 @@
 import type { ApiConfigItem } from "../../../types/app";
 
 export const LEGAL_REASONING_EFFORTS = [
+  "default",
   "none",
   "minimal",
   "low",
   "medium",
   "high",
   "xhigh",
+  "max",
 ] as const;
 
 export type LegalReasoningEffort = (typeof LEGAL_REASONING_EFFORTS)[number];
 
 type TranslateFn = (key: string, params?: Record<string, unknown>) => string;
 
-const REASONING_SUFFIX_PATTERN = /\s*·\s*(不思考|低|中|高|极高|Off|Low|Medium|High|Extra High|XHigh)$/i;
+const REASONING_SUFFIX_PATTERN = /\s*·\s*(默认|不思考|最小|低|中|高|极高|最大|Default|Off|Minimal|Low|Medium|High|Extra High|XHigh|Max)$/i;
 
 export function normalizeReasoningEffortValue(value: unknown): string {
   return String(value || "").trim().toLowerCase();
@@ -24,14 +26,19 @@ export function isLegalReasoningEffort(value: unknown): value is LegalReasoningE
   return (LEGAL_REASONING_EFFORTS as readonly string[]).includes(normalized);
 }
 
-/** 仅合法值返回标签；非法/空值返回空字符串，调用方不应再拼等级后缀。 */
 export function reasoningEffortDisplayLabel(
   value: unknown,
   t?: TranslateFn,
 ): string {
   const normalized = normalizeReasoningEffortValue(value);
-  if (normalized === "none" || normalized === "minimal") {
+  if (normalized === "default") {
+    return t ? t("config.api.reasoningDefault") : "默认";
+  }
+  if (normalized === "none") {
     return t ? t("config.api.reasoningOff") : "不思考";
+  }
+  if (normalized === "minimal") {
+    return t ? t("config.api.reasoningMinimal") : "最小";
   }
   if (normalized === "low") {
     return t ? t("config.api.reasoningLow") : "低";
@@ -44,6 +51,9 @@ export function reasoningEffortDisplayLabel(
   }
   if (normalized === "xhigh") {
     return t ? t("config.api.reasoningXHigh") : "极高";
+  }
+  if (normalized === "max") {
+    return t ? t("config.api.reasoningMax") : "最大";
   }
   return "";
 }
