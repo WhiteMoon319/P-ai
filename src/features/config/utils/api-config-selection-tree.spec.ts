@@ -58,4 +58,21 @@ describe("buildApiConfigSelectionTree", () => {
       expect.objectContaining({ id: "provider-a::model-legacy", label: "legacy" }),
     ]);
   });
+
+  it("思维等级叶子按固定档位序排列，不因录入顺序靠前", () => {
+    const tree = buildApiConfigSelectionTree([
+      apiConfig({ id: "provider-a::model-high", reasoningEffort: "high" }),
+      apiConfig({ id: "provider-a::model-default", reasoningEffort: "default" }),
+      apiConfig({ id: "provider-a::model-low", reasoningEffort: "low" }),
+      apiConfig({ id: "provider-a::model-max", reasoningEffort: "max" }),
+    ]);
+
+    expect(tree[0].models[0].leaves.map((leaf) => leaf.item.reasoningEffort)).toEqual([
+      "default",
+      "low",
+      "high",
+      "max",
+    ]);
+  });
 });
+

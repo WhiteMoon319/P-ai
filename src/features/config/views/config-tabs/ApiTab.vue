@@ -472,7 +472,10 @@ import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
 import { invokeTauri } from "../../../../services/tauri-api";
 import CodexProviderPanel from "./CodexProviderPanel.vue";
 import { normalizeApiRequestFormat } from "../../utils/api-request-format";
-import { reasoningEffortDisplayLabel as sharedReasoningEffortDisplayLabel } from "../../utils/api-config-display";
+import {
+  reasoningEffortDisplayLabel as sharedReasoningEffortDisplayLabel,
+  sortReasoningEffortValues,
+} from "../../utils/api-config-display";
 import { buildModelCapability, type ModelCapabilitySnapshot } from "../../utils/model-capability";
 
 type ApiCapability = "text" | "voice" | "embedding" | "rerank";
@@ -1003,8 +1006,12 @@ function reasoningEffortItems(modelCard: ApiModelConfigItem): Array<{ value: str
   const existing = (group?.cards || [modelCard])
     .map((item) => String(item.reasoningEffort || "").trim().toLowerCase() || "default");
   const capability = reasoningCapability(modelCard);
-  const options = [...existing, ...(capability?.reasoning?.reasoningEffortOptions || [])];
-  return Array.from(new Set(options)).map((value) => ({
+  // 已勾选档位只参与集合，不抢占顺序；统一按标准档位序展示。
+  const options = sortReasoningEffortValues([
+    ...(capability?.reasoning?.reasoningEffortOptions || []),
+    ...existing,
+  ]);
+  return options.map((value) => ({
     value,
     label: reasoningEffortDisplayLabel(value) || value,
   }));

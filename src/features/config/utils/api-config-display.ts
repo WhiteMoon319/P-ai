@@ -26,6 +26,27 @@ export function isLegalReasoningEffort(value: unknown): value is LegalReasoningE
   return (LEGAL_REASONING_EFFORTS as readonly string[]).includes(normalized);
 }
 
+/** 固定档位顺序：default → none → minimal → low → medium → high → xhigh → max；未知值置后保持相对顺序。 */
+export function sortReasoningEffortValues(values: Iterable<string>): string[] {
+  const unique: string[] = [];
+  for (const raw of values) {
+    const value = normalizeReasoningEffortValue(raw);
+    if (!value || unique.includes(value)) continue;
+    unique.push(value);
+  }
+  const rank = new Map<string, number>(
+    LEGAL_REASONING_EFFORTS.map((item, index) => [item, index]),
+  );
+  return unique.sort((left, right) => {
+    const leftRank = rank.get(left);
+    const rightRank = rank.get(right);
+    if (leftRank != null && rightRank != null) return leftRank - rightRank;
+    if (leftRank != null) return -1;
+    if (rightRank != null) return 1;
+    return left.localeCompare(right);
+  });
+}
+
 export function reasoningEffortDisplayLabel(
   value: unknown,
   t?: TranslateFn,

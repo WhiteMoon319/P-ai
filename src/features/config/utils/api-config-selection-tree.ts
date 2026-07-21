@@ -1,5 +1,10 @@
 import type { ApiConfigItem } from "../../../types/app";
-import { normalizeReasoningEffortValue, reasoningEffortDisplayLabel, stripReasoningEffortDisplaySuffix } from "./api-config-display";
+import {
+  normalizeReasoningEffortValue,
+  reasoningEffortDisplayLabel,
+  sortReasoningEffortValues,
+  stripReasoningEffortDisplaySuffix,
+} from "./api-config-display";
 
 export type ApiConfigSelectionLeaf = {
   id: string;
@@ -134,7 +139,15 @@ export function buildApiConfigSelectionTree(
       const groups = byModelName.get(group.name) || [];
       groups.push(group);
       byModelName.set(group.name, groups);
-      group.leaves.sort((left, right) => left.label.localeCompare(right.label));
+      const orderedEfforts = sortReasoningEffortValues(
+        group.leaves.map((leaf) => normalizeReasoningEffortValue(leaf.item.reasoningEffort) || "default"),
+      );
+      const effortRank = new Map(orderedEfforts.map((value, index) => [value, index]));
+      group.leaves.sort((left, right) => {
+        const leftEffort = normalizeReasoningEffortValue(left.item.reasoningEffort) || "default";
+        const rightEffort = normalizeReasoningEffortValue(right.item.reasoningEffort) || "default";
+        return (effortRank.get(leftEffort) ?? 0) - (effortRank.get(rightEffort) ?? 0);
+      });
     }
     for (const groups of byModelName.values()) {
       const fields = groups.length > 1 ? distinctSummaryFields(groups) : [];
