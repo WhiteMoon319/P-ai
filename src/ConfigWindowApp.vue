@@ -438,7 +438,7 @@ const {
 });
 const startupOverlayVisible = ref(false);
 const startupOverlayMessage = ref("等待后端加载中...");
-const { setUiSizeScale } = useUiSizeAppearance();
+const { setUiSizeScale, uiSizeScale } = useUiSizeAppearance();
 const { updateGithubUpdateMethod } = useGithubUpdateMethod(config, setStatusError);
 
 const {
@@ -895,5 +895,12 @@ watch(
   },
   { immediate: true },
 );
+
+// Ctrl/Meta + 滑轮会改全局 uiSizeScale，需回写设置页当前值。
+watch(uiSizeScale, (scale) => {
+  if (config.uiSizeScale !== scale) {
+    config.uiSizeScale = scale;
+  }
+});
 
 </script>

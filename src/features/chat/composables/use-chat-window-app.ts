@@ -227,7 +227,7 @@ export function useChatWindowApp() {
     status,
     perfDebug: PERF_DEBUG,
   });
-  const { setUiSizeScale } = useUiSizeAppearance();
+  const { setUiSizeScale, uiSizeScale } = useUiSizeAppearance();
   const { updateGithubUpdateMethod } = useGithubUpdateMethod(config, setStatusError);
   const { clearConversationStatus } = usePipelineStatus({
     activeConversationId: computed(() => String(currentChatConversationId.value || "").trim()),
@@ -920,6 +920,12 @@ export function useChatWindowApp() {
   function updateUiSizeScale(value: unknown) {
     config.uiSizeScale = setUiSizeScale(value);
   }
+
+  watch(uiSizeScale, (scale) => {
+    if (config.uiSizeScale !== scale) {
+      config.uiSizeScale = scale;
+    }
+  });
 
   return {
     messageText,

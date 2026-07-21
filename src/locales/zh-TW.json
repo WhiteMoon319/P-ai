@@ -2120,7 +2120,7 @@
     "textStrength": "文字強度",
     "radius": "統一圓角",
     "uiSizeScale": "UI 介面尺寸",
-    "uiSizeScaleHint": "連續調整介面字體與控制項尺寸（75%–150%）。",
+    "uiSizeScaleHint": "連續調整介面字體與控制項尺寸（75%–150%）。可用 Ctrl + 滾輪每次調節 10%。",
     "depthEnabled": "層次效果",
     "noiseEnabled": "紋理效果",
     "language": "界面语言",

@@ -11,7 +11,12 @@ vi.mock("../src/services/tauri-api", () => ({
 
 import {
   normalizeUiSizeScale,
+  stepUiSizeScale,
   uiSizeTokensFor,
+  useUiSizeAppearance,
+  UI_SIZE_DEFAULT_SCALE,
+  UI_SIZE_MAX_SCALE,
+  UI_SIZE_MIN_SCALE,
 } from "../src/features/shell/composables/use-ui-size-appearance";
 
 describe("ui size appearance", () => {
@@ -57,5 +62,19 @@ describe("ui size appearance", () => {
       sizeField: "5.2px",
       border: "1.25px",
     });
+  });
+
+  it("steps ui size by 10% and clamps within the supported range", () => {
+    const { setUiSizeScale, uiSizeScale } = useUiSizeAppearance();
+    setUiSizeScale(UI_SIZE_DEFAULT_SCALE);
+    expect(stepUiSizeScale(1)).toBe(110);
+    expect(uiSizeScale.value).toBe(110);
+    expect(stepUiSizeScale(-1)).toBe(100);
+    setUiSizeScale(UI_SIZE_MIN_SCALE);
+    expect(stepUiSizeScale(-1)).toBe(UI_SIZE_MIN_SCALE);
+    setUiSizeScale(UI_SIZE_MAX_SCALE);
+    expect(stepUiSizeScale(1)).toBe(UI_SIZE_MAX_SCALE);
+    setUiSizeScale(145);
+    expect(stepUiSizeScale(1)).toBe(UI_SIZE_MAX_SCALE);
   });
 });

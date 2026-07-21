@@ -8,6 +8,7 @@ const UI_SIZE_CHANGED_EVENT = "easy-call:ui-size-changed";
 export const UI_SIZE_MIN_SCALE = 75;
 export const UI_SIZE_MAX_SCALE = 150;
 export const UI_SIZE_DEFAULT_SCALE = 100;
+export const UI_SIZE_STEP_SCALE = 10;
 export const UI_SIZE_SCALE_MARKS = [75, 100, 125, 150] as const;
 export type UiSizeScale = number;
 
@@ -132,11 +133,43 @@ function handleStorageEvent(event: StorageEvent) {
   if (event.key === UI_SIZE_STORAGE_KEY) applyUiSizeScale(event.newValue);
 }
 
+function hasUiSizeZoomModifier(event: WheelEvent | KeyboardEvent) {
+  return !!event.ctrlKey || !!event.metaKey;
+}
+
+export function stepUiSizeScale(direction: number): UiSizeScale {
+  const delta = direction > 0 ? UI_SIZE_STEP_SCALE : -UI_SIZE_STEP_SCALE;
+  return setUiSizeScale(uiSizeScale.value + delta);
+}
+
+function handleGlobalUiSizeWheel(event: WheelEvent) {
+  if (!hasUiSizeZoomModifier(event)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  // 向上滚放大，向下滚缩小，每步 10%。
+  stepUiSizeScale(event.deltaY < 0 ? 1 : -1);
+}
+
+function setUiSizeScale(value: unknown): UiSizeScale {
+  const scale = normalizeUiSizeScale(value);
+  const changed = uiSizeScale.value !== scale;
+  applyUiSizeScale(scale);
+  persistUiSizeScale(scale);
+  if (changed && isTauriRuntimeAvailable()) {
+    void emit(UI_SIZE_CHANGED_EVENT, { scale }).catch((error) => {
+      console.warn("[界面尺寸] 同步尺寸变化失败", error);
+    });
+  }
+  return scale;
+}
+
 export function initUiSizeAppearance() {
   if (initialized) return;
   initialized = true;
   applyUiSizeScale(readStoredUiSizeScale());
-  if (typeof window !== "undefined") window.addEventListener("storage", handleStorageEvent);
+  if (typeof window === "undefined") return;
+  window.addEventListener("storage", handleStorageEvent);
+  window.addEventListener("wheel", handleGlobalUiSizeWheel, { passive: false, capture: true });
   if (!isTauriRuntimeAvailable()) return;
   void listen<UiSizePayload>(UI_SIZE_CHANGED_EVENT, (event) => {
     applyUiSizeScale(event.payload?.scale ?? event.payload?.preset);
@@ -149,17 +182,5 @@ export function initUiSizeAppearance() {
 
 export function useUiSizeAppearance() {
   initUiSizeAppearance();
-
-  function setUiSizeScale(value: unknown): UiSizeScale {
-    const scale = applyUiSizeScale(value);
-    persistUiSizeScale(scale);
-    if (isTauriRuntimeAvailable()) {
-      void emit(UI_SIZE_CHANGED_EVENT, { scale }).catch((error) => {
-        console.warn("[界面尺寸] 同步尺寸变化失败", error);
-      });
-    }
-    return scale;
-  }
-
-  return { uiSizeScale, setUiSizeScale };
+  return { uiSizeScale, setUiSizeScale, stepUiSizeScale };
 }

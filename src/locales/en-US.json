@@ -2120,7 +2120,7 @@
     "textStrength": "Text Strength",
     "radius": "Unified Radius",
     "uiSizeScale": "UI Size",
-    "uiSizeScaleHint": "Continuously adjust interface typography and control sizes (75%–150%).",
+    "uiSizeScaleHint": "Continuously adjust interface typography and control sizes (75%–150%). Use Ctrl + mouse wheel to change by 10% each step.",
     "depthEnabled": "Depth Effect",
     "noiseEnabled": "Noise Effect",
     "language": "UI Language",
