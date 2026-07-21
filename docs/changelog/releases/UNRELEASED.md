@@ -1,5 +1,6 @@
 # 未发布
 
+- 优化（model-reasoning-selector）：模型三级选择改为 DaisyUI menu 折叠树，默认折叠；下拉面板限制在视口可用高度内滚动，不再顶出屏幕。
 - 优化（model-reasoning-selector）：供应商页思维强度选项按固定档位顺序展示，已勾选项不会被提到最前。
 - 功能（model-reasoning-selector）：供应商页将同模型不同思维档位聚合为一组复选框编辑，所有文本模型选择入口统一升级为“渠道 → 模型 → 思维等级”三级菜单，并保持既有 `apiConfigId` 绑定协议不变。
 

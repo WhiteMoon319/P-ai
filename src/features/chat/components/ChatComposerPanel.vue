@@ -349,40 +349,62 @@
     <div
       v-if="modelDropdownOpen"
       ref="modelDropdownPanelRef"
-      class="fixed z-1200"
+      class="fixed z-1200 overflow-hidden rounded-box border border-base-300 bg-base-100 text-base-content shadow-xl"
       :data-theme="teleportTheme"
       :style="modelDropdownStyle"
     >
-      <div class="relative overflow-hidden rounded-box border border-base-300 bg-base-100 text-base-content shadow-xl">
-        <div ref="modelDropdownScrollRef" class="ecall-model-dropdown-scroll max-h-[80vh] overflow-y-auto p-2">
-          <div class="w-72 p-2">
-            <section v-for="provider in chatModelTree" :key="provider.id" class="mb-2 last:mb-0">
-              <div class="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-base-content/55">
-                {{ provider.name }}
-              </div>
-              <div v-for="model in provider.models" :key="model.key" class="mb-1 rounded-lg bg-base-200/60 p-1 last:mb-0">
-                <div class="px-2 py-1.5 text-sm font-medium">
-                  <div class="truncate">{{ model.name }}</div>
-                  <div v-if="model.summaryFields.length > 0" class="mt-0.5 truncate text-xs font-normal text-base-content/60">
-                    {{ modelSummary(model.representative, model.summaryFields) }}
-                  </div>
-                </div>
-                <button
-                  v-for="item in model.leaves"
-                  :key="item.id"
-                  type="button"
-                  class="flex w-full items-center rounded-md px-3 py-1.5 text-left text-sm transition-colors hover:bg-base-100"
-                  :class="{ 'bg-primary/10': item.id === activeModelOptionId }"
-                  @click="selectConversationPreferredModel(item.id)"
-                >
-                  <span class="min-w-0 break-all">{{ item.label }}</span>
-                </button>
-              </div>
-            </section>
-          </div>
-        </div>
-        <FloatingScrollbar ref="modelDropdownScrollbarRef" :target="modelDropdownScrollRef" />
+      <div
+        ref="modelDropdownScrollRef"
+        class="ecall-model-dropdown-scroll overflow-y-auto overflow-x-hidden"
+        :style="modelDropdownScrollStyle"
+      >
+        <ul class="menu menu-sm w-full p-1">
+          <template v-for="provider in chatModelTree" :key="provider.id">
+            <li>
+              <details>
+                <summary class="font-semibold text-sm">
+                  <span class="min-w-0 flex-1 truncate">{{ provider.name }}</span>
+                  <span class="badge badge-ghost badge-xs shrink-0">{{ chatModelCount(provider) }}</span>
+                </summary>
+                <ul>
+                  <template v-for="model in provider.models" :key="model.key">
+                    <li>
+                      <details>
+                        <summary class="text-sm">
+                          <span class="min-w-0 flex-1 truncate">{{ model.name }}</span>
+                          <template v-if="model.summaryFields.length > 0">
+                            <span
+                              v-for="field in model.summaryFields"
+                              :key="field"
+                              class="badge badge-outline badge-xs font-mono shrink-0"
+                            >
+                              {{ chatSummaryValue(model.representative, field) }}
+                            </span>
+                          </template>
+                        </summary>
+                        <ul>
+                          <li v-for="item in model.leaves" :key="item.id">
+                            <button
+                              type="button"
+                              class="text-sm"
+                              :class="item.id === activeModelOptionId ? 'active' : ''"
+                              @click.stop="selectConversationPreferredModel(item.id)"
+                            >
+                              <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
+                              <span v-if="item.id === activeModelOptionId" class="badge badge-xs badge-primary shrink-0">✓</span>
+                            </button>
+                          </li>
+                        </ul>
+                      </details>
+                    </li>
+                  </template>
+                </ul>
+              </details>
+            </li>
+          </template>
+        </ul>
       </div>
+      <FloatingScrollbar ref="modelDropdownScrollbarRef" :target="modelDropdownScrollRef" />
     </div>
   </Teleport>
 </template>
@@ -636,8 +658,11 @@ const chatModelSummaryLabels = computed<Record<ApiConfigSelectionSummaryField, s
   enableAudio: t("config.api.capAudio"),
   enableVideo: t("config.api.capVideo"),
 }));
-function modelSummary(item: ApiConfigItem, fields: ApiConfigSelectionSummaryField[]): string {
-  return apiConfigSelectionSummary(item, fields, chatModelSummaryLabels.value);
+function chatSummaryValue(item: ApiConfigItem, field: ApiConfigSelectionSummaryField): string {
+  return apiConfigSelectionSummary(item, [field], chatModelSummaryLabels.value);
+}
+function chatModelCount(provider: { models: Array<{ leaves: Array<{ id: string }> }> }): number {
+  return provider.models.reduce((sum, model) => sum + model.leaves.length, 0);
 }
 const localModelOptionId = ref("");
 
@@ -975,6 +1000,10 @@ const modelDropdownStyle = ref<Record<string, string>>({
   left: "0px",
   top: "0px",
   width: "20rem",
+  maxHeight: "80vh",
+});
+const modelDropdownScrollStyle = ref<Record<string, string>>({
+  maxHeight: "80vh",
 });
 let composerWidthObserver: ResizeObserver | null = null;
 
@@ -996,34 +1025,61 @@ async function refreshModelDropdownPosition() {
   const trigger = modelDropdownTriggerRef.value || modelDropdownRef.value;
   if (!trigger) return;
   await nextTick();
-  const panel = modelDropdownPanelRef.value;
   const margin = 8;
+  const gap = 8;
   const triggerRect = trigger.getBoundingClientRect();
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
   const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
   const preferredWidth = Math.max(Math.round(triggerRect.width), 320);
   const maxAllowedWidth = Math.max(220, viewportWidth - margin * 2);
   const width = Math.min(preferredWidth, maxAllowedWidth);
-  const measuredHeight = panel?.getBoundingClientRect().height || 0;
-  const spaceAbove = triggerRect.top - margin;
-  const spaceBelow = viewportHeight - triggerRect.bottom - margin;
-  const openUpward = spaceAbove >= measuredHeight || spaceAbove > spaceBelow;
+  const spaceAbove = Math.max(0, triggerRect.top - margin - gap);
+  const spaceBelow = Math.max(0, viewportHeight - triggerRect.bottom - margin - gap);
+  // 优先下方；下方更挤时才向上开
+  const openUpward = spaceAbove > spaceBelow;
+  const availableHeight = openUpward ? spaceAbove : spaceBelow;
+  // 最外层和滚动层共用同一高度上限；可用空间不够时不强行抬到 120
+  const maxHeight = Math.max(
+    0,
+    Math.min(Math.floor(viewportHeight * 0.8), Math.floor(availableHeight)),
+  );
   const left = Math.min(
     Math.max(margin, triggerRect.left),
     Math.max(margin, viewportWidth - width - margin),
   );
-  const top = openUpward
-    ? Math.max(margin, triggerRect.top - measuredHeight - 8)
-    : Math.min(
-      triggerRect.bottom + 8,
-      Math.max(margin, viewportHeight - measuredHeight - margin),
-    );
-  modelDropdownStyle.value = {
-    left: `${Math.round(left)}px`,
-    top: `${Math.round(top)}px`,
-    width: `${Math.round(width)}px`,
-    maxWidth: `calc(100vw - ${margin * 2}px)`,
+  const maxHeightPx = `${Math.round(maxHeight)}px`;
+
+  modelDropdownScrollStyle.value = {
+    maxHeight: maxHeightPx,
   };
+
+  if (openUpward) {
+    // 用 bottom 锚定触发器上方，避免 top 计算误差把面板顶出屏幕
+    const bottom = Math.max(margin, viewportHeight - triggerRect.top + gap);
+    modelDropdownStyle.value = {
+      left: `${Math.round(left)}px`,
+      right: "auto",
+      top: "auto",
+      bottom: `${Math.round(bottom)}px`,
+      width: `${Math.round(width)}px`,
+      maxWidth: `calc(100vw - ${margin * 2}px)`,
+      maxHeight: maxHeightPx,
+      height: "auto",
+    };
+  } else {
+    const top = triggerRect.bottom + gap;
+    modelDropdownStyle.value = {
+      left: `${Math.round(left)}px`,
+      right: "auto",
+      top: `${Math.round(top)}px`,
+      bottom: "auto",
+      width: `${Math.round(width)}px`,
+      maxWidth: `calc(100vw - ${margin * 2}px)`,
+      maxHeight: maxHeightPx,
+      height: "auto",
+    };
+  }
+  await nextTick();
   modelDropdownScrollbarRef.value?.updateThumb();
 }
 
