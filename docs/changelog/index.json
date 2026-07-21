@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-20T11:50:39.072Z",
-  "latestVersion": "v0.36.2",
+  "generatedAt": "2026-07-21T10:22:08.631Z",
+  "latestVersion": "v0.37.0",
   "releases": [
+    {
+      "version": "v0.37.0",
+      "path": "docs/changelog/releases/v0.37.0.md",
+      "summary": "选模型时按「渠道 → 模型 → 思维等级」三级选择，同一模型的不同思考强度会收成一组，不用再在一长串名字里翻找。"
+    },
     {
       "version": "v0.36.2",
       "path": "docs/changelog/releases/v0.36.2.md",
