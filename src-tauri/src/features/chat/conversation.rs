@@ -3420,14 +3420,19 @@ fn build_conversation_prompt_payload(
             (None, Vec::new())
         };
         let mut text = if is_user {
-            let rendered = render_prompt_user_text_only(message);
-            let mention_prefix = render_prompt_user_mention_prefix(message);
-            if mention_prefix.is_empty() {
-                rendered
-            } else if rendered.trim().is_empty() {
-                mention_prefix
+            // goal_continue 映射为 user 后仍须读取持久化 hiddenPromptText。
+            if message_is_goal_continue(message) {
+                render_message_content_for_model(message)
             } else {
-                format!("{mention_prefix}\n{rendered}")
+                let rendered = render_prompt_user_text_only(message);
+                let mention_prefix = render_prompt_user_mention_prefix(message);
+                if mention_prefix.is_empty() {
+                    rendered
+                } else if rendered.trim().is_empty() {
+                    mention_prefix
+                } else {
+                    format!("{mention_prefix}\n{rendered}")
+                }
             }
         } else {
             render_prompt_message_text(message)
@@ -3466,7 +3471,10 @@ fn build_conversation_prompt_payload(
     let mut latest_audios = Vec::<PreparedBinaryPayload>::new();
 
     if let Some(msg) = latest_user {
-        let latest_user_text_rendered = {
+        let latest_user_text_rendered = if message_is_goal_continue(&msg) {
+            // goal_continue 作为 latest user 时同样读取持久化 hiddenPromptText。
+            render_message_content_for_model(&msg)
+        } else {
             let rendered = render_prompt_user_text_only(&msg);
             let mention_prefix = render_prompt_user_mention_prefix(&msg);
             if mention_prefix.is_empty() {

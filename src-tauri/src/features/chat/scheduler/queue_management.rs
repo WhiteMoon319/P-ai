@@ -421,13 +421,21 @@ fn conversation_is_idle_for_goal_fallback(
 }
 
 fn message_is_goal_continue(message: &ChatMessage) -> bool {
-    message
+    let role = message.role.trim();
+    let speaker_id = message
+        .speaker_agent_id
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or_default();
+    let message_kind = message
         .provider_meta
         .as_ref()
         .and_then(|meta| meta.get("messageKind"))
         .and_then(Value::as_str)
-        .map(str::trim)
-        == Some("goal_continue")
+        .map(str::trim);
+    matches!(role, "assistant" | "system")
+        && speaker_id == SYSTEM_PERSONA_ID
+        && message_kind == Some("goal_continue")
 }
 
 fn event_is_goal_continue(event: &ChatPendingEvent) -> bool {

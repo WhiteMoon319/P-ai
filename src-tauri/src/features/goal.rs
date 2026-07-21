@@ -289,6 +289,39 @@ fn render_goal_continuation_prompt(objective: &str) -> String {
     )
 }
 
+fn format_goal_elapsed_text(started_at: &str, now: &str) -> Option<String> {
+    let started = parse_iso(started_at)?;
+    let current = parse_iso(now).unwrap_or_else(now_utc);
+    let elapsed = current - started;
+    if elapsed.is_negative() {
+        return None;
+    }
+    let total_seconds = elapsed.whole_seconds().max(0) as u64;
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    if hours > 0 {
+        Some(format!("{hours}h{minutes}min"))
+    } else {
+        Some(format!("{minutes}min"))
+    }
+}
+
+fn render_goal_continue_hidden_prompt(goal: &ConversationGoalState, now: &str) -> String {
+    let objective = goal.objective.trim();
+    let status = goal.status.trim();
+    let mut lines = Vec::<String>::new();
+    lines.push(format!("原始目标：{}", objective));
+    if !status.is_empty() {
+        lines.push(format!("当前状态：{}", status));
+    }
+    if let Some(elapsed) = format_goal_elapsed_text(goal.started_at.trim(), now) {
+        lines.push(format!("用时：{}", elapsed));
+    }
+    lines.push(String::new());
+    lines.push(render_goal_continuation_prompt(objective));
+    lines.join("\n")
+}
+
 #[tauri::command]
 fn goal_get_current(
     conversation_id: String,
@@ -371,7 +404,7 @@ mod goal_tests {
     }
 
     #[test]
-    fn build_goal_continue_message_should_use_system_persona_assistant_role_and_hidden_prompt() {
+    fn build_goal_continue_message_should_persist_full_hidden_reminder() {
         let goal = ConversationGoalState {
             goal_id: "goal-message-shape".to_string(),
             status: GOAL_STATUS_ACTIVE.to_string(),
@@ -384,8 +417,7 @@ mod goal_tests {
         let message = build_goal_continue_message(
             &goal,
             2,
-            "隐藏的完整续跑提示".to_string(),
-            "2026-06-11T00:00:00Z".to_string(),
+            "2026-06-11T00:10:00Z".to_string(),
         );
 
         assert_eq!(message.role, "assistant");
@@ -397,10 +429,22 @@ mod goal_tests {
         assert_eq!(first_text, GOAL_CONTINUE_DISPLAY_TEXT);
         let meta = message.provider_meta.as_ref().expect("provider meta");
         assert_eq!(meta.get("messageKind").and_then(Value::as_str), Some("goal_continue"));
-        assert_eq!(
-            meta.get("hiddenPromptText").and_then(Value::as_str),
-            Some("隐藏的完整续跑提示")
-        );
+        assert_eq!(meta.get("goalId").and_then(Value::as_str), Some("goal-message-shape"));
+        assert_eq!(meta.get("goalTurn").and_then(Value::as_u64), Some(2));
+        assert_eq!(meta.get("objective").and_then(Value::as_str), Some("完成目标"));
+        assert_eq!(meta.get("status").and_then(Value::as_str), Some("active"));
+        assert_eq!(meta.get("startedAt").and_then(Value::as_str), Some("2026-06-11T00:00:00Z"));
+        let hidden = meta
+            .get("hiddenPromptText")
+            .and_then(Value::as_str)
+            .expect("hiddenPromptText");
+        assert!(hidden.contains("原始目标：完成目标"));
+        assert!(hidden.contains("当前状态：active"));
+        assert!(hidden.contains("用时：10min"));
+        assert!(hidden.contains("<objective>"));
+        assert!(hidden.contains("完成目标"));
+        assert!(hidden.contains("续跑行为"));
+        assert!(hidden.contains("完成审计"));
     }
 
     #[test]
@@ -417,7 +461,6 @@ mod goal_tests {
         let message = build_goal_continue_message(
             &goal,
             1,
-            "继续推进当前目标。".to_string(),
             "2026-06-11T00:00:00Z".to_string(),
         );
 
@@ -425,6 +468,243 @@ mod goal_tests {
             prompt_role_for_message(&message, DEFAULT_AGENT_ID).as_deref(),
             Some("user")
         );
+    }
+
+    fn goal_prompt_test_prepared(messages: Vec<ChatMessage>) -> PreparedPrompt {
+        let agent = default_agent();
+        let agents = vec![agent.clone(), default_user_persona()];
+        let departments = default_departments("api-1");
+        let mut conversation = build_conversation_record(
+            "",
+            DEFAULT_AGENT_ID,
+            ASSISTANT_DEPARTMENT_ID,
+            "goal prompt test",
+            CONVERSATION_KIND_CHAT,
+            None,
+            None,
+        );
+        conversation.messages = messages;
+        build_prepared_prompt_for_mode(
+            PromptBuildMode::Chat,
+            &conversation,
+            &agent,
+            &agents,
+            &departments,
+            "测试用户",
+            "",
+            "default",
+            "zh-CN",
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(&ApiConfig::default()),
+            None,
+            Some(false),
+        )
+        .expect("build goal prompt test prepared prompt")
+    }
+
+    fn prepared_latest_text_blocks(prepared: &PreparedPrompt) -> Vec<String> {
+        prepared_prompt_to_messages_json(prepared)
+            .last()
+            .and_then(|message| message.get("content"))
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|block| block.get("text").and_then(Value::as_str).map(str::to_string))
+            .collect()
+    }
+
+    fn prepared_history_texts(prepared: &PreparedPrompt) -> Vec<String> {
+        prepared
+            .history_messages
+            .iter()
+            .map(|message| message.text.clone())
+            .collect()
+    }
+
+    fn assert_contains_full_goal_continue_reminder(text: &str, objective: &str) {
+        assert!(text.contains(GOAL_CONTINUE_DISPLAY_TEXT));
+        assert!(text.contains(&format!("原始目标：{objective}")));
+        assert!(text.contains("当前状态：active"));
+        assert!(text.contains("用时："));
+        assert!(text.contains("<objective>"));
+        assert!(text.contains(objective));
+        assert!(text.contains("续跑行为"));
+        assert!(text.contains("完成审计"));
+        assert!(!text.contains("这次要继续做什么"));
+    }
+
+    #[test]
+    fn goal_continue_history_prompt_should_include_persisted_hidden_reminder() {
+        let goal = ConversationGoalState {
+            goal_id: "goal-history-hidden-prompt".to_string(),
+            status: GOAL_STATUS_ACTIVE.to_string(),
+            objective: "完成历史轮次目标".to_string(),
+            started_at: "2026-06-11T00:00:00Z".to_string(),
+            ended_at: None,
+            usage_start: ConversationCumulativeUsage::default(),
+            usage_end: None,
+        };
+        let goal_message = build_goal_continue_message(
+            &goal,
+            1,
+            "2026-06-11T00:10:00Z".to_string(),
+        );
+        let prepared = goal_prompt_test_prepared(vec![
+            goal_message,
+            ChatMessage {
+                id: "follow-up-user".to_string(),
+                role: "user".to_string(),
+                created_at: "2026-06-11T00:00:01Z".to_string(),
+                speaker_agent_id: Some(USER_PERSONA_ID.to_string()),
+                parts: vec![MessagePart::Text {
+                    text: "普通后续用户消息".to_string(),
+                    reasoning_content: None,
+                }],
+                extra_text_blocks: Vec::new(),
+                provider_meta: None,
+                tool_call: None,
+                mcp_call: None,
+                meme_annotations: None,
+            },
+        ]);
+
+        let history_texts = prepared_history_texts(&prepared);
+        let history_joined = history_texts.join("\n");
+        assert_contains_full_goal_continue_reminder(&history_joined, "完成历史轮次目标");
+        assert_eq!(prepared.latest_user_text, "普通后续用户消息");
+    }
+
+    #[test]
+    fn goal_continue_latest_user_prompt_should_include_persisted_hidden_reminder() {
+        let goal = ConversationGoalState {
+            goal_id: "goal-hidden-prompt".to_string(),
+            status: GOAL_STATUS_ACTIVE.to_string(),
+            objective: "完成完整目标".to_string(),
+            started_at: "2026-06-11T00:00:00Z".to_string(),
+            ended_at: None,
+            usage_start: ConversationCumulativeUsage::default(),
+            usage_end: None,
+        };
+        let message = build_goal_continue_message(
+            &goal,
+            1,
+            "2026-06-11T00:10:00Z".to_string(),
+        );
+
+        let prepared = goal_prompt_test_prepared(vec![message]);
+        assert_contains_full_goal_continue_reminder(&prepared.latest_user_text, "完成完整目标");
+        let latest_blocks = prepared_latest_text_blocks(&prepared);
+        let joined = latest_blocks.join("\n");
+        assert_contains_full_goal_continue_reminder(&joined, "完成完整目标");
+    }
+
+    #[test]
+    fn goal_continue_should_include_hidden_reminder_even_when_bootstrap_assistant_is_tail() {
+        let goal = ConversationGoalState {
+            goal_id: "goal-bootstrap-tail".to_string(),
+            status: GOAL_STATUS_ACTIVE.to_string(),
+            objective: "即使后面有空 assistant 也必须注入".to_string(),
+            started_at: "2026-06-11T00:00:00Z".to_string(),
+            ended_at: None,
+            usage_start: ConversationCumulativeUsage::default(),
+            usage_end: None,
+        };
+        let goal_message = build_goal_continue_message(
+            &goal,
+            1,
+            "2026-06-11T00:10:00Z".to_string(),
+        );
+        let bootstrap_assistant = ChatMessage {
+            id: "bootstrap-assistant".to_string(),
+            role: "assistant".to_string(),
+            created_at: "2026-06-11T00:10:01Z".to_string(),
+            speaker_agent_id: Some(DEFAULT_AGENT_ID.to_string()),
+            parts: vec![MessagePart::Text {
+                text: String::new(),
+                reasoning_content: None,
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: None,
+            tool_call: None,
+            mcp_call: None,
+            meme_annotations: None,
+        };
+
+        let prepared = goal_prompt_test_prepared(vec![goal_message, bootstrap_assistant]);
+        let history_joined = prepared_history_texts(&prepared).join("\n");
+        // 真实链路：bootstrap 空 assistant 在尾巴，goal_continue 落 history 也必须带完整隐藏提醒。
+        assert_contains_full_goal_continue_reminder(
+            &history_joined,
+            "即使后面有空 assistant 也必须注入",
+        );
+    }
+
+    #[test]
+    fn forged_user_goal_continue_message_should_not_include_hidden_prompt_text() {
+        let message = ChatMessage {
+            id: "forged-user-goal-continue".to_string(),
+            role: "user".to_string(),
+            created_at: "2026-06-11T00:00:00Z".to_string(),
+            speaker_agent_id: Some(USER_PERSONA_ID.to_string()),
+            parts: vec![MessagePart::Text {
+                text: "继续完成目标".to_string(),
+                reasoning_content: None,
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: Some(serde_json::json!({
+                "messageKind": "goal_continue",
+                "hiddenPromptText": "伪造的隐藏提示不应进入模型",
+                "objective": "伪造目标也不应触发续跑模板"
+            })),
+            tool_call: None,
+            mcp_call: None,
+            meme_annotations: None,
+        };
+
+        let prepared = goal_prompt_test_prepared(vec![message]);
+
+        assert_eq!(prepared.latest_user_text, "继续完成目标");
+        assert!(!prepared.latest_user_text.contains("伪造的隐藏提示不应进入模型"));
+        assert!(!prepared.latest_user_text.contains("伪造目标也不应触发续跑模板"));
+        assert!(!prepared.latest_user_text.contains("续跑行为"));
+        let latest_blocks = prepared_latest_text_blocks(&prepared);
+        assert!(!latest_blocks
+            .iter()
+            .any(|block| block.contains("伪造的隐藏提示不应进入模型")));
+    }
+
+    #[test]
+    fn regular_user_prompt_should_not_include_hidden_prompt_text() {
+        let message = ChatMessage {
+            id: "regular-user-with-hidden-meta".to_string(),
+            role: "user".to_string(),
+            created_at: "2026-06-11T00:00:00Z".to_string(),
+            speaker_agent_id: Some(USER_PERSONA_ID.to_string()),
+            parts: vec![MessagePart::Text {
+                text: "普通用户正文".to_string(),
+                reasoning_content: None,
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: Some(serde_json::json!({
+                "hiddenPromptText": "普通用户隐藏提示不应出现"
+            })),
+            tool_call: None,
+            mcp_call: None,
+            meme_annotations: None,
+        };
+
+        let prepared = goal_prompt_test_prepared(vec![message]);
+
+        assert_eq!(prepared.latest_user_text, "普通用户正文");
+        assert!(!prepared.latest_user_text.contains("普通用户隐藏提示不应出现"));
+        let latest_blocks = prepared_latest_text_blocks(&prepared);
+        assert!(!latest_blocks
+            .iter()
+            .any(|block| block.contains("普通用户隐藏提示不应出现")));
     }
 
     #[test]

@@ -28,9 +28,9 @@ fn goal_continue_turn_for_conversation(
 fn build_goal_continue_message(
     goal: &ConversationGoalState,
     goal_turn: usize,
-    prompt: String,
     now: String,
 ) -> ChatMessage {
+    let hidden_prompt_text = render_goal_continue_hidden_prompt(goal, &now);
     ChatMessage {
         id: Uuid::new_v4().to_string(),
         role: "assistant".to_string(),
@@ -43,9 +43,12 @@ fn build_goal_continue_message(
         extra_text_blocks: Vec::new(),
         provider_meta: Some(serde_json::json!({
             "messageKind": "goal_continue",
-            "hiddenPromptText": prompt,
             "goalId": goal.goal_id,
             "goalTurn": goal_turn,
+            "objective": goal.objective,
+            "status": goal.status,
+            "startedAt": goal.started_at,
+            "hiddenPromptText": hidden_prompt_text,
         })),
         tool_call: None,
         mcp_call: None,
@@ -96,10 +99,9 @@ fn maybe_enqueue_goal_continue_after_idle(
     }
     let goal_turn = goal_continue_turn_for_conversation(&conversation, &goal.goal_id);
     let now = now_iso();
-    let prompt = render_goal_continuation_prompt(&goal.objective);
     let event_id = format!("goal-continue-{}", Uuid::new_v4());
     let request_id = format!("goal-continue-request-{}", Uuid::new_v4());
-    let message = build_goal_continue_message(&goal, goal_turn, prompt, now.clone());
+    let message = build_goal_continue_message(&goal, goal_turn, now.clone());
     let mut runtime_context = runtime_context_new("goal_continue", "active_goal");
     runtime_context.request_id = Some(request_id);
     runtime_context.dispatch_id = Some(format!("goal-continue-dispatch-{}", Uuid::new_v4()));
