@@ -304,20 +304,13 @@
             <button
               ref="modelDropdownTriggerRef"
               type="button"
-              :class="compactModelButton
-                ? 'btn btn-sm btn-square h-8 min-h-8 w-8 shrink-0 border-0 shadow-none bg-base-100 text-base-content hover:bg-base-200'
-                : 'btn btn-sm h-8 min-h-8 w-44 max-w-44 justify-between border-0 shadow-none bg-base-100 text-base-content hover:bg-base-200'"
+              class="btn btn-sm h-8 min-h-8 w-44 max-w-44 justify-between border-0 shadow-none bg-base-100 text-base-content hover:bg-base-200"
               :disabled="normalizedChatModelOptions.length === 0"
               :title="selectedModelName"
               @click="modelDropdownOpen = !modelDropdownOpen"
             >
-              <template v-if="compactModelButton">
-                <Bot class="h-3.5 w-3.5 shrink-0" />
-              </template>
-              <template v-else>
-                <span class="truncate">{{ selectedModelName }}</span>
-                <ChevronDown class="h-3 w-3 shrink-0 opacity-50 rotate-180" :class="{ 'rotate-0': modelDropdownOpen }" />
-              </template>
+              <span class="truncate">{{ selectedModelName }}</span>
+              <ChevronDown class="h-3 w-3 shrink-0 opacity-50 rotate-180" :class="{ 'rotate-0': modelDropdownOpen }" />
             </button>
           </div>
         </div>
@@ -412,7 +405,7 @@
 <script setup lang="ts">
 import { Teleport, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Bot, CalendarPlus, ChevronDown, ClipboardList, CornerRightUp, FileText, History, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X } from "@lucide/vue";
+import { CalendarPlus, ChevronDown, ClipboardList, CornerRightUp, FileText, History, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption } from "../../../types/app";
 import { invokeTauri } from "../../../services/tauri-api";
 import ChatQueuePreview from "./ChatQueuePreview.vue";
@@ -612,7 +605,7 @@ const CHAT_INPUT_HISTORY_STORAGE_KEY = "easy_call.chat_input_history.v1";
 const CHAT_INPUT_HISTORY_LIMIT = 100;
 const composerRootRef = ref<HTMLDivElement | null>(null);
 const chatInputRef = ref<HTMLTextAreaElement | null>(null);
-const composerWidth = ref(0);
+
 const chatInputHistory = ref<string[]>([]);
 const chatInputHistoryCursor = ref(-1);
 const chatInputHistoryDraft = ref("");
@@ -695,7 +688,7 @@ const selectedModelName = computed(() => {
   const found = normalizedChatModelOptions.value.find((item) => item.id === displayId);
   return found?.name || displayId;
 });
-const compactModelButton = computed(() => composerWidth.value > 0 && composerWidth.value < 420);
+
 const showIdeWorkspaceGroupLabel = computed(() => false);
 const attachedIdeContextReferenceIds = computed(() => new Set((props.attachedIdeContextReferences || []).map((item) => item.id)));
 const mergedIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() => mergeComposerIdeContextGroups(
@@ -1005,12 +998,6 @@ const modelDropdownStyle = ref<Record<string, string>>({
 const modelDropdownScrollStyle = ref<Record<string, string>>({
   maxHeight: "80vh",
 });
-let composerWidthObserver: ResizeObserver | null = null;
-
-function refreshComposerWidth() {
-  const el = composerRootRef.value;
-  composerWidth.value = el ? Math.round(el.getBoundingClientRect().width) : 0;
-}
 
 function handleModelDropdownClickOutside(event: MouseEvent) {
   const target = event.target as Node | null;
@@ -1091,12 +1078,6 @@ watch(modelDropdownOpen, (open) => {
     });
   } else {
     document.removeEventListener("click", handleModelDropdownClickOutside);
-  }
-});
-
-watch(compactModelButton, (compact) => {
-  if (compact) {
-    modelDropdownOpen.value = false;
   }
 });
 
@@ -1359,14 +1340,8 @@ onMounted(() => {
   window.addEventListener("scroll", refreshMentionPanelPosition, true);
   window.addEventListener("resize", refreshModelDropdownPosition);
   window.addEventListener("scroll", refreshModelDropdownPosition, true);
-  refreshComposerWidth();
-  if (typeof ResizeObserver !== "undefined" && composerRootRef.value) {
-    composerWidthObserver = new ResizeObserver(() => refreshComposerWidth());
-    composerWidthObserver.observe(composerRootRef.value);
-  }
   nextTick(() => {
     resizeChatInput();
-    refreshComposerWidth();
     refreshMentionPanelPosition();
   });
 });
@@ -1382,8 +1357,6 @@ onBeforeUnmount(() => {
     cancelAnimationFrame(resizeInputRaf.value);
     resizeInputRaf.value = 0;
   }
-  composerWidthObserver?.disconnect();
-  composerWidthObserver = null;
 });
 
 watch(
