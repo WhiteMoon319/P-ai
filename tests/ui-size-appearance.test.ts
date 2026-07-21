@@ -77,4 +77,90 @@ describe("ui size appearance", () => {
     setUiSizeScale(145);
     expect(stepUiSizeScale(1)).toBe(UI_SIZE_MAX_SCALE);
   });
+
+  it("shows the current scale percentage hint when stepping", () => {
+    const elements = new Map<string, {
+      id: string;
+      textContent: string;
+      style: { cssText: string; opacity?: string; transform?: string; setProperty: (name: string, value: string) => void };
+      getAttribute: (name: string) => string | null;
+      setAttribute: (name: string, value: string) => void;
+      attributes: Record<string, string>;
+    }>();
+    const createElement = () => {
+      const attributes: Record<string, string> = {};
+      return {
+        id: "",
+        textContent: "",
+        style: {
+          cssText: "",
+          setProperty: () => undefined,
+        },
+        attributes,
+        getAttribute: (name: string) => attributes[name] ?? null,
+        setAttribute: (name: string, value: string) => {
+          attributes[name] = value;
+        },
+      };
+    };
+    const body = {
+      appendChild: (el: { id: string }) => {
+        if (el.id) elements.set(el.id, el as never);
+        return el;
+      },
+    };
+    const previousDocument = (globalThis as { document?: unknown }).document;
+    const previousWindow = (globalThis as { window?: unknown }).window;
+    const previousLocalStorage = (globalThis as { localStorage?: unknown }).localStorage;
+    const store = new Map<string, string>();
+    (globalThis as { localStorage?: unknown }).localStorage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+    };
+    (globalThis as { document?: unknown }).document = {
+      getElementById: (id: string) => elements.get(id) ?? null,
+      createElement,
+      body,
+      documentElement: {
+        style: {
+          setProperty: () => undefined,
+        },
+      },
+    };
+    (globalThis as { window?: unknown }).window = {
+      localStorage: (globalThis as { localStorage?: unknown }).localStorage,
+      setTimeout: (handler: () => void) => {
+        // 测试只验证提示立即显示，不模拟自动隐藏。
+        void handler;
+        return 1;
+      },
+      clearTimeout: () => undefined,
+    };
+    try {
+      const { setUiSizeScale } = useUiSizeAppearance();
+      setUiSizeScale(100);
+      stepUiSizeScale(1);
+      const hint = elements.get("easy-call-ui-size-hint");
+      expect(hint?.textContent).toBe("110%");
+      expect(hint?.getAttribute("role")).toBe("status");
+    } finally {
+      if (previousDocument === undefined) {
+        delete (globalThis as { document?: unknown }).document;
+      } else {
+        (globalThis as { document?: unknown }).document = previousDocument;
+      }
+      if (previousWindow === undefined) {
+        delete (globalThis as { window?: unknown }).window;
+      } else {
+        (globalThis as { window?: unknown }).window = previousWindow;
+      }
+      if (previousLocalStorage === undefined) {
+        delete (globalThis as { localStorage?: unknown }).localStorage;
+      } else {
+        (globalThis as { localStorage?: unknown }).localStorage = previousLocalStorage;
+      }
+    }
+  });
 });

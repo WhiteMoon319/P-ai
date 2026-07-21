@@ -4,6 +4,8 @@ import { isTauriRuntimeAvailable } from "../../../services/tauri-api";
 
 const UI_SIZE_STORAGE_KEY = "easy-call.ui-size.v1";
 const UI_SIZE_CHANGED_EVENT = "easy-call:ui-size-changed";
+const UI_SIZE_HINT_HIDE_MS = 900;
+const UI_SIZE_HINT_ELEMENT_ID = "easy-call-ui-size-hint";
 
 export const UI_SIZE_MIN_SCALE = 75;
 export const UI_SIZE_MAX_SCALE = 150;
@@ -49,6 +51,7 @@ const LEGACY_UI_SIZE_SCALE_MAP: Record<string, UiSizeScale> = {
 const uiSizeScale = ref<UiSizeScale>(UI_SIZE_DEFAULT_SCALE);
 let initialized = false;
 let eventUnlisten: UnlistenFn | null = null;
+let hintHideTimer: ReturnType<typeof window.setTimeout> | null = null;
 
 function scaledPx(value: number, scale: UiSizeScale): string {
   return `${Math.round(value * scale) / 100}px`;
@@ -137,9 +140,65 @@ function hasUiSizeZoomModifier(event: WheelEvent | KeyboardEvent) {
   return !!event.ctrlKey || !!event.metaKey;
 }
 
+function ensureUiSizeHintElement(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  const existing = document.getElementById(UI_SIZE_HINT_ELEMENT_ID);
+  if (existing) return existing;
+  const el = document.createElement("div");
+  el.id = UI_SIZE_HINT_ELEMENT_ID;
+  el.setAttribute("role", "status");
+  el.setAttribute("aria-live", "polite");
+  el.style.cssText = [
+    "position:fixed",
+    "left:50%",
+    "top:50%",
+    "transform:translate(-50%,-50%) scale(0.96)",
+    "z-index:2147483000",
+    "min-width:4.5rem",
+    "padding:0.7rem 1.1rem",
+    "border-radius:9999px",
+    "border:1px solid color-mix(in oklab, var(--color-base-content) 18%, transparent)",
+    "background:color-mix(in oklab, var(--color-base-100) 88%, transparent)",
+    "color:var(--color-base-content)",
+    "box-shadow:0 10px 30px color-mix(in oklab, var(--color-base-content) 18%, transparent)",
+    "backdrop-filter:blur(8px)",
+    "font-size:1.25rem",
+    "font-weight:700",
+    "font-variant-numeric:tabular-nums",
+    "letter-spacing:0.01em",
+    "line-height:1",
+    "text-align:center",
+    "pointer-events:none",
+    "opacity:0",
+    "transition:opacity 120ms ease, transform 120ms ease",
+  ].join(";");
+  document.body.appendChild(el);
+  return el;
+}
+
+export function showUiSizeScaleHint(scale: UiSizeScale) {
+  if (typeof document === "undefined" || typeof window === "undefined") return;
+  const el = ensureUiSizeHintElement();
+  if (!el) return;
+  el.textContent = `${normalizeUiSizeScale(scale)}%`;
+  el.style.opacity = "1";
+  el.style.transform = "translate(-50%, -50%) scale(1)";
+  if (hintHideTimer) {
+    window.clearTimeout(hintHideTimer);
+    hintHideTimer = null;
+  }
+  hintHideTimer = window.setTimeout(() => {
+    el.style.opacity = "0";
+    el.style.transform = "translate(-50%, -50%) scale(0.96)";
+    hintHideTimer = null;
+  }, UI_SIZE_HINT_HIDE_MS);
+}
+
 export function stepUiSizeScale(direction: number): UiSizeScale {
   const delta = direction > 0 ? UI_SIZE_STEP_SCALE : -UI_SIZE_STEP_SCALE;
-  return setUiSizeScale(uiSizeScale.value + delta);
+  const next = setUiSizeScale(uiSizeScale.value + delta);
+  showUiSizeScaleHint(next);
+  return next;
 }
 
 function handleGlobalUiSizeWheel(event: WheelEvent) {
