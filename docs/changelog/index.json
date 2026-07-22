@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-21T10:22:08.631Z",
-  "latestVersion": "v0.37.0",
+  "generatedAt": "2026-07-22T10:06:20.581Z",
+  "latestVersion": "v0.37.1",
   "releases": [
+    {
+      "version": "v0.37.1",
+      "path": "docs/changelog/releases/v0.37.1.md",
+      "summary": "模型选择菜单会保留「供应商 → 模型」层级；打开后自动展开当前供应商和当前模型，其他供应商保持收起，列表更容易浏览。"
+    },
     {
       "version": "v0.37.0",
       "path": "docs/changelog/releases/v0.37.0.md",
