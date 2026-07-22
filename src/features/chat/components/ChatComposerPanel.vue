@@ -374,6 +374,7 @@ import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import { useChatQueue } from "../composables/use-chat-queue";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
 import ApiConfigSelectionMenu from "../../config/components/ApiConfigSelectionMenu.vue";
+import { formatApiConfigOptionLabel } from "../../config/utils/api-config-display";
 import { buildApiConfigSelectionTree } from "../../config/utils/api-config-selection-tree";
 import { ideContextReferenceDisplayParts } from "../utils/ide-context-reference-display";
 import { mergeComposerIdeContextGroups } from "../utils/ide-context-reference-groups";
@@ -594,7 +595,7 @@ const normalizedChatModelOptions = computed(() =>
   (Array.isArray(props.chatModelOptions) ? props.chatModelOptions : [])
     .map((item) => ({
       id: String(item?.id || "").trim(),
-      name: [String(item?.name || "").trim(), String(item?.model || "").trim()].find(Boolean) || "",
+      name: formatApiConfigOptionLabel(item, t),
     }))
     .filter((item) => !!item.id && !!item.name),
 );
