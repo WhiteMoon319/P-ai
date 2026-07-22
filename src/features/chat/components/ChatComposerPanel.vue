@@ -351,51 +351,11 @@
         class="ecall-model-dropdown-scroll overflow-y-auto overflow-x-hidden"
         :style="modelDropdownScrollStyle"
       >
-        <ul class="menu menu-sm w-full p-1">
-          <template v-for="provider in chatModelTree" :key="provider.id">
-            <li>
-              <details>
-                <summary class="font-semibold text-sm">
-                  <span class="min-w-0 flex-1 truncate">{{ provider.name }}</span>
-                  <span class="badge badge-ghost badge-xs shrink-0">{{ chatModelCount(provider) }}</span>
-                </summary>
-                <ul>
-                  <template v-for="model in provider.models" :key="model.key">
-                    <li>
-                      <details>
-                        <summary class="text-sm">
-                          <span class="min-w-0 flex-1 truncate">{{ model.name }}</span>
-                          <template v-if="model.summaryFields.length > 0">
-                            <span
-                              v-for="field in model.summaryFields"
-                              :key="field"
-                              class="badge badge-outline badge-xs font-mono shrink-0"
-                            >
-                              {{ chatSummaryValue(model.representative, field) }}
-                            </span>
-                          </template>
-                        </summary>
-                        <ul>
-                          <li v-for="item in model.leaves" :key="item.id">
-                            <button
-                              type="button"
-                              class="text-sm"
-                              :class="item.id === activeModelOptionId ? 'active' : ''"
-                              @click.stop="selectConversationPreferredModel(item.id)"
-                            >
-                              <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
-                              <span v-if="item.id === activeModelOptionId" class="badge badge-xs badge-primary shrink-0">✓</span>
-                            </button>
-                          </li>
-                        </ul>
-                      </details>
-                    </li>
-                  </template>
-                </ul>
-              </details>
-            </li>
-          </template>
-        </ul>
+        <ApiConfigSelectionMenu
+          :tree="chatModelTree"
+          :selected-id="activeModelOptionId"
+          @select="selectConversationPreferredModel"
+        />
       </div>
       <FloatingScrollbar ref="modelDropdownScrollbarRef" :target="modelDropdownScrollRef" />
     </div>
@@ -413,11 +373,8 @@ import ChatSelectionActionPanel from "./ChatSelectionActionPanel.vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import { useChatQueue } from "../composables/use-chat-queue";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
-import {
-  apiConfigSelectionSummary,
-  buildApiConfigSelectionTree,
-  type ApiConfigSelectionSummaryField,
-} from "../../config/utils/api-config-selection-tree";
+import ApiConfigSelectionMenu from "../../config/components/ApiConfigSelectionMenu.vue";
+import { buildApiConfigSelectionTree } from "../../config/utils/api-config-selection-tree";
 import { ideContextReferenceDisplayParts } from "../utils/ide-context-reference-display";
 import { mergeComposerIdeContextGroups } from "../utils/ide-context-reference-groups";
 
@@ -642,21 +599,6 @@ const normalizedChatModelOptions = computed(() =>
     .filter((item) => !!item.id && !!item.name),
 );
 const chatModelTree = computed(() => buildApiConfigSelectionTree(props.chatModelOptions, t));
-const chatModelSummaryLabels = computed<Record<ApiConfigSelectionSummaryField, string>>(() => ({
-  contextWindowTokens: t("config.api.contextWindow"),
-  maxOutputTokens: t("config.api.maxOutputTokens"),
-  temperature: t("config.api.temperature"),
-  enableTools: t("config.api.capTools"),
-  enableImage: t("config.api.capImage"),
-  enableAudio: t("config.api.capAudio"),
-  enableVideo: t("config.api.capVideo"),
-}));
-function chatSummaryValue(item: ApiConfigItem, field: ApiConfigSelectionSummaryField): string {
-  return apiConfigSelectionSummary(item, [field], chatModelSummaryLabels.value);
-}
-function chatModelCount(provider: { models: Array<{ leaves: Array<{ id: string }> }> }): number {
-  return provider.models.reduce((sum, model) => sum + model.leaves.length, 0);
-}
 const localModelOptionId = ref("");
 
 function modelOptionIdFromProps(): string {
