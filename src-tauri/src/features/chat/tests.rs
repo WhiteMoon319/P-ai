@@ -10794,8 +10794,8 @@
         child.child_department_ids = Vec::new();
 
         let departments = vec![parent, child];
-        let parent_rules = build_system_tools_rule_blocks("dept-tool-parent", &departments);
-        let child_rules = build_system_tools_rule_blocks("dept-tool-child", &departments);
+        let parent_rules = build_system_tools_rule_blocks("dept-tool-parent", &departments, true);
+        let child_rules = build_system_tools_rule_blocks("dept-tool-child", &departments, true);
 
         let parent_delegate_rule = parent_rules
             .iter()
@@ -10811,6 +10811,23 @@
         assert!(!child_rules
             .iter()
             .any(|block| block.contains("<delegate tool rule>")));
+    }
+
+    #[test]
+    fn exec_tool_rule_should_include_rg_guidance_when_rg_installed() {
+        let block = build_builtin_tool_rule_block("exec", true).expect("exec tool rule");
+
+        assert!(block.contains("当前环境 `rg` 可用时，优先使用 `rg` 进行搜索"));
+        assert!(block.contains("rg --files"));
+    }
+
+    #[test]
+    fn exec_tool_rule_should_omit_rg_guidance_when_rg_unavailable() {
+        let block = build_builtin_tool_rule_block("exec", false).expect("exec tool rule");
+
+        assert!(!block.contains("`rg`"));
+        assert!(!block.contains("rg --files"));
+        assert!(!block.contains("rg -n"));
     }
 
     #[test]

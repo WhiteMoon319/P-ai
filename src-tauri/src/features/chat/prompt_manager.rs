@@ -144,6 +144,10 @@ fn normalize_executor_department_id(departments: &[DepartmentConfig], department
         .unwrap_or_default()
 }
 
+fn prompt_runtime_rg_installed() -> bool {
+    host_runtime_prerequisite_installed("rg").unwrap_or(false)
+}
+
 fn build_department_system_prompt_cache_key(
     state: Option<&AppState>,
     agent: &AgentProfile,
@@ -173,8 +177,11 @@ fn build_department_system_prompt_snapshot_uncached(
         departments,
         ui_language,
     );
-    let department_tool_rule_blocks =
-        build_system_tools_rule_blocks(executor_department_id, departments);
+    let department_tool_rule_blocks = build_system_tools_rule_blocks(
+        executor_department_id,
+        departments,
+        prompt_runtime_rg_installed(),
+    );
     DepartmentSystemPromptSnapshot {
         department_prompt_block,
         department_tool_rule_blocks,

@@ -673,7 +673,7 @@ impl ConversationPromptService {
             }
         }
         if builtin_tool_prompt_rule_allowed_in_origin("goal", prompt_origin_scope) {
-            if let Some(goal_block) = build_builtin_tool_rule_block("goal") {
+            if let Some(goal_block) = build_builtin_tool_rule_block("goal", true) {
                 tool_rule_blocks.push(goal_block);
             }
         }
@@ -692,7 +692,7 @@ impl ConversationPromptService {
             plan_tool_enabled,
         ));
         if builtin_tool_prompt_rule_allowed_in_origin("todo", prompt_origin_scope) {
-            if let Some(todo_block) = build_builtin_tool_rule_block("todo") {
+            if let Some(todo_block) = build_builtin_tool_rule_block("todo", true) {
                 tool_rule_blocks.push(todo_block);
             }
         }

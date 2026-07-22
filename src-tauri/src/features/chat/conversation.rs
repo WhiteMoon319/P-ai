@@ -2903,8 +2903,19 @@ fn build_builtin_tool_general_rule_block() -> String {
     )
 }
 
-fn build_builtin_tool_rule_block(tool_id: &str) -> Option<String> {
+const EXEC_TOOL_RULE_SHELL_MD: &str = include_str!("../../../resources/prompts/exec-tool-rule-shell.md");
+const EXEC_TOOL_RULE_RG_MD: &str = include_str!("../../../resources/prompts/exec-tool-rule-rg.md");
+
+fn build_builtin_tool_rule_block(tool_id: &str, rg_installed: bool) -> Option<String> {
     let (block_name, body) = match tool_id.trim() {
+        "exec" => {
+            let mut body = String::from(EXEC_TOOL_RULE_SHELL_MD.trim());
+            if rg_installed {
+                body.push_str("\n\n");
+                body.push_str(EXEC_TOOL_RULE_RG_MD.trim());
+            }
+            return Some(prompt_xml_block("exec tool rule", body));
+        }
         "todo" => (
             "todo tool rule",
             "## 何时使用\n\
@@ -2981,28 +2992,6 @@ fn build_builtin_tool_rule_block(tool_id: &str) -> Option<String> {
              - trigger 写调度时间、重复频率和结束时间。\n\
              - goal、why、todo 写触发后这一次要完成什么、为什么做、关注哪些边界。",
         ),
-        "exec" => (
-            "exec tool rule",
-            "## 何时使用\n\
-             当需要搜索文件、读取代码/配置/日志、检查环境、查看 git 状态、运行验证、执行脚本或获取本地事实时，使用 `exec`。很多 skill 会要求执行脚本。\n\n\
-             ## 探索策略\n\
-             在不了解代码位置、调用链或现状时，先广撒网建立上下文，再收敛到具体文件和实现。不要只凭一个搜索结果就过早下结论。\n\n\
-             - **并发搜索按独立线索方向拆分，不要机械拆词。** 每个搜索命令可以合并同族关键词、别名、字段名、函数名、日志前缀或中英文相关术语来提高召回，但它们必须共同指向同一个检索意图。\n\
-             - **同一检索意图内用 `|` 连接别名。** 例如搜索工作目录字段时，可用 `rg -n \"workspaceLabel|workspaceRootPath|shellWorkspaces|工作目录\"`；搜索会话创建入口时，可用 `rg -n \"createConversation|newConversation|新建会话\"`。\n\
-             - **彼此独立、互不依赖的线索方向应一次性并发发起。** 例如同时搜索入口组件、类型定义、后端命令、日志文案和测试位置；不要等一个无关搜索结束后才开始下一个。\n\
-             - **依赖前序结果时必须串行。** 先用较宽的搜索找到候选文件，再根据命中结果读取具体片段、追调用链或运行针对性验证。\n\
-             - **搜索文本优先 `rg`，找文件优先 `rg --files`。** 如果缺失，再使用当前 shell 的原生命令。\n\n\
-             ## 使用边界\n\
-             - `exec` 默认是一次性进程执行；命令结束、失败或超时后会回收本次进程树，不依赖持久 live shell 状态。\n\
-             - 读取文件、列目录、搜索文本、查看 `git diff/status` 等低风险探索可以积极使用。\n\
-             - 运行测试或构建时，只执行和本次改动直接相关的最小必要检查。\n\
-             - 新增、删除、移动或改写文件必须优先使用文件编辑工具（`write` / `delete` / `update` / `move`）。不要用 `exec` 通过 `cat`、`echo`、重定向、heredoc、python 等方式直接写文件，除非用户明确要求或没有可行替代。\n\
-             - 不要执行删除、移动、清空、重置仓库、切换分支等破坏性命令，除非用户明确要求。\n\
-             - Windows 下不要跨 shell 拼接破坏性文件操作；如必须处理路径，优先使用当前 shell 的原生命令和明确路径。\n\
-             - 若 `exec` 报告工作区、路径授权或 `shell_switch_workspace` 相关错误，应先解决工作区与授权前提，再继续当前工具链。\n\n\
-             ## 为什么\n\
-             `exec` 用来快速建立本地事实和验证判断。先按独立线索并发搜索，再基于结果收敛，可以减少误判、漏查和反复试错；文件修改仍由更可控的编辑工具承担。",
-        ),
         "write" | "delete" | "update" | "move" | "file_edit" => (
             "file edit tool rule",
             "请优先使用文件编辑工具写文件，不要使用终端或者 python 写入。\n\
@@ -3047,6 +3036,7 @@ fn department_builtin_tool_enabled(
 fn build_system_tools_rule_blocks(
     current_department_id: &str,
     departments: &[DepartmentConfig],
+    rg_installed: bool,
 ) -> Vec<String> {
     let department_config = departments_only_config(departments);
     let current_department = department_by_id(&department_config, current_department_id);
@@ -3060,7 +3050,7 @@ fn build_system_tools_rule_blocks(
             });
         if rule_enabled {
             any_builtin_enabled = true;
-            if let Some(block) = build_builtin_tool_rule_block(rule_id) {
+            if let Some(block) = build_builtin_tool_rule_block(rule_id, rg_installed) {
                 blocks.push(block);
             }
         }
