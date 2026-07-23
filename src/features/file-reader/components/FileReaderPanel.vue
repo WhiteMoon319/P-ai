@@ -2865,7 +2865,6 @@ defineExpose({
 .file-reader-code-virtual-block {
   width: 100%;
   min-width: 0;
-  padding: 4px 0;
   font-family: var(--app-code-font-family);
   font-size: var(--app-text-sm-size);
   line-height: 21px;

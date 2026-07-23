@@ -4,7 +4,6 @@ import { getSingletonHighlighter, hastToHtml, type GrammarState } from "shiki";
 import {
   FILE_READER_VIRTUAL_BLOCK_LINE_HEIGHT_PX,
   FILE_READER_VIRTUAL_BLOCK_OVERSCAN,
-  FILE_READER_VIRTUAL_BLOCK_PADDING_Y_PX,
 } from "../constants";
 import type { FileReaderFileBlockPayload, FileTab, VirtualCodeBlock } from "../types";
 import {
@@ -93,7 +92,7 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
       estimateSize: (index: number) => {
         const block = activeVirtualCodeBlocks.value[index];
         if (!block) return FILE_READER_VIRTUAL_BLOCK_LINE_HEIGHT_PX;
-        return block.lineCount * FILE_READER_VIRTUAL_BLOCK_LINE_HEIGHT_PX + FILE_READER_VIRTUAL_BLOCK_PADDING_Y_PX * 2;
+        return block.lineCount * FILE_READER_VIRTUAL_BLOCK_LINE_HEIGHT_PX;
       },
       overscan: FILE_READER_VIRTUAL_BLOCK_OVERSCAN,
       measureElement: (element: Element) => (element as HTMLElement).getBoundingClientRect().height,
