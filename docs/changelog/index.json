@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-22T10:06:20.581Z",
-  "latestVersion": "v0.37.1",
+  "generatedAt": "2026-07-23T10:27:44.541Z",
+  "latestVersion": "v0.37.2",
   "releases": [
+    {
+      "version": "v0.37.2",
+      "path": "docs/changelog/releases/v0.37.2.md",
+      "summary": "代码文件中的超长行现在会自动换行，行号会随对应代码内容同步对齐。"
+    },
     {
       "version": "v0.37.1",
       "path": "docs/changelog/releases/v0.37.1.md",
