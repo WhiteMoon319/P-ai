@@ -2385,8 +2385,8 @@ async fn send_chat_message_inner(
                 format!("所有候选模型均失败：{}", fallback_errors.join(" | "))
             }
         })?;
-    let mut assistant_text = model_reply.assistant_text;
-    let mut final_response_text = model_reply.final_response_text;
+    let assistant_text = model_reply.assistant_text;
+    let final_response_text = model_reply.final_response_text;
     let activity_reasoning_text = model_reply.activity_reasoning_text;
     let assistant_provider_meta_override = model_reply.assistant_provider_meta;
     let tool_history_events = model_reply.tool_history_events;
@@ -2396,33 +2396,36 @@ async fn send_chat_message_inner(
             .as_deref()
             .map(|delegate_id| !remote_im_reply_delegate_is_active(&state, delegate_id))
             .unwrap_or(false);
-    if !suppress_assistant_message {
-        if let Some(delegate_id) = runtime_context
-            .remote_im_reply_delegate_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            if let Some((_contact_id, dispatch_policy)) =
-                remote_im_reply_delegate_group_policy(&state, delegate_id)
-            {
-                let draft = if assistant_text.trim().is_empty() {
-                    final_response_text.clone()
-                } else {
-                    assistant_text.clone()
-                };
-                let final_text = remote_im_reply_delegate_finalize_group_reply_draft(
-                    &state,
-                    delegate_id,
-                    &draft,
-                    dispatch_policy.max_chars,
-                )
-                .await;
-                assistant_text = final_text.clone();
-                final_response_text = final_text;
-            }
-        }
-    }
+    // 群聊长度门二次改写默认禁用：模型回复完成后直接使用原始 assistant_text/final_response_text。
+    // 这段逻辑保留在 remote_im_reply_delegate_finalize_group_reply_draft(...)，但不再在默认发送路径调用，
+    // 避免在 model_request.finish 之后额外触发一次 30 秒快速模型请求。
+    // if !suppress_assistant_message {
+    //     if let Some(delegate_id) = runtime_context
+    //         .remote_im_reply_delegate_id
+    //         .as_deref()
+    //         .map(str::trim)
+    //         .filter(|value| !value.is_empty())
+    //     {
+    //         if let Some((_contact_id, dispatch_policy)) =
+    //             remote_im_reply_delegate_group_policy(&state, delegate_id)
+    //         {
+    //             let draft = if assistant_text.trim().is_empty() {
+    //                 final_response_text.clone()
+    //             } else {
+    //                 assistant_text.clone()
+    //             };
+    //             let final_text = remote_im_reply_delegate_finalize_group_reply_draft(
+    //                 &state,
+    //                 delegate_id,
+    //                 &draft,
+    //                 dispatch_policy.max_chars,
+    //             )
+    //             .await;
+    //             assistant_text = final_text.clone();
+    //             final_response_text = final_text;
+    //         }
+    //     }
+    // }
     let remote_im_auto_send_source = match resolve_remote_im_auto_send_source(
         &state,
         &conversation_id,
