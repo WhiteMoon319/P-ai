@@ -377,11 +377,26 @@
             v-model="createConversationWorkspaceAccess"
             class="select select-bordered min-w-0"
             :disabled="!createConversationWorkspacePath"
+            @change="handleCreateConversationWorkspaceAccessChange"
           >
             <option value="approval">{{ workspaceAccessLabel("approval") }}</option>
             <option value="full_access">{{ workspaceAccessLabel("full_access") }}</option>
             <option value="read_only">{{ workspaceAccessLabel("read_only") }}</option>
           </select>
+        </div>
+        <select
+          v-model="createConversationWorkMode"
+          class="select select-bordered w-full"
+          :disabled="!createConversationWorkspacePath"
+        >
+          <option value="directory">{{ t("chat.workspaceWorkModeDirectory") }}</option>
+          <option value="isolated_worktree" :disabled="createConversationWorkspaceAccess === 'read_only' || !createConversationWorktreeAvailable">{{ t("chat.workspaceWorkModeIsolated") }}</option>
+        </select>
+        <div
+          v-if="createConversationWorkspacePath && createConversationWorkspaceAccess !== 'read_only' && createConversationWorktreeCheckMessage"
+          class="text-xs text-base-content/60"
+        >
+          {{ createConversationWorktreeCheckMessage }}
         </div>
       </div>
       <div class="modal-action mt-4 items-center justify-between gap-3">
@@ -477,7 +492,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useI18n } from "vue-i18n";
 import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 import { Download, FoldVertical, FolderOpen, History, Minus, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, ScrollText, Search, Settings, Square, SquarePen, X } from "@lucide/vue";
-import type { ApiConfigItem, ChatConversationOverviewItem, ShellWorkspace, ShellWorkspaceAccess } from "../../../types/app";
+import type { ApiConfigItem, ChatConversationOverviewItem, ShellWorkspace, ShellWorkspaceAccess, ShellWorkMode } from "../../../types/app";
 import { defaultWorkspaceNameFromPath } from "../../../utils/shell-workspaces";
 import { buildWorkspaceConversationSections } from "../../chat/utils/conversation-sections";
 import { resolveConversationDisplayTitle } from "../../chat/utils/conversation-title";
@@ -503,6 +518,7 @@ type CreateConversationInput = {
   copyCurrent?: boolean;
   importPath?: string;
   shellWorkspaces?: ShellWorkspace[];
+  shellWorkMode?: ShellWorkMode;
   shellAutonomousMode?: boolean;
 };
 
@@ -756,6 +772,10 @@ const createConversationTopicSuggestionsOpen = ref(false);
 const suppressNextCreateConversationTopicFocus = ref(false);
 const createConversationWorkspacePath = ref("");
 const createConversationWorkspaceAccess = ref<ShellWorkspaceAccess>("approval");
+const createConversationWorkMode = ref<ShellWorkMode>("directory");
+const createConversationWorktreeAvailable = ref(false);
+const createConversationWorktreeCheckMessage = ref("");
+let createConversationWorktreeCheckSeq = 0;
 const createConversationCustomWorkspace = ref<ShellWorkspace | null>(null);
 const createConversationMaxPermission = ref(false);
 const createConversationWorkspacePickerOpen = ref(false);
@@ -865,6 +885,9 @@ function normalizeWorkspaceAccess(value: unknown): ShellWorkspaceAccess {
 function resetCreateConversationWorkspace() {
   createConversationWorkspacePath.value = "";
   createConversationWorkspaceAccess.value = "approval";
+  createConversationWorkMode.value = "directory";
+  createConversationWorktreeAvailable.value = false;
+  createConversationWorktreeCheckMessage.value = "";
   createConversationCustomWorkspace.value = null;
   createConversationMaxPermission.value = false;
   closeCreateConversationWorkspacePicker();
@@ -916,10 +939,50 @@ function handleCreateConversationWorkspaceChange() {
   const source = selectableCreateConversationWorkspaces.value.find((item) => item.path === path)
     || (createConversationCustomWorkspace.value?.path === path ? createConversationCustomWorkspace.value : null);
   createConversationWorkspaceAccess.value = normalizeWorkspaceAccess(source?.access);
+  handleCreateConversationWorkspaceAccessChange();
+  void checkCreateConversationWorkspaceGitRoot(path);
+}
+
+function handleCreateConversationWorkspaceAccessChange() {
+  if (createConversationWorkspaceAccess.value === "read_only") {
+    createConversationWorkMode.value = "directory";
+  }
+}
+
+async function checkCreateConversationWorkspaceGitRoot(path: string) {
+  const normalizedPath = String(path || "").trim();
+  const currentSeq = ++createConversationWorktreeCheckSeq;
+  if (!normalizedPath) {
+    createConversationWorktreeAvailable.value = false;
+    createConversationWorktreeCheckMessage.value = "";
+    return;
+  }
+  createConversationWorktreeCheckMessage.value = t("chat.workspaceWorktreeChecking");
+  try {
+    const result = await invokeTauri<{ isGitRoot?: boolean; checked?: boolean; error?: string }>("check_git_workspace_root", {
+      input: { workspacePath: normalizedPath },
+    });
+    if (currentSeq !== createConversationWorktreeCheckSeq) return;
+    createConversationWorktreeAvailable.value = Boolean(result.isGitRoot);
+    createConversationWorktreeCheckMessage.value = result.error
+      ? String(result.error)
+      : (result.checked && !result.isGitRoot
+        ? t("chat.workspaceWorktreeUnavailable")
+        : "");
+    if (!createConversationWorktreeAvailable.value) {
+      createConversationWorkMode.value = "directory";
+    }
+  } catch (error) {
+    if (currentSeq !== createConversationWorktreeCheckSeq) return;
+    createConversationWorktreeAvailable.value = false;
+    createConversationWorktreeCheckMessage.value = error instanceof Error ? error.message : String(error);
+    createConversationWorkMode.value = "directory";
+  }
 }
 
 function handleCreateConversationWorkspacePickerAccessChange(value: string) {
   createConversationWorkspaceAccess.value = normalizeWorkspaceAccess(value);
+  handleCreateConversationWorkspaceAccessChange();
 }
 
 async function pickCreateConversationWorkspace() {
@@ -937,6 +1000,8 @@ async function pickCreateConversationWorkspace() {
   if (existing) {
     createConversationWorkspacePath.value = existing.path;
     createConversationWorkspaceAccess.value = normalizeWorkspaceAccess(existing.access);
+    handleCreateConversationWorkspaceAccessChange();
+    void checkCreateConversationWorkspaceGitRoot(existing.path);
     return;
   }
   const workspace: ShellWorkspace = {
@@ -950,6 +1015,8 @@ async function pickCreateConversationWorkspace() {
   createConversationCustomWorkspace.value = workspace;
   createConversationWorkspacePath.value = workspace.path;
   createConversationWorkspaceAccess.value = workspace.access;
+  handleCreateConversationWorkspaceAccessChange();
+  void checkCreateConversationWorkspaceGitRoot(workspace.path);
 }
 
 function openCreateConversationWorkspacePicker() {
@@ -1009,6 +1076,8 @@ function confirmCreateConversationWorkspacePicker() {
     createConversationWorkspacePath.value = existing.path;
     createConversationWorkspaceAccess.value = normalizeWorkspaceAccess(existing.access);
     createConversationCustomWorkspace.value = null;
+    handleCreateConversationWorkspaceAccessChange();
+    void checkCreateConversationWorkspaceGitRoot(existing.path);
     closeCreateConversationWorkspacePicker();
     return;
   }
@@ -1023,6 +1092,8 @@ function confirmCreateConversationWorkspacePicker() {
   createConversationCustomWorkspace.value = workspace;
   createConversationWorkspacePath.value = workspace.path;
   createConversationWorkspaceAccess.value = workspace.access;
+  handleCreateConversationWorkspaceAccessChange();
+  void checkCreateConversationWorkspaceGitRoot(workspace.path);
   closeCreateConversationWorkspacePicker();
 }
 
@@ -1137,11 +1208,13 @@ function handleCreateConversation() {
   if (currentMainWorkspace?.path) {
     createConversationWorkspacePath.value = currentMainWorkspace.path;
     createConversationWorkspaceAccess.value = normalizeWorkspaceAccess(currentMainWorkspace.access);
+    void checkCreateConversationWorkspaceGitRoot(currentMainWorkspace.path);
   } else {
     const preferredWorkspace = selectableCreateConversationWorkspaces.value[0];
     if (preferredWorkspace?.path) {
       createConversationWorkspacePath.value = preferredWorkspace.path;
       createConversationWorkspaceAccess.value = normalizeWorkspaceAccess(preferredWorkspace.access);
+      void checkCreateConversationWorkspaceGitRoot(preferredWorkspace.path);
     }
   }
   createConversationDialogOpen.value = true;
@@ -1166,6 +1239,7 @@ function openCreateConversationDialogWithWorkspace(workspace: ShellWorkspace) {
   }
   createConversationWorkspacePath.value = target.path;
   createConversationWorkspaceAccess.value = normalizeWorkspaceAccess(target.access);
+  void checkCreateConversationWorkspaceGitRoot(target.path);
 }
 
 function handleOpenCreateConversationDialogEvent(event: Event) {
@@ -1255,6 +1329,9 @@ function confirmCreateConversation() {
   createConversationAgentId.value = "";
   createConversationTopicSuggestionsOpen.value = false;
   const shellWorkspaces = createConversationWorkspacePayload();
+  const shellWorkMode = createConversationWorkspaceAccess.value === "read_only"
+    ? "directory"
+    : createConversationWorkMode.value;
   const shellAutonomousMode = createConversationMaxPermission.value;
   resetCreateConversationWorkspace();
   emit("create-conversation", {
@@ -1262,6 +1339,7 @@ function confirmCreateConversation() {
     departmentId: departmentId || undefined,
     agentId: agentId || undefined,
     shellWorkspaces,
+    shellWorkMode,
     shellAutonomousMode,
   });
 }
@@ -1290,6 +1368,9 @@ async function importConversationFromExternal() {
     createConversationAgentId.value = "";
     createConversationTopicSuggestionsOpen.value = false;
     const shellWorkspaces = createConversationWorkspacePayload();
+    const shellWorkMode = createConversationWorkspaceAccess.value === "read_only"
+      ? "directory"
+      : createConversationWorkMode.value;
     const shellAutonomousMode = createConversationMaxPermission.value;
     resetCreateConversationWorkspace();
     emit("create-conversation", {
@@ -1298,6 +1379,7 @@ async function importConversationFromExternal() {
       agentId: agentId || undefined,
       importPath: path,
       shellWorkspaces,
+      shellWorkMode,
       shellAutonomousMode,
     });
   } finally {

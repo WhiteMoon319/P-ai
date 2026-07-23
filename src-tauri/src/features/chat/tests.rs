@@ -5151,6 +5151,12 @@
     #[test]
     fn conversation_service_v2_should_create_and_delete_conversation() {
         let state = test_chat_runtime_state();
+        let git_init = std::process::Command::new("git")
+            .args(["init", "--quiet"])
+            .current_dir(&state.llm_workspace_path)
+            .output()
+            .expect("initialize git workspace");
+        assert!(git_init.status.success(), "git init should succeed");
         let created = conversation_service_v2()
             .create_conversation(
                 &state,
@@ -5161,6 +5167,7 @@
                     title: Some("V2创建会话".to_string()),
                     copy_source_conversation_id: None,
                     shell_workspaces: None,
+                    shell_work_mode: Some("isolated_worktree".to_string()),
                     shell_autonomous_mode: None,
                 },
             )
@@ -5170,6 +5177,7 @@
             .expect("created conversation should exist");
         assert_eq!(created_conversation.title, "V2创建会话");
         assert_eq!(created_conversation.agent_id, DEFAULT_AGENT_ID);
+        assert_eq!(created_conversation.shell_work_mode, "isolated_worktree");
         assert_eq!(created_conversation.shell_workspace_path, None);
         assert_eq!(created_conversation.shell_workspaces.len(), 1);
         assert_eq!(
@@ -5189,6 +5197,72 @@
             .delete_conversation(&state, &created.conversation_id)
             .expect("delete conversation through v2");
         assert_eq!(deleted.deleted_conversation_id, created.conversation_id);
+    }
+
+    #[test]
+    fn conversation_service_v2_should_reject_isolated_worktree_for_read_only_workspace() {
+        let state = test_chat_runtime_state();
+        let git_init = std::process::Command::new("git")
+            .args(["init", "--quiet"])
+            .current_dir(&state.llm_workspace_path)
+            .output()
+            .expect("initialize git workspace");
+        assert!(git_init.status.success(), "git init should succeed");
+
+        let result = conversation_service_v2().create_conversation(
+            &state,
+            &CreateUnarchivedConversationInput {
+                api_config_id: None,
+                agent_id: Some(DEFAULT_AGENT_ID.to_string()),
+                department_id: Some(ASSISTANT_DEPARTMENT_ID.to_string()),
+                title: Some("只读隔离会话".to_string()),
+                copy_source_conversation_id: None,
+                shell_workspaces: Some(vec![ShellWorkspaceConfig {
+                    id: "main-workspace".to_string(),
+                    name: "测试 Git 根".to_string(),
+                    path: terminal_path_for_user(&state.llm_workspace_path),
+                    level: SHELL_WORKSPACE_LEVEL_MAIN.to_string(),
+                    access: SHELL_WORKSPACE_ACCESS_READ_ONLY.to_string(),
+                    built_in: false,
+                }]),
+                shell_work_mode: Some(SHELL_WORK_MODE_ISOLATED_WORKTREE.to_string()),
+                shell_autonomous_mode: None,
+            },
+        );
+
+        match result {
+            Ok(_) => panic!("read-only workspace must reject isolated worktree mode"),
+            Err(error) => assert_eq!(error, "在隔离工作树中工作至少需要审批权限。"),
+        }
+    }
+
+    #[test]
+    fn isolated_worktree_should_require_git_repository_root() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "eca-isolated-worktree-root-test-{}",
+            Uuid::new_v4()
+        ));
+        let git_root = temp_root.join("repo");
+        let nested_path = git_root.join("nested");
+        let plain_path = temp_root.join("plain");
+        std::fs::create_dir_all(&nested_path).expect("create nested Git path");
+        std::fs::create_dir_all(&plain_path).expect("create plain path");
+        let git_init = std::process::Command::new("git")
+            .args(["init", "--quiet"])
+            .current_dir(&git_root)
+            .output()
+            .expect("initialize Git repository");
+        assert!(git_init.status.success(), "git init should succeed");
+
+        assert!(validate_isolated_worktree_root(&git_root.to_string_lossy()).is_ok());
+        let nested_error = validate_isolated_worktree_root(&nested_path.to_string_lossy())
+            .expect_err("Git repository subdirectory must be rejected");
+        assert!(nested_error.contains("必须选择 Git 仓库根目录"));
+        let plain_error = validate_isolated_worktree_root(&plain_path.to_string_lossy())
+            .expect_err("non-Git directory must be rejected");
+        assert!(plain_error.contains("需要 Git 仓库根目录"));
+
+        let _ = std::fs::remove_dir_all(temp_root);
     }
 
     #[test]

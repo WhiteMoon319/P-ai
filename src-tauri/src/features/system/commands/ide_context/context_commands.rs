@@ -168,6 +168,21 @@ fn ide_chat_workspace_list(state: &AppState, params: Value) -> Result<Value, Str
         "workspaceName": workspace_name, "autonomousMode": meta.shell_autonomous_mode}))
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeChatWorkspaceGitRootCheckInput {
+    workspace_path: String,
+}
+
+async fn ide_chat_workspace_git_root_check(params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatWorkspaceGitRootCheckInput>(params)?;
+    let result = check_git_workspace_root(ShellWorkspacePathInput {
+        workspace_path: Some(input.workspace_path),
+    })
+    .await?;
+    serde_json::to_value(result).map_err(|err| format!("serialize git root check failed: {err}"))
+}
+
 fn ide_chat_workspace_directory_list(params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatWorkspaceDirectoryListInput>(params)?;
     let payload = list_file_reader_directory(input.path)?;

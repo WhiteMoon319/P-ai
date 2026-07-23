@@ -18,6 +18,20 @@
           auto-select-first
         />
         <div class="text-xs text-base-content/60">{{ t("chat.createConversationDepartmentPersonaLockedHint") }}</div>
+        <select
+          v-model="localWorkMode"
+          class="select select-bordered w-full"
+          :disabled="!workspacePath"
+        >
+          <option value="directory">{{ t("chat.workspaceWorkModeDirectory") }}</option>
+          <option value="isolated_worktree" :disabled="workspaceAccess === 'read_only' || !worktreeAvailable">{{ t("chat.workspaceWorkModeIsolated") }}</option>
+        </select>
+        <div
+          v-if="workspacePath && workspaceAccess !== 'read_only' && worktreeCheckMessage"
+          class="text-xs text-base-content/60"
+        >
+          {{ worktreeCheckMessage }}
+        </div>
       </div>
       <div v-if="errorText" class="mt-3 rounded border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
         {{ errorText }}
@@ -39,6 +53,7 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import type { ShellWorkspaceAccess, ShellWorkMode } from "../../../types/app";
 import DepartmentPersonaSelect from "../../shared/components/DepartmentPersonaSelect.vue";
 import type { SidebarCreateDepartmentOption } from "../sidebar-app-types";
 
@@ -49,18 +64,23 @@ const props = defineProps<{
   creating: boolean;
   departments: SidebarCreateDepartmentOption[];
   defaultDepartmentId: string;
+  workspacePath: string;
+  workspaceAccess: ShellWorkspaceAccess;
+  worktreeAvailable: boolean;
+  worktreeCheckMessage: string;
   personaAvatarUrlMap?: Record<string, string>;
   errorText: string;
 }>();
 
 const emit = defineEmits<{
   close: [];
-  confirm: [input: { title?: string; departmentId: string; agentId: string }];
+  confirm: [input: { title?: string; departmentId: string; agentId: string; shellWorkMode: ShellWorkMode }];
 }>();
 
 const localTitle = ref("");
 const localDepartmentId = ref("");
 const localAgentId = ref("");
+const localWorkMode = ref<ShellWorkMode>("directory");
 
 watch(
   () => [props.open, props.defaultDepartmentId, props.departments.map((item) => item.id).join("|")] as const,
@@ -72,8 +92,18 @@ watch(
     ) || props.departments[0];
     localDepartmentId.value = String(option?.departmentId || props.defaultDepartmentId || "").trim();
     localAgentId.value = String(option?.agentId || "").trim();
+    localWorkMode.value = "directory";
   },
   { immediate: true },
+);
+
+watch(
+  () => [props.workspaceAccess, props.worktreeAvailable] as const,
+  ([access, worktreeAvailable]) => {
+    if (access === "read_only" || !worktreeAvailable) {
+      localWorkMode.value = "directory";
+    }
+  },
 );
 
 function confirm() {
@@ -84,6 +114,11 @@ function confirm() {
     title: String(localTitle.value || "").trim() || undefined,
     departmentId,
     agentId,
+    shellWorkMode: props.workspaceAccess === "read_only"
+      || !props.worktreeAvailable
+      || !String(props.workspacePath || "").trim()
+      ? "directory"
+      : localWorkMode.value,
   });
 }
 </script>

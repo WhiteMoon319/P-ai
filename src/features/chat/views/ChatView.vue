@@ -596,7 +596,7 @@ import {
 } from "../../shell/composables/use-chat-composer-appearance";
 import { ArrowDownToLine, Check, ChevronsDown, ChevronsUp, History, Inbox, ListTodo, Network, Trash2, Undo2, Wrench, X } from "@lucide/vue";
 import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
-import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ChatMessageBlock, ChatPersonaPresenceChip, ChatTodoItem, ConversationDelegateStatusSummary, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption, ShellWorkspace } from "../../../types/app";
+import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ChatMessageBlock, ChatPersonaPresenceChip, ChatTodoItem, ConversationDelegateStatusSummary, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption, ShellWorkspace, ShellWorkMode } from "../../../types/app";
 import ChatMessageItem from "../components/ChatMessageItem.vue";
 import ChatApprovalPanel from "../components/ChatApprovalPanel.vue";
 import ChatComposerPanel from "../components/ChatComposerPanel.vue";
@@ -736,7 +736,7 @@ const emit = defineEmits<{
   (e: "exportConversation", conversationId: string): void;
   (e: "deleteConversation", conversationId: string): void;
   (e: "rebindConversationRecipient", payload: { conversationId: string; departmentId: string; agentId: string }): void;
-  (e: "createConversation", input?: { title?: string; departmentId?: string; agentId?: string; copyCurrent?: boolean; importPath?: string; shellWorkspaces?: ShellWorkspace[]; shellAutonomousMode?: boolean }): void;
+  (e: "createConversation", input?: { title?: string; departmentId?: string; agentId?: string; copyCurrent?: boolean; importPath?: string; shellWorkspaces?: ShellWorkspace[]; shellWorkMode?: ShellWorkMode; shellAutonomousMode?: boolean }): void;
   (e: "loadOlderHistory"): void; (e: "reachedBottom"): void;
   (e: "jumpToConversationBottom"): void;
   (e: "refreshToolReviewMessage", payload: { conversationId: string; messageId: string }): void;

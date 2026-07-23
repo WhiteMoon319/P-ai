@@ -685,6 +685,8 @@ struct CreateUnarchivedConversationInput {
     #[serde(default)]
     shell_workspaces: Option<Vec<ShellWorkspaceConfig>>,
     #[serde(default)]
+    shell_work_mode: Option<String>,
+    #[serde(default)]
     shell_autonomous_mode: Option<bool>,
 }
 
@@ -837,6 +839,8 @@ struct ImportConversationShareFromFileInput {
     title: Option<String>,
     #[serde(default)]
     shell_workspaces: Option<Vec<ShellWorkspaceConfig>>,
+    #[serde(default)]
+    shell_work_mode: Option<String>,
     #[serde(default)]
     shell_autonomous_mode: Option<bool>,
 }
@@ -1477,6 +1481,7 @@ fn import_conversation_share_from_file(
         title: requested_title,
         copy_source_conversation_id: None,
         shell_workspaces: input.shell_workspaces.clone(),
+        shell_work_mode: input.shell_work_mode.clone(),
         shell_autonomous_mode: input.shell_autonomous_mode,
     };
     let result = conversation_service_v2().create_conversation(state.inner(), &create_input)?;
@@ -1600,6 +1605,7 @@ async fn create_conversation_branch_from_message_internal(
         title: None,
         copy_source_conversation_id: Some(source_conversation.id.clone()),
         shell_workspaces: None,
+        shell_work_mode: None,
         shell_autonomous_mode: None,
     };
     let create_result = conversation_service_v2().create_conversation(state, &create_input)?;

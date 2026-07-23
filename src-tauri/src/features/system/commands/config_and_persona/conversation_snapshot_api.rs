@@ -1138,6 +1138,7 @@ fn list_unarchived_conversations_blocking(
         title: None,
         copy_source_conversation_id: None,
         shell_workspaces: None,
+        shell_work_mode: None,
         shell_autonomous_mode: None,
     };
     let result = conversation_service_v2().create_conversation(state, &create_input)?;

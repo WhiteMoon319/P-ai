@@ -989,6 +989,7 @@ mod ide_context_tests {
                     title: Some("IDE发送即时assistant气泡".to_string()),
                     copy_source_conversation_id: None,
                     shell_workspaces: None,
+                    shell_work_mode: None,
                     shell_autonomous_mode: None,
                 },
             )

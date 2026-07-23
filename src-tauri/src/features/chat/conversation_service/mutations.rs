@@ -269,6 +269,40 @@ fn read_latest_archive_summary_from_chat_index(state: &AppState) -> Result<Optio
         .map(|conversation_meta| conversation_meta.summary.to_string()))
 }
 
+fn validate_isolated_worktree_root(path: &str) -> Result<(), String> {
+    let raw_path = path.trim();
+    if raw_path.is_empty() {
+        return Err("隔离工作树需要 Git 仓库根目录，当前工作区路径为空。".to_string());
+    }
+    let canonical_workspace = std::path::Path::new(raw_path)
+        .canonicalize()
+        .map_err(|err| format!("无法读取隔离工作树目录：{err}"))?;
+    let output = std::process::Command::new("git")
+        .current_dir(&canonical_workspace)
+        .args(["rev-parse", "--show-toplevel"])
+        .output()
+        .map_err(|err| format!("无法运行 Git 检查隔离工作树目录：{err}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "隔离工作树需要 Git 仓库根目录：{}",
+            canonical_workspace.display()
+        ));
+    }
+    let reported_root = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let canonical_root = std::path::PathBuf::from(reported_root)
+        .canonicalize()
+        .map_err(|err| format!("无法解析 Git 仓库根目录：{err}"))?;
+    if normalize_terminal_path_for_compare(&canonical_root)
+        != normalize_terminal_path_for_compare(&canonical_workspace)
+    {
+        return Err(format!(
+            "隔离工作树必须选择 Git 仓库根目录，不能选择子目录：{}",
+            canonical_workspace.display()
+        ));
+    }
+    Ok(())
+}
+
 fn create_unarchived_conversation_shared(
     state: &AppState,
     input: &CreateUnarchivedConversationInput,
@@ -366,6 +400,23 @@ fn create_unarchived_conversation_shared(
         input.shell_workspaces.as_deref().unwrap_or(&conversation.shell_workspaces),
     );
     conversation.shell_workspace_path = None;
+    if copy_source_conversation_id.is_none() {
+        if let Some(shell_work_mode) = input.shell_work_mode.as_deref() {
+            conversation.shell_work_mode = normalize_shell_work_mode_text(shell_work_mode);
+            if conversation.shell_work_mode == SHELL_WORK_MODE_ISOLATED_WORKTREE {
+                let workspace = conversation
+                    .shell_workspaces
+                    .iter()
+                    .find(|workspace| workspace.level == SHELL_WORKSPACE_LEVEL_MAIN)
+                    .or_else(|| conversation.shell_workspaces.first())
+                    .ok_or_else(|| "隔离工作树需要至少一个工作区。".to_string())?;
+                if workspace.access.trim() == SHELL_WORKSPACE_ACCESS_READ_ONLY {
+                    return Err("在隔离工作树中工作至少需要审批权限。".to_string());
+                }
+                validate_isolated_worktree_root(&workspace.path)?;
+            }
+        }
+    }
     if let Some(shell_autonomous_mode) = input.shell_autonomous_mode {
         conversation.shell_autonomous_mode = shell_autonomous_mode;
     }

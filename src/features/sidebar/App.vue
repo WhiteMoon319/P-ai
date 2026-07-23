@@ -137,6 +137,10 @@
       :creating="creatingConversation"
       :departments="createConversationDepartmentOptions"
       :default-department-id="defaultCreateConversationDepartmentId"
+      :workspace-path="vscodeWorkspaceRoots[0]?.path || ''"
+      :workspace-access="workspaceAccess || 'approval'"
+      :worktree-available="createConversationWorktreeAvailable"
+      :worktree-check-message="createConversationWorktreeCheckMessage"
       :persona-avatar-url-map="sidebarPersonaAvatarUrlMap"
       :error-text="createConversationErrorText"
       @close="closeCreateConversationDialog"
@@ -256,7 +260,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import type { ApiConfigItem, ChatConversationOverviewItem, ChatIngressPart, ChatMessage, ChatTodoItem, ConversationGoalState, IdeContextWorkspaceGroup, ShellWorkspace } from "../../types/app";
+import type { ApiConfigItem, ChatConversationOverviewItem, ChatIngressPart, ChatMessage, ChatTodoItem, ConversationGoalState, IdeContextWorkspaceGroup, ShellWorkspace, ShellWorkMode } from "../../types/app";
 import { removeBinaryPlaceholders, messageText } from "../../utils/chat-message";
 import { formatConversationFallbackTitle } from "../chat/utils/conversation-title";
 import { formalizeMessages } from "../chat/composables/use-chat-flow-utils";
@@ -393,6 +397,9 @@ const workspaceAccess = ref<"read_only" | "approval" | "full_access" | "">("appr
 const workspaceRootPath = ref("");
 const workspaceRootName = ref("");
 const vscodeWorkspaceRoots = ref<Array<{ path: string; name: string }>>([]);
+const createConversationWorktreeAvailable = ref(false);
+const createConversationWorktreeCheckMessage = ref("");
+let createConversationWorktreeCheckSeq = 0;
 const vscodeIdeContextGroups = ref<IdeContextWorkspaceGroup[]>([]);
 const messages = ref<ChatMessage[]>([]);
 const sidebarTodos = ref<ChatTodoItem[]>([]);
@@ -453,6 +460,13 @@ const createConversationDepartmentOptions = ref<SidebarCreateDepartmentOption[]>
 const defaultCreateConversationDepartmentId = ref("");
 const createConversationErrorText = ref("");
 const createConversationOptionsStale = ref(true);
+watch(
+  () => [createConversationDialogOpen.value, vscodeWorkspaceRoots.value[0]?.path || ""] as const,
+  ([open, workspacePath]) => {
+    if (!open) return;
+    void checkCreateConversationWorkspaceGitRoot(workspacePath);
+  },
+);
 const remoteAuthDialogOpen = ref(false);
 const remoteAuthPassword = ref("");
 const remoteAuthSubmitting = ref(false);
@@ -1525,8 +1539,39 @@ async function loadPrevBlock() {
   messages.value = normalizeSidebarMessages([...previous, ...messages.value], messages.value);
 }
 
+async function checkCreateConversationWorkspaceGitRoot(path: string) {
+  const normalizedPath = String(path || "").trim();
+  const currentSeq = ++createConversationWorktreeCheckSeq;
+  if (!normalizedPath) {
+    createConversationWorktreeAvailable.value = false;
+    createConversationWorktreeCheckMessage.value = "";
+    return;
+  }
+  createConversationWorktreeCheckMessage.value = t("chat.workspaceWorktreeChecking");
+  try {
+    const result = await transport.request<{ isGitRoot?: boolean; checked?: boolean; error?: string }>(
+      "workspace.gitRootCheck",
+      { workspacePath: normalizedPath },
+      8000,
+    );
+    if (currentSeq !== createConversationWorktreeCheckSeq) return;
+    createConversationWorktreeAvailable.value = Boolean(result.isGitRoot);
+    createConversationWorktreeCheckMessage.value = result.error
+      ? String(result.error)
+      : (result.checked && !result.isGitRoot
+        ? t("chat.workspaceWorktreeUnavailable")
+        : "");
+  } catch (error) {
+    if (currentSeq !== createConversationWorktreeCheckSeq) return;
+    createConversationWorktreeAvailable.value = false;
+    createConversationWorktreeCheckMessage.value = error instanceof Error ? error.message : String(error);
+  }
+}
+
 async function openCreateConversationDialog() {
   createConversationErrorText.value = "";
+  const workspacePath = String(vscodeWorkspaceRoots.value[0]?.path || "").trim();
+  void checkCreateConversationWorkspaceGitRoot(workspacePath);
   try {
     await refreshCreateConversationOptionsIfNeeded();
     createConversationDialogOpen.value = true;
@@ -1547,6 +1592,7 @@ async function createConversation(input: {
   departmentId: string;
   agentId: string;
   shellWorkspaces?: ShellWorkspace[];
+  shellWorkMode?: ShellWorkMode;
   shellAutonomousMode?: boolean;
 }) {
   const departmentId = String(input.departmentId || "").trim();
@@ -1584,6 +1630,7 @@ async function createConversation(input: {
       departmentId,
       agentId,
       shellWorkspaces,
+      shellWorkMode: input.shellWorkMode || "directory",
       shellAutonomousMode: Boolean(input.shellAutonomousMode),
     });
     if (Array.isArray(result.unarchivedConversations)) {
@@ -1677,7 +1724,7 @@ async function rebindConversationRecipient(payload: { conversationId: string; de
   }
 }
 
-function handleCreateConversationRequest(input?: { title?: string; departmentId?: string; agentId?: string; copyCurrent?: boolean; importPath?: string; shellWorkspaces?: ShellWorkspace[]; shellAutonomousMode?: boolean }) {
+function handleCreateConversationRequest(input?: { title?: string; departmentId?: string; agentId?: string; copyCurrent?: boolean; importPath?: string; shellWorkspaces?: ShellWorkspace[]; shellWorkMode?: ShellWorkMode; shellAutonomousMode?: boolean }) {
   const departmentId = String(input?.departmentId || "").trim();
   const agentId = String(input?.agentId || "").trim();
   if (departmentId && agentId) {
@@ -1686,6 +1733,7 @@ function handleCreateConversationRequest(input?: { title?: string; departmentId?
       departmentId,
       agentId,
       shellWorkspaces: input?.shellWorkspaces,
+      shellWorkMode: input?.shellWorkMode,
       shellAutonomousMode: input?.shellAutonomousMode,
     });
     return;

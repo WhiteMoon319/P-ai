@@ -186,6 +186,7 @@ async fn ide_chat_handle_jsonrpc_request(
         "workspace.layout.save" => ide_chat_workspace_layout_save(state, request.params),
         "workspace.list" => ide_chat_workspace_list(state, request.params),
         "workspace.directory.list" => ide_chat_workspace_directory_list(request.params),
+        "workspace.gitRootCheck" => ide_chat_workspace_git_root_check(request.params).await,
         "fileReader.directory.list" => ide_chat_file_reader_directory_list(request.params),
         "fileReader.readFile" => ide_chat_file_reader_read(request.params),
         "fileReader.readFileBlock" => ide_chat_file_reader_read_block(request.params),

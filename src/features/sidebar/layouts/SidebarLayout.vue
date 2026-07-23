@@ -102,7 +102,7 @@
 import { computed } from "vue";
 import { ChevronLeft, FileSearch, RefreshCcw, Settings, SquarePen } from "@lucide/vue";
 import AppWindowHeader from "../../shell/components/AppWindowHeader.vue";
-import type { ChatConversationOverviewItem, ShellWorkspace } from "../../../types/app";
+import type { ChatConversationOverviewItem, ShellWorkspace, ShellWorkMode } from "../../../types/app";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
 
 const props = defineProps<{
@@ -149,7 +149,7 @@ defineEmits<{
   toggleReviewPanel: [];
   toggleSideConversationList: [];
   toggleToolReviewPanel: [];
-  createConversation: [input?: { title?: string; departmentId?: string; agentId?: string; copyCurrent?: boolean; importPath?: string; shellWorkspaces?: ShellWorkspace[]; shellAutonomousMode?: boolean }];
+  createConversation: [input?: { title?: string; departmentId?: string; agentId?: string; copyCurrent?: boolean; importPath?: string; shellWorkspaces?: ShellWorkspace[]; shellWorkMode?: ShellWorkMode; shellAutonomousMode?: boolean }];
   directoryPickRestricted: [];
 }>();
 </script>
