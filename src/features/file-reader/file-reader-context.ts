@@ -137,13 +137,13 @@ export function buildFileReaderSelectionContextReference(input: {
 }
 
 function resolveVirtualizedSelectedLineRange(range: Range): { startLine: number; endLine: number } | null {
-  const startLine = resolveVirtualizedBoundaryLine(range.startContainer, range.startOffset);
-  const endLine = resolveVirtualizedBoundaryLine(range.endContainer, range.endOffset);
+  const startLine = resolveVirtualizedBoundaryLine(range.startContainer);
+  const endLine = resolveVirtualizedBoundaryLine(range.endContainer);
   if (!startLine || !endLine) return null;
   return { startLine: Math.min(startLine, endLine), endLine: Math.max(startLine, endLine) };
 }
 
-function resolveVirtualizedBoundaryLine(container: Node, offset: number): number | null {
+function resolveVirtualizedBoundaryLine(container: Node): number | null {
   const element = container.nodeType === Node.ELEMENT_NODE ? container as Element : container.parentElement;
   const row = element?.closest<HTMLElement>(".file-reader-code-virtual-row");
   if (!row) return null;
@@ -151,32 +151,12 @@ function resolveVirtualizedBoundaryLine(container: Node, offset: number): number
   const blockEndLine = Number(row.dataset.endLine || 0);
   if (!Number.isFinite(blockStartLine) || !Number.isFinite(blockEndLine) || blockStartLine <= 0 || blockEndLine < blockStartLine) return null;
 
-  const shikiLine = element?.closest<HTMLElement>(".file-reader-code-virtual-shiki .line");
-  if (shikiLine && row.contains(shikiLine)) {
-    const lineElements = Array.from(row.querySelectorAll<HTMLElement>(".file-reader-code-virtual-shiki code .line"));
-    const index = lineElements.indexOf(shikiLine);
-    if (index >= 0) return Math.max(blockStartLine, Math.min(blockEndLine, blockStartLine + index));
-  }
-
-  const rawPre = row.querySelector<HTMLElement>(".file-reader-code-virtual-raw");
-  if (rawPre && (container === rawPre || rawPre.contains(container))) {
-    const lineIndex = lineIndexWithinElement(rawPre, container, offset);
-    if (lineIndex != null) return Math.max(blockStartLine, Math.min(blockEndLine, blockStartLine + lineIndex));
+  const lineElement = element?.closest<HTMLElement>(".file-reader-code-virtual-line");
+  if (lineElement && row.contains(lineElement)) {
+    const lineNumber = Number(lineElement.dataset.lineNumber || 0);
+    if (Number.isFinite(lineNumber) && lineNumber >= blockStartLine && lineNumber <= blockEndLine) return lineNumber;
   }
   return blockStartLine;
-}
-
-function lineIndexWithinElement(root: HTMLElement, container: Node, offset: number): number | null {
-  const range = document.createRange();
-  try {
-    range.selectNodeContents(root);
-    range.setEnd(container, offset);
-    return Math.max(0, range.toString().split("\n").length - 1);
-  } catch {
-    return null;
-  } finally {
-    range.detach();
-  }
 }
 
 function buildContextTextBlock(input: {

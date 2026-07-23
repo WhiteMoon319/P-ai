@@ -31,8 +31,29 @@ type HighlightStateEntry = {
 
 type ShikiHighlighter = Awaited<ReturnType<typeof getSingletonHighlighter>>;
 
+type ShikiHastNode = {
+  type: string;
+  tagName?: string;
+  properties?: Record<string, unknown>;
+  children?: ShikiHastNode[];
+};
+
+type ShikiHastElement = ShikiHastNode & {
+  type: "element";
+  tagName: string;
+  properties: Record<string, unknown>;
+  children: ShikiHastNode[];
+};
+
+type ShikiHastRoot = {
+  type: "root";
+  children: ShikiHastNode[];
+};
+
+const EMPTY_CODE_LINE_HTML = '<span class="file-reader-code-empty-line">&#8203;</span>';
+
 export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOptions) {
-  const highlightedCodeHtmlByBlockKey = ref<Record<string, string>>({});
+  const highlightedCodeLinesByBlockKey = ref<Record<string, string[]>>({});
   const fileBlockContentByKey = ref<Record<string, string>>({});
   const fileBlockLoadingByKey = ref<Record<string, boolean>>({});
   const fileBlockErrorByKey = ref<Record<string, string>>({});
@@ -84,7 +105,10 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
     return rows.map((row) => ({
       row,
       block: activeVirtualCodeBlocks.value[row.index],
-    })).filter((entry): entry is { row: (typeof rows)[number]; block: VirtualCodeBlock } => Boolean(entry.block));
+    })).filter((entry): entry is { row: (typeof rows)[number]; block: VirtualCodeBlock } => Boolean(entry.block)).map((entry) => ({
+      ...entry,
+      lines: blockContentLines(entry.block.key, entry.block.lineCount),
+    }));
   });
 
   const activeVirtualCodeTotalSize = computed(() => virtualCodeBlockVirtualizer.value.getTotalSize());
@@ -98,14 +122,29 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
     return fileBlockContentByKey.value[blockKey] || "";
   }
 
-  function blockContentHtml(blockKey: string) {
-    return highlightedCodeHtmlByBlockKey.value[blockKey] || escapeHtml(blockContentText(blockKey));
+  function escapeCodeLines(content: string) {
+    return splitContentLines(content).map((line) => escapeHtml(line) || EMPTY_CODE_LINE_HTML);
   }
 
-  function normalizeShikiLineHtml(html: string) {
-    return html
-      .replace(/<\/span>\s+<span class="line"/g, '</span><span class="line"')
-      .replace(/<span class="line"><\/span>/g, '<span class="line"><span class="file-reader-code-empty-line">&#8203;</span></span>');
+  function blockContentLines(blockKey: string, lineCount: number) {
+    const lines = highlightedCodeLinesByBlockKey.value[blockKey] || escapeCodeLines(blockContentText(blockKey));
+    return Array.from({ length: Math.max(0, lineCount) }, (_, index) => lines[index] || EMPTY_CODE_LINE_HTML);
+  }
+
+  function hasClassName(node: ShikiHastElement, className: string) {
+    const value = node.properties.class;
+    if (typeof value === "string") return value.split(/\s+/).includes(className);
+    if (Array.isArray(value)) return value.map(String).includes(className);
+    return false;
+  }
+
+  function extractShikiLineHtml(root: ShikiHastRoot) {
+    const pre = root.children.find((node): node is ShikiHastElement => node.type === "element" && node.tagName === "pre");
+    const code = pre?.children?.find((node): node is ShikiHastElement => node.type === "element" && node.tagName === "code");
+    const lines = code?.children?.filter((node): node is ShikiHastElement => (
+      node.type === "element" && node.tagName === "span" && hasClassName(node as ShikiHastElement, "line")
+    )) || [];
+    return lines.map((line) => hastToHtml({ type: "root", children: line.children } as Parameters<typeof hastToHtml>[0]) || EMPTY_CODE_LINE_HTML);
   }
 
   async function renderHighlightedCodeHtml(tab: FileTab, content: string, grammarState?: GrammarState) {
@@ -118,7 +157,7 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
       ...(grammarState ? { grammarState } : {}),
     });
     return {
-      html: normalizeShikiLineHtml(hastToHtml(root)),
+      lines: extractShikiLineHtml(root as unknown as ShikiHastRoot),
       grammarState: highlighter.getLastGrammarState(root),
     };
   }
@@ -219,15 +258,18 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
 
       try {
         const result = await renderHighlightedCodeHtml(tab, content, grammarState);
-        highlightedCodeHtmlByBlockKey.value = {
-          ...highlightedCodeHtmlByBlockKey.value,
-          [block.key]: result.html,
+        highlightedCodeLinesByBlockKey.value = {
+          ...highlightedCodeLinesByBlockKey.value,
+          [block.key]: result.lines,
         };
         highlightedVersionByBlockKey.set(block.key, version);
         grammarStateByBlockKey.set(block.key, { version, state: result.grammarState });
         grammarState = result.grammarState;
       } catch {
-        highlightedCodeHtmlByBlockKey.value = { ...highlightedCodeHtmlByBlockKey.value, [block.key]: escapeHtml(content) };
+        highlightedCodeLinesByBlockKey.value = {
+          ...highlightedCodeLinesByBlockKey.value,
+          [block.key]: escapeCodeLines(content),
+        };
         highlightedVersionByBlockKey.set(block.key, version);
         grammarStateByBlockKey.set(block.key, { version, state: undefined });
         grammarState = undefined;
@@ -254,12 +296,12 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
     const contentNext = { ...fileBlockContentByKey.value };
     const loadingNext = { ...fileBlockLoadingByKey.value };
     const errorNext = { ...fileBlockErrorByKey.value };
-    const htmlNext = { ...highlightedCodeHtmlByBlockKey.value };
+    const linesNext = { ...highlightedCodeLinesByBlockKey.value };
     for (const key of new Set([
       ...Object.keys(contentNext),
       ...Object.keys(loadingNext),
       ...Object.keys(errorNext),
-      ...Object.keys(htmlNext),
+      ...Object.keys(linesNext),
       ...Array.from(highlightedVersionByBlockKey.keys()),
       ...Array.from(grammarStateByBlockKey.keys()),
     ])) {
@@ -267,7 +309,7 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
       delete contentNext[key];
       delete loadingNext[key];
       delete errorNext[key];
-      delete htmlNext[key];
+      delete linesNext[key];
       blockLoadPromises.delete(key);
       highlightedVersionByBlockKey.delete(key);
       grammarStateByBlockKey.delete(key);
@@ -275,12 +317,12 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
     fileBlockContentByKey.value = contentNext;
     fileBlockLoadingByKey.value = loadingNext;
     fileBlockErrorByKey.value = errorNext;
-    highlightedCodeHtmlByBlockKey.value = htmlNext;
+    highlightedCodeLinesByBlockKey.value = linesNext;
   }
 
   function resetVirtualCodeCaches() {
     activeHighlightRefreshId += 1;
-    highlightedCodeHtmlByBlockKey.value = {};
+    highlightedCodeLinesByBlockKey.value = {};
     fileBlockContentByKey.value = {};
     fileBlockLoadingByKey.value = {};
     fileBlockErrorByKey.value = {};
@@ -298,7 +340,7 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
     const contentNext = migrateRecordKeys(fileBlockContentByKey.value, fromPrefix, normalizedToPath);
     const loadingNext = migrateRecordKeys(fileBlockLoadingByKey.value, fromPrefix, normalizedToPath);
     const errorNext = migrateRecordKeys(fileBlockErrorByKey.value, fromPrefix, normalizedToPath);
-    const htmlNext = migrateRecordKeys(highlightedCodeHtmlByBlockKey.value, fromPrefix, normalizedToPath);
+    const linesNext = migrateRecordKeys(highlightedCodeLinesByBlockKey.value, fromPrefix, normalizedToPath);
 
     migrateMapKeys(grammarStateByBlockKey, fromPrefix, normalizedToPath);
     migrateMapKeys(highlightedVersionByBlockKey, fromPrefix, normalizedToPath);
@@ -309,7 +351,7 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
     fileBlockContentByKey.value = contentNext;
     fileBlockLoadingByKey.value = loadingNext;
     fileBlockErrorByKey.value = errorNext;
-    highlightedCodeHtmlByBlockKey.value = htmlNext;
+    highlightedCodeLinesByBlockKey.value = linesNext;
   }
 
   function migrateRecordKeys<T>(record: Record<string, T>, fromPrefix: string, toPath: string) {
@@ -349,18 +391,18 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
   function clearHighlightCachesForPath(path: string) {
     const normalizedPath = normalizePath(path);
     if (!normalizedPath) return;
-    const htmlNext = { ...highlightedCodeHtmlByBlockKey.value };
+    const linesNext = { ...highlightedCodeLinesByBlockKey.value };
     for (const key of new Set([
-      ...Object.keys(htmlNext),
+      ...Object.keys(linesNext),
       ...Array.from(highlightedVersionByBlockKey.keys()),
       ...Array.from(grammarStateByBlockKey.keys()),
     ])) {
       if (!key.startsWith(`${normalizedPath}::`)) continue;
-      delete htmlNext[key];
+      delete linesNext[key];
       highlightedVersionByBlockKey.delete(key);
       grammarStateByBlockKey.delete(key);
     }
-    highlightedCodeHtmlByBlockKey.value = htmlNext;
+    highlightedCodeLinesByBlockKey.value = linesNext;
   }
 
   function collectVirtualizedVisibleContent(tab: FileTab, lineRange: { startLine: number; endLine: number }) {
@@ -405,7 +447,7 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
     activeVirtualCodeTotalSize,
     virtualCodeLineNumberDigits,
     blockContentText,
-    blockContentHtml,
+    blockContentLines,
     clearFileBlockCaches,
     resetVirtualCodeCaches,
     migrateVirtualCodeCaches,

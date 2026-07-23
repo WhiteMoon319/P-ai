@@ -386,26 +386,26 @@
                     <div
                       class="file-reader-code-virtual-block"
                       :class="isTabRawMode(activeTab) ? 'file-reader-code-virtual-block-raw' : 'file-reader-code-virtual-block-shiki'"
+                      :style="{ '--file-reader-code-gutter-ch': String(virtualCodeLineNumberDigits) }"
                     >
                       <div
-                        aria-hidden="true"
-                        class="file-reader-code-virtual-gutter"
-                        :class="isTabRawMode(activeTab) ? 'file-reader-code-virtual-gutter-raw' : 'file-reader-code-virtual-gutter-shiki'"
+                        v-for="(lineHtml, lineIndex) in entry.lines"
+                        :key="`${entry.block.key}-${lineIndex}`"
+                        :data-line-number="entry.block.startLine + lineIndex"
+                        class="file-reader-code-virtual-line"
                       >
                         <div
-                          v-for="lineNumber in blockLineNumbers(entry.block)"
-                          :key="`${entry.block.key}-${lineNumber}`"
-                          class="file-reader-code-virtual-gutter-line"
+                          aria-hidden="true"
+                          class="file-reader-code-virtual-line-number"
+                          :class="isTabRawMode(activeTab) ? 'file-reader-code-virtual-gutter-raw' : 'file-reader-code-virtual-gutter-shiki'"
                         >
-                          {{ lineNumber }}
+                          {{ entry.block.startLine + lineIndex }}
                         </div>
+                        <div
+                          class="file-reader-code-virtual-line-content"
+                          v-html="lineHtml"
+                        ></div>
                       </div>
-                      <pre v-if="isTabRawMode(activeTab)" class="file-reader-raw-pre file-reader-code-virtual-raw">{{ blockContentText(entry.block.key) }}</pre>
-                      <div
-                        v-else
-                        class="file-reader-code-virtual-shiki"
-                        v-html="blockContentHtml(entry.block.key)"
-                      ></div>
                     </div>
                   </div>
                 </div>
@@ -415,12 +415,6 @@
                 ref="virtualCodeScrollbarRef"
                 :target="virtualCodeScroller"
                 variant="code-dark"
-              />
-              <FloatingScrollbar
-                v-if="!isTabRawMode(activeTab)"
-                :target="virtualCodeScroller"
-                variant="code-dark"
-                orientation="horizontal"
               />
             </div>
             <div
@@ -432,7 +426,7 @@
               @keyup="captureCurrentTextSelection"
               @contextmenu.prevent="openActiveFileContextMenu"
             >
-              <pre class="file-reader-raw-pre min-h-full p-4">{{ activeTab.content }}</pre>
+              <pre :class="['file-reader-raw-pre', 'min-h-full', 'p-4', activeTab.kind === 'code' ? 'file-reader-code-wrap' : '']">{{ activeTab.content }}</pre>
             </div>
           </div>
         </div>
@@ -692,7 +686,6 @@ import type {
   TreeRow,
 } from "../types";
 import {
-  blockLineNumbers,
   directoryFromPath,
   directoryPathChain,
   extensionFromPath,
@@ -872,8 +865,6 @@ const {
   activeVirtualCodeEntries,
   activeVirtualCodeTotalSize,
   virtualCodeLineNumberDigits,
-  blockContentText,
-  blockContentHtml,
   clearFileBlockCaches,
   resetVirtualCodeCaches,
   migrateVirtualCodeCaches,
@@ -2843,7 +2834,11 @@ defineExpose({
   min-height: 100%;
   overflow: auto;
 }
+.file-reader-code-virtual-scroller-raw {
+  overflow-x: hidden;
+}
 .file-reader-code-virtual-scroller-shiki {
+  overflow-x: hidden;
   background: var(--color-base-100);
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -2851,6 +2846,11 @@ defineExpose({
 .file-reader-code-virtual-scroller-shiki::-webkit-scrollbar {
   width: 0;
   height: 0;
+}
+.file-reader-code-wrap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .file-reader-code-virtual-canvas {
   position: relative;
@@ -2863,97 +2863,54 @@ defineExpose({
   width: 100%;
 }
 .file-reader-code-virtual-block {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 0;
+  font-family: var(--app-code-font-family);
+  font-size: var(--app-text-sm-size);
+  line-height: 21px;
+}
+.file-reader-code-virtual-line {
   display: grid;
   grid-template-columns: calc(var(--file-reader-code-gutter-ch, 2) * 1ch + 1rem) minmax(0, 1fr);
-  align-items: flex-start;
-  min-width: 100%;
+  align-items: stretch;
+  min-width: 0;
 }
-.file-reader-code-virtual-block-raw {
-  width: 100%;
-  font-family: var(--app-code-font-family);
-  font-size: var(--app-text-sm-size);
-  line-height: 21px;
-}
-.file-reader-code-virtual-block-shiki {
-  width: max-content;
-  font-family: var(--app-code-font-family);
-  font-size: var(--app-text-sm-size);
-  line-height: 21px;
-}
-.file-reader-code-virtual-gutter {
+.file-reader-code-virtual-line-number {
   position: sticky;
   left: 0;
   z-index: 2;
-  width: calc(var(--file-reader-code-gutter-ch, 2) * 1ch + 0.75rem);
-  padding-top: 5px;
-  padding-bottom: 4px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 21px;
   padding-right: 0.25rem;
+  color: rgb(100 116 139 / 0.92);
+  line-height: inherit;
   text-align: right;
   user-select: none;
 }
-.file-reader-code-virtual-gutter::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: -4px;
-  width: 4px;
-  height: 100%;
-}
 .file-reader-code-virtual-gutter-raw {
-  background: color-mix(in srgb, var(--color-base-200) 60%, transparent);
-}
-.file-reader-code-virtual-gutter-raw::after {
   background: color-mix(in srgb, var(--color-base-200) 60%, transparent);
 }
 .file-reader-code-virtual-gutter-shiki {
   background: color-mix(in srgb, var(--color-base-200) 60%, transparent);
 }
-.file-reader-code-virtual-gutter-shiki::after {
-  background: color-mix(in srgb, var(--color-base-200) 60%, transparent);
-}
-.file-reader-code-virtual-gutter-line {
-  min-height: 21px;
-  line-height: inherit;
-  color: rgb(100 116 139 / 0.92);
-}
-.file-reader-code-virtual-raw {
-  margin: 0;
-  padding: 4px 8px;
+.file-reader-code-virtual-line-content {
+  display: block;
+  width: 100%;
   min-width: 0;
-  flex: 1 1 auto;
-  font-family: inherit;
-  font-size: inherit;
-  line-height: inherit;
-}
-.file-reader-code-virtual-shiki :deep(pre.shiki) {
-  display: block;
-  margin: 0;
-  padding: 4px 8px;
-  min-width: 100%;
-  width: max-content;
-  box-sizing: border-box;
-  font-family: inherit !important;
-  font-size: inherit !important;
-  line-height: inherit !important;
-  background: transparent !important;
-  overflow: visible;
-}
-.file-reader-code-virtual-shiki :deep(pre.shiki code) {
-  display: block;
-  min-width: max-content;
-  font-family: inherit !important;
-  font-size: inherit !important;
-  line-height: inherit !important;
-}
-.file-reader-code-virtual-shiki :deep(pre.shiki code .line) {
-  display: block;
   min-height: 21px;
+  padding: 0 8px;
+  font: inherit;
   line-height: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
-.file-reader-code-virtual-shiki :deep(pre.shiki span) {
+.file-reader-code-virtual-line-content :deep(span) {
   font-family: inherit !important;
 }
-.file-reader-code-virtual-shiki :deep(.file-reader-code-empty-line) {
+.file-reader-code-virtual-line-content :deep(.file-reader-code-empty-line) {
   display: inline-block;
   width: 0;
   opacity: 0;

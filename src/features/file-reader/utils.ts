@@ -1,5 +1,5 @@
 import { CODE_LANGUAGE_BY_EXTENSION, SHIKI_LANGUAGE_KEYS } from "./constants";
-import type { FileReaderDirectoryEntry, FileReaderFileKind, FileTab, VirtualCodeBlock } from "./types";
+import type { FileReaderDirectoryEntry, FileReaderFileKind, FileTab } from "./types";
 
 const IMAGE_FILE_EXTENSIONS = new Set([
   "avif", "bmp", "gif", "ico", "jpeg", "jpg", "png", "svg", "webp",
@@ -54,10 +54,6 @@ export function splitContentLines(value: string) {
 
 export function buildFileBlockKey(path: string, startLine: number, endLine: number) {
   return `${normalizePath(path)}::${startLine}-${endLine}`;
-}
-
-export function blockLineNumbers(block: VirtualCodeBlock) {
-  return Array.from({ length: block.lineCount }, (_, index) => block.startLine + index);
 }
 
 export function normalizeSelectedText(value: string) {
