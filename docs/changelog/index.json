@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-23T10:27:44.541Z",
-  "latestVersion": "v0.37.2",
+  "generatedAt": "2026-07-23T15:45:45.198Z",
+  "latestVersion": "v0.37.3",
   "releases": [
+    {
+      "version": "v0.37.3",
+      "path": "docs/changelog/releases/v0.37.3.md",
+      "summary": "点击图片预览外的空白区域，或者按键盘的 Esc 键，预览会直接关闭，不用再找关闭按钮。"
+    },
     {
       "version": "v0.37.2",
       "path": "docs/changelog/releases/v0.37.2.md",
@@ -860,7 +865,7 @@
     {
       "version": "UNRELEASED",
       "path": "docs/changelog/releases/UNRELEASED.md",
-      "summary": ""
+      "summary": "修复：发送消息时不再在附件提示阶段检查文件是否存在，减少 prompt 构建阶段的磁盘访问和额外耗时。"
     }
   ]
 }

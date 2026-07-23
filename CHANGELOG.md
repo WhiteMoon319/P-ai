@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.37.3](docs/changelog/releases/v0.37.3.md) - 点击图片预览外的空白区域，或者按键盘的 Esc 键，预览会直接关闭，不用再找关闭按钮。
 - [v0.37.2](docs/changelog/releases/v0.37.2.md) - 代码文件中的超长行现在会自动换行，行号会随对应代码内容同步对齐。
 - [v0.37.1](docs/changelog/releases/v0.37.1.md) - 模型选择菜单会保留「供应商 → 模型」层级；打开后自动展开当前供应商和当前模型，其他供应商保持收起，列表更容易浏览。
 - [v0.37.0](docs/changelog/releases/v0.37.0.md) - 选模型时按「渠道 → 模型 → 思维等级」三级选择，同一模型的不同思考强度会收成一组，不用再在一长串名字里翻找。
@@ -176,5 +177,5 @@
 - [v0.9.3](docs/changelog/releases/v0.9.3.md) - 发布（release-0.9.3）：同步版本号并承接当前 `rust-genai` 运行时迁移成果
 - [v0.9.1](docs/changelog/releases/v0.9.1.md) - 发布（release-0.9.1）：整合委托功能修复与聊天交互打磨后发布补丁版本
 - [v0.9.0](docs/changelog/releases/v0.9.0.md) - 发布（release-0.9.0）：整理并发布当前这一轮聊天窗口、Markdown 渲染、流式输出与会话链路重构成果
-- [UNRELEASED](docs/changelog/releases/UNRELEASED.md)
+- [UNRELEASED](docs/changelog/releases/UNRELEASED.md) - 修复：发送消息时不再在附件提示阶段检查文件是否存在，减少 prompt 构建阶段的磁盘访问和额外耗时。
 
