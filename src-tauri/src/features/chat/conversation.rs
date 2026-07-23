@@ -2250,7 +2250,7 @@ fn prompt_recall_memory_block_for_message(
 }
 
 fn prompt_attachment_notice_text(
-    state: Option<&AppState>,
+    _state: Option<&AppState>,
     index: usize,
     relative_path: &str,
 ) -> String {
@@ -2258,20 +2258,7 @@ fn prompt_attachment_notice_text(
     if normalized_relative_path.is_empty() {
         return build_attachment_notice_text(index, relative_path);
     }
-    let Some(state) = state else {
-        return build_attachment_notice_text(index, &normalized_relative_path);
-    };
-    let workspace_root = configured_workspace_root_path(state)
-        .unwrap_or_else(|_| state.llm_workspace_path.clone());
-    let absolute_path = workspace_root.join(&normalized_relative_path);
-    if absolute_path.exists() {
-        return build_attachment_notice_text(index, &normalized_relative_path);
-    }
-    format!(
-        "[附件#{} 已经丢失]\npath: {}",
-        index + 1,
-        assistant_space_display_path(&normalized_relative_path)
-    )
+    build_attachment_notice_text(index, &normalized_relative_path)
 }
 
 fn prompt_user_extra_blocks_for_message(
