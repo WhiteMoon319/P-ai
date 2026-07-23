@@ -84,7 +84,7 @@
               <Code2 v-else-if="currentDirectoryOpenTarget.type === 'vscode'" class="h-4 w-4" />
               <Folders v-else class="h-4 w-4" />
             </button>
-            <div ref="directoryOpenTargetDropdownRef" class="dropdown dropdown-end">
+            <div ref="directoryOpenTargetDropdownRef" class="dropdown dropdown-end z-20">
               <button
                 class="btn btn-xs h-7 min-h-7 w-7 join-item border-0 bg-base-100 px-0 shadow-none hover:bg-base-100"
                 type="button"
@@ -94,14 +94,14 @@
               >
                 <ChevronDown class="h-4 w-4" />
               </button>
-              <ul v-if="directoryOpenTargetDropdownOpen" tabindex="0" class="dropdown-content menu z-50 mt-2 w-72 rounded-box border border-base-300 bg-base-100 p-1.5 text-sm shadow-xl" @click.stop>
+              <ul v-if="directoryOpenTargetDropdownOpen" tabindex="0" class="dropdown-content menu z-50 mt-2 rounded-box border border-base-300 bg-base-100 p-1.5 text-sm shadow-xl" @click.stop>
                 <li class="menu-title px-2 py-1 text-xs uppercase tracking-wide opacity-60">
                   <span>打开当前目录</span>
                 </li>
                 <li v-for="item in directoryOpenTargets" :key="item.kind">
                   <button
                     type="button"
-                    class="flex min-h-9 items-center justify-between gap-3 rounded-btn px-3 py-2 text-left"
+                    class="flex min-h-9 w-52 items-center justify-between gap-3 rounded-btn px-3 py-2 text-left"
                     :class="selectedDirectoryOpenTargetKind === item.kind ? 'active' : ''"
                     :disabled="directoryTreeRoot.loading"
                     :title="item.label"
