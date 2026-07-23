@@ -1969,7 +1969,7 @@ fn chat_metadata_store_read_block_messages_before(
     })
 }
 
-fn chat_metadata_store_count_block_messages_before(
+fn chat_metadata_store_count_block_messages(
     paths: &MessageStorePaths,
     before_message_id: &str,
 ) -> Result<usize, String> {
@@ -1985,12 +1985,8 @@ fn chat_metadata_store_count_block_messages_before(
         let count = conn
             .query_row(
                 "SELECT COUNT(*) FROM message_locator
-                 WHERE conversation_id=?1 AND block_id=?2 AND sequence<?3",
-                rusqlite::params![
-                    paths.conversation_id,
-                    selected_block_id as i64,
-                    anchor.sequence,
-                ],
+                 WHERE conversation_id=?1 AND block_id=?2",
+                rusqlite::params![paths.conversation_id, selected_block_id as i64],
                 |row| row.get::<_, i64>(0),
             )
             .map_err(|err| format!("读取 SQLite block 消息计数失败: {err}"))?;
@@ -2511,12 +2507,12 @@ fn v3_chat_metadata_block_reader_should_stop_at_block_boundary() {
     );
     assert!(!page.has_more);
 
-    let block_message_count = chat_metadata_store_count_block_messages_before(
+    let block_message_count = chat_metadata_store_count_block_messages(
         &paths,
         "current-2",
     )
     .expect("count current SQLite block messages");
-    assert_eq!(block_message_count, 2);
+    assert_eq!(block_message_count, 3);
     let _ = fs::remove_dir_all(root);
 }
 

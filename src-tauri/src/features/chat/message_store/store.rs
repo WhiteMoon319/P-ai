@@ -1281,16 +1281,16 @@ pub(super) fn read_ready_message_store_block_messages_before(
         .map(Some)
 }
 
-/// 仅从索引计数触发消息之前、同一当前 block 的消息数。
+/// 仅从索引计数触发消息所在同一当前 block 的总消息数。
 ///
-/// 远程唤醒的触发消息是该 block 的最后一条；此值即为 block 消息总数减一。
-pub(super) fn read_ready_message_store_block_message_count_before(
+/// 远程唤醒的低频判断要看当前 block 的完整消息规模，不能只看触发消息之前的数量。
+pub(super) fn read_ready_message_store_block_message_count(
     paths: &MessageStorePaths,
     before_message_id: &str,
 ) -> Result<Option<usize>, String> {
     if paths.is_v3_ready()? {
         return Ok(Some(
-            chat_metadata_store_count_block_messages_before(paths, before_message_id)?,
+            chat_metadata_store_count_block_messages(paths, before_message_id)?,
         ));
     }
     let Some(store) = ready_jsonl_snapshot_store(paths)? else {
@@ -1302,7 +1302,7 @@ pub(super) fn read_ready_message_store_block_message_count_before(
             paths.conversation_id
         ));
     };
-    count_jsonl_block_messages_before(&index, before_message_id).map(Some)
+    count_jsonl_block_messages(&index, before_message_id).map(Some)
 }
 
 pub(super) fn read_message_store_current_compaction_segment_for_conversation(
@@ -2121,7 +2121,7 @@ fn read_jsonl_block_messages_before(
     })
 }
 
-fn count_jsonl_block_messages_before(
+fn count_jsonl_block_messages(
     index: &MessageStoreIndexFile,
     before_message_id: &str,
 ) -> Result<usize, String> {
@@ -2133,7 +2133,7 @@ fn count_jsonl_block_messages_before(
         .get(anchor_position)
         .and_then(|item| item.block_id)
         .unwrap_or(0);
-    Ok(index.items[..anchor_position]
+    Ok(index.items
         .iter()
         .filter(|item| item.block_id.unwrap_or(0) == selected_block_id)
         .count())
@@ -3369,9 +3369,9 @@ mod message_store_reader_tests {
         );
         assert!(!before.has_more);
 
-        let block_message_count = count_jsonl_block_messages_before(&index, "current-2")
+        let block_message_count = count_jsonl_block_messages(&index, "current-2")
             .expect("count current block messages");
-        assert_eq!(block_message_count, 2);
+        assert_eq!(block_message_count, 3);
         let _ = fs::remove_dir_all(root);
     }
 

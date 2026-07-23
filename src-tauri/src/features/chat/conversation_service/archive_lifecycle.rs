@@ -507,7 +507,7 @@ impl ConversationServiceV2 {
         )?
         .ok_or_else(|| format!("远程唤醒压缩失败：触发消息缺少序号，message_id={trigger_message_id}"))?;
         if include_history {
-            match message_store::read_ready_message_store_block_message_count_before(
+            match message_store::read_ready_message_store_block_message_count(
                 &store_paths,
                 trigger_message_id,
             ) {
@@ -515,7 +515,7 @@ impl ConversationServiceV2 {
                     if remote_im_wake_compaction_should_skip_for_low_frequency(block_message_count) =>
                 {
                     runtime_log_info(format!(
-                        "[远程唤醒压缩] 跳过，任务=低频群入场，conversation_id={}，trigger_message_id={}，block_message_count={}，minimum_block_message_count={}",
+                        "[远程唤醒压缩] 跳过，任务=低频群入场，conversation_id={}，trigger_message_id={}，current_block_message_count={}，minimum_block_message_count={}",
                         conversation_id,
                         trigger_message_id,
                         block_message_count,

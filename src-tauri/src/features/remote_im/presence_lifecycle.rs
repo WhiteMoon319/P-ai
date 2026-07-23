@@ -27,6 +27,71 @@ fn remote_im_mark_contact_present_and_schedule(
     remote_im_schedule_presence_timeout(state, contact_id, patience_seconds)
 }
 
+fn remote_im_mark_contact_present_and_schedule_after_entry_compaction(
+    state: &AppState,
+    contact_id: &str,
+    conversation_id: &str,
+    trigger_message_id: &str,
+    patience_seconds: u64,
+    reason: &str,
+) -> Result<bool, String> {
+    remote_im_mark_contact_present(state, contact_id, reason)?;
+    runtime_log_info(format!(
+        "[远程唤醒压缩] 开始，任务=入场原子压缩，conversation_id={}，contact_id={}，trigger_message_id={}",
+        conversation_id, contact_id, trigger_message_id
+    ));
+    let mut force_memory_prompt_snapshot = false;
+    match conversation_service_v2().remote_im_apply_dynamic_wake_compaction(
+        state,
+        conversation_id,
+        trigger_message_id,
+        true,
+    ) {
+        Ok(RemoteImDynamicWakeCompactionOutcome::Applied) => {
+            runtime_log_info(format!(
+                "[远程唤醒压缩] 完成，任务=入场原子压缩，conversation_id={}，contact_id={}，trigger_message_id={}",
+                conversation_id, contact_id, trigger_message_id
+            ));
+        }
+        Ok(RemoteImDynamicWakeCompactionOutcome::SkippedLowFrequency {
+            block_message_count,
+        }) => {
+            runtime_log_info(format!(
+                "[远程唤醒压缩] 完成，任务=低频群跳过，conversation_id={}，contact_id={}，trigger_message_id={}，block_message_count={}",
+                conversation_id, contact_id, trigger_message_id, block_message_count
+            ));
+        }
+        Err(primary_err) => {
+            runtime_log_error(format!(
+                "[远程唤醒压缩] 失败，任务=历史摘要，conversation_id={}，contact_id={}，trigger_message_id={}，error={}",
+                conversation_id, contact_id, trigger_message_id, primary_err
+            ));
+            force_memory_prompt_snapshot = true;
+            if let Err(fallback_err) = conversation_service_v2()
+                .remote_im_apply_dynamic_wake_compaction(
+                    state,
+                    conversation_id,
+                    trigger_message_id,
+                    false,
+                )
+            {
+                runtime_log_error(format!(
+                    "[远程唤醒压缩] 失败，任务=空摘要降级，conversation_id={}，contact_id={}，trigger_message_id={}，error={}",
+                    conversation_id, contact_id, trigger_message_id, fallback_err
+                ));
+            } else {
+                runtime_log_warn(format!(
+                    "[远程唤醒压缩] 完成，任务=空摘要降级，conversation_id={}，contact_id={}，trigger_message_id={}",
+                    conversation_id, contact_id, trigger_message_id
+                ));
+                force_memory_prompt_snapshot = false;
+            }
+        }
+    }
+    remote_im_schedule_presence_timeout(state, contact_id, patience_seconds)?;
+    Ok(force_memory_prompt_snapshot)
+}
+
 fn remote_im_contact_is_away(state: &AppState, contact_id: &str) -> Result<bool, String> {
     Ok(lock_remote_im_contact_runtime_states(state)?
         .get(contact_id)

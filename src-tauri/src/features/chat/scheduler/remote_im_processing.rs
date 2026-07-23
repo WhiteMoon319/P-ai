@@ -326,58 +326,26 @@ async fn process_persisted_remote_im_events_individually_now(
         }
 
         let should_apply_dynamic_wake = effective_remote_im_contact_response_strategy(&contact)
-            == "smart_judge"
-            && remote_im_contact_is_away(state, &contact.id)?;
-        let mut force_memory_prompt_snapshot = false;
-        if should_apply_dynamic_wake {
-            match conversation_service_v2().remote_im_apply_dynamic_wake_compaction(
-                state,
-                conversation_id,
-                &trigger_message.id,
-                true,
-            ) {
-                Ok(RemoteImDynamicWakeCompactionOutcome::Applied) => {}
-                Ok(RemoteImDynamicWakeCompactionOutcome::SkippedLowFrequency {
-                    block_message_count,
-                }) => runtime_log_info(format!(
-                    "[远程唤醒压缩] 完成，任务=低频群跳过，conversation_id={}，contact_id={}，event_id={}，block_message_count={}",
-                    conversation_id, contact.id, event.id, block_message_count
-                )),
-                Err(primary_err) => {
-                    report_remote_im_dynamic_wake_failure(
-                        state,
-                        conversation_id,
-                        &contact.id,
-                        &event.id,
-                        "历史摘要",
-                        &primary_err,
-                    );
-                    if let Err(fallback_err) = conversation_service_v2()
-                        .remote_im_apply_dynamic_wake_compaction(
-                            state,
-                            conversation_id,
-                            &trigger_message.id,
-                            false,
-                        )
-                    {
-                        report_remote_im_dynamic_wake_failure(
-                            state,
-                            conversation_id,
-                            &contact.id,
-                            &event.id,
-                            "空摘要降级",
-                            &fallback_err,
-                        );
-                        // 动态 B 不可回退：空摘要也落库失败时，委托只能使用触发消息
-                        // 的内存上下文，绝不能再次读取旧 block。
-                        force_memory_prompt_snapshot = true;
-                    }
-                }
-            }
-        }
+            == "smart_judge";
         let patience_seconds = remote_im_channel_behavior_settings_for_contact(state, &contact)
             .patience_seconds;
-        if let Err(err) = remote_im_mark_contact_present_and_schedule(
+        let mut force_memory_prompt_snapshot = false;
+        if should_apply_dynamic_wake {
+            if let Err(err) = remote_im_mark_contact_present_and_schedule_after_entry_compaction(
+                state,
+                &contact.id,
+                conversation_id,
+                &trigger_message.id,
+                patience_seconds,
+                "巡检决定通知远程应答委托",
+            ) {
+                force_memory_prompt_snapshot = true;
+                runtime_log_warn(format!(
+                    "[群聊巡检] 在场状态、压缩或计时刷新降级，contact_id={}，error={}",
+                    contact.id, err
+                ));
+            }
+        } else if let Err(err) = remote_im_mark_contact_present_and_schedule(
             state,
             &contact.id,
             patience_seconds,

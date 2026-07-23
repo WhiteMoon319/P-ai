@@ -954,55 +954,31 @@ async fn process_conversation_batch(
                         .map(|message| message.id.clone()),
                 ) {
                     let should_apply_dynamic_wake =
-                        effective_remote_im_contact_response_strategy(&contact) == "smart_judge"
-                        && remote_im_contact_is_away(state, &contact.id)?;
+                        effective_remote_im_contact_response_strategy(&contact) == "smart_judge";
+                    let patience_seconds = remote_im_channel_behavior_settings_for_contact(state, &contact)
+                        .patience_seconds;
                     if should_apply_dynamic_wake {
-                        match conversation_service_v2().remote_im_apply_dynamic_wake_compaction(
+                        if let Err(err) = remote_im_mark_contact_present_and_schedule_after_entry_compaction(
                             state,
+                            &contact.id,
                             conversation_id,
                             &trigger_message_id,
-                            true,
+                            patience_seconds,
+                            "秘书决定通知远程应答委托",
                         ) {
-                            Ok(RemoteImDynamicWakeCompactionOutcome::Applied) => {}
-                            Ok(RemoteImDynamicWakeCompactionOutcome::SkippedLowFrequency {
-                                block_message_count,
-                            }) => runtime_log_info(format!(
-                                "[远程唤醒压缩] 完成，任务=低频群跳过，conversation_id={}，contact_id={}，block_message_count={}",
-                                conversation_id, contact.id, block_message_count
-                            )),
-                            Err(primary_err) => {
-                                runtime_log_error(format!(
-                                    "[远程唤醒压缩] 失败，conversation_id={}，contact_id={}，error={}",
-                                    conversation_id, contact.id, primary_err
-                                ));
-                                if let Err(fallback_err) = conversation_service_v2()
-                                    .remote_im_apply_dynamic_wake_compaction(
-                                        state,
-                                        conversation_id,
-                                        &trigger_message_id,
-                                        false,
-                                    )
-                                {
-                                    runtime_log_error(format!(
-                                        "[远程唤醒压缩] 失败，任务=空摘要降级，conversation_id={}，contact_id={}，error={}",
-                                        conversation_id, contact.id, fallback_err
-                                    ));
-                                } else {
-                                    runtime_log_warn(format!(
-                                        "[远程唤醒压缩] 完成，任务=空摘要降级，conversation_id={}，contact_id={}",
-                                        conversation_id, contact.id
-                                    ));
-                                }
-                            }
+                            runtime_log_warn(format!(
+                                "[群聊秘书] 在场状态、压缩或计时刷新降级，conversation_id={}，contact_id={}，error={}",
+                                conversation_id, contact.id, err
+                            ));
                         }
+                    } else {
+                        remote_im_mark_contact_present_and_schedule(
+                            state,
+                            &contact.id,
+                            patience_seconds,
+                            "秘书决定通知远程应答委托",
+                        )?;
                     }
-                    remote_im_mark_contact_present_and_schedule(
-                        state,
-                        &contact.id,
-                        remote_im_channel_behavior_settings_for_contact(state, &contact)
-                            .patience_seconds,
-                        "秘书决定通知远程应答委托",
-                    )?;
                     // 未来的自己请停手：这里会把触发消息塞进远程应答委托，
                     // 属于后端生成链路。绝对不能读取 frontend_display_only，
                     // 否则工具历史会被展示投影污染后继续进模型/持久化流程。
