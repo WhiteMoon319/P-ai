@@ -1477,6 +1477,16 @@ async function openChatReaderDirectoryIfEmpty() {
   await panel.openDirectoryTree(workspaceRootPath);
 }
 
+async function refreshChatReaderDirectoryOnWorkspaceChange() {
+  await nextTick();
+  await nextTick();
+  if (!effectiveToolReviewPanelOpen.value || props.chatRightPanelMode !== "reader") return;
+  const panel = chatReaderPanelRef.value;
+  const workspaceRootPath = String(props.currentWorkspaceRootPath || "").trim();
+  if (!panel || !workspaceRootPath) return;
+  await panel.openDirectoryTree(workspaceRootPath);
+}
+
 function selectChatRightPanelMode(mode: ChatRightPanelMode) {
   emit("update:chatRightPanelMode", mode);
   emit("toolReviewPanelOpenChange", true);
@@ -1485,17 +1495,24 @@ function selectChatRightPanelMode(mode: ChatRightPanelMode) {
   }
 }
 
-// 打开右侧面板 / 切到 reader / 工作区变化时：无打开文件则自动展开目录
+// 打开右侧面板 / 切到 reader / 工作区变化时：无打开文件则自动展开目录；工作区变化时强刷目录树
 watch(
   () => [
     effectiveToolReviewPanelOpen.value,
     props.chatRightPanelMode,
-    String(props.currentWorkspaceRootPath || "").trim(),
     String(props.activeConversationId || "").trim(),
   ] as const,
   ([panelOpen, mode]) => {
     if (!panelOpen || mode !== "reader") return;
     void openChatReaderDirectoryIfEmpty();
+  },
+);
+
+watch(
+  () => String(props.currentWorkspaceRootPath || "").trim(),
+  (nextRoot, prevRoot) => {
+    if (!nextRoot || nextRoot === prevRoot) return;
+    void refreshChatReaderDirectoryOnWorkspaceChange();
   },
 );
 
