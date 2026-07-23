@@ -120,7 +120,7 @@
                       @copy-message="handleCopyMessage"
                       @copy-message-image-done="handleCopyMessageImageDone"
                       @copy-message-image-failed="handleCopyMessageImageFailed"
-                      @open-image-preview="openImagePreview"
+                      @open-image-preview="openChatMessageImagePreview"
                       @toggle-audio-playback="toggleAudioPlayback($event.id, $event.audio)"
                       @assistant-link-click="handleAssistantLinkClick"
                     />
@@ -401,13 +401,14 @@
         <ChatImagePreviewDialog
           :open="imagePreviewOpen" :data-url="imagePreviewDataUrl" :zoom="imagePreviewZoom"
           :min-zoom="IMAGE_PREVIEW_MIN_ZOOM" :max-zoom="IMAGE_PREVIEW_MAX_ZOOM"
-          :offset-x="previewOffsetX" :offset-y="previewOffsetY" :dragging="previewDragging"
+          :offset-x="previewOffsetX" :offset-y="previewOffsetY" :dragging="previewDragging" :rotation="imagePreviewRotation"
           :local-path="imagePreviewLocalPath"
           :copy-status="imagePreviewCopyStatus as any"
           :save-status="imagePreviewSaveStatus as any"
           @close="closeImagePreview" @zoom-in="zoomInPreview" @zoom-out="zoomOutPreview"
           @reset="resetPreviewZoom" @wheel="onPreviewWheel" @pointer-down="onPreviewPointerDown"
           @pointer-move="onPreviewPointerMove" @pointer-up="onPreviewPointerUp"
+          @rotate="rotatePreviewClockwise"
           @copy-image="handleCopyLocalImage" @save-image="handleSaveLocalImage"
         />
 
@@ -589,6 +590,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { isDarkAppTheme } from "../../shell/composables/use-app-theme";
 import {
   useChatComposerAppearance,
@@ -1682,10 +1684,10 @@ watch(
 // ==================== image preview ====================
 
 const {
-  imagePreviewOpen, imagePreviewDataUrl, imagePreviewLocalPath, imagePreviewZoom,
+  imagePreviewOpen, imagePreviewDataUrl, imagePreviewLocalPath, imagePreviewZoom, imagePreviewRotation,
   IMAGE_PREVIEW_MIN_ZOOM, IMAGE_PREVIEW_MAX_ZOOM,
   previewOffsetX, previewOffsetY, previewDragging,
-  zoomInPreview, zoomOutPreview, resetPreviewZoom,
+  zoomInPreview, zoomOutPreview, resetPreviewZoom, rotatePreviewClockwise,
   onPreviewWheel, openImagePreview, closeImagePreview,
   onPreviewPointerDown, onPreviewPointerMove, onPreviewPointerUp,
 } = useChatImagePreview();
@@ -1849,6 +1851,31 @@ function handleShiftWheel(event: WheelEvent) {
 }
 
 // ==================== link / copy ====================
+
+function openChatMessageImagePreview(payload: {
+  mime?: string;
+  bytesBase64?: string;
+  dataUrl?: string;
+  localPath?: string;
+  src?: string;
+  alt?: string;
+}) {
+  const mime = String(payload?.mime || "").trim() || "image/png";
+  const dataUrl = String(payload?.dataUrl || payload?.src || "").trim();
+  const bytesBase64 = String(payload?.bytesBase64 || "").trim();
+  const localPath = String(payload?.localPath || "").trim();
+  if (dataUrl) {
+    openImagePreview({ mime, dataUrl, localPath });
+    return;
+  }
+  if (bytesBase64) {
+    openImagePreview({ mime, bytesBase64, localPath });
+    return;
+  }
+  if (localPath) {
+    openImagePreview({ mime, dataUrl: convertFileSrc(localPath), localPath });
+  }
+}
 
 async function handleAssistantLinkClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null;

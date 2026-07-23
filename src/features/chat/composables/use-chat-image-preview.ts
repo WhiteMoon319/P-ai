@@ -7,6 +7,7 @@ export function useChatImagePreview() {
   const imagePreviewDataUrl = ref("");
   const imagePreviewLocalPath = ref("");
   const imagePreviewZoom = ref(1);
+  const imagePreviewRotation = ref(0);
   const previewOffsetX = ref(0);
   const previewOffsetY = ref(0);
   const previewDragging = ref(false);
@@ -43,6 +44,12 @@ export function useChatImagePreview() {
     previewOffsetY.value = 0;
   }
 
+  function rotatePreviewClockwise() {
+    imagePreviewRotation.value = (imagePreviewRotation.value + 90) % 360;
+    previewOffsetX.value = 0;
+    previewOffsetY.value = 0;
+  }
+
   function onPreviewWheel(event: WheelEvent) {
     if (event.deltaY < 0) {
       zoomInPreview();
@@ -65,6 +72,7 @@ export function useChatImagePreview() {
     }
     imagePreviewLocalPath.value = localPath;
     imagePreviewZoom.value = 1;
+    imagePreviewRotation.value = 0;
     previewOffsetX.value = 0;
     previewOffsetY.value = 0;
     previewDragging.value = false;
@@ -77,6 +85,7 @@ export function useChatImagePreview() {
     imagePreviewDataUrl.value = "";
     imagePreviewLocalPath.value = "";
     imagePreviewZoom.value = 1;
+    imagePreviewRotation.value = 0;
     previewOffsetX.value = 0;
     previewOffsetY.value = 0;
     previewDragging.value = false;
@@ -117,6 +126,7 @@ export function useChatImagePreview() {
     imagePreviewDataUrl,
     imagePreviewLocalPath,
     imagePreviewZoom,
+    imagePreviewRotation,
     IMAGE_PREVIEW_MIN_ZOOM,
     IMAGE_PREVIEW_MAX_ZOOM,
     previewOffsetX,
@@ -125,6 +135,7 @@ export function useChatImagePreview() {
     zoomInPreview,
     zoomOutPreview,
     resetPreviewZoom,
+    rotatePreviewClockwise,
     onPreviewWheel,
     openImagePreview,
     closeImagePreview,

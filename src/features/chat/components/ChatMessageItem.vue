@@ -187,6 +187,7 @@
                     :local-image-base-path="currentWorkspaceRootPath"
                     :toolcall-preview-map="toolcallPreviewMap"
                     @math-context-menu="openMathContextMenu"
+                    @open-image-preview="emit('openImagePreview', $event)"
                     @click="emit('assistantLinkClick', $event)"
                   />
                 </div>
@@ -200,6 +201,7 @@
                 :local-image-base-path="currentWorkspaceRootPath"
                 :toolcall-preview-map="toolcallPreviewMap"
                 @math-context-menu="openMathContextMenu"
+                @open-image-preview="emit('openImagePreview', $event)"
                 @click="emit('assistantLinkClick', $event)"
               />
             </div>
@@ -524,7 +526,7 @@ const emit = defineEmits<{
   (e: "copyMessage", block: ChatMessageBlock): void;
   (e: "copyMessageImageDone"): void;
   (e: "copyMessageImageFailed"): void;
-  (e: "openImagePreview", image: { mime: string; bytesBase64?: string; dataUrl?: string; localPath?: string }): void;
+  (e: "openImagePreview", image: { mime?: string; bytesBase64?: string; dataUrl?: string; localPath?: string; src?: string; alt?: string }): void;
   (e: "toggleAudioPlayback", payload: { id: string; audio: { mime: string; bytesBase64?: string; mediaRef?: string } }): void;
   (e: "assistantLinkClick", event: MouseEvent): void;
 }>();

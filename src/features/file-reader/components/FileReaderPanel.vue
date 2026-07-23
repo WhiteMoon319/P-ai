@@ -630,6 +630,7 @@
       :offset-x="previewOffsetX"
       :offset-y="previewOffsetY"
       :dragging="previewDragging"
+      :rotation="imagePreviewRotation"
       :local-path="imagePreviewLocalPath"
       :copy-status="imagePreviewCopyStatus"
       :save-status="imagePreviewSaveStatus"
@@ -641,6 +642,7 @@
       @pointer-down="onPreviewPointerDown"
       @pointer-move="onPreviewPointerMove"
       @pointer-up="onPreviewPointerUp"
+      @rotate="rotatePreviewClockwise"
       @copy-image="handleCopyMarkdownImage"
       @save-image="handleSaveMarkdownImage"
     />
@@ -882,6 +884,7 @@ const {
   imagePreviewDataUrl,
   imagePreviewLocalPath,
   imagePreviewZoom,
+  imagePreviewRotation,
   IMAGE_PREVIEW_MIN_ZOOM,
   IMAGE_PREVIEW_MAX_ZOOM,
   previewOffsetX,
@@ -890,6 +893,7 @@ const {
   zoomInPreview,
   zoomOutPreview,
   resetPreviewZoom,
+  rotatePreviewClockwise,
   onPreviewWheel,
   openImagePreview,
   closeImagePreview,
