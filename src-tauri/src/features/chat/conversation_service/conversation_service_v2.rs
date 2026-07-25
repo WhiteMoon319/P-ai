@@ -1032,8 +1032,21 @@ impl ConversationServiceV2 {
         audit: &ConversationOverwriteAudit,
         snapshot: &Conversation,
     ) -> Result<(), String> {
-        let _guard =
-            lock_conversation_with_metrics(state, "conversation_v2_privileged_overwrite")?;
+        self.validate_overwrite_audit(audit)?;
+        let snapshot_id = snapshot.id.trim();
+        if snapshot_id.is_empty() {
+            return Err("overwrite snapshot conversation.id is required.".to_string());
+        }
+        let mutation_gate = conversation_mutation_gate(&state.data_path, snapshot_id)?;
+        let _guard = mutation_gate.lock().map_err(|err| {
+            named_lock_error(
+                "conversation_mutation_gate",
+                file!(),
+                line!(),
+                module_path!(),
+                &err,
+            )
+        })?;
         self.apply_privileged_snapshot_overwrite_inner(state, audit, snapshot)
     }
 

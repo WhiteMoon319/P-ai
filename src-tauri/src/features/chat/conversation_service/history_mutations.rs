@@ -352,6 +352,7 @@ impl ConversationServiceV2 {
                 hint: "当前会话正在运行或整理上下文，完成后再撤回。".to_string(),
             });
         }
+        drop(guard);
         let store_paths = message_store::message_store_paths(&state.data_path, &conversation_id)?;
         ensure_ready_message_store_from_legacy_conversation(state, &conversation_id, &store_paths)?;
         let rewind_state =
@@ -370,7 +371,6 @@ impl ConversationServiceV2 {
             existing_backup_count,
             backup_record_ids.len().saturating_sub(existing_backup_count)
         ));
-        drop(guard);
 
         if existing_backup_count > 0 {
             return Ok(RewindConversationPreviewResult {

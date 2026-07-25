@@ -139,6 +139,7 @@ impl ConversationServiceV2 {
             .map(|item| item.id.clone())
             .unwrap_or_else(|| ASSISTANT_DEPARTMENT_ID.to_string());
         let normalized_root_conversation_id = root_conversation_id.trim();
+        let mut conversation_to_persist = None::<Conversation>;
         let target_conversation_id =
             if task_conversation_id_is_system_notification(normalized_root_conversation_id) {
                 if let Some(conversation_meta) = self
@@ -156,7 +157,7 @@ impl ConversationServiceV2 {
                 } else {
                     let conversation = build_system_notification_conversation_record();
                     let conversation_id = conversation.id.clone();
-                    state_schedule_conversation_persist(state, &conversation)?;
+                    conversation_to_persist = Some(conversation);
                     conversation_id
                 }
             } else if self
@@ -178,6 +179,9 @@ impl ConversationServiceV2 {
                 ));
             };
         drop(guard);
+        if let Some(conversation) = conversation_to_persist {
+            state_schedule_conversation_persist(state, &conversation)?;
+        }
         Ok(DelegateResultTargetConversationResolution {
             department_id,
             agent_id: assistant_agent_id,
