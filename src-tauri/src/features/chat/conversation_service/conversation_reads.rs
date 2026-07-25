@@ -81,14 +81,7 @@ impl ConversationServiceV2 {
             }
         }
 
-        let _guard = state.conversation_lock.lock().map_err(|err| {
-            format!(
-                "Failed to lock state mutex at {}:{} {}: {err}",
-                file!(),
-                line!(),
-                module_path!()
-            )
-        })?;
+        let _guard = lock_conversation_with_metrics(state, "get_chat_snapshot")?;
 
         let mut app_config = state_read_config_cached(state)?;
         let runtime = state_read_runtime_state_cached(state)?;

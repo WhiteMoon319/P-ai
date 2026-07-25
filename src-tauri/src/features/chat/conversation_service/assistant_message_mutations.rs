@@ -17,18 +17,6 @@ impl ConversationServiceV2 {
             conversation_id,
             assistant_message_id,
         )?;
-        if assistant_message_tool_append_closed(&target_message) {
-            return Err(
-                ConversationServiceV2Error::new(
-                    ConversationServiceV2ErrorCode::ToolAppendClosed,
-                    format!(
-                        "目标 assistant message 已关闭 tool append，conversationId={}，assistantMessageId={}",
-                        conversation_id, assistant_message_id
-                    ),
-                )
-                .into_string(),
-            );
-        }
         let agent_id = target_message
             .speaker_agent_id
             .as_deref()
@@ -44,67 +32,76 @@ impl ConversationServiceV2 {
                 )
                 .into_string()
             })?;
-        let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
-        let _guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error(
-                "conversation_mutation_gate",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
-        let mut target_message = self.read_current_writable_assistant_message(
+        with_conversation_mutation(
             state,
             conversation_id,
-            assistant_message_id,
-        )?;
-        let normalized_agent_id = agent_id.trim();
-        let target_agent_id = target_message
-            .speaker_agent_id
-            .as_deref()
-            .map(str::trim)
-            .unwrap_or_default();
-        if target_agent_id != normalized_agent_id {
-            return Err(
-                ConversationServiceV2Error::new(
-                    ConversationServiceV2ErrorCode::MessageNotWritable,
-                    format!(
-                        "目标 assistant message 的 speaker_agent_id 不匹配，conversationId={}，assistantMessageId={}，expectedAgentId={}，actualAgentId={}",
-                        conversation_id,
-                        assistant_message_id,
-                        normalized_agent_id,
-                        target_agent_id
-                    ),
-                )
-                .into_string(),
-            );
-        }
-        let tool_call_id = validate_tool_group_result_append_v2(
-            &input.assistant_tool_event,
-            &input.tool_result_event,
-        )?;
-        let group_call_ids =
-            tool_call_ids_from_assistant_tool_event_v2(&input.assistant_tool_event);
-        let events = target_message.tool_call.get_or_insert_with(Vec::new);
-        if !tool_history_contains_tool_result_id_v2(events, &tool_call_id) {
-            if !tool_history_contains_assistant_tool_group_v2(events, &group_call_ids) {
-                events.push(input.assistant_tool_event.clone());
-            }
-            events.push(input.tool_result_event.clone());
-        }
-        merge_provider_meta_patch_v2(
-            &mut target_message.provider_meta,
-            input.provider_meta_patch.clone(),
-        );
-        let tool_event_count = target_message.tool_call.as_ref().map(Vec::len).unwrap_or(0);
-        self.persist_replaced_ready_message_locked(state, conversation_id, &target_message)?;
-        Ok(AssistantMessageToolAppendResult {
-            conversation_id: conversation_id.to_string(),
-            assistant_message_id: assistant_message_id.to_string(),
-            tool_event_count,
-            tool_append_closed: false,
-        })
+            "append_tool_event_to_assistant_message",
+            || {
+                let mut target_message = self.read_current_writable_assistant_message(
+                    state,
+                    conversation_id,
+                    assistant_message_id,
+                )?;
+                if assistant_message_tool_append_closed(&target_message) {
+                    return Err(
+                        ConversationServiceV2Error::new(
+                            ConversationServiceV2ErrorCode::ToolAppendClosed,
+                            format!(
+                                "目标 assistant message 已关闭 tool append，conversationId={}，assistantMessageId={}",
+                                conversation_id, assistant_message_id
+                            ),
+                        )
+                        .into_string(),
+                    );
+                }
+                let normalized_agent_id = agent_id.trim();
+                let target_agent_id = target_message
+                    .speaker_agent_id
+                    .as_deref()
+                    .map(str::trim)
+                    .unwrap_or_default();
+                if target_agent_id != normalized_agent_id {
+                    return Err(
+                        ConversationServiceV2Error::new(
+                            ConversationServiceV2ErrorCode::MessageNotWritable,
+                            format!(
+                                "目标 assistant message 的 speaker_agent_id 不匹配，conversationId={}，assistantMessageId={}，expectedAgentId={}，actualAgentId={}",
+                                conversation_id,
+                                assistant_message_id,
+                                normalized_agent_id,
+                                target_agent_id
+                            ),
+                        )
+                        .into_string(),
+                    );
+                }
+                let tool_call_id = validate_tool_group_result_append_v2(
+                    &input.assistant_tool_event,
+                    &input.tool_result_event,
+                )?;
+                let group_call_ids =
+                    tool_call_ids_from_assistant_tool_event_v2(&input.assistant_tool_event);
+                let events = target_message.tool_call.get_or_insert_with(Vec::new);
+                if !tool_history_contains_tool_result_id_v2(events, &tool_call_id) {
+                    if !tool_history_contains_assistant_tool_group_v2(events, &group_call_ids) {
+                        events.push(input.assistant_tool_event.clone());
+                    }
+                    events.push(input.tool_result_event.clone());
+                }
+                merge_provider_meta_patch_v2(
+                    &mut target_message.provider_meta,
+                    input.provider_meta_patch.clone(),
+                );
+                let tool_event_count = target_message.tool_call.as_ref().map(Vec::len).unwrap_or(0);
+                self.persist_replaced_ready_message_locked(state, conversation_id, &target_message)?;
+                Ok(AssistantMessageToolAppendResult {
+                    conversation_id: conversation_id.to_string(),
+                    assistant_message_id: assistant_message_id.to_string(),
+                    tool_event_count,
+                    tool_append_closed: false,
+                })
+            },
+        )
     }
 
     fn append_final_text_to_assistant_message(
@@ -121,83 +118,78 @@ impl ConversationServiceV2 {
             return Err("assistantMessageId is required.".to_string());
         }
         let final_text = input.final_text.as_str();
-        let target_message = {
-            let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
-            let _guard = mutation_gate.lock().map_err(|err| {
-                named_lock_error(
-                    "conversation_mutation_gate",
-                    file!(),
-                    line!(),
-                    module_path!(),
-                    &err,
-                )
-            })?;
-            let mut target_message = self.read_current_writable_assistant_message(
-                state,
-                conversation_id,
-                assistant_message_id,
-            )?;
-            if assistant_message_tool_append_closed(&target_message) {
-                return Err(
-                    ConversationServiceV2Error::new(
-                        ConversationServiceV2ErrorCode::FinalTextAlreadyCommitted,
-                        format!(
-                            "目标 assistant message 已有 final 正文，禁止重复提交，conversationId={}，assistantMessageId={}",
-                            conversation_id, assistant_message_id
-                        ),
-                    )
-                    .into_string(),
-                );
-            }
-            let mut text_part_updated = false;
-            for part in &mut target_message.parts {
-                if let MessagePart::Text {
-                    text,
-                    reasoning_content,
-                } = part
-                {
-                    *text = final_text.to_string();
-                    merge_optional_text_block_v2(reasoning_content, input.reasoning_text.clone());
-                    text_part_updated = true;
-                    break;
+        let target_message = with_conversation_mutation(
+            state,
+            conversation_id,
+            "append_final_text_to_assistant_message",
+            || {
+                let mut target_message = self.read_current_writable_assistant_message(
+                    state,
+                    conversation_id,
+                    assistant_message_id,
+                )?;
+                if assistant_message_tool_append_closed(&target_message) {
+                    return Err(
+                        ConversationServiceV2Error::new(
+                            ConversationServiceV2ErrorCode::FinalTextAlreadyCommitted,
+                            format!(
+                                "目标 assistant message 已有 final 正文，禁止重复提交，conversationId={}，assistantMessageId={}",
+                                conversation_id, assistant_message_id
+                            ),
+                        )
+                        .into_string(),
+                    );
                 }
-            }
-            if !text_part_updated {
-                target_message.parts.push(MessagePart::Text {
-                    text: final_text.to_string(),
-                    reasoning_content: input.reasoning_text.clone(),
-                });
-            }
-            merge_provider_meta_patch_v2(
-                &mut target_message.provider_meta,
-                input.provider_meta_patch.clone(),
-            );
-            runtime_log_debug(format!(
-                "[表情替换] FinalAppend开始，conversation_id={}，assistant_message_id={}，existing_annotation_count={}，incoming_annotation_count={}，incoming_tokens=[{}]",
-                conversation_id,
-                assistant_message_id,
-                target_message
-                    .meme_annotations
-                    .as_ref()
-                    .map(Vec::len)
-                    .unwrap_or(0),
-                input
-                    .meme_annotations
-                    .as_ref()
-                    .map(Vec::len)
-                    .unwrap_or(0),
-                input
-                    .meme_annotations
-                    .as_ref()
-                    .map(|items| items.iter().map(|item| item.meme.trim().to_string()).collect::<Vec<_>>().join(","))
-                    .unwrap_or_default()
-            ));
-            target_message.meme_annotations = input.meme_annotations.clone();
-            mark_stream_final_committed_v2(&mut target_message.provider_meta);
+                let mut text_part_updated = false;
+                for part in &mut target_message.parts {
+                    if let MessagePart::Text {
+                        text,
+                        reasoning_content,
+                    } = part
+                    {
+                        *text = final_text.to_string();
+                        merge_optional_text_block_v2(reasoning_content, input.reasoning_text.clone());
+                        text_part_updated = true;
+                        break;
+                    }
+                }
+                if !text_part_updated {
+                    target_message.parts.push(MessagePart::Text {
+                        text: final_text.to_string(),
+                        reasoning_content: input.reasoning_text.clone(),
+                    });
+                }
+                merge_provider_meta_patch_v2(
+                    &mut target_message.provider_meta,
+                    input.provider_meta_patch.clone(),
+                );
+                runtime_log_debug(format!(
+                    "[表情替换] FinalAppend开始，conversation_id={}，assistant_message_id={}，existing_annotation_count={}，incoming_annotation_count={}，incoming_tokens=[{}]",
+                    conversation_id,
+                    assistant_message_id,
+                    target_message
+                        .meme_annotations
+                        .as_ref()
+                        .map(Vec::len)
+                        .unwrap_or(0),
+                    input
+                        .meme_annotations
+                        .as_ref()
+                        .map(Vec::len)
+                        .unwrap_or(0),
+                    input
+                        .meme_annotations
+                        .as_ref()
+                        .map(|items| items.iter().map(|item| item.meme.trim().to_string()).collect::<Vec<_>>().join(","))
+                        .unwrap_or_default()
+                ));
+                target_message.meme_annotations = input.meme_annotations.clone();
+                mark_stream_final_committed_v2(&mut target_message.provider_meta);
 
-            self.persist_replaced_ready_message_locked(state, conversation_id, &target_message)?;
-            target_message
-        };
+                self.persist_replaced_ready_message_locked(state, conversation_id, &target_message)?;
+                Ok(target_message)
+            },
+        )?;
         if let Err(err) = emit_unarchived_conversation_overview_item_updated_from_state(
             state,
             conversation_id,
@@ -326,17 +318,12 @@ impl ConversationServiceV2 {
                 created: false,
             });
         }
-        let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
-        let _guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error(
-                "conversation_mutation_gate",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
-        self.append_message_locked(state, conversation_id, &message)?;
+        with_conversation_mutation(
+            state,
+            conversation_id,
+            "bootstrap_streaming_assistant_message",
+            || self.append_message_locked(state, conversation_id, &message),
+        )?;
         Ok(AssistantMessageBootstrapResult {
             conversation_id: conversation_id.to_string(),
             assistant_message_id: assistant_message_id.to_string(),
@@ -360,30 +347,27 @@ impl ConversationServiceV2 {
         if !input.provider_meta_patch.is_object() {
             return Err("providerMetaPatch must be an object.".to_string());
         }
-        let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
-        let _guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error(
-                "conversation_mutation_gate",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
-        let mut target_message = self.read_current_writable_assistant_message(
+        with_conversation_mutation(
             state,
             conversation_id,
-            assistant_message_id,
-        )?;
-        merge_provider_meta_patch_v2(
-            &mut target_message.provider_meta,
-            Some(input.provider_meta_patch.clone()),
-        );
-        self.persist_replaced_ready_message_locked(state, conversation_id, &target_message)?;
-        Ok(AssistantMessageProviderMetaPatchResult {
-            conversation_id: conversation_id.to_string(),
-            assistant_message_id: assistant_message_id.to_string(),
-        })
+            "patch_provider_meta_on_assistant_message",
+            || {
+                let mut target_message = self.read_current_writable_assistant_message(
+                    state,
+                    conversation_id,
+                    assistant_message_id,
+                )?;
+                merge_provider_meta_patch_v2(
+                    &mut target_message.provider_meta,
+                    Some(input.provider_meta_patch.clone()),
+                );
+                self.persist_replaced_ready_message_locked(state, conversation_id, &target_message)?;
+                Ok(AssistantMessageProviderMetaPatchResult {
+                    conversation_id: conversation_id.to_string(),
+                    assistant_message_id: assistant_message_id.to_string(),
+                })
+            },
+        )
     }
 
     fn patch_message_provider_meta_batch(
@@ -413,48 +397,40 @@ impl ConversationServiceV2 {
             }
             patch_by_id.insert(message_id.to_string(), item.provider_meta.clone());
         }
-        let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
-        let _guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error(
-                "conversation_mutation_gate",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
-        let conversation_meta = self.get_conversation_meta(state, conversation_id)?;
-        if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
-            return Err(format!("Unarchived conversation not found: {conversation_id}"));
-        }
-        let paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
-        ensure_ready_message_store_from_legacy_conversation(state, conversation_id, &paths)?;
-        let mut ready_meta = message_store::read_ready_message_store_meta(&paths)?
-            .ok_or_else(|| {
-                format!(
-                    "批量更新消息 providerMeta 失败：缺少 ready 消息元数据，conversation_id={conversation_id}"
-                )
-            })?;
-        ready_meta.apply_metadata_fields_from_meta_view(&conversation_meta);
-        let mut updated_messages = Vec::with_capacity(patch_by_id.len());
-        for (message_id, provider_meta) in &patch_by_id {
-            let mut message = message_store::read_ready_message_store_message_by_id(&paths, message_id)?
+        with_conversation_mutation(state, conversation_id, "patch_message_provider_meta_batch", || {
+            let conversation_meta = self.get_conversation_meta(state, conversation_id)?;
+            if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
+                return Err(format!("Unarchived conversation not found: {conversation_id}"));
+            }
+            let paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
+            ensure_ready_message_store_from_legacy_conversation(state, conversation_id, &paths)?;
+            let mut ready_meta = message_store::read_ready_message_store_meta(&paths)?
                 .ok_or_else(|| {
                     format!(
-                        "批量更新消息 providerMeta 失败：消息不存在，conversation_id={}，message_id={}",
-                        conversation_id, message_id
+                        "批量更新消息 providerMeta 失败：缺少 ready 消息元数据，conversation_id={conversation_id}"
                     )
                 })?;
-            message.provider_meta = provider_meta.clone();
-            updated_messages.push(message);
-        }
-        message_store::write_jsonl_snapshot_replaced_messages_shard(
-            &paths,
-            &ready_meta.to_persist_meta(),
-            &updated_messages,
-        )?;
-        self.mark_conversation_metadata_cached_persisted(state, conversation_id)?;
-        Ok(())
+            ready_meta.apply_metadata_fields_from_meta_view(&conversation_meta);
+            let mut updated_messages = Vec::with_capacity(patch_by_id.len());
+            for (message_id, provider_meta) in &patch_by_id {
+                let mut message = message_store::read_ready_message_store_message_by_id(&paths, message_id)?
+                    .ok_or_else(|| {
+                        format!(
+                            "批量更新消息 providerMeta 失败：消息不存在，conversation_id={}，message_id={}",
+                            conversation_id, message_id
+                        )
+                    })?;
+                message.provider_meta = provider_meta.clone();
+                updated_messages.push(message);
+            }
+            message_store::write_jsonl_snapshot_replaced_messages_shard(
+                &paths,
+                &ready_meta.to_persist_meta(),
+                &updated_messages,
+            )?;
+            self.mark_conversation_metadata_cached_persisted(state, conversation_id)?;
+            Ok(())
+        })
     }
     fn persist_stop_chat_partial_message(
         &self,
@@ -586,25 +562,23 @@ impl ConversationServiceV2 {
             }
             StopChatConversationTarget::PersistedRef { conversation_id, .. } => {
                 let target_id = conversation_id.to_string();
-                let mutation_gate = conversation_mutation_gate(&state.data_path, &target_id)?;
-                let _guard = mutation_gate.lock().map_err(|err| {
-                    named_lock_error(
-                        "conversation_mutation_gate",
-                        file!(),
-                        line!(),
-                        module_path!(),
-                        &err,
-                    )
-                })?;
-                if target_assistant_message_id.is_some() {
-                    self.persist_replaced_ready_message_locked(
-                        state,
-                        &target_id,
-                        &assistant_message,
-                    )?;
-                } else {
-                    self.append_message_locked(state, &target_id, &assistant_message)?;
-                }
+                with_conversation_mutation(
+                    state,
+                    &target_id,
+                    "persist_stop_chat_partial_message",
+                    || {
+                        if target_assistant_message_id.is_some() {
+                            self.persist_replaced_ready_message_locked(
+                                state,
+                                &target_id,
+                                &assistant_message,
+                            )?;
+                        } else {
+                            self.append_message_locked(state, &target_id, &assistant_message)?;
+                        }
+                        Ok(())
+                    },
+                )?;
                 target_id
             }
         };

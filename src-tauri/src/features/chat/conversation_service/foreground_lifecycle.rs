@@ -296,38 +296,35 @@ impl ConversationServiceV2 {
                 conversation: None,
             });
         }
-        let mutation_gate = conversation_mutation_gate(&state.data_path, normalized_conversation_id)?;
-        let guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error(
-                "conversation_mutation_gate",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
-        let conversation_meta = match self.get_conversation_meta(state, normalized_conversation_id) {
-            Ok(conversation_meta) => conversation_meta,
-            Err(err) => {
-                runtime_log_debug(format!(
-                    "[会话已读] 读取会话失败，conversation_id={}，error={}",
-                    normalized_conversation_id, err
-                ));
-                drop(guard);
-                return Ok(MarkConversationReadResult {
-                    conversation: None,
-                });
-            }
+        let conversation_meta = with_conversation_mutation(
+            state,
+            normalized_conversation_id,
+            "mark_conversation_read",
+            || {
+                match self.get_conversation_meta(state, normalized_conversation_id) {
+                    Ok(conversation_meta) => Ok(Some(conversation_meta)),
+                    Err(err) => {
+                        runtime_log_debug(format!(
+                            "[会话已读] 读取会话失败，conversation_id={}，error={}",
+                            normalized_conversation_id, err
+                        ));
+                        Ok(None)
+                    }
+                }
+            },
+        )?;
+        let Some(conversation_meta) = conversation_meta else {
+            return Ok(MarkConversationReadResult {
+                conversation: None,
+            });
         };
         if conversation_meta.unread_count == 0 {
-            drop(guard);
             return Ok(MarkConversationReadResult {
                 conversation: Some(self.build_conversation_record_from_meta_view(
                     &conversation_meta,
                 )),
             });
         }
-        drop(guard);
         let result_conversation =
             self.set_conversation_unread_count_metadata(state, normalized_conversation_id, 0)?;
         Ok(MarkConversationReadResult {

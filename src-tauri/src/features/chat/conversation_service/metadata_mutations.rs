@@ -10,36 +10,27 @@ impl ConversationServiceV2 {
             return Err("conversationId is required.".to_string());
         }
         let normalized_title = next_title.trim();
-        let mutation_gate = conversation_mutation_gate(&state.data_path, normalized_conversation_id)?;
-        let guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error(
-                "conversation_mutation_gate",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
+        let should_update = with_conversation_mutation(
+            state,
+            normalized_conversation_id,
+            "rename_conversation",
+            || {
+                ensure_unarchived_conversation_not_organizing(state, normalized_conversation_id)?;
 
-        ensure_unarchived_conversation_not_organizing(state, normalized_conversation_id)?;
-
-        let conversation_meta =
-            self.get_conversation_meta(state, normalized_conversation_id)?;
-        if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
-            drop(guard);
-            return Err("未找到可改名的会话".to_string());
+                let conversation_meta =
+                    self.get_conversation_meta(state, normalized_conversation_id)?;
+                if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
+                    return Err("未找到可改名的会话".to_string());
+                }
+                if self.conversation_meta_is_system_notification_meta_view(&conversation_meta) {
+                    return Err("系统通知会话不支持改名".to_string());
+                }
+                Ok(conversation_meta.title.trim() != normalized_title)
+            },
+        )?;
+        if should_update {
+            self.set_title(state, normalized_conversation_id, normalized_title)?;
         }
-        if self.conversation_meta_is_system_notification_meta_view(&conversation_meta) {
-            drop(guard);
-            return Err("系统通知会话不支持改名".to_string());
-        }
-        if conversation_meta.title.trim() == normalized_title {
-            drop(guard);
-            return Ok(normalized_title.to_string());
-        }
-
-        drop(guard);
-        self.set_title(state, normalized_conversation_id, normalized_title)?;
         Ok(normalized_title.to_string())
     }
 
@@ -357,36 +348,30 @@ impl ConversationServiceV2 {
         if normalized_conversation_id.is_empty() {
             return Ok(None);
         }
-        let mutation_gate = conversation_mutation_gate(&state.data_path, normalized_conversation_id)?;
-        let guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error(
-                "conversation_mutation_gate",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
-        let conversation_meta = match self.get_conversation_meta(state, normalized_conversation_id) {
-            Ok(conversation) => conversation,
-            Err(err) => {
-                runtime_log_debug(format!(
-                    "[Todo] 读取会话失败，函数=update_conversation_todos，conversation_id={}，error={}",
-                    normalized_conversation_id, err
-                ));
-                drop(guard);
-                return Ok(None);
-            }
-        };
-        if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
-            drop(guard);
+        let should_update = with_conversation_mutation(
+            state,
+            normalized_conversation_id,
+            "update_conversation_todos",
+            || {
+                let conversation_meta = match self.get_conversation_meta(state, normalized_conversation_id) {
+                    Ok(conversation) => conversation,
+                    Err(err) => {
+                        runtime_log_debug(format!(
+                            "[Todo] 读取会话失败，函数=update_conversation_todos，conversation_id={}，error={}",
+                            normalized_conversation_id, err
+                        ));
+                        return Ok(false);
+                    }
+                };
+                if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
+                    return Ok(false);
+                }
+                Ok(conversation_meta.current_todos != stored_todos)
+            },
+        )?;
+        if !should_update {
             return Ok(None);
         }
-        if conversation_meta.current_todos == stored_todos {
-            drop(guard);
-            return Ok(None);
-        }
-        drop(guard);
         let updated = self.set_current_todos(
             state,
             normalized_conversation_id,
@@ -568,26 +553,24 @@ impl ConversationServiceV2 {
         ) {
             return Ok(false);
         }
-        let mutation_gate = conversation_mutation_gate(&state.data_path, normalized_conversation_id)?;
-        let _guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error(
-                "conversation_mutation_gate",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
-        let (conversation, changed, _) = state_update_conversation_metadata_cached_unlocked(
+        let (conversation, changed) = with_conversation_mutation(
             state,
             normalized_conversation_id,
-            |conversation| {
-                Ok(conversation_cumulative_usage_add_provider_usage(
-                    &mut conversation.cumulative_usage,
-                    provider_key,
-                    model_name,
-                    usage,
-                ))
+            "add_conversation_cumulative_usage_delta",
+            || {
+                let (conversation, changed, _) = state_update_conversation_metadata_cached_unlocked(
+                    state,
+                    normalized_conversation_id,
+                    |conversation| {
+                        Ok(conversation_cumulative_usage_add_provider_usage(
+                            &mut conversation.cumulative_usage,
+                            provider_key,
+                            model_name,
+                            usage,
+                        ))
+                    },
+                )?;
+                Ok((conversation, changed))
             },
         )?;
         if changed {

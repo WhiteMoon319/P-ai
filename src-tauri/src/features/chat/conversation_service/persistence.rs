@@ -51,37 +51,42 @@ fn ensure_ready_message_store_from_legacy_conversation(
     if normalized_conversation_id.is_empty() {
         return Err("conversationId is required.".to_string());
     }
-    let mutation_gate = conversation_mutation_gate(&state.data_path, normalized_conversation_id)?;
-    {
-        let _guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error("conversation_mutation_gate", file!(), line!(), module_path!(), &err)
-        })?;
-        match message_store::read_ready_message_store_status(store_paths) {
-            Ok(Some(_)) => return Ok(()),
-            Ok(None) => {}
-            Err(err) => runtime_log_warn(format!(
-                "[消息存储] ready 状态读取失败，尝试从会话缓存快照自愈，conversation_id={}，error={}",
-                normalized_conversation_id, err
-            )),
-        }
-        let conversation = read_legacy_conversation_snapshot_for_ready_store_recovery(
-            state,
-            normalized_conversation_id,
-        )?;
-        let recovery_job_id = format!("runtime-ready-store-recover-{normalized_conversation_id}");
-        let recovery_reason = format!(
-            "运行时补建 ready message store，conversation_id={normalized_conversation_id}"
-        );
-        conversation_service_v2().apply_privileged_snapshot_overwrite_inner(
-            state,
-            &ConversationOverwriteAudit {
-                job_id: recovery_job_id,
-                source: ConversationOverwriteSource::MigrationRecovery,
-                operator: "runtime_ready_store_recover".to_string(),
-                reason: recovery_reason,
-            },
-            &conversation,
-        )?;
+    let recovery = with_conversation_mutation(
+        state,
+        normalized_conversation_id,
+        "ensure_ready_message_store_from_legacy_conversation",
+        || {
+            match message_store::read_ready_message_store_status(store_paths) {
+                Ok(Some(_)) => return Ok(false),
+                Ok(None) => {}
+                Err(err) => runtime_log_warn(format!(
+                    "[消息存储] ready 状态读取失败，尝试从会话缓存快照自愈，conversation_id={}，error={}",
+                    normalized_conversation_id, err
+                )),
+            }
+            let conversation = read_legacy_conversation_snapshot_for_ready_store_recovery(
+                state,
+                normalized_conversation_id,
+            )?;
+            let recovery_job_id = format!("runtime-ready-store-recover-{normalized_conversation_id}");
+            let recovery_reason = format!(
+                "运行时补建 ready message store，conversation_id={normalized_conversation_id}"
+            );
+            conversation_service_v2().apply_privileged_snapshot_overwrite_inner(
+                state,
+                &ConversationOverwriteAudit {
+                    job_id: recovery_job_id,
+                    source: ConversationOverwriteSource::MigrationRecovery,
+                    operator: "runtime_ready_store_recover".to_string(),
+                    reason: recovery_reason,
+                },
+                &conversation,
+            )?;
+            Ok(true)
+        },
+    )?;
+    if !recovery {
+        return Ok(());
     }
     flush_pending_persists_blocking(state)?;
     Ok(())

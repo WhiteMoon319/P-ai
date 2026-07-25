@@ -4,59 +4,50 @@ impl ConversationServiceV2 {
         state: &AppState,
         conversation_id: &str,
     ) -> Result<DeleteUnarchivedConversationMutationResult, String> {
+        struct DeleteConversationPreparation {
+            app_config: AppConfig,
+            runtime: RuntimeStateFile,
+            child_conversation_ids: Vec<String>,
+            active_conversation_id: String,
+            should_create_system_notification: bool,
+            should_set_main_to_system_notification: bool,
+            parent_conversation_id: Option<String>,
+        }
+
         let normalized_conversation_id = conversation_id.trim();
         if normalized_conversation_id.is_empty() {
             return Err("conversationId is required.".to_string());
         }
-        let mutation_gate = conversation_mutation_gate(&state.data_path, normalized_conversation_id)?;
-        let guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error(
-                "conversation_mutation_gate",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
-        let app_config = state_read_config_cached(state)?;
-        let runtime = state_read_runtime_state_cached(state)?;
-        let main_conversation_id = runtime
-            .main_conversation_id
-            .as_deref()
-            .map(str::trim)
-            .unwrap_or_default()
-            .to_string();
-        if normalized_conversation_id == main_conversation_id {
-            drop(guard);
-            return Err("系统通知会话暂不支持删除".to_string());
-        }
-        let conversation = self.get_conversation_meta(state, normalized_conversation_id).ok();
-        let child_conversation_ids = conversation
-            .as_ref()
-            .map(|item| item.child_conversation_ids.clone())
-            .unwrap_or_default();
-        if conversation
-            .as_ref()
-            .map(|conversation| self.conversation_meta_is_system_notification_meta_view(conversation))
-            .unwrap_or(false)
-        {
-            drop(guard);
-            return Err("系统通知会话暂不支持删除".to_string());
-        }
-        let chat_index = state_read_chat_index_cached(state)?;
-        let active_conversation_id = chat_index
-            .conversations
-            .iter()
-            .filter_map(|item| self.get_conversation_meta(state, item.id.as_str()).ok())
-            .find(|conversation_meta| {
-                conversation_meta.id != normalized_conversation_id
-                    && self.conversation_meta_is_unarchived_meta_view(conversation_meta)
-                    && conversation_meta.visible_in_foreground_lists
-                    && conversation_meta.status.trim() == "active"
-            })
-            .map(|conversation_meta| conversation_meta.id.to_string())
-            .or_else(|| {
-                chat_index
+        let preparation = with_conversation_mutation(
+            state,
+            normalized_conversation_id,
+            "delete_conversation",
+            || {
+                let app_config = state_read_config_cached(state)?;
+                let runtime = state_read_runtime_state_cached(state)?;
+                let main_conversation_id = runtime
+                    .main_conversation_id
+                    .as_deref()
+                    .map(str::trim)
+                    .unwrap_or_default()
+                    .to_string();
+                if normalized_conversation_id == main_conversation_id {
+                    return Err("系统通知会话暂不支持删除".to_string());
+                }
+                let conversation = self.get_conversation_meta(state, normalized_conversation_id).ok();
+                let child_conversation_ids = conversation
+                    .as_ref()
+                    .map(|item| item.child_conversation_ids.clone())
+                    .unwrap_or_default();
+                if conversation
+                    .as_ref()
+                    .map(|conversation| self.conversation_meta_is_system_notification_meta_view(conversation))
+                    .unwrap_or(false)
+                {
+                    return Err("系统通知会话暂不支持删除".to_string());
+                }
+                let chat_index = state_read_chat_index_cached(state)?;
+                let active_conversation_id = chat_index
                     .conversations
                     .iter()
                     .filter_map(|item| self.get_conversation_meta(state, item.id.as_str()).ok())
@@ -64,36 +55,68 @@ impl ConversationServiceV2 {
                         conversation_meta.id != normalized_conversation_id
                             && self.conversation_meta_is_unarchived_meta_view(conversation_meta)
                             && conversation_meta.visible_in_foreground_lists
+                            && conversation_meta.status.trim() == "active"
                     })
                     .map(|conversation_meta| conversation_meta.id.to_string())
-            })
-            .unwrap_or_default();
-        mark_tasks_as_session_lost(&state.data_path, normalized_conversation_id);
-        let active_conversation_id = if active_conversation_id.trim().is_empty() {
-            let system_notification_exists = self
-                .get_conversation_meta(state, SYSTEM_NOTIFICATION_CONVERSATION_ID)
-                .ok()
-                .filter(|conversation_meta| {
-                    self.conversation_meta_is_unarchived_meta_view(conversation_meta)
-                        && conversation_meta.visible_in_foreground_lists
-                        && self.conversation_meta_is_system_notification_meta_view(conversation_meta)
+                    .or_else(|| {
+                        chat_index
+                            .conversations
+                            .iter()
+                            .filter_map(|item| self.get_conversation_meta(state, item.id.as_str()).ok())
+                            .find(|conversation_meta| {
+                                conversation_meta.id != normalized_conversation_id
+                                    && self.conversation_meta_is_unarchived_meta_view(conversation_meta)
+                                    && conversation_meta.visible_in_foreground_lists
+                            })
+                            .map(|conversation_meta| conversation_meta.id.to_string())
+                    })
+                    .unwrap_or_default();
+                let system_notification_exists = if active_conversation_id.trim().is_empty() {
+                    self.get_conversation_meta(state, SYSTEM_NOTIFICATION_CONVERSATION_ID)
+                        .ok()
+                        .filter(|conversation_meta| {
+                            self.conversation_meta_is_unarchived_meta_view(conversation_meta)
+                                && conversation_meta.visible_in_foreground_lists
+                                && self.conversation_meta_is_system_notification_meta_view(conversation_meta)
+                        })
+                        .is_some()
+                } else {
+                    true
+                };
+                let should_set_main_to_system_notification = active_conversation_id.trim().is_empty()
+                    && runtime.main_conversation_id.as_deref().map(str::trim)
+                        != Some(SYSTEM_NOTIFICATION_CONVERSATION_ID);
+                let parent_conversation_id = conversation
+                    .as_ref()
+                    .and_then(|item| item.parent_conversation_id.clone())
+                    .filter(|id| !id.trim().is_empty());
+
+                Ok(DeleteConversationPreparation {
+                    app_config,
+                    runtime,
+                    child_conversation_ids,
+                    active_conversation_id: if active_conversation_id.trim().is_empty() {
+                        SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string()
+                    } else {
+                        active_conversation_id
+                    },
+                    should_create_system_notification: !system_notification_exists,
+                    should_set_main_to_system_notification,
+                    parent_conversation_id,
                 })
-                .is_some();
-            if !system_notification_exists {
-                let system_notification = build_system_notification_conversation_record();
-                state_schedule_conversation_persist(state, &system_notification)?;
-            }
-            let mut next_runtime = runtime.clone();
-            if next_runtime.main_conversation_id.as_deref().map(str::trim)
-                != Some(SYSTEM_NOTIFICATION_CONVERSATION_ID)
-            {
-                next_runtime.main_conversation_id = Some(SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string());
-                state_write_runtime_state_cached(state, &next_runtime)?;
-            }
-            SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string()
-        } else {
-            active_conversation_id
-        };
+            },
+        )?;
+
+        mark_tasks_as_session_lost(&state.data_path, normalized_conversation_id);
+        if preparation.should_create_system_notification {
+            let system_notification = build_system_notification_conversation_record();
+            state_schedule_conversation_persist(state, &system_notification)?;
+        }
+        if preparation.should_set_main_to_system_notification {
+            let mut next_runtime = preparation.runtime.clone();
+            next_runtime.main_conversation_id = Some(SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string());
+            state_write_runtime_state_cached(state, &next_runtime)?;
+        }
         if let Ok(cleanup_conversation) =
             read_conversation_for_backup_cleanup(state, normalized_conversation_id)
         {
@@ -114,7 +137,7 @@ impl ConversationServiceV2 {
             }
         }
         state_schedule_conversation_delete(state, normalized_conversation_id)?;
-        for child_conversation_id in child_conversation_ids {
+        for child_conversation_id in preparation.child_conversation_ids {
             if child_conversation_id.trim().is_empty() {
                 continue;
             }
@@ -126,11 +149,7 @@ impl ConversationServiceV2 {
             }
             clear_conversation_list_activity_mark(state, &child_conversation_id);
         }
-        if let Some(parent_conversation_id) = conversation
-            .as_ref()
-            .and_then(|item| item.parent_conversation_id.clone())
-            .filter(|id| !id.trim().is_empty())
-        {
+        if let Some(parent_conversation_id) = preparation.parent_conversation_id {
             if let Err(err) = state_update_conversation_metadata_cached(
                 state,
                 &parent_conversation_id,
@@ -149,11 +168,10 @@ impl ConversationServiceV2 {
         }
         clear_conversation_list_activity_mark(state, normalized_conversation_id);
         let unarchived_conversations =
-            self.collect_unarchived_conversation_summaries_cached(state, &app_config)?;
-        drop(guard);
+            self.collect_unarchived_conversation_summaries_cached(state, &preparation.app_config)?;
         Ok(DeleteUnarchivedConversationMutationResult {
             deleted_conversation_id: normalized_conversation_id.to_string(),
-            active_conversation_id,
+            active_conversation_id: preparation.active_conversation_id,
             overview_payload: UnarchivedConversationOverviewUpdatedPayload {
                 preferred_conversation_id: unarchived_conversations
                     .first()
@@ -174,104 +192,101 @@ impl ConversationServiceV2 {
         let Some(requested_conversation_id) = requested_conversation_id.as_deref() else {
             return Err("conversationId is required.".to_string());
         };
-        let mutation_gate = conversation_mutation_gate(&state.data_path, requested_conversation_id)?;
-        let _guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error(
-                "conversation_mutation_gate",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
-        let conversation_meta = self
-            .get_conversation_meta(state, requested_conversation_id)
-            .map_err(|_| "Target message not found in active conversation.".to_string())?;
-        let conversation_id = if self.conversation_meta_is_unarchived_meta_view(&conversation_meta)
-            && (conversation_meta.visible_in_foreground_lists
-                || conversation_meta.is_remote_im_contact
-                || conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_SIDE_CHAT)
-        {
-            conversation_meta.id.to_string()
-        } else {
-            return Err("Target message not found in active conversation.".to_string());
-        };
-        let runtime_state = get_conversation_runtime_state(state, &conversation_id)?;
-        if runtime_state != MainSessionState::Idle {
-            let runtime_state_text = match runtime_state {
-                MainSessionState::Idle => "空闲",
-                MainSessionState::AssistantStreaming => "助理流式输出",
-                MainSessionState::OrganizingContext => "整理上下文",
-            };
-            runtime_log_error(format!(
-                "[会话撤回] 失败，任务=rewind_conversation_from_message，conversation_id={}，原因=会话运行中，runtime_state={}",
-                conversation_id, runtime_state_text
-            ));
-            return Err("当前会话正在运行或整理上下文，完成后再撤回。".to_string());
-        }
-        let store_paths = message_store::message_store_paths(&state.data_path, &conversation_id)?;
-        ensure_ready_message_store_from_legacy_conversation(state, &conversation_id, &store_paths)?;
-        let rewind_state =
-            read_ready_store_rewind_state_meta_view(state, &store_paths, &conversation_meta, message_id)?;
-        if is_context_compaction_message(
-            &rewind_state.recalled_user_message,
-            rewind_state.recalled_user_message.role.trim(),
-        ) && Self::is_first_context_compaction_message_in_store(&store_paths, message_id)?
-        {
-            return Err("不能撤回会话的第一条摘要消息。".to_string());
-        }
-        let git_snapshot = read_git_snapshot_record_from_provider_meta(
-            rewind_state.recalled_user_message.provider_meta.as_ref(),
-        );
-        maybe_undo_rewind_apply_patch(
+        with_conversation_mutation(
             state,
-            input,
-            &rewind_state.removed_messages,
-            message_id,
-            started_at,
-        )?;
-        let updated_at = now_iso();
-        let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
-            state,
-            &conversation_id,
-            |cached| {
-                cached.apply_truncated_rewind_state(
-                    rewind_state.keep_count,
-                    rewind_state.remaining_todos.clone(),
-                    updated_at.clone(),
-                    rewind_state.remaining_last_user_at.clone(),
-                    rewind_state.remaining_last_assistant_at.clone(),
-                    rewind_state.remaining_last_message_id.clone(),
-                    rewind_state.remaining_last_message_at.clone(),
-                    rewind_state.remaining_body_message_count,
-                    rewind_state.remaining_body_text_length,
-                    rewind_state.remaining_last_assistant_at.is_some(),
-                    rewind_state.remaining_has_context_compaction_message,
-                    rewind_state.remaining_latest_summary_title.clone(),
-                    rewind_state.remaining_preview_messages.clone(),
+            requested_conversation_id,
+            "rewind_conversation",
+            || {
+                let conversation_meta = self
+                    .get_conversation_meta(state, requested_conversation_id)
+                    .map_err(|_| "Target message not found in active conversation.".to_string())?;
+                let conversation_id = if self.conversation_meta_is_unarchived_meta_view(&conversation_meta)
+                    && (conversation_meta.visible_in_foreground_lists
+                        || conversation_meta.is_remote_im_contact
+                        || conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_SIDE_CHAT)
+                {
+                    conversation_meta.id.to_string()
+                } else {
+                    return Err("Target message not found in active conversation.".to_string());
+                };
+                let runtime_state = get_conversation_runtime_state(state, &conversation_id)?;
+                if runtime_state != MainSessionState::Idle {
+                    let runtime_state_text = match runtime_state {
+                        MainSessionState::Idle => "空闲",
+                        MainSessionState::AssistantStreaming => "助理流式输出",
+                        MainSessionState::OrganizingContext => "整理上下文",
+                    };
+                    runtime_log_error(format!(
+                        "[会话撤回] 失败，任务=rewind_conversation_from_message，conversation_id={}，原因=会话运行中，runtime_state={}",
+                        conversation_id, runtime_state_text
+                    ));
+                    return Err("当前会话正在运行或整理上下文，完成后再撤回。".to_string());
+                }
+                let store_paths = message_store::message_store_paths(&state.data_path, &conversation_id)?;
+                ensure_ready_message_store_from_legacy_conversation(state, &conversation_id, &store_paths)?;
+                let rewind_state =
+                    read_ready_store_rewind_state_meta_view(state, &store_paths, &conversation_meta, message_id)?;
+                if is_context_compaction_message(
+                    &rewind_state.recalled_user_message,
+                    rewind_state.recalled_user_message.role.trim(),
+                ) && Self::is_first_context_compaction_message_in_store(&store_paths, message_id)?
+                {
+                    return Err("不能撤回会话的第一条摘要消息。".to_string());
+                }
+                let git_snapshot = read_git_snapshot_record_from_provider_meta(
+                    rewind_state.recalled_user_message.provider_meta.as_ref(),
                 );
-                Ok(())
+                maybe_undo_rewind_apply_patch(
+                    state,
+                    input,
+                    &rewind_state.removed_messages,
+                    message_id,
+                    started_at,
+                )?;
+                let updated_at = now_iso();
+                let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
+                    state,
+                    &conversation_id,
+                    |cached| {
+                        cached.apply_truncated_rewind_state(
+                            rewind_state.keep_count,
+                            rewind_state.remaining_todos.clone(),
+                            updated_at.clone(),
+                            rewind_state.remaining_last_user_at.clone(),
+                            rewind_state.remaining_last_assistant_at.clone(),
+                            rewind_state.remaining_last_message_id.clone(),
+                            rewind_state.remaining_last_message_at.clone(),
+                            rewind_state.remaining_body_message_count,
+                            rewind_state.remaining_body_text_length,
+                            rewind_state.remaining_last_assistant_at.is_some(),
+                            rewind_state.remaining_has_context_compaction_message,
+                            rewind_state.remaining_latest_summary_title.clone(),
+                            rewind_state.remaining_preview_messages.clone(),
+                        );
+                        Ok(())
+                    },
+                )?;
+                let metadata_conversation =
+                    self.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
+                state_upsert_chat_index_conversation_cached(state, &metadata_conversation)?;
+                let current_todo = conversation_current_todo_text_from_items(&rewind_state.remaining_todos);
+                message_store::write_jsonl_snapshot_truncated_messages_shard_from_meta(
+                    &store_paths,
+                    &updated_meta,
+                    rewind_state.keep_count,
+                )?;
+                self.mark_conversation_metadata_cached_persisted(state, &conversation_id)?;
+                Ok(RewindConversationMutationResult {
+                    conversation_id,
+                    removed_count: rewind_state.removed_messages.len(),
+                    remaining_count: rewind_state.keep_count,
+                    current_todo,
+                    current_todos: rewind_state.remaining_todos,
+                    recalled_user_message: Some(rewind_state.recalled_user_message),
+                    git_snapshot,
+                })
             },
-        )?;
-        let metadata_conversation =
-            self.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
-        state_upsert_chat_index_conversation_cached(state, &metadata_conversation)?;
-        let current_todo = conversation_current_todo_text_from_items(&rewind_state.remaining_todos);
-        message_store::write_jsonl_snapshot_truncated_messages_shard_from_meta(
-            &store_paths,
-            &updated_meta,
-            rewind_state.keep_count,
-        )?;
-        self.mark_conversation_metadata_cached_persisted(state, &conversation_id)?;
-        Ok(RewindConversationMutationResult {
-            conversation_id,
-            removed_count: rewind_state.removed_messages.len(),
-            remaining_count: rewind_state.keep_count,
-            current_todo,
-            current_todos: rewind_state.remaining_todos,
-            recalled_user_message: Some(rewind_state.recalled_user_message),
-            git_snapshot,
-        })
+        )
     }
 
     fn is_first_context_compaction_message_in_store(
@@ -316,17 +331,7 @@ impl ConversationServiceV2 {
         input: &RewindConversationInput,
         message_id: &str,
     ) -> Result<RewindConversationPreviewResult, String> {
-        let guard = state
-            .conversation_lock
-            .lock()
-            .map_err(|err| {
-                format!(
-                    "Failed to lock state mutex at {}:{} {}: {err}",
-                    file!(),
-                    line!(),
-                    module_path!()
-                )
-            })?;
+        let guard = lock_conversation_with_metrics(state, "preview_rewind_conversation")?;
 
         let requested_conversation_id = trimmed_option(input.session.conversation_id.as_deref());
         let Some(requested_conversation_id) = requested_conversation_id.as_deref() else {

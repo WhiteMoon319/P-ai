@@ -9,95 +9,102 @@ impl ConversationServiceV2 {
         should_seed_summary_context: bool,
         has_existing_messages: bool,
     ) -> Result<SchedulerHistoryFlushCommitResult, String> {
-        let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
-        let _guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error(
-                "conversation_mutation_gate",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
-        let conversation_meta = match self.get_conversation_meta(state, conversation_id) {
-            Ok(conversation_meta)
-                if self.conversation_meta_is_unarchived_meta_view(&conversation_meta) =>
-            {
-                conversation_meta
-            }
-            _ => {
+        enum SchedulerHistoryFlushOutcome {
+            MissingTarget(String),
+            Committed(SchedulerHistoryFlushCommitResult),
+        }
+        let outcome = with_conversation_mutation(
+            state,
+            conversation_id,
+            "commit_scheduler_history_flush",
+            || {
+                let conversation_meta = match self.get_conversation_meta(state, conversation_id) {
+                    Ok(conversation_meta)
+                        if self.conversation_meta_is_unarchived_meta_view(&conversation_meta) =>
+                    {
+                        conversation_meta
+                    }
+                    _ => {
+                        return Ok(SchedulerHistoryFlushOutcome::MissingTarget(format!(
+                            "目标会话不存在，conversationId={conversation_id}"
+                        )));
+                    }
+                };
+                let mut conversation = self.build_conversation_record_from_meta_view(&conversation_meta);
+                let mut runtime = state_read_runtime_state_cached(state)?;
+                let remote_im_runtime_before = serde_json::to_vec(&(
+                    runtime.remote_im_contacts.clone(),
+                    runtime.remote_im_contact_checkpoints.clone(),
+                ))
+                .ok();
+
+                let persisted_batch_messages = self.write_scheduler_persisted_message_batch_v2(
+                    conversation_id,
+                    events,
+                    prepared_batches,
+                    history_flush_time,
+                    should_seed_summary_context,
+                    has_existing_messages,
+                    conversation_meta.has_context_compaction_message,
+                    state,
+                    &mut conversation,
+                );
+                let (event_activate_flags, _activated_contacts) =
+                    self.handle_scheduler_remote_im_activations_v2(
+                        state,
+                        &runtime.remote_im_contacts,
+                        &mut runtime.remote_im_contact_checkpoints,
+                        &mut conversation,
+                        events,
+                        history_flush_time,
+                    )?;
+                conversation.updated_at = history_flush_time.to_string();
+                let (metadata_conversation, (), _) = state_update_conversation_meta_cached_unlocked(
+                    state,
+                    &conversation.id,
+                    |cached| {
+                        let mut metadata_snapshot =
+                            self.build_conversation_snapshot_from_meta(cached, Vec::new());
+                        metadata_snapshot.user_profile_snapshot = conversation.user_profile_snapshot.clone();
+                        metadata_snapshot.memory_recall_table = conversation.memory_recall_table.clone();
+                        metadata_snapshot.unread_count = conversation.unread_count;
+                        metadata_snapshot.updated_at = conversation.updated_at.clone();
+                        metadata_snapshot.last_user_at = conversation.last_user_at.clone();
+                        metadata_snapshot.last_assistant_at = conversation.last_assistant_at.clone();
+                        cached.apply_metadata_fields_from_conversation(&metadata_snapshot);
+                        cached.apply_appended_messages(&persisted_batch_messages);
+                        Ok(())
+                    },
+                )?;
+                let metadata_snapshot =
+                    self.build_conversation_snapshot_from_meta(&metadata_conversation, Vec::new());
+                state_upsert_chat_index_conversation_cached(state, &metadata_snapshot)?;
+                self.persist_scheduler_flush_appended_messages_v2(
+                    state,
+                    &metadata_conversation,
+                    &persisted_batch_messages,
+                    &runtime,
+                    remote_im_runtime_before,
+                )?;
+                Ok(SchedulerHistoryFlushOutcome::Committed(
+                    SchedulerHistoryFlushCommitResult {
+                        persisted_batch_messages,
+                        event_activate_flags,
+                    },
+                ))
+            },
+        )?;
+        match outcome {
+            SchedulerHistoryFlushOutcome::MissingTarget(error) => {
                 let event_ids = events
                     .iter()
                     .map(|event| event.id.clone())
                     .collect::<Vec<_>>();
-                complete_pending_chat_events_with_error(
-                    state,
-                    &event_ids,
-                    &format!("目标会话不存在，conversationId={conversation_id}"),
-                )?;
-                return Err(format!("目标会话不存在，conversationId={conversation_id}"));
+                complete_pending_chat_events_with_error(state, &event_ids, &error)?;
+                Err(error)
             }
-        };
-        let mut conversation = self.build_conversation_record_from_meta_view(&conversation_meta);
-        let mut runtime = state_read_runtime_state_cached(state)?;
-        let remote_im_runtime_before = serde_json::to_vec(&(
-            runtime.remote_im_contacts.clone(),
-            runtime.remote_im_contact_checkpoints.clone(),
-        ))
-        .ok();
-
-        let persisted_batch_messages = self.write_scheduler_persisted_message_batch_v2(
-            conversation_id,
-            events,
-            prepared_batches,
-            history_flush_time,
-            should_seed_summary_context,
-            has_existing_messages,
-            conversation_meta.has_context_compaction_message,
-            state,
-            &mut conversation,
-        );
-        let (event_activate_flags, _activated_contacts) =
-            self.handle_scheduler_remote_im_activations_v2(
-                state,
-                &runtime.remote_im_contacts,
-                &mut runtime.remote_im_contact_checkpoints,
-                &mut conversation,
-                events,
-                history_flush_time,
-            )?;
-        conversation.updated_at = history_flush_time.to_string();
-        let (metadata_conversation, (), _) = state_update_conversation_meta_cached_unlocked(
-            state,
-            &conversation.id,
-            |cached| {
-                let mut metadata_snapshot =
-                    self.build_conversation_snapshot_from_meta(cached, Vec::new());
-                metadata_snapshot.user_profile_snapshot = conversation.user_profile_snapshot.clone();
-                metadata_snapshot.memory_recall_table = conversation.memory_recall_table.clone();
-                metadata_snapshot.unread_count = conversation.unread_count;
-                metadata_snapshot.updated_at = conversation.updated_at.clone();
-                metadata_snapshot.last_user_at = conversation.last_user_at.clone();
-                metadata_snapshot.last_assistant_at = conversation.last_assistant_at.clone();
-                cached.apply_metadata_fields_from_conversation(&metadata_snapshot);
-                cached.apply_appended_messages(&persisted_batch_messages);
-                Ok(())
-            },
-        )?;
-        let metadata_snapshot =
-            self.build_conversation_snapshot_from_meta(&metadata_conversation, Vec::new());
-        state_upsert_chat_index_conversation_cached(state, &metadata_snapshot)?;
-        self.persist_scheduler_flush_appended_messages_v2(
-            state,
-            &metadata_conversation,
-            &persisted_batch_messages,
-            &runtime,
-            remote_im_runtime_before,
-        )?;
-        Ok(SchedulerHistoryFlushCommitResult {
-            persisted_batch_messages,
-            event_activate_flags,
-        })
+            SchedulerHistoryFlushOutcome::Committed(result) => Ok(result),
+        }
     }
 
     fn write_scheduler_persisted_message_batch_v2(

@@ -11728,6 +11728,587 @@
     }
 
     #[test]
+    fn assistant_message_mutations_should_use_unified_conversation_mutation_entry() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("chat")
+            .join("conversation_service")
+            .join("assistant_message_mutations.rs");
+        let content = std::fs::read_to_string(&file).expect("read assistant message mutations");
+
+        assert!(
+            !content.contains("conversation_mutation_gate("),
+            "assistant message 写入链必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+        assert!(
+            content.contains("with_conversation_mutation"),
+            "assistant message 写入链应保留统一会话 mutation 入口"
+        );
+    }
+
+    #[test]
+    fn metadata_short_mutations_should_use_unified_conversation_mutation_entry() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("chat")
+            .join("conversation_service")
+            .join("metadata_mutations.rs");
+        let content = std::fs::read_to_string(&file).expect("read metadata mutations");
+        let rename_start = content
+            .find("fn rename_conversation")
+            .expect("rename_conversation exists");
+        let rename_end = content
+            .find("fn update_latest_summary_title")
+            .expect("update_latest_summary_title exists");
+        let usage_start = content
+            .find("fn add_conversation_cumulative_usage_delta")
+            .expect("add_conversation_cumulative_usage_delta exists");
+        let usage_section = &content[usage_start..];
+
+        assert!(
+            !content[rename_start..rename_end].contains("conversation_mutation_gate("),
+            "rename_conversation 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+        assert!(
+            usage_section.contains("with_conversation_mutation"),
+            "add_conversation_cumulative_usage_delta 应保留统一会话 mutation 入口"
+        );
+        assert!(
+            !usage_section.contains("conversation_mutation_gate("),
+            "add_conversation_cumulative_usage_delta 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+    }
+
+    #[test]
+    fn scheduler_history_flush_should_use_unified_conversation_mutation_entry() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("chat")
+            .join("conversation_service")
+            .join("scheduler_history_flush.rs");
+        let content = std::fs::read_to_string(&file).expect("read scheduler history flush");
+
+        assert!(
+            !content.contains("conversation_mutation_gate("),
+            "commit_scheduler_history_flush 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+        assert!(
+            content.contains("with_conversation_mutation"),
+            "commit_scheduler_history_flush 应保留统一会话 mutation 入口"
+        );
+    }
+
+    #[test]
+    fn rewind_conversation_should_use_unified_conversation_mutation_entry() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("chat")
+            .join("conversation_service")
+            .join("history_mutations.rs");
+        let content = std::fs::read_to_string(&file).expect("read history mutations");
+        let rewind_start = content
+            .find("fn rewind_conversation")
+            .expect("rewind_conversation exists");
+        let rewind_end = content
+            .find("fn is_first_context_compaction_message_in_store")
+            .expect("rewind helper exists");
+
+        assert!(
+            content[rewind_start..rewind_end].contains("with_conversation_mutation"),
+            "rewind_conversation 应保留统一会话 mutation 入口"
+        );
+        assert!(
+            !content[rewind_start..rewind_end].contains("conversation_mutation_gate("),
+            "rewind_conversation 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+    }
+
+    #[test]
+    fn active_plan_should_use_unified_conversation_mutation_entry() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("chat")
+            .join("message_store")
+            .join("active_plan.rs");
+        let content = std::fs::read_to_string(&file).expect("read active plan");
+
+        assert!(
+            !content.contains("conversation_mutation_gate("),
+            "active_plan 写入链必须走 with_conversation_mutation_for_data_path，禁止重新裸用 conversation_mutation_gate"
+        );
+        assert!(
+            content.contains("with_conversation_mutation_for_data_path"),
+            "active_plan 写入链应保留统一会话 mutation 入口"
+        );
+    }
+
+    #[test]
+    fn remote_im_management_writes_should_use_unified_conversation_mutation_entry() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("chat")
+            .join("conversation_service")
+            .join("remote_im_sessions.rs");
+        let content = std::fs::read_to_string(&file).expect("read remote im sessions");
+        let prune_start = content
+            .find("fn prune_expired_remote_im_fast_request_turns")
+            .expect("prune_expired_remote_im_fast_request_turns exists");
+        let prune_end = content
+            .find("fn get_active_goal")
+            .expect("get_active_goal exists");
+        let goal_start = content
+            .find("fn update_goal_conversation")
+            .expect("update_goal_conversation exists");
+        let goal_end = content
+            .find("fn remote_im_runtime_state_should_cache_blocks")
+            .expect("remote_im_runtime_state_should_cache_blocks exists");
+        let prune_section = &content[prune_start..prune_end];
+        let goal_section = &content[goal_start..goal_end];
+
+        assert!(
+            prune_section.contains("with_conversation_mutation"),
+            "prune_expired_remote_im_fast_request_turns 应保留统一会话 mutation 入口"
+        );
+        assert!(
+            !prune_section.contains("conversation_mutation_gate("),
+            "prune_expired_remote_im_fast_request_turns 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+        assert!(
+            goal_section.contains("with_conversation_mutation"),
+            "update_goal_conversation 应保留统一会话 mutation 入口"
+        );
+        assert!(
+            goal_section.contains("lock_conversation_with_metrics"),
+            "update_goal_conversation 的 delegate 兜底分支应继续保留带指标的会话锁"
+        );
+        assert!(
+            !goal_section.contains("conversation_mutation_gate("),
+            "update_goal_conversation 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+    }
+
+    #[test]
+    fn remote_im_short_writes_should_use_unified_conversation_mutation_entry() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("chat")
+            .join("conversation_service")
+            .join("remote_im_sessions.rs");
+        let content = std::fs::read_to_string(&file).expect("read remote im sessions");
+        let update_start = content
+            .find("fn update_unarchived_conversation_by_id")
+            .expect("update_unarchived_conversation_by_id exists");
+        let update_end = content
+            .find("fn append_fast_request_turn_if_unarchived_exists")
+            .expect("append_fast_request_turn_if_unarchived_exists exists");
+        let fast_turn_start = update_end;
+        let fast_turn_end = content
+            .find("fn get_conversation_fast_request_turns")
+            .expect("get_conversation_fast_request_turns exists");
+        let update_section = &content[update_start..update_end];
+        let fast_turn_section = &content[fast_turn_start..fast_turn_end];
+
+        for (name, section) in [
+            ("update_unarchived_conversation_by_id", update_section),
+            ("append_fast_request_turn_if_unarchived_exists", fast_turn_section),
+        ] {
+            assert!(
+                section.contains("with_conversation_mutation"),
+                "{name} 应保留统一会话 mutation 入口"
+            );
+            assert!(
+                !section.contains("conversation_mutation_gate("),
+                "{name} 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+            );
+        }
+    }
+
+    #[test]
+    fn foreground_mark_read_should_use_unified_conversation_mutation_entry() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("chat")
+            .join("conversation_service")
+            .join("foreground_lifecycle.rs");
+        let content = std::fs::read_to_string(&file).expect("read foreground lifecycle");
+        let mark_read_start = content
+            .find("fn mark_conversation_read")
+            .expect("mark_conversation_read exists");
+        let mark_read_end = content
+            .rfind("}\n\n}")
+            .expect("foreground lifecycle impl end exists");
+        let mark_read_section = &content[mark_read_start..mark_read_end];
+
+        assert!(
+            mark_read_section.contains("with_conversation_mutation"),
+            "mark_conversation_read 应保留统一会话 mutation 入口"
+        );
+        assert!(
+            !mark_read_section.contains("conversation_mutation_gate("),
+            "mark_conversation_read 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+    }
+
+    #[test]
+    fn conversation_service_v2_append_writes_should_use_unified_conversation_mutation_entry() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("chat")
+            .join("conversation_service")
+            .join("conversation_service_v2.rs");
+        let content = std::fs::read_to_string(&file).expect("read conversation service v2");
+        let scopes = [
+            (
+                "append_message",
+                "fn append_message",
+                "fn append_message_locked",
+            ),
+            (
+                "append_message_locked",
+                "fn append_message_locked",
+                "fn append_messages",
+            ),
+            (
+                "append_messages",
+                "fn append_messages",
+                "fn build_forward_selection_notification_message",
+            ),
+            (
+                "append_user_message",
+                "fn append_user_message",
+                "fn append_remote_im_user_message",
+            ),
+            (
+                "append_remote_im_user_message",
+                "fn append_remote_im_user_message",
+                "fn increment_unread_count_if_background",
+            ),
+        ];
+
+        for (name, start_marker, end_marker) in scopes {
+            let start = content.find(start_marker).expect("append scope start exists");
+            let end = content.find(end_marker).expect("append scope end exists");
+            let section = &content[start..end];
+            assert!(
+                !section.contains("conversation_mutation_gate("),
+                "{name} 必须走统一会话 mutation 入口，禁止重新裸用 conversation_mutation_gate"
+            );
+            if name != "append_message_locked" {
+                assert!(
+                    section.contains("with_conversation_mutation"),
+                    "{name} 应保留统一会话 mutation 入口"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn conversation_service_v2_core_metadata_writes_should_use_unified_conversation_mutation_entry() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("chat")
+            .join("conversation_service")
+            .join("conversation_service_v2.rs");
+        let content = std::fs::read_to_string(&file).expect("read conversation service v2");
+        let overwrite_start = content
+            .find("fn apply_privileged_snapshot_overwrite")
+            .expect("apply_privileged_snapshot_overwrite exists");
+        let overwrite_end = content
+            .find("fn apply_privileged_snapshot_overwrite_inner")
+            .expect("apply_privileged_snapshot_overwrite_inner exists");
+        let metadata_start = content
+            .find("fn apply_external_metadata_patch")
+            .expect("apply_external_metadata_patch exists");
+        let metadata_end = content
+            .find("fn get_conversation_meta")
+            .expect("get_conversation_meta exists");
+        let overwrite_section = &content[overwrite_start..overwrite_end];
+        let metadata_section = &content[metadata_start..metadata_end];
+
+        assert!(
+            overwrite_section.contains("with_conversation_mutation"),
+            "apply_privileged_snapshot_overwrite 应保留统一会话 mutation 入口"
+        );
+        assert!(
+            !overwrite_section.contains("conversation_mutation_gate("),
+            "apply_privileged_snapshot_overwrite 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+        assert!(
+            metadata_section.contains("with_conversation_mutation"),
+            "apply_external_metadata_patch 应保留统一会话 mutation 入口"
+        );
+        assert!(
+            !metadata_section.contains("conversation_mutation_gate("),
+            "apply_external_metadata_patch 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+    }
+
+    #[test]
+    fn metadata_todo_update_should_use_unified_conversation_mutation_entry() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("chat")
+            .join("conversation_service")
+            .join("metadata_mutations.rs");
+        let content = std::fs::read_to_string(&file).expect("read metadata mutations");
+        let todos_start = content
+            .find("fn update_conversation_todos")
+            .expect("update_conversation_todos exists");
+        let todos_end = content
+            .find("fn read_unarchived_conversation_summary")
+            .expect("read_unarchived_conversation_summary exists");
+        let todos_section = &content[todos_start..todos_end];
+
+        assert!(
+            todos_section.contains("with_conversation_mutation"),
+            "update_conversation_todos 应保留统一会话 mutation 入口"
+        );
+        assert!(
+            !todos_section.contains("conversation_mutation_gate("),
+            "update_conversation_todos 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+    }
+
+    #[test]
+    fn persistence_ready_store_recovery_should_use_unified_conversation_mutation_entry() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("chat")
+            .join("conversation_service")
+            .join("persistence.rs");
+        let content = std::fs::read_to_string(&file).expect("read persistence");
+        let recovery_start = content
+            .find("fn ensure_ready_message_store_from_legacy_conversation")
+            .expect("ensure_ready_message_store_from_legacy_conversation exists");
+        let recovery_end = content
+            .find("fn read_legacy_conversation_snapshot_for_ready_store_recovery")
+            .expect("read legacy recovery helper exists");
+        let recovery_section = &content[recovery_start..recovery_end];
+
+        assert!(
+            recovery_section.contains("with_conversation_mutation"),
+            "ensure_ready_message_store_from_legacy_conversation 应保留统一会话 mutation 入口"
+        );
+        assert!(
+            !recovery_section.contains("conversation_mutation_gate("),
+            "ensure_ready_message_store_from_legacy_conversation 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+    }
+
+    #[test]
+    fn history_delete_and_preview_should_not_use_legacy_direct_locks() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("chat")
+            .join("conversation_service")
+            .join("history_mutations.rs");
+        let content = std::fs::read_to_string(&file).expect("read history mutations");
+        let delete_start = content
+            .find("fn delete_conversation")
+            .expect("delete_conversation exists");
+        let delete_end = content
+            .find("fn rewind_conversation")
+            .expect("rewind_conversation exists");
+        let preview_start = content
+            .find("fn preview_rewind_conversation")
+            .expect("preview_rewind_conversation exists");
+        let preview_end = content
+            .find("fn branch_conversation_from_selection")
+            .expect("branch_conversation_from_selection exists");
+        let delete_section = &content[delete_start..delete_end];
+        let preview_section = &content[preview_start..preview_end];
+
+        assert!(
+            delete_section.contains("with_conversation_mutation"),
+            "delete_conversation 应保留统一会话 mutation 入口"
+        );
+        assert!(
+            !delete_section.contains("conversation_mutation_gate("),
+            "delete_conversation 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+        assert!(
+            preview_section.contains("lock_conversation_with_metrics"),
+            "preview_rewind_conversation 应使用带指标的 conversation lock 入口"
+        );
+        assert!(
+            !preview_section.contains(".conversation_lock\n"),
+            "preview_rewind_conversation 禁止直接访问 conversation_lock"
+        );
+    }
+
+    #[test]
+    fn archive_mutations_should_use_unified_conversation_mutation_entry() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("chat")
+            .join("conversation_service")
+            .join("archive_lifecycle.rs");
+        let content = std::fs::read_to_string(&file).expect("read archive lifecycle");
+        let delete_start = content
+            .find("fn delete_archive")
+            .expect("delete_archive exists");
+        let delete_end = content
+            .find("fn unarchive_archive")
+            .expect("unarchive_archive exists");
+        let unarchive_start = delete_end;
+        let unarchive_end = content
+            .find("fn resolve_archive_request_conversation_by_id")
+            .expect("resolve_archive_request_conversation_by_id exists");
+        let delete_section = &content[delete_start..delete_end];
+        let unarchive_section = &content[unarchive_start..unarchive_end];
+
+        assert!(
+            delete_section.contains("with_conversation_mutation"),
+            "delete_archive 应保留统一会话 mutation 入口"
+        );
+        assert!(
+            !delete_section.contains("conversation_mutation_gate("),
+            "delete_archive 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+        assert!(
+            unarchive_section.contains("with_conversation_mutation"),
+            "unarchive_archive 应保留统一会话 mutation 入口"
+        );
+        assert!(
+            !unarchive_section.contains("conversation_mutation_gate("),
+            "unarchive_archive 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+        let wake_start = content
+            .find("fn remote_im_apply_dynamic_wake_compaction")
+            .expect("remote_im_apply_dynamic_wake_compaction exists");
+        let wake_end = content
+            .find("fn persist_compaction_message")
+            .expect("persist_compaction_message exists");
+        let compaction_start = wake_end;
+        let compaction_end = content
+            .find("fn import_archives")
+            .expect("import_archives exists");
+        let wake_section = &content[wake_start..wake_end];
+        let compaction_section = &content[compaction_start..compaction_end];
+
+        assert!(
+            wake_section.contains("with_conversation_mutation"),
+            "remote_im_apply_dynamic_wake_compaction 应保留统一会话 mutation 入口"
+        );
+        assert!(
+            !wake_section.contains("conversation_mutation_gate("),
+            "remote_im_apply_dynamic_wake_compaction 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+        assert!(
+            compaction_section.contains("with_conversation_mutation"),
+            "persist_compaction_message 应保留统一会话 mutation 入口"
+        );
+        assert!(
+            !compaction_section.contains("conversation_mutation_gate("),
+            "persist_compaction_message 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+        let archive_start = content
+            .find("fn archive_conversation")
+            .expect("archive_conversation exists");
+        let archive_end = content
+            .rfind("}\n\n}")
+            .expect("archive lifecycle impl end exists");
+        let archive_section = &content[archive_start..archive_end];
+
+        assert!(
+            archive_section.contains("with_conversation_mutation"),
+            "archive_conversation 应保留统一会话 mutation 入口"
+        );
+        assert!(
+            !archive_section.contains("conversation_mutation_gate("),
+            "archive_conversation 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
+        );
+    }
+
+    #[test]
+    fn archive_lifecycle_should_not_use_direct_conversation_lock() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("chat")
+            .join("conversation_service")
+            .join("archive_lifecycle.rs");
+        let content = std::fs::read_to_string(&file).expect("read archive lifecycle");
+
+        assert!(
+            content.contains("lock_conversation_with_metrics"),
+            "archive_lifecycle legacy 只读/多会话路径应使用带指标的 conversation lock 入口"
+        );
+        assert!(
+            !content.contains("conversation_lock.lock()"),
+            "archive_lifecycle 禁止直接访问 conversation_lock.lock()"
+        );
+    }
+
+    #[test]
+    fn conversation_reads_snapshot_should_use_metric_lock() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("chat")
+            .join("conversation_service")
+            .join("conversation_reads.rs");
+        let content = std::fs::read_to_string(&file).expect("read conversation reads");
+        let snapshot_start = content
+            .find("fn get_chat_snapshot")
+            .expect("get_chat_snapshot exists");
+        let snapshot_end = content
+            .find("fn get_conversation_recent_messages")
+            .expect("get_conversation_recent_messages exists");
+        let snapshot_section = &content[snapshot_start..snapshot_end];
+
+        assert!(
+            snapshot_section.contains("lock_conversation_with_metrics"),
+            "get_chat_snapshot 应使用带指标的 conversation lock 入口"
+        );
+        assert!(
+            !snapshot_section.contains("conversation_lock.lock()"),
+            "get_chat_snapshot 禁止直接访问 conversation_lock.lock()"
+        );
+    }
+
+    #[test]
+    fn conversation_mutation_gate_should_wait_without_hard_timeout() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("core")
+            .join("domain")
+            .join("runtime_lock.rs");
+        let content = std::fs::read_to_string(&file).expect("read runtime lock");
+        let mutation_gate_start = content
+            .find("impl ConversationMutationGate")
+            .expect("ConversationMutationGate impl exists");
+        let mutation_gate_end = content
+            .find("struct TimedConversationMutationGuard")
+            .expect("TimedConversationMutationGuard exists");
+        let mutation_gate_section = &content[mutation_gate_start..mutation_gate_end];
+
+        assert!(
+            !mutation_gate_section.contains("CONVERSATION_LOCK_MAX_WAIT_MS"),
+            "conversation mutation gate 必须保持串行等待语义，禁止固定等待超时失败"
+        );
+        assert!(
+            !mutation_gate_section.contains("会话写入门等待超时"),
+            "conversation mutation gate 禁止把等待变成用户可见超时错误"
+        );
+    }
+
+    #[test]
     fn conversation_lock_should_only_be_used_by_service_or_explicit_legacy_exception() {
         let features_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("src")

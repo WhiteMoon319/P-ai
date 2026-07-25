@@ -212,6 +212,90 @@ impl ConversationMutationGate {
     fn lock(&self) -> Result<parking_lot::ReentrantMutexGuard<'_, ()>, String> {
         Ok(self.inner.lock())
     }
+
+    fn lock_named<'a>(
+        &'a self,
+        conversation_id: &str,
+        task_name: &str,
+    ) -> Result<TimedConversationMutationGuard<'a>, String> {
+        let started_at = std::time::Instant::now();
+        let waiter_thread = current_thread_descriptor();
+        let mut next_wait_log_ms = CONVERSATION_LOCK_WAIT_LOG_FIRST_MS;
+        loop {
+            if let Some(guard) = self.inner.try_lock() {
+                let waited_ms = started_at.elapsed().as_millis();
+                if waited_ms >= CONVERSATION_LOCK_SLOW_WAIT_MS {
+                    runtime_log_debug(format!(
+                        "[会话写入门] 等待完成，任务={}，conversation_id={}，线程={}，等待毫秒={}",
+                        task_name, conversation_id, waiter_thread, waited_ms
+                    ));
+                }
+                return Ok(TimedConversationMutationGuard {
+                    task_name: task_name.to_string(),
+                    conversation_id: conversation_id.to_string(),
+                    acquired_at: std::time::Instant::now(),
+                    thread: waiter_thread,
+                    _guard: guard,
+                });
+            }
+            let waited_ms = started_at.elapsed().as_millis();
+            if waited_ms >= next_wait_log_ms {
+                runtime_log_warn(format!(
+                    "[会话写入门] 等待中，任务={}，conversation_id={}，线程={}，等待毫秒={}",
+                    task_name, conversation_id, waiter_thread, waited_ms
+                ));
+                next_wait_log_ms += CONVERSATION_LOCK_WAIT_LOG_REPEAT_MS;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+}
+
+struct TimedConversationMutationGuard<'a> {
+    task_name: String,
+    conversation_id: String,
+    acquired_at: std::time::Instant,
+    thread: String,
+    _guard: parking_lot::ReentrantMutexGuard<'a, ()>,
+}
+
+impl Drop for TimedConversationMutationGuard<'_> {
+    fn drop(&mut self) {
+        let held_ms = self.acquired_at.elapsed().as_millis();
+        if held_ms >= CONVERSATION_LOCK_SLOW_HOLD_MS {
+            runtime_log_debug(format!(
+                "[会话写入门] 持有完成，任务={}，conversation_id={}，线程={}，持有毫秒={}",
+                self.task_name, self.conversation_id, self.thread, held_ms
+            ));
+        }
+    }
+}
+
+fn with_conversation_mutation_for_data_path<T, F>(
+    data_path: &std::path::PathBuf,
+    conversation_id: &str,
+    task_name: &str,
+    f: F,
+) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String>,
+{
+    let normalized_conversation_id = conversation_id.trim();
+    let mutation_gate = conversation_mutation_gate(data_path, normalized_conversation_id)?;
+    let _guard = mutation_gate.lock_named(normalized_conversation_id, task_name)?;
+    f()
+}
+
+fn with_conversation_mutation<T, F>(
+    state: &AppState,
+    conversation_id: &str,
+    task_name: &str,
+    f: F,
+) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String>,
+{
+    with_conversation_mutation_for_data_path(&state.data_path, conversation_id, task_name, f)
 }
 
 fn conversation_mutation_gate(

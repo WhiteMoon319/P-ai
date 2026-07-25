@@ -61,9 +61,7 @@ impl ConversationServiceV2 {
         let runtime_snapshot = load_runtime_organization_snapshot(state)?;
         // 锁外预读可能与并发归档交错；锁内只复核当前仍归档的 ID，避免返回已取消归档项。
         let current_archived_ids = {
-            let guard = state.conversation_lock.lock().map_err(|err| {
-                named_lock_error("conversation_lock", file!(), line!(), module_path!(), &err)
-            })?;
+            let guard = lock_conversation_with_metrics(state, "list_archives_with_resolvers")?;
             let current_index = state_read_chat_index_cached(state)?;
             let archived_ids = current_index
                 .conversations
@@ -130,9 +128,7 @@ impl ConversationServiceV2 {
             materialize_chat_message_parts_from_media_refs(&mut messages, &state.data_path);
             return Ok(messages);
         }
-        let guard = state.conversation_lock.lock().map_err(|err| {
-            named_lock_error("conversation_lock", file!(), line!(), module_path!(), &err)
-        })?;
+        let guard = lock_conversation_with_metrics(state, "get_archive_messages")?;
         ensure_archive_ready_message_store_from_legacy(state, normalized_archive_id, &store_paths)?;
         drop(guard);
         let mut messages = message_store::read_ready_message_store_all_messages(&store_paths)?
@@ -176,9 +172,7 @@ impl ConversationServiceV2 {
             });
         }
 
-        let guard = state.conversation_lock.lock().map_err(|err| {
-            named_lock_error("conversation_lock", file!(), line!(), module_path!(), &err)
-        })?;
+        let guard = lock_conversation_with_metrics(state, "get_archive_block_page")?;
         ensure_archive_ready_message_store_from_legacy(state, normalized_archive_id, &store_paths)?;
         drop(guard);
         let page = message_store::read_ready_message_store_block_page(&store_paths, block_id)?
@@ -215,9 +209,7 @@ impl ConversationServiceV2 {
         if normalized_archive_id.is_empty() {
             return Err("archiveId is required".to_string());
         }
-        let guard = state.conversation_lock.lock().map_err(|err| {
-            named_lock_error("conversation_lock", file!(), line!(), module_path!(), &err)
-        })?;
+        let guard = lock_conversation_with_metrics(state, "get_archive_summary")?;
         let summary = self
             .get_conversation_meta(state, normalized_archive_id)
             .map_err(|_| "Archive not found".to_string())
@@ -241,24 +233,16 @@ impl ConversationServiceV2 {
         if normalized_archive_id.is_empty() {
             return Err("archiveId is required".to_string());
         }
-        let mutation_gate = conversation_mutation_gate(&state.data_path, normalized_archive_id)?;
-        let _guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error(
-                "conversation_mutation_gate",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
-        let conversation_meta = self
-            .get_conversation_meta(state, normalized_archive_id)
-            .map_err(|_| "Archive not found".to_string())?;
-        if conversation_meta.status.trim() != "archived" {
-            return Err("Archive not found".to_string());
-        }
-        state_schedule_conversation_delete(state, normalized_archive_id)?;
-        Ok(())
+        with_conversation_mutation(state, normalized_archive_id, "delete_archive", || {
+            let conversation_meta = self
+                .get_conversation_meta(state, normalized_archive_id)
+                .map_err(|_| "Archive not found".to_string())?;
+            if conversation_meta.status.trim() != "archived" {
+                return Err("Archive not found".to_string());
+            }
+            state_schedule_conversation_delete(state, normalized_archive_id)?;
+            Ok(())
+        })
     }
 
     fn unarchive_archive(
@@ -270,36 +254,34 @@ impl ConversationServiceV2 {
         if normalized_archive_id.is_empty() {
             return Err("archiveId is required".to_string());
         }
-        let guard = state.conversation_lock.lock().map_err(|err| {
-            named_lock_error("conversation_lock", file!(), line!(), module_path!(), &err)
-        })?;
-        let conversation_meta = self
-            .get_conversation_meta(state, normalized_archive_id)
-            .map_err(|_| "Archive not found".to_string())?;
-        if conversation_meta.status.trim() != "archived"
-            || !conversation_meta.visible_in_foreground_lists
-            || conversation_meta.conversation_kind.trim() != CONVERSATION_KIND_CHAT
-        {
-            drop(guard);
-            return Err("该归档会话无法恢复为普通会话".to_string());
-        }
+        let conversation_id = with_conversation_mutation(state, normalized_archive_id, "unarchive_archive", || {
+            let conversation_meta = self
+                .get_conversation_meta(state, normalized_archive_id)
+                .map_err(|_| "Archive not found".to_string())?;
+            if conversation_meta.status.trim() != "archived"
+                || !conversation_meta.visible_in_foreground_lists
+                || conversation_meta.conversation_kind.trim() != CONVERSATION_KIND_CHAT
+            {
+                return Err("该归档会话无法恢复为普通会话".to_string());
+            }
 
-        let now = now_iso();
-        let (conversation, (), _) = state_update_conversation_metadata_cached(
-            state,
-            normalized_archive_id,
-            |conversation| {
-                conversation.status = "active".to_string();
-                conversation.archived_at = None;
-                conversation.updated_at = now.clone();
-                Ok(())
-            },
-        )?;
+            let now = now_iso();
+            let (conversation, (), _) = state_update_conversation_metadata_cached_unlocked(
+                state,
+                normalized_archive_id,
+                |conversation| {
+                    conversation.status = "active".to_string();
+                    conversation.archived_at = None;
+                    conversation.updated_at = now.clone();
+                    Ok(())
+                },
+            )?;
+            Ok(conversation.id)
+        })?;
         runtime_log_info(format!(
             "[归档] 完成，任务=取消归档，conversation_id={}",
-            conversation.id
+            conversation_id
         ));
-        drop(guard);
         Ok(())
     }
 
@@ -312,14 +294,7 @@ impl ConversationServiceV2 {
         if normalized_conversation_id.is_empty() {
             return Err("conversationId is required".to_string());
         }
-        let guard = state.conversation_lock.lock().map_err(|err| {
-            format!(
-                "Failed to lock state mutex at {}:{} {}: {err}",
-                file!(),
-                line!(),
-                module_path!()
-            )
-        })?;
+        let guard = lock_conversation_with_metrics(state, "resolve_archive_request_conversation_by_id")?;
         let runtime_snapshot = load_runtime_organization_snapshot(state)?;
         let app_config = &runtime_snapshot.config;
         let source_meta = self
@@ -482,16 +457,11 @@ impl ConversationServiceV2 {
         if conversation_id.is_empty() || trigger_message_id.is_empty() {
             return Err("远程唤醒压缩失败：缺少会话或触发消息 ID".to_string());
         }
-        let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
-        let _guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error(
-                "conversation_mutation_gate",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
+        with_conversation_mutation(
+            state,
+            conversation_id,
+            "remote_im_apply_dynamic_wake_compaction",
+            || {
         let conversation_meta = self.get_conversation_meta(state, conversation_id)?;
         if !conversation_meta.is_remote_im_contact {
             return Err(format!(
@@ -600,6 +570,8 @@ impl ConversationServiceV2 {
             ));
         }
         Ok(RemoteImDynamicWakeCompactionOutcome::Applied)
+            },
+        )
     }
 
     fn persist_compaction_message(
@@ -609,21 +581,12 @@ impl ConversationServiceV2 {
         compression_message: &ChatMessage,
         refreshed_user_profile_snapshot: Option<String>,
     ) -> Result<CompactionMessagePersistResult, String> {
-        let mutation_gate = conversation_mutation_gate(&state.data_path, &source.id)?;
-        let guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error(
-                "conversation_mutation_gate",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
+        let (store_paths, compression_message_id, previous_latest_block_id, active_conversation_id) =
+            with_conversation_mutation(state, &source.id, "persist_compaction_message", || {
         let source_meta = self
             .get_conversation_meta(state, &source.id)
             .map_err(|_| "活动对话已变化，请重试上下文整理。".to_string())?;
         if !self.conversation_meta_is_unarchived_meta_view(&source_meta) {
-            drop(guard);
             return Err("活动对话已变化，请重试上下文整理。".to_string());
         }
         let store_paths = message_store::message_store_paths(&state.data_path, &source.id)?;
@@ -670,9 +633,13 @@ impl ConversationServiceV2 {
         )?;
         // v3 保留远程联系人的完整 JSONL 历史；压缩消息只作为新消息追加。
         // 旧的“仅保留最后 block”策略会删掉正文并触发整会话 snapshot 重写。
-        self.mark_conversation_metadata_cached_persisted(state, &metadata_conversation.id)?;
-
-        drop(guard);
+        Ok((
+            store_paths,
+            compression_message_id,
+            previous_latest_block_id,
+            active_conversation_id,
+        ))
+            })?;
 
         let persisted = message_store::read_ready_message_store_message_by_id(
             &store_paths,
@@ -723,14 +690,7 @@ impl ConversationServiceV2 {
         state: &AppState,
         incoming_archives: &mut Vec<ConversationArchive>,
     ) -> Result<ImportArchivesMutationResult, String> {
-        let guard = state.conversation_lock.lock().map_err(|err| {
-            format!(
-                "Failed to lock state mutex at {}:{} {}: {err}",
-                file!(),
-                line!(),
-                module_path!()
-            )
-        })?;
+        let guard = lock_conversation_with_metrics(state, "import_archives")?;
         let chat_index = state_read_chat_index_cached(state)?;
         let existing_archive_ids = chat_index
             .conversations
@@ -795,107 +755,111 @@ impl ConversationServiceV2 {
         source: &Conversation,
         archive_reason: &str,
     ) -> Result<InstantArchiveConversationMutationResult, String> {
-        let mutation_gate = conversation_mutation_gate(&state.data_path, &source.id)?;
-        let guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error(
-                "conversation_mutation_gate",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
-        let source_conversation_meta = self
-            .get_conversation_meta(state, &source.id)
-            .map_err(|err| format!("当前没有可归档的活动对话：{}", err))?;
-        let source_conversation =
-            self.build_conversation_record_from_meta_view(&source_conversation_meta);
-        let already_archived = source_conversation_meta.status.trim() == "archived";
-        if !already_archived
-            && !self.conversation_meta_is_local_normal_chat_meta_view(&source_conversation_meta)
-        {
-            drop(guard);
-            return Err("当前没有可归档的活动对话。".to_string());
-        }
+        let (mutation_result, archive_log) =
+            with_conversation_mutation(state, &source.id, "archive_conversation", || {
+                let source_conversation_meta = self
+                    .get_conversation_meta(state, &source.id)
+                    .map_err(|err| format!("当前没有可归档的活动对话：{}", err))?;
+                let source_conversation =
+                    self.build_conversation_record_from_meta_view(&source_conversation_meta);
+                let already_archived = source_conversation_meta.status.trim() == "archived";
+                if !already_archived
+                    && !self.conversation_meta_is_local_normal_chat_meta_view(&source_conversation_meta)
+                {
+                    return Err("当前没有可归档的活动对话。".to_string());
+                }
 
-        let runtime = state_read_runtime_state_cached(state)?;
-        let runtime_snapshot = load_runtime_organization_snapshot(state)?;
-        let agents = runtime_snapshot.agents;
-        let chat_index = state_read_chat_index_cached(state)?;
-        let active_conversation_id = if let Some(conversation_id) = chat_index
-            .conversations
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, item)| {
-                let conversation_meta = self.get_conversation_meta(state, item.id.as_str()).ok()?;
-                Some((idx, conversation_meta))
-            })
-            .filter(|(_, conversation_meta)| {
-                conversation_meta.id != source.id
-                    && self.conversation_meta_is_local_normal_chat_meta_view(conversation_meta)
-            })
-            .max_by(|(idx_a, a), (idx_b, b)| {
-                let a_updated = a.updated_at.trim();
-                let b_updated = b.updated_at.trim();
-                let a_created = a.created_at.trim();
-                let b_created = b.created_at.trim();
-                a_updated
-                    .cmp(b_updated)
-                    .then_with(|| a_created.cmp(b_created))
-                    .then_with(|| idx_a.cmp(idx_b))
-            })
-            .map(|(_, conversation_meta)| conversation_meta.id.to_string())
-        {
-            conversation_id
-        } else {
-            let conversation = build_archive_replacement_conversation(
-                state,
-                &agents,
-                &runtime.assistant_department_agent_id,
-                selected_api,
-                source,
-            )?;
-            let conversation_id = conversation.id.clone();
-            state_schedule_conversation_persist(state, &conversation)?;
-            conversation_id
-        };
+                let runtime = state_read_runtime_state_cached(state)?;
+                let runtime_snapshot = load_runtime_organization_snapshot(state)?;
+                let agents = runtime_snapshot.agents;
+                let chat_index = state_read_chat_index_cached(state)?;
+                let active_conversation_id = if let Some(conversation_id) = chat_index
+                    .conversations
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(idx, item)| {
+                        let conversation_meta = self.get_conversation_meta(state, item.id.as_str()).ok()?;
+                        Some((idx, conversation_meta))
+                    })
+                    .filter(|(_, conversation_meta)| {
+                        conversation_meta.id != source.id
+                            && self.conversation_meta_is_local_normal_chat_meta_view(conversation_meta)
+                    })
+                    .max_by(|(idx_a, a), (idx_b, b)| {
+                        let a_updated = a.updated_at.trim();
+                        let b_updated = b.updated_at.trim();
+                        let a_created = a.created_at.trim();
+                        let b_created = b.created_at.trim();
+                        a_updated
+                            .cmp(b_updated)
+                            .then_with(|| a_created.cmp(b_created))
+                            .then_with(|| idx_a.cmp(idx_b))
+                    })
+                    .map(|(_, conversation_meta)| conversation_meta.id.to_string())
+                {
+                    conversation_id
+                } else {
+                    let conversation = build_archive_replacement_conversation(
+                        state,
+                        &agents,
+                        &runtime.assistant_department_agent_id,
+                        selected_api,
+                        source,
+                    )?;
+                    let conversation_id = conversation.id.clone();
+                    state_schedule_conversation_persist(state, &conversation)?;
+                    conversation_id
+                };
 
-        if !already_archived {
-            let previous_status = source_conversation.status.clone();
-            let now = now_iso();
-            let (conversation, (), _) = state_update_conversation_metadata_cached_unlocked(
-                state,
-                &source.id,
-                |conversation| {
-                    conversation.status = "archived".to_string();
-                    conversation.summary.clear();
-                    conversation.fast_request_turns.clear();
-                    conversation.archived_at = Some(now.clone());
-                    conversation.updated_at = now.clone();
-                    Ok(())
-                },
-            )?;
+                let archive_log = if !already_archived {
+                    let previous_status = source_conversation.status.clone();
+                    let now = now_iso();
+                    let (conversation, (), _) = state_update_conversation_metadata_cached_unlocked(
+                        state,
+                        &source.id,
+                        |conversation| {
+                            conversation.status = "archived".to_string();
+                            conversation.summary.clear();
+                            conversation.fast_request_turns.clear();
+                            conversation.archived_at = Some(now.clone());
+                            conversation.updated_at = now.clone();
+                            Ok(())
+                        },
+                    )?;
+                    Some((
+                        conversation.id,
+                        previous_status,
+                        conversation.archived_at.unwrap_or_default(),
+                    ))
+                } else {
+                    None
+                };
+                let app_config = runtime_snapshot.config;
+                let unarchived_conversations =
+                    self.collect_unarchived_conversation_summaries_cached(state, &app_config)?;
+                let overview_payload = UnarchivedConversationOverviewUpdatedPayload {
+                    preferred_conversation_id: Some(active_conversation_id.clone()),
+                    unarchived_conversations,
+                };
+                Ok((
+                    InstantArchiveConversationMutationResult {
+                        active_conversation_id,
+                        overview_payload,
+                        already_archived,
+                    },
+                    archive_log,
+                ))
+            })?;
+        if let Some((conversation_id, previous_status, archived_at)) = archive_log {
             runtime_log_info(format!(
                 "[归档] 完成，任务=即时标记归档，conversation_id={}，previous_status={}，reason={}，archived_at={}",
-                conversation.id,
+                conversation_id,
                 previous_status,
                 archive_reason,
-                conversation.archived_at.as_deref().unwrap_or("")
+                archived_at
             ));
         }
-        let app_config = runtime_snapshot.config;
-        let unarchived_conversations =
-            self.collect_unarchived_conversation_summaries_cached(state, &app_config)?;
-        let overview_payload = UnarchivedConversationOverviewUpdatedPayload {
-            preferred_conversation_id: Some(active_conversation_id.clone()),
-            unarchived_conversations,
-        };
-        drop(guard);
-        Ok(InstantArchiveConversationMutationResult {
-            active_conversation_id,
-            overview_payload,
-            already_archived,
-        })
+        Ok(mutation_result)
     }
 
 }

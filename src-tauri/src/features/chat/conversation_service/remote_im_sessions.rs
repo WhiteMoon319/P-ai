@@ -674,72 +674,69 @@ impl ConversationServiceV2 {
         if normalized_conversation_id.is_empty() {
             return Err("conversationId is required.".to_string());
         }
-        let mutation_gate = conversation_mutation_gate(&state.data_path, normalized_conversation_id)?;
-        let _guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error(
-                "conversation_mutation_gate",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
-        // 工具审查按 call_id 定位，而现有 locator 未索引 tool_call_id；这是该入口必须读取
-        // 全量正文的唯一原因。v3 发布仍限制为变更消息的 block 级替换，禁止回退整会话快照。
-        let mut conversation = self.read_persisted_conversation(state, normalized_conversation_id)?;
-        self.ensure_unarchived_conversation(&conversation, normalized_conversation_id)?;
-        let original_messages = conversation.messages.clone();
-        let result = updater(&mut conversation)?;
-        let store_paths =
-            message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
-        let is_v3_ready = message_store::message_store_is_v3_ready(&store_paths)?;
-        let changed_messages = if is_v3_ready {
-            if conversation.messages.len() != original_messages.len()
-                || conversation
-                    .messages
-                    .iter()
-                    .zip(original_messages.iter())
-                    .any(|(updated, original)| updated.id != original.id)
-            {
-                return Err(format!(
-                    "v3 不支持通过 update_unarchived_conversation_by_id 改变消息结构，conversation_id={normalized_conversation_id}"
-                ));
-            }
-            conversation
-                .messages
-                .iter()
-                .zip(original_messages.iter())
-                .filter_map(|(updated, original)| {
-                    (serde_json::to_value(updated).ok() != serde_json::to_value(original).ok())
-                        .then(|| updated.clone())
-                })
-                .collect::<Vec<_>>()
-        } else {
-            Vec::new()
-        };
-        let (updated_meta_conversation, (), _) = state_update_conversation_metadata_cached_unlocked(
+        with_conversation_mutation(
             state,
             normalized_conversation_id,
-            |cached| {
-                preserve_field_level_conversation_metadata(cached, &conversation);
-                Ok(())
+            "update_unarchived_conversation_by_id",
+            || {
+                // 工具审查按 call_id 定位，而现有 locator 未索引 tool_call_id；这是该入口必须读取
+                // 全量正文的唯一原因。v3 发布仍限制为变更消息的 block 级替换，禁止回退整会话快照。
+                let mut conversation = self.read_persisted_conversation(state, normalized_conversation_id)?;
+                self.ensure_unarchived_conversation(&conversation, normalized_conversation_id)?;
+                let original_messages = conversation.messages.clone();
+                let result = updater(&mut conversation)?;
+                let store_paths =
+                    message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
+                let is_v3_ready = message_store::message_store_is_v3_ready(&store_paths)?;
+                let changed_messages = if is_v3_ready {
+                    if conversation.messages.len() != original_messages.len()
+                        || conversation
+                            .messages
+                            .iter()
+                            .zip(original_messages.iter())
+                            .any(|(updated, original)| updated.id != original.id)
+                    {
+                        return Err(format!(
+                            "v3 不支持通过 update_unarchived_conversation_by_id 改变消息结构，conversation_id={normalized_conversation_id}"
+                        ));
+                    }
+                    conversation
+                        .messages
+                        .iter()
+                        .zip(original_messages.iter())
+                        .filter_map(|(updated, original)| {
+                            (serde_json::to_value(updated).ok() != serde_json::to_value(original).ok())
+                                .then(|| updated.clone())
+                        })
+                        .collect::<Vec<_>>()
+                } else {
+                    Vec::new()
+                };
+                let (updated_meta_conversation, (), _) = state_update_conversation_metadata_cached_unlocked(
+                    state,
+                    normalized_conversation_id,
+                    |cached| {
+                        preserve_field_level_conversation_metadata(cached, &conversation);
+                        Ok(())
+                    },
+                )?;
+                if !is_v3_ready {
+                    state_schedule_conversation_persist(state, &conversation)?;
+                    return Ok(result);
+                }
+                if !changed_messages.is_empty() {
+                    let mut ready_meta = self.ensure_appendable_ready_message_store(state, normalized_conversation_id)?;
+                    ready_meta.apply_metadata_fields_from_conversation(&updated_meta_conversation);
+                    message_store::write_jsonl_snapshot_replaced_messages_shard(
+                        &store_paths,
+                        &ready_meta.to_persist_meta(),
+                        &changed_messages,
+                    )?;
+                    self.mark_conversation_metadata_cached_persisted(state, normalized_conversation_id)?;
+                }
+                Ok(result)
             },
-        )?;
-        if !is_v3_ready {
-            state_schedule_conversation_persist(state, &conversation)?;
-            return Ok(result);
-        }
-        if !changed_messages.is_empty() {
-            let mut ready_meta = self.ensure_appendable_ready_message_store(state, normalized_conversation_id)?;
-            ready_meta.apply_metadata_fields_from_conversation(&updated_meta_conversation);
-            message_store::write_jsonl_snapshot_replaced_messages_shard(
-                &store_paths,
-                &ready_meta.to_persist_meta(),
-                &changed_messages,
-            )?;
-            self.mark_conversation_metadata_cached_persisted(state, normalized_conversation_id)?;
-        }
-        Ok(result)
+        )
     }
 
     fn append_fast_request_turn_if_unarchived_exists(
@@ -752,28 +749,25 @@ impl ConversationServiceV2 {
         if normalized_conversation_id.is_empty() {
             return Ok(false);
         }
-        let mutation_gate = conversation_mutation_gate(&state.data_path, normalized_conversation_id)?;
-        let _guard = mutation_gate.lock().map_err(|err| {
-            named_lock_error(
-                "conversation_mutation_gate",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
-        let conversation_meta = match self.get_conversation_meta(state, normalized_conversation_id) {
-            Ok(conversation_meta) => conversation_meta,
-            Err(_) => return Ok(false),
-        };
-        if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
-            return Ok(false);
-        }
-        state_update_conversation_meta_cached_unlocked(state, normalized_conversation_id, |meta| {
-            meta.push_fast_request_turn(turn);
-            Ok(())
-        })?;
-        Ok(true)
+        with_conversation_mutation(
+            state,
+            normalized_conversation_id,
+            "append_fast_request_turn_if_unarchived_exists",
+            || {
+                let conversation_meta = match self.get_conversation_meta(state, normalized_conversation_id) {
+                    Ok(conversation_meta) => conversation_meta,
+                    Err(_) => return Ok(false),
+                };
+                if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
+                    return Ok(false);
+                }
+                state_update_conversation_meta_cached_unlocked(state, normalized_conversation_id, |meta| {
+                    meta.push_fast_request_turn(turn);
+                    Ok(())
+                })?;
+                Ok(true)
+            },
+        )
     }
 
     fn get_conversation_fast_request_turns(
@@ -810,45 +804,36 @@ impl ConversationServiceV2 {
         let mut removed = 0usize;
         let mut errors = Vec::new();
         for item in index.conversations {
-            let mutation_gate = match conversation_mutation_gate(&state.data_path, &item.id) {
-                Ok(gate) => gate,
-                Err(err) => {
-                    errors.push(format!("conversation_id={}，获取变更锁失败：{}", item.id, err));
-                    continue;
-                }
-            };
-            let _guard = match mutation_gate.lock() {
-                Ok(guard) => guard,
-                Err(err) => {
-                    errors.push(format!("conversation_id={}，获取变更锁失败：{}", item.id, err));
-                    continue;
-                }
-            };
-            let meta = match self.get_conversation_meta(state, &item.id) {
-                Ok(meta) => meta,
-                Err(err) => {
-                    errors.push(format!("conversation_id={}，读取元数据失败：{}", item.id, err));
-                    continue;
-                }
-            };
-            if !meta.is_remote_im_contact || meta.fast_request_turns.is_empty() {
-                continue;
-            }
-            let expired_count = meta.fast_request_turns.iter()
-                .filter(|turn| remote_im_maintenance_is_expired_at(&turn.created_at, cutoff))
-                .count();
-            if expired_count == 0 {
-                continue;
-            }
-            let result = state_update_conversation_meta_cached_unlocked(state, &item.id, |stored| {
-                stored.retain_fast_request_turns(|turn| {
-                    !remote_im_maintenance_is_expired_at(&turn.created_at, cutoff)
-                });
-                Ok(())
-            });
+            let result = with_conversation_mutation(
+                state,
+                &item.id,
+                "prune_expired_remote_im_fast_request_turns",
+                || {
+                    let meta = self.get_conversation_meta(state, &item.id).map_err(|err| {
+                        format!("conversation_id={}，读取元数据失败：{}", item.id, err)
+                    })?;
+                    if !meta.is_remote_im_contact || meta.fast_request_turns.is_empty() {
+                        return Ok(0usize);
+                    }
+                    let expired_count = meta.fast_request_turns.iter()
+                        .filter(|turn| remote_im_maintenance_is_expired_at(&turn.created_at, cutoff))
+                        .count();
+                    if expired_count == 0 {
+                        return Ok(0usize);
+                    }
+                    state_update_conversation_meta_cached_unlocked(state, &item.id, |stored| {
+                        stored.retain_fast_request_turns(|turn| {
+                            !remote_im_maintenance_is_expired_at(&turn.created_at, cutoff)
+                        });
+                        Ok(())
+                    })
+                    .map_err(|err| format!("conversation_id={}，清理杂务失败：{}", item.id, err))?;
+                    Ok(expired_count)
+                },
+            );
             match result {
-                Ok(_) => removed = removed.saturating_add(expired_count),
-                Err(err) => errors.push(format!("conversation_id={}，清理杂务失败：{}", item.id, err)),
+                Ok(expired_count) => removed = removed.saturating_add(expired_count),
+                Err(err) => errors.push(err),
             }
         }
         Ok((removed, errors))
@@ -895,22 +880,19 @@ impl ConversationServiceV2 {
             .get_conversation_meta(state, normalized_conversation_id)
             .is_ok()
         {
-            let mutation_gate = conversation_mutation_gate(&state.data_path, normalized_conversation_id)?;
-            let _guard = mutation_gate.lock().map_err(|err| {
-                named_lock_error(
-                    "conversation_mutation_gate",
-                    file!(),
-                    line!(),
-                    module_path!(),
-                    &err,
-                )
-            })?;
-            let (conversation, result, _) = state_update_conversation_metadata_cached_unlocked(
+            return with_conversation_mutation(
                 state,
                 normalized_conversation_id,
-                updater,
-            )?;
-            return Ok((conversation, result));
+                task_name,
+                || {
+                    let (conversation, result, _) = state_update_conversation_metadata_cached_unlocked(
+                        state,
+                        normalized_conversation_id,
+                        updater,
+                    )?;
+                    Ok((conversation, result))
+                },
+            );
         }
         let _guard = lock_conversation_with_metrics(state, task_name)?;
         let mut conversation = delegate_runtime_thread_conversation_get(state, normalized_conversation_id)?
