@@ -23,25 +23,28 @@ impl ConversationServiceV2 {
         if normalized_root_conversation_id.is_empty() {
             return Err("rootConversationId is required.".to_string());
         }
-        let _guard = lock_conversation_with_metrics(
-            state,
-            "conversation_v2_create_remote_im_contact_conversation",
-        )?;
-        let mut conversation = build_conversation_record(
-            "",
-            normalized_agent_id,
-            normalized_department_id,
-            normalized_title,
-            CONVERSATION_KIND_REMOTE_IM_CONTACT,
-            Some(normalized_root_conversation_id.to_string()),
-            None,
-        );
-        conversation.status = "inactive".to_string();
-        let summary_message =
-            build_initial_summary_context_message(Some(&conversation.current_todos), None);
-        conversation.last_user_at = Some(summary_message.created_at.clone());
-        conversation.updated_at = summary_message.created_at.clone();
-        conversation.messages.push(summary_message);
+        let conversation = {
+            let _guard = lock_conversation_with_metrics(
+                state,
+                "conversation_v2_create_remote_im_contact_conversation",
+            )?;
+            let mut conversation = build_conversation_record(
+                "",
+                normalized_agent_id,
+                normalized_department_id,
+                normalized_title,
+                CONVERSATION_KIND_REMOTE_IM_CONTACT,
+                Some(normalized_root_conversation_id.to_string()),
+                None,
+            );
+            conversation.status = "inactive".to_string();
+            let summary_message =
+                build_initial_summary_context_message(Some(&conversation.current_todos), None);
+            conversation.last_user_at = Some(summary_message.created_at.clone());
+            conversation.updated_at = summary_message.created_at.clone();
+            conversation.messages.push(summary_message);
+            conversation
+        };
         state_schedule_conversation_persist(state, &conversation)?;
         Ok(conversation)
     }

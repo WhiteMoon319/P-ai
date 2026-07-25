@@ -241,18 +241,23 @@ impl ConversationServiceV2 {
         if normalized_archive_id.is_empty() {
             return Err("archiveId is required".to_string());
         }
-        let guard = state.conversation_lock.lock().map_err(|err| {
-            named_lock_error("conversation_lock", file!(), line!(), module_path!(), &err)
+        let mutation_gate = conversation_mutation_gate(&state.data_path, normalized_archive_id)?;
+        let _guard = mutation_gate.lock().map_err(|err| {
+            named_lock_error(
+                "conversation_mutation_gate",
+                file!(),
+                line!(),
+                module_path!(),
+                &err,
+            )
         })?;
         let conversation_meta = self
             .get_conversation_meta(state, normalized_archive_id)
             .map_err(|_| "Archive not found".to_string())?;
         if conversation_meta.status.trim() != "archived" {
-            drop(guard);
             return Err("Archive not found".to_string());
         }
         state_schedule_conversation_delete(state, normalized_archive_id)?;
-        drop(guard);
         Ok(())
     }
 

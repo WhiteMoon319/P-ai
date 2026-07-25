@@ -367,14 +367,6 @@ fn instant_batch_archive_conversation_metadata_only(
     replacement_seed_api: &ApiConfig,
     source: &Conversation,
 ) -> Result<InstantArchiveConversationMutationResult, String> {
-    let _guard = state.conversation_lock.lock().map_err(|err| {
-        format!(
-            "Failed to lock state mutex at {}:{} {}: {err}",
-            file!(),
-            line!(),
-            module_path!()
-        )
-    })?;
     conversation_service_v2().archive_conversation(
         state,
         replacement_seed_api,
