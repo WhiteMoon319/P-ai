@@ -405,14 +405,7 @@ impl ConversationServiceV2 {
         if normalized_conversation_id.is_empty() {
             return Ok(None);
         }
-        let guard = state.conversation_lock.lock().map_err(|err| {
-            format!(
-                "Failed to lock state mutex at {}:{} {}: {err}",
-                file!(),
-                line!(),
-                module_path!()
-            )
-        })?;
+        let guard = lock_conversation_with_metrics(state, "read_unarchived_conversation_summary")?;
         let app_config = state_read_config_cached(state)?;
         let runtime_snapshot = load_runtime_organization_snapshot(state)?;
         let runtime_app_config = if runtime_snapshot.config.departments.is_empty() {

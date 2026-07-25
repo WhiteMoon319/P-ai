@@ -422,6 +422,13 @@ async fn run_genai_tool_loop(
         }
 
         let mut stop_after_remote_im_done_in_turn = false;
+        runtime_log_info(format!(
+            "[聊天] 阶段=tool_loop.round_model_request.start，模式=stream，session={}，轮次={}，模型={}，api_id={}",
+            chat_session_key,
+            round_index + 1,
+            model_name,
+            selected_api.id,
+        ));
         let round_output = async {
             let _provider_concurrency_guard = maybe_acquire_provider_concurrency_guard(
                 tool_abort_state,
@@ -553,7 +560,17 @@ async fn run_genai_tool_loop(
                 assistant_provider_meta: round_assistant_provider_meta,
             })
         }
-        .await?;
+        .await;
+        runtime_log_info(format!(
+            "[聊天] 阶段=tool_loop.round_model_request.finish，模式=stream，session={}，轮次={}，模型={}，api_id={}，状态={}，耗时={}ms",
+            chat_session_key,
+            round_index + 1,
+            model_name,
+            selected_api.id,
+            if round_output.is_ok() { "完成" } else { "失败" },
+            round_started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+        ));
+        let round_output = round_output?;
         let GenaiToolLoopRoundOutput {
             turn_text,
             turn_reasoning,
@@ -1055,6 +1072,13 @@ async fn run_genai_tool_loop_non_stream(
         }
 
         let mut stop_after_remote_im_done_in_turn = false;
+        runtime_log_info(format!(
+            "[聊天] 阶段=tool_loop.round_model_request.start，模式=non_stream，session={}，轮次={}，模型={}，api_id={}",
+            chat_session_key,
+            round_index + 1,
+            model_name,
+            selected_api.id,
+        ));
         let round = {
             let mut request = genai::chat::ChatRequest::from_messages(
                 sanitize_genai_messages_before_request(messages.clone(), "genai_tool_loop_non_stream"),
@@ -1087,8 +1111,18 @@ async fn run_genai_tool_loop_non_stream(
                 tool_abort_state,
                 usage_conversation_id,
             )
-            .await?
+            .await
         };
+        runtime_log_info(format!(
+            "[聊天] 阶段=tool_loop.round_model_request.finish，模式=non_stream，session={}，轮次={}，模型={}，api_id={}，状态={}，耗时={}ms",
+            chat_session_key,
+            round_index + 1,
+            model_name,
+            selected_api.id,
+            if round.is_ok() { "完成" } else { "失败" },
+            round_started_at.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
+        ));
+        let round = round?;
         let turn_text = round.turn_text;
         let turn_reasoning = round.turn_reasoning;
         let reasoning_delta_emitted = round.reasoning_delta_emitted;

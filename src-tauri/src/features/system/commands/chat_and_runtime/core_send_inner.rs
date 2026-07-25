@@ -546,6 +546,8 @@ async fn send_chat_message_inner(
                 | "pre_send_archive_checked"
                 | "prompt_ready"
                 | "model_reply_ready"
+                | "assistant_final_append.start"
+                | "assistant_final_append.finish"
                 | "assistant_message_persist_scheduled"
                 | "send_chat_message_inner.finish"
         ) || stage.starts_with("model_request.start[")
@@ -610,6 +612,10 @@ async fn send_chat_message_inner(
             "模型请求完成".to_string()
         } else if stage == "model_reply_ready" {
             "模型回复已就绪".to_string()
+        } else if stage == "assistant_final_append.start" {
+            "final assistant 写入开始".to_string()
+        } else if stage == "assistant_final_append.finish" {
+            "final assistant 写入完成".to_string()
         } else if stage == "assistant_message_persist_scheduled" {
             "助理消息持久化已调度".to_string()
         } else if stage == "send_chat_message_inner.finish" {
@@ -2733,7 +2739,8 @@ async fn send_chat_message_inner(
                         .unwrap_or_default(),
                     final_text.replace('\n', "\\n")
                 ));
-                conversation_service_v2().append_final_text_to_assistant_message(
+                log_run_stage("assistant_final_append.start");
+                let append_final_result = conversation_service_v2().append_final_text_to_assistant_message(
                     &state,
                     &AssistantMessageFinalTextAppendInput {
                         conversation_id: conversation_id.clone(),
@@ -2743,7 +2750,9 @@ async fn send_chat_message_inner(
                         provider_meta_patch: assistant_message.provider_meta.clone(),
                         meme_annotations: assistant_message.meme_annotations.clone(),
                     },
-                )?;
+                );
+                log_run_stage("assistant_final_append.finish");
+                append_final_result?;
                 // 未来的自己请停手：persisted_assistant_message 后面会用于远程应答镜像、
                 // 自动推送和返回结果的内部判断，属于后端链路。绝对不能读取
                 // frontend_display_only；真正发前端时由事件/command 出口再投影。
