@@ -321,6 +321,7 @@ impl ConversationServiceV2 {
             .map(|conversation_meta| conversation_meta.id.to_string())
             .or_else(|| target_conversation.as_ref().map(|conversation| conversation.id.clone()))
             .ok_or_else(|| "Requested conversation not found.".to_string())?;
+        drop(guard);
         clear_conversation_list_activity_mark(state, &conversation_id);
         if created_new_conversation {
             let conversation = target_conversation
@@ -343,7 +344,6 @@ impl ConversationServiceV2 {
             runtime.main_conversation_id = Some(SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string());
             state_write_runtime_state_cached(state, &runtime)?;
         }
-        drop(guard);
         Ok(conversation_id)
     }
 

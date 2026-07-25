@@ -129,6 +129,7 @@ impl ConversationServiceV2 {
             .as_ref()
             .map(|conversation_meta| conversation_meta.unread_count > 0)
             .unwrap_or(false);
+        drop(guard);
         clear_conversation_list_activity_mark(state, &target_conversation_id);
         if unread_changed && !created_new_conversation {
             state_update_conversation_metadata_cached(
@@ -178,8 +179,6 @@ impl ConversationServiceV2 {
         };
         let unarchived_conversations =
             self.collect_unarchived_conversation_summaries_cached(state, &app_config)?;
-        drop(guard);
-
         let mut materialized_snapshot = snapshot;
         materialize_chat_message_parts_from_media_refs(
             &mut materialized_snapshot.messages,

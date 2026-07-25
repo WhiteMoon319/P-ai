@@ -444,6 +444,7 @@ impl ConversationServiceV2 {
             &selected_messages,
         )?;
         let conversation_id = conversation.id.clone();
+        drop(guard);
         state_schedule_conversation_persist(state, &conversation)?;
         let overview_payload = UnarchivedConversationOverviewUpdatedPayload {
             preferred_conversation_id: Some(conversation_id.clone()),
@@ -452,7 +453,6 @@ impl ConversationServiceV2 {
                 &app_config,
             )?,
         };
-        drop(guard);
         Ok(BranchUnarchivedConversationMutationResult {
             conversation_id,
             title: branch_summary_title,

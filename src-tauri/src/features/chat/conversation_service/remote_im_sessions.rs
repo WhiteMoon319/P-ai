@@ -615,6 +615,7 @@ impl ConversationServiceV2 {
             }
         };
 
+        drop(guard);
         state_mutate_runtime_state_cached(state, |latest_runtime| {
             let Some(latest_contact) = latest_runtime
                 .remote_im_contacts
@@ -631,7 +632,6 @@ impl ConversationServiceV2 {
             Ok(())
         })?;
         state_schedule_conversation_delete(state, &conversation_meta.id)?;
-        drop(guard);
         Ok(true)
     }
 

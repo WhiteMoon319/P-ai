@@ -421,6 +421,7 @@ fn create_unarchived_conversation_shared(
         conversation.shell_autonomous_mode = shell_autonomous_mode;
     }
     let conversation_id = conversation.id.clone();
+    drop(guard);
     let persist_seq = state_schedule_conversation_persist(state, &conversation)?;
     runtime_log_info(format!(
         "[会话] 完成，任务=新建未归档会话，阶段=调度持久化，conversation_id={}，persist_seq={}，department_id={}，agent_id={}，preferred_api_config_id={}，message_count={}，duration_ms={}",
@@ -443,7 +444,6 @@ fn create_unarchived_conversation_shared(
         overview_payload.unarchived_conversations.len(),
         started_at.elapsed().as_millis()
     ));
-    drop(guard);
     Ok(CreateUnarchivedConversationMutationResult {
         conversation_id,
         overview_payload,

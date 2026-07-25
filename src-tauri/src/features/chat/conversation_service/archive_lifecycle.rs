@@ -420,6 +420,7 @@ impl ConversationServiceV2 {
             }
             _ => {}
         }
+        drop(guard);
         state_schedule_conversation_delete(state, &source.id)?;
         let system_notification_exists = self
             .get_conversation_meta(state, SYSTEM_NOTIFICATION_CONVERSATION_ID)
@@ -465,8 +466,6 @@ impl ConversationServiceV2 {
             state_schedule_conversation_persist(state, &replacement)?;
             replacement_id
         };
-        drop(guard);
-
         cleanup_pdf_session_memory_cache_for_conversation(&source.id);
         Ok(active_conversation_id)
     }
