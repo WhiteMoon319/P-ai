@@ -3,14 +3,25 @@ import type { AssistantStreamBlock, ChatMentionTarget, ChatMessage } from "../..
 import {
   assistantTextFromStreamBlocks,
   assistantContentBlocksFromMessage,
-  appendTextDeltaToStreamBlocks,
   normalizeAssistantStreamBlocks,
   normalizeChatActivityItems,
   streamBlocksToToolCalls,
 } from "../../../utils/chat-message-semantics";
-import { consumeClosedMarkdownBlocks } from "./use-chat-flow-text";
 import { readMessagePlainText, messageHasVisibleContent } from "./use-chat-flow-utils";
-import { messageWithStableRenderId, stableRenderIdFromMessage } from "../utils/stable-render-id";
+import { messageWithStableRenderId } from "../utils/stable-render-id";
+import {
+  assistantMessageHasCanonicalVisibleContent,
+  createChatMessageState,
+  reconcileCompletedAssistantMessage,
+  reduceChatMessageState,
+  type ChatMessageEvent,
+  type ChatMessageState,
+} from "./chat-message-state-machine";
+import {
+  tauriAssistantDeltaToMessageEvent,
+  tauriRoundStartedToMessageEvent,
+} from "./chat-message-tauri-adapter";
+import type { AssistantDeltaEvent, RoundStartedPayload } from "./use-chat-flow-events";
 
 export const DRAFT_ASSISTANT_ID_PREFIX = "__draft_assistant__:";
 export const DRAFT_USER_ID_PREFIX = "__draft_user__:";
@@ -61,6 +72,92 @@ type UseChatFlowDraftsOptions = {
 export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
   let pendingUserDraftId = "";
   const pendingUserDraftIdByGen = new Map<number, string>();
+  let messageState = createChatMessageState(
+    String(options.getConversationId ? options.getConversationId() : "").trim() || "__foreground__",
+    options.allMessages.value,
+  );
+
+  function machineConversationId(): string {
+    return String(options.getConversationId ? options.getConversationId() : "").trim() || "__foreground__";
+  }
+
+  function synchronizeMachineInput(): ChatMessageState {
+    const conversationId = machineConversationId();
+    if (messageState.conversationId !== conversationId) {
+      messageState = createChatMessageState(conversationId, options.allMessages.value);
+      return messageState;
+    }
+    if (messageState.messages !== options.allMessages.value) {
+      messageState = { ...messageState, messages: options.allMessages.value };
+    }
+    if (messageState.round.phase !== "idle") {
+      const activeMessage = messageState.messages.find((message) => message.id === messageState.round.assistantMessageId);
+      // An authoritative messageAppended may arrive before roundFinished and
+      // legitimately clear `_streaming`. Keep the projection round anchored
+      // by message identity until its terminal event is reduced; otherwise a
+      // stale terminal can bypass the shared reducer's identity guard.
+      if (!activeMessage || activeMessage.role !== "assistant") {
+        messageState = createChatMessageState(conversationId, options.allMessages.value);
+      }
+    }
+    return messageState;
+  }
+
+  function synchronizeDisplayRefs(messageId: string) {
+    const message = options.allMessages.value.find((item) => item.id === messageId);
+    if (!message) return;
+    const blocks = assistantContentBlocksFromMessage(message);
+    if (options.streamBlocks) options.streamBlocks.value = blocks;
+    options.latestAssistantText.value = assistantTextFromStreamBlocks(blocks) || readMessagePlainText(message);
+    const meta = (message.providerMeta || {}) as Record<string, unknown>;
+    options.toolStatusText.value = String(meta._toolStatusText || "");
+    const toolStatusState = String(meta._toolStatusState || "").trim();
+    options.toolStatusState.value = toolStatusState === "running" || toolStatusState === "done" || toolStatusState === "failed"
+      ? toolStatusState
+      : "";
+  }
+
+  function dispatchMessageEvent(event: ChatMessageEvent): ChatMessageState {
+    synchronizeMachineInput();
+    messageState = reduceChatMessageState(messageState, event);
+    options.allMessages.value = messageState.messages;
+    const messageId = messageState.round.assistantMessageId
+      || ("assistantMessageId" in event ? String(event.assistantMessageId || "").trim() : "")
+      || ("assistantMessage" in event ? String(event.assistantMessage?.id || "").trim() : "");
+    if (messageId) synchronizeDisplayRefs(messageId);
+    return messageState;
+  }
+
+  function ensureProjectionRound(
+    messageId: string,
+    statusText = "",
+    phase: "waiting" | "streaming" = "streaming",
+    identity?: Partial<RoundStartedPayload>,
+  ) {
+    const normalizedMessageId = String(messageId || "").trim();
+    if (!normalizedMessageId) return;
+    synchronizeMachineInput();
+    if (messageState.round.phase !== "idle" && messageState.round.assistantMessageId !== normalizedMessageId) {
+      dispatchMessageEvent({
+        type: "round_reset",
+        conversationId: machineConversationId(),
+        preserveVisibleContent: true,
+      });
+    }
+    if (messageState.round.phase === "idle") {
+      const existing = options.allMessages.value.find((message) => message.id === normalizedMessageId);
+      const event = tauriRoundStartedToMessageEvent({
+        ...identity,
+        startedAt: identity?.startedAt || existing?.createdAt || new Date().toISOString(),
+      }, machineConversationId(), {
+        assistantMessageId: normalizedMessageId,
+        speakerAgentId: resolveAssistantMessageSpeakerAgentId(existing),
+        statusText,
+        phase,
+      });
+      if (event) dispatchMessageEvent(event);
+    }
+  }
 
   function resolveAssistantMessageSpeakerAgentId(existingMessage?: ChatMessage | null): string {
     const existing = String(existingMessage?.speakerAgentId || "").trim();
@@ -175,42 +272,33 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
   function insertStreamingAssistantMessage(messageId: string, gen?: number, initialText = ""): string {
     const normalizedMessageId = String(messageId || "").trim();
     if (!normalizedMessageId) return "";
-    const startedAtMs = typeof gen === "number" ? options.getSendStartedAtMs(gen) || 0 : 0;
-    const elapsedMs = startedAtMs > 0 ? Math.max(0, Date.now() - startedAtMs) : -1;
-    const agentId = resolveAssistantMessageSpeakerAgentId();
-    const msg = messageWithStableRenderId({
-      id: normalizedMessageId,
-      role: "assistant",
-      createdAt: new Date().toISOString(),
-      speakerAgentId: agentId,
-      parts: [{ type: "text", text: "" }],
-      providerMeta: {
-        _streaming: true,
-        _streamSegments: [] as string[],
-        _streamTail: "",
-        _preStreamingStatusText: String(initialText || ""),
-        _toolStatusText: String(options.toolStatusText.value || ""),
-        _toolStatusState: "",
-        _frontendDispatchStartedAtMs: options.getFrontendDispatchStartedAtMs(),
-        _frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
+    ensureProjectionRound(normalizedMessageId, initialText, "streaming");
+    dispatchMessageEvent({
+      type: "assistant_stream_snapshot",
+      conversationId: machineConversationId(),
+      assistantMessageId: normalizedMessageId,
+      snapshot: {
+        persistedAssistantMessageId: normalizedMessageId,
+        startedAtMs: typeof gen === "number" ? options.getSendStartedAtMs(gen) || undefined : undefined,
+        speakerAgentId: resolveAssistantMessageSpeakerAgentId(
+          options.allMessages.value.find((message) => message.id === normalizedMessageId),
+        ),
+        streamBlocks: options.streamBlocks?.value || [],
+        toolStatusText: options.toolStatusText.value,
+        toolStatusState: options.toolStatusState.value,
+        preStreamingStatusText: String(initialText || ""),
+        frontendDispatchStartedAtMs: options.getFrontendDispatchStartedAtMs(),
+        frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
       },
-    } satisfies ChatMessage, normalizedMessageId);
-    const cur = options.allMessages.value;
-    const idx = cur.findIndex((m) => m.id === normalizedMessageId);
-    if (idx >= 0) {
-      const existing = cur[idx];
-      const existingMeta = (existing?.providerMeta || {}) as Record<string, unknown>;
-      if (String(existing?.role || "") === "assistant" && (existingMeta._streaming !== true || assistantMessageHasVisibleProgress(existing))) {
-        return normalizedMessageId;
-      }
-      options.allMessages.value = cur.map((m, i) => (i === idx ? msg : m));
-      return normalizedMessageId;
-    }
-    options.allMessages.value = [...cur, msg];
+    });
     return normalizedMessageId;
   }
 
-  function updateQueuedAssistantMessageStatus(messageId: string, statusText: string) {
+  function updateQueuedAssistantMessageStatus(
+    messageId: string,
+    statusText: string,
+    identity?: Partial<RoundStartedPayload>,
+  ) {
     if (!messageId) return;
     const existingMessage = options.allMessages.value.find((item) => item.id === messageId);
     if (String(existingMessage?.role || "") === "assistant") {
@@ -219,35 +307,22 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
         return;
       }
     }
-    const agentId = resolveAssistantMessageSpeakerAgentId(existingMessage);
-    const existingMeta = ((existingMessage?.providerMeta || {}) as Record<string, unknown>);
-    const stableRenderId = stableRenderIdFromMessage(existingMessage) || messageId;
-    const msg = messageWithStableRenderId({
-      id: messageId,
-      role: "assistant",
-      createdAt: String(existingMessage?.createdAt || new Date().toISOString()),
-      speakerAgentId: agentId,
-      parts: [{ type: "text", text: "" }],
-      providerMeta: {
-        ...existingMeta,
-        _streaming: true,
-        _streamSegments: [] as string[],
-        _streamTail: "",
-        _streamAnimatedDelta: "",
-        _preStreamingStatusText: String(statusText || ""),
-        _toolStatusText: String(options.toolStatusText.value || ""),
-        _toolStatusState: String(existingMeta._toolStatusState || ""),
-        _frontendDispatchStartedAtMs: options.getFrontendDispatchStartedAtMs(),
-        _frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
+    ensureProjectionRound(messageId, statusText, "waiting", identity);
+    dispatchMessageEvent({
+      type: "assistant_stream_snapshot",
+      conversationId: machineConversationId(),
+      assistantMessageId: messageId,
+      snapshot: {
+        persistedAssistantMessageId: messageId,
+        speakerAgentId: resolveAssistantMessageSpeakerAgentId(existingMessage),
+        streamBlocks: assistantContentBlocksFromMessage(existingMessage),
+        toolStatusText: options.toolStatusText.value,
+        toolStatusState: options.toolStatusState.value,
+        preStreamingStatusText: String(statusText || ""),
+        frontendDispatchStartedAtMs: options.getFrontendDispatchStartedAtMs(),
+        frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
       },
-    } satisfies ChatMessage, stableRenderId);
-    const cur = options.allMessages.value;
-    const idx = cur.findIndex((m) => m.id === messageId);
-    if (idx >= 0) {
-      options.allMessages.value = cur.map((m, i) => (i === idx ? msg : m));
-    } else {
-      options.allMessages.value = [...cur, msg];
-    }
+    });
   }
 
   function readMessageStreamSegments(messageId: string): string[] {
@@ -270,14 +345,19 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
   function syncStreamBlocksToMessage(messageId: string, rawBlocks?: AssistantStreamBlock[]) {
     if (!messageId) return;
     const blocks = normalizeAssistantStreamBlocks(rawBlocks);
-    options.allMessages.value = options.allMessages.value.map((message) => {
-      if (message.id !== messageId) return message;
-      const meta = ((message.providerMeta || {}) as Record<string, unknown>);
-      return {
-        ...message,
-        contentBlocks: blocks,
-        providerMeta: meta,
-      };
+    ensureProjectionRound(messageId, "", "streaming");
+    dispatchMessageEvent({
+      type: "assistant_stream_snapshot",
+      conversationId: machineConversationId(),
+      assistantMessageId: messageId,
+      snapshot: {
+        persistedAssistantMessageId: messageId,
+        streamBlocks: blocks,
+        toolStatusText: options.toolStatusText.value,
+        toolStatusState: options.toolStatusState.value,
+        frontendDispatchStartedAtMs: options.getFrontendDispatchStartedAtMs(),
+        frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
+      },
     });
   }
 
@@ -318,43 +398,48 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     const streamBlocks = rawBlocks === undefined
       ? getMessageStreamBlocks(messageId)
       : normalizeAssistantStreamBlocks(rawBlocks);
-    const stableRenderId = stableRenderIdFromMessage(existingMessage) || messageId;
-    const existingMeta = ((existingMessage?.providerMeta || {}) as Record<string, unknown>);
-    const msg = messageWithStableRenderId({
-      id: messageId,
-      role: "assistant",
-      createdAt: String(existingMessage?.createdAt || new Date().toISOString()),
-      speakerAgentId: agentId,
-      parts: existingMessage?.parts || [{ type: "text", text: "" }],
-      contentBlocks: streamBlocks,
-      toolCall: existingMessage?.toolCall,
-      activityItems: existingMessage?.activityItems,
-      providerMeta: {
-        ...existingMeta,
-        _streaming: true,
-        _streamSegments: nextStreamSegments,
-        _streamTail: nextStreamTail,
-        _streamAnimatedDelta: String(streamAnimatedDelta || ""),
-        _preStreamingStatusText: preStreamingStatusText,
-        _toolStatusText: String(options.toolStatusText.value || ""),
-        _toolStatusState: String(options.toolStatusState.value || ""),
-        _frontendDispatchStartedAtMs: options.getFrontendDispatchStartedAtMs(),
-        _frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
+    ensureProjectionRound(messageId, preStreamingStatusText, "streaming");
+    dispatchMessageEvent({
+      type: "assistant_stream_snapshot",
+      conversationId: machineConversationId(),
+      assistantMessageId: messageId,
+      snapshot: {
+        persistedAssistantMessageId: messageId,
+        assistantText: options.latestAssistantText.value,
+        speakerAgentId: agentId,
+        streamBlocks,
+        streamSegments: nextStreamSegments,
+        streamTail: nextStreamTail,
+        streamAnimatedDelta: String(streamAnimatedDelta || ""),
+        preStreamingStatusText,
+        toolStatusText: options.toolStatusText.value,
+        toolStatusState: options.toolStatusState.value,
+        frontendDispatchStartedAtMs: options.getFrontendDispatchStartedAtMs(),
+        frontendDispatchElapsedMs: options.currentFrontendDispatchElapsedMs(),
       },
-    } satisfies ChatMessage, stableRenderId);
-    const cur = options.allMessages.value;
-    const idx = cur.findIndex((m) => m.id === messageId);
-    options.allMessages.value = idx < 0 ? [...cur, msg] : cur.map((m, i) => (i === idx ? msg : m));
+    });
+    void updateOptions;
   }
 
   function removeMessage(messageId: string) {
     if (!messageId) return;
     const existing = options.allMessages.value.find((message) => message.id === messageId);
     // 有内容的消息禁止删除；撤回走后端截断/整表替换，不经过这里。
-    if (messageHasVisibleContent(existing)) {
-      if (String(existing?.role || "").trim() === "assistant") {
+    if (String(existing?.role || "").trim() === "assistant") {
+      if (assistantMessageHasCanonicalVisibleContent(existing)) {
         finalizeMessage(messageId);
+        return;
       }
+      synchronizeMachineInput();
+      if (messageState.round.phase !== "idle" && messageState.round.assistantMessageId === messageId) {
+        dispatchMessageEvent({
+          type: "round_failed",
+          conversationId: machineConversationId(),
+          assistantMessageId: messageId,
+        });
+        return;
+      }
+    } else if (messageHasVisibleContent(existing)) {
       return;
     }
     if (messageId === pendingUserDraftId) {
@@ -380,95 +465,58 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
         return message;
       }
       // 有内容的 draft 前缀消息：只收口流式态，不删。
-      const meta = { ...((message.providerMeta || {}) as Record<string, unknown>) };
-      delete meta._streaming;
-      delete meta._preStreamingStatusText;
-      delete meta._toolStatusText;
-      delete meta._toolStatusState;
-      return {
-        ...message,
-        providerMeta: meta,
-      };
+      return reconcileCompletedAssistantMessage(message) || message;
     });
   }
 
-  function finalizeMessage(messageId: string, finalMessage?: ChatMessage) {
+  function finalizeMessage(
+    messageId: string,
+    finalMessage?: ChatMessage,
+    identity?: { activationId?: string; requestId?: string },
+  ) {
     if (!messageId) return;
-    const current = options.allMessages.value;
-    const messageIdx = current.findIndex((m) => m.id === messageId);
-    if (messageIdx < 0) return;
-    const draft = current[messageIdx];
-    const stableRenderId = stableRenderIdFromMessage(draft) || messageId;
-    const draftMeta = ((draft.providerMeta || {}) as Record<string, unknown>);
-    const finalMeta = ((finalMessage?.providerMeta || {}) as Record<string, unknown>);
-    const speakerAgentId = resolveAssistantMessageSpeakerAgentId(draft);
-    const canonicalBlocks = getMessageStreamBlocks(messageId);
-    const hasCanonicalContent = canonicalBlocks.length > 0;
+    dispatchMessageEvent({
+      type: "round_finished",
+      conversationId: machineConversationId(),
+      assistantMessageId: messageId,
+      activationId: identity?.activationId,
+      requestId: identity?.requestId,
+      assistantMessage: finalMessage,
+    });
+  }
 
-    // 完成态只收口流式状态，不整条替换气泡身份。
-    // 保留原 messageId / _stableRenderId，避免 virtual list key 变化导致跳位。
-    const nextMeta: Record<string, unknown> = { ...finalMeta, ...draftMeta };
-    delete nextMeta._streaming;
-    delete nextMeta._preStreamingStatusText;
-    delete nextMeta._toolStatusText;
-    delete nextMeta._toolStatusState;
+  function failMessage(
+    messageId: string,
+    error?: unknown,
+    identity?: { activationId?: string; requestId?: string },
+  ) {
+    if (!messageId) return;
+    dispatchMessageEvent({
+      type: "round_failed",
+      conversationId: machineConversationId(),
+      assistantMessageId: messageId,
+      activationId: identity?.activationId,
+      requestId: identity?.requestId,
+      error,
+    });
+  }
 
-    const finalNonTextParts = Array.isArray(finalMessage?.parts)
-      ? finalMessage.parts.filter((part) => part?.type !== "text")
-      : [];
-    const draftTextParts = Array.isArray(draft.parts)
-      ? draft.parts.filter((part) => part?.type === "text")
-      : [];
-    const completedBase = !hasCanonicalContent && finalMessage
-      ? finalMessage
-      : draft;
-    const completedFields = hasCanonicalContent && finalMessage
-      ? { ...draft, ...finalMessage }
-      : completedBase;
-    const normalized = messageWithStableRenderId({
-      ...completedFields,
-      id: messageId,
-      role: completedBase.role,
-      createdAt: draft.createdAt || completedBase.createdAt,
-      speakerAgentId,
-      parts: hasCanonicalContent
-        ? [...draftTextParts, ...finalNonTextParts]
-        : completedBase.parts,
-      contentBlocks: hasCanonicalContent ? canonicalBlocks : completedBase.contentBlocks,
-      toolCall: hasCanonicalContent ? draft.toolCall : completedBase.toolCall,
-      activityItems: hasCanonicalContent ? draft.activityItems : completedBase.activityItems,
-      providerMeta: nextMeta,
-    } satisfies ChatMessage, stableRenderId);
-
-    const finalId = String(finalMessage?.id || "").trim();
-    const nextMessages = finalId && finalId !== messageId
-      ? current.filter((message, index) => index === messageIdx || message.id !== finalId)
-      : current;
-    const nextMessageIdx = nextMessages.findIndex((message) => message.id === messageId);
-    if (nextMessageIdx < 0) return;
-    options.allMessages.value = nextMessages.map((message, index) => (
-      index === nextMessageIdx ? normalized : message
-    ));
+  function applyAssistantEventToMessage(messageId: string, parsed: AssistantDeltaEvent) {
+    if (!messageId) return;
+    ensureProjectionRound(messageId, "", "streaming");
+    const event = tauriAssistantDeltaToMessageEvent(parsed, machineConversationId(), messageId);
+    if (event) dispatchMessageEvent(event);
   }
 
   function applyAssistantDeltaToMessage(messageId: string, delta: string) {
     if (!messageId || !delta) return;
-    options.latestAssistantText.value += delta;
-    const blocks = appendTextDeltaToStreamBlocks(getMessageStreamBlocks(messageId), delta);
-    syncStreamBlocksToMessage(messageId, blocks);
-    const currentSegments = readMessageStreamSegments(messageId);
-    const currentTail = readMessageStreamTail(messageId);
-    const parsed = consumeClosedMarkdownBlocks(`${currentTail}${delta}`);
-    const nextStreamSegments = parsed.chunks.length > 0
-      ? [...currentSegments, ...parsed.chunks]
-      : currentSegments;
-    updateMessageText(messageId, nextStreamSegments, parsed.tail, delta, blocks, {
-      preserveActivityProjection: true,
-    });
+    applyAssistantEventToMessage(messageId, { delta });
   }
 
   return {
     applyAssistantDeltaToMessage,
+    applyAssistantEventToMessage,
+    failMessage,
     finalizeMessage,
     getMessageStreamBlocks,
     getPendingUserDraftId,

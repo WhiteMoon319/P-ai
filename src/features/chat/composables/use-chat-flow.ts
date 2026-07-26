@@ -114,6 +114,8 @@ export function useChatFlow(options: UseChatFlowOptions) {
   });
   const {
     applyAssistantDeltaToMessage,
+    applyAssistantEventToMessage,
+    failMessage,
     finalizeMessage,
     getMessageStreamBlocks,
     getPendingUserDraftId,
@@ -184,6 +186,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     clearChatErrorText,
     updateMessageText,
     finalizeMessage,
+    failMessage,
     clearConversationStreamCache,
     clearFrontendDispatchTimer,
     setActiveActivationId: (value: string) => {
@@ -222,15 +225,14 @@ export function useChatFlow(options: UseChatFlowOptions) {
     clearConversationStreamCache,
     applyConversationStreamCacheSnapshotToDisplay,
     getConversationId: options.getConversationId,
+    getActiveActivationId: () => activeActivationId,
     setActiveActivationId: (value) => {
       activeActivationId = value;
     },
     handleRoundCompleted,
     handleRoundFailed,
-    getMessageStreamBlocks,
-    syncStreamBlocksToMessage,
-    updateMessageText,
     enqueueStreamDelta: roundFinalizers.enqueueStreamDelta,
+    applyAssistantEventToMessage,
   });
   const channelBinding = useChatFlowChannelBinding({
     debug: CHAT_STREAM_DEBUG,
@@ -324,6 +326,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
   const externalEvents = useChatFlowExternalEvents({
     debug: CHAT_STREAM_DEBUG,
     getCurrentConversationId: () => String(options.getConversationId ? options.getConversationId() : "").trim(),
+    getActiveActivationId: () => activeActivationId,
     setActiveActivationId: (value) => {
       activeActivationId = value;
     },
@@ -465,6 +468,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     insertStreamingAssistantMessage,
     updateMessageText,
     finalizeMessage,
+    failMessage,
     syncStreamBlocksToMessage,
     applyPendingTerminalEvent,
     promoteQueuedRoundToStreaming,
@@ -722,13 +726,19 @@ export function useChatFlow(options: UseChatFlowOptions) {
     result: {
       assistantText: string;
       assistantMessage?: ChatMessage;
+      activationId?: string;
+      requestId?: string;
     },
   ) {
     await roundEvents.handleRoundCompleted(gen, result);
   }
 
-  async function handleRoundFailed(gen: number, error: unknown) {
-    await roundEvents.handleRoundFailed(gen, error);
+  async function handleRoundFailed(
+    gen: number,
+    error: unknown,
+    identity?: { activationId?: string; requestId?: string },
+  ) {
+    await roundEvents.handleRoundFailed(gen, error, identity);
   }
 
   function applyPendingTerminalEvent(gen: number) {

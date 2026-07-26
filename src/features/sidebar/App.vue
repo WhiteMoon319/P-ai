@@ -263,7 +263,8 @@ import type { ApiConfigItem, ChatConversationOverviewItem, ChatIngressPart, Chat
 import { removeBinaryPlaceholders, messageText } from "../../utils/chat-message";
 import { formatConversationFallbackTitle } from "../chat/utils/conversation-title";
 import { formalizeMessages } from "../chat/composables/use-chat-flow-utils";
-import { messageWithStableRenderId, preserveStableRenderId, stableRenderIdFromMessage } from "../chat/utils/stable-render-id";
+import { assistantMessageHasCanonicalVisibleContent } from "../chat/composables/chat-message-state-machine";
+import { messageWithStableRenderId, stableRenderIdFromMessage } from "../chat/utils/stable-render-id";
 import { useI18n } from "vue-i18n";
 import SidebarLayout from "./layouts/SidebarLayout.vue";
 import ChatViewWrapper from "./views/ChatViewWrapper.vue";
@@ -286,6 +287,11 @@ import {
   recoverSidebarForegroundStreaming,
   type SidebarForegroundRuntimeSnapshot,
 } from "./composables/sidebar-foreground-recovery";
+import {
+  sidebarAssistantDeltaToMessageEvent,
+  sidebarRoundFinishedToMessageEvent,
+  sidebarRoundStartedToMessageEvent,
+} from "./composables/sidebar-chat-message-adapter";
 import type {
   BlockPageResult,
   CompactionPreviewResult,
@@ -412,15 +418,20 @@ const {
   streamRevision,
   toolStatusState,
   toolStatusText,
-  appendAssistantTextDelta,
-  applyAssistantToolEvent,
-  applyAssistantToolStatusEvent,
   applyRuntimeStreamCache,
   clearStreamingState,
+  dispatchMessageEvent,
   finishStreamingMessage,
+  messageEventTargetsActiveRound,
+  messageRoundIsSettling,
+  pendingAssistantMessageIdForEvent,
+  trackPendingAssistantRound,
+  forgetPendingAssistantRound,
+  mergeAuthoritativeMessages,
+  replaceHistory,
   startStreamingMessage,
   writeStreamCacheToMessage,
-} = useSidebarAssistantStream({ messages, activeAgentId });
+} = useSidebarAssistantStream({ messages, activeAgentId, conversationId: activeConversationId });
 const chatErrorText = ref("");
 const busy = ref(false);
 const sendSubmitting = ref(false);
@@ -1168,7 +1179,7 @@ async function applyOpenConversationResult(result: OpenConversationResult) {
   applyModelPayload(result.model || {});
   await refreshWorkspacePermission();
   await refreshWorkspaceList();
-  messages.value = normalizeSidebarMessages(Array.isArray(result.messages) ? result.messages : [], messages.value);
+  replaceHistory(Array.isArray(result.messages) ? result.messages : []);
   sidebarTodos.value = Array.isArray(result.currentTodos) ? result.currentTodos : [];
   const resultActiveGoal = result.activeGoal || null;
   activeConversationGoal.value = String(resultActiveGoal?.status || "").trim() === "active"
@@ -1257,11 +1268,8 @@ async function refreshSidebarMessageById(conversationId: string, messageId: stri
       },
     });
     if (!message?.id) return false;
-    const index = messages.value.findIndex((item) => String(item.id || "").trim() === normalizedMessageId);
-    const nextMessages = index >= 0
-      ? messages.value.map((item, itemIndex) => itemIndex === index ? message : item)
-      : [...messages.value, message];
-    messages.value = normalizeSidebarMessages(nextMessages);
+    if (String(activeConversationId.value || "").trim() !== normalizedConversationId) return false;
+    mergeAuthoritativeMessages([message], { forceReplace: true });
     return true;
   } catch (error) {
     console.warn("[Sidebar前台恢复] 单条 assistant 消息刷新失败", {
@@ -1533,9 +1541,7 @@ async function loadPrevBlock() {
   });
   selectedBlockId.value = result.selectedBlockId;
   hasPrevBlock.value = result.hasPrevBlock;
-  const existingIds = new Set(messages.value.map((item) => item.id));
-  const previous = (result.messages || []).filter((item) => !existingIds.has(item.id));
-  messages.value = normalizeSidebarMessages([...previous, ...messages.value], messages.value);
+  mergeAuthoritativeMessages(result.messages || [], { prependMessages: true });
 }
 
 async function checkCreateConversationWorkspaceGitRoot(path: string) {
@@ -2166,7 +2172,15 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
         name: String(attachment.fileName || "").trim() || path.split("/").pop() || "attachment",
       });
     }
-    const result = await transport.request<{ userMessageId?: string; assistantMessageId?: string; accepted?: boolean; duplicate?: boolean; ingress?: string }>("chat.send", {
+    const result = await transport.request<{
+      userMessageId?: string;
+      assistantMessageId?: string;
+      accepted?: boolean;
+      duplicate?: boolean;
+      ingress?: string;
+      traceId?: string;
+      eventId?: string;
+    }>("chat.send", {
       payload: {
         text,
         parts,
@@ -2186,9 +2200,17 @@ async function send(payload?: { extraTextBlocks?: string[] }) {
       replaceOptimisticOwnUserDraftById(optimisticDraftId, userMessageId);
     }
     if (assistantMessageId) {
-      streamingAssistantMessageId.value = assistantMessageId;
-      const queued = result?.accepted === false || String(result?.ingress || "").trim() === "queued";
-      if (!queued) {
+      const ingress = String(result?.ingress || "").trim();
+      const queued = ingress === "queued";
+      const duplicate = result?.accepted === false || result?.duplicate === true || ingress === "duplicate";
+      if (queued) {
+        trackPendingAssistantRound(assistantMessageId, {
+          activationId: result?.traceId,
+          requestId: result?.traceId,
+        });
+      } else if (!duplicate) {
+        // The direct ingress has no roundStarted notification guarantee, so
+        // seed the shared reducer immediately as before.
         writeStreamCacheToMessage({
           persistedAssistantMessageId: assistantMessageId,
           streamBlocks: [],
@@ -2577,23 +2599,6 @@ function workspaceNameFromPath(path: string): string {
   return parts[parts.length - 1] || normalized || "workspace";
 }
 
-function isLocalOwnUserMessage(message?: ChatMessage | null): boolean {
-  if (!message || message.role !== "user") return false;
-  const meta = (message.providerMeta || {}) as Record<string, unknown>;
-  const origin = meta.origin as Record<string, unknown> | undefined;
-  if (origin && origin.kind === "remote_im") return false;
-  const speakerAgentId = String(message.speakerAgentId || meta.speakerAgentId || meta.speaker_agent_id || "").trim();
-  return !speakerAgentId || speakerAgentId === "user-persona";
-}
-
-function isOptimisticOwnUserDraft(message?: ChatMessage | null): boolean {
-  if (!message || message.role !== "user") return false;
-  const messageId = String(message.id || "").trim();
-  if (messageId.startsWith(SIDEBAR_DRAFT_USER_ID_PREFIX)) return true;
-  const meta = (message.providerMeta || {}) as Record<string, unknown>;
-  return meta._optimistic === true && isLocalOwnUserMessage(message);
-}
-
 function insertOptimisticOwnUserDraft(input: {
   text: string;
   attachments: SidebarAttachmentPayload[];
@@ -2636,29 +2641,6 @@ function removeOptimisticOwnUserDraftById(draftId: string) {
   messages.value = messages.value.filter((message) => String(message.id || "").trim() !== normalizedDraftId);
 }
 
-function normalizeSidebarMessages(nextMessages: ChatMessage[], previousMessages: ChatMessage[] = messages.value): ChatMessage[] {
-  const previousById = new Map<string, ChatMessage>();
-  for (const message of Array.isArray(previousMessages) ? previousMessages : []) {
-    const messageId = String(message.id || "").trim();
-    if (!messageId || previousById.has(messageId)) continue;
-    previousById.set(messageId, message);
-  }
-
-  const normalized: ChatMessage[] = [];
-  const seenIds = new Set<string>();
-  for (const message of Array.isArray(nextMessages) ? nextMessages : []) {
-    const messageId = String(message.id || "").trim();
-    if (!messageId) {
-      normalized.push(message);
-      continue;
-    }
-    if (seenIds.has(messageId)) continue;
-    seenIds.add(messageId);
-    normalized.push(preserveStableRenderId(message, previousById.get(messageId)));
-  }
-  return normalized;
-}
-
 function replaceOptimisticOwnUserDraftById(draftId: string, committedId: string) {
   const normalizedDraftId = String(draftId || "").trim();
   const normalizedCommittedId = String(committedId || "").trim();
@@ -2677,33 +2659,11 @@ function replaceOptimisticOwnUserDraftById(draftId: string, committedId: string)
     },
     stableRenderIdFromMessage(draftMessage) || normalizedCommittedId,
   );
-  const nextMessages = [...messages.value];
-  nextMessages[draftIndex] = committedMessage;
-  messages.value = nextMessages.filter((item, index) => {
-    if (index === draftIndex) return true;
-    return String(item.id || "").trim() !== normalizedCommittedId;
+  mergeAuthoritativeMessages([committedMessage], {
+    optimisticUserDraftId: normalizedDraftId,
   });
-  return true;
-}
-
-function replaceOptimisticOwnUserDraftIfNeeded(message: ChatMessage): boolean {
-  if (!isLocalOwnUserMessage(message)) return false;
-  const draftIndex = messages.value.findIndex((item) => isOptimisticOwnUserDraft(item));
-  if (draftIndex < 0) return false;
-  const draftMessage = messages.value[draftIndex];
-  const committedId = String(message.id || "").trim();
-  const committedMessage = messageWithStableRenderId(
-    message,
-    stableRenderIdFromMessage(draftMessage) || committedId,
-  );
-  const nextMessages = [...messages.value];
-  nextMessages[draftIndex] = committedMessage;
-  messages.value = nextMessages.filter((item, index) => {
-    if (index === draftIndex) return true;
-    if (!committedId) return true;
-    return String(item.id || "").trim() !== committedId;
-  });
-  return true;
+  return messages.value.some((item) => String(item.id || "").trim() === normalizedCommittedId)
+    && !messages.value.some((item) => String(item.id || "").trim() === normalizedDraftId);
 }
 
 function appendMessages(next: unknown) {
@@ -2711,18 +2671,89 @@ function appendMessages(next: unknown) {
   if (payload.conversationId && payload.conversationId !== activeConversationId.value) return;
   const incoming = payload.messages || (payload.message ? [payload.message] : []);
   if (!incoming.length) return;
-  const appended: ChatMessage[] = [];
-  for (const item of incoming) {
-    if (replaceOptimisticOwnUserDraftIfNeeded(item)) continue;
-    const messageId = String(item.id || "").trim();
-    if (messageId && messages.value.some((message) => String(message.id || "").trim() === messageId)) {
-      continue;
+  mergeAuthoritativeMessages(incoming, {
+    replaceOptimisticUserDrafts: true,
+    summarySeedsFirst: true,
+  });
+}
+
+function sidebarRoundIdentityFromPayload(payload: unknown): {
+  assistantMessageId?: string;
+  activationId?: string;
+  requestId?: string;
+} {
+  const value = payload && typeof payload === "object"
+    ? payload as Record<string, unknown>
+    : {};
+  const assistantMessage = value.assistantMessage && typeof value.assistantMessage === "object"
+    ? value.assistantMessage as Record<string, unknown>
+    : undefined;
+  return {
+    assistantMessageId: String(value.assistantMessageId || assistantMessage?.id || "").trim() || undefined,
+    activationId: String(value.activationId || "").trim() || undefined,
+    requestId: String(value.requestId || "").trim() || undefined,
+  };
+}
+
+async function handleSidebarRoundFinishedNotification(payload: unknown) {
+  const payloadIdentity = sidebarRoundIdentityFromPayload(payload);
+  const pendingMessageId = pendingAssistantMessageIdForEvent(payloadIdentity);
+  const normalizedEvent = sidebarRoundFinishedToMessageEvent(
+    payload,
+    activeConversationId.value,
+    pendingMessageId || streamingAssistantMessageId.value,
+  );
+  if (!normalizedEvent || normalizedEvent.event.conversationId !== activeConversationId.value) return;
+  const conversationId = activeConversationId.value;
+  const finishedMessageId = String(normalizedEvent.event.assistantMessageId || "").trim();
+  const targetsActiveRound = messageEventTargetsActiveRound(normalizedEvent.event);
+  const pendingTerminalMessageId = pendingAssistantMessageIdForEvent({
+    assistantMessageId: finishedMessageId || pendingMessageId,
+    activationId: normalizedEvent.event.activationId,
+    requestId: normalizedEvent.event.requestId,
+  });
+  const targetsPendingRound = !!pendingTerminalMessageId && !targetsActiveRound;
+  if (targetsPendingRound && normalizedEvent.assistantMessage) {
+    mergeAuthoritativeMessages([normalizedEvent.assistantMessage], { forceReplace: true });
+  }
+  dispatchMessageEvent(normalizedEvent.event);
+  if (targetsPendingRound) {
+    forgetPendingAssistantRound({
+      assistantMessageId: pendingTerminalMessageId,
+      activationId: normalizedEvent.event.activationId,
+      requestId: normalizedEvent.event.requestId,
+    });
+    if (normalizedEvent.failed) {
+      setChatErrorText(normalizedEvent.error || t("status.requestUnknownReason"));
+      return;
     }
-    appended.push(item);
+    if (normalizedEvent.assistantMessage) {
+      clearChatError();
+      return;
+    }
+    const refreshed = await refreshSidebarMessageById(conversationId, finishedMessageId || pendingTerminalMessageId);
+    if (activeConversationId.value !== conversationId || streamingAssistantMessageId.value) return;
+    const visible = messages.value.some((message) => (
+      String(message.id || "").trim() === (finishedMessageId || pendingTerminalMessageId)
+      && assistantMessageHasCanonicalVisibleContent(message)
+    ));
+    if (!refreshed || !visible) await openConversation(conversationId);
+    return;
   }
-  if (appended.length > 0) {
-    messages.value = normalizeSidebarMessages([...messages.value, ...appended]);
+  if (!targetsActiveRound) return;
+  busy.value = false;
+  if (normalizedEvent.failed) {
+    setChatErrorText(normalizedEvent.error || t("status.requestUnknownReason"));
+    return;
   }
+  clearChatError();
+  const needsAuthoritativeRefresh = !!finishedMessageId
+    && messageRoundIsSettling(finishedMessageId, normalizedEvent.event);
+  if (!needsAuthoritativeRefresh) return;
+  await refreshSidebarMessageById(conversationId, finishedMessageId);
+  if (activeConversationId.value !== conversationId) return;
+  if (!messageRoundIsSettling(finishedMessageId, normalizedEvent.event)) return;
+  await openConversation(conversationId);
 }
 
 async function initializeAfterBridgeAuthenticated() {
@@ -2932,60 +2963,27 @@ function registerNotifications() {
   });
   transport.onNotification("chat.historyFlushed", appendMessages);
   transport.onNotification("chat.roundStarted", (payload) => {
-    const value = payload as { conversationId?: string; assistantMessageId?: string };
-    if (value.conversationId === activeConversationId.value) {
-      busy.value = true;
-      clearChatError();
-      startStreamingMessage(String(value.assistantMessageId || "").trim());
-    }
+    const event = sidebarRoundStartedToMessageEvent(payload, activeConversationId.value, {
+      startedAt: new Date().toISOString(),
+      speakerAgentId: activeAgentId.value,
+    });
+    if (!event || event.conversationId !== activeConversationId.value) return;
+    dispatchMessageEvent(event);
+    if (!messageEventTargetsActiveRound(event)) return;
+    busy.value = true;
+    clearChatError();
   });
   transport.onNotification("chat.assistantDelta", (payload) => {
-    const value = payload as SidebarAssistantDeltaPayload;
-    if (value.conversationId !== activeConversationId.value) return;
-    const delta = String(value.event?.delta || "");
-    const kind = String(value.event?.kind || "").trim();
-    const hasStreamCache = !!value.event?.streamCache;
-    if (value.event?.streamCache) {
-      applyRuntimeStreamCache({ streamCache: value.event.streamCache });
-    }
-    if (kind === "tool_status" && value.event) {
-      applyAssistantToolStatusEvent(value.event);
-      return;
-    }
-    if (kind === "assistant_tool_event" && value.event) {
-      if (hasStreamCache) return;
-      applyAssistantToolEvent(value.event.message || "");
-      return;
-    }
-    if (kind === "assistant_tool_result") return;
-    if (!delta) return;
-    if (kind === "activity_reasoning_delta") {
-      return;
-    } else if (!hasStreamCache) {
-      appendAssistantTextDelta(delta);
-    } else {
-      return;
-    }
+    const event = sidebarAssistantDeltaToMessageEvent(
+      payload as SidebarAssistantDeltaPayload,
+      activeConversationId.value,
+      streamingAssistantMessageId.value,
+    );
+    if (!event || event.conversationId !== activeConversationId.value) return;
+    dispatchMessageEvent(event);
   });
   transport.onNotification("chat.roundFinished", (payload) => {
-    const value = payload as {
-      conversationId?: string;
-      assistantMessage?: ChatMessage;
-      status?: string;
-      error?: unknown;
-    };
-    if (value.conversationId !== activeConversationId.value) return;
-    busy.value = false;
-    const finishedMessageId = String(value.assistantMessage?.id || streamingAssistantMessageId.value || "").trim();
-    // 先追加正式消息再清流式状态，避免 Vue 先删草稿再插正式消息导致一帧闪烁。
-    if (value.assistantMessage) appendMessages({ conversationId: value.conversationId, message: value.assistantMessage });
-    finishStreamingMessage(finishedMessageId);
-    clearStreamingState();
-    if (String(value.status || "").trim() === "failed") {
-      setChatErrorText(value.error || t("status.requestUnknownReason"));
-      return;
-    }
-    clearChatError();
+    void handleSidebarRoundFinishedNotification(payload);
   });
 }
 

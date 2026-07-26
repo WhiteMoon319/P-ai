@@ -49,11 +49,12 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
         const assistantMessage = payloadObject?.assistantMessage || null;
         const targetFlows = flowsForConversation(payloadConversationId);
         if (targetFlows.length === 0 && payloadConversationId && payloadConversationId !== currentConversationId) {
-          const assistantMessageId = String(assistantMessage?.id || "").trim();
           const cachedMessages = bindings.formalizeConversationMessages(bindings.conversationMessageCache.value[payloadConversationId] || []);
-          const messageAlreadyCached = !!assistantMessageId && cachedMessages.some((message: any) => String(message?.id || "").trim() === assistantMessageId);
-          if (assistantMessage && assistantMessageId && !messageAlreadyCached) {
-            bindings.cacheConversationMessages(payloadConversationId, [...cachedMessages, assistantMessage]);
+          if (assistantMessage && String(assistantMessage?.id || "").trim()) {
+            bindings.cacheConversationMessages(
+              payloadConversationId,
+              bindings.mergeMessagesIntoTimeline(cachedMessages, [assistantMessage]),
+            );
           }
           return;
         }

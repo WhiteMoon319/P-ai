@@ -3,7 +3,11 @@ import {
   preserveStableRenderId,
   providerMetaWithoutStableRenderId,
 } from "../utils/stable-render-id";
-import { reconcileAuthoritativeConversationMessage } from "./chat-message-reconciliation";
+import {
+  mergeAuthoritativeConversationMessages,
+  replaceConversationHistory as replaceSharedConversationHistory,
+  type AuthoritativeMessageMergeOptions,
+} from "./chat-message-state-machine";
 
 type ConversationMessageUtilsOptions = {
   draftAssistantIdPrefix: string;
@@ -24,13 +28,6 @@ const TRANSIENT_PROVIDER_META_KEYS = [
 export function useChatConversationMessageUtils(options: ConversationMessageUtilsOptions) {
   function isAssistantDraftMessage(message?: any): boolean {
     return String(message?.id || "").trim().startsWith(options.draftAssistantIdPrefix);
-  }
-
-  function messageCreatedAtMs(message?: any): number | null {
-    const raw = String(message?.createdAt || "").trim();
-    if (!raw) return null;
-    const ms = Date.parse(raw);
-    return Number.isFinite(ms) ? ms : null;
   }
 
   function stripTransientProviderMeta(message: any): any {
@@ -58,61 +55,33 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
       .map((message: any) => stripTransientProviderMeta(messageWithoutStableRenderId(message)));
   }
 
-  function insertMessageIntoTimeline(messages: any[], incoming: any): any[] {
-    const incomingAtMs = messageCreatedAtMs(incoming);
-    if (incomingAtMs === null) {
-      return [...messages, incoming];
-    }
-    const insertIdx = messages.findIndex((message) => {
-      const existingAtMs = messageCreatedAtMs(message);
-      return existingAtMs !== null && existingAtMs > incomingAtMs;
-    });
-    if (insertIdx < 0) {
-      return [...messages, incoming];
-    }
-    return [
-      ...messages.slice(0, insertIdx),
-      incoming,
-      ...messages.slice(insertIdx),
-    ];
-  }
-
-  function mergeMessagesIntoTimeline(messages: any[], incoming: any[]): any[] {
+  function mergeMessagesIntoTimeline(
+    messages: any[],
+    incoming: any[],
+    mergeOptions?: AuthoritativeMessageMergeOptions,
+  ): any[] {
     if (!Array.isArray(incoming) || incoming.length <= 0) return messages;
-    let nextMessages = Array.isArray(messages) ? [...messages] : [];
-    for (const rawIncoming of incoming) {
-      const incomingMessage = stripTransientProviderMeta(messageWithoutStableRenderId(rawIncoming));
-      const incomingId = String(incomingMessage?.id || "").trim();
-      if (!incomingId) {
-        nextMessages = insertMessageIntoTimeline(nextMessages, incomingMessage);
-        continue;
-      }
-      const existingIdx = nextMessages.findIndex((message) =>
-        String(message?.id || "").trim() === incomingId
-      );
-      if (existingIdx >= 0) {
-        let replaced = false;
-        nextMessages = nextMessages.flatMap((message) => {
-          if (String(message?.id || "").trim() !== incomingId) {
-            return [message];
-          }
-          if (replaced) {
-            return [];
-          }
-          replaced = true;
-          // 流式投影允许正式消息收口；已经冻结的正式正文只接收后端权威用量元数据。
-          // 典型场景：stop 后 partial 落盘变长/变空，前台不应 1 秒后突然改画面。
-          return [reconcileAuthoritativeConversationMessage(message, incomingMessage)];
-        });
-        continue;
-      }
-      nextMessages = insertMessageIntoTimeline(nextMessages, incomingMessage);
-    }
+    const normalizedIncoming = incoming.map((message) => (
+      stripTransientProviderMeta(messageWithoutStableRenderId(message))
+    ));
+    const nextMessages = mergeAuthoritativeConversationMessages(
+      Array.isArray(messages) ? messages : [],
+      normalizedIncoming,
+      mergeOptions,
+    );
     return reuseStableMessageReferences(nextMessages, messages);
   }
 
   function insertMessagesBeforeAssistantDraft(messages: any[], incoming: any[]): any[] {
     return mergeMessagesIntoTimeline(messages, incoming);
+  }
+
+  function replaceConversationHistory(messages: any[], incoming: any[]): any[] {
+    const nextMessages = replaceSharedConversationHistory(
+      Array.isArray(messages) ? messages : [],
+      options.ensureConversationMessageIds(Array.isArray(incoming) ? incoming : []),
+    );
+    return reuseStableMessageReferences(nextMessages, messages);
   }
 
   function areMessagesEquivalent(left: any[], right: any[]): boolean {
@@ -177,18 +146,7 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
     if (!targetMessageId || !Array.isArray(messages) || messages.length <= 0) {
       return messages;
     }
-    let changed = false;
-    const nextMessages = messages.map((message) => {
-      if (String(message?.id || "").trim() !== targetMessageId) {
-        return message;
-      }
-      // 流式投影允许正式消息收口；已经冻结的正式正文只接收后端权威用量元数据。
-      // 包含：空消息抹掉、以及 stop 后 partial 变长导致画面突增。
-      const reconciledMessage = reconcileAuthoritativeConversationMessage(message, nextMessage);
-      if (reconciledMessage !== message) changed = true;
-      return reconciledMessage;
-    });
-    return changed ? reuseStableMessageReferences(nextMessages, messages) : messages;
+    return mergeMessagesIntoTimeline(messages, [nextMessage]);
   }
 
   return {
@@ -200,6 +158,7 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
     mergeMessagesIntoTimeline,
     messageContentSignature,
     replaceConversationMessage,
+    replaceConversationHistory,
     reuseStableMessageReferences,
   };
 }

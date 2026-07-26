@@ -26,6 +26,7 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     mergeMessagesIntoTimeline,
     messageContentSignature,
     replaceConversationMessage,
+    replaceConversationHistory,
     reuseStableMessageReferences,
   } = useChatConversationMessageUtils({
     draftAssistantIdPrefix: bindings.DRAFT_ASSISTANT_ID_PREFIX,
@@ -289,12 +290,9 @@ export function useChatConversationSync(bindings: Record<string, any>) {
       }
       const previousMessages = Array.isArray(bindings.allMessages.value) ? bindings.allMessages.value : [];
       const incomingMessages = freezeConversationMessages(Array.isArray(result?.messages) ? result.messages : []);
-      const existingIds = new Set(previousMessages.map((item: any) => String(item?.id || "").trim()).filter(Boolean));
-      const uniqueIncoming = incomingMessages.filter((item: any) => {
-        const messageId = String(item?.id || "").trim();
-        return !!messageId && !existingIds.has(messageId);
+      const nextMessages = mergeMessagesIntoTimeline(previousMessages, incomingMessages, {
+        prependMessages: true,
       });
-      const nextMessages = reuseStableMessageReferences([...uniqueIncoming, ...previousMessages], previousMessages);
       bindings.allMessages.value = nextMessages;
       cacheConversationMessages(conversationId, nextMessages);
       bindings.hasMoreBackendHistory.value = !!result?.hasMore;
@@ -427,7 +425,7 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     rawNextMessages = overlay.messages;
     const mergedMessages = preserveExistingHistory
       ? mergeMessagesIntoTimeline(formalizeConversationMessages(bindings.allMessages.value), rawNextMessages)
-      : rawNextMessages;
+      : replaceConversationHistory(bindings.allMessages.value, rawNextMessages);
     const nextMessages = reuseStableMessageReferences(mergedMessages, bindings.allMessages.value);
     bindings.currentChatConversationId.value = nextConversationId;
     bindings.currentChatPreferredApiConfigId.value = String(snapshot.preferredApiConfigId || "").trim();

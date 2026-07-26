@@ -8,6 +8,7 @@ function createRuntime() {
   const runtime = useSidebarAssistantStream({
     messages,
     activeAgentId: ref("agent-1"),
+    conversationId: ref("conversation-1"),
   });
   return { messages, runtime };
 }
@@ -65,6 +66,64 @@ describe("useSidebarAssistantStream", () => {
 
     expect(runtime.streamActivationId.value).toBe("activation-1");
     expect(runtime.streamRequestId.value).toBe("request-1");
+  });
+
+  it("tracks a queued assistant id until a terminal event arrives before roundStarted", () => {
+    const { runtime } = createRuntime();
+    runtime.trackPendingAssistantRound("assistant-queued", { requestId: "request-queued" });
+
+    expect(runtime.pendingAssistantMessageIdForEvent({ requestId: "request-queued" })).toBe("assistant-queued");
+    expect(runtime.pendingAssistantMessageIdForEvent({ requestId: "request-other" })).toBe("");
+    expect(runtime.forgetPendingAssistantRound({ requestId: "request-queued" })).toBe("assistant-queued");
+    expect(runtime.pendingAssistantMessageIdForEvent({ requestId: "request-queued" })).toBe("");
+  });
+
+  it("forgets queued tracking after roundStarted promotes the same assistant id", () => {
+    const { runtime } = createRuntime();
+    runtime.trackPendingAssistantRound("assistant-queued", { requestId: "request-queued" });
+
+    runtime.dispatchMessageEvent({
+      type: "round_started",
+      conversationId: "conversation-1",
+      assistantMessageId: "assistant-queued",
+      requestId: "request-queued",
+    });
+
+    expect(runtime.streamingAssistantMessageId.value).toBe("assistant-queued");
+    expect(runtime.pendingAssistantMessageIdForEvent({ requestId: "request-queued" })).toBe("");
+  });
+
+  it("reports stale terminal events as not targeting the active round", () => {
+    const { messages, runtime } = createRuntime();
+    runtime.startStreamingMessage("assistant-1", { activationId: "activation-new" });
+
+    const staleEvent = {
+      type: "round_finished" as const,
+      conversationId: "conversation-1",
+      activationId: "activation-old",
+    };
+    expect(runtime.messageEventTargetsActiveRound(staleEvent)).toBe(false);
+    runtime.dispatchMessageEvent(staleEvent);
+
+    expect(runtime.streamingAssistantMessageId.value).toBe("assistant-1");
+    expect(messages.value[0].providerMeta?._streaming).toBe(true);
+  });
+
+  it("stops treating an old settling round as recoverable after a new round starts", () => {
+    const { runtime } = createRuntime();
+    runtime.startStreamingMessage("assistant-old", { activationId: "activation-old" });
+    runtime.finishStreamingMessage("assistant-old");
+
+    expect(runtime.messageRoundIsSettling("assistant-old", {
+      activationId: "activation-old",
+    })).toBe(true);
+
+    runtime.startStreamingMessage("assistant-new", { activationId: "activation-new" });
+
+    expect(runtime.messageRoundIsSettling("assistant-old", {
+      activationId: "activation-old",
+    })).toBe(false);
+    expect(runtime.streamingAssistantMessageId.value).toBe("assistant-new");
   });
 
   it("finishes by clearing streaming metadata while preserving blocks", () => {

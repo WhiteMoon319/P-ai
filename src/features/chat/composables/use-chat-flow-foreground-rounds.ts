@@ -154,6 +154,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
         gen,
       }),
       bindings.t("chat.statusWaitingReply"),
+      payload,
     );
     bindings.setFrontendRoundPhase("waiting");
     return gen;

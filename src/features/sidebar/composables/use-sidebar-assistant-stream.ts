@@ -1,11 +1,18 @@
 import { computed, ref, type Ref } from "vue";
 import type { ChatMessage } from "../../../types/app";
 import {
-  applyAssistantToolEventToStreamBlocks,
-  appendTextDeltaToStreamBlocks,
   assistantTextFromStreamBlocks,
   normalizeAssistantStreamBlocks,
 } from "../../../utils/chat-message-semantics";
+import {
+  chatMessageRoundMatchesIdentity,
+  createChatMessageState,
+  reduceChatMessageState,
+  type AuthoritativeMessageMergeOptions,
+  type ChatAssistantDelta,
+  type ChatMessageEvent,
+  type ChatMessageState,
+} from "../../chat/composables/chat-message-state-machine";
 import type {
   SidebarAssistantDeltaPayload,
   SidebarConversationRuntimePayload,
@@ -15,10 +22,27 @@ import type {
 type UseSidebarAssistantStreamOptions = {
   messages: Ref<ChatMessage[]>;
   activeAgentId: Ref<string>;
+  conversationId: Ref<string>;
 };
 
+type PendingAssistantRound = {
+  assistantMessageId: string;
+  activationId: string;
+  requestId: string;
+};
+
+type RoundIdentityInput = {
+  assistantMessageId?: string;
+  activationId?: string;
+  requestId?: string;
+};
+
+function normalized(value: unknown): string {
+  return String(value || "").trim();
+}
+
 function normalizeToolStatusState(value: unknown): "running" | "done" | "failed" | "" {
-  const status = String(value || "").trim();
+  const status = normalized(value);
   return status === "running" || status === "done" || status === "failed" ? status : "";
 }
 
@@ -29,116 +53,258 @@ export function useSidebarAssistantStream(options: UseSidebarAssistantStreamOpti
   const streamActivationId = ref("");
   const streamRequestId = ref("");
   const streamRevision = ref("");
+  const pendingAssistantRounds = new Map<string, PendingAssistantRound>();
+  let messageState = createChatMessageState(options.conversationId.value, options.messages.value);
 
   const activeMessage = computed(() => options.messages.value.find((message) =>
-    String(message.id || "").trim() === streamingAssistantMessageId.value
+    normalized(message.id) === streamingAssistantMessageId.value
   ));
   const activeMessageBlocks = computed(() => normalizeAssistantStreamBlocks(activeMessage.value?.contentBlocks));
   const activeMessageText = computed(() => assistantTextFromStreamBlocks(activeMessageBlocks.value));
 
-  function clearStreamingState() {
-    toolStatusText.value = "";
-    toolStatusState.value = "";
-    streamingAssistantMessageId.value = "";
-    streamActivationId.value = "";
-    streamRequestId.value = "";
-    streamRevision.value = "";
+  function synchronizeMachineInput(): ChatMessageState {
+    const conversationId = normalized(options.conversationId.value);
+    if (messageState.conversationId !== conversationId) {
+      messageState = createChatMessageState(conversationId, options.messages.value);
+      pendingAssistantRounds.clear();
+      return messageState;
+    }
+    if (messageState.messages !== options.messages.value) {
+      messageState = { ...messageState, messages: options.messages.value };
+    }
+    return messageState;
   }
 
-  function writeStreamCacheToMessage(cache: SidebarStreamCachePayload) {
-    const messageId = String(cache.persistedAssistantMessageId || streamingAssistantMessageId.value || "").trim();
-    if (!messageId) return;
-    streamingAssistantMessageId.value = messageId;
-    if (String(cache.activationId || "").trim()) {
-      streamActivationId.value = String(cache.activationId || "").trim();
-    }
-    if (String(cache.requestId || "").trim()) {
-      streamRequestId.value = String(cache.requestId || "").trim();
-    }
-    if (String(cache.updatedAt || "").trim()) {
-      streamRevision.value = String(cache.updatedAt || "").trim();
-    }
-    const blocks = normalizeAssistantStreamBlocks(cache.streamBlocks);
-    const index = options.messages.value.findIndex((message) => String(message.id || "").trim() === messageId);
-    const previous = index >= 0 ? options.messages.value[index] : undefined;
-    const previousMeta = (previous?.providerMeta || {}) as Record<string, unknown>;
-    const message: ChatMessage = {
-      ...(previous || {
-        id: messageId,
-        role: "assistant",
-        createdAt: new Date().toISOString(),
-        speakerAgentId: options.activeAgentId.value || undefined,
-        parts: [{ type: "text", text: "" }],
-      }),
-      contentBlocks: blocks,
-      providerMeta: {
-        ...previousMeta,
-        _streaming: true,
-        _toolStatusText: String(cache.toolStatusText || ""),
-        _toolStatusState: normalizeToolStatusState(cache.toolStatusState),
-      },
-    };
-    options.messages.value = index >= 0
-      ? options.messages.value.map((item, itemIndex) => itemIndex === index ? message : item)
-      : [...options.messages.value, message];
+  function pendingRoundMatches(
+    pending: PendingAssistantRound,
+    input: RoundIdentityInput,
+  ): boolean {
+    const incomingMessageId = normalized(input.assistantMessageId);
+    if (incomingMessageId && incomingMessageId !== pending.assistantMessageId) return false;
+    const incomingIds = [normalized(input.activationId), normalized(input.requestId)].filter(Boolean);
+    if (incomingIds.length === 0) return !!incomingMessageId;
+    const pendingIds = [pending.activationId, pending.requestId].filter(Boolean);
+    if (pendingIds.length === 0) return !!incomingMessageId && incomingMessageId === pending.assistantMessageId;
+    return incomingIds.some((value) => pendingIds.includes(value));
   }
 
-  function startStreamingMessage(messageId: string) {
-    clearStreamingState();
-    streamingAssistantMessageId.value = String(messageId || "").trim();
-    writeStreamCacheToMessage({
-      persistedAssistantMessageId: streamingAssistantMessageId.value,
-      streamBlocks: [],
-      toolStatusText: "",
-      toolStatusState: "",
+  function findPendingAssistantRound(input: RoundIdentityInput): PendingAssistantRound | undefined {
+    synchronizeMachineInput();
+    return [...pendingAssistantRounds.values()].find((pending) => pendingRoundMatches(pending, input));
+  }
+
+  function trackPendingAssistantRound(
+    assistantMessageId: string,
+    input?: { activationId?: string; requestId?: string },
+  ) {
+    synchronizeMachineInput();
+    const normalizedMessageId = normalized(assistantMessageId);
+    if (!normalizedMessageId) return;
+    pendingAssistantRounds.set(normalizedMessageId, {
+      assistantMessageId: normalizedMessageId,
+      activationId: normalized(input?.activationId),
+      requestId: normalized(input?.requestId),
     });
   }
 
-  function finishStreamingMessage(messageId: string) {
-    const normalizedId = String(messageId || "").trim();
-    if (!normalizedId) return;
-    options.messages.value = options.messages.value.map((message) => {
-      if (String(message.id || "").trim() !== normalizedId) return message;
-      const meta = { ...((message.providerMeta || {}) as Record<string, unknown>) };
-      delete meta._streaming;
-      delete meta._preStreamingStatusText;
-      delete meta._toolStatusText;
-      delete meta._toolStatusState;
-      return { ...message, providerMeta: meta };
+  function pendingAssistantMessageIdForEvent(input: RoundIdentityInput): string {
+    return findPendingAssistantRound(input)?.assistantMessageId || "";
+  }
+
+  function forgetPendingAssistantRound(input: RoundIdentityInput): string {
+    const pending = findPendingAssistantRound(input);
+    if (!pending) return "";
+    pendingAssistantRounds.delete(pending.assistantMessageId);
+    return pending.assistantMessageId;
+  }
+
+  function synchronizeRefsFromMachine() {
+    const round = messageState.round;
+    if (round.phase === "idle") {
+      toolStatusText.value = "";
+      toolStatusState.value = "";
+      streamingAssistantMessageId.value = "";
+      streamActivationId.value = "";
+      streamRequestId.value = "";
+      streamRevision.value = "";
+      return;
+    }
+    streamingAssistantMessageId.value = round.assistantMessageId;
+    streamActivationId.value = round.activationId;
+    streamRequestId.value = round.requestId;
+    streamRevision.value = round.revision;
+    const message = messageState.messages.find((item) => normalized(item.id) === round.assistantMessageId);
+    const meta = (message?.providerMeta || {}) as Record<string, unknown>;
+    toolStatusText.value = String(meta._toolStatusText || "");
+    toolStatusState.value = normalizeToolStatusState(meta._toolStatusState);
+  }
+
+  function dispatchMessageEvent(event: ChatMessageEvent): ChatMessageState {
+    synchronizeMachineInput();
+    messageState = reduceChatMessageState(messageState, event);
+    options.messages.value = messageState.messages;
+    if (event.type === "round_started" && chatMessageRoundMatchesIdentity(messageState.round, event)) {
+      pendingAssistantRounds.delete(normalized(event.assistantMessageId));
+    }
+    synchronizeRefsFromMachine();
+    return messageState;
+  }
+
+  function messageEventTargetsActiveRound(
+    event: Extract<ChatMessageEvent, { type: "round_started" | "round_finished" | "round_failed" }>,
+  ): boolean {
+    synchronizeMachineInput();
+    return chatMessageRoundMatchesIdentity(messageState.round, event);
+  }
+
+  function messageRoundIsSettling(
+    messageId: string,
+    identity?: { activationId?: string; requestId?: string },
+  ): boolean {
+    synchronizeMachineInput();
+    const normalizedMessageId = normalized(messageId);
+    return messageState.round.phase === "settling"
+      && messageState.round.assistantMessageId === normalizedMessageId
+      && chatMessageRoundMatchesIdentity(messageState.round, {
+        assistantMessageId: normalizedMessageId,
+        activationId: identity?.activationId,
+        requestId: identity?.requestId,
+      });
+  }
+
+  function clearStreamingState() {
+    synchronizeMachineInput();
+    messageState = createChatMessageState(options.conversationId.value, options.messages.value);
+    synchronizeRefsFromMachine();
+  }
+
+  function replaceHistory(messages: ChatMessage[]) {
+    const conversationId = normalized(options.conversationId.value);
+    if (!conversationId) {
+      options.messages.value = Array.isArray(messages) ? messages : [];
+      clearStreamingState();
+      return;
+    }
+    dispatchMessageEvent({
+      type: "history_replaced",
+      conversationId,
+      messages: Array.isArray(messages) ? messages : [],
+    });
+  }
+
+  function mergeAuthoritativeMessages(
+    messages: ChatMessage[],
+    mergeOptions?: AuthoritativeMessageMergeOptions,
+  ) {
+    const conversationId = normalized(options.conversationId.value);
+    if (!conversationId || !Array.isArray(messages) || messages.length === 0) return;
+    dispatchMessageEvent({
+      type: "authoritative_messages_merged",
+      conversationId,
+      messages,
+      options: mergeOptions,
+    });
+  }
+
+  function startStreamingMessage(
+    messageId: string,
+    input?: {
+      activationId?: string;
+      requestId?: string;
+      revision?: string;
+      startedAt?: string;
+      startedAtMs?: number;
+      speakerAgentId?: string;
+      statusText?: string;
+      phase?: "waiting" | "streaming";
+    },
+  ) {
+    const assistantMessageId = normalized(messageId);
+    const conversationId = normalized(options.conversationId.value);
+    if (!assistantMessageId || !conversationId) return;
+    dispatchMessageEvent({
+      type: "round_started",
+      conversationId,
+      assistantMessageId,
+      activationId: normalized(input?.activationId) || undefined,
+      requestId: normalized(input?.requestId) || undefined,
+      revision: normalized(input?.revision) || undefined,
+      startedAt: normalized(input?.startedAt) || new Date().toISOString(),
+      startedAtMs: input?.startedAtMs,
+      speakerAgentId: normalized(input?.speakerAgentId || options.activeAgentId.value) || undefined,
+      statusText: input?.statusText,
+      phase: input?.phase || "waiting",
+    });
+  }
+
+  function writeStreamCacheToMessage(cache: SidebarStreamCachePayload) {
+    const messageId = normalized(cache.persistedAssistantMessageId || streamingAssistantMessageId.value);
+    const conversationId = normalized(options.conversationId.value);
+    if (!messageId || !conversationId) return;
+    dispatchMessageEvent({
+      type: "assistant_stream_snapshot",
+      conversationId,
+      assistantMessageId: messageId,
+      snapshot: {
+        activationId: cache.activationId,
+        requestId: cache.requestId,
+        updatedAt: cache.updatedAt,
+        startedAt: new Date().toISOString(),
+        assistantText: cache.assistantText,
+        toolStatusText: cache.toolStatusText,
+        toolStatusState: cache.toolStatusState,
+        streamBlocks: cache.streamBlocks,
+        persistedAssistantMessageId: messageId,
+        speakerAgentId: options.activeAgentId.value,
+      },
+    });
+  }
+
+  function applyAssistantDeltaEvent(event: ChatAssistantDelta) {
+    const conversationId = normalized(options.conversationId.value);
+    if (!conversationId) return;
+    dispatchMessageEvent({
+      type: "assistant_delta",
+      conversationId,
+      event: {
+        ...event,
+        assistantMessageId: normalized(
+          event.assistantMessageId || streamingAssistantMessageId.value,
+        ) || undefined,
+      },
+    });
+  }
+
+  function finishStreamingMessage(messageId: string, finalMessage?: ChatMessage) {
+    const conversationId = normalized(options.conversationId.value);
+    if (!conversationId) return;
+    dispatchMessageEvent({
+      type: "round_finished",
+      conversationId,
+      assistantMessageId: normalized(messageId) || undefined,
+      assistantMessage: finalMessage,
     });
   }
 
   function applyRuntimeStreamCache(runtime: SidebarConversationRuntimePayload | null | undefined) {
-    const cache = runtime?.streamCache;
-    if (!cache) return;
-    writeStreamCacheToMessage(cache);
-    toolStatusText.value = String(cache.toolStatusText || "");
-    toolStatusState.value = normalizeToolStatusState(cache.toolStatusState);
+    if (!runtime?.streamCache) return;
+    writeStreamCacheToMessage(runtime.streamCache);
   }
 
   function applyAssistantToolStatusEvent(event: NonNullable<SidebarAssistantDeltaPayload["event"]>) {
-    toolStatusText.value = String(event.message || "");
-    toolStatusState.value = normalizeToolStatusState(event.toolStatus);
+    applyAssistantDeltaEvent({
+      kind: "tool_status",
+      message: event.message,
+      toolStatus: event.toolStatus,
+    });
   }
 
   function applyAssistantToolEvent(message: string) {
-    const blocks = applyAssistantToolEventToStreamBlocks(activeMessage.value?.contentBlocks, message);
-    writeStreamCacheToMessage({
-      persistedAssistantMessageId: streamingAssistantMessageId.value,
-      streamBlocks: blocks,
-      toolStatusText: toolStatusText.value,
-      toolStatusState: toolStatusState.value,
-    });
+    applyAssistantDeltaEvent({ kind: "assistant_tool_event", message });
   }
 
   function appendAssistantTextDelta(delta: string) {
-    const blocks = appendTextDeltaToStreamBlocks(activeMessage.value?.contentBlocks, delta);
-    writeStreamCacheToMessage({
-      persistedAssistantMessageId: streamingAssistantMessageId.value,
-      streamBlocks: blocks,
-      toolStatusText: toolStatusText.value,
-      toolStatusState: toolStatusState.value,
-    });
+    applyAssistantDeltaEvent({ delta });
   }
 
   return {
@@ -151,11 +317,20 @@ export function useSidebarAssistantStream(options: UseSidebarAssistantStreamOpti
     toolStatusState,
     toolStatusText,
     appendAssistantTextDelta,
+    applyAssistantDeltaEvent,
     applyAssistantToolEvent,
     applyAssistantToolStatusEvent,
     applyRuntimeStreamCache,
     clearStreamingState,
+    dispatchMessageEvent,
     finishStreamingMessage,
+    messageEventTargetsActiveRound,
+    messageRoundIsSettling,
+    pendingAssistantMessageIdForEvent,
+    trackPendingAssistantRound,
+    forgetPendingAssistantRound,
+    mergeAuthoritativeMessages,
+    replaceHistory,
     startStreamingMessage,
     writeStreamCacheToMessage,
   };

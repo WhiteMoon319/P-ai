@@ -529,10 +529,6 @@ export function useChatWindowApp() {
 
   const {
     syncUserAliasFromPersona,
-    isLocalOwnUserMessage,
-    isOptimisticOwnUserDraft,
-    applyStableRenderIdFromDraft,
-    applySingleOwnUserHistoryFlushFastPath,
   } = contentOrchestrator.messageHelpers;
   
   const {
@@ -666,11 +662,7 @@ export function useChatWindowApp() {
     toolStatusState,
     setConversationChatErrorText,
     bumpOwnUserDraftAlign,
-    applyStableRenderIdFromDraft,
-    applySingleOwnUserHistoryFlushFastPath,
     consumeOrQueueOwnMessageAlign,
-    isOptimisticOwnUserDraft,
-    isLocalOwnUserMessage,
     deleteUnarchivedConversationFromArchives,
     sendChatFromCurrentWindow,
     setConversationPlanMode,

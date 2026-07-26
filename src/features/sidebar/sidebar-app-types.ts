@@ -182,6 +182,8 @@ export type SidebarAssistantDeltaPayload = {
   event?: {
     delta?: string;
     kind?: string;
+    activationId?: string;
+    requestId?: string;
     toolName?: string;
     toolCallId?: string;
     toolStatus?: string;

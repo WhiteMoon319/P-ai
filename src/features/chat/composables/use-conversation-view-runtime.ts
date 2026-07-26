@@ -2,10 +2,13 @@ import { computed, onScopeDispose, ref, shallowRef, watch, type Ref } from "vue"
 import { invokeTauri } from "../../../services/tauri-api";
 import type { AssistantStreamBlock, ChatMentionTarget, ChatMessage, ChatTodoItem } from "../../../types/app";
 import { ensureConversationMessageIds } from "../utils/message-id";
-import { preserveStableRenderId } from "../utils/stable-render-id";
 import { registerChatFlowRuntime } from "./chat-flow-runtime-registry";
 import type { ExclusiveChatViewSubscriptionSlot } from "./exclusive-chat-view-subscription-slot";
-import { reconcileAuthoritativeConversationMessage } from "./chat-message-reconciliation";
+import {
+  mergeAuthoritativeConversationMessages,
+  replaceConversationHistory,
+  type AuthoritativeMessageMergeOptions,
+} from "./chat-message-state-machine";
 import {
   createLatestTaskRunner,
   reconcileForegroundConversation as reconcileChatForegroundConversation,
@@ -85,39 +88,16 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     return String(options.conversationId.value || "").trim();
   }
 
-  function messageCreatedAtMs(message?: ChatMessage): number | null {
-    const raw = String(message?.createdAt || "").trim();
-    if (!raw) return null;
-    const value = Date.parse(raw);
-    return Number.isFinite(value) ? value : null;
-  }
-
-  function insertMessageIntoTimeline(messages: ChatMessage[], incoming: ChatMessage): ChatMessage[] {
-    const incomingAt = messageCreatedAtMs(incoming);
-    if (incomingAt === null) return [...messages, incoming];
-    const index = messages.findIndex((message) => {
-      const existingAt = messageCreatedAtMs(message);
-      return existingAt !== null && existingAt > incomingAt;
-    });
-    if (index < 0) return [...messages, incoming];
-    return [...messages.slice(0, index), incoming, ...messages.slice(index)];
-  }
-
-  function mergeAuthoritativeMessages(messages: ChatMessage[], incomingMessages: ChatMessage[]): ChatMessage[] {
-    let next = [...messages];
-    for (const incoming of ensureConversationMessageIds(incomingMessages)) {
-      const messageId = String(incoming.id || "").trim();
-      const existingIndex = messageId
-        ? next.findIndex((message) => String(message.id || "").trim() === messageId)
-        : -1;
-      if (existingIndex >= 0) {
-        const replacement = reconcileAuthoritativeConversationMessage(next[existingIndex], incoming);
-        next = next.map((message, index) => index === existingIndex ? replacement : message);
-      } else {
-        next = insertMessageIntoTimeline(next, incoming);
-      }
-    }
-    return next;
+  function mergeAuthoritativeMessages(
+    messages: ChatMessage[],
+    incomingMessages: ChatMessage[],
+    mergeOptions?: AuthoritativeMessageMergeOptions,
+  ): ChatMessage[] {
+    return mergeAuthoritativeConversationMessages(
+      messages,
+      ensureConversationMessageIds(incomingMessages),
+      mergeOptions,
+    );
   }
 
   function currentFormalTailMessageId(): string {
@@ -139,10 +119,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     const incomingMessages = ensureConversationMessageIds(Array.isArray(snapshot?.messages) ? snapshot.messages : []);
     allMessages.value = preserveExistingHistory
       ? mergeAuthoritativeMessages(allMessages.value, incomingMessages)
-      : incomingMessages.map((message) => {
-        const previous = allMessages.value.find((item) => item.id === message.id);
-        return preserveStableRenderId(message, previous);
-      });
+      : replaceConversationHistory(allMessages.value, incomingMessages);
     const snapshotApiConfigId = String(snapshot?.preferredApiConfigId || "").trim();
     if (snapshotApiConfigId) preferredApiConfigId.value = snapshotApiConfigId;
     hasMoreHistory.value = !!snapshot?.hasMoreHistory;
@@ -252,10 +229,10 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
         input: { conversationId, beforeMessageId: oldestMessageId, limit: 50 },
       });
       if (conversationId !== currentConversationId()) return;
-      const existingIds = new Set(allMessages.value.map((message) => message.id));
-      const incoming = ensureConversationMessageIds(Array.isArray(result?.messages) ? result.messages : [])
-        .filter((message) => !existingIds.has(message.id));
-      allMessages.value = [...incoming, ...allMessages.value];
+      const incoming = ensureConversationMessageIds(Array.isArray(result?.messages) ? result.messages : []);
+      allMessages.value = mergeAuthoritativeMessages(allMessages.value, incoming, {
+        prependMessages: true,
+      });
       hasMoreHistory.value = !!result?.hasMore;
     } finally {
       loadingOlderHistory.value = false;
@@ -267,11 +244,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
       input: { conversationId, messageId },
     });
     if (!message || conversationId !== currentConversationId()) return false;
-    const index = allMessages.value.findIndex((item) => item.id === message.id);
-    if (index < 0) return false;
-    const next = [...allMessages.value];
-    next[index] = reconcileAuthoritativeConversationMessage(next[index], message, { forceReplace: true });
-    allMessages.value = next;
+    allMessages.value = mergeAuthoritativeMessages(allMessages.value, [message], { forceReplace: true });
     return true;
   }
 
@@ -358,49 +331,14 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     onReloadMessages: loadSnapshot,
     onHistoryFlushed: async ({ conversationId, pendingMessages }) => {
       if (conversationId !== currentConversationId()) return;
-      const next = [...allMessages.value];
-      for (const message of pendingMessages) {
-        const providerMeta = (message.providerMeta || {}) as Record<string, unknown>;
-        const messageMeta = (providerMeta.message_meta || providerMeta.messageMeta || {}) as Record<string, unknown>;
-        const existingIndex = next.findIndex((item) => item.id === message.id);
-        if (existingIndex >= 0) {
-          next[existingIndex] = reconcileAuthoritativeConversationMessage(next[existingIndex], message);
-          continue;
-        }
-        if (String(messageMeta.kind || "").trim() === "summary_context_seed") {
-          next.unshift(message);
-          continue;
-        }
-        const draftIndex = message.role === "user"
-          ? next.findIndex((item) => item.id.startsWith(DRAFT_USER_ID_PREFIX))
-          : -1;
-        if (draftIndex >= 0) {
-          const draft = next[draftIndex];
-          const stableRenderId = String(draft.providerMeta?._stableRenderId || draft.id).trim();
-          next[draftIndex] = {
-            ...message,
-            providerMeta: {
-              ...(message.providerMeta || {}),
-              _stableRenderId: stableRenderId,
-            },
-          };
-        } else {
-          const merged = insertMessageIntoTimeline(next, message);
-          next.splice(0, next.length, ...merged);
-        }
-      }
-      allMessages.value = next;
+      allMessages.value = mergeAuthoritativeMessages(allMessages.value, pendingMessages, {
+        replaceOptimisticUserDrafts: true,
+        summarySeedsFirst: true,
+      });
     },
     onAssistantMessageCompleted: async ({ conversationId, assistantMessage }) => {
       if (conversationId !== currentConversationId()) return;
-      const index = allMessages.value.findIndex((message) => message.id === assistantMessage.id);
-      if (index < 0) {
-        allMessages.value = insertMessageIntoTimeline(allMessages.value, assistantMessage);
-      } else {
-        const next = [...allMessages.value];
-        next[index] = reconcileAuthoritativeConversationMessage(next[index], assistantMessage);
-        allMessages.value = next;
-      }
+      allMessages.value = mergeAuthoritativeMessages(allMessages.value, [assistantMessage]);
     },
   });
 

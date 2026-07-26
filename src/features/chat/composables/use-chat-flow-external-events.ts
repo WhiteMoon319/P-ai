@@ -13,6 +13,7 @@ import { stringifyExternalEventPayload } from "./use-chat-flow-utils";
 type UseChatFlowExternalEventsOptions = {
   debug?: boolean;
   getCurrentConversationId: () => string;
+  getActiveActivationId: () => string;
   setActiveActivationId: (value: string) => void;
   clearRecentlyCompletedRoundIds: () => void;
   hasRecentlyCompletedRoundIds: () => boolean;
@@ -30,8 +31,12 @@ type UseChatFlowExternalEventsOptions = {
   handleHistoryFlushed: (gen: number, parsed: any, source: "sendChat" | "bound") => Promise<void>;
   beginAssistantActivationFromEvent: (payload: any) => number;
   markRoundStarted: (gen: number) => Promise<void>;
-  handleRoundCompleted: (gen: number, result: any) => void;
-  handleRoundFailed: (gen: number, error: unknown) => Promise<void>;
+  handleRoundCompleted: (gen: number, result: any) => Promise<void>;
+  handleRoundFailed: (
+    gen: number,
+    error: unknown,
+    identity?: { activationId?: string; requestId?: string },
+  ) => Promise<void>;
   clearConversationStreamCache: (conversationId?: string | null) => void;
   clearFrontendDispatchTimer: () => void;
   onReloadMessages: () => Promise<void>;
@@ -53,6 +58,21 @@ type UseChatFlowExternalEventsOptions = {
   syncStreamBlocksToMessage: (messageId: string) => void;
   updateMessageText: (messageId: string) => void;
 };
+
+export function externalTerminalTargetsRound(
+  round: RoundState,
+  activeActivationId: string,
+  input: { activationId?: string; requestId?: string; assistantMessageId?: string },
+): boolean {
+  if (round.phase !== "queued" && round.phase !== "streaming") return false;
+  const incomingMessageId = String(input.assistantMessageId || "").trim();
+  if (incomingMessageId && incomingMessageId !== round.messageId) return false;
+  const currentActivationId = String(activeActivationId || "").trim();
+  const incomingIds = [String(input.activationId || "").trim(), String(input.requestId || "").trim()]
+    .filter(Boolean);
+  if (currentActivationId && incomingIds.length > 0 && !incomingIds.includes(currentActivationId)) return false;
+  return true;
+}
 
 export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOptions) {
   const STREAM_REBIND_COOLDOWN_MS = 800;
@@ -76,6 +96,18 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       return true;
     }
     return false;
+  }
+
+  function terminalTargetsCurrentRound(input: {
+    activationId?: string;
+    requestId?: string;
+    assistantMessageId?: string;
+  }): boolean {
+    return externalTerminalTargetsRound(
+      options.getRound(),
+      options.getActiveActivationId(),
+      input,
+    );
   }
 
   async function handleExternalStreamRebindRequired(payload: unknown) {
@@ -175,9 +207,16 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       await options.onReloadMessages();
       return;
     }
-    options.handleRoundCompleted(round.gen, {
+    if (!terminalTargetsCurrentRound({
+      activationId: parsed.activationId,
+      requestId: parsed.requestId,
+      assistantMessageId: parsed.assistantMessage?.id,
+    })) return;
+    await options.handleRoundCompleted(round.gen, {
       assistantText: String(parsed.assistantText || ""),
       assistantMessage: parsed.assistantMessage,
+      activationId: parsed.activationId,
+      requestId: parsed.requestId,
     });
   }
 
@@ -221,7 +260,18 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       await options.onReloadMessages();
       return;
     }
-    await options.handleRoundFailed(round.gen, parsed?.error || raw || String(raw));
+    if (!terminalTargetsCurrentRound({
+      activationId: parsed?.activationId,
+      requestId: parsed?.requestId,
+    })) return;
+    await options.handleRoundFailed(
+      round.gen,
+      parsed?.error || raw || String(raw),
+      {
+        activationId: parsed?.activationId,
+        requestId: parsed?.requestId,
+      },
+    );
   }
 
   async function handleExternalAssistantDelta(payload: unknown) {

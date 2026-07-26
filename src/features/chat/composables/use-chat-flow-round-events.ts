@@ -18,7 +18,15 @@ type UseChatFlowRoundEventsOptions = {
   getGeneration: () => number;
   setPendingTerminalEvent: (event: PendingTerminalEvent | null) => void;
   getPendingTerminalEvent: () => PendingTerminalEvent | null;
-  setDeferredRoundCompletion: (event: { gen: number; result: { assistantText: string; assistantMessage?: ChatMessage } } | null) => void;
+  setDeferredRoundCompletion: (event: {
+    gen: number;
+    result: {
+      assistantText: string;
+      assistantMessage?: ChatMessage;
+      activationId?: string;
+      requestId?: string;
+    };
+  } | null) => void;
   clearConversationStreamCache: (conversationId?: string | null) => void;
   clearFrontendDispatchTimer: () => void;
   setActiveActivationId: (value: string) => void;
@@ -30,16 +38,34 @@ type UseChatFlowRoundEventsOptions = {
   updateQueuedAssistantMessageStatus: (messageId: string, statusText: string) => void;
   insertStreamingAssistantMessage: (messageId: string, gen?: number, initialText?: string) => string;
   updateMessageText: (messageId: string) => void;
-  finalizeMessage: (messageId: string, finalMessage?: ChatMessage) => void;
+  finalizeMessage: (
+    messageId: string,
+    finalMessage?: ChatMessage,
+    identity?: { activationId?: string; requestId?: string },
+  ) => void;
+  failMessage: (
+    messageId: string,
+    error?: unknown,
+    identity?: { activationId?: string; requestId?: string },
+  ) => void;
   syncStreamBlocksToMessage: (messageId: string) => void;
   applyPendingTerminalEvent: (gen: number) => boolean;
   promoteQueuedRoundToStreaming: (gen: number) => number;
-  finalizeDeferredRoundCompletion: () => void;
+  finalizeDeferredRoundCompletion: () => Promise<void>;
   finalizeQueuedRoundWithoutMessage: (
     gen: number,
-    result: { assistantText: string; assistantMessage?: ChatMessage },
+    result: {
+      assistantText: string;
+      assistantMessage?: ChatMessage;
+      activationId?: string;
+      requestId?: string;
+    },
   ) => Promise<void>;
-  failQueuedRoundWithoutMessage: (gen: number, error: unknown) => Promise<void>;
+  failQueuedRoundWithoutMessage: (
+    gen: number,
+    error: unknown,
+    identity?: { activationId?: string; requestId?: string },
+  ) => Promise<void>;
   enqueueStreamDelta: (gen: number, delta: string) => void;
   setChatErrorText: (text: string, conversationId?: string | null) => void;
   formatRequestFailed: (error: unknown) => string;
@@ -91,7 +117,10 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
         await options.finalizeQueuedRoundWithoutMessage(gen, pending.result);
         return;
       }
-      await options.failQueuedRoundWithoutMessage(gen, pending?.error);
+      await options.failQueuedRoundWithoutMessage(gen, pending?.error, {
+        activationId: pending?.activationId,
+        requestId: pending?.requestId,
+      });
       return;
     }
     options.updateQueuedAssistantMessageStatus(round.messageId, options.optionsT("chat.statusWaitingReply"));
@@ -103,6 +132,8 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
     result: {
       assistantText: string;
       assistantMessage?: ChatMessage;
+      activationId?: string;
+      requestId?: string;
     },
   ) {
     options.sendStartedAtMsByGen.delete(gen);
@@ -113,14 +144,18 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
     }
     if (round.phase !== "streaming" || round.gen !== gen) return;
     options.setDeferredRoundCompletion({ gen, result });
-    options.finalizeDeferredRoundCompletion();
+    await options.finalizeDeferredRoundCompletion();
   }
 
-  async function handleRoundFailed(gen: number, error: unknown) {
+  async function handleRoundFailed(
+    gen: number,
+    error: unknown,
+    identity?: { activationId?: string; requestId?: string },
+  ) {
     options.sendStartedAtMsByGen.delete(gen);
     const round = options.getRound();
     if (round.phase === "queued" && round.gen === gen) {
-      await options.failQueuedRoundWithoutMessage(gen, error);
+      await options.failQueuedRoundWithoutMessage(gen, error, identity);
       return;
     }
     if (round.phase !== "streaming" || round.gen !== gen) return;
@@ -134,7 +169,7 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
     }
     // streaming failed: 保留已经显示出来的内容，只结束流式态，不再重载。
     options.updateMessageText(round.messageId);
-    options.finalizeMessage(round.messageId);
+    options.failMessage(round.messageId, error, identity);
     options.setRound({ phase: "idle" });
     options.chatting.value = false;
     options.reasoningStartedAtMs.value = 0;
@@ -149,7 +184,10 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
       void handleRoundCompleted(gen, pending.result);
       return true;
     }
-    void handleRoundFailed(gen, pending.error);
+    void handleRoundFailed(gen, pending.error, {
+      activationId: pending.activationId,
+      requestId: pending.requestId,
+    });
     return true;
   }
 

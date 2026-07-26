@@ -1,8 +1,8 @@
 import { ref, watch, type Ref } from "vue";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { AppConfig, ChatMessage } from "../../../types/app";
+import { mergeAuthoritativeConversationMessages } from "./chat-message-state-machine";
 import { formalizeMessages } from "./use-chat-flow-utils";
-import { reconcileAuthoritativeConversationMessage } from "./chat-message-reconciliation";
 import {
   createLatestTaskRunner,
   reconcileForegroundConversation as reconcileChatForegroundConversation,
@@ -212,9 +212,11 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     if (!message || String(options.currentChatConversationId.value || "").trim() !== conversationId) return false;
     const index = options.allMessages.value.findIndex((item) => String(item.id || "").trim() === messageId);
     if (index < 0) return false;
-    const nextMessages = [...options.allMessages.value];
-    nextMessages[index] = reconcileAuthoritativeConversationMessage(nextMessages[index], message, { forceReplace: true });
-    options.allMessages.value = nextMessages;
+    options.allMessages.value = mergeAuthoritativeConversationMessages(
+      options.allMessages.value,
+      [message],
+      { forceReplace: true },
+    );
     return true;
   }
 

@@ -89,4 +89,74 @@ describe("useChatFlowRoundFinalizers", () => {
     expect(allMessages.value[0].providerMeta?._streaming).toBeUndefined();
     expect(round.value.phase).toBe("idle");
   });
+
+  it("streaming 终态缺少正式消息时回读并重载后再清理外层 round", async () => {
+    const assistant = emptyStreamingAssistant("assistant-1");
+    const allMessages = shallowRef<ChatMessage[]>([assistant]);
+    const round = ref<any>({ phase: "streaming", gen: 1, messageId: assistant.id });
+    const deferred = ref<any>({
+      gen: 1,
+      result: { assistantText: "完成正文" },
+    });
+    const refreshMessageById = vi.fn(async () => false);
+    const onReloadMessages = vi.fn(async () => {
+      allMessages.value = [{
+        ...assistant,
+        parts: [{ type: "text", text: "重载正文" }],
+        providerMeta: {},
+      }];
+    });
+    const removeMessage = vi.fn((messageId: string) => {
+      allMessages.value = allMessages.value.filter((message) => message.id !== messageId);
+    });
+    const finalizeMessage = vi.fn((messageId: string, finalMessage?: ChatMessage) => {
+      if (!finalMessage) {
+        round.value = { ...round.value, phase: "settling" };
+        return;
+      }
+      allMessages.value = allMessages.value.map((message) => (
+        message.id === messageId ? { ...finalMessage, providerMeta: {} } : message
+      ));
+    });
+    const finalizers = useChatFlowRoundFinalizers({
+      allMessages,
+      getConversationId: () => "conversation-1",
+      refreshMessageById,
+      getRound: () => round.value,
+      setRound: (next: any) => { round.value = next; },
+      getDeferredRoundCompletion: () => deferred.value,
+      setDeferredRoundCompletion: (next: any) => { deferred.value = next; },
+      latestAssistantText: ref(""),
+      toolStatusText: ref(""),
+      toolStatusState: ref<"running" | "done" | "failed" | "">(""),
+      streamBlocks: ref([]),
+      chatting: ref(true),
+      reasoningStartedAtMs: ref(1),
+      t: (key: string) => key,
+      clearChatErrorText: vi.fn(),
+      finalizeMessage,
+      clearConversationStreamCache: vi.fn(),
+      clearFrontendDispatchTimer: vi.fn(),
+      setActiveActivationId: vi.fn(),
+      setActiveRoundAgentId: vi.fn(),
+      onReloadMessages,
+      removeMessage,
+      submitPending: ref(false),
+    });
+
+    await finalizers.finalizeDeferredRoundCompletion();
+
+    expect(refreshMessageById).toHaveBeenCalledWith({
+      conversationId: "conversation-1",
+      messageId: "assistant-1",
+    });
+    expect(onReloadMessages).toHaveBeenCalledOnce();
+    expect(finalizeMessage).toHaveBeenLastCalledWith(
+      "assistant-1",
+      expect.objectContaining({ parts: [{ type: "text", text: "重载正文" }] }),
+    );
+    expect(removeMessage).not.toHaveBeenCalled();
+    expect(allMessages.value[0].providerMeta?._streaming).toBeUndefined();
+    expect(round.value.phase).toBe("idle");
+  });
 });

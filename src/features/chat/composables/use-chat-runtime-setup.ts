@@ -159,63 +159,14 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
         }
         const queueMessages = Array.isArray(pendingMessages) ? pendingMessages : [];
         if (queueMessages.length > 0) {
-          const fastPathResult = bindings.applySingleOwnUserHistoryFlushFastPath(queueMessages);
-          if (fastPathResult) {
-            bindings.cacheConversationMessages(
-              flushedConversationId || String(bindings.currentChatConversationId.value || "").trim(),
-              bindings.allMessages.value,
-            );
-            return;
-          }
-          const currentMessages = [...bindings.allMessages.value];
-          const dedup = new Set(
-            currentMessages
-              .filter((message: any) => !bindings.isOptimisticOwnUserDraft(message))
-              .map((message: any) => String(message.id || "").trim())
-              .filter((id: string) => !!id),
+          bindings.allMessages.value = bindings.mergeMessagesIntoTimeline(
+            bindings.allMessages.value,
+            queueMessages,
+            {
+              replaceOptimisticUserDrafts: true,
+              summarySeedsFirst: true,
+            },
           );
-          const uniqueIncoming = queueMessages.filter((message: any) => {
-            const id = String(message.id || "").trim();
-            if (!id) return true;
-            if (dedup.has(id)) return false;
-            dedup.add(id);
-            return true;
-          });
-          const prepended = uniqueIncoming.filter((message: any) => {
-            const meta = ((message.providerMeta || {}) as Record<string, unknown>);
-            const messageMeta = ((meta.message_meta || meta.messageMeta || {}) as Record<string, unknown>);
-            return String(messageMeta.kind || "").trim() === "summary_context_seed";
-          });
-          const appended = uniqueIncoming.filter((message: any) => {
-            const meta = ((message.providerMeta || {}) as Record<string, unknown>);
-            const messageMeta = ((meta.message_meta || meta.messageMeta || {}) as Record<string, unknown>);
-            return String(messageMeta.kind || "").trim() !== "summary_context_seed";
-          });
-          const appendedOwnUser = appended.filter((message: any) => bindings.isLocalOwnUserMessage(message));
-          const appendedOthers = appended.filter((message: any) => !bindings.isLocalOwnUserMessage(message));
-          let nextMessages = [...currentMessages];
-          if (prepended.length > 0) {
-            nextMessages = [...prepended, ...nextMessages];
-          }
-          if (appendedOwnUser.length > 0) {
-            let replacedOwnDraft = false;
-            const remainingOwnIncoming = [...appendedOwnUser];
-            nextMessages = nextMessages.flatMap((message: any) => {
-              if (!replacedOwnDraft && bindings.isOptimisticOwnUserDraft(message)) {
-                replacedOwnDraft = true;
-                return [bindings.applyStableRenderIdFromDraft(remainingOwnIncoming.shift()!, message)];
-              }
-              return [message];
-            });
-            if (remainingOwnIncoming.length > 0) {
-              nextMessages = bindings.mergeMessagesIntoTimeline(nextMessages, remainingOwnIncoming);
-            }
-          }
-          if (appendedOthers.length > 0) {
-            nextMessages = bindings.mergeMessagesIntoTimeline(nextMessages, appendedOthers);
-          }
-          nextMessages = bindings.reuseStableMessageReferences(nextMessages, bindings.allMessages.value);
-          bindings.allMessages.value = nextMessages;
           bindings.foregroundTailLatestReady.value = true;
         }
         bindings.cacheConversationMessages(

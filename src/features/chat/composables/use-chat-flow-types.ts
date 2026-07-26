@@ -106,15 +106,21 @@ export type PendingTerminalEvent =
   | {
       kind: "completed";
       gen: number;
+      activationId?: string;
+      requestId?: string;
       result: {
         assistantText: string;
         assistantMessage?: ChatMessage;
+        activationId?: string;
+        requestId?: string;
       };
     }
   | {
       kind: "failed";
       gen: number;
       error: unknown;
+      activationId?: string;
+      requestId?: string;
     };
 
 export type DeferredRoundCompletion = {
@@ -122,6 +128,8 @@ export type DeferredRoundCompletion = {
   result: {
     assistantText: string;
     assistantMessage?: ChatMessage;
+    activationId?: string;
+    requestId?: string;
   };
 };
 

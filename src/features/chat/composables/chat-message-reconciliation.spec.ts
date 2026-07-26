@@ -31,6 +31,21 @@ describe("reconcileAuthoritativeConversationMessage", () => {
     expect(result.providerMeta?.contextUsagePercent).toBe(25);
   });
 
+  it("冻结正文仍可接收权威 planCard 元数据", () => {
+    const result = reconcileAuthoritativeConversationMessage(
+      message("frozen"),
+      message("later", {
+        planCard: { action: "present", path: ".pai/plan/example.md" },
+      }),
+    );
+
+    expect(result.parts[0].text).toBe("frozen");
+    expect(result.providerMeta?.planCard).toEqual({
+      action: "present",
+      path: ".pai/plan/example.md",
+    });
+  });
+
   it("目标消息终态刷新可以强制用正式正文收口", () => {
     const result = reconcileAuthoritativeConversationMessage(
       message("partial"),

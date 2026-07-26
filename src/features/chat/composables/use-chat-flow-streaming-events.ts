@@ -1,5 +1,4 @@
 import type { Ref } from "vue";
-import type { AssistantStreamBlock } from "../../../types/app";
 import { normalizeAssistantStreamBlocks } from "../../../utils/chat-message-semantics";
 import {
   assistantEventHasVisibleProgress,
@@ -23,6 +22,7 @@ type UseChatFlowStreamingEventsOptions = {
   setPendingTerminalEvent: (event: PendingTerminalEvent | null) => void;
   clearConversationStreamCache: (conversationId?: string | null) => void;
   getConversationId?: () => string;
+  getActiveActivationId: () => string;
   setActiveActivationId: (value: string) => void;
   applyConversationStreamCacheSnapshotToDisplay: (
     conversationId: string,
@@ -33,21 +33,33 @@ type UseChatFlowStreamingEventsOptions = {
     result: {
       assistantText: string;
       assistantMessage?: any;
+      activationId?: string;
+      requestId?: string;
     },
   ) => Promise<void>;
-  handleRoundFailed: (gen: number, error: unknown) => Promise<void>;
-  getMessageStreamBlocks: (messageId: string) => AssistantStreamBlock[];
-  syncStreamBlocksToMessage: (messageId: string, rawBlocks?: AssistantStreamBlock[]) => void;
-  updateMessageText: (
-    messageId: string,
-    streamSegments?: string[],
-    streamTail?: string,
-    streamAnimatedDelta?: string,
-    rawBlocks?: AssistantStreamBlock[],
-    updateOptions?: { preserveActivityProjection?: boolean },
-  ) => void;
+  handleRoundFailed: (
+    gen: number,
+    error: unknown,
+    identity?: { activationId?: string; requestId?: string },
+  ) => Promise<void>;
+  applyAssistantEventToMessage: (messageId: string, parsed: AssistantDeltaEvent) => void;
   enqueueStreamDelta: (gen: number, delta: string) => void;
 };
+
+export function streamingTerminalTargetsRound(
+  round: RoundState,
+  activeActivationId: string,
+  input: { activationId?: string; requestId?: string; assistantMessageId?: string },
+): boolean {
+  if (round.phase !== "queued" && round.phase !== "streaming") return false;
+  const incomingMessageId = String(input.assistantMessageId || "").trim();
+  if (incomingMessageId && incomingMessageId !== round.messageId) return false;
+  const currentActivationId = String(activeActivationId || "").trim();
+  const incomingIds = [String(input.activationId || "").trim(), String(input.requestId || "").trim()]
+    .filter(Boolean);
+  if (currentActivationId && incomingIds.length > 0 && !incomingIds.includes(currentActivationId)) return false;
+  return true;
+}
 
 export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOptions) {
   function handleStreamingEvent(currentGen: number, parsed: AssistantDeltaEvent) {
@@ -77,9 +89,21 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
     }
     if (parsed.kind === "round_completed") {
       const p = readRoundCompletedPayload(parsed.message);
+      const identity = {
+        activationId: p?.activationId || parsed.activationId,
+        requestId: p?.requestId || parsed.requestId,
+        assistantMessageId: p?.assistantMessage?.id,
+      };
+      if (!streamingTerminalTargetsRound(
+        currentRound,
+        options.getActiveActivationId(),
+        identity,
+      )) return;
       const result = {
         assistantText: String(p?.assistantText || ""),
         assistantMessage: p?.assistantMessage,
+        activationId: identity.activationId,
+        requestId: identity.requestId,
       };
       if (currentRound.phase === "queued" && parsed.reason === "context_compaction_boundary") {
         void options.handleRoundCompleted(currentGen, result);
@@ -100,22 +124,36 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
     }
 
     if (parsed.kind === "round_failed") {
+      const p = readRoundFailedPayload(parsed.message);
+      const identity = {
+        activationId: p?.activationId || parsed.activationId,
+        requestId: p?.requestId || parsed.requestId,
+      };
+      if (!streamingTerminalTargetsRound(
+        currentRound,
+        options.getActiveActivationId(),
+        identity,
+      )) return;
       if (options.contextUsagePreview) {
         options.contextUsagePreview.value = null;
       }
-      const p = readRoundFailedPayload(parsed.message);
       const error = p?.error || parsed.message || JSON.stringify(parsed);
       if (currentRound.phase === "queued") {
         options.setPendingTerminalEvent({
           kind: "failed",
           gen: currentGen,
           error,
+          activationId: identity.activationId,
+          requestId: identity.requestId,
         });
         options.clearConversationStreamCache(options.getConversationId ? options.getConversationId() : "");
         options.setActiveActivationId("");
         return;
       }
-      void options.handleRoundFailed(currentGen, error);
+      void options.handleRoundFailed(currentGen, error, {
+        activationId: identity.activationId,
+        requestId: identity.requestId,
+      });
       return;
     }
 
@@ -140,15 +178,7 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
       );
       if (currentRound.phase === "streaming" && snapshotHasVisibleProgress) {
         options.applyConversationStreamCacheSnapshotToDisplay(conversationId, parsed.streamCache);
-        options.syncStreamBlocksToMessage(currentRound.messageId, snapshotBlocks);
-        options.updateMessageText(
-          currentRound.messageId,
-          undefined,
-          undefined,
-          "",
-          snapshotBlocks,
-          { preserveActivityProjection: true },
-        );
+        options.applyAssistantEventToMessage(currentRound.messageId, parsed);
         receivedCanonicalSnapshot = true;
       }
     }
@@ -158,13 +188,16 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
       options.toolStatusState.value =
         parsed.toolStatus === "running" || parsed.toolStatus === "done" || parsed.toolStatus === "failed"
           ? parsed.toolStatus : "";
-      if (currentRound.phase === "streaming") {
-        options.updateMessageText(currentRound.messageId);
+      if (currentRound.phase === "streaming" && !receivedCanonicalSnapshot) {
+        options.applyAssistantEventToMessage(currentRound.messageId, parsed);
       }
     }
 
     if (isActivityProjectionEvent) {
       if (delta && options.reasoningStartedAtMs.value === 0) options.reasoningStartedAtMs.value = Date.now();
+      if (currentRound.phase === "streaming" && !receivedCanonicalSnapshot) {
+        options.applyAssistantEventToMessage(currentRound.messageId, parsed);
+      }
     }
 
     if (parsed.kind === "tool_status" || isActivityProjectionEvent || receivedCanonicalSnapshot) {
