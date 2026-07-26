@@ -272,6 +272,7 @@ export function useChatWindowApp() {
     updateConversationListTab,
     updateChatLeftPanelMode,
     updateChatRightPanelMode,
+    openChatReaderPanel,
     updateChatMonitorPanelMode,
     handleChatSidePanelWidthsChange,
     toggleSideConversationList,

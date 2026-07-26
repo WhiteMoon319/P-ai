@@ -56,6 +56,7 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
   const sideConversationListVisible = ref(loadStoredChatSidePanelVisibility("left"));
   const toolReviewPanelOpenVisible = ref(loadStoredChatSidePanelVisibility("right"));
   const chatSidePanelWidths = ref(loadStoredChatSidePanelWidths());
+  let openingChatReaderPanel: Promise<void> | null = null;
 
   const conversationChatErrorTextMap = ref<Record<string, string>>({});
   const fallbackChatErrorText = ref("");
@@ -234,6 +235,24 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     }
   }
 
+  function openChatReaderPanel() {
+    if (openingChatReaderPanel) return openingChatReaderPanel;
+    openingChatReaderPanel = (async () => {
+      const conversationId = String(bindings.currentChatConversationId.value || "").trim();
+      chatRightPanelMode.value = "reader";
+      if (conversationId) {
+        storeChatRightPanelMode("reader", conversationId);
+      }
+      if (!toolReviewPanelOpenVisible.value) {
+        await setSidePanelVisibility("right", true);
+      }
+      await nextTick();
+    })().finally(() => {
+      openingChatReaderPanel = null;
+    });
+    return openingChatReaderPanel;
+  }
+
   function updateChatMonitorPanelMode(value: ChatMonitorPanelMode) {
     const nextMode = normalizeChatMonitorPanelMode(value, "delegate");
     chatMonitorPanelMode.value = nextMode;
@@ -305,6 +324,7 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     updateConversationListTab,
     updateChatLeftPanelMode,
     updateChatRightPanelMode,
+    openChatReaderPanel,
     updateChatMonitorPanelMode,
     handleChatSidePanelWidthsChange,
     toggleSideConversationList,

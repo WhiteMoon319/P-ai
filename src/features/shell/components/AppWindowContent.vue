@@ -202,6 +202,7 @@
         @remove-mention="removeChatMention"
         @side-conversation-list-visible-change="setSideConversationListVisible"
         @tool-review-panel-open-change="setToolReviewPanelOpen"
+        @open-chat-reader-file="openChatReaderFile"
         @side-panel-widths-change="setChatSidePanelWidths"
         @side-panel-widths-commit="commitChatSidePanelWidths"
         @update:conversation-list-tab="updateConversationListTab"
@@ -768,6 +769,7 @@ const props = defineProps<{
   updatePlanModeEnabled: (value: boolean) => void;
   setSideConversationListVisible: (value: boolean) => void;
   setToolReviewPanelOpen: (value: boolean) => void;
+  openChatReaderPanel: () => Promise<void>;
   setChatSidePanelWidths: (value: { leftWidth: number; rightWidth: number }, options?: { syncWindow?: boolean; commit?: boolean }) => void;
   updateConversationListTab: (value: "local" | "contact" | "task") => void;
   updateChatLeftPanelMode: (value: "local" | "contact" | "task") => void;
@@ -843,6 +845,7 @@ const promptPreviewDialogVNodeRef: VNodeRef = (el) => {
 const chatViewRef = ref<{
   exitMessageSelectionMode: () => void;
   showTransientNotice: (text: string, tone?: "default" | "error" | "info") => void;
+  openFileInReader: (path: string, line?: number) => Promise<void>;
 } | null>(null);
 
 const sideChatTabs = computed(() => (props.sideConversations || []).map((conversation) => ({
@@ -876,6 +879,17 @@ function closeOtherSideChatTabs(conversationId: string) {
 
 function showChatNotice(text: string, tone: "default" | "error" | "info" = "info") {
   chatViewRef.value?.showTransientNotice?.(text, tone);
+}
+
+async function openChatReaderFile(path: string, line?: number) {
+  try {
+    await props.openChatReaderPanel();
+    const chatView = chatViewRef.value;
+    if (!chatView) throw new Error("文件阅读面板尚未就绪");
+    await chatView.openFileInReader(path, line);
+  } catch (error) {
+    showChatNotice(props.t("status.openLinkFailed", { err: String(error) }), "error");
+  }
 }
 
 function commitChatSidePanelWidths(value: { leftWidth: number; rightWidth: number }) {

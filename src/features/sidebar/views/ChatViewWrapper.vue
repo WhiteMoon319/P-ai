@@ -97,6 +97,7 @@
     @remove-mention="noop"
     @side-conversation-list-visible-change="$emit('sideConversationListVisibleChange', $event)"
     @tool-review-panel-open-change="$emit('toolReviewPanelOpenChange', $event)"
+    @open-chat-reader-file="(path, line) => $emit('openChatReaderFile', path, line)"
     @side-panel-widths-change="$emit('sidePanelWidthsChange', $event)"
     @side-panel-widths-commit="$emit('sidePanelWidthsCommit', $event)"
     @update:conversation-list-tab="$emit('updateConversationListTab', $event)"
@@ -256,6 +257,7 @@ defineEmits<{
   selectionActionDelegate: [payload: { count: number; messageIds: string[]; departmentId: string; agentId: string; presetId: string; why: string; goal: string; todo: string }];
   sideConversationListVisibleChange: [value: boolean];
   toolReviewPanelOpenChange: [value: boolean];
+  openChatReaderFile: [path: string, line?: number];
   sidePanelWidthsChange: [value: { leftWidth: number; rightWidth: number }];
   sidePanelWidthsCommit: [value: { leftWidth: number; rightWidth: number }];
   updateConversationListTab: [value: "local" | "contact" | "task"];
@@ -441,13 +443,22 @@ const { visibleMessageBlocks, chatUsagePercent } = useChatMessageBlocks({
   perfNow: () => performance.now(),
 });
 
-const chatViewRef = ref<{ exitMessageSelectionMode: () => void } | null>(null);
+const chatViewRef = ref<{
+  exitMessageSelectionMode: () => void;
+  openFileInReader: (path: string, line?: number) => Promise<void>;
+} | null>(null);
 
 function exitMessageSelectionMode() {
   chatViewRef.value?.exitMessageSelectionMode();
 }
 
-defineExpose({ exitMessageSelectionMode, chatUsagePercent });
+async function openFileInReader(path: string, line?: number) {
+  const chatView = chatViewRef.value;
+  if (!chatView) throw new Error("文件阅读面板尚未就绪");
+  await chatView.openFileInReader(path, line);
+}
+
+defineExpose({ exitMessageSelectionMode, openFileInReader, chatUsagePercent });
 
 function noop() {}
 

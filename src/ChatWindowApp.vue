@@ -294,6 +294,7 @@
       :update-plan-mode-enabled="updatePlanModeEnabled"
       :set-side-conversation-list-visible="handleSideConversationListVisibleChange"
       :set-tool-review-panel-open="handleToolReviewPanelOpenChange"
+      :open-chat-reader-panel="openChatReaderPanel"
       :set-chat-side-panel-widths="handleChatSidePanelWidthsChange"
       :update-conversation-list-tab="updateConversationListTab"
       :update-chat-left-panel-mode="updateChatLeftPanelMode"

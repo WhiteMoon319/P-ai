@@ -706,6 +706,7 @@ const emit = defineEmits<{
   (e: "removeMention", value: string | { agentId: string; departmentId?: string }): void;
   (e: "sideConversationListVisibleChange", value: boolean): void;
   (e: "toolReviewPanelOpenChange", value: boolean): void;
+  (e: "openChatReaderFile", path: string, line?: number): void;
   (e: "sidePanelWidthsChange", value: { leftWidth: number; rightWidth: number }): void;
   (e: "sidePanelWidthsCommit", value: { leftWidth: number; rightWidth: number }): void;
   (e: "update:conversation-list-tab", value: "local" | "contact" | "task"): void;
@@ -1282,6 +1283,7 @@ function handleExitMessageSelectionMode() {
 defineExpose({
   exitMessageSelectionMode: handleExitMessageSelectionMode,
   showTransientNotice,
+  openFileInReader,
 });
 
 // ==================== scroll layout ====================
@@ -1947,14 +1949,16 @@ async function handleAssistantLinkClick(event: MouseEvent) {
   }
 }
 
-async function openLocalFileInChatReader(path: string, line?: number) {
-  emit("update:chatRightPanelMode", "reader");
-  if (!props.initialToolReviewPanelOpen) {
-    emit("toolReviewPanelOpenChange", true);
+function openLocalFileInChatReader(path: string, line?: number) {
+  emit("openChatReaderFile", path, line);
+}
+
+async function openFileInReader(path: string, line?: number) {
+  const panel = chatReaderPanelRef.value;
+  if (!panel) {
+    throw new Error("文件阅读面板尚未就绪");
   }
-  await nextTick();
-  await nextTick();
-  await chatReaderPanelRef.value?.openPath(path, { targetLine: line });
+  await panel.openPath(path, { targetLine: line });
 }
 
 // ==================== lifecycle ====================

@@ -88,6 +88,7 @@
       @update-workspace-access="selectWorkspaceAccess"
       @side-conversation-list-visible-change="handleSideConversationListVisibleChange"
       @tool-review-panel-open-change="handleToolReviewPanelOpenChange"
+      @open-chat-reader-file="openChatReaderFile"
       @side-panel-widths-change="handleChatSidePanelWidthsChange"
       @side-panel-widths-commit="handleChatSidePanelWidthsCommit"
       @update-conversation-list-tab="updateConversationListTab"
@@ -258,7 +259,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatIngressPart, ChatMessage, ChatTodoItem, ConversationGoalState, IdeContextWorkspaceGroup, ShellWorkspace, ShellWorkMode } from "../../types/app";
 import { removeBinaryPlaceholders, messageText } from "../../utils/chat-message";
 import { formatConversationFallbackTitle } from "../chat/utils/conversation-title";
@@ -457,7 +458,11 @@ const {
   t,
   uploadAttachment: transport.uploadAttachment,
 });
-const chatViewWrapperRef = ref<{ exitMessageSelectionMode: () => void; chatUsagePercent?: number } | null>(null);
+const chatViewWrapperRef = ref<{
+  exitMessageSelectionMode: () => void;
+  openFileInReader: (path: string, line?: number) => Promise<void>;
+  chatUsagePercent?: number;
+} | null>(null);
 const chatUsagePercent = computed(() => chatViewWrapperRef.value?.chatUsagePercent ?? 0);
 const compactionDialogOpen = ref(false);
 const compactionPreviewLoading = ref(false);
@@ -740,6 +745,14 @@ function updateChatRightPanelMode(value: ChatRightPanelMode) {
   }
   view.value = "chat";
   handleToolReviewPanelOpenChange(true);
+}
+
+async function openChatReaderFile(path: string, line?: number) {
+  updateChatRightPanelMode("reader");
+  await nextTick();
+  const chatViewWrapper = chatViewWrapperRef.value;
+  if (!chatViewWrapper) throw new Error("文件阅读面板尚未就绪");
+  await chatViewWrapper.openFileInReader(path, line);
 }
 
 function updateChatMonitorPanelMode(value: ChatMonitorPanelMode) {
