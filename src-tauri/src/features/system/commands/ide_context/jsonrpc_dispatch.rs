@@ -31,6 +31,12 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "write_base64_file_to_path"
             | "write_utf8_text_file_to_path"
             | "queue_local_file_attachment"
+            | "attachment_transfer_begin"
+            | "attachment_transfer_chunk"
+            | "attachment_transfer_complete"
+            | "attachment_transfer_abort"
+            | "attachment_ingest_local_path"
+            | "check_git_workspace_root"
             | "update_file_reader_watch_targets"
             | "migrate_shell_workspace_directory"
             | "desktop_screenshot"
@@ -332,14 +338,17 @@ async fn ide_chat_handle_jsonrpc_request(
         "remote_im_weixin_oc_get_login_status" => ide_chat_remote_im_weixin_oc_get_login_status_for_web_settings(state, request.params).await,
         "remote_im_weixin_oc_sync_contacts" => ide_chat_remote_im_weixin_oc_sync_contacts_for_web_settings(state, request.params).await,
         "remote_im_weixin_oc_logout" => ide_chat_remote_im_weixin_oc_logout_for_web_settings(state, request.params).await,
-        "chat.queueAttachment" => ide_chat_queue_attachment(state, request.params),
+        "chat.queueAttachment" => ide_chat_queue_attachment(state, request.params).await,
         "chat.send" => ide_chat_send_message(state, request.params).await,
         "chat.stop" => ide_chat_stop_conversation(state, request.params),
         "chat.queueSnapshot" => ide_chat_queue_snapshot(state),
         "chat.sessionStateSnapshot" => ide_chat_session_state_snapshot(state),
         "chat.queueRecall" => ide_chat_recall_queue_event(state, request.params),
         "chat.queueMarkGuided" => ide_chat_mark_queue_event_guided(state, request.params),
-        "queue_inline_file_attachment" => ide_chat_queue_inline_attachment(state, request.params),
+        "queue_inline_file_attachment" => ide_chat_queue_inline_attachment(state, request.params).await,
+        "attachment.transfer.begin" => ide_attachment_transfer_begin(state, client_id, request.params).await,
+        "attachment.transfer.complete" => ide_attachment_transfer_complete(state, client_id, request.params).await,
+        "attachment.transfer.abort" => ide_attachment_transfer_abort(client_id, request.params).await,
         "submit_chat_message" => ide_chat_submit_message_command(state, request.params).await,
         "stop_chat_message" => ide_chat_stop_message_command(state, request.params),
         "get_chat_queue_snapshot" => ide_chat_queue_snapshot(state),
@@ -608,6 +617,9 @@ mod web_native_capability_tests {
             "get_usage_overview",
             "refresh_usage_overview",
             "queue_inline_file_attachment",
+            "attachment.transfer.begin",
+            "attachment.transfer.complete",
+            "attachment.transfer.abort",
             "submit_chat_message",
             "stop_chat_message",
             "get_chat_queue_snapshot",

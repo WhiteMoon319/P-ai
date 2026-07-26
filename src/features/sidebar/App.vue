@@ -251,7 +251,6 @@
       ref="attachmentInputRef"
       class="hidden"
       type="file"
-      accept="image/*,application/pdf"
       multiple
       @change="handleAttachmentInputChange"
     />
@@ -445,7 +444,7 @@ const {
   compacting,
   errorText: transport.errorText,
   t,
-  queueAttachment: (input) => transport.request("chat.queueAttachment", input),
+  uploadAttachment: transport.uploadAttachment,
 });
 const chatViewWrapperRef = ref<{ exitMessageSelectionMode: () => void; chatUsagePercent?: number } | null>(null);
 const chatUsagePercent = computed(() => chatViewWrapperRef.value?.chatUsagePercent ?? 0);

@@ -1,6 +1,11 @@
 import { ref, type ComputedRef, type Ref } from "vue";
 import type { ApiConfigItem } from "../../../types/app";
-import { invokeTauri } from "../../../services/tauri-api";
+import {
+  attachmentPreviewBase64,
+  ingestAttachment,
+  textAttachmentFile,
+  type AttachmentReceipt,
+} from "../../../services/attachment-transfer";
 import { useHotkeyRecordTest } from "../../shell/composables/use-hotkey-record-test";
 import { isAbsoluteLocalPath } from "../utils/local-link";
 
@@ -22,21 +27,6 @@ type UseChatMediaOptions = {
   queuedAttachmentNotices: Ref<Array<{ id: string; fileName: string; path: string; mime: string }>>;
 };
 
-type QueuedLocalFileResult = {
-  mime: string;
-  fileName: string;
-  savedPath: string;
-  attachAsMedia: boolean;
-  bytesBase64?: string | null;
-  textNotice?: string;
-};
-
-type QueueInlineFileAttachmentInput = {
-  fileName: string;
-  mime?: string;
-  bytesBase64: string;
-};
-
 export function useChatMedia(options: UseChatMediaOptions) {
   const mediaDragActive = ref(false);
   let dragOverlayHideTimer: ReturnType<typeof setTimeout> | null = null;
@@ -54,24 +44,11 @@ export function useChatMedia(options: UseChatMediaOptions) {
   async function queueTextAttachment(fileName: string, text: string, mime = "text/markdown") {
     const normalizedText = String(text || "");
     if (!normalizedText.trim()) return;
-    const bytesBase64 = btoa(unescape(encodeURIComponent(normalizedText)));
-    const queued = await invokeTauri<QueuedLocalFileResult>("queue_inline_file_attachment", {
-      input: {
-        fileName: String(fileName || "").trim() || "attachment.md",
-        mime,
-        bytesBase64,
-      } as QueueInlineFileAttachmentInput,
+    const queued = await ingestAttachment({
+      kind: "browser-file",
+      file: textAttachmentFile(fileName, normalizedText, mime),
     });
     applyQueuedAttachmentResult(queued, options.activeChatApiConfig.value || ({ enableImage: false } as ApiConfigItem));
-  }
-
-  async function readBlobAsDataUrl(blob: Blob): Promise<string> {
-    return await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ""));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(blob);
-    });
   }
 
   function classifyFileMime(
@@ -108,6 +85,15 @@ export function useChatMedia(options: UseChatMediaOptions) {
     const raw = (file.type || "").trim().toLowerCase();
     if (raw) return raw;
     return inferMimeFromFileName(file.name);
+  }
+
+  function hasFileTransferPayload(transfer: DataTransfer | null): boolean {
+    if (!transfer) return false;
+    const types = Array.from(transfer.types || []).map((value) => String(value || "").toLowerCase());
+    if (types.includes("files")) return true;
+    if (transfer.files && transfer.files.length > 0) return true;
+    if (transfer.items && Array.from(transfer.items).some((item) => item.kind === "file")) return true;
+    return false;
   }
 
   function collectPastedFiles(
@@ -157,21 +143,17 @@ export function useChatMedia(options: UseChatMediaOptions) {
     return out;
   }
 
-  function applyQueuedAttachmentResult(queued: QueuedLocalFileResult, apiConfig: ApiConfigItem) {
+  function applyQueuedAttachmentResult(queued: AttachmentReceipt, apiConfig: ApiConfigItem) {
     const mime = String(queued.mime || "").trim().toLowerCase();
     const classified = classifyFileMime(mime, apiConfig);
-    const canAttachAsMedia =
-      !!queued.attachAsMedia &&
-      !!String(queued.bytesBase64 || "").trim() &&
-      !!classified.kind;
+    const canAttachAsMedia = !!queued.attachAsMedia && !!classified.kind;
+    const path = String(queued.path || "").trim().replace(/\\/g, "/");
+    if (!isAbsoluteLocalPath(path)) {
+      options.setChatError("附件保存未返回绝对路径，已跳过该附件。其他消息内容仍可继续发送。");
+      return;
+    }
 
     if (!canAttachAsMedia) {
-      const savedPath = String(queued.savedPath || "").trim();
-      const path = savedPath.replace(/\\/g, "/");
-      if (!isAbsoluteLocalPath(path)) {
-        options.setChatError("附件保存未返回绝对路径，已跳过该附件。其他消息内容仍可继续发送。");
-        return;
-      }
       const fileName = String(queued.fileName || "").trim() || path.split("/").pop() || "attachment";
       const id = `${path}::${mime}`;
       if (!options.queuedAttachmentNotices.value.some((item) => item.id === id)) {
@@ -185,24 +167,17 @@ export function useChatMedia(options: UseChatMediaOptions) {
       return;
     }
 
-    options.clipboardImages.value.push({
+    const previewImage = {
       mime,
-      bytesBase64: String(queued.bytesBase64 || "").trim(),
-      savedPath: String(queued.savedPath || "").trim() || undefined,
-    });
+      bytesBase64: attachmentPreviewBase64(queued),
+      savedPath: path,
+      previewDataUrl: String(queued.previewDataUrl || "").trim() || undefined,
+    };
+    options.clipboardImages.value.push(previewImage);
   }
 
-  async function queueInlineBrowserFile(file: File, mime: string): Promise<QueuedLocalFileResult | null> {
-    const dataUrl = await readBlobAsDataUrl(file);
-    const bytesBase64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : "";
-    if (!bytesBase64) return null;
-    return await invokeTauri<QueuedLocalFileResult>("queue_inline_file_attachment", {
-      input: {
-        fileName: String(file.name || "").trim() || "attachment",
-        mime,
-        bytesBase64,
-      } as QueueInlineFileAttachmentInput,
-    });
+  async function queueInlineBrowserFile(file: File, _mime: string): Promise<AttachmentReceipt> {
+    return await ingestAttachment({ kind: "browser-file", file });
   }
 
   function onPaste(event: ClipboardEvent) {
@@ -218,7 +193,6 @@ export function useChatMedia(options: UseChatMediaOptions) {
         for (const item of collected) {
           try {
             const queued = await queueInlineBrowserFile(item.file, item.mime);
-            if (!queued) continue;
             applyQueuedAttachmentResult(queued, apiConfig);
           } catch (error) {
             options.setStatusError("status.pasteImageReadFailed", error);
@@ -243,13 +217,9 @@ export function useChatMedia(options: UseChatMediaOptions) {
     if (options.trimming.value) return;
     const apiConfig = options.activeChatApiConfig.value;
     if (!apiConfig) return;
-    if (!event.dataTransfer) return;
-    const hasFilePayload = !!event.dataTransfer?.types?.includes("Files");
-    if (!hasFilePayload) return;
+    if (!hasFileTransferPayload(event.dataTransfer)) return;
     event.preventDefault();
-    event.dataTransfer.dropEffect = "copy";
-    const collected = collectDroppedFiles(event);
-    if (collected.length === 0) return;
+    event.dataTransfer!.dropEffect = "copy";
     mediaDragActive.value = true;
     if (dragOverlayHideTimer) {
       clearTimeout(dragOverlayHideTimer);
@@ -266,9 +236,13 @@ export function useChatMedia(options: UseChatMediaOptions) {
     if (options.trimming.value) return;
     const apiConfig = options.activeChatApiConfig.value;
     if (!apiConfig) return;
-    const collected = collectDroppedFiles(event);
-    if (collected.length === 0) return;
+    if (!hasFileTransferPayload(event.dataTransfer)) return;
     event.preventDefault();
+    const collected = collectDroppedFiles(event);
+    if (collected.length === 0) {
+      mediaDragActive.value = false;
+      return;
+    }
     options.setChatError("");
     options.setStatus(`收到拖拽文件 ${collected.length} 个（DOM）。`);
     mediaDragActive.value = false;
@@ -280,7 +254,6 @@ export function useChatMedia(options: UseChatMediaOptions) {
       for (const item of collected) {
         try {
           const queued = await queueInlineBrowserFile(item.file, item.mime);
-          if (!queued) continue;
           applyQueuedAttachmentResult(queued, apiConfig);
         } catch (error) {
           options.setStatusError("status.pasteImageReadFailed", error);
@@ -300,9 +273,7 @@ export function useChatMedia(options: UseChatMediaOptions) {
 
     for (const path of paths) {
       try {
-        const queued = await invokeTauri<QueuedLocalFileResult>("queue_local_file_attachment", {
-          input: { path },
-        });
+        const queued = await ingestAttachment({ kind: "local-path", path });
         applyQueuedAttachmentResult(queued, apiConfig);
       } catch (error) {
         options.setStatusError("status.pasteImageReadFailed", error);

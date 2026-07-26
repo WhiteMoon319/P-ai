@@ -682,14 +682,24 @@ fn ide_chat_rebind_conversation_recipient(state: &AppState, params: Value) -> Re
     ide_chat_serialize(rebind_unarchived_conversation_recipient_inner(input, state)?)
 }
 
-fn ide_chat_queue_attachment(state: &AppState, params: Value) -> Result<Value, String> {
+async fn ide_chat_queue_attachment(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<QueueInlineFileAttachmentInput>(params)?;
-    ide_chat_serialize(queue_inline_file_attachment_inner(input, state)?)
+    let app_state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        ide_chat_serialize(queue_inline_file_attachment_inner(input, &app_state)?)
+    })
+    .await
+    .map_err(|err| format!("Web 内联附件兼容摄取任务异常：{err}"))?
 }
 
-fn ide_chat_queue_inline_attachment(state: &AppState, params: Value) -> Result<Value, String> {
+async fn ide_chat_queue_inline_attachment(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<QueueInlineFileAttachmentInput>(params, "input")?;
-    ide_chat_serialize(queue_inline_file_attachment_inner(input, state)?)
+    let app_state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        ide_chat_serialize(queue_inline_file_attachment_inner(input, &app_state)?)
+    })
+    .await
+    .map_err(|err| format!("Web 内联附件兼容摄取任务异常：{err}"))?
 }
 
 async fn ide_chat_submit_message_command(state: &AppState, params: Value) -> Result<Value, String> {

@@ -82,7 +82,7 @@ export function useChatComposerDrafts(options: UseChatComposerDraftsOptions) {
         .filter((item) => !!item.agentId && !!item.departmentId),
       clipboardImages: (Array.isArray(options.clipboardImages.value) ? options.clipboardImages.value : [])
         .map(cloneClipboardImage)
-        .filter((item) => !!item.mime && !!item.bytesBase64),
+        .filter((item) => !!item.mime && (!!item.bytesBase64 || !!item.savedPath)),
       queuedAttachmentNotices: (Array.isArray(options.queuedAttachmentNotices.value) ? options.queuedAttachmentNotices.value : [])
         .map(cloneQueuedAttachment)
         .filter((item) => !!item.id && !!item.path),

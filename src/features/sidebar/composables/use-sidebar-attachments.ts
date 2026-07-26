@@ -1,4 +1,5 @@
 import { computed, ref, type Ref } from "vue";
+import { attachmentPreviewBase64, type AttachmentReceipt } from "../../../services/attachment-transfer";
 import { isAbsoluteLocalPath } from "../../chat/utils/local-link";
 import type {
   SidebarAttachmentPayload,
@@ -7,48 +8,27 @@ import type {
   SidebarQueuedAttachmentNotice,
 } from "../sidebar-app-types";
 
-type QueueAttachmentResult = {
-  mime: string;
-  fileName: string;
-  savedPath: string;
-  attachAsMedia: boolean;
-  bytesBase64?: string | null;
-};
-
 type UseSidebarAttachmentsOptions = {
   view: Ref<string>;
   busy: Ref<boolean>;
   compacting: Ref<boolean>;
   errorText: Ref<string>;
   t: (key: string) => string;
-  queueAttachment: (input: {
-    fileName: string;
-    mime: string;
-    bytesBase64: string;
-  }) => Promise<QueueAttachmentResult>;
+  uploadAttachment: (file: File) => Promise<AttachmentReceipt>;
 };
 
-function readBlobAsDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error || new Error("读取剪贴板图片失败"));
-    reader.readAsDataURL(blob);
-  });
-}
-
-function pastedImageFiles(event: ClipboardEvent): File[] {
+function pastedFiles(event: ClipboardEvent): File[] {
   const data = event.clipboardData;
   if (!data) return [];
   const filesFromItems = data.items && data.items.length > 0
     ? Array.from(data.items)
-      .filter((item) => item.kind === "file" && item.type.toLowerCase().startsWith("image/"))
+      .filter((item) => item.kind === "file")
       .map((item) => item.getAsFile())
       .filter((file): file is File => !!file)
     : [];
   if (filesFromItems.length > 0) return filesFromItems;
   return data.files
-    ? Array.from(data.files).filter((file) => String(file.type || "").toLowerCase().startsWith("image/"))
+    ? Array.from(data.files)
     : [];
 }
 
@@ -62,10 +42,13 @@ export function useSidebarAttachments(options: UseSidebarAttachmentsOptions) {
   const attachmentInputRef = ref<HTMLInputElement | null>(null);
 
   const attachmentBackedClipboardImages = computed<SidebarClipboardImage[]>(() => queuedAttachmentEntries.value
-    .filter((item) => item.mime.startsWith("image/") && !!String(item.imageBytesBase64 || "").trim())
+    .filter((item) => item.mime.startsWith("image/") && (
+      !!String(item.imageBytesBase64 || "").trim() || !!String(item.previewDataUrl || "").trim()
+    ))
     .map((item) => ({
       mime: item.mime,
       bytesBase64: String(item.imageBytesBase64 || "").trim(),
+      previewDataUrl: String(item.previewDataUrl || "").trim() || undefined,
     })));
   const composerClipboardImages = computed<SidebarClipboardImage[]>(() => [
     ...clipboardImages.value,
@@ -80,27 +63,10 @@ export function useSidebarAttachments(options: UseSidebarAttachmentsOptions) {
 
   async function appendClipboardImagesFromPaste(event: ClipboardEvent) {
     if (options.view.value !== "chat" || options.compacting.value) return;
-    const files = pastedImageFiles(event);
+    const files = pastedFiles(event);
     if (files.length === 0) return;
     event.preventDefault();
-    for (const file of files) {
-      try {
-        const dataUrl = await readBlobAsDataUrl(file);
-        const bytesBase64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : "";
-        if (!bytesBase64) continue;
-        clipboardImages.value.push({
-          mime: String(file.type || "image/png").trim() || "image/png",
-          bytesBase64,
-        });
-      } catch (error) {
-        console.warn("[侧边栏附件] 单张剪贴板图片读取失败，已跳过并继续", {
-          fileName: String(file.name || "clipboard-image"),
-          error: error instanceof Error ? error.message : String(error || "unknown"),
-          stack: error instanceof Error ? error.stack : undefined,
-        });
-        options.errorText.value = String(error || options.t("sidebar.readClipboardImageFailed"));
-      }
-    }
+    await appendAttachmentFiles(files);
   }
 
   function removeClipboardImage(index: number) {
@@ -112,7 +78,9 @@ export function useSidebarAttachments(options: UseSidebarAttachmentsOptions) {
     const attachmentImageIndex = index - clipboardImages.value.length;
     if (attachmentImageIndex < 0) return;
     const attachmentImageIds = queuedAttachmentEntries.value
-      .filter((item) => item.mime.startsWith("image/") && !!String(item.imageBytesBase64 || "").trim())
+      .filter((item) => item.mime.startsWith("image/") && (
+        !!String(item.imageBytesBase64 || "").trim() || !!String(item.previewDataUrl || "").trim()
+      ))
       .map((item) => item.id);
     const targetId = attachmentImageIds[attachmentImageIndex];
     if (!targetId) return;
@@ -147,24 +115,12 @@ export function useSidebarAttachments(options: UseSidebarAttachmentsOptions) {
   }
 
   async function appendAttachmentFiles(files: File[]) {
-    const supported = files.filter((file) => {
-      const mime = String(file.type || "").toLowerCase();
-      return mime.startsWith("image/") || mime === "application/pdf";
-    });
-    if (supported.length === 0) return;
-    for (const file of supported) {
+    if (files.length === 0) return;
+    for (const file of files) {
       try {
-        const dataUrl = await readBlobAsDataUrl(file);
-        const bytesBase64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : "";
-        if (!bytesBase64) continue;
-        const queued = await options.queueAttachment({
-          fileName: String(file.name || "").trim() || "attachment",
-          mime: String(file.type || "").trim() || "application/octet-stream",
-          bytesBase64,
-        });
+        const queued = await options.uploadAttachment(file);
         const mime = String(queued.mime || "").trim().toLowerCase();
-        const savedPath = String(queued.savedPath || "").trim();
-        const path = savedPath.replace(/\\/g, "/");
+        const path = String(queued.path || "").trim().replace(/\\/g, "/");
         if (!isAbsoluteLocalPath(path)) {
           throw new Error(`附件未返回可用的绝对路径：${String(queued.fileName || file.name || "attachment")}`);
         }
@@ -176,7 +132,8 @@ export function useSidebarAttachments(options: UseSidebarAttachmentsOptions) {
             fileName,
             path,
             mime,
-            imageBytesBase64: mime.startsWith("image/") ? String(queued.bytesBase64 || "").trim() || undefined : undefined,
+            imageBytesBase64: mime.startsWith("image/") ? attachmentPreviewBase64(queued) || undefined : undefined,
+            previewDataUrl: mime.startsWith("image/") ? String(queued.previewDataUrl || "").trim() || undefined : undefined,
           });
         }
       } catch (error) {

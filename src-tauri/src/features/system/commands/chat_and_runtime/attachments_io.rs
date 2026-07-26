@@ -455,61 +455,73 @@ fn provider_meta_attachment_relative_paths(meta: &Value) -> Vec<String> {
 }
 
 #[tauri::command]
-fn read_local_binary_file(
+async fn read_local_binary_file(
     input: ReadLocalBinaryFileInput,
 ) -> Result<ReadLocalBinaryFileOutput, String> {
-    let path_text = input.path.trim();
-    if path_text.is_empty() {
-        return Err("File path is empty.".to_string());
-    }
-    let path = std::path::PathBuf::from(path_text);
-    let mime = media_mime_from_path(&path)
-        .ok_or_else(|| format!("Unsupported file type: '{}'.", path_text))?
-        .to_string();
-    let raw = fs::read(&path).map_err(|err| format!("Read file failed: {err}"))?;
-    if raw.len() > MAX_MULTIMODAL_BYTES {
-        return Err(format!(
-            "File is too large ({} bytes). Max allowed is {} bytes.",
-            raw.len(),
-            MAX_MULTIMODAL_BYTES
-        ));
-    }
-    Ok(ReadLocalBinaryFileOutput {
-        mime,
-        bytes_base64: B64.encode(raw),
+    tokio::task::spawn_blocking(move || {
+        let path_text = input.path.trim();
+        if path_text.is_empty() {
+            return Err("File path is empty.".to_string());
+        }
+        let path = std::path::PathBuf::from(path_text);
+        let mime = media_mime_from_path(&path)
+            .ok_or_else(|| format!("Unsupported file type: '{}'.", path_text))?
+            .to_string();
+        let raw = fs::read(&path).map_err(|err| format!("Read file failed: {err}"))?;
+        if raw.len() > MAX_MULTIMODAL_BYTES {
+            return Err(format!(
+                "File is too large ({} bytes). Max allowed is {} bytes.",
+                raw.len(),
+                MAX_MULTIMODAL_BYTES
+            ));
+        }
+        Ok(ReadLocalBinaryFileOutput {
+            mime,
+            bytes_base64: B64.encode(raw),
+        })
     })
+    .await
+    .map_err(|err| format!("读取本地二进制文件任务异常：{err}"))?
 }
 
 #[tauri::command]
-fn queue_local_file_attachment(
+async fn queue_local_file_attachment(
     input: QueueLocalFileAttachmentInput,
     state: State<'_, AppState>,
 ) -> Result<QueueLocalFileAttachmentOutput, String> {
-    let path_text = input.path.trim();
-    if path_text.is_empty() {
-        return Err("File path is empty.".to_string());
-    }
-    let path = std::path::PathBuf::from(path_text);
-    let file_name = path
-        .file_name()
-        .and_then(|v| v.to_str())
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .unwrap_or("attachment")
-        .to_string();
-    let raw = fs::read(&path).map_err(|err| format!("Read file failed: {err}"))?;
-    let mime = media_mime_from_path(&path)
-        .unwrap_or("application/octet-stream")
-        .to_string();
-    queue_attachment_from_raw(state.inner(), &file_name, &mime, &raw)
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let path_text = input.path.trim();
+        if path_text.is_empty() {
+            return Err("File path is empty.".to_string());
+        }
+        let path = std::path::PathBuf::from(path_text);
+        let file_name = path
+            .file_name()
+            .and_then(|v| v.to_str())
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .unwrap_or("attachment")
+            .to_string();
+        let raw = fs::read(&path).map_err(|err| format!("Read file failed: {err}"))?;
+        let mime = media_mime_from_path(&path)
+            .unwrap_or("application/octet-stream")
+            .to_string();
+        queue_attachment_from_raw(&app_state, &file_name, &mime, &raw)
+    })
+    .await
+    .map_err(|err| format!("本地附件兼容摄取任务异常：{err}"))?
 }
 
 #[tauri::command]
-fn queue_inline_file_attachment(
+async fn queue_inline_file_attachment(
     input: QueueInlineFileAttachmentInput,
     state: State<'_, AppState>,
 ) -> Result<QueueLocalFileAttachmentOutput, String> {
-    queue_inline_file_attachment_inner(input, state.inner())
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || queue_inline_file_attachment_inner(input, &app_state))
+        .await
+        .map_err(|err| format!("内联附件兼容摄取任务异常：{err}"))?
 }
 
 fn queue_inline_file_attachment_inner(
@@ -559,66 +571,78 @@ struct ReadLocalChatImageThumbnailOutput {
 }
 
 #[tauri::command]
-fn read_local_chat_image_thumbnail(
+async fn read_local_chat_image_thumbnail(
     input: ReadLocalChatImageThumbnailInput,
 ) -> Result<ReadLocalChatImageThumbnailOutput, String> {
-    let path = std::path::PathBuf::from(input.path.trim());
-    let max_edge = input.max_edge.unwrap_or(LOCAL_IMAGE_THUMBNAIL_MAX_EDGE);
-    let render = local_image_read_for_display(&path, max_edge)?;
-    let data_url = format!("data:{};base64,{}", render.mime, B64.encode(&render.bytes));
-    Ok(ReadLocalChatImageThumbnailOutput {
-        data_url,
-        mime: render.mime,
-        width: render.output_width,
-        height: render.output_height,
-        original_width: render.original_width,
-        original_height: render.original_height,
+    tokio::task::spawn_blocking(move || {
+        let path = std::path::PathBuf::from(input.path.trim());
+        let max_edge = input.max_edge.unwrap_or(LOCAL_IMAGE_THUMBNAIL_MAX_EDGE);
+        let render = local_image_read_for_display(&path, max_edge)?;
+        let data_url = format!("data:{};base64,{}", render.mime, B64.encode(&render.bytes));
+        Ok(ReadLocalChatImageThumbnailOutput {
+            data_url,
+            mime: render.mime,
+            width: render.output_width,
+            height: render.output_height,
+            original_width: render.original_width,
+            original_height: render.original_height,
+        })
     })
+    .await
+    .map_err(|err| format!("读取本地图片缩略图任务异常：{err}"))?
 }
 
 #[tauri::command]
-fn read_local_chat_image_original(
+async fn read_local_chat_image_original(
     input: ReadLocalChatImageThumbnailInput,
 ) -> Result<ReadLocalChatImageOutput, String> {
-    let path = std::path::PathBuf::from(input.path.trim());
-    let render = local_image_read_original(&path)?;
-    let data_url = format!("data:{};base64,{}", render.mime, B64.encode(&render.bytes));
-    Ok(ReadLocalChatImageOutput {
-        data_url,
-        mime: render.mime,
-        width: render.output_width,
-        height: render.output_height,
+    tokio::task::spawn_blocking(move || {
+        let path = std::path::PathBuf::from(input.path.trim());
+        let render = local_image_read_original(&path)?;
+        let data_url = format!("data:{};base64,{}", render.mime, B64.encode(&render.bytes));
+        Ok(ReadLocalChatImageOutput {
+            data_url,
+            mime: render.mime,
+            width: render.output_width,
+            height: render.output_height,
+        })
     })
+    .await
+    .map_err(|err| format!("读取本地图片原图任务异常：{err}"))?
 }
 
 #[tauri::command]
-fn copy_local_chat_image_to_clipboard(
+async fn copy_local_chat_image_to_clipboard(
     input: ReadLocalChatImageThumbnailInput,
 ) -> Result<Value, String> {
-    let path = std::path::PathBuf::from(input.path.trim());
-    let raw = local_image_read_raw(&path)?;
-    let (_, mime) = local_image_detect_format(&raw, &path)?;
-    let mut clipboard = arboard::Clipboard::new()
-        .map_err(|err| format!("初始化剪贴板失败: {err}"))?;
+    tokio::task::spawn_blocking(move || {
+        let path = std::path::PathBuf::from(input.path.trim());
+        let raw = local_image_read_raw(&path)?;
+        let (_, mime) = local_image_detect_format(&raw, &path)?;
+        let mut clipboard = arboard::Clipboard::new()
+            .map_err(|err| format!("初始化剪贴板失败: {err}"))?;
 
-    if matches!(mime.as_str(), "image/gif" | "image/webp") {
-        clipboard
-            .set()
-            .file_list(&[path.as_path()])
-            .map_err(|err| format!("复制图片文件到剪贴板失败: {err}"))?;
-        return Ok(serde_json::json!({ "ok": true, "mode": "file" }));
-    }
+        if matches!(mime.as_str(), "image/gif" | "image/webp") {
+            clipboard
+                .set()
+                .file_list(&[path.as_path()])
+                .map_err(|err| format!("复制图片文件到剪贴板失败: {err}"))?;
+            return Ok(serde_json::json!({ "ok": true, "mode": "file" }));
+        }
 
-    let (dynamic, _) = local_image_decode_dynamic(&raw, &path)?;
-    let rgba = dynamic.to_rgba8();
-    let image_data = arboard::ImageData {
-        width: rgba.width() as usize,
-        height: rgba.height() as usize,
-        bytes: rgba.as_raw().clone().into(),
-    };
-    clipboard.set_image(image_data)
-        .map_err(|err| format!("复制图片到剪贴板失败: {err}"))?;
-    Ok(serde_json::json!({ "ok": true, "mode": "bitmap" }))
+        let (dynamic, _) = local_image_decode_dynamic(&raw, &path)?;
+        let rgba = dynamic.to_rgba8();
+        let image_data = arboard::ImageData {
+            width: rgba.width() as usize,
+            height: rgba.height() as usize,
+            bytes: rgba.as_raw().clone().into(),
+        };
+        clipboard.set_image(image_data)
+            .map_err(|err| format!("复制图片到剪贴板失败: {err}"))?;
+        Ok(serde_json::json!({ "ok": true, "mode": "bitmap" }))
+    })
+    .await
+    .map_err(|err| format!("复制本地图片任务异常：{err}"))?
 }
 
 #[tauri::command]
@@ -634,14 +658,22 @@ async fn save_local_chat_image_as(
         .file_name()
         .and_then(|v| v.to_str())
         .unwrap_or("image.webp");
-    let dest = app.dialog()
+    let (dialog_tx, dialog_rx) = tokio::sync::oneshot::channel();
+    app.dialog()
         .file()
         .set_file_name(file_name)
-        .blocking_save_file();
+        .save_file(move |file| {
+            let _ = dialog_tx.send(file);
+        });
+    let dest = dialog_rx
+        .await
+        .map_err(|err| format!("等待保存对话框结果失败：{err}"))?;
     let dest_path = dest
         .and_then(|fp| fp.as_path().map(ToOwned::to_owned))
         .ok_or_else(|| "用户取消了保存".to_string())?;
-    std::fs::copy(&source_path, &dest_path)
+    tokio::task::spawn_blocking(move || std::fs::copy(&source_path, &dest_path))
+        .await
+        .map_err(|err| format!("复制图片文件任务异常：{err}"))?
         .map_err(|err| format!("复制文件失败: {err}"))?;
     Ok(serde_json::json!({ "ok": true }))
 }

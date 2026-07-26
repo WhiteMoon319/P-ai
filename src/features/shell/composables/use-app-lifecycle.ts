@@ -1,5 +1,6 @@
 import { onBeforeUnmount, onMounted, type Ref } from "vue";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
 
 type UseAppLifecycleOptions = {
@@ -133,6 +134,8 @@ async function waitForBackendReady(): Promise<void> {
 }
 
 export function useAppLifecycle(options: UseAppLifecycleOptions) {
+  let unlistenNativeFileDrop: (() => void) | null = null;
+
   onMounted(async () => {
     options.onStartupOverlayChange?.(true, "等待后端加载中...");
     options.onStartupProgressChange?.({
@@ -208,8 +211,25 @@ export function useAppLifecycle(options: UseAppLifecycleOptions) {
       });
       options.restoreThemeFromStorage();
       window.addEventListener("paste", options.onPaste);
-      window.addEventListener("dragover", options.onDragOver);
-      window.addEventListener("drop", options.onDrop);
+      window.addEventListener("dragover", options.onDragOver, { capture: true });
+      window.addEventListener("drop", options.onDrop, { capture: true });
+      if (isTauriRuntimeAvailable() && options.onNativeFileDrop) {
+        try {
+          unlistenNativeFileDrop = await getCurrentWebview().onDragDropEvent((event) => {
+            const payload = event.payload;
+            if (payload.type === "enter" || payload.type === "over") {
+              options.onNativeDragState?.(true);
+              return;
+            }
+            options.onNativeDragState?.(false);
+            if (payload.type === "drop") {
+              void Promise.resolve(options.onNativeFileDrop?.(payload.paths));
+            }
+          });
+        } catch {
+          // 原生拖拽监听失败不影响 DOM 拖拽。
+        }
+      }
       options.recordHotkeyMount();
       try {
         options.onStartupProgressChange?.({
@@ -301,7 +321,9 @@ export function useAppLifecycle(options: UseAppLifecycleOptions) {
     options.recordHotkeyUnmount();
     void options.cleanupChatMedia();
     window.removeEventListener("paste", options.onPaste);
-    window.removeEventListener("dragover", options.onDragOver);
-    window.removeEventListener("drop", options.onDrop);
+    window.removeEventListener("dragover", options.onDragOver, { capture: true });
+    window.removeEventListener("drop", options.onDrop, { capture: true });
+    unlistenNativeFileDrop?.();
+    unlistenNativeFileDrop = null;
   });
 }

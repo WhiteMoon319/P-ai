@@ -13,6 +13,12 @@ type PendingWebBridgeRequest = {
   timer: number | null;
 };
 
+type PendingWebAttachmentChunk = {
+  resolve: (value: { transferId: string; nextOffset: number }) => void;
+  reject: (reason?: unknown) => void;
+  timer: number;
+};
+
 type WebBridgeState = {
   configured: boolean;
   connected: boolean;
@@ -60,6 +66,7 @@ let webBridgeSocket: WebSocket | null = null;
 let webBridgeConnectPromise: Promise<void> | null = null;
 let webBridgeRequestId = 1;
 const webBridgePending = new Map<number, PendingWebBridgeRequest>();
+const webBridgePendingAttachmentChunks = new Map<string, PendingWebAttachmentChunk>();
 const webBridgeNotificationHandlers = new Map<string, Set<(payload: unknown) => void>>();
 const webBridgeState: WebBridgeState = {
   configured: false,
@@ -238,6 +245,11 @@ function resetWebBridgeConnectionState(errorText = "") {
     request.reject(new Error(errorText || "连接已断开"));
     webBridgePending.delete(id);
   }
+  for (const [transferId, request] of webBridgePendingAttachmentChunks.entries()) {
+    window.clearTimeout(request.timer);
+    request.reject(new Error(errorText || "连接已断开"));
+    webBridgePendingAttachmentChunks.delete(transferId);
+  }
 }
 
 function settleWebBridgeRequest(id: number, payload: Record<string, unknown>) {
@@ -287,6 +299,33 @@ function emitWebBridgeNotification(method: string, payload: unknown) {
   for (const handler of handlers) handler(payload);
 }
 
+function settleWebAttachmentChunk(payload: Record<string, unknown>) {
+  const params = (payload.params || {}) as { transferId?: unknown; nextOffset?: unknown };
+  const transferId = String(params.transferId || "").trim();
+  if (payload.method === "attachment.chunkAck" && transferId) {
+    const request = webBridgePendingAttachmentChunks.get(transferId);
+    if (!request) return;
+    webBridgePendingAttachmentChunks.delete(transferId);
+    window.clearTimeout(request.timer);
+    const nextOffset = Number(params.nextOffset);
+    if (!Number.isSafeInteger(nextOffset) || nextOffset < 0) {
+      request.reject(new Error("附件分块确认 offset 无效"));
+      return;
+    }
+    request.resolve({ transferId, nextOffset });
+    return;
+  }
+  if (payload.error && webBridgePendingAttachmentChunks.size > 0) {
+    const error = payload.error as { message?: unknown };
+    const reason = new Error(String(error?.message || "附件分块传输失败"));
+    for (const [pendingTransferId, request] of webBridgePendingAttachmentChunks.entries()) {
+      webBridgePendingAttachmentChunks.delete(pendingTransferId);
+      window.clearTimeout(request.timer);
+      request.reject(reason);
+    }
+  }
+}
+
 function handleWebBridgeMessage(event: MessageEvent<string>, ready: () => void) {
   let payload: Record<string, unknown>;
   try {
@@ -299,6 +338,13 @@ function handleWebBridgeMessage(event: MessageEvent<string>, ready: () => void) 
     return;
   }
   const method = String(payload.method || "");
+  if (method === "attachment.chunkAck") {
+    settleWebAttachmentChunk(payload);
+    return;
+  }
+  if (payload.error) {
+    settleWebAttachmentChunk(payload);
+  }
   if (method === "bridge.ready") {
     const params = (payload.params || {}) as { authRequired?: unknown };
     const hasAuthToken = !!String(webBridgeConfig?.token || "").trim();
@@ -404,6 +450,10 @@ async function invokeWebBridge<T>(command: string, args?: Record<string, unknown
   const authToken = String(config.token || "").trim();
   const params = authToken ? { authToken, ...(args || {}) } : (args || {});
   const body = { jsonrpc: "2.0", id, method: command, params };
+  const currentSocket = webBridgeSocket;
+  if (!currentSocket || currentSocket.readyState !== WebSocket.OPEN) {
+    throw new Error("PAI 未运行");
+  }
   return new Promise<T>((resolve, reject) => {
     const resolvedTimeoutMs = webBridgeTimeoutForCommand(command, timeoutMs);
     const timer = resolvedTimeoutMs === null
@@ -413,6 +463,109 @@ async function invokeWebBridge<T>(command: string, args?: Record<string, unknown
           reject(new Error("请求超时"));
         }, resolvedTimeoutMs);
     webBridgePending.set(id, { resolve: resolve as (value: unknown) => void, reject, timer });
-    webBridgeSocket?.send(JSON.stringify(body));
+    try {
+      currentSocket.send(JSON.stringify(body));
+    } catch (error) {
+      webBridgePending.delete(id);
+      if (timer !== null) window.clearTimeout(timer);
+      reject(error);
+    }
   });
+}
+
+function webAttachmentUuidToBytes(value: string): Uint8Array {
+  const normalized = String(value || "").replace(/-/g, "").trim();
+  if (!/^[0-9a-f]{32}$/i.test(normalized)) {
+    throw new Error("附件传输 ID 无效");
+  }
+  const bytes = new Uint8Array(16);
+  for (let index = 0; index < 16; index += 1) {
+    bytes[index] = Number.parseInt(normalized.slice(index * 2, index * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+function waitForWebAttachmentChunk(
+  transferId: string,
+  timeoutMs = 30000,
+): Promise<{ transferId: string; nextOffset: number }> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      webBridgePendingAttachmentChunks.delete(transferId);
+      reject(new Error("附件分块确认超时"));
+    }, timeoutMs);
+    webBridgePendingAttachmentChunks.set(transferId, { resolve, reject, timer });
+  });
+}
+
+function clearPendingWebAttachmentChunk(transferId: string) {
+  const request = webBridgePendingAttachmentChunks.get(transferId);
+  if (!request) return;
+  webBridgePendingAttachmentChunks.delete(transferId);
+  window.clearTimeout(request.timer);
+}
+
+export async function uploadWebBridgeAttachment<T>(file: File): Promise<T> {
+  const size = Number(file.size || 0);
+  if (size > 50 * 1024 * 1024) {
+    const error = new Error("FILE_TOO_LARGE: 文件太大，单个文件不能超过 50 MiB") as Error & { code?: string };
+    error.code = "FILE_TOO_LARGE";
+    throw error;
+  }
+  const begin = await invokeWebBridge<{ transferId: string; nextOffset: number; chunkSize?: number }>(
+    "attachment.transfer.begin",
+    {
+      fileName: String(file.name || "attachment").trim() || "attachment",
+      mime: String(file.type || "").trim(),
+      size,
+    },
+    30000,
+  );
+  const transferId = String(begin?.transferId || "").trim();
+  if (!transferId) throw new Error("附件传输未返回 transferId");
+  const chunkSize = Math.max(1, Math.min(Number(begin?.chunkSize || 256 * 1024), 256 * 1024));
+  let offset = Number(begin?.nextOffset || 0);
+  try {
+    while (offset < size) {
+      const end = Math.min(size, offset + chunkSize);
+      const chunk = new Uint8Array(await file.slice(offset, end).arrayBuffer());
+      if (chunk.length === 0) throw new Error("附件分块为空");
+      const frame = new Uint8Array(29 + chunk.length);
+      frame[0] = 1;
+      frame.set(webAttachmentUuidToBytes(transferId), 1);
+      const frameView = new DataView(frame.buffer);
+      frameView.setUint32(17, Math.floor(offset / 0x100000000), false);
+      frameView.setUint32(21, offset >>> 0, false);
+      frameView.setUint32(25, chunk.length, false);
+      frame.set(chunk, 29);
+      let ack: { transferId: string; nextOffset: number } | null = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const ackPromise = waitForWebAttachmentChunk(transferId);
+        try {
+          if (!webBridgeSocket || webBridgeSocket.readyState !== WebSocket.OPEN) {
+            throw new Error("连接已断开");
+          }
+          webBridgeSocket.send(frame);
+          ack = await ackPromise;
+          break;
+        } catch (error) {
+          clearPendingWebAttachmentChunk(transferId);
+          if (attempt === 1) throw error;
+        }
+      }
+      if (!ack) throw new Error("附件分块传输失败");
+      if (ack.nextOffset <= offset || ack.nextOffset > size) {
+        throw new Error(`附件分块确认 offset 无效：${ack.nextOffset}`);
+      }
+      offset = ack.nextOffset;
+    }
+    return await invokeWebBridge<T>("attachment.transfer.complete", { transferId }, 60000);
+  } catch (error) {
+    try {
+      await invokeWebBridge("attachment.transfer.abort", { transferId }, 5000);
+    } catch {
+      // 连接断开或会话已清理时无需重复报告 abort 错误。
+    }
+    throw error;
+  }
 }

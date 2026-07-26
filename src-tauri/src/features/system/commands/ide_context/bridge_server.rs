@@ -391,6 +391,11 @@ async fn ide_context_chat_ws_handle_connection(
             "path": IDE_CONTEXT_CHAT_BRIDGE_PATH,
             "authRequired": !authenticated,
             "authMode": if authenticated { "none" } else { "password" },
+            "attachmentTransfer": {
+                "version": 1,
+                "chunkSize": ATTACHMENT_TRANSFER_CHUNK_BYTES,
+                "maxBytes": ATTACHMENT_TRANSFER_WEB_MAX_BYTES,
+            },
         },
     }));
     let mut registered_client = false;
@@ -537,6 +542,29 @@ async fn ide_context_chat_ws_handle_connection(
                     "params": { "bytes": payload.len() },
                 }));
             }
+            Ok(tokio_tungstenite::tungstenite::Message::Binary(data)) => {
+                if !ide_context_web_access_enabled(&state) {
+                    let _ = outbound_tx.send(ide_chat_jsonrpc_error(
+                        None,
+                        -32002,
+                        "网络访问已关闭",
+                    ));
+                    break;
+                }
+                if !authenticated {
+                    let _ = outbound_tx.send(ide_chat_jsonrpc_error(
+                        None,
+                        -32001,
+                        "远程访问需要先输入密码",
+                    ));
+                } else {
+                    let response = match ide_attachment_transfer_binary_chunk(&client_id, &data).await {
+                        Ok(notification) => notification,
+                        Err(err) => ide_chat_jsonrpc_error(None, -32020, err),
+                    };
+                    let _ = outbound_tx.send(response);
+                }
+            }
             Ok(tokio_tungstenite::tungstenite::Message::Close(_)) => break,
             Ok(_) => {}
             Err(err) => {
@@ -558,6 +586,7 @@ async fn ide_context_chat_ws_handle_connection(
             runtime_log_error(format!("[VSCode 侧边栏] 释放会话占用失败: {}", err));
         }
     }
+    attachment_transfer_abort_owner(&client_id).await;
     writer.abort();
     runtime_log_info(format!("[VSCode 侧边栏] 客户端已断开: {}", peer_addr));
 }

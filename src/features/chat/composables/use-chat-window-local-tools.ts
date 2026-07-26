@@ -1,5 +1,10 @@
 import { i18n } from "../../../i18n";
 import { invokeTauri } from "../../../services/tauri-api";
+import {
+  attachmentPreviewBase64,
+  base64AttachmentFile,
+  ingestAttachment,
+} from "../../../services/attachment-transfer";
 import type { AppConfig } from "../../../types/app";
 import type { Ref } from "vue";
 import { isAbsoluteLocalPath } from "../utils/local-link";
@@ -170,35 +175,30 @@ export function useChatWindowLocalTools(bindings: ChatWindowLocalToolsBindings) 
       if (!imageBase64) {
         throw new Error(t('chat.localTools.screenshotResultEmpty'));
       }
-      const queued = await invokeTauri<{
-        mime: string;
-        fileName: string;
-        savedPath: string;
-        attachAsMedia: boolean;
-        bytesBase64?: string | null;
-      }>("queue_inline_file_attachment", {
-        input: {
-          fileName: `voice-auto-${Date.now()}.webp`,
-          mime: imageMime || "image/webp",
-          bytesBase64: imageBase64,
-        },
+      const queued = await ingestAttachment({
+        kind: "browser-file",
+        file: base64AttachmentFile(
+          `voice-auto-${Date.now()}.webp`,
+          imageBase64,
+          imageMime || "image/webp",
+        ),
       });
       const mime = String(queued.mime || "").trim().toLowerCase();
       const imageSupported = !!apiConfig.enableImage || bindings.hasVisionFallback.value;
       const canSendAsImage =
         !!queued.attachAsMedia
-        && !!String(queued.bytesBase64 || "").trim()
         && mime.startsWith("image/")
         && imageSupported;
       if (canSendAsImage) {
-        bindings.clipboardImages.value.push({
+        const previewImage = {
           mime,
-          bytesBase64: String(queued.bytesBase64 || "").trim(),
-          savedPath: String(queued.savedPath || "").trim() || undefined,
-        });
+          bytesBase64: attachmentPreviewBase64(queued),
+          savedPath: String(queued.path || "").trim() || undefined,
+          previewDataUrl: String(queued.previewDataUrl || "").trim() || undefined,
+        };
+        bindings.clipboardImages.value.push(previewImage);
       } else {
-        const savedPath = String(queued.savedPath || "").trim();
-        const path = savedPath.replace(/\\/g, "/");
+        const path = String(queued.path || "").trim().replace(/\\/g, "/");
         if (!isAbsoluteLocalPath(path)) {
           throw new Error("截图附件保存未返回绝对路径，已跳过本次截图附件。");
         }

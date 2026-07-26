@@ -2,23 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 import { useSidebarAttachments } from "./use-sidebar-attachments";
 
-class FakeFileReader {
-  result: string | ArrayBuffer | null = null;
-  error: DOMException | null = null;
-  onload: ((event: ProgressEvent<FileReader>) => void) | null = null;
-  onerror: ((event: ProgressEvent<FileReader>) => void) | null = null;
-
-  readAsDataURL(_blob: Blob) {
-    this.result = "data:image/png;base64,YWJj";
-    queueMicrotask(() => this.onload?.({} as ProgressEvent<FileReader>));
-  }
-}
-
 function file(name: string): File {
   return { name, type: "image/png" } as File;
 }
 
-function setup(queueAttachment: any) {
+function setup(uploadAttachment: any) {
   const errorText = ref("");
   const attachments = useSidebarAttachments({
     view: ref("chat"),
@@ -26,7 +14,7 @@ function setup(queueAttachment: any) {
     compacting: ref(false),
     errorText,
     t: (key) => key,
-    queueAttachment,
+    uploadAttachment,
   });
   return { attachments, errorText };
 }
@@ -38,38 +26,42 @@ afterEach(() => {
 
 describe("useSidebarAttachments", () => {
   it("continues with later files when one attachment fails", async () => {
-    vi.stubGlobal("FileReader", FakeFileReader);
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const queueAttachment = vi.fn()
+    const uploadAttachment = vi.fn()
       .mockRejectedValueOnce(new Error("first failed"))
       .mockResolvedValueOnce({
+        id: "transfer-2",
         mime: "image/png",
         fileName: "second.png",
-        savedPath: "C:/attachments/second.png",
+        path: "C:/attachments/second.png",
+        size: 3,
         attachAsMedia: true,
-        bytesBase64: "YWJj",
+        textNotice: "",
+        previewDataUrl: "data:image/png;base64,YWJj",
       });
-    const { attachments, errorText } = setup(queueAttachment);
+    const { attachments, errorText } = setup(uploadAttachment);
 
     await attachments.appendAttachmentFiles([file("first.png"), file("second.png")]);
 
-    expect(queueAttachment).toHaveBeenCalledTimes(2);
+    expect(uploadAttachment).toHaveBeenCalledTimes(2);
+    expect(uploadAttachment.mock.calls[1]?.[0]).toMatchObject({ name: "second.png", type: "image/png" });
     expect(attachments.queuedAttachmentEntries.value).toHaveLength(1);
     expect(attachments.queuedAttachmentEntries.value[0]?.path).toBe("C:/attachments/second.png");
     expect(errorText.value).toContain("first failed");
   });
 
   it("never fabricates a relative path when queue result has no saved path", async () => {
-    vi.stubGlobal("FileReader", FakeFileReader);
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const queueAttachment = vi.fn().mockResolvedValue({
+    const uploadAttachment = vi.fn().mockResolvedValue({
+      id: "transfer-pdf",
       mime: "application/pdf",
       fileName: "report.pdf",
-      savedPath: "",
+      path: "",
+      size: 3,
       attachAsMedia: false,
-      bytesBase64: null,
+      textNotice: "",
     });
-    const { attachments, errorText } = setup(queueAttachment);
+    const { attachments, errorText } = setup(uploadAttachment);
 
     await attachments.appendAttachmentFiles([
       { name: "report.pdf", type: "application/pdf" } as File,

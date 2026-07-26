@@ -11,6 +11,23 @@ export type SidebarBridgeConfig = {
   token?: string;
 };
 
+type PendingAttachmentChunk = {
+  resolve: (value: { transferId: string; nextOffset: number }) => void;
+  reject: (reason?: unknown) => void;
+  timer: number;
+};
+
+export type SidebarAttachmentReceipt = {
+  id: string;
+  fileName: string;
+  mime: string;
+  size: number;
+  path: string;
+  attachAsMedia: boolean;
+  textNotice: string;
+  previewDataUrl?: string;
+};
+
 const SIDEBAR_BRIDGE_TOKEN_STORAGE_PREFIX = "easy_call.sidebar.bridge_token.v1:";
 
 function sidebarBridgeTokenStorageKey(chatUrl: string): string {
@@ -49,6 +66,7 @@ export function useWsTransport() {
   const bridgeConfig = ref<SidebarBridgeConfig | null>(null);
   const notificationHandlers = new Map<string, Set<(payload: unknown) => void>>();
   const pending = new Map<number, PendingRequest>();
+  const pendingAttachmentChunks = new Map<string, PendingAttachmentChunk>();
   let authRefreshHandler: (() => void) | null = null;
   let requestId = 1;
 
@@ -96,6 +114,33 @@ export function useWsTransport() {
     item.resolve(payload.result);
   }
 
+  function settleAttachmentChunk(payload: Record<string, unknown>) {
+    const params = (payload.params || {}) as { transferId?: unknown; nextOffset?: unknown };
+    const transferId = String(params.transferId || "").trim();
+    if (payload.method === "attachment.chunkAck" && transferId) {
+      const pendingChunk = pendingAttachmentChunks.get(transferId);
+      if (!pendingChunk) return;
+      pendingAttachmentChunks.delete(transferId);
+      window.clearTimeout(pendingChunk.timer);
+      const nextOffset = Number(params.nextOffset);
+      if (!Number.isSafeInteger(nextOffset) || nextOffset < 0) {
+        pendingChunk.reject(new Error("附件分块确认 offset 无效"));
+        return;
+      }
+      pendingChunk.resolve({ transferId, nextOffset });
+      return;
+    }
+    if (payload.error && pendingAttachmentChunks.size > 0) {
+      const error = payload.error as { message?: unknown };
+      const reason = new Error(String(error?.message || "附件分块传输失败"));
+      for (const [pendingTransferId, pendingChunk] of pendingAttachmentChunks.entries()) {
+        pendingAttachmentChunks.delete(pendingTransferId);
+        window.clearTimeout(pendingChunk.timer);
+        pendingChunk.reject(reason);
+      }
+    }
+  }
+
   function handleMessage(event: MessageEvent<string>, ready?: () => void) {
     let payload: Record<string, unknown>;
     try {
@@ -108,6 +153,13 @@ export function useWsTransport() {
       return;
     }
     const method = String(payload.method || "");
+    if (method === "attachment.chunkAck") {
+      settleAttachmentChunk(payload);
+      return;
+    }
+    if (payload.error) {
+      settleAttachmentChunk(payload);
+    }
     if (method === "bridge.ready") {
       const params = (payload.params || {}) as { authRequired?: unknown };
       const hasAuthToken = !!String(bridgeConfig.value?.token || "").trim();
@@ -131,6 +183,11 @@ export function useWsTransport() {
       window.clearTimeout(item.timer);
       item.reject(new Error("连接已断开"));
       pending.delete(id);
+    }
+    for (const [transferId, item] of pendingAttachmentChunks.entries()) {
+      window.clearTimeout(item.timer);
+      item.reject(new Error("连接已断开"));
+      pendingAttachmentChunks.delete(transferId);
     }
     if (current && current.readyState !== WebSocket.CLOSED) current.close();
   }
@@ -189,6 +246,11 @@ export function useWsTransport() {
           item.reject(new Error("连接已断开"));
           pending.delete(id);
         }
+        for (const [transferId, item] of pendingAttachmentChunks.entries()) {
+          window.clearTimeout(item.timer);
+          item.reject(new Error("连接已断开"));
+          pendingAttachmentChunks.delete(transferId);
+        }
         if (!settled) {
           fail(new Error("PAI 未运行"));
         } else if (socket.value === ws) {
@@ -205,7 +267,10 @@ export function useWsTransport() {
   }
 
   function request<T>(method: string, params: Record<string, unknown> = {}, timeoutMs = 30000): Promise<T> {
-    if (!canSend.value || !socket.value) return Promise.reject(new Error("PAI 未运行"));
+    const currentSocket = socket.value;
+    if (!canSend.value || !currentSocket || currentSocket.readyState !== WebSocket.OPEN) {
+      return Promise.reject(new Error("PAI 未运行"));
+    }
     if (authRequired.value && !authenticated.value && method !== "auth.login") {
       return Promise.reject(new Error("远程访问需要先输入密码"));
     }
@@ -219,7 +284,13 @@ export function useWsTransport() {
         reject(new Error("请求超时"));
       }, timeoutMs);
       pending.set(id, { resolve: resolve as (value: unknown) => void, reject, timer });
-      socket.value?.send(JSON.stringify(body));
+      try {
+        currentSocket.send(JSON.stringify(body));
+      } catch (error) {
+        pending.delete(id);
+        window.clearTimeout(timer);
+        reject(error);
+      }
     });
   }
 
@@ -232,6 +303,104 @@ export function useWsTransport() {
 
   function onAuthRefreshNeeded(handler: () => void) {
     authRefreshHandler = handler;
+  }
+
+  function uuidToBytes(value: string): Uint8Array {
+    const normalized = String(value || "").replace(/-/g, "").trim();
+    if (!/^[0-9a-f]{32}$/i.test(normalized)) {
+      throw new Error("附件传输 ID 无效");
+    }
+    const bytes = new Uint8Array(16);
+    for (let index = 0; index < 16; index += 1) {
+      bytes[index] = Number.parseInt(normalized.slice(index * 2, index * 2 + 2), 16);
+    }
+    return bytes;
+  }
+
+  function waitForAttachmentChunk(
+    transferId: string,
+    timeoutMs = 30000,
+  ): Promise<{ transferId: string; nextOffset: number }> {
+    return new Promise((resolve, reject) => {
+      const timer = window.setTimeout(() => {
+        pendingAttachmentChunks.delete(transferId);
+        reject(new Error("附件分块确认超时"));
+      }, timeoutMs);
+      pendingAttachmentChunks.set(transferId, { resolve, reject, timer });
+    });
+  }
+
+  function clearPendingAttachmentChunk(transferId: string) {
+    const pendingChunk = pendingAttachmentChunks.get(transferId);
+    if (!pendingChunk) return;
+    pendingAttachmentChunks.delete(transferId);
+    window.clearTimeout(pendingChunk.timer);
+  }
+
+  async function uploadAttachment(file: File): Promise<SidebarAttachmentReceipt> {
+    const size = Number(file.size || 0);
+    const maxBytes = 50 * 1024 * 1024;
+    if (size > maxBytes) {
+      const error = new Error("FILE_TOO_LARGE: 文件太大，单个文件不能超过 50 MiB") as Error & { code?: string };
+      error.code = "FILE_TOO_LARGE";
+      throw error;
+    }
+    const begin = await request<{ transferId: string; nextOffset: number; chunkSize?: number }>(
+      "attachment.transfer.begin",
+      {
+        fileName: String(file.name || "attachment").trim() || "attachment",
+        mime: String(file.type || "").trim(),
+        size,
+      },
+      30000,
+    );
+    const transferId = String(begin?.transferId || "").trim();
+    if (!transferId) throw new Error("附件传输未返回 transferId");
+    const chunkSize = Math.max(1, Math.min(Number(begin?.chunkSize || 256 * 1024), 256 * 1024));
+    let offset = Number(begin?.nextOffset || 0);
+    try {
+      while (offset < size) {
+        const end = Math.min(size, offset + chunkSize);
+        const chunk = new Uint8Array(await file.slice(offset, end).arrayBuffer());
+        if (chunk.length === 0) throw new Error("附件分块为空");
+        const frame = new Uint8Array(29 + chunk.length);
+        frame[0] = 1;
+        frame.set(uuidToBytes(transferId), 1);
+        const frameView = new DataView(frame.buffer);
+        frameView.setUint32(17, Math.floor(offset / 0x100000000), false);
+        frameView.setUint32(21, offset >>> 0, false);
+        frameView.setUint32(25, chunk.length, false);
+        frame.set(chunk, 29);
+        let ack: { transferId: string; nextOffset: number } | null = null;
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const ackPromise = waitForAttachmentChunk(transferId);
+          try {
+            if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
+              throw new Error("连接已断开");
+            }
+            socket.value.send(frame);
+            ack = await ackPromise;
+            break;
+          } catch (error) {
+            clearPendingAttachmentChunk(transferId);
+            if (attempt === 1) throw error;
+          }
+        }
+        if (!ack) throw new Error("附件分块传输失败");
+        if (ack.nextOffset <= offset || ack.nextOffset > size) {
+          throw new Error(`附件分块确认 offset 无效：${ack.nextOffset}`);
+        }
+        offset = ack.nextOffset;
+      }
+      return await request<SidebarAttachmentReceipt>("attachment.transfer.complete", { transferId }, 60000);
+    } catch (error) {
+      try {
+        await request("attachment.transfer.abort", { transferId }, 5000);
+      } catch {
+        // 连接断开或会话已清理时无需重复报告 abort 错误。
+      }
+      throw error;
+    }
   }
 
   async function login(password: string): Promise<void> {
@@ -267,6 +436,7 @@ export function useWsTransport() {
     close,
     login,
     request,
+    uploadAttachment,
     ping,
     onNotification,
     onAuthRefreshNeeded,

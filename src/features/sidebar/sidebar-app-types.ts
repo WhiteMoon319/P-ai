@@ -86,7 +86,7 @@ export type SidebarWorkspacePermission = {
   rootPath?: string;
 };
 
-export type SidebarClipboardImage = { mime: string; bytesBase64: string };
+export type SidebarClipboardImage = { mime: string; bytesBase64: string; previewDataUrl?: string };
 
 export type SidebarQueuedAttachmentEntry = {
   id: string;
@@ -94,6 +94,7 @@ export type SidebarQueuedAttachmentEntry = {
   path: string;
   mime: string;
   imageBytesBase64?: string;
+  previewDataUrl?: string;
 };
 
 export type SidebarQueuedAttachmentNotice = {

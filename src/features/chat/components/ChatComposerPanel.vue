@@ -379,7 +379,7 @@ import { buildApiConfigSelectionTree } from "../../config/utils/api-config-selec
 import { ideContextReferenceDisplayParts } from "../utils/ide-context-reference-display";
 import { mergeComposerIdeContextGroups } from "../utils/ide-context-reference-groups";
 
-type BinaryAttachment = { mime: string; bytesBase64: string };
+type BinaryAttachment = { mime: string; bytesBase64: string; previewDataUrl?: string };
 type QueuedAttachmentNotice = { id: string; fileName: string; path: string; mime: string };
 type ConversationDepartmentOption = DepartmentPersonaOption;
 type MentionOptionView = {
@@ -1217,6 +1217,8 @@ function isPdfMime(mime: string): boolean {
 }
 
 function clipboardImagePreviewSrc(image: BinaryAttachment): string {
+  const previewDataUrl = String(image?.previewDataUrl || "").trim();
+  if (previewDataUrl.startsWith("data:image/")) return previewDataUrl;
   const mime = String(image?.mime || "").trim().toLowerCase();
   const bytesBase64 = String(image?.bytesBase64 || "").trim();
   if (!mime.startsWith("image/") || !bytesBase64) return "";

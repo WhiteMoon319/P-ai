@@ -654,7 +654,7 @@ const props = defineProps<{
   frontendRoundPhase: "idle" | "queued" | "waiting" | "streaming";
   submitPending?: boolean;
   toolStatusText: string; toolStatusState: "running" | "done" | "failed" | "";
-  chatErrorText: string; clipboardImages: Array<{ mime: string; bytesBase64: string }>;
+  chatErrorText: string; clipboardImages: Array<{ mime: string; bytesBase64: string; previewDataUrl?: string }>;
   queuedAttachmentNotices: Array<{ id: string; fileName: string; path: string; mime: string }>;
   chatInput: string; instructionPresets: PromptCommandPreset[]; chatInputPlaceholder: string;
   canRecord: boolean; recording: boolean; recordingMs: number; transcribing: boolean; recordHotkey: string;
