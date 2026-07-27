@@ -660,7 +660,7 @@ import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-ap
 import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
 import ChatImagePreviewDialog from "../../chat/components/dialogs/ChatImagePreviewDialog.vue";
 import { useChatImagePreview } from "../../chat/composables/use-chat-image-preview";
-import { isAbsoluteLocalPath, normalizeLocalLinkHref, parseLocalFileReference } from "../../chat/utils/local-link";
+import { isAbsoluteLocalPath, isAssistantSpacePath, normalizeLocalLinkHref, parseLocalFileReference } from "../../chat/utils/local-link";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import PanelTabStrip from "../../shared/components/PanelTabStrip.vue";
 import { useI18n } from "vue-i18n";
@@ -1949,7 +1949,7 @@ async function openMarkdownFileLink(event: MouseEvent) {
   await openPath(targetPath, { targetLine: reference?.line });
 }
 
-function openMarkdownImagePreview(payload: { src?: string; localPath?: string; alt?: string }) {
+async function openMarkdownImagePreview(payload: { src?: string; localPath?: string; alt?: string }) {
   const src = String(payload?.src || "").trim();
   const localPath = String(payload?.localPath || "").trim();
   if (src) {
@@ -1957,6 +1957,18 @@ function openMarkdownImagePreview(payload: { src?: string; localPath?: string; a
     return;
   }
   if (localPath) {
+    if (isAssistantSpacePath(localPath)) {
+      try {
+        const result = await invokeTauri<{ dataUrl: string; mime: string }>("read_local_chat_image_original", {
+          input: { path: localPath },
+        });
+        const dataUrl = String(result?.dataUrl || "").trim();
+        if (dataUrl) openImagePreview({ mime: result.mime, dataUrl, localPath });
+      } catch (error) {
+        console.warn("[文件浏览器预览] Assistant Space 图片原图加载失败", { path: localPath, error });
+      }
+      return;
+    }
     openImagePreview({ mime: "image/png", dataUrl: convertFileSrc(localPath), localPath });
   }
 }

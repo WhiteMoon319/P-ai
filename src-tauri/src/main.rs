@@ -54,6 +54,9 @@ include!("features/chat/message_store/mod.rs");
 #[path = "features/config/pai_config_tool.rs"]
 mod pai_config_tool;
 
+// ==================== 独立图像生成 ====================
+include!("features/image_generation.rs");
+
 // ==================== 对话核心 ====================
 include!("features/chat/message_semantics.rs");
 include!("features/chat/conversation.rs");
@@ -1016,6 +1019,7 @@ fn main() {
             set_skipped_github_update_version,
             set_ui_language,
             load_config,
+            generate_image,
             check_message_store_migration,
             run_message_store_migration,
             get_storage_usage_overview,

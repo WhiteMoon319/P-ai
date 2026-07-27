@@ -1,9 +1,14 @@
 import { computed, defineComponent, h, ref, watch } from "vue";
 import { invokeTauri } from "../../../services/tauri-api";
-import { isAbsoluteLocalPath, normalizeLocalLinkHref } from "../utils/local-link";
+import {
+  isAbsoluteLocalPath,
+  isAssistantSpacePath,
+  normalizeAssistantSpacePath,
+  normalizeLocalLinkHref,
+} from "../utils/local-link";
 import { stableMarkdownRuntimeKey } from "./markdown-runtime-key";
 
-type MarkdownImageSource =
+export type MarkdownImageSource =
   | { kind: "remote"; src: string }
   | { kind: "local"; path: string }
   | { kind: "blocked"; label: string };
@@ -95,6 +100,9 @@ function normalizeBaseLocalPath(value: string): string {
 export function resolveMarkdownImageSource(rawSrc: string, basePath: string): MarkdownImageSource {
   const src = String(rawSrc || "").trim();
   if (!src) return { kind: "blocked", label: "" };
+  if (isAssistantSpacePath(src)) {
+    return { kind: "local", path: normalizeAssistantSpacePath(src) };
+  }
   if (/^(https?:|data:image\/)/i.test(src)) return { kind: "remote", src };
   if (/^(blob:|javascript:|mailto:)/i.test(src)) return { kind: "blocked", label: src };
   const normalized = normalizeLocalLinkHref(src);

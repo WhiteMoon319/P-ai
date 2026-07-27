@@ -43,7 +43,7 @@ type ConfigSearchSource = {
 
 const CONFIG_SEARCH_SOURCES: ConfigSearchSource[] = [
   { tab: "hotkey", titleKey: "config.tabs.hotkey", titleFallback: "Hotkey", prefixes: ["config.hotkey"] },
-  { tab: "api", titleKey: "config.tabs.api", titleFallback: "API", prefixes: ["config.api"] },
+  { tab: "api", titleKey: "config.tabs.api", titleFallback: "API", prefixes: ["config.api", "config.imageGeneration"] },
   { tab: "tools", titleKey: "config.tabs.tools", titleFallback: "Tools", prefixes: ["config.tools"] },
   { tab: "mcp", titleFallback: "MCP", prefixes: ["config.mcp"] },
   { tab: "skill", titleKey: "config.tabs.skill", titleFallback: "Skill", prefixes: [] },

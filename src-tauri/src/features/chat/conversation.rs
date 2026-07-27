@@ -2805,6 +2805,7 @@ fn departments_only_config(departments: &[DepartmentConfig]) -> AppConfig {
         vision_api_config_id: None,
         tool_review_api_config_id: None,
         stt_api_config_id: None,
+        image_generation_model_id: None,
         stt_auto_send: false,
         terminal_shell_kind: default_terminal_shell_kind(),
         shell_workspaces: Vec::new(),
@@ -2813,6 +2814,7 @@ fn departments_only_config(departments: &[DepartmentConfig]) -> AppConfig {
         departments: departments.to_vec(),
         provider_non_stream_base_urls: Vec::new(),
         api_providers: Vec::new(),
+        image_providers: Vec::new(),
         api_configs: Vec::new(),
     }
 }

@@ -26,10 +26,8 @@
         </label>
 
         <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-          <label class="form-control min-w-0">
-            <div class="label px-0 pb-1">
-              <span class="label-text text-sm font-medium">{{ t("config.networkAccess.port") }}</span>
-            </div>
+          <label class="grid min-w-0 gap-1">
+            <span class="text-sm font-medium">{{ t("config.networkAccess.port") }}</span>
             <input
               class="input input-bordered input-sm w-full max-w-48 font-mono"
               type="number"

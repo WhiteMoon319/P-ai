@@ -614,6 +614,7 @@ function defaultConfig(): AppConfig {
     messageNotificationSoundEnabled: false,
     selectedApiConfigId: "",
     assistantDepartmentApiConfigId: "",
+    imageGenerationModelId: undefined,
     sttAutoSend: false,
     terminalShellKind: "auto",
     shellWorkspaces: [],
@@ -621,6 +622,7 @@ function defaultConfig(): AppConfig {
     remoteImChannels: [],
     departments: [],
     apiProviders: [],
+    imageProviders: [],
     apiConfigs: [],
   };
 }

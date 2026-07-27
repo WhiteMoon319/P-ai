@@ -1094,6 +1094,8 @@ struct AppConfig {
     #[serde(default)]
     stt_api_config_id: Option<String>,
     #[serde(default)]
+    image_generation_model_id: Option<String>,
+    #[serde(default)]
     stt_auto_send: bool,
     #[serde(default = "default_terminal_shell_kind")]
     terminal_shell_kind: String,
@@ -1109,6 +1111,8 @@ struct AppConfig {
     provider_non_stream_base_urls: Vec<String>,
     #[serde(default)]
     api_providers: Vec<ApiProviderConfig>,
+    #[serde(default = "default_image_generation_providers")]
+    image_providers: Vec<ImageGenerationProviderConfig>,
     #[serde(default)]
     api_configs: Vec<ApiConfig>,
 }
@@ -1139,6 +1143,7 @@ impl Default for AppConfig {
             vision_api_config_id: None,
             tool_review_api_config_id: None,
             stt_api_config_id: None,
+            image_generation_model_id: None,
             stt_auto_send: false,
             terminal_shell_kind: default_terminal_shell_kind(),
             shell_workspaces: Vec::new(),
@@ -1147,6 +1152,7 @@ impl Default for AppConfig {
             departments: default_departments(&api_config.id),
             provider_non_stream_base_urls: default_provider_non_stream_base_urls(),
             api_providers: default_api_providers(),
+            image_providers: default_image_generation_providers(),
             api_configs: vec![api_config],
         }
     }

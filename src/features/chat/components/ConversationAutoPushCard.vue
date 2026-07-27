@@ -22,16 +22,16 @@
               @change="emit('update:enabled', ($event.target as HTMLInputElement).checked)"
             />
             <div class="flex min-w-0 flex-1 flex-col">
-              <span class="label-text font-medium">{{ t("chat.autoPush.enable") }}</span>
+              <span class="text-sm font-medium">{{ t("chat.autoPush.enable") }}</span>
               <span class="text-xs whitespace-normal break-words text-base-content/60">
                 {{ t("chat.autoPush.enableHint") }}
               </span>
             </div>
           </label>
 
-          <div class="form-control gap-2">
+          <div class="grid gap-2">
             <label class="label pb-0">
-              <span class="label-text font-medium">{{ t("chat.autoPush.targetContact") }}</span>
+              <span class="text-sm font-medium">{{ t("chat.autoPush.targetContact") }}</span>
             </label>
             <select
               class="select select-bordered w-full"

@@ -37,6 +37,7 @@
           :restore-api-config-action="props.restoreConfigAction"
           :normalize-api-bindings-action="normalizeApiBindingsAction"
           :last-saved-config-json="props.lastSavedConfigJson"
+          :set-status-action="setStatusAction"
           @refresh-models="$emit('refreshModels')"
         />
       </div>

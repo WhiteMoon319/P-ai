@@ -350,7 +350,8 @@
             :transcribing="transcribing" :can-record="canRecord" :recording="recording" :recording-ms="recordingMs"
             :record-hotkey="recordHotkey" :conversation-call-primary-api-config-id="conversationCallPrimaryApiConfigId"
             :preferred-chat-model-id="preferredChatModelId"
-            :chat-model-options="chatModelOptions" :plan-mode-enabled="planModeEnabled"
+            :chat-model-options="chatModelOptions"
+            :plan-mode-enabled="planModeEnabled"
             :workspace-access="workspaceAccess"
             :frontend-round-phase="frontendRoundPhase" :chat-usage-percent="chatUsagePercent"
             :trim-tip="trimTip" :chatting="chatting" :busy="conversationInteractionBusy"
@@ -622,7 +623,7 @@ import { useChatImagePreview } from "../composables/use-chat-image-preview";
 import { useChatMessageActions } from "../composables/use-chat-message-actions";
 import { useChatScrollLayout } from "../composables/use-chat-scroll-layout";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
-import { isAbsoluteLocalPath, normalizeLocalLinkHref, parseLocalFileReference } from "../utils/local-link";
+import { isAbsoluteLocalPath, isAssistantSpacePath, normalizeLocalLinkHref, parseLocalFileReference } from "../utils/local-link";
 import { type ChatRenderItem, isRightAlignedMessage, canOpenInFileReader, fileExtensionFromPath } from "../utils/chat-render";
 import { clearFileReaderContextCandidates } from "../utils/file-reader-context-tags";
 import { useIdeContext } from "../composables/use-ide-context";
@@ -1854,7 +1855,7 @@ function handleShiftWheel(event: WheelEvent) {
 
 // ==================== link / copy ====================
 
-function openChatMessageImagePreview(payload: {
+async function openChatMessageImagePreview(payload: {
   mime?: string;
   bytesBase64?: string;
   dataUrl?: string;
@@ -1875,6 +1876,20 @@ function openChatMessageImagePreview(payload: {
     return;
   }
   if (localPath) {
+    if (isAssistantSpacePath(localPath)) {
+      try {
+        const result = await invokeTauri<{ dataUrl: string; mime: string }>("read_local_chat_image_original", {
+          input: { path: localPath },
+        });
+        const originalDataUrl = String(result?.dataUrl || "").trim();
+        if (originalDataUrl) {
+          openImagePreview({ mime: result.mime, dataUrl: originalDataUrl, localPath });
+        }
+      } catch (error) {
+        console.warn("[预览] Assistant Space 图片原图加载失败", { path: localPath, error });
+      }
+      return;
+    }
     openImagePreview({ mime, dataUrl: convertFileSrc(localPath), localPath });
   }
 }
@@ -1886,12 +1901,12 @@ async function handleAssistantLinkClick(event: MouseEvent) {
     const rawPath = localImage.getAttribute("data-local-image-path") || "";
     let path = normalizeLocalLinkHref(rawPath);
     if (!path) return;
-    if (!isAbsoluteLocalPath(path)) {
+    if (!isAssistantSpacePath(path) && !isAbsoluteLocalPath(path)) {
       const root = String(props.currentWorkspaceRootPath || "").trim().replace(/\\/g, "/").replace(/\/$/, "");
       if (root) path = `${root}/${path.replace(/^\.\//, "")}`;
     }
     event.preventDefault(); event.stopPropagation();
-    if (bridgeMode.value && openLocalFilesInHost.value) {
+    if (!isAssistantSpacePath(path) && bridgeMode.value && openLocalFilesInHost.value) {
       emit("openSidebarFileReference", path);
       return;
     }

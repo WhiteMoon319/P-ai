@@ -1,33 +1,22 @@
 import { ImageIcon } from "@lucide/vue";
 import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { isAbsoluteLocalPath, normalizeLocalLinkHref } from "../utils/local-link";
-import type { MarkdownImagePreviewPayload } from "./MarkdownImage";
+import { invokeTauri } from "../../../services/tauri-api";
+import { isAssistantSpacePath } from "../utils/local-link";
+import { resolveMarkdownImageSource, type MarkdownImagePreviewPayload } from "./MarkdownImage";
 
-type MarkdownImageSource =
-  | { kind: "remote"; src: string }
-  | { kind: "local"; path: string }
-  | { kind: "blocked"; label: string };
+const assistantSpaceThumbnailCache = new Map<string, string>();
+const assistantSpaceThumbnailPromiseCache = new Map<string, Promise<string>>();
+const ASSISTANT_SPACE_THUMBNAIL_CACHE_LIMIT = 40;
 
-function hasUrlScheme(value: string): boolean {
-  return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value);
-}
-
-function normalizeBaseLocalPath(value: string): string {
-  return String(value || "").trim().replace(/\\/g, "/").replace(/\/$/, "");
-}
-
-function resolveLazyMarkdownImageSource(rawSrc: string, basePath: string): MarkdownImageSource {
-  const src = String(rawSrc || "").trim();
-  if (!src) return { kind: "blocked", label: "" };
-  if (/^(https?:|data:image\/)/i.test(src)) return { kind: "remote", src };
-  if (/^(blob:|javascript:|mailto:)/i.test(src)) return { kind: "blocked", label: src };
-  const normalized = normalizeLocalLinkHref(src);
-  if (isAbsoluteLocalPath(normalized)) return { kind: "local", path: normalized };
-  if (hasUrlScheme(normalized)) return { kind: "blocked", label: normalized };
-  const root = normalizeBaseLocalPath(basePath);
-  if (!root) return { kind: "local", path: normalized };
-  return { kind: "local", path: `${root}/${normalized.replace(/^\.\//, "")}` };
+function cacheAssistantSpaceThumbnail(path: string, dataUrl: string) {
+  assistantSpaceThumbnailCache.delete(path);
+  assistantSpaceThumbnailCache.set(path, dataUrl);
+  while (assistantSpaceThumbnailCache.size > ASSISTANT_SPACE_THUMBNAIL_CACHE_LIMIT) {
+    const oldestPath = assistantSpaceThumbnailCache.keys().next().value;
+    if (!oldestPath) break;
+    assistantSpaceThumbnailCache.delete(oldestPath);
+  }
 }
 
 function isMemeImagePath(path: string): boolean {
@@ -50,8 +39,10 @@ export default defineComponent({
     const inViewport = ref(false);
     const imageLoaded = ref(false);
     const imageErrored = ref(false);
-    const source = computed(() => resolveLazyMarkdownImageSource(imageProps.src, imageProps.localImageBasePath));
+    const assistantSpaceThumbnailSrc = ref("");
+    const source = computed(() => resolveMarkdownImageSource(imageProps.src, imageProps.localImageBasePath));
     let observer: IntersectionObserver | null = null;
+    let thumbnailLoadVersion = 0;
 
     function ensureVisible() {
       inViewport.value = true;
@@ -65,6 +56,7 @@ export default defineComponent({
       inViewport.value = false;
       imageLoaded.value = false;
       imageErrored.value = false;
+      assistantSpaceThumbnailSrc.value = "";
     }
 
     function observeRoot() {
@@ -83,6 +75,7 @@ export default defineComponent({
     onMounted(observeRoot);
 
     onBeforeUnmount(() => {
+      thumbnailLoadVersion += 1;
       observer?.disconnect();
       observer = null;
     });
@@ -92,6 +85,43 @@ export default defineComponent({
       await nextTick();
       observeRoot();
     });
+
+    watch(
+      [source, inViewport],
+      ([current, visible]) => {
+        const version = ++thumbnailLoadVersion;
+        assistantSpaceThumbnailSrc.value = "";
+        if (!visible || current.kind !== "local" || !isAssistantSpacePath(current.path)) return;
+        const path = current.path;
+        const cached = assistantSpaceThumbnailCache.get(path);
+        if (cached) {
+          assistantSpaceThumbnailSrc.value = cached;
+          return;
+        }
+        const existing = assistantSpaceThumbnailPromiseCache.get(path);
+        const task = existing || invokeTauri<{ dataUrl: string }>("read_local_chat_image_thumbnail", {
+          input: { path },
+        })
+          .then((result) => {
+            const dataUrl = String(result?.dataUrl || "").trim();
+            if (dataUrl) cacheAssistantSpaceThumbnail(path, dataUrl);
+            assistantSpaceThumbnailPromiseCache.delete(path);
+            return dataUrl;
+          })
+          .catch((error) => {
+            assistantSpaceThumbnailPromiseCache.delete(path);
+            console.warn("[Markdown图片] Assistant Space 缩略图加载失败", { path, error });
+            return "";
+          });
+        if (!existing) assistantSpaceThumbnailPromiseCache.set(path, task);
+        void task.then((dataUrl) => {
+          if (version !== thumbnailLoadVersion) return;
+          assistantSpaceThumbnailSrc.value = dataUrl;
+          if (!dataUrl) imageErrored.value = true;
+        });
+      },
+      { immediate: true },
+    );
 
     return () => {
       const current = source.value;
@@ -111,9 +141,12 @@ export default defineComponent({
         return h("span", { ref: rootRef, class: "ecall-md-image-placeholder ecall-md-image-error" }, alt || current.label || imageProps.src);
       }
 
+      const assistantSpaceImage = current.kind === "local" && isAssistantSpacePath(current.path);
       const resolvedSrc = current.kind === "remote"
         ? current.src
-        : convertFileSrc(current.path);
+        : assistantSpaceImage
+          ? assistantSpaceThumbnailSrc.value
+          : convertFileSrc(current.path);
       const title = current.kind === "local" ? (alt || current.path) : alt;
       const imageClass = current.kind === "local" && isMemeImagePath(current.path)
         ? "ecall-md-meme-image"
@@ -132,7 +165,7 @@ export default defineComponent({
             "aria-hidden": "true",
           }, [h(ImageIcon, { class: "h-8 w-8 text-base-content/20" })])
           : null,
-        inViewport.value
+        inViewport.value && resolvedSrc
           ? h("img", {
             class: ["ecall-md-image", imageClass, "cursor-zoom-in"],
             src: resolvedSrc,

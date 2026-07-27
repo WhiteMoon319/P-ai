@@ -38,6 +38,21 @@ export function isAbsoluteLocalPath(href: string): boolean {
   return /^[A-Za-z]:[\\/]/.test(normalized) || normalized.startsWith("\\\\") || normalized.startsWith("/");
 }
 
+export const ASSISTANT_SPACE_PATH_PREFIX = "{Assistant Space}";
+
+export function isAssistantSpacePath(value: string): boolean {
+  const normalized = String(value || "").trim().replace(/\\/g, "/");
+  return normalized === ASSISTANT_SPACE_PATH_PREFIX
+    || normalized.startsWith(`${ASSISTANT_SPACE_PATH_PREFIX}/`);
+}
+
+export function normalizeAssistantSpacePath(value: string): string {
+  const normalized = String(value || "").trim().replace(/\\/g, "/");
+  if (!isAssistantSpacePath(normalized)) return normalized;
+  const suffix = normalized.slice(ASSISTANT_SPACE_PATH_PREFIX.length).replace(/^\/+/, "");
+  return suffix ? `${ASSISTANT_SPACE_PATH_PREFIX}/${suffix}` : ASSISTANT_SPACE_PATH_PREFIX;
+}
+
 export type LocalFileReference = {
   path: string;
   line?: number;

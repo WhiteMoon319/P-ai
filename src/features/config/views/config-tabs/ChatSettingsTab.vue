@@ -39,6 +39,21 @@
           </div>
 
           <div>
+            <h4 class="text-sm font-semibold">{{ t("config.imageGeneration.defaultModel") }}</h4>
+            <select
+              :value="config.imageGenerationModelId || ''"
+              class="select select-bordered select-sm mt-3 w-full"
+              @change="onImageGenerationSelectChange"
+            >
+              <option value="">{{ t("config.imageGeneration.noDefaultModel") }}</option>
+              <option v-for="option in imageGenerationModelOptions" :key="option.id" :value="option.id">
+                {{ option.label }}
+              </option>
+            </select>
+            <div class="mt-3 text-xs opacity-70">{{ t("config.imageGeneration.defaultModelHint") }}</div>
+          </div>
+
+          <div>
             <h4 class="text-sm font-semibold">{{ t("config.chatSettings.sttTitle") }}</h4>
             <div class="mt-3 flex items-center gap-2">
               <select :value="config.sttApiConfigId ?? ''" class="select select-bordered select-sm flex-1" @change="onSttSelectChange">
@@ -143,6 +158,7 @@ import { Plus, Trash2 } from "@lucide/vue";
 import SegmentedControl from "../../components/SegmentedControl.vue";
 import ApiConfigTreeSelect from "../../components/ApiConfigTreeSelect.vue";
 import type { AppConfig, ApiConfigItem, ChatSettingsPatch, ConversationApiSettingsPatch, PromptCommandPreset, ResponseStyleOption } from "../../../../types/app";
+import { deriveImageGenerationModelOptions } from "../../utils/image-generation-config";
 
 const props = defineProps<{
   config: AppConfig;
@@ -161,6 +177,9 @@ const responseStyleSegmentOptions = computed(() =>
     value: style.id,
     label: t(`responseStyle.${style.id}`),
   })),
+);
+const imageGenerationModelOptions = computed(() =>
+  deriveImageGenerationModelOptions(props.config.imageProviders || []),
 );
 const pdfReadModeOptions = computed(() => [
   { value: "text" as const, label: t("config.chatSettings.pdfReadModeText") },
@@ -196,6 +215,10 @@ function onExpertSelect(value: string) {
   emit("patchConversationApiSettings", {
     assistantDepartmentApiConfigId: props.config.assistantDepartmentApiConfigId,
   });
+}
+
+function onImageGenerationSelectChange(event: Event) {
+  props.config.imageGenerationModelId = ((event.target as HTMLSelectElement).value || undefined);
 }
 
 function onResponseStyleChange(value: string) {

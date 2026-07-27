@@ -81,6 +81,7 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "read_avatar_data_url"
             | "save_agent_avatar"
             | "clear_agent_avatar"
+            | "generate_image"
             | "check_tools_status"
             | "list_terminal_shell_candidates"
             | "bind_active_chat_view_stream"

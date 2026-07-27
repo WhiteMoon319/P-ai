@@ -343,6 +343,7 @@ const config = reactive<AppConfig>({
   selectedApiConfigId: "",
   assistantDepartmentApiConfigId: "",
   visionApiConfigId: undefined,
+  imageGenerationModelId: undefined,
   toolReviewApiConfigId: undefined,
   sttApiConfigId: undefined,
   sttAutoSend: false,
@@ -352,6 +353,7 @@ const config = reactive<AppConfig>({
   remoteImChannels: [],
   departments: [],
   apiProviders: [],
+  imageProviders: [],
   apiConfigs: [],
 });
 

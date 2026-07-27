@@ -570,12 +570,65 @@ struct ReadLocalChatImageThumbnailOutput {
     original_height: u32,
 }
 
+fn assistant_space_relative_image_path(path: &str) -> Result<Option<PathBuf>, String> {
+    const ASSISTANT_SPACE_PREFIX: &str = "{Assistant Space}";
+
+    let trimmed = path.trim();
+    let Some(suffix) = trimmed.strip_prefix(ASSISTANT_SPACE_PREFIX) else {
+        return Ok(None);
+    };
+    if !suffix.is_empty() && !suffix.starts_with(['/', '\\']) {
+        return Ok(None);
+    }
+    let normalized = suffix
+        .trim_start_matches(['/', '\\'])
+        .replace('\\', "/");
+    if normalized.is_empty() {
+        return Err("Assistant Space 图片路径为空".to_string());
+    }
+    let relative = PathBuf::from(&normalized);
+    if relative.is_absolute()
+        || relative.components().any(|component| match component {
+            std::path::Component::Normal(value) => value.to_string_lossy().contains(':'),
+            _ => true,
+        })
+    {
+        return Err("Assistant Space 图片路径不安全".to_string());
+    }
+    Ok(Some(relative))
+}
+
+fn resolve_local_chat_image_path(state: &AppState, path: &str) -> Result<PathBuf, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("图片路径为空".to_string());
+    }
+    let Some(relative) = assistant_space_relative_image_path(trimmed)? else {
+        return Ok(PathBuf::from(trimmed));
+    };
+    let workspace_root = configured_workspace_root_path(state)
+        .unwrap_or_else(|_| state.llm_workspace_path.clone());
+    let canonical_root = workspace_root
+        .canonicalize()
+        .map_err(|err| format!("解析 Assistant Space 目录失败：{err}"))?;
+    let target = workspace_root.join(relative);
+    let canonical_target = target
+        .canonicalize()
+        .map_err(|err| format!("解析 Assistant Space 图片路径失败：{err}"))?;
+    if !path_is_within(&canonical_root, &canonical_target) {
+        return Err("Assistant Space 图片路径越界".to_string());
+    }
+    Ok(canonical_target)
+}
+
 #[tauri::command]
 async fn read_local_chat_image_thumbnail(
     input: ReadLocalChatImageThumbnailInput,
+    state: State<'_, AppState>,
 ) -> Result<ReadLocalChatImageThumbnailOutput, String> {
+    let app_state = state.inner().clone();
     tokio::task::spawn_blocking(move || {
-        let path = std::path::PathBuf::from(input.path.trim());
+        let path = resolve_local_chat_image_path(&app_state, &input.path)?;
         let max_edge = input.max_edge.unwrap_or(LOCAL_IMAGE_THUMBNAIL_MAX_EDGE);
         let render = local_image_read_for_display(&path, max_edge)?;
         let data_url = format!("data:{};base64,{}", render.mime, B64.encode(&render.bytes));
@@ -595,9 +648,11 @@ async fn read_local_chat_image_thumbnail(
 #[tauri::command]
 async fn read_local_chat_image_original(
     input: ReadLocalChatImageThumbnailInput,
+    state: State<'_, AppState>,
 ) -> Result<ReadLocalChatImageOutput, String> {
+    let app_state = state.inner().clone();
     tokio::task::spawn_blocking(move || {
-        let path = std::path::PathBuf::from(input.path.trim());
+        let path = resolve_local_chat_image_path(&app_state, &input.path)?;
         let render = local_image_read_original(&path)?;
         let data_url = format!("data:{};base64,{}", render.mime, B64.encode(&render.bytes));
         Ok(ReadLocalChatImageOutput {
@@ -614,9 +669,11 @@ async fn read_local_chat_image_original(
 #[tauri::command]
 async fn copy_local_chat_image_to_clipboard(
     input: ReadLocalChatImageThumbnailInput,
+    state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    let app_state = state.inner().clone();
     tokio::task::spawn_blocking(move || {
-        let path = std::path::PathBuf::from(input.path.trim());
+        let path = resolve_local_chat_image_path(&app_state, &input.path)?;
         let raw = local_image_read_raw(&path)?;
         let (_, mime) = local_image_detect_format(&raw, &path)?;
         let mut clipboard = arboard::Clipboard::new()
@@ -649,8 +706,9 @@ async fn copy_local_chat_image_to_clipboard(
 async fn save_local_chat_image_as(
     input: ReadLocalChatImageThumbnailInput,
     app: AppHandle,
+    state: State<'_, AppState>,
 ) -> Result<Value, String> {
-    let source_path = std::path::PathBuf::from(input.path.trim());
+    let source_path = resolve_local_chat_image_path(state.inner(), &input.path)?;
     if !source_path.exists() {
         return Err(format!("源文件不存在: {}", source_path.to_string_lossy()));
     }
@@ -676,4 +734,33 @@ async fn save_local_chat_image_as(
         .map_err(|err| format!("复制图片文件任务异常：{err}"))?
         .map_err(|err| format!("复制文件失败: {err}"))?;
     Ok(serde_json::json!({ "ok": true }))
+}
+
+#[cfg(test)]
+mod assistant_space_image_path_tests {
+    use super::*;
+
+    #[test]
+    fn assistant_space_image_path_should_parse_safe_relative_path() {
+        let path = assistant_space_relative_image_path(
+            "{Assistant Space}/generated-images/20260727/image.png",
+        )
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+        assert_eq!(
+            path.to_string_lossy().replace('\\', "/"),
+            "generated-images/20260727/image.png"
+        );
+    }
+
+    #[test]
+    fn assistant_space_image_path_should_reject_parent_traversal() {
+        let error = assistant_space_relative_image_path(
+            "{Assistant Space}/generated-images/../../outside.png",
+        )
+        .err()
+        .unwrap_or_default();
+        assert!(error.contains("不安全"));
+    }
 }

@@ -161,7 +161,7 @@
               :checked="props.controls.depthEnabled"
               @change="patchBoolean('depthEnabled', $event)"
             />
-            <span class="label-text text-base-content">{{ t("appearance.depthEnabled") }}</span>
+            <span class="text-sm text-base-content">{{ t("appearance.depthEnabled") }}</span>
           </label>
           <label class="label cursor-pointer justify-start gap-3 rounded-box border border-base-300 bg-base-200 px-3 py-2">
             <input
@@ -170,7 +170,7 @@
               :checked="props.controls.noiseEnabled"
               @change="patchBoolean('noiseEnabled', $event)"
             />
-            <span class="label-text text-base-content">{{ t("appearance.noiseEnabled") }}</span>
+            <span class="text-sm text-base-content">{{ t("appearance.noiseEnabled") }}</span>
           </label>
         </div>
       </div>

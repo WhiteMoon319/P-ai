@@ -3,6 +3,10 @@ import type { ApiConfigItem, ApiModelConfigItem, ApiProviderConfigItem, AppConfi
 import { defaultToolBindings } from "../utils/builtin-tools";
 import { normalizeApiRequestFormat } from "../utils/api-request-format";
 import { apiConfigDisplayName as buildApiConfigDisplayName } from "../utils/api-config-display";
+import {
+  normalizeImageGenerationModelId,
+  normalizeImageGenerationProviders,
+} from "../utils/image-generation-config";
 
 function normalizeRemoteImPlatform(value: unknown): RemoteImPlatform {
   const text = String(value || "").trim().toLowerCase();
@@ -331,6 +335,11 @@ export function useConfigCore(options: UseConfigCoreOptions) {
   }
 
   function buildConfigPayload(): AppConfig {
+    const imageProviders = normalizeImageGenerationProviders(options.config.imageProviders);
+    const imageGenerationModelId = normalizeImageGenerationModelId(
+      options.config.imageGenerationModelId,
+      imageProviders,
+    );
     return {
       hotkey: options.config.hotkey,
       uiLanguage: options.config.uiLanguage,
@@ -351,6 +360,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
       selectedApiConfigId: options.config.selectedApiConfigId,
       assistantDepartmentApiConfigId: options.config.assistantDepartmentApiConfigId,
       ...(options.config.visionApiConfigId ? { visionApiConfigId: options.config.visionApiConfigId } : {}),
+      ...(imageGenerationModelId ? { imageGenerationModelId } : {}),
       ...(options.config.toolReviewApiConfigId ? { toolReviewApiConfigId: options.config.toolReviewApiConfigId } : {}),
       ...(options.config.sttApiConfigId ? { sttApiConfigId: options.config.sttApiConfigId } : {}),
       ...(options.config.sttAutoSend ? { sttAutoSend: true } : {}),
@@ -429,6 +439,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
         })),
         failureRetryCount: Math.max(0, Math.round(Number(provider.failureRetryCount ?? 0))),
       })),
+      imageProviders,
       apiConfigs: options.config.apiConfigs.map((a) => ({
         id: a.id,
         name: a.name,
@@ -467,6 +478,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
   }
 
   function buildConfigSnapshotJson(): string {
+    const imageProviders = normalizeImageGenerationProviders(options.config.imageProviders);
     return JSON.stringify({
       hotkey: options.config.hotkey,
       uiLanguage: options.config.uiLanguage,
@@ -487,6 +499,10 @@ export function useConfigCore(options: UseConfigCoreOptions) {
       selectedApiConfigId: options.config.selectedApiConfigId,
       assistantDepartmentApiConfigId: options.config.assistantDepartmentApiConfigId,
       visionApiConfigId: options.config.visionApiConfigId,
+      imageGenerationModelId: normalizeImageGenerationModelId(
+        options.config.imageGenerationModelId,
+        imageProviders,
+      ),
       toolReviewApiConfigId: options.config.toolReviewApiConfigId,
       sttApiConfigId: options.config.sttApiConfigId,
       sttAutoSend: !!options.config.sttAutoSend,
@@ -496,6 +512,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
       mcpServers: [...(options.config.mcpServers || [])],
       remoteImChannels: [...(options.config.remoteImChannels || [])],
       apiProviders: [...(options.config.apiProviders || [])],
+      imageProviders,
       apiConfigs: options.config.apiConfigs.map((a) => ({
         id: a.id,
         name: a.name,

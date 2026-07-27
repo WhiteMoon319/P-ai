@@ -160,6 +160,83 @@ export type ApiProviderConfigItem = {
   failureRetryCount?: number;
 };
 
+export type ImageGenerationProviderKind = "comfyui" | "codex" | "openai" | "xai" | "seedream" | "gemini";
+
+export type ImageGenerationModelConfigItem = {
+  id: string;
+  name: string;
+  model: string;
+  enabled: boolean;
+  deprecated?: boolean;
+  defaultSize?: string;
+  defaultAspectRatio?: string;
+  defaultQuality?: string;
+};
+
+export type ComfyUiNodeInputMapping = {
+  nodeIds: string[];
+  inputKey: string;
+};
+
+export type ComfyUiWorkflowMapping = {
+  prompt: ComfyUiNodeInputMapping;
+  negativePrompt: ComfyUiNodeInputMapping;
+  model: ComfyUiNodeInputMapping;
+  width: ComfyUiNodeInputMapping;
+  height: ComfyUiNodeInputMapping;
+  seed: ComfyUiNodeInputMapping;
+  steps: ComfyUiNodeInputMapping;
+  outputNodeIds: string[];
+};
+
+export type ImageGenerationProviderConfigItem = {
+  id: string;
+  name: string;
+  providerType: ImageGenerationProviderKind;
+  enabled: boolean;
+  deprecated?: boolean;
+  baseUrl: string;
+  apiKeys: string[];
+  codexApiProviderId?: string;
+  keyCursor?: number;
+  timeoutSeconds: number;
+  watermark: boolean;
+  models: ImageGenerationModelConfigItem[];
+  comfyuiWorkflowJson: string;
+  comfyuiMapping: ComfyUiWorkflowMapping;
+};
+
+export type ImageGenerationModelOption = {
+  id: string;
+  providerId: string;
+  providerName: string;
+  providerType: ImageGenerationProviderKind;
+  modelId: string;
+  model: string;
+  name: string;
+  label: string;
+};
+
+export type GeneratedImageAsset = {
+  relativePath: string;
+  remoteUrl?: string;
+  markdown: string;
+  mime: string;
+  width: number;
+  height: number;
+  revisedPrompt?: string;
+};
+
+export type ImageGenerationResult = {
+  providerId: string;
+  providerName: string;
+  providerType: ImageGenerationProviderKind;
+  modelId: string;
+  model: string;
+  images: GeneratedImageAsset[];
+  providerText?: string;
+};
+
 export type ShellWorkspaceLevel = "system" | "main" | "secondary";
 
 export type ShellWorkspaceAccess = "approval" | "full_access" | "read_only";
@@ -300,6 +377,7 @@ export type AppConfig = {
   // Active chat LLM provider config id (kept as legacy key name for storage compatibility).
   assistantDepartmentApiConfigId: string;
   visionApiConfigId?: string;
+  imageGenerationModelId?: string;
   toolReviewApiConfigId?: string;
   sttApiConfigId?: string;
   sttAutoSend?: boolean;
@@ -309,6 +387,7 @@ export type AppConfig = {
   remoteImChannels: RemoteImChannelConfig[];
   departments: DepartmentConfig[];
   apiProviders: ApiProviderConfigItem[];
+  imageProviders: ImageGenerationProviderConfigItem[];
   apiConfigs: ApiConfigItem[];
 };
 

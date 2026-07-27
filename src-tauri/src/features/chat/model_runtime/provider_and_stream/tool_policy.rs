@@ -120,6 +120,10 @@ const BUILTIN_TOOL_POLICY_TABLE: &[BuiltinToolPolicy] = &[
         ..DEFAULT_BUILTIN_TOOL_POLICY
     },
     BuiltinToolPolicy {
+        id: "image_generate",
+        ..DEFAULT_BUILTIN_TOOL_POLICY
+    },
+    BuiltinToolPolicy {
         id: "remember",
         permission_class: BuiltinToolPermissionClass::SystemExempt,
         runtime_scope: BuiltinToolRuntimeScope::Any,

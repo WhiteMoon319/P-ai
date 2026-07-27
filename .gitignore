@@ -20,6 +20,7 @@ yarn-error.log*
 .vscode/
 .claude/
 .pai/
+.qoder/
 *.swp
 *.swo
 .DS_Store

@@ -1,6 +1,10 @@
 import type { Ref } from "vue";
 import { applyUiSizeScale } from "../../shell/composables/use-ui-size-appearance";
 import type { AppConfig, PromptCommandPreset } from "../../../types/app";
+import {
+  normalizeImageGenerationModelId,
+  normalizeImageGenerationProviders,
+} from "../utils/image-generation-config";
 
 type RuntimeNumberNormalizer = (
   minValue: unknown,
@@ -106,6 +110,17 @@ export function applyConfigBootstrapUpdate(bindings: {
   if ("selectedApiConfigId" in payload) bindings.config.selectedApiConfigId = String(payload.selectedApiConfigId ?? "").trim();
   if ("assistantDepartmentApiConfigId" in payload) bindings.config.assistantDepartmentApiConfigId = String(payload.assistantDepartmentApiConfigId ?? "").trim();
   if ("visionApiConfigId" in payload) bindings.config.visionApiConfigId = payload.visionApiConfigId as string | undefined;
+  if ("imageProviders" in payload) {
+    bindings.config.imageProviders = normalizeImageGenerationProviders(payload.imageProviders);
+  }
+  if ("imageGenerationModelId" in payload || "imageProviders" in payload) {
+    bindings.config.imageGenerationModelId = normalizeImageGenerationModelId(
+      "imageGenerationModelId" in payload
+        ? payload.imageGenerationModelId
+        : bindings.config.imageGenerationModelId,
+      bindings.config.imageProviders,
+    );
+  }
   if ("toolReviewApiConfigId" in payload) bindings.config.toolReviewApiConfigId = payload.toolReviewApiConfigId as string | undefined;
   if ("sttApiConfigId" in payload) bindings.config.sttApiConfigId = payload.sttApiConfigId as string | undefined;
   if ("sttAutoSend" in payload) bindings.config.sttAutoSend = !!payload.sttAutoSend;

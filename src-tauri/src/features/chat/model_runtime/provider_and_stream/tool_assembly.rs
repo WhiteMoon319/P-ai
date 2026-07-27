@@ -310,6 +310,7 @@ fn build_global_tool_schema_cache(state: &AppState) -> Vec<CachedRuntimeToolSche
         }
         .provider_tool_definition(),
         BuiltinMemeTool { app_state: state.clone() }.provider_tool_definition(),
+        BuiltinImageGenerateTool { app_state: state.clone() }.provider_tool_definition(),
         BuiltinContactSendFilesTool {
             app_state: state.clone(),
             session_id: preview_session_id,
@@ -558,6 +559,26 @@ fn runtime_tool_denied_reason(
     }
     match &tool.source {
         CachedRuntimeToolSource::Builtin => {
+            if tool_name == "image_generate"
+                && app_config
+                    .image_generation_model_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .is_none()
+            {
+                return Some("未选择默认生图模型，生图工具不挂载".to_string());
+            }
+            if tool_name == "read_media"
+                && app_config
+                    .vision_api_config_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .is_none()
+            {
+                return Some("未选择多模态分析模型，read_media 工具不挂载".to_string());
+            }
             if tool_name == "recall"
                 && !memory_context.map(|context| context.recall_enabled).unwrap_or(false)
             {
@@ -955,6 +976,7 @@ fn build_builtin_runtime_tool_executor(
             source_department_id: executor_department_id.to_string(),
         }),
         "meme" => Box::new(BuiltinMemeTool { app_state: state.clone() }),
+        "image_generate" => Box::new(BuiltinImageGenerateTool { app_state: state.clone() }),
         "contact_send_files" => Box::new(BuiltinContactSendFilesTool {
             app_state: state.clone(),
             session_id: tool_session_id.to_string(),
@@ -1360,6 +1382,54 @@ mod tool_assembly_permission_tests {
             .map(|tool| tool.definition.name.as_str())
             .collect::<Vec<_>>();
         assert_eq!(names, vec!["remember"]);
+    }
+
+    #[test]
+    fn legal_tool_resolver_should_skip_media_tools_without_default_models() {
+        let department = whitelist_department(&["image_generate", "read_media"]);
+        let mut config = AppConfig {
+            departments: vec![department.clone()],
+            ..AppConfig::default()
+        };
+        config.image_generation_model_id = None;
+        config.vision_api_config_id = None;
+        let policy = RuntimeToolPolicy {
+            conversation_resolved: true,
+            local_conversation: true,
+            ..RuntimeToolPolicy::default()
+        };
+        let tools = vec![
+            CachedRuntimeToolSchema::builtin(test_definition("image_generate")),
+            CachedRuntimeToolSchema::builtin(test_definition("read_media")),
+        ];
+        let memory = test_memory_context(true);
+        let resolved = resolve_legal_runtime_tools_for_department(
+            &config,
+            &test_api(),
+            Some(&department),
+            &policy,
+            Some(&memory),
+            &tools,
+        );
+        assert!(resolved.attached.is_empty());
+        assert_eq!(resolved.manifest.len(), 2);
+
+        config.image_generation_model_id = Some("provider-a::model-a".to_string());
+        config.vision_api_config_id = Some("vision-a".to_string());
+        let resolved = resolve_legal_runtime_tools_for_department(
+            &config,
+            &test_api(),
+            Some(&department),
+            &policy,
+            Some(&memory),
+            &tools,
+        );
+        let names = resolved
+            .attached
+            .iter()
+            .map(|tool| tool.definition.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec!["image_generate", "read_media"]);
     }
 
     #[test]

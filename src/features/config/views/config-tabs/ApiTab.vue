@@ -4,12 +4,12 @@
       <div class="flex flex-col gap-3">
         <div class="join w-full">
           <button v-for="tab in capabilityTabs" :key="tab.id" class="btn btn-sm join-item flex-1" type="button"
-            :class="activeCapability === tab.id ? 'btn-primary' : 'bg-base-100'" @click="switchCapabilityTab(tab.id)">
+            :class="activeTopTab === tab.id ? 'btn-primary' : 'bg-base-100'" @click="switchCapabilityTab(tab.id)">
             {{ tab.label }}
           </button>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div v-if="activeTopTab !== 'imageGeneration'" class="flex items-center gap-2">
           <button class="btn btn-sm btn-square btn-primary shrink-0" type="button" :title="t('config.api.addProvider')"
             @click="addProvider()">
             <Plus class="h-4 w-4" />
@@ -49,7 +49,7 @@
       </div>
     </template>
 
-    <div v-if="selectedProvider" class="grid gap-3">
+    <div v-if="activeTopTab !== 'imageGeneration' && selectedProvider" class="grid gap-3">
         <div class="card bg-base-100 border border-base-300">
           <div class="card-body gap-3 p-4">
             <div class="flex items-center justify-between gap-2">
@@ -312,7 +312,7 @@
                       </div>
                     </div>
 
-                    <div v-if="activeCapability === 'text'" class="grid gap-2 md:grid-cols-6">
+                    <div v-if="selectedCapability === 'text'" class="grid gap-2 md:grid-cols-6">
                       <label
                         class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
                         <span class="text-sm">{{ t("config.api.capImage") }}</span>
@@ -362,7 +362,7 @@
                       </label>
                     </div>
 
-                    <div v-if="activeCapability === 'text'" class="grid gap-3">
+                    <div v-if="selectedCapability === 'text'" class="grid gap-3">
                       <label class="flex flex-col gap-1">
                         <span class="text-sm font-medium">{{ t("config.api.contextWindow") }}</span>
                         <div class="flex items-center gap-2">
@@ -443,6 +443,17 @@
             </div>
           </div>
         </div>
+
+    <div v-else-if="activeTopTab === 'imageGeneration'" class="grid gap-3">
+      <ImageGenerationTab
+        :config="config"
+        :config-dirty="configDirty"
+        :saving-config="savingConfig"
+        :save-config-action="saveApiConfigAction"
+        :last-saved-config-json="lastSavedConfigJson"
+        :set-status-action="setStatusAction"
+      />
+    </div>
     <dialog class="modal" :class="{ 'modal-open': providerDeleteDialogOpen }">
       <div class="modal-box max-w-sm">
         <h3 class="text-lg font-semibold">{{ t("config.api.deleteProviderTitle") }}</h3>
@@ -471,6 +482,7 @@ import type { ApiModelConfigItem, ApiProviderConfigItem, ApiRequestFormat, AppCo
 import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
 import { invokeTauri } from "../../../../services/tauri-api";
 import CodexProviderPanel from "./CodexProviderPanel.vue";
+import ImageGenerationTab from "./ImageGenerationTab.vue";
 import { normalizeApiRequestFormat } from "../../utils/api-request-format";
 import {
   reasoningEffortDisplayLabel as sharedReasoningEffortDisplayLabel,
@@ -479,6 +491,7 @@ import {
 import { buildModelCapability, type ModelCapabilitySnapshot } from "../../utils/model-capability";
 
 type ApiCapability = "text" | "voice" | "embedding" | "rerank";
+type ApiTopTab = ApiCapability | "imageGeneration";
 type ProviderPresetCategory = "official" | "domestic" | "openaiCompatible" | "local";
 type ProviderPreset = {
   id: string;
@@ -535,6 +548,7 @@ const props = defineProps<{
   saveApiConfigAction: () => Promise<boolean> | boolean;
   normalizeApiBindingsAction: () => void;
   lastSavedConfigJson: string;
+  setStatusAction: (text: string) => void;
 }>();
 
 const emit = defineEmits<{
@@ -582,11 +596,12 @@ const connectionTestFirstKeyRunning = ref(false);
 const connectionTestAllKeysRunning = ref(false);
 const connectionTestResults = ref<ConnectionTestResultItem[]>([]);
 const connectionTestKeyStatus = ref<Record<string, { status: "success" | "failed"; latencyMs?: number; error?: string }>>({});
-const capabilityTabs = computed<Array<{ id: ApiCapability; label: string }>>(() => [
+const capabilityTabs = computed<Array<{ id: ApiTopTab; label: string }>>(() => [
   { id: "text", label: t("config.api.capabilityText") },
   { id: "voice", label: t("config.api.capabilityVoice") },
   { id: "embedding", label: t("config.api.capabilityEmbedding") },
   { id: "rerank", label: t("config.api.capabilityRerank") },
+  { id: "imageGeneration", label: t("config.tabs.imageGeneration") },
 ]);
 const protocolOptionsByCapability: Record<ApiCapability, ProtocolOption[]> = {
   text: [
@@ -807,12 +822,13 @@ function modelGroupDisplayLabel(modelCard: ApiModelConfigItem): string {
   if (new Set(peers.map((item) => item.enableVideo)).size > 1) summary.push(`${t("config.api.capVideo")} ${modelCard.enableVideo ? "✓" : "—"}`);
   return summary.length > 0 ? `${modelName} · ${summary.join(" · ")}` : modelName;
 }
-const activeCapability = computed<ApiCapability>(() => capabilityFromRequestFormat(selectedProvider.value?.requestFormat || "openai"));
+const selectedCapability = computed<ApiCapability>(() => capabilityFromRequestFormat(selectedProvider.value?.requestFormat || "openai"));
+const activeTopTab = ref<ApiTopTab>(selectedCapability.value);
 const scopedProviderList = computed(() =>
-  activeProviderList.value.filter((provider) => capabilityFromRequestFormat(provider.requestFormat) === activeCapability.value),
+  activeProviderList.value.filter((provider) => capabilityFromRequestFormat(provider.requestFormat) === selectedCapability.value),
 );
 const protocolOptions = computed(() =>
-  protocolOptionsByCapability[activeCapability.value].map((option) =>
+  protocolOptionsByCapability[selectedCapability.value].map((option) =>
     option.value === "auto"
       ? { ...option, label: t("config.api.protocolAuto") }
       : option,
@@ -832,6 +848,16 @@ const currentCodexAuthStatus = computed(() => {
   const providerId = String(selectedProvider.value?.id || "").trim();
   return providerId ? codexAuthStatusByProvider.value[providerId] ?? null : null;
 });
+
+watch(
+  selectedCapability,
+  (value) => {
+    if (activeTopTab.value !== "imageGeneration") {
+      activeTopTab.value = value;
+    }
+  },
+  { immediate: true },
+);
 
 const linkHelperTabs = computed(() =>
   protocolOptions.value.filter((option) =>
@@ -1018,7 +1044,7 @@ function reasoningEffortItems(modelCard: ApiModelConfigItem): Array<{ value: str
 }
 
 function showReasoningEffort(modelCard: ApiModelConfigItem): boolean {
-  if (activeCapability.value !== "text") return false;
+  if (selectedCapability.value !== "text") return false;
   const capability = reasoningCapability(modelCard);
   const existing = reasoningEffortItems(modelCard).some((item) => item.value !== "default");
   if (existing) return true;
@@ -1328,7 +1354,7 @@ function createModel(seed: string, name = "gpt-4o-mini"): ApiModelConfigItem {
   };
 }
 
-function createProvider(seed: string, capability: ApiCapability = activeCapability.value): ApiProviderConfigItem {
+function createProvider(seed: string, capability: ApiCapability = selectedCapability.value): ApiProviderConfigItem {
   const requestFormat = capabilityDefaultProtocol[capability];
   const isCodex = requestFormat === "codex";
   return {
@@ -1388,7 +1414,7 @@ function selectModelCard(modelId: string) {
 
 async function addProvider() {
   const seed = buildProviderSeed();
-  const provider = createProvider(seed, activeCapability.value);
+  const provider = createProvider(seed, selectedCapability.value);
   applyProtocolDefaults(provider);
   props.config.apiProviders.push(provider);
   props.config.selectedApiConfigId = `${provider.id}::${provider.models[0].id}`;
@@ -1486,8 +1512,12 @@ async function confirmDeleteProvider() {
   await Promise.resolve(props.saveApiConfigAction());
 }
 
-async function switchCapabilityTab(capability: ApiCapability) {
+async function switchCapabilityTab(capability: ApiTopTab) {
   revertUnsavedConfigIfNeeded();
+  activeTopTab.value = capability;
+  if (capability === "imageGeneration") {
+    return;
+  }
   const nextProvider = activeProviderList.value.find((provider) => capabilityFromRequestFormat(provider.requestFormat) === capability);
   if (nextProvider) {
     selectProvider(nextProvider.id);

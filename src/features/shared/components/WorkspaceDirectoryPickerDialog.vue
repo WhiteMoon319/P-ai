@@ -6,10 +6,8 @@
         <div class="mt-1 text-xs opacity-70">{{ hintText }}</div>
       </div>
       <div class="space-y-4 px-4 py-4">
-        <label class="form-control w-full">
-          <div class="label">
-            <span class="label-text text-xs">{{ pathLabel }}</span>
-          </div>
+        <label class="grid w-full gap-1">
+          <span class="text-xs">{{ pathLabel }}</span>
           <div class="join w-full">
             <input
               :value="manualPath"
@@ -80,10 +78,8 @@
           </div>
         </div>
         <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-          <label class="form-control w-full">
-            <div class="label">
-              <span class="label-text text-xs">{{ accessLabelText }}</span>
-            </div>
+          <label class="grid w-full gap-1">
+            <span class="text-xs">{{ accessLabelText }}</span>
             <select
               :value="access"
               class="select select-bordered select-sm w-full"

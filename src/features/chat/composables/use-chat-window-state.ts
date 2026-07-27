@@ -45,6 +45,7 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
     selectedApiConfigId: "",
     assistantDepartmentApiConfigId: "",
     visionApiConfigId: undefined,
+    imageGenerationModelId: undefined,
     toolReviewApiConfigId: undefined,
     sttApiConfigId: undefined,
     sttAutoSend: false,
@@ -54,6 +55,7 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
     remoteImChannels: [],
     departments: [],
     apiProviders: [],
+    imageProviders: [],
     apiConfigs: [],
   });
   const recordHotkeyProbeLastSeq = ref(0);

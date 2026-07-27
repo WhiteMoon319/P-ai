@@ -88,23 +88,17 @@
         :persona-avatar-url-map="personaAvatarUrlMap"
         auto-select-first
       />
-      <label class="form-control mt-3">
-        <span class="label py-1">
-          <span class="label-text text-xs opacity-70">{{ t("chat.selection.delegateGoalLabel") }}</span>
-        </span>
+      <label class="mt-3 grid gap-1">
+        <span class="text-xs opacity-70">{{ t("chat.selection.delegateGoalLabel") }}</span>
         <textarea v-model="selectionDelegateGoal" class="textarea textarea-bordered min-h-24 w-full resize-y text-sm" :placeholder="t('chat.selection.goalPlaceholder')" maxlength="10000"></textarea>
       </label>
       <div class="mt-2 grid grid-cols-2 gap-2">
-        <label class="form-control min-w-0">
-          <span class="label py-1">
-            <span class="label-text text-xs opacity-70">{{ t("chat.selection.delegateWhyLabel") }}</span>
-          </span>
+        <label class="grid min-w-0 content-start gap-1">
+          <span class="text-xs opacity-70">{{ t("chat.selection.delegateWhyLabel") }}</span>
           <textarea v-model="selectionDelegateWhy" class="textarea textarea-bordered min-h-20 w-full resize-y text-sm" :placeholder="t('chat.selection.whyPlaceholder')" maxlength="5000"></textarea>
         </label>
-        <label class="form-control min-w-0">
-          <span class="label py-1">
-            <span class="label-text text-xs opacity-70">{{ t("chat.selection.delegateTodoLabel") }}</span>
-          </span>
+        <label class="grid min-w-0 content-start gap-1">
+          <span class="text-xs opacity-70">{{ t("chat.selection.delegateTodoLabel") }}</span>
           <textarea v-model="selectionDelegateTodo" class="textarea textarea-bordered min-h-20 w-full resize-y text-sm" :placeholder="t('chat.selection.todoPlaceholder')" maxlength="5000"></textarea>
         </label>
       </div>

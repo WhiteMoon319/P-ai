@@ -631,7 +631,6 @@ const selectedModelName = computed(() => {
   const found = normalizedChatModelOptions.value.find((item) => item.id === displayId);
   return found?.name || displayId;
 });
-
 const showIdeWorkspaceGroupLabel = computed(() => false);
 const attachedIdeContextReferenceIds = computed(() => new Set((props.attachedIdeContextReferences || []).map((item) => item.id)));
 const mergedIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() => mergeComposerIdeContextGroups(

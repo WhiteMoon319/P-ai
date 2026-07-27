@@ -208,6 +208,9 @@ fn provider_tool_output_from_value(tool_name: &str, value: &Value) -> String {
             .or_else(|| value.get("text").and_then(Value::as_str))
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| tool_value_readable_text(value)),
+        "image_generate" => value.get("message").and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| tool_value_readable_text(value)),
         _ => tool_value_readable_text(value),
     }
 }

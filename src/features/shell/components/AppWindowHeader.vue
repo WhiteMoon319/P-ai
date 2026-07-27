@@ -402,7 +402,7 @@
       <div class="modal-action mt-4 items-center justify-between gap-3">
         <label class="label min-w-0 cursor-pointer justify-start gap-3 p-0">
           <input v-model="createConversationMaxPermission" type="checkbox" class="checkbox checkbox-sm" />
-          <span class="label-text truncate text-sm">{{ t("chat.createConversationMaxPermission") }}</span>
+          <span class="truncate text-sm">{{ t("chat.createConversationMaxPermission") }}</span>
         </label>
         <div class="flex shrink-0 items-center justify-end gap-2">
           <button class="btn btn-sm" @click="closeCreateConversationDialog">{{ t("common.cancel") }}</button>

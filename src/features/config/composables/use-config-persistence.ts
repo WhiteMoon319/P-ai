@@ -17,6 +17,10 @@ import type {
 import type { SupportedLocale } from "../../../i18n";
 import { normalizeApiRequestFormat } from "../utils/api-request-format";
 import { normalizeDepartmentChildIds } from "../utils/department-graph";
+import {
+  normalizeImageGenerationModelId,
+  normalizeImageGenerationProviders,
+} from "../utils/image-generation-config";
 import { applyUiSizeScale, normalizeUiSizeScale } from "../../shell/composables/use-ui-size-appearance";
 
 const DEFAULT_CODEX_ORIGINATOR = "codex-tui";
@@ -297,6 +301,13 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     options.config.selectedApiConfigId = cfg.selectedApiConfigId;
     options.config.assistantDepartmentApiConfigId = cfg.assistantDepartmentApiConfigId;
     options.config.visionApiConfigId = cfg.visionApiConfigId ?? undefined;
+    options.config.imageProviders = normalizeImageGenerationProviders(
+      (cfg as Partial<AppConfig>).imageProviders,
+    );
+    options.config.imageGenerationModelId = normalizeImageGenerationModelId(
+      (cfg as Partial<AppConfig>).imageGenerationModelId,
+      options.config.imageProviders,
+    );
     options.config.toolReviewApiConfigId = cfg.toolReviewApiConfigId ?? undefined;
     options.config.sttApiConfigId = cfg.sttApiConfigId ?? undefined;
     options.config.sttAutoSend = !!cfg.sttAutoSend;
@@ -527,6 +538,13 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
       options.config.selectedApiConfigId = saved.selectedApiConfigId;
       options.config.assistantDepartmentApiConfigId = saved.assistantDepartmentApiConfigId;
       options.config.visionApiConfigId = saved.visionApiConfigId ?? undefined;
+      options.config.imageProviders = normalizeImageGenerationProviders(
+        (saved as Partial<AppConfig>).imageProviders,
+      );
+      options.config.imageGenerationModelId = normalizeImageGenerationModelId(
+        (saved as Partial<AppConfig>).imageGenerationModelId,
+        options.config.imageProviders,
+      );
       options.config.toolReviewApiConfigId = saved.toolReviewApiConfigId ?? undefined;
       options.config.sttApiConfigId = saved.sttApiConfigId ?? undefined;
       options.config.sttAutoSend = !!saved.sttAutoSend;

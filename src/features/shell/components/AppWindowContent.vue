@@ -833,7 +833,6 @@ const props = defineProps<{
   openGithub: () => void;
 }>();
 const sideChatSubscriptionSlot = createExclusiveChatViewSubscriptionSlot();
-
 const memoryDialogVNodeRef: VNodeRef = (el) => {
   props.setMemoryDialogRef((el as Element | null) ?? null);
 };

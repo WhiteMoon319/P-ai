@@ -1300,6 +1300,7 @@ fn normalize_app_config(config: &mut AppConfig) {
     normalize_remote_im_channels(config);
     normalize_provider_non_stream_base_urls(config);
     normalize_departments(config);
+    normalize_image_generation_config(config);
 }
 
 const MEDIA_REF_PREFIX: &str = "@media:";

@@ -39,10 +39,10 @@
               </select>
             </div>
 
-            <label v-else class="form-control min-w-0 gap-2">
+            <label v-else class="grid min-w-0 gap-2">
               <div>
-                <div class="label-text text-sm">{{ field.label }}</div>
-                <div v-if="field.description" class="label-text-alt mt-1 text-xs">{{ field.description }}</div>
+                <div class="text-sm">{{ field.label }}</div>
+                <div v-if="field.description" class="mt-1 text-xs text-base-content/60">{{ field.description }}</div>
               </div>
               <input
                 v-if="field.type === 'text' || field.type === 'number'"

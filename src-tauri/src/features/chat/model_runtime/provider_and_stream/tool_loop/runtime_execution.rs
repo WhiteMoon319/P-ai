@@ -143,6 +143,7 @@ fn runtime_tool_call_requires_serial_execution(
             | "task"
             | "remember"
             | "plan"
+            | "image_generate"
             | "remote_im_send"
             | "contact_send_files"
     ) {

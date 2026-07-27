@@ -160,7 +160,7 @@
             </div>
           </div>
 
-          <label class="form-control w-full gap-2">
+          <label class="grid w-full gap-2">
             <span class="text-sm font-medium">{{ t("config.migration.password") }}</span>
             <label class="input input-bordered flex w-full items-center gap-3">
               <input
@@ -220,7 +220,7 @@
             <div class="mt-2 whitespace-pre-line text-sm opacity-70">{{ t("config.migration.importUploadHint") }}</div>
           </button>
 
-          <label v-if="needImportPassword" class="form-control w-full gap-2">
+          <label v-if="needImportPassword" class="grid w-full gap-2">
             <span class="text-sm font-medium">{{ t("config.migration.decryptPassword") }}</span>
             <label class="input input-bordered flex w-full items-center gap-3">
               <input

@@ -15,6 +15,7 @@ const BUILTIN_TOOL_DEFAULTS: ReadonlyArray<Readonly<ApiToolItem>> = [
   { id: "create_goal", command: "builtin", args: ["create_goal"], enabled: true, values: {} },
   { id: "update_goal", command: "builtin", args: ["update_goal"], enabled: true, values: {} },
   { id: "meme", command: "builtin", args: ["meme"], enabled: true, values: {} },
+  { id: "image_generate", command: "builtin", args: ["image_generate"], enabled: true, values: {} },
 ];
 
 export function defaultToolBindings(): ApiToolItem[] {
