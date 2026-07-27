@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-23T15:45:45.198Z",
-  "latestVersion": "v0.37.3",
+  "generatedAt": "2026-07-27T11:51:03.933Z",
+  "latestVersion": "v0.40.0",
   "releases": [
+    {
+      "version": "v0.40.0",
+      "path": "docs/changelog/releases/v0.40.0.md",
+      "summary": "修复：发送消息时不再在附件提示阶段检查文件是否存在，减少 prompt 构建阶段的磁盘访问和额外耗时。"
+    },
     {
       "version": "v0.37.3",
       "path": "docs/changelog/releases/v0.37.3.md",
@@ -865,7 +870,7 @@
     {
       "version": "UNRELEASED",
       "path": "docs/changelog/releases/UNRELEASED.md",
-      "summary": "修复：发送消息时不再在附件提示阶段检查文件是否存在，减少 prompt 构建阶段的磁盘访问和额外耗时。"
+      "summary": ""
     }
   ]
 }
