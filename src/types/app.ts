@@ -186,6 +186,8 @@ export type ComfyUiWorkflowMapping = {
   height: ComfyUiNodeInputMapping;
   seed: ComfyUiNodeInputMapping;
   steps: ComfyUiNodeInputMapping;
+  inputImage: ComfyUiNodeInputMapping;
+  maskImage: ComfyUiNodeInputMapping;
   outputNodeIds: string[];
 };
 

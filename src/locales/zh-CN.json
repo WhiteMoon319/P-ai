@@ -528,6 +528,8 @@
       "mappingHeight": "高度",
       "mappingSeed": "随机种子",
       "mappingSteps": "采样步数",
+      "mappingInputImage": "输入图片（图像编辑）",
+      "mappingMaskImage": "mask 图片（图像编辑）",
       "confirmRemoveProvider": "确定删除生图供应商“{name}”吗？",
       "confirmRemoveModel": "确定删除生图模型“{name}”吗？",
       "restored": "已还原生图配置",

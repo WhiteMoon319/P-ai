@@ -105,6 +105,10 @@ struct ComfyUiWorkflowMapping {
     seed: ComfyUiNodeInputMapping,
     #[serde(default = "default_comfyui_steps_mapping")]
     steps: ComfyUiNodeInputMapping,
+    #[serde(default = "default_comfyui_input_image_mapping")]
+    input_image: ComfyUiNodeInputMapping,
+    #[serde(default = "default_comfyui_mask_image_mapping")]
+    mask_image: ComfyUiNodeInputMapping,
     #[serde(default)]
     output_node_ids: Vec<String>,
 }
@@ -137,6 +141,14 @@ fn default_comfyui_steps_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("steps")
 }
 
+fn default_comfyui_input_image_mapping() -> ComfyUiNodeInputMapping {
+    ComfyUiNodeInputMapping::with_input_key("image")
+}
+
+fn default_comfyui_mask_image_mapping() -> ComfyUiNodeInputMapping {
+    ComfyUiNodeInputMapping::with_input_key("image")
+}
+
 impl Default for ComfyUiWorkflowMapping {
     fn default() -> Self {
         Self {
@@ -147,6 +159,8 @@ impl Default for ComfyUiWorkflowMapping {
             height: default_comfyui_height_mapping(),
             seed: default_comfyui_seed_mapping(),
             steps: default_comfyui_steps_mapping(),
+            input_image: default_comfyui_input_image_mapping(),
+            mask_image: default_comfyui_mask_image_mapping(),
             output_node_ids: Vec::new(),
         }
     }

@@ -131,6 +131,8 @@ export function createDefaultComfyUiMapping(): ComfyUiWorkflowMapping {
     height: { nodeIds: [], inputKey: "height" },
     seed: { nodeIds: [], inputKey: "seed" },
     steps: { nodeIds: [], inputKey: "steps" },
+    inputImage: { nodeIds: [], inputKey: "image" },
+    maskImage: { nodeIds: [], inputKey: "image" },
     outputNodeIds: [],
   };
 }
@@ -147,6 +149,8 @@ export function normalizeComfyUiMapping(value: unknown): ComfyUiWorkflowMapping 
     height: normalizeNodeMapping(mapping.height, "height"),
     seed: normalizeNodeMapping(mapping.seed, "seed"),
     steps: normalizeNodeMapping(mapping.steps, "steps"),
+    inputImage: normalizeNodeMapping(mapping.inputImage, "image"),
+    maskImage: normalizeNodeMapping(mapping.maskImage, "image"),
     outputNodeIds: normalizeUniqueStrings(mapping.outputNodeIds, true),
   };
 }
@@ -303,6 +307,8 @@ export function cloneImageGenerationProvider(
       height: { ...provider.comfyuiMapping.height, nodeIds: [...provider.comfyuiMapping.height.nodeIds] },
       seed: { ...provider.comfyuiMapping.seed, nodeIds: [...provider.comfyuiMapping.seed.nodeIds] },
       steps: { ...provider.comfyuiMapping.steps, nodeIds: [...provider.comfyuiMapping.steps.nodeIds] },
+      inputImage: { ...provider.comfyuiMapping.inputImage, nodeIds: [...provider.comfyuiMapping.inputImage.nodeIds] },
+      maskImage: { ...provider.comfyuiMapping.maskImage, nodeIds: [...provider.comfyuiMapping.maskImage.nodeIds] },
       outputNodeIds: [...provider.comfyuiMapping.outputNodeIds],
     },
   };

@@ -506,6 +506,13 @@ fn default_api_tools() -> Vec<ApiToolConfig> {
             enabled: true,
             values: serde_json::json!({}),
         },
+        ApiToolConfig {
+            id: "image_edit".to_string(),
+            command: "builtin".to_string(),
+            args: vec!["image_edit".to_string()],
+            enabled: true,
+            values: serde_json::json!({}),
+        },
     ]
 }
 

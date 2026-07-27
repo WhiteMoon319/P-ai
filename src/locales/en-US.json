@@ -528,6 +528,8 @@
       "mappingHeight": "Height",
       "mappingSeed": "Seed",
       "mappingSteps": "Sampling steps",
+      "mappingInputImage": "Input image (image edit)",
+      "mappingMaskImage": "Mask image (image edit)",
       "confirmRemoveProvider": "Delete image provider “{name}”?",
       "confirmRemoveModel": "Delete image model “{name}”?",
       "restored": "Image generation settings restored",

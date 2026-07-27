@@ -528,6 +528,8 @@
       "mappingHeight": "高度",
       "mappingSeed": "隨機種子",
       "mappingSteps": "取樣步數",
+      "mappingInputImage": "輸入圖片（圖像編輯）",
+      "mappingMaskImage": "mask 圖片（圖像編輯）",
       "confirmRemoveProvider": "確定刪除生圖供應商「{name}」嗎？",
       "confirmRemoveModel": "確定刪除生圖模型「{name}」嗎？",
       "restored": "已還原生圖設定",

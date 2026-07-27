@@ -311,6 +311,7 @@ fn build_global_tool_schema_cache(state: &AppState) -> Vec<CachedRuntimeToolSche
         .provider_tool_definition(),
         BuiltinMemeTool { app_state: state.clone() }.provider_tool_definition(),
         BuiltinImageGenerateTool { app_state: state.clone() }.provider_tool_definition(),
+        BuiltinImageEditTool { app_state: state.clone() }.provider_tool_definition(),
         BuiltinContactSendFilesTool {
             app_state: state.clone(),
             session_id: preview_session_id,
@@ -559,7 +560,7 @@ fn runtime_tool_denied_reason(
     }
     match &tool.source {
         CachedRuntimeToolSource::Builtin => {
-            if tool_name == "image_generate"
+            if matches!(tool_name, "image_generate" | "image_edit")
                 && app_config
                     .image_generation_model_id
                     .as_deref()
@@ -977,6 +978,7 @@ fn build_builtin_runtime_tool_executor(
         }),
         "meme" => Box::new(BuiltinMemeTool { app_state: state.clone() }),
         "image_generate" => Box::new(BuiltinImageGenerateTool { app_state: state.clone() }),
+        "image_edit" => Box::new(BuiltinImageEditTool { app_state: state.clone() }),
         "contact_send_files" => Box::new(BuiltinContactSendFilesTool {
             app_state: state.clone(),
             session_id: tool_session_id.to_string(),
@@ -1386,7 +1388,7 @@ mod tool_assembly_permission_tests {
 
     #[test]
     fn legal_tool_resolver_should_skip_media_tools_without_default_models() {
-        let department = whitelist_department(&["image_generate", "read_media"]);
+        let department = whitelist_department(&["image_generate", "image_edit", "read_media"]);
         let mut config = AppConfig {
             departments: vec![department.clone()],
             ..AppConfig::default()
@@ -1400,6 +1402,7 @@ mod tool_assembly_permission_tests {
         };
         let tools = vec![
             CachedRuntimeToolSchema::builtin(test_definition("image_generate")),
+            CachedRuntimeToolSchema::builtin(test_definition("image_edit")),
             CachedRuntimeToolSchema::builtin(test_definition("read_media")),
         ];
         let memory = test_memory_context(true);
@@ -1412,7 +1415,7 @@ mod tool_assembly_permission_tests {
             &tools,
         );
         assert!(resolved.attached.is_empty());
-        assert_eq!(resolved.manifest.len(), 2);
+        assert_eq!(resolved.manifest.len(), 3);
 
         config.image_generation_model_id = Some("provider-a::model-a".to_string());
         config.vision_api_config_id = Some("vision-a".to_string());
@@ -1429,7 +1432,7 @@ mod tool_assembly_permission_tests {
             .iter()
             .map(|tool| tool.definition.name.as_str())
             .collect::<Vec<_>>();
-        assert_eq!(names, vec!["image_generate", "read_media"]);
+        assert_eq!(names, vec!["image_generate", "image_edit", "read_media"]);
     }
 
     #[test]

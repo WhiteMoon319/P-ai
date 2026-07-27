@@ -1662,6 +1662,7 @@ mod tool_loop_tests {
             test_tool("remember", false),
             test_tool("plan", false),
             test_tool("image_generate", false),
+            test_tool("image_edit", false),
             test_tool("remote_im_send", false),
             test_tool("contact_send_files", false),
             test_tool("read", false),
@@ -1683,6 +1684,7 @@ mod tool_loop_tests {
         assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "remember"));
         assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "plan"));
         assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "image_generate"));
+        assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "image_edit"));
         assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "remote_im_send"));
         assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "contact_send_files"));
         assert!(!runtime_tool_call_requires_serial_execution(&tools, &definitions, "read"));

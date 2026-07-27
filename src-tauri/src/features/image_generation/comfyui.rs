@@ -377,6 +377,15 @@ async fn generate_comfyui_image_once(
     api_key: &str,
 ) -> Result<ProviderImageGenerationOutput, String> {
     let workflow = build_comfyui_workflow(&resolved.provider, &resolved.model, request)?;
+    queue_and_wait_comfyui_workflow(state, resolved, api_key, workflow).await
+}
+
+async fn queue_and_wait_comfyui_workflow(
+    state: &AppState,
+    resolved: &ResolvedImageGenerationModel,
+    api_key: &str,
+    workflow: Value,
+) -> Result<ProviderImageGenerationOutput, String> {
     let (root, prompt_id) = queue_comfyui_workflow(
         state,
         &resolved.provider,
@@ -393,6 +402,166 @@ async fn generate_comfyui_image_once(
     )
     .await?;
     Ok(ProviderImageGenerationOutput { images, text: None })
+}
+
+// ==================== ComfyUI 图像编辑（上传输入图 + 节点注入） ====================
+
+async fn upload_comfyui_input_image(
+    state: &AppState,
+    provider: &ImageGenerationProviderConfig,
+    api_key: &str,
+    input: &ImageEditInputImage,
+    file_stem: &str,
+) -> Result<String, String> {
+    let mut last_not_found = None::<String>;
+    for root in comfyui_candidate_roots(&provider.base_url) {
+        let endpoint = append_image_generation_endpoint(&root, "/upload/image");
+        let form = reqwest::multipart::Form::new()
+            .part("image", image_edit_multipart_part(input, file_stem)?)
+            .text("overwrite", "true");
+        let request = state
+            .shared_http_client
+            .post(&endpoint)
+            .multipart(form)
+            .timeout(std::time::Duration::from_secs(u64::from(provider.timeout_seconds)));
+        let response = comfyui_request_with_auth(request, api_key)
+            .send()
+            .await
+            .map_err(|err| format!("上传图片到 ComfyUI 失败：{err}"))?;
+        if matches!(response.status().as_u16(), 404 | 405) {
+            let status = response.status();
+            let bytes = read_limited_response_bytes(response, IMAGE_GENERATION_MAX_ERROR_BYTES).await?;
+            last_not_found = Some(format!(
+                "{}：HTTP {} {}",
+                endpoint,
+                status,
+                truncate_image_generation_error_body(&bytes)
+            ));
+            continue;
+        }
+        let value = parse_image_generation_json_response(response, &provider.name).await?;
+        let name = image_generation_value_string(&value, &["name"])
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| "ComfyUI 上传响应缺少 name".to_string())?;
+        let subfolder = value
+            .get("subfolder")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .unwrap_or("");
+        return Ok(if subfolder.is_empty() {
+            name.to_string()
+        } else {
+            format!("{subfolder}/{name}")
+        });
+    }
+    Err(format!(
+        "ComfyUI 未找到 /upload/image 或 /api/upload/image 接口{}",
+        last_not_found
+            .map(|value| format!("：{value}"))
+            .unwrap_or_default()
+    ))
+}
+
+// 每个 LoadImage 类节点只承载一张图片，按映射顺序一一注入上传后的文件名。
+fn inject_comfyui_input_images(
+    workflow: &mut Value,
+    mapping: &ComfyUiNodeInputMapping,
+    field_name: &str,
+    uploaded_names: &[String],
+) -> Result<(), String> {
+    if mapping.node_ids.is_empty() {
+        return Err(format!(
+            "ComfyUI 未配置{field_name}节点映射，无法执行图像编辑"
+        ));
+    }
+    if uploaded_names.len() > mapping.node_ids.len() {
+        return Err(format!(
+            "ComfyUI {field_name}节点只配置了 {} 个，无法承载 {} 张图片",
+            mapping.node_ids.len(),
+            uploaded_names.len()
+        ));
+    }
+    let input_key = mapping.input_key.trim();
+    if input_key.is_empty() {
+        return Err(format!("ComfyUI {field_name} input key 为空"));
+    }
+    for (node_id, name) in mapping.node_ids.iter().zip(uploaded_names) {
+        let node = workflow
+            .get_mut(node_id)
+            .ok_or_else(|| format!("ComfyUI workflow 中找不到{field_name}节点 {node_id}"))?;
+        let inputs = node
+            .get_mut("inputs")
+            .and_then(Value::as_object_mut)
+            .ok_or_else(|| format!("ComfyUI 节点 {node_id} 缺少 inputs 对象"))?;
+        inputs.insert(input_key.to_string(), Value::String(name.clone()));
+    }
+    Ok(())
+}
+
+async fn edit_comfyui_image_once(
+    state: &AppState,
+    resolved: &ResolvedImageGenerationModel,
+    request: &ImageGenerationRequest,
+    inputs: &ImageEditInputs,
+    api_key: &str,
+) -> Result<ProviderImageGenerationOutput, String> {
+    ensure_image_edit_input_limits(
+        &resolved.provider.name,
+        inputs,
+        IMAGE_EDIT_MAX_INPUT_IMAGES,
+        true,
+    )?;
+    let mapping = &resolved.provider.comfyui_mapping;
+    // 无法映射时返回可读错误，不静默降级为文生图。
+    if mapping.input_image.node_ids.is_empty() {
+        return Err(
+            "ComfyUI 未配置输入图片节点映射（input_image），无法执行图像编辑；请在生图设置中为该供应商补充 LoadImage 节点映射".to_string(),
+        );
+    }
+    if inputs.mask.is_some() && mapping.mask_image.node_ids.is_empty() {
+        return Err(
+            "ComfyUI 未配置 mask 输入节点映射（mask_image），无法使用 mask；请补充映射或去掉 mask 参数".to_string(),
+        );
+    }
+    let mut workflow = build_comfyui_workflow(&resolved.provider, &resolved.model, request)?;
+    let batch = Uuid::new_v4().to_string();
+    let mut uploaded_names = Vec::with_capacity(inputs.images.len());
+    for (index, input) in inputs.images.iter().enumerate() {
+        uploaded_names.push(
+            upload_comfyui_input_image(
+                state,
+                &resolved.provider,
+                api_key,
+                input,
+                &format!("pai-edit-{batch}-{index}"),
+            )
+            .await?,
+        );
+    }
+    inject_comfyui_input_images(
+        &mut workflow,
+        &mapping.input_image,
+        "输入图片",
+        &uploaded_names,
+    )?;
+    if let Some(mask) = &inputs.mask {
+        let mask_name = upload_comfyui_input_image(
+            state,
+            &resolved.provider,
+            api_key,
+            mask,
+            &format!("pai-edit-{batch}-mask"),
+        )
+        .await?;
+        inject_comfyui_input_images(
+            &mut workflow,
+            &mapping.mask_image,
+            "mask 图片",
+            &[mask_name],
+        )?;
+    }
+    queue_and_wait_comfyui_workflow(state, resolved, api_key, workflow).await
 }
 
 #[cfg(test)]
@@ -443,14 +612,9 @@ mod image_generation_comfyui_tests {
         };
         let request = ImageGenerationRequest {
             prompt: "new prompt".to_string(),
-            model_id: None,
             negative_prompt: Some("bad".to_string()),
             size: Some("1024x768".to_string()),
-            aspect_ratio: None,
-            quality: None,
-            n: 1,
-            seed: None,
-            steps: None,
+            ..ImageGenerationRequest::default()
         };
         let workflow = build_comfyui_workflow(&provider, &model, &request).unwrap_or_default();
         assert_eq!(workflow.pointer("/6/inputs/text").and_then(Value::as_str), Some("new prompt"));
@@ -475,5 +639,53 @@ mod image_generation_comfyui_tests {
         .unwrap_or_default();
         assert_eq!(images.len(), 1);
         assert!(images[0].remote_url.as_deref().unwrap_or_default().contains("b.png"));
+    }
+
+    #[test]
+    fn comfyui_input_image_injection_should_map_names_and_reject_overflow() {
+        let mut workflow = serde_json::json!({
+            "11": { "inputs": { "image": "old-a.png" }, "class_type": "LoadImage" },
+            "12": { "inputs": { "image": "old-b.png" }, "class_type": "LoadImage" }
+        });
+        let mapping = ComfyUiNodeInputMapping {
+            node_ids: vec!["11".to_string(), "12".to_string()],
+            input_key: "image".to_string(),
+        };
+        inject_comfyui_input_images(
+            &mut workflow,
+            &mapping,
+            "输入图片",
+            &["clip/new-a.png".to_string()],
+        )
+        .unwrap_or_default();
+        assert_eq!(
+            workflow.pointer("/11/inputs/image").and_then(Value::as_str),
+            Some("clip/new-a.png")
+        );
+        // 未占用的节点保持原值，不被清空。
+        assert_eq!(
+            workflow.pointer("/12/inputs/image").and_then(Value::as_str),
+            Some("old-b.png")
+        );
+
+        let overflow = inject_comfyui_input_images(
+            &mut workflow,
+            &mapping,
+            "输入图片",
+            &["a".to_string(), "b".to_string(), "c".to_string()],
+        )
+        .err()
+        .unwrap_or_default();
+        assert!(overflow.contains("无法承载 3 张"));
+
+        let missing = inject_comfyui_input_images(
+            &mut workflow,
+            &ComfyUiNodeInputMapping { node_ids: Vec::new(), input_key: "image".to_string() },
+            "输入图片",
+            &["a".to_string()],
+        )
+        .err()
+        .unwrap_or_default();
+        assert!(missing.contains("未配置输入图片节点映射"));
     }
 }

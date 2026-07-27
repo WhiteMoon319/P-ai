@@ -329,6 +329,8 @@ const comfyMappingFields: Array<{ key: ComfyInputMappingKey; labelKey: string }>
   { key: "height", labelKey: "config.imageGeneration.mappingHeight" },
   { key: "seed", labelKey: "config.imageGeneration.mappingSeed" },
   { key: "steps", labelKey: "config.imageGeneration.mappingSteps" },
+  { key: "inputImage", labelKey: "config.imageGeneration.mappingInputImage" },
+  { key: "maskImage", labelKey: "config.imageGeneration.mappingMaskImage" },
 ];
 
 const providers = computed(() => props.config.imageProviders || []);

@@ -566,31 +566,40 @@ async fn generate_seedream_image_once(
     parse_openai_style_image_response(&value)
 }
 
-async fn generate_gemini_image_once(
+async fn post_gemini_image_interactions(
     state: &AppState,
     resolved: &ResolvedImageGenerationModel,
-    request: &ImageGenerationRequest,
     api_key: &str,
-) -> Result<ProviderImageGenerationOutput, String> {
+    payload: &Value,
+) -> Result<Value, String> {
     let endpoint = append_image_generation_endpoint(
         &resolved.provider.base_url,
         "/interactions",
     );
-    let payload = gemini_image_generation_payload(request, &resolved.model);
     let response = state
         .shared_http_client
         .post(endpoint)
         .header("x-goog-api-key", api_key)
         .header("Api-Revision", "2026-05-20")
         .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .json(&payload)
+        .json(payload)
         .timeout(std::time::Duration::from_secs(u64::from(
             resolved.provider.timeout_seconds,
         )))
         .send()
         .await
         .map_err(|err| format!("{} 请求失败：{err}", resolved.provider.name))?;
-    let value = parse_image_generation_json_response(response, &resolved.provider.name).await?;
+    parse_image_generation_json_response(response, &resolved.provider.name).await
+}
+
+async fn generate_gemini_image_once(
+    state: &AppState,
+    resolved: &ResolvedImageGenerationModel,
+    request: &ImageGenerationRequest,
+    api_key: &str,
+) -> Result<ProviderImageGenerationOutput, String> {
+    let payload = gemini_image_generation_payload(request, &resolved.model);
+    let value = post_gemini_image_interactions(state, resolved, api_key, &payload).await?;
     parse_gemini_image_response(&value)
 }
 
@@ -601,14 +610,8 @@ mod image_generation_provider_tests {
     fn request() -> ImageGenerationRequest {
         ImageGenerationRequest {
             prompt: "一只猫".to_string(),
-            model_id: None,
-            negative_prompt: None,
-            size: None,
             aspect_ratio: Some("16:9".to_string()),
-            quality: None,
-            n: 1,
-            seed: None,
-            steps: None,
+            ..ImageGenerationRequest::default()
         }
     }
 

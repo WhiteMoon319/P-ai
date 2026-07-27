@@ -78,6 +78,30 @@ fn normalize_image_generation_request(
         .filter(|value| !value.is_empty());
     request.n = request.n.clamp(1, 4);
     request.steps = request.steps.map(|value| value.clamp(1, 500));
+    request.images = request
+        .images
+        .iter()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect();
+    request.mask = request
+        .mask
+        .as_ref()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    // 带输入图即视为编辑；声明编辑却无图直接拒绝，避免错误降级为文生图。
+    if !request.images.is_empty() {
+        request.operation = ImageGenerationOperation::Edit;
+    } else if matches!(request.operation, ImageGenerationOperation::Edit) {
+        return Err("图像编辑至少需要一张输入图片（images）".to_string());
+    }
+    if request.mask.is_some() && !matches!(request.operation, ImageGenerationOperation::Edit) {
+        return Err("mask 只能在图像编辑时使用，请同时提供 images".to_string());
+    }
+    if matches!(request.operation, ImageGenerationOperation::Edit) {
+        // 编辑路径按单次结果语义运行，不支持多张重复输出。
+        request.n = 1;
+    }
     Ok(request)
 }
 
@@ -85,23 +109,40 @@ async fn generate_image_with_provider_once(
     state: &AppState,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
+    edit_inputs: &ImageEditInputs,
     api_key: &str,
 ) -> Result<ProviderImageGenerationOutput, String> {
+    let editing = matches!(request.operation, ImageGenerationOperation::Edit);
     match resolved.provider.provider_type {
+        ImageGenerationProviderKind::Comfyui if editing => {
+            edit_comfyui_image_once(state, resolved, request, edit_inputs, api_key).await
+        }
         ImageGenerationProviderKind::Comfyui => {
             generate_comfyui_image_once(state, resolved, request, api_key).await
         }
         ImageGenerationProviderKind::Codex => {
-            generate_codex_image_once(state, resolved, request).await
+            generate_codex_image_once(state, resolved, request, edit_inputs).await
+        }
+        ImageGenerationProviderKind::Openai if editing => {
+            edit_openai_image_once(state, resolved, request, edit_inputs, api_key).await
         }
         ImageGenerationProviderKind::Openai => {
             generate_openai_image_once(state, resolved, request, api_key).await
         }
+        ImageGenerationProviderKind::Xai if editing => {
+            edit_xai_image_once(state, resolved, request, edit_inputs, api_key).await
+        }
         ImageGenerationProviderKind::Xai => {
             generate_xai_image_once(state, resolved, request, api_key).await
         }
+        ImageGenerationProviderKind::Seedream if editing => {
+            edit_seedream_image_once(state, resolved, request, edit_inputs, api_key).await
+        }
         ImageGenerationProviderKind::Seedream => {
             generate_seedream_image_once(state, resolved, request, api_key).await
+        }
+        ImageGenerationProviderKind::Gemini if editing => {
+            edit_gemini_image_once(state, resolved, request, edit_inputs, api_key).await
         }
         ImageGenerationProviderKind::Gemini => {
             generate_gemini_image_once(state, resolved, request, api_key).await
@@ -127,12 +168,20 @@ async fn generate_images(
         return Err(format!("生图供应商“{}”尚未配置 API Key", resolved.provider.name));
     }
     let started = std::time::Instant::now();
+    let edit_inputs = load_image_edit_inputs(state, &request).await?;
+    let operation_label = if matches!(request.operation, ImageGenerationOperation::Edit) {
+        "编辑"
+    } else {
+        "生成"
+    };
     runtime_log_info(format!(
-        "[图像生成] 开始，供应商={}，类型={}，模型={}，数量={}",
+        "[图像生成] 开始，操作={}，供应商={}，类型={}，模型={}，数量={}，输入图={}",
+        operation_label,
         resolved.provider.name,
         resolved.provider.provider_type.as_str(),
         resolved.model.model,
-        request.n
+        request.n,
+        edit_inputs.images.len()
     ));
     let mut assets = Vec::<GeneratedImageAsset>::new();
     let mut provider_texts = Vec::<String>::new();
@@ -146,6 +195,7 @@ async fn generate_images(
             state,
             &resolved,
             &single_request,
+            &edit_inputs,
             &api_key,
         )
         .await?;
@@ -175,7 +225,8 @@ async fn generate_images(
         return Err("供应商未返回可保存的图片".to_string());
     }
     runtime_log_info(format!(
-        "[图像生成] 完成，供应商={}，模型={}，图片数={}，耗时毫秒={}",
+        "[图像生成] 完成，操作={}，供应商={}，模型={}，图片数={}，耗时毫秒={}",
+        operation_label,
         resolved.provider.name,
         resolved.model.model,
         assets.len(),

@@ -2,10 +2,20 @@ fn default_image_generation_count() -> u32 {
     1
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum ImageGenerationOperation {
+    #[default]
+    Generate,
+    Edit,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ImageGenerationRequest {
     prompt: String,
+    #[serde(default)]
+    operation: ImageGenerationOperation,
     #[serde(default, alias = "model_id")]
     model_id: Option<String>,
     #[serde(default, alias = "negative_prompt")]
@@ -22,6 +32,29 @@ struct ImageGenerationRequest {
     seed: Option<i64>,
     #[serde(default)]
     steps: Option<u32>,
+    #[serde(default)]
+    images: Vec<String>,
+    #[serde(default)]
+    mask: Option<String>,
+}
+
+impl Default for ImageGenerationRequest {
+    fn default() -> Self {
+        Self {
+            prompt: String::new(),
+            operation: ImageGenerationOperation::Generate,
+            model_id: None,
+            negative_prompt: None,
+            size: None,
+            aspect_ratio: None,
+            quality: None,
+            n: default_image_generation_count(),
+            seed: None,
+            steps: None,
+            images: Vec::new(),
+            mask: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,4 +109,16 @@ struct PendingGeneratedImage {
 struct ProviderImageGenerationOutput {
     images: Vec<PendingGeneratedImage>,
     text: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct ImageEditInputImage {
+    bytes: Vec<u8>,
+    mime: String,
+}
+
+#[derive(Debug, Clone, Default)]
+struct ImageEditInputs {
+    images: Vec<ImageEditInputImage>,
+    mask: Option<ImageEditInputImage>,
 }

@@ -102,6 +102,7 @@ async fn resolve_codex_image_auth(
 fn codex_image_generation_payload(
     request: &ImageGenerationRequest,
     model: &ImageGenerationModelConfig,
+    edit_inputs: &ImageEditInputs,
 ) -> Value {
     let mut tool = serde_json::json!({
         "type": "image_generation",
@@ -114,6 +115,20 @@ fn codex_image_generation_payload(
     if let Some(quality) = effective_image_generation_quality(request, model) {
         tool["quality"] = Value::String(quality);
     }
+    // Responses API 的 mask 通过 image_generation 工具配置传入，而非消息内容。
+    if let Some(mask) = &edit_inputs.mask {
+        tool["input_image_mask"] = serde_json::json!({ "image_url": image_edit_data_url(mask) });
+    }
+    let mut content = vec![serde_json::json!({
+        "type": "input_text",
+        "text": effective_image_generation_prompt(request)
+    })];
+    for input in &edit_inputs.images {
+        content.push(serde_json::json!({
+            "type": "input_image",
+            "image_url": image_edit_data_url(input)
+        }));
+    }
     serde_json::json!({
         "instructions": "",
         "stream": true,
@@ -125,10 +140,7 @@ fn codex_image_generation_payload(
         "input": [{
             "type": "message",
             "role": "user",
-            "content": [{
-                "type": "input_text",
-                "text": effective_image_generation_prompt(request)
-            }]
+            "content": content
         }],
         "tools": [tool],
         "tool_choice": { "type": "image_generation" }
@@ -285,7 +297,16 @@ async fn generate_codex_image_once(
     state: &AppState,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
+    edit_inputs: &ImageEditInputs,
 ) -> Result<ProviderImageGenerationOutput, String> {
+    if matches!(request.operation, ImageGenerationOperation::Edit) {
+        ensure_image_edit_input_limits(
+            &resolved.provider.name,
+            edit_inputs,
+            CODEX_IMAGE_EDIT_MAX_IMAGES,
+            true,
+        )?;
+    }
     let auth = resolve_codex_image_auth(state, &resolved.provider).await?;
     let endpoint = append_image_generation_endpoint(&auth.base_url, "/responses");
     let session_id = Uuid::new_v4().to_string();
@@ -354,7 +375,7 @@ async fn generate_codex_image_once(
         .post(endpoint)
         .headers(headers)
         .bearer_auth(auth.access_token)
-        .json(&codex_image_generation_payload(request, &resolved.model))
+        .json(&codex_image_generation_payload(request, &resolved.model, edit_inputs))
         .timeout(std::time::Duration::from_secs(u64::from(
             resolved.provider.timeout_seconds,
         )))
@@ -389,14 +410,7 @@ mod codex_image_generation_tests {
     fn test_request() -> ImageGenerationRequest {
         ImageGenerationRequest {
             prompt: "一只戴红围巾的猫".to_string(),
-            model_id: None,
-            negative_prompt: None,
-            size: None,
-            aspect_ratio: None,
-            quality: None,
-            n: 1,
-            seed: None,
-            steps: None,
+            ..ImageGenerationRequest::default()
         }
     }
 
@@ -404,7 +418,8 @@ mod codex_image_generation_tests {
     fn payload_should_force_codex_image_generation_tool() {
         let mut model = ImageGenerationModelConfig::default();
         model.model = "user-configured-model-should-be-ignored".to_string();
-        let payload = codex_image_generation_payload(&test_request(), &model);
+        let payload =
+            codex_image_generation_payload(&test_request(), &model, &ImageEditInputs::default());
 
         assert_eq!(payload["model"], CODEX_IMAGE_MAIN_MODEL);
         assert_eq!(payload["tools"][0]["type"], "image_generation");
@@ -412,6 +427,36 @@ mod codex_image_generation_tests {
         assert_eq!(payload["tools"][0]["output_format"], "png");
         assert_eq!(payload["tool_choice"]["type"], "image_generation");
         assert_eq!(payload["reasoning"]["effort"], "medium");
+    }
+
+    #[test]
+    fn payload_should_attach_edit_images_and_mask() {
+        let inputs = ImageEditInputs {
+            images: vec![ImageEditInputImage {
+                bytes: b"img".to_vec(),
+                mime: "image/png".to_string(),
+            }],
+            mask: Some(ImageEditInputImage {
+                bytes: b"mask".to_vec(),
+                mime: "image/png".to_string(),
+            }),
+        };
+        let payload = codex_image_generation_payload(
+            &test_request(),
+            &ImageGenerationModelConfig::default(),
+            &inputs,
+        );
+
+        assert_eq!(payload["input"][0]["content"][0]["type"], "input_text");
+        assert_eq!(payload["input"][0]["content"][1]["type"], "input_image");
+        assert!(payload["input"][0]["content"][1]["image_url"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("data:image/png;base64,"));
+        assert!(payload["tools"][0]["input_image_mask"]["image_url"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("data:image/png;base64,"));
     }
 
     #[test]
