@@ -2,8 +2,6 @@
 #[serde(deny_unknown_fields)]
 struct ImageGenerateToolArgs {
     prompt: String,
-    #[serde(default)]
-    aspect_ratio: Option<String>,
     #[serde(default, alias = "size")]
     resolution: Option<String>,
 }
@@ -25,13 +23,9 @@ impl RuntimeToolMetadata for BuiltinImageGenerateTool {
                         "type": "string",
                         "description": "详细、可直接交给生图模型的提示词。"
                     },
-                    "aspect_ratio": {
-                        "type": "string",
-                        "description": "可选宽高比，例如 1:1、16:9、9:16。"
-                    },
                     "resolution": {
                         "type": "string",
-                        "description": "可选分辨率或尺寸，例如 1024x1024、1536x1024、2K。"
+                        "description": "分辨率，默认 512x512。"
                     }
                 },
                 "required": ["prompt"],
@@ -55,7 +49,6 @@ impl RuntimeValueTool for BuiltinImageGenerateTool {
             let request = ImageGenerationRequest {
                 prompt: args.prompt,
                 size: args.resolution,
-                aspect_ratio: args.aspect_ratio,
                 ..ImageGenerationRequest::default()
             };
             let result = generate_images(&self.app_state, request)
@@ -101,8 +94,6 @@ struct ImageEditToolArgs {
     images: Vec<String>,
     #[serde(default)]
     mask: Option<String>,
-    #[serde(default)]
-    aspect_ratio: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -130,10 +121,6 @@ impl RuntimeToolMetadata for BuiltinImageEditTool {
                     "mask": {
                         "type": "string",
                         "description": "可选 mask 图片引用，白色/不透明区域表示允许修改；仅部分供应商支持，不支持时会返回错误。"
-                    },
-                    "aspect_ratio": {
-                        "type": "string",
-                        "description": "可选输出宽高比，例如 1:1、16:9；仅多图融合或扩图需要改变比例时填写，默认跟随原图。"
                     }
                 },
                 "required": ["prompt", "images"],
@@ -159,7 +146,6 @@ impl RuntimeValueTool for BuiltinImageEditTool {
                 operation: ImageGenerationOperation::Edit,
                 images: args.images,
                 mask: args.mask,
-                aspect_ratio: args.aspect_ratio,
                 ..ImageGenerationRequest::default()
             };
             let result = generate_images(&self.app_state, request)
@@ -190,7 +176,6 @@ mod image_generate_tool_tests {
         assert!(!definition.description.contains("设置页"));
         let properties = definition.parameters["properties"].as_object().cloned().unwrap_or_default();
         assert!(properties.contains_key("prompt"));
-        assert!(properties.contains_key("aspect_ratio"));
         assert!(properties.contains_key("resolution"));
         assert!(!properties.contains_key("model_id"));
         assert!(!properties.contains_key("negative_prompt"));
@@ -215,7 +200,7 @@ mod image_generate_tool_tests {
         assert!(definition.description.contains("Markdown 图片行"));
         let properties = definition.parameters["properties"].as_object().cloned().unwrap_or_default();
         assert!(properties.contains_key("mask"));
-        assert!(properties.contains_key("aspect_ratio"));
+        assert!(!properties.contains_key("aspect_ratio"));
         assert!(!properties.contains_key("model_id"));
         assert!(!properties.contains_key("quality"));
         assert!(!properties.contains_key("seed"));

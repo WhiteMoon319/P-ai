@@ -170,13 +170,6 @@
           <!-- 上：参数一排（与 image_generate 工具的可选参数对齐） -->
           <div class="flex flex-wrap gap-3">
             <div class="grid content-start gap-1">
-              <span class="text-xs font-medium text-base-content/60">{{ t("config.imageGeneration.testAspectRatio") }}</span>
-              <select v-model="testAspectRatio" class="select select-bordered select-sm w-36">
-                <option value="">{{ t("config.imageGeneration.testOptionModelDefault") }}</option>
-                <option v-for="ratio in testAspectRatioOptions" :key="ratio" :value="ratio">{{ ratio }}</option>
-              </select>
-            </div>
-            <div class="grid content-start gap-1">
               <span class="text-xs font-medium text-base-content/60">{{ t("config.imageGeneration.testSize") }}</span>
               <select v-model="testResolution" class="select select-bordered select-sm w-40 font-mono">
                 <option value="">{{ t("config.imageGeneration.testOptionModelDefault") }}</option>
@@ -277,11 +270,9 @@ const props = defineProps<{
 const { t } = useI18n();
 const selectedProviderId = ref("");
 const testPrompt = ref("");
-// 与 AI 工具 image_generate 的可选参数对齐：aspect_ratio / resolution，留空表示用模型默认值
-const testAspectRatio = ref("");
+// 与 AI 工具 image_generate 的可选参数对齐：仅 resolution，留空表示用模型默认值
 const testResolution = ref("");
-const testAspectRatioOptions = ["1:1", "16:9", "9:16", "4:3", "3:4", "21:9"];
-const testResolutionPresets = ["1024x1024", "1536x1024", "1024x1536", "2K", "4K"];
+const testResolutionPresets = ["512x512", "1024x1024", "1536x1024", "1024x1536", "2K", "4K"];
 const testingImage = ref(false);
 const copyingImage = ref(false);
 const testError = ref("");
@@ -379,7 +370,7 @@ const providerTemplateGroups = computed<ConfigTemplateGroup[]>(() => {
     { key: "providerType", label: t("config.imageGeneration.providerType"), type: "select" as const, options: providerTypeOptions.map((item) => ({ value: item.value, label: item.label })) },
     { key: "providerName", label: t("config.imageGeneration.providerName"), type: "text" as const },
     endpointField,
-    { key: "timeoutSeconds", label: t("config.imageGeneration.timeoutSeconds"), type: "number" as const, min: 10, max: 1800 },
+    { key: "timeoutSeconds", label: t("config.imageGeneration.timeoutSeconds"), type: "number" as const, min: 10, max: 600 },
   ];
   if (provider.providerType === "seedream") fields.push({ key: "watermark", label: t("config.imageGeneration.watermark"), description: t("config.imageGeneration.watermarkHint"), type: "toggle" as const } as never);
   const rows: ConfigTemplateGroup["rows"] = fields.map((field) => ({ items: [field] }));
@@ -632,8 +623,6 @@ async function runImageTest() {
     prompt: testPrompt.value.trim(),
     n: 1,
   };
-  const aspectRatio = testAspectRatio.value.trim();
-  if (aspectRatio) request.aspectRatio = aspectRatio;
   const resolution = testResolution.value.trim();
   if (resolution) request.size = resolution;
   try {

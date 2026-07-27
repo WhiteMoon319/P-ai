@@ -23,7 +23,8 @@ const PROVIDER_TEMPLATES: Record<ImageGenerationProviderKind, ProviderTemplate> 
     model: {
       name: "ComfyUI Workflow",
       model: "",
-      defaultSize: "1024x1024",
+      defaultSize: "512x512",
+      defaultAspectRatio: "1:1",
     },
   },
   codex: {
@@ -32,7 +33,8 @@ const PROVIDER_TEMPLATES: Record<ImageGenerationProviderKind, ProviderTemplate> 
     model: {
       name: "Codex Image Generation",
       model: CODEX_IMAGE_MAIN_MODEL,
-      defaultSize: "1024x1024",
+      defaultSize: "512x512",
+      defaultAspectRatio: "1:1",
       defaultQuality: "medium",
     },
   },
@@ -42,7 +44,8 @@ const PROVIDER_TEMPLATES: Record<ImageGenerationProviderKind, ProviderTemplate> 
     model: {
       name: "GPT Image 2",
       model: "gpt-image-2",
-      defaultSize: "1024x1024",
+      defaultSize: "512x512",
+      defaultAspectRatio: "1:1",
       defaultQuality: "medium",
     },
   },
@@ -52,7 +55,7 @@ const PROVIDER_TEMPLATES: Record<ImageGenerationProviderKind, ProviderTemplate> 
     model: {
       name: "Grok Imagine Image Quality",
       model: "grok-imagine-image-quality",
-      defaultSize: "1k",
+      defaultSize: "512x512",
       defaultAspectRatio: "1:1",
     },
   },
@@ -62,7 +65,8 @@ const PROVIDER_TEMPLATES: Record<ImageGenerationProviderKind, ProviderTemplate> 
     model: {
       name: "Seedream 5.0 Pro",
       model: "doubao-seedream-5-0-pro-260628",
-      defaultSize: "2K",
+      defaultSize: "512x512",
+      defaultAspectRatio: "1:1",
       defaultQuality: "standard",
     },
   },
@@ -72,7 +76,7 @@ const PROVIDER_TEMPLATES: Record<ImageGenerationProviderKind, ProviderTemplate> 
     model: {
       name: "Nano Banana 2",
       model: "gemini-3.1-flash-image",
-      defaultSize: "2K",
+      defaultSize: "512x512",
       defaultAspectRatio: "1:1",
     },
   },
@@ -176,7 +180,7 @@ export function createImageGenerationProvider(
     apiKeys: [],
     codexApiProviderId: undefined,
     keyCursor: 0,
-    timeoutSeconds: 300,
+    timeoutSeconds: 600,
     watermark: false,
     models: [{
       id: defaultModelId(providerType, seed),
@@ -257,7 +261,7 @@ export function normalizeImageGenerationProvider(
       seenModels.add(key);
       return true;
     });
-  const timeout = Math.round(Number(source.timeoutSeconds ?? 300));
+  const timeout = Math.round(Number(source.timeoutSeconds ?? 600));
   return {
     id,
     name: String(source.name ?? "").trim() || template.name,
@@ -269,8 +273,8 @@ export function normalizeImageGenerationProvider(
     codexApiProviderId: normalizedOptionalText(source.codexApiProviderId),
     keyCursor: Math.max(0, Math.min(1_000_000, Math.round(Number(source.keyCursor ?? 0)) || 0)),
     timeoutSeconds: Number.isFinite(timeout) && timeout > 0
-      ? Math.max(10, Math.min(1_800, timeout))
-      : 300,
+      ? Math.max(10, Math.min(600, timeout))
+      : 600,
     watermark: !!source.watermark,
     models,
     comfyuiWorkflowJson: String(source.comfyuiWorkflowJson ?? "").trim(),

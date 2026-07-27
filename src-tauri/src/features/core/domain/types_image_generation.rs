@@ -57,8 +57,8 @@ impl Default for ImageGenerationModelConfig {
             model: "gpt-image-2".to_string(),
             enabled: true,
             deprecated: false,
-            default_size: Some("1024x1024".to_string()),
-            default_aspect_ratio: None,
+            default_size: Some("512x512".to_string()),
+            default_aspect_ratio: Some("1:1".to_string()),
             default_quality: Some("medium".to_string()),
         }
     }
@@ -167,7 +167,7 @@ impl Default for ComfyUiWorkflowMapping {
 }
 
 fn default_image_generation_timeout_seconds() -> u32 {
-    300
+    600
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -138,7 +138,7 @@ fn normalize_image_generation_provider(provider: &mut ImageGenerationProviderCon
     provider.timeout_seconds = if provider.timeout_seconds == 0 {
         default_image_generation_timeout_seconds()
     } else {
-        provider.timeout_seconds.clamp(10, 1_800)
+        provider.timeout_seconds.clamp(10, 600)
     };
     provider.comfyui_workflow_json = provider.comfyui_workflow_json.trim().to_string();
     provider.codex_api_provider_id = provider

@@ -579,7 +579,7 @@ mod image_generation_comfyui_tests {
             api_keys: Vec::new(),
             codex_api_provider_id: None,
             key_cursor: 0,
-            timeout_seconds: 300,
+            timeout_seconds: 600,
             watermark: false,
             models: Vec::new(),
             comfyui_workflow_json: serde_json::json!({
