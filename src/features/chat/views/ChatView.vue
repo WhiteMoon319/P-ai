@@ -251,20 +251,6 @@
           >
             <RemoteImContactEnergyDashboard :snapshot="remoteImContactDashboardSnapshot" />
           </div>
-          <!-- 临时视觉验收：确认 DaisyUI info alert 的主题配色后删除。 -->
-          <div
-            v-if="!chatStatusBanner"
-            class="pointer-events-none absolute inset-x-0 top-0 z-30 flex -translate-y-full justify-center px-2 pb-2 pt-0"
-          >
-            <div class="alert alert-info alert-soft pointer-events-auto w-fit max-w-full px-4 py-2 text-sm shadow-sm">
-              <div class="flex w-full min-w-0 flex-col gap-2">
-                <span
-                  class="block max-h-32 min-w-0 overflow-y-auto whitespace-pre-wrap break-words text-center leading-5 text-base-content/80 ecall-shimmer-text ecall-reasoning-shimmer"
-                  :data-shimmer-text="t('chat.statusCompactingContext')"
-                >{{ t("chat.statusCompactingContext") }}</span>
-              </div>
-            </div>
-          </div>
           <Transition name="chat-status-banner">
             <div
               v-if="chatStatusBanner"
