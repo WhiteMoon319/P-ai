@@ -2,6 +2,9 @@ import { computed, type Ref } from "vue";
 import type { ChatConversationOverviewItem, ChatMentionTarget, ChatTodoItem } from "../../../types/app";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
 
+export type ChatStatusBannerTone = "default" | "error" | "success" | "info";
+export type ChatStatusBanner = { text: string; tone: ChatStatusBannerTone };
+
 export function useChatConversationCtx(
   props: {
     currentTheme: string;
@@ -133,7 +136,7 @@ export function useChatConversationCtx(
     return isOrganizeContextStatusText(actualText);
   });
 
-  const chatStatusBanner = computed<null | { text: string; tone: "default" | "error" }>(() => {
+  const chatStatusBanner = computed<ChatStatusBanner | null>(() => {
     const errorText = String(props.chatErrorText || "").trim();
     if (errorText) return { text: errorText, tone: "error" };
     if (props.trimming) {
@@ -143,7 +146,7 @@ export function useChatConversationCtx(
       return { text: t("chat.statusArchivingConversation"), tone: "default" };
     }
     if (isOrganizingContextBusy.value) {
-      return { text: t("chat.statusCompactingContext"), tone: "default" };
+      return { text: t("chat.statusCompactingContext"), tone: "info" };
     }
     return null;
   });

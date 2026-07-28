@@ -647,7 +647,7 @@ import { useChatVirtualList } from "../composables/use-chat-virtual-list";
 import { useChatVirtualScroll } from "../composables/use-chat-virtual-scroll";
 import { useChatPanes, PANE_WIDTH_LIMITS, type UseChatPanesOptions } from "../composables/use-chat-panes";
 import { useChatSelection } from "../composables/use-chat-selection";
-import { useChatConversationCtx } from "../composables/use-chat-conversation-ctx";
+import { useChatConversationCtx, type ChatStatusBanner, type ChatStatusBannerTone } from "../composables/use-chat-conversation-ctx";
 import { useChatScrollOrchestration } from "../composables/use-chat-scroll-orchestration";
 import { useChatToolReviewHandlers } from "../composables/use-chat-tool-review-handlers";
 import type { ToolReviewCodeReviewScope, ToolReviewCommitOption } from "../composables/use-chat-tool-review";
@@ -815,10 +815,10 @@ const toolReviewSidebarActiveTab = computed<ToolReviewSidebarTab>(() => {
 // ==================== messages / audio ====================
 
 const { playingAudioId, copyMessage, stopAudioPlayback, toggleAudioPlayback } = useChatMessageActions();
-const transientNotice = ref<null | { text: string; tone: "default" | "error" | "success" }>(null);
+const transientNotice = ref<ChatStatusBanner | null>(null);
 let transientNoticeTimer = 0;
 
-function showTransientNotice(text: string, tone: "default" | "error" | "success" = "success") {
+function showTransientNotice(text: string, tone: ChatStatusBannerTone = "success") {
   const next = String(text || "").trim();
   if (!next) return;
   transientNotice.value = { text: next, tone };
