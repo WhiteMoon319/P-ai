@@ -207,7 +207,14 @@ fn resolve_plan_file_for_conversation_id(
     resolve_plan_file_for_conversation(&base_root, raw_path)
 }
 
-fn plan_continue_confirmation_message() -> ChatMessage {
+fn plan_continue_prompt_block(plan_path: &str) -> String {
+    format!(
+        "<active_plans>\n以下为用户刚刚同意执行的计划文件。请读取该文件并开始执行；完成后调用 plan(action=complete) 并传入对应 path。\n<active_plan index=\"1\">\n{}\n</active_plan>\n</active_plans>",
+        plan_path.trim()
+    )
+}
+
+fn plan_continue_confirmation_message(plan_path: &str) -> ChatMessage {
     ChatMessage {
         id: Uuid::new_v4().to_string(),
         role: "user".to_string(),
@@ -222,7 +229,8 @@ fn plan_continue_confirmation_message() -> ChatMessage {
             "messageKind": "plan_confirm_continue",
             "message_meta": {
                 "kind": "plan_confirm_continue"
-            }
+            },
+            "oneShotPromptExtraBlocks": [plan_continue_prompt_block(plan_path)]
         })),
         tool_call: None,
         mcp_call: None,
@@ -432,7 +440,7 @@ async fn confirm_plan_and_continue_inner(
         created_at: now_iso(),
         source: ChatEventSource::System,
         queue_mode: ChatQueueMode::Normal,
-        messages: vec![plan_continue_confirmation_message()],
+        messages: vec![plan_continue_confirmation_message(&resolved_plan_path.display_path)],
         activate_assistant: true,
         assistant_message_id: Some(assistant_message_id),
         session_info: ChatSessionInfo {

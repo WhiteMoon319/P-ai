@@ -190,26 +190,6 @@ pub(super) fn active_plan_complete_by_path(
     )
 }
 
-pub(super) fn active_plan_prompt_block(
-    data_path: &PathBuf,
-    conversation_id: &str,
-) -> Result<Option<String>, String> {
-    let records = active_plan_records_in_progress(data_path, conversation_id)?;
-    if records.is_empty() {
-        return Ok(None);
-    }
-    let mut lines = Vec::<String>::new();
-    lines.push("<active_plans>".to_string());
-    lines.push("以下为用户已同意且正在执行的计划文件。它们必须持续纳入上下文；完成后调用 plan(action=complete) 并传入对应 path。".to_string());
-    for (index, record) in records.iter().enumerate() {
-        lines.push(format!("<active_plan index=\"{}\">", index + 1));
-        lines.push(record.path.trim().to_string());
-        lines.push("</active_plan>".to_string());
-    }
-    lines.push("</active_plans>".to_string());
-    Ok(Some(lines.join("\n")))
-}
-
 #[cfg(test)]
 #[test]
 fn read_active_plan_records_should_skip_legacy_record_without_path() {

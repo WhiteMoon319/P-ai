@@ -2271,7 +2271,7 @@ fn prompt_user_extra_blocks_for_message(
     _include_remote_identity: bool,
     recall_memories: Option<&[MemoryEntry]>,
     seen_memory_ids: &mut HashSet<String>,
-    _include_conversation_workspace: bool,
+    include_one_shot_prompt_blocks: bool,
 ) -> Vec<String> {
     let mut blocks = Vec::<String>::new();
     if let Some(recall_block) =
@@ -2296,6 +2296,19 @@ fn prompt_user_extra_blocks_for_message(
         blocks.push(extra);
     }
     if let Some(meta) = message.provider_meta.as_ref() {
+        if include_one_shot_prompt_blocks {
+            if let Some(one_shot_blocks) = meta
+                .get("oneShotPromptExtraBlocks")
+                .and_then(Value::as_array)
+            {
+                one_shot_blocks.iter().filter_map(Value::as_str).for_each(|block| {
+                    let block = block.trim();
+                    if !block.is_empty() {
+                        blocks.push(block.to_string());
+                    }
+                });
+            }
+        }
         for (index, relative_path) in provider_meta_attachment_relative_paths(meta)
             .iter()
             .enumerate()
@@ -2362,6 +2375,38 @@ mod prompt_user_extra_attachment_tests {
                 "[附件#2]\npath: {Assistant Space}/downloads/notes.txt".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn prompt_user_extra_blocks_should_only_include_one_shot_blocks_for_latest_message() {
+        let message = ChatMessage {
+            id: "plan-confirm".to_string(),
+            role: "user".to_string(),
+            created_at: now_iso(),
+            speaker_agent_id: None,
+            parts: vec![MessagePart::Text {
+                text: "我同意，请执行。".to_string(),
+                reasoning_content: None,
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: Some(serde_json::json!({
+                "oneShotPromptExtraBlocks": ["<active_plans>计划路径</active_plans>"]
+            })),
+            tool_call: None,
+            mcp_call: None,
+            meme_annotations: None,
+        };
+        let mut seen_memory_ids = HashSet::new();
+
+        let latest_blocks = prompt_user_extra_blocks_for_message(
+            None, None, &message, &[], "", "", false, None, &mut seen_memory_ids, true,
+        );
+        let history_blocks = prompt_user_extra_blocks_for_message(
+            None, None, &message, &[], "", "", false, None, &mut seen_memory_ids, false,
+        );
+
+        assert_eq!(latest_blocks, vec!["<active_plans>计划路径</active_plans>"]);
+        assert!(history_blocks.is_empty());
     }
 }
 
@@ -3757,23 +3802,7 @@ fn build_prompt_with_mode(
         log_stage("prepare_context.prompt_conversation_payload_ready");
     }
 
-    let mut latest_user_extra_blocks = conversation_payload.latest_user_extra_blocks;
-    if let Some(path) = data_path {
-        match message_store::active_plan_prompt_block(path, &conversation.id) {
-            Ok(Some(active_plan_block)) => {
-                latest_user_extra_blocks.push(active_plan_block);
-            }
-            Ok(None) => {}
-            Err(err) => {
-                runtime_log_error(format!(
-                    "[提示词] active_plan_prompt_block 读取失败: conversation_id={}, data_path={}, error={:?}",
-                    conversation.id,
-                    path.display(),
-                    err
-                ));
-            }
-        }
-    }
+    let latest_user_extra_blocks = conversation_payload.latest_user_extra_blocks;
 
     Ok(PreparedPrompt {
         preamble,

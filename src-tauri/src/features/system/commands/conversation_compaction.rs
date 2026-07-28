@@ -254,16 +254,6 @@ async fn run_context_compaction_pipeline_inner(
         &deduped_recall,
         &summary_draft,
     )?;
-    let summary_with_pending_plan = match message_store::active_plan_prompt_block(
-        &state.data_path,
-        &source.id,
-    )? {
-        Some(plan_block) if summary_draft.summary.trim().is_empty() => {
-            format!("\n{}", plan_block.trim())
-        }
-        Some(plan_block) => format!("{}\n\n{}", summary_draft.summary.trim(), plan_block.trim()),
-        None => summary_draft.summary.clone(),
-    };
     let refreshed_user_profile_snapshot =
         if conversation_is_delegate(source) || conversation_is_remote_im_contact(source) {
             None
@@ -271,7 +261,7 @@ async fn run_context_compaction_pipeline_inner(
             build_user_profile_snapshot_block(&state.data_path, &owner_agent, 12)?
         };
     let compression_message = build_compaction_message(
-        &summary_with_pending_plan,
+        &summary_draft.summary,
         Some(summary_draft.title.as_str()),
         compaction_reason,
         Some(&preserved_dialogue),
