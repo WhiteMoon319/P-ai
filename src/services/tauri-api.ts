@@ -1760,6 +1760,7 @@ const TRANSPORT_NOTIFICATION_EVENT_ALIASES: Record<string, string | string[]> = 
   "markdownAppearance.changed": "easy-call:markdown-appearance-changed",
   "chatMessageAppearance.changed": "easy-call:chat-message-appearance-changed",
   "chatComposerAppearance.changed": "easy-call:chat-composer-appearance-changed",
+  "fileReaderAppearance.changed": "easy-call:file-reader-appearance-changed",
   "backend.ready": "easy-call:backend-ready",
   "startup.progress": "easy-call:startup-progress",
   "workspace.migrationProgress": "easy-call:workspace-migration-progress",

@@ -2198,6 +2198,9 @@
     "inputPanel": "输入面板外观",
     "inputPanelSideFileTags": "显示侧边文件标签",
     "inputPanelIdeBridgeFileTags": "显示 IDE 桥文件标签",
+    "fileReader": "文件浏览器",
+    "fileReaderLineWrap": "换行显示",
+    "fileReaderLineWrapHint": "代码文件预览自动换行；可按 Alt + Z 切换。",
     "themeTabs": {
       "preset": "预设",
       "generated": "自定义"

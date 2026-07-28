@@ -427,6 +427,10 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
     virtualCodeBlockVirtualizer.value.measureElement(target);
   }
 
+  function remeasureVirtualCodeRows() {
+    virtualCodeBlockVirtualizer.value.measure();
+  }
+
   watch(
     activeVirtualCodeEntries,
     (entries) => {
@@ -452,5 +456,6 @@ export function useFileReaderVirtualCode(options: UseFileReaderVirtualCodeOption
     migrateVirtualCodeCaches,
     collectVirtualizedVisibleContent,
     measureVirtualCodeRow,
+    remeasureVirtualCodeRows,
   };
 }

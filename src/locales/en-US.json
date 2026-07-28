@@ -2198,6 +2198,9 @@
     "inputPanel": "Input Panel Appearance",
     "inputPanelSideFileTags": "Show side file tags",
     "inputPanelIdeBridgeFileTags": "Show IDE bridge file tags",
+    "fileReader": "File Browser",
+    "fileReaderLineWrap": "Line wrap",
+    "fileReaderLineWrapHint": "Wrap long lines in code previews. Press Alt + Z to toggle.",
     "themeTabs": {
       "preset": "Preset",
       "generated": "Custom"

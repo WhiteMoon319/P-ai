@@ -2198,6 +2198,9 @@
     "inputPanel": "輸入面板外觀",
     "inputPanelSideFileTags": "顯示側邊檔案標籤",
     "inputPanelIdeBridgeFileTags": "顯示 IDE 橋接檔案標籤",
+    "fileReader": "檔案瀏覽器",
+    "fileReaderLineWrap": "換行顯示",
+    "fileReaderLineWrapHint": "程式碼檔案預覽自動換行；可按 Alt + Z 切換。",
     "themeTabs": {
       "preset": "預設",
       "generated": "自訂"

@@ -362,7 +362,10 @@
               <div
                 ref="virtualCodeScroller"
                 class="file-reader-code-virtual-scroller h-full min-h-0 overflow-auto"
-                :class="isTabRawMode(activeTab) ? 'file-reader-code-virtual-scroller-raw' : 'file-reader-code-virtual-scroller-shiki'"
+                :class="[
+                  isTabRawMode(activeTab) ? 'file-reader-code-virtual-scroller-raw' : 'file-reader-code-virtual-scroller-shiki',
+                  fileReaderLineWrapEnabled ? 'file-reader-code-virtual-scroller-wrap' : 'file-reader-code-virtual-scroller-nowrap',
+                ]"
                 @scroll="handleContentScroll"
                 @mouseup="captureCurrentTextSelection"
                 @keyup="captureCurrentTextSelection"
@@ -416,6 +419,12 @@
                 :target="virtualCodeScroller"
                 variant="code-dark"
               />
+              <FloatingScrollbar
+                v-if="!isTabRawMode(activeTab) && !fileReaderLineWrapEnabled"
+                :target="virtualCodeScroller"
+                variant="code-dark"
+                orientation="horizontal"
+              />
             </div>
             <div
               v-else
@@ -426,7 +435,7 @@
               @keyup="captureCurrentTextSelection"
               @contextmenu.prevent="openActiveFileContextMenu"
             >
-              <pre :class="['file-reader-raw-pre', 'min-h-full', 'p-4', activeTab.kind === 'code' ? 'file-reader-code-wrap' : '']">{{ activeTab.content }}</pre>
+              <pre :class="['file-reader-raw-pre', 'min-h-full', 'p-4', activeTab.kind === 'code' && fileReaderLineWrapEnabled ? 'file-reader-code-wrap' : '']">{{ activeTab.content }}</pre>
             </div>
           </div>
         </div>
@@ -674,6 +683,7 @@ import ChatImagePreviewDialog from "../../chat/components/dialogs/ChatImagePrevi
 import { useChatImagePreview } from "../../chat/composables/use-chat-image-preview";
 import { isAbsoluteLocalPath, isAssistantSpacePath, normalizeLocalLinkHref, parseLocalFileReference } from "../../chat/utils/local-link";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
+import { useFileReaderAppearance } from "../../shell/composables/use-file-reader-appearance";
 import PanelTabStrip from "../../shared/components/PanelTabStrip.vue";
 import { useI18n } from "vue-i18n";
 import type { IdeContextReferenceItem } from "../../../types/app";
@@ -883,6 +893,7 @@ const {
   migrateVirtualCodeCaches,
   collectVirtualizedVisibleContent,
   measureVirtualCodeRow,
+  remeasureVirtualCodeRows,
 } = useFileReaderVirtualCode({
   activeTab,
   markdownIsDark: computed(() => props.markdownIsDark),
@@ -890,6 +901,10 @@ const {
   isRawMode: isTabRawMode,
   requestFileBlock: requestFileReaderFileBlock,
 });
+const {
+  fileReaderLineWrapEnabled,
+  toggleFileReaderLineWrapEnabled,
+} = useFileReaderAppearance();
 const {
   imagePreviewOpen,
   imagePreviewDataUrl,
@@ -2639,12 +2654,32 @@ function handleGlobalEscape(event: KeyboardEvent) {
   }
 }
 
+function handleFileReaderLineWrapShortcut(event: KeyboardEvent) {
+  if (
+    event.code !== "KeyZ"
+    || !event.altKey
+    || event.ctrlKey
+    || event.metaKey
+    || event.shiftKey
+    || activeTab.value?.kind !== "code"
+  ) return;
+  const target = event.target instanceof Element ? event.target : null;
+  if (target?.closest("input, textarea, [contenteditable='true']")) return;
+  event.preventDefault();
+  toggleFileReaderLineWrapEnabled();
+}
+
+watch(fileReaderLineWrapEnabled, () => {
+  void nextTick(() => remeasureVirtualCodeRows());
+});
+
 // ==================== Lifecycle ====================
 
 onMounted(async () => {
   window.addEventListener("resize", updateAddressScrollState);
   window.addEventListener("pointerdown", handleGlobalPointerDown);
   window.addEventListener("keydown", handleGlobalEscape);
+  window.addEventListener("keydown", handleFileReaderLineWrapShortcut);
   measureFileReaderLayoutWidth();
   if (typeof ResizeObserver !== "undefined" && fileReaderLayoutRoot.value) {
     fileReaderLayoutResizeObserver = new ResizeObserver(() => {
@@ -2678,6 +2713,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", updateAddressScrollState);
   window.removeEventListener("pointerdown", handleGlobalPointerDown);
   window.removeEventListener("keydown", handleGlobalEscape);
+  window.removeEventListener("keydown", handleFileReaderLineWrapShortcut);
   stopDirectoryTreeResize();
   fileReaderLayoutResizeObserver?.disconnect();
   fileReaderLayoutResizeObserver = null;
@@ -2841,10 +2877,9 @@ defineExpose({
   overflow: auto;
 }
 .file-reader-code-virtual-scroller-raw {
-  overflow-x: hidden;
+  overflow-x: auto;
 }
 .file-reader-code-virtual-scroller-shiki {
-  overflow-x: hidden;
   background: var(--color-base-100);
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -2852,6 +2887,12 @@ defineExpose({
 .file-reader-code-virtual-scroller-shiki::-webkit-scrollbar {
   width: 0;
   height: 0;
+}
+.file-reader-code-virtual-scroller-wrap {
+  overflow-x: hidden;
+}
+.file-reader-code-virtual-scroller-nowrap {
+  overflow: auto;
 }
 .file-reader-code-wrap {
   white-space: pre-wrap;
@@ -2908,6 +2949,11 @@ defineExpose({
   padding: 0 8px;
   font: inherit;
   line-height: inherit;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.file-reader-code-virtual-scroller-wrap .file-reader-code-virtual-line-content {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;

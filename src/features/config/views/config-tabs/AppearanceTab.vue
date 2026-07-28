@@ -96,6 +96,24 @@
 
     <div class="card bg-base-100 border border-base-300">
       <div class="card-body gap-3 p-4">
+        <h3 class="card-title text-base">{{ t("appearance.fileReader") }}</h3>
+        <label class="flex cursor-pointer items-center justify-between gap-3 rounded-box bg-base-200/40 px-3 py-2">
+          <span>
+            <span class="block text-sm font-medium">{{ t("appearance.fileReaderLineWrap") }}</span>
+            <span class="mt-0.5 block text-xs text-base-content/60">{{ t("appearance.fileReaderLineWrapHint") }}</span>
+          </span>
+          <input
+            :checked="fileReaderLineWrapEnabled"
+            type="checkbox"
+            class="toggle toggle-sm"
+            @change="setFileReaderLineWrapEnabled(($event.target as HTMLInputElement).checked)"
+          />
+        </label>
+      </div>
+    </div>
+
+    <div class="card bg-base-100 border border-base-300">
+      <div class="card-body gap-3 p-4">
         <div>
           <h3 class="card-title text-base">{{ t("appearance.uiSizeScale") }}</h3>
           <p class="mt-1 text-xs text-base-content/60">{{ t("appearance.uiSizeScaleHint") }}</p>
@@ -194,6 +212,7 @@ import {
 } from "../../../shell/composables/use-markdown-appearance";
 import { useChatMessageAppearance } from "../../../shell/composables/use-chat-message-appearance";
 import { SIDE_FILE_TAGS_AVAILABLE, useChatComposerAppearance } from "../../../shell/composables/use-chat-composer-appearance";
+import { useFileReaderAppearance } from "../../../shell/composables/use-file-reader-appearance";
 
 const props = defineProps<{
   uiLanguage: "zh-CN" | "en-US" | "zh-TW";
@@ -240,6 +259,10 @@ const {
   setSideFileTagsEnabled,
   setIdeBridgeFileTagsEnabled,
 } = useChatComposerAppearance();
+const {
+  fileReaderLineWrapEnabled,
+  setFileReaderLineWrapEnabled,
+} = useFileReaderAppearance();
 
 function isGeneratedTheme(theme: string) {
   return theme === GENERATED_THEME_LIGHT_ID || theme === GENERATED_THEME_DARK_ID;
