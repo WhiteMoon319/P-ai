@@ -247,6 +247,7 @@
                   type="checkbox"
                   class="toggle toggle-sm toggle-primary"
                   :checked="permissionControlEnabled"
+                  :disabled="selectedDepartmentIsFixedPreset"
                   @change="updateDepartmentPermissionControl({ enabled: !!($event.target as HTMLInputElement).checked })"
                 />
               </div>
@@ -437,7 +438,7 @@ import {
 import { validateDepartmentConfig } from "../../utils/department-validation";
 import { normalizeDepartmentChildIds } from "../../utils/department-graph";
 import { MODEL_ROLE_EXPERT_API_CONFIG_ID, MODEL_ROLE_QUICK_API_CONFIG_ID } from "../../utils/model-role-options";
-import { EXPLORER_DEPARTMENT_DEFAULT, LEADER_DEPARTMENT_DEFAULT, REMOTE_CUSTOMER_SERVICE_DEPARTMENT_DEFAULT } from "../../constants/department-defaults";
+import { EXPLORER_DEPARTMENT_DEFAULT, LEADER_DEPARTMENT_DEFAULT, REMOTE_CUSTOMER_SERVICE_DEPARTMENT_DEFAULT, REVIEWER_DEPARTMENT_DEFAULT, SADDLER_DEPARTMENT_DEFAULT } from "../../constants/department-defaults";
 import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
 import ApiConfigTreeSelect from "../../components/ApiConfigTreeSelect.vue";
 
@@ -461,8 +462,35 @@ const SYSTEM_DEPARTMENT_IDS = new Set([
   "assistant-department",
   "leader-department",
   "deputy-department",
+  "reviewer-department",
+  "saddler-department",
   "remote-customer-service-department",
 ]);
+const FIXED_PRESET_DEPARTMENT_IDS = new Set(["deputy-department", "reviewer-department", "saddler-department"]);
+const FIXED_PRESET_ASSISTANT_CHILD_IDS = ["deputy-department", "reviewer-department", "saddler-department"];
+const FIXED_PRESET_PERMISSION_CONTROL: Record<string, NonNullable<DepartmentConfig["permissionControl"]>> = {
+  "deputy-department": {
+    enabled: true,
+    mode: "whitelist",
+    builtinToolNames: ["read", "read_media", "exec", "fetch", "websearch"],
+    skillNames: ["workspace-guide", "agents-md-setup"],
+    mcpToolNames: [],
+  },
+  "reviewer-department": {
+    enabled: true,
+    mode: "whitelist",
+    builtinToolNames: ["read", "read_media", "fetch", "websearch", "exec"],
+    skillNames: ["code-review"],
+    mcpToolNames: [],
+  },
+  "saddler-department": {
+    enabled: true,
+    mode: "whitelist",
+    builtinToolNames: ["read", "write", "update", "exec"],
+    skillNames: ["agents-md-setup", "workspace-guide"],
+    mcpToolNames: [],
+  },
+};
 
 const TEXT_REQUEST_FORMATS = new Set([
   "auto",
@@ -567,7 +595,7 @@ const permissionCatalogError = ref("");
 const sortedDepartments = computed(() =>
   [...departmentDrafts.value].sort((a, b) => {
     const rank = (id: string) =>
-      id === "assistant-department" ? 0 : id === "leader-department" ? 1 : id === "deputy-department" ? 2 : id === "remote-customer-service-department" ? 3 : 4;
+      id === "assistant-department" ? 0 : id === "leader-department" ? 1 : id === "deputy-department" ? 2 : id === "reviewer-department" ? 3 : id === "saddler-department" ? 4 : id === "remote-customer-service-department" ? 5 : 6;
     const aRank = rank(String(a.id || "").trim());
     const bRank = rank(String(b.id || "").trim());
     return aRank - bRank || a.orderIndex - b.orderIndex;
@@ -577,7 +605,8 @@ const sortedDepartments = computed(() =>
 const selectedDepartment = computed(
   () => departmentDrafts.value.find((item) => item.id === selectedDepartmentId.value) ?? sortedDepartments.value[0] ?? null,
 );
-const selectedDepartmentIsLockedPreset = computed(() => String(selectedDepartment.value?.id || "").trim() === "deputy-department");
+const selectedDepartmentIsFixedPreset = computed(() => FIXED_PRESET_DEPARTMENT_IDS.has(String(selectedDepartment.value?.id || "").trim()));
+const selectedDepartmentIsLockedPreset = computed(() => selectedDepartmentIsFixedPreset.value);
 const selectedDepartmentIsSystemBuiltIn = computed(() => isSystemBuiltInDepartment(selectedDepartment.value));
 const selectedDepartmentIsPrivateWorkspace = computed(() => selectedDepartment.value?.source === "private_workspace");
 const textDepartmentApiConfigs = computed(() =>
@@ -665,7 +694,7 @@ const permissionCardTone = computed(() =>
       },
 );
 const permissionListDisabled = computed(() =>
-  !permissionControlEnabled.value,
+  !permissionControlEnabled.value || selectedDepartmentIsFixedPreset.value,
 );
 const permissionExecAllowed = computed(() => {
   const control = selectedDepartmentPermissionControl.value;
@@ -844,6 +873,7 @@ function updateDepartmentPermissionControl(patch: Partial<NonNullable<Department
     modeBefore: control?.mode || "",
   });
   if (!target || !control) return;
+  if (FIXED_PRESET_DEPARTMENT_IDS.has(String(target.id || "").trim())) return;
   if ("enabled" in patch) {
     control.enabled = !!patch.enabled;
   }
@@ -1014,6 +1044,12 @@ function departmentDefaultSeed(department: DepartmentConfig | null | undefined):
   if (id === "deputy-department") {
     return EXPLORER_DEPARTMENT_DEFAULT;
   }
+  if (id === "reviewer-department") {
+    return REVIEWER_DEPARTMENT_DEFAULT;
+  }
+  if (id === "saddler-department") {
+    return SADDLER_DEPARTMENT_DEFAULT;
+  }
   if (id === "leader-department") {
     return LEADER_DEPARTMENT_DEFAULT;
   }
@@ -1122,6 +1158,7 @@ function availableDepartmentRoleOptionsForIndex(index: number) {
 function updateDepartmentApiConfigAt(index: number, apiId: string) {
   const target = selectedDepartment.value;
   if (!target) return;
+  if (FIXED_PRESET_DEPARTMENT_IDS.has(String(target.id || "").trim())) return;
   const next = currentDepartmentApiConfigIds(target);
   const trimmedApiId = String(apiId || "").trim();
   if ((next[index] || "") === trimmedApiId) return;
@@ -1141,6 +1178,7 @@ function updateDepartmentApiConfigAt(index: number, apiId: string) {
 function updateDepartmentModelFailureFallback(enabled: boolean) {
   const target = selectedDepartment.value;
   if (!target || target.modelFailureFallbackEnabled === enabled) return;
+  if (FIXED_PRESET_DEPARTMENT_IDS.has(String(target.id || "").trim())) return;
   if (!departmentCanEnableModelFailureFallback(target)) return;
   target.modelFailureFallbackEnabled = enabled;
   if (currentDepartmentApiConfigIds(target).length === 0) {
@@ -1153,6 +1191,7 @@ function updateDepartmentModelFailureFallback(enabled: boolean) {
 function addDepartmentApiConfig() {
   const target = selectedDepartment.value;
   if (!target) return;
+  if (FIXED_PRESET_DEPARTMENT_IDS.has(String(target.id || "").trim())) return;
   const nextRole = remainingDepartmentRoleOptions.value[0];
   const nextApi = remainingDepartmentApiConfigs.value[0];
   if (!nextRole && !nextApi) return;
@@ -1166,6 +1205,7 @@ function addDepartmentApiConfig() {
 function removeDepartmentApiConfigAt(index: number) {
   const target = selectedDepartment.value;
   if (!target) return;
+  if (FIXED_PRESET_DEPARTMENT_IDS.has(String(target.id || "").trim())) return;
   const next = currentDepartmentApiConfigIds(target);
   next.splice(index, 1);
   target.apiConfigIds = next.length > 0 ? next : [MODEL_ROLE_EXPERT_API_CONFIG_ID];
@@ -1176,6 +1216,7 @@ function removeDepartmentApiConfigAt(index: number) {
 function moveDepartmentApiConfig(index: number, delta: number) {
   const target = selectedDepartment.value;
   if (!target) return;
+  if (FIXED_PRESET_DEPARTMENT_IDS.has(String(target.id || "").trim())) return;
   const next = currentDepartmentApiConfigIds(target);
   const swapIndex = index + delta;
   if (swapIndex < 0 || swapIndex >= next.length) return;
@@ -1223,13 +1264,37 @@ function applyUpdatedAtToChangedDepartments(
 }
 
 function prepareDepartmentsForSave(departments: DepartmentConfig[]) {
-  return departments.map((department) => {
-    const apiConfigIds = departmentModelIdsForSave(department);
+  const normalized = departments.map((department) => {
+    const departmentId = String(department.id || "").trim();
+    const fixedRoleId = departmentId === "saddler-department"
+      ? MODEL_ROLE_EXPERT_API_CONFIG_ID
+      : departmentId === "deputy-department" || departmentId === "reviewer-department"
+        ? MODEL_ROLE_QUICK_API_CONFIG_ID
+        : "";
+    const apiConfigIds = fixedRoleId ? [fixedRoleId] : departmentModelIdsForSave(department);
     return {
       ...department,
       apiConfigIds,
       apiConfigId: apiConfigIds[0] || "",
-      modelFailureFallbackEnabled: departmentCanEnableModelFailureFallback(department) && department.modelFailureFallbackEnabled,
+      modelFailureFallbackEnabled: fixedRoleId ? false : departmentCanEnableModelFailureFallback(department) && department.modelFailureFallbackEnabled,
+      childDepartmentIds: FIXED_PRESET_DEPARTMENT_IDS.has(departmentId)
+        ? []
+        : normalizeDepartmentChildIds(department.childDepartmentIds, departmentId).filter((childId) =>
+            !FIXED_PRESET_DEPARTMENT_IDS.has(childId) || departmentId === "assistant-department" || !!department.isBuiltInAssistant
+          ),
+      permissionControl: FIXED_PRESET_PERMISSION_CONTROL[departmentId]
+        ? normalizePermissionControl(FIXED_PRESET_PERMISSION_CONTROL[departmentId])
+        : normalizePermissionControl(department.permissionControl),
+    };
+  });
+  return normalized.map((department) => {
+    if (String(department.id || "").trim() !== "assistant-department" && !department.isBuiltInAssistant) return department;
+    return {
+      ...department,
+      childDepartmentIds: normalizeDepartmentChildIds(
+        [...department.childDepartmentIds, ...FIXED_PRESET_ASSISTANT_CHILD_IDS],
+        department.id,
+      ),
     };
   });
 }

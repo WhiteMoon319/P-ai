@@ -161,6 +161,46 @@ impl Default for DepartmentPermissionControl {
     }
 }
 
+fn department_whitelist_permission_control(
+    builtin_tool_names: &[&str],
+    skill_names: &[&str],
+) -> DepartmentPermissionControl {
+    DepartmentPermissionControl {
+        enabled: true,
+        mode: "whitelist".to_string(),
+        builtin_tool_names: builtin_tool_names
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect(),
+        skill_names: skill_names
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect(),
+        mcp_tool_names: Vec::new(),
+    }
+}
+
+fn explorer_department_permission_control() -> DepartmentPermissionControl {
+    department_whitelist_permission_control(
+        &["read", "read_media", "exec", "fetch", "websearch"],
+        &["workspace-guide", "agents-md-setup"],
+    )
+}
+
+fn reviewer_department_permission_control() -> DepartmentPermissionControl {
+    department_whitelist_permission_control(
+        &["read", "read_media", "fetch", "websearch", "exec"],
+        &["code-review"],
+    )
+}
+
+fn saddler_department_permission_control() -> DepartmentPermissionControl {
+    department_whitelist_permission_control(
+        &["read", "write", "update", "exec"],
+        &["agents-md-setup", "workspace-guide"],
+    )
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DepartmentConfig {
@@ -240,7 +280,7 @@ fn default_assistant_department(api_config_id: &str) -> DepartmentConfig {
         api_config_id,
         model_failure_fallback_enabled: false,
         agent_ids: vec![DEFAULT_AGENT_ID.to_string()],
-        child_department_ids: vec![DEPUTY_DEPARTMENT_ID.to_string()],
+        child_department_ids: preset_assistant_child_department_ids(),
         created_at: now.clone(),
         updated_at: now,
         order_index: 1,
@@ -321,7 +361,72 @@ fn default_deputy_department(api_config_id: &str) -> DepartmentConfig {
         is_deputy: false,
         source: default_main_source(),
         scope: default_global_scope(),
-        permission_control: DepartmentPermissionControl::default(),
+        permission_control: explorer_department_permission_control(),
+    }
+}
+
+fn default_reviewer_department(api_config_id: &str) -> DepartmentConfig {
+    let now = now_iso();
+    let api_config_id = api_config_id.trim().to_string();
+    DepartmentConfig {
+        id: REVIEWER_DEPARTMENT_ID.to_string(),
+        name: "reviewer".to_string(),
+        summary: "当你完成复杂功能、关键修复或高风险改动后，请委托我进行代码审查。".to_string(),
+        guide: [
+            "你是 reviewer 部门，负责对已经完成的实现做独立审查，而不是继续替主助理实现功能。",
+            "审查时优先关注真实缺陷、需求漏项、权限或数据安全风险、回归风险和缺失的必要验证。结论必须基于代码证据、测试结果或可复现推理。",
+            "你可以读取仓库、搜索符号、查看媒体资料、查询网页资料，并运行与审查直接相关的最小验证命令。不要修改文件，不要删除、移动、配置项目，也不要再委托其他部门。",
+            "输出时先列问题，按严重程度排序；如果没有发现可行动问题，就明确说明未发现阻断项，并列出仍未覆盖的验证风险。",
+        ].join("\n"),
+        api_config_ids: if api_config_id.is_empty() {
+            Vec::new()
+        } else {
+            vec![api_config_id.clone()]
+        },
+        api_config_id,
+        model_failure_fallback_enabled: false,
+        agent_ids: vec![DEFAULT_AGENT_ID.to_string()],
+        child_department_ids: Vec::new(),
+        created_at: now.clone(),
+        updated_at: now,
+        order_index: 4,
+        is_built_in_assistant: false,
+        is_deputy: false,
+        source: default_main_source(),
+        scope: default_global_scope(),
+        permission_control: reviewer_department_permission_control(),
+    }
+}
+
+fn default_saddler_department(api_config_id: &str) -> DepartmentConfig {
+    let now = now_iso();
+    let api_config_id = api_config_id.trim().to_string();
+    DepartmentConfig {
+        id: SADDLER_DEPARTMENT_ID.to_string(),
+        name: "saddler".to_string(),
+        summary: "当项目需要沉淀协作规范、AGENTS.md、Skill、workflow 或其他 .pai 能力资产时，请委托给我。".to_string(),
+        guide: [
+            "你是 saddler 部门，专门负责在当前项目 `.pai/` 目录下生成和维护能力资产，包括 AGENTS.md、Skill、workflow、计划与相关协作说明。",
+            "你的写入和更新范围固定限制在当前项目 `.pai/` 目录内。你可以读取项目上下文来理解约束，但不要承担 `.pai/` 之外的业务实现任务。",
+            "使用 exec 时只运行理解项目结构、检查能力资产或做最小验证所需的命令；不要借助脚本修改 `.pai/` 之外的文件。",
+        ].join("\n"),
+        api_config_ids: if api_config_id.is_empty() {
+            Vec::new()
+        } else {
+            vec![api_config_id.clone()]
+        },
+        api_config_id,
+        model_failure_fallback_enabled: false,
+        agent_ids: vec![DEFAULT_AGENT_ID.to_string()],
+        child_department_ids: Vec::new(),
+        created_at: now.clone(),
+        updated_at: now,
+        order_index: 5,
+        is_built_in_assistant: false,
+        is_deputy: false,
+        source: default_main_source(),
+        scope: default_global_scope(),
+        permission_control: saddler_department_permission_control(),
     }
 }
 
@@ -344,7 +449,7 @@ fn default_remote_customer_service_department(api_config_id: &str) -> Department
         child_department_ids: Vec::new(),
         created_at: now.clone(),
         updated_at: now,
-        order_index: 4,
+        order_index: 6,
         is_built_in_assistant: false,
         is_deputy: false,
         source: default_main_source(),
@@ -366,9 +471,26 @@ fn built_in_department_rank(id: &str) -> i32 {
         ASSISTANT_DEPARTMENT_ID => 0,
         LEADER_DEPARTMENT_ID => 1,
         DEPUTY_DEPARTMENT_ID => 2,
-        REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID => 3,
-        _ => 4,
+        REVIEWER_DEPARTMENT_ID => 3,
+        SADDLER_DEPARTMENT_ID => 4,
+        REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID => 5,
+        _ => 6,
     }
+}
+
+fn preset_assistant_child_department_ids() -> Vec<String> {
+    vec![
+        DEPUTY_DEPARTMENT_ID.to_string(),
+        REVIEWER_DEPARTMENT_ID.to_string(),
+        SADDLER_DEPARTMENT_ID.to_string(),
+    ]
+}
+
+fn is_fixed_assistant_child_department_id(id: &str) -> bool {
+    matches!(
+        id.trim(),
+        DEPUTY_DEPARTMENT_ID | REVIEWER_DEPARTMENT_ID | SADDLER_DEPARTMENT_ID
+    )
 }
 
 fn default_departments(api_config_id: &str) -> Vec<DepartmentConfig> {
@@ -377,10 +499,17 @@ fn default_departments(api_config_id: &str) -> Vec<DepartmentConfig> {
     } else {
         MODEL_ROLE_EXPERT_API_CONFIG_ID
     };
+    let quick_api_config_id = if api_config_id.trim().is_empty() {
+        ""
+    } else {
+        MODEL_ROLE_QUICK_API_CONFIG_ID
+    };
     vec![
         default_assistant_department(default_api_config_id),
         default_leader_department(default_api_config_id),
-        default_deputy_department(default_api_config_id),
+        default_deputy_department(quick_api_config_id),
+        default_reviewer_department(quick_api_config_id),
+        default_saddler_department(default_api_config_id),
         default_remote_customer_service_department(default_api_config_id),
     ]
 }

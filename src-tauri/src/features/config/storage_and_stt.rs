@@ -1022,6 +1022,10 @@ fn normalize_departments(config: &mut AppConfig) {
         if item.name.is_empty() {
             item.name = if item.id == DEPUTY_DEPARTMENT_ID {
                 "explorer".to_string()
+            } else if item.id == REVIEWER_DEPARTMENT_ID {
+                "reviewer".to_string()
+            } else if item.id == SADDLER_DEPARTMENT_ID {
+                "saddler".to_string()
             } else if item.id == LEADER_DEPARTMENT_ID {
                 "leader".to_string()
             } else if item.id == REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID {
@@ -1047,10 +1051,14 @@ fn normalize_departments(config: &mut AppConfig) {
     if !out.iter().any(|item| item.id == LEADER_DEPARTMENT_ID) {
         out.push(default_leader_department(MODEL_ROLE_EXPERT_API_CONFIG_ID));
     }
-    let injected_missing_deputy =
-        !out.iter().any(|item| item.id == DEPUTY_DEPARTMENT_ID);
-    if injected_missing_deputy {
-        out.push(default_deputy_department(MODEL_ROLE_EXPERT_API_CONFIG_ID));
+    if !out.iter().any(|item| item.id == DEPUTY_DEPARTMENT_ID) {
+        out.push(default_deputy_department(MODEL_ROLE_QUICK_API_CONFIG_ID));
+    }
+    if !out.iter().any(|item| item.id == REVIEWER_DEPARTMENT_ID) {
+        out.push(default_reviewer_department(MODEL_ROLE_QUICK_API_CONFIG_ID));
+    }
+    if !out.iter().any(|item| item.id == SADDLER_DEPARTMENT_ID) {
+        out.push(default_saddler_department(MODEL_ROLE_EXPERT_API_CONFIG_ID));
     }
     if !out
         .iter()
@@ -1089,14 +1097,46 @@ fn normalize_departments(config: &mut AppConfig) {
             }
         } else if item.id == DEPUTY_DEPARTMENT_ID {
             item.is_deputy = false;
-            let defaults = default_deputy_department(MODEL_ROLE_EXPERT_API_CONFIG_ID);
+            let defaults = default_deputy_department(MODEL_ROLE_QUICK_API_CONFIG_ID);
             item.name = defaults.name;
             item.summary = defaults.summary;
             item.guide = defaults.guide;
-            normalize_department_api_bindings(item, &valid_text_chat_api_ids);
+            item.api_config_ids = vec![MODEL_ROLE_QUICK_API_CONFIG_ID.to_string()];
+            item.api_config_id = MODEL_ROLE_QUICK_API_CONFIG_ID.to_string();
+            item.model_failure_fallback_enabled = false;
             if item.agent_ids.is_empty() {
                 item.agent_ids = vec![DEPUTY_AGENT_ID.to_string()];
             }
+            item.child_department_ids.clear();
+            item.permission_control = explorer_department_permission_control();
+        } else if item.id == REVIEWER_DEPARTMENT_ID {
+            item.is_deputy = false;
+            let defaults = default_reviewer_department(MODEL_ROLE_QUICK_API_CONFIG_ID);
+            item.name = defaults.name;
+            item.summary = defaults.summary;
+            item.guide = defaults.guide;
+            item.api_config_ids = vec![MODEL_ROLE_QUICK_API_CONFIG_ID.to_string()];
+            item.api_config_id = MODEL_ROLE_QUICK_API_CONFIG_ID.to_string();
+            item.model_failure_fallback_enabled = false;
+            if item.agent_ids.is_empty() {
+                item.agent_ids = vec![DEFAULT_AGENT_ID.to_string()];
+            }
+            item.child_department_ids.clear();
+            item.permission_control = reviewer_department_permission_control();
+        } else if item.id == SADDLER_DEPARTMENT_ID {
+            item.is_deputy = false;
+            let defaults = default_saddler_department(MODEL_ROLE_EXPERT_API_CONFIG_ID);
+            item.name = defaults.name;
+            item.summary = defaults.summary;
+            item.guide = defaults.guide;
+            item.api_config_ids = vec![MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string()];
+            item.api_config_id = MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string();
+            item.model_failure_fallback_enabled = false;
+            if item.agent_ids.is_empty() {
+                item.agent_ids = vec![DEFAULT_AGENT_ID.to_string()];
+            }
+            item.child_department_ids.clear();
+            item.permission_control = saddler_department_permission_control();
         } else if item.id == LEADER_DEPARTMENT_ID {
             item.is_deputy = false;
             let defaults = default_leader_department(MODEL_ROLE_EXPERT_API_CONFIG_ID);
@@ -1137,6 +1177,12 @@ fn normalize_departments(config: &mut AppConfig) {
             &item.id,
         )
         .into_iter()
+        .filter(|child_id| {
+            !is_fixed_assistant_child_department_id(child_id)
+                || item.id == ASSISTANT_DEPARTMENT_ID
+                || item.is_built_in_assistant
+        })
+        .into_iter()
         .collect::<Vec<_>>();
         if (item.id == ASSISTANT_DEPARTMENT_ID || item.is_built_in_assistant)
             && item.agent_ids.is_empty()
@@ -1144,25 +1190,23 @@ fn normalize_departments(config: &mut AppConfig) {
             item.agent_ids = vec![DEFAULT_AGENT_ID.to_string()];
         }
     }
-    if injected_missing_deputy {
-        if let Some(assistant) = out
-            .iter_mut()
-            .find(|item| item.id == ASSISTANT_DEPARTMENT_ID || item.is_built_in_assistant)
-        {
+    if let Some(assistant) = out
+        .iter_mut()
+        .find(|item| item.id == ASSISTANT_DEPARTMENT_ID || item.is_built_in_assistant)
+    {
+        for child_id in preset_assistant_child_department_ids() {
             if !assistant
                 .child_department_ids
                 .iter()
-                .any(|id| id.trim() == DEPUTY_DEPARTMENT_ID)
+                .any(|id| id.trim() == child_id)
             {
-                assistant
-                    .child_department_ids
-                    .push(DEPUTY_DEPARTMENT_ID.to_string());
-                assistant.child_department_ids = normalize_department_child_ids(
-                    &assistant.child_department_ids,
-                    &assistant.id,
-                );
+                assistant.child_department_ids.push(child_id);
             }
         }
+        assistant.child_department_ids = normalize_department_child_ids(
+            &assistant.child_department_ids,
+            &assistant.id,
+        );
     }
     let removed_cyclic_edges = remove_cyclic_department_child_ids(&mut out);
     if !removed_cyclic_edges.is_empty() {

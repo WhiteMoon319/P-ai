@@ -238,6 +238,7 @@ fn build_global_tool_schema_cache(state: &AppState) -> Vec<CachedRuntimeToolSche
         BuiltinTerminalExecTool {
             app_state: state.clone(),
             session_id: preview_session_id.clone(),
+            executor_department_id: String::new(),
         }
         .provider_tool_definition(),
         BuiltinConfigTool {
@@ -247,21 +248,25 @@ fn build_global_tool_schema_cache(state: &AppState) -> Vec<CachedRuntimeToolSche
         BuiltinWriteFileTool {
             app_state: state.clone(),
             session_id: preview_session_id.clone(),
+            executor_department_id: String::new(),
         }
         .provider_tool_definition(),
         BuiltinDeleteFileTool {
             app_state: state.clone(),
             session_id: preview_session_id.clone(),
+            executor_department_id: String::new(),
         }
         .provider_tool_definition(),
         BuiltinUpdateFileTool {
             app_state: state.clone(),
             session_id: preview_session_id.clone(),
+            executor_department_id: String::new(),
         }
         .provider_tool_definition(),
         BuiltinMoveFileTool {
             app_state: state.clone(),
             session_id: preview_session_id.clone(),
+            executor_department_id: String::new(),
         }
         .provider_tool_definition(),
         BuiltinPlanTool {
@@ -921,23 +926,28 @@ fn build_builtin_runtime_tool_executor(
         "exec" => Box::new(BuiltinTerminalExecTool {
             app_state: state.clone(),
             session_id: tool_session_id.to_string(),
+            executor_department_id: executor_department_id.to_string(),
         }),
         "config" => Box::new(BuiltinConfigTool { app_state: state.clone() }),
         "write" => Box::new(BuiltinWriteFileTool {
             app_state: state.clone(),
             session_id: tool_session_id.to_string(),
+            executor_department_id: executor_department_id.to_string(),
         }),
         "delete" => Box::new(BuiltinDeleteFileTool {
             app_state: state.clone(),
             session_id: tool_session_id.to_string(),
+            executor_department_id: executor_department_id.to_string(),
         }),
         "update" => Box::new(BuiltinUpdateFileTool {
             app_state: state.clone(),
             session_id: tool_session_id.to_string(),
+            executor_department_id: executor_department_id.to_string(),
         }),
         "move" => Box::new(BuiltinMoveFileTool {
             app_state: state.clone(),
             session_id: tool_session_id.to_string(),
+            executor_department_id: executor_department_id.to_string(),
         }),
         "plan" => Box::new(BuiltinPlanTool {
             app_state: state.clone(),
@@ -1276,6 +1286,86 @@ mod tool_assembly_permission_tests {
             item.get("name").and_then(Value::as_str) == Some("config")
                 && item.get("attached").and_then(Value::as_bool) == Some(false)
         }));
+    }
+
+    #[test]
+    fn legal_tool_resolver_should_apply_fixed_preset_department_whitelists() {
+        let mut config = AppConfig::default();
+        config.vision_api_config_id = Some("vision-a".to_string());
+        let policy = RuntimeToolPolicy {
+            conversation_resolved: true,
+            local_conversation: true,
+            ..RuntimeToolPolicy::default()
+        };
+        let tools = vec![
+            CachedRuntimeToolSchema::builtin(test_definition("read")),
+            CachedRuntimeToolSchema::builtin(test_definition("read_media")),
+            CachedRuntimeToolSchema::builtin(test_definition("exec")),
+            CachedRuntimeToolSchema::builtin(test_definition("fetch")),
+            CachedRuntimeToolSchema::builtin(test_definition("websearch")),
+            CachedRuntimeToolSchema::builtin(test_definition("write")),
+            CachedRuntimeToolSchema::builtin(test_definition("update")),
+            CachedRuntimeToolSchema::builtin(test_definition("delete")),
+            CachedRuntimeToolSchema::builtin(test_definition("delegate")),
+            CachedRuntimeToolSchema::builtin(test_definition("operate")),
+        ];
+        let memory = test_memory_context(true);
+
+        let explorer = config
+            .departments
+            .iter()
+            .find(|department| department.id == DEPUTY_DEPARTMENT_ID)
+            .expect("explorer department");
+        let resolved = resolve_legal_runtime_tools_for_department(
+            &config,
+            &test_api(),
+            Some(explorer),
+            &policy,
+            Some(&memory),
+            &tools,
+        );
+        let names = resolved
+            .attached
+            .iter()
+            .map(|tool| tool.definition.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec!["read", "read_media", "exec", "fetch", "websearch"]);
+
+        let reviewer = config
+            .departments
+            .iter()
+            .find(|department| department.id == REVIEWER_DEPARTMENT_ID)
+            .expect("reviewer department");
+        assert!(department_permission_allows_any_name(
+            Some(reviewer),
+            DepartmentPermissionCategory::Skill,
+            &["code-review"],
+        ));
+        assert!(!department_permission_allows_any_name(
+            Some(reviewer),
+            DepartmentPermissionCategory::Skill,
+            &["workspace-guide"],
+        ));
+
+        let saddler = config
+            .departments
+            .iter()
+            .find(|department| department.id == SADDLER_DEPARTMENT_ID)
+            .expect("saddler department");
+        let resolved = resolve_legal_runtime_tools_for_department(
+            &config,
+            &test_api(),
+            Some(saddler),
+            &policy,
+            Some(&memory),
+            &tools,
+        );
+        let names = resolved
+            .attached
+            .iter()
+            .map(|tool| tool.definition.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec!["read", "exec", "write", "update"]);
     }
 
     #[test]

@@ -497,6 +497,93 @@
     }
 
     #[test]
+    fn normalize_app_config_should_restore_fixed_assistant_children_and_preset_permissions() {
+        let mut cfg = AppConfig::default();
+        cfg.departments
+            .retain(|item| item.id != REVIEWER_DEPARTMENT_ID && item.id != SADDLER_DEPARTMENT_ID);
+        for department in &mut cfg.departments {
+            if department.id == ASSISTANT_DEPARTMENT_ID || department.is_built_in_assistant {
+                department.child_department_ids.clear();
+            }
+            if department.id == DEPUTY_DEPARTMENT_ID {
+                department.api_config_ids = vec![MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string()];
+                department.api_config_id = MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string();
+                department.permission_control = DepartmentPermissionControl::default();
+                department.child_department_ids = vec!["department-other".to_string()];
+            }
+        }
+
+        let mut parent = default_assistant_department(MODEL_ROLE_EXPERT_API_CONFIG_ID);
+        parent.id = "department-other".to_string();
+        parent.is_built_in_assistant = false;
+        parent.child_department_ids = vec![DEPUTY_DEPARTMENT_ID.to_string()];
+        cfg.departments.push(parent);
+
+        normalize_app_config(&mut cfg);
+
+        let assistant = cfg
+            .departments
+            .iter()
+            .find(|item| item.id == ASSISTANT_DEPARTMENT_ID)
+            .expect("assistant department");
+        assert_eq!(
+            assistant.child_department_ids,
+            vec![
+                DEPUTY_DEPARTMENT_ID.to_string(),
+                REVIEWER_DEPARTMENT_ID.to_string(),
+                SADDLER_DEPARTMENT_ID.to_string(),
+            ]
+        );
+
+        let explorer = cfg
+            .departments
+            .iter()
+            .find(|item| item.id == DEPUTY_DEPARTMENT_ID)
+            .expect("explorer department");
+        assert_eq!(explorer.api_config_id, MODEL_ROLE_QUICK_API_CONFIG_ID);
+        assert_eq!(explorer.child_department_ids, Vec::<String>::new());
+        assert_eq!(explorer.permission_control, explorer_department_permission_control());
+
+        let reviewer = cfg
+            .departments
+            .iter()
+            .find(|item| item.id == REVIEWER_DEPARTMENT_ID)
+            .expect("reviewer department");
+        assert_eq!(reviewer.api_config_id, MODEL_ROLE_QUICK_API_CONFIG_ID);
+        assert_eq!(reviewer.child_department_ids, Vec::<String>::new());
+        assert_eq!(reviewer.permission_control, reviewer_department_permission_control());
+        assert!(department_permission_allows_any_name(
+            Some(reviewer),
+            DepartmentPermissionCategory::Skill,
+            &["code-review"],
+        ));
+        assert!(!department_permission_allows_any_name(
+            Some(reviewer),
+            DepartmentPermissionCategory::Skill,
+            &["workspace-guide"],
+        ));
+
+        let saddler = cfg
+            .departments
+            .iter()
+            .find(|item| item.id == SADDLER_DEPARTMENT_ID)
+            .expect("saddler department");
+        assert_eq!(saddler.api_config_id, MODEL_ROLE_EXPERT_API_CONFIG_ID);
+        assert_eq!(saddler.child_department_ids, Vec::<String>::new());
+        assert_eq!(saddler.permission_control, saddler_department_permission_control());
+
+        let other = cfg
+            .departments
+            .iter()
+            .find(|item| item.id == "department-other")
+            .expect("other department");
+        assert!(!other
+            .child_department_ids
+            .iter()
+            .any(|id| id == DEPUTY_DEPARTMENT_ID));
+    }
+
+    #[test]
     fn app_data_default_should_include_deputy_agent() {
         let data = AppData::default();
         assert!(data.agents.iter().any(|agent| agent.id == DEPUTY_AGENT_ID));

@@ -69,6 +69,7 @@ async fn builtin_tool_definitions_for_frontend(
             BuiltinTerminalExecTool {
                 app_state: state.clone(),
                 session_id: preview_session_id.clone(),
+                executor_department_id: String::new(),
             }
             .provider_tool_definition(),
         ),
@@ -82,6 +83,7 @@ async fn builtin_tool_definitions_for_frontend(
             BuiltinWriteFileTool {
                 app_state: state.clone(),
                 session_id: preview_session_id.clone(),
+                executor_department_id: String::new(),
             }
             .provider_tool_definition(),
         ),
@@ -89,6 +91,7 @@ async fn builtin_tool_definitions_for_frontend(
             BuiltinDeleteFileTool {
                 app_state: state.clone(),
                 session_id: preview_session_id.clone(),
+                executor_department_id: String::new(),
             }
             .provider_tool_definition(),
         ),
@@ -96,6 +99,7 @@ async fn builtin_tool_definitions_for_frontend(
             BuiltinUpdateFileTool {
                 app_state: state.clone(),
                 session_id: preview_session_id.clone(),
+                executor_department_id: String::new(),
             }
             .provider_tool_definition(),
         ),
@@ -103,6 +107,7 @@ async fn builtin_tool_definitions_for_frontend(
             BuiltinMoveFileTool {
                 app_state: state.clone(),
                 session_id: preview_session_id.clone(),
+                executor_department_id: String::new(),
             }
             .provider_tool_definition(),
         ),

@@ -348,6 +348,7 @@ impl RuntimeToolMetadata for BuiltinOrganizeContextTool {
 struct BuiltinTerminalExecTool {
     app_state: AppState,
     session_id: String,
+    executor_department_id: String,
 }
 
 #[derive(Debug, Clone)]
@@ -722,6 +723,13 @@ impl RuntimeValueTool for BuiltinTerminalExecTool {
         if resolved_action == "run" && resolved_command.is_empty() {
             return Err(ToolInvokeError::from("exec.command is required".to_string()));
         }
+        ensure_saddler_exec_allowed(
+            &self.app_state,
+            &self.session_id,
+            &self.executor_department_id,
+            resolved_command,
+        )
+        .map_err(ToolInvokeError::from)?;
         let result = builtin_shell_exec(
             &self.app_state,
             &self.session_id,
@@ -755,24 +763,85 @@ impl RuntimeValueTool for BuiltinTerminalExecTool {
 struct BuiltinWriteFileTool {
     app_state: AppState,
     session_id: String,
+    executor_department_id: String,
 }
 
 #[derive(Debug, Clone)]
 struct BuiltinDeleteFileTool {
     app_state: AppState,
     session_id: String,
+    executor_department_id: String,
 }
 
 #[derive(Debug, Clone)]
 struct BuiltinUpdateFileTool {
     app_state: AppState,
     session_id: String,
+    executor_department_id: String,
 }
 
 #[derive(Debug, Clone)]
 struct BuiltinMoveFileTool {
     app_state: AppState,
     session_id: String,
+    executor_department_id: String,
+}
+
+fn path_is_within_directory(path: &std::path::Path, directory: &std::path::Path) -> bool {
+    let normalized_path = terminal_normalize_for_access_check(path);
+    let normalized_directory = terminal_normalize_for_access_check(directory);
+    normalized_path == normalized_directory || normalized_path.starts_with(normalized_directory)
+}
+
+fn ensure_saddler_file_target_allowed(
+    state: &AppState,
+    session_id: &str,
+    executor_department_id: &str,
+    raw_path: &str,
+) -> Result<(), String> {
+    if executor_department_id.trim() != SADDLER_DEPARTMENT_ID {
+        return Ok(());
+    }
+    let normalized_session = normalize_terminal_tool_session_id(session_id);
+    let cwd = resolve_terminal_cwd(state, &normalized_session, None)?;
+    let target = apply_patch_resolve_path(&cwd, raw_path)?;
+    let pai_dir = terminal_normalize_for_access_check(&cwd.join(".pai"));
+    if path_is_within_directory(&target, &pai_dir) {
+        Ok(())
+    } else {
+        Err("saddler 部门只能在当前项目 .pai/ 目录下写入或更新能力资产".to_string())
+    }
+}
+
+fn ensure_saddler_exec_allowed(
+    state: &AppState,
+    session_id: &str,
+    executor_department_id: &str,
+    command: &str,
+) -> Result<(), String> {
+    if executor_department_id.trim() != SADDLER_DEPARTMENT_ID {
+        return Ok(());
+    }
+    let normalized_session = normalize_terminal_tool_session_id(session_id);
+    let cwd = resolve_terminal_cwd(state, &normalized_session, None)?;
+    let runtime_shell = terminal_shell_for_state(state);
+    let analysis = terminal_analyze_command(&cwd, command, &runtime_shell.kind);
+    if terminal_command_is_read_whitelist(command, &runtime_shell.kind, &analysis) {
+        return Ok(());
+    }
+    let pai_dir = terminal_normalize_for_access_check(&cwd.join(".pai"));
+    let write_targets = analysis.write_target_paths();
+    if write_targets.is_empty() {
+        return Err("saddler 部门的 exec 只能执行只读命令，或写入目标明确位于当前项目 .pai/ 目录下的命令".to_string());
+    }
+    if write_targets
+        .iter()
+        .all(|path| path_is_within_directory(path, &pai_dir))
+    {
+        Ok(())
+    } else {
+        Err("saddler 部门的 exec 写入目标必须全部位于当前项目 .pai/ 目录下".to_string())
+    }
 }
 
 impl RuntimeToolMetadata for BuiltinWriteFileTool {
@@ -805,6 +874,13 @@ impl RuntimeValueTool for BuiltinWriteFileTool {
             "[工具调试] 内置工具执行开始 name=write args={}",
             debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
         ));
+        ensure_saddler_file_target_allowed(
+            &self.app_state,
+            &self.session_id,
+            &self.executor_department_id,
+            &args.path,
+        )
+        .map_err(ToolInvokeError::from)?;
         let result = builtin_write_file(&self.app_state, &self.session_id, args)
             .await
             .map_err(ToolInvokeError::from);
@@ -848,6 +924,13 @@ impl RuntimeValueTool for BuiltinDeleteFileTool {
             "[工具调试] 内置工具执行开始 name=delete args={}",
             debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
         ));
+        ensure_saddler_file_target_allowed(
+            &self.app_state,
+            &self.session_id,
+            &self.executor_department_id,
+            &args.path,
+        )
+        .map_err(ToolInvokeError::from)?;
         let result = builtin_delete_file(&self.app_state, &self.session_id, args)
             .await
             .map_err(ToolInvokeError::from);
@@ -894,6 +977,13 @@ impl RuntimeValueTool for BuiltinUpdateFileTool {
             "[工具调试] 内置工具执行开始 name=update args={}",
             debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
         ));
+        ensure_saddler_file_target_allowed(
+            &self.app_state,
+            &self.session_id,
+            &self.executor_department_id,
+            &args.path,
+        )
+        .map_err(ToolInvokeError::from)?;
         let result = builtin_update_file(&self.app_state, &self.session_id, args)
             .await
             .map_err(ToolInvokeError::from);
@@ -938,6 +1028,20 @@ impl RuntimeValueTool for BuiltinMoveFileTool {
             "[工具调试] 内置工具执行开始 name=move args={}",
             debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
         ));
+        ensure_saddler_file_target_allowed(
+            &self.app_state,
+            &self.session_id,
+            &self.executor_department_id,
+            &args.path,
+        )
+        .map_err(ToolInvokeError::from)?;
+        ensure_saddler_file_target_allowed(
+            &self.app_state,
+            &self.session_id,
+            &self.executor_department_id,
+            &args.to,
+        )
+        .map_err(ToolInvokeError::from)?;
         let result = builtin_move_file(&self.app_state, &self.session_id, args)
             .await
             .map_err(ToolInvokeError::from);
