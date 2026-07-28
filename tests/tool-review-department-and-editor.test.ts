@@ -77,4 +77,15 @@ describe("department basic editor helpers", () => {
       createDepartment({ id: "department-new", childDepartmentIds: ["child-new"] }),
     ]);
   });
+
+  it("prunes saved child edges that point to a deleted department", () => {
+    const drafts = [createDepartment({ id: "department-a" })];
+    const source = [createDepartment({ id: "department-a", childDepartmentIds: ["department-removed"] })];
+
+    expect(
+      mergeDepartmentChildIdsFromSource(drafts, source, ["department-removed"]),
+    ).toEqual([
+      createDepartment({ id: "department-a", childDepartmentIds: [] }),
+    ]);
+  });
 });

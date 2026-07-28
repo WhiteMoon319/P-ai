@@ -1289,7 +1289,7 @@ mod tool_assembly_permission_tests {
     }
 
     #[test]
-    fn legal_tool_resolver_should_apply_fixed_preset_department_whitelists() {
+    fn legal_tool_resolver_should_apply_default_preset_department_whitelists() {
         let mut config = AppConfig::default();
         config.vision_api_config_id = Some("vision-a".to_string());
         let policy = RuntimeToolPolicy {

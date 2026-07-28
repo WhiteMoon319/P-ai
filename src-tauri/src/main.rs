@@ -1019,6 +1019,7 @@ fn main() {
             set_skipped_github_update_version,
             set_ui_language,
             load_config,
+            get_department_default_draft,
             generate_image,
             check_message_store_migration,
             run_message_store_migration,

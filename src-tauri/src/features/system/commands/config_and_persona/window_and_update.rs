@@ -408,6 +408,22 @@ fn load_config(state: State<'_, AppState>) -> Result<AppConfig, String> {
     load_config_inner(&state)
 }
 
+#[tauri::command]
+fn get_department_default_draft(
+    state: State<'_, AppState>,
+    department_id: String,
+) -> Result<DepartmentConfig, String> {
+    get_department_default_draft_inner(&state, &department_id)
+}
+
+fn get_department_default_draft_inner(
+    state: &AppState,
+    department_id: &str,
+) -> Result<DepartmentConfig, String> {
+    let config = load_config_inner(state)?;
+    default_department_draft(department_id, &config.ui_language)
+}
+
 fn load_config_inner(state: &AppState) -> Result<AppConfig, String> {
     let mut result = state_read_config_cached(&state)?;
     normalize_app_config(&mut result);

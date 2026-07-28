@@ -361,6 +361,9 @@ async fn ide_chat_handle_jsonrpc_request(
         }
         "clear_recent_runtime_logs" => clear_recent_runtime_logs().and_then(ide_chat_serialize),
         "set_github_update_method" => ide_chat_set_github_update_method_for_web_settings(state, app, request.params),
+        "get_department_default_draft" => {
+            ide_chat_get_department_default_draft_for_web_settings(state, request.params)
+        }
         "set_skipped_github_update_version" => {
             ide_chat_set_skipped_github_update_version_for_web_settings(state, app, request.params)
         },

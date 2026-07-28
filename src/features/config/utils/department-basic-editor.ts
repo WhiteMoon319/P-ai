@@ -38,7 +38,11 @@ export function departmentBasicComparableSnapshot(department: DepartmentConfig):
 export function mergeDepartmentChildIdsFromSource(
   targetDepartments: DepartmentConfig[] | null | undefined,
   sourceDepartments: DepartmentConfig[] | null | undefined,
+  removedDepartmentIds: Iterable<string> = [],
 ): DepartmentConfig[] {
+  const removedIds = new Set(
+    Array.from(removedDepartmentIds, (id) => String(id || "").trim()).filter(Boolean),
+  );
   const sourceChildIdsById = new Map(
     (sourceDepartments || []).map((department) => {
       const id = String(department.id || "").trim();
@@ -54,7 +58,7 @@ export function mergeDepartmentChildIdsFromSource(
     return {
       ...department,
       childDepartmentIds: sourceChildIds
-        ? [...sourceChildIds]
+        ? sourceChildIds.filter((childId) => !removedIds.has(childId))
         : normalizeDepartmentChildIds(department.childDepartmentIds, id),
     };
   });

@@ -1097,46 +1097,25 @@ fn normalize_departments(config: &mut AppConfig) {
             }
         } else if item.id == DEPUTY_DEPARTMENT_ID {
             item.is_deputy = false;
-            let defaults = default_deputy_department(MODEL_ROLE_QUICK_API_CONFIG_ID);
-            item.name = defaults.name;
-            item.summary = defaults.summary;
-            item.guide = defaults.guide;
-            item.api_config_ids = vec![MODEL_ROLE_QUICK_API_CONFIG_ID.to_string()];
-            item.api_config_id = MODEL_ROLE_QUICK_API_CONFIG_ID.to_string();
-            item.model_failure_fallback_enabled = false;
+            normalize_department_api_bindings(item, &valid_text_chat_api_ids);
             if item.agent_ids.is_empty() {
                 item.agent_ids = vec![DEPUTY_AGENT_ID.to_string()];
             }
             item.child_department_ids.clear();
-            item.permission_control = explorer_department_permission_control();
         } else if item.id == REVIEWER_DEPARTMENT_ID {
             item.is_deputy = false;
-            let defaults = default_reviewer_department(MODEL_ROLE_QUICK_API_CONFIG_ID);
-            item.name = defaults.name;
-            item.summary = defaults.summary;
-            item.guide = defaults.guide;
-            item.api_config_ids = vec![MODEL_ROLE_QUICK_API_CONFIG_ID.to_string()];
-            item.api_config_id = MODEL_ROLE_QUICK_API_CONFIG_ID.to_string();
-            item.model_failure_fallback_enabled = false;
+            normalize_department_api_bindings(item, &valid_text_chat_api_ids);
             if item.agent_ids.is_empty() {
                 item.agent_ids = vec![DEFAULT_AGENT_ID.to_string()];
             }
             item.child_department_ids.clear();
-            item.permission_control = reviewer_department_permission_control();
         } else if item.id == SADDLER_DEPARTMENT_ID {
             item.is_deputy = false;
-            let defaults = default_saddler_department(MODEL_ROLE_EXPERT_API_CONFIG_ID);
-            item.name = defaults.name;
-            item.summary = defaults.summary;
-            item.guide = defaults.guide;
-            item.api_config_ids = vec![MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string()];
-            item.api_config_id = MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string();
-            item.model_failure_fallback_enabled = false;
+            normalize_department_api_bindings(item, &valid_text_chat_api_ids);
             if item.agent_ids.is_empty() {
                 item.agent_ids = vec![DEFAULT_AGENT_ID.to_string()];
             }
             item.child_department_ids.clear();
-            item.permission_control = saddler_department_permission_control();
         } else if item.id == LEADER_DEPARTMENT_ID {
             item.is_deputy = false;
             let defaults = default_leader_department(MODEL_ROLE_EXPERT_API_CONFIG_ID);

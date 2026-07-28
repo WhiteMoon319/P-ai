@@ -2,6 +2,14 @@ fn ide_chat_load_config_for_web_settings(state: &AppState) -> Result<Value, Stri
     ide_chat_serialize(load_config_inner(state)?)
 }
 
+fn ide_chat_get_department_default_draft_for_web_settings(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let department_id = ide_chat_parse_param_field::<String>(params, "departmentId")?;
+    ide_chat_serialize(get_department_default_draft_inner(state, &department_id)?)
+}
+
 fn ide_chat_load_app_bootstrap_snapshot_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(read_app_bootstrap_snapshot(state)?)
 }

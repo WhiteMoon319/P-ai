@@ -514,6 +514,30 @@ fn default_departments(api_config_id: &str) -> Vec<DepartmentConfig> {
     ]
 }
 
+fn default_department_draft(
+    department_id: &str,
+    ui_language: &str,
+) -> Result<DepartmentConfig, String> {
+    let department_id = department_id.trim();
+    let mut department = match department_id {
+        ASSISTANT_DEPARTMENT_ID => {
+            let mut department = default_assistant_department(MODEL_ROLE_EXPERT_API_CONFIG_ID);
+            department.name = default_assistant_department_name(ui_language);
+            department
+        }
+        LEADER_DEPARTMENT_ID => default_leader_department(MODEL_ROLE_EXPERT_API_CONFIG_ID),
+        DEPUTY_DEPARTMENT_ID => default_deputy_department(MODEL_ROLE_QUICK_API_CONFIG_ID),
+        REVIEWER_DEPARTMENT_ID => default_reviewer_department(MODEL_ROLE_QUICK_API_CONFIG_ID),
+        SADDLER_DEPARTMENT_ID => default_saddler_department(MODEL_ROLE_EXPERT_API_CONFIG_ID),
+        REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID => {
+            default_remote_customer_service_department(MODEL_ROLE_EXPERT_API_CONFIG_ID)
+        }
+        _ => return Err(format!("没有可还原的部门预设: {department_id}")),
+    };
+    department.id = department_id.to_string();
+    Ok(department)
+}
+
 fn is_model_role_api_config_id(api_config_id: &str) -> bool {
     matches!(
         api_config_id.trim(),

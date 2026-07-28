@@ -497,19 +497,38 @@
     }
 
     #[test]
-    fn normalize_app_config_should_restore_fixed_assistant_children_and_preset_permissions() {
+    fn normalize_app_config_should_preserve_preset_department_customizations_and_restore_tree() {
         let mut cfg = AppConfig::default();
-        cfg.departments
-            .retain(|item| item.id != REVIEWER_DEPARTMENT_ID && item.id != SADDLER_DEPARTMENT_ID);
         for department in &mut cfg.departments {
             if department.id == ASSISTANT_DEPARTMENT_ID || department.is_built_in_assistant {
                 department.child_department_ids.clear();
             }
             if department.id == DEPUTY_DEPARTMENT_ID {
+                department.name = "自定义探索".to_string();
+                department.summary = "自定义概述".to_string();
+                department.guide = "自定义指南".to_string();
                 department.api_config_ids = vec![MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string()];
                 department.api_config_id = MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string();
+                department.model_failure_fallback_enabled = true;
                 department.permission_control = DepartmentPermissionControl::default();
                 department.child_department_ids = vec!["department-other".to_string()];
+            }
+            if department.id == REVIEWER_DEPARTMENT_ID {
+                department.name = "自定义审查".to_string();
+                department.summary = "自定义概述".to_string();
+                department.guide = "自定义指南".to_string();
+                department.api_config_ids = vec![MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string()];
+                department.api_config_id = MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string();
+                department.model_failure_fallback_enabled = true;
+                department.permission_control = department_whitelist_permission_control(&["read"], &[]);
+            }
+            if department.id == SADDLER_DEPARTMENT_ID {
+                department.name = "自定义能力资产".to_string();
+                department.summary = "自定义概述".to_string();
+                department.guide = "自定义指南".to_string();
+                department.api_config_ids = vec![MODEL_ROLE_QUICK_API_CONFIG_ID.to_string()];
+                department.api_config_id = MODEL_ROLE_QUICK_API_CONFIG_ID.to_string();
+                department.permission_control = DepartmentPermissionControl::default();
             }
         }
 
@@ -540,27 +559,38 @@
             .iter()
             .find(|item| item.id == DEPUTY_DEPARTMENT_ID)
             .expect("explorer department");
-        assert_eq!(explorer.api_config_id, MODEL_ROLE_QUICK_API_CONFIG_ID);
+        assert_eq!(explorer.name, "自定义探索");
+        assert_eq!(explorer.summary, "自定义概述");
+        assert_eq!(explorer.guide, "自定义指南");
+        assert_eq!(explorer.api_config_id, MODEL_ROLE_EXPERT_API_CONFIG_ID);
+        assert!(explorer.model_failure_fallback_enabled);
         assert_eq!(explorer.child_department_ids, Vec::<String>::new());
-        assert_eq!(explorer.permission_control, explorer_department_permission_control());
+        assert_eq!(explorer.permission_control, DepartmentPermissionControl::default());
 
         let reviewer = cfg
             .departments
             .iter()
             .find(|item| item.id == REVIEWER_DEPARTMENT_ID)
             .expect("reviewer department");
-        assert_eq!(reviewer.api_config_id, MODEL_ROLE_QUICK_API_CONFIG_ID);
+        assert_eq!(reviewer.name, "自定义审查");
+        assert_eq!(reviewer.summary, "自定义概述");
+        assert_eq!(reviewer.guide, "自定义指南");
+        assert_eq!(reviewer.api_config_id, MODEL_ROLE_EXPERT_API_CONFIG_ID);
+        assert!(reviewer.model_failure_fallback_enabled);
         assert_eq!(reviewer.child_department_ids, Vec::<String>::new());
-        assert_eq!(reviewer.permission_control, reviewer_department_permission_control());
+        assert_eq!(
+            reviewer.permission_control,
+            department_whitelist_permission_control(&["read"], &[])
+        );
         assert!(department_permission_allows_any_name(
             Some(reviewer),
-            DepartmentPermissionCategory::Skill,
-            &["code-review"],
+            DepartmentPermissionCategory::BuiltinTool,
+            &["read"],
         ));
         assert!(!department_permission_allows_any_name(
             Some(reviewer),
-            DepartmentPermissionCategory::Skill,
-            &["workspace-guide"],
+            DepartmentPermissionCategory::BuiltinTool,
+            &["exec"],
         ));
 
         let saddler = cfg
@@ -568,9 +598,12 @@
             .iter()
             .find(|item| item.id == SADDLER_DEPARTMENT_ID)
             .expect("saddler department");
-        assert_eq!(saddler.api_config_id, MODEL_ROLE_EXPERT_API_CONFIG_ID);
+        assert_eq!(saddler.name, "自定义能力资产");
+        assert_eq!(saddler.summary, "自定义概述");
+        assert_eq!(saddler.guide, "自定义指南");
+        assert_eq!(saddler.api_config_id, MODEL_ROLE_QUICK_API_CONFIG_ID);
         assert_eq!(saddler.child_department_ids, Vec::<String>::new());
-        assert_eq!(saddler.permission_control, saddler_department_permission_control());
+        assert_eq!(saddler.permission_control, DepartmentPermissionControl::default());
 
         let other = cfg
             .departments
@@ -581,6 +614,30 @@
             .child_department_ids
             .iter()
             .any(|id| id == DEPUTY_DEPARTMENT_ID));
+    }
+
+    #[test]
+    fn default_department_draft_should_return_backend_preset() {
+        let reviewer = default_department_draft(REVIEWER_DEPARTMENT_ID, "zh-CN")
+            .expect("reviewer default draft");
+        assert_eq!(reviewer.api_config_id, MODEL_ROLE_QUICK_API_CONFIG_ID);
+        assert_eq!(
+            reviewer.permission_control,
+            reviewer_department_permission_control()
+        );
+
+        let saddler = default_department_draft(SADDLER_DEPARTMENT_ID, "zh-CN")
+            .expect("saddler default draft");
+        assert_eq!(saddler.api_config_id, MODEL_ROLE_EXPERT_API_CONFIG_ID);
+        assert_eq!(
+            saddler.permission_control,
+            saddler_department_permission_control()
+        );
+
+        let assistant = default_department_draft(ASSISTANT_DEPARTMENT_ID, "en-US")
+            .expect("assistant default draft");
+        assert_eq!(assistant.name, "Assistant Department");
+        assert!(default_department_draft("department-custom", "zh-CN").is_err());
     }
 
     #[test]
