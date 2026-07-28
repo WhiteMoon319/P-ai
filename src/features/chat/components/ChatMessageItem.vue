@@ -482,10 +482,6 @@ const imageDataUrlCache = new Map<string, string>();
 const imageDataUrlPromiseCache = new Map<string, Promise<string>>();
 const debugPlainMarkdownRender = typeof window !== "undefined"
   && window.localStorage.getItem("easy-call.debug.chat-plain-markdown") === "1";
-const showMessageIdDebug = import.meta.env.DEV || (
-  typeof window !== "undefined"
-  && window.localStorage.getItem("easy-call.debug.chat-message-id") === "1"
-);
 
 const props = defineProps<{
   activeConversationId: string;
@@ -640,17 +636,7 @@ const assistantCreatedAtText = computed(() => {
   }
   return formatRecentRelativeTime(props.block.createdAt, relativeTimeNowTick.value);
 });
-const assistantDebugMeta = computed(() => {
-  if (isOwnMessage(props.block) || !showMessageIdDebug) return "";
-  const id = String(props.block.id || "").trim();
-  if (!id) return "";
-  const sourceId = String(props.block.sourceMessageId || "").trim();
-  return sourceId && sourceId !== id ? `id=${id} src=${sourceId}` : `id=${id}`;
-});
-const assistantMetaText = computed(() => joinNonEmpty([
-  assistantCreatedAtText.value,
-  assistantDebugMeta.value,
-]));
+const assistantMetaText = assistantCreatedAtText;
 const streamingHeaderStatus = computed(() => assistantStreamingHeaderStatus(props.block));
 const toolcallPreviewMap = computed<Record<string, { title: string; body: string; filePath?: string; fileLabel?: string }>>(() => {
   const previews = buildToolcallPreviewMap(props.block.activityItems, toolTimelineText("noArgs"));

@@ -251,36 +251,64 @@
           >
             <RemoteImContactEnergyDashboard :snapshot="remoteImContactDashboardSnapshot" />
           </div>
+          <!-- 临时视觉验收：确认 DaisyUI info alert 的主题配色后删除。 -->
+          <div
+            v-if="!chatStatusBanner"
+            class="pointer-events-none absolute inset-x-0 top-0 z-30 flex -translate-y-full justify-center px-2 pb-2 pt-0"
+          >
+            <div class="alert alert-info alert-soft pointer-events-auto w-fit max-w-full px-4 py-2 text-sm shadow-sm">
+              <div class="flex w-full min-w-0 flex-col gap-2">
+                <span
+                  class="block max-h-32 min-w-0 overflow-y-auto whitespace-pre-wrap break-words text-center leading-5 text-base-content/80 ecall-shimmer-text ecall-reasoning-shimmer"
+                  :data-shimmer-text="t('chat.statusCompactingContext')"
+                >{{ t("chat.statusCompactingContext") }}</span>
+              </div>
+            </div>
+          </div>
           <Transition name="chat-status-banner">
             <div
               v-if="chatStatusBanner"
               class="pointer-events-none absolute inset-x-0 top-0 z-30 flex -translate-y-full justify-center px-2 pb-2 pt-0"
             >
               <div
-                class="pointer-events-auto max-h-36 w-fit max-w-full overflow-hidden rounded-box border px-4 py-2 text-sm shadow-sm backdrop-blur-md"
+                class="alert pointer-events-auto w-fit max-w-full px-4 py-2 text-sm shadow-sm"
                 :class="chatStatusBanner.tone === 'error'
-                  ? 'border-error/30 bg-error/12 text-error'
+                  ? 'alert-error alert-soft'
+                  : chatStatusBanner.tone === 'success'
+                    ? 'alert-success alert-soft'
                   : chatStatusBanner.tone === 'info' || chatStatusBanner.text === t('chat.statusCompactingContext')
-                    ? 'border-info/25 bg-info/10 text-info'
-                    : 'border-base-300/70 bg-base-200/85 text-base-content'"
+                    ? 'alert-info alert-soft'
+                    : 'bg-base-200 text-base-content'"
               >
-                <div class="flex items-center gap-2 sm:gap-3">
+                <div class="flex w-full min-w-0 flex-col gap-2">
+                  <div v-if="chatStatusBanner.tone === 'error'" class="flex items-center justify-between gap-2">
+                    <span class="font-bold">{{ requestErrorTitle }}</span>
+                    <div class="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-sm gap-1 text-error hover:bg-error/15"
+                        @click="void copyStatusText(chatStatusBanner.text)"
+                      >
+                        <Copy class="h-3.5 w-3.5" />
+                        <span>{{ t("common.copy") }}</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-ghost btn-sm gap-1 text-error hover:bg-error/15"
+                        @click="$emit('clearChatError')"
+                      >
+                        <X class="h-3.5 w-3.5" />
+                        <span>{{ t("common.close") }}</span>
+                      </button>
+                    </div>
+                  </div>
                   <span
-                    class="min-w-0 whitespace-pre-wrap break-words text-center leading-5"
-                    :class="chatStatusBanner.tone === 'error' || chatStatusBanner.tone === 'info'
+                    class="block max-h-32 min-w-0 overflow-y-auto whitespace-pre-wrap break-words text-center leading-5"
+                    :class="chatStatusBanner.tone === 'error' || chatStatusBanner.tone === 'info' || chatStatusBanner.tone === 'success'
                       ? ''
                       : 'text-base-content/80 ecall-shimmer-text ecall-reasoning-shimmer'"
-                    :data-shimmer-text="chatStatusBanner.tone === 'error' || chatStatusBanner.tone === 'info' ? '' : chatStatusBanner.text"
+                    :data-shimmer-text="chatStatusBanner.tone === 'error' || chatStatusBanner.tone === 'info' || chatStatusBanner.tone === 'success' ? '' : chatStatusBanner.text"
                   >{{ chatStatusBanner.text }}</span>
-                  <button
-                    v-if="chatStatusBanner.tone === 'error'"
-                    type="button"
-                    class="btn btn-circle btn-ghost btn-sm h-8 min-h-8 w-8 shrink-0 p-0 text-error hover:bg-error/15"
-                    :title="t('common.close')"
-                    @click="$emit('clearChatError')"
-                  >
-                    <X class="h-4 w-4" />
-                  </button>
                 </div>
               </div>
             </div>
@@ -343,7 +371,7 @@
             :chat-input="chatInput" :instruction-presets="instructionPresets" :mention-entries="mentionEntries"
             :selected-mentions="selectedMentions" :chat-input-placeholder="chatInputPlaceholder"
             :clipboard-images="clipboardImages" :queued-attachment-notices="queuedAttachmentNotices"
-            :link-open-error-text="linkOpenErrorText" :chat-error-text="chatErrorText"
+            :link-open-error-text="linkOpenErrorText"
             :transcribing="transcribing" :can-record="canRecord" :recording="recording" :recording-ms="recordingMs"
             :record-hotkey="recordHotkey" :conversation-call-primary-api-config-id="conversationCallPrimaryApiConfigId"
             :preferred-chat-model-id="preferredChatModelId"
@@ -351,7 +379,7 @@
             :plan-mode-enabled="planModeEnabled"
             :workspace-access="workspaceAccess"
             :frontend-round-phase="frontendRoundPhase" :chat-usage-percent="chatUsagePercent"
-            :trim-tip="trimTip" :chatting="chatting" :busy="conversationInteractionBusy"
+            :chatting="chatting" :busy="conversationInteractionBusy"
             :stop-chat-disabled="isOrganizingContextBusy || submitPending" :frozen="frozen"
             :supervision-active="supervisionActive"
             :supervision-title="supervisionButtonTitle"
@@ -587,7 +615,7 @@ import {
   useChatComposerAppearance,
   visibleChatComposerContextGroups,
 } from "../../shell/composables/use-chat-composer-appearance";
-import { ArrowDownToLine, Check, ChevronsDown, ChevronsUp, History, Inbox, ListTodo, Network, Trash2, Undo2, Wrench, X } from "@lucide/vue";
+import { ArrowDownToLine, Check, ChevronsDown, ChevronsUp, Copy, History, Inbox, ListTodo, Network, Trash2, Undo2, Wrench, X } from "@lucide/vue";
 import {
   copyTransportChatImageToClipboard,
   invokeTauri,
@@ -659,7 +687,7 @@ const props = defineProps<{
   chatInput: string; instructionPresets: PromptCommandPreset[]; chatInputPlaceholder: string;
   canRecord: boolean; recording: boolean; recordingMs: number; transcribing: boolean; recordHotkey: string;
   conversationCallPrimaryApiConfigId: string; preferredChatModelId?: string; toolReviewApiConfigId?: string; toolReviewRefreshTick: number; chatModelOptions: ApiConfigItem[];
-  planModeEnabled: boolean; chatUsagePercent: number; trimTip: string;
+  planModeEnabled: boolean; chatUsagePercent: number;
   mediaDragActive: boolean; chatting: boolean; trimming: boolean; trimmingConversationId?: string;
   compactingConversation: boolean; compactingConversationId?: string;
   conversationBusy: boolean; frozen: boolean; messageBlocks: ChatMessageBlock[];
@@ -801,10 +829,10 @@ const toolReviewSidebarActiveTab = computed<ToolReviewSidebarTab>(() => {
 // ==================== messages / audio ====================
 
 const { playingAudioId, copyMessage, stopAudioPlayback, toggleAudioPlayback } = useChatMessageActions();
-const transientNotice = ref<null | { text: string; tone: "default" | "error" | "info" }>(null);
+const transientNotice = ref<null | { text: string; tone: "default" | "error" | "success" }>(null);
 let transientNoticeTimer = 0;
 
-function showTransientNotice(text: string, tone: "default" | "error" | "info" = "info") {
+function showTransientNotice(text: string, tone: "default" | "error" | "success" = "success") {
   const next = String(text || "").trim();
   if (!next) return;
   transientNotice.value = { text: next, tone };
@@ -815,17 +843,27 @@ function showTransientNotice(text: string, tone: "default" | "error" | "info" = 
   }, 2200);
 }
 
+async function copyStatusText(text: string) {
+  const content = String(text || "").trim();
+  if (!content) return;
+  try {
+    await navigator.clipboard.writeText(content);
+  } catch (error) {
+    console.warn("[状态提示] 复制失败", error);
+  }
+}
+
 async function handleCopyMessage(block: ChatMessageBlock) {
   const ok = await copyMessage(block);
   if (ok) {
-    showTransientNotice(t("chat.copyDone"), "info");
+    showTransientNotice(t("chat.copyDone"), "success");
     return;
   }
   showTransientNotice(t("chat.copyFailed"), "error");
 }
 
 function handleCopyMessageImageDone() {
-  showTransientNotice(t("chat.copyImageDone"), "info");
+  showTransientNotice(t("chat.copyImageDone"), "success");
 }
 
 function handleCopyMessageImageFailed() {
@@ -833,7 +871,7 @@ function handleCopyMessageImageFailed() {
 }
 
 function handleSelectionCopyDone(count: number) {
-  showTransientNotice(t("chat.selection.copied", { count }), "info");
+  showTransientNotice(t("chat.selection.copied", { count }), "success");
 }
 
 function handleSelectionCopyFailed() {
@@ -852,6 +890,10 @@ const {
 const chatStatusBanner = computed(() => {
   if (transientNotice.value) return transientNotice.value;
   return baseChatStatusBanner.value;
+});
+const requestErrorTitle = computed(() => {
+  const title = t("chat.errorTitleRequest");
+  return title === "chat.errorTitleRequest" ? "请求发生错误" : title;
 });
 const conversationInteractionBusy = computed(() =>
   props.conversationBusy || isOrganizingContextBusy.value,

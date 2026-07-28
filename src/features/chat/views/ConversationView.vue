@@ -34,7 +34,6 @@
     :chat-model-options="chatModelOptions"
     :plan-mode-enabled="runtime.planModeEnabled.value"
     :chat-usage-percent="messageBlocks.chatUsagePercent.value"
-    :trim-tip="trimTip"
     :media-drag-active="false"
     :chatting="runtime.chatting.value"
     :trimming="false"
@@ -122,7 +121,6 @@ const props = defineProps<{
   workspaces: ShellWorkspace[];
   workspaceAccess: "read_only" | "approval" | "full_access";
   currentTheme: string;
-  trimTip: string;
   chatInputPlaceholder: string;
   terminalApprovals?: TerminalApprovalConversationItem[];
   terminalApprovalResolving?: boolean;

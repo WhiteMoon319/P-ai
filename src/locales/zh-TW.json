@@ -2032,6 +2032,7 @@
     },
     "requestUnknownReason": "未返回具體失敗原因",
     "requestAbortedByUser": "已停止本次請求。",
+    "errorTitleRequest": "請求發生錯誤",
     "requestFriendlyWithRaw": "{reason}: {err}",
     "requestRateLimited": "請求過於頻繁或額度受限",
     "requestServiceUnavailable": "模型服務暫時不可用",

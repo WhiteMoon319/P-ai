@@ -2032,6 +2032,7 @@
     },
     "requestUnknownReason": "No detailed failure reason was returned",
     "requestAbortedByUser": "This request was stopped.",
+    "errorTitleRequest": "Request error",
     "requestFriendlyWithRaw": "{reason}: {err}",
     "requestRateLimited": "The request was rate limited or quota limited",
     "requestServiceUnavailable": "The model service is temporarily unavailable",

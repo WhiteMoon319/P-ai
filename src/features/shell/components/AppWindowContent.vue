@@ -313,7 +313,6 @@
               :workspaces="currentChatWorkspaces"
               :workspace-access="currentChatWorkspaces.find((item) => item.level === 'main')?.access || 'read_only'"
               :current-theme="currentTheme"
-              :trim-tip="trimTip"
               :chat-input-placeholder="chatInputPlaceholder"
               :terminal-approvals="terminalApprovals"
               :terminal-approval-resolving="terminalApprovalResolving"

@@ -404,7 +404,6 @@ const props = defineProps<{
   clipboardImages: BinaryAttachment[];
   queuedAttachmentNotices: QueuedAttachmentNotice[];
   linkOpenErrorText: string;
-  chatErrorText: string;
   transcribing: boolean;
   canRecord: boolean;
   recording: boolean;
@@ -439,7 +438,6 @@ const props = defineProps<{
   attachedIdeContextReferences: IdeContextReferenceItem[];
   currentTheme?: string;
   showConversationActions?: boolean;
-  trimTip?: string;
   chatUsagePercent?: number;
 }>();
 
