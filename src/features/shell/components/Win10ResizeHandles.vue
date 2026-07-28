@@ -11,7 +11,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { startCurrentTransportWindowResizeDragging } from "../../../services/tauri-api";
 
 type ResizeDirection = "East" | "North" | "NorthEast" | "NorthWest" | "South" | "SouthEast" | "SouthWest" | "West";
 
@@ -31,7 +31,7 @@ const resizeHandles = computed<Array<{ edge: string; direction: ResizeDirection 
 ]);
 
 function startResize(direction: ResizeDirection): void {
-  getCurrentWindow().startResizeDragging(direction).catch((error) => {
+  void startCurrentTransportWindowResizeDragging(direction).catch((error) => {
     console.warn("[窗口] Win10 自定义边缘缩放启动失败", error);
   });
 }

@@ -1,9 +1,7 @@
 import { ref } from "vue";
-import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { emitTransportEvent, onTransportNotification } from "../../../services/tauri-api";
 
 const MARKDOWN_APPEARANCE_STORAGE_KEY = "easy-call.markdown-appearance.v1";
-const MARKDOWN_APPEARANCE_CHANGED_EVENT = "easy-call:markdown-appearance-changed";
 
 export const MARKDOWN_FONT_SCALE_MIN = 0;
 export const MARKDOWN_FONT_SCALE_MAX = 1;
@@ -15,7 +13,7 @@ type MarkdownAppearancePayload = {
 
 const markdownFontScale = ref(MARKDOWN_FONT_SCALE_DEFAULT);
 let initialized = false;
-let eventUnlisten: UnlistenFn | null = null;
+let eventUnlisten: (() => void) | null = null;
 
 function clampFontScale(value: unknown): number {
   const numeric = Number(value);
@@ -93,15 +91,9 @@ export function initMarkdownAppearance() {
   if (typeof window !== "undefined") {
     window.addEventListener("storage", handleStorageEvent);
   }
-  if (isTauriRuntimeAvailable()) {
-    void listen<MarkdownAppearancePayload>(MARKDOWN_APPEARANCE_CHANGED_EVENT, (event) => {
-      applyMarkdownFontScale(event.payload?.fontScale);
-    }).then((unlisten) => {
-      eventUnlisten = unlisten;
-    }).catch((error) => {
-      console.warn("[Markdown外观] 监听字体强度变化失败", error);
-    });
-  }
+  eventUnlisten = onTransportNotification<MarkdownAppearancePayload>("markdownAppearance.changed", (payload) => {
+    applyMarkdownFontScale(payload?.fontScale);
+  });
 }
 
 export function disposeMarkdownAppearance() {
@@ -121,8 +113,7 @@ export function useMarkdownAppearance() {
     const normalized = clampFontScale(value);
     applyMarkdownFontScale(normalized);
     persistMarkdownFontScale(normalized);
-    if (!isTauriRuntimeAvailable()) return;
-    void emit(MARKDOWN_APPEARANCE_CHANGED_EVENT, { fontScale: normalized }).catch((error) => {
+    void emitTransportEvent("markdownAppearance.changed", { fontScale: normalized }).catch((error) => {
       console.warn("[Markdown外观] 同步字体强度失败", error);
     });
   }

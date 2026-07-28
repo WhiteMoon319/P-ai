@@ -2185,6 +2185,13 @@ fn cleanup_storage_legacy_items(
     state: State<'_, AppState>,
     input: CleanupStorageLegacyItemsInput,
 ) -> Result<StorageCleanupResult, String> {
+    cleanup_storage_legacy_items_inner(state.inner(), input)
+}
+
+fn cleanup_storage_legacy_items_inner(
+    state: &AppState,
+    input: CleanupStorageLegacyItemsInput,
+) -> Result<StorageCleanupResult, String> {
     let cleanup_kind = input.cleanup_kind.trim();
     let (scope, label) = match cleanup_kind {
         STORAGE_CLEANUP_LEGACY_CONVERSATIONS => (
@@ -2202,7 +2209,7 @@ fn cleanup_storage_legacy_items(
                 cleanup_kind
             ));
             let started_at = std::time::Instant::now();
-            let result = cleanup_storage_abnormal_conversations(&state);
+            let result = cleanup_storage_abnormal_conversations(state);
             match &result {
                 Ok(report) => runtime_log_warn(format!(
                     "[存储] 完成，任务=清理异常会话目录，cleanup_kind={}，删除文件数={}，跳过文件数={}，释放字节={}，耗时毫秒={}",
@@ -2227,7 +2234,7 @@ fn cleanup_storage_legacy_items(
                 cleanup_kind
             ));
             let started_at = std::time::Instant::now();
-            let result = cleanup_storage_image_text_cache(&state);
+            let result = cleanup_storage_image_text_cache(state);
             match &result {
                 Ok(report) => runtime_log_warn(format!(
                     "[存储] 完成，任务=清理多媒体解析缓存，cleanup_kind={}，删除文件数={}，跳过文件数={}，释放字节={}，耗时毫秒={}",
@@ -2255,7 +2262,7 @@ fn cleanup_storage_legacy_items(
         cleanup_kind
     ));
     let started_at = std::time::Instant::now();
-    let result = cleanup_storage_legacy_scope(&state, scope);
+    let result = cleanup_storage_legacy_scope(state, scope);
     match &result {
         Ok(report) => runtime_log_warn(format!(
             "[存储] 完成，任务=清理{}，cleanup_kind={}，删除文件数={}，跳过文件数={}，释放字节={}，耗时毫秒={}",

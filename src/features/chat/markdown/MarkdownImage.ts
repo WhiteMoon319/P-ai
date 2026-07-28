@@ -1,5 +1,5 @@
 import { computed, defineComponent, h, ref, watch } from "vue";
-import { invokeTauri } from "../../../services/tauri-api";
+import { readTransportChatImage } from "../../../services/tauri-api";
 import {
   isAbsoluteLocalPath,
   isAssistantSpacePath,
@@ -152,9 +152,7 @@ const MarkdownImage = defineComponent({
           cancelled = true;
         });
         const existing = markdownImageThumbnailPromiseCache.get(cacheKey);
-        const task = existing || invokeTauri<{ dataUrl: string }>("read_local_chat_image_thumbnail", {
-          input: { path },
-        })
+        const task = existing || readTransportChatImage({ path })
           .then((result) => {
             const dataUrl = String(result?.dataUrl || "").trim();
             if (dataUrl) {

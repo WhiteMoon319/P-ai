@@ -18,7 +18,6 @@
         :active-tab="chatLeftPanelMode"
         :chat-model-options="chatModelOptions"
         :tool-review-api-config-id="toolReviewApiConfigId"
-        :bridge-request="bridgeRequest"
         @update:active-tab="$emit('update:conversation-list-tab', $event)"
         @edit-task="openTaskEditDialog"
         @select="handleConversationListSelect"
@@ -106,13 +105,11 @@
                       :markdown-is-dark="markdownIsDark"
                       :playing-audio-id="playingAudioId" :active-turn-user="false"
                       :compact-with-previous="entry.item.compactWithPrevious"
-                      :can-regenerate="!sidebarMode && canRegenerateBlock(entry.item.block, entry.item.blockIndex)"
+                      :can-regenerate="showConversationActions && canRegenerateBlock(entry.item.block, entry.item.blockIndex)"
                       :can-confirm-plan="canConfirmPlan(entry.item.block)"
-                      :read-plan-file-content="readPlanFileContent"
                       :current-workspace-root-path="currentWorkspaceRootPath"
                       :current-theme="currentTheme"
                       :disable-recall-and-branch-actions="activeConversationIsSystemNotification"
-                      :disable-markdown-render="disableMarkdownRender"
                       @create-conversation-branch-from-turn="$emit('createConversationBranchFromTurn', $event)"
                       @recall-turn="$emit('recallTurn', $event)" @regenerate-turn="$emit('regenerateTurn', $event)"
                       @confirm-plan="$emit('confirmPlan', $event)" @enter-selection-mode="handleEnterMessageSelectionMode"
@@ -163,12 +160,12 @@
                   :auto-push-active="!!String(activeConversationSummary?.autoPushRemoteContactId || '').trim()"
                   :hide-menu-button="activeConversationSummary?.kind === 'remote_im_contact'"
                   :hide-workspace-button="hideWorkspaceButton || activeConversationSummary?.kind === 'remote_im_contact'"
-              :show-task-create-menu-item="!sidebarMode && !activeConversationIsRemoteContact && !activeConversationIsSystemNotification"
-              :show-forward-menu-item="!sidebarMode"
-              :show-auto-push-menu-item="!sidebarMode && !activeConversationIsRemoteContact && !activeConversationIsSystemNotification"
-              :show-share-menu-item="!sidebarMode"
+              :show-task-create-menu-item="showConversationActions && !activeConversationIsRemoteContact && !activeConversationIsSystemNotification"
+              :show-forward-menu-item="showConversationActions"
+              :show-auto-push-menu-item="showConversationActions && !activeConversationIsRemoteContact && !activeConversationIsSystemNotification"
+              :show-share-menu-item="showConversationActions"
               :show-workspace-menu-item="true"
-              :show-open-in-browser-button="!bridgeMode && !activeConversationIsSystemNotification"
+              :show-open-in-browser-button="showOpenInBrowserButton && !activeConversationIsSystemNotification"
               :open-in-browser-disabled="!activeConversationId || activeConversationIsSystemNotification"
               :show-code-review-menu-item="true"
               :mention-entries="mentionEntries" :selected-mention-keys="selectedMentionKeys"
@@ -371,9 +368,7 @@
             :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
             :ide-context-groups="mergedVisibleIdeContextGroups" :attached-ide-context-references="attachedIdeContextReferences"
             :current-theme="currentTheme"
-            :sidebar-mode="sidebarMode"
-            :bridge-request="bridgeRequest"
-            :bridge-subscribe="bridgeSubscribe"
+            :show-conversation-actions="showConversationActions"
             @update:chat-input="$emit('update:chatInput', $event)" @add-mention="$emit('addMention', $event)"
             @remove-mention="$emit('removeMention', $event)" @remove-clipboard-image="$emit('removeClipboardImage', $event)"
             @remove-queued-attachment-notice="$emit('removeQueuedAttachmentNotice', $event)"
@@ -414,14 +409,14 @@
         />
 
         <ChatSupervisionTaskDialog
-          v-if="!sidebarMode"
+          v-if="showConversationActions"
           :open="supervisionDialogOpen" :saving="supervisionTaskSaving" :error-text="supervisionTaskError"
           :active-task="activeSupervisionTask" :recent-history="recentSupervisionTaskHistory"
           @close="$emit('closeSupervisionTask')" @save="$emit('saveSupervisionTask', $event)"
           @stop="$emit('stopSupervisionTask')"
         />
         <ToolReviewTargetDialog
-          v-if="!sidebarMode"
+          v-if="showConversationActions"
           :open="codeReviewDialogOpen"
           :submitting="!!toolReviewSubmittingBatchKey"
           :error-text="codeReviewErrorText"
@@ -439,12 +434,11 @@
           @review-code="handleSubmitCodeReview"
         />
         <TaskCreateCard
-          v-if="!sidebarMode"
+          v-if="showConversationActions"
           :open="taskDialogOpen"
           :mode="taskDialogMode"
           :conversation-id="activeConversationId"
           :task="taskDialogTask"
-          :bridge-request="bridgeRequest"
           @close="closeTaskDialog"
           @created="handleTaskCreated"
           @updated="handleTaskUpdated"
@@ -485,12 +479,11 @@
           ref="chatReaderPanelRef"
           class="h-full w-full"
           :initial-root-path="currentWorkspaceRootPath"
-          :bridge-request="bridgeRequest"
           :session-key="chatFileReaderSessionKey"
           :legacy-session-key="legacyChatFileReaderSessionKey"
           :enable-global-drop="false"
           :show-pick-file-button="false"
-          :show-tab-desktop-actions="true"
+          :show-tab-local-file-actions="true"
           :markdown-is-dark="markdownIsDark"
           custom-markstream-id="chat-file-reader-markstream"
           @capture-context-reference="handleCaptureFileReaderContextReference"
@@ -545,7 +538,6 @@
             :delegate-statuses="delegateStatuses"
             :delegate-statuses-error-text="delegateStatusesErrorText"
             :persona-avatar-url-map="personaAvatarUrlMap"
-            :bridge-request="bridgeRequest"
             @select-batch="setToolReviewCurrentBatchKey" @load-item-detail="loadToolReviewItemDetail"
             @review-item="runToolReviewForCall" @review-batch="runToolReviewForBatch"
             @open-delegate-detail="openDelegateArchiveDetail"
@@ -590,15 +582,23 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { isDarkAppTheme } from "../../shell/composables/use-app-theme";
 import {
   useChatComposerAppearance,
   visibleChatComposerContextGroups,
 } from "../../shell/composables/use-chat-composer-appearance";
 import { ArrowDownToLine, Check, ChevronsDown, ChevronsUp, History, Inbox, ListTodo, Network, Trash2, Undo2, Wrench, X } from "@lucide/vue";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import {
+  copyTransportChatImageToClipboard,
+  invokeTauri,
+  onTransportNotification,
+  openTransportExternalUrl,
+  openTransportLocalDirectory,
+  openTransportLocalFileReference,
+  readTransportChatImage,
+  resolveLocalFileUrl,
+  saveTransportChatImageAs,
+} from "../../../services/tauri-api";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ChatMessageBlock, ChatPersonaPresenceChip, ChatTodoItem, ConversationDelegateStatusSummary, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption, ShellWorkspace, ShellWorkMode } from "../../../types/app";
 import ChatMessageItem from "../components/ChatMessageItem.vue";
 import ChatApprovalPanel from "../components/ChatApprovalPanel.vue";
@@ -642,7 +642,6 @@ import { useChatBlockTracking } from "../composables/use-chat-block-tracking";
 import type { TaskEntry } from "../../config/views/config-tabs/task-editor";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
 import { clearNativeTextSelection } from "../../../utils/native-selection";
-import { FILE_READER_ADD_TO_CHAT_EVENT } from "../../file-reader/file-reader-context";
 
 // ==================== props / emits ====================
 
@@ -685,20 +684,14 @@ const props = defineProps<{
   createConversationDepartmentOptions: DepartmentPersonaOption[];
   recipientOptionsReady?: boolean;
   defaultCreateConversationDepartmentId: string;
-  ideContextGroups: IdeContextWorkspaceGroup[]; attachedIdeContextReferences: IdeContextReferenceItem[];
+  ideContextGroups: IdeContextWorkspaceGroup[];
   terminalApprovals?: TerminalApprovalConversationItem[];
   terminalApprovalResolving?: boolean;
-  sidebarMode?: boolean;
-  disableMarkdownRender?: boolean;
   hideConversationControlPanel?: boolean;
-  bridgeMode?: boolean;
-  openLocalFilesInHost?: boolean;
-  bridgeRequest?: <T = unknown>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>;
-  bridgeSubscribe?: (method: string, handler: (payload: unknown) => void) => () => void;
+  showOpenInBrowserButton?: boolean;
   systemNotificationMode?: boolean;
   hideWorkspaceButton?: boolean;
   workspaceAccess?: "read_only" | "approval" | "full_access" | "";
-  readPlanFileContent?: (input: { conversationId: string; path: string }) => Promise<string>;
 }>();
 
 const emit = defineEmits<{
@@ -754,8 +747,6 @@ const emit = defineEmits<{
   (e: "denyTerminalApproval", requestId: string): void;
   (e: "approveTerminalApprovalForSession", requestId: string): void;
   (e: "approveTerminalApprovalForWorkspace", requestId: string): void;
-  (e: "openSidebarFileReference", href: string): void;
-  (e: "openSidebarExternalUrl", url: string): void;
 }>();
 
 // ==================== basic state ====================
@@ -940,21 +931,6 @@ watch(
   { immediate: true },
 );
 
-watch(
-  () => ({
-    activeConversationId: props.activeConversationId,
-    propSystemNotificationMode: props.systemNotificationMode,
-    summarySystemNotificationMode: activeConversationSummary.value?.isSystemNotificationConversation,
-    effectiveSystemNotificationMode: activeConversationIsSystemNotification.value,
-    activeConversationSummary: activeConversationSummary.value,
-  }),
-  (snapshot) => {
-    if (!props.sidebarMode) return;
-    // 系统会话识别日志已移除
-  },
-  { immediate: true, deep: true },
-);
-
 const toolReviewDepartmentOptions = computed(() =>
   // 用户主动发起代码审查不受 AI delegate 工具的“直接下级部门”限制。
   (Array.isArray(props.createConversationDepartmentOptions) ? props.createConversationDepartmentOptions : []),
@@ -990,16 +966,8 @@ const legacyChatFileReaderSessionKey = computed(() => {
 // ==================== messages / audio ====================
 
 const showSideConversationList = computed(() => !!props.sideConversationListVisible);
-const sidebarMode = computed(() => !!props.sidebarMode);
-const disableMarkdownRender = computed(() => props.disableMarkdownRender ?? sidebarMode.value);
-const bridgeMode = computed(() => !!props.bridgeMode);
-const openLocalFilesInHost = computed(() => !!props.openLocalFilesInHost);
-const composerContextHost = computed<"default" | "vscode">(() =>
-  typeof document !== "undefined" && document.documentElement.getAttribute("data-host") === "vscode"
-    ? "vscode"
-    : "default",
-);
-const tauriRuntimeAvailable = isTauriRuntimeAvailable();
+const showConversationActions = computed(() => !props.hideConversationControlPanel);
+const showOpenInBrowserButton = computed(() => props.showOpenInBrowserButton ?? true);
 
 function canRegenerateBlock(block: ChatMessageBlock, blockIndex: number): boolean {
   if (block.role !== "assistant" || block.isExtraTextBlock) return false;
@@ -1116,7 +1084,7 @@ async function saveAutoPushCard() {
   if (!conversationId || autoPushSaving.value) return;
   autoPushSaving.value = true;
   try {
-    await invokeTauri("set_conversation_auto_push_remote_contact", {
+    await invokeTauri("conversation.autoPush", {
       input: {
         conversationId,
         remoteContactId: autoPushEnabled.value
@@ -1142,7 +1110,7 @@ const {
   workspaces: toRef(props, "workspaces"),
   currentWorkspaceRootPath: toRef(props, "currentWorkspaceRootPath"),
   currentWorkspaceName: toRef(props, "currentWorkspaceName"),
-  enabled: computed(() => !sidebarMode.value),
+  enabled: computed(() => true),
 });
 
 const fileReaderVisibleContextReference = ref<IdeContextReferenceItem | null>(null);
@@ -1171,7 +1139,6 @@ const mergedVisibleIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() =>
     ideBridgeGroups: baseGroups,
     sideFileTagsEnabled: sideFileTagsEnabled.value,
     ideBridgeFileTagsEnabled: ideBridgeFileTagsEnabled.value,
-    host: composerContextHost.value,
   });
 });
 
@@ -1318,7 +1285,7 @@ const {
   latestOwnElasticMinHeight,
   chatting: toRef(props, "chatting"),
   olderHistoryCorrectionAllowed,
-  debugEnabled: computed(() => !sidebarMode.value),
+  debugEnabled: computed(() => true),
   onUserScroll: () => onScroll(),
 });
 
@@ -1456,12 +1423,11 @@ const {
   currentDepartmentId: toRef(props, "currentDepartmentId"),
   departmentOptions: toolReviewDepartmentOptions,
   initialPanelOpen: toRef(props, "initialToolReviewPanelOpen"),
-  bridgeRequest: toRef(props, "bridgeRequest"),
   t, syncViewportMetrics,
   onRefreshMessage: (payload) => emit("refreshToolReviewMessage", payload),
   onToolReviewPanelOpenChange: (open) => emit("toolReviewPanelOpenChange", open),
 });
-const effectiveToolReviewPanelOpen = computed(() => !sidebarMode.value && toolReviewPanelOpen.value);
+const effectiveToolReviewPanelOpen = computed(() => toolReviewPanelOpen.value);
 
 watch(
   () => [effectiveToolReviewPanelOpen.value, props.chatRightPanelMode] as const,
@@ -1533,12 +1499,10 @@ const {
   openDelegateArchiveDetail, abortDelegate,
 } = useDelegateStatus({
   activeConversationId: toRef(props, "activeConversationId"),
-  panelOpen: computed(() => !sidebarMode.value
-    && effectiveToolReviewPanelOpen.value
+  panelOpen: computed(() => effectiveToolReviewPanelOpen.value
     && props.chatRightPanelMode === "monitor"
     && props.chatMonitorPanelMode === "delegate"),
-  enabled: computed(() => !sidebarMode.value),
-  bridgeRequest: toRef(props, "bridgeRequest"),
+  enabled: computed(() => true),
 });
 
 // ==================== panes ====================
@@ -1701,7 +1665,7 @@ const imagePreviewSaveStatus = ref<string>('idle');
 async function handleCopyLocalImage(path: string) {
   imagePreviewCopyStatus.value = 'doing';
   try {
-    await invokeTauri('copy_local_chat_image_to_clipboard', { input: { path } });
+    await copyTransportChatImageToClipboard(path);
   } catch (error) {
     console.warn('[预览] 复制图片失败', error);
   } finally {
@@ -1712,7 +1676,7 @@ async function handleCopyLocalImage(path: string) {
 async function handleSaveLocalImage(path: string) {
   imagePreviewSaveStatus.value = 'doing';
   try {
-    await invokeTauri('save_local_chat_image_as', { input: { path } });
+    await saveTransportChatImageAs(path);
   } catch (error) {
     console.warn('[预览] 保存图片失败', error);
   } finally {
@@ -1778,7 +1742,7 @@ async function openActiveConversationInBrowser() {
   const conversationId = String(props.activeConversationId || "").trim();
   if (!conversationId || props.systemNotificationMode) return;
   try {
-    const info = await invokeTauri<WebAccessInfo>("get_web_access_info", {
+    const info = await invokeTauri<WebAccessInfo>("transport.accessInfo", {
       input: { forceRefresh: false },
     });
     const localUrl = String(info?.localUrl || "").trim();
@@ -1790,7 +1754,7 @@ async function openActiveConversationInBrowser() {
     }
     const url = new URL(localUrl);
     url.searchParams.set("conversationId", conversationId);
-    await invokeTauri("open_external_url", { url: url.toString() });
+    await openTransportExternalUrl(url.toString());
     linkOpenErrorText.value = "";
   } catch (error) {
     linkOpenErrorText.value = t("status.openLinkFailed", { err: String(error) });
@@ -1878,19 +1842,17 @@ async function openChatMessageImagePreview(payload: {
   if (localPath) {
     if (isAssistantSpacePath(localPath)) {
       try {
-        const result = await invokeTauri<{ dataUrl: string; mime: string }>("read_local_chat_image_original", {
-          input: { path: localPath },
-        });
+        const result = await readTransportChatImage({ path: localPath, mime, original: true });
         const originalDataUrl = String(result?.dataUrl || "").trim();
         if (originalDataUrl) {
-          openImagePreview({ mime: result.mime, dataUrl: originalDataUrl, localPath });
+          openImagePreview({ mime: result?.mime || mime, dataUrl: originalDataUrl, localPath });
         }
       } catch (error) {
         console.warn("[预览] Assistant Space 图片原图加载失败", { path: localPath, error });
       }
       return;
     }
-    openImagePreview({ mime, dataUrl: convertFileSrc(localPath), localPath });
+    openImagePreview({ mime, dataUrl: resolveLocalFileUrl(localPath), localPath });
   }
 }
 
@@ -1906,17 +1868,14 @@ async function handleAssistantLinkClick(event: MouseEvent) {
       if (root) path = `${root}/${path.replace(/^\.\//, "")}`;
     }
     event.preventDefault(); event.stopPropagation();
-    if (!isAssistantSpacePath(path) && bridgeMode.value && openLocalFilesInHost.value) {
-      emit("openSidebarFileReference", path);
+    if (!isAssistantSpacePath(path) && await openTransportLocalFileReference(path)) {
       return;
     }
     try {
-      const result = await invokeTauri<{ dataUrl: string; mime: string }>("read_local_chat_image_original", {
-        input: { path },
-      });
+      const result = await readTransportChatImage({ path, mime: "image/png", original: true });
       const dataUrl = String(result?.dataUrl || "").trim();
       if (!dataUrl) return;
-      openImagePreview({ mime: result.mime, dataUrl, localPath: path });
+      openImagePreview({ mime: result?.mime || "image/png", dataUrl, localPath: path });
       linkOpenErrorText.value = "";
     } catch (error) {
       linkOpenErrorText.value = t("status.openLinkFailed", { err: String(error) });
@@ -1939,27 +1898,21 @@ async function handleAssistantLinkClick(event: MouseEvent) {
   const localPath = localReference?.path || href;
   if (isAbsoluteLocalPath(localPath)) {
     event.preventDefault(); event.stopPropagation();
-    if (bridgeMode.value && openLocalFilesInHost.value) {
-      emit("openSidebarFileReference", href);
+    if (await openTransportLocalFileReference(href)) {
       return;
     }
     try {
       if (canOpenInFileReader(localPath) || !fileExtensionFromPath(localPath)) {
         await openLocalFileInChatReader(localPath, localReference?.line);
       }
-      else if (tauriRuntimeAvailable) { await invokeTauri("open_local_file_directory", { path: localPath }); }
-      else { throw new Error(t("status.openLinkUnsupportedInWeb")); }
+      else { await openTransportLocalDirectory(localPath); }
       linkOpenErrorText.value = "";
     } catch (error) { linkOpenErrorText.value = t("status.openLinkFailed", { err: String(error) }); }
     return;
   }
   if (href.startsWith("http://") || href.startsWith("https://")) {
     event.preventDefault(); event.stopPropagation();
-    if (bridgeMode.value) {
-      emit("openSidebarExternalUrl", href);
-      return;
-    }
-    try { await invokeTauri("open_external_url", { url: href }); linkOpenErrorText.value = ""; }
+    try { await openTransportExternalUrl(href); linkOpenErrorText.value = ""; }
     catch (error) { linkOpenErrorText.value = t("status.openLinkFailed", { err: String(error) }); }
   }
 }
@@ -1978,21 +1931,15 @@ async function openFileInReader(path: string, line?: number) {
 
 // ==================== lifecycle ====================
 
-let unlistenFileReaderAddToChat: UnlistenFn | null = null;
+let unlistenFileReaderAddToChat: (() => void) | null = null;
 
 onMounted(() => {
   void nextTick(() => chatScrollbarRef.value?.updateThumb());
   document.addEventListener("pointerdown", closeCompactionSummaryContextMenu);
   document.addEventListener("keydown", handleCompactionSummaryContextMenuKeydown);
-  if (isTauriRuntimeAvailable()) {
-    void listen<IdeContextReferenceItem>(FILE_READER_ADD_TO_CHAT_EVENT, (event) => {
-      handleAddFileReaderContextReference(event.payload);
-    }).then((unlisten) => {
-      unlistenFileReaderAddToChat = unlisten;
-    }).catch((error) => {
-      console.warn("[文件阅读器] 监听添加选区到聊天失败", error);
-    });
-  }
+  unlistenFileReaderAddToChat = onTransportNotification<IdeContextReferenceItem>("fileReader.addToChat", (payload) => {
+    handleAddFileReaderContextReference(payload);
+  });
 });
 
 onBeforeUnmount(() => {

@@ -136,7 +136,13 @@
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import type { ApiConfigItem, AppConfig, PersonaProfile } from "../../../../types/app";
-import { invokeTauri } from "../../../../services/tauri-api";
+import {
+  getTransportHostRuntimePrerequisites,
+  installTransportHostRuntimePrerequisite,
+  invokeTauri,
+  openTransportExternalUrl,
+  openTransportWindow,
+} from "../../../../services/tauri-api";
 import { toErrorMessage } from "../../../../utils/error";
 
 type ConfigTab = "welcome" | "hotkey" | "api" | "tools" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "chatSettings" | "usage" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
@@ -226,7 +232,7 @@ async function loadWelcomeRuntimeState() {
     skillCount.value = 0;
   }
   try {
-    hostRuntimePrerequisites.value = await invokeTauri<HostRuntimePrerequisites>("get_host_runtime_prerequisites");
+    hostRuntimePrerequisites.value = await getTransportHostRuntimePrerequisites<HostRuntimePrerequisites>();
   } catch {
     hostRuntimePrerequisites.value = {};
   }
@@ -457,7 +463,7 @@ const completionRate = computed(() => {
 });
 
 function openExternalUrl(url: string) {
-  void invokeTauri("open_external_url", { url });
+  void openTransportExternalUrl(url);
 }
 
 async function installRuntimePrerequisite(card: WelcomeCard) {
@@ -467,7 +473,7 @@ async function installRuntimePrerequisite(card: WelcomeCard) {
   runtimeInstallStatus.value[kind] = t("config.welcome.installing");
   runtimeInstallStatusError.value[kind] = false;
   try {
-    const result = await invokeTauri<HostRuntimePrerequisiteInstallResult>("install_host_runtime_prerequisite", { kind });
+    const result = await installTransportHostRuntimePrerequisite<HostRuntimePrerequisiteInstallResult>(kind);
     runtimeInstallStatus.value[kind] = result.message || t("config.welcome.installSuccess");
     runtimeInstallStatusError.value[kind] = false;
     await loadWelcomeRuntimeState();
@@ -484,6 +490,6 @@ async function installRuntimePrerequisite(card: WelcomeCard) {
 }
 
 function openQuickSetupWindow() {
-  void invokeTauri("show_quick_setup_window");
+  void openTransportWindow("quickSetup");
 }
 </script>

@@ -1,5 +1,4 @@
 import { reactive, ref, shallowRef } from "vue";
-import type { UnlistenFn } from "@tauri-apps/api/event";
 import type { TerminalApprovalRequestPayload } from "../../shell/composables/use-terminal-approval";
 import type {
   AppConfig,
@@ -61,9 +60,7 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
   const recordHotkeyProbeLastSeq = ref(0);
   const recordHotkeyProbeDown = ref(false);
   const chatWindowActiveSynced = ref<boolean | null>(null);
-  const tauriWindowLabel = ref("unknown");
-  const isChatTauriWindow = ref(false);
-  const chatWindowEventUnlisteners: Record<string, UnlistenFn | null> = {
+  const chatWindowEventUnlisteners: Record<string, (() => void) | null> = {
     chatHistoryFlushed: null,
     chatRoundStarted: null,
     chatRoundCompleted: null,
@@ -153,8 +150,6 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
     recordHotkeyProbeLastSeq,
     recordHotkeyProbeDown,
     chatWindowActiveSynced,
-    tauriWindowLabel,
-    isChatTauriWindow,
     chatWindowEventUnlisteners,
     currentChatConversationId,
     currentChatPreferredApiConfigId,

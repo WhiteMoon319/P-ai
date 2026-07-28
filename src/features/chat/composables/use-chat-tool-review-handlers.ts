@@ -1,5 +1,5 @@
 import { watch, type Ref, type ComponentPublicInstance } from "vue";
-import { useChatToolReview, type ToolReviewBridgeRequest } from "./use-chat-tool-review";
+import { useChatToolReview } from "./use-chat-tool-review";
 
 export interface UseChatToolReviewHandlersOptions {
   activeConversationId: Ref<string>;
@@ -7,7 +7,6 @@ export interface UseChatToolReviewHandlersOptions {
   currentDepartmentId: Ref<string>;
   departmentOptions: Ref<Array<{ id: string }>>;
   initialPanelOpen?: Ref<boolean>;
-  bridgeRequest?: Ref<ToolReviewBridgeRequest | undefined>;
   t: (key: string, params?: Record<string, unknown>) => string;
   syncViewportMetrics: () => void;
   onRefreshMessage: (payload: { conversationId: string; messageId: string }) => void;
@@ -38,7 +37,6 @@ export function useChatToolReviewHandlers(options: UseChatToolReviewHandlersOpti
     activeConversationId: options.activeConversationId,
     refreshTick: options.toolReviewRefreshTick,
     initialPanelOpen: options.initialPanelOpen,
-    bridgeRequest: options.bridgeRequest,
     t,
     onRefreshMessage: options.onRefreshMessage,
   });

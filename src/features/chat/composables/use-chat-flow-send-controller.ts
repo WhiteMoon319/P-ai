@@ -1,6 +1,6 @@
 import type { Ref } from "vue";
-import type { Channel } from "@tauri-apps/api/core";
 import type { AssistantStreamBlock, ChatIngressPart, ChatMentionTarget, ChatMessage } from "../../../types/app";
+import type { TransportChannel } from "../../../services/tauri-api";
 import type { PreparedChatSendInput } from "./use-chat-flow-send-input";
 import type { RoundState, SendChatOverrides } from "./use-chat-flow-types";
 import type { AssistantDeltaEvent } from "./use-chat-flow-events";
@@ -58,7 +58,7 @@ type UseChatFlowSendControllerOptions = {
   streamBlocks?: Ref<AssistantStreamBlock[]>;
   getConversationId?: () => string;
   getSession: () => { apiConfigId: string; agentId: string; departmentId?: string } | null;
-  createSendChatDeltaChannel: (gen: number, conversationId: string) => Channel<AssistantDeltaEvent>;
+  createSendChatDeltaChannel: (gen: number, conversationId: string) => TransportChannel<AssistantDeltaEvent>;
   invokeSendChatMessage: (input: {
     text: string;
     displayText?: string;
@@ -67,7 +67,7 @@ type UseChatFlowSendControllerOptions = {
     mentions?: ChatMentionTarget[];
     session: { apiConfigId: string; agentId: string; departmentId?: string; conversationId?: string };
     traceId: string;
-    onDelta: Channel<AssistantDeltaEvent>;
+    onDelta: TransportChannel<AssistantDeltaEvent>;
   }) => Promise<{
     accepted: boolean;
     duplicate: boolean;
@@ -242,7 +242,7 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
       await options.sendRecovery.handleFailedSend(gen, error, sendSession, sendConversationId);
     } finally {
       if (!submitSucceeded && options.submitPending) options.submitPending.value = false;
-      // submit_chat_message 是短提交命令；成功后的轮次收束只由 history_flushed、round_started、round_completed 等事件驱动。
+      // chat.send 是短提交命令；成功后的轮次收束只由统一 history/round 事件驱动。
     }
   }
 

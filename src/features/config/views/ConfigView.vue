@@ -406,8 +406,11 @@ import LogTab from "./config-tabs/LogTab.vue";
 import AppearanceTab from "./config-tabs/AppearanceTab.vue";
 import StorageTab from "./config-tabs/StorageTab.vue";
 import AboutTab from "./config-tabs/AboutTab.vue";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import {
+  invokeTauri,
+  migrateTransportShellWorkspaceDirectory,
+  onTransportNotification,
+} from "../../../services/tauri-api";
 import { toErrorMessage } from "../../../utils/error";
 import { ArrowLeftRight, Beaker, Bell, Building2, ClipboardList, Code, Cpu, Database, Home, Info, Keyboard, Menu, MessageSquare, Network, Palette, Puzzle, Radio, ScrollText, User, Wifi, Wrench } from "@lucide/vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
@@ -573,7 +576,7 @@ const workspaceMigrationUi = ref({
 });
 type WorkspaceMigrationDecision = "migrate" | "skip" | "cancel";
 let resolveWorkspaceMigrationConfirm: ((value: WorkspaceMigrationDecision) => void) | null = null;
-let workspaceMigrationProgressUnlisten: UnlistenFn | null = null;
+let workspaceMigrationProgressUnlisten: (() => void) | null = null;
 const cropperReady = ref(false);
 const localCropError = ref("");
 const avatarEditorTargetId = ref("");
@@ -887,8 +890,7 @@ function cancelWorkspaceMigration() {
 
 async function ensureWorkspaceMigrationListener() {
   if (workspaceMigrationProgressUnlisten) return;
-  if (!isTauriRuntimeAvailable()) return;
-  workspaceMigrationProgressUnlisten = await listen<{
+  workspaceMigrationProgressUnlisten = onTransportNotification<{
     taskId: string;
     stage: string;
     processed: number;
@@ -897,8 +899,7 @@ async function ensureWorkspaceMigrationListener() {
     message: string;
     done: boolean;
     error?: string | null;
-  }>("easy-call:workspace-migration-progress", (event) => {
-    const payload = event.payload;
+  }>("workspace.migrationProgress", (payload) => {
     if (!payload || payload.taskId !== workspaceMigrationUi.value.taskId) return;
     workspaceMigrationUi.value.stage = String(payload.stage || "");
     workspaceMigrationUi.value.message = String(payload.message || "");
@@ -924,13 +925,7 @@ async function migrateWorkspaceWithProgress(oldPath: string, newPath: string): P
   workspaceMigrationUi.value.currentPath = oldPath;
   workspaceMigrationUi.value.error = "";
   try {
-    const migratedPath = await invokeTauri<string>("migrate_shell_workspace_directory", {
-      input: {
-        oldPath,
-        newPath,
-        taskId,
-      },
-    });
+    const migratedPath = await migrateTransportShellWorkspaceDirectory({ oldPath, newPath, taskId });
     const dialog = migrateWorkspaceDialog.value;
     if (dialog?.open) {
       dialog.close();

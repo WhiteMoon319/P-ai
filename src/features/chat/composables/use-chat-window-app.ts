@@ -1,7 +1,6 @@
 import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { emit } from "@tauri-apps/api/event";
-import { invokeTauri } from "../../../services/tauri-api";
+import { emitTransportEvent, invokeTauri } from "../../../services/tauri-api";
 import { useAppCore } from "../../shell/composables/use-app-core";
 import { useAppTheme } from "../../shell/composables/use-app-theme";
 import { normalizeUiSizeScale, useUiSizeAppearance } from "../../shell/composables/use-ui-size-appearance";
@@ -83,8 +82,6 @@ export function useChatWindowApp() {
     recordHotkeyProbeLastSeq,
     recordHotkeyProbeDown,
     chatWindowActiveSynced,
-    tauriWindowLabel,
-    isChatTauriWindow,
     chatWindowEventUnlisteners,
     currentChatConversationId,
     currentChatPreferredApiConfigId,
@@ -422,8 +419,6 @@ export function useChatWindowApp() {
     queuedAttachmentNotices,
     activeSttApiConfig,
     shouldUseRemoteStt,
-    tauriWindowLabel,
-    isChatTauriWindow,
     currentChatConversationId,
     currentForegroundAgentId: contentOrchestrator.personaConversation.currentForegroundAgentId,
     startupDataReady,
@@ -498,7 +493,6 @@ export function useChatWindowApp() {
     minimizeWindowAndClearForeground,
     openGithubRepository,
   } = useWindowActions({
-    isChatTauriWindow,
     closeWindow,
     minimizeWindow,
     freezeForegroundConversation,
@@ -624,7 +618,6 @@ export function useChatWindowApp() {
     perfLog,
     PERF_DEBUG,
     configTab,
-    tauriWindowLabel,
     unarchivedConversations,
     delegateConversations,
     remoteImContactConversations,
@@ -768,7 +761,7 @@ export function useChatWindowApp() {
     await nextTick();
     try {
       for (const conversationId of idsToClose) {
-        await invokeTauri("stop_chat_message", {
+        await invokeTauri("chat.stop", {
           input: {
             session: {
               apiConfigId: String(currentForegroundApiConfigId.value || "").trim(),
@@ -780,7 +773,7 @@ export function useChatWindowApp() {
             partialStreamBlocks: [],
           },
         }).catch(() => {});
-        await invokeTauri("delete_unarchived_conversation", {
+        await invokeTauri("conversation.delete", {
           input: { conversationId },
         }).catch((error) => {
           setStatusError("status.requestFailed", error);
@@ -820,8 +813,6 @@ export function useChatWindowApp() {
     updateGithubUpdateMethod,
     applyUiFont,
     chatWindowEventUnlisteners,
-    tauriWindowLabel,
-    isChatTauriWindow,
     currentChatConversationId,
     currentChatPreferredApiConfigId,
     chatWindowActiveSynced,
@@ -883,7 +874,7 @@ export function useChatWindowApp() {
   });
 
   function notifySidebarCodeReview() {
-    void emit("code-review-requested");
+    void emitTransportEvent("codeReview.requested");
   }
 
   async function rebindConversationRecipient(payload: { conversationId: string; departmentId: string; agentId: string }) {
@@ -897,7 +888,7 @@ export function useChatWindowApp() {
         departmentId: string;
         agentId: string;
         preferredApiConfigId?: string | null;
-      }>("rebind_unarchived_conversation_recipient", {
+      }>("conversation.rebindRecipient", {
         input: { conversationId, departmentId, agentId },
       });
       if (String(currentChatConversationId.value || "").trim() === conversationId) {

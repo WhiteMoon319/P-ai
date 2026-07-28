@@ -506,10 +506,10 @@ function reduceStreamSnapshot(
   const streamAnimatedDelta = Object.prototype.hasOwnProperty.call(snapshot, "streamAnimatedDelta")
     ? String(snapshot.streamAnimatedDelta || "")
     : String(meta._streamAnimatedDelta || "");
-  const toolStatusText = Object.prototype.hasOwnProperty.call(snapshot, "toolStatusText")
+  const toolStatusText = typeof snapshot.toolStatusText === "string"
     ? String(snapshot.toolStatusText || "")
     : String(meta._toolStatusText || "");
-  const toolStatusState = Object.prototype.hasOwnProperty.call(snapshot, "toolStatusState")
+  const toolStatusState = typeof snapshot.toolStatusState === "string"
     ? normalizeToolStatus(snapshot.toolStatusState)
     : normalizeToolStatus(meta._toolStatusState);
   const preStreamingStatusText = blocks.length > 0
@@ -563,7 +563,7 @@ function reduceAssistantDelta(
   // must not promote a waiting round or mutate the assistant bubble.
   if (normalized(deltaEvent.kind) === "context_usage_update") return state;
   if (deltaEvent.streamCache) {
-    return reduceStreamSnapshot(state, {
+    const snapshotState = reduceStreamSnapshot(state, {
       type: "assistant_stream_snapshot",
       conversationId: event.conversationId,
       assistantMessageId: deltaEvent.assistantMessageId,
@@ -574,6 +574,16 @@ function reduceAssistantDelta(
         updatedAt: deltaEvent.streamCache.updatedAt || deltaEvent.revision,
       },
     });
+    // streamCache 是正文/活动的权威快照，但旧后端与部分通知不会把本次
+    // tool_status 同步写入快照。状态事件仍须覆盖到同一条消息，否则
+    // reducer 随后的显示同步会把刚收到的工具/重试状态清空。
+    if (normalized(deltaEvent.kind) === "tool_status") {
+      return reduceAssistantDelta(snapshotState, {
+        ...event,
+        event: { ...deltaEvent, streamCache: undefined },
+      });
+    }
+    return snapshotState;
   }
   const messageId = normalized(deltaEvent.assistantMessageId || state.round.assistantMessageId);
   if (!messageId || !roundIdentityMatches(state.round, {

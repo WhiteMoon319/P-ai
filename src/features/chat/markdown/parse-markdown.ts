@@ -1,7 +1,7 @@
 import { findNextMarkdownAutoLink } from "./markdown-auto-link";
 
 // ==================== Markdown Block Parser ====================
-// Lightweight markdown parser based on SidebarLightMarkdown's approach,
+// Lightweight markdown parser based on PlainMarkdownRenderer's approach,
 // extended with math block detection ($$...$$ and $...$) and mermaid awareness.
 
 export type MarkdownListItem = {

@@ -266,7 +266,11 @@
 import { Copy, FileText, RotateCcw, SquareTerminal, Undo2, Wrench } from "@lucide/vue";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { invokeTauri } from "../../../../services/tauri-api";
+import {
+  invokeTauri,
+  restartTransportApplicationDemo,
+  sendTransportNativeNotificationDemo,
+} from "../../../../services/tauri-api";
 import ConfigTemplate from "../../components/ConfigTemplate.vue";
 import type { ConfigTemplateGroup } from "../../components/config-template";
 import ChatBubbleShell from "../../../chat/components/ChatBubbleShell.vue";
@@ -661,7 +665,7 @@ async function sendNativeNotification() {
   resultText.value = "";
 
   try {
-    const result = await invokeTauri<NativeNotificationDemoResult>("demo_send_native_notification");
+    const result = await sendTransportNativeNotificationDemo<NativeNotificationDemoResult>();
     resultText.value = [
       t("config.demo.nativeNotificationSent"),
       `title: ${result.title}`,
@@ -682,7 +686,7 @@ async function restartApp() {
   resultText.value = "";
 
   try {
-    await invokeTauri<void>("demo_restart_app");
+    await restartTransportApplicationDemo();
     resultText.value = t("config.demo.restartRequested");
   } catch (error) {
     errorText.value = error instanceof Error ? error.message : String(error);

@@ -2081,7 +2081,6 @@
     "rewindFailed": "撤回失敗",
     "confirmPlanFailed": "確認計劃失敗",
     "saveWorkspaceFailed": "儲存工作區設定失敗",
-    "openDirectoryRestricted": "Web 側邊欄暫不支援開啟或選擇本機目錄。",
     "paiNotRunning": "PAI 未執行",
     "remoteAuthTitle": "遠端存取",
     "remoteAuthHint": "請輸入遠端存取密碼。",

@@ -31,12 +31,20 @@ fn convert_private_agent_to_main(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Vec<AgentProfile>, String> {
+    convert_private_agent_to_main_inner(input, &app, state.inner())
+}
+
+fn convert_private_agent_to_main_inner(
+    input: ConvertPrivateAgentToMainInput,
+    app: &AppHandle,
+    state: &AppState,
+) -> Result<Vec<AgentProfile>, String> {
     let agent_id = input.agent_id.trim();
     if agent_id.is_empty() {
         return Err("agentId is required".to_string());
     }
 
-    let mut runtime_agents = load_agents_inner(&state)?;
+    let mut runtime_agents = load_agents_inner(state)?;
     let target_idx = runtime_agents
         .iter()
         .position(|a| a.id == agent_id)
@@ -53,8 +61,8 @@ fn convert_private_agent_to_main(
         SaveAgentsInput {
             agents: runtime_agents,
         },
-        &app,
-        &state,
+        app,
+        state,
     )
 }
 
@@ -1112,6 +1120,13 @@ struct ChatImageDataUrlOutput {
 fn read_chat_image_data_url(
     input: ChatImageDataUrlInput,
     state: State<'_, AppState>,
+) -> Result<ChatImageDataUrlOutput, String> {
+    read_chat_image_data_url_inner(input, &state)
+}
+
+fn read_chat_image_data_url_inner(
+    input: ChatImageDataUrlInput,
+    state: &AppState,
 ) -> Result<ChatImageDataUrlOutput, String> {
     let media_ref = input.media_ref.trim();
     if media_ref.is_empty() {

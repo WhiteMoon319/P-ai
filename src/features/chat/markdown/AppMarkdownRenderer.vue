@@ -1125,6 +1125,10 @@ const MathBlock = defineComponent({
   font-variation-settings: "wght" var(--ecall-md-body-weight-setting, var(--app-font-weight, 400));
 }
 
+.ecall-md-chat {
+  font-size: var(--app-chat-message-text-size, var(--app-text-sm-size));
+}
+
 .ecall-md-renderer > :first-child {
   margin-top: 0;
 }

@@ -1,4 +1,4 @@
-import { Channel } from "@tauri-apps/api/core";
+import { createTransportChannel, type TransportChannel } from "../../../services/tauri-api";
 import {
   readAssistantEvent,
   type AssistantDeltaEvent,
@@ -14,7 +14,7 @@ type UseChatFlowChannelBindingOptions = {
   invokeBindActiveChatViewStream?: (input: {
     bindingId: string;
     conversationId?: string;
-    onDelta: Channel<AssistantDeltaEvent>;
+    onDelta: TransportChannel<AssistantDeltaEvent>;
   }) => Promise<void>;
   invokeUnbindActiveChatViewStream?: (input: { bindingId: string }) => Promise<void>;
   invokeProbeActiveChatViewStream?: (input: {
@@ -50,7 +50,7 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
   let boundConversationId = "";
   let boundConversationInitialized = false;
   let boundDisplayGeneration = 0;
-  let boundDeltaChannel: Channel<AssistantDeltaEvent> | null = null;
+  let boundDeltaChannel: TransportChannel<AssistantDeltaEvent> | null = null;
   let boundChannelSeq = 0;
   const pendingProbeResolvers = new Map<string, (received: boolean) => void>();
 
@@ -73,7 +73,7 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
   }
 
   function attachDeltaHandler(
-    channel: Channel<AssistantDeltaEvent>,
+    channel: TransportChannel<AssistantDeltaEvent>,
     source: ChatFlowDeltaSource,
     getGen: () => number,
     nextGenOnHistoryFlushed: () => number,
@@ -145,7 +145,7 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
     const previousConversationId = boundConversationId;
     const previousInitialized = boundConversationInitialized;
     const channelSeq = ++boundChannelSeq;
-    const channel = new Channel<AssistantDeltaEvent>();
+    const channel = createTransportChannel<AssistantDeltaEvent>();
     attachDeltaHandler(
       channel,
       "bound",
@@ -196,9 +196,9 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
     }
   }
 
-  function createSendChatDeltaChannel(gen: number, conversationId: string): Channel<AssistantDeltaEvent> {
+  function createSendChatDeltaChannel(gen: number, conversationId: string): TransportChannel<AssistantDeltaEvent> {
     const expectedConversationId = normalizeConversationId(conversationId);
-    const channel = new Channel<AssistantDeltaEvent>();
+    const channel = createTransportChannel<AssistantDeltaEvent>();
     attachDeltaHandler(
       channel,
       "sendChat",

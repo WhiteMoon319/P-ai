@@ -19,7 +19,11 @@ type UseChatFlowExternalEventsOptions = {
   hasRecentlyCompletedRoundIds: () => boolean;
   markRecentlyCompletedRoundIds: (payload: { activationId?: string; requestId?: string } | null | undefined) => void;
   matchesRecentlyCompletedRoundIds: (payload: { activationId?: string; requestId?: string } | null | undefined) => boolean;
+  hasStoppedRound: () => boolean;
+  matchesStoppedRound: (payload: { assistantMessageId?: string; activationId?: string; requestId?: string }) => boolean;
+  clearStoppedRound: () => void;
   getRound: () => RoundState;
+  setRound: (next: RoundState) => void;
   getSendChatActiveGen: () => number;
   nextGeneration: () => number;
   channelBinding: {
@@ -41,6 +45,7 @@ type UseChatFlowExternalEventsOptions = {
   clearFrontendDispatchTimer: () => void;
   onReloadMessages: () => Promise<void>;
   onAssistantMessageCompleted?: (input: { conversationId: string; assistantMessage: any }) => Promise<void> | void;
+  applyStoppedAssistantMessage?: (assistantMessage: any) => Promise<void> | void;
   setChatErrorText: (text: string, conversationId?: string | null) => void;
   formatRequestFailed: (error: unknown) => string;
   latestAssistantText: { value: string };
@@ -116,6 +121,7 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     if (!sameForegroundConversation(payloadConversationId)) {
       return;
     }
+    if (options.hasStoppedRound()) return;
     if (foregroundAlreadyHandlingCurrentConversation()) {
       return;
     }
@@ -154,6 +160,7 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     if (currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId) {
       return;
     }
+    if (parsed.activateAssistant && options.hasStoppedRound()) return;
     if (parsed.activateAssistant) {
       options.clearRecentlyCompletedRoundIds();
     }
@@ -179,6 +186,14 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     if (currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId) {
       return;
     }
+    if (options.matchesStoppedRound({
+      assistantMessageId: parsed.assistantMessageId,
+      activationId: parsed.activationId,
+      requestId: parsed.requestId,
+    })) {
+      return;
+    }
+    options.clearStoppedRound();
     options.clearRecentlyCompletedRoundIds();
     const gen = options.beginAssistantActivationFromEvent(parsed);
     if (!gen) return;
@@ -195,9 +210,23 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       options.clearConversationStreamCache(payloadConversationId);
       return;
     }
+    const terminalIdentity = {
+      assistantMessageId: parsed.assistantMessage?.id,
+      activationId: parsed.activationId,
+      requestId: parsed.requestId,
+    };
+    if (options.matchesStoppedRound(terminalIdentity)) {
+      if (parsed.assistantMessage) {
+        await options.applyStoppedAssistantMessage?.(parsed.assistantMessage);
+      } else if (String(parsed.assistantText || "").trim()) {
+        await options.onReloadMessages();
+      }
+      return;
+    }
     options.markRecentlyCompletedRoundIds(parsed);
     const round = options.getRound();
     if (round.phase !== "streaming" && round.phase !== "queued") {
+      options.setRound({ phase: "idle" });
       options.chatting.value = false;
       options.reasoningStartedAtMs.value = 0;
       options.clearConversationStreamCache(payloadConversationId || currentConversationId);
@@ -207,11 +236,7 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       await options.onReloadMessages();
       return;
     }
-    if (!terminalTargetsCurrentRound({
-      activationId: parsed.activationId,
-      requestId: parsed.requestId,
-      assistantMessageId: parsed.assistantMessage?.id,
-    })) return;
+    if (!terminalTargetsCurrentRound(terminalIdentity)) return;
     await options.handleRoundCompleted(round.gen, {
       assistantText: String(parsed.assistantText || ""),
       assistantMessage: parsed.assistantMessage,
@@ -231,8 +256,13 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       options.clearConversationStreamCache(payloadConversationId);
       return;
     }
+    if (options.matchesStoppedRound({
+      activationId: parsed?.activationId,
+      requestId: parsed?.requestId,
+    })) return;
     const round = options.getRound();
     if (round.phase !== "streaming" && round.phase !== "queued") {
+      options.setRound({ phase: "idle" });
       options.latestAssistantText.value = "";
       options.chatting.value = false;
       options.reasoningStartedAtMs.value = 0;
@@ -281,6 +311,7 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     const parsed = readAssistantEvent(rawObj?.event ?? payload);
     const cacheConversationId = payloadConversationId || currentConversationId;
     const round = options.getRound();
+    if (options.matchesStoppedRound(parsed)) return;
     if (options.matchesRecentlyCompletedRoundIds(parsed)) {
       return;
     }

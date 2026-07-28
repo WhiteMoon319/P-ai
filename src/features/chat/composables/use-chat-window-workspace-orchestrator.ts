@@ -4,8 +4,6 @@ import { useChatWorkspacePickerFlow } from "./use-chat-workspace-picker-flow";
 
 export function useChatWindowWorkspaceOrchestrator(bindings: Record<string, any>) {
   const workspace = useChatWorkspace({
-    activeApiConfigId: bindings.currentForegroundApiConfigId,
-    activeAgentId: bindings.currentForegroundAgentId,
     activeConversationId: computed(() => bindings.currentChatConversationId.value),
     setStatus: bindings.setStatus,
     setStatusError: bindings.setStatusError,

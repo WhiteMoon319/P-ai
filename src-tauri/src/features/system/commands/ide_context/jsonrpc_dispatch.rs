@@ -3,9 +3,6 @@ const WEB_NATIVE_CAPABILITY_UNAVAILABLE: &str = "WEB_NATIVE_CAPABILITY_UNAVAILAB
 fn ide_chat_web_native_only_method(method: &str) -> bool {
     matches!(
         method,
-            | "conversation.plan.readFile"
-            | "conversation.rewindPreview"
-            | "read_chat_image_data_url"
             | "read_local_chat_image_thumbnail"
             | "read_local_chat_image_original"
             | "list_file_reader_directory"
@@ -25,9 +22,10 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "copy_local_chat_image_to_clipboard"
             | "save_local_chat_image_as"
             | "export_archive_to_file"
+            | "archives.export"
+            | "conversation.importShare"
             | "export_memories_to_path"
             | "export_agent_private_memories"
-            | "set_agent_private_memory_enabled"
             | "write_base64_file_to_path"
             | "write_utf8_text_file_to_path"
             | "queue_local_file_attachment"
@@ -36,7 +34,6 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "attachment_transfer_complete"
             | "attachment_transfer_abort"
             | "attachment_ingest_local_path"
-            | "check_git_workspace_root"
             | "update_file_reader_watch_targets"
             | "migrate_shell_workspace_directory"
             | "desktop_screenshot"
@@ -48,12 +45,10 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "hide_current_window"
             | "update_record_hotkey"
             | "update_record_background_wake"
-            | "stt_transcribe"
             | "install_host_runtime_prerequisite"
             | "get_host_runtime_prerequisites"
             | "reset_chat_shell_workspace"
             | "get_default_chat_shell_workspace_path"
-            | "settings.open"
             | "open_external_url"
             | "show_main_window"
             | "show_chat_window"
@@ -67,43 +62,12 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "start_github_update"
             | "cancel_github_update"
             | "apply_prepared_github_update"
-            | "get_storage_usage_overview"
-            | "refresh_storage_usage_overview"
-            | "cleanup_storage_legacy_items"
-            | "export_config_migration_package"
-            | "preview_import_config_migration_package"
-            | "apply_import_config_migration_package"
-            | "codex_get_auth_status"
-            | "codex_start_oauth_login"
-            | "codex_get_rate_limits"
-            | "codex_consume_rate_limit_reset_credit"
-            | "codex_logout"
-            | "read_avatar_data_url"
-            | "save_agent_avatar"
-            | "clear_agent_avatar"
-            | "generate_image"
-            | "check_tools_status"
-            | "list_terminal_shell_candidates"
             | "bind_active_chat_view_stream"
             | "probe_active_chat_view_stream"
             | "unbind_active_chat_view_stream"
-            | "request_conversation_messages_after_async"
             | "set_chat_window_active"
-            | "preview_rewind_conversation_from_message"
-            | "check_message_store_migration"
-            | "run_message_store_migration"
-            | "convert_private_agent_to_main"
-            | "get_chat_shell_workspace"
-            | "update_chat_shell_workspace_layout"
-            | "create_side_chat_conversation"
             | "open_file_reader_window_command"
             | "read_local_binary_file"
-            | "remote_im_get_default_group_response_guidance"
-            | "remote_im_patch_contact_settings"
-            | "remote_im_reconfigure_channel_behavior"
-            | "remote_im_subscribe_contact_dashboard"
-            | "remote_im_sync_contact_dashboard"
-            | "remote_im_unsubscribe_contact_dashboard"
             | "set_chat_window_side_expanded"
     )
 }
@@ -113,6 +77,21 @@ fn ide_chat_web_native_only_error(method: &str) -> String {
         "{}: Web 端不支持本机能力：{}",
         WEB_NATIVE_CAPABILITY_UNAVAILABLE, method
     )
+}
+
+fn ide_chat_upsert_ide_context_command(
+    state: &AppState,
+    params: Value,
+    ide_context_runtime: &IdeContextRuntime,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<UpsertIdeContextSnapshotInput>(params)?;
+    let (client_id, updated_at) =
+        upsert_ide_context_snapshot_internal(input, ide_context_runtime)?;
+    emit_ide_context_updated(state, &client_id, &updated_at);
+    Ok(serde_json::json!({
+        "clientId": client_id,
+        "updatedAt": updated_at,
+    }))
 }
 
 async fn ide_chat_handle_jsonrpc_request(
@@ -141,22 +120,10 @@ async fn ide_chat_handle_jsonrpc_request(
             "ok": true,
             "ts": chrono::Utc::now().to_rfc3339(),
         })),
+        "webview.ping" => Ok(serde_json::json!(true)),
+        "webview_pong" => Ok(serde_json::json!(true)),
         "conversation.list" => ide_chat_conversation_list(state, &sidebar_viewer_id),
         "conversation.changedSince" => ide_chat_conversation_changed_since(state, request.params).await,
-        "conversation.open" => ide_chat_parse_params::<IdeChatConversationInput>(request.params)
-            .and_then(|input| {
-                let result = ide_chat_conversation_open_result(state, &input.conversation_id)?;
-                ide_chat_register_sidebar_conversation(
-                    state,
-                    &input.conversation_id,
-                    &sidebar_label,
-                    opened_conversation_id,
-                )?;
-                if let Some(workspace_path) = input.workspace_path.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
-                    let _ = ide_chat_ensure_sidebar_workspace(state, &input.conversation_id, workspace_path, input.workspace_name.as_deref());
-                }
-                Ok(result)
-        }),
         "conversation.blockPage" => ide_chat_conversation_block_page(state, request.params),
         "conversation.fastRequestTurns" => ide_chat_conversation_fast_request_turns(state, request.params),
         "conversation.runtimeSnapshot" => ide_chat_conversation_runtime_snapshot(state, request.params),
@@ -169,6 +136,16 @@ async fn ide_chat_handle_jsonrpc_request(
         "conversation.streamProbe" => ide_chat_stream_probe(request.params, client_id, opened_conversation_id),
         "conversation.freshnessSnapshot" => ide_chat_conversation_freshness_snapshot(state, request.params).await,
         "conversation.markRead" => ide_chat_mark_conversation_read(state, request.params),
+        "conversation.messageById" => ide_chat_conversation_message_by_id_command(state, request.params),
+        "conversation.messagesBefore" => ide_chat_conversation_messages_before_command(state, request.params),
+        "conversation.messagesAfterAsync" =>
+            ide_chat_parse_param_field::<RequestConversationMessagesAfterAsyncInput>(
+                request.params,
+                "input",
+            )
+            .and_then(|input| request_conversation_messages_after_async_inner(input, state))
+            .and_then(ide_chat_serialize),
+        "conversation.setActive" => ide_chat_set_active_conversation_command(state, request.params),
         "conversation.create" => ide_chat_create_conversation(state, request.params)
             .await
             .and_then(|result| {
@@ -187,13 +164,39 @@ async fn ide_chat_handle_jsonrpc_request(
                 }
                 Ok(result)
             }),
+        "conversation.createSide" => ide_chat_create_side_chat_conversation(state, request.params).await,
         "conversation.createOptions" => ide_chat_create_conversation_options(state),
         "workspace.permission" => ide_chat_workspace_permission(state, request.params),
         "workspace.permission.select" => ide_chat_select_workspace_permission(state, request.params),
+        "workspace.ensureHostRoot" => ide_chat_parse_params::<IdeChatConversationInput>(request.params)
+            .and_then(|input| {
+                let workspace_path = input
+                    .workspace_path
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|path| !path.is_empty())
+                    .ok_or_else(|| "workspacePath is required".to_string())?;
+                ide_chat_ensure_sidebar_workspace(
+                    state,
+                    &input.conversation_id,
+                    workspace_path,
+                    input.workspace_name.as_deref(),
+                )?;
+                Ok(serde_json::json!({ "conversationId": input.conversation_id }))
+            }),
         "workspace.layout.save" => ide_chat_workspace_layout_save(state, request.params),
         "workspace.list" => ide_chat_workspace_list(state, request.params),
         "workspace.directory.list" => ide_chat_workspace_directory_list(request.params),
         "workspace.gitRootCheck" => ide_chat_workspace_git_root_check(request.params).await,
+        // 旧命令保留为兼容别名，但必须落到同一套工作区实现；不再将其视为
+        // Web 不可用的 App 专属能力。
+        "get_chat_shell_workspace" => ide_chat_parse_workspace_params::<ChatShellWorkspaceInput>(request.params)
+            .and_then(|input| get_chat_shell_workspace_inner(input, state))
+            .and_then(ide_chat_serialize),
+        "update_chat_shell_workspace_layout" => ide_chat_parse_workspace_params::<SaveChatShellWorkspacesInput>(request.params)
+            .and_then(|input| update_chat_shell_workspace_layout_inner(input, state))
+            .and_then(ide_chat_serialize),
+        "check_git_workspace_root" => ide_chat_workspace_git_root_check(request.params).await,
         "fileReader.directory.list" => ide_chat_file_reader_directory_list(request.params),
         "fileReader.readFile" => ide_chat_file_reader_read(request.params),
         "fileReader.readFileBlock" => ide_chat_file_reader_read_block(request.params),
@@ -203,17 +206,37 @@ async fn ide_chat_handle_jsonrpc_request(
         "conversation.rewind" => ide_chat_rewind_conversation(state, request.params).await,
         "conversation.branchFromMessage" => ide_chat_branch_conversation_from_message(state, request.params).await,
         "conversation.branchFromSelection" => ide_chat_branch_conversation(state, request.params).await,
+        "conversation.forwardSelection" => ide_chat_forward_selection_command(state, request.params),
+        "conversation.forwardRemoteContact" => ide_chat_forward_remote_contact_command(state, request.params),
+        "conversation.rename" => ide_chat_rename_conversation_command(state, request.params),
+        "conversation.pin" => ide_chat_toggle_pin_command(state, request.params),
+        "conversation.autoPush" => ide_chat_set_auto_push_command(state, request.params),
         "list_unarchived_conversations" => ide_chat_list_unarchived_conversations_for_web_settings(state).await,
+        "conversation.overview.list" => ide_chat_list_unarchived_conversations_for_web_settings(state).await,
         "remote_im_list_contact_conversations" => {
             ide_chat_remote_im_list_contact_conversations_for_web_settings(state)
         }
+        "remoteIm.conversations.list" => {
+            ide_chat_remote_im_list_contact_conversations_for_web_settings(state)
+        }
         "list_delegate_conversations" => ide_chat_list_delegate_conversations_for_web_settings(state),
+        "delegate.conversations.list" => ide_chat_list_delegate_conversations_for_web_settings(state),
         "get_prompt_preview" => ide_chat_get_prompt_preview_for_web_settings(state, request.params).await,
+        "prompt.preview" => ide_chat_get_prompt_preview_for_web_settings(state, request.params).await,
         "get_system_prompt_preview" => ide_chat_get_system_prompt_preview_for_web_settings(state, request.params).await,
+        "prompt.systemPreview" => ide_chat_get_system_prompt_preview_for_web_settings(state, request.params).await,
         "get_conversation_section_orders" => (|| -> Result<Value, String> {
             ide_chat_serialize(get_conversation_section_orders_inner(state)?)
         })(),
+        "conversation.sectionOrders.get" => (|| -> Result<Value, String> {
+            ide_chat_serialize(get_conversation_section_orders_inner(state)?)
+        })(),
         "save_conversation_section_order" => (|| -> Result<Value, String> {
+            let input =
+                ide_chat_parse_param_field::<SaveConversationSectionOrderInput>(request.params, "input")?;
+            ide_chat_serialize(save_conversation_section_order_inner(input, state)?)
+        })(),
+        "conversation.sectionOrders.save" => (|| -> Result<Value, String> {
             let input =
                 ide_chat_parse_param_field::<SaveConversationSectionOrderInput>(request.params, "input")?;
             ide_chat_serialize(save_conversation_section_order_inner(input, state)?)
@@ -222,6 +245,8 @@ async fn ide_chat_handle_jsonrpc_request(
         "delegate.abort" => ide_chat_delegate_abort(state, request.params),
         "delegate.blockPage" => ide_chat_delegate_block_page(state, request.params),
         "delegate.submit" => ide_chat_submit_delegate(state, request.params).await,
+        "delegate.delete" => ide_chat_delete_delegate_command(state, request.params),
+        "conversation.deleteDelegate" => ide_chat_delete_delegate_command(state, request.params),
         "task.list" => ide_chat_task_list(state),
         "task.create" => ide_chat_task_create(state, request.params),
         "task.update" => ide_chat_task_update(state, request.params),
@@ -233,8 +258,10 @@ async fn ide_chat_handle_jsonrpc_request(
         "goal.cancel" => ide_chat_goal_cancel(state, request.params),
         "conversation.compactPreview" => ide_chat_compact_preview(state, request.params),
         "conversation.compact" => ide_chat_compact_conversation(state, request.params).await,
+        "conversation.preferredModel.set" => ide_chat_set_preferred_model_command(state, request.params),
         "model.list" => ide_chat_model_list(state, request.params),
         "model.select" => ide_chat_select_model(state, app, request.params),
+        "ideContext.upsert" => ide_chat_upsert_ide_context_command(state, request.params, ide_context_runtime),
         "ideContext.query" => ide_chat_parse_params::<IdeContextWorkspaceQueryInput>(request.params)
             .and_then(|input| serde_json::to_value(query_ide_context_references_internal(input, ide_context_runtime)?)
                 .map_err(|err| format!("serialize IDE context query result failed: {err}"))),
@@ -247,11 +274,45 @@ async fn ide_chat_handle_jsonrpc_request(
         }
         "conversation.planMode.set" => ide_chat_set_conversation_plan_mode(state, request.params),
         "conversation.plan.confirm" => ide_chat_confirm_plan(state, request.params).await,
+        "conversation.plan.readFile" => ide_chat_read_plan_file(state, request.params),
+        "conversation.rewindPreview" => ide_chat_preview_rewind_conversation(state, request.params).await,
+        "conversation.archiveList" => ide_chat_list_archives_command(state),
+        "conversation.archiveBlockPage" => ide_chat_archive_block_page_command(state, request.params),
+        "conversation.archiveSummary" => ide_chat_archive_summary_command(state, request.params),
+        "conversation.deleteArchive" => ide_chat_delete_archive_command(state, request.params),
+        "conversation.unarchive" => ide_chat_unarchive_command(state, request.params),
+        "archives.list" => ide_chat_list_archives_command(state),
+        "archives.blockPage" => ide_chat_archive_block_page_command(state, request.params),
+        "archives.summary" => ide_chat_archive_summary_command(state, request.params),
+        "archives.delete" => ide_chat_delete_archive_command(state, request.params),
+        "archives.unarchive" => ide_chat_unarchive_command(state, request.params),
         "is_backend_ready" => Ok(serde_json::json!(state.backend_ready.load(std::sync::atomic::Ordering::Acquire))),
         "load_config" => ide_chat_load_config_for_web_settings(state),
         "load_app_bootstrap_snapshot" => ide_chat_load_app_bootstrap_snapshot_for_web_settings(state),
+        "app.bootstrapSnapshot" => ide_chat_load_app_bootstrap_snapshot_for_web_settings(state),
+        "messageStore.migration.check" => check_message_store_migration_inner(state)
+            .and_then(ide_chat_serialize),
+        "messageStore.migration.run" => ide_chat_parse_workspace_params::<RunMessageStoreMigrationInput>(request.params)
+            .and_then(|input| run_message_store_migration_inner(app, state, input))
+            .and_then(ide_chat_serialize),
         "save_config" => ide_chat_save_config_for_web_settings(state, app, ide_context_runtime, request.params),
         "load_agents" => ide_chat_load_agents_for_web_settings(state),
+        "convert_private_agent_to_main" => {
+            ide_chat_convert_private_agent_to_main_for_web_settings(state, app, request.params)
+        }
+        "save_agent_avatar" => ide_chat_save_agent_avatar_for_web_settings(state, request.params),
+        "clear_agent_avatar" => ide_chat_clear_agent_avatar_for_web_settings(state, request.params),
+        "set_agent_private_memory_enabled" => {
+            ide_chat_set_agent_private_memory_enabled_for_web_settings(state, request.params)
+        }
+        "read_chat_image_data_url" => (|| -> Result<Value, String> {
+            let input = ide_chat_parse_param_field::<ChatImageDataUrlInput>(request.params, "input")?;
+            ide_chat_serialize(read_chat_image_data_url_inner(input, state)?)
+        })(),
+        "read_avatar_data_url" => (|| -> Result<Value, String> {
+            let input = ide_chat_parse_param_field::<AvatarDataPathInput>(request.params, "input")?;
+            ide_chat_serialize(read_avatar_data_url_inner(input, state)?)
+        })(),
         "save_agents" => ide_chat_save_agents_for_web_settings(state, app, request.params),
         "load_chat_settings" => ide_chat_load_chat_settings_for_web_settings(state),
         "save_chat_settings" => ide_chat_save_chat_settings_for_web_settings(state, app, request.params),
@@ -269,18 +330,90 @@ async fn ide_chat_handle_jsonrpc_request(
         "test_memory_rerank_provider" => ide_chat_test_memory_rerank_provider_for_web_settings(state, request.params),
         "get_image_text_cache_stats" => ide_chat_get_image_text_cache_stats_for_web_settings(state),
         "clear_image_text_cache" => ide_chat_clear_image_text_cache_for_web_settings(state),
+        "check_tools_status" => ide_chat_check_tools_status_for_web_settings(state, request.params),
+        "list_terminal_shell_candidates" => {
+            ide_chat_list_terminal_shell_candidates_for_web_settings(state)
+        }
         "list_tool_catalog" => ide_chat_list_tool_catalog_for_web_settings(state).await,
         "list_department_permission_catalog" => ide_chat_list_department_permission_catalog_for_web_settings(state).await,
         "get_app_version" => Ok(serde_json::json!(env!("CARGO_PKG_VERSION").to_string())),
+        "stt_transcribe" => ide_chat_stt_transcribe_for_web_settings(state, request.params).await,
         "get_project_repository_url" => Ok(serde_json::json!(GITHUB_REPO_PAGE.to_string())),
         "fetch_project_changelog_markdown" => fetch_project_changelog_markdown().await.and_then(ide_chat_serialize),
         "get_web_access_info" => ide_chat_web_access_info_for_web_settings(app, state, ide_context_runtime).await,
+        "transport.accessInfo" => ide_chat_web_access_info_for_web_settings(app, state, ide_context_runtime).await,
         "list_recent_runtime_logs" => list_recent_runtime_logs().and_then(ide_chat_serialize),
+        "list_runtime_logs_since" => {
+            let since_created_at = request
+                .params
+                .get("sinceCreatedAt")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string);
+            list_runtime_logs_since(since_created_at).and_then(ide_chat_serialize)
+        }
+        "append_runtime_log_probe" => {
+            let message = request
+                .params
+                .get("message")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string);
+            append_runtime_log_probe(message).and_then(ide_chat_serialize)
+        }
         "clear_recent_runtime_logs" => clear_recent_runtime_logs().and_then(ide_chat_serialize),
         "set_github_update_method" => ide_chat_set_github_update_method_for_web_settings(state, app, request.params),
         "set_skipped_github_update_version" => {
             ide_chat_set_skipped_github_update_version_for_web_settings(state, app, request.params)
         },
+        "get_storage_usage_overview" => {
+            ide_chat_get_storage_usage_overview_for_web_settings(state).await
+        }
+        "refresh_storage_usage_overview" => {
+            ide_chat_refresh_storage_usage_overview_for_web_settings(state).await
+        }
+        "cleanup_storage_legacy_items" => {
+            ide_chat_cleanup_storage_legacy_items_for_web_settings(state, request.params)
+        }
+        "export_config_migration_package" | "configMigration.export" => {
+            ide_chat_parse_param_field::<ExportConfigMigrationPackageInput>(
+                request.params,
+                "input",
+            )
+            .and_then(|input| export_config_migration_package_for_web(input, state)
+                .map_err(migration_command_error_for_web))
+            .and_then(ide_chat_serialize)
+        }
+        "preview_import_config_migration_package" | "configMigration.preview" => {
+            ide_chat_parse_param_field::<PreviewImportConfigMigrationPackageInput>(
+                request.params,
+                "input",
+            )
+            .and_then(|input| preview_import_config_migration_package_for_web(input, state)
+                .map_err(migration_command_error_for_web))
+            .and_then(ide_chat_serialize)
+        }
+        "apply_import_config_migration_package" | "configMigration.apply" => {
+            ide_chat_parse_param_field::<ApplyImportConfigMigrationPackageInput>(
+                request.params,
+                "input",
+            )
+            .and_then(|input| apply_import_config_migration_package_inner(input, app, state)
+                .map_err(migration_command_error_for_web))
+            .and_then(ide_chat_serialize)
+        }
+        "codex_get_auth_status" => {
+            ide_chat_codex_get_auth_status_for_web_settings(request.params).await
+        }
+        "codex_start_oauth_login" => {
+            ide_chat_codex_start_oauth_login_for_web_settings(request.params).await
+        }
+        "codex_get_rate_limits" => {
+            ide_chat_codex_get_rate_limits_for_web_settings(request.params).await
+        }
+        "codex_consume_rate_limit_reset_credit" => {
+            ide_chat_codex_consume_rate_limit_reset_credit_for_web_settings(request.params).await
+        }
+        "codex_logout" => ide_chat_codex_logout_for_web_settings(request.params),
+        "generate_image" => ide_chat_generate_image_for_web_settings(state, request.params).await,
         "list_memories" => ide_chat_list_memories_for_web_settings(state),
         "delete_memory" => ide_chat_delete_memory_for_web_settings(state, request.params),
         "search_memories_mixed" => ide_chat_search_memories_mixed_for_web_settings(state, request.params),
@@ -339,6 +472,22 @@ async fn ide_chat_handle_jsonrpc_request(
         "remote_im_weixin_oc_get_login_status" => ide_chat_remote_im_weixin_oc_get_login_status_for_web_settings(state, request.params).await,
         "remote_im_weixin_oc_sync_contacts" => ide_chat_remote_im_weixin_oc_sync_contacts_for_web_settings(state, request.params).await,
         "remote_im_weixin_oc_logout" => ide_chat_remote_im_weixin_oc_logout_for_web_settings(state, request.params).await,
+        "remote_im_get_default_group_response_guidance" => {
+            ide_chat_remote_im_default_group_response_guidance_for_web_settings()
+        }
+        "remote_im_patch_contact_settings" => {
+            ide_chat_remote_im_patch_contact_settings_for_web_settings(state, request.params)
+        }
+        "remote_im_reconfigure_channel_behavior" => {
+            ide_chat_remote_im_reconfigure_channel_behavior_for_web_settings(state, request.params)
+        }
+        "remoteIm.dashboard.subscribe" => {
+            remote_im_subscribe_contact_dashboard_for_web(state, request.params, client_id)
+        }
+        "remoteIm.dashboard.sync" => remote_im_sync_contact_dashboard_for_web(state, request.params),
+        "remoteIm.dashboard.unsubscribe" => {
+            remote_im_unsubscribe_contact_dashboard_for_web(request.params, client_id)
+        }
         "chat.queueAttachment" => ide_chat_queue_attachment(state, request.params).await,
         "chat.send" => ide_chat_send_message(state, request.params).await,
         "chat.stop" => ide_chat_stop_conversation(state, request.params),
@@ -358,15 +507,30 @@ async fn ide_chat_handle_jsonrpc_request(
         "mark_chat_queue_event_guided" => ide_chat_mark_queue_event_guided(state, request.params),
         "get_conversation_fast_request_turns" => ide_chat_conversation_fast_request_turns_command(state, request.params),
         "get_conversation_runtime_snapshot" => ide_chat_conversation_runtime_snapshot(state, request.params),
-        "get_foreground_conversation_light_snapshot" => ide_chat_conversation_light_snapshot_command(state, request.params).await,
+        "conversation.foregroundLightSnapshot" => {
+            ide_chat_conversation_light_snapshot_command(state, request.params).await
+        }
+        "get_foreground_conversation_light_snapshot" => {
+            ide_chat_conversation_light_snapshot_command(state, request.params).await
+        }
         "get_foreground_conversation_freshness_snapshot" => ide_chat_conversation_freshness_snapshot_command(state, request.params).await,
         "get_unarchived_conversation_block_page" => ide_chat_conversation_block_page_command(state, request.params),
         "get_unarchived_conversation_message_by_id" => ide_chat_conversation_message_by_id_command(state, request.params),
         "get_active_conversation_messages_before" => ide_chat_conversation_messages_before_command(state, request.params),
+        "request_conversation_messages_after_async" =>
+            ide_chat_parse_param_field::<RequestConversationMessagesAfterAsyncInput>(
+                request.params,
+                "input",
+            )
+            .and_then(|input| request_conversation_messages_after_async_inner(input, state))
+            .and_then(ide_chat_serialize),
         "mark_conversation_read" => ide_chat_mark_conversation_read_command(state, request.params),
         "set_active_unarchived_conversation" => ide_chat_set_active_conversation_command(state, request.params),
         "rebind_unarchived_conversation_recipient" => ide_chat_rebind_conversation_command(state, request.params),
         "rewind_conversation_from_message" => ide_chat_rewind_conversation_command(state, request.params).await,
+        "preview_rewind_conversation_from_message" => {
+            ide_chat_preview_rewind_conversation(state, request.params).await
+        }
         "set_conversation_plan_mode" => ide_chat_set_plan_mode_command(state, request.params),
         "set_conversation_preferred_model" => ide_chat_set_preferred_model_command(state, request.params),
         "confirm_plan_and_continue" => ide_chat_confirm_plan_command(state, request.params).await,
@@ -380,7 +544,12 @@ async fn ide_chat_handle_jsonrpc_request(
         "get_archive_summary" => ide_chat_archive_summary_command(state, request.params),
         "delete_archive" => ide_chat_delete_archive_command(state, request.params),
         "unarchive_archive" => ide_chat_unarchive_command(state, request.params),
-        "archive_conversation" => ide_chat_archive_conversation_command(state, request.params).await,
+        "conversation.archive" => {
+            ide_chat_archive_conversation_command(state, request.params).await
+        }
+        "archive_conversation" => {
+            ide_chat_archive_conversation_command(state, request.params).await
+        }
         "batch_archive_conversations" => ide_chat_batch_archive_command(state, request.params).await,
         "list_conversation_delegate_statuses" => ide_chat_delegate_statuses_command(state, request.params),
         "abort_delegate_conversation" => ide_chat_delegate_abort_command(state, request.params),
@@ -390,19 +559,29 @@ async fn ide_chat_handle_jsonrpc_request(
         "create_conversation_branch_from_message" => ide_chat_branch_message_command(state, request.params).await,
         "submit_user_async_delegate" => ide_chat_submit_delegate_command(state, request.params).await,
         "delete_unarchived_conversation" => ide_chat_delete_unarchived_command(state, request.params).await,
+        "create_side_chat_conversation" => {
+            ide_chat_create_side_chat_conversation(state, request.params).await
+        }
         "export_conversation_share_json" => ide_chat_export_conversation_share_command(state, request.params),
+        "conversation.exportShare" => ide_chat_export_conversation_share_command(state, request.params),
         "import_archives_from_json" => ide_chat_import_archives_command(state, request.params),
+        "conversation.importArchives" => ide_chat_import_archives_command(state, request.params),
         "import_agent_memories" => ide_chat_import_agent_memories_command(state, request.params),
         "remote_im_get_contact_conversation_block_page" => ide_chat_remote_im_block_page_command(state, request.params),
+        "remoteIm.conversation.blockPage" => ide_chat_remote_im_block_page_command(state, request.params),
         "remote_im_clear_contact_conversation" => ide_chat_remote_im_clear_conversation_command(state, request.params),
+        "remoteIm.conversation.clear" => ide_chat_remote_im_clear_conversation_command(state, request.params),
         "frontend_ready_start_remote_im_services" => ide_chat_frontend_ready_remote_im_command(app).await,
+        "remoteIm.services.start" => ide_chat_frontend_ready_remote_im_command(app).await,
         "forward_unarchived_conversation_selection" => ide_chat_forward_selection_command(state, request.params),
         "forward_selection_to_remote_im_contact" => ide_chat_forward_remote_contact_command(state, request.params),
         "rename_unarchived_conversation" => ide_chat_rename_conversation_command(state, request.params),
         "toggle_unarchived_conversation_pin" => ide_chat_toggle_pin_command(state, request.params),
         "set_conversation_auto_push_remote_contact" => ide_chat_set_auto_push_command(state, request.params),
         "set_department_primary_api_config" => ide_chat_set_department_primary_api_command(state, app, request.params),
+        "department.primaryApi.set" => ide_chat_set_department_primary_api_command(state, app, request.params),
         "set_ui_language" => ide_chat_set_ui_language_command(state, app, request.params),
+        "app.language.set" => ide_chat_set_ui_language_command(state, app, request.params),
         "dump_memory_cache_stats" => ide_chat_dump_memory_cache_stats_command(state),
         "list_unarchived_conversations_changed_since" => ide_chat_conversation_changed_since_command(state, request.params).await,
         "search_memories_recall" => ide_chat_search_memories_recall_command(state, request.params),
@@ -539,8 +718,6 @@ mod web_native_capability_tests {
         for method in [
             "read_file_reader_file",
             "read_local_chat_image_original",
-            "conversation.plan.readFile",
-            "conversation.rewindPreview",
             "open_storage_usage_item_directory",
             "mcp_open_workspace_dir",
             "migrate_shell_workspace_directory",
@@ -554,36 +731,12 @@ mod web_native_capability_tests {
             "start_github_update",
             "cancel_github_update",
             "apply_prepared_github_update",
-            "get_storage_usage_overview",
-            "refresh_storage_usage_overview",
-            "cleanup_storage_legacy_items",
-            "export_config_migration_package",
             "export_memories_to_path",
             "export_agent_private_memories",
-            "set_agent_private_memory_enabled",
-            "preview_import_config_migration_package",
-            "apply_import_config_migration_package",
-            "codex_get_auth_status",
-            "codex_start_oauth_login",
-            "codex_get_rate_limits",
-            "codex_consume_rate_limit_reset_credit",
-            "codex_logout",
-            "read_avatar_data_url",
-            "save_agent_avatar",
-            "clear_agent_avatar",
-            "check_tools_status",
-            "list_terminal_shell_candidates",
             "bind_active_chat_view_stream",
             "probe_active_chat_view_stream",
             "unbind_active_chat_view_stream",
-            "request_conversation_messages_after_async",
             "set_chat_window_active",
-            "preview_rewind_conversation_from_message",
-            "check_message_store_migration",
-            "run_message_store_migration",
-            "convert_private_agent_to_main",
-            "get_chat_shell_workspace",
-            "update_chat_shell_workspace_layout",
         ] {
             assert!(
                 ide_chat_web_native_only_method(method),
@@ -604,10 +757,18 @@ mod web_native_capability_tests {
             "conversation.resumeSubscription",
             "conversation.streamProbe",
             "workspace.list",
+            "check_git_workspace_root",
+            "get_chat_shell_workspace",
+            "update_chat_shell_workspace_layout",
             "workspace.directory.list",
             "fileReader.directory.list",
             "fileReader.readFile",
             "fileReader.readFileBlock",
+            "conversation.plan.readFile",
+            "conversation.rewindPreview",
+            "conversation.archive",
+            "conversation.compact",
+            "conversation.foregroundLightSnapshot",
             "chat.send",
             "remote_im_list_contacts",
             "task.list",
@@ -634,6 +795,7 @@ mod web_native_capability_tests {
             "get_unarchived_conversation_block_page",
             "get_unarchived_conversation_message_by_id",
             "get_active_conversation_messages_before",
+            "request_conversation_messages_after_async",
             "mark_conversation_read",
             "set_active_unarchived_conversation",
             "rebind_unarchived_conversation_recipient",
@@ -661,6 +823,37 @@ mod web_native_capability_tests {
             "create_conversation_branch_from_message",
             "submit_user_async_delegate",
             "delete_unarchived_conversation",
+            "read_chat_image_data_url",
+            "read_avatar_data_url",
+            "messageStore.migration.check",
+            "messageStore.migration.run",
+            "stt_transcribe",
+            "get_storage_usage_overview",
+            "refresh_storage_usage_overview",
+            "cleanup_storage_legacy_items",
+            "configMigration.export",
+            "configMigration.preview",
+            "configMigration.apply",
+            "export_config_migration_package",
+            "preview_import_config_migration_package",
+            "apply_import_config_migration_package",
+            "codex_get_auth_status",
+            "codex_start_oauth_login",
+            "codex_get_rate_limits",
+            "codex_consume_rate_limit_reset_credit",
+            "codex_logout",
+            "save_agent_avatar",
+            "clear_agent_avatar",
+            "generate_image",
+            "check_tools_status",
+            "list_terminal_shell_candidates",
+            "preview_rewind_conversation_from_message",
+            "convert_private_agent_to_main",
+            "set_agent_private_memory_enabled",
+            "remote_im_get_default_group_response_guidance",
+            "remote_im_patch_contact_settings",
+            "remote_im_reconfigure_channel_behavior",
+            "create_side_chat_conversation",
         ] {
             assert!(
                 !ide_chat_web_native_only_method(method),

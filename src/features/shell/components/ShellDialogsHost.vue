@@ -3,6 +3,11 @@ import { useI18n } from "vue-i18n";
 import { Star } from "@lucide/vue";
 import type { RuntimeLogEntry } from "../../../types/app";
 import RuntimeLogsDialog from "./RuntimeLogsDialog.vue";
+import ConversationMaintenanceDialog from "../../chat/components/dialogs/ConversationMaintenanceDialog.vue";
+import type {
+  TrimCompactionPreviewResult,
+  TrimPreviewResult,
+} from "../../chat/composables/use-conversation-maintenance-dialog";
 
 type UpdateDialogKind = "error" | "info" | "warning";
 type UpdateDialogPrimaryAction = "force" | "download" | "restart" | null | undefined;
@@ -13,23 +18,6 @@ type ArchiveImportPreview = {
   imported: number;
   replaced: number;
 } | null;
-type TrimPreviewResult = {
-  conversationId?: string;
-  canArchive: boolean;
-  canDropConversation?: boolean;
-  deleteOnly?: boolean;
-  messageCount: number;
-  bodyTextLength?: number;
-  hasAssistantReply: boolean;
-  isEmpty?: boolean;
-  archiveDisabledReason?: string | null;
-} | null;
-type TrimCompactionPreviewResult = {
-  canCompact: boolean;
-  contextUsagePercent: number;
-  compactionDisabledReason?: string | null;
-} | null;
-
 const props = defineProps<{
   updateDialogOpen: boolean;
   updateDialogTitle: string;
@@ -58,8 +46,8 @@ const props = defineProps<{
   skillPlaceholderDialogOpen: boolean;
   trimActionDialogOpen: boolean;
   trimPreviewLoading: boolean;
-  trimPreview: TrimPreviewResult;
-  trimCompactionPreview: TrimCompactionPreviewResult;
+  trimPreview: TrimPreviewResult | null;
+  trimCompactionPreview: TrimCompactionPreviewResult | null;
   trimming: boolean;
 }>();
 
@@ -292,73 +280,15 @@ function canShowUpdateSecondaryActions() {
     </form>
   </dialog>
 
-  <dialog class="modal" :class="{ 'modal-open': trimActionDialogOpen }">
-    <div class="modal-box w-[80vw] max-w-[80vw]">
-      <div class="flex items-center justify-between gap-4">
-        <h3 class="font-semibold text-base">{{ t("dialogs.trim.title") }}</h3>
-        <div class="flex shrink-0 items-center gap-3 text-xs opacity-60">
-          <span>{{ t("dialogs.trim.messageCount", { count: trimPreview?.messageCount ?? 0 }) }}</span>
-          <span>{{ t("dialogs.trim.contextUsage", { percent: trimCompactionPreview?.contextUsagePercent ?? 0 }) }}</span>
-        </div>
-      </div>
-      <div v-if="trimPreviewLoading" class="mt-3 text-sm opacity-70">{{ t("dialogs.trim.loading") }}</div>
-      <template v-else>
-        <div class="mt-3 rounded-box border border-base-300 bg-base-200/40 px-3 py-3 text-sm">
-          <div class="font-medium">{{ t("dialogs.trim.compactTitle") }}</div>
-          <div class="mt-1 opacity-80">{{ t("dialogs.trim.compactSummary") }}</div>
-          <div class="mt-2 text-xs opacity-70">{{ t("dialogs.trim.compactHint") }}</div>
-          <div
-            v-if="trimCompactionPreview?.compactionDisabledReason"
-            class="mt-3 rounded border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning"
-          >
-            {{ trimCompactionPreview.compactionDisabledReason }}
-          </div>
-        </div>
-        <div class="mt-3 rounded-box border border-base-300 bg-base-200/40 px-3 py-3 text-sm">
-          <div class="font-medium">{{ t("dialogs.trim.archiveTitle") }}</div>
-          <div class="mt-1 opacity-80">{{ t("dialogs.trim.archiveSummary") }}</div>
-          <div class="mt-2 text-xs opacity-70">{{ t("dialogs.trim.archiveHint") }}</div>
-          <div
-            v-if="trimPreview?.archiveDisabledReason"
-            class="mt-3 rounded border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning"
-          >
-            {{ trimPreview.archiveDisabledReason }}
-          </div>
-        </div>
-      </template>
-      <div class="mt-4 flex items-center justify-between gap-4">
-        <div class="flex items-center gap-2">
-          <button
-            class="btn btn-sm btn-error"
-            :disabled="trimPreviewLoading || !trimPreview?.canDropConversation || trimming"
-            @click="handleConfirmTrimDeleteAction"
-          >
-            {{ t("common.delete") }}
-          </button>
-          <button
-            class="btn btn-sm btn-secondary"
-            :disabled="trimPreviewLoading || !trimPreview?.canArchive || trimming"
-            @click="handleConfirmTrimAction"
-          >
-            {{ t("dialogs.trim.archiveTitle") }}
-          </button>
-        </div>
-        <div class="flex items-center gap-2">
-          <button
-            class="btn btn-sm btn-primary"
-            :disabled="trimPreviewLoading || !trimCompactionPreview?.canCompact || trimming"
-            @click="handleConfirmTrimCompactionAction"
-          >
-            {{ t("dialogs.trim.compactTitle") }}
-          </button>
-          <button class="btn btn-sm" :disabled="trimPreviewLoading || trimming" @click="handleCloseTrimActionDialog">
-            {{ t("common.cancel") }}
-          </button>
-        </div>
-      </div>
-    </div>
-    <form method="dialog" class="modal-backdrop">
-      <button @click.prevent="handleCloseTrimActionDialog">close</button>
-    </form>
-  </dialog>
+  <ConversationMaintenanceDialog
+    :open="trimActionDialogOpen"
+    :loading="trimPreviewLoading"
+    :running="trimming"
+    :preview="trimPreview"
+    :compaction-preview="trimCompactionPreview"
+    @close="handleCloseTrimActionDialog"
+    @confirm-compaction="handleConfirmTrimCompactionAction"
+    @confirm-archive="handleConfirmTrimAction"
+    @confirm-delete="handleConfirmTrimDeleteAction"
+  />
 </template>

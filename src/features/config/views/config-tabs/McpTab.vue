@@ -14,7 +14,7 @@
             </option>
           </select>
           <button class="btn btn-sm bg-base-200 shrink-0" type="button" @click="reloadServers" :disabled="loading">{{ t('config.mcp.refresh') }}</button>
-          <button v-if="tauriRuntimeAvailable" class="btn btn-sm btn-primary shrink-0" type="button" @click="openMcpDir" :disabled="loading">{{ t('config.mcp.openDir') }}</button>
+          <button v-if="localFileSystemAvailable" class="btn btn-sm btn-primary shrink-0" type="button" @click="openMcpDir" :disabled="loading">{{ t('config.mcp.openDir') }}</button>
           <button class="btn btn-sm btn-primary shrink-0" type="button" @click="addServer">{{ t('config.mcp.add') }}</button>
         </div>
       </div>
@@ -43,7 +43,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../../services/tauri-api";
+import { getTransportCapabilities, invokeTauri, openTransportMcpWorkspaceDirectory } from "../../../../services/tauri-api";
 import type {
   McpDefinitionValidateResult,
   McpListServerToolsResult,
@@ -67,7 +67,7 @@ const statusText = ref("");
 const statusError = ref(false);
 const servers = ref<McpServerView[]>([]);
 const selectedServerId = ref("");
-const tauriRuntimeAvailable = isTauriRuntimeAvailable();
+const localFileSystemAvailable = getTransportCapabilities().localFileSystem;
 
 const selectedServer = computed(() =>
   servers.value.find((s) => s.id === selectedServerId.value) ?? null,
@@ -296,10 +296,10 @@ async function refreshTools(serverId: string) {
 }
 
 async function openMcpDir() {
-  if (!tauriRuntimeAvailable || loading.value) return;
+  if (!localFileSystemAvailable || loading.value) return;
   loading.value = true;
   try {
-    const opened = await invokeTauri<string>("mcp_open_workspace_dir");
+    const opened = await openTransportMcpWorkspaceDirectory();
     setStatus(t("config.mcp.openDirOpened", { path: opened }));
   } catch (error) {
     setStatus(t("config.mcp.openDirFailed", { err: toErrorMessage(error) }), true);

@@ -1,5 +1,4 @@
-import { Channel } from "@tauri-apps/api/core";
-import { ref } from "vue";
+import { onBeforeUnmount, ref } from "vue";
 import type { AssistantStreamBlock, ChatMessage } from "../../../types/app";
 import { normalizeAssistantStreamBlocks } from "../../../utils/chat-message-semantics";
 import { useChatFlowChannelBinding } from "./use-chat-flow-channel-binding";
@@ -65,6 +64,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
   let activeActivationId = "";
   let recentlyCompletedActivationId = "";
   let recentlyCompletedRequestId = "";
+  let stoppedRound: { conversationId: string; messageId: string; activationId: string } | null = null;
   let activeRoundAgentId = "";
   let queuedStreamingState: {
     assistantText: string;
@@ -126,6 +126,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     loadStreamBlocksFromMessage,
     removeLegacyAssistantDrafts,
     removeMessage,
+    settleStreamingAssistantMessages,
     syncStreamBlocksToMessage,
     updateMessageText,
     updateQueuedAssistantMessageStatus,
@@ -334,7 +335,13 @@ export function useChatFlow(options: UseChatFlowOptions) {
     hasRecentlyCompletedRoundIds,
     markRecentlyCompletedRoundIds,
     matchesRecentlyCompletedRoundIds,
+    hasStoppedRound,
+    matchesStoppedRound,
+    clearStoppedRound: () => {
+      stoppedRound = null;
+    },
     getRound: () => round,
+    setRound,
     getSendChatActiveGen: () => sendChatActiveGen,
     nextGeneration: () => ++generation,
     channelBinding: coordinatedChannelBinding,
@@ -347,6 +354,15 @@ export function useChatFlow(options: UseChatFlowOptions) {
     clearFrontendDispatchTimer,
     onReloadMessages: options.onReloadMessages,
     onAssistantMessageCompleted: options.onAssistantMessageCompleted,
+    applyStoppedAssistantMessage: async (assistantMessage) => {
+      const messageId = String(assistantMessage?.id || "").trim();
+      if (!messageId || !matchesStoppedRound({ assistantMessageId: messageId })) return;
+      finalizeMessage(messageId, assistantMessage);
+      const conversationId = String(options.getConversationId ? options.getConversationId() : "").trim();
+      if (conversationId && options.onAssistantMessageCompleted) {
+        await options.onAssistantMessageCompleted({ conversationId, assistantMessage });
+      }
+    },
     setChatErrorText,
     formatRequestFailed: options.formatRequestFailed,
     latestAssistantText: options.latestAssistantText,
@@ -361,6 +377,28 @@ export function useChatFlow(options: UseChatFlowOptions) {
     syncStreamBlocksToMessage,
     updateMessageText,
   });
+  function handleExternalRoundFinished(payload: unknown) {
+    const value = payload && typeof payload === "object" ? payload as Record<string, unknown> : null;
+    const status = String(value?.status || "").trim();
+    if (status === "failed" || String(value?.error || "").trim()) {
+      return externalEvents.handleExternalRoundFailed(payload);
+    }
+    return externalEvents.handleExternalRoundCompleted(payload);
+  }
+  const externalEventUnsubscribers = options.subscribeExternalEvents
+    ? [
+        ["chat.historyFlushed", externalEvents.handleExternalHistoryFlushed],
+        ["chat.roundStarted", externalEvents.handleExternalRoundStarted],
+        ["chat.assistantDelta", externalEvents.handleExternalAssistantDelta],
+        ["chat.roundFinished", handleExternalRoundFinished],
+        ["chat.streamRebindRequired", externalEvents.handleExternalStreamRebindRequired],
+      ].map(([method, handler]) => options.subscribeExternalEvents!(method as string, handler as (payload: unknown) => void))
+    : [];
+  if (externalEventUnsubscribers.length > 0) {
+    onBeforeUnmount(() => {
+      for (const unsubscribe of externalEventUnsubscribers) unsubscribe();
+    });
+  }
   const stopController = useChatFlowStop({
     chatting: options.chatting,
     latestAssistantText: options.latestAssistantText,
@@ -371,7 +409,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
     getSession: options.getSession,
     getConversationId: options.getConversationId,
     invokeStopChatMessage: options.invokeStopChatMessage,
-    t: options.t,
     getRound: () => round,
     setRound,
     advanceGeneration: () => {
@@ -389,12 +426,21 @@ export function useChatFlow(options: UseChatFlowOptions) {
     setActiveActivationId: (value) => {
       activeActivationId = value;
     },
+    getActiveActivationId: () => activeActivationId,
     setActiveRoundAgentId: (value: string) => {
       activeRoundAgentId = String(value || "").trim();
+    },
+    markStoppedRound: ({ messageId, activationId }) => {
+      stoppedRound = {
+        conversationId: String(options.getConversationId ? options.getConversationId() : "").trim(),
+        messageId: String(messageId || "").trim(),
+        activationId: String(activationId || "").trim(),
+      };
     },
     clearFrontendDispatchTimer,
     getPendingUserDraftId,
     removeMessage,
+    settleStreamingAssistantMessages,
     finalizeMessage,
     updateMessageText,
     deleteSendStartedAtMs: (gen) => {
@@ -636,6 +682,30 @@ export function useChatFlow(options: UseChatFlowOptions) {
     );
   }
 
+  function matchesStoppedRound(input: {
+    assistantMessageId?: string;
+    activationId?: string;
+    requestId?: string;
+  }): boolean {
+    const currentStoppedRound = stoppedRound;
+    if (!currentStoppedRound || !hasStoppedRound()) return false;
+    const incomingMessageId = String(input.assistantMessageId || "").trim();
+    if (incomingMessageId) return incomingMessageId === currentStoppedRound.messageId;
+    const incomingIds = [
+      String(input.activationId || "").trim(),
+      String(input.requestId || "").trim(),
+    ].filter(Boolean);
+    if (incomingIds.length === 0) return true;
+    if (!currentStoppedRound.activationId) return true;
+    return incomingIds.includes(currentStoppedRound.activationId);
+  }
+
+  function hasStoppedRound(): boolean {
+    if (!stoppedRound) return false;
+    const conversationId = String(options.getConversationId ? options.getConversationId() : "").trim();
+    return !!conversationId && stoppedRound.conversationId === conversationId;
+  }
+
   // =========================================================================
   // 显示状态重置（只在 history_flushed 清屏时调用）
   // =========================================================================
@@ -665,18 +735,22 @@ export function useChatFlow(options: UseChatFlowOptions) {
   }
 
   function ensureForegroundWaitingRound(statusText = options.t("chat.statusWaitingReply")) {
+    if (hasStoppedRound()) return 0;
     return foregroundRounds?.ensureForegroundWaitingRound(statusText) ?? 0;
   }
 
   function ensureForegroundStreamingRound() {
+    if (hasStoppedRound()) return 0;
     return foregroundRounds?.ensureForegroundStreamingRound() ?? 0;
   }
 
   function resumeForegroundRuntimeRound(input?: ResumeForegroundRuntimeRoundInput) {
+    if (hasStoppedRound()) return 0;
     return foregroundRounds?.resumeForegroundRuntimeRound(input) ?? 0;
   }
 
   function resumeForegroundStreamCacheProjection(input?: { conversationId?: string | null; reason?: string }) {
+    if (hasStoppedRound()) return 0;
     return foregroundRounds?.resumeForegroundStreamCacheProjection(input) ?? 0;
   }
 
@@ -702,6 +776,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
       submitPending.value = false;
     }
     const flushed = readHistoryFlushedPayload(parsed.message);
+    if (flushed?.activateAssistant && hasStoppedRound()) return;
     if (flushed && options.onHistoryFlushed) {
       await options.onHistoryFlushed({
         conversationId: flushed.conversationId,
@@ -757,6 +832,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
   // =========================================================================
 
   async function sendChat(overrides?: SendChatOverrides) {
+    stoppedRound = null;
     clearContextUsagePreview();
     await sendController.sendChat(overrides);
   }
@@ -787,6 +863,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     handleExternalRoundCompleted: externalEvents.handleExternalRoundCompleted,
     handleExternalRoundFailed: externalEvents.handleExternalRoundFailed,
     handleExternalAssistantDelta: externalEvents.handleExternalAssistantDelta,
+    handleExternalRoundFinished,
     frontendRoundPhase,
     submitPending,
     reasoningStartedAtMs,

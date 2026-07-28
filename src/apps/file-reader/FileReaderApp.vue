@@ -98,18 +98,25 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { emitTo, listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { FilePlus, FileText, Minus, Square, X } from "@lucide/vue";
-import { open } from "@tauri-apps/plugin-dialog";
 import { useI18n } from "vue-i18n";
 import FileReaderPanel from "../../features/file-reader/components/FileReaderPanel.vue";
 import type { AppThemeState } from "../../features/shell/theme/theme-types";
 import { isDarkAppTheme, useAppTheme } from "../../features/shell/composables/use-app-theme";
 import Win10ResizeHandles from "../../features/shell/components/Win10ResizeHandles.vue";
-import { invokeTauri } from "../../services/tauri-api";
+import {
+  currentTransportWindowIsMaximized,
+  emitTransportEventTo,
+  hideCurrentTransportWindow,
+  invokeTauri,
+  getTransportLaunchParameter,
+  minimizeCurrentTransportWindow,
+  onTransportNotification,
+  openTransportFileDialog,
+  openTransportWindow,
+  toggleCurrentTransportWindowMaximize,
+} from "../../services/tauri-api";
 import type { IdeContextReferenceItem } from "../../types/app";
-import { FILE_READER_ADD_TO_CHAT_EVENT } from "../../features/file-reader/file-reader-context";
 
 const FILE_READER_SESSION_STORAGE_KEY = "easy_call.file_reader_session.v1";
 const LEGACY_FILE_READER_SESSION_STORAGE_KEY = "easy-call:file-reader-session:v1";
@@ -122,19 +129,18 @@ type FileReaderSessionState = {
 
 const { applyTheme, currentTheme, restoreThemeFromStorage } = useAppTheme();
 const { t } = useI18n();
-const appWindow = getCurrentWindow();
 const maximized = ref(false);
 const fileReaderPanelRef = ref<InstanceType<typeof FileReaderPanel> | null>(null);
 const markdownIsDark = computed(() => isDarkAppTheme(currentTheme.value));
 const tabMenu = ref<{ path: string; x: number; y: number } | null>(null);
 
-let unlistenOpenPath: UnlistenFn | null = null;
-let unlistenThemeChanged: UnlistenFn | null = null;
+let unlistenOpenPath: (() => void) | null = null;
+let unlistenThemeChanged: (() => void) | null = null;
 
 async function addContextReferenceToChat(reference: IdeContextReferenceItem) {
   try {
-    await invokeTauri("show_chat_window");
-    await emitTo("chat", FILE_READER_ADD_TO_CHAT_EVENT, reference);
+    await openTransportWindow("chat");
+    await emitTransportEventTo("chat", "fileReader.addToChat", reference);
   } catch (error) {
     console.error("[文件阅读器] 添加选区到聊天失败", error);
   }
@@ -262,31 +268,31 @@ async function restoreFileReaderSession(loadActiveTab: boolean) {
 }
 
 async function pickFile() {
-  const picked = await open({ multiple: false, directory: false, title: "打开文件" });
+  const picked = await openTransportFileDialog({ multiple: false, directory: false, title: "打开文件" });
   if (!picked || Array.isArray(picked)) return;
   await fileReaderPanelRef.value?.openPath(String(picked));
 }
 
 async function syncWindowState() {
   try {
-    maximized.value = await appWindow.isMaximized();
+    maximized.value = await currentTransportWindowIsMaximized();
   } catch {
     maximized.value = false;
   }
 }
 
 async function minimizeWindow() {
-  await appWindow.minimize();
+  await minimizeCurrentTransportWindow();
 }
 
 async function toggleMaximizeWindow() {
-  await appWindow.toggleMaximize();
+  await toggleCurrentTransportWindowMaximize();
   await syncWindowState();
 }
 
 async function closeWindow() {
   persistFileReaderSession();
-  await appWindow.hide();
+  await hideCurrentTransportWindow();
 }
 
 onMounted(async () => {
@@ -294,21 +300,21 @@ onMounted(async () => {
   window.addEventListener("keydown", handleWindowKeydown);
   restoreThemeFromStorage();
   try {
-    unlistenThemeChanged = await listen<AppThemeState>("easy-call:theme-changed", (event) => {
-      applyTheme(event.payload);
+    unlistenThemeChanged = onTransportNotification<AppThemeState>("theme.changed", (payload) => {
+      applyTheme(payload);
     });
   } catch (error) {
     console.error("[文件阅读窗口] 监听主题变化失败", error);
   }
   void syncWindowState();
-  const path = new URLSearchParams(window.location.search).get("path") || "";
+  const path = getTransportLaunchParameter("path");
   await restoreFileReaderSession(!path);
   if (path) {
     void fileReaderPanelRef.value?.openPath(path, { revealInDirectoryTree: true });
   }
   try {
-    unlistenOpenPath = await listen<{ path?: string }>("file-reader-open-path", (event) => {
-      void fileReaderPanelRef.value?.openPath(event.payload?.path || "", { revealInDirectoryTree: true });
+    unlistenOpenPath = onTransportNotification<{ path?: string }>("fileReader.openPath", (payload) => {
+      void fileReaderPanelRef.value?.openPath(payload?.path || "", { revealInDirectoryTree: true });
     });
   } catch (error) {
     console.error("[文件阅读窗口] 监听打开文件事件失败", error);

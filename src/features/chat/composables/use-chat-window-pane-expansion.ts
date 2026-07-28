@@ -1,5 +1,4 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { getCurrentTransportWindowInnerSize, setTransportChatPaneExpanded } from "../../../services/tauri-api";
 import { PANE_WIDTH_LIMITS } from "./use-chat-panes";
 
 export type ChatWindowPaneSide = "left" | "right";
@@ -70,7 +69,7 @@ export function useChatWindowPaneExpansion() {
 
   async function panePhysicalWidth(side: ChatWindowPaneSide, width: number) {
     const widthCss = normalizeExternalPaneCssWidth(side, width);
-    const innerSize = await getCurrentWindow().innerSize();
+    const innerSize = await getCurrentTransportWindowInnerSize();
     return cssWidthToPhysical(
       widthCss,
       window.innerWidth,
@@ -80,14 +79,9 @@ export function useChatWindowPaneExpansion() {
   }
 
   async function setExpanded(side: ChatWindowPaneSide, expanded: boolean, width: number) {
-    if (!isTauriRuntimeAvailable()) return false;
     try {
       const widthPhysical = expanded ? await panePhysicalWidth(side, width) : 1;
-      return await invokeTauri<boolean>("set_chat_window_side_expanded", {
-        side,
-        expanded,
-        widthPhysical,
-      });
+      return await setTransportChatPaneExpanded(side, expanded, widthPhysical);
     } catch (error) {
       console.warn(`[聊天侧栏] ${side === "left" ? "左侧" : "右侧"}栏窗口外扩调整失败`, error);
       return false;

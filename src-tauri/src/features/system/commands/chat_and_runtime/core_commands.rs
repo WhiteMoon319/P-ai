@@ -477,12 +477,20 @@ fn read_plan_file_content(
     path: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    read_plan_file_content_inner(&conversation_id, &path, state.inner())
+}
+
+fn read_plan_file_content_inner(
+    conversation_id: &str,
+    path: &str,
+    state: &AppState,
+) -> Result<String, String> {
     let normalized_conversation_id = conversation_id.trim();
     if normalized_conversation_id.is_empty() {
         return Err("conversationId is required.".to_string());
     }
     let resolved = resolve_plan_file_for_conversation_id(
-        state.inner(),
+        state,
         normalized_conversation_id,
         path.trim(),
     )?;

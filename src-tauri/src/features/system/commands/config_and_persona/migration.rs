@@ -791,26 +791,34 @@ fn build_imported_runtime(
     final_data
 }
 
-#[tauri::command]
-async fn export_config_migration_package(
-    input: ExportConfigMigrationPackageInput,
-    app: AppHandle,
-    state: State<'_, AppState>,
+fn migration_command_error_for_web(error: MigrationCommandError) -> String {
+    match error.code.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+        Some(code) => format!("{code}: {}", error.message),
+        None => error.message,
+    }
+}
+
+fn export_config_migration_package_to_path(
+    input: &ExportConfigMigrationPackageInput,
+    state: &AppState,
+    path: &Path,
+    source: &str,
 ) -> Result<ExportConfigMigrationPackageResult, MigrationCommandError> {
     validate_export_migration_password(&input.password)?;
     let total_started_at = std::time::Instant::now();
     runtime_log_info(format!(
-        "[迁移包导出] 开始 task=export_config_migration_package trigger=tauri_command password_present={} password_len={}",
+        "[迁移包导出] 开始，来源={}，已设置密码={}，密码长度={}",
+        source,
         !input.password.trim().is_empty(),
         input.password.chars().count()
     ));
-    let path = migration_save_path(&app).await?;
 
     let payload_started_at = std::time::Instant::now();
-    let payload = build_export_payload(state.inner())?;
+    let payload = build_export_payload(state)?;
     let payload_elapsed_ms = payload_started_at.elapsed().as_millis();
     runtime_log_debug(format!(
-        "[迁移包导出] 完成 task=export_config_migration_package trigger=tauri_command stage=build_export_payload provider_count={} api_config_count={} memory_count={} duration_ms={}",
+        "[迁移包导出] 完成，来源={}，阶段=生成数据，供应商数={}，API配置数={}，记忆数={}，耗时毫秒={}",
+        source,
         payload.config.api_providers.len(),
         payload.config.api_configs.len(),
         payload.memories.len(),
@@ -822,9 +830,10 @@ async fn export_config_migration_package(
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         exported_at: now_iso(),
     };
-    write_migration_package(&path, input.password.trim(), &manifest, &payload)?;
+    write_migration_package(path, input.password.trim(), &manifest, &payload)?;
     runtime_log_debug(format!(
-        "[迁移包导出] 完成 task=export_config_migration_package trigger=tauri_command stage=write_migration_package path={} provider_count={} api_config_count={} memory_count={} total_duration_ms={}",
+        "[迁移包导出] 完成，来源={}，阶段=写入迁移包，路径={}，供应商数={}，API配置数={}，记忆数={}，总耗时毫秒={}",
+        source,
         path.to_string_lossy(),
         payload.config.api_providers.len(),
         payload.config.api_configs.len(),
@@ -842,22 +851,68 @@ async fn export_config_migration_package(
     })
 }
 
+fn export_config_migration_package_for_web(
+    input: ExportConfigMigrationPackageInput,
+    state: &AppState,
+) -> Result<ExportConfigMigrationPackageResult, MigrationCommandError> {
+    let export_dir = migration_temp_root(state).join("exports");
+    std::fs::create_dir_all(&export_dir).map_err(|err| {
+        format!("创建迁移包导出临时目录失败 ({}): {err}", export_dir.display())
+    })?;
+    let file_name = "p-ai-migration.zip".to_string();
+    let temp_path = export_dir.join(format!("{}.zip", Uuid::new_v4()));
+    let mut result = match export_config_migration_package_to_path(
+        &input,
+        state,
+        &temp_path,
+        "Web传输",
+    ) {
+        Ok(result) => result,
+        Err(error) => {
+            let _ = std::fs::remove_file(&temp_path);
+            return Err(error);
+        }
+    };
+    let bytes_result = std::fs::read(&temp_path)
+        .map_err(|err| format!("读取迁移包导出结果失败 ({}): {err}", temp_path.display()));
+    if let Err(err) = std::fs::remove_file(&temp_path) {
+        runtime_log_warn(format!(
+            "[迁移包导出] 失败，阶段=清理临时文件，路径={}，异常={:?}",
+            temp_path.display(),
+            err
+        ));
+    }
+    let bytes = bytes_result?;
+    result.path.clear();
+    result.file_name = file_name;
+    result.bytes_base64 = encode_base64(&bytes);
+    Ok(result)
+}
+
 #[tauri::command]
-async fn preview_import_config_migration_package(
-    input: PreviewImportConfigMigrationPackageInput,
+async fn export_config_migration_package(
+    input: ExportConfigMigrationPackageInput,
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<PreviewImportConfigMigrationPackageResult, MigrationCommandError> {
-    let package_path = resolve_migration_import_path(&app, &input).await?;
-    let preview_id = Uuid::new_v4().to_string();
-    let preview_dir = migration_preview_dir(state.inner(), &preview_id);
+) -> Result<ExportConfigMigrationPackageResult, MigrationCommandError> {
+    let path = migration_save_path(&app).await?;
+    export_config_migration_package_to_path(&input, state.inner(), &path, "桌面命令")
+}
 
-    unzip_migration_package_to_dir(&package_path, input.password.trim(), &preview_dir)?;
+fn preview_import_config_migration_package_from_path(
+    input: &PreviewImportConfigMigrationPackageInput,
+    state: &AppState,
+    package_path: &Path,
+) -> Result<PreviewImportConfigMigrationPackageResult, MigrationCommandError> {
+    let preview_id = Uuid::new_v4().to_string();
+    let preview_dir = migration_preview_dir(state, &preview_id);
+
+    unzip_migration_package_to_dir(package_path, input.password.trim(), &preview_dir)?;
     let (manifest, payload) = read_preview_payload(&preview_dir)?;
     let package_version = assert_manifest_version(&manifest, &payload)?;
 
-    let current_config = state_read_config_cached(&state)?;
-    let memory_preview = preview_memory_import(state.inner(), &preview_dir, &payload.memories)?;
+    let current_config = state_read_config_cached(state)?;
+    let memory_preview = preview_memory_import(state, &preview_dir, &payload.memories)?;
     let (_, provider_added_count, provider_updated_count) =
         merge_api_providers(&current_config.api_providers, &payload.config.api_providers);
     let (_, api_config_added_count, api_config_updated_count) =
@@ -883,11 +938,50 @@ async fn preview_import_config_migration_package(
     })
 }
 
+fn preview_import_config_migration_package_for_web(
+    input: PreviewImportConfigMigrationPackageInput,
+    state: &AppState,
+) -> Result<PreviewImportConfigMigrationPackageResult, MigrationCommandError> {
+    let encoded = input
+        .package_bytes_base64
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "Web 导入迁移包必须提供文件内容。".to_string())?;
+    let bytes = decode_base64(encoded)?;
+    let upload_dir = migration_temp_root(state).join("uploads");
+    std::fs::create_dir_all(&upload_dir).map_err(|err| {
+        format!("创建迁移包上传临时目录失败 ({}): {err}", upload_dir.display())
+    })?;
+    let temp_path = upload_dir.join(format!("{}.zip", Uuid::new_v4()));
+    std::fs::write(&temp_path, bytes).map_err(|err| {
+        format!("写入迁移包上传临时文件失败 ({}): {err}", temp_path.display())
+    })?;
+    let result = preview_import_config_migration_package_from_path(&input, state, &temp_path);
+    if let Err(err) = std::fs::remove_file(&temp_path) {
+        runtime_log_warn(format!(
+            "[迁移包导入] 失败，阶段=清理上传临时文件，路径={}，异常={:?}",
+            temp_path.display(),
+            err
+        ));
+    }
+    result
+}
+
 #[tauri::command]
-fn apply_import_config_migration_package(
-    input: ApplyImportConfigMigrationPackageInput,
+async fn preview_import_config_migration_package(
+    input: PreviewImportConfigMigrationPackageInput,
     app: AppHandle,
     state: State<'_, AppState>,
+) -> Result<PreviewImportConfigMigrationPackageResult, MigrationCommandError> {
+    let package_path = resolve_migration_import_path(&app, &input).await?;
+    preview_import_config_migration_package_from_path(&input, state.inner(), &package_path)
+}
+
+fn apply_import_config_migration_package_inner(
+    input: ApplyImportConfigMigrationPackageInput,
+    app: &AppHandle,
+    state: &AppState,
 ) -> Result<ApplyImportConfigMigrationPackageResult, MigrationCommandError> {
     let preview_dir = state
         .migration_preview_dirs
@@ -900,9 +994,9 @@ fn apply_import_config_migration_package(
     let (manifest, payload) = read_preview_payload(&preview_dir)?;
     assert_manifest_version(&manifest, &payload)?;
 
-    let backup_dir = backup_current_migration_targets(state.inner())?;
-    let current_config = state_read_config_cached(&state)?;
-    let current_data = state_read_agents_runtime_snapshot(&state)?;
+    let backup_dir = backup_current_migration_targets(state)?;
+    let current_config = state_read_config_cached(state)?;
+    let current_data = state_read_agents_runtime_snapshot(state)?;
     let (
         final_config,
         provider_added_count,
@@ -910,18 +1004,18 @@ fn apply_import_config_migration_package(
         api_config_added_count,
         api_config_updated_count,
     ) = build_imported_config(&current_config, &payload.config);
-    let avatar_path_map = write_avatar_files(state.inner(), &payload.avatar_files)?;
+    let avatar_path_map = write_avatar_files(state, &payload.avatar_files)?;
     write_oauth_files(&final_config, &payload.oauth_files)?;
     let final_data = build_imported_runtime(&current_data, &payload.runtime_data, &avatar_path_map);
     let memory_stats = memory_store_import_memories(&state.data_path, &payload.memories)?;
 
-    state_write_config_cached(&state, &final_config)?;
-    state_write_agents_cached(&state, &final_data.agents)?;
-    state_write_runtime_state_cached(&state, &build_runtime_state_file(&final_data))?;
+    state_write_config_cached(state, &final_config)?;
+    state_write_agents_cached(state, &final_data.agents)?;
+    state_write_runtime_state_cached(state, &build_runtime_state_file(&final_data))?;
 
     if let Err(err) = std::fs::remove_dir_all(&preview_dir) {
         runtime_log_warn(format!(
-            "[迁移包导入] 失败 task=apply_import_config_migration_package stage=remove_preview_dir path={} err={:?}",
+            "[迁移包导入] 失败，阶段=清理预检目录，路径={}，异常={:?}",
             preview_dir.display(),
             err
         ));
@@ -938,11 +1032,20 @@ fn apply_import_config_migration_package(
         backup_dir: backup_dir.to_string_lossy().to_string(),
     };
 
-    let app_handle = app.clone();
+    let app_handle = (*app).clone();
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(300));
         graceful_restart_app(&app_handle);
     });
 
     Ok(result)
+}
+
+#[tauri::command]
+fn apply_import_config_migration_package(
+    input: ApplyImportConfigMigrationPackageInput,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<ApplyImportConfigMigrationPackageResult, MigrationCommandError> {
+    apply_import_config_migration_package_inner(input, &app, state.inner())
 }

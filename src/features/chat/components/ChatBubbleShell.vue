@@ -323,6 +323,8 @@ const surfaceStyle = computed<StyleValue | undefined>(() => {
   width: fit-content;
   max-width: 100%;
   color: var(--color-base-content);
+  font-size: var(--app-chat-message-text-size, var(--app-text-sm-size));
+  line-height: 1.5;
 }
 
 .ecall-chat-bubble-wide .ecall-chat-bubble-surface {

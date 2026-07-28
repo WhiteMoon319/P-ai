@@ -1,16 +1,13 @@
 import { computed, ref, watch, onMounted, onBeforeUnmount, type Ref } from "vue";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { invokeTauri, onTransportNotification, openTransportWindow } from "../../../services/tauri-api";
 import type { ConversationDelegateStatusSummary } from "../../../types/app";
 
 const ARCHIVE_FOCUS_REQUEST_STORAGE_KEY = "easy_call.archives.focus_request.v1";
-const DELEGATE_STATUS_UPDATED_EVENT = "easy-call:conversation-delegate-status-updated";
 
 interface UseDelegateStatusOptions {
   activeConversationId: Ref<string>;
   panelOpen: Ref<boolean>;
   enabled?: Ref<boolean>;
-  bridgeRequest?: Ref<((method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<unknown>) | undefined>;
 }
 
 type DelegateStatusUpdatedPayload = {
@@ -34,10 +31,9 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
     }));
   });
   const delegateStatusesErrorText = ref("");
-  const hasBridgeRequest = () => typeof options.bridgeRequest?.value === "function";
-  const enabled = () => options.enabled?.value !== false && (isTauriRuntimeAvailable() || hasBridgeRequest());
+  const enabled = () => options.enabled?.value !== false;
 
-  let delegateStatusUpdatedUnlisten: UnlistenFn | null = null;
+  let delegateStatusUpdatedUnlisten: (() => void) | null = null;
   let delegateClockTimer: ReturnType<typeof window.setInterval> | null = null;
   let disposed = false;
   let hydrateRequestSeq = 0;
@@ -63,12 +59,11 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
     if (!enabled() || !panelOpen.value || !conversationId || hydratedConversationId === conversationId) return;
     const seq = ++hydrateRequestSeq;
     try {
-      const statuses = hasBridgeRequest()
-        ? await options.bridgeRequest!.value!("delegate.statuses", { conversationId }, 10000) as ConversationDelegateStatusSummary[]
-        : await invokeTauri<ConversationDelegateStatusSummary[]>(
-            "list_conversation_delegate_statuses",
-            { input: { conversationId } },
-          );
+      const statuses = await invokeTauri<ConversationDelegateStatusSummary[]>(
+        "delegate.statuses",
+        { conversationId },
+        10000,
+      );
       if (seq !== hydrateRequestSeq || !panelOpen.value || activeConversationId.value.trim() !== conversationId) return;
       rawDelegateStatuses.value = Array.isArray(statuses) ? statuses : [];
       delegateClockNowMs.value = Date.now();
@@ -133,7 +128,7 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
           createdAt: Date.now(),
         }));
       }
-      await invokeTauri("show_archives_window");
+      await openTransportWindow("archives");
     } catch (error) {
       delegateStatusesErrorText.value = `打开委托归档失败：${String(error)}`;
     }
@@ -143,13 +138,7 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
     const delegateId = String(status?.delegateId || "").trim();
     if (!delegateId) return;
     try {
-      if (hasBridgeRequest()) {
-        await options.bridgeRequest!.value!("delegate.abort", { delegateId }, 10000);
-      } else {
-        await invokeTauri("abort_delegate_conversation", {
-          input: { delegateId },
-        });
-      }
+      await invokeTauri("delegate.abort", { delegateId }, 10000);
     } catch (error) {
       delegateStatusesErrorText.value = `打断委托失败：${String(error)}`;
     }
@@ -174,22 +163,12 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
   );
 
   onMounted(() => {
-    if (isTauriRuntimeAvailable()) {
-      void listen<DelegateStatusUpdatedPayload>(DELEGATE_STATUS_UPDATED_EVENT, (event) => {
-        applyStatusEvent(event.payload);
-      }).then((unlisten) => {
-        if (disposed) {
-          unlisten();
-          return;
-        }
-        delegateStatusUpdatedUnlisten = unlisten;
-      }).catch((error) => {
-        console.error("[委托状态] 监听器注册失败", error);
-      });
-    }
-    if (typeof window !== "undefined") {
-      window.addEventListener(DELEGATE_STATUS_UPDATED_EVENT, handleBridgeDelegateStatusUpdated);
-    }
+    const unlisten = onTransportNotification<DelegateStatusUpdatedPayload>(
+      "conversation.delegateStatusUpdated",
+      applyStatusEvent,
+    );
+    if (disposed) unlisten();
+    else delegateStatusUpdatedUnlisten = unlisten;
   });
 
   onBeforeUnmount(() => {
@@ -202,15 +181,7 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
       window.clearInterval(delegateClockTimer);
       delegateClockTimer = null;
     }
-    if (typeof window !== "undefined") {
-      window.removeEventListener(DELEGATE_STATUS_UPDATED_EVENT, handleBridgeDelegateStatusUpdated);
-    }
   });
-
-  function handleBridgeDelegateStatusUpdated(event: Event) {
-    const payload = (event as CustomEvent<DelegateStatusUpdatedPayload>).detail;
-    applyStatusEvent(payload);
-  }
 
   function applyStatusEvent(payload: DelegateStatusUpdatedPayload | null | undefined) {
     if (!enabled() || !payloadMatchesActiveConversation(payload)) return;

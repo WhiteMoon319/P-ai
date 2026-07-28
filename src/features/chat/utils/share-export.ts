@@ -1,5 +1,5 @@
 import { i18n } from "../../../i18n";
-import { invokeTauri } from "../../../services/tauri-api";
+import { invokeTauri, readTransportChatImage } from "../../../services/tauri-api";
 import type { ChatMessageBlock } from "../../../types/app";
 import { stripToolcallMarkers } from "../../../utils/chat-message-semantics";
 
@@ -496,13 +496,11 @@ async function resolveShareImageSrc(image: {
   if (!mediaRef) return "";
   try {
     const legacyMarker = mediaRef.startsWith("@media:") || mediaRef.startsWith("@download:");
-    const result = legacyMarker
-      ? await invokeTauri<{ dataUrl: string }>("read_chat_image_data_url", {
-        input: { mediaRef, mime },
-      })
-      : await invokeTauri<{ dataUrl: string }>("read_local_chat_image_original", {
-        input: { path: mediaRef },
-      });
+    const result = await readTransportChatImage({
+      ...(legacyMarker ? { mediaRef } : { path: mediaRef }),
+      mime,
+      original: true,
+    });
     return String(result?.dataUrl || "").trim();
   } catch (error) {
     console.warn("[分享导出] 读取图片数据失败，已跳过", {

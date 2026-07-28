@@ -72,15 +72,12 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
     recordHotkeyProbeLastSeq: bindings.recordHotkeyProbeLastSeq,
     recordHotkeyProbeDown: bindings.recordHotkeyProbeDown,
     recordHotkey: bindings.recordHotkey,
-    isPrimaryChatWindow: bindings.isPrimaryChatWindow,
     startRecording: bindings.startRecording,
     stopRecording: bindings.stopRecording,
   });
 
   useChatWindowEvents({
     unlisteners: bindings.chatWindowEventUnlisteners,
-    tauriWindowLabel: bindings.tauriWindowLabel,
-    isChatTauriWindow: bindings.isChatTauriWindow,
     sideConversationListVisible: bindings.sideConversationListVisible,
     toolReviewPanelOpenVisible: bindings.toolReviewPanelOpenVisible,
     readConversationIdFromPayload: bindings.readConversationIdFromPayload,
@@ -99,6 +96,7 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
     applyConversationPinUpdated: bindings.applyConversationPinUpdated,
     applyConversationRuntimeStateUpdated: bindings.applyConversationRuntimeStateUpdated,
     applyConversationOverviewUpdated: bindings.applyConversationOverviewUpdated,
+    applyConversationOverviewItemUpdated: bindings.applyConversationOverviewItemUpdated,
     CHAT_STREAM_DEBUG: bindings.CHAT_STREAM_DEBUG,
     applyConversationMessagesAfterSynced: bindings.applyConversationMessagesAfterSynced,
     applyConversationMessageAppended: bindings.applyConversationMessageAppended,
@@ -114,10 +112,8 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
     clearChatWindowActiveSyncTimer: bindings.clearChatWindowActiveSyncTimer,
     clearChatMicPrewarmTimer: bindings.clearChatMicPrewarmTimer,
     clearSupervisionTaskPollTimer: bindings.clearSupervisionTaskPollTimer,
-    clearRecordHotkeyProbeState: bindings.clearRecordHotkeyProbeState,
+    cleanupChatForegroundActivity: bindings.cleanupChatForegroundActivity,
     agentWorkPresence: bindings.agentWorkPresence,
-    chatWindowActiveSynced: bindings.chatWindowActiveSynced,
-    isPrimaryChatWindow: bindings.isPrimaryChatWindow,
     cancelPendingRewindConfirm: bindings.cancelPendingRewindConfirm,
   });
 
@@ -147,7 +143,6 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
     currentForegroundAgentId: bindings.currentForegroundAgentId,
     currentChatConversationId: bindings.currentChatConversationId,
     startupDataReady: bindings.startupDataReady,
-    tauriWindowLabel: bindings.tauriWindowLabel,
     allMessages: bindings.allMessages,
     setStatusError: bindings.setStatusError,
     refreshChatUnarchivedConversations: bindings.refreshChatUnarchivedConversations,
@@ -163,7 +158,7 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
     onPaste: bindings.onPaste,
     onDragOver: bindings.onDragOver,
     onDrop: bindings.onDrop,
-    onNativeFileDrop: bindings.onNativeFileDrop,
+    onTransportFileDrop: bindings.onTransportFileDrop,
     mediaDragActive: bindings.mediaDragActive,
     recordHotkey: bindings.recordHotkey,
     ensureMessageStoreMigrationGate: async () => {

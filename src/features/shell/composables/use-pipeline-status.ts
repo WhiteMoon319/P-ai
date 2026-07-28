@@ -1,5 +1,5 @@
 import { computed, onMounted, onUnmounted, ref, type ComputedRef } from "vue";
-import { isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { onTransportNotification } from "../../../services/tauri-api";
 
 export type ConversationPipelineStatus = "busy" | "success" | "error";
 
@@ -43,12 +43,9 @@ function setConversationStatus(conversationId: string, status?: ConversationPipe
 
 async function startConversationWorkStatusListener() {
   if (unlisten || listenerStarting) return;
-  if (!isTauriRuntimeAvailable()) return;
   listenerStarting = true;
   try {
-    const { listen } = await import("@tauri-apps/api/event");
-    const off = await listen<ConversationWorkStatusEvent>("conversation_work_status", (event) => {
-      const payload = event.payload;
+    const off = onTransportNotification<ConversationWorkStatusEvent>("conversation.workStatus", (payload) => {
       const conversationId = String(payload.conversationId || payload.conversation_id || "").trim();
       if (!conversationId) return;
 

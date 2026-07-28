@@ -1,5 +1,11 @@
 import { computed, onScopeDispose, ref, shallowRef, watch, type Ref } from "vue";
-import { invokeTauri } from "../../../services/tauri-api";
+import {
+  bindTransportConversationStream,
+  invokeTauri,
+  onTransportNotification,
+  probeTransportConversationStream,
+  unbindTransportConversationStream,
+} from "../../../services/tauri-api";
 import type { AssistantStreamBlock, ChatMentionTarget, ChatMessage, ChatTodoItem } from "../../../types/app";
 import { ensureConversationMessageIds } from "../utils/message-id";
 import { registerChatFlowRuntime } from "./chat-flow-runtime-registry";
@@ -11,9 +17,9 @@ import {
 } from "./chat-message-state-machine";
 import {
   createLatestTaskRunner,
-  reconcileForegroundConversation as reconcileChatForegroundConversation,
   runForegroundSnapshotBindingTransaction,
 } from "./chat-foreground-coordinator";
+import { recoverForegroundStreaming } from "./foreground-recovery-state-machine";
 import { useChatFlow } from "./use-chat-flow";
 import { DRAFT_ASSISTANT_ID_PREFIX, DRAFT_USER_ID_PREFIX } from "./use-chat-flow-drafts";
 import type { ConversationRuntimeStreamCacheSnapshot } from "./use-chat-flow-stream-cache";
@@ -125,7 +131,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     hasMoreHistory.value = !!snapshot?.hasMoreHistory;
     currentTodos.value = Array.isArray(snapshot?.currentTodos) ? snapshot.currentTodos : [];
     planModeEnabled.value = !!snapshot?.conversation?.planModeEnabled;
-    runtimeState.value = snapshot?.runtimeState || (snapshot?.shouldBindStream ? "assistant_streaming" : "idle");
+    runtimeState.value = snapshot?.runtimeState || "idle";
   }
 
   async function requestSnapshot(conversationId: string) {
@@ -137,7 +143,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
       runtimeState.value = "idle";
       return null;
     }
-    const snapshot = await invokeTauri<ConversationLightSnapshot>("get_foreground_conversation_light_snapshot", {
+    const snapshot = await invokeTauri<ConversationLightSnapshot>("conversation.foregroundLightSnapshot", {
       input: { conversationId, agentId: null, limit: 50, resumeProjection: true },
     });
     const snapshotConversationId = String(snapshot?.conversationId || conversationId).trim();
@@ -176,6 +182,11 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
           applySnapshot: (snapshot) => applySnapshot(snapshot, syncOptions.preserveExistingHistory),
           bind: () => flow.bindActiveConversationStream(conversationId, true),
           resume: (snapshot) => {
+            const runtimeState = String(snapshot?.runtimeState || "").trim();
+            const streamCache = snapshot?.streamCache as Record<string, unknown> | null | undefined;
+            if (runtimeState !== "assistant_streaming" && runtimeState !== "organizing_context" && !streamCache?.hasVisibleProgress) {
+              return;
+            }
             flow.resumeForegroundRuntimeRound({
               conversationId,
               streamCache: snapshot.streamCache || null,
@@ -225,7 +236,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     if (!conversationId || !oldestMessageId || !hasMoreHistory.value || loadingOlderHistory.value) return;
     loadingOlderHistory.value = true;
     try {
-      const result = await invokeTauri<{ messages?: ChatMessage[]; hasMore?: boolean }>("get_active_conversation_messages_before", {
+      const result = await invokeTauri<{ messages?: ChatMessage[]; hasMore?: boolean }>("conversation.messagesBefore", {
         input: { conversationId, beforeMessageId: oldestMessageId, limit: 50 },
       });
       if (conversationId !== currentConversationId()) return;
@@ -240,7 +251,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
   }
 
   async function refreshMessageById(conversationId: string, messageId: string) {
-    const message = await invokeTauri<ChatMessage | null>("get_unarchived_conversation_message_by_id", {
+    const message = await invokeTauri<ChatMessage | null>("conversation.messageById", {
       input: { conversationId, messageId },
     });
     if (!message || conversationId !== currentConversationId()) return false;
@@ -270,13 +281,21 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     toolStatusText,
     toolStatusState,
     streamBlocks,
+    subscribeExternalEvents: (method, handler) => onTransportNotification(method, (payload) => {
+      if (method === "chat.roundStarted") runtimeState.value = "assistant_streaming";
+      void Promise.resolve().then(() => handler(payload)).finally(() => {
+        if (method === "chat.roundFinished" && !frontendConversationIsStreaming()) {
+          runtimeState.value = "idle";
+        }
+      });
+    }),
     chatErrorText,
     allMessages,
     t: options.t,
     formatRequestFailed: (error) => String(error instanceof Error ? error.message : error || ""),
     removeBinaryPlaceholders: (text) => text,
     invokeSendChatMessage: ({ text, displayText, parts, mentions, session, traceId, onDelta }) =>
-      invokeTauri("submit_chat_message", {
+      invokeTauri("chat.send", {
         input: {
           payload: {
             text,
@@ -295,7 +314,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
         onDelta,
       }),
     invokeStopChatMessage: ({ session, partialAssistantText, partialStreamBlocks }) =>
-      invokeTauri("stop_chat_message", {
+      invokeTauri("chat.stop", {
         input: {
           session: {
             apiConfigId: session.apiConfigId,
@@ -308,17 +327,9 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
         },
       }),
     refreshMessageById: ({ conversationId, messageId }) => refreshMessageById(conversationId, messageId),
-    invokeBindActiveChatViewStream: ({ bindingId, conversationId, onDelta }) =>
-      invokeTauri("bind_active_chat_view_stream", {
-        input: { bindingId, conversationId: conversationId || null },
-        onDelta,
-      }),
-    invokeUnbindActiveChatViewStream: ({ bindingId }) =>
-      invokeTauri("unbind_active_chat_view_stream", { input: { bindingId } }),
-    invokeProbeActiveChatViewStream: ({ bindingId, conversationId, probeId }) =>
-      invokeTauri<boolean>("probe_active_chat_view_stream", {
-        input: { bindingId, conversationId: conversationId || null, probeId },
-      }),
+    invokeBindActiveChatViewStream: bindTransportConversationStream,
+    invokeUnbindActiveChatViewStream: unbindTransportConversationStream,
+    invokeProbeActiveChatViewStream: probeTransportConversationStream,
     coordinateActiveConversationStreamBind: ({ bindingId, conversationId, bind, unbind }) => {
       if (!options.subscriptionSlot) return bind();
       return options.subscriptionSlot.acquire({
@@ -343,13 +354,13 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
   });
 
   async function requestRuntimeSnapshot(conversationId: string) {
-    return invokeTauri<ConversationRuntimeSnapshot>("get_conversation_runtime_snapshot", {
+    return invokeTauri<ConversationRuntimeSnapshot>("conversation.runtimeSnapshot", {
       conversationId,
     });
   }
 
   async function requestLatestFormalTailMessageId(conversationId: string) {
-    const snapshot = await invokeTauri<{ lastMessageId?: string | null }>("get_foreground_conversation_freshness_snapshot", {
+    const snapshot = await invokeTauri<{ lastMessageId?: string | null }>("conversation.freshnessSnapshot", {
       input: { conversationId, agentId: null },
     });
     return String(snapshot?.lastMessageId || "").trim();
@@ -358,36 +369,57 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
   async function reconcileForegroundConversation(reason: string) {
     const conversationId = currentConversationId();
     if (!conversationId || foregroundSyncing.value) return;
-    await reconcileChatForegroundConversation({
+    const runtimeSnapshot = await requestRuntimeSnapshot(conversationId);
+    if (disposed || conversationId !== currentConversationId()) return;
+    const frontendStreamCache = flow.readConversationStreamCache?.(conversationId);
+    const outcome = await recoverForegroundStreaming({
       conversationId,
-      isCurrent: () => !disposed && conversationId === currentConversationId(),
-      requestRuntimeSnapshot: () => requestRuntimeSnapshot(conversationId),
-      applyRuntimeState: (snapshot) => {
-        runtimeState.value = (snapshot.runtimeState as ConversationRuntimeState) || "idle";
+      runtimeSnapshot,
+      frontendStreaming: frontendConversationIsStreaming(),
+      frontendMessageId: frontendStreamCache?.persistedAssistantMessageId,
+      frontendActivationId: frontendStreamCache?.activationId,
+      frontendRequestId: frontendStreamCache?.requestId,
+      frontendRevision: frontendStreamCache?.updatedAt,
+    }, {
+      probeStream: (targetConversationId) => flow.probeBoundChannel(targetConversationId),
+      resumeSubscription: async (targetConversationId) => {
+        await flow.bindActiveConversationStream(targetConversationId, true);
+        return requestRuntimeSnapshot(targetConversationId);
       },
-      frontendStreaming: frontendConversationIsStreaming,
-      readFrontendStreamCache: () => flow.readConversationStreamCache?.(conversationId),
-      probeStream: () => flow.probeBoundChannel(conversationId),
-      readCurrentFormalTailMessageId: currentFormalTailMessageId,
-      requestLatestFormalTailMessageId: () => requestLatestFormalTailMessageId(conversationId),
-      refreshTargetMessage: (messageId) => refreshMessageById(conversationId, messageId),
-      resumeStream: async (snapshot) => {
-        await flow.bindActiveConversationStream(conversationId, true);
+      applyRuntimeSnapshot: (snapshot) => {
+        if (disposed || conversationId !== currentConversationId()) return false;
+        runtimeState.value = (snapshot.runtimeState as ConversationRuntimeState) || "idle";
         return flow.resumeForegroundRuntimeRound({
           conversationId,
           streamCache: snapshot.streamCache || null,
           reason: `foreground_${reason}`,
         }) > 0;
       },
-      finalizeTargetRefresh: async () => {
+      refreshMessageById,
+      finalizeMessage: async () => {
         flow.clearForegroundRuntimeState();
         await flow.unbindActiveConversationStream().catch(() => {});
         runtimeState.value = "idle";
       },
-      reloadConversation: () => synchronizeConversation(conversationId, {
+    });
+    if (disposed || conversationId !== currentConversationId()) return;
+    if (outcome === "handled") return;
+    if (outcome === "reload_conversation") {
+      await synchronizeConversation(conversationId, {
         clearRuntime: true,
         preserveExistingHistory: true,
-      }),
+      });
+      return;
+    }
+
+    const currentTailId = currentFormalTailMessageId();
+    const latestTailId = await requestLatestFormalTailMessageId(conversationId);
+    if (disposed || conversationId !== currentConversationId()) return;
+    if (latestTailId === currentTailId) return;
+    if (latestTailId && await refreshMessageById(conversationId, latestTailId)) return;
+    await synchronizeConversation(conversationId, {
+      clearRuntime: true,
+      preserveExistingHistory: true,
     });
   }
 

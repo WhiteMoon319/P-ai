@@ -75,7 +75,7 @@ export function useChatWindowBootstrap(bindings: Record<string, any>) {
       if (state === "released") {
         bindings.recordHotkeyProbeDown.value = false;
       }
-      if (bindings.viewMode.value !== "chat" || !bindings.isPrimaryChatWindow()) return;
+      if (bindings.viewMode.value !== "chat") return;
       if (state === "released") {
         bindings.recordHotkey?.handleExternalState?.("released");
         return;

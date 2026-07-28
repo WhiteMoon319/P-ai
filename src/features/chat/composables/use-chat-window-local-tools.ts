@@ -1,5 +1,9 @@
 import { i18n } from "../../../i18n";
-import { invokeTauri } from "../../../services/tauri-api";
+import {
+  captureTransportDesktop,
+  captureTransportFocusedWindow,
+  invokeTauri,
+} from "../../../services/tauri-api";
 import {
   attachmentPreviewBase64,
   base64AttachmentFile,
@@ -71,7 +75,7 @@ export function useChatWindowLocalTools(bindings: ChatWindowLocalToolsBindings) 
     const changed = bindings.applyDepartmentPrimaryApiConfigLocally(currentDepartment, nextId);
     if (!changed) return;
     try {
-      await invokeTauri("set_department_primary_api_config", {
+      await invokeTauri("department.primaryApi.set", {
         input: {
           departmentId: currentDepartmentId,
           apiConfigId: nextId,
@@ -155,20 +159,13 @@ export function useChatWindowLocalTools(bindings: ChatWindowLocalToolsBindings) 
       let imageMime = "";
       let imageBase64 = "";
       if (input.mode === "focused_window") {
-        const output = await invokeTauri<{ data?: { imageMime?: string; imageBase64?: string } }>("xcap", {
-          input: {
-            method: "capture_focused_window",
-            args: {},
-          },
-        });
+        const output = await captureTransportFocusedWindow<{
+          data?: { imageMime?: string; imageBase64?: string };
+        }>();
         imageMime = String(output?.data?.imageMime || "").trim();
         imageBase64 = String(output?.data?.imageBase64 || "").trim();
       } else {
-        const output = await invokeTauri<{ imageMime?: string; imageBase64?: string }>("desktop_screenshot", {
-          input: {
-            mode: "desktop",
-          },
-        });
+        const output = await captureTransportDesktop<{ imageMime?: string; imageBase64?: string }>();
         imageMime = String(output?.imageMime || "").trim();
         imageBase64 = String(output?.imageBase64 || "").trim();
       }

@@ -158,7 +158,7 @@ const props = withDefaults(defineProps<{
   placeholderText?: string;
 }>(), {
   saveLabel: "使用此目录",
-  hintText: "Web 端请手动输入可由服务端访问的工作目录路径。",
+  hintText: "可手动输入由当前后端访问的工作目录路径。",
   pathLabel: "工作目录路径",
   browseLabel: "浏览",
   parentLabel: "上一级",

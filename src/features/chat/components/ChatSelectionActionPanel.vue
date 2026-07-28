@@ -6,7 +6,7 @@
         {{ t("chat.selection.branch") }}
       </button>
       <button
-        v-if="!delegateOnly && !sidebarMode"
+        v-if="showConversationActions && !delegateOnly"
         type="button"
         class="btn btn-sm"
         :class="{ 'btn-primary': selectionDeliverCardOpen }"
@@ -27,13 +27,13 @@
       <button v-if="!delegateOnly" type="button" class="btn btn-sm" :disabled="selectedMessageCount === 0" @click="emit('selectionActionCopy')">
         {{ t("common.copy") }}
       </button>
-      <button v-if="!delegateOnly && !sidebarMode" type="button" class="btn btn-sm" :disabled="selectedMessageCount === 0" @click="emit('selectionActionShare', 'copyPng')">
+      <button v-if="showConversationActions && !delegateOnly" type="button" class="btn btn-sm" :disabled="selectedMessageCount === 0" @click="emit('selectionActionShare', 'copyPng')">
         {{ t("chat.selection.copyImageAsImage") }}
       </button>
-      <button v-if="!delegateOnly && !sidebarMode" type="button" class="btn btn-sm" :disabled="selectedMessageCount === 0" @click="emit('selectionActionShare', 'png')">
+      <button v-if="showConversationActions && !delegateOnly" type="button" class="btn btn-sm" :disabled="selectedMessageCount === 0" @click="emit('selectionActionShare', 'png')">
         {{ t("chat.selection.saveAsImage") }}
       </button>
-      <button v-if="!delegateOnly && !sidebarMode" type="button" class="btn btn-sm" :disabled="selectedMessageCount === 0" @click="emit('selectionActionShare', 'html')">
+      <button v-if="showConversationActions && !delegateOnly" type="button" class="btn btn-sm" :disabled="selectedMessageCount === 0" @click="emit('selectionActionShare', 'html')">
         {{ t("chat.selection.saveAsHtml") }}
       </button>
       <button type="button" class="btn btn-sm btn-ghost ml-auto" @click="handleExitSelectionMode">
@@ -41,7 +41,7 @@
       </button>
     </div>
 
-    <div v-if="!delegateOnly && !sidebarMode && selectionDeliverCardOpen" class="mt-3 rounded-box border border-base-300 bg-base-200/50 px-3 py-3">
+    <div v-if="showConversationActions && !delegateOnly && selectionDeliverCardOpen" class="mt-3 rounded-box border border-base-300 bg-base-200/50 px-3 py-3">
       <div class="text-sm font-medium">{{ t("chat.selection.forward") }}</div>
       <div class="mt-1 text-xs opacity-70">{{ t("chat.selection.forwardHint") }}</div>
       <select v-model="selectionDeliverTargetKey" class="select select-bordered select-sm mt-3 w-full" :disabled="selectionDeliverTargetOptions.length === 0">
@@ -135,8 +135,8 @@ type RecentDelegateRequest = {
 };
 
 const props = defineProps<{
-  sidebarMode?: boolean;
   delegateOnly?: boolean;
+  showConversationActions?: boolean;
   selectedMessageCount: number;
   activeConversationId: string;
   unarchivedConversationItems: ChatConversationOverviewItem[];
@@ -155,8 +155,8 @@ const emit = defineEmits<{
 }>();
 
 const { t, locale } = useI18n();
-const sidebarMode = computed(() => !!props.sidebarMode);
 const delegateOnly = computed(() => !!props.delegateOnly);
+const showConversationActions = computed(() => props.showConversationActions ?? true);
 const USER_ASYNC_DELEGATE_RECENT_STORAGE_KEY = "easy_call.user_async_delegate_recent.v1";
 const USER_ASYNC_DELEGATE_RECENT_LIMIT = 3;
 

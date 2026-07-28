@@ -160,9 +160,8 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useI18n } from "vue-i18n";
-import { invokeTauri } from "./services/tauri-api";
+import { invokeTauri, onTransportNotification } from "./services/tauri-api";
 import type { AppBootstrapSnapshot, AppConfig } from "./types/app";
 import { normalizeLocale } from "./i18n";
 import AppWindowHeader from "./features/shell/components/AppWindowHeader.vue";
@@ -323,24 +322,16 @@ const {
   setStatusError,
 });
 
-let unlistenConversationOverviewUpdated: UnlistenFn | null = null;
-let unlistenConversationOverviewItemUpdated: UnlistenFn | null = null;
+let unlistenConversationOverviewUpdated: (() => void) | null = null;
+let unlistenConversationOverviewItemUpdated: (() => void) | null = null;
 
 onMounted(() => {
-  void listen("easy-call:conversation-overview-updated", () => {
+  unlistenConversationOverviewUpdated = onTransportNotification("conversation.overviewUpdated", () => {
     void loadArchives();
-  }).then((unlisten) => {
-    unlistenConversationOverviewUpdated = unlisten;
-  }).catch((error) => {
-    console.error("[归档窗口] 监听会话概览失败", error);
   });
 
-  void listen<any>("easy-call:conversation-overview-item-updated", (event) => {
-    applyUnarchivedConversationOverviewItemUpdated(event.payload);
-  }).then((unlisten) => {
-    unlistenConversationOverviewItemUpdated = unlisten;
-  }).catch((error) => {
-    console.error("[归档窗口] 监听单会话概览失败", error);
+  unlistenConversationOverviewItemUpdated = onTransportNotification<Record<string, any> | null | undefined>("conversation.overviewItemUpdated", (payload) => {
+    applyUnarchivedConversationOverviewItemUpdated(payload);
   });
 });
 

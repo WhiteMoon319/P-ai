@@ -726,15 +726,20 @@ struct TerminalApprovalRequestIdInput {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ChatShellWorkspaceInput {
+    #[serde(default)]
     api_config_id: String,
+    #[serde(default)]
     agent_id: String,
+    #[serde(default)]
     conversation_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SaveChatShellWorkspacesInput {
+    #[serde(default)]
     api_config_id: String,
+    #[serde(default)]
     agent_id: String,
     conversation_id: Option<String>,
     #[serde(default)]
@@ -833,6 +838,36 @@ fn resolve_chat_tool_session_id(
 ) -> Result<String, String> {
     let api_id = api_config_id.trim();
     let agent = agent_id.trim();
+    if let Some(conversation_id) = conversation_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        let (department_id, conversation_agent_id) = match conversation_service_v2()
+            .get_conversation_meta(state, conversation_id)
+        {
+            Ok(meta) => (meta.department_id, meta.agent_id),
+            Err(primary_error) => match delegate_runtime_thread_conversation_get_any(
+                state,
+                conversation_id,
+            )? {
+                Some(conversation) => (conversation.department_id, conversation.agent_id),
+                None => return Err(primary_error),
+            },
+        };
+        let department_id = department_id.trim().to_string();
+        let session_scope = if department_id.is_empty() {
+            conversation_agent_id.trim().to_string()
+        } else {
+            department_id
+        };
+        if session_scope.is_empty() {
+            return Err(format!("指定会话缺少部门或 Agent 标识：{conversation_id}"));
+        }
+        return Ok(normalize_terminal_tool_session_id(&inflight_chat_key(
+            &session_scope,
+            Some(conversation_id),
+        )));
+    }
     if api_id.is_empty() {
         return Err("apiConfigId is required.".to_string());
     }
@@ -1789,17 +1824,24 @@ fn get_chat_shell_workspace(
     input: ChatShellWorkspaceInput,
     state: State<'_, AppState>,
 ) -> Result<ChatShellWorkspaceOutput, String> {
+    get_chat_shell_workspace_inner(input, &state)
+}
+
+fn get_chat_shell_workspace_inner(
+    input: ChatShellWorkspaceInput,
+    state: &AppState,
+) -> Result<ChatShellWorkspaceOutput, String> {
     let session_id =
         resolve_chat_tool_session_id(
-            &state,
+            state,
             &input.api_config_id,
             &input.agent_id,
             input.conversation_id.as_deref(),
         )?;
-    let conversation = terminal_session_conversation(&state, &session_id)?;
-    let root = terminal_session_root_canonical(&state, &session_id)?;
+    let conversation = terminal_session_conversation(state, &session_id)?;
+    let root = terminal_session_root_canonical(state, &session_id)?;
     Ok(build_chat_shell_workspace_output(
-        &state,
+        state,
         session_id,
         conversation.as_ref(),
         root,
@@ -1811,21 +1853,28 @@ fn update_chat_shell_workspace_layout(
     input: SaveChatShellWorkspacesInput,
     state: State<'_, AppState>,
 ) -> Result<ChatShellWorkspaceOutput, String> {
+    update_chat_shell_workspace_layout_inner(input, &state)
+}
+
+fn update_chat_shell_workspace_layout_inner(
+    input: SaveChatShellWorkspacesInput,
+    state: &AppState,
+) -> Result<ChatShellWorkspaceOutput, String> {
     let session_id =
         resolve_chat_tool_session_id(
-            &state,
+            state,
             &input.api_config_id,
             &input.agent_id,
             input.conversation_id.as_deref(),
         )?;
     let conversation_id = resolve_chat_workspace_conversation_id(
-        &state,
+        state,
         &input.agent_id,
         input.conversation_id.as_deref(),
     )?;
-    let normalized_workspaces = normalize_conversation_shell_workspaces(&state, &input.workspaces);
+    let normalized_workspaces = normalize_conversation_shell_workspaces(state, &input.workspaces);
     let updated = apply_conversation_chat_workspace_changes(
-        &state,
+        state,
         &conversation_id,
         Some(None),
         Some(normalized_workspaces),
@@ -1839,9 +1888,9 @@ fn update_chat_shell_workspace_layout(
             .map_err(|_| "Failed to lock terminal session roots".to_string())?;
         roots.remove(&session_id);
     }
-    let root = terminal_session_root_canonical(&state, &session_id)?;
+    let root = terminal_session_root_canonical(state, &session_id)?;
     Ok(build_chat_shell_workspace_output(
-        &state,
+        state,
         session_id,
         Some(&updated),
         root,

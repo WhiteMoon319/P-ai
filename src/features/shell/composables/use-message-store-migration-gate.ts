@@ -1,6 +1,5 @@
 import { onBeforeUnmount, reactive } from "vue";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { invokeTauri } from "../../../services/tauri-api";
+import { invokeTauri, onTransportNotification } from "../../../services/tauri-api";
 
 export type MessageStoreMigrationGateMode = "idle" | "checking" | "migrating" | "blocked" | "error";
 
@@ -54,7 +53,7 @@ export function useMessageStoreMigrationGate(bindings: MessageStoreMigrationGate
     blockedItems: [],
   });
 
-  let messageStoreMigrationProgressUnlisten: UnlistenFn | null = null;
+  let messageStoreMigrationProgressUnlisten: (() => void) | null = null;
 
   function resetMessageStoreMigrationGate() {
     messageStoreMigration.visible = false;
@@ -67,10 +66,9 @@ export function useMessageStoreMigrationGate(bindings: MessageStoreMigrationGate
 
   async function ensureMessageStoreMigrationProgressListener() {
     if (messageStoreMigrationProgressUnlisten) return;
-    messageStoreMigrationProgressUnlisten = await listen<MessageStoreMigrationProgressPayload>(
-      "easy-call:message-store-migration-progress",
-      (event) => {
-        const payload = event.payload;
+    messageStoreMigrationProgressUnlisten = onTransportNotification<MessageStoreMigrationProgressPayload>(
+      "messageStore.migrationProgress",
+      (payload) => {
         messageStoreMigration.visible = true;
         messageStoreMigration.mode = payload.status === "failed" ? "error" : "migrating";
         messageStoreMigration.current = Number(payload.current || 0);
@@ -87,16 +85,14 @@ export function useMessageStoreMigrationGate(bindings: MessageStoreMigrationGate
     messageStoreMigration.visible = true;
     messageStoreMigration.mode = "migrating";
     messageStoreMigration.message = "正在迁移会话消息仓库...";
-    await invokeTauri("run_message_store_migration", {
-      input: {},
-    });
+    await invokeTauri("messageStore.migration.run", {});
     resetMessageStoreMigrationGate();
   }
 
   async function ensureMessageStoreMigrationGate() {
     await ensureMessageStoreMigrationProgressListener();
     const report = await invokeTauri<MessageStoreMigrationPreflightReport>(
-      "check_message_store_migration",
+      "messageStore.migration.check",
     );
     if (report.migrationRequired) {
       messageStoreMigration.visible = true;

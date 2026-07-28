@@ -366,11 +366,17 @@ fn record_discarded_message_store_migration_item(
 fn check_message_store_migration(
     state: State<'_, AppState>,
 ) -> Result<MessageStoreMigrationPreflightReport, String> {
+    check_message_store_migration_inner(&state)
+}
+
+fn check_message_store_migration_inner(
+    state: &AppState,
+) -> Result<MessageStoreMigrationPreflightReport, String> {
     let _migration_guard = lock_message_store_migration();
-    if message_store_migration_current_version_recorded(&state)? {
+    if message_store_migration_current_version_recorded(state)? {
         return Ok(empty_message_store_migration_preflight_report());
     }
-    Ok(build_message_store_migration_preflight_report(&state))
+    Ok(build_message_store_migration_preflight_report(state))
 }
 
 fn refresh_message_store_migration_caches(state: &AppState) -> Result<(), String> {
@@ -403,6 +409,14 @@ fn refresh_message_store_migration_caches(state: &AppState) -> Result<(), String
 fn run_message_store_migration(
     app: AppHandle,
     state: State<'_, AppState>,
+    input: RunMessageStoreMigrationInput,
+) -> Result<MessageStoreMigrationRunReport, String> {
+    run_message_store_migration_inner(&app, &state, input)
+}
+
+fn run_message_store_migration_inner(
+    app: &AppHandle,
+    state: &AppState,
     _input: RunMessageStoreMigrationInput,
 ) -> Result<MessageStoreMigrationRunReport, String> {
     let _migration_guard = lock_message_store_migration();
@@ -412,19 +426,19 @@ fn run_message_store_migration(
         discarded_count: 0,
         failed_count: 0,
     };
-    if message_store_migration_current_version_recorded(&state)? {
+    if message_store_migration_current_version_recorded(state)? {
         return Ok(report);
     }
-    let mut runtime = state_read_runtime_state_cached(&state)?;
+    let mut runtime = state_read_runtime_state_cached(state)?;
     if runtime.message_store_migration_version
         >= DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES
     {
         message_store::chat_metadata_store_run_v3_migration(&state.data_path)?;
         runtime.message_store_migration_version = DATA_MIGRATION_VERSION_V3_CHAT_METADATA_SQLITE;
-        state_write_runtime_state_cached(&state, &runtime)?;
+        state_write_runtime_state_cached(state, &runtime)?;
         return Ok(report);
     }
-    let preflight = build_message_store_migration_preflight_report(&state);
+    let preflight = build_message_store_migration_preflight_report(state);
     let discarded = preflight
         .items
         .iter()
@@ -504,13 +518,13 @@ fn run_message_store_migration(
                     item.conversation_id, item.title
                 );
                 conversation_service_v2().recover_conversation_snapshot(
-                    state.inner(),
+                    state,
                     &recovery_job_id,
                     "message_store_migration",
                     &recovery_reason,
                     &conversation,
                 )?;
-                flush_pending_persists_blocking(state.inner())?;
+                flush_pending_persists_blocking(state)?;
                 report.migrated_count += 1;
                 emit_message_store_migration_progress(
                     &app,
@@ -551,13 +565,13 @@ fn run_message_store_migration(
             }
         }
     }
-    refresh_message_store_migration_caches(&state)?;
+    refresh_message_store_migration_caches(state)?;
     runtime.message_store_migration_version =
         DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES;
-    state_write_runtime_state_cached(&state, &runtime)?;
+    state_write_runtime_state_cached(state, &runtime)?;
     message_store::chat_metadata_store_run_v3_migration(&state.data_path)?;
     runtime.message_store_migration_version = DATA_MIGRATION_VERSION_V3_CHAT_METADATA_SQLITE;
-    state_write_runtime_state_cached(&state, &runtime)?;
+    state_write_runtime_state_cached(state, &runtime)?;
     Ok(report)
 }
 

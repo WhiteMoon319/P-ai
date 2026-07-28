@@ -197,16 +197,50 @@ fn build_stop_chat_partial_assistant_message_for_id(
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .or_else(|| Some(agent_id.trim().to_string()));
-    // 工具结果可能已按 ID 提前写入既有消息；若本次只补 partial 正文，必须保留既有 tool_call。
-    if message
-        .tool_call
-        .as_ref()
-        .map(|items| items.is_empty())
-        .unwrap_or(true)
-    {
-        message.tool_call = existing_tool_call;
-    }
+    // 工具结果可能已按 ID 提前写入正式消息。停止收尾只能补充缓存中
+    // 尚未写入的事件，绝不能以不完整缓存覆盖既有工具链。
+    message.tool_call = merge_stop_chat_tool_history(
+        existing_tool_call,
+        message.tool_call.as_deref().unwrap_or_default(),
+    );
     message
+}
+
+fn merge_stop_chat_tool_history(
+    existing_tool_call: Option<Vec<Value>>,
+    partial_tool_history: &[Value],
+) -> Option<Vec<Value>> {
+    let mut merged = existing_tool_call.unwrap_or_default();
+    for event in partial_tool_history {
+        let role = event
+            .get("role")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .unwrap_or_default();
+        if role.eq_ignore_ascii_case("tool") {
+            let tool_call_id = event
+                .get("tool_call_id")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or_default();
+            if !tool_call_id.is_empty()
+                && tool_history_contains_tool_result_id_v2(&merged, tool_call_id)
+            {
+                continue;
+            }
+        } else if role.eq_ignore_ascii_case("assistant") {
+            let tool_call_ids = tool_call_ids_from_assistant_tool_event_v2(event);
+            if !tool_call_ids.is_empty()
+                && tool_history_contains_assistant_tool_group_v2(&merged, &tool_call_ids)
+            {
+                continue;
+            }
+        }
+        if !merged.iter().any(|existing| existing == event) {
+            merged.push(event.clone());
+        }
+    }
+    (!merged.is_empty()).then_some(merged)
 }
 
 fn apply_stop_chat_partial_message(

@@ -791,8 +791,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { AlertTriangle, ChevronUp, ClipboardPaste, Copy, Plus, RefreshCw, RotateCcw, Save, ScrollText, Settings, SquareTerminal, Trash2 } from "@lucide/vue";
-import { invokeTauri } from "../../../../services/tauri-api";
-import { open } from "@tauri-apps/plugin-dialog";
+import { invokeTauri, openTransportFileDialog } from "../../../../services/tauri-api";
 import type { AppConfig, DepartmentConfig, PersonaProfile, RemoteImChannelConfig, RemoteImContact, RemoteImPlatform, ShellWorkspace } from "../../../../types/app";
 import DepartmentPersonaSelect from "../../../shared/components/DepartmentPersonaSelect.vue";
 import ChannelBehaviorSettingsModal from "./remote-im/ChannelBehaviorSettingsModal.vue";
@@ -1982,7 +1981,7 @@ function onContactActivationKeywordsBlur(item: RemoteImContact) {
 async function addContactWorkspace() {
   if (!contactDraft.value) return;
   try {
-    const picked = await open({
+    const picked = await openTransportFileDialog({
       directory: true,
       multiple: false,
     });

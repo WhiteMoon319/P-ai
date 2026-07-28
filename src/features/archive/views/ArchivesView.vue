@@ -264,10 +264,15 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect } from "vue";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { FileDown, FileJson2, Import, RefreshCw, Trash2, Undo2 } from "@lucide/vue";
 import { useI18n } from "vue-i18n";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import {
+  invokeTauri,
+  openTransportWorkspaceFile,
+  readTransportChatImage,
+  readTransportLocalBinaryFile,
+  resolveLocalFileUrl,
+} from "../../../services/tauri-api";
 import { extractMessageAttachmentFiles, extractMessageAudios, extractMessageImages } from "../../../utils/chat-message";
 import { resolveConversationDisplayTitle } from "../../chat/utils/conversation-title";
 import type {
@@ -749,7 +754,7 @@ function messageAttachments(msg: ChatMessage): Array<{ fileName: string; path: s
 
 function openAttachment(path: string) {
   if (!path.trim()) return;
-  void invokeTauri("open_workspace_file", { relativePath: path }).catch((error) => {
+  void openTransportWorkspaceFile(path).catch((error) => {
     console.warn("[归档附件] 打开失败", { path, error });
   });
 }
@@ -796,19 +801,17 @@ async function readArchiveAudioSource(audio: { mime: string; mediaRef?: string }
   const mediaRef = String(audio.mediaRef || "").trim();
   if (!mediaRef || mediaRef.startsWith("@")) return "";
   try {
-    const result = await invokeTauri<{ mime?: string; bytesBase64?: string }>("read_local_binary_file", {
-      input: { path: mediaRef },
-    });
+    const result = await readTransportLocalBinaryFile<{ mime?: string; bytesBase64?: string }>({ path: mediaRef });
     const bytesBase64 = String(result?.bytesBase64 || "").trim();
     const mime = String(result?.mime || audio.mime || "audio/mpeg").trim();
     if (bytesBase64) return `data:${mime};base64,${bytesBase64}`;
   } catch (error) {
-    if (!isTauriRuntimeAvailable()) {
-      console.warn("[归档音频] 通过桥接读取失败", { path: mediaRef, error });
-      return "";
-    }
+    const fallback = resolveLocalFileUrl(mediaRef);
+    if (fallback) return fallback;
+    console.warn("[归档音频] 读取失败", { path: mediaRef, error });
+    return "";
   }
-  return convertFileSrc(mediaRef);
+  return resolveLocalFileUrl(mediaRef);
 }
 
 function archiveImageKey(messageId: string, index: number): string {
@@ -829,13 +832,10 @@ async function readArchiveImageDataUrl(
   const pending = archiveImagePendingCache.get(cacheKey);
   if (pending) return pending;
   const legacyMarker = mediaRef.startsWith("@media:") || mediaRef.startsWith("@download:");
-  const task = (legacyMarker
-    ? invokeTauri<{ dataUrl: string }>("read_chat_image_data_url", {
-      input: { mediaRef, mime },
-    })
-    : invokeTauri<{ dataUrl: string }>("read_local_chat_image_thumbnail", {
-      input: { path: mediaRef },
-    }))
+  const task = readTransportChatImage({
+    ...(legacyMarker ? { mediaRef } : { path: mediaRef }),
+    mime,
+  })
     .then((result) => {
       const dataUrl = String(result?.dataUrl || "").trim();
       if (dataUrl) archiveImageDataUrlCache.set(cacheKey, dataUrl);

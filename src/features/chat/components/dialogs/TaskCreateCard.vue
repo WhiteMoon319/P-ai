@@ -290,7 +290,6 @@ const props = defineProps<{
   mode?: "create" | "edit";
   conversationId?: string;
   task?: TaskEntry | null;
-  bridgeRequest?: <T = unknown>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>;
 }>();
 
 const emit = defineEmits<{
@@ -800,26 +799,19 @@ function dispatchTaskDeletedEvent(taskId: string) {
 }
 
 async function requestTaskCreate(payload: TaskCreateInputWire): Promise<TaskEntry> {
-  if (props.bridgeRequest) return props.bridgeRequest<TaskEntry>("task.create", payload);
-  return invokeTauri<TaskEntry>("task_create_task", { input: payload });
+  return invokeTauri<TaskEntry>("task.create", payload);
 }
 
 async function requestTaskUpdate(payload: TaskUpdateInputWire): Promise<TaskEntry> {
-  if (props.bridgeRequest) return props.bridgeRequest<TaskEntry>("task.update", payload);
-  return invokeTauri<TaskEntry>("task_update_task", { input: payload });
+  return invokeTauri<TaskEntry>("task.update", payload);
 }
 
 async function requestTaskDelete(payload: TaskDeleteInputWire): Promise<void> {
-  if (props.bridgeRequest) {
-    await props.bridgeRequest("task.delete", payload);
-    return;
-  }
-  await invokeTauri("task_delete_task", { input: payload });
+  await invokeTauri("task.delete", payload);
 }
 
 async function requestTaskOptimize(payload: TaskOptimizeDraftInputWire): Promise<TaskOptimizeDraftOutputWire> {
-  if (props.bridgeRequest) return props.bridgeRequest<TaskOptimizeDraftOutputWire>("task.optimizeDraft", payload, 60_000);
-  return invokeTauri<TaskOptimizeDraftOutputWire>("task_optimize_draft", { input: payload });
+  return invokeTauri<TaskOptimizeDraftOutputWire>("task.optimizeDraft", payload, 60_000);
 }
 
 async function handleSubmit() {

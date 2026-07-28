@@ -1,6 +1,5 @@
-import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
+import { acknowledgeTransportWebviewHeartbeat, onTransportNotification } from "./services/tauri-api";
 
-listen("easy-call:webview-ping", () => {
-  invoke("webview_pong").catch(() => {});
+onTransportNotification("webview.ping", () => {
+  acknowledgeTransportWebviewHeartbeat().catch(() => {});
 });

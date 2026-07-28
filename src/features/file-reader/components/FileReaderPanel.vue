@@ -51,7 +51,7 @@
       >
         <div class="flex h-8 shrink-0 items-center gap-1.5 border-b border-base-300 bg-base-200/35 px-3 text-sm">
           <button
-            v-if="tauriRuntimeAvailable"
+            v-if="localFileSystemAvailable"
             class="btn btn-ghost btn-xs min-w-0 flex-1 justify-start gap-1.5 overflow-hidden font-medium"
             :title="directoryTreeRoot.path"
             @click="openDirectoryInFileManager(directoryTreeRoot.path)"
@@ -66,7 +66,7 @@
             :title="directoryTreeRoot.path"
             @contextmenu.prevent.stop="openPathOnlyContextMenu(directoryTreeRoot.path, $event)"
           >{{ directoryTreeRoot.name }}</span>
-          <div v-if="tauriRuntimeAvailable" class="join shrink-0">
+          <div v-if="localFileSystemAvailable" class="join shrink-0">
             <button
               class="btn btn-xs h-7 min-h-7 w-7 join-item border-0 bg-base-100 px-0 shadow-none hover:bg-base-100"
               type="button"
@@ -651,12 +651,24 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
 import { ChevronDown, ChevronRight, Check, Code2, Copy, Eye, ExternalLink, FilePlus, Folders, MessageSquarePlus, RefreshCw, Search, SquareTerminal } from "@lucide/vue";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import {
+  copyTransportChatImageToClipboard,
+  getTransportCapabilities,
+  invokeTauri,
+  listTransportFileReaderDirectoryOpenTargets,
+  listenCurrentTransportFileDrop,
+  onTransportNotification,
+  openTransportFileDialog,
+  openTransportFileReaderDirectoryTarget,
+  openTransportFileReaderWindow,
+  openTransportFileWithDefaultProgram,
+  openTransportLocalDirectory,
+  readTransportChatImage,
+  resolveLocalFileUrl,
+  saveTransportChatImageAs,
+  updateTransportFileReaderWatchTargets,
+} from "../../../services/tauri-api";
 import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
 import ChatImagePreviewDialog from "../../chat/components/dialogs/ChatImagePreviewDialog.vue";
 import { useChatImagePreview } from "../../chat/composables/use-chat-image-preview";
@@ -714,10 +726,9 @@ initKatex();
 const props = withDefaults(defineProps<{
   initialRootPath?: string;
   initialOpenPath?: string;
-  bridgeRequest?: <T = unknown>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>;
   showTabs?: boolean;
   showPickFileButton?: boolean;
-  showTabDesktopActions?: boolean;
+  showTabLocalFileActions?: boolean;
   directoryOnly?: boolean;
   enableGlobalDrop?: boolean;
   markdownIsDark?: boolean;
@@ -727,7 +738,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   showTabs: true,
   showPickFileButton: true,
-  showTabDesktopActions: false,
+  showTabLocalFileActions: false,
   directoryOnly: false,
   enableGlobalDrop: true,
   markdownIsDark: false,
@@ -761,7 +772,7 @@ type FileReaderSelectionAction = {
 
 // ==================== Constants ====================
 
-const tauriRuntimeAvailable = isTauriRuntimeAvailable();
+const localFileSystemAvailable = getTransportCapabilities().localFileSystem;
 const FILE_READER_DIRECTORY_TREE_MIN_WIDTH = 220;
 const FILE_READER_DIRECTORY_TREE_MAX_WIDTH = 640;
 const FILE_READER_DIRECTORY_TREE_DEFAULT_WIDTH = 320;
@@ -830,7 +841,7 @@ const hoverDirectoryTreeAnchor = ref("");
 let hoverHideTimer: number | null = null;
 
 let unlistenFileDrop: (() => void) | null = null;
-let unlistenFileReaderWatch: UnlistenFn | null = null;
+let unlistenFileReaderWatch: (() => void) | null = null;
 let restoringSessionId = 0;
 let suppressSessionPersist = false;
 let lastCapturedSelectionKey = "";
@@ -855,9 +866,9 @@ const activeTab = computed(() => tabs.value.find((tab) => tab.path === activePat
 
 const activeMediaSourceUrl = computed(() => {
   const tab = activeTab.value;
-  if (!tab || !isPreviewMediaKind(tab.kind) || !tauriRuntimeAvailable) return "";
+  if (!tab || !isPreviewMediaKind(tab.kind)) return "";
   try {
-    return convertFileSrc(tab.path);
+    return resolveLocalFileUrl(tab.path);
   } catch {
     return "";
   }
@@ -948,7 +959,7 @@ const fileReaderPanelTabs = computed(() =>
 );
 
 const fileTabContextMenuItems = computed(() => {
-  if (!props.showTabDesktopActions || !tauriRuntimeAvailable) return [];
+  if (!props.showTabLocalFileActions || !localFileSystemAvailable) return [];
   return [
     { label: t('fileReader.openInDocumentBrowser'), onClick: openInDocumentBrowser },
     { label: t('fileReader.openContainingFolder'), onClick: openDirectoryInFileManager },
@@ -1180,12 +1191,9 @@ function scheduleFileReaderWatchTargetUpdate() {
 async function updateFileReaderWatchTargets() {
   const sessionId = fileReaderWatchSessionId.value;
   if (!sessionId) return;
-  if (!isTauriRuntimeAvailable()) return;
   const targets = collectFileReaderWatchTargets();
   try {
-    await invokeTauri("update_file_reader_watch_targets", {
-      input: { sessionId, targets },
-    });
+    await updateTransportFileReaderWatchTargets({ sessionId, targets });
   } catch (error) {
     console.warn("[文件阅读器] 更新自动刷新监听目标失败", error);
   }
@@ -1222,10 +1230,9 @@ function collectFileReaderWatchTargets(): FileReaderWatchTarget[] {
 
 async function startFileReaderWatchListener() {
   stopFileReaderWatchListener();
-  if (!isTauriRuntimeAvailable()) return;
   try {
-    unlistenFileReaderWatch = await listen<FileReaderWatchEventPayload>("easy-call:file-reader-watch-changed", (event) => {
-      handleFileReaderWatchEvent(event.payload);
+    unlistenFileReaderWatch = onTransportNotification<FileReaderWatchEventPayload>("fileReader.watchChanged", (payload) => {
+      handleFileReaderWatchEvent(payload);
     });
   } catch (error) {
     console.warn("[文件阅读器] 监听自动刷新事件失败", error);
@@ -1311,7 +1318,7 @@ function openPathOnlyContextMenu(path: string, event: MouseEvent) {
 }
 
 function openAddressContextMenu(event: MouseEvent) {
-  if (!isTauriRuntimeAvailable()) {
+  if (!localFileSystemAvailable) {
     closeContextMenu();
     return;
   }
@@ -1959,24 +1966,22 @@ async function openMarkdownImagePreview(payload: { src?: string; localPath?: str
   if (localPath) {
     if (isAssistantSpacePath(localPath)) {
       try {
-        const result = await invokeTauri<{ dataUrl: string; mime: string }>("read_local_chat_image_original", {
-          input: { path: localPath },
-        });
+        const result = await readTransportChatImage({ path: localPath, mime: "image/png", original: true });
         const dataUrl = String(result?.dataUrl || "").trim();
-        if (dataUrl) openImagePreview({ mime: result.mime, dataUrl, localPath });
+        if (dataUrl) openImagePreview({ mime: result?.mime || "image/png", dataUrl, localPath });
       } catch (error) {
         console.warn("[文件浏览器预览] Assistant Space 图片原图加载失败", { path: localPath, error });
       }
       return;
     }
-    openImagePreview({ mime: "image/png", dataUrl: convertFileSrc(localPath), localPath });
+    openImagePreview({ mime: "image/png", dataUrl: resolveLocalFileUrl(localPath), localPath });
   }
 }
 
 async function handleCopyMarkdownImage(path: string) {
   imagePreviewCopyStatus.value = "doing";
   try {
-    await invokeTauri("copy_local_chat_image_to_clipboard", { input: { path } });
+    await copyTransportChatImageToClipboard(path);
   } catch (error) {
     console.warn("[文件浏览器预览] 复制图片失败", error);
   } finally {
@@ -1987,7 +1992,7 @@ async function handleCopyMarkdownImage(path: string) {
 async function handleSaveMarkdownImage(path: string) {
   imagePreviewSaveStatus.value = "doing";
   try {
-    await invokeTauri("save_local_chat_image_as", { input: { path } });
+    await saveTransportChatImageAs(path);
   } catch (error) {
     console.warn("[文件浏览器预览] 保存图片失败", error);
   } finally {
@@ -2084,7 +2089,7 @@ async function openInDocumentBrowser(path: string) {
   const normalizedPath = normalizePath(path);
   if (!normalizedPath) return;
   try {
-    await invokeTauri("open_file_reader_window_command", { path: normalizedPath });
+    await openTransportFileReaderWindow(normalizedPath);
   } catch (error) {
     reportFileReaderActionFailure(t('fileReader.actionOpenDocumentBrowser'), normalizedPath, error);
   }
@@ -2094,14 +2099,14 @@ async function openPathWithDefaultProgram(path: string) {
   const normalizedPath = normalizePath(path);
   if (!normalizedPath) return;
   try {
-    await invokeTauri("open_file_with_default_program", { path: normalizedPath });
+    await openTransportFileWithDefaultProgram(normalizedPath);
   } catch (error) {
     reportFileReaderActionFailure(t('fileReader.actionOpenDefault'), normalizedPath, error);
   }
 }
 
 async function pickFile() {
-  const picked = await open({ multiple: false, directory: false, title: t('fileReader.openFile') });
+  const picked = await openTransportFileDialog({ multiple: false, directory: false, title: t('fileReader.openFile') });
   if (!picked || Array.isArray(picked)) return;
   await openPath(String(picked));
 }
@@ -2117,10 +2122,7 @@ async function requestFileReaderDirectory(path: string): Promise<FileReaderDirec
       entries: [],
     };
   }
-  if (props.bridgeRequest) {
-    return await props.bridgeRequest<FileReaderDirectoryPayload>("fileReader.directory.list", { path: normalizedPath });
-  }
-  return await invokeTauri<FileReaderDirectoryPayload>("list_file_reader_directory", { path: normalizedPath });
+  return await invokeTauri<FileReaderDirectoryPayload>("fileReader.directory.list", { path: normalizedPath });
 }
 
 async function requestFileReaderFile(path: string): Promise<FileReaderFilePayload> {
@@ -2138,10 +2140,7 @@ async function requestFileReaderFile(path: string): Promise<FileReaderFilePayloa
       blockLineCount: 0,
     };
   }
-  if (props.bridgeRequest) {
-    return await props.bridgeRequest<FileReaderFilePayload>("fileReader.readFile", { path: normalizedPath });
-  }
-  return await invokeTauri<FileReaderFilePayload>("read_file_reader_file", { path: normalizedPath });
+  return await invokeTauri<FileReaderFilePayload>("fileReader.readFile", { path: normalizedPath });
 }
 
 async function requestFileReaderFileBlock(path: string, startLine: number, lineCount: number): Promise<FileReaderFileBlockPayload> {
@@ -2149,14 +2148,7 @@ async function requestFileReaderFileBlock(path: string, startLine: number, lineC
   if (!normalizedPath) {
     return { path: "", startLine: 1, endLine: 1, content: "" };
   }
-  if (props.bridgeRequest) {
-    return await props.bridgeRequest<FileReaderFileBlockPayload>("fileReader.readFileBlock", {
-      path: normalizedPath,
-      startLine,
-      lineCount,
-    });
-  }
-  return await invokeTauri<FileReaderFileBlockPayload>("read_file_reader_file_block", {
+  return await invokeTauri<FileReaderFileBlockPayload>("fileReader.readFileBlock", {
     path: normalizedPath,
     startLine,
     lineCount,
@@ -2472,10 +2464,10 @@ const currentDirectoryOpenTarget = computed<DirectoryOpenTargetOption>(() => {
 const selectedDirectoryOpenTargetTitle = computed(() => `用 ${currentDirectoryOpenTarget.value.label} 打开当前目录`);
 
 async function loadDirectoryOpenTargets() {
-  if (!tauriRuntimeAvailable) return;
+  if (!localFileSystemAvailable) return;
   directoryOpenTargetsLoading.value = true;
   try {
-    const payload = await invokeTauri<DirectoryOpenTargetsResult>("list_file_reader_directory_open_targets");
+    const payload = await listTransportFileReaderDirectoryOpenTargets<DirectoryOpenTargetsResult>();
     directoryOpenTargetOptions.value = normalizeDirectoryOpenTargetOptions(Array.isArray(payload.options) ? payload.options : []);
   } catch {
     directoryOpenTargetOptions.value = [];
@@ -2509,29 +2501,29 @@ function closeDirectoryOpenTargetDropdown() {
 
 async function openDirectoryAtTreeRoot(kind = currentDirectoryOpenTargetKind()) {
   closeDirectoryOpenTargetDropdown();
-  if (!tauriRuntimeAvailable) return;
+  if (!localFileSystemAvailable) return;
   const root = directoryTreeRoot.value;
   if (!root) return;
   await openDirectoryWithTarget(root.path, kind);
 }
 
 async function openDirectoryWithTarget(path: string, targetKind = currentDirectoryOpenTargetKind()) {
-  if (!tauriRuntimeAvailable) return;
+  if (!localFileSystemAvailable) return;
   const normalizedPath = normalizePath(path);
   if (!normalizedPath) return;
   try {
-    await invokeTauri("open_file_reader_directory_target", { input: { path: normalizedPath, targetKind } });
+    await openTransportFileReaderDirectoryTarget(normalizedPath, targetKind);
   } catch (error) {
     reportFileReaderActionFailure("打开当前目录", normalizedPath, error);
   }
 }
 
 async function openDirectoryInFileManager(path: string) {
-  if (!tauriRuntimeAvailable) return;
+  if (!localFileSystemAvailable) return;
   const normalizedPath = normalizePath(path);
   if (!normalizedPath) return;
   try {
-    await invokeTauri("open_local_file_directory", { path: normalizedPath });
+    await openTransportLocalDirectory(normalizedPath);
   } catch (error) {
     reportFileReaderActionFailure(t('fileReader.actionOpenDirectory'), normalizedPath, error);
   }
@@ -2664,10 +2656,9 @@ onMounted(async () => {
   void loadDirectoryOpenTargets();
   void startFileReaderWatchListener();
   scheduleFileReaderWatchTargetUpdate();
-  if (props.enableGlobalDrop === false || !isTauriRuntimeAvailable()) return;
+  if (props.enableGlobalDrop === false) return;
   try {
-    unlistenFileDrop = await getCurrentWebview().onDragDropEvent((event) => {
-      const payload = event.payload;
+    unlistenFileDrop = await listenCurrentTransportFileDrop((payload) => {
       if (payload.type === "enter" || payload.type === "over") {
         fileDragActive.value = true;
         return;
@@ -2696,11 +2687,10 @@ onBeforeUnmount(() => {
   if (visibleRangeCaptureTimer) window.clearTimeout(visibleRangeCaptureTimer);
   pendingAutoRefreshDirectoryPaths.clear();
   stopFileReaderWatchListener();
-  if (isTauriRuntimeAvailable()) {
-    void invokeTauri("update_file_reader_watch_targets", {
-      input: { sessionId: fileReaderWatchSessionId.value, targets: [] },
-    }).catch(() => {});
-  }
+  void updateTransportFileReaderWatchTargets({
+    sessionId: fileReaderWatchSessionId.value,
+    targets: [],
+  }).catch(() => {});
   unlistenFileDrop?.();
 });
 

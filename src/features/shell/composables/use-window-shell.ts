@@ -1,70 +1,61 @@
-import { ref, shallowRef } from "vue";
-import { getCurrentWindow, Window as WebviewWindow } from "@tauri-apps/api/window";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { ref } from "vue";
+import {
+  currentTransportWindowIsAlwaysOnTop,
+  currentTransportWindowIsMaximized,
+  getCurrentTransportWindowRole,
+  hideCurrentTransportWindow,
+  minimizeCurrentTransportWindow,
+  setCurrentTransportWindowAlwaysOnTop,
+  startCurrentTransportWindowDragging,
+  toggleCurrentTransportWindowMaximize,
+} from "../../../services/tauri-api";
 
 export function useWindowShell() {
-  const appWindow = shallowRef<WebviewWindow | null>(null);
   const windowReady = ref(false);
   const alwaysOnTop = ref(false);
   const maximized = ref(false);
 
   function initWindow(): "chat" | "archives" | "config" {
-    if (!isTauriRuntimeAvailable()) {
-      appWindow.value = null;
-      windowReady.value = true;
-      return "config";
-    }
-    const win = getCurrentWindow();
-    appWindow.value = win;
+    const role = getCurrentTransportWindowRole();
     windowReady.value = true;
     void syncWindowControlsState();
-    if (win.label === "chat") return "chat";
-    if (win.label === "archives") return "archives";
-    return "config";
+    return role;
   }
 
   async function syncWindowControlsState() {
-    if (!appWindow.value) return;
     try {
-      alwaysOnTop.value = await appWindow.value.isAlwaysOnTop();
+      alwaysOnTop.value = await currentTransportWindowIsAlwaysOnTop();
     } catch {
       alwaysOnTop.value = false;
     }
     try {
-      maximized.value = await appWindow.value.isMaximized();
+      maximized.value = await currentTransportWindowIsMaximized();
     } catch {
       maximized.value = false;
     }
   }
 
   async function closeWindow() {
-    if (!appWindow.value) return;
     try {
-      await invokeTauri("hide_current_window");
-      return;
+      await hideCurrentTransportWindow();
     } catch (error) {
-      console.warn("[窗口] 后端隐藏当前窗口失败，回退前端隐藏", error);
+      console.error("[窗口] 隐藏当前窗口失败", error);
     }
-    await appWindow.value.hide();
   }
 
   async function startDrag() {
-    if (!appWindow.value) return;
     try {
-      await invokeTauri("start_current_window_drag");
+      await startCurrentTransportWindowDragging();
       await syncWindowControlsState();
-      return;
     } catch (error) {
-      console.warn("[窗口] backend startDrag failed, fallback to frontend dragging:", error);
+      console.error("[窗口] 开始拖动当前窗口失败", error);
     }
-    await appWindow.value.startDragging();
   }
 
   async function toggleAlwaysOnTop() {
-    if (!appWindow.value) return;
     const desired = !alwaysOnTop.value;
     try {
-      await appWindow.value.setAlwaysOnTop(desired);
+      await setCurrentTransportWindowAlwaysOnTop(desired);
       alwaysOnTop.value = desired;
     } catch (error) {
       console.error("[窗口] setAlwaysOnTop failed:", error);
@@ -72,32 +63,22 @@ export function useWindowShell() {
   }
 
   async function minimizeWindow() {
-    if (!appWindow.value) return;
     try {
-      await appWindow.value.minimize();
+      await minimizeCurrentTransportWindow();
     } catch (error) {
       console.error("[窗口] minimize failed:", error);
     }
   }
 
   async function toggleMaximizeWindow() {
-    if (!appWindow.value) return;
     try {
-      maximized.value = await invokeTauri<boolean>("toggle_current_window_maximize");
-      return;
+      maximized.value = await toggleCurrentTransportWindowMaximize();
     } catch (error) {
-      console.warn("[窗口] backend toggleMaximize failed, fallback to frontend toggle:", error);
-    }
-    try {
-      await appWindow.value.toggleMaximize();
-      maximized.value = await appWindow.value.isMaximized();
-    } catch (error) {
-      console.error("[窗口] fallback toggleMaximize failed:", error);
+      console.error("[窗口] 切换最大化失败", error);
     }
   }
 
   return {
-    appWindow,
     windowReady,
     alwaysOnTop,
     maximized,

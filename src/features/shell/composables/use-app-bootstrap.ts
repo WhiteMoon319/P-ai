@@ -1,7 +1,6 @@
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { AgentWorkSignalPayload, AppConfig } from "../../../types/app";
 import type { AppThemeState } from "../theme/theme-types";
-import { isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { onTransportNotification } from "../../../services/tauri-api";
 
 type ViewMode = "chat" | "archives" | "config";
 type ConversationApiSettingsPayload = {
@@ -56,98 +55,61 @@ type AppBootstrapOptions = {
 };
 
 export function useAppBootstrap(options: AppBootstrapOptions) {
-  const unlisteners: UnlistenFn[] = [];
+  const unlisteners: Array<() => void> = [];
 
   async function mount() {
     const mode = options.initWindowMode();
-    const isChatWindow = mode === "chat";
     options.setViewMode(mode);
-    if (!isTauriRuntimeAvailable()) {
-      return;
-    }
     try {
-      unlisteners.push(
-        await listen<AppThemeState>("easy-call:theme-changed", (event) => {
-          options.onThemeChanged(event.payload);
-        }),
-      );
-      unlisteners.push(
-        await listen<string>("easy-call:locale-changed", (event) => {
-          options.onLocaleChanged(event.payload);
-        }),
-      );
-      if (isChatWindow) {
-        unlisteners.push(
-          await listen<TerminalApprovalRequestPayload>(
-            "easy-call:terminal-approval-request",
-            (event) => {
-              options.onTerminalApprovalRequested?.(event.payload);
-            },
-          ),
-        );
-      } else {
-        console.warn("[启动] 跳过终端审批监听：当前不是聊天窗口");
-      }
-      unlisteners.push(
-        await listen<ConversationApiSettingsPayload>(
-          "easy-call:conversation-api-updated",
-          (event) => {
-            options.onConversationApiUpdated?.(event.payload);
-          },
-        ),
-      );
-      unlisteners.push(
-        await listen<ChatSettingsPayload>(
-          "easy-call:chat-settings-updated",
-          (event) => {
-            options.onChatSettingsUpdated?.(event.payload);
-          },
-        ),
-      );
-      unlisteners.push(
-        await listen<AppConfig>("easy-call:config-updated", (event) => {
-          options.onConfigUpdated?.(event.payload);
-        }),
-      );
-      unlisteners.push(
-        await listen<AgentWorkSignalPayload>("easy-call:agent-work-start", (event) => {
-          options.onAgentWorkStarted?.(event.payload);
-        }),
-      );
-      unlisteners.push(
-        await listen<AgentWorkSignalPayload>("easy-call:agent-work-stop", (event) => {
-          options.onAgentWorkStopped?.(event.payload);
-        }),
-      );
-      unlisteners.push(
-        await listen<unknown>("easy-call:record-hotkey-probe", (event) => {
-          const payload = event.payload as
+      const subscribe = <T>(method: string, handler: (payload: T) => void) => {
+        unlisteners.push(onTransportNotification<T>(method, handler));
+      };
+      subscribe<AppThemeState>("theme.changed", (payload) => {
+        options.onThemeChanged(payload);
+      });
+      subscribe<string>("locale.changed", (payload) => {
+        options.onLocaleChanged(payload);
+      });
+      subscribe<TerminalApprovalRequestPayload>("terminalApproval.requested", (payload) => {
+        options.onTerminalApprovalRequested?.(payload);
+      });
+      subscribe<ConversationApiSettingsPayload>("conversation.apiUpdated", (payload) => {
+        options.onConversationApiUpdated?.(payload);
+      });
+      subscribe<ChatSettingsPayload>("chat.settingsUpdated", (payload) => {
+        options.onChatSettingsUpdated?.(payload);
+      });
+      subscribe<AppConfig>("config.updated", (payload) => {
+        options.onConfigUpdated?.(payload);
+      });
+      subscribe<AgentWorkSignalPayload>("agentWork.started", (payload) => {
+        options.onAgentWorkStarted?.(payload);
+      });
+      subscribe<AgentWorkSignalPayload>("agentWork.stopped", (payload) => {
+        options.onAgentWorkStopped?.(payload);
+      });
+      subscribe<unknown>("recordHotkey.probe", (payload) => {
+          const normalizedPayload = payload as
             | { state?: unknown; seq?: unknown }
             | string
             | null
             | undefined;
-          if (typeof payload === "string") {
-            const text = payload.trim().toLowerCase();
+          if (typeof normalizedPayload === "string") {
+            const text = normalizedPayload.trim().toLowerCase();
             if (text === "pressed" || text === "released") {
               options.onRecordHotkeyProbe?.({ state: text, seq: 0 });
             }
             return;
           }
-          const text = String(payload?.state || "").trim().toLowerCase();
+          const text = String(normalizedPayload?.state || "").trim().toLowerCase();
           if (text !== "pressed" && text !== "released") return;
-          const seqRaw = Number(payload?.seq);
+          const seqRaw = Number(normalizedPayload?.seq);
           const seq = Number.isFinite(seqRaw) && seqRaw > 0 ? Math.floor(seqRaw) : 0;
           options.onRecordHotkeyProbe?.({ state: text, seq });
-        }),
-      );
-      unlisteners.push(
-        await listen<{ conversationId?: string; reportId?: string; status?: string }>(
-          "easy-call:tool-review-reports-updated",
-          (event) => {
-            options.onToolReviewReportsUpdated?.(event.payload || {});
-          },
-        ),
-      );
+      });
+      subscribe<{ conversationId?: string; reportId?: string; status?: string }>("toolReview.reportsUpdated", (payload) => {
+        options.onToolReviewReportsUpdated?.(payload || {});
+      });
     } catch (error) {
       unmount();
       throw error;

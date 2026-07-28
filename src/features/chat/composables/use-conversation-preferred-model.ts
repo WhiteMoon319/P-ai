@@ -7,12 +7,14 @@ import type { Ref } from "vue";
 const t = i18n.global.t;
 
 type ConversationPreferredModelBindings = {
-  config: AppConfig;
+  config?: AppConfig;
   currentChatConversationId: Ref<string>;
   currentChatPreferredApiConfigId: Ref<string>;
   setStatus: (value: string) => void;
   setStatusError: (key: string, error: unknown) => void;
   isTextRequestFormat?: (format: string) => boolean;
+  isModelAvailable?: (apiConfigId: string) => boolean;
+  afterPersist?: (result: { conversationId: string; preferredApiConfigId?: string | null }) => Promise<void> | void;
 };
 
 export function useConversationPreferredModel(bindings: ConversationPreferredModelBindings) {
@@ -37,12 +39,17 @@ export function useConversationPreferredModel(bindings: ConversationPreferredMod
 
   async function updateConversationPreferredApiConfig(value: string) {
     const nextId = String(value || "").trim();
-    const resolvedId = resolveModelRoleApiConfigId(nextId, bindings.config);
-    if (nextId && !bindings.config.apiConfigs.some((item: any) =>
-      item.id === resolvedId
-      && item.enableText
-      && (!bindings.isTextRequestFormat || bindings.isTextRequestFormat(item.requestFormat))
-    )) {
+    const resolvedId = bindings.config
+      ? resolveModelRoleApiConfigId(nextId, bindings.config)
+      : nextId;
+    const modelAvailable = !nextId
+      || bindings.isModelAvailable?.(resolvedId)
+      || !!bindings.config?.apiConfigs.some((item: any) =>
+        item.id === resolvedId
+        && item.enableText
+        && (!bindings.isTextRequestFormat || bindings.isTextRequestFormat(item.requestFormat))
+      );
+    if (!modelAvailable) {
       bindings.setStatus(t("chat.localTools.modelNotAvailable"));
       return;
     }
@@ -57,12 +64,13 @@ export function useConversationPreferredModel(bindings: ConversationPreferredMod
     let persist!: Promise<boolean>;
     persist = (async () => {
       try {
-        await invokeTauri("set_conversation_preferred_model", {
+        const result = await invokeTauri<{ conversationId: string; preferredApiConfigId?: string | null }>("conversation.preferredModel.set", {
           input: {
             conversationId,
             preferredApiConfigId: nextId || null,
           },
         });
+        await bindings.afterPersist?.(result);
       } catch (error) {
         console.error("[会话首选模型] 保存失败，准备回滚", {
           conversationId,

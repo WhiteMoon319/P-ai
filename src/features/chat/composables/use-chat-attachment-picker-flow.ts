@@ -1,5 +1,6 @@
-import { open } from "@tauri-apps/plugin-dialog";
 import type { Ref } from "vue";
+import type { AttachmentReceipt } from "../../../services/attachment-transfer";
+import { pickTransportAttachments } from "../../../services/tauri-api";
 
 type QueuedAttachmentNotice = {
   id: string;
@@ -12,7 +13,7 @@ type UseChatAttachmentPickerFlowOptions = {
   chatting: Ref<boolean>;
   trimming: Ref<boolean>;
   queuedAttachmentNotices: Ref<QueuedAttachmentNotice[]>;
-  onNativeFileDrop: (paths: string[]) => Promise<void>;
+  applyPickedAttachment: (receipt: AttachmentReceipt) => void;
   setStatusError: (key: string, error: unknown) => void;
 };
 
@@ -25,18 +26,12 @@ export function useChatAttachmentPickerFlow(options: UseChatAttachmentPickerFlow
   async function pickChatAttachments() {
     if (options.chatting.value || options.trimming.value) return;
     try {
-      const picked = await open({
+      const receipts = await pickTransportAttachments<AttachmentReceipt>({
         multiple: true,
         directory: false,
         title: "选择附件",
       });
-      if (!picked) return;
-      const paths = Array.isArray(picked) ? picked : [picked];
-      const normalized = paths
-        .map((value) => String(value || "").trim())
-        .filter(Boolean);
-      if (normalized.length === 0) return;
-      await options.onNativeFileDrop(normalized);
+      for (const receipt of receipts) options.applyPickedAttachment(receipt);
     } catch (error) {
       options.setStatusError("status.pasteImageReadFailed", error);
     }

@@ -1,4 +1,4 @@
-import { invokeTauri } from "../../../services/tauri-api";
+import { importTransportConversationShare, invokeTauri } from "../../../services/tauri-api";
 import type { ShellWorkspace, ShellWorkMode } from "../../../types/app";
 
 export function useChatConversationActionsOrchestrator(bindings: Record<string, any>) {
@@ -21,40 +21,36 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
       )
       : null;
     const agentId = String(input?.agentId || selectedOption?.agentId || "").trim();
-    if (!departmentId) return;
+    if (!departmentId) return "";
     try {
       const copySourceConversationId = input?.copyCurrent
         ? String(bindings.currentChatConversationId.value || "").trim()
         : "";
       const importPath = String(input?.importPath || "").trim();
-      const result = await invokeTauri<{
-        conversationId: string;
-        unarchivedConversations?: any[];
-      }>(importPath ? "import_conversation_share_from_file" : "create_unarchived_conversation", importPath
-        ? {
+      const request = {
+        departmentId,
+        agentId: agentId || null,
+        title: String(input?.title || "").trim() || null,
+        shellWorkspaces: input?.shellWorkspaces || null,
+        shellWorkMode: input?.shellWorkMode || null,
+        shellAutonomousMode: Boolean(input?.shellAutonomousMode),
+      };
+      const result = importPath
+        ? await importTransportConversationShare<{
+          conversationId: string;
+          unarchivedConversations?: any[];
+        }>({ path: importPath, ...request })
+        : await invokeTauri<{
+          conversationId: string;
+          unarchivedConversations?: any[];
+        }>("conversation.create", {
           input: {
-            path: importPath,
-            departmentId,
-            agentId: agentId || null,
-            title: String(input?.title || "").trim() || null,
-            shellWorkspaces: input?.shellWorkspaces || null,
-            shellWorkMode: input?.shellWorkMode || null,
-            shellAutonomousMode: Boolean(input?.shellAutonomousMode),
-          },
-        }
-        : {
-          input: {
-            departmentId,
-            agentId: agentId || null,
-            title: String(input?.title || "").trim() || null,
+            ...request,
             copySourceConversationId: copySourceConversationId || null,
-            shellWorkspaces: input?.shellWorkspaces || null,
-            shellWorkMode: input?.shellWorkMode || null,
-            shellAutonomousMode: Boolean(input?.shellAutonomousMode),
           },
         });
       const conversationId = String(result?.conversationId || "").trim();
-      if (!conversationId) return;
+      if (!conversationId) return "";
       if (Array.isArray(result.unarchivedConversations)) {
         bindings.unarchivedConversations.value = result.unarchivedConversations;
       } else {
@@ -64,8 +60,10 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
       if (importPath) {
         bindings.setStatus(bindings.tr("status.conversationShareImported"));
       }
+      return conversationId;
     } catch (error) {
       bindings.setStatus(bindings.tr("status.conversationCreateFailed", { err: bindings.formatRequestFailed(error) }));
+      return "";
     }
   }
 
@@ -78,7 +76,7 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
         parentConversationId: string;
         conversationKind: string;
         title: string;
-      }>("create_side_chat_conversation", {
+      }>("conversation.createSide", {
         input: { parentConversationId: parentId },
       });
       return String(result?.conversationId || "").trim();
@@ -103,7 +101,7 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
         conversationId: string;
         title: string;
         warning?: string | null;
-      }>("branch_unarchived_conversation_from_selection", {
+      }>("conversation.branchFromSelection", {
         input: {
           sourceConversationId,
           selectedMessageIds,
@@ -141,7 +139,7 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
         conversationId: string;
         title: string;
         warning?: string | null;
-      }>("create_conversation_branch_from_message", {
+      }>("conversation.branchFromMessage", {
         input: {
           sourceConversationId,
           turnMessageId,
@@ -189,7 +187,7 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
           targetConversationId: string;
           remoteContactId: string;
           forwardedCount: number;
-        }>("forward_selection_to_remote_im_contact", {
+        }>("conversation.forwardRemoteContact", {
           input: {
             sourceConversationId,
             targetConversationId,
@@ -215,7 +213,7 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
         const result = await invokeTauri<{
           targetConversationId: string;
           forwardedCount: number;
-        }>("forward_unarchived_conversation_selection", {
+        }>("conversation.forwardSelection", {
           input: {
             sourceConversationId,
             targetConversationId,
@@ -270,7 +268,7 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
         targetAgentId: string;
         targetAgentName: string;
         selectedMessageCount: number;
-      }>("submit_user_async_delegate", {
+      }>("delegate.submit", {
         input: {
           conversationId,
           targetDepartmentId,
@@ -299,7 +297,7 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
     const title = String(payload?.title || "").trim();
     if (!conversationId) return;
     try {
-      const result = await invokeTauri<{ conversationId: string; title: string }>("rename_unarchived_conversation", {
+      const result = await invokeTauri<{ conversationId: string; title: string }>("conversation.rename", {
         input: {
           conversationId,
           title,
@@ -324,7 +322,7 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
     const cid = String(conversationId || "").trim();
     if (!cid) return;
     try {
-      const result = await invokeTauri<{ conversationId: string; isPinned: boolean; pinIndex?: number | null }>("toggle_unarchived_conversation_pin", {
+      const result = await invokeTauri<{ conversationId: string; isPinned: boolean; pinIndex?: number | null }>("conversation.pin", {
         input: {
           conversationId: cid,
         },

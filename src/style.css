@@ -17,6 +17,7 @@
 
 :root {
   --app-code-font-family: "Easy Call JetBrains Mono", var(--app-font-family, system-ui, sans-serif);
+  --app-chat-message-text-size: var(--app-text-sm-size, 0.875rem);
 }
 
 .ecall-shimmer-text {

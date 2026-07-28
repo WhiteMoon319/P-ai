@@ -1,5 +1,11 @@
 import { onScopeDispose } from "vue";
-import { invokeTauri } from "../../../services/tauri-api";
+import {
+  bindTransportConversationStream,
+  invokeTauri,
+  onTransportNotification,
+  probeTransportConversationStream,
+  unbindTransportConversationStream,
+} from "../../../services/tauri-api";
 import { registerChatFlowRuntime } from "./chat-flow-runtime-registry";
 import { useChatFlow } from "./use-chat-flow";
 import { useChatRewindActions } from "./use-chat-rewind-actions";
@@ -9,6 +15,7 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
   let chatFlowRef: any = null;
 
   const chatFlow = useChatFlow({
+      subscribeExternalEvents: (method, handler) => onTransportNotification(method, handler),
       chatting: bindings.chatting,
       trimming: bindings.trimming,
       isConversationBusy: () => {
@@ -74,7 +81,7 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
       removeBinaryPlaceholders: bindings.removeBinaryPlaceholders,
       invokeSendChatMessage: ({ text, displayText, parts, extraTextBlocks, mentions, session, traceId, onDelta }) =>
         invokeTauri(
-          "submit_chat_message",
+          "chat.send",
           {
             input: {
               payload: {
@@ -103,7 +110,7 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
           },
         ),
       invokeStopChatMessage: ({ session, partialAssistantText, partialStreamBlocks }) =>
-        invokeTauri("stop_chat_message", {
+        invokeTauri("chat.stop", {
           input: {
             session: {
               apiConfigId: session.apiConfigId,
@@ -125,26 +132,9 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
         const afterMessage = bindings.allMessages.value.find((message: any) => String(message?.id || "").trim() === normalizedMessageId);
         return !!afterMessage && afterMessage !== beforeMessage;
       },
-      invokeBindActiveChatViewStream: ({ bindingId, conversationId, onDelta }) =>
-        invokeTauri("bind_active_chat_view_stream", {
-          input: {
-            bindingId,
-            conversationId: conversationId || null,
-          },
-          onDelta,
-        }),
-      invokeUnbindActiveChatViewStream: ({ bindingId }) =>
-        invokeTauri("unbind_active_chat_view_stream", {
-          input: { bindingId },
-        }),
-      invokeProbeActiveChatViewStream: ({ bindingId, conversationId, probeId }) =>
-        invokeTauri<boolean>("probe_active_chat_view_stream", {
-          input: {
-            bindingId,
-            conversationId: conversationId || null,
-            probeId,
-          },
-        }),
+      invokeBindActiveChatViewStream: bindTransportConversationStream,
+      invokeUnbindActiveChatViewStream: unbindTransportConversationStream,
+      invokeProbeActiveChatViewStream: probeTransportConversationStream,
       onReloadMessages: () => bindings.reloadForegroundConversationMessages("chat_flow_reload"),
       onAssistantMessageCompleted: async ({ conversationId, assistantMessage }) => {
         bindings.applyConversationMessageAppended({
@@ -187,7 +177,7 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
       clearForegroundRuntimeState: () => {
         chatFlowRef?.clearForegroundRuntimeState();
       },
-      confirmPlanAndContinue: ({ conversationId, planMessageId, departmentId, agentId }) => invokeTauri<void>("confirm_plan_and_continue", {
+      confirmPlanAndContinue: ({ conversationId, planMessageId, departmentId, agentId }) => invokeTauri<void>("conversation.plan.confirm", {
         input: {
           conversationId,
           planMessageId,
@@ -227,7 +217,7 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
         const normalizedConversationId = String(conversationId || "").trim();
         if (!normalizedConversationId) return;
         chatFlowRef?.clearForegroundRuntimeState();
-        const snapshot = await invokeTauri<any>("get_foreground_conversation_light_snapshot", {
+        const snapshot = await invokeTauri<any>("conversation.foregroundLightSnapshot", {
           input: {
             conversationId: normalizedConversationId,
             agentId: null,

@@ -1,5 +1,5 @@
 import { computed } from "vue";
-import { invokeTauri } from "../../../services/tauri-api";
+import { invokeTauri, openTransportWindow } from "../../../services/tauri-api";
 import { useChatAttachmentActions } from "./use-chat-attachment-actions";
 import { useChatAttachmentPickerFlow } from "./use-chat-attachment-picker-flow";
 import { useChatMedia } from "./use-chat-media";
@@ -78,7 +78,7 @@ export function useChatWindowMediaOrchestrator(bindings: Record<string, any>) {
             startedAt,
           });
         }
-        void invokeTauri("show_chat_window").catch((error) => {
+        void openTransportWindow("chat").catch((error) => {
           console.warn("[音频] 打开聊天窗口失败:", error);
         });
       }
@@ -98,27 +98,18 @@ export function useChatWindowMediaOrchestrator(bindings: Record<string, any>) {
     viewMode: bindings.viewMode,
     config: bindings.config,
     recording,
-    tauriWindowLabel: bindings.tauriWindowLabel,
-    isChatTauriWindow: bindings.isChatTauriWindow,
     currentChatConversationId: bindings.currentChatConversationId,
-    currentForegroundAgentId: bindings.currentForegroundAgentId,
-    startupDataReady: bindings.startupDataReady,
     chatting: bindings.chatting,
     recordHotkeyProbeLastSeq: bindings.recordHotkeyProbeLastSeq,
     recordHotkeyProbeDown: bindings.recordHotkeyProbeDown,
     chatWindowActiveSynced: bindings.chatWindowActiveSynced,
     allMessages: bindings.allMessages,
-    foregroundSnapshotRecentLimit: bindings.FOREGROUND_SNAPSHOT_RECENT_LIMIT,
-    backgroundConversationCacheLimit: bindings.BACKGROUND_CONVERSATION_CACHE_LIMIT,
     getChatFlow: bindings.getChatFlow,
     applyConversationRuntimeStateUpdated: bindings.applyConversationRuntimeStateUpdated,
     startSpeechRecording,
     stopSpeechRecording,
     prewarmMicrophone,
-    refreshChatUnarchivedConversations: bindings.refreshChatUnarchivedConversations,
     syncUnarchivedConversationOverviewChangedSinceWatermark: bindings.syncUnarchivedConversationOverviewChangedSinceWatermark,
-    freezeForegroundConversation: bindings.freezeForegroundConversation,
-    restoreForegroundConversationProjection: bindings.restoreForegroundConversationProjection,
     switchUnarchivedConversation: bindings.switchUnarchivedConversation,
   });
 
@@ -146,7 +137,10 @@ export function useChatWindowMediaOrchestrator(bindings: Record<string, any>) {
     chatting: bindings.chatting,
     trimming: bindings.trimming,
     queuedAttachmentNotices: bindings.queuedAttachmentNotices,
-    onNativeFileDrop: chatMedia.onNativeFileDrop,
+    applyPickedAttachment: (receipt) => {
+      const apiConfig = bindings.getCurrentForegroundApiConfig();
+      if (apiConfig) chatMedia.applyQueuedAttachmentResult(receipt, apiConfig);
+    },
     setStatusError: bindings.setStatusError,
   });
 
@@ -172,7 +166,7 @@ export function useChatWindowMediaOrchestrator(bindings: Record<string, any>) {
     onPaste: chatMedia.onPaste,
     onDragOver: chatMedia.onDragOver,
     onDrop: chatMedia.onDrop,
-    onNativeFileDrop: chatMedia.onNativeFileDrop,
+    onTransportFileDrop: chatMedia.onTransportFileDrop,
     removeClipboardImage: chatMedia.removeClipboardImage,
     startHotkeyRecordTest: chatMedia.startHotkeyRecordTest,
     stopHotkeyRecordTest: chatMedia.stopHotkeyRecordTest,

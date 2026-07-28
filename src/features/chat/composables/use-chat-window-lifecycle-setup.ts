@@ -10,7 +10,7 @@ export function useChatWindowLifecycleSetup(bindings: Record<string, any>) {
       onPaste: bindings.onPaste,
       onDragOver: bindings.onDragOver,
       onDrop: bindings.onDrop,
-      onNativeFileDrop: bindings.onNativeFileDrop,
+      onTransportFileDrop: bindings.onTransportFileDrop,
       onNativeDragState: (active) => {
         bindings.mediaDragActive.value = active;
       },
@@ -45,7 +45,7 @@ export function useChatWindowLifecycleSetup(bindings: Record<string, any>) {
         bindings.setStatus(`启动步骤失败：${label}：${bindings.formatRequestFailed(error)}`);
       },
       afterSafetyGateReady: async () => {
-        const started = await invokeTauri<boolean>("frontend_ready_start_remote_im_services");
+        const started = await invokeTauri<boolean>("remoteIm.services.start");
         console.info("[启动] 迁移后会话准备完成，已通知后端启动后台服务", { started });
       },
       afterMountedReady: async () => {

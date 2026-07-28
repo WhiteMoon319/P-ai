@@ -286,6 +286,52 @@ struct IdeChatConversationInput {
     workspace_name: Option<String>,
 }
 
+// ========== 统一传输协议的桌面入口 ==========
+// Sidebar/Web 使用的协议方法也必须有同一份 Tauri 入口；协议差异只能由
+// tauri-api.ts 适配器处理，不能让前端维护“Web 专用方法”。
+
+#[tauri::command]
+fn list_transport_conversations(state: State<'_, AppState>) -> Result<Value, String> {
+    ide_chat_conversation_list(state.inner(), "desktop")
+}
+
+#[tauri::command]
+fn list_conversation_create_options(state: State<'_, AppState>) -> Result<Value, String> {
+    ide_chat_create_conversation_options(state.inner())
+}
+
+#[tauri::command]
+fn get_conversation_workspace_permission(
+    input: Value,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    ide_chat_workspace_permission(state.inner(), input)
+}
+
+#[tauri::command]
+fn select_conversation_workspace_permission(
+    input: Value,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    ide_chat_select_workspace_permission(state.inner(), input)
+}
+
+#[tauri::command]
+fn save_conversation_workspace_layout(
+    input: Value,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    ide_chat_workspace_layout_save(state.inner(), input)
+}
+
+#[tauri::command]
+fn list_conversation_workspaces(
+    input: Value,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    ide_chat_workspace_list(state.inner(), input)
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct IdeChatStreamProbeInput {
@@ -678,6 +724,49 @@ mod ide_context_tests {
             migration_preview_dirs: Arc::new(Mutex::new(std::collections::HashMap::new())),
             delegate_active_ids: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
             backend_ready: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
+    }
+
+    #[test]
+    fn config_migration_web_transport_should_round_trip_base64_package() {
+        let _test_guard = ide_context_test_lock();
+        let state = ide_context_test_state();
+        state_write_config_cached(&state, &AppConfig::default()).expect("write test config");
+        state_write_agents_cached(&state, &[]).expect("write test agents");
+        state_write_runtime_state_cached(&state, &RuntimeStateFile::default())
+            .expect("write test runtime state");
+
+        let exported = export_config_migration_package_for_web(
+            ExportConfigMigrationPackageInput {
+                password: "secret1".to_string(),
+            },
+            &state,
+        )
+        .expect("export web migration package");
+        assert!(exported.path.is_empty());
+        assert_eq!(exported.file_name, "p-ai-migration.zip");
+        assert!(!exported.bytes_base64.is_empty());
+
+        let preview = preview_import_config_migration_package_for_web(
+            PreviewImportConfigMigrationPackageInput {
+                password: "secret1".to_string(),
+                package_path: None,
+                package_file_name: Some(exported.file_name),
+                package_bytes_base64: Some(exported.bytes_base64),
+            },
+            &state,
+        )
+        .expect("preview web migration package");
+        assert!(!preview.preview_id.is_empty());
+        assert!(preview.package_version.starts_with('V'));
+
+        let preview_dir = state
+            .migration_preview_dirs
+            .lock()
+            .expect("lock preview dirs")
+            .remove(&preview.preview_id);
+        if let Some(path) = preview_dir {
+            let _ = std::fs::remove_dir_all(path);
         }
     }
 

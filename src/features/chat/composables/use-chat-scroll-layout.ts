@@ -1,4 +1,5 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue";
+import { isMobileTouchViewport } from "../utils/chat-input-focus";
 
 const TODO_DROPDOWN_SAFE_GAP = 30;
 const FLOATING_TOOLBAR_MIN_RESERVE = 24;
@@ -239,7 +240,13 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
   watch(
     options.chatting,
     (isChatting, wasChatting) => {
-      if (wasChatting && !isChatting && !options.frozen.value && !options.busy.value) {
+      if (
+        wasChatting
+        && !isChatting
+        && !options.frozen.value
+        && !options.busy.value
+        && !isMobileTouchViewport()
+      ) {
         nextTick(() => options.focusComposerInput({ preventScroll: true }));
       }
     },

@@ -19,8 +19,6 @@ export type ChatWorkspaceChoice = {
 };
 
 type UseChatWorkspaceOptions = {
-  activeApiConfigId: ComputedRef<string>;
-  activeAgentId: ComputedRef<string>;
   activeConversationId: ComputedRef<string>;
   setStatus: (text: string) => void;
   setStatusError: (key: string, error: unknown) => void;
@@ -117,8 +115,8 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
     chatWorkspaceWorktreeAvailable.value = false;
     chatWorkspaceWorktreeCheckMessage.value = t("chat.workspaceWorktreeChecking");
     try {
-      const result = await invokeTauri<{ isGitRoot?: boolean; checked?: boolean; error?: string }>("check_git_workspace_root", {
-        input: { workspacePath: normalizedPath },
+      const result = await invokeTauri<{ isGitRoot?: boolean; checked?: boolean; error?: string }>("workspace.gitRootCheck", {
+        workspacePath: normalizedPath,
       });
       if (checkSequence !== gitCheckSequence) return Boolean(result.isGitRoot);
       chatWorkspaceWorktreeAvailable.value = Boolean(result.isGitRoot);
@@ -150,10 +148,8 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
   }
 
   async function refreshChatWorkspaceState() {
-    const apiConfigId = String(options.activeApiConfigId.value || "").trim();
-    const agentId = String(options.activeAgentId.value || "").trim();
     const conversationId = String(options.activeConversationId.value || "").trim();
-    if (!apiConfigId || !agentId || !conversationId) {
+    if (!conversationId) {
       chatWorkspaceName.value = DEFAULT_CHAT_WORKSPACE_NAME;
       chatWorkspacePath.value = "";
       chatWorkspaceRootPath.value = "";
@@ -165,8 +161,8 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
       return;
     }
     try {
-      const state = await invokeTauri<ChatShellWorkspaceState>("get_chat_shell_workspace", {
-        input: { apiConfigId, agentId, conversationId: conversationId || null },
+      const state = await invokeTauri<ChatShellWorkspaceState>("workspace.list", {
+        conversationId,
       });
       applyChatWorkspaceState(state);
     } catch (error) {
@@ -185,10 +181,7 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
   }
 
   async function saveChatWorkspaces(workspaces: ChatWorkspaceChoice[], autonomousMode?: boolean, workMode: ShellWorkMode = chatWorkspaceWorkMode.value) {
-    const apiConfigId = String(options.activeApiConfigId.value || "").trim();
-    const agentId = String(options.activeAgentId.value || "").trim();
     const conversationId = String(options.activeConversationId.value || "").trim();
-    if (!apiConfigId || !agentId) return;
     if (!conversationId) {
       options.setStatus("当前会话未就绪，暂时不能设置工作目录");
       return;
@@ -201,24 +194,20 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
     chatWorkspaceAutonomousMode.value = Boolean(autonomousMode);
     chatWorkspaceWorkMode.value = workMode === "isolated_worktree" ? "isolated_worktree" : "directory";
     try {
-      const state = await invokeTauri<ChatShellWorkspaceState>("update_chat_shell_workspace_layout", {
-        input: {
-          apiConfigId,
-          agentId,
-          conversationId: conversationId || null,
-          autonomousMode: Boolean(autonomousMode),
-          shellWorkMode: chatWorkspaceWorkMode.value,
-          workspaces: workspaces
-            .filter((item) => item.level !== "system")
-            .map((item) => ({
-              id: item.id,
-              name: item.name,
-              path: item.path,
-              level: item.level,
-              access: item.access,
-              builtIn: false,
-            })),
-        },
+      const state = await invokeTauri<ChatShellWorkspaceState>("workspace.layout.save", {
+        conversationId,
+        autonomousMode: Boolean(autonomousMode),
+        shellWorkMode: chatWorkspaceWorkMode.value,
+        workspaces: workspaces
+          .filter((item) => item.level !== "system")
+          .map((item) => ({
+            id: item.id,
+            name: item.name,
+            path: item.path,
+            level: item.level,
+            access: item.access,
+            builtIn: false,
+          })),
       });
       applyChatWorkspaceState(state);
     } catch (error) {

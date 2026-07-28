@@ -81,7 +81,6 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     perfLog: bindings.perfLog,
     PERF_DEBUG: bindings.PERF_DEBUG,
     configTab: bindings.configTab,
-    tauriWindowLabel: bindings.tauriWindowLabel,
     currentForegroundDepartmentId: bindings.currentForegroundDepartmentId,
     unarchivedConversations: bindings.unarchivedConversations,
     delegateConversations: bindings.delegateConversations,
@@ -113,7 +112,6 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
       currentChatTodos: bindings.currentChatTodos,
       currentForegroundAgentId: bindings.currentForegroundAgentId,
       currentForegroundApiConfigId: bindings.currentForegroundApiConfigId,
-      tauriWindowLabel: bindings.tauriWindowLabel,
       unarchivedConversations: bindings.unarchivedConversations,
       lastOverviewSyncAt: bindings.lastOverviewSyncAt,
       remoteImContactConversations: bindings.remoteImContactConversations,
@@ -139,7 +137,6 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     },
     config: bindings.config,
     tr: bindings.tr,
-    tauriWindowLabel: bindings.tauriWindowLabel,
     currentChatConversationId: bindings.currentChatConversationId,
     currentChatPreferredApiConfigId: bindings.currentChatPreferredApiConfigId,
     currentChatTodos: bindings.currentChatTodos,
@@ -214,7 +211,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
         conversationId: string;
         title: string;
         warning?: string | null;
-      }>("create_conversation_branch_from_message", {
+      }>("conversation.branchFromMessage", {
         input: {
           sourceConversationId,
           turnMessageId,
@@ -262,7 +259,6 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     removeBinaryPlaceholders,
     reloadForegroundConversationMessages: conversationOrchestrator.reloadForegroundConversationMessages,
     refreshForegroundConversationMessageById: conversationOrchestrator.refreshForegroundConversationMessageById,
-    tauriWindowLabel: bindings.tauriWindowLabel,
     isChatWindowActiveNow: bindings.isChatWindowActiveNow,
     consumeOrQueueOwnMessageAlign: bindings.consumeOrQueueOwnMessageAlign,
     applyConversationMessageAppended: conversationOrchestrator.applyConversationMessageAppended,

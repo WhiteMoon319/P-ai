@@ -58,7 +58,7 @@ function createBindings(shouldBindStream: boolean, order: string[]) {
     getChatFlow: () => flow,
   };
   invokeTauriMock.mockImplementation(async (command: string) => {
-    if (command !== "get_foreground_conversation_light_snapshot") {
+    if (command !== "conversation.foregroundLightSnapshot") {
       throw new Error(`unexpected command: ${command}`);
     }
     order.push("snapshot-request");

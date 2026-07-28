@@ -1,12 +1,9 @@
 import { onMounted, onScopeDispose, ref, watch, type Ref } from "vue";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { invokeTauri, onTransportNotification } from "../../../services/tauri-api";
 import type {
   RemoteImContactDashboardSnapshot,
   RemoteImContactDashboardSyncResult,
 } from "../../../types/app";
-
-const REMOTE_IM_CONTACT_DASHBOARD_UPDATED_EVENT = "easy-call:remote-im-contact-dashboard-updated";
 
 type UseRemoteImContactDashboardOptions = {
   contactId: Ref<string>;
@@ -18,14 +15,14 @@ function normalizedContactId(value: unknown) {
 }
 
 function dashboardAvailable(options: UseRemoteImContactDashboardOptions) {
-  if (!isTauriRuntimeAvailable() || !options.enabled.value) return false;
+  if (!options.enabled.value) return false;
   if (typeof document !== "undefined" && document.visibilityState === "hidden") return false;
   return !!normalizedContactId(options.contactId.value);
 }
 
 export function useRemoteImContactDashboard(options: UseRemoteImContactDashboardOptions) {
   const snapshot = ref<RemoteImContactDashboardSnapshot | null>(null);
-  let unlisten: UnlistenFn | null = null;
+  let unlisten: (() => void) | null = null;
   let disposed = false;
   let requestSequence = 0;
   let subscribedContactId = "";
@@ -38,11 +35,9 @@ export function useRemoteImContactDashboard(options: UseRemoteImContactDashboard
 
   async function unsubscribe(contactId = subscribedContactId) {
     const target = normalizedContactId(contactId);
-    if (!target || !isTauriRuntimeAvailable()) return;
+    if (!target) return;
     if (subscribedContactId === target) subscribedContactId = "";
-    await invokeTauri("remote_im_unsubscribe_contact_dashboard", {
-      input: { contactId: target },
-    }).catch((error) => {
+    await invokeTauri("remoteIm.dashboard.unsubscribe", { contactId: target }).catch((error) => {
       console.debug("[远程会话仪表盘] 取消订阅失败", error);
     });
   }
@@ -53,8 +48,8 @@ export function useRemoteImContactDashboard(options: UseRemoteImContactDashboard
     const sequence = ++requestSequence;
     try {
       const next = await invokeTauri<RemoteImContactDashboardSnapshot>(
-        "remote_im_subscribe_contact_dashboard",
-        { input: { contactId } },
+        "remoteIm.dashboard.subscribe",
+        { contactId },
       );
       if (disposed || sequence !== requestSequence || contactId !== normalizedContactId(options.contactId.value)) return;
       subscribedContactId = contactId;
@@ -72,12 +67,10 @@ export function useRemoteImContactDashboard(options: UseRemoteImContactDashboard
     const sequence = ++requestSequence;
     try {
       const result = await invokeTauri<RemoteImContactDashboardSyncResult>(
-        "remote_im_sync_contact_dashboard",
+        "remoteIm.dashboard.sync",
         {
-          input: {
-            contactId,
-            knownWatermark: snapshot.value?.watermark || undefined,
-          },
+          contactId,
+          knownWatermark: snapshot.value?.watermark || undefined,
         },
       );
       if (disposed || sequence !== requestSequence || contactId !== normalizedContactId(options.contactId.value)) return;
@@ -122,20 +115,12 @@ export function useRemoteImContactDashboard(options: UseRemoteImContactDashboard
   );
 
   onMounted(() => {
-    if (isTauriRuntimeAvailable()) {
-      void listen<RemoteImContactDashboardSnapshot>(REMOTE_IM_CONTACT_DASHBOARD_UPDATED_EVENT, (event) => {
-        if (!dashboardAvailable(options)) return;
-        applySnapshot(event.payload);
-      }).then((dispose) => {
-        if (disposed) {
-          dispose();
-          return;
-        }
-        unlisten = dispose;
-      }).catch((error) => {
-        console.debug("[远程会话仪表盘] 推送监听注册失败", error);
-      });
-    }
+    const dispose = onTransportNotification<RemoteImContactDashboardSnapshot>("remoteIm.dashboard.updated", (payload) => {
+      if (!dashboardAvailable(options)) return;
+      applySnapshot(payload);
+    });
+    if (disposed) dispose();
+    else unlisten = dispose;
     window.addEventListener("focus", handleForegroundWake);
     document.addEventListener("visibilitychange", handleForegroundWake);
   });

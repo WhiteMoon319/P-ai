@@ -1,5 +1,9 @@
 import type { ComputedRef, Ref } from "vue";
-import { invokeTauri } from "../../../services/tauri-api";
+import {
+  invokeTauri,
+  updateTransportRecordBackgroundWake,
+  updateTransportRecordHotkey,
+} from "../../../services/tauri-api";
 import type {
   AppBootstrapSnapshot,
   AppConfig,
@@ -645,11 +649,7 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     if (next === current) return true;
     options.saving.value = true;
     try {
-      const saved = await invokeTauri<RecordHotkeyUpdateResult>("update_record_hotkey", {
-        input: {
-          recordHotkey: next,
-        },
-      });
+      const saved = await updateTransportRecordHotkey<RecordHotkeyUpdateResult>(next);
       options.config.recordHotkey = String(saved.recordHotkey || "");
       options.config.recordBackgroundWakeEnabled = !!saved.recordBackgroundWakeEnabled;
       const normalizedConfigNumbers = normalizeConfigNumberFields(
@@ -679,11 +679,7 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     if (next === previous) return true;
     options.saving.value = true;
     try {
-      const saved = await invokeTauri<RecordHotkeyUpdateResult>("update_record_background_wake", {
-        input: {
-          enabled: next,
-        },
-      });
+      const saved = await updateTransportRecordBackgroundWake<RecordHotkeyUpdateResult>(next);
       options.config.recordHotkey = String(saved.recordHotkey || "");
       options.config.recordBackgroundWakeEnabled = !!saved.recordBackgroundWakeEnabled;
       const normalizedConfigNumbers = normalizeConfigNumberFields(

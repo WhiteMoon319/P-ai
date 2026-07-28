@@ -57,7 +57,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { invokeTauri } from "../../../../services/tauri-api";
+import { invokeTauri, openTransportExternalUrl } from "../../../../services/tauri-api";
 import type { GithubUpdateMethod } from "../../../../types/app";
 
 const props = defineProps<{
@@ -99,7 +99,7 @@ onMounted(async () => {
 async function openRepository() {
   try {
     const url = await invokeTauri<string>("get_project_repository_url");
-    void invokeTauri("open_external_url", { url });
+    void openTransportExternalUrl(url);
   } catch (error) {
     console.warn("[关于] resolve project repository failed:", error);
   }
@@ -115,7 +115,7 @@ function setGithubUpdateMethod(value: GithubUpdateMethod) {
 
 function openUpdateRelease() {
   if (updateDialogReleaseUrl.value) {
-    void invokeTauri("open_external_url", { url: updateDialogReleaseUrl.value });
+    void openTransportExternalUrl(updateDialogReleaseUrl.value);
   }
 }
 

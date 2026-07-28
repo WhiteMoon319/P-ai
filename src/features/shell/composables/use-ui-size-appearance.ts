@@ -1,9 +1,7 @@
 import { ref } from "vue";
-import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { emitTransportEvent, onTransportNotification } from "../../../services/tauri-api";
 
 const UI_SIZE_STORAGE_KEY = "easy-call.ui-size.v1";
-const UI_SIZE_CHANGED_EVENT = "easy-call:ui-size-changed";
 const UI_SIZE_HINT_HIDE_MS = 900;
 const UI_SIZE_HINT_ELEMENT_ID = "easy-call-ui-size-hint";
 
@@ -50,7 +48,7 @@ const LEGACY_UI_SIZE_SCALE_MAP: Record<string, UiSizeScale> = {
 
 const uiSizeScale = ref<UiSizeScale>(UI_SIZE_DEFAULT_SCALE);
 let initialized = false;
-let eventUnlisten: UnlistenFn | null = null;
+let eventUnlisten: (() => void) | null = null;
 let hintHideTimer: ReturnType<typeof window.setTimeout> | null = null;
 
 function scaledPx(value: number, scale: UiSizeScale): string {
@@ -214,8 +212,8 @@ function setUiSizeScale(value: unknown): UiSizeScale {
   const changed = uiSizeScale.value !== scale;
   applyUiSizeScale(scale);
   persistUiSizeScale(scale);
-  if (changed && isTauriRuntimeAvailable()) {
-    void emit(UI_SIZE_CHANGED_EVENT, { scale }).catch((error) => {
+  if (changed) {
+    void emitTransportEvent("uiSize.changed", { scale }).catch((error) => {
       console.warn("[界面尺寸] 同步尺寸变化失败", error);
     });
   }
@@ -229,13 +227,8 @@ export function initUiSizeAppearance() {
   if (typeof window === "undefined") return;
   window.addEventListener("storage", handleStorageEvent);
   window.addEventListener("wheel", handleGlobalUiSizeWheel, { passive: false, capture: true });
-  if (!isTauriRuntimeAvailable()) return;
-  void listen<UiSizePayload>(UI_SIZE_CHANGED_EVENT, (event) => {
-    applyUiSizeScale(event.payload?.scale ?? event.payload?.preset);
-  }).then((unlisten) => {
-    eventUnlisten = unlisten;
-  }).catch((error) => {
-    console.warn("[界面尺寸] 监听尺寸变化失败", error);
+  eventUnlisten = onTransportNotification<UiSizePayload>("uiSize.changed", (payload) => {
+    applyUiSizeScale(payload?.scale ?? payload?.preset);
   });
 }
 

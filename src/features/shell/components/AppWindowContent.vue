@@ -188,7 +188,6 @@
         :recipient-options-ready="recipientOptionsReady"
         :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
         :ide-context-groups="[]"
-        :attached-ide-context-references="[]"
         :current-theme="currentTheme"
         :side-conversation-list-visible="sideConversationListVisible"
         :initial-tool-review-panel-open="initialToolReviewPanelOpen"
@@ -471,7 +470,6 @@ import MemoryDialog from "../../memory/components/dialogs/MemoryDialog.vue";
 import PromptPreviewDialog from "../../chat/components/dialogs/PromptPreviewDialog.vue";
 import SelectionShareDialog from "../../chat/components/dialogs/SelectionShareDialog.vue";
 import { computed, ref, type VNodeRef } from "vue";
-import { save } from "@tauri-apps/plugin-dialog";
 import type {
   ApiConfigItem,
   AppConfig,
@@ -500,7 +498,12 @@ import {
   buildShareExportFileName,
   generateShareFromMessageIds,
 } from "../../chat/utils/share-generator";
-import { invokeTauri } from "../../../services/tauri-api";
+import {
+  invokeTauri,
+  saveTransportFileDialog,
+  writeTransportBase64File,
+  writeTransportUtf8TextFile,
+} from "../../../services/tauri-api";
 
 type MemoryItem = {
   id: string;
@@ -903,20 +906,15 @@ async function exportConversationShare(conversationId: string) {
   const id = String(conversationId || "").trim();
   if (!id) return;
   try {
-    const result = await invokeTauri<{ fileName: string; payloadJson: string }>("export_conversation_share_json", {
+    const result = await invokeTauri<{ fileName: string; payloadJson: string }>("conversation.exportShare", {
       input: { conversationId: id },
     });
-    const path = await save({
+    const path = await saveTransportFileDialog({
       filters: [{ name: "JSON", extensions: ["json"] }],
       defaultPath: String(result?.fileName || "conversation.json").trim() || "conversation.json",
     });
     if (!path) return;
-    await invokeTauri("write_utf8_text_file_to_path", {
-      input: {
-        path,
-        text: String(result?.payloadJson || ""),
-      },
-    });
+    await writeTransportUtf8TextFile(path, String(result?.payloadJson || ""));
     showChatNotice(props.t("chat.conversationShareExported", { path }), "info");
   } catch (error) {
     showChatNotice(props.t("chat.conversationShareExportFailed", { err: String(error) }), "error");
@@ -1010,7 +1008,7 @@ async function exportSelectionAsHtml() {
   if (!conversationId || messageIds.length === 0) return;
   selectionShareDialogLoading.value = true;
   try {
-    const path = await save({
+    const path = await saveTransportFileDialog({
       filters: [{ name: "HTML", extensions: ["html"] }],
       defaultPath: buildShareExportFileName("html"),
     });
@@ -1030,12 +1028,7 @@ async function exportSelectionAsHtml() {
     if (!generated.html) {
       throw new Error(props.t("chat.shareExportFailed", { err: "empty html" }));
     }
-    await invokeTauri("write_utf8_text_file_to_path", {
-      input: {
-        path,
-        text: generated.html,
-      },
-    });
+    await writeTransportUtf8TextFile(path, generated.html);
     showChatNotice(props.t("chat.shareHtmlExported", { path }), "info");
     selectionShareDialogOpen.value = false;
   } catch (error) {
@@ -1138,7 +1131,7 @@ async function exportSelectionAsImage() {
     messageIdCount: messageIds.length,
   });
   try {
-    const path = await save({
+    const path = await saveTransportFileDialog({
       filters: [{ name: "PNG", extensions: ["png"] }],
       defaultPath: buildShareExportFileName("png"),
     });
@@ -1150,12 +1143,7 @@ async function exportSelectionAsImage() {
     console.info("[分享导出] 图片保存路径已选择", { path });
     const { bytesBase64 } = await generateSelectionSharePng(payload, "selection_share_image");
     showChatNotice(props.t("chat.shareImageWriting"), "info");
-    await invokeTauri("write_base64_file_to_path", {
-      input: {
-        path,
-        bytesBase64,
-      },
-    });
+    await writeTransportBase64File(path, bytesBase64);
     showChatNotice(props.t("chat.shareImageExported", { path }), "info");
     selectionShareDialogOpen.value = false;
   } catch (error) {

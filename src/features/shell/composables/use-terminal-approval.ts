@@ -30,6 +30,12 @@ export type TerminalApprovalConversationItem = TerminalApprovalRequestPayload & 
 type UseTerminalApprovalOptions = {
   queue: Ref<TerminalApprovalRequestPayload[]>;
   resolving: Ref<boolean>;
+  defaultTitle?: string | (() => string);
+  onError?: (input: {
+    action: "resolve" | "approve_for_session" | "approve_for_workspace";
+    request: TerminalApprovalRequestPayload;
+    error: unknown;
+  }) => void;
 };
 
 export function useTerminalApproval(options: UseTerminalApprovalOptions) {
@@ -41,6 +47,13 @@ export function useTerminalApproval(options: UseTerminalApprovalOptions) {
   const terminalApprovalDialogBody = computed(
     () => terminalApprovalCurrent.value?.message || "",
   );
+
+  function defaultTitle(): string {
+    const value = typeof options.defaultTitle === "function"
+      ? options.defaultTitle()
+      : options.defaultTitle;
+    return String(value || "终端审批").trim() || "终端审批";
+  }
 
   function normalizeTerminalApprovalConversationId(payload: Pick<TerminalApprovalRequestPayload, "sessionId"> | null | undefined): string {
     const sessionId = String(payload?.sessionId || "").trim();
@@ -78,7 +91,7 @@ export function useTerminalApproval(options: UseTerminalApprovalOptions) {
     options.queue.value.push({
       ...payload,
       requestId,
-      title: String(payload.title || "终端审批"),
+      title: String(payload.title || defaultTitle()),
       message: String(payload.message || ""),
       approvalKind: String(payload.approvalKind || "unknown"),
       sessionId: String(payload.sessionId || ""),
@@ -114,16 +127,15 @@ export function useTerminalApproval(options: UseTerminalApprovalOptions) {
     if (!current) return;
     options.resolving.value = true;
     try {
-      await invokeTauri("resolve_terminal_approval", {
-        input: {
-          requestId: current.requestId,
-          approved,
-        },
+      await invokeTauri("terminalApproval.resolve", {
+        requestId: current.requestId,
+        approved,
       });
-    } catch (error) {
-      console.warn("[终端] resolve_terminal_approval failed:", error);
-    } finally {
       options.queue.value.splice(targetIndex, 1);
+    } catch (error) {
+      options.onError?.({ action: "resolve", request: current, error });
+      if (!options.onError) console.warn("[终端审批] 失败，操作=处理审批", error);
+    } finally {
       options.resolving.value = false;
     }
   }
@@ -136,7 +148,11 @@ export function useTerminalApproval(options: UseTerminalApprovalOptions) {
     void resolveTerminalApproval(true, requestId);
   }
 
-  async function invokeTerminalApprovalAction(command: string, requestId?: string) {
+  async function invokeTerminalApprovalAction(
+    command: "terminalApproval.approveForSession" | "terminalApproval.approveForWorkspace",
+    action: "approve_for_session" | "approve_for_workspace",
+    requestId?: string,
+  ) {
     if (options.resolving.value) return;
     const normalizedRequestId = String(requestId || "").trim();
     const targetIndex = normalizedRequestId
@@ -148,24 +164,23 @@ export function useTerminalApproval(options: UseTerminalApprovalOptions) {
     options.resolving.value = true;
     try {
       await invokeTauri(command, {
-        input: {
-          requestId: current.requestId,
-        },
+        requestId: current.requestId,
       });
-    } catch (error) {
-      console.warn(`[终端] ${command} failed:`, error);
-    } finally {
       options.queue.value.splice(targetIndex, 1);
+    } catch (error) {
+      options.onError?.({ action, request: current, error });
+      if (!options.onError) console.warn(`[终端审批] 失败，操作=${action}`, error);
+    } finally {
       options.resolving.value = false;
     }
   }
 
   function approveTerminalApprovalForSession(requestId?: string) {
-    void invokeTerminalApprovalAction("approve_terminal_approval_for_session", requestId);
+    void invokeTerminalApprovalAction("terminalApproval.approveForSession", "approve_for_session", requestId);
   }
 
   function approveTerminalApprovalForWorkspace(requestId?: string) {
-    void invokeTerminalApprovalAction("approve_terminal_approval_for_workspace", requestId);
+    void invokeTerminalApprovalAction("terminalApproval.approveForWorkspace", "approve_for_workspace", requestId);
   }
 
   return {

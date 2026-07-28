@@ -131,6 +131,48 @@ fn ide_chat_broadcast_notification(method: &str, params: serde_json::Value) {
     }
 }
 
+fn ide_chat_emit_notification_to_client(
+    client_id: &str,
+    method: &str,
+    params: serde_json::Value,
+) -> bool {
+    let normalized_client_id = client_id.trim();
+    if normalized_client_id.is_empty() {
+        return false;
+    }
+    let message = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": method,
+        "params": params,
+    });
+    let clients = ide_context_chat_clients();
+    let mut stale = false;
+    let delivered = if let Ok(clients_guard) = clients.lock() {
+        match clients_guard.get(normalized_client_id) {
+            Some(sender) => {
+                if sender.send(message).is_ok() {
+                    true
+                } else {
+                    stale = true;
+                    false
+                }
+            }
+            None => false,
+        }
+    } else {
+        false
+    };
+    if stale {
+        if let Ok(mut clients_guard) = clients.lock() {
+            clients_guard.remove(normalized_client_id);
+        }
+        if let Ok(mut conversations) = ide_context_chat_client_conversations().lock() {
+            conversations.remove(normalized_client_id);
+        }
+    }
+    delivered
+}
+
 fn ide_chat_sidebar_client_id_from_label(label: &str) -> Option<String> {
     let label = label.trim();
     if let Some(value) = label.strip_prefix("vscode-sidebar:") {

@@ -207,7 +207,7 @@
               <span class="badge badge-ghost badge-sm">{{ testResult.providerName }} · {{ testResult.model }}</span>
               <span class="badge badge-ghost badge-sm font-mono">{{ firstTestImage.width }}×{{ firstTestImage.height }}</span>
               <code class="min-w-0 flex-1 truncate rounded bg-base-200 px-2 py-1 text-[11px]" :title="firstTestImage.relativePath">{{ firstTestImage.relativePath }}</code>
-              <button class="btn btn-xs btn-ghost shrink-0" type="button" :disabled="copyingImage" @click="copyGeneratedImage(firstTestImage.relativePath)">
+              <button v-if="localFileSystemAvailable" class="btn btn-xs btn-ghost shrink-0" type="button" :disabled="copyingImage" @click="copyGeneratedImage(firstTestImage.relativePath)">
                 <span v-if="copyingImage" class="loading loading-spinner loading-xs" />
                 <ImageIcon v-else class="h-3.5 w-3.5" />
                 {{ t("config.imageGeneration.copyImage") }}
@@ -245,7 +245,12 @@ import type {
   ImageGenerationProviderKind,
   ImageGenerationResult,
 } from "../../../../types/app";
-import { invokeTauri } from "../../../../services/tauri-api";
+import {
+  copyTransportChatImageToClipboard,
+  getTransportCapabilities,
+  invokeTauri,
+  readTransportChatImage,
+} from "../../../../services/tauri-api";
 import ConfigTemplate from "../../components/ConfigTemplate.vue";
 import type { ConfigTemplateGroup } from "../../components/config-template";
 import {
@@ -270,6 +275,7 @@ const props = defineProps<{
 const { t } = useI18n();
 const selectedProviderId = ref("");
 const testPrompt = ref("");
+const localFileSystemAvailable = getTransportCapabilities().localFileSystem;
 // 与 AI 工具 image_generate 的可选参数对齐：仅 resolution，留空表示用模型默认值
 const testResolution = ref("");
 const testResolutionPresets = ["512x512", "1024x1024", "1536x1024", "1024x1536", "2K", "4K"];
@@ -631,8 +637,9 @@ async function runImageTest() {
     const firstImage = result.images?.[0];
     if (firstImage?.relativePath) {
       // 后端预览命令只认 {Assistant Space} 前缀，裸相对路径会按进程工作目录解析导致找不到文件
-      const preview = await invokeTauri<{ dataUrl: string }>("read_local_chat_image_thumbnail", {
-        input: { path: `{Assistant Space}/${firstImage.relativePath}`, maxEdge: 768 },
+      const preview = await readTransportChatImage({
+        path: `{Assistant Space}/${firstImage.relativePath}`,
+        maxEdge: 768,
       });
       testPreviewDataUrl.value = String(preview?.dataUrl || "");
     }
@@ -661,9 +668,7 @@ async function copyGeneratedImage(relativePath: string) {
   if (!value || copyingImage.value) return;
   copyingImage.value = true;
   try {
-    await invokeTauri("copy_local_chat_image_to_clipboard", {
-      input: { path: `{Assistant Space}/${value}` },
-    });
+    await copyTransportChatImageToClipboard(`{Assistant Space}/${value}`);
     props.setStatusAction(t("config.imageGeneration.imageCopied"));
   } catch (error) {
     testError.value = String(error instanceof Error ? error.message : error || t("config.imageGeneration.copyFailed"));

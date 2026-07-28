@@ -1,12 +1,14 @@
-import type { Channel } from "@tauri-apps/api/core";
 import type { Ref } from "vue";
 import type { AssistantStreamBlock, ChatIngressPart, ChatMentionTarget, ChatMessage } from "../../../types/app";
+import type { TransportChannel } from "../../../services/tauri-api";
 import type { AssistantDeltaEvent, ContextUsageUpdatePayload } from "./use-chat-flow-events";
 import type { ConversationRuntimeStreamCacheSnapshot } from "./use-chat-flow-stream-cache";
 
 export type FrontendRoundPhase = "idle" | "queued" | "waiting" | "streaming";
 
 export type UseChatFlowOptions = {
+  /** 由统一传输适配器提供外部事件订阅；聊天状态机本身负责注册和销毁。 */
+  subscribeExternalEvents?: (method: string, handler: (payload: unknown) => void) => () => void;
   chatting: Ref<boolean>;
   submitPending?: Ref<boolean>;
   trimming: Ref<boolean>;
@@ -40,7 +42,7 @@ export type UseChatFlowOptions = {
     mentions?: ChatMentionTarget[];
     session: { apiConfigId: string; agentId: string; departmentId?: string; conversationId?: string };
     traceId: string;
-    onDelta: Channel<AssistantDeltaEvent>;
+    onDelta: TransportChannel<AssistantDeltaEvent>;
   }) => Promise<{
     accepted: boolean;
     duplicate: boolean;
@@ -69,7 +71,7 @@ export type UseChatFlowOptions = {
   invokeBindActiveChatViewStream?: (input: {
     bindingId: string;
     conversationId?: string;
-    onDelta: Channel<AssistantDeltaEvent>;
+    onDelta: TransportChannel<AssistantDeltaEvent>;
   }) => Promise<void>;
   invokeUnbindActiveChatViewStream?: (input: { bindingId: string }) => Promise<void>;
   invokeProbeActiveChatViewStream?: (input: {

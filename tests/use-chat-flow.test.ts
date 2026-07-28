@@ -28,6 +28,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 vi.mock("../src/services/tauri-api", () => ({
+  createTransportChannel: <T,>() => new hoisted.MockChannel<T>(),
   invokeTauri: hoisted.invokeTauriMock,
 }));
 
@@ -195,7 +196,7 @@ describe("useChatFlow stream isolation", () => {
     expect(allMessages.value[0].providerMeta?._preStreamingStatusText).toBeUndefined();
   });
 
-  it("closes queued round immediately when compaction boundary completes it", async () => {
+  it("cleans the old queued projection immediately when compaction restarts dispatch", async () => {
     const chatting = ref(false);
     const trimming = ref(false);
     const chatInput = ref("new question");
@@ -258,7 +259,7 @@ describe("useChatFlow stream isolation", () => {
 
     expect(flow.frontendRoundPhase.value).toBe("idle");
     expect(chatting.value).toBe(false);
-    expect(allMessages.value.some((message) => String(message.id || "").startsWith("__draft_assistant__:"))).toBe(true);
+    expect(allMessages.value.some((message) => String(message.id || "").startsWith("__draft_assistant__:"))).toBe(false);
     expect(onReloadMessages).toHaveBeenCalledTimes(0);
   });
 
@@ -283,7 +284,7 @@ describe("useChatFlow stream isolation", () => {
     ];
 
     hoisted.invokeTauriMock.mockImplementation(async (command: string) => {
-      if (command === "get_foreground_conversation_light_snapshot") {
+      if (command === "conversation.foregroundLightSnapshot") {
         return { messages: oldHistory };
       }
       throw new Error(`unexpected invoke command: ${command}`);
@@ -470,7 +471,7 @@ describe("useChatFlow stream isolation", () => {
     await sendPromise;
   });
 
-  it("clears retry waiting draft after stop succeeds", async () => {
+  it("removes retry waiting draft immediately after stop succeeds", async () => {
     const chatting = ref(false);
     const trimming = ref(false);
     const chatInput = ref("new question");
@@ -533,6 +534,14 @@ describe("useChatFlow stream isolation", () => {
 
     expect(chatting.value).toBe(true);
     expect(allMessages.value.some((message) => String(message.id || "").startsWith("__draft_assistant__:"))).toBe(true);
+    allMessages.value = [...allMessages.value, {
+      id: "stale-assistant",
+      role: "assistant",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      speakerAgentId: "agent-1",
+      parts: [{ type: "text", text: "已收到的片段" }],
+      providerMeta: { _streaming: true },
+    }];
 
     await flow.stopChat();
 
@@ -541,7 +550,25 @@ describe("useChatFlow stream isolation", () => {
     expect(flow.frontendRoundPhase.value).toBe("idle");
     expect(toolStatusText.value).toBe("");
     expect(toolStatusState.value).toBe("");
-    expect(allMessages.value.some((message) => String(message.id || "").startsWith("__draft_assistant__:"))).toBe(true);
+    expect(allMessages.value.some((message) => String(message.id || "").startsWith("__draft_assistant__:"))).toBe(false);
+    expect(allMessages.value.find((message) => message.id === "stale-assistant")?.providerMeta?._streaming).toBeUndefined();
+    expect(onReloadMessages).toHaveBeenCalledTimes(0);
+
+    await flow.handleExternalRoundStarted({
+      conversationId: "conversation-1",
+      assistantMessageId: "__draft_assistant__:1",
+      activationId: "late-activation",
+    });
+    capturedChannel!.emit({
+      kind: "history_flushed",
+      message: "{\"conversationId\":\"conversation-1\",\"messageCount\":1,\"activateAssistant\":true}",
+    });
+    await flushAsyncSteps();
+    await flow.handleExternalRoundCompleted({ conversationId: "conversation-1", status: "completed" });
+
+    expect(chatting.value).toBe(false);
+    expect(flow.frontendRoundPhase.value).toBe("idle");
+    expect(allMessages.value.some((message) => String(message.id || "").startsWith("__draft_assistant__:"))).toBe(false);
     expect(onReloadMessages).toHaveBeenCalledTimes(0);
   });
 
@@ -609,14 +636,13 @@ describe("useChatFlow stream isolation", () => {
     await flow.stopChat();
 
     expect(invokeStopChatMessage).toHaveBeenCalledTimes(1);
-    expect(allMessages.value).toHaveLength(2);
+    expect(allMessages.value).toHaveLength(1);
     expect(allMessages.value[0].id).toBe("user-1");
     expect(allMessages.value[0].parts).toEqual([{ type: "text", text: "first question" }]);
-    expect(allMessages.value[1].id).toBe("assistant-1");
     expect(flow.frontendRoundPhase.value).toBe("idle");
   });
 
-  it("stops stream by refreshing the same assistant message from backend and syncing stop payload", async () => {
+  it("freezes the visible stream immediately when stop returns no formal message", async () => {
     const chatting = ref(false);
     const trimming = ref(false);
     const chatInput = ref("new question");
@@ -632,25 +658,6 @@ describe("useChatFlow stream isolation", () => {
     const visibleTurnCount = ref(1);
     const onReloadMessages = vi.fn(async () => {});
     const invokeStopChatMessage = vi.fn(async () => {});
-    const refreshMessageById = vi.fn(async ({ messageId }: { conversationId: string; messageId: string }) => {
-      allMessages.value = allMessages.value.map((message) => (
-        String(message.id || "") === messageId
-          ? {
-              ...message,
-              parts: [{ type: "text", text: "ABC" }],
-              toolCall: [
-                {
-                  role: "assistant",
-                  content: "ABC",
-                  reasoning_content: "R1",
-                },
-              ],
-              providerMeta: {},
-            }
-          : message
-      ));
-      return true;
-    });
 
     type ChannelLike = {
       emit: (event: AssistantDeltaEvent) => void;
@@ -682,7 +689,6 @@ describe("useChatFlow stream isolation", () => {
           resolve(acceptedSendResult());
         }),
       invokeStopChatMessage,
-      refreshMessageById,
       onReloadMessages,
     });
 
@@ -722,7 +728,6 @@ describe("useChatFlow stream isolation", () => {
       partialAssistantText: "ABC",
       partialStreamBlocks: [expectedStreamBlock({ reasoning: "R1", text: "ABC" })],
     });
-    expect(refreshMessageById).not.toHaveBeenCalled();
     expect(onReloadMessages).toHaveBeenCalledTimes(0);
     expect(allMessages.value).toHaveLength(2);
     const stoppedAssistant = allMessages.value[1];
@@ -811,7 +816,7 @@ describe("useChatFlow stream isolation", () => {
         assistantText: "不太确定，展开说说？",
         archivedBeforeSend: false,
         assistantMessage: {
-          ...textMessage("a-final", "assistant", "不太确定，展开说说？"),
+          ...textMessage("__draft_assistant__:1", "assistant", "不太确定，展开说说？"),
           parts: [{
             type: "text",
             text: "不太确定，展开说说？",
@@ -1912,12 +1917,12 @@ describe("useChatRuntime force archive conversation sync", () => {
     const visibleTurnCount = ref(1);
 
     hoisted.invokeTauriMock.mockImplementation(async (command: string, payload?: unknown) => {
-      if (command === "archive_conversation") {
+      if (command === "conversation.archive") {
         return {
           success: true,
         };
       }
-      if (command === "get_foreground_conversation_light_snapshot") {
+      if (command === "conversation.foregroundLightSnapshot") {
         const input = (payload as { input?: { conversationId?: string | null } } | undefined)?.input;
         return {
           messages: [
@@ -1964,7 +1969,7 @@ describe("useChatRuntime force archive conversation sync", () => {
 });
 
 describe("useChatFlowStop", () => {
-  it("keeps the visible frontend stream when stop cannot refresh the persisted assistant message", async () => {
+  it("freezes the visible frontend stream when stop returns no formal message", async () => {
     const chatting = ref(true);
     const latestAssistantText = ref("ABC");
     const toolStatusText = ref("");
@@ -1987,9 +1992,7 @@ describe("useChatFlowStop", () => {
       gen: 1,
       messageId: "assistant-1",
     };
-    const onReloadMessages = vi.fn(async () => {});
     const invokeStopChatMessage = vi.fn(async () => ({ aborted: true, persisted: false }));
-    const refreshMessageById = vi.fn(async () => false);
 
     const stop = useChatFlowStop({
       chatting,
@@ -2001,9 +2004,6 @@ describe("useChatFlowStop", () => {
       getSession: () => ({ apiConfigId: "api-1", agentId: "agent-1" }),
       getConversationId: () => "conversation-1",
       invokeStopChatMessage,
-      refreshMessageById,
-      onReloadMessages,
-      t: (key) => key,
       getRound: () => round,
       setRound: (next) => {
         round = next;
@@ -2013,11 +2013,21 @@ describe("useChatFlowStop", () => {
       clearDeferredRoundCompletion: () => {},
       clearPendingTerminalEvent: () => {},
       setActiveActivationId: () => {},
+      getActiveActivationId: () => "",
       setActiveRoundAgentId: () => {},
+      markStoppedRound: () => {},
       clearFrontendDispatchTimer: () => {},
       getPendingUserDraftId: () => "",
       removeMessage: (messageId) => {
         allMessages.value = allMessages.value.filter((message) => String(message.id || "") !== messageId);
+      },
+      settleStreamingAssistantMessages: () => {
+        allMessages.value = allMessages.value.map((message) => {
+          const nextMeta = { ...(message.providerMeta || {}) } as Record<string, unknown>;
+          delete nextMeta._streaming;
+          return { ...message, providerMeta: nextMeta };
+        });
+        return ["assistant-1"];
       },
       finalizeMessage: (messageId) => {
         allMessages.value = allMessages.value.map((message) => {
@@ -2048,16 +2058,14 @@ describe("useChatFlowStop", () => {
     await stop.stopChat();
 
     expect(invokeStopChatMessage).toHaveBeenCalledTimes(1);
-    expect(refreshMessageById).not.toHaveBeenCalled();
-    expect(onReloadMessages).toHaveBeenCalledTimes(0);
     expect(chatting.value).toBe(false);
     expect(round.phase).toBe("idle");
     expect(allMessages.value).toHaveLength(1);
-    expect(allMessages.value[0].contentBlocks).toEqual(streamBlocks.value);
+    expect(allMessages.value[0].contentBlocks).toEqual([expectedStreamBlock({ reasoning: "R1", text: "ABC" })]);
     expect(allMessages.value[0].providerMeta?._streaming).toBeUndefined();
   });
 
-  it("uses the refreshed persisted assistant message when stop can read it back", async () => {
+  it("merges a same-id formal assistant message returned by stop", async () => {
     const chatting = ref(true);
     const latestAssistantText = ref("ABC");
     const toolStatusText = ref("");
@@ -2080,36 +2088,19 @@ describe("useChatFlowStop", () => {
       gen: 1,
       messageId: "assistant-1",
     };
-    const invokeStopChatMessage = vi.fn(async () => ({ aborted: true, persisted: true }));
-    const refreshMessageById = vi.fn(async ({ messageId }: { conversationId: string; messageId: string }) => {
-      allMessages.value = allMessages.value.map((message) => (
-        String(message.id || "") === messageId
-          ? {
-              ...message,
-              parts: [{ type: "text", text: "正式文本" }],
-              toolCall: [{
-                role: "assistant",
-                content: "正式文本",
-                reasoning_content: "正式思考",
-                tool_calls: [{
-                  id: "tool-1",
-                  type: "function",
-                  function: {
-                    name: "read_file",
-                    arguments: "{\"path\":\"README.md\"}",
-                  },
-                }],
-              }, {
-                role: "tool",
-                tool_call_id: "tool-1",
-                content: "文件内容",
-              }],
-              providerMeta: {},
-            }
-          : message
-      ));
-      return true;
-    });
+    const persistedAssistantMessage: ChatMessage = {
+      id: "assistant-1",
+      role: "assistant",
+      createdAt: "2026-01-01T00:00:01.000Z",
+      speakerAgentId: "agent-1",
+      parts: [{ type: "text", text: "正式文本" }],
+      providerMeta: {},
+    };
+    const invokeStopChatMessage = vi.fn(async () => ({
+      aborted: true,
+      persisted: true,
+      assistantMessage: persistedAssistantMessage,
+    }));
 
     const stop = useChatFlowStop({
       chatting,
@@ -2121,9 +2112,6 @@ describe("useChatFlowStop", () => {
       getSession: () => ({ apiConfigId: "api-1", agentId: "agent-1" }),
       getConversationId: () => "conversation-1",
       invokeStopChatMessage,
-      refreshMessageById,
-      onReloadMessages: vi.fn(async () => {}),
-      t: (key) => key,
       getRound: () => round,
       setRound: (next) => {
         round = next;
@@ -2133,15 +2121,26 @@ describe("useChatFlowStop", () => {
       clearDeferredRoundCompletion: () => {},
       clearPendingTerminalEvent: () => {},
       setActiveActivationId: () => {},
+      getActiveActivationId: () => "",
       setActiveRoundAgentId: () => {},
+      markStoppedRound: () => {},
       clearFrontendDispatchTimer: () => {},
       getPendingUserDraftId: () => "",
       removeMessage: (messageId) => {
         allMessages.value = allMessages.value.filter((message) => String(message.id || "") !== messageId);
       },
-      finalizeMessage: (messageId) => {
+      settleStreamingAssistantMessages: () => {
+        allMessages.value = allMessages.value.map((message) => {
+          const nextMeta = { ...(message.providerMeta || {}) } as Record<string, unknown>;
+          delete nextMeta._streaming;
+          return { ...message, providerMeta: nextMeta };
+        });
+        return ["assistant-1"];
+      },
+      finalizeMessage: (messageId, finalMessage) => {
         allMessages.value = allMessages.value.map((message) => {
           if (String(message.id || "") !== messageId) return message;
+          if (finalMessage) return finalMessage;
           const nextMeta = { ...(message.providerMeta || {}) } as Record<string, unknown>;
           delete nextMeta._streaming;
           return {
@@ -2167,11 +2166,6 @@ describe("useChatFlowStop", () => {
 
     await stop.stopChat();
 
-    expect(refreshMessageById).not.toHaveBeenCalled();
-    expect(allMessages.value[0].contentBlocks).toEqual(streamBlocks.value);
-    expect(projectMessageForDisplay(allMessages.value[0]).activityItems.map((item) => item.kind === "tool" ? item.name : item.text)).toEqual([
-      "R1",
-      "ABC",
-    ]);
+    expect(allMessages.value[0]).toEqual(persistedAssistantMessage);
   });
 });

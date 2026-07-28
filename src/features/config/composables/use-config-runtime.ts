@@ -1,5 +1,5 @@
 import type { ComputedRef, Ref } from "vue";
-import { invokeTauri } from "../../../services/tauri-api";
+import { invokeTauri, syncTransportTrayIcon } from "../../../services/tauri-api";
 import type {
   ApiConfigItem,
   ApiProviderConfigItem,
@@ -52,11 +52,7 @@ export function useConfigRuntime(options: UseConfigRuntimeOptions) {
 
   async function syncTrayIcon(agentId?: string) {
     try {
-      await invokeTauri("sync_tray_icon", {
-        input: {
-          agentId: agentId ?? null,
-        },
-      });
+      await syncTransportTrayIcon({ agentId: agentId ?? null });
     } catch (e) {
       console.warn("[托盘] sync icon failed:", e);
     }

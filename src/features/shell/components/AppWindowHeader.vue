@@ -294,6 +294,7 @@
       <div class="flex items-center justify-between gap-3">
         <h3 class="text-base font-semibold">{{ t("chat.newConversation") }}</h3>
         <button
+          v-if="localPathPickerAvailable"
           type="button"
           class="btn btn-ghost btn-sm btn-square"
           :disabled="importConversationLoading"
@@ -490,7 +491,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { getTransportCapabilities, invokeTauri, openTransportFileDialog } from "../../../services/tauri-api";
 import { Download, FoldVertical, FolderOpen, History, Minus, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, ScrollText, Search, Settings, Square, SquarePen, X } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ShellWorkspace, ShellWorkspaceAccess, ShellWorkMode } from "../../../types/app";
 import { defaultWorkspaceNameFromPath } from "../../../utils/shell-workspaces";
@@ -571,11 +572,9 @@ const props = withDefaults(defineProps<{
   updateToLatestLabel?: string;
   updateToLatestTitle?: string;
   windowControlsVisible?: boolean;
-  directoryPickRestricted?: boolean;
   pipelineStatusEnabled?: boolean;
 }>(), {
   windowControlsVisible: true,
-  directoryPickRestricted: false,
   pipelineStatusEnabled: true,
 });
 
@@ -604,13 +603,16 @@ const emit = defineEmits<{
   (e: "update:config-search-query", value: string): void;
   (e: "select-config-search-result", tab: ConfigSearchTab): void;
   (e: "update-to-latest"): void;
-  (e: "directory-pick-restricted"): void;
 }>();
 
 const { t, locale } = useI18n();
+const transportCapabilities = getTransportCapabilities();
+const localPathPickerAvailable = transportCapabilities.localPathPicker;
 
 const circumference = RING_CIRCUMFERENCE;
-const showWindowControls = computed(() => props.windowControlsVisible !== false);
+const showWindowControls = computed(() =>
+  props.windowControlsVisible !== false && transportCapabilities.windowControls,
+);
 
 const normalizedChatUsagePercent = computed(() =>
   Math.min(100, Math.max(0, Math.round(Number(props.chatUsagePercent || 0)))),
@@ -866,8 +868,7 @@ const showCreateConversationTopicSuggestions = computed(() =>
   && filteredRecentConversationTopics.value.length > 0,
 );
 async function openNativeDialog(options: { directory?: boolean; multiple?: boolean; filters?: Array<{ name: string; extensions: string[] }> }) {
-  const dialog = await import("@tauri-apps/plugin-dialog");
-  return dialog.open(options);
+  return openTransportFileDialog(options);
 }
 
 function normalizeWorkspacePathKey(path: string): string {
@@ -959,8 +960,8 @@ async function checkCreateConversationWorkspaceGitRoot(path: string) {
   }
   createConversationWorktreeCheckMessage.value = t("chat.workspaceWorktreeChecking");
   try {
-    const result = await invokeTauri<{ isGitRoot?: boolean; checked?: boolean; error?: string }>("check_git_workspace_root", {
-      input: { workspacePath: normalizedPath },
+    const result = await invokeTauri<{ isGitRoot?: boolean; checked?: boolean; error?: string }>("workspace.gitRootCheck", {
+      workspacePath: normalizedPath,
     });
     if (currentSeq !== createConversationWorktreeCheckSeq) return;
     createConversationWorktreeAvailable.value = Boolean(result.isGitRoot);
@@ -986,7 +987,7 @@ function handleCreateConversationWorkspacePickerAccessChange(value: string) {
 }
 
 async function pickCreateConversationWorkspace() {
-  if (props.directoryPickRestricted || !isTauriRuntimeAvailable()) {
+  if (!localPathPickerAvailable) {
     openCreateConversationWorkspacePicker();
     return;
   }
@@ -1046,14 +1047,10 @@ async function loadCreateConversationWorkspaceDirectory(pathInput: string) {
   createConversationWorkspaceDirectoryLoading.value = true;
   createConversationWorkspaceDirectoryError.value = "";
   try {
-    const result = isTauriRuntimeAvailable()
-      ? await invokeTauri<WorkspaceDirectoryListResult>("list_file_reader_directory", { path })
-      : await invokeTauri<WorkspaceDirectoryListResult>("workspace.directory.list", { path });
+    const result = await invokeTauri<WorkspaceDirectoryListResult>("workspace.directory.list", { path });
     createConversationWorkspaceBrowserPath.value = String(result.path || path).trim();
     createConversationWorkspaceManualPath.value = createConversationWorkspaceBrowserPath.value;
-    const rawDirectories = isTauriRuntimeAvailable()
-      ? (Array.isArray(result.entries) ? result.entries.filter((item) => item && item.isDirectory) : [])
-      : (Array.isArray(result.directories) ? result.directories : []);
+    const rawDirectories = Array.isArray(result.directories) ? result.directories : [];
     createConversationWorkspaceDirectoryItems.value = rawDirectories
       .map((item) => ({
         path: String(item.path || "").trim(),

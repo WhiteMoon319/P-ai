@@ -32,7 +32,7 @@
       :checking-update="checkingUpdate"
       :update-to-latest-label="updateToLatestLabel"
       :update-to-latest-title="updateToLatestTitle"
-      :window-controls-visible="tauriRuntimeAvailable"
+      :window-controls-visible="windowControlsVisible"
       @start-drag="startDrag"
       @update:config-search-query="updateConfigSearchQuery"
       @select-config-search-result="handleSelectConfigSearchResult"
@@ -267,7 +267,7 @@ import ShellDialogsHost from "./features/shell/components/ShellDialogsHost.vue";
 import Win10ResizeHandles from "./features/shell/components/Win10ResizeHandles.vue";
 import MemoryDialog from "./features/memory/components/dialogs/MemoryDialog.vue";
 import PromptPreviewDialog from "./features/chat/components/dialogs/PromptPreviewDialog.vue";
-import { invokeTauri, isTauriRuntimeAvailable } from "./services/tauri-api";
+import { getTransportCapabilities, invokeTauri, openTransportWindow } from "./services/tauri-api";
 import type { AppConfig, PromptCommandPreset } from "./types/app";
 import { normalizeLocale } from "./i18n";
 import { useWindowShell } from "./features/shell/composables/use-window-shell";
@@ -298,7 +298,7 @@ import { useConfigWindowBootstrap } from "./features/config/composables/use-conf
 const { t, locale } = useI18n();
 const tr = (key: string, params?: Record<string, unknown>) => t(key, params as never);
 const isMacPlatform = /Mac|iPhone|iPad|iPod/i.test(window.navigator.platform || "");
-const tauriRuntimeAvailable = isTauriRuntimeAvailable();
+const windowControlsVisible = getTransportCapabilities().windowControls;
 
 type ConfigTab =
   | "welcome"
@@ -697,7 +697,6 @@ const {
 });
 
 const { summonChatWindowFromConfig, openGithubRepository } = useWindowActions({
-  isChatTauriWindow: computed(() => false),
   closeWindow,
   minimizeWindow,
   freezeForegroundConversation: () => undefined,
@@ -786,7 +785,7 @@ function updateInstructionPresets(value: PromptCommandPreset[]) {
 
 async function openConversationList() {
   try {
-    await invokeTauri("show_archives_window");
+    await openTransportWindow("archives");
   } catch (error) {
     setStatusError("status.requestFailed", error);
   }
@@ -807,7 +806,7 @@ async function openSystemPromptPreviewFromConfig() {
 }
 
 function openRuntimeLogs() {
-  void invokeTauri("open_runtime_logs_window").catch((error) => {
+  void openTransportWindow("runtimeLogs").catch((error) => {
     console.warn("[运行日志] 打开日志窗口失败", error);
   });
 }

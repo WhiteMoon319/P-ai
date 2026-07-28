@@ -232,6 +232,13 @@ async fn stt_transcribe(
     input: SttTranscribeInput,
     state: State<'_, AppState>,
 ) -> Result<SttTranscribeOutput, String> {
+    stt_transcribe_inner(input, state.inner()).await
+}
+
+async fn stt_transcribe_inner(
+    input: SttTranscribeInput,
+    state: &AppState,
+) -> Result<SttTranscribeOutput, String> {
     if input.bytes_base64.trim().is_empty() {
         return Err("Audio payload is empty.".to_string());
     }

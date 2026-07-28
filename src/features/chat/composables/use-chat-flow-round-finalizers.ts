@@ -41,6 +41,22 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     bindings.failMessage(messageId, error);
   }
 
+  function completeQueuedRoundCleanup() {
+    bindings.setPendingTerminalEvent(null);
+    bindings.setDeferredRoundCompletion(null);
+    bindings.setQueuedStreamingState(null);
+    bindings.clearConversationStreamCache(bindings.getConversationId ? bindings.getConversationId() : "");
+    bindings.submitPending && (bindings.submitPending.value = false);
+    bindings.clearFrontendDispatchTimer();
+    bindings.setActiveActivationId("");
+    bindings.setActiveRoundAgentId?.("");
+    bindings.clearChatErrorText();
+    if (bindings.streamBlocks) bindings.streamBlocks.value = [];
+    bindings.setRound({ phase: "idle" });
+    bindings.chatting.value = false;
+    bindings.reasoningStartedAtMs.value = 0;
+  }
+
   async function resolveCanonicalAssistantMessage(
     messageId: string,
     resultMessage?: ChatMessage,
@@ -176,6 +192,13 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     bindings.sendStartedAtMsByGen.delete(gen);
     const round = bindings.getRound();
     if (round.phase !== "queued" || round.gen !== gen) return;
+    if ((result as { skipCanonicalReadback?: boolean }).skipCanonicalReadback === true) {
+      // 上下文压缩会立刻以新的 assistant message id 发出 round_started。
+      // 旧轮次没有正式消息时直接移除空投影，避免无意义回读与新轮次竞态。
+      bindings.removeMessage(round.messageId);
+      completeQueuedRoundCleanup();
+      return;
+    }
     const existingMessage = Array.isArray(bindings.allMessages?.value)
       ? bindings.allMessages.value.find((message: ChatMessage) => message.id === round.messageId)
       : undefined;
@@ -213,18 +236,7 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
       });
       bindings.removeMessage(round.messageId);
     }
-    bindings.setPendingTerminalEvent(null);
-    bindings.setDeferredRoundCompletion(null);
-    bindings.setQueuedStreamingState(null);
-    bindings.clearConversationStreamCache(bindings.getConversationId ? bindings.getConversationId() : "");
-    bindings.submitPending && (bindings.submitPending.value = false);
-    bindings.clearFrontendDispatchTimer();
-    bindings.setActiveActivationId("");
-    bindings.setActiveRoundAgentId?.("");
-    bindings.clearChatErrorText();
-    bindings.setRound({ phase: "idle" });
-    bindings.chatting.value = false;
-    bindings.reasoningStartedAtMs.value = 0;
+    completeQueuedRoundCleanup();
   }
 
   async function failQueuedRoundWithoutMessage(

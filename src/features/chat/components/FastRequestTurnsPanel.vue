@@ -120,7 +120,6 @@ import CollapsibleGroup from "./CollapsibleGroup.vue";
 const props = defineProps<{
   conversationId: string;
   active?: boolean;
-  bridgeRequest?: <T = unknown>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>;
 }>();
 
 const { t, locale } = useI18n();
@@ -175,11 +174,7 @@ async function loadTurns() {
   }
   loading.value = true;
   try {
-    const result = props.bridgeRequest
-      ? await props.bridgeRequest<FastRequestTurn[]>("conversation.fastRequestTurns", { conversationId }, 10000)
-      : await invokeTauri<FastRequestTurn[]>("get_conversation_fast_request_turns", {
-          input: { conversationId },
-        });
+    const result = await invokeTauri<FastRequestTurn[]>("conversation.fastRequestTurns", { conversationId }, 10000);
     if (seq !== requestSeq) return;
     turns.value = Array.isArray(result) ? result.map(normalizeTurn) : [];
   } catch (error) {

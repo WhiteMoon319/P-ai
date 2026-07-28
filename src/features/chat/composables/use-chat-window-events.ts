@@ -1,9 +1,12 @@
 import { onBeforeUnmount, onMounted } from "vue";
-import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { invokeTauri } from "../../../services/tauri-api";
+import { onTransportNotification } from "../../../services/tauri-api";
 import { chatFlowRuntimesForConversation } from "./chat-flow-runtime-registry";
 
+/**
+ * 窗口级事件胶水只负责把非流式会话通知交给当前运行时。
+ * 流式 history/round/delta/rebind 事件由 useChatFlow 自己订阅，确保所有窗口
+ * 共用同一条消息状态机，不再维护第二套事件处理器。
+ */
 export function useChatWindowEvents(bindings: Record<string, any>) {
   function flowsForConversation(conversationId: string) {
     const normalizedConversationId = String(conversationId || "").trim();
@@ -16,210 +19,103 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
     return [];
   }
 
+  const subscriptions: Array<{ key: string; stop: () => void }> = [];
+
+  function subscribe<T>(key: string, method: string, handler: (payload: T) => void) {
+    const stop = onTransportNotification<T>(method, handler);
+    subscriptions.push({ key, stop });
+    bindings.unlisteners[key] = stop;
+  }
+
   onMounted(() => {
-    try {
-      const label = String(getCurrentWindow().label || "").trim();
-      bindings.tauriWindowLabel.value = label || "unknown";
-      bindings.isChatTauriWindow.value = bindings.tauriWindowLabel.value === "chat";
-    } catch {
-      bindings.tauriWindowLabel.value = "unknown";
-      bindings.isChatTauriWindow.value = false;
-    }
-    if (bindings.isChatTauriWindow.value) {
-      void listen<any>("easy-call:history-flushed", (event) => {
-        const payloadConversationId = bindings.readConversationIdFromPayload(event.payload);
-        const targetFlows = flowsForConversation(payloadConversationId);
-        if (targetFlows.length > 0) {
-          for (const flow of targetFlows) void flow.handleExternalHistoryFlushed(event.payload);
-        } else if (payloadConversationId) {
-          bindings.mergeIncomingMessagesIntoCache(payloadConversationId, bindings.readMessagesFromPayload(event.payload));
-        }
-      }).then((unlisten) => {
-        bindings.unlisteners.chatHistoryFlushed = unlisten;
-      }).catch((error) => {
-        console.error("[聊天追踪][历史刷写] 监听器注册失败", error);
-      });
+    subscribe<any>("chatHistoryFlushed", "chat.historyFlushed", (payload) => {
+      const conversationId = bindings.readConversationIdFromPayload(payload);
+      if (!conversationId || flowsForConversation(conversationId).length > 0) return;
+      bindings.mergeIncomingMessagesIntoCache(
+        conversationId,
+        bindings.readMessagesFromPayload(payload),
+      );
+    });
 
-      void listen<any>("easy-call:round-completed", (event) => {
-        const payloadConversationId = bindings.readConversationIdFromPayload(event.payload);
-        const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
-        const payloadObject = event.payload && typeof event.payload === "object"
-          ? event.payload
-          : null;
-        const assistantMessage = payloadObject?.assistantMessage || null;
-        const targetFlows = flowsForConversation(payloadConversationId);
-        if (targetFlows.length === 0 && payloadConversationId && payloadConversationId !== currentConversationId) {
-          const cachedMessages = bindings.formalizeConversationMessages(bindings.conversationMessageCache.value[payloadConversationId] || []);
-          if (assistantMessage && String(assistantMessage?.id || "").trim()) {
-            bindings.cacheConversationMessages(
-              payloadConversationId,
-              bindings.mergeMessagesIntoTimeline(cachedMessages, [assistantMessage]),
-            );
-          }
+    subscribe<any>("chatRoundCompleted", "chat.roundFinished", (payload) => {
+      const conversationId = bindings.readConversationIdFromPayload(payload);
+      const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
+      const value = payload && typeof payload === "object" ? payload as Record<string, any> : null;
+      const failed = String(value?.status || "").trim() === "failed" || !!String(value?.error || "").trim();
+      const targetFlows = flowsForConversation(conversationId);
+      if (targetFlows.length === 0 && conversationId && conversationId !== currentConversationId) {
+        if (failed) {
+          bindings.setConversationBadge(conversationId, "failed");
           return;
         }
-        if (payloadConversationId === currentConversationId) {
-          bindings.clearConversationBadge(payloadConversationId);
-          bindings.toolReviewRefreshTick.value += 1;
-        }
-        void Promise.allSettled(
-          targetFlows.map((flow) => Promise.resolve(flow.handleExternalRoundCompleted(event.payload))),
-        ).then(() => {
-          if (payloadConversationId === currentConversationId) {
-            void bindings.refreshActiveSupervisionTask({ silent: true });
-          }
-        });
-      }).then((unlisten) => {
-        bindings.unlisteners.chatRoundCompleted = unlisten;
-      }).catch((error) => {
-        console.error("[聊天追踪][轮次完成] 监听器注册失败", error);
-      });
-
-      void listen<any>("easy-call:round-started", (event) => {
-        const payloadConversationId = bindings.readConversationIdFromPayload(event.payload);
-        for (const flow of flowsForConversation(payloadConversationId)) {
-          void flow.handleExternalRoundStarted(event.payload);
-        }
-      }).then((unlisten) => {
-        bindings.unlisteners.chatRoundStarted = unlisten;
-      }).catch((error) => {
-        console.error("[聊天追踪][轮次开始] 监听器注册失败", error);
-      });
-
-      void listen<any>("easy-call:round-failed", (event) => {
-        const payloadConversationId = bindings.readConversationIdFromPayload(event.payload);
-        const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
-        const targetFlows = flowsForConversation(payloadConversationId);
-        if (targetFlows.length === 0 && payloadConversationId && payloadConversationId !== currentConversationId) {
-          bindings.setConversationBadge(payloadConversationId, "failed");
-          return;
-        }
-        if (payloadConversationId === currentConversationId) {
-          bindings.clearConversationBadge(payloadConversationId);
-        }
-        for (const flow of targetFlows) void flow.handleExternalRoundFailed(event.payload);
-      }).then((unlisten) => {
-        bindings.unlisteners.chatRoundFailed = unlisten;
-      }).catch((error) => {
-        console.error("[聊天追踪][轮次失败] 监听器注册失败", error);
-      });
-
-      void listen<any>("easy-call:conversation-todos-updated", (event) => {
-        const conversationId = bindings.readConversationIdFromPayload(event.payload);
-        for (const flow of flowsForConversation(conversationId)) {
-          void flow.handleExternalTodosUpdated?.(event.payload);
-        }
-        bindings.applyConversationTodosUpdated(event.payload);
-      }).then((unlisten) => {
-        bindings.unlisteners.chatConversationTodosUpdated = unlisten;
-      }).catch((error) => {
-        console.error("[Todo] 监听器注册失败", error);
-      });
-
-      void listen<any>("easy-call:conversation-pin-updated", (event) => {
-        bindings.applyConversationPinUpdated(event.payload);
-      }).then((unlisten) => {
-        bindings.unlisteners.chatConversationPinUpdated = unlisten;
-      }).catch((error) => {
-        console.error("[会话置顶] 监听器注册失败", error);
-      });
-
-      void listen<any>("easy-call:conversation-goal-updated", (event) => {
-        bindings.applyConversationGoalUpdated(event.payload);
-      }).then((unlisten) => {
-        bindings.unlisteners.chatConversationGoalUpdated = unlisten;
-      }).catch((error) => {
-        console.error("[目标] 监听器注册失败", error);
-      });
-
-      void listen<any>("easy-call:conversation-runtime-state-updated", (event) => {
-        const conversationId = bindings.readConversationIdFromPayload(event.payload);
-        for (const flow of flowsForConversation(conversationId)) {
-          void flow.handleExternalRuntimeStateUpdated?.(event.payload);
-        }
-        bindings.applyConversationRuntimeStateUpdated(event.payload);
-      }).then((unlisten) => {
-        bindings.unlisteners.chatConversationRuntimeStateUpdated = unlisten;
-      }).catch((error) => {
-        console.error("[会话运行态] 监听器注册失败", error);
-      });
-
-      void listen<any>("easy-call:conversation-overview-updated", (event) => {
-        bindings.applyConversationOverviewUpdated(event.payload);
-      }).then((unlisten) => {
-        bindings.unlisteners.chatConversationOverviewUpdated = unlisten;
-      }).catch((error) => {
-        console.error("[会话概览] 监听器注册失败", error);
-      });
-
-      void listen<any>("easy-call:conversation-overview-item-updated", (event) => {
-        bindings.applyConversationOverviewItemUpdated(event.payload);
-      }).then((unlisten) => {
-        bindings.unlisteners.chatConversationOverviewItemUpdated = unlisten;
-      }).catch((error) => {
-        console.error("[会话概览] 单项监听器注册失败", error);
-      });
-
-      void listen<any>("easy-call:assistant-delta", (event) => {
-        const conversationId = bindings.readConversationIdFromPayload(event.payload);
-        if (bindings.CHAT_STREAM_DEBUG) {
-          console.debug("[聊天流式重绑][前端] 收到助手增量普通事件", {
+        const assistantMessage = value?.assistantMessage || null;
+        if (assistantMessage && String(assistantMessage?.id || "").trim()) {
+          const cachedMessages = bindings.formalizeConversationMessages(
+            bindings.conversationMessageCache.value[conversationId] || [],
+          );
+          bindings.cacheConversationMessages(
             conversationId,
-            currentConversationId: String(bindings.currentChatConversationId.value || "").trim(),
-          });
+            bindings.mergeMessagesIntoTimeline(cachedMessages, [assistantMessage]),
+          );
         }
-        for (const flow of flowsForConversation(conversationId)) {
-          void flow.handleExternalAssistantDelta(event.payload);
-        }
-      }).then((unlisten) => {
-        bindings.unlisteners.chatAssistantDelta = unlisten;
-      }).catch((error) => {
-        console.error("[聊天追踪][助手增量] 监听器注册失败", error);
+        return;
+      }
+      if (conversationId !== currentConversationId) return;
+      bindings.clearConversationBadge(conversationId);
+      if (failed) return;
+      bindings.toolReviewRefreshTick.value += 1;
+      queueMicrotask(() => {
+        void bindings.refreshActiveSupervisionTask({ silent: true });
       });
+    });
 
-      void listen<any>("easy-call:stream-rebind-required", (event) => {
-        const conversationId = bindings.readConversationIdFromPayload(event.payload);
-        if (bindings.CHAT_STREAM_DEBUG) {
-          console.debug("[聊天流式重绑][前端] 收到重绑普通事件", {
-            conversationId,
-            currentConversationId: String(bindings.currentChatConversationId.value || "").trim(),
-            payload: event.payload,
-          });
-        }
-        for (const flow of flowsForConversation(conversationId)) {
-          void flow.handleExternalStreamRebindRequired(event.payload);
-        }
-      }).then((unlisten) => {
-        bindings.unlisteners.chatStreamRebindRequired = unlisten;
-      }).catch((error) => {
-        console.error("[聊天追踪][流式重绑] 监听器注册失败", error);
-      });
+    subscribe<any>("chatConversationTodosUpdated", "conversation.todosUpdated", (payload) => {
+      const conversationId = bindings.readConversationIdFromPayload(payload);
+      for (const flow of flowsForConversation(conversationId)) {
+        void flow.handleExternalTodosUpdated?.(payload);
+      }
+      bindings.applyConversationTodosUpdated(payload);
+    });
 
-      void listen<any>("easy-call:conversation-messages-after-synced", (event) => {
-        const conversationId = bindings.readConversationIdFromPayload(event.payload);
-        for (const flow of flowsForConversation(conversationId)) {
-          void flow.handleExternalMessagesAfterSynced?.(event.payload);
-        }
-        void bindings.applyConversationMessagesAfterSynced(event.payload);
-      }).then((unlisten) => {
-        bindings.unlisteners.chatConversationMessagesAfterSynced = unlisten;
-      }).catch((error) => {
-        console.error("[聊天追踪][异步补消息] 监听器注册失败", error);
-      });
+    subscribe<any>("chatConversationPinUpdated", "conversation.pinUpdated", (payload) => {
+      bindings.applyConversationPinUpdated(payload);
+    });
 
-      void listen<any>("easy-call:conversation-message-appended", (event) => {
-        const conversationId = bindings.readConversationIdFromPayload(event.payload);
-        for (const flow of flowsForConversation(conversationId)) {
-          void flow.handleExternalMessageAppended?.(event.payload);
-        }
-        bindings.applyConversationMessageAppended(event.payload);
-      }).then((unlisten) => {
-        bindings.unlisteners.chatConversationMessageAppended = unlisten;
-      }).catch((error) => {
-        console.error("[聊天追踪][追加消息] 监听器注册失败", error);
-      });
+    subscribe<any>("chatConversationGoalUpdated", "conversation.goalUpdated", (payload) => {
+      bindings.applyConversationGoalUpdated(payload);
+    });
 
-    }
+    subscribe<any>("chatConversationRuntimeStateUpdated", "conversation.runtimeStateUpdated", (payload) => {
+      const conversationId = bindings.readConversationIdFromPayload(payload);
+      for (const flow of flowsForConversation(conversationId)) {
+        void flow.handleExternalRuntimeStateUpdated?.(payload);
+      }
+      bindings.applyConversationRuntimeStateUpdated(payload);
+    });
+
+    subscribe<any>("chatConversationOverviewUpdated", "conversation.overviewUpdated", (payload) => {
+      bindings.applyConversationOverviewUpdated(payload);
+    });
+
+    subscribe<any>("chatConversationOverviewItemUpdated", "conversation.overviewItemUpdated", (payload) => {
+      bindings.applyConversationOverviewItemUpdated(payload);
+    });
+
+    subscribe<any>("chatConversationMessagesAfterSynced", "conversation.messagesAfterSynced", (payload) => {
+      const conversationId = bindings.readConversationIdFromPayload(payload);
+      for (const flow of flowsForConversation(conversationId)) {
+        void flow.handleExternalMessagesAfterSynced?.(payload);
+      }
+      void bindings.applyConversationMessagesAfterSynced(payload);
+    });
+
+    subscribe<any>("chatConversationMessageAppended", "conversation.messageAppended", (payload) => {
+      const conversationId = bindings.readConversationIdFromPayload(payload);
+      for (const flow of flowsForConversation(conversationId)) {
+        void flow.handleExternalMessageAppended?.(payload);
+      }
+      bindings.applyConversationMessageAppended(payload);
+    });
 
     bindings.scheduleChatWindowActiveStateSync("mounted");
     bindings.startSupervisionTaskPolling();
@@ -232,57 +128,9 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
   });
 
   onBeforeUnmount(() => {
-    if (bindings.unlisteners.chatHistoryFlushed) {
-      bindings.unlisteners.chatHistoryFlushed();
-      bindings.unlisteners.chatHistoryFlushed = null;
-    }
-    if (bindings.unlisteners.chatRoundCompleted) {
-      bindings.unlisteners.chatRoundCompleted();
-      bindings.unlisteners.chatRoundCompleted = null;
-    }
-    if (bindings.unlisteners.chatRoundStarted) {
-      bindings.unlisteners.chatRoundStarted();
-      bindings.unlisteners.chatRoundStarted = null;
-    }
-    if (bindings.unlisteners.chatRoundFailed) {
-      bindings.unlisteners.chatRoundFailed();
-      bindings.unlisteners.chatRoundFailed = null;
-    }
-    if (bindings.unlisteners.chatAssistantDelta) {
-      bindings.unlisteners.chatAssistantDelta();
-      bindings.unlisteners.chatAssistantDelta = null;
-    }
-    if (bindings.unlisteners.chatStreamRebindRequired) {
-      bindings.unlisteners.chatStreamRebindRequired();
-      bindings.unlisteners.chatStreamRebindRequired = null;
-    }
-    if (bindings.unlisteners.chatConversationMessagesAfterSynced) {
-      bindings.unlisteners.chatConversationMessagesAfterSynced();
-      bindings.unlisteners.chatConversationMessagesAfterSynced = null;
-    }
-    if (bindings.unlisteners.chatConversationMessageAppended) {
-      bindings.unlisteners.chatConversationMessageAppended();
-      bindings.unlisteners.chatConversationMessageAppended = null;
-    }
-    if (bindings.unlisteners.chatConversationTodosUpdated) {
-      bindings.unlisteners.chatConversationTodosUpdated();
-      bindings.unlisteners.chatConversationTodosUpdated = null;
-    }
-    if (bindings.unlisteners.chatConversationPinUpdated) {
-      bindings.unlisteners.chatConversationPinUpdated();
-      bindings.unlisteners.chatConversationPinUpdated = null;
-    }
-    if (bindings.unlisteners.chatConversationGoalUpdated) {
-      bindings.unlisteners.chatConversationGoalUpdated();
-      bindings.unlisteners.chatConversationGoalUpdated = null;
-    }
-    if (bindings.unlisteners.chatConversationRuntimeStateUpdated) {
-      bindings.unlisteners.chatConversationRuntimeStateUpdated();
-      bindings.unlisteners.chatConversationRuntimeStateUpdated = null;
-    }
-    if (bindings.unlisteners.chatConversationOverviewUpdated) {
-      bindings.unlisteners.chatConversationOverviewUpdated();
-      bindings.unlisteners.chatConversationOverviewUpdated = null;
+    for (const { key, stop } of subscriptions.splice(0)) {
+      stop();
+      if (bindings.unlisteners[key] === stop) bindings.unlisteners[key] = null;
     }
     window.removeEventListener("focus", bindings.handleWindowFocusForStateSync);
     window.removeEventListener("blur", bindings.handleWindowBlurForStateSync);
@@ -290,13 +138,9 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
     bindings.clearChatWindowActiveSyncTimer();
     bindings.clearChatMicPrewarmTimer();
     bindings.clearSupervisionTaskPollTimer();
-    bindings.clearRecordHotkeyProbeState();
+    bindings.cleanupChatForegroundActivity();
     bindings.agentWorkPresence.cleanup();
-    bindings.chatWindowActiveSynced.value = null;
     void bindings.getChatFlow()?.unbindActiveConversationStream?.().catch(() => {});
-    if (bindings.isPrimaryChatWindow()) {
-      void invokeTauri("set_chat_window_active", { active: false }).catch(() => {});
-    }
     window.removeEventListener("focus", bindings.handleWindowFocusForMicPrewarm);
     document.removeEventListener("visibilitychange", bindings.handleVisibilityForMicPrewarm);
     bindings.cancelPendingRewindConfirm();

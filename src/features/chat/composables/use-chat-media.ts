@@ -262,14 +262,14 @@ export function useChatMedia(options: UseChatMediaOptions) {
     })();
   }
 
-  async function onNativeFileDrop(paths: string[]) {
+  async function onTransportFileDrop(paths: string[]) {
     if (options.viewMode.value !== "chat") return;
     if (options.trimming.value) return;
     const apiConfig = options.activeChatApiConfig.value;
     if (!apiConfig) return;
     if (!Array.isArray(paths) || paths.length === 0) return;
     options.setChatError("");
-    options.setStatus(`收到拖拽文件 ${paths.length} 个（Tauri）。`);
+    options.setStatus(`收到拖拽文件 ${paths.length} 个。`);
 
     for (const path of paths) {
       try {
@@ -305,7 +305,8 @@ export function useChatMedia(options: UseChatMediaOptions) {
     onPaste,
     onDragOver,
     onDrop,
-    onNativeFileDrop,
+    onTransportFileDrop,
+    applyQueuedAttachmentResult,
     queueTextAttachment,
     removeClipboardImage,
     startHotkeyRecordTest: hotkeyRecordTest.startHotkeyRecordTest,

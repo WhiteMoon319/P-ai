@@ -17,7 +17,7 @@
     </div>
     <ChatSelectionActionPanel
       v-if="selectionModeEnabled"
-      :sidebar-mode="sidebarMode"
+      :show-conversation-actions="showConversationActions"
       :delegate-only="selectionDelegateOnly || systemNotificationMode || remoteContactMode"
       :selected-message-count="selectedMessageCount"
       :active-conversation-id="activeConversationId"
@@ -279,7 +279,7 @@
             </button>
           </div>
           <button
-            v-if="!sidebarMode"
+            v-if="showConversationActions"
             class="btn btn-sm btn-circle btn-ghost shrink-0"
             :title="t('chat.attach')"
             @click="emit('pickAttachments')"
@@ -287,7 +287,7 @@
             <Paperclip class="h-3.5 w-3.5" />
           </button>
           <button
-            v-if="!sidebarMode"
+            v-if="showConversationActions"
             class="btn btn-sm btn-circle shrink-0"
             :class="recording ? 'btn-error' : 'btn-ghost'"
             :disabled="!canRecord"
@@ -367,7 +367,6 @@ import { Teleport, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } 
 import { useI18n } from "vue-i18n";
 import { CalendarPlus, ChevronDown, ClipboardList, CornerRightUp, FileText, History, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption } from "../../../types/app";
-import { invokeTauri } from "../../../services/tauri-api";
 import ChatQueuePreview from "./ChatQueuePreview.vue";
 import ChatSelectionActionPanel from "./ChatSelectionActionPanel.vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
@@ -378,6 +377,7 @@ import { formatApiConfigOptionLabel } from "../../config/utils/api-config-displa
 import { buildApiConfigSelectionTree } from "../../config/utils/api-config-selection-tree";
 import { ideContextReferenceDisplayParts } from "../utils/ide-context-reference-display";
 import { mergeComposerIdeContextGroups } from "../utils/ide-context-reference-groups";
+import { isMobileTouchViewport } from "../utils/chat-input-focus";
 
 type BinaryAttachment = { mime: string; bytesBase64: string; previewDataUrl?: string };
 type QueuedAttachmentNotice = { id: string; fileName: string; path: string; mime: string };
@@ -438,9 +438,7 @@ const props = defineProps<{
   ideContextGroups: IdeContextWorkspaceGroup[];
   attachedIdeContextReferences: IdeContextReferenceItem[];
   currentTheme?: string;
-  sidebarMode?: boolean;
-  bridgeRequest?: <T = unknown>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>;
-  bridgeSubscribe?: (method: string, handler: (payload: unknown) => void) => () => void;
+  showConversationActions?: boolean;
   trimTip?: string;
   chatUsagePercent?: number;
 }>();
@@ -477,10 +475,8 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const sidebarMode = computed(() => !!props.sidebarMode);
-const bridgeRequest = computed(() => props.bridgeRequest);
-const bridgeSubscribe = computed(() => props.bridgeSubscribe);
-const queueEnabled = computed(() => !sidebarMode.value || typeof bridgeRequest.value === "function");
+const queueEnabled = computed(() => true);
+const showConversationActions = computed(() => props.showConversationActions ?? true);
 const systemNotificationMode = computed(() => !!props.systemNotificationMode);
 const remoteContactMode = computed(() => !!props.remoteContactMode);
 
@@ -489,10 +485,8 @@ const remoteContactMode = computed(() => !!props.remoteContactMode);
 // condition for attach/record/command/task/delegate actions. Only gate on real
 // hard blockers such as frozen state, explicit busy flows, permissions, or action-specific prerequisites.
 const teleportTheme = computed(() => {
-  if (typeof document !== "undefined" && document.documentElement.getAttribute("data-host") === "vscode") {
-    return undefined;
-  }
-  return String(props.currentTheme || document.documentElement.getAttribute("data-theme") || "light").trim() || "light";
+  const documentTheme = typeof document === "undefined" ? "" : document.documentElement.getAttribute("data-theme");
+  return String(props.currentTheme || documentTheme || "light").trim() || "light";
 });
 
 function openCreateConversationDialog() {
@@ -539,8 +533,6 @@ onBeforeUnmount(() => { document.removeEventListener('pointerdown', onMenuOutsid
 
 const { queueEvents, sessionState, recallQueueEvent, markGuided } = useChatQueue({
   enabled: queueEnabled,
-  request: bridgeRequest,
-  subscribe: bridgeSubscribe,
 });
 
 const visibleQueueEvents = computed(() => {
@@ -1120,6 +1112,9 @@ function recordSentTextIfNeeded(rawText: string) {
 
 function handleSendChat() {
   const plainText = String(localChatInput.value || "").trim();
+  if (isMobileTouchViewport()) {
+    chatInputRef.value?.blur();
+  }
   emit("sendChat");
   recordSentTextIfNeeded(plainText);
   closeInstructionPanel();
@@ -1321,7 +1316,7 @@ watch(
 watch(
   () => props.chatting,
   (isChatting, wasChatting) => {
-    if (wasChatting && !isChatting) {
+    if (wasChatting && !isChatting && !isMobileTouchViewport()) {
       nextTick(() => focusInput({ preventScroll: true }));
     }
   },

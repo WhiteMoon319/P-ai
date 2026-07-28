@@ -341,12 +341,17 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { emit } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { open } from "@tauri-apps/plugin-dialog";
 import { Eye, EyeOff, Minus, Settings2, X } from "@lucide/vue";
 import { i18n, normalizeLocale } from "../../../i18n";
-import { invokeTauri } from "../../../services/tauri-api";
+import {
+  hideCurrentTransportWindow,
+  completeTransportQuickSetupAndOpenChat,
+  invokeTauri,
+  openTransportExternalUrl,
+  openTransportWindow,
+  minimizeCurrentTransportWindow,
+  openTransportFileDialog,
+} from "../../../services/tauri-api";
 import type { ApiProviderConfigItem, ApiRequestFormat, AppBootstrapSnapshot, AppConfig, ChatSettings, PersonaProfile, ResponseStyleOption } from "../../../types/app";
 import responseStylesJson from "../../../constants/response-styles.json";
 import { useAvatarCache } from "../../chat/composables/use-avatar-cache";
@@ -386,7 +391,6 @@ const providerOptions: QuickProviderPreset[] = [
   { id: "openrouter", label: "OpenRouter", requestFormat: "openai", baseUrl: "https://openrouter.ai/api/v1", keyUrl: "https://openrouter.ai/", defaultModel: "openai/gpt-4o-mini" },
   { id: "custom", label: "Custom", requestFormat: "auto", baseUrl: "https://api.openai.com/v1", keyUrl: "https://platform.openai.com", defaultModel: "gpt-4o-mini" },
 ];
-const appWindow = getCurrentWindow();
 const { locale, t } = useI18n();
 const rerankPresetOptions: AdvancedProviderPreset[] = [
   { id: "siliconflow", label: t('sidebar.quickSetupSiliconFlow'), name: "SiliconFlow Rerank", requestFormat: "openai_rerank", baseUrl: "https://api.siliconflow.cn/v1", apiKey: "", model: "BAAI/bge-reranker-v2-m3" },
@@ -718,9 +722,6 @@ function applyUiLanguage(value: string) {
 
 function setUiLanguage(value: AppConfig["uiLanguage"]) {
   applyUiLanguage(value);
-  void emit("easy-call:locale-changed", normalizeLocale(value)).catch((error) => {
-    console.warn("[语言] emit easy-call:locale-changed failed:", error);
-  });
 }
 
 function setThemeDraft(value: "corporate" | "dracula") {
@@ -788,7 +789,7 @@ function selectProvider(providerId: QuickProviderId) {
 }
 
 function openProviderKeyUrl() {
-  void invokeTauri("open_external_url", { url: selectedProvider.value.keyUrl });
+  void openTransportExternalUrl(selectedProvider.value.keyUrl);
 }
 
 async function refreshProviderModels() {
@@ -1144,7 +1145,7 @@ async function finishBasicSetup() {
     if (!hasUsableTextLlm(config)) {
       throw new Error(t('sidebar.quickSetupNoLlmDetected'));
     }
-    await invokeTauri("complete_quick_setup_and_open_chat");
+    await completeTransportQuickSetupAndOpenChat();
   } catch (error) {
     errorText.value = String(error ?? "unknown");
   } finally {
@@ -1182,7 +1183,7 @@ async function persistCurrentStepBeforeWindowSwitch() {
 }
 
 async function pickWorkspacePath() {
-  const picked = await open({ directory: true, multiple: false, defaultPath: workspaceDraft.path || undefined });
+  const picked = await openTransportFileDialog({ directory: true, multiple: false, defaultPath: workspaceDraft.path || undefined });
   if (!picked || Array.isArray(picked)) return;
   workspaceDraft.path = String(picked);
   if (!workspaceDraft.name.trim()) {
@@ -1196,7 +1197,7 @@ async function openSettingsWindow() {
   errorText.value = "";
   try {
     await persistCurrentStepBeforeWindowSwitch();
-    await invokeTauri("show_main_window");
+    await openTransportWindow("main");
     closeWindow();
   } catch (error) {
     errorText.value = String(error ?? "unknown");
@@ -1206,11 +1207,11 @@ async function openSettingsWindow() {
 }
 
 function minimizeWindow() {
-  void appWindow.minimize();
+  void minimizeCurrentTransportWindow();
 }
 
 function closeWindow() {
-  void appWindow.hide();
+  void hideCurrentTransportWindow();
 }
 
 async function openAvatarEditor(target: "user" | "assistant") {

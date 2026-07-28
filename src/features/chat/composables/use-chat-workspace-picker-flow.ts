@@ -1,6 +1,5 @@
 import { ref, type Ref } from "vue";
-import { open } from "@tauri-apps/plugin-dialog";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { openTransportFileDialog, openTransportWorkspaceDirectory } from "../../../services/tauri-api";
 import { toErrorMessage } from "../../../utils/error";
 import type { ChatWorkspaceChoice } from "./use-chat-workspace";
 import type { ShellWorkMode } from "../../../types/app";
@@ -26,7 +25,6 @@ export function useChatWorkspacePickerFlow(options: UseChatWorkspacePickerFlowOp
   const chatWorkspaceDraftWorkMode = ref<ShellWorkMode>("directory");
   const chatWorkspaceDraftError = ref("");
   const chatWorkspacePickerSaving = ref(false);
-  const tauriRuntimeAvailable = isTauriRuntimeAvailable();
 
   function cloneChatWorkspaceChoices(items: ChatWorkspaceChoice[]): ChatWorkspaceChoice[] {
     return (items || []).map((item) => ({
@@ -58,7 +56,7 @@ export function useChatWorkspacePickerFlow(options: UseChatWorkspacePickerFlowOp
 
   async function addChatWorkspace() {
     try {
-      const picked = await open({
+      const picked = await openTransportFileDialog({
         directory: true,
         multiple: false,
       });
@@ -141,15 +139,12 @@ export function useChatWorkspacePickerFlow(options: UseChatWorkspacePickerFlowOp
   }
 
   async function openChatWorkspaceDir(workspaceId: string) {
-    if (!tauriRuntimeAvailable) return;
     const draft = cloneChatWorkspaceChoices(chatWorkspaceDraftChoices.value);
     const target = draft.find((item) => item.id === workspaceId);
     if (!target?.path) return;
     try {
-      const opened = await invokeTauri<string>("open_chat_shell_workspace_dir", {
-        input: { workspacePath: target.path },
-      });
-      options.setStatus(`已打开目录: ${opened}`);
+      const opened = await openTransportWorkspaceDirectory(target.path);
+      if (opened) options.setStatus(`已打开目录: ${opened}`);
     } catch (error) {
       options.setStatusError("config.tools.openDirFailed", error);
     }

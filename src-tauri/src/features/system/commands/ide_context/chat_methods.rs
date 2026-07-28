@@ -69,46 +69,6 @@ fn ide_chat_register_sidebar_conversation(
     Ok(())
 }
 
-fn ide_chat_conversation_open_result(state: &AppState, conversation_id: &str) -> Result<Value, String> {
-    let conversation_id = conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId is required".to_string());
-    }
-    let conversation_meta = conversation_service_v2().get_conversation_meta(state, conversation_id)?;
-    if conversation_meta.status.trim() == "archived"
-        || conversation_meta
-            .archived_at
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .is_some()
-    {
-        return Err("conversation is archived".to_string());
-    }
-    let messages = conversation_service_v2().get_recent_messages_for_frontend_display_only(
-        state,
-        conversation_id,
-        DEFAULT_FOREGROUND_SNAPSHOT_RECENT_LIMIT,
-    )?;
-    let runtime = ide_chat_runtime_for_conversation(state, conversation_id);
-    let persona = ide_chat_persona_payload(state, Some(conversation_meta.agent_id.as_str()))?;
-    let conversation = ide_chat_conversation_from_meta_view(&conversation_meta);
-    let model = ide_chat_model_payload_for_conversation(state, &conversation)?;
-    Ok(serde_json::json!({
-        "conversationId": conversation_meta.id,
-        "title": conversation_meta.title,
-        "agentId": conversation_meta.agent_id,
-        "departmentId": conversation_meta.department_id,
-        "updatedAt": conversation_meta.updated_at,
-        "messages": messages,
-        "runtime": runtime,
-        "persona": persona,
-        "model": model,
-        "currentTodos": conversation_meta.current_todos,
-        "activeGoal": conversation_meta.active_goal,
-    }))
-}
-
 fn ide_chat_ensure_sidebar_workspace(
     state: &AppState,
     conversation_id: &str,
@@ -340,6 +300,30 @@ async fn ide_chat_rewind_conversation_command(
 fn ide_chat_set_plan_mode_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<SetConversationPlanModeInput>(params, "input")?;
     ide_chat_serialize(set_conversation_plan_mode_inner(input, state)?)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct IdeChatReadPlanFileInput {
+    conversation_id: String,
+    path: String,
+}
+
+fn ide_chat_read_plan_file(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatReadPlanFileInput>(params)?;
+    let content = read_plan_file_content_inner(&input.conversation_id, &input.path, state)?;
+    Ok(serde_json::json!({ "content": content }))
+}
+
+async fn ide_chat_preview_rewind_conversation(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<RewindConversationInput>(params)?;
+    let mut preview = preview_rewind_conversation_from_message_inner(input, state).await?;
+    // Web 无法直接回滚本机文件；协议仍共用同一预览入口，但只开放消息撤回。
+    preview.can_undo_patch = false;
+    ide_chat_serialize(preview)
 }
 
 fn ide_chat_set_preferred_model_command(state: &AppState, params: Value) -> Result<Value, String> {
@@ -661,6 +645,20 @@ fn ide_chat_mark_conversation_read(state: &AppState, params: Value) -> Result<Va
 async fn ide_chat_create_conversation(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<CreateUnarchivedConversationInput>(params)?;
     ide_chat_serialize(create_unarchived_conversation_inner(input, state).await?)
+}
+
+async fn ide_chat_create_side_chat_conversation(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<CreateSideChatConversationInput>(params, "input")?;
+    let app_state = state.clone();
+    let output = tokio::task::spawn_blocking(move || {
+        create_side_chat_conversation_blocking(input, &app_state)
+    })
+    .await
+    .map_err(|err| format!("创建追问会话任务异常：{err}"))??;
+    ide_chat_serialize(output)
 }
 
 async fn ide_chat_delete_conversation(state: &AppState, params: Value) -> Result<Value, String> {

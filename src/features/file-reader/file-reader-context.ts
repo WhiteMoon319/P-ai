@@ -18,7 +18,6 @@ type TranslateFn = (key: string, params?: Record<string, unknown>) => string;
 type LineRange = { startLine?: number; endLine?: number };
 type RectBounds = { left: number; right: number; top: number; bottom: number };
 
-export const FILE_READER_ADD_TO_CHAT_EVENT = "easy-call:file-reader-add-to-chat";
 
 export function resolveFileReaderSelectionActionPosition(input: {
   anchorX: number;

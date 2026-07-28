@@ -480,7 +480,7 @@ import { useI18n } from "vue-i18n";
 import { AlertTriangle, ArrowUpToLine, ChevronDown, ExternalLink, Eye, EyeOff, Plus, RefreshCw, RotateCcw, Save, Trash2, WandSparkles } from "@lucide/vue";
 import type { ApiModelConfigItem, ApiProviderConfigItem, ApiRequestFormat, AppConfig, CodexAuthMode, CodexAuthStatus } from "../../../../types/app";
 import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
-import { invokeTauri } from "../../../../services/tauri-api";
+import { invokeTauri, openTransportExternalUrl } from "../../../../services/tauri-api";
 import CodexProviderPanel from "./CodexProviderPanel.vue";
 import ImageGenerationTab from "./ImageGenerationTab.vue";
 import { normalizeApiRequestFormat } from "../../utils/api-request-format";
@@ -1101,7 +1101,7 @@ async function openModelDocumentation(modelCard: ApiModelConfigItem) {
   const url = modelDocumentationUrl(modelCard);
   if (!url) return;
   try {
-    await invokeTauri("open_external_url", { url });
+    await openTransportExternalUrl(url);
   } catch (error) {
     console.warn("[API] 打开模型文档失败:", error);
   }
@@ -1894,7 +1894,7 @@ function applyGeneratedBaseUrl(presetId?: string) {
 async function openProviderSite(preset: ProviderPreset) {
   if (!preset.docsUrl) return;
   try {
-    await invokeTauri("open_external_url", { url: preset.docsUrl });
+    await openTransportExternalUrl(preset.docsUrl);
   } catch (error) {
     console.warn("[API] 打开供应商文档失败:", error);
   }

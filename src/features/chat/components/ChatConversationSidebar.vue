@@ -59,7 +59,6 @@
             v-if="activeConversationTab === 'task'"
             :conversation-items="items"
             :search-query="conversationSearchQuery"
-            :bridge-request="bridgeRequest"
             @edit-task="requestTaskEdit"
             @layout-change="scheduleConversationListScrollbarUpdate"
           />
@@ -481,7 +480,6 @@ const props = defineProps<{
   activeTab: ConversationSidebarTab;
   chatModelOptions: ApiConfigItem[];
   toolReviewApiConfigId?: string;
-  bridgeRequest?: <T = unknown>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>;
 }>();
 
 const emit = defineEmits<{
@@ -754,7 +752,7 @@ onBeforeUnmount(() => {
 
 async function loadConversationSectionOrders() {
   try {
-    const result = await invokeTauri<ConversationSectionOrderState>("get_conversation_section_orders");
+    const result = await invokeTauri<ConversationSectionOrderState>("conversation.sectionOrders.get");
     conversationSectionOrders.value = {
       local: Array.isArray(result?.local) ? result.local.map((item) => String(item || "").trim()).filter(Boolean) : [],
       contact: Array.isArray(result?.contact) ? result.contact.map((item) => String(item || "").trim()).filter(Boolean) : [],
@@ -767,7 +765,7 @@ async function loadConversationSectionOrders() {
 async function persistConversationSectionOrder(tab: "local" | "contact", orderedKeys: string[]) {
   savingConversationSectionOrder.value = true;
   try {
-    const result = await invokeTauri<{ orderedKeys?: string[] }>("save_conversation_section_order", {
+    const result = await invokeTauri<{ orderedKeys?: string[] }>("conversation.sectionOrders.save", {
       input: {
         tab,
         orderedKeys,
@@ -1271,9 +1269,7 @@ async function submitBatchArchive() {
   batchArchiveSubmitting.value = true;
   try {
     const payload = { conversationIds, reflectionApiConfigId };
-    const result = props.bridgeRequest
-      ? await props.bridgeRequest<BatchArchiveConversationsOutput>("conversation.batchArchive", payload, 30_000)
-      : await invokeTauri<BatchArchiveConversationsOutput>("batch_archive_conversations", { input: payload });
+    const result = await invokeTauri<BatchArchiveConversationsOutput>("conversation.batchArchive", payload, 30_000);
     batchArchiveSelectedConversationIds.value = new Set();
     batchArchiveCardOpen.value = false;
     emit("batchArchiveCompleted", {

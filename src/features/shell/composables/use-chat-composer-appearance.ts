@@ -1,11 +1,9 @@
 import { ref } from "vue";
-import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { emitTransportEvent, onTransportNotification } from "../../../services/tauri-api";
 import type { IdeContextReferenceItem, IdeContextWorkspaceGroup } from "../../../types/app";
 
 const SIDE_FILE_TAGS_STORAGE_KEY = "easy-call.chat.composer-side-file-tags.v1";
 const IDE_BRIDGE_FILE_TAGS_STORAGE_KEY = "easy-call.chat.composer-ide-bridge-file-tags.v1";
-const CHAT_COMPOSER_APPEARANCE_CHANGED_EVENT = "easy-call:chat-composer-appearance-changed";
 export const SIDE_FILE_TAGS_AVAILABLE = false;
 
 type ChatComposerAppearancePayload = {
@@ -20,13 +18,12 @@ type VisibleComposerContextGroupsInput = {
   ideBridgeGroups: IdeContextWorkspaceGroup[];
   sideFileTagsEnabled: boolean;
   ideBridgeFileTagsEnabled: boolean;
-  host?: "default" | "vscode";
 };
 
 const sideFileTagsEnabled = ref(false);
 const ideBridgeFileTagsEnabled = ref(readBooleanPreference(IDE_BRIDGE_FILE_TAGS_STORAGE_KEY));
 let initialized = false;
-let eventUnlisten: UnlistenFn | null = null;
+let eventUnlisten: (() => void) | null = null;
 
 function readBooleanPreference(storageKey: string): boolean {
   if (typeof window === "undefined") return false;
@@ -65,20 +62,13 @@ export function initChatComposerAppearance() {
   if (typeof window !== "undefined") {
     window.addEventListener("storage", handleStorageEvent);
   }
-  if (isTauriRuntimeAvailable()) {
-    void listen<ChatComposerAppearancePayload>(CHAT_COMPOSER_APPEARANCE_CHANGED_EVENT, (event) => {
-      applyPayload(event.payload);
-    }).then((unlisten) => {
-      eventUnlisten = unlisten;
-    }).catch((error) => {
-      console.warn("[输入面板外观] 监听设置变化失败", error);
-    });
-  }
+  eventUnlisten = onTransportNotification<ChatComposerAppearancePayload>("chatComposerAppearance.changed", (payload) => {
+    applyPayload(payload);
+  });
 }
 
 function emitAppearanceChanged() {
-  if (!isTauriRuntimeAvailable()) return;
-  void emit(CHAT_COMPOSER_APPEARANCE_CHANGED_EVENT, {
+  void emitTransportEvent("chatComposerAppearance.changed", {
     sideFileTagsEnabled: sideFileTagsEnabled.value,
     ideBridgeFileTagsEnabled: ideBridgeFileTagsEnabled.value,
   } satisfies ChatComposerAppearancePayload).catch((error) => {
@@ -90,15 +80,14 @@ export function visibleChatComposerContextGroups(
   input: VisibleComposerContextGroupsInput,
 ): IdeContextWorkspaceGroup[] {
   const groups: IdeContextWorkspaceGroup[] = [];
-  const isVsCodeHost = input.host === "vscode";
-  if (SIDE_FILE_TAGS_AVAILABLE && !isVsCodeHost && input.sideFileTagsEnabled && input.sideReferences.length > 0) {
+  if (SIDE_FILE_TAGS_AVAILABLE && input.sideFileTagsEnabled && input.sideReferences.length > 0) {
     groups.push({
       workspacePath: String(input.sideWorkspacePath || "").trim(),
       workspaceName: String(input.sideWorkspaceName || "").trim(),
       references: input.sideReferences,
     });
   }
-  if (isVsCodeHost || input.ideBridgeFileTagsEnabled) {
+  if (input.ideBridgeFileTagsEnabled) {
     groups.push(...input.ideBridgeGroups);
   }
   return groups;

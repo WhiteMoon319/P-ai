@@ -194,7 +194,7 @@ import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { Plus, RotateCcw, Save, Trash2 } from "@lucide/vue";
 import type { MemoryRecallMode, PersonaProfile } from "../../../../types/app";
-import { invokeTauri } from "../../../../services/tauri-api";
+import { exportTransportAgentPrivateMemories, invokeTauri } from "../../../../services/tauri-api";
 import SegmentedControl from "../../components/SegmentedControl.vue";
 
 const props = defineProps<{
@@ -424,9 +424,7 @@ async function exportPrivateMemoriesBeforeDisable() {
   privateMemoryError.value = "";
   privateMemoryExporting.value = true;
   try {
-    const result = await invokeTauri<{ count: number; path: string }>("export_agent_private_memories", {
-      input: { agentId },
-    });
+    const result = await exportTransportAgentPrivateMemories<{ count: number; path: string }>({ agentId });
     privateMemoryExported.value = true;
     privateMemoryDialogMessage.value = `t('config.persona.exportSuccess', { count: result.count })\n路径：${result.path}\n\n现在可以点击“确认”关闭私有记忆。`;
   } catch (error) {

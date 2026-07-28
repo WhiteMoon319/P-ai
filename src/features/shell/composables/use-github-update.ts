@@ -1,7 +1,16 @@
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { computed, onBeforeUnmount, ref, type Ref } from "vue";
 import { i18n } from "../../../i18n";
-import { invokeTauri, isTauriRuntimeAvailable, onWebBridgeNotification } from "../../../services/tauri-api";
+import {
+  applyPreparedTransportGithubUpdate,
+  canUseTransportGithubUpdate,
+  cancelTransportGithubUpdate,
+  checkTransportGithubUpdate,
+  getTransportGithubUpdateState,
+  invokeTauri,
+  onTransportNotification,
+  openTransportExternalUrl,
+  startTransportGithubUpdate,
+} from "../../../services/tauri-api";
 import type { GithubUpdateInfo, GithubUpdateState, UpdateProgressPayload } from "../types/update";
 import type { GithubUpdateMethod } from "../../../types/app";
 
@@ -58,6 +67,12 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   const updateUiMode = ref<"foreground" | "background" | null>(null);
   const skippedVersion = computed(() => normalizeSkippedVersion(options.skippedVersion.value));
 
+  // 应用更新依赖桌面端原生能力。聊天页也会在 Web/VS Code 宿主复用，
+  // 这些宿主不应尝试调用原生更新命令。
+  function canUseGithubUpdate() {
+    return canUseTransportGithubUpdate();
+  }
+
   const updateSuppressedBySkip = computed(() => {
     const latestVersion = String(
       currentUpdateState.value?.latestVersion || latestCheckResult.value?.latestVersion || "",
@@ -85,8 +100,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     && isCancellableUpdateStage(updateStage.value),
   );
 
-  let updateProgressUnlisten: UnlistenFn | null = null;
-  let webUpdateProgressUnlisten: (() => void) | null = null;
+  let updateProgressUnlisten: (() => void) | null = null;
   function runtimeLabel(kind: "installer" | "portable") {
     return kind === "portable" ? t("about.runtimePortable") : t("about.runtimeInstaller");
   }
@@ -109,7 +123,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   function openUpdateRelease() {
     const url = String(updateDialogReleaseUrl.value || latestCheckResult.value?.releaseUrl || "").trim();
     if (!url) return;
-    void invokeTauri("open_external_url", { url });
+    void openTransportExternalUrl(url);
   }
 
   function buildCheckDialogBody(result: GithubUpdateInfo) {
@@ -217,12 +231,13 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   }
 
   async function refreshGithubUpdateState() {
+    if (!canUseGithubUpdate()) return null;
     try {
-      const state = await invokeTauri<GithubUpdateState>("get_github_update_state");
+      const state = await getTransportGithubUpdateState<GithubUpdateState>();
       syncCurrentUpdateState(state);
       return state;
     } catch (error) {
-      console.warn("[自动更新] get_github_update_state failed:", error);
+      console.warn("[自动更新] 读取更新状态失败", error);
       return null;
     }
   }
@@ -315,6 +330,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   }
 
   async function checkGithubUpdate(silent: boolean, respectCooldown = false) {
+    if (!canUseGithubUpdate()) return null;
     if (options.viewMode.value === "archives") return;
     if (checkingUpdate.value) return;
     checkingUpdateRequest.value = true;
@@ -322,7 +338,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       if (!silent) {
         options.status.value = t("about.checking");
       }
-      const result = await invokeTauri<GithubUpdateInfo>("check_github_update", {
+      const result = await checkTransportGithubUpdate<GithubUpdateInfo>({
         updateMethod: currentUpdateMethod(),
         respectCooldown,
       });
@@ -353,13 +369,14 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
         updateDialogPrimaryAction.value = null;
         openUpdateDialog(t("about.checkFailedDialog", { error: String(error) }), "error");
       }
-      console.warn("[自动更新] check_github_update failed:", error);
+      console.warn("[自动更新] 检查更新失败", error);
     } finally {
       checkingUpdateRequest.value = false;
     }
   }
 
   async function startGithubUpdate(force: boolean, silent: boolean) {
+    if (!canUseGithubUpdate()) return;
     if (checkingUpdate.value) return;
     updateInProgress.value = true;
     updateCancelPending.value = false;
@@ -376,7 +393,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       updateDialogOpen.value = true;
     }
     try {
-      await invokeTauri("start_github_update", { force, updateMethod: currentUpdateMethod() });
+      await startTransportGithubUpdate({ force, updateMethod: currentUpdateMethod() });
     } catch (error) {
       if (String(error || "").includes("用户已取消更新")) {
         updateInProgress.value = false;
@@ -399,16 +416,17 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
         updateDialogOpen.value = true;
       }
       options.status.value = t("about.startUpdateFailedStatus", { error: String(error) });
-      console.warn("[自动更新] start_github_update failed:", error);
+      console.warn("[自动更新] 启动更新失败", error);
     }
   }
 
   async function cancelGithubUpdate() {
+    if (!canUseGithubUpdate()) return;
     if (!updateInProgress.value || updateCancelPending.value || !isCancellableUpdateStage(updateStage.value)) return;
     updateCancelPending.value = true;
     options.status.value = t("about.cancellingUpdate");
     try {
-      await invokeTauri("cancel_github_update");
+      await cancelTransportGithubUpdate();
     } catch (error) {
       updateCancelPending.value = false;
       options.status.value = t("about.cancelUpdateFailed", { error: String(error) });
@@ -417,6 +435,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
   }
 
   async function applyPreparedGithubUpdate() {
+    if (!canUseGithubUpdate()) return;
     if (checkingUpdate.value) return;
     updateInProgress.value = true;
     updateCancelPending.value = false;
@@ -430,7 +449,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     updateProgressPercent.value = null;
     options.status.value = t("about.applyingUpdate");
     try {
-      await invokeTauri("apply_prepared_github_update");
+      await applyPreparedTransportGithubUpdate();
     } catch (error) {
       updateInProgress.value = false;
       updateCancelPending.value = false;
@@ -440,7 +459,7 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       updateDialogTitle.value = t("about.updateFailed");
       updateDialogBody.value = t("about.applyUpdateFailed", { error: String(error) });
       options.status.value = t("about.applyUpdateFailedStatus", { error: String(error) });
-      console.warn("[自动更新] apply_prepared_github_update failed:", error);
+      console.warn("[自动更新] 应用已下载更新失败", error);
     }
   }
 
@@ -488,29 +507,13 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     await refreshGithubUpdateState();
   }
 
-  if (isTauriRuntimeAvailable()) {
-    void listen<UpdateProgressPayload>("easy-call:update-status", (event) => {
-      handleUpdateProgressPayload(event.payload);
-    })
-      .then((unlisten) => {
-        updateProgressUnlisten = unlisten;
-      })
-      .catch((error) => {
-        console.warn("[自动更新] listen easy-call:update-status failed:", error);
-      });
-  } else {
-    webUpdateProgressUnlisten = onWebBridgeNotification("easy-call:update-status", (payload) => {
-      if (isUpdateProgressPayload(payload)) {
-        handleUpdateProgressPayload(payload);
-      }
-    });
-  }
+  updateProgressUnlisten = onTransportNotification("easy-call:update-status", (payload) => {
+    if (isUpdateProgressPayload(payload)) handleUpdateProgressPayload(payload);
+  });
 
   onBeforeUnmount(() => {
     updateProgressUnlisten?.();
     updateProgressUnlisten = null;
-    webUpdateProgressUnlisten?.();
-    webUpdateProgressUnlisten = null;
   });
 
   return {

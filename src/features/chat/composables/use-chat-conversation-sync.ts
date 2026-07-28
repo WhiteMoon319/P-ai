@@ -69,7 +69,7 @@ export function useChatConversationSync(bindings: Record<string, any>) {
   }
 
   async function requestConversationRuntimeSnapshot(conversationId: string) {
-    return invokeTauri<any>("get_conversation_runtime_snapshot", {
+    return invokeTauri<any>("conversation.runtimeSnapshot", {
       conversationId,
     });
   }
@@ -139,7 +139,7 @@ export function useChatConversationSync(bindings: Record<string, any>) {
   function markConversationReadPersisted(conversationId: string) {
     const cid = String(conversationId || "").trim();
     if (!cid) return;
-    void invokeTauri("mark_conversation_read", {
+    void invokeTauri("conversation.markRead", {
       input: { conversationId: cid },
     }).catch((error) => {
       console.warn("[会话已读] 持久化失败", {
@@ -192,7 +192,7 @@ export function useChatConversationSync(bindings: Record<string, any>) {
         afterMessageId: afterMessageId || "",
       });
     }
-    await invokeTauri("request_conversation_messages_after_async", {
+    await invokeTauri("conversation.messagesAfterAsync", {
       input: {
         conversationId: cid,
         afterMessageId,
@@ -202,7 +202,7 @@ export function useChatConversationSync(bindings: Record<string, any>) {
   }
 
   async function requestConversationMessageById(conversationId: string, messageId: string) {
-    return invokeTauri("get_unarchived_conversation_message_by_id", {
+    return invokeTauri("conversation.messageById", {
       input: {
         conversationId,
         messageId,
@@ -276,7 +276,7 @@ export function useChatConversationSync(bindings: Record<string, any>) {
 
     bindings.loadingOlderConversationHistory.value = true;
     try {
-      const result = await invokeTauri("get_active_conversation_messages_before", {
+      const result = await invokeTauri("conversation.messagesBefore", {
         input: {
           conversationId,
           beforeMessageId: oldestMessageId,

@@ -1,7 +1,7 @@
 import type { Ref } from "vue";
 import type { AssistantStreamBlock, ChatMessage } from "../../../types/app";
 import { normalizeAssistantStreamBlocks } from "../../../utils/chat-message-semantics";
-import { summarizeToolCallsText } from "./use-chat-flow-drafts";
+import { assistantMessageHasCanonicalVisibleContent } from "./chat-message-state-machine";
 import type { RoundState } from "./use-chat-flow-types";
 import { readMessagePlainText } from "./use-chat-flow-utils";
 
@@ -25,7 +25,6 @@ type UseChatFlowStopOptions = {
     assistantText?: string;
     assistantMessage?: ChatMessage;
   }>;
-  t: (key: string, params?: Record<string, unknown>) => string;
   getRound: () => RoundState;
   setRound: (next: RoundState) => void;
   advanceGeneration: () => void;
@@ -33,10 +32,13 @@ type UseChatFlowStopOptions = {
   clearDeferredRoundCompletion: () => void;
   clearPendingTerminalEvent: () => void;
   setActiveActivationId: (value: string) => void;
+  getActiveActivationId: () => string;
   setActiveRoundAgentId: (value: string) => void;
+  markStoppedRound: (input: { messageId: string; activationId?: string }) => void;
   clearFrontendDispatchTimer: () => void;
   getPendingUserDraftId: () => string;
   removeMessage: (messageId: string) => void;
+  settleStreamingAssistantMessages: () => string[];
   finalizeMessage: (messageId: string, finalMessage?: ChatMessage) => void;
   updateMessageText: (
     messageId: string,
@@ -63,10 +65,54 @@ function stringifyStopError(error: unknown): string {
 }
 
 export function useChatFlowStop(options: UseChatFlowStopOptions) {
-  async function finishLocalStoppedRound(input?: {
-    statusState?: "failed" | "";
-  }) {
-    const statusState = input?.statusState || "";
+  function resultMessageForStoppedRound(
+    messageId: string,
+    result: {
+      assistantText?: string;
+      assistantMessage?: ChatMessage;
+    },
+  ): ChatMessage | undefined {
+    const responseMessage = result.assistantMessage;
+    if (
+      responseMessage
+      && String(responseMessage.id || "").trim() === messageId
+      && assistantMessageHasCanonicalVisibleContent(responseMessage)
+    ) {
+      return responseMessage;
+    }
+    const assistantText = String(result.assistantText || "").trim();
+    if (!assistantText || !messageId) return undefined;
+    const existing = options.allMessages.value.find((message) => String(message?.id || "").trim() === messageId);
+    const providerMeta = { ...((existing?.providerMeta || {}) as Record<string, unknown>) };
+    delete providerMeta._streaming;
+    delete providerMeta._streamSegments;
+    delete providerMeta._streamTail;
+    delete providerMeta._streamAnimatedDelta;
+    delete providerMeta._preStreamingStatusText;
+    delete providerMeta._toolStatusText;
+    delete providerMeta._toolStatusState;
+    return {
+      ...(existing || {}),
+      id: messageId,
+      role: "assistant",
+      createdAt: existing?.createdAt || new Date().toISOString(),
+      speakerAgentId: existing?.speakerAgentId || "assistant-draft",
+      parts: [{ type: "text", text: assistantText }],
+      providerMeta,
+    } as ChatMessage;
+  }
+
+  async function finishLocalStoppedRound() {
+    const round = options.getRound();
+    const messageId = round.phase === "streaming" || round.phase === "queued" ? round.messageId : "";
+    const activationId = options.getActiveActivationId();
+    const currentStreamBlocks = normalizeAssistantStreamBlocks(options.streamBlocks?.value || []);
+    if (round.phase === "streaming" && messageId && (
+      String(options.latestAssistantText.value || "").trim() || currentStreamBlocks.length > 0
+    )) {
+      // 先把尚未投影的最后一段内容写入消息，再统一结束所有忙碌投影。
+      options.updateMessageText(messageId, undefined, undefined, "", currentStreamBlocks);
+    }
     options.advanceGeneration();
     options.setSendChatActiveGen(0);
     options.clearDeferredRoundCompletion();
@@ -80,55 +126,66 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
       options.removeMessage(pendingUserDraftId);
     }
 
-    const round = options.getRound();
-    if (round.phase === "streaming") {
-      // 停止后原样冻结当前流式画面；后续落盘结果不再回写前台。
-      options.finalizeMessage(round.messageId);
-      options.deleteSendStartedAtMs(round.gen);
-    } else if (round.phase === "queued") {
-      options.finalizeMessage(round.messageId);
+    if (messageId) {
+      options.markStoppedRound({ messageId, activationId });
+    }
+    if (round.phase === "streaming" || round.phase === "queued") {
       options.deleteSendStartedAtMs(round.gen);
     }
+    // 当前轮次必须先按同一正式消息 ID 冻结。停止命令只负责中断，
+    // 后台的正式落盘结果会异步回到前台；不能先清空内容块再等待它。
+    if (messageId) {
+      options.finalizeMessage(messageId);
+    }
+    // 再收束历史残留的忙碌气泡，避免它们在停止后重新显示为流式。
+    // 当前消息已去掉 _streaming，不会在这里被二次清理。
+    options.settleStreamingAssistantMessages();
 
     options.setRound({ phase: "idle" });
     options.chatting.value = false;
     options.reasoningStartedAtMs.value = 0;
-    options.toolStatusState.value = statusState;
-    options.toolStatusText.value = statusState
-      ? (summarizeToolCallsText(options.streamBlocks?.value || []) || options.t("status.interrupted"))
-      : "";
+    options.latestAssistantText.value = "";
+    if (options.streamBlocks) options.streamBlocks.value = [];
+    options.toolStatusState.value = "";
+    options.toolStatusText.value = "";
     options.clearConversationStreamCache(options.getConversationId ? options.getConversationId() : "");
+    return { messageId, activationId };
   }
 
   async function stopChat() {
     const round = options.getRound();
-    if (!options.chatting.value && round.phase !== "queued") return;
+    const hasStreamingAssistant = options.allMessages.value.some((message) => {
+      const providerMeta = (message?.providerMeta || {}) as Record<string, unknown>;
+      return String(message?.role || "").trim() === "assistant" && providerMeta._streaming === true;
+    });
+    if (!options.chatting.value && round.phase !== "queued" && round.phase !== "streaming" && !hasStreamingAssistant) return;
 
     const stopSession = options.getSession();
     const cid = options.getConversationId ? options.getConversationId() : "";
-    const activeMessageId = round.phase === "streaming" ? round.messageId : "";
+    const activeMessageId = round.phase === "streaming" || round.phase === "queued" ? round.messageId : "";
     const activeMessage = activeMessageId
       ? options.allMessages.value.find((message) => String(message?.id || "") === activeMessageId)
       : undefined;
     const partialAssistantText = options.latestAssistantText.value || readMessagePlainText(activeMessage);
     const partialStreamBlocks = normalizeAssistantStreamBlocks(options.streamBlocks?.value || []);
 
-    // 先钉死当前画面，再通知后端打断；后端 partial 只负责落盘，不改前台。
-    await finishLocalStoppedRound();
+    // 先立即结束本地忙碌态，再通知后端；后端有同一消息的正式结果才回写。
+    const stoppedRound = await finishLocalStoppedRound();
 
     if (stopSession && options.invokeStopChatMessage) {
       try {
-        await options.invokeStopChatMessage({
+        const result = await options.invokeStopChatMessage({
           session: cid ? { ...stopSession, conversationId: cid } : stopSession,
           partialAssistantText,
           partialStreamBlocks,
         });
+        const finalMessage = resultMessageForStoppedRound(stoppedRound.messageId, result);
+        if (finalMessage) {
+          options.finalizeMessage(stoppedRound.messageId, finalMessage);
+        }
       } catch (error) {
         const et = stringifyStopError(error);
         console.warn(`[聊天] 停止消息失败，apiConfigId=${stopSession.apiConfigId}，agentId=${stopSession.agentId}，len=${partialAssistantText.length}，错误=${et}`);
-        options.toolStatusState.value = "failed";
-        options.toolStatusText.value =
-          summarizeToolCallsText(options.streamBlocks?.value || []) || options.t("status.interrupted");
       }
     }
   }

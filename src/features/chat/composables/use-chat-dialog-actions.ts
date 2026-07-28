@@ -1,4 +1,4 @@
-import { invokeTauri } from "../../../services/tauri-api";
+import { invokeTauri, openTransportWindow } from "../../../services/tauri-api";
 import type { Ref } from "vue";
 
 type UseChatDialogActionsOptions = {
@@ -14,13 +14,13 @@ export function useChatDialogActions(options: UseChatDialogActionsOptions) {
   async function openConversationList() {
     console.info("[CHAT] openConversationList 开始: 打开归档窗口");
     try {
-      await invokeTauri("show_archives_window");
+      await openTransportWindow("archives");
     } catch (error) {
       const err = error as { message?: unknown; stack?: unknown };
       console.error("[CHAT] openConversationList 失败: 打开归档窗口", {
         message: String(err?.message ?? error ?? ""),
         stack: String(err?.stack ?? ""),
-        action: "show_archives_window",
+        action: "openTransportWindow:archives",
       });
     }
   }
@@ -39,7 +39,7 @@ export function useChatDialogActions(options: UseChatDialogActionsOptions) {
           createdAt: Date.now(),
         }));
       }
-      await invokeTauri("set_active_unarchived_conversation", {
+      await invokeTauri("conversation.setActive", {
         input: {
           conversationId: normalizedConversationId,
         },

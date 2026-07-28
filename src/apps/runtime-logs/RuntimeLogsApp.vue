@@ -58,9 +58,12 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { invoke } from "@tauri-apps/api/core";
+import {
+  hideCurrentTransportWindow,
+  invokeTauri,
+  minimizeCurrentTransportWindow,
+  onTransportNotification,
+} from "../../services/tauri-api";
 import { useAppTheme } from "../../features/shell/composables/use-app-theme";
 import type { AppThemeState, GeneratedThemeControls } from "../../features/shell/theme/theme-types";
 import { buildGeneratedThemeStyleText, generateGeneratedThemeTokens, GENERATED_THEME_NAME } from "../../features/shell/theme/theme-generator";
@@ -86,7 +89,7 @@ const logContainer = ref<HTMLElement | null>(null);
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let lastCreatedAt = "";
-let unlistenTheme: UnlistenFn | null = null;
+let unlistenTheme: (() => void) | null = null;
 
 const { restoreThemeFromStorage } = useAppTheme();
 
@@ -119,8 +122,7 @@ watch(filteredLogs, () => {
 onMounted(async () => {
   restoreThemeFromStorage();
   try {
-    unlistenTheme = await listen<AppThemeState>("easy-call:theme-changed", (event) => {
-      const state = event.payload;
+    unlistenTheme = onTransportNotification<AppThemeState>("theme.changed", (state) => {
       if (state.kind === "preset" && state.name) {
         document.documentElement.setAttribute("data-theme", state.name);
       } else if (state.kind === "generated" && state.controls) {
@@ -154,12 +156,12 @@ onBeforeUnmount(() => {
 async function loadInitial() {
   loading.value = true;
   try {
-    await invoke("append_runtime_log_probe", { message: "运行日志窗口已打开" });
+    await invokeTauri("append_runtime_log_probe", { message: "运行日志窗口已打开" });
   } catch {
     // ignore
   }
   try {
-    const items = await invoke<RuntimeLogEntry[]>("list_recent_runtime_logs");
+    const items = await invokeTauri<RuntimeLogEntry[]>("list_recent_runtime_logs");
     logs.value = items;
     if (items.length > 0) {
       lastCreatedAt = items[items.length - 1].createdAt;
@@ -185,7 +187,7 @@ function stopPolling() {
 
 async function pollIncremental() {
   try {
-    const items = await invoke<RuntimeLogEntry[]>("list_runtime_logs_since", {
+    const items = await invokeTauri<RuntimeLogEntry[]>("list_runtime_logs_since", {
       sinceCreatedAt: lastCreatedAt,
     });
     if (items.length > 0) {
@@ -200,7 +202,7 @@ async function pollIncremental() {
 
 async function clearLogs() {
   try {
-    await invoke("clear_recent_runtime_logs");
+    await invokeTauri("clear_recent_runtime_logs");
     logs.value = [];
     lastCreatedAt = "";
     errorText.value = "";
@@ -220,11 +222,11 @@ async function copyLogs() {
 }
 
 function minimizeWindow() {
-  getCurrentWindow().minimize();
+  void minimizeCurrentTransportWindow();
 }
 
 function closeWindow() {
-  getCurrentWindow().hide();
+  void hideCurrentTransportWindow();
 }
 
 function extractModule(message: string): string | null {

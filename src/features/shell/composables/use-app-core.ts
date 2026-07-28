@@ -1,8 +1,8 @@
 import { computed, type Ref } from "vue";
-import { emit } from "@tauri-apps/api/event";
 import { formatI18nError } from "../../../utils/error";
 import { normalizeLocale, type SupportedLocale } from "../../../i18n";
 import type { AppConfig } from "../../../types/app";
+import { emitTransportEvent } from "../../../services/tauri-api";
 
 type TrFn = (key: string, params?: Record<string, unknown>) => string;
 
@@ -44,8 +44,8 @@ export function useAppCore(options: UseAppCoreOptions) {
     if (options.config.uiLanguage === lang && options.locale.value === lang) return false;
     options.config.uiLanguage = lang;
     options.locale.value = lang;
-    void emit("easy-call:locale-changed", lang).catch((error) => {
-      console.warn("[语言] emit easy-call:locale-changed failed:", error);
+    void emitTransportEvent("locale.changed", lang).catch((error) => {
+      console.warn("[语言] 同步语言变化失败", error);
     });
     return true;
   }

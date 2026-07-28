@@ -1,8 +1,7 @@
 import { ref } from "vue";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import type { ChatMessageBlock } from "../../../types/app";
 import { stripToolcallMarkers } from "../../../utils/chat-message-semantics";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { readTransportLocalBinaryFile, resolveLocalFileUrl } from "../../../services/tauri-api";
 
 export function useChatMessageActions() {
   const playingAudioId = ref("");
@@ -26,19 +25,17 @@ export function useChatMessageActions() {
     const mediaRef = String(audio.mediaRef || "").trim();
     if (!mediaRef || mediaRef.startsWith("@media:") || mediaRef.startsWith("@download:")) return "";
     try {
-      const result = await invokeTauri<{ mime?: string; bytesBase64?: string }>("read_local_binary_file", {
-        input: { path: mediaRef },
-      });
+      const result = await readTransportLocalBinaryFile<{ mime?: string; bytesBase64?: string }>({ path: mediaRef });
       const encoded = String(result?.bytesBase64 || "").trim();
       const mime = String(result?.mime || audio.mime || "audio/mpeg").trim();
       if (encoded) return `data:${mime};base64,${encoded}`;
     } catch (error) {
-      if (!isTauriRuntimeAvailable()) {
-        console.warn("[聊天音频] 通过桥接读取失败", { path: mediaRef, error });
-        return "";
-      }
+      const fallback = resolveLocalFileUrl(mediaRef);
+      if (fallback) return fallback;
+      console.warn("[聊天音频] 读取失败", { path: mediaRef, error });
+      return "";
     }
-    return convertFileSrc(mediaRef);
+    return resolveLocalFileUrl(mediaRef);
   }
 
   function stopAudioPlayback() {

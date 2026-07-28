@@ -309,8 +309,6 @@ class PaiSidebarProvider {
     this.view = null;
     this._discoveryWatcher = null;
     this._lastDiscoveryContent = "";
-    this._ideContextSocket = null;
-    this._ideContextSocketUrl = "";
     this._ideContextTimer = null;
     this._ideContextSendTimer = null;
     this._lastIdeContextSignature = "";
@@ -346,6 +344,13 @@ class PaiSidebarProvider {
         openExternalUrl(message.url).catch((error) => {
           const detail = error && error.message ? error.message : String(error);
           void vscode.window.showWarningMessage(`打开外部链接失败：${detail}`);
+        });
+        return;
+      }
+      if (message && message.type === "pai-open-settings") {
+        openExternalUrl(message.url).catch((error) => {
+          const detail = error && error.message ? error.message : String(error);
+          void vscode.window.showWarningMessage(`打开本机设置失败：${detail}`);
         });
       }
     });
@@ -422,11 +427,6 @@ class PaiSidebarProvider {
     for (const subscription of this._subscriptions.splice(0)) {
       try { subscription.dispose(); } catch {}
     }
-    if (this._ideContextSocket) {
-      try { this._ideContextSocket.close(); } catch {}
-      this._ideContextSocket = null;
-      this._ideContextSocketUrl = "";
-    }
   }
 
   scheduleIdeContextSync() {
@@ -452,14 +452,12 @@ class PaiSidebarProvider {
     if (heartbeatOnly && !heartbeatDue) return;
     const discovery = readDiscovery();
     if (heartbeatOnly && !this._ideContextDirty && heartbeatDue) {
-      if (!discovery?.bridgeUrl && !discovery?.url) return;
-      const bridgeUrl = String(discovery.bridgeUrl || discovery.url || "").trim();
-      if (!bridgeUrl) return;
+      if (!discovery) return;
       this._lastIdeContextPayload = {
         ...this._lastIdeContextPayload,
         updatedAt: nowIso(),
       };
-      this.sendIdeContextSnapshot(bridgeUrl, this._lastIdeContextPayload);
+      this.sendIdeContextSnapshot(this._lastIdeContextPayload);
       return;
     }
     const references = collectIdeContextReferences();
@@ -468,48 +466,21 @@ class PaiSidebarProvider {
       this._ideContextDirty = false;
       return;
     }
-    if (!discovery?.bridgeUrl && !discovery?.url) return;
-    const bridgeUrl = String(discovery.bridgeUrl || discovery.url || "").trim();
-    if (!bridgeUrl) return;
+    if (!discovery) return;
     const payload = snapshotPayloadFromReferences(references, discovery);
     this._lastIdeContextSignature = signature;
     this._lastIdeContextPayload = payload;
     this._ideContextDirty = false;
-    this.sendIdeContextSnapshot(bridgeUrl, payload);
+    this.sendIdeContextSnapshot(payload);
   }
 
-  sendIdeContextSnapshot(bridgeUrl, payload) {
-    const send = () => {
-      try {
-        this._ideContextSocket?.send(JSON.stringify(payload));
-        this._lastIdeContextSentAt = Date.now();
-      } catch {
-        this._ideContextSocket = null;
-      }
-    };
-    if (this._ideContextSocket && this._ideContextSocketUrl === bridgeUrl && this._ideContextSocket.readyState === 1) {
-      send();
-      return;
-    }
-    if (this._ideContextSocket && this._ideContextSocketUrl !== bridgeUrl) {
-      try { this._ideContextSocket.close(); } catch {}
-      this._ideContextSocket = null;
-    }
-    if (this._ideContextSocket && this._ideContextSocket.readyState === 0) return;
-    try {
-      if (typeof WebSocket !== "function") return;
-      this._ideContextSocketUrl = bridgeUrl;
-      this._ideContextSocket = new WebSocket(bridgeUrl);
-      this._ideContextSocket.onopen = send;
-      this._ideContextSocket.onerror = () => {
-        this._ideContextSocket = null;
-      };
-      this._ideContextSocket.onclose = () => {
-        this._ideContextSocket = null;
-      };
-    } catch {
-      this._ideContextSocket = null;
-    }
+  sendIdeContextSnapshot(payload) {
+    if (!this.view || !payload) return;
+    void this.view.webview.postMessage({
+      type: "pai-ide-context-snapshot",
+      snapshot: payload,
+    });
+    this._lastIdeContextSentAt = Date.now();
   }
 
   postDiscovery(discoveryInput) {

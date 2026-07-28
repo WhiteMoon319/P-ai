@@ -1,5 +1,5 @@
 import { ref } from "vue";
-import { invokeTauri } from "../../../services/tauri-api";
+import { exportTransportArchive, invokeTauri } from "../../../services/tauri-api";
 import type {
   ArchiveBlockPage,
   ArchiveSummary,
@@ -125,7 +125,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
     const previousHasPrev = unarchivedHasPrevBlock.value;
     const previousHasNext = unarchivedHasNextBlock.value;
     try {
-      const page = await invokeTauri<ArchiveBlockPage>("get_unarchived_conversation_block_page", {
+      const page = await invokeTauri<ArchiveBlockPage>("conversation.blockPage", {
         input: { conversationId },
       });
       selectedUnarchivedConversationId.value = conversationId;
@@ -154,7 +154,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
     const previousHasPrev = unarchivedHasPrevBlock.value;
     const previousHasNext = unarchivedHasNextBlock.value;
     try {
-      const page = await invokeTauri<ArchiveBlockPage>("get_unarchived_conversation_block_page", {
+      const page = await invokeTauri<ArchiveBlockPage>("conversation.blockPage", {
         input: {
           conversationId,
           blockId: typeof blockId === "number" ? blockId : undefined,
@@ -177,7 +177,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
 
   async function loadUnarchivedConversations() {
     try {
-      unarchivedConversations.value = await invokeTauri<UnarchivedConversationSummary[]>("list_unarchived_conversations");
+      unarchivedConversations.value = await invokeTauri<UnarchivedConversationSummary[]>("conversation.overview.list");
       if (unarchivedConversations.value.length === 0) {
         selectedUnarchivedConversationId.value = "";
         selectedUnarchivedBlockId.value = null;
@@ -198,7 +198,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
 
   async function loadUnarchivedConversationListOnly() {
     try {
-      unarchivedConversations.value = await invokeTauri<UnarchivedConversationSummary[]>("list_unarchived_conversations");
+      unarchivedConversations.value = await invokeTauri<UnarchivedConversationSummary[]>("conversation.overview.list");
       const selectedId = String(selectedUnarchivedConversationId.value || "").trim();
       if (!unarchivedConversations.value.some((item) => String(item.conversationId || "").trim() === selectedId)) {
         selectedUnarchivedConversationId.value = "";
@@ -228,7 +228,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
     const previousHasPrev = delegateHasPrevBlock.value;
     const previousHasNext = delegateHasNextBlock.value;
     try {
-      const page = await invokeTauri<ArchiveBlockPage>("get_delegate_conversation_block_page", {
+      const page = await invokeTauri<ArchiveBlockPage>("delegate.blockPage", {
         input: { conversationId },
       });
       selectedDelegateConversationId.value = conversationId;
@@ -257,7 +257,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
     const previousHasPrev = delegateHasPrevBlock.value;
     const previousHasNext = delegateHasNextBlock.value;
     try {
-      const page = await invokeTauri<ArchiveBlockPage>("get_delegate_conversation_block_page", {
+      const page = await invokeTauri<ArchiveBlockPage>("delegate.blockPage", {
         input: {
           conversationId,
           blockId: typeof blockId === "number" ? blockId : undefined,
@@ -280,7 +280,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
 
   async function loadDelegateConversations() {
     try {
-      delegateConversations.value = await invokeTauri<DelegateConversationSummary[]>("list_delegate_conversations");
+      delegateConversations.value = await invokeTauri<DelegateConversationSummary[]>("delegate.conversations.list");
       if (delegateConversations.value.length === 0) {
         selectedDelegateConversationId.value = "";
         selectedDelegateBlockId.value = null;
@@ -306,7 +306,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
       loadRemoteImContactConversations(),
     ]);
     try {
-      archives.value = await invokeTauri<ArchiveSummary[]>("list_archives");
+      archives.value = await invokeTauri<ArchiveSummary[]>("archives.list");
       if (archives.value.length === 0) {
         selectedArchiveId.value = "";
         selectedArchiveBlockId.value = null;
@@ -336,7 +336,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
     // 先更新高亮，避免等待消息加载导致左侧选中反馈卡顿。
     selectedRemoteImContactId.value = contactId;
     try {
-      const page = await invokeTauri<ArchiveBlockPage>("remote_im_get_contact_conversation_block_page", {
+      const page = await invokeTauri<ArchiveBlockPage>("remoteIm.conversation.blockPage", {
         input: { contactId },
       });
       remoteImContactBlocks.value = Array.isArray(page?.blocks) ? page.blocks : [];
@@ -364,7 +364,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
     const previousHasPrev = remoteImHasPrevBlock.value;
     const previousHasNext = remoteImHasNextBlock.value;
     try {
-      const page = await invokeTauri<ArchiveBlockPage>("remote_im_get_contact_conversation_block_page", {
+      const page = await invokeTauri<ArchiveBlockPage>("remoteIm.conversation.blockPage", {
         input: {
           contactId,
           blockId: typeof blockId === "number" ? blockId : undefined,
@@ -389,7 +389,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
     try {
       const previousSelectedId = selectedRemoteImContactId.value;
       remoteImContactConversations.value =
-        await invokeTauri<RemoteImContactConversationSummary[]>("remote_im_list_contact_conversations");
+        await invokeTauri<RemoteImContactConversationSummary[]>("remoteIm.conversations.list");
       if (remoteImContactConversations.value.length === 0) {
         selectedRemoteImContactId.value = "";
         selectedRemoteImContactBlockId.value = null;
@@ -457,8 +457,8 @@ export function useArchivesView(options: UseArchivesViewOptions) {
     const previousHasPrev = archiveHasPrevBlock.value;
     const previousHasNext = archiveHasNextBlock.value;
     try {
-      const summary = await invokeTauri<string>("get_archive_summary", { archiveId });
-      const page = await invokeTauri<ArchiveBlockPage>("get_archive_block_page", {
+      const summary = await invokeTauri<string>("archives.summary", { archiveId });
+      const page = await invokeTauri<ArchiveBlockPage>("archives.blockPage", {
         input: { archiveId },
       });
       selectedArchiveId.value = archiveId;
@@ -488,7 +488,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
     const previousHasPrev = archiveHasPrevBlock.value;
     const previousHasNext = archiveHasNextBlock.value;
     try {
-      const page = await invokeTauri<ArchiveBlockPage>("get_archive_block_page", {
+      const page = await invokeTauri<ArchiveBlockPage>("archives.blockPage", {
         input: {
           archiveId,
           blockId: typeof blockId === "number" ? blockId : undefined,
@@ -511,7 +511,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
   async function deleteArchive(archiveId: string) {
     if (!archiveId) return;
     try {
-      await invokeTauri("delete_archive", { archiveId });
+      await invokeTauri("archives.delete", { archiveId });
       options.setStatus(options.t("status.archiveDeleted"));
       if (selectedArchiveId.value === archiveId) {
         selectedArchiveId.value = "";
@@ -532,7 +532,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
     const conversationId = String(archiveId || "").trim();
     if (!conversationId) return;
     try {
-      await invokeTauri("unarchive_archive", { archiveId: conversationId });
+      await invokeTauri("archives.unarchive", { archiveId: conversationId });
       selectedArchiveId.value = "";
       selectedArchiveBlockId.value = null;
       archiveBlocks.value = [];
@@ -566,7 +566,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
     }
     try {
       console.info("[归档] delete current unarchived conversation", { conversationId });
-      const result = await invokeTauri<DeleteUnarchivedConversationResult>("delete_unarchived_conversation", {
+      const result = await invokeTauri<DeleteUnarchivedConversationResult>("conversation.delete", {
         input: { conversationId },
       });
       options.setStatus(options.t("status.unarchivedConversationDeleted"));
@@ -589,7 +589,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
   async function deleteRemoteImContactConversation(contactId: string) {
     if (!contactId) return;
     try {
-      await invokeTauri<boolean>("remote_im_clear_contact_conversation", {
+      await invokeTauri<boolean>("remoteIm.conversation.clear", {
         input: { contactId },
       });
       options.setStatus("联系人会话已删除。");
@@ -602,7 +602,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
   async function deleteDelegateConversation(conversationId: string): Promise<DeleteDelegateConversationResult | null> {
     if (!conversationId) return null;
     try {
-      const result = await invokeTauri<DeleteDelegateConversationResult>("delete_delegate_conversation", {
+      const result = await invokeTauri<DeleteDelegateConversationResult>("delegate.delete", {
         input: { conversationId },
       });
       options.setStatus("委托会话已删除。");
@@ -628,11 +628,9 @@ export function useArchivesView(options: UseArchivesViewOptions) {
       return;
     }
     try {
-      const result = await invokeTauri<ExportArchiveFileResult>("export_archive_to_file", {
-        input: {
-          archiveId: selectedArchiveId.value,
-          format: payload.format,
-        },
+      const result = await exportTransportArchive<ExportArchiveFileResult>({
+        archiveId: selectedArchiveId.value,
+        format: payload.format,
       });
       options.setStatus(options.t("status.archiveExported", { format: result.format, path: result.path }));
     } catch (e) {
@@ -673,7 +671,7 @@ export function useArchivesView(options: UseArchivesViewOptions) {
 
   async function importArchivePayload(payloadJson: string) {
     try {
-      const result = await invokeTauri<ImportArchivesResult>("import_archives_from_json", {
+      const result = await invokeTauri<ImportArchivesResult>("conversation.importArchives", {
         input: { payloadJson },
       });
       if (result.selectedArchiveId) {

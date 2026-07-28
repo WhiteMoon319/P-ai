@@ -161,10 +161,10 @@
         >
           <div v-if="block.text">
             <div
-              v-if="forcePlainMarkdownRender"
+              v-if="plainMarkdownDebugEnabled"
               @click="emit('assistantLinkClick', $event)"
             >
-              <SidebarLightMarkdown :text="assistantRenderedText" />
+              <PlainMarkdownRenderer :text="assistantRenderedText" />
             </div>
             <div v-else ref="markdownContainerRef">
               <div v-if="assistantUsesSegmentedMarkdown" class="ecall-assistant-segment-list">
@@ -455,7 +455,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect, watchPostEffect } from "vue";
 import { useI18n } from "vue-i18n";
 import { Braces, Copy, FileText, ImageIcon, ListCheck, Split, Undo2 } from "@lucide/vue";
-import { invokeTauri } from "../../../services/tauri-api";
+import { invokeTauri, openTransportWorkspaceFile, readTransportChatImage } from "../../../services/tauri-api";
 import type { ChatActivityItem, ChatMessageBlock } from "../../../types/app";
 import {
   normalizeAssistantStreamBlocks,
@@ -474,7 +474,7 @@ import { generateShareFromMessageIds } from "../utils/share-generator";
 import { displayFileName, extraTextReferenceDisplayParts } from "../utils/chat-attachment-display";
 import ChatBubbleShell from "./ChatBubbleShell.vue";
 import ChatAttachmentItem from "./ChatAttachmentItem.vue";
-import SidebarLightMarkdown from "./SidebarLightMarkdown.vue";
+import PlainMarkdownRenderer from "./PlainMarkdownRenderer.vue";
 
 initKatex();
 
@@ -507,10 +507,8 @@ const props = defineProps<{
   compactWithPrevious: boolean;
   canRegenerate: boolean;
   canConfirmPlan: boolean;
-  readPlanFileContent?: (input: { conversationId: string; path: string }) => Promise<string>;
   currentWorkspaceRootPath?: string;
   currentTheme?: string;
-  disableMarkdownRender?: boolean;
   disableRecallAndBranchActions?: boolean;
   isLastUserMessage?: boolean;
   isLastAssistantMessage?: boolean;
@@ -558,26 +556,23 @@ const copyMessageImageBusy = ref(false);
 const planMarkdownText = ref("");
 const planMarkdownError = ref("");
 const planMarkdownLoading = ref(false);
-const forcePlainMarkdownRender = computed(() => !!props.disableMarkdownRender || debugPlainMarkdownRender);
+const plainMarkdownDebugEnabled = debugPlainMarkdownRender;
 const assistantRenderedText = computed(() => formatAssistantStreamingText(props.block));
 const segmentedMarkdownActive = computed(() => segmentedMarkdownEnabled.value && assistantBubbleBackgroundEnabled.value);
 const assistantMarkdownBlocks = computed<MarkdownBlock[]>(() => {
-  if (forcePlainMarkdownRender.value || !segmentedMarkdownActive.value) return [];
+  if (plainMarkdownDebugEnabled || !segmentedMarkdownActive.value) return [];
   const text = assistantRenderedText.value;
   if (!text) return [];
   return parseMarkdownBlocks(text, !!props.block.isStreaming);
 });
 const assistantMarkdownSegments = computed<MarkdownSegment[]>(() => groupMarkdownSegments(assistantMarkdownBlocks.value));
 const assistantUsesSegmentedMarkdown = computed(() => {
-  if (forcePlainMarkdownRender.value || !segmentedMarkdownActive.value) return false;
+  if (plainMarkdownDebugEnabled || !segmentedMarkdownActive.value) return false;
   return assistantMarkdownSegments.value.length > 0;
 });
 const teleportTheme = computed(() => {
-  if (typeof document !== "undefined" && document.documentElement.getAttribute("data-host") === "vscode") {
-    return undefined;
-  }
-  if (typeof document === "undefined") return "light";
-  return String(props.currentTheme || document.documentElement.getAttribute("data-theme") || "light").trim() || "light";
+  const documentTheme = typeof document === "undefined" ? "" : document.documentElement.getAttribute("data-theme");
+  return String(props.currentTheme || documentTheme || "light").trim() || "light";
 });
 let disposed = false;
 
@@ -619,9 +614,7 @@ watch(
     planMarkdownLoading.value = true;
     try {
       const input = { conversationId: snapshot.conversationId, path: snapshot.path };
-      const content = props.readPlanFileContent
-        ? await props.readPlanFileContent(input)
-        : await invokeTauri<string>("read_plan_file_content", input);
+      const content = await invokeTauri<string>("conversation.plan.readFile", input);
       if (cancelled || disposed) return;
       planMarkdownText.value = String(content || "");
     } catch (error) {
@@ -1522,13 +1515,10 @@ async function loadImageDataUrl(image: { mime: string; bytesBase64?: string; med
   const pending = imageDataUrlPromiseCache.get(cacheKey);
   if (pending) return pending;
   const legacyMarker = mediaRef.startsWith("@media:") || mediaRef.startsWith("@download:");
-  const task = (legacyMarker
-    ? invokeTauri<{ dataUrl: string }>("read_chat_image_data_url", {
-      input: { mediaRef, mime },
-    })
-    : invokeTauri<{ dataUrl: string }>("read_local_chat_image_thumbnail", {
-      input: { path: mediaRef },
-    }))
+  const task = readTransportChatImage({
+    ...(legacyMarker ? { mediaRef } : { path: mediaRef }),
+    mime,
+  })
     .then((result) => {
       const dataUrl = String(result?.dataUrl || "").trim();
       if (dataUrl) imageDataUrlCache.set(cacheKey, dataUrl);
@@ -1628,7 +1618,7 @@ function openResolvedImagePreview(
 function openAttachmentPath(path: string) {
   const normalized = String(path || "").trim();
   if (!normalized) return;
-  void invokeTauri("open_workspace_file", { relativePath: normalized }).catch((error) => {
+  void openTransportWorkspaceFile(normalized).catch((error) => {
     console.warn("[聊天附件] 打开失败", { path: normalized, error });
   });
 }
@@ -1784,8 +1774,8 @@ function openAttachmentPath(path: string) {
   max-height: none !important;
   height: auto !important;
   font-family: inherit;
-  font-size: var(--app-text-sm-size);
-  line-height: 1.5;
+  font-size: var(--app-chat-message-text-size, var(--app-text-sm-size));
+  line-height: inherit;
 }
 
 .assistant-markdown :deep(.ecall-markdown-content .paragraph-node),
@@ -1961,7 +1951,7 @@ function openAttachmentPath(path: string) {
 }
 
 .ecall-assistant-bubble {
-  font-size: var(--app-text-sm-size);
+  font-size: var(--app-chat-message-text-size, var(--app-text-sm-size));
   transition:
     box-shadow 220ms ease,
     transform 220ms ease,

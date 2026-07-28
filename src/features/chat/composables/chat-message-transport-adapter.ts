@@ -5,7 +5,7 @@ function normalized(value: unknown): string {
   return String(value || "").trim();
 }
 
-export function tauriRoundStartedToMessageEvent(
+export function transportRoundStartedToMessageEvent(
   payload: Partial<RoundStartedPayload>,
   fallbackConversationId: string,
   input: {
@@ -32,7 +32,7 @@ export function tauriRoundStartedToMessageEvent(
   };
 }
 
-export function tauriAssistantDeltaToMessageEvent(
+export function transportAssistantDeltaToMessageEvent(
   parsed: AssistantDeltaEvent,
   conversationId: string,
   assistantMessageId: string,

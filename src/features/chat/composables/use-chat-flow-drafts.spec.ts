@@ -8,12 +8,14 @@ function createRuntime() {
   const allMessages = shallowRef<ChatMessage[]>([]);
   const latestAssistantText = ref("");
   const streamBlocks = ref<AssistantStreamBlock[]>([]);
+  const toolStatusText = ref("");
+  const toolStatusState = ref<"running" | "done" | "failed" | "">("");
   const runtime = useChatFlowDrafts({
     allMessages,
     latestUserText: ref(""),
     latestAssistantText,
-    toolStatusText: ref(""),
-    toolStatusState: ref<"running" | "done" | "failed" | "">(""),
+    toolStatusText,
+    toolStatusState,
     streamBlocks,
     getConversationId: () => "conversation-1",
     getActiveRoundAgentId: () => "agent-1",
@@ -66,6 +68,36 @@ describe("useChatFlowDrafts shared message projection", () => {
     empty.runtime.failMessage("assistant-empty", new Error("失败"));
 
     expect(empty.allMessages.value).toEqual([]);
+  });
+
+  it("stopping settles a thinking and tool projection without losing its content blocks", () => {
+    const { allMessages, runtime } = createRuntime();
+    runtime.insertStreamingAssistantMessage("assistant-tool-blocks", 1);
+    runtime.updateMessageText("assistant-tool-blocks", undefined, undefined, "", [{
+      reasoning: "先读取配置。",
+      tools: [{
+        toolCallId: "call-1",
+        name: "read_file",
+        argsText: "{\"path\":\"app.toml\"}",
+        resultText: "配置已读取",
+        status: "done",
+      }],
+    }]);
+
+    runtime.settleStreamingAssistantMessages();
+
+    expect(allMessages.value).toHaveLength(1);
+    expect(allMessages.value[0].providerMeta?._streaming).toBeUndefined();
+    expect(allMessages.value[0].contentBlocks?.[0]).toMatchObject({
+      reasoning: "先读取配置。",
+      tools: [expect.objectContaining({
+        toolCallId: "call-1",
+        name: "read_file",
+        argsText: "{\"path\":\"app.toml\"}",
+        resultText: "配置已读取",
+        status: "done",
+      })],
+    });
   });
 
   it("keeps completion metadata when an external same-id formal message arrives first", () => {

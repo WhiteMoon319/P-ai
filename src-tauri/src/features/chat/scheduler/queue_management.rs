@@ -547,7 +547,9 @@ pub(crate) fn ingress_chat_event(
         || !slot.pending_queue.is_empty()
         || conversation_running_slot_count(&claims, &event.conversation_id) > 0
         || running_count >= CHAT_CONCURRENCY_LIMIT;
-    if blocked && chat_pending_event_duplicates_existing_message(state, &event)? {
+    // 已经写入消息存储的 requestId 无论本次会走直通还是排队，都必须
+    // 幂等处理。只在 blocked 时检查会让网络重试在会话空闲窗口重复落盘。
+    if chat_pending_event_duplicates_existing_message(state, &event)? {
         return Ok(ChatEventIngress::Duplicate { event_id: event.id });
     }
     slot.last_activity_at = now_iso();

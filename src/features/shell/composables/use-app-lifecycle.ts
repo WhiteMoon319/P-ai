@@ -1,7 +1,5 @@
 import { onBeforeUnmount, onMounted, type Ref } from "vue";
-import { listen } from "@tauri-apps/api/event";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { invokeTauri, listenCurrentTransportFileDrop, onTransportNotification } from "../../../services/tauri-api";
 
 type UseAppLifecycleOptions = {
   appBootstrapMount: () => Promise<void>;
@@ -10,7 +8,7 @@ type UseAppLifecycleOptions = {
   onPaste: (event: ClipboardEvent) => void;
   onDragOver: (event: DragEvent) => void;
   onDrop: (event: DragEvent) => void;
-  onNativeFileDrop?: (paths: string[]) => Promise<void> | void;
+  onTransportFileDrop?: (paths: string[]) => Promise<void> | void;
   onNativeDragState?: (active: boolean) => void;
   recordHotkeyMount: () => void;
   recordHotkeyUnmount: () => void;
@@ -112,23 +110,9 @@ async function waitForBackendReady(): Promise<void> {
       reject(new Error(`等待后端就绪超时（${BACKEND_READY_TIMEOUT_MS / 1000}秒）`));
     }, BACKEND_READY_TIMEOUT_MS);
     pollTimer = setInterval(checkReady, BACKEND_READY_POLL_INTERVAL_MS);
-    if (isTauriRuntimeAvailable()) {
-      listen("easy-call:backend-ready", () => {
-        finishReady("事件通知");
-      })
-        .then((fn) => {
-          unlisten = fn;
-          checkReady();
-        })
-        .catch((error) => {
-          if (settled) return;
-          settled = true;
-          cleanup();
-          reject(error);
-        });
-    } else {
-      checkReady();
-    }
+    unlisten = onTransportNotification("backend.ready", () => {
+      finishReady("事件通知");
+    });
     checkReady();
   });
 }
@@ -175,31 +159,28 @@ export function useAppLifecycle(options: UseAppLifecycleOptions) {
       }
 
       // 监听后端阶段 2 延迟初始化进度，实时显示卡在哪一步
-      if (isTauriRuntimeAvailable()) {
-        try {
-          unlistenProgress = await listen<string>("easy-call:startup-progress", (event) => {
-            const step = event.payload;
-            if (step === "done") {
-              options.onStartupOverlayChange?.(true, "加载数据中...");
-              options.onStartupProgressChange?.({
-                title: "加载数据中...",
-                detail: "后端延迟初始化已完成，正在准备界面数据...",
-                current: 3,
-                total: 7,
-              });
-            } else {
-              options.onStartupOverlayChange?.(true, `初始化: ${step}`);
-              options.onStartupProgressChange?.({
-                title: "初始化组件中...",
-                detail: `当前步骤：${step}`,
-                current: 3,
-                total: 7,
-              });
-            }
-          });
-        } catch {
-          // 监听失败不影响启动
-        }
+      try {
+        unlistenProgress = onTransportNotification<string>("startup.progress", (step) => {
+          if (step === "done") {
+            options.onStartupOverlayChange?.(true, "加载数据中...");
+            options.onStartupProgressChange?.({
+              title: "加载数据中...",
+              detail: "后端延迟初始化已完成，正在准备界面数据...",
+              current: 3,
+              total: 7,
+            });
+          } else {
+            options.onStartupOverlayChange?.(true, `初始化: ${step}`);
+            options.onStartupProgressChange?.({
+              title: "初始化组件中...",
+              detail: `当前步骤：${step}`,
+              current: 3,
+              total: 7,
+            });
+          }
+        });
+      } catch {
+        // 监听失败不影响启动
       }
 
       options.onStartupOverlayChange?.(true, "加载数据中...");
@@ -213,17 +194,16 @@ export function useAppLifecycle(options: UseAppLifecycleOptions) {
       window.addEventListener("paste", options.onPaste);
       window.addEventListener("dragover", options.onDragOver, { capture: true });
       window.addEventListener("drop", options.onDrop, { capture: true });
-      if (isTauriRuntimeAvailable() && options.onNativeFileDrop) {
+      if (options.onTransportFileDrop) {
         try {
-          unlistenNativeFileDrop = await getCurrentWebview().onDragDropEvent((event) => {
-            const payload = event.payload;
+          unlistenNativeFileDrop = await listenCurrentTransportFileDrop((payload) => {
             if (payload.type === "enter" || payload.type === "over") {
               options.onNativeDragState?.(true);
               return;
             }
             options.onNativeDragState?.(false);
             if (payload.type === "drop") {
-              void Promise.resolve(options.onNativeFileDrop?.(payload.paths));
+              void Promise.resolve(options.onTransportFileDrop?.(payload.paths));
             }
           });
         } catch {

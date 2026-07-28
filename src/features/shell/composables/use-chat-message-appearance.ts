@@ -1,11 +1,9 @@
 import { ref } from "vue";
-import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { emitTransportEvent, onTransportNotification } from "../../../services/tauri-api";
 
 const CHAT_BUBBLE_BACKGROUND_STORAGE_KEY = "easy-call.chat.bubble-background.v1";
 const CHAT_SEGMENTED_MARKDOWN_STORAGE_KEY = "easy-call.chat.segmented-markdown.v1";
 const CHAT_TIME_DISPLAY_MODE_STORAGE_KEY = "easy-call.chat.time-display-mode.v1";
-const CHAT_MESSAGE_APPEARANCE_CHANGED_EVENT = "easy-call:chat-message-appearance-changed";
 
 type ChatTimeDisplayMode = "relative" | "absolute";
 
@@ -19,7 +17,7 @@ const assistantBubbleBackgroundEnabled = ref(readBooleanPreference(CHAT_BUBBLE_B
 const segmentedMarkdownEnabled = ref(readBooleanPreference(CHAT_SEGMENTED_MARKDOWN_STORAGE_KEY));
 const chatTimeDisplayMode = ref<ChatTimeDisplayMode>(readChatTimeDisplayModePreference());
 let initialized = false;
-let eventUnlisten: UnlistenFn | null = null;
+let eventUnlisten: (() => void) | null = null;
 
 function readBooleanPreference(storageKey: string): boolean {
   if (typeof window === "undefined") return false;
@@ -75,20 +73,13 @@ export function initChatMessageAppearance() {
   if (typeof window !== "undefined") {
     window.addEventListener("storage", handleStorageEvent);
   }
-  if (isTauriRuntimeAvailable()) {
-    void listen<ChatMessageAppearancePayload>(CHAT_MESSAGE_APPEARANCE_CHANGED_EVENT, (event) => {
-      applyPayload(event.payload);
-    }).then((unlisten) => {
-      eventUnlisten = unlisten;
-    }).catch((error) => {
-      console.warn("[聊天外观] 监听消息外观变化失败", error);
-    });
-  }
+  eventUnlisten = onTransportNotification<ChatMessageAppearancePayload>("chatMessageAppearance.changed", (payload) => {
+    applyPayload(payload);
+  });
 }
 
 function emitAppearanceChanged() {
-  if (!isTauriRuntimeAvailable()) return;
-  void emit(CHAT_MESSAGE_APPEARANCE_CHANGED_EVENT, {
+  void emitTransportEvent("chatMessageAppearance.changed", {
     assistantBubbleBackgroundEnabled: assistantBubbleBackgroundEnabled.value,
     segmentedMarkdownEnabled: segmentedMarkdownEnabled.value,
     chatTimeDisplayMode: chatTimeDisplayMode.value,

@@ -201,13 +201,29 @@ fn remote_im_contact_dashboard_snapshot_inner(
 }
 
 fn remote_im_emit_contact_dashboard_snapshot(state: &AppState, contact_id: &str) {
-    let has_subscription = remote_im_contact_dashboard_subscriptions()
+    let (has_subscription, web_client_ids) = remote_im_contact_dashboard_subscriptions()
         .lock()
-        .map(|subscriptions| subscriptions
-            .contact_ids_by_window
-            .values()
-            .any(|item| item == contact_id))
-        .unwrap_or(false);
+        .map(|subscriptions| {
+            let mut web_client_ids = Vec::new();
+            for (window_label, subscribed_contact_id) in &subscriptions.contact_ids_by_window {
+                if subscribed_contact_id != contact_id {
+                    continue;
+                }
+                if let Some(client_id) = window_label.strip_prefix("web:") {
+                    if !client_id.trim().is_empty() {
+                        web_client_ids.push(client_id.trim().to_string());
+                    }
+                }
+            }
+            (
+                subscriptions
+                    .contact_ids_by_window
+                    .values()
+                    .any(|item| item == contact_id),
+                web_client_ids,
+            )
+        })
+        .unwrap_or((false, Vec::new()));
     if !has_subscription {
         return;
     }
@@ -221,18 +237,22 @@ fn remote_im_emit_contact_dashboard_snapshot(state: &AppState, contact_id: &str)
             return;
         }
     };
-    let app_handle = match state.app_handle.lock() {
-        Ok(guard) => guard.as_ref().cloned(),
-        Err(_) => None,
-    };
-    let Some(app_handle) = app_handle else {
-        return;
-    };
-    if let Err(err) = app_handle.emit(REMOTE_IM_CONTACT_DASHBOARD_UPDATED_EVENT, snapshot) {
-        runtime_log_debug(format!(
-            "[远程会话仪表盘] 跳过，任务=推送快照，contact_id={}，error={}",
-            contact_id, err
-        ));
+    for client_id in web_client_ids {
+        let _ = ide_chat_emit_notification_to_client(
+            &client_id,
+            "remoteIm.dashboard.updated",
+            serde_json::json!(snapshot),
+        );
+    }
+    if let Ok(guard) = state.app_handle.lock() {
+        if let Some(app_handle) = guard.as_ref() {
+            if let Err(err) = app_handle.emit(REMOTE_IM_CONTACT_DASHBOARD_UPDATED_EVENT, snapshot) {
+                runtime_log_debug(format!(
+                    "[远程会话仪表盘] 跳过，任务=推送快照，contact_id={}，error={}",
+                    contact_id, err
+                ));
+            }
+        }
     }
 }
 
@@ -331,6 +351,62 @@ async fn remote_im_unsubscribe_contact_dashboard(
         subscriptions.contact_ids_by_window.remove(&window_label);
     }
     Ok(())
+}
+
+fn remote_im_subscribe_contact_dashboard_for_web(
+    state: &AppState,
+    params: serde_json::Value,
+    client_id: &str,
+) -> Result<serde_json::Value, String> {
+    let input = serde_json::from_value::<RemoteImContactDashboardInput>(params)
+        .map_err(|err| format!("解析远程联系人仪表盘订阅参数失败：{err}"))?;
+    let contact_id = input.contact_id.trim().to_string();
+    let snapshot = remote_im_contact_dashboard_snapshot_inner(state, &contact_id)?;
+    let subscription_key = format!("web:{}", client_id.trim());
+    if subscription_key != "web:" {
+        let mut subscriptions = remote_im_contact_dashboard_subscriptions()
+            .lock()
+            .map_err(|_| "远程联系人仪表盘订阅锁不可用".to_string())?;
+        subscriptions
+            .contact_ids_by_window
+            .insert(subscription_key, contact_id);
+    }
+    remote_im_start_contact_dashboard_push_worker(state);
+    serde_json::to_value(snapshot).map_err(|err| format!("序列化远程联系人仪表盘快照失败：{err}"))
+}
+
+fn remote_im_sync_contact_dashboard_for_web(
+    state: &AppState,
+    params: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let input = serde_json::from_value::<RemoteImContactDashboardInput>(params)
+        .map_err(|err| format!("解析远程联系人仪表盘同步参数失败：{err}"))?;
+    let snapshot = remote_im_contact_dashboard_snapshot_inner(state, &input.contact_id)?;
+    let known = input.known_watermark.as_deref().unwrap_or("");
+    serde_json::to_value(RemoteImContactDashboardSyncResult {
+        changed: known != snapshot.watermark,
+        snapshot,
+    })
+    .map_err(|err| format!("序列化远程联系人仪表盘同步结果失败：{err}"))
+}
+
+fn remote_im_unsubscribe_contact_dashboard_for_web(
+    params: serde_json::Value,
+    client_id: &str,
+) -> Result<serde_json::Value, String> {
+    let input = serde_json::from_value::<RemoteImContactDashboardInput>(params)
+        .map_err(|err| format!("解析远程联系人仪表盘取消订阅参数失败：{err}"))?;
+    let subscription_key = format!("web:{}", client_id.trim());
+    if let Ok(mut subscriptions) = remote_im_contact_dashboard_subscriptions().lock() {
+        if subscriptions
+            .contact_ids_by_window
+            .get(&subscription_key)
+            .is_some_and(|current| current == input.contact_id.trim())
+        {
+            subscriptions.contact_ids_by_window.remove(&subscription_key);
+        }
+    }
+    Ok(serde_json::Value::Null)
 }
 
 #[derive(Clone)]

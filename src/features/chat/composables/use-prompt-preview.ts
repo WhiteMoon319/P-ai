@@ -111,13 +111,13 @@ export function usePromptPreview(options: UsePromptPreviewOptions) {
     }
     try {
       if (promptPreviewConversationScope.value === "remote") {
-        const fetched = await invokeTauri<RemoteImContactConversationSummary[]>("remote_im_list_contact_conversations");
+        const fetched = await invokeTauri<RemoteImContactConversationSummary[]>("remoteIm.conversations.list");
         promptPreviewConversationOptions.value = remoteConversationOptionsFromSource(Array.isArray(fetched) ? fetched : []);
       } else if (promptPreviewConversationScope.value === "delegate") {
-        const fetched = await invokeTauri<DelegateConversationSummary[]>("list_delegate_conversations");
+        const fetched = await invokeTauri<DelegateConversationSummary[]>("delegate.conversations.list");
         promptPreviewConversationOptions.value = delegateConversationOptionsFromSource(Array.isArray(fetched) ? fetched : []);
       } else {
-        const fetched = await invokeTauri<UnarchivedConversationSummary[]>("list_unarchived_conversations");
+        const fetched = await invokeTauri<UnarchivedConversationSummary[]>("conversation.overview.list");
         promptPreviewConversationOptions.value = localConversationOptionsFromSource(Array.isArray(fetched) ? fetched : []);
       }
     } catch {
@@ -173,7 +173,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions) {
     promptPreviewLatestImages.value = 0;
     promptPreviewLatestAudios.value = 0;
     try {
-      const preview = await invokeTauri<PromptPreviewResult>("get_prompt_preview", {
+      const preview = await invokeTauri<PromptPreviewResult>("prompt.preview", {
         input: buildPreviewSessionInput(promptPreviewApiConfigId.value, promptPreviewAgentId.value),
         previewMode: mode,
       });
@@ -194,7 +194,7 @@ export function usePromptPreview(options: UsePromptPreviewOptions) {
     promptPreviewLoading.value = true;
     promptPreviewText.value = "";
     try {
-      const preview = await invokeTauri<SystemPromptPreviewResult>("get_system_prompt_preview", {
+      const preview = await invokeTauri<SystemPromptPreviewResult>("prompt.systemPreview", {
         input: buildPreviewSessionInput(promptPreviewApiConfigId.value, promptPreviewAgentId.value),
       });
       promptPreviewText.value = preview.systemPrompt || "";

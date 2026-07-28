@@ -2070,6 +2070,77 @@
     }
 
     #[test]
+    fn stop_partial_message_should_merge_cached_tools_with_already_persisted_formal_message() {
+        let existing_tool_history = vec![
+            serde_json::json!({
+                "role": "assistant",
+                "content": Value::Null,
+                "reasoning_content": "先读取配置文件。",
+                "tool_calls": [{
+                    "id": "call_existing",
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "arguments": "{\"path\":\"app.toml\"}"
+                    }
+                }]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call_existing",
+                "content": "已有工具结果"
+            }),
+        ];
+        let cached_tool_history = vec![
+            serde_json::json!({
+                "role": "assistant",
+                "content": Value::Null,
+                "reasoning_content": "再检查运行日志。",
+                "tool_calls": [{
+                    "id": "call_cached",
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "arguments": "{\"path\":\"runtime.log\"}"
+                    }
+                }]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call_cached",
+                "content": "缓存中的工具结果"
+            }),
+        ];
+
+        let message = build_stop_chat_partial_assistant_message_for_id(
+            "assistant-formal",
+            "agent-a",
+            "2026-07-28T10:00:00Z",
+            Some("agent-a".to_string()),
+            Some(existing_tool_history),
+            None,
+            "",
+            "",
+            &cached_tool_history,
+        );
+        let tool_history = message.tool_call.expect("merged tool history");
+
+        assert!(tool_history.iter().any(|event| {
+            event.get("tool_call_id").and_then(Value::as_str) == Some("call_existing")
+        }));
+        assert!(tool_history.iter().any(|event| {
+            event.get("tool_call_id").and_then(Value::as_str) == Some("call_cached")
+        }));
+        assert_eq!(
+            tool_history
+                .iter()
+                .filter(|event| event.get("tool_call_id").and_then(Value::as_str) == Some("call_existing"))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
     fn build_prompt_should_prefix_latest_user_text_with_mentions() {
         let now = now_iso();
         let agent = default_agent();
@@ -7608,7 +7679,7 @@
     }
 
     #[test]
-    fn scheduler_should_ignore_duplicate_user_event_after_message_persisted() {
+    fn scheduler_should_ignore_duplicate_user_event_after_message_persisted_even_when_idle() {
         let state = test_chat_runtime_state();
         let now = now_iso();
         let mut conversation = test_chat_conversation("conversation-a", "active", &now);
@@ -7621,9 +7692,6 @@
         );
         conversation.messages.push(persisted);
         write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
-        set_conversation_runtime_state(&state, "conversation-a", MainSessionState::AssistantStreaming)
-            .expect("set streaming state");
-
         let mut duplicate = test_pending_event("conversation-a");
         duplicate.runtime_context = Some(RuntimeContext {
             request_id: Some("chat-same-request".to_string()),

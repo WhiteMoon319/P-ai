@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import { emit } from "@tauri-apps/api/event";
+import { emitTransportEvent } from "../../../services/tauri-api";
 import {
   buildGeneratedThemeStyleText,
   DEFAULT_GENERATED_THEME_CONTROLS,
@@ -317,8 +317,8 @@ export function useAppTheme() {
 
   function emitThemeChanged(state: AppThemeState) {
     const payload = cloneThemeState(state);
-    return emit("easy-call:theme-changed", payload).catch((error) => {
-      console.warn("[主题] emit easy-call:theme-changed failed:", error);
+    return emitTransportEvent("theme.changed", payload).catch((error) => {
+      console.warn("[主题] 同步主题变化失败", error);
     });
   }
 

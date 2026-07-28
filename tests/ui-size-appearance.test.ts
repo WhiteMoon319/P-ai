@@ -6,7 +6,8 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 vi.mock("../src/services/tauri-api", () => ({
-  isTauriRuntimeAvailable: () => false,
+  emitTransportEvent: vi.fn(() => Promise.resolve()),
+  onTransportNotification: vi.fn(() => () => {}),
 }));
 
 import {

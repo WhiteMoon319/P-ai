@@ -1,28 +1,28 @@
 <template>
-  <div class="ecall-sidebar-light-markdown">
+  <div class="ecall-plain-markdown-markdown">
     <template v-for="(block, index) in blocks" :key="`${block.type}-${index}-${block.key}`">
       <component
         :is="headingTag(block.level)"
         v-if="block.type === 'heading'"
-        class="ecall-sidebar-light-heading"
+        class="ecall-plain-markdown-heading"
       >
         <InlineText :text="block.text" />
       </component>
-      <blockquote v-else-if="block.type === 'quote'" class="ecall-sidebar-light-quote">
+      <blockquote v-else-if="block.type === 'quote'" class="ecall-plain-markdown-quote">
         <InlineText :text="block.text" />
       </blockquote>
-      <ul v-else-if="block.type === 'list' && !block.ordered" class="ecall-sidebar-light-list">
+      <ul v-else-if="block.type === 'list' && !block.ordered" class="ecall-plain-markdown-list">
         <li v-for="(item, itemIndex) in block.items" :key="`${index}-${itemIndex}`">
           <InlineText :text="item" />
         </li>
       </ul>
-      <ol v-else-if="block.type === 'list'" class="ecall-sidebar-light-list">
+      <ol v-else-if="block.type === 'list'" class="ecall-plain-markdown-list">
         <li v-for="(item, itemIndex) in block.items" :key="`${index}-${itemIndex}`">
           <InlineText :text="item" />
         </li>
       </ol>
-      <div v-else-if="block.type === 'table'" class="ecall-sidebar-light-table-wrap">
-        <table class="ecall-sidebar-light-table">
+      <div v-else-if="block.type === 'table'" class="ecall-plain-markdown-table-wrap">
+        <table class="ecall-plain-markdown-table">
           <thead>
             <tr>
               <th v-for="(cell, cellIndex) in block.headers" :key="`${index}-h-${cellIndex}`">
@@ -39,11 +39,11 @@
           </tbody>
         </table>
       </div>
-      <div v-else-if="block.type === 'code'" class="ecall-sidebar-light-code-wrap">
-        <div class="ecall-sidebar-light-code-actions">
+      <div v-else-if="block.type === 'code'" class="ecall-plain-markdown-code-wrap">
+        <div class="ecall-plain-markdown-code-actions">
           <button
             type="button"
-            class="ecall-sidebar-light-expand"
+            class="ecall-plain-markdown-expand"
             :title="t('common.expand')"
             @click="openPreview(block)"
           >
@@ -51,17 +51,17 @@
           </button>
           <button
             type="button"
-            class="ecall-sidebar-light-copy"
+            class="ecall-plain-markdown-copy"
             :title="copiedCodeKey === block.key ? '已复制' : '复制代码'"
             @click="copyCodeBlock(block.key, block.text)"
           >
             {{ copiedCodeKey === block.key ? "已复制" : "复制" }}
           </button>
         </div>
-        <pre class="ecall-sidebar-light-code"><code>{{ block.text }}</code></pre>
+        <pre class="ecall-plain-markdown-code"><code>{{ block.text }}</code></pre>
       </div>
-      <hr v-else-if="block.type === 'hr'" class="ecall-sidebar-light-hr" />
-      <p v-else class="ecall-sidebar-light-paragraph">
+      <hr v-else-if="block.type === 'hr'" class="ecall-plain-markdown-hr" />
+      <p v-else class="ecall-plain-markdown-paragraph">
         <InlineText :text="block.text" />
       </p>
     </template>
@@ -150,28 +150,28 @@ const InlineText = defineComponent({
   setup(inlineProps) {
     return () => parseInlineSegments(inlineProps.text).map((segment, index) => {
       if (segment.type === "code") {
-        return h("code", { key: `code-${index}`, class: "ecall-sidebar-light-inline-code" }, segment.text);
+        return h("code", { key: `code-${index}`, class: "ecall-plain-markdown-inline-code" }, segment.text);
       }
       if (segment.type === "link") {
         return h("a", {
           key: `link-${index}`,
           href: segment.href,
-          class: "ecall-sidebar-light-link",
+          class: "ecall-plain-markdown-link",
         }, segment.text);
       }
       if (segment.type === "strong") {
-        return h("strong", { key: `strong-${index}`, class: "ecall-sidebar-light-strong" }, renderInlineSegments(segment.children, `strong-${index}`));
+        return h("strong", { key: `strong-${index}`, class: "ecall-plain-markdown-strong" }, renderInlineSegments(segment.children, `strong-${index}`));
       }
       if (segment.type === "em") {
-        return h("em", { key: `em-${index}`, class: "ecall-sidebar-light-em" }, renderInlineSegments(segment.children, `em-${index}`));
+        return h("em", { key: `em-${index}`, class: "ecall-plain-markdown-em" }, renderInlineSegments(segment.children, `em-${index}`));
       }
       if (segment.type === "strongEm") {
-        return h("strong", { key: `strong-em-${index}`, class: "ecall-sidebar-light-strong" }, [
-          h("em", { class: "ecall-sidebar-light-em" }, renderInlineSegments(segment.children, `strong-em-${index}`)),
+        return h("strong", { key: `strong-em-${index}`, class: "ecall-plain-markdown-strong" }, [
+          h("em", { class: "ecall-plain-markdown-em" }, renderInlineSegments(segment.children, `strong-em-${index}`)),
         ]);
       }
       if (segment.type === "delete") {
-        return h("del", { key: `delete-${index}`, class: "ecall-sidebar-light-delete" }, renderInlineSegments(segment.children, `delete-${index}`));
+        return h("del", { key: `delete-${index}`, class: "ecall-plain-markdown-delete" }, renderInlineSegments(segment.children, `delete-${index}`));
       }
       return segment.text;
     });
@@ -372,28 +372,28 @@ function pushTextSegment(segments: InlineSegment[], text: string) {
 function renderInlineSegments(segments: InlineSegment[], keyPrefix: string): VNodeChild[] {
   return segments.map((segment, index) => {
     if (segment.type === "code") {
-      return h("code", { key: `${keyPrefix}-code-${index}`, class: "ecall-sidebar-light-inline-code" }, segment.text);
+      return h("code", { key: `${keyPrefix}-code-${index}`, class: "ecall-plain-markdown-inline-code" }, segment.text);
     }
     if (segment.type === "link") {
       return h("a", {
         key: `${keyPrefix}-link-${index}`,
         href: segment.href,
-        class: "ecall-sidebar-light-link",
+        class: "ecall-plain-markdown-link",
       }, segment.text);
     }
     if (segment.type === "strong") {
-      return h("strong", { key: `${keyPrefix}-strong-${index}`, class: "ecall-sidebar-light-strong" }, renderInlineSegments(segment.children, `${keyPrefix}-strong-${index}`));
+      return h("strong", { key: `${keyPrefix}-strong-${index}`, class: "ecall-plain-markdown-strong" }, renderInlineSegments(segment.children, `${keyPrefix}-strong-${index}`));
     }
     if (segment.type === "em") {
-      return h("em", { key: `${keyPrefix}-em-${index}`, class: "ecall-sidebar-light-em" }, renderInlineSegments(segment.children, `${keyPrefix}-em-${index}`));
+      return h("em", { key: `${keyPrefix}-em-${index}`, class: "ecall-plain-markdown-em" }, renderInlineSegments(segment.children, `${keyPrefix}-em-${index}`));
     }
     if (segment.type === "strongEm") {
-      return h("strong", { key: `${keyPrefix}-strong-em-${index}`, class: "ecall-sidebar-light-strong" }, [
-        h("em", { class: "ecall-sidebar-light-em" }, renderInlineSegments(segment.children, `${keyPrefix}-strong-em-${index}`)),
+      return h("strong", { key: `${keyPrefix}-strong-em-${index}`, class: "ecall-plain-markdown-strong" }, [
+        h("em", { class: "ecall-plain-markdown-em" }, renderInlineSegments(segment.children, `${keyPrefix}-strong-em-${index}`)),
       ]);
     }
     if (segment.type === "delete") {
-      return h("del", { key: `${keyPrefix}-delete-${index}`, class: "ecall-sidebar-light-delete" }, renderInlineSegments(segment.children, `${keyPrefix}-delete-${index}`));
+      return h("del", { key: `${keyPrefix}-delete-${index}`, class: "ecall-plain-markdown-delete" }, renderInlineSegments(segment.children, `${keyPrefix}-delete-${index}`));
     }
     return segment.text;
   });
@@ -536,78 +536,78 @@ function findNextInlineMarker(
 </script>
 
 <style scoped>
-.ecall-sidebar-light-markdown {
+.ecall-plain-markdown-markdown {
   min-width: 0;
   max-width: 100%;
   overflow-wrap: anywhere;
   white-space: normal;
-  font-size: var(--app-text-sm-size);
+  font-size: var(--app-chat-message-text-size, var(--app-text-sm-size));
   line-height: 1.5;
   font-weight: var(--ecall-md-body-weight-setting, var(--app-font-weight, 400));
   font-variation-settings: "wght" var(--ecall-md-body-weight-setting, var(--app-font-weight, 400));
 }
 
-.ecall-sidebar-light-heading,
-.ecall-sidebar-light-paragraph,
-.ecall-sidebar-light-quote,
-.ecall-sidebar-light-list,
-.ecall-sidebar-light-code {
+.ecall-plain-markdown-heading,
+.ecall-plain-markdown-paragraph,
+.ecall-plain-markdown-quote,
+.ecall-plain-markdown-list,
+.ecall-plain-markdown-code {
   margin: 0.25rem 0;
 }
 
-.ecall-sidebar-light-heading {
+.ecall-plain-markdown-heading {
   font-weight: var(--ecall-md-heading-weight-setting, var(--app-font-strong-weight, 600));
   font-variation-settings: "wght" var(--ecall-md-heading-weight-setting, var(--app-font-strong-weight, 600));
   line-height: 1.45;
 }
 
-h1.ecall-sidebar-light-heading {
+h1.ecall-plain-markdown-heading {
   font-size: var(--app-text-markdown-heading-1-size);
 }
 
-h2.ecall-sidebar-light-heading {
+h2.ecall-plain-markdown-heading {
   font-size: var(--app-text-markdown-heading-2-size);
 }
 
-h3.ecall-sidebar-light-heading {
+h3.ecall-plain-markdown-heading {
   font-size: var(--app-text-markdown-heading-3-size);
 }
 
-h4.ecall-sidebar-light-heading {
+h4.ecall-plain-markdown-heading {
   font-size: var(--app-text-markdown-heading-4-size);
 }
 
-.ecall-sidebar-light-paragraph {
+.ecall-plain-markdown-paragraph {
   white-space: pre-wrap;
 }
 
-.ecall-sidebar-light-quote {
+.ecall-plain-markdown-quote {
   border-left: 2px solid color-mix(in srgb, currentColor 22%, transparent);
   padding-left: 0.68rem;
   color: color-mix(in srgb, currentColor 82%, transparent);
   white-space: pre-wrap;
 }
 
-.ecall-sidebar-light-list {
+.ecall-plain-markdown-list {
   padding-left: 0.85rem;
 }
 
-.ecall-sidebar-light-list li {
+.ecall-plain-markdown-list li {
   margin: 0.12rem 0;
   padding-left: 0;
 }
 
-ol.ecall-sidebar-light-list {
+ol.ecall-plain-markdown-list {
   list-style: decimal;
 }
 
-.ecall-sidebar-light-table-wrap {
+.ecall-plain-markdown-table-wrap {
   max-width: 100%;
   overflow-x: auto;
   margin: 0.35rem 0;
 }
 
-.ecall-sidebar-light-table {
+.ecall-plain-markdown-table {
   width: max-content;
   min-width: 100%;
   border-collapse: collapse;
@@ -615,26 +615,26 @@ ol.ecall-sidebar-light-list {
   line-height: 1.45;
 }
 
-.ecall-sidebar-light-table th,
-.ecall-sidebar-light-table td {
+.ecall-plain-markdown-table th,
+.ecall-plain-markdown-table td {
   border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
   padding: 0.32rem 0.48rem;
   text-align: left;
   vertical-align: top;
 }
 
-.ecall-sidebar-light-table th {
+.ecall-plain-markdown-table th {
   font-weight: var(--ecall-md-table-heading-weight-setting, var(--app-font-strong-weight, 600));
   font-variation-settings: "wght" var(--ecall-md-table-heading-weight-setting, var(--app-font-strong-weight, 600));
   background: color-mix(in srgb, currentColor 7%, transparent);
 }
 
-.ecall-sidebar-light-code-wrap {
+.ecall-plain-markdown-code-wrap {
   position: relative;
   margin: 0.25rem 0;
 }
 
-.ecall-sidebar-light-code {
+.ecall-plain-markdown-code {
   max-width: 100%;
   overflow-x: auto;
   border-radius: 0.4rem;
@@ -648,7 +648,7 @@ ol.ecall-sidebar-light-list {
   line-height: 1.45;
 }
 
-.ecall-sidebar-light-code-actions {
+.ecall-plain-markdown-code-actions {
   position: absolute;
   right: 0.4rem;
   top: 0.35rem;
@@ -658,8 +658,8 @@ ol.ecall-sidebar-light-list {
   gap: 0.25rem;
 }
 
-.ecall-sidebar-light-expand,
-.ecall-sidebar-light-copy {
+.ecall-plain-markdown-expand,
+.ecall-plain-markdown-copy {
   border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
   border-radius: 0.3rem;
   background: color-mix(in srgb, currentColor 8%, var(--color-base-100, transparent));
@@ -669,20 +669,20 @@ ol.ecall-sidebar-light-list {
   color: color-mix(in srgb, currentColor 78%, transparent);
 }
 
-.ecall-sidebar-light-expand {
+.ecall-plain-markdown-expand {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0.18rem;
 }
 
-.ecall-sidebar-light-expand:hover,
-.ecall-sidebar-light-copy:hover {
+.ecall-plain-markdown-expand:hover,
+.ecall-plain-markdown-copy:hover {
   background: color-mix(in srgb, currentColor 13%, var(--color-base-100, transparent));
   color: currentColor;
 }
 
-.ecall-sidebar-light-code code {
+.ecall-plain-markdown-code code {
   border: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
@@ -691,7 +691,7 @@ ol.ecall-sidebar-light-list {
   font: inherit;
 }
 
-.ecall-sidebar-light-inline-code {
+.ecall-plain-markdown-inline-code {
   border-radius: 0.28rem;
   background: color-mix(in srgb, currentColor 10%, transparent);
   padding: 0.08rem 0.28rem;
@@ -701,28 +701,28 @@ ol.ecall-sidebar-light-list {
   font-size: var(--app-text-xs-size);
 }
 
-.ecall-sidebar-light-link {
+.ecall-plain-markdown-link {
   color: var(--color-primary);
   text-decoration: underline;
   text-decoration-thickness: 0.08em;
   text-underline-offset: 0.18em;
 }
 
-.ecall-sidebar-light-strong {
+.ecall-plain-markdown-strong {
   font-weight: var(--ecall-md-strong-weight-setting, var(--app-font-strong-weight, 600));
   font-variation-settings: "wght" var(--ecall-md-strong-weight-setting, var(--app-font-strong-weight, 600));
 }
 
-.ecall-sidebar-light-em {
+.ecall-plain-markdown-em {
   font-style: italic;
 }
 
-.ecall-sidebar-light-delete {
+.ecall-plain-markdown-delete {
   text-decoration: line-through;
   color: color-mix(in srgb, currentColor 76%, transparent);
 }
 
-.ecall-sidebar-light-hr {
+.ecall-plain-markdown-hr {
   margin: 0.65rem 0;
   border: 0;
   border-top: 1px solid color-mix(in srgb, currentColor 16%, transparent);

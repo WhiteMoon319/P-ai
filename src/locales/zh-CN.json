@@ -2081,7 +2081,6 @@
     "rewindFailed": "撤回失败",
     "confirmPlanFailed": "确认计划失败",
     "saveWorkspaceFailed": "保存工作区设置失败",
-    "openDirectoryRestricted": "Web 侧边栏暂不支持打开或选择本机目录。",
     "paiNotRunning": "PAI 未运行",
     "remoteAuthTitle": "远程访问",
     "remoteAuthHint": "请输入远程访问密码。",

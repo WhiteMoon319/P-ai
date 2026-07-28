@@ -193,7 +193,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
     options?: { resumeProjection?: boolean },
   ) {
     const targetConversationId = String(conversationId || "").trim();
-    return invokeTauri<any>("get_foreground_conversation_light_snapshot", {
+    return invokeTauri<any>("conversation.foregroundLightSnapshot", {
       input: {
         conversationId: targetConversationId || null,
         agentId: targetConversationId
@@ -206,13 +206,13 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
   }
 
   async function requestUnarchivedConversationOverviewChangedSince(since: string) {
-    return invokeTauri<Record<string, any>>("list_unarchived_conversations_changed_since", {
+    return invokeTauri<Record<string, any>>("conversation.changedSince", {
       input: { since: String(since || "").trim() || null },
     });
   }
 
   async function refreshRemoteImConversationOverview() {
-    bindings.remoteImContactConversations.value = await invokeTauri<any[]>("remote_im_list_contact_conversations");
+    bindings.remoteImContactConversations.value = await invokeTauri<any[]>("remoteIm.conversations.list");
   }
 
   async function refreshUnarchivedConversationOverview() {
@@ -379,6 +379,11 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
           await bindActiveConversationStream(cid, true);
         },
         resume: (nextSnapshot) => {
+          const runtimeState = String(nextSnapshot?.runtimeState || "").trim();
+          const streamCache = nextSnapshot?.streamCache as Record<string, unknown> | null | undefined;
+          if (runtimeState !== "assistant_streaming" && runtimeState !== "organizing_context" && !streamCache?.hasVisibleProgress) {
+            return;
+          }
           bindings.getChatFlow()?.resumeForegroundRuntimeRound?.({
             conversationId: cid,
             streamCache: nextSnapshot?.streamCache || null,
@@ -441,7 +446,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       return;
     }
     try {
-      const result = await invokeTauri<{ accepted: boolean; requestId: string }>("request_conversation_messages_after_async", {
+      const result = await invokeTauri<{ accepted: boolean; requestId: string }>("conversation.messagesAfterAsync", {
         input: {
           conversationId,
           afterMessageId: bindings.buildConversationMessagesAfterAnchor(conversationId),

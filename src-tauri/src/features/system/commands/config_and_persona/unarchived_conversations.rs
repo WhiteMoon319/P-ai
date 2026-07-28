@@ -3203,10 +3203,9 @@ fn get_active_conversation_messages_after(
 }
 
 
-#[tauri::command]
-fn request_conversation_messages_after_async(
+fn request_conversation_messages_after_async_inner(
     input: RequestConversationMessagesAfterAsyncInput,
-    state: State<'_, AppState>,
+    state: &AppState,
 ) -> Result<RequestConversationMessagesAfterAsyncOutput, String> {
     let conversation_id = input.conversation_id.trim().to_string();
     if conversation_id.is_empty() {
@@ -3220,7 +3219,7 @@ fn request_conversation_messages_after_async(
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned);
     let fallback_limit = input.fallback_limit.clamp(1, 50);
-    let state_clone = state.inner().clone();
+    let state_clone = state.clone();
     let request_id_clone = request_id.clone();
     runtime_log_warn(format!(
         "[聊天推送] 收到异步补消息请求: request_id={}, conversation_id={}, after_message_id={}, fallback_limit={}",
@@ -3268,6 +3267,10 @@ fn request_conversation_messages_after_async(
                 }
             }
         };
+        ide_chat_broadcast_notification(
+            "conversation.messagesAfterSynced",
+            serde_json::json!(&payload),
+        );
         let app_handle = match state_clone.app_handle.lock() {
             Ok(guard) => guard.as_ref().cloned(),
             Err(_) => None,
@@ -3295,6 +3298,14 @@ fn request_conversation_messages_after_async(
         accepted: true,
         request_id,
     })
+}
+
+#[tauri::command]
+fn request_conversation_messages_after_async(
+    input: RequestConversationMessagesAfterAsyncInput,
+    state: State<'_, AppState>,
+) -> Result<RequestConversationMessagesAfterAsyncOutput, String> {
+    request_conversation_messages_after_async_inner(input, state.inner())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

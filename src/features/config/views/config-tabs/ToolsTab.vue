@@ -6,7 +6,7 @@
           <span class="text-sm font-medium">{{ t('config.tools.shellWorkspace') }}</span>
         </div>
         <div class="flex flex-wrap items-center justify-end gap-2">
-          <button v-if="tauriRuntimeAvailable" class="btn btn-sm" type="button" @click="openShellWorkspaceDir">{{ t('config.tools.openDir') }}</button>
+          <button v-if="localFileSystemAvailable" class="btn btn-sm" type="button" @click="openShellWorkspaceDir">{{ t('config.tools.openDir') }}</button>
           <button class="btn btn-sm" type="button" :disabled="shellWorkspacePathResetting" @click="resetShellWorkspacePath">{{ t('config.tools.resetWorkspacePath') }}</button>
           <button class="btn btn-sm" type="button" :disabled="shellWorkspaceInitializing" @click="initializeShellWorkspace">{{ t('config.tools.initializeWorkspace') }}</button>
           <button class="btn btn-sm btn-primary" :disabled="savingConfig" @click="$emit('saveApiConfig')">
@@ -122,9 +122,16 @@ import type {
   FrontendToolDefinition,
   ToolLoadStatus,
 } from "../../../../types/app";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../../services/tauri-api";
+import {
+  getTransportCapabilities,
+  getTransportDefaultChatShellWorkspacePath,
+  invokeTauri,
+  openTransportExternalUrl,
+  openTransportFileDialog,
+  openTransportWorkspaceDirectory,
+  resetTransportChatShellWorkspace,
+} from "../../../../services/tauri-api";
 import { toErrorMessage } from "../../../../utils/error";
-import { open } from "@tauri-apps/plugin-dialog";
 
 type TerminalShellCandidate = {
   kind: string;
@@ -163,7 +170,7 @@ const terminalShellOptionsLoading = ref(false);
 const terminalShellOptions = ref<TerminalShellCandidate[]>([]);
 const GIT_DOWNLOAD_URL = "https://git-scm.com/downloads";
 const isWindowsHost = typeof navigator !== "undefined" && /windows/i.test(String(navigator.userAgent || ""));
-const tauriRuntimeAvailable = isTauriRuntimeAvailable();
+const localFileSystemAvailable = getTransportCapabilities().localFileSystem;
 const terminalShellKindValue = computed(() => String(props.config.terminalShellKind || "auto"));
 function setShellWorkspaceStatus(text: string, isError = false) {
   shellWorkspaceStatus.value = text;
@@ -212,11 +219,9 @@ function onTerminalShellKindChange(event: Event) {
 }
 
 async function openShellWorkspaceDir() {
-  if (!tauriRuntimeAvailable) return;
+  if (!localFileSystemAvailable) return;
   try {
-    const opened = await invokeTauri<string>("open_chat_shell_workspace_dir", {
-      input: { workspacePath: props.config.shellWorkspaces[0]?.path || "" },
-    });
+    const opened = await openTransportWorkspaceDirectory(props.config.shellWorkspaces[0]?.path || "");
     setShellWorkspaceStatus(t("config.tools.openDirOpened", { path: opened }));
   } catch (error) {
     setShellWorkspaceStatus(t("config.tools.openDirFailed", { err: toErrorMessage(error) }), true);
@@ -229,9 +234,7 @@ async function initializeShellWorkspace() {
   if (!confirmed) return;
   shellWorkspaceInitializing.value = true;
   try {
-    const root = await invokeTauri<string>("reset_chat_shell_workspace", {
-      input: { workspacePath: props.config.shellWorkspaces[0]?.path || "" },
-    });
+    const root = await resetTransportChatShellWorkspace(props.config.shellWorkspaces[0]?.path || "");
     setShellWorkspaceStatus(t("config.tools.initializeWorkspaceDone", { path: root }));
   } catch (error) {
     setShellWorkspaceStatus(t("config.tools.initializeWorkspaceFailed", { err: toErrorMessage(error) }), true);
@@ -270,7 +273,7 @@ async function resetShellWorkspacePath() {
   if (shellWorkspacePathResetting.value) return;
   shellWorkspacePathResetting.value = true;
   try {
-    const defaultPath = await invokeTauri<string>("get_default_chat_shell_workspace_path");
+    const defaultPath = await getTransportDefaultChatShellWorkspacePath();
     if (!Array.isArray(props.config.shellWorkspaces) || props.config.shellWorkspaces.length === 0) {
       props.config.shellWorkspaces = [{
         id: "system-workspace",
@@ -310,7 +313,7 @@ function defaultWorkspaceNameFromPath(path: string): string {
 async function pickWorkspacePath(index: number) {
   const item = props.config.shellWorkspaces[index];
   if (!item) return;
-  const picked = await open({
+  const picked = await openTransportFileDialog({
     directory: true,
     multiple: false,
     defaultPath: item.path || undefined,
@@ -502,7 +505,7 @@ function toolParameterExamples(id: string): string[] {
 }
 
 function openGitDownloadLink() {
-  void invokeTauri("open_external_url", { url: GIT_DOWNLOAD_URL });
+  void openTransportExternalUrl(GIT_DOWNLOAD_URL);
 }
 
 onMounted(() => {

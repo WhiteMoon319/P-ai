@@ -151,7 +151,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { Copy, ExternalLink, KeyRound, RefreshCw, Save } from "@lucide/vue";
-import { invokeTauri } from "../../../../services/tauri-api";
+import { invokeTauri, openTransportExternalUrl } from "../../../../services/tauri-api";
 import type { AppConfig } from "../../../../types/app";
 
 type WebAccessInfo = {
@@ -314,7 +314,7 @@ async function openLocalUrl() {
   const url = webInfo.value?.localUrl || "";
   if (!url) return;
   try {
-    await invokeTauri("open_external_url", { url });
+    await openTransportExternalUrl(url);
   } catch (error) {
     statusError.value = true;
     statusText.value = String(error || t("config.networkAccess.openFailed"));

@@ -1,6 +1,5 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, type Ref } from "vue";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { invokeTauri, onTransportNotification } from "../../../services/tauri-api";
 import type { IdeContextQueryResult, IdeContextReferenceItem, IdeContextWorkspaceGroup, IdeContextWorkspaceInput, ShellWorkspace } from "../../../types/app";
 
 interface UseIdeContextOptions {
@@ -21,11 +20,11 @@ export function useIdeContext(options: UseIdeContextOptions) {
     const configuredValue = typeof configured === "object" && configured && "value" in configured
       ? configured.value
       : configured;
-    return configuredValue !== false && isTauriRuntimeAvailable();
+    return configuredValue !== false;
   });
 
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
-  let eventUnlisten: UnlistenFn | null = null;
+  let eventUnlisten: (() => void) | null = null;
   let refreshSeq = 0;
 
   function normalizedWorkspaceInputs(): IdeContextWorkspaceInput[] {
@@ -57,9 +56,7 @@ export function useIdeContext(options: UseIdeContextOptions) {
     }
     const seq = ++refreshSeq;
     try {
-      const result = await invokeTauri<IdeContextQueryResult>("query_ide_context_references", {
-        input: { workspaces: wsInputs },
-      });
+      const result = await invokeTauri<IdeContextQueryResult>("ideContext.query", { workspaces: wsInputs });
       if (seq !== refreshSeq) return;
       ideContextGroups.value = Array.isArray(result?.groups) ? result.groups : [];
     } catch (error) {
@@ -80,14 +77,10 @@ export function useIdeContext(options: UseIdeContextOptions) {
     refreshTimer = null;
   }
 
-  async function startEventListener() {
+  function startEventListener() {
     if (!enabled.value) return;
     stopEventListener();
-    try {
-      eventUnlisten = await listen("ide-context-updated", () => void refresh());
-    } catch (error) {
-      console.warn("[IDE 上下文] 监听更新事件失败", error);
-    }
+    eventUnlisten = onTransportNotification("ideContext.updated", () => void refresh());
   }
 
   function stopEventListener() {
@@ -125,7 +118,7 @@ export function useIdeContext(options: UseIdeContextOptions) {
   onMounted(() => {
     if (!enabled.value) return;
     void refresh();
-    void startEventListener();
+    startEventListener();
     startTimer();
   });
 

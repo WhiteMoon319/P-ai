@@ -18,7 +18,7 @@
           </div>
           <div class="flex flex-wrap items-center justify-end gap-2">
             <button class="btn btn-sm bg-base-200" type="button" @click="reload" :disabled="loading">刷新</button>
-            <button v-if="tauriRuntimeAvailable" class="btn btn-sm btn-primary" type="button" @click="openSkillsDir" :disabled="loading">打开目录</button>
+            <button v-if="localFileSystemAvailable" class="btn btn-sm btn-primary" type="button" @click="openSkillsDir" :disabled="loading">打开目录</button>
           </div>
         </div>
       </div>
@@ -53,7 +53,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../../services/tauri-api";
+import { getTransportCapabilities, invokeTauri, openTransportSkillWorkspaceDirectory } from "../../../../services/tauri-api";
 import type { SkillListResult, SkillSummaryItem } from "../../../../types/app";
 import { toErrorMessage } from "../../../../utils/error";
 
@@ -62,7 +62,7 @@ const statusText = ref("");
 const statusError = ref(false);
 const skills = ref<SkillSummaryItem[]>([]);
 const selectedSkillPath = ref("");
-const tauriRuntimeAvailable = isTauriRuntimeAvailable();
+const localFileSystemAvailable = getTransportCapabilities().localFileSystem;
 
 const selectedSkill = computed(() => skills.value.find((v) => v.path === selectedSkillPath.value) ?? null);
 
@@ -100,10 +100,10 @@ async function reload() {
 }
 
 async function openSkillsDir() {
-  if (!tauriRuntimeAvailable || loading.value) return;
+  if (!localFileSystemAvailable || loading.value) return;
   loading.value = true;
   try {
-    const opened = await invokeTauri<string>("skill_open_workspace_dir");
+    const opened = await openTransportSkillWorkspaceDirectory();
     setStatus(`已打开目录: ${opened}`);
   } catch (error) {
     setStatus(`打开目录失败: ${toErrorMessage(error)}`, true);

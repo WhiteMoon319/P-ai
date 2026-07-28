@@ -2081,7 +2081,6 @@
     "rewindFailed": "Rewind failed",
     "confirmPlanFailed": "Failed to confirm plan",
     "saveWorkspaceFailed": "Failed to save workspace settings",
-    "openDirectoryRestricted": "The web sidebar cannot open or select local folders.",
     "paiNotRunning": "PAI is not running",
     "remoteAuthTitle": "Remote Access",
     "remoteAuthHint": "Enter the remote access password.",

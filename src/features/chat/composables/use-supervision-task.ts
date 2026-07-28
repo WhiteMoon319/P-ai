@@ -148,7 +148,7 @@ export function useSupervisionTask(options: UseSupervisionTaskOptions) {
       return;
     }
     try {
-      const goal = await invokeTauri<ConversationGoalState | null>("goal_get_current", {
+      const goal = await invokeTauri<ConversationGoalState | null>("goal.current", {
         conversationId,
       });
       activeSupervisionTask.value = goalIsActive(goal) ? activeSupervisionTaskFromGoal(goal) : null;
@@ -205,11 +205,11 @@ export function useSupervisionTask(options: UseSupervisionTaskOptions) {
     try {
       const hadActiveGoal = !!activeSupervisionTask.value;
       if (hadActiveGoal) {
-        await invokeTauri<GoalMutationOutput>("goal_cancel_goal", {
+        await invokeTauri<GoalMutationOutput>("goal.cancel", {
           input: { conversationId },
         });
       }
-      const created = await invokeTauri<GoalMutationOutput>("goal_create_goal", {
+      const created = await invokeTauri<GoalMutationOutput>("goal.create", {
         input: {
           conversationId,
           objective,
@@ -240,7 +240,7 @@ export function useSupervisionTask(options: UseSupervisionTaskOptions) {
     supervisionTaskSaving.value = true;
     supervisionTaskError.value = "";
     try {
-      await invokeTauri<GoalMutationOutput>("goal_cancel_goal", {
+      await invokeTauri<GoalMutationOutput>("goal.cancel", {
         input: { conversationId },
       });
       options.setStatus(options.t("chat.supervision.stoppedStatus"));

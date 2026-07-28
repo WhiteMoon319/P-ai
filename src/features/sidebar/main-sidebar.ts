@@ -1,34 +1,3 @@
-import { createApp } from "vue";
-import App from "./App.vue";
-import { i18n } from "../../i18n";
-import "../../style.css";
-import "../chat/markdown/markdown-content.css";
-import "katex/dist/katex.min.css";
-import "./assets/sidebar-theme.css";
-import { LUCIDE_CONTEXT } from "../../lucide-context";
-import { useAppTheme } from "../shell/composables/use-app-theme";
-import { initMarkdownAppearance } from "../shell/composables/use-markdown-appearance";
-import { initUiSizeAppearance } from "../shell/composables/use-ui-size-appearance";
-import { installNativeSelectionGuard } from "../../utils/native-selection";
-
-function isVsCodeSidebarHost(): boolean {
-  const bridgeWindow = window as Window & { acquireVsCodeApi?: unknown };
-  return typeof bridgeWindow.acquireVsCodeApi === "function" || window.location.protocol === "vscode-webview:";
-}
-
-function prepareSidebarThemeHost() {
-  if (isVsCodeSidebarHost()) {
-    document.documentElement.setAttribute("data-host", "vscode");
-    return;
-  }
-  document.documentElement.setAttribute("data-host", "web");
-  const { restoreThemeFromStorage } = useAppTheme();
-  restoreThemeFromStorage();
-}
-
-installNativeSelectionGuard();
-initMarkdownAppearance();
-initUiSizeAppearance();
-prepareSidebarThemeHost();
-
-createApp(App).use(i18n).provide(LUCIDE_CONTEXT, {}).mount("#app");
+// Sidebar 与桌面聊天窗口使用完全相同的前台入口。宿主发现、连接方式、
+// 文件选择器等差异只能由 tauri-api 传输适配器处理，不能再复制聊天状态机。
+import "../../main-chat";

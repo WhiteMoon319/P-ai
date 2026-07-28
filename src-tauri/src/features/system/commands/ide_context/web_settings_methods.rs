@@ -20,6 +20,14 @@ fn ide_chat_load_agents_for_web_settings(state: &AppState) -> Result<Value, Stri
     ide_chat_serialize(load_agents_inner(state)?)
 }
 
+async fn ide_chat_stt_transcribe_for_web_settings(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<SttTranscribeInput>(params)?;
+    ide_chat_serialize(stt_transcribe_inner(input, state).await?)
+}
+
 async fn ide_chat_list_unarchived_conversations_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
@@ -356,6 +364,138 @@ fn ide_chat_set_skipped_github_update_version_for_web_settings(
         _ => String::new(),
     };
     ide_chat_serialize(set_skipped_github_update_version_inner(version, app, state)?)
+}
+
+fn ide_chat_set_agent_private_memory_enabled_for_web_settings(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<SetAgentPrivateMemoryEnabledInput>(params, "input")?;
+    ide_chat_serialize(set_agent_private_memory_enabled_inner(input, state)?)
+}
+
+fn ide_chat_save_agent_avatar_for_web_settings(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<SaveAgentAvatarInput>(params, "input")?;
+    ide_chat_serialize(save_agent_avatar_inner(input, state)?)
+}
+
+fn ide_chat_clear_agent_avatar_for_web_settings(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ClearAgentAvatarInput>(params, "input")?;
+    clear_agent_avatar_inner(input, state)?;
+    Ok(Value::Null)
+}
+
+fn ide_chat_convert_private_agent_to_main_for_web_settings(
+    state: &AppState,
+    app: &AppHandle,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ConvertPrivateAgentToMainInput>(params, "input")?;
+    ide_chat_serialize(convert_private_agent_to_main_inner(input, app, state)?)
+}
+
+fn ide_chat_check_tools_status_for_web_settings(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<CheckToolsStatusInput>(params, "input")?;
+    ide_chat_serialize(check_tools_status_inner(input, state)?)
+}
+
+fn ide_chat_list_terminal_shell_candidates_for_web_settings(
+    state: &AppState,
+) -> Result<Value, String> {
+    let (preferred_kind, current, options) = terminal_shell_candidates_for_ui(state);
+    Ok(serde_json::json!({
+        "preferredKind": preferred_kind,
+        "currentKind": current.kind,
+        "currentPath": current.path,
+        "options": options,
+    }))
+}
+
+async fn ide_chat_generate_image_for_web_settings(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let request = ide_chat_parse_param_field::<ImageGenerationRequest>(params, "request")?;
+    ide_chat_serialize(generate_images(state, request).await?)
+}
+
+async fn ide_chat_get_storage_usage_overview_for_web_settings(
+    state: &AppState,
+) -> Result<Value, String> {
+    ide_chat_serialize(start_storage_overview_refresh_if_needed(state.clone(), false).await)
+}
+
+async fn ide_chat_refresh_storage_usage_overview_for_web_settings(
+    state: &AppState,
+) -> Result<Value, String> {
+    ide_chat_serialize(start_storage_overview_refresh_if_needed(state.clone(), true).await)
+}
+
+fn ide_chat_cleanup_storage_legacy_items_for_web_settings(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<CleanupStorageLegacyItemsInput>(params, "input")?;
+    ide_chat_serialize(cleanup_storage_legacy_items_inner(state, input)?)
+}
+
+async fn ide_chat_codex_get_auth_status_for_web_settings(params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<CodexAuthStatusInput>(params, "input")?;
+    ide_chat_serialize(codex_get_auth_status(input).await?)
+}
+
+async fn ide_chat_codex_start_oauth_login_for_web_settings(params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<CodexStartOAuthLoginInput>(params, "input")?;
+    ide_chat_serialize(codex_start_oauth_login(input).await?)
+}
+
+async fn ide_chat_codex_get_rate_limits_for_web_settings(params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<CodexGetRateLimitsInput>(params, "input")?;
+    ide_chat_serialize(codex_get_rate_limits(input).await?)
+}
+
+async fn ide_chat_codex_consume_rate_limit_reset_credit_for_web_settings(
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<CodexGetRateLimitsInput>(params, "input")?;
+    ide_chat_serialize(codex_consume_rate_limit_reset_credit(input).await?)
+}
+
+fn ide_chat_codex_logout_for_web_settings(params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<CodexLogoutInput>(params, "input")?;
+    ide_chat_serialize(codex_logout(input)?)
+}
+
+fn ide_chat_remote_im_default_group_response_guidance_for_web_settings() -> Result<Value, String> {
+    ide_chat_serialize(default_remote_im_contact_response_guidance())
+}
+
+fn ide_chat_remote_im_patch_contact_settings_for_web_settings(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<RemoteImContactSettingsPatchInput>(params, "input")?;
+    ide_chat_serialize(remote_im_patch_contact_settings_inner(state, input)?)
+}
+
+fn ide_chat_remote_im_reconfigure_channel_behavior_for_web_settings(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let channel_id = params
+        .get("channelId")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    ide_chat_serialize(remote_im_reconfigure_channel_behavior_inner(state, channel_id))
 }
 
 include!("remote_im_methods.rs");

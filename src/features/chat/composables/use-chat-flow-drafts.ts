@@ -5,6 +5,7 @@ import {
   assistantContentBlocksFromMessage,
   normalizeAssistantStreamBlocks,
   normalizeChatActivityItems,
+  stripToolcallMarkers,
   streamBlocksToToolCalls,
 } from "../../../utils/chat-message-semantics";
 import { readMessagePlainText, messageHasVisibleContent } from "./use-chat-flow-utils";
@@ -18,9 +19,9 @@ import {
   type ChatMessageState,
 } from "./chat-message-state-machine";
 import {
-  tauriAssistantDeltaToMessageEvent,
-  tauriRoundStartedToMessageEvent,
-} from "./chat-message-tauri-adapter";
+  transportAssistantDeltaToMessageEvent,
+  transportRoundStartedToMessageEvent,
+} from "./chat-message-transport-adapter";
 import type { AssistantDeltaEvent, RoundStartedPayload } from "./use-chat-flow-events";
 
 export const DRAFT_ASSISTANT_ID_PREFIX = "__draft_assistant__:";
@@ -108,7 +109,9 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     if (!message) return;
     const blocks = assistantContentBlocksFromMessage(message);
     if (options.streamBlocks) options.streamBlocks.value = blocks;
-    options.latestAssistantText.value = assistantTextFromStreamBlocks(blocks) || readMessagePlainText(message);
+    options.latestAssistantText.value = stripToolcallMarkers(
+      assistantTextFromStreamBlocks(blocks) || readMessagePlainText(message),
+    );
     const meta = (message.providerMeta || {}) as Record<string, unknown>;
     options.toolStatusText.value = String(meta._toolStatusText || "");
     const toolStatusState = String(meta._toolStatusState || "").trim();
@@ -146,7 +149,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     }
     if (messageState.round.phase === "idle") {
       const existing = options.allMessages.value.find((message) => message.id === normalizedMessageId);
-      const event = tauriRoundStartedToMessageEvent({
+      const event = transportRoundStartedToMessageEvent({
         ...identity,
         startedAt: identity?.startedAt || existing?.createdAt || new Date().toISOString(),
       }, machineConversationId(), {
@@ -469,6 +472,34 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     });
   }
 
+  /**
+   * 用户明确停止时，前台不能继续保留任何“正在生成”的投影。
+   * 有可见内容的气泡冻结，空气泡直接移除；随后重建状态机，避免
+   * `settling` 残留把已经停止的气泡重新标成流式。
+   */
+  function settleStreamingAssistantMessages(): string[] {
+    synchronizeMachineInput();
+    const settledIds: string[] = [];
+    const nextMessages: ChatMessage[] = [];
+    for (const message of options.allMessages.value) {
+      const messageId = String(message?.id || "").trim();
+      const providerMeta = (message?.providerMeta || {}) as Record<string, unknown>;
+      const isStreamingAssistant = String(message?.role || "").trim() === "assistant"
+        && providerMeta._streaming === true;
+      if (!isStreamingAssistant) {
+        nextMessages.push(message);
+        continue;
+      }
+      if (messageId) settledIds.push(messageId);
+      if (assistantMessageHasCanonicalVisibleContent(message)) {
+        nextMessages.push(reconcileCompletedAssistantMessage(message) || message);
+      }
+    }
+    options.allMessages.value = nextMessages;
+    messageState = createChatMessageState(machineConversationId(), nextMessages);
+    return settledIds;
+  }
+
   function finalizeMessage(
     messageId: string,
     finalMessage?: ChatMessage,
@@ -504,7 +535,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
   function applyAssistantEventToMessage(messageId: string, parsed: AssistantDeltaEvent) {
     if (!messageId) return;
     ensureProjectionRound(messageId, "", "streaming");
-    const event = tauriAssistantDeltaToMessageEvent(parsed, machineConversationId(), messageId);
+    const event = transportAssistantDeltaToMessageEvent(parsed, machineConversationId(), messageId);
     if (event) dispatchMessageEvent(event);
   }
 
@@ -527,6 +558,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     loadStreamBlocksFromMessage,
     removeLegacyAssistantDrafts,
     removeMessage,
+    settleStreamingAssistantMessages,
     syncStreamBlocksToMessage,
     updateMessageText,
     updateQueuedAssistantMessageStatus,

@@ -26,10 +26,18 @@ fn ide_chat_parse_param_field<T: serde::de::DeserializeOwned>(
     field: &str,
 ) -> Result<T, String> {
     match params {
-        Value::Object(mut map) => map
-            .remove(field)
-            .ok_or_else(|| format!("{field} is required"))
-            .and_then(ide_chat_parse_params::<T>),
+        Value::Object(mut map) => {
+            if let Some(value) = map.remove(field) {
+                return ide_chat_parse_params::<T>(value);
+            }
+            // 统一传输层在 Web 端会把 `{ input: ... }` 解包，
+            // 因此同一个协议方法可能以“裸 input”进入 JSON-RPC。
+            // 仅对 input 字段接受整对象回退，保留其它字段的严格校验。
+            if field == "input" {
+                return ide_chat_parse_params::<T>(Value::Object(map));
+            }
+            Err(format!("{field} is required"))
+        }
         _ => Err(format!("{field} is required")),
     }
 }

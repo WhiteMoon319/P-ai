@@ -69,9 +69,12 @@ fn upsert_ide_context_snapshot_internal(
     Ok((client_id, updated_at))
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IdeChatWorkspaceListInput { conversation_id: String }
+fn ide_chat_parse_workspace_params<T: serde::de::DeserializeOwned>(params: Value) -> Result<T, String> {
+    match ide_chat_parse_params::<T>(params.clone()) {
+        Ok(value) => Ok(value),
+        Err(_) => ide_chat_parse_param_field::<T>(params, "input"),
+    }
+}
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -80,14 +83,6 @@ struct IdeChatWorkspacePermissionInput {
     access: String,
     workspace_path: Option<String>,
     workspace_name: Option<String>,
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IdeChatWorkspaceLayoutSaveInput {
-    conversation_id: String,
-    #[serde(default)] workspaces: Vec<ShellWorkspaceConfig>,
-    #[serde(default)] autonomous_mode: Option<bool>,
 }
 
 fn ide_chat_workspace_permission_payload(state: &AppState, conversation: &Conversation) -> Result<Value, String> {
@@ -130,11 +125,8 @@ fn ide_chat_select_workspace_permission(state: &AppState, params: Value) -> Resu
 }
 
 fn ide_chat_workspace_layout_save(state: &AppState, params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatWorkspaceLayoutSaveInput>(params)?;
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() { return Err("conversationId is required".to_string()); }
-    let updated = apply_conversation_chat_workspace_changes(state, conversation_id, Some(None), Some(normalize_conversation_shell_workspaces(state, &input.workspaces)), input.autonomous_mode, None)?;
-    ide_chat_workspace_permission_payload(state, &updated)
+    let input = ide_chat_parse_workspace_params::<SaveChatShellWorkspacesInput>(params)?;
+    ide_chat_serialize(update_chat_shell_workspace_layout_inner(input, state)?)
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -150,22 +142,8 @@ struct IdeChatFileReaderReadInput { path: String }
 struct IdeChatFileReaderReadBlockInput { path: String, start_line: usize, line_count: usize }
 
 fn ide_chat_workspace_list(state: &AppState, params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatWorkspaceListInput>(params)?;
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() { return Err("conversationId is required".to_string()); }
-    let meta = conversation_service_v2().get_conversation_meta(state, conversation_id)?;
-    let conversation = ide_chat_conversation_from_meta_view(&meta);
-    let workspaces = terminal_allowed_workspaces_for_conversation_canonical(state, Some(&conversation))?;
-    let main = workspaces.iter().find(|ws| ws.level == SHELL_WORKSPACE_LEVEL_MAIN)
-        .or_else(|| workspaces.iter().find(|ws| ws.level == SHELL_WORKSPACE_LEVEL_SYSTEM));
-    let root_path = main.map(|ws| terminal_path_for_user(&ws.path)).unwrap_or_default();
-    let workspace_name = main.map(|ws| ws.name.clone()).unwrap_or_default();
-    let values = workspaces.iter().map(|ws| serde_json::json!({
-        "id": ws.id, "name": ws.name, "level": ws.level, "access": ws.access,
-        "builtIn": ws.built_in, "path": terminal_path_for_user(&ws.path),
-    })).collect::<Vec<_>>();
-    Ok(serde_json::json!({"workspaces": values, "rootPath": root_path,
-        "workspaceName": workspace_name, "autonomousMode": meta.shell_autonomous_mode}))
+    let input = ide_chat_parse_workspace_params::<ChatShellWorkspaceInput>(params)?;
+    ide_chat_serialize(get_chat_shell_workspace_inner(input, state)?)
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -175,7 +153,7 @@ struct IdeChatWorkspaceGitRootCheckInput {
 }
 
 async fn ide_chat_workspace_git_root_check(params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatWorkspaceGitRootCheckInput>(params)?;
+    let input = ide_chat_parse_workspace_params::<IdeChatWorkspaceGitRootCheckInput>(params)?;
     let result = check_git_workspace_root(ShellWorkspacePathInput {
         workspace_path: Some(input.workspace_path),
     })

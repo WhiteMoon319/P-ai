@@ -26,7 +26,7 @@ export function useChatConfigActionsGlue(options: UseChatConfigActionsGlueOption
   function setUiLanguage(value: string) {
     const changed = options.applyUiLanguage(value);
     const lang = options.normalizeLocale(value);
-    void invokeTauri<AppConfig>("set_ui_language", { uiLanguage: lang })
+    void invokeTauri<AppConfig>("app.language.set", { uiLanguage: lang })
       .then((saved) => {
         options.config.uiLanguage = options.normalizeLocale(saved.uiLanguage);
         options.locale.value = options.config.uiLanguage;

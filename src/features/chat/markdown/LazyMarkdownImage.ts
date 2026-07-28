@@ -1,7 +1,6 @@
 import { ImageIcon } from "@lucide/vue";
 import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch, type PropType } from "vue";
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { invokeTauri } from "../../../services/tauri-api";
+import { readTransportChatImage, resolveLocalFileUrl } from "../../../services/tauri-api";
 import { isAssistantSpacePath } from "../utils/local-link";
 import { resolveMarkdownImageSource, type MarkdownImagePreviewPayload } from "./MarkdownImage";
 
@@ -99,9 +98,7 @@ export default defineComponent({
           return;
         }
         const existing = assistantSpaceThumbnailPromiseCache.get(path);
-        const task = existing || invokeTauri<{ dataUrl: string }>("read_local_chat_image_thumbnail", {
-          input: { path },
-        })
+        const task = existing || readTransportChatImage({ path })
           .then((result) => {
             const dataUrl = String(result?.dataUrl || "").trim();
             if (dataUrl) cacheAssistantSpaceThumbnail(path, dataUrl);
@@ -146,7 +143,7 @@ export default defineComponent({
         ? current.src
         : assistantSpaceImage
           ? assistantSpaceThumbnailSrc.value
-          : convertFileSrc(current.path);
+          : resolveLocalFileUrl(current.path);
       const title = current.kind === "local" ? (alt || current.path) : alt;
       const imageClass = current.kind === "local" && isMemeImagePath(current.path)
         ? "ecall-md-meme-image"

@@ -1,6 +1,6 @@
 import { type Ref, type ShallowRef } from "vue";
 import { i18n } from "../../../i18n";
-import { invokeTauri } from "../../../services/tauri-api";
+import { invokeTauri, readTransportChatImage } from "../../../services/tauri-api";
 import type { ChatMentionTarget, ChatMessage } from "../../../types/app";
 
 const t = i18n.global.t;
@@ -66,13 +66,11 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
     if (!mediaRef) return null;
     try {
       const isLegacyMarker = mediaRef.startsWith("@media:") || mediaRef.startsWith("@download:");
-      const result = isLegacyMarker
-        ? await invokeTauri<{ dataUrl: string }>("read_chat_image_data_url", {
-          input: { mediaRef, mime },
-        })
-        : await invokeTauri<{ dataUrl: string }>("read_local_chat_image_original", {
-          input: { path: mediaRef },
-        });
+      const result = await readTransportChatImage({
+        ...(isLegacyMarker ? { mediaRef } : { path: mediaRef }),
+        mime,
+        original: true,
+      });
       const bytesBase64 = bytesBase64FromDataUrl(result?.dataUrl || "");
       return bytesBase64 ? { mime, bytesBase64, savedPath: isLegacyMarker ? undefined : mediaRef } : null;
     } catch (error) {
@@ -206,19 +204,17 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
     }
     try {
       console.info("[会话撤回] 调用后端命令", {
-        command: "rewind_conversation_from_message",
+        command: "conversation.rewind",
         messageId,
         undoApplyPatch,
       });
-      const result = await invokeTauri<RewindConversationResult>("rewind_conversation_from_message", {
-        input: {
-          session: {
-            agentId: "",
-            conversationId,
-          },
-          messageId,
-          undoApplyPatch,
+      const result = await invokeTauri<RewindConversationResult>("conversation.rewind", {
+        session: {
+          agentId: "",
+          conversationId,
         },
+        messageId,
+        undoApplyPatch,
       });
       if (conversationId) {
         await options.refreshForegroundConversationAfterRewind(conversationId);

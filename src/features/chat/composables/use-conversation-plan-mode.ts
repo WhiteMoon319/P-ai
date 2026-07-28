@@ -1,13 +1,17 @@
 import { computed, type Ref } from "vue";
 import { invokeTauri } from "../../../services/tauri-api";
-import type { UnarchivedConversationSummary } from "../../../types/app";
 
-type UseConversationPlanModeOptions = {
-  currentConversationId: Ref<string>;
-  unarchivedConversations: Ref<UnarchivedConversationSummary[]>;
+type ConversationPlanModeSummary = {
+  conversationId: string;
+  planModeEnabled?: boolean;
 };
 
-export function useConversationPlanMode(options: UseConversationPlanModeOptions) {
+type UseConversationPlanModeOptions<T extends ConversationPlanModeSummary> = {
+  currentConversationId: Ref<string>;
+  unarchivedConversations: Ref<T[]>;
+};
+
+export function useConversationPlanMode<T extends ConversationPlanModeSummary>(options: UseConversationPlanModeOptions<T>) {
   const inFlightPlanModeRequests = new Map<string, Promise<boolean>>();
   const confirmedConversationPlanModeStates = new Map<string, boolean>();
 
@@ -71,7 +75,7 @@ export function useConversationPlanMode(options: UseConversationPlanModeOptions)
     patchConversationPlanModeInOverview(normalizedConversationId, nextValue);
     return queueConversationPlanModeUpdate(normalizedConversationId, async () => {
       try {
-        await invokeTauri<{ conversationId: string; planModeEnabled: boolean }>("set_conversation_plan_mode", {
+        await invokeTauri<{ conversationId: string; planModeEnabled: boolean }>("conversation.planMode.set", {
           input: {
             conversationId: normalizedConversationId,
             planModeEnabled: nextValue,

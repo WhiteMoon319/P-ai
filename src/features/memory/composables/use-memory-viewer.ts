@@ -1,6 +1,8 @@
 import { computed, ref } from "vue";
-import { save } from "@tauri-apps/plugin-dialog";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import {
+  exportTransportMemories,
+  invokeTauri,
+} from "../../../services/tauri-api";
 
 type MemoryEntry = {
   id: string;
@@ -14,21 +16,11 @@ type MemoryEntry = {
   updatedAt: string;
 };
 
-type ExportMemoriesFileResult = {
-  path: string;
-  count: number;
-};
-
 type ImportMemoriesResult = {
   importedCount: number;
   createdCount: number;
   mergedCount: number;
   totalCount: number;
-};
-
-type ExportMemoriesPayload = {
-  records?: unknown[];
-  memories?: unknown[];
 };
 
 type TrFn = (key: string, params?: Record<string, unknown>) => string;
@@ -40,18 +32,6 @@ type UseMemoryViewerOptions = {
 };
 
 const MEMORY_PAGE_SIZE = 5;
-
-function downloadJsonFile(fileName: string, payload: unknown) {
-  const body = JSON.stringify(payload, null, 2);
-  const url = URL.createObjectURL(new Blob([body], { type: "application/json;charset=utf-8" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
 
 export function useMemoryViewer(options: UseMemoryViewerOptions) {
   const memoryDialog = ref<HTMLDialogElement | null>(null);
@@ -94,23 +74,8 @@ export function useMemoryViewer(options: UseMemoryViewerOptions) {
   async function exportMemories() {
     try {
       const defaultName = `easy-call-ai-memories-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-      if (!isTauriRuntimeAvailable()) {
-        const payload = await invokeTauri<ExportMemoriesPayload>("export_memories");
-        downloadJsonFile(defaultName, payload);
-        const count = Array.isArray(payload.records) ? payload.records.length : (payload.memories?.length || 0);
-        options.setStatus(options.t("status.memoriesExported", { count, path: defaultName }));
-        return;
-      }
-      const path = await save({
-        filters: [{ name: "JSON", extensions: ["json"] }],
-        defaultPath: defaultName,
-      });
-      if (!path) {
-        return;
-      }
-      const result = await invokeTauri<ExportMemoriesFileResult>("export_memories_to_path", {
-        input: { path },
-      });
+      const result = await exportTransportMemories({ defaultFileName: defaultName });
+      if (!result) return;
       options.setStatus(options.t("status.memoriesExported", { count: result.count, path: result.path }));
     } catch (e) {
       options.setStatusError("status.exportMemoriesFailed", e);

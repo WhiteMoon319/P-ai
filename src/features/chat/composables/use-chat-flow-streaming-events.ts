@@ -73,10 +73,23 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
       }
       return;
     }
-    if (!currentGen) {
+    const round = options.getRound();
+    if (
+      !currentGen
+      || (round.phase !== "queued" && round.phase !== "streaming")
+      || round.gen !== currentGen
+    ) {
       return;
     }
-    const round = options.getRound();
+    if (parsed.kind === "tool_status") {
+      // 工具/重试状态本身就是促使 waiting -> streaming 的可见进度。
+      // 必须先写入显示状态，再创建流式投影；否则投影初始化会用空状态
+      // 覆盖刚收到的状态，原生 Channel 与 Web 虚拟 Channel 都会丢首个状态。
+      options.toolStatusText.value = parsed.message || "";
+      options.toolStatusState.value =
+        parsed.toolStatus === "running" || parsed.toolStatus === "done" || parsed.toolStatus === "failed"
+          ? parsed.toolStatus : "";
+    }
     if (round.phase === "queued" && round.gen === currentGen && assistantEventHasVisibleProgress(parsed)) {
       options.promoteQueuedRoundToStreaming(currentGen);
     }
@@ -104,6 +117,12 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
         assistantMessage: p?.assistantMessage,
         activationId: identity.activationId,
         requestId: identity.requestId,
+        ...(currentRound.phase === "queued"
+          && parsed.reason === "context_compaction_boundary"
+          && !String(p?.assistantText || "").trim()
+          && !p?.assistantMessage
+          ? { skipCanonicalReadback: true }
+          : {}),
       };
       if (currentRound.phase === "queued" && parsed.reason === "context_compaction_boundary") {
         void options.handleRoundCompleted(currentGen, result);
@@ -184,10 +203,6 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
     }
 
     if (parsed.kind === "tool_status") {
-      options.toolStatusText.value = parsed.message || "";
-      options.toolStatusState.value =
-        parsed.toolStatus === "running" || parsed.toolStatus === "done" || parsed.toolStatus === "failed"
-          ? parsed.toolStatus : "";
       if (currentRound.phase === "streaming" && !receivedCanonicalSnapshot) {
         options.applyAssistantEventToMessage(currentRound.messageId, parsed);
       }

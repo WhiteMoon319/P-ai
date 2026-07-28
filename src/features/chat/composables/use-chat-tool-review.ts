@@ -1,5 +1,5 @@
 import { ref, watch, type Ref } from "vue";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { invokeTauri } from "../../../services/tauri-api";
 
 export type ToolReviewStoredReview = {
   kind: string;
@@ -120,31 +120,9 @@ type UseChatToolReviewOptions = {
   activeConversationId: Ref<string>;
   refreshTick: Ref<number>;
   initialPanelOpen?: Ref<boolean>;
-  bridgeRequest?: Ref<ToolReviewBridgeRequest | undefined>;
   t: (key: string, params?: Record<string, unknown>) => string;
   onRefreshMessage?: (input: { conversationId: string; messageId: string }) => void | Promise<void>;
 };
-
-export type ToolReviewBridgeRequest = <T = unknown>(
-  method: string,
-  params?: Record<string, unknown>,
-  timeoutMs?: number,
-) => Promise<T>;
-
-function bridgeMethodForCommand(command: string): string {
-  switch (command) {
-    case "list_tool_review_reports": return "toolReview.reports.list";
-    case "delete_tool_review_report": return "toolReview.report.delete";
-    case "list_tool_review_commit_options": return "toolReview.commitOptions.list";
-    case "submit_tool_review_code": return "toolReview.code.submit";
-    case "list_tool_review_batches": return "toolReview.batches.list";
-    case "get_tool_review_item_detail": return "toolReview.item.detail";
-    case "run_tool_review_for_call": return "toolReview.item.review";
-    case "run_tool_review_for_batch": return "toolReview.batch.review";
-    case "set_tool_review_item_user_decision": return "toolReview.item.decision";
-    default: return command;
-  }
-}
 
 export function useChatToolReview(options: UseChatToolReviewOptions) {
   const toolReviewPanelOpen = ref(!!options.initialPanelOpen?.value);
@@ -171,14 +149,7 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
   }
 
   async function requestToolReview<T>(command: string, args?: { input?: Record<string, unknown> }): Promise<T> {
-    const bridgeRequest = options.bridgeRequest?.value;
-    if (bridgeRequest) {
-      return await bridgeRequest<T>(bridgeMethodForCommand(command), args?.input || {});
-    }
-    if (!isTauriRuntimeAvailable()) {
-      throw new Error("当前运行环境不支持工具审查接口。");
-    }
-    return await invokeTauri<T>(command, args);
+    return await invokeTauri<T>(command, args?.input || {});
   }
 
   async function refreshToolReviewReports() {

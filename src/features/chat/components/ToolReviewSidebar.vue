@@ -143,7 +143,6 @@
         v-else-if="activeTab === 'fastRequests'"
         :conversation-id="activeConversationId"
         active
-        :bridge-request="bridgeRequest"
       />
     </div>
     <FloatingScrollbar :target="contentScroller" />
@@ -183,7 +182,6 @@
     mode="edit"
     :conversation-id="activeConversationId"
     :task="taskEditorTask"
-    :bridge-request="bridgeRequest"
     @close="closeTaskEditor"
     @created="handleTaskMutated"
     @updated="handleTaskMutated"
@@ -233,7 +231,6 @@ const props = defineProps<{
   delegateStatuses: ConversationDelegateStatusSummary[];
   delegateStatusesErrorText: string;
   personaAvatarUrlMap: Record<string, string>;
-  bridgeRequest?: <T = unknown>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>;
 }>();
 
 const emit = defineEmits<{
@@ -467,11 +464,7 @@ async function openDelegateResult(status: import("../../../types/app").Conversat
   delegateResultDialogOpen.value = true;
   delegateResultLoading.value = true;
   try {
-    const page = props.bridgeRequest
-      ? await props.bridgeRequest<ArchiveBlockPage>("delegate.blockPage", { conversationId }, 10000)
-      : await invokeTauri<ArchiveBlockPage>("get_delegate_conversation_block_page", {
-          input: { conversationId },
-        });
+    const page = await invokeTauri<ArchiveBlockPage>("delegate.blockPage", { conversationId }, 10000);
     delegateResultText.value = formatDelegateResultText(findLastAssistantText(Array.isArray(page?.messages) ? page.messages : []));
   } catch (error) {
     delegateResultText.value = `读取委托结果失败：${String(error)}`;
@@ -685,8 +678,7 @@ function workspaceDisplayName(workspace: ShellWorkspace, root: string, index: nu
 }
 
 async function requestTaskList() {
-  if (props.bridgeRequest) return props.bridgeRequest<TaskEntry[]>("task.list", {});
-  return invokeTauri<TaskEntry[]>("task_list_tasks");
+  return invokeTauri<TaskEntry[]>("task.list", {});
 }
 
 async function loadConversationTasks() {

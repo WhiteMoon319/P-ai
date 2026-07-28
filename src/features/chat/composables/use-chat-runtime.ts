@@ -34,7 +34,7 @@ type UseChatRuntimeOptions = {
 };
 
 type ConversationMaintenanceAction = {
-  command: "archive_conversation" | "compact_conversation";
+  command: "conversation.archive" | "conversation.compact";
   runningKey: string;
   doneKey: string;
   failedKey: string;
@@ -57,7 +57,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
     const sourceConversationId = String(targetConversationId || currentConversationId || "").trim() || null;
     const targetIsForeground = !currentConversationId || !sourceConversationId || sourceConversationId === currentConversationId;
     const shouldLockForeground = action.lockForeground && targetIsForeground;
-    const instantArchiveAction = action.command === "archive_conversation";
+    const instantArchiveAction = action.command === "conversation.archive";
     if (!sourceConversationId) {
       const text = options.t("status.conversationActionNoTarget");
       options.setStatus(text);
@@ -81,7 +81,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
       options.setChatError(text);
       return;
     }
-    if (targetIsForeground && options.chatting.value && action.command !== "archive_conversation") {
+    if (targetIsForeground && options.chatting.value && action.command !== "conversation.archive") {
       const text = options.t("status.conversationActionBusy");
       options.setStatus(text);
       options.setChatError(text);
@@ -163,7 +163,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
 
   async function trimNow(targetConversationId?: string | null) {
     await runConversationMaintenance({
-      command: "archive_conversation",
+      command: "conversation.archive",
       runningKey: "status.trimArchiveRunning",
       doneKey: "status.trimArchiveDone",
       failedKey: "status.trimArchiveFailed",
@@ -173,7 +173,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
 
   async function trimCompactNow() {
     await runConversationMaintenance({
-      command: "compact_conversation",
+      command: "conversation.compact",
       runningKey: "status.trimCompactRunning",
       doneKey: "status.trimCompactDone",
       failedKey: "status.trimCompactFailed",
@@ -186,7 +186,7 @@ export function useChatRuntime(options: UseChatRuntimeOptions) {
     const startedAt = options.perfNow();
     try {
       const conversationId = String(targetConversationId || currentConversationIdOrNull() || "").trim() || null;
-      const snapshot = await invokeTauri<{ messages: ChatMessage[] }>("get_foreground_conversation_light_snapshot", {
+      const snapshot = await invokeTauri<{ messages: ChatMessage[] }>("conversation.foregroundLightSnapshot", {
         input: {
           agentId: conversationId ? null : options.assistantDepartmentAgentId.value,
           conversationId,

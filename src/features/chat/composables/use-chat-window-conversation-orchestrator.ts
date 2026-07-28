@@ -56,7 +56,6 @@ export function useChatWindowConversationOrchestrator(bindings: Record<string, a
     FOREGROUND_SNAPSHOT_RECENT_LIMIT: bindings.FOREGROUND_SNAPSHOT_RECENT_LIMIT,
     BACKGROUND_CONVERSATION_CACHE_LIMIT: bindings.BACKGROUND_CONVERSATION_CACHE_LIMIT,
     config: bindings.config,
-    tauriWindowLabel: bindings.tauriWindowLabel,
     currentChatConversationId: bindings.currentChatConversationId,
     currentChatPreferredApiConfigId: bindings.currentChatPreferredApiConfigId,
     currentChatTodos: bindings.currentChatTodos,

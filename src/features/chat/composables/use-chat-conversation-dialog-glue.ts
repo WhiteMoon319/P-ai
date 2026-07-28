@@ -1,23 +1,24 @@
+import { coordinateConversationDelete } from "./conversation-delete-coordinator";
+
 export function useChatConversationDialogGlue(bindings: Record<string, any>) {
   async function deleteUnarchivedConversationFromArchives(conversationId: string) {
     const normalizedConversationId = String(conversationId || "").trim();
     if (!normalizedConversationId) return;
-    const currentConversationId = String(bindings.currentChatConversationId.value || "").trim();
-    const deletingCurrentConversation = currentConversationId === normalizedConversationId;
-    if (deletingCurrentConversation) {
-      bindings.clearForegroundConversation("delete_unarchived_conversation_current");
-    }
-    const result = await bindings.deleteUnarchivedConversationFromArchivesRaw(normalizedConversationId);
-    if (!deletingCurrentConversation) return;
-    if (String(bindings.currentChatConversationId.value || "").trim()) return;
-    const nextConversationId = String(result?.activeConversationId || "").trim();
-    if (nextConversationId) {
-      await bindings.switchUnarchivedConversation(nextConversationId);
-      return;
-    }
-    await bindings.recoverForegroundConversationFromOverview(
-      "delete_unarchived_conversation_current_missing_replacement",
-    );
+    await coordinateConversationDelete({
+      conversationId: normalizedConversationId,
+      currentConversationId: () => String(bindings.currentChatConversationId.value || "").trim(),
+      deleteConversation: bindings.deleteUnarchivedConversationFromArchivesRaw,
+      applyConversationList: (items) => {
+        bindings.unarchivedConversations.value = items;
+      },
+      conversationIds: () => bindings.unarchivedConversations.value
+        .map((item: any) => String(item?.conversationId || "").trim()),
+      clearCurrentConversation: bindings.clearForegroundConversation,
+      openConversation: bindings.switchUnarchivedConversation,
+      onNoReplacement: () => bindings.recoverForegroundConversationFromOverview(
+        "conversation_delete_current_missing_replacement",
+      ),
+    });
   }
 
   async function archiveConversationFromList(conversationId: string) {

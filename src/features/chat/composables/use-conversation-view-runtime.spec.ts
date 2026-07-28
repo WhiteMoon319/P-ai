@@ -25,6 +25,9 @@ const flowMock = vi.hoisted(() => ({
 
 vi.mock("../../../services/tauri-api", () => ({
   invokeTauri: invokeTauriMock,
+  bindTransportConversationStream: vi.fn(async () => {}),
+  unbindTransportConversationStream: vi.fn(async () => {}),
+  probeTransportConversationStream: vi.fn(async () => true),
 }));
 
 vi.mock("./use-chat-flow", () => ({
@@ -119,6 +122,23 @@ describe("useConversationViewRuntime", () => {
     scope.stop();
   });
 
+  it("绑定通道需求不等于会话正在忙碌", async () => {
+    invokeTauriMock.mockResolvedValueOnce({
+      conversationId: "conversation-a",
+      messages: [message("assistant-1", "历史正文")],
+      shouldBindStream: true,
+      streamCache: null,
+    });
+
+    const { runtime, scope } = await createRuntime();
+    await vi.waitFor(() => expect(runtime.allMessages.value).toHaveLength(1));
+
+    expect(runtime.runtimeState.value).toBe("idle");
+    expect(runtime.conversationBusy.value).toBe(false);
+    await vi.waitFor(() => expect(flowMock.bindActiveConversationStream).toHaveBeenCalledWith("conversation-a", true));
+    scope.stop();
+  });
+
   it("按会话事件更新权威忙碌态并合并后台追加消息", async () => {
     invokeTauriMock.mockResolvedValueOnce({
       conversationId: "conversation-a",
@@ -152,7 +172,7 @@ describe("useConversationViewRuntime", () => {
     let activeRequests = 0;
     let maxActiveRequests = 0;
     invokeTauriMock.mockImplementation((command: string) => {
-      if (command !== "get_foreground_conversation_light_snapshot") {
+      if (command !== "conversation.foregroundLightSnapshot") {
         return Promise.resolve({});
       }
       activeRequests += 1;
@@ -199,7 +219,7 @@ describe("useConversationViewRuntime", () => {
       hasVisibleProgress: true,
     };
     invokeTauriMock.mockImplementation((command: string) => {
-      if (command === "get_foreground_conversation_light_snapshot") {
+      if (command === "conversation.foregroundLightSnapshot") {
         return Promise.resolve({
           conversationId: "conversation-a",
           messages: [message("assistant-1", "partial")],
@@ -208,7 +228,7 @@ describe("useConversationViewRuntime", () => {
           streamCache,
         });
       }
-      if (command === "get_conversation_runtime_snapshot") {
+      if (command === "conversation.runtimeSnapshot") {
         return Promise.resolve({
           conversationId: "conversation-a",
           runtimeState: "assistant_streaming",
@@ -226,7 +246,7 @@ describe("useConversationViewRuntime", () => {
 
     await vi.waitFor(() => expect(flowMock.probeBoundChannel).toHaveBeenCalledWith("conversation-a"));
     expect(flowMock.bindActiveConversationStream).toHaveBeenCalledTimes(1);
-    expect(invokeTauriMock.mock.calls.filter(([command]) => command === "get_foreground_conversation_light_snapshot")).toHaveLength(1);
+    expect(invokeTauriMock.mock.calls.filter(([command]) => command === "conversation.foregroundLightSnapshot")).toHaveLength(1);
     scope.stop();
   });
 
@@ -242,7 +262,7 @@ describe("useConversationViewRuntime", () => {
     let runtimeSnapshotCalls = 0;
     let resolveFirstRuntimeSnapshot: ((value: unknown) => void) | undefined;
     invokeTauriMock.mockImplementation((command: string) => {
-      if (command === "get_foreground_conversation_light_snapshot") {
+      if (command === "conversation.foregroundLightSnapshot") {
         return Promise.resolve({
           conversationId: "conversation-a",
           messages: [message("assistant-1", "partial")],
@@ -251,7 +271,7 @@ describe("useConversationViewRuntime", () => {
           streamCache,
         });
       }
-      if (command === "get_conversation_runtime_snapshot") {
+      if (command === "conversation.runtimeSnapshot") {
         runtimeSnapshotCalls += 1;
         if (runtimeSnapshotCalls === 1) {
           return new Promise((resolve) => {
@@ -294,7 +314,7 @@ describe("useConversationViewRuntime", () => {
       hasVisibleProgress: true,
     };
     invokeTauriMock.mockImplementation((command: string) => {
-      if (command === "get_foreground_conversation_light_snapshot") {
+      if (command === "conversation.foregroundLightSnapshot") {
         return Promise.resolve({
           conversationId: "conversation-a",
           messages: [message("assistant-1", "partial")],
@@ -303,14 +323,14 @@ describe("useConversationViewRuntime", () => {
           streamCache,
         });
       }
-      if (command === "get_conversation_runtime_snapshot") {
+      if (command === "conversation.runtimeSnapshot") {
         return Promise.resolve({
           conversationId: "conversation-a",
           runtimeState: "idle",
           streamCache,
         });
       }
-      if (command === "get_unarchived_conversation_message_by_id") {
+      if (command === "conversation.messageById") {
         return Promise.resolve(message("assistant-1", "final"));
       }
       return Promise.resolve({});
@@ -325,7 +345,7 @@ describe("useConversationViewRuntime", () => {
     await vi.waitFor(() => {
       expect((runtime.allMessages.value[0]?.parts?.[0] as any)?.text).toBe("final");
     });
-    expect(invokeTauriMock.mock.calls.filter(([command]) => command === "get_foreground_conversation_light_snapshot")).toHaveLength(1);
+    expect(invokeTauriMock.mock.calls.filter(([command]) => command === "conversation.foregroundLightSnapshot")).toHaveLength(1);
     expect(runtime.runtimeState.value).toBe("idle");
     scope.stop();
   });
@@ -333,7 +353,7 @@ describe("useConversationViewRuntime", () => {
   it("视图因主会话切换被卸载后，旧快照不得重新绑定僵尸 Channel", async () => {
     let resolveSnapshot: ((value: unknown) => void) | undefined;
     invokeTauriMock.mockImplementation((command: string) => {
-      if (command !== "get_foreground_conversation_light_snapshot") {
+      if (command !== "conversation.foregroundLightSnapshot") {
         return Promise.resolve({});
       }
       return new Promise((resolve) => {
