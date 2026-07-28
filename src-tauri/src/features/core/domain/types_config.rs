@@ -183,21 +183,51 @@ fn department_whitelist_permission_control(
 fn explorer_department_permission_control() -> DepartmentPermissionControl {
     department_whitelist_permission_control(
         &["read", "read_media", "exec", "fetch", "websearch"],
-        &["workspace-guide", "agents-md-setup"],
+        &[
+            "workspace-guide",
+            "agents-md-setup",
+            "memory-generation",
+        ],
     )
 }
 
 fn reviewer_department_permission_control() -> DepartmentPermissionControl {
     department_whitelist_permission_control(
         &["read", "read_media", "fetch", "websearch", "exec"],
-        &["code-review"],
+        &["code-review", "memory-generation"],
     )
 }
 
 fn saddler_department_permission_control() -> DepartmentPermissionControl {
     department_whitelist_permission_control(
         &["read", "write", "update", "exec"],
-        &["agents-md-setup", "workspace-guide"],
+        &[
+            "agents-md-setup",
+            "workspace-guide",
+            "memory-generation",
+        ],
+    )
+}
+
+fn leader_department_permission_control() -> DepartmentPermissionControl {
+    department_whitelist_permission_control(
+        &["read", "read_media", "exec", "fetch", "websearch", "delegate"],
+        &["memory-generation"],
+    )
+}
+
+fn remote_customer_service_department_permission_control() -> DepartmentPermissionControl {
+    department_whitelist_permission_control(
+        &[
+            "read",
+            "read_media",
+            "fetch",
+            "websearch",
+            "meme",
+            "image_generate",
+            "image_edit",
+        ],
+        &["news-analyst", "memory-generation"],
     )
 }
 
@@ -332,7 +362,7 @@ fn default_leader_department(api_config_id: &str) -> DepartmentConfig {
         is_deputy: false,
         source: default_main_source(),
         scope: default_global_scope(),
-        permission_control: DepartmentPermissionControl::default(),
+        permission_control: leader_department_permission_control(),
     }
 }
 
@@ -454,7 +484,7 @@ fn default_remote_customer_service_department(api_config_id: &str) -> Department
         is_deputy: false,
         source: default_main_source(),
         scope: default_global_scope(),
-        permission_control: DepartmentPermissionControl::default(),
+        permission_control: remote_customer_service_department_permission_control(),
     }
 }
 

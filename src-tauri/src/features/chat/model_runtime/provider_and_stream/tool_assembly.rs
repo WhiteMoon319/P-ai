@@ -1292,6 +1292,7 @@ mod tool_assembly_permission_tests {
     fn legal_tool_resolver_should_apply_default_preset_department_whitelists() {
         let mut config = AppConfig::default();
         config.vision_api_config_id = Some("vision-a".to_string());
+        config.image_generation_model_id = Some("provider-a::model-a".to_string());
         let policy = RuntimeToolPolicy {
             conversation_resolved: true,
             local_conversation: true,
@@ -1308,6 +1309,9 @@ mod tool_assembly_permission_tests {
             CachedRuntimeToolSchema::builtin(test_definition("delete")),
             CachedRuntimeToolSchema::builtin(test_definition("delegate")),
             CachedRuntimeToolSchema::builtin(test_definition("operate")),
+            CachedRuntimeToolSchema::builtin(test_definition("meme")),
+            CachedRuntimeToolSchema::builtin(test_definition("image_generate")),
+            CachedRuntimeToolSchema::builtin(test_definition("image_edit")),
         ];
         let memory = test_memory_context(true);
 
@@ -1331,6 +1335,39 @@ mod tool_assembly_permission_tests {
             .collect::<Vec<_>>();
         assert_eq!(names, vec!["read", "read_media", "exec", "fetch", "websearch"]);
 
+        let leader = config
+            .departments
+            .iter()
+            .find(|department| department.id == LEADER_DEPARTMENT_ID)
+            .expect("leader department");
+        let resolved = resolve_legal_runtime_tools_for_department(
+            &config,
+            &test_api(),
+            Some(leader),
+            &policy,
+            Some(&memory),
+            &tools,
+        );
+        let names = resolved
+            .attached
+            .iter()
+            .map(|tool| tool.definition.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            vec!["read", "read_media", "exec", "fetch", "websearch", "delegate"]
+        );
+        assert!(department_permission_allows_any_name(
+            Some(leader),
+            DepartmentPermissionCategory::Skill,
+            &["memory-generation"],
+        ));
+        assert!(!department_permission_allows_any_name(
+            Some(leader),
+            DepartmentPermissionCategory::Skill,
+            &["news-analyst"],
+        ));
+
         let reviewer = config
             .departments
             .iter()
@@ -1345,6 +1382,11 @@ mod tool_assembly_permission_tests {
             Some(reviewer),
             DepartmentPermissionCategory::Skill,
             &["workspace-guide"],
+        ));
+        assert!(department_permission_allows_any_name(
+            Some(reviewer),
+            DepartmentPermissionCategory::Skill,
+            &["memory-generation"],
         ));
 
         let saddler = config
@@ -1366,6 +1408,47 @@ mod tool_assembly_permission_tests {
             .map(|tool| tool.definition.name.as_str())
             .collect::<Vec<_>>();
         assert_eq!(names, vec!["read", "exec", "write", "update"]);
+
+        let remote_customer_service = config
+            .departments
+            .iter()
+            .find(|department| department.id == REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID)
+            .expect("remote customer service department");
+        let resolved = resolve_legal_runtime_tools_for_department(
+            &config,
+            &test_api(),
+            Some(remote_customer_service),
+            &policy,
+            Some(&memory),
+            &tools,
+        );
+        let names = resolved
+            .attached
+            .iter()
+            .map(|tool| tool.definition.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            vec![
+                "read",
+                "read_media",
+                "fetch",
+                "websearch",
+                "meme",
+                "image_generate",
+                "image_edit",
+            ]
+        );
+        assert!(department_permission_allows_any_name(
+            Some(remote_customer_service),
+            DepartmentPermissionCategory::Skill,
+            &["news-analyst"],
+        ));
+        assert!(department_permission_allows_any_name(
+            Some(remote_customer_service),
+            DepartmentPermissionCategory::Skill,
+            &["memory-generation"],
+        ));
     }
 
     #[test]

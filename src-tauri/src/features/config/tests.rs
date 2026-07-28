@@ -618,6 +618,14 @@
 
     #[test]
     fn default_department_draft_should_return_backend_preset() {
+        let leader = default_department_draft(LEADER_DEPARTMENT_ID, "zh-CN")
+            .expect("leader default draft");
+        assert_eq!(leader.api_config_id, MODEL_ROLE_EXPERT_API_CONFIG_ID);
+        assert_eq!(
+            leader.permission_control,
+            leader_department_permission_control()
+        );
+
         let reviewer = default_department_draft(REVIEWER_DEPARTMENT_ID, "zh-CN")
             .expect("reviewer default draft");
         assert_eq!(reviewer.api_config_id, MODEL_ROLE_QUICK_API_CONFIG_ID);
@@ -634,9 +642,42 @@
             saddler_department_permission_control()
         );
 
+        let remote_customer_service =
+            default_department_draft(REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID, "zh-CN")
+                .expect("remote customer service default draft");
+        assert_eq!(
+            remote_customer_service.permission_control,
+            remote_customer_service_department_permission_control()
+        );
+
         let assistant = default_department_draft(ASSISTANT_DEPARTMENT_ID, "en-US")
             .expect("assistant default draft");
         assert_eq!(assistant.name, "Assistant Department");
+
+        let config = AppConfig::default();
+        for department_id in [
+            ASSISTANT_DEPARTMENT_ID,
+            LEADER_DEPARTMENT_ID,
+            DEPUTY_DEPARTMENT_ID,
+            REVIEWER_DEPARTMENT_ID,
+            SADDLER_DEPARTMENT_ID,
+            REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID,
+        ] {
+            let department = config
+                .departments
+                .iter()
+                .find(|department| department.id == department_id)
+                .expect("default preset department");
+            assert!(
+                department_permission_allows_any_name(
+                    Some(department),
+                    DepartmentPermissionCategory::Skill,
+                    &["memory-generation"],
+                ),
+                "{department_id} should allow memory-generation",
+            );
+        }
+
         assert!(default_department_draft("department-custom", "zh-CN").is_err());
     }
 
