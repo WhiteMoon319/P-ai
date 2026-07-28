@@ -14,8 +14,47 @@ export const LEGAL_REASONING_EFFORTS = [
 export type LegalReasoningEffort = (typeof LEGAL_REASONING_EFFORTS)[number];
 
 type TranslateFn = (key: string, params?: Record<string, unknown>) => string;
+type ApiConfigDisplayOptions = {
+  providerMaxCharacters?: number;
+};
 
 const REASONING_SUFFIX_PATTERN = /\s*·\s*(默认|不思考|最小|低|中|高|极高|最大|Default|Off|Minimal|Low|Medium|High|Extra High|XHigh|Max)$/i;
+
+function compactText(value: string, maxCharacters?: number): string {
+  if (!maxCharacters || maxCharacters < 1) return value;
+  return Array.from(value).slice(0, maxCharacters).join("");
+}
+
+function providerModelDisplayName(
+  providerName: string,
+  modelValue: string,
+  providerMaxCharacters?: number,
+): string {
+  const provider = compactText(String(providerName || "").trim(), providerMaxCharacters);
+  const model = String(modelValue || "").trim();
+  return provider && model ? `${provider} · ${model}` : (provider || model);
+}
+
+function formatProviderModelDisplayName(
+  name: string,
+  modelValue: string,
+  providerMaxCharacters?: number,
+): string {
+  const base = String(name || "").trim();
+  const model = String(modelValue || "").trim();
+  if (!base || !model || base === model) return base;
+
+  const displaySuffix = ` · ${model}`;
+  if (base.endsWith(displaySuffix)) {
+    return providerModelDisplayName(base.slice(0, -displaySuffix.length), model, providerMaxCharacters);
+  }
+
+  // 兼容历史配置中以“供应商/模型”保存的名称。
+  const legacySuffix = `/${model}`;
+  return base.endsWith(legacySuffix)
+    ? providerModelDisplayName(base.slice(0, -legacySuffix.length), model, providerMaxCharacters)
+    : base;
+}
 
 export function normalizeReasoningEffortValue(value: unknown): string {
   return String(value || "").trim().toLowerCase();
@@ -103,6 +142,7 @@ export function apiConfigDisplayName(
 export function formatApiConfigOptionLabel(
   item: Pick<ApiConfigItem, "name" | "model" | "reasoningEffort"> | null | undefined,
   t?: TranslateFn,
+  options?: ApiConfigDisplayOptions,
 ): string {
   if (!item) return "";
   const model = String(item.model || "").trim();
@@ -125,5 +165,10 @@ export function formatApiConfigOptionLabel(
   }
   if (!base) base = rawName || model;
   const label = reasoningEffortDisplayLabel(item.reasoningEffort, t);
-  return label ? `${base} · ${label}` : base;
+  const displayBase = formatProviderModelDisplayName(
+    base,
+    model,
+    options?.providerMaxCharacters,
+  );
+  return label ? `${displayBase} · ${label}` : displayBase;
 }

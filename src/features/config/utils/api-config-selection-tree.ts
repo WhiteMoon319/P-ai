@@ -52,8 +52,9 @@ function providerIdFromApiConfigId(id: string): string {
 function providerNameFromApiConfig(item: ApiConfigItem): string {
   const name = stripReasoningEffortDisplaySuffix(String(item.name || "").trim());
   const model = String(item.model || "").trim();
-  const suffix = model ? `/${model}` : "";
-  if (suffix && name.endsWith(suffix)) return name.slice(0, -suffix.length).trim();
+  const suffixes = model ? [` · ${model}`, `/${model}`] : [];
+  const suffix = suffixes.find((item) => name.endsWith(item));
+  if (suffix) return name.slice(0, -suffix.length).trim();
   return providerIdFromApiConfigId(item.id) || name;
 }
 

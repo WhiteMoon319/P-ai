@@ -306,7 +306,7 @@
               type="button"
               class="btn btn-sm h-8 min-h-8 w-44 max-w-44 justify-between border-0 shadow-none bg-base-100 text-base-content hover:bg-base-200"
               :disabled="normalizedChatModelOptions.length === 0"
-              :title="selectedModelName"
+              :title="selectedModelTitle"
               @click="modelDropdownOpen = !modelDropdownOpen"
             >
               <span class="truncate">{{ selectedModelName }}</span>
@@ -585,7 +585,8 @@ const normalizedChatModelOptions = computed(() =>
   (Array.isArray(props.chatModelOptions) ? props.chatModelOptions : [])
     .map((item) => ({
       id: String(item?.id || "").trim(),
-      name: formatApiConfigOptionLabel(item, t),
+      name: formatApiConfigOptionLabel(item, t, { providerMaxCharacters: 2 }),
+      title: formatApiConfigOptionLabel(item, t),
     }))
     .filter((item) => !!item.id && !!item.name),
 );
@@ -620,6 +621,11 @@ const selectedModelName = computed(() => {
   const displayId = localModelOptionId.value || props.conversationCallPrimaryApiConfigId;
   const found = normalizedChatModelOptions.value.find((item) => item.id === displayId);
   return found?.name || displayId;
+});
+const selectedModelTitle = computed(() => {
+  const displayId = localModelOptionId.value || props.conversationCallPrimaryApiConfigId;
+  const found = normalizedChatModelOptions.value.find((item) => item.id === displayId);
+  return found?.title || displayId;
 });
 const showIdeWorkspaceGroupLabel = computed(() => false);
 const attachedIdeContextReferenceIds = computed(() => new Set((props.attachedIdeContextReferences || []).map((item) => item.id)));
