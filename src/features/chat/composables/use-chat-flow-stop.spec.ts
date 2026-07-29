@@ -1,6 +1,6 @@
 import { ref, shallowRef } from "vue";
 import { describe, expect, it, vi } from "vitest";
-import type { AssistantStreamBlock, ChatMessage } from "../../../types/app";
+import type { ChatMessage } from "../../../types/app";
 import { useChatFlowStop } from "./use-chat-flow-stop";
 
 describe("useChatFlowStop", () => {
@@ -21,7 +21,6 @@ describe("useChatFlowStop", () => {
       }],
       providerMeta: { _streaming: true },
     }]);
-    const streamBlocks = ref<AssistantStreamBlock[]>(allMessages.value[0].contentBlocks || []);
     const finalizeMessage = vi.fn();
     const settleStreamingAssistantMessages = vi.fn(() => []);
     const invokeStopChatMessage = vi.fn(async () => ({
@@ -35,7 +34,6 @@ describe("useChatFlowStop", () => {
       latestAssistantText: ref(""),
       toolStatusText: ref(""),
       toolStatusState: ref(""),
-      streamBlocks,
       allMessages,
       getSession: () => ({ apiConfigId: "api-1", agentId: "agent-1", departmentId: "department-1" }),
       getConversationId: () => "conversation-1",

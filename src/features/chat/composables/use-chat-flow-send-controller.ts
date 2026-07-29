@@ -79,7 +79,7 @@ type UseChatFlowSendControllerOptions = {
     assistantMessageId?: string;
   }>;
   onOwnUserDraftInserted?: (payload: { conversationId: string; messageId: string }) => void;
-  onAssistantDraftInserted?: () => void;
+  onStreamingAssistantBubbleInserted?: () => void;
   t: (key: string, params?: Record<string, unknown>) => string;
   getRound: () => RoundState;
   setRound: (next: RoundState) => void;
@@ -213,7 +213,7 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
           queuedAssistantMessageId = assistantMessageId;
           options.setRound({ phase: "queued", gen, messageId: queuedAssistantMessageId });
           options.updateQueuedAssistantMessageStatus(queuedAssistantMessageId, options.t("chat.statusPreparingMessage"));
-          options.onAssistantDraftInserted?.();
+          options.onStreamingAssistantBubbleInserted?.();
         }
       }
       if (shouldProjectUserMessage) {

@@ -104,7 +104,6 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     BACKGROUND_CONVERSATION_CACHE_LIMIT: bindings.BACKGROUND_CONVERSATION_CACHE_LIMIT,
     OLDER_HISTORY_PAGE_SIZE: bindings.OLDER_HISTORY_PAGE_SIZE,
     sync: {
-      DRAFT_ASSISTANT_ID_PREFIX: bindings.DRAFT_ASSISTANT_ID_PREFIX,
       BACKGROUND_CONVERSATION_CACHE_LIMIT: bindings.BACKGROUND_CONVERSATION_CACHE_LIMIT,
       OLDER_HISTORY_PAGE_SIZE: bindings.OLDER_HISTORY_PAGE_SIZE,
       currentChatConversationId: bindings.currentChatConversationId,
@@ -263,7 +262,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     consumeOrQueueOwnMessageAlign: bindings.consumeOrQueueOwnMessageAlign,
     applyConversationMessageAppended: conversationOrchestrator.applyConversationMessageAppended,
     cacheConversationMessages: conversationOrchestrator.cacheConversationMessages,
-    insertMessagesBeforeAssistantDraft: conversationOrchestrator.insertMessagesBeforeAssistantDraft,
+    insertMessagesBeforeStreamingAssistantProjection: conversationOrchestrator.insertMessagesBeforeStreamingAssistantProjection,
     mergeMessagesIntoTimeline: conversationOrchestrator.mergeMessagesIntoTimeline,
     reuseStableMessageReferences: conversationOrchestrator.reuseStableMessageReferences,
     foregroundTailLatestReady: bindings.foregroundTailLatestReady,

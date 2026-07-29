@@ -148,7 +148,7 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
     refreshChatUnarchivedConversations: bindings.refreshChatUnarchivedConversations,
     syncUnarchivedConversationOverviewChangedSinceWatermark: bindings.syncUnarchivedConversationOverviewChangedSinceWatermark,
     getChatFlow: bindings.getChatFlow,
-    maybeResumeForegroundStreamingDraft: bindings.maybeResumeForegroundStreamingDraft,
+    maybeResumeForegroundStreamingBubble: bindings.maybeResumeForegroundStreamingBubble,
     resumeForegroundRuntimeFromBackend: bindings.resumeForegroundRuntimeFromBackend,
   });
 

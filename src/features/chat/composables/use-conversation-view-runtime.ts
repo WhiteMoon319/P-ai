@@ -21,7 +21,7 @@ import {
 } from "./chat-foreground-coordinator";
 import { recoverForegroundStreaming } from "./foreground-recovery-state-machine";
 import { useChatFlow } from "./use-chat-flow";
-import { DRAFT_ASSISTANT_ID_PREFIX, DRAFT_USER_ID_PREFIX } from "./use-chat-flow-drafts";
+import { DRAFT_USER_ID_PREFIX } from "./use-chat-flow-drafts";
 import type { ConversationRuntimeStreamCacheSnapshot } from "./use-chat-flow-stream-cache";
 
 type ConversationViewRuntimeOptions = {
@@ -110,8 +110,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     const formalMessages = allMessages.value.filter((message) => {
       const messageId = String(message.id || "").trim();
       return !!messageId
-        && !messageId.startsWith(DRAFT_USER_ID_PREFIX)
-        && !messageId.startsWith(DRAFT_ASSISTANT_ID_PREFIX);
+        && !messageId.startsWith(DRAFT_USER_ID_PREFIX);
     });
     return String(formalMessages[formalMessages.length - 1]?.id || "").trim();
   }

@@ -24,7 +24,6 @@ type UseChatFlowForegroundResetOptions = {
   clearFrontendDispatchTimer: () => void;
   getPendingUserDraftId: () => string;
   removeMessage: (messageId: string) => void;
-  removeLegacyAssistantDrafts: () => void;
   finalizeMessage: (messageId: string, finalMessage?: ChatMessage) => void;
   clearConversationStreamCache: (conversationId?: string | null) => void;
   setActiveHistoryMessageCount: (value: number) => void;
@@ -83,7 +82,6 @@ export function useChatFlowForegroundReset(options: UseChatFlowForegroundResetOp
     if (pendingUserDraftId) {
       options.removeMessage(pendingUserDraftId);
     }
-    options.removeLegacyAssistantDrafts();
     options.setRound({ phase: "idle" });
     options.setActiveHistoryMessageCount(0);
     options.chatting.value = false;

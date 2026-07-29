@@ -73,7 +73,7 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
           bindings.allMessages.value,
         );
       },
-      onAssistantDraftInserted: () => {
+      onStreamingAssistantBubbleInserted: () => {
         bindings.bumpOwnUserDraftAlign();
       },
       t: bindings.tr,

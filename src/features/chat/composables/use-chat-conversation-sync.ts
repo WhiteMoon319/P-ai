@@ -21,15 +21,13 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     areMessagesEquivalent,
     formalizeConversationMessages,
     freezeConversationMessages,
-    insertMessagesBeforeAssistantDraft,
-    isAssistantDraftMessage,
+    insertMessagesBeforeStreamingAssistantProjection,
     mergeMessagesIntoTimeline,
     messageContentSignature,
     replaceConversationMessage,
     replaceConversationHistory,
     reuseStableMessageReferences,
   } = useChatConversationMessageUtils({
-    draftAssistantIdPrefix: bindings.DRAFT_ASSISTANT_ID_PREFIX,
     ensureConversationMessageIds: bindings.ensureConversationMessageIds,
   });
   const {
@@ -52,7 +50,7 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     ).trim();
   }
 
-  function maybeResumeForegroundStreamingDraft(conversationId?: string | null, reason = "unknown") {
+  function maybeResumeForegroundStreamingBubble(conversationId?: string | null, reason = "unknown") {
     void conversationId;
     void reason;
   }
@@ -589,11 +587,10 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     matchesForegroundConversation,
     formalizeConversationMessages,
     freezeConversationMessages,
-    isAssistantDraftMessage,
-    insertMessagesBeforeAssistantDraft,
+    insertMessagesBeforeStreamingAssistantProjection,
     mergeMessagesIntoTimeline,
     currentConversationRuntimeState,
-    maybeResumeForegroundStreamingDraft,
+    maybeResumeForegroundStreamingBubble,
     conversationRuntimeSnapshotIsBusy,
     requestConversationRuntimeSnapshot,
     resumeForegroundRuntimeFromBackend,

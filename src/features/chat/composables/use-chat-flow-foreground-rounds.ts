@@ -1,6 +1,5 @@
 import type { ChatMessage } from "../../../types/app";
 import { normalizeAssistantStreamBlocks, streamBlocksToToolCalls } from "../../../utils/chat-message-semantics";
-import { DRAFT_ASSISTANT_ID_PREFIX } from "./use-chat-flow-drafts";
 import { streamCacheHasVisibleProgress } from "./use-chat-flow-stream-cache";
 import { applyStreamingHistoryOverlay } from "./use-chat-flow-stream-overlay";
 import { formalizeMessages, normalizeConversationId, positiveRoundedNumber, readMessagePlainText } from "./use-chat-flow-utils";
@@ -16,8 +15,7 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
   function isStreamingAssistantMessage(message?: ChatMessage | null): boolean {
     const messageId = String(message?.id || "").trim();
     const meta = (message?.providerMeta || {}) as Record<string, unknown>;
-    return messageId.startsWith(DRAFT_ASSISTANT_ID_PREFIX)
-      || (String(message?.role || "").trim() === "assistant" && meta._streaming === true);
+    return String(message?.role || "").trim() === "assistant" && meta._streaming === true;
   }
 
   function messageIdOf(message?: ChatMessage | null): string {
@@ -105,6 +103,10 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     }
     if (cid) bindings.clearConversationStreamCache(cid);
     bindings.setActiveActivationId(nextActivationId);
+    const canonicalMessageId = String(payload.assistantMessageId || "").trim();
+    if (round.phase === "queued" && !round.messageId && canonicalMessageId) {
+      bindings.setRound({ phase: "queued", gen: round.gen, messageId: canonicalMessageId }, "waiting");
+    }
     if (cid && positiveRoundedNumber(payload.startedAtMs)) {
       bindings.writeConversationStreamCacheSnapshot(cid, {
         activationId: nextActivationId,
@@ -125,7 +127,6 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
       bindings.setPendingTerminalEvent(null);
       bindings.setDeferredRoundCompletion(null);
       bindings.setQueuedStreamingState(null);
-      bindings.removeLegacyAssistantDrafts();
       bindings.resetDisplayState();
       bindings.setActiveHistoryMessageCount(formalizeMessages(bindings.allMessages.value).length);
       bindings.setRound({

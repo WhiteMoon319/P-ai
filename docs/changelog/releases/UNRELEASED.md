@@ -1,5 +1,10 @@
 # 未发布
 
+## 修复：前台会话流式状态恢复
+
+- 修复（chat-foreground-stream-recovery）：压缩中尚未产生正式 assistant 消息时仅显示会话忙态；收到 `roundStarted` 的正式消息 ID 后才显示对应气泡，避免暴露内部占位身份。
+- 修复（chat-stop-preserves-message-activity）：中止调度时直接以正式消息的内容块保存思考与工具活动，不再依赖废弃的前端流式镜像。
+
 ## 修复：计划确认提示词仅发送一次
 
 - 修复（plan-confirm-one-shot-prompt）：用户确认执行计划后，计划路径提示词仅随该次继续执行请求发送；后续普通消息与上下文压缩不再重复回灌活动计划。

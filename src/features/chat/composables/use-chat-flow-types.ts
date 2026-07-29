@@ -30,7 +30,7 @@ export type UseChatFlowOptions = {
   setConversationChatError?: (conversationId: string, text: string) => void;
   allMessages: Ref<ChatMessage[]>;
   onOwnUserDraftInserted?: (payload: { conversationId: string; messageId: string }) => void;
-  onAssistantDraftInserted?: () => void;
+  onStreamingAssistantBubbleInserted?: () => void;
   t: (key: string, params?: Record<string, unknown>) => string;
   formatRequestFailed: (error: unknown) => string;
   removeBinaryPlaceholders: (text: string) => string;

@@ -24,7 +24,6 @@ import {
 } from "./chat-message-transport-adapter";
 import type { AssistantDeltaEvent, RoundStartedPayload } from "./use-chat-flow-events";
 
-export const DRAFT_ASSISTANT_ID_PREFIX = "__draft_assistant__:";
 export const DRAFT_USER_ID_PREFIX = "__draft_user__:";
 
 type UpdateMessageTextOptions = {
@@ -164,10 +163,10 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
 
   function resolveAssistantMessageSpeakerAgentId(existingMessage?: ChatMessage | null): string {
     const existing = String(existingMessage?.speakerAgentId || "").trim();
-    if (existing && existing !== "assistant-draft") return existing;
+    if (existing) return existing;
     const activeRoundAgentId = String(options.getActiveRoundAgentId ? options.getActiveRoundAgentId() : "").trim();
     if (activeRoundAgentId) return activeRoundAgentId;
-    return "assistant-draft";
+    return "";
   }
 
   function getPendingUserDraftId(): string {
@@ -201,8 +200,7 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     return options.allMessages.value.some((message) => {
       const messageId = String(message?.id || "").trim();
       const meta = (message?.providerMeta || {}) as Record<string, unknown>;
-      return messageId.startsWith(DRAFT_ASSISTANT_ID_PREFIX)
-        || (String(message?.role || "").trim() === "assistant" && meta._streaming === true);
+      return String(message?.role || "").trim() === "assistant" && meta._streaming === true;
     });
   }
 
@@ -456,22 +454,6 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     options.allMessages.value = options.allMessages.value.filter((m) => m.id !== messageId);
   }
 
-  function removeLegacyAssistantDrafts() {
-    options.allMessages.value = options.allMessages.value.filter((message) => {
-      const messageId = String(message?.id || "").trim();
-      if (!messageId.startsWith(DRAFT_ASSISTANT_ID_PREFIX)) return true;
-      // 旧 draft 前缀也可能已有可见内容，仍禁止删除。
-      return messageHasVisibleContent(message);
-    }).map((message) => {
-      const messageId = String(message?.id || "").trim();
-      if (!messageId.startsWith(DRAFT_ASSISTANT_ID_PREFIX) || !messageHasVisibleContent(message)) {
-        return message;
-      }
-      // 有内容的 draft 前缀消息：只收口流式态，不删。
-      return reconcileCompletedAssistantMessage(message) || message;
-    });
-  }
-
   /**
    * 用户明确停止时，前台不能继续保留任何“正在生成”的投影。
    * 有可见内容的气泡冻结，空气泡直接移除；随后重建状态机，避免
@@ -556,7 +538,6 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     insertStreamingAssistantMessage,
     insertUserDraft,
     loadStreamBlocksFromMessage,
-    removeLegacyAssistantDrafts,
     removeMessage,
     settleStreamingAssistantMessages,
     syncStreamBlocksToMessage,

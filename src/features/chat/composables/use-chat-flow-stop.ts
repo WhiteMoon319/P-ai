@@ -1,6 +1,6 @@
 import type { Ref } from "vue";
 import type { AssistantStreamBlock, ChatMessage } from "../../../types/app";
-import { normalizeAssistantStreamBlocks } from "../../../utils/chat-message-semantics";
+import { assistantContentBlocksFromMessage } from "../../../utils/chat-message-semantics";
 import { assistantMessageHasCanonicalVisibleContent } from "./chat-message-state-machine";
 import type { RoundState } from "./use-chat-flow-types";
 import { readMessagePlainText } from "./use-chat-flow-utils";
@@ -10,7 +10,6 @@ type UseChatFlowStopOptions = {
   latestAssistantText: Ref<string>;
   toolStatusText: Ref<string>;
   toolStatusState: Ref<"running" | "done" | "failed" | "">;
-  streamBlocks?: Ref<AssistantStreamBlock[]>;
   allMessages: Ref<ChatMessage[]>;
   getSession: () => { apiConfigId: string; agentId: string; departmentId?: string } | null;
   getConversationId?: () => string;
@@ -96,7 +95,7 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
       id: messageId,
       role: "assistant",
       createdAt: existing?.createdAt || new Date().toISOString(),
-      speakerAgentId: existing?.speakerAgentId || "assistant-draft",
+      speakerAgentId: existing?.speakerAgentId,
       parts: [{ type: "text", text: assistantText }],
       providerMeta,
     } as ChatMessage;
@@ -106,7 +105,10 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
     const round = options.getRound();
     const messageId = round.phase === "streaming" || round.phase === "queued" ? round.messageId : "";
     const activationId = options.getActiveActivationId();
-    const currentStreamBlocks = normalizeAssistantStreamBlocks(options.streamBlocks?.value || []);
+    const activeMessage = messageId
+      ? options.allMessages.value.find((message) => String(message?.id || "").trim() === messageId)
+      : undefined;
+    const currentStreamBlocks = assistantContentBlocksFromMessage(activeMessage);
     if (round.phase === "streaming" && messageId && (
       String(options.latestAssistantText.value || "").trim() || currentStreamBlocks.length > 0
     )) {
@@ -145,7 +147,6 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
     options.chatting.value = false;
     options.reasoningStartedAtMs.value = 0;
     options.latestAssistantText.value = "";
-    if (options.streamBlocks) options.streamBlocks.value = [];
     options.toolStatusState.value = "";
     options.toolStatusText.value = "";
     options.clearConversationStreamCache(options.getConversationId ? options.getConversationId() : "");
@@ -167,7 +168,7 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
       ? options.allMessages.value.find((message) => String(message?.id || "") === activeMessageId)
       : undefined;
     const partialAssistantText = options.latestAssistantText.value || readMessagePlainText(activeMessage);
-    const partialStreamBlocks = normalizeAssistantStreamBlocks(options.streamBlocks?.value || []);
+    const partialStreamBlocks = assistantContentBlocksFromMessage(activeMessage);
 
     // 先立即结束本地忙碌态，再通知后端；后端有同一消息的正式结果才回写。
     const stoppedRound = await finishLocalStoppedRound();

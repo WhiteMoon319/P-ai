@@ -73,7 +73,6 @@ export function useChatWindowApp() {
   } = useAppTheme();
   
   const {
-    DRAFT_ASSISTANT_ID_PREFIX,
     BACKGROUND_CONVERSATION_CACHE_LIMIT,
     FOREGROUND_SNAPSHOT_RECENT_LIMIT,
     OLDER_HISTORY_PAGE_SIZE,
@@ -549,7 +548,6 @@ export function useChatWindowApp() {
   } = configActions;
 
   const runtimeOrchestrator = useChatWindowRuntimeOrchestrator({
-    DRAFT_ASSISTANT_ID_PREFIX,
     BACKGROUND_CONVERSATION_CACHE_LIMIT,
     FOREGROUND_SNAPSHOT_RECENT_LIMIT,
     OLDER_HISTORY_PAGE_SIZE,

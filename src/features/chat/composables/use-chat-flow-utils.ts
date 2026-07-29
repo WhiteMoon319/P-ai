@@ -1,6 +1,5 @@
 import type { ChatMessage } from "../../../types/app";
 
-const DRAFT_ASSISTANT_ID_PREFIX = "__draft_assistant__:";
 const DRAFT_USER_ID_PREFIX = "__draft_user__:";
 
 export function normalizeConversationId(conversationId?: string | null): string {
@@ -83,8 +82,7 @@ export function formalizeMessages(messages: ChatMessage[]): ChatMessage[] {
   return messages.filter((item) => {
     const messageId = String(item?.id || "").trim();
     return (
-      !messageId.startsWith(DRAFT_ASSISTANT_ID_PREFIX)
-      && !messageId.startsWith(DRAFT_USER_ID_PREFIX)
+      !messageId.startsWith(DRAFT_USER_ID_PREFIX)
     );
   });
 }

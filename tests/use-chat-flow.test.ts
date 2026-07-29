@@ -1974,7 +1974,17 @@ describe("useChatFlowStop", () => {
     const latestAssistantText = ref("ABC");
     const toolStatusText = ref("");
     const toolStatusState = ref<"running" | "done" | "failed" | "">("");
-    const streamBlocks = ref<AssistantStreamBlock[]>([{ reasoning: "R1", text: "ABC" }]);
+    // 停止只能读取正式消息本身；不得依赖已废弃的 streamBlocks 镜像状态。
+    const renderedStreamBlocks = [expectedStreamBlock({
+      reasoning: "R1",
+      text: "ABC",
+      tools: [{
+        toolCallId: "tool-1",
+        name: "operate",
+        argsText: "{\"action\":\"wait\"}",
+        status: "running",
+      }],
+    })];
     const reasoningStartedAtMs = ref(123);
     const allMessages = shallowRef<ChatMessage[]>([{
       id: "assistant-1",
@@ -1982,7 +1992,7 @@ describe("useChatFlowStop", () => {
       createdAt: "2026-01-01T00:00:00.000Z",
       speakerAgentId: "agent-1",
       parts: [{ type: "text", text: "" }],
-      contentBlocks: streamBlocks.value,
+      contentBlocks: renderedStreamBlocks,
       providerMeta: {
         _streaming: true,
       },
@@ -1999,7 +2009,6 @@ describe("useChatFlowStop", () => {
       latestAssistantText,
       toolStatusText,
       toolStatusState,
-      streamBlocks,
       allMessages,
       getSession: () => ({ apiConfigId: "api-1", agentId: "agent-1" }),
       getConversationId: () => "conversation-1",
@@ -2061,7 +2070,11 @@ describe("useChatFlowStop", () => {
     expect(chatting.value).toBe(false);
     expect(round.phase).toBe("idle");
     expect(allMessages.value).toHaveLength(1);
-    expect(allMessages.value[0].contentBlocks).toEqual([expectedStreamBlock({ reasoning: "R1", text: "ABC" })]);
+    expect(allMessages.value[0].contentBlocks).toMatchObject([{
+      reasoning: "R1",
+      text: "ABC",
+      tools: [{ toolCallId: "tool-1", name: "operate" }],
+    }]);
     expect(allMessages.value[0].providerMeta?._streaming).toBeUndefined();
   });
 

@@ -10,7 +10,6 @@ import {
 } from "./chat-message-state-machine";
 
 type ConversationMessageUtilsOptions = {
-  draftAssistantIdPrefix: string;
   ensureConversationMessageIds: (messages: any[]) => any[];
 };
 
@@ -26,10 +25,6 @@ const TRANSIENT_PROVIDER_META_KEYS = [
 ];
 
 export function useChatConversationMessageUtils(options: ConversationMessageUtilsOptions) {
-  function isAssistantDraftMessage(message?: any): boolean {
-    return String(message?.id || "").trim().startsWith(options.draftAssistantIdPrefix);
-  }
-
   function stripTransientProviderMeta(message: any): any {
     const rawProviderMeta = message?.providerMeta;
     if (!rawProviderMeta || typeof rawProviderMeta !== "object") return message;
@@ -46,7 +41,6 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
 
   function formalizeConversationMessages(messages: any[]): any[] {
     return options.ensureConversationMessageIds(messages)
-      .filter((item: any) => !isAssistantDraftMessage(item))
       .map((item: any) => stripTransientProviderMeta(messageWithoutStableRenderId(item)));
   }
 
@@ -72,7 +66,7 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
     return reuseStableMessageReferences(nextMessages, messages);
   }
 
-  function insertMessagesBeforeAssistantDraft(messages: any[], incoming: any[]): any[] {
+  function insertMessagesBeforeStreamingAssistantProjection(messages: any[], incoming: any[]): any[] {
     return mergeMessagesIntoTimeline(messages, incoming);
   }
 
@@ -153,8 +147,7 @@ export function useChatConversationMessageUtils(options: ConversationMessageUtil
     areMessagesEquivalent,
     formalizeConversationMessages,
     freezeConversationMessages,
-    insertMessagesBeforeAssistantDraft,
-    isAssistantDraftMessage,
+    insertMessagesBeforeStreamingAssistantProjection,
     mergeMessagesIntoTimeline,
     messageContentSignature,
     replaceConversationMessage,

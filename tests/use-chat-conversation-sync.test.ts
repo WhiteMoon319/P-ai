@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ref, shallowRef } from "vue";
 import type { ChatMessage } from "../src/types/app";
 import { useChatConversationSync } from "../src/features/chat/composables/use-chat-conversation-sync";
@@ -28,7 +28,6 @@ function buildConversationSync(overrides: {
   const allMessages = shallowRef<ChatMessage[]>(overrides.previousMessages ?? []);
 
   const sync = useChatConversationSync({
-    DRAFT_ASSISTANT_ID_PREFIX: "__draft_assistant__:",
     BACKGROUND_CONVERSATION_CACHE_LIMIT: 20,
     OLDER_HISTORY_PAGE_SIZE: 20,
     currentChatConversationId: ref(overrides.currentConversationId ?? ""),
@@ -69,49 +68,8 @@ function buildConversationSync(overrides: {
   };
 }
 
-describe("useChatConversationSync", () => {
-  beforeEach(() => {
-    hoisted.invokeTauriMock.mockReset();
-    hoisted.invokeTauriMock.mockResolvedValue({
-      runtimeState: "idle",
-      streamCache: null,
-    });
-  });
-
-  it("removes the persisted history message when preserving local streaming state", () => {
-    const preservedDraft: ChatMessage = {
-      ...textMessage("__draft_assistant__:7", "assistant", "partial reply"),
-      providerMeta: { _streaming: true },
-    };
-    const persistedAssistant = textMessage("assistant-1", "assistant", "partial reply");
-    const { allMessages, sync } = buildConversationSync({
-      currentConversationId: "conversation-1",
-      previousMessages: [preservedDraft],
-      readConversationStreamCache: () => ({
-        activationId: "request-1",
-        requestId: "request-1",
-        assistantText: "partial reply",
-        toolStatusText: "",
-        toolStatusState: "",
-        streamBlocks: [],
-        persistedAssistantMessageId: "assistant-1",
-      }),
-    });
-
-    sync.applyConversationSnapshot({
-      conversationId: "conversation-1",
-      preferredApiConfigId: "api-1",
-      runtimeState: "assistant_streaming",
-      messages: [persistedAssistant],
-    }, { preserveExistingHistory: true });
-
-    expect(allMessages.value.map((message) => message.id)).toEqual([]);
-  });
-});
-
 describe("useChatConversationMessageUtils", () => {
   const utils = useChatConversationMessageUtils({
-    draftAssistantIdPrefix: "__draft_assistant__:",
     ensureConversationMessageIds: (messages) => messages,
   });
 
