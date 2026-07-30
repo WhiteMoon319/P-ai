@@ -1,58 +1,54 @@
 <template>
-  <div class="grid gap-3">
-    <div class="card border border-base-300 bg-base-100">
-      <div class="card-body gap-4 p-4">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <h3 class="card-title text-base">{{ t("config.notification.title") }}</h3>
-            <p class="mt-1 text-xs text-base-content/60">{{ t("config.notification.summary") }}</p>
-          </div>
-          <button
-            class="btn btn-sm btn-primary shrink-0"
-            :disabled="!notificationDirty || props.savingConfig"
-            @click="handleSaveConfig"
-          >
-            {{ props.savingConfig ? t("common.saving") : t("common.save") }}
-          </button>
+  <ConfigTemplate :model-value="templateValues" :groups="templateGroups">
+    <template #group-actions-notification>
+      <button
+        class="btn btn-sm btn-primary shrink-0"
+        :disabled="!notificationDirty || props.savingConfig"
+        @click="handleSaveConfig"
+      >
+        {{ props.savingConfig ? t("common.saving") : t("common.save") }}
+      </button>
+    </template>
+    <template #row-enable-notification>
+      <label class="flex min-w-0 items-center justify-between gap-4">
+        <div class="min-w-0">
+          <div class="text-sm">{{ t("config.notification.enableLabel") }}</div>
+          <div class="mt-1 text-xs text-base-content/60">{{ t("config.notification.enableHint") }}</div>
         </div>
-
-        <label class="flex items-center justify-between gap-4 rounded-box border border-base-300 bg-base-200/40 p-4">
-          <div class="min-w-0">
-            <div class="text-sm font-medium">{{ t("config.notification.enableLabel") }}</div>
-            <div class="mt-1 text-xs text-base-content/60">{{ t("config.notification.enableHint") }}</div>
-          </div>
-          <input
-            :checked="props.config.messageNotificationEnabled"
-            class="toggle toggle-primary"
-            type="checkbox"
-            @change="props.config.messageNotificationEnabled = ($event.target as HTMLInputElement).checked"
-          />
-        </label>
-
-        <label
-          class="flex items-center justify-between gap-4 rounded-box border border-base-300 bg-base-200/40 p-4"
-          :class="{ 'opacity-50': !props.config.messageNotificationEnabled }"
-        >
-          <div class="min-w-0">
-            <div class="text-sm font-medium">{{ t("config.notification.soundLabel") }}</div>
-            <div class="mt-1 text-xs text-base-content/60">{{ t("config.notification.soundHint") }}</div>
-          </div>
-          <input
-            :checked="props.config.messageNotificationSoundEnabled"
-            :disabled="!props.config.messageNotificationEnabled"
-            class="toggle toggle-primary"
-            type="checkbox"
-            @change="props.config.messageNotificationSoundEnabled = ($event.target as HTMLInputElement).checked"
-          />
-        </label>
-      </div>
-    </div>
-  </div>
+        <input
+          :checked="props.config.messageNotificationEnabled"
+          class="toggle toggle-sm toggle-primary shrink-0"
+          type="checkbox"
+          @change="props.config.messageNotificationEnabled = ($event.target as HTMLInputElement).checked"
+        />
+      </label>
+    </template>
+    <template #row-sound-notification>
+      <label
+        class="flex min-w-0 items-center justify-between gap-4"
+        :class="{ 'opacity-50': !props.config.messageNotificationEnabled }"
+      >
+        <div class="min-w-0">
+          <div class="text-sm">{{ t("config.notification.soundLabel") }}</div>
+          <div class="mt-1 text-xs text-base-content/60">{{ t("config.notification.soundHint") }}</div>
+        </div>
+        <input
+          :checked="props.config.messageNotificationSoundEnabled"
+          :disabled="!props.config.messageNotificationEnabled"
+          class="toggle toggle-sm toggle-primary shrink-0"
+          type="checkbox"
+          @change="props.config.messageNotificationSoundEnabled = ($event.target as HTMLInputElement).checked"
+        />
+      </label>
+    </template>
+  </ConfigTemplate>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import ConfigTemplate from "../../components/ConfigTemplate.vue";
+import type { ConfigTemplateGroup } from "../../components/config-template";
 import type { AppConfig } from "../../../../types/app";
 
 const props = defineProps<{
@@ -63,6 +59,17 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
+const templateValues = {};
+const templateGroups = computed<ConfigTemplateGroup[]>(() => [
+  {
+    key: "notification",
+    title: t("config.notification.title"),
+    rows: [
+      { key: "enable-notification", items: [] },
+      { key: "sound-notification", items: [] },
+    ],
+  },
+]);
 
 const savedNotificationSnapshot = computed(() => {
   try {

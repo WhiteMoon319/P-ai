@@ -2,8 +2,7 @@
   <div class="space-y-5">
     <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
       <div>
-        <div class="text-xl font-semibold">{{ t("config.usage.pageTitle") }}</div>
-        <div class="mt-1 text-sm opacity-70">{{ t("config.usage.pageHint") }}</div>
+        <div class="text-sm font-semibold">{{ t("config.usage.pageTitle") }}</div>
       </div>
       <button class="btn btn-primary btn-sm shrink-0" :disabled="loading" @click="refreshOverview">
         <span v-if="loading" class="loading loading-spinner loading-xs"></span>
@@ -28,10 +27,10 @@
       </section>
 
       <div class="grid gap-4 xl:grid-cols-2">
-        <section class="card border border-base-300 bg-base-100 shadow-sm">
+        <section>
+          <h3 class="mb-3 text-sm font-semibold">{{ t("config.usage.modelTitle") }}</h3>
+          <div class="card border border-base-300 bg-base-100 shadow-sm">
           <div class="card-body p-4">
-            <div class="card-title text-base">{{ t("config.usage.modelTitle") }}</div>
-            <div class="mt-1 text-xs opacity-60">{{ t("config.usage.modelHint") }}</div>
             <div class="mt-2 overflow-x-auto">
               <table class="table table-sm">
                 <thead>
@@ -63,11 +62,13 @@
               </table>
             </div>
           </div>
+          </div>
         </section>
 
-        <section class="card border border-base-300 bg-base-100 shadow-sm">
+        <section>
+          <h3 class="mb-1 text-sm font-semibold">{{ t("config.usage.agentTitle") }}</h3>
+          <div class="card border border-base-300 bg-base-100 shadow-sm">
           <div class="card-body p-4">
-            <div class="card-title text-base">{{ t("config.usage.agentTitle") }}</div>
             <div class="mt-2 overflow-x-auto">
               <table class="table table-sm">
                 <thead>
@@ -97,11 +98,13 @@
               </table>
             </div>
           </div>
+          </div>
         </section>
 
-        <section class="card border border-base-300 bg-base-100 shadow-sm">
+        <section>
+          <h3 class="mb-1 text-sm font-semibold">{{ t("config.usage.kindTitle") }}</h3>
+          <div class="card border border-base-300 bg-base-100 shadow-sm">
           <div class="card-body p-4">
-            <div class="card-title text-base">{{ t("config.usage.kindTitle") }}</div>
             <div class="mt-2 overflow-x-auto">
               <table class="table table-sm">
                 <thead>
@@ -131,15 +134,16 @@
               </table>
             </div>
           </div>
+          </div>
         </section>
       </div>
 
-      <section class="card border border-base-300 bg-base-100 shadow-sm">
+      <section>
+        <h3 class="mb-3 text-sm font-semibold">{{ t("config.usage.conversationTitle") }}</h3>
+        <div class="card border border-base-300 bg-base-100 shadow-sm">
         <div class="card-body p-4">
           <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <div class="card-title text-base">{{ t("config.usage.conversationTitle") }}</div>
-              <div class="text-xs opacity-60">{{ t("config.usage.conversationHint") }}</div>
             </div>
             <div class="flex flex-col gap-2 md:items-end">
               <div class="join">
@@ -233,6 +237,7 @@
               </button>
             </div>
           </div>
+        </div>
         </div>
       </section>
     </template>

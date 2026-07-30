@@ -145,6 +145,9 @@
       "reasoningHigh": "High",
       "reasoningXHigh": "Extra High",
       "reasoningMax": "Max",
+      "reasoningCapabilityUnknown": "Capability unconfirmed",
+      "reasoningCapabilityUnsupported": "Not declared as supported",
+      "reasoningEffortUnsupported": "The provider has not declared support for this level",
       "viewModelDocumentation": "View docs",
       "codexLogin": "Codex Login",
       "codexLoginHint": "Local read only checks the credential file itself. If the token expires at runtime, the backend refreshes it as needed.",
@@ -607,11 +610,13 @@
     "persona": {
       "title": "Persona",
       "hint": "Define the AI persona and tell it what its self-understanding should be.",
+      "settings": "Persona Settings",
       "userTag": "User",
       "systemTag": "Preset",
       "add": "Add Persona",
       "remove": "Remove Persona",
       "name": "Persona Name",
+      "avatar": "Avatar",
       "avatarSaving": "Saving avatar",
       "editAvatar": "Edit Avatar",
       "prompt": "Persona Prompt",
@@ -696,6 +701,7 @@
     },
     "department": {
       "title": "Department",
+      "settings": "Department Settings",
       "hint": "Define how PAI should get things done here.",
       "add": "Add",
       "remove": "Remove Department",
@@ -806,7 +812,7 @@
       "saveInstructionPresets": "Save Instruction Presets",
       "quickActionsTitle": "Quick Actions",
       "openConversationList": "Conversation List",
-      "previewRequest": "Request",
+      "previewRequest": "Request Body Preview",
       "previewSystemPrompt": "System Prompt"
     },
     "networkAccess": {
@@ -1322,11 +1328,12 @@
     "logs": {
       "title": "Call Logs (Memory)",
       "backendLogs": "Backend Logs",
+      "refreshPipelineLogs": "Refresh Pipeline Logs",
+      "clearPipelineLogs": "Clear Pipeline Logs",
       "cacheSize": "Cache Size",
       "times": "{count} times",
       "capacityHint": "Keep only the latest {count} pipeline logs. Multiple chat rounds in one dispatch are grouped into their pipeline, and logs are cleared when the process exits.",
       "noLogs": "No logs",
-      "pipelineLogs": "Pipeline Logs",
       "currentPipeline": "Current Dispatch",
       "totalElapsed": "Total Elapsed",
       "modelRounds": "Model Rounds",
@@ -2186,6 +2193,9 @@
     "roleTool": "Tool"
   },
   "appearance": {
+    "text": "Text",
+    "textLanguage": "Text Language",
+    "textWeight": "Text Weight",
     "theme": "Theme",
     "markdownFontScale": "Global Font Weight",
     "markdownFontScaleHint": "Adjust font weight across the interface and Markdown.",

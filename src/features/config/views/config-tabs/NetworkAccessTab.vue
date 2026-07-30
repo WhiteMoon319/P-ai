@@ -1,156 +1,156 @@
 <template>
-  <div class="grid gap-3">
-    <div class="card border border-base-300 bg-base-100">
-      <div class="card-body gap-4 p-4">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <h3 class="card-title text-base">{{ t("config.networkAccess.title") }}</h3>
-            <p class="mt-1 text-xs text-base-content/60">{{ t("config.networkAccess.summary") }}</p>
-          </div>
-          <button class="btn btn-sm btn-ghost shrink-0" :disabled="loading" :title="t('common.refresh')" @click="refreshInfo">
-            <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': loading }" />
-          </button>
-        </div>
+  <ConfigTemplate :model-value="templateValues" :groups="templateGroups">
+    <template #group-actions-network-access>
+      <button class="btn btn-sm btn-ghost shrink-0" :disabled="loading" :title="t('common.refresh')" @click="refreshInfo">
+        <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': loading }" />
+      </button>
+    </template>
 
-        <label class="flex cursor-pointer items-center justify-between gap-3 rounded-box border border-base-300 bg-base-200/40 p-3">
-          <div class="min-w-0">
-            <div class="text-sm font-medium">{{ t("config.networkAccess.enabled") }}</div>
-            <div class="mt-1 text-xs text-base-content/60">{{ t("config.networkAccess.enabledHint") }}</div>
-          </div>
+    <template #row-network-enabled>
+      <label class="flex min-w-0 cursor-pointer items-center justify-between gap-4">
+        <div class="min-w-0">
+          <div class="text-sm">{{ t("config.networkAccess.enabled") }}</div>
+          <div class="mt-1 text-xs text-base-content/60">{{ t("config.networkAccess.enabledHint") }}</div>
+        </div>
+        <input
+          type="checkbox"
+          class="toggle toggle-sm toggle-primary shrink-0"
+          :checked="networkAccessEnabled"
+          @change="updateEnabled"
+        />
+      </label>
+    </template>
+
+    <template #row-network-port>
+      <div class="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <label class="grid min-w-0 gap-1">
+          <span class="text-sm">{{ t("config.networkAccess.port") }}</span>
           <input
-            type="checkbox"
-            class="toggle toggle-primary shrink-0"
-            :checked="networkAccessEnabled"
-            @change="updateEnabled"
+            class="input input-bordered input-sm w-full max-w-48 font-mono"
+            type="number"
+            min="1024"
+            max="65535"
+            :disabled="props.savingConfig"
+            :value="portInput"
+            @input="updatePort"
           />
         </label>
+        <button
+          class="btn btn-sm btn-primary shrink-0"
+          :disabled="!settingsDirty || props.savingConfig"
+          @click="saveSettings"
+        >
+          <Save class="h-4 w-4" />
+          {{ props.savingConfig ? t("common.saving") : t("common.save") }}
+        </button>
+      </div>
+    </template>
 
-        <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-          <label class="grid min-w-0 gap-1">
-            <span class="text-sm font-medium">{{ t("config.networkAccess.port") }}</span>
-            <input
-              class="input input-bordered input-sm w-full max-w-48 font-mono"
-              type="number"
-              min="1024"
-              max="65535"
-              :disabled="props.savingConfig"
-              :value="portInput"
-              @input="updatePort"
-            />
-          </label>
-          <button
-            class="btn btn-sm btn-primary"
-            :disabled="!settingsDirty || props.savingConfig"
-            @click="saveSettings"
-          >
+    <template #row-network-local-link>
+      <div class="flex min-w-0 items-center justify-between gap-4">
+        <div class="min-w-0">
+          <div class="text-sm">{{ t("config.networkAccess.localLink") }}</div>
+          <div class="mt-1 break-all font-mono text-xs text-base-content/70">{{ localUrlText }}</div>
+        </div>
+        <button class="btn btn-sm btn-primary shrink-0" :disabled="!webInfo?.localUrl || !webInfo?.enabled" @click="openLocalUrl">
+          <ExternalLink class="h-4 w-4" />
+          {{ t("config.networkAccess.open") }}
+        </button>
+      </div>
+    </template>
+
+    <template #row-network-password>
+      <div class="flex min-w-0 flex-wrap items-end justify-between gap-3">
+        <label class="grid min-w-0 gap-2">
+          <span class="text-sm">{{ t("config.networkAccess.remotePassword") }}</span>
+          <input
+            class="input input-bordered input-sm w-full max-w-64 font-mono"
+            :disabled="!networkAccessEnabled"
+            :value="passwordInput"
+            :placeholder="webInfo?.remotePassword || ''"
+            @input="updatePassword"
+          />
+        </label>
+        <div class="flex shrink-0 items-center gap-1">
+          <button class="btn btn-sm btn-ghost" :disabled="!networkAccessEnabled" :title="t('config.networkAccess.regeneratePassword')" @click="regeneratePassword">
+            <KeyRound class="h-4 w-4" />
+          </button>
+          <button class="btn btn-sm btn-ghost" :disabled="!passwordInput || !webInfo?.enabled" @click="copyText(passwordInput)">
+            <Copy class="h-4 w-4" />
+          </button>
+          <button class="btn btn-sm btn-primary" :disabled="!settingsDirty || props.savingConfig" :title="t('common.save')" @click="saveSettings">
             <Save class="h-4 w-4" />
-            {{ props.savingConfig ? t("common.saving") : t("common.save") }}
           </button>
         </div>
+      </div>
+    </template>
 
-        <div class="grid gap-3">
-          <div class="rounded-box border border-base-300 bg-base-200/40 p-3">
-            <div class="flex items-center justify-between gap-3">
-              <div class="min-w-0">
-                <div class="text-sm font-medium">{{ t("config.networkAccess.localLink") }}</div>
-                <div class="mt-1 break-all font-mono text-xs text-base-content/70">{{ localUrlText }}</div>
-              </div>
-              <button class="btn btn-sm btn-primary shrink-0" :disabled="!webInfo?.localUrl || !webInfo?.enabled" @click="openLocalUrl">
-                <ExternalLink class="h-4 w-4" />
-                {{ t("config.networkAccess.open") }}
-              </button>
-            </div>
-          </div>
-
-          <div class="rounded-box border border-base-300 bg-base-200/40 p-3">
-            <div class="flex items-end justify-between gap-3">
-              <div class="min-w-0">
-                <div class="text-sm font-medium">{{ t("config.networkAccess.remotePassword") }}</div>
-                <input
-                  class="input input-bordered input-sm mt-2 w-full max-w-64 font-mono"
-                  :disabled="!networkAccessEnabled"
-                  :value="passwordInput"
-                  :placeholder="webInfo?.remotePassword || ''"
-                  @input="updatePassword"
-                />
-              </div>
-              <div class="flex shrink-0 items-center gap-1">
-                <button class="btn btn-sm btn-ghost" :disabled="!networkAccessEnabled" :title="t('config.networkAccess.regeneratePassword')" @click="regeneratePassword">
-                  <KeyRound class="h-4 w-4" />
-                </button>
-                <button class="btn btn-sm btn-ghost" :disabled="!passwordInput || !webInfo?.enabled" @click="copyText(passwordInput)">
-                  <Copy class="h-4 w-4" />
-                </button>
-                <button class="btn btn-sm btn-primary" :disabled="!settingsDirty || props.savingConfig" :title="t('common.save')" @click="saveSettings">
-                  <Save class="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div class="rounded-box border border-base-300 bg-base-200/40 p-3">
-            <div class="flex items-center justify-between gap-3">
-              <div class="text-sm font-medium">{{ t("config.networkAccess.remoteLinks") }}</div>
-              <button class="btn btn-sm btn-ghost shrink-0" :disabled="remoteUrls.length === 0 || !webInfo?.enabled" @click="copyText(remoteUrls.join('\n'))">
-                <Copy class="h-4 w-4" />
-              </button>
-            </div>
-            <div v-if="remoteUrls.length > 0" class="mt-2 grid gap-1">
-              <div v-for="url in remoteUrls" :key="url" class="break-all font-mono text-xs text-base-content/70">
-                {{ url }}
-              </div>
-            </div>
-            <div v-else class="mt-2 text-xs text-base-content/60">
-              {{ webInfo?.enabled === false ? t("config.networkAccess.disabled") : t("config.networkAccess.noRemoteLink") }}
-            </div>
-          </div>
-
-          <div class="rounded-box border border-base-300 bg-base-200/40 p-3">
-            <div class="flex items-center justify-between gap-3">
-              <div>
-                <div class="text-sm font-medium">{{ t("config.networkAccess.activeConnections") }}</div>
-                <div class="mt-1 text-xs text-base-content/60">
-                  {{ t("config.networkAccess.activeConnectionsCount", { count: activeConnections.length }) }}
-                </div>
-              </div>
-            </div>
-            <div v-if="activeConnections.length > 0" class="mt-3 grid gap-2">
-              <div v-for="item in activeConnections" :key="item.id" class="rounded-box border border-base-300 bg-base-100/70 p-3 text-xs">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="badge badge-outline">{{ connectionKindLabel(item.path) }}</span>
-                  <span class="badge badge-ghost">{{ item.local ? t("config.networkAccess.connectionLocal") : t("config.networkAccess.connectionRemote") }}</span>
-                  <span class="badge" :class="item.authenticated ? 'badge-success badge-outline' : 'badge-warning badge-outline'">
-                    {{ item.authenticated ? t("config.networkAccess.connectionAuthenticated") : t("config.networkAccess.connectionPending") }}
-                  </span>
-                </div>
-                <div class="mt-2 font-mono break-all text-base-content/70">{{ item.peerAddr }}</div>
-                <div class="mt-1 text-base-content/60">{{ item.connectedAt }}</div>
-              </div>
-            </div>
-            <div v-else class="mt-2 text-xs text-base-content/60">
-              {{ t("config.networkAccess.noActiveConnections") }}
-            </div>
+    <template #row-network-links>
+      <div class="grid min-w-0 gap-2">
+        <div class="flex items-center justify-between gap-4">
+          <div class="text-sm">{{ t("config.networkAccess.remoteLinks") }}</div>
+          <button class="btn btn-sm btn-ghost shrink-0" :disabled="remoteUrls.length === 0 || !webInfo?.enabled" @click="copyText(remoteUrls.join('\n'))">
+            <Copy class="h-4 w-4" />
+          </button>
+        </div>
+        <div v-if="remoteUrls.length > 0" class="grid gap-1">
+          <div v-for="url in remoteUrls" :key="url" class="break-all font-mono text-xs text-base-content/70">
+            {{ url }}
           </div>
         </div>
-
-        <div v-if="statusText" class="text-xs" :class="statusError ? 'text-error' : 'text-success'">
-          {{ statusText }}
-        </div>
-        <div class="rounded-box border border-base-300 bg-base-200/40 p-3 text-xs">
-          <div class="font-medium">{{ t("config.networkAccess.linkStatus") }}</div>
-          <div class="mt-2 text-base-content/70">{{ linkStatusText }}</div>
-          <div v-if="webInfo?.listenAddr" class="mt-1 font-mono text-base-content/60">{{ webInfo.listenAddr }}</div>
-          <div v-if="webInfo?.lastError" class="mt-2 break-all text-error">{{ webInfo.lastError }}</div>
+        <div v-else class="text-xs text-base-content/60">
+          {{ webInfo?.enabled === false ? t("config.networkAccess.disabled") : t("config.networkAccess.noRemoteLink") }}
         </div>
       </div>
-    </div>
-  </div>
+    </template>
+
+    <template #row-network-connections>
+      <div class="grid min-w-0 gap-3">
+        <div>
+          <div class="text-sm">{{ t("config.networkAccess.activeConnections") }}</div>
+          <div class="mt-1 text-xs text-base-content/60">
+            {{ t("config.networkAccess.activeConnectionsCount", { count: activeConnections.length }) }}
+          </div>
+        </div>
+        <div v-if="activeConnections.length > 0" class="grid gap-2">
+          <div v-for="item in activeConnections" :key="item.id" class="rounded-box border border-base-300 bg-base-100/70 p-3 text-xs">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="badge badge-outline">{{ connectionKindLabel(item.path) }}</span>
+              <span class="badge badge-ghost">{{ item.local ? t("config.networkAccess.connectionLocal") : t("config.networkAccess.connectionRemote") }}</span>
+              <span class="badge" :class="item.authenticated ? 'badge-success badge-outline' : 'badge-warning badge-outline'">
+                {{ item.authenticated ? t("config.networkAccess.connectionAuthenticated") : t("config.networkAccess.connectionPending") }}
+              </span>
+            </div>
+            <div class="mt-2 break-all font-mono text-base-content/70">{{ item.peerAddr }}</div>
+            <div class="mt-1 text-base-content/60">{{ item.connectedAt }}</div>
+          </div>
+        </div>
+        <div v-else class="text-xs text-base-content/60">
+          {{ t("config.networkAccess.noActiveConnections") }}
+        </div>
+      </div>
+    </template>
+
+    <template #row-network-status>
+      <div class="grid min-w-0 gap-2 text-xs">
+        <div v-if="statusText" :class="statusError ? 'text-error' : 'text-success'">
+          {{ statusText }}
+        </div>
+        <div class="font-medium">{{ t("config.networkAccess.linkStatus") }}</div>
+        <div class="text-base-content/70">{{ linkStatusText }}</div>
+        <div v-if="webInfo?.listenAddr" class="break-all font-mono text-base-content/60">{{ webInfo.listenAddr }}</div>
+        <div v-if="webInfo?.lastError" class="break-all text-error">{{ webInfo.lastError }}</div>
+      </div>
+    </template>
+  </ConfigTemplate>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { Copy, ExternalLink, KeyRound, RefreshCw, Save } from "@lucide/vue";
+import ConfigTemplate from "../../components/ConfigTemplate.vue";
+import type { ConfigTemplateGroup } from "../../components/config-template";
 import { invokeTauri, openTransportExternalUrl } from "../../../../services/tauri-api";
 import type { AppConfig } from "../../../../types/app";
 
@@ -184,6 +184,22 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
+const templateValues = {};
+const templateGroups = computed<ConfigTemplateGroup[]>(() => [
+  {
+    key: "network-access",
+    title: t("config.networkAccess.title"),
+    rows: [
+      { key: "network-enabled", items: [] },
+      { key: "network-port", items: [] },
+      { key: "network-local-link", items: [] },
+      { key: "network-password", items: [] },
+      { key: "network-links", items: [] },
+      { key: "network-connections", items: [] },
+      { key: "network-status", items: [] },
+    ],
+  },
+]);
 const webInfo = ref<WebAccessInfo | null>(null);
 const loading = ref(false);
 const statusText = ref("");

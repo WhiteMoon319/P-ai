@@ -1,86 +1,93 @@
 <template>
-  <div class="grid gap-3">
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-4 gap-4">
+  <ConfigTemplate :model-value="templateValues" :groups="templateGroups">
+    <template #row-vision-api>
+      <label class="grid min-w-0 gap-2">
         <div>
-          <h3 class="card-title text-base">{{ t("config.chatSettings.defaultModelsTitle") }}</h3>
-          <div class="mt-1 text-xs opacity-70">{{ t("config.chatSettings.defaultModelsHint") }}</div>
+          <div class="text-sm">{{ t("config.chatSettings.visionApi") }}</div>
+          <div class="mt-1 text-xs text-base-content/60">{{ t("config.chatSettings.visionApiHint") }}</div>
         </div>
-        <div class="grid gap-5">
-          <div>
-            <h4 class="text-sm font-semibold">{{ t("config.chatSettings.visionApi") }}</h4>
-            <select :value="config.visionApiConfigId ?? ''" class="select select-bordered select-sm mt-3 w-full" @change="onVisionSelectChange">
-              <option value="">{{ t("config.chatSettings.noVision") }}</option>
-              <option v-for="a in imageCapableApiConfigs" :key="a.id" :value="a.id">{{ a.name }}</option>
-            </select>
-            <div class="mt-3 text-xs opacity-70">{{ t("config.chatSettings.visionApiHint") }}</div>
-          </div>
+        <select :value="config.visionApiConfigId ?? ''" class="select select-bordered select-sm w-full" @change="onVisionSelectChange">
+          <option value="">{{ t("config.chatSettings.noVision") }}</option>
+          <option v-for="a in imageCapableApiConfigs" :key="a.id" :value="a.id">{{ a.name }}</option>
+        </select>
+      </label>
+    </template>
 
-          <div>
-            <h4 class="text-sm font-semibold">{{ t("config.chatSettings.toolReviewApi") }}</h4>
-            <ApiConfigTreeSelect
-              class="mt-3"
-              :model-value="config.toolReviewApiConfigId ?? ''"
-              :api-configs="textCapableApiConfigs"
-              @update:model-value="onToolReviewSelect"
-            />
-            <div class="mt-3 text-xs opacity-70">{{ t("config.chatSettings.toolReviewApiHint") }}</div>
-          </div>
-
-          <div>
-            <h4 class="text-sm font-semibold">{{ t("config.chatSettings.expertChatModelTitle") }}</h4>
-            <ApiConfigTreeSelect
-              class="mt-3"
-              :model-value="config.assistantDepartmentApiConfigId || ''"
-              :api-configs="textCapableApiConfigs"
-              @update:model-value="onExpertSelect"
-            />
-            <div class="mt-3 text-xs opacity-70">{{ t("config.chatSettings.expertChatModelHint") }}</div>
-          </div>
-
-          <div>
-            <h4 class="text-sm font-semibold">{{ t("config.imageGeneration.defaultModel") }}</h4>
-            <select
-              :value="config.imageGenerationModelId || ''"
-              class="select select-bordered select-sm mt-3 w-full"
-              @change="onImageGenerationSelectChange"
-            >
-              <option value="">{{ t("config.imageGeneration.noDefaultModel") }}</option>
-              <option v-for="option in imageGenerationModelOptions" :key="option.id" :value="option.id">
-                {{ option.label }}
-              </option>
-            </select>
-            <div class="mt-3 text-xs opacity-70">{{ t("config.imageGeneration.defaultModelHint") }}</div>
-          </div>
-
-          <div>
-            <h4 class="text-sm font-semibold">{{ t("config.chatSettings.sttTitle") }}</h4>
-            <div class="mt-3 flex items-center gap-2">
-              <select :value="config.sttApiConfigId ?? ''" class="select select-bordered select-sm flex-1" @change="onSttSelectChange">
-                <option value="">{{ t("config.chatSettings.sttLocalWebSpeech") }}</option>
-                <option v-for="a in sttCapableApiConfigs" :key="a.id" :value="a.id">{{ a.name }}</option>
-              </select>
-              <label class="inline-flex cursor-pointer items-center gap-1 py-0">
-                <span class="text-sm">{{ t("config.chatSettings.sttAutoSend") }}</span>
-                <input
-                  :checked="!!config.sttAutoSend"
-                  type="checkbox"
-                  class="toggle toggle-sm"
-                  :disabled="!config.sttApiConfigId"
-                  @change="onSttAutoSendChange"
-                />
-              </label>
-            </div>
-            <div class="mt-3 text-xs opacity-70">{{ t("config.chatSettings.sttHint") }}</div>
-          </div>
+    <template #row-tool-review-api>
+      <label class="grid min-w-0 gap-2">
+        <div>
+          <div class="text-sm">{{ t("config.chatSettings.toolReviewApi") }}</div>
+          <div class="mt-1 text-xs text-base-content/60">{{ t("config.chatSettings.toolReviewApiHint") }}</div>
         </div>
+        <ApiConfigTreeSelect
+          :model-value="config.toolReviewApiConfigId ?? ''"
+          :api-configs="textCapableApiConfigs"
+          @update:model-value="onToolReviewSelect"
+        />
+      </label>
+    </template>
+
+    <template #row-expert-chat-model>
+      <label class="grid min-w-0 gap-2">
+        <div>
+          <div class="text-sm">{{ t("config.chatSettings.expertChatModelTitle") }}</div>
+          <div class="mt-1 text-xs text-base-content/60">{{ t("config.chatSettings.expertChatModelHint") }}</div>
+        </div>
+        <ApiConfigTreeSelect
+          :model-value="config.assistantDepartmentApiConfigId || ''"
+          :api-configs="textCapableApiConfigs"
+          @update:model-value="onExpertSelect"
+        />
+      </label>
+    </template>
+
+    <template #row-image-generation-model>
+      <label class="grid min-w-0 gap-2">
+        <div>
+          <div class="text-sm">{{ t("config.imageGeneration.defaultModel") }}</div>
+          <div class="mt-1 text-xs text-base-content/60">{{ t("config.imageGeneration.defaultModelHint") }}</div>
+        </div>
+        <select :value="config.imageGenerationModelId || ''" class="select select-bordered select-sm w-full" @change="onImageGenerationSelectChange">
+          <option value="">{{ t("config.imageGeneration.noDefaultModel") }}</option>
+          <option v-for="option in imageGenerationModelOptions" :key="option.id" :value="option.id">
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
+    </template>
+
+    <template #row-stt-api>
+      <label class="grid min-w-0 gap-2">
+        <div>
+          <div class="text-sm">{{ t("config.chatSettings.sttTitle") }}</div>
+          <div class="mt-1 text-xs text-base-content/60">{{ t("config.chatSettings.sttHint") }}</div>
+        </div>
+        <select :value="config.sttApiConfigId ?? ''" class="select select-bordered select-sm w-full" @change="onSttSelectChange">
+          <option value="">{{ t("config.chatSettings.sttLocalWebSpeech") }}</option>
+          <option v-for="a in sttCapableApiConfigs" :key="a.id" :value="a.id">{{ a.name }}</option>
+        </select>
+      </label>
+    </template>
+
+    <template #row-stt-auto-send>
+      <div class="flex min-w-0 items-center justify-between gap-4" :class="{ 'opacity-50': !config.sttApiConfigId }">
+        <div class="min-w-0">
+          <div class="text-sm">{{ t("config.chatSettings.sttAutoSend") }}</div>
+          <p class="mt-1 text-xs text-base-content/60">{{ t("config.chatSettings.sttHint") }}</p>
+        </div>
+        <input
+          :checked="!!config.sttAutoSend"
+          type="checkbox"
+          class="toggle toggle-sm toggle-primary shrink-0"
+          :disabled="!config.sttApiConfigId"
+          @change="onSttAutoSendChange"
+        />
       </div>
-    </div>
+    </template>
 
-    <!-- 响应风格 -->
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-4">
-        <h3 class="card-title text-base mb-3">{{ t("config.chatSettings.responseStyle") }}</h3>
+    <template #row-response-style>
+      <div class="grid min-w-0 gap-2">
+        <div class="text-sm">{{ t("config.chatSettings.responseStyle") }}</div>
         <SegmentedControl
           :model-value="responseStyleId"
           :options="responseStyleSegmentOptions"
@@ -88,41 +95,40 @@
           @change="onResponseStyleChange"
         />
       </div>
-    </div>
+    </template>
 
-    <!-- PDF读取模式 -->
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-4">
-        <h3 class="card-title text-base mb-3">{{ t("config.chatSettings.pdfReadMode") }}</h3>
+    <template #row-pdf-read-mode>
+      <div class="grid min-w-0 gap-2">
+        <div>
+          <div class="text-sm">{{ t("config.chatSettings.pdfReadMode") }}</div>
+          <div class="mt-1 text-xs text-base-content/60">{{ t("config.chatSettings.pdfReadModeHint") }}</div>
+        </div>
         <SegmentedControl
           :model-value="pdfReadMode"
           :options="pdfReadModeOptions"
           size="sm"
           @change="onPdfReadModeChange"
         />
-        <div class="mt-3 text-xs opacity-70">{{ t("config.chatSettings.pdfReadModeHint") }}</div>
       </div>
-    </div>
+    </template>
 
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-4 gap-3">
-        <div class="flex items-center justify-between gap-2">
-          <div>
-            <h3 class="card-title text-base">{{ t("config.chatSettings.instructionPresetsTitle") }}</h3>
-            <div class="text-xs opacity-70 mt-1">{{ t("config.chatSettings.instructionPresetsHint") }}</div>
-          </div>
-          <button class="btn btn-sm btn-ghost shrink-0" @click="addInstructionPreset">
-            <Plus class="h-4 w-4" />
-            <span>{{ t("config.chatSettings.addInstructionPreset") }}</span>
-          </button>
+    <template #group-actions-instruction-presets>
+      <button class="btn btn-sm btn-ghost shrink-0" @click="addInstructionPreset">
+        <Plus class="h-4 w-4" />
+        <span>{{ t("config.chatSettings.addInstructionPreset") }}</span>
+      </button>
+    </template>
+    <template #row-instruction-presets>
+      <div class="grid min-w-0 gap-3">
+        <div v-if="instructionPresetsDraft.length === 0" class="text-sm opacity-60">
+          {{ t("config.chatSettings.noInstructionPresets") }}
         </div>
-        <div v-if="instructionPresetsDraft.length === 0" class="text-sm opacity-60">{{ t("config.chatSettings.noInstructionPresets") }}</div>
-        <div v-else class="overflow-hidden rounded-box border border-base-300 bg-base-200/20">
-          <div v-for="item in instructionPresetsDraft" :key="item.id" class="flex items-center gap-2 border-b border-base-300 px-3 py-2 last:border-b-0">
+        <div v-else class="grid gap-2">
+          <div v-for="item in instructionPresetsDraft" :key="item.id" class="flex items-center gap-2">
             <input
               v-model="item.prompt"
               type="text"
-              class="input input-ghost input-sm flex-1"
+              class="input input-ghost input-sm min-w-0 flex-1"
               :placeholder="t('config.chatSettings.instructionPresetPlaceholder')"
             />
             <button class="btn btn-sm btn-ghost btn-square shrink-0" @click="removeInstructionPreset(item.id)">
@@ -131,24 +137,27 @@
           </div>
         </div>
         <div class="flex justify-end">
-          <button class="btn btn-sm btn-primary" :disabled="!instructionPresetsDirty" @click="saveInstructionPresets">{{ t("config.chatSettings.saveInstructionPresets") }}</button>
+          <button class="btn btn-sm btn-primary" :disabled="!instructionPresetsDirty" @click="saveInstructionPresets">
+            {{ t("config.chatSettings.saveInstructionPresets") }}
+          </button>
         </div>
       </div>
-    </div>
+    </template>
 
-    <!-- 快捷操作 -->
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-4">
-        <h3 class="card-title text-base mb-3">{{ t("config.chatSettings.quickActionsTitle") }}</h3>
-        <div class="grid grid-cols-3 gap-2">
-          <button class="btn btn-sm bg-base-200 border-base-300 hover:bg-base-300 whitespace-nowrap" @click="$emit('openConversationList')">{{ t("config.chatSettings.openConversationList") }}</button>
-          <button class="btn btn-sm bg-base-200 border-base-300 hover:bg-base-300 whitespace-nowrap" @click="$emit('openPromptPreview')">{{ t("config.chatSettings.previewRequest") }}</button>
-          <button class="btn btn-sm bg-base-200 border-base-300 hover:bg-base-300 whitespace-nowrap" @click="$emit('openSystemPromptPreview')">{{ t("config.chatSettings.previewSystemPrompt") }}</button>
-        </div>
+    <template #row-quick-actions>
+      <div class="grid grid-cols-3 gap-2">
+        <button class="btn btn-sm w-full bg-base-200" @click="$emit('openConversationList')">
+          {{ t("config.chatSettings.openConversationList") }}
+        </button>
+        <button class="btn btn-sm w-full bg-base-200" @click="$emit('openPromptPreview')">
+          {{ t("config.chatSettings.previewRequest") }}
+        </button>
+        <button class="btn btn-sm w-full bg-base-200" @click="$emit('openSystemPromptPreview')">
+          {{ t("config.chatSettings.previewSystemPrompt") }}
+        </button>
       </div>
-    </div>
-
-  </div>
+    </template>
+  </ConfigTemplate>
 </template>
 
 <script setup lang="ts">
@@ -156,6 +165,8 @@ import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { Plus, Trash2 } from "@lucide/vue";
 import SegmentedControl from "../../components/SegmentedControl.vue";
+import ConfigTemplate from "../../components/ConfigTemplate.vue";
+import type { ConfigTemplateGroup } from "../../components/config-template";
 import ApiConfigTreeSelect from "../../components/ApiConfigTreeSelect.vue";
 import type { AppConfig, ApiConfigItem, ChatSettingsPatch, ConversationApiSettingsPatch, PromptCommandPreset, ResponseStyleOption } from "../../../../types/app";
 import { deriveImageGenerationModelOptions } from "../../utils/image-generation-config";
@@ -172,6 +183,41 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
+const templateValues = {};
+const templateGroups = computed<ConfigTemplateGroup[]>(() => [
+  {
+    key: "default-models",
+    title: t("config.chatSettings.defaultModelsTitle"),
+    rows: [
+      { key: "vision-api", items: [] },
+      { key: "tool-review-api", items: [] },
+      { key: "expert-chat-model", items: [] },
+      { key: "image-generation-model", items: [] },
+      { key: "stt-api", items: [] },
+      { key: "stt-auto-send", items: [] },
+    ],
+  },
+  {
+    key: "response-style",
+    title: t("config.chatSettings.responseStyle"),
+    rows: [{ key: "response-style", items: [] }],
+  },
+  {
+    key: "pdf-read-mode",
+    title: t("config.chatSettings.pdfReadMode"),
+    rows: [{ key: "pdf-read-mode", items: [] }],
+  },
+  {
+    key: "instruction-presets",
+    title: t("config.chatSettings.instructionPresetsTitle"),
+    rows: [{ key: "instruction-presets", items: [] }],
+  },
+  {
+    key: "quick-actions",
+    title: t("config.chatSettings.quickActionsTitle"),
+    rows: [{ key: "quick-actions", items: [] }],
+  },
+]);
 const responseStyleSegmentOptions = computed(() =>
   props.responseStyleOptions.map((style) => ({
     value: style.id,

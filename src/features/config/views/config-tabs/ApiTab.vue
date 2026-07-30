@@ -4,450 +4,407 @@
       <div class="flex flex-col gap-3">
         <div class="join w-full">
           <button v-for="tab in capabilityTabs" :key="tab.id" class="btn btn-sm join-item flex-1" type="button"
-            :class="activeTopTab === tab.id ? 'btn-primary' : 'bg-base-100'" @click="switchCapabilityTab(tab.id)">
+            :class="activeTopTab === tab.id ? 'btn-primary' : 'btn-ghost'" @click="switchCapabilityTab(tab.id)">
             {{ tab.label }}
           </button>
         </div>
 
-        <div v-if="activeTopTab !== 'imageGeneration'" class="flex items-center gap-2">
-          <button class="btn btn-sm btn-square btn-primary shrink-0" type="button" :title="t('config.api.addProvider')"
-            @click="addProvider()">
-            <Plus class="h-4 w-4" />
-          </button>
-          <button class="btn btn-sm btn-square shrink-0"
-            :class="scopedProviderList.length <= 1 ? 'btn-disabled bg-base-200 text-base-content/30' : 'btn-error'"
-            type="button" :title="t('config.api.removeProvider')" :disabled="scopedProviderList.length <= 1"
-            @click="removeProvider(selectedProviderId)">
-            <Trash2 class="h-4 w-4" />
-          </button>
-          <select :value="selectedProviderId" class="select select-bordered select-md flex-1"
-          @change="handleProviderChange($event)">
-          <option v-for="provider in scopedProviderList" :key="provider.id" :value="provider.id">
-            {{ provider.name || provider.id }}（{{ provider.requestFormat }}）
-          </option>
-          </select>
-          <button
-            class="btn btn-sm btn-square shrink-0"
-            :class="currentProviderDirty ? 'btn-info' : 'bg-base-200 text-base-content/30 shadow-none'"
-            type="button"
-            :title="t('config.api.restoreProviderDraft')"
-            :disabled="!currentProviderDirty || props.savingConfig"
-            @click="handleRestoreProviderDraft"
-          >
-            <RotateCcw class="h-4 w-4" />
-          </button>
-          <button class="api-save-btn btn btn-sm btn-square shrink-0 transition-all duration-300"
-            :class="currentProviderDirty
-              ? 'btn-success api-save-btn--dirty'
-              : 'bg-base-200 text-base-content/50 shadow-none'" type="button"
-            :title="props.savingConfig ? t('config.api.saving') : currentProviderDirty ? t('config.api.saveConfig') : t('config.api.saved')"
-            :disabled="!currentProviderDirty || props.savingConfig" @click="handleSaveApiConfig">
-            <Save v-if="!props.savingConfig" class="h-4 w-4" />
-            <span v-else class="loading loading-spinner loading-sm"></span>
-          </button>
-        </div>
+        <ProviderToolbar
+          v-if="activeTopTab !== 'imageGeneration'"
+          :providers="providerToolbarOptions"
+          :model-value="selectedProviderId"
+          :empty-label="t('config.api.currentProvider')"
+          :add-title="t('config.api.addProvider')"
+          :remove-title="t('config.api.removeProvider')"
+          :restore-title="t('config.api.restoreProviderDraft')"
+          :save-title="props.savingConfig ? t('config.api.saving') : currentProviderDirty ? t('config.api.saveConfig') : t('config.api.saved')"
+          :dirty="currentProviderDirty"
+          :saving="props.savingConfig"
+          :remove-disabled="scopedProviderList.length <= 1"
+          :restore-disabled="!currentProviderDirty || props.savingConfig"
+          :save-disabled="!currentProviderDirty || props.savingConfig"
+          @update:model-value="selectProvider"
+          @add="addProvider"
+          @remove="removeProvider(selectedProviderId)"
+          @restore="handleRestoreProviderDraft"
+          @save="handleSaveApiConfig"
+        />
+        <ProviderToolbar
+          v-else
+          :providers="imageToolbarProviderOptions"
+          :model-value="imageToolbarSelectedProviderId"
+          :empty-label="t('config.imageGeneration.emptyProviders')"
+          :add-title="t('config.imageGeneration.addProvider')"
+          :remove-title="t('config.imageGeneration.removeProvider')"
+          :restore-title="t('common.reset')"
+          :save-title="imageToolbarSaveTitle"
+          :dirty="imageToolbarDirty"
+          :saving="imageToolbarSaving"
+          :remove-disabled="imageToolbarRemoveDisabled"
+          :restore-disabled="imageToolbarRestoreDisabled"
+          :save-disabled="imageToolbarSaveDisabled"
+          :select-disabled="imageToolbarProviderOptions.length === 0"
+          @update:model-value="selectImageProvider"
+          @add="addImageProvider"
+          @remove="removeImageProvider"
+          @restore="restoreImageProviderConfig"
+          @save="saveImageProviderConfig"
+        />
       </div>
     </template>
 
     <div v-if="activeTopTab !== 'imageGeneration' && selectedProvider" class="grid gap-3">
-        <div class="card bg-base-100 border border-base-300">
+      <ConfigTemplate v-model="providerTemplateValues" :groups="providerTemplateGroups">
+        <template #field-baseUrl="{ field, value, update }">
+          <label class="grid min-w-0 gap-2">
+            <div class="flex items-center gap-2">
+              <div class="text-sm">{{ field.label }}</div>
+              <button class="btn btn-xs bg-base-200" type="button" @click="baseUrlHelperOpen = !baseUrlHelperOpen">
+                <WandSparkles class="h-3 w-3" />
+                <span>{{ t("config.api.linkHelper") }}</span>
+              </button>
+            </div>
+            <input
+              :value="String(value ?? '')"
+              :placeholder="field.placeholder"
+              class="input input-bordered input-sm w-full"
+              @input="update(($event.target as HTMLInputElement).value)"
+            />
+            <div v-if="baseUrlHelperOpen" class="rounded-box border border-base-300 bg-base-200/50 p-3">
+              <div class="mb-2 text-xs opacity-70">{{ t("config.api.linkHelperHint") }}</div>
+              <div class="tabs tabs-boxed mb-2 bg-base-100 p-1">
+                <button v-for="tab in linkHelperTabs" :key="tab.value" class="tab tab-sm flex-1"
+                  :class="linkHelperActiveProtocol === tab.value ? 'tab-active' : ''" type="button"
+                  @click="linkHelperActiveProtocol = tab.value">
+                  {{ tab.label }}
+                </button>
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <div v-for="preset in filteredProviderPresets" :key="preset.id" class="join rounded-btn shadow-sm">
+                  <button class="btn btn-sm join-item"
+                    :class="selectedPresetId === preset.id ? 'btn-primary' : 'bg-base-100'" type="button"
+                    @click="applyGeneratedBaseUrl(preset.id)">
+                    {{ preset.name }}
+                  </button>
+                  <button class="btn btn-sm btn-neutral join-item" type="button" @click="openProviderSite(preset)">
+                    <ExternalLink class="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </label>
+        </template>
+        <template #row-allow-concurrent>
+          <div class="grid min-w-0 gap-2">
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-sm">{{ t("config.api.allowConcurrentRequests") }}</span>
+              <span class="text-sm tabular-nums">{{ providerConcurrentLimitLabel(selectedProvider) }}</span>
+            </div>
+            <input
+              :value="providerConcurrentLimit(selectedProvider)"
+              type="range"
+              min="0"
+              max="16"
+              step="1"
+              class="range range-sm w-full"
+              @input="updateProviderConcurrentLimit(selectedProvider, ($event.target as HTMLInputElement).value)"
+            />
+          </div>
+        </template>
+      </ConfigTemplate>
+
+
+      <section v-if="!selectedProviderIsCodex">
+        <h3 class="text-sm font-semibold">{{ t("config.imageGeneration.apiKeys") }}</h3>
+        <ApiKeyListCard
+          :key="selectedProvider.id"
+          :model-value="selectedProvider.apiKeys"
+          :connection-test-key-status="connectionTestKeyStatus"
+          @update:model-value="updateSelectedApiKeys"
+        />
+      </section>
+
+      <CodexProviderPanel
+        v-else
+        :provider="selectedProvider"
+        :selected-api-config-id="props.config.selectedApiConfigId"
+        :refreshing-models="props.refreshingModels"
+        :model-options="props.modelOptions"
+        :model-refresh-error="props.modelRefreshError"
+        @refresh-models="$emit('refreshModels')"
+        @select-model="selectModelCard"
+      />
+
+      <section v-if="!selectedProviderIsCodex">
+        <h3 class="mb-1 text-sm font-semibold">{{ t("config.api.connectionTest") }}</h3>
+        <div class="card border border-base-300 bg-base-100">
           <div class="card-body gap-3 p-4">
-            <div class="flex items-center justify-between gap-2">
-              <div class="card-title text-base mb-0">{{ t("config.api.providerSettings") }}</div>
-            </div>
-
-            <div class="grid gap-3 md:grid-cols-2">
-              <label class="flex flex-col gap-1">
-                <span class="text-sm font-medium">{{ t("config.api.configName") }}</span>
-                <input v-model="selectedProvider.name" class="input input-bordered input-sm" :placeholder="t('config.api.providerNamePlaceholder')" />
-              </label>
-
-              <label class="flex flex-col gap-1">
-                <span class="text-sm font-medium">{{ t("config.api.requestFormat") }}</span>
-                <select v-model="selectedProvider.requestFormat" class="select select-bordered select-sm"
-                  @change="handleRequestFormatChange($event)">
-                  <option v-for="item in protocolOptions" :key="item.value" :value="item.value">{{ item.label }}
-                  </option>
-                </select>
-              </label>
-            </div>
-
-            <div v-if="!selectedProviderIsCodex" class="flex flex-col gap-1">
-              <div class="flex items-center gap-2">
-                <span class="text-sm font-medium">{{ t("config.api.baseUrl") }}</span>
-                <button class="btn btn-xs bg-base-200" type="button" @click="baseUrlHelperOpen = !baseUrlHelperOpen">
-                  <WandSparkles class="h-3 w-3" />
-                  <span>{{ t("config.api.linkHelper") }}</span>
-                </button>
-              </div>
-              <input v-model="selectedProvider.baseUrl" class="input input-bordered input-sm"
-                :placeholder="props.baseUrlReference" />
-              <label class="mt-2 flex flex-col gap-1">
-                <div class="flex flex-col gap-1">
-                  <span class="text-sm font-medium">{{ t("config.api.allowConcurrentRequests") }}</span>
-                </div>
-                <div class="flex items-center gap-3">
-                  <input
-                    :value="providerConcurrentLimit(selectedProvider)"
-                    type="range"
-                    min="0"
-                    max="16"
-                    step="1"
-                    class="range range-sm flex-1"
-                    @input="updateProviderConcurrentLimit(selectedProvider, ($event.target as HTMLInputElement).value)"
-                  />
-                  <div class="w-16 text-right text-sm">
-                    {{ providerConcurrentLimitLabel(selectedProvider) }}
-                  </div>
-                </div>
-              </label>
-              <div v-if="baseUrlHelperOpen" class="rounded-box border border-base-300 bg-base-200/50 p-3">
-                <div class="mb-2 text-xs opacity-70">{{ t("config.api.linkHelperHint") }}</div>
-                <div class="tabs tabs-boxed mb-2 bg-base-100 p-1">
-                  <button v-for="tab in linkHelperTabs" :key="tab.value" class="tab tab-sm flex-1"
-                    :class="linkHelperActiveProtocol === tab.value ? 'tab-active' : ''" type="button"
-                    @click="linkHelperActiveProtocol = tab.value">
-                    {{ tab.label }}
-                  </button>
-                </div>
-                <div class="flex flex-wrap gap-1">
-                  <div v-for="preset in filteredProviderPresets" :key="preset.id" class="join rounded-btn shadow-sm">
-                    <button class="btn btn-sm join-item"
-                      :class="selectedPresetId === preset.id ? 'btn-primary' : 'bg-base-100'" type="button"
-                      @click="applyGeneratedBaseUrl(preset.id)">
-                      {{ preset.name }}
-                    </button>
-                    <button class="btn btn-sm btn-neutral join-item" type="button" @click="openProviderSite(preset)">
-                      <ExternalLink class="h-3 w-3" />
-                    </button>
-                  </div>
-                </div>
-              </div>
+            <div class="flex items-center gap-2">
+              <select v-model="connectionTestModelId" class="select select-bordered select-sm flex-1">
+                <option v-for="m in (selectedProvider.models || []).filter((item) => !item.deprecated)" :key="m.id" :value="m.id">
+                  {{ modelDisplayLabel(selectedProvider, m) }}
+                </option>
+              </select>
+              <button class="btn btn-sm" type="button"
+                :class="connectionTestFirstKeyRunning ? 'loading' : 'bg-base-200'"
+                :disabled="connectionTestFirstKeyRunning || connectionTestAllKeysRunning"
+                @click="runConnectionTestFirstKey">
+                <span v-if="connectionTestFirstKeyRunning" class="loading loading-spinner loading-xs"></span>
+                {{ t("config.api.testFirstKey") }}
+              </button>
+              <button class="btn btn-sm" type="button"
+                :class="connectionTestAllKeysRunning ? 'loading' : 'bg-base-200'"
+                :disabled="connectionTestFirstKeyRunning || connectionTestAllKeysRunning"
+                @click="runConnectionTestAllKeys">
+                <span v-if="connectionTestAllKeysRunning" class="loading loading-spinner loading-xs"></span>
+                {{ t("config.api.testAllKeys") }}
+              </button>
             </div>
           </div>
         </div>
+      </section>
 
-          <div v-if="!selectedProviderIsCodex" class="card bg-base-100 border border-base-300">
-            <div class="card-body gap-3 p-4">
-              <div class="flex items-center justify-between gap-2">
-                <div>
-                  <div class="card-title text-base mb-1">{{ t("config.api.apiKeyPool") }}</div>
-                  <div class="text-xs opacity-60">{{ t("config.api.apiKeyPoolHint") }}</div>
-                </div>
-                <button class="btn btn-sm bg-base-200" type="button" @click="addApiKey">
-                  <Plus class="h-3.5 w-3.5" />
-                  <span>{{ t("config.api.addApiKey") }}</span>
-                </button>
-              </div>
+      <section v-if="!selectedProviderIsCodex">
+        <h3 class="mb-3 text-sm font-semibold">{{ t("config.api.modelCards") }}</h3>
+        <div class="card border border-base-300 bg-base-100">
+          <div class="card-body gap-3 p-4">
+            <div class="flex items-center justify-end gap-2">
+              <button class="btn btn-sm bg-base-200" type="button" :class="{ loading: props.refreshingModels }"
+                :disabled="props.refreshingModels" @click="$emit('refreshModels')">
+                <RefreshCw class="h-3.5 w-3.5" />
+                <span>{{ t("config.api.refreshModels") }}</span>
+              </button>
+              <button class="btn btn-sm bg-base-200" type="button" @click="addModelCard">
+                <Plus class="h-3.5 w-3.5" />
+                <span>{{ t("config.api.addModel") }}</span>
+              </button>
+            </div>
 
-              <div class="grid gap-2">
-                <div v-for="(apiKey, index) in selectedProvider.apiKeys" :key="`key-${selectedProvider.id}-${index}`"
-                  class="flex items-center gap-2">
-                  <div v-if="connectionTestKeyStatus[selectedProvider.apiKeys[index].trim()]" class="dropdown dropdown-start">
-                    <div tabindex="0" role="button" class="cursor-pointer">
-                      <span v-if="connectionTestKeyStatus[selectedProvider.apiKeys[index].trim()]?.status === 'success'" class="status status-success"></span>
-                      <span v-else class="status status-error"></span>
-                    </div>
-                    <div tabindex="0" class="dropdown-content card card-sm bg-base-100 border border-base-300 shadow-lg z-10 w-64">
-                      <div class="card-body p-3">
-                        <p v-if="connectionTestKeyStatus[selectedProvider.apiKeys[index].trim()]?.status === 'success'" class="text-success text-xs">
-                          {{ t('config.api.testConnectionSuccess', { latency: connectionTestKeyStatus[selectedProvider.apiKeys[index].trim()]?.latencyMs }) }}
-                        </p>
-                        <p v-else class="text-error text-xs break-all">
-                          {{ connectionTestKeyStatus[selectedProvider.apiKeys[index].trim()]?.error }}
-                        </p>
+            <div
+              class="text-xs"
+              :class="props.modelRefreshError
+                ? 'text-error'
+                : props.modelRefreshOk
+                  ? 'text-success'
+                  : 'text-transparent'"
+            >
+              {{ props.modelRefreshError || (props.modelRefreshOk ? t("status.modelListRefreshed", { count: providerModelOptions.length }) : " ") }}
+            </div>
+
+            <div class="grid gap-3">
+              <div v-for="modelCard in activeModelCards" :key="modelCard.id"
+                class="card border border-base-300 bg-base-200/50 transition"
+                :class="selectedModel?.id === modelCard.id ? '' : ''">
+                <div class="card-body gap-3 p-4">
+                  <div class="flex items-start justify-between gap-2">
+                    <button class="min-w-0 flex-1 text-left" type="button" @click="selectModelCard(modelCard.id)">
+                      <div class="card-title text-base mb-1">{{ modelGroupDisplayLabel(modelCard) }}</div>
+                    </button>
+                    <button class="btn btn-sm btn-square btn-ghost" type="button"
+                      :class="activeModelGroups.length <= 1 ? 'text-base-content/30' : 'text-error'"
+                      :disabled="activeModelGroups.length <= 1" @click="removeModelGroup(modelCard)">
+                      <Trash2 class="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div class="grid gap-3">
+                    <label class="flex flex-col gap-1">
+                      <span class="text-sm font-medium">{{ t("config.api.model") }}</span>
+                      <div class="join">
+                        <input v-model="modelCard.model" class="input input-bordered input-sm join-item flex-1"
+                          placeholder="model" @focus="selectModelCard(modelCard.id)"
+                          @blur="void syncModelMetadata(modelCard)"
+                          @keydown.enter.prevent="void syncModelMetadata(modelCard)" />
+                        <button class="btn btn-sm join-item bg-base-300" type="button"
+                          :disabled="providerModelOptions.length === 0" @click="openModelPicker(modelCard.id)">
+                          <ChevronDown class="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <div v-if="selectedProtocol === 'auto' && resolvedAdapterByModelId[modelCard.id]"
+                        class="mt-1 text-xs opacity-70">
+                        {{ t("config.api.matchedProtocol", { protocol: resolvedAdapterByModelId[modelCard.id] }) }}
+                      </div>
+                      <div v-if="shouldWarnDeepSeekKimiProtocol(modelCard)"
+                        class="alert alert-warning mt-2 py-2 text-xs">
+                        <AlertTriangle class="h-4 w-4 shrink-0" />
+                        <span>{{ t("config.api.deepSeekKimiProtocolHint") }}</span>
+                      </div>
+                    </label>
+                    <div v-if="activeModelPickerId === modelCard.id"
+                      class="rounded-box border border-base-300 bg-base-200/50 p-3">
+                      <input v-model="modelSearch" class="input input-bordered input-sm mb-2 w-full"
+                        :placeholder="t('config.api.searchModel')" @keydown.esc.stop.prevent="closeModelPicker" />
+                      <div class="max-h-48 overflow-auto">
+                        <button v-for="option in filteredModels" :key="`${modelCard.id}-${option}`"
+                          class="btn btn-ghost btn-sm mb-1 mr-1" type="button"
+                          @click="selectModelOption(modelCard, option)">
+                          {{ option }}
+                        </button>
+                        <div v-if="filteredModels.length === 0" class="px-2 py-3 text-sm opacity-50">{{
+                          t("config.api.noModelFound") }}</div>
                       </div>
                     </div>
                   </div>
-                  <span v-else class="w-4 shrink-0"></span>
-                  <input v-model="selectedProvider.apiKeys[index]"
-                    :type="showApiKeys[selectedProvider.id]?.[index] ? 'text' : 'password'"
-                    class="input input-bordered input-sm flex-1" :placeholder="`API Key #${index + 1}`" />
-                  <button class="btn btn-sm btn-square bg-base-200" type="button"
-                    :disabled="index === 0"
-                    :title="t('config.api.pinApiKeyToTop')"
-                    @click="pinApiKeyToTop(index)">
-                    <ArrowUpToLine class="h-3.5 w-3.5" />
-                  </button>
-                  <button class="btn btn-sm btn-square bg-base-200" type="button"
-                    @click="toggleApiKeyVisible(selectedProvider.id, index)">
-                    <EyeOff v-if="showApiKeys[selectedProvider.id]?.[index]" class="h-3.5 w-3.5" />
-                    <Eye v-else class="h-3.5 w-3.5" />
-                  </button>
-                  <button class="btn btn-sm btn-square bg-base-200 text-error" type="button"
-                    :disabled="selectedProvider.apiKeys.length <= 1" @click="removeApiKey(index)">
-                    <Trash2 class="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                <div v-if="selectedProvider.apiKeys.length === 0"
-                  class="rounded-box border border-dashed border-base-300 px-3 py-3 text-sm opacity-60">
-                  {{ t("config.api.noApiKey") }}
-                </div>
-              </div>
-            </div>
-          </div>
 
-          <CodexProviderPanel
-            v-else
-            :provider="selectedProvider"
-            :selected-api-config-id="props.config.selectedApiConfigId"
-            :refreshing-models="props.refreshingModels"
-            :model-options="props.modelOptions"
-            :model-refresh-error="props.modelRefreshError"
-            @refresh-models="$emit('refreshModels')"
-            @select-model="selectModelCard"
-          />
+                  <div v-if="selectedCapability === 'text'" class="flex flex-wrap gap-3">
+                    <label
+                      class="flex min-w-40 flex-1 items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
+                      <span class="text-sm">{{ t("config.api.capImage") }}</span>
+                      <input
+                        v-model="modelCard.enableImage"
+                        type="checkbox"
+                        class="checkbox checkbox-sm"
+                      />
+                    </label>
+                    <label
+                      class="flex min-w-40 flex-1 items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
+                      <span class="text-sm">{{ t("config.api.capAudio") }}</span>
+                      <input
+                        v-model="modelCard.enableAudio"
+                        type="checkbox"
+                        class="checkbox checkbox-sm"
+                      />
+                    </label>
+                    <label
+                      class="flex min-w-40 flex-1 items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
+                      <span class="text-sm">{{ t("config.api.capVideo") }}</span>
+                      <input
+                        v-model="modelCard.enableVideo"
+                        type="checkbox"
+                        class="checkbox checkbox-sm"
+                      />
+                    </label>
+                    <label
+                      class="flex min-w-40 flex-1 items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
+                      <span class="text-sm">{{ t("config.api.capTools") }}</span>
+                      <input v-model="modelCard.enableTools" type="checkbox" class="checkbox checkbox-sm" />
+                    </label>
+                    <label
+                      class="flex min-w-40 flex-1 items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
+                      <span class="text-sm">{{ t("config.api.temperature") }}</span>
+                      <input v-model="modelCard.customTemperatureEnabled" type="checkbox" class="checkbox checkbox-sm" />
+                    </label>
+                    <label
+                      class="flex min-w-40 flex-1 items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
+                      <span class="text-sm">{{ t("config.api.maxOutputTokens") }}</span>
+                      <input
+                        v-model="modelCard.customMaxOutputTokensEnabled"
+                        type="checkbox"
+                        class="checkbox checkbox-sm"
+                        @change="handleCustomMaxOutputTokensToggle(modelCard)"
+                      />
+                    </label>
+                  </div>
 
-          <div v-if="!selectedProviderIsCodex" class="card bg-base-100 border border-base-300">
-            <div class="card-body gap-3 p-4">
-              <div class="flex items-center justify-between gap-2">
-                <div class="card-title text-base mb-0">{{ t("config.api.connectionTest") }}</div>
-              </div>
-              <div class="flex items-center gap-2">
-                <select v-model="connectionTestModelId" class="select select-bordered select-sm flex-1">
-                  <option v-for="m in (selectedProvider.models || []).filter((item) => !item.deprecated)" :key="m.id" :value="m.id">
-                    {{ modelDisplayLabel(selectedProvider, m) }}
-                  </option>
-                </select>
-                <button class="btn btn-sm" type="button"
-                  :class="connectionTestFirstKeyRunning ? 'loading' : 'bg-base-200'"
-                  :disabled="connectionTestFirstKeyRunning || connectionTestAllKeysRunning"
-                  @click="runConnectionTestFirstKey">
-                  <span v-if="connectionTestFirstKeyRunning" class="loading loading-spinner loading-xs"></span>
-                  {{ t("config.api.testFirstKey") }}
-                </button>
-                <button class="btn btn-sm" type="button"
-                  :class="connectionTestAllKeysRunning ? 'loading' : 'bg-base-200'"
-                  :disabled="connectionTestFirstKeyRunning || connectionTestAllKeysRunning"
-                  @click="runConnectionTestAllKeys">
-                  <span v-if="connectionTestAllKeysRunning" class="loading loading-spinner loading-xs"></span>
-                  {{ t("config.api.testAllKeys") }}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div v-if="!selectedProviderIsCodex" class="card bg-base-100 border border-base-300">
-            <div class="card-body gap-3 p-4">
-              <div class="flex items-center justify-between gap-2">
-                <div>
-                  <div class="card-title text-base mb-1">{{ t("config.api.modelCards") }}</div>
-                  <div class="text-xs opacity-60">{{ t("config.api.modelCardsHint") }}</div>
-                </div>
-                <div class="flex gap-2">
-                  <button class="btn btn-sm bg-base-200" type="button" :class="{ loading: props.refreshingModels }"
-                    :disabled="props.refreshingModels" @click="$emit('refreshModels')">
-                    <RefreshCw class="h-3.5 w-3.5" />
-                    <span>{{ t("config.api.refreshModels") }}</span>
-                  </button>
-                  <button class="btn btn-sm bg-base-200" type="button" @click="addModelCard">
-                    <Plus class="h-3.5 w-3.5" />
-                    <span>{{ t("config.api.addModel") }}</span>
-                  </button>
-                </div>
-              </div>
-
-              <div
-                class="text-xs"
-                :class="props.modelRefreshError
-                  ? 'text-error'
-                  : props.modelRefreshOk
-                    ? 'text-success'
-                    : 'text-transparent'"
-              >
-                {{ props.modelRefreshError || (props.modelRefreshOk ? t("status.modelListRefreshed", { count: providerModelOptions.length }) : " ") }}
-              </div>
-
-              <div class="grid gap-3">
-                <div v-for="modelCard in activeModelCards" :key="modelCard.id"
-                  class="card border border-base-300 bg-base-200/50 transition"
-                  :class="selectedModel?.id === modelCard.id ? '' : ''">
-                  <div class="card-body gap-3 p-4">
-                    <div class="flex items-start justify-between gap-2">
-                      <button class="min-w-0 flex-1 text-left" type="button" @click="selectModelCard(modelCard.id)">
-                        <div class="card-title text-base mb-1">{{ modelGroupDisplayLabel(modelCard) }}</div>
-                      </button>
-                      <button class="btn btn-sm btn-square btn-ghost" type="button"
-                        :class="activeModelGroups.length <= 1 ? 'text-base-content/30' : 'text-error'"
-                        :disabled="activeModelGroups.length <= 1" @click="removeModelGroup(modelCard)">
-                        <Trash2 class="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    <div class="grid gap-3">
-                      <label class="flex flex-col gap-1">
-                        <span class="text-sm font-medium">{{ t("config.api.model") }}</span>
-                        <div class="join">
-                          <input v-model="modelCard.model" class="input input-bordered input-sm join-item flex-1"
-                            placeholder="model" @focus="selectModelCard(modelCard.id)"
-                            @blur="void syncModelMetadata(modelCard)"
-                            @keydown.enter.prevent="void syncModelMetadata(modelCard)" />
-                          <button class="btn btn-sm join-item bg-base-300" type="button"
-                            :disabled="providerModelOptions.length === 0" @click="openModelPicker(modelCard.id)">
-                            <ChevronDown class="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                        <div v-if="selectedProtocol === 'auto' && resolvedAdapterByModelId[modelCard.id]"
-                          class="mt-1 text-xs opacity-70">
-                          {{ t("config.api.matchedProtocol", { protocol: resolvedAdapterByModelId[modelCard.id] }) }}
-                        </div>
-                        <div v-if="shouldWarnDeepSeekKimiProtocol(modelCard)"
-                          class="alert alert-warning mt-2 py-2 text-xs">
-                          <AlertTriangle class="h-4 w-4 shrink-0" />
-                          <span>{{ t("config.api.deepSeekKimiProtocolHint") }}</span>
-                        </div>
-                      </label>
-                      <div v-if="activeModelPickerId === modelCard.id"
-                        class="rounded-box border border-base-300 bg-base-200/50 p-3">
-                        <input v-model="modelSearch" class="input input-bordered input-sm mb-2 w-full"
-                          :placeholder="t('config.api.searchModel')" @keydown.esc.stop.prevent="closeModelPicker" />
-                        <div class="max-h-48 overflow-auto">
-                          <button v-for="option in filteredModels" :key="`${modelCard.id}-${option}`"
-                            class="btn btn-ghost btn-sm mb-1 mr-1" type="button"
-                            @click="selectModelOption(modelCard, option)">
-                            {{ option }}
-                          </button>
-                          <div v-if="filteredModels.length === 0" class="px-2 py-3 text-sm opacity-50">{{
-                            t("config.api.noModelFound") }}</div>
+                  <div v-if="selectedCapability === 'text'" class="grid gap-3">
+                    <label class="flex flex-col gap-1">
+                      <span class="text-sm font-medium">{{ t("config.api.contextWindow") }}</span>
+                      <div class="flex items-center gap-2">
+                        <input :value="modelCard.contextWindowTokens"
+                          @input="modelCard.contextWindowTokens = Number(($event.target as HTMLInputElement).value)"
+                          type="range" :min="SLIDER_CONTEXT_MIN" :max="contextWindowMax(modelCard)" step="1000"
+                          class="range range-sm flex-1" />
+                        <div class="relative w-28">
+                          <input :value="Math.round(Number(modelCard.contextWindowTokens || 0) / 1000)"
+                            @input="modelCard.contextWindowTokens = Number(($event.target as HTMLInputElement).value || 0) * 1000"
+                            @blur="clampManualContextWindowValue(modelCard)"
+                            type="number" :min="Math.round(SLIDER_CONTEXT_MIN / 1000)"
+                            :max="2000" step="1"
+                            class="input input-bordered input-sm w-full pr-7 text-right font-mono" />
+                          <span class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs opacity-70">K</span>
                         </div>
                       </div>
-                    </div>
+                    </label>
 
-                    <div v-if="selectedCapability === 'text'" class="grid gap-2 md:grid-cols-6">
-                      <label
-                        class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
-                        <span class="text-sm">{{ t("config.api.capImage") }}</span>
-                        <input
-                          v-model="modelCard.enableImage"
-                          type="checkbox"
-                          class="checkbox checkbox-sm"
-                        />
-                      </label>
-                      <label
-                        class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
-                        <span class="text-sm">{{ t("config.api.capAudio") }}</span>
-                        <input
-                          v-model="modelCard.enableAudio"
-                          type="checkbox"
-                          class="checkbox checkbox-sm"
-                        />
-                      </label>
-                      <label
-                        class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
-                        <span class="text-sm">{{ t("config.api.capVideo") }}</span>
-                        <input
-                          v-model="modelCard.enableVideo"
-                          type="checkbox"
-                          class="checkbox checkbox-sm"
-                        />
-                      </label>
-                      <label
-                        class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
-                        <span class="text-sm">{{ t("config.api.capTools") }}</span>
-                        <input v-model="modelCard.enableTools" type="checkbox" class="checkbox checkbox-sm" />
-                      </label>
-                      <label
-                        class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
-                        <span class="text-sm">{{ t("config.api.temperature") }}</span>
-                        <input v-model="modelCard.customTemperatureEnabled" type="checkbox" class="checkbox checkbox-sm" />
-                      </label>
-                      <label
-                        class="flex items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
-                        <span class="text-sm">{{ t("config.api.maxOutputTokens") }}</span>
-                        <input
-                          v-model="modelCard.customMaxOutputTokensEnabled"
-                          type="checkbox"
-                          class="checkbox checkbox-sm"
-                          @change="handleCustomMaxOutputTokensToggle(modelCard)"
-                        />
-                      </label>
-                    </div>
+                    <button
+                      v-if="modelDocumentationUrl(modelCard)"
+                      type="button"
+                      class="btn btn-outline btn-sm justify-start"
+                      @click="openModelDocumentation(modelCard)"
+                    >
+                      {{ t("config.api.viewModelDocumentation") }}
+                    </button>
 
-                    <div v-if="selectedCapability === 'text'" class="grid gap-3">
-                      <label class="flex flex-col gap-1">
-                        <span class="text-sm font-medium">{{ t("config.api.contextWindow") }}</span>
-                        <div class="flex items-center gap-2">
-                          <input :value="modelCard.contextWindowTokens"
-                            @input="modelCard.contextWindowTokens = Number(($event.target as HTMLInputElement).value)"
-                            type="range" :min="SLIDER_CONTEXT_MIN" :max="contextWindowMax(modelCard)" step="1000"
-                            class="range range-sm flex-1" />
-                          <div class="relative w-28">
-                            <input :value="Math.round(Number(modelCard.contextWindowTokens || 0) / 1000)"
-                              @input="modelCard.contextWindowTokens = Number(($event.target as HTMLInputElement).value || 0) * 1000"
-                              @blur="clampManualContextWindowValue(modelCard)"
-                              type="number" :min="Math.round(SLIDER_CONTEXT_MIN / 1000)"
-                              :max="2000" step="1"
-                              class="input input-bordered input-sm w-full pr-7 text-right font-mono" />
-                            <span class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs opacity-70">K</span>
-                          </div>
-                        </div>
-                      </label>
-
-                      <button
-                        v-if="modelDocumentationUrl(modelCard)"
-                        type="button"
-                        class="btn btn-outline btn-sm justify-start"
-                        @click="openModelDocumentation(modelCard)"
-                      >
-                        {{ t("config.api.viewModelDocumentation") }}
-                      </button>
-
-                      <div v-if="showReasoningEffort(modelCard)" class="flex flex-col gap-2">
+                    <div v-if="showReasoningEffort(modelCard)" class="flex flex-col gap-2">
+                      <div class="flex items-center gap-2">
                         <span class="text-sm font-medium">{{ t("config.api.reasoningEffort") }}</span>
-                        <div class="flex flex-wrap gap-x-4 gap-y-2">
-                          <label v-for="item in reasoningEffortItems(modelCard)" :key="item.value" class="flex items-center gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              class="checkbox checkbox-sm"
-                              :checked="groupHasReasoningEffort(modelCard, item.value)"
-                              @change="setGroupReasoningEffort(modelCard, item.value, ($event.target as HTMLInputElement).checked)"
-                            />
-                            <span>{{ item.label }}</span>
-                          </label>
-                        </div>
+                        <span
+                          v-if="reasoningCapabilityStatus(modelCard) === 'unknown'"
+                          class="text-xs opacity-60"
+                          :title="t('config.api.reasoningCapabilityUnknown')"
+                        >
+                          {{ t("config.api.reasoningCapabilityUnknown") }}
+                        </span>
+                        <span
+                          v-else-if="reasoningCapabilityStatus(modelCard) === 'unsupported'"
+                          class="text-xs text-warning"
+                          :title="t('config.api.reasoningCapabilityUnsupported')"
+                        >
+                          {{ t("config.api.reasoningCapabilityUnsupported") }}
+                        </span>
                       </div>
-
-                      <label v-if="modelCard.customTemperatureEnabled" class="flex flex-col gap-1">
-                        <span class="text-sm font-medium">{{ t("config.api.temperature") }}</span>
-                        <div class="flex items-center gap-2">
-                          <input :value="modelCard.temperature"
-                            @input="modelCard.temperature = Number(($event.target as HTMLInputElement).value)"
-                            type="range" min="0" max="2" step="0.1" class="range range-sm flex-1" />
-                          <span class="text-xs font-mono w-8 text-right">{{ modelCard.temperature.toFixed(1) }}</span>
-                        </div>
-                      </label>
-
-                      <label v-if="modelCard.customMaxOutputTokensEnabled" class="flex flex-col gap-1">
-                        <span class="text-sm font-medium">{{ t("config.api.maxOutputTokens") }}</span>
-                        <div class="flex items-center gap-2">
-                          <input :value="modelCard.maxOutputTokens"
-                            @input="modelCard.maxOutputTokens = Number(($event.target as HTMLInputElement).value)"
-                            type="range" min="8192" max="128000" step="256"
-                            class="range range-sm flex-1" />
-                          <input :value="Math.round(Number(modelCard.maxOutputTokens ?? 0))"
-                            @input="modelCard.maxOutputTokens = Number(($event.target as HTMLInputElement).value || 0)"
-                            type="number" step="1"
-                            class="input input-bordered input-sm w-28 text-right font-mono" />
-                        </div>
-                      </label>
+                      <div class="flex flex-wrap gap-x-4 gap-y-2">
+                        <label
+                          v-for="item in reasoningEffortItems(modelCard)"
+                          :key="item.value"
+                          class="flex items-center gap-2 text-sm"
+                          :class="item.disabled ? 'cursor-not-allowed opacity-50' : ''"
+                          :title="item.disabled ? t('config.api.reasoningEffortUnsupported') : undefined"
+                        >
+                          <input
+                            type="checkbox"
+                            class="checkbox checkbox-sm"
+                            :checked="groupHasReasoningEffort(modelCard, item.value)"
+                            :disabled="item.disabled"
+                            @change="setGroupReasoningEffort(modelCard, item.value, ($event.target as HTMLInputElement).checked)"
+                          />
+                          <span>{{ item.label }}</span>
+                        </label>
+                      </div>
                     </div>
 
-                    <div v-if="modelConnectionResult[modelCard.id]" class="rounded-box border px-3 py-2 text-xs"
-                      :class="modelConnectionResult[modelCard.id]?.success ? 'border-success/30 text-success' : 'border-error/30 text-error'">
-                      {{ modelConnectionResult[modelCard.id]?.success
-                        ? t('config.api.testConnectionSuccess', { latency: modelConnectionResult[modelCard.id]?.latencyMs })
-                        : t('config.api.testConnectionFailed', { error: modelConnectionResult[modelCard.id]?.error }) }}
-                    </div>
+                    <label v-if="modelCard.customTemperatureEnabled" class="flex flex-col gap-1">
+                      <span class="text-sm font-medium">{{ t("config.api.temperature") }}</span>
+                      <div class="flex items-center gap-2">
+                        <input :value="modelCard.temperature"
+                          @input="modelCard.temperature = Number(($event.target as HTMLInputElement).value)"
+                          type="range" min="0" max="2" step="0.1" class="range range-sm flex-1" />
+                        <span class="text-xs font-mono w-8 text-right">{{ modelCard.temperature.toFixed(1) }}</span>
+                      </div>
+                    </label>
+
+                    <label v-if="modelCard.customMaxOutputTokensEnabled" class="flex flex-col gap-1">
+                      <span class="text-sm font-medium">{{ t("config.api.maxOutputTokens") }}</span>
+                      <div class="flex items-center gap-2">
+                        <input :value="modelCard.maxOutputTokens"
+                          @input="modelCard.maxOutputTokens = Number(($event.target as HTMLInputElement).value)"
+                          type="range" min="8192" max="128000" step="256"
+                          class="range range-sm flex-1" />
+                        <input :value="Math.round(Number(modelCard.maxOutputTokens ?? 0))"
+                          @input="modelCard.maxOutputTokens = Number(($event.target as HTMLInputElement).value || 0)"
+                          type="number" step="1"
+                          class="input input-bordered input-sm w-28 text-right font-mono" />
+                      </div>
+                    </label>
+                  </div>
+
+                  <div v-if="modelConnectionResult[modelCard.id]" class="rounded-box border px-3 py-2 text-xs"
+                    :class="modelConnectionResult[modelCard.id]?.success ? 'border-success/30 text-success' : 'border-error/30 text-error'">
+                    {{ modelConnectionResult[modelCard.id]?.success
+                      ? t('config.api.testConnectionSuccess', { latency: modelConnectionResult[modelCard.id]?.latencyMs })
+                      : t('config.api.testConnectionFailed', { error: modelConnectionResult[modelCard.id]?.error }) }}
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
+      </section>
+    </div>
 
     <div v-else-if="activeTopTab === 'imageGeneration'" class="grid gap-3">
       <ImageGenerationTab
+        ref="imageGenerationTabRef"
         :config="config"
-        :config-dirty="configDirty"
         :saving-config="savingConfig"
         :save-config-action="saveApiConfigAction"
         :last-saved-config-json="lastSavedConfigJson"
@@ -477,18 +434,23 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { AlertTriangle, ArrowUpToLine, ChevronDown, ExternalLink, Eye, EyeOff, Plus, RefreshCw, RotateCcw, Save, Trash2, WandSparkles } from "@lucide/vue";
+import { AlertTriangle, ChevronDown, ExternalLink, Plus, RefreshCw, Trash2, WandSparkles } from "@lucide/vue";
 import type { ApiModelConfigItem, ApiProviderConfigItem, ApiRequestFormat, AppConfig, CodexAuthMode, CodexAuthStatus } from "../../../../types/app";
+import ApiKeyListCard, { type ApiKeyConnectionStatus } from "../../components/ApiKeyListCard.vue";
+import ConfigTemplate from "../../components/ConfigTemplate.vue";
+import ProviderToolbar, { type ProviderToolbarOption } from "../../components/ProviderToolbar.vue";
 import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
 import { invokeTauri, openTransportExternalUrl } from "../../../../services/tauri-api";
 import CodexProviderPanel from "./CodexProviderPanel.vue";
 import ImageGenerationTab from "./ImageGenerationTab.vue";
 import { normalizeApiRequestFormat } from "../../utils/api-request-format";
 import {
+  LEGAL_REASONING_EFFORTS,
   reasoningEffortDisplayLabel as sharedReasoningEffortDisplayLabel,
   sortReasoningEffortValues,
 } from "../../utils/api-config-display";
 import { buildModelCapability, type ModelCapabilitySnapshot } from "../../utils/model-capability";
+import type { ConfigTemplateGroup } from "../../components/config-template";
 
 type ApiCapability = "text" | "voice" | "embedding" | "rerank";
 type ApiTopTab = ApiCapability | "imageGeneration";
@@ -523,6 +485,23 @@ type ActiveModelGroup = {
   key: string;
   primary: ApiModelConfigItem;
   cards: ApiModelConfigItem[];
+};
+type ImageGenerationToolbarState = {
+  providers: ProviderToolbarOption[];
+  selectedProviderId: string;
+  dirty: boolean;
+  saving: boolean;
+  removeDisabled: boolean;
+  restoreDisabled: boolean;
+  saveDisabled: boolean;
+};
+type ImageGenerationTabPublicInstance = {
+  toolbarState: ImageGenerationToolbarState;
+  selectProvider: (providerId: string) => void;
+  addProvider: () => void;
+  removeSelectedProvider: () => void;
+  restoreImageConfig: () => void;
+  saveImageConfig: () => Promise<void>;
 };
 
 const SLIDER_CONTEXT_MIN = 16_000;
@@ -580,7 +559,7 @@ const modelSearch = ref("");
 const providerDeleteDialogOpen = ref(false);
 const pendingDeleteProviderId = ref("");
 const pendingDeleteProviderName = ref("");
-const showApiKeys = ref<Record<string, Record<number, boolean>>>({});
+const imageGenerationTabRef = ref<ImageGenerationTabPublicInstance | null>(null);
 const modelCapabilityById = ref<Record<string, ModelCapabilityLimits>>({});
 const resolvedAdapterByModelId = ref<Record<string, string>>({});
 const adapterResolveRequestSeq = ref(0);
@@ -824,9 +803,37 @@ function modelGroupDisplayLabel(modelCard: ApiModelConfigItem): string {
 }
 const selectedCapability = computed<ApiCapability>(() => capabilityFromRequestFormat(selectedProvider.value?.requestFormat || "openai"));
 const activeTopTab = ref<ApiTopTab>(selectedCapability.value);
+const emptyImageToolbarState: ImageGenerationToolbarState = {
+  providers: [],
+  selectedProviderId: "",
+  dirty: false,
+  saving: false,
+  removeDisabled: true,
+  restoreDisabled: true,
+  saveDisabled: true,
+};
+const imageToolbarState = computed<ImageGenerationToolbarState>(() => imageGenerationTabRef.value?.toolbarState ?? emptyImageToolbarState);
+const imageToolbarProviderOptions = computed(() => imageToolbarState.value.providers);
+const imageToolbarSelectedProviderId = computed(() => imageToolbarState.value.selectedProviderId);
+const imageToolbarDirty = computed(() => imageToolbarState.value.dirty);
+const imageToolbarSaving = computed(() => imageToolbarState.value.saving);
+const imageToolbarRemoveDisabled = computed(() => imageToolbarState.value.removeDisabled);
+const imageToolbarRestoreDisabled = computed(() => imageToolbarState.value.restoreDisabled);
+const imageToolbarSaveDisabled = computed(() => imageToolbarState.value.saveDisabled);
+const imageToolbarSaveTitle = computed(() => (
+  props.savingConfig
+    ? t("config.api.saving")
+    : imageToolbarDirty.value
+      ? t("common.save")
+      : t("common.saved")
+));
 const scopedProviderList = computed(() =>
   activeProviderList.value.filter((provider) => capabilityFromRequestFormat(provider.requestFormat) === selectedCapability.value),
 );
+const providerToolbarOptions = computed<ProviderToolbarOption[]>(() => scopedProviderList.value.map((provider) => ({
+  id: provider.id,
+  label: `${provider.name || provider.id}（${provider.requestFormat}）`,
+})));
 const protocolOptions = computed(() =>
   protocolOptionsByCapability[selectedCapability.value].map((option) =>
     option.value === "auto"
@@ -844,6 +851,66 @@ const selectedModel = computed(() => {
 
 const selectedProtocol = computed<ApiRequestFormat>(() => canonicalRequestFormat(selectedProvider.value?.requestFormat || "openai"));
 const selectedProviderIsCodex = computed(() => selectedProtocol.value === "codex");
+const providerTemplateValues = computed<Record<string, unknown>>({
+  get: () => {
+    const provider = selectedProvider.value;
+    if (!provider) return {};
+    return {
+      name: provider.name,
+      requestFormat: provider.requestFormat,
+      baseUrl: provider.baseUrl,
+    };
+  },
+  set: (values) => {
+    const provider = selectedProvider.value;
+    if (!provider) return;
+    if (typeof values.name === "string") provider.name = values.name;
+    if (typeof values.baseUrl === "string") provider.baseUrl = values.baseUrl;
+    if (typeof values.requestFormat === "string" && values.requestFormat !== provider.requestFormat) {
+      provider.requestFormat = values.requestFormat as ApiRequestFormat;
+      applyProtocolDefaults(provider);
+      if (provider.requestFormat !== "codex") {
+        stopCodexAuthPolling();
+      } else {
+        void refreshCodexAuthStatus(provider);
+      }
+    }
+  },
+});
+const providerTemplateGroups = computed<ConfigTemplateGroup[]>(() => {
+  const provider = selectedProvider.value;
+  if (!provider) return [];
+  const rows: ConfigTemplateGroup["rows"] = [
+    {
+      items: [{
+        key: "name",
+        label: t("config.api.configName"),
+        type: "text",
+        placeholder: t("config.api.providerNamePlaceholder"),
+      }],
+    },
+    {
+      items: [{
+        key: "requestFormat",
+        label: t("config.api.requestFormat"),
+        type: "select",
+        options: protocolOptions.value.map((item) => ({ value: item.value, label: item.label })),
+      }],
+    },
+  ];
+  if (!selectedProviderIsCodex.value) {
+    rows.push({
+      items: [{
+        key: "baseUrl",
+        label: t("config.api.baseUrl"),
+        type: "text",
+        placeholder: props.baseUrlReference,
+      }],
+    });
+    rows.push({ key: "allow-concurrent", items: [] });
+  }
+  return [{ title: t("config.api.providerSettings"), rows }];
+});
 const currentCodexAuthStatus = computed(() => {
   const providerId = String(selectedProvider.value?.id || "").trim();
   return providerId ? codexAuthStatusByProvider.value[providerId] ?? null : null;
@@ -1027,30 +1094,56 @@ function reasoningCapability(modelCard: ApiModelConfigItem): ModelCapabilityLimi
   return undefined;
 }
 
-function reasoningEffortItems(modelCard: ApiModelConfigItem): Array<{ value: string; label: string }> {
+function configuredReasoningEffortValues(modelCard: ApiModelConfigItem): string[] {
   const group = modelGroupForCard(modelCard);
-  const existing = (group?.cards || [modelCard])
-    .map((item) => String(item.reasoningEffort || "").trim().toLowerCase() || "default");
+  return (group?.cards || [modelCard]).map((item) => (
+    String(item.reasoningEffort || "").trim().toLowerCase() || "default"
+  ));
+}
+
+function reasoningCapabilityStatus(modelCard: ApiModelConfigItem): "known" | "unknown" | "unsupported" {
   const capability = reasoningCapability(modelCard);
-  // 已勾选档位只参与集合，不抢占顺序；统一按标准档位序展示。
-  const options = sortReasoningEffortValues([
-    ...(capability?.reasoning?.reasoningEffortOptions || []),
-    ...existing,
+  if (!capability || capability.metadataFound !== true) return "unknown";
+  if (capability.reasoning?.supportsReasoning === false) return "unsupported";
+  const explicitOptions = capability.reasoning?.reasoningEffortOptions?.some((value) => {
+    const normalized = String(value || "").trim().toLowerCase();
+    return normalized && normalized !== "default";
+  });
+  return explicitOptions ? "known" : "unknown";
+}
+
+function reasoningEffortSupportSet(modelCard: ApiModelConfigItem): Set<string> | null {
+  const capability = reasoningCapability(modelCard);
+  if (!capability || capability.metadataFound !== true) return null;
+  if (capability.reasoning?.supportsReasoning === false) return new Set();
+  const options = (capability.reasoning?.reasoningEffortOptions || [])
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean);
+  if (!options.some((value) => value !== "default")) return null;
+  return new Set(options);
+}
+
+function reasoningEffortItems(modelCard: ApiModelConfigItem): Array<{ value: string; label: string; disabled: boolean }> {
+  const values = sortReasoningEffortValues([
+    ...LEGAL_REASONING_EFFORTS,
+    ...configuredReasoningEffortValues(modelCard),
   ]);
-  return options.map((value) => ({
+  const supported = reasoningEffortSupportSet(modelCard);
+  return values.map((value) => ({
     value,
     label: reasoningEffortDisplayLabel(value) || value,
+    disabled: supported ? !supported.has(value) : false,
   }));
 }
 
 function showReasoningEffort(modelCard: ApiModelConfigItem): boolean {
   if (selectedCapability.value !== "text") return false;
   const capability = reasoningCapability(modelCard);
-  const existing = reasoningEffortItems(modelCard).some((item) => item.value !== "default");
-  if (existing) return true;
-  if (!capability) return false;
-  if (capability.metadataFound === false) return reasoningEffortItems(modelCard).length > 0;
-  return !!capability.reasoning?.supportsReasoning && reasoningEffortItems(modelCard).length > 0;
+  const hasConfiguredReasoningEffort = configuredReasoningEffortValues(modelCard).some((value) => value !== "default");
+  if (capability?.metadataFound === true && capability.reasoning?.supportsReasoning === false && !hasConfiguredReasoningEffort) {
+    return false;
+  }
+  return true;
 }
 
 function groupHasReasoningEffort(modelCard: ApiModelConfigItem, effort: string): boolean {
@@ -1064,6 +1157,8 @@ function setGroupReasoningEffort(modelCard: ApiModelConfigItem, effort: string, 
   const group = modelGroupForCard(modelCard);
   if (!provider || !group) return;
   const normalized = String(effort || "").trim().toLowerCase() || "default";
+  const selectedOption = reasoningEffortItems(modelCard).find((item) => item.value === normalized);
+  if (selectedOption?.disabled) return;
   const matchingCards = group.cards.filter((item) =>
     (String(item.reasoningEffort || "").trim().toLowerCase() || "default") === normalized,
   );
@@ -1388,22 +1483,24 @@ function selectProvider(providerId: string) {
   props.config.selectedApiConfigId = `${provider.id}::${model.id}`;
 }
 
-function handleProviderChange(event: Event) {
-  const target = event.target as HTMLSelectElement;
-  const providerId = target.value;
-  selectProvider(providerId);
+function selectImageProvider(providerId: string) {
+  imageGenerationTabRef.value?.selectProvider(providerId);
 }
 
-function handleRequestFormatChange(event: Event) {
-  const provider = selectedProvider.value;
-  if (!provider) return;
-  provider.requestFormat = (event.target as HTMLSelectElement).value as ApiRequestFormat;
-  applyProtocolDefaults(provider);
-  if (provider.requestFormat !== "codex") {
-    stopCodexAuthPolling();
-  } else {
-    void refreshCodexAuthStatus(provider);
-  }
+function addImageProvider() {
+  imageGenerationTabRef.value?.addProvider();
+}
+
+function removeImageProvider() {
+  imageGenerationTabRef.value?.removeSelectedProvider();
+}
+
+function restoreImageProviderConfig() {
+  imageGenerationTabRef.value?.restoreImageConfig();
+}
+
+function saveImageProviderConfig() {
+  void imageGenerationTabRef.value?.saveImageConfig();
 }
 
 function selectModelCard(modelId: string) {
@@ -1545,41 +1642,10 @@ function revertUnsavedConfigIfNeeded() {
   props.config.apiProviders.splice(providerIndex, 1, cloneProvider(savedProvider));
 }
 
-function addApiKey() {
-  selectedProvider.value?.apiKeys.push("");
-}
-
-function removeApiKey(index: number) {
+function updateSelectedApiKeys(apiKeys: string[]) {
   const provider = selectedProvider.value;
-  if (!provider || provider.apiKeys.length <= 1) return;
-  provider.apiKeys.splice(index, 1);
-}
-
-function pinApiKeyToTop(index: number) {
-  const provider = selectedProvider.value;
-  if (!provider || index === 0 || index >= provider.apiKeys.length) return;
-  const currentVisibleKeys = showApiKeys.value[provider.id] || {};
-  const nextVisibleKeys: Record<number, boolean> = {};
-  provider.apiKeys.forEach((_, currentIndex) => {
-    const nextIndex = currentIndex === index ? 0 : currentIndex < index ? currentIndex + 1 : currentIndex;
-    nextVisibleKeys[nextIndex] = !!currentVisibleKeys[currentIndex];
-  });
-  const [key] = provider.apiKeys.splice(index, 1);
-  provider.apiKeys.unshift(key);
-  showApiKeys.value = {
-    ...showApiKeys.value,
-    [provider.id]: nextVisibleKeys,
-  };
-}
-
-function toggleApiKeyVisible(providerId: string, index: number) {
-  showApiKeys.value = {
-    ...showApiKeys.value,
-    [providerId]: {
-      ...(showApiKeys.value[providerId] || {}),
-      [index]: !(showApiKeys.value[providerId]?.[index]),
-    },
-  };
+  if (!provider) return;
+  provider.apiKeys = apiKeys;
 }
 
 function addModelCard() {
@@ -2192,59 +2258,3 @@ onUnmounted(() => {
   stopCodexAuthPolling();
 });
 </script>
-
-<style scoped>
-.api-save-btn {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-}
-
-.api-save-btn::before {
-  content: "";
-  position: absolute;
-  inset: -18px;
-  border-radius: 9999px;
-  background:
-    conic-gradient(
-      from 0deg,
-      transparent 0deg,
-      transparent 220deg,
-      rgba(255, 255, 255, 0.95) 280deg,
-      rgba(255, 255, 255, 0.1) 320deg,
-      transparent 360deg
-    );
-  opacity: 0;
-  transform: rotate(0deg);
-  transition: opacity 180ms ease;
-  z-index: -2;
-}
-
-.api-save-btn::after {
-  content: "";
-  position: absolute;
-  inset: 2px;
-  border-radius: calc(var(--radius-btn, 0.5rem) - 2px);
-  background: inherit;
-  z-index: -1;
-}
-
-.api-save-btn--dirty {
-  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.25), 0 0 14px rgba(34, 197, 94, 0.2);
-}
-
-.api-save-btn--dirty::before {
-  opacity: 1;
-  animation: api-save-ring-spin 1.8s linear infinite;
-}
-
-@keyframes api-save-ring-spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-</style>

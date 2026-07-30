@@ -1,42 +1,11 @@
 <template>
   <div class="grid gap-3">
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body gap-3 p-4">
-        <div>
-          <div class="card-title text-base mb-1">{{ t("config.api.codexLogin") }}</div>
-          <div class="text-xs opacity-60">{{ t("config.api.codexLoginHint") }}</div>
-        </div>
+    <section>
+      <ConfigTemplate v-model="codexTemplateValues" :groups="codexTemplateGroups" />
+      <div class="grid gap-3">
 
-        <div class="grid gap-3">
-          <label class="flex flex-col gap-1">
-            <span class="text-sm font-medium">{{ t("config.api.codexAuthMode") }}</span>
-            <select v-model="provider.codexAuthMode" class="select select-bordered select-sm" @change="void refreshCodexAuthStatus()">
-              <option v-for="item in codexAuthModeOptions" :key="item.value" :value="item.value">
-                {{ item.label }}
-              </option>
-            </select>
-          </label>
-        </div>
-
-        <div v-if="provider.codexAuthMode === 'read_local'" class="grid gap-3">
-          <label class="flex flex-col gap-1">
-            <span class="text-sm font-medium">{{ t("config.api.codexLocalAuthPath") }}</span>
-            <input v-model="provider.codexLocalAuthPath" class="input input-bordered input-sm" :placeholder="DEFAULT_CODEX_LOCAL_AUTH_PATH" />
-          </label>
-          <div class="flex gap-2">
-            <button class="btn btn-sm bg-base-200" type="button" :disabled="codexAuthBusy" @click="checkLocalCodexAuth">
-              {{ t("config.api.codexCheckLocalLogin") }}
-            </button>
-          </div>
-        </div>
-
-        <div v-else-if="provider.codexAuthMode === 'custom_url'" class="grid gap-3">
+        <div v-if="provider.codexAuthMode === 'custom_url'" class="grid gap-3">
           <div class="text-sm opacity-70">{{ t("config.api.codexCustomConfigHint") }}</div>
-          <label class="flex flex-col gap-1">
-            <span class="text-sm font-medium">{{ t("config.api.codexCustomUrl") }}</span>
-            <input v-model="provider.codexCustomUrl" class="input input-bordered input-sm" :placeholder="DEFAULT_CODEX_BASE_URL" />
-            <span class="text-xs opacity-60">{{ t("config.api.codexCustomUrlHint") }}</span>
-          </label>
           <label class="flex flex-col gap-1">
             <span class="text-sm font-medium">{{ t("config.api.codexCustomApiKey") }}</span>
             <div class="flex items-center gap-2">
@@ -55,7 +24,13 @@
           </label>
         </div>
 
-        <div v-else class="grid gap-3">
+        <div v-if="provider.codexAuthMode === 'read_local'" class="flex gap-2">
+          <button class="btn btn-sm bg-base-200" type="button" :disabled="codexAuthBusy" @click="checkLocalCodexAuth">
+            {{ t("config.api.codexCheckLocalLogin") }}
+          </button>
+        </div>
+
+        <div v-else-if="provider.codexAuthMode === 'managed_oauth'" class="grid gap-3">
           <div class="text-sm opacity-70">{{ t("config.api.codexOAuthHint") }}</div>
           <div class="flex flex-wrap gap-2">
             <button class="btn btn-sm btn-primary" type="button" :disabled="codexAuthBusy" @click="startCodexOAuthLogin">
@@ -173,16 +148,13 @@
           </div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <div class="card bg-base-100 border border-base-300">
+    <section>
+      <h3 class="text-sm font-semibold">{{ t("config.api.codexModels") }}</h3>
+      <div class="card bg-base-100 border border-base-300">
       <div class="card-body gap-3 p-4">
-        <div class="flex items-center justify-between gap-2">
-          <div>
-            <div class="card-title text-base mb-1">{{ t("config.api.codexModels") }}</div>
-            <div class="text-xs opacity-60">{{ t("config.api.codexModelsHint") }}</div>
-          </div>
-          <div class="flex gap-2">
+        <div class="flex items-center justify-end gap-2">
             <button class="btn btn-sm bg-base-200" type="button" :class="{ loading: refreshingModels }" :disabled="refreshingModels" @click="$emit('refreshModels')">
               <span>{{ t("config.api.refreshModels") }}</span>
             </button>
@@ -190,7 +162,6 @@
               <span>{{ t("config.api.addModel") }}</span>
             </button>
           </div>
-        </div>
 
         <div class="text-xs text-error">{{ modelRefreshError || " " }}</div>
 
@@ -206,7 +177,7 @@
                 </button>
               </div>
 
-              <div class="grid gap-3 md:grid-cols-2">
+              <div class="grid gap-3">
                 <label class="flex flex-col gap-1">
                   <span class="text-sm font-medium">{{ t("config.api.model") }}</span>
                   <select v-model="modelCard.model" class="select select-bordered select-sm" @change="syncCachedModels">
@@ -234,8 +205,8 @@
           </div>
         </div>
       </div>
-    </div>
-
+      </div>
+    </section>
   </div>
 </template>
 
@@ -243,6 +214,8 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { Eye, EyeOff, Trash2 } from "@lucide/vue";
+import ConfigTemplate from "../../components/ConfigTemplate.vue";
+import type { ConfigTemplateGroup } from "../../components/config-template";
 import type {
   ApiModelConfigItem,
   ApiProviderConfigItem,
@@ -306,6 +279,56 @@ const codexAuthModeOptions: Array<{ value: CodexAuthMode; label: string }> = [
   { value: "managed_oauth", label: t("config.api.codexAuthModeManagedOauth") },
   { value: "custom_url", label: t("config.api.codexAuthModeCustomUrl") },
 ];
+const codexTemplateValues = computed<Record<string, unknown>>({
+  get: () => ({
+    authMode: props.provider.codexAuthMode || DEFAULT_CODEX_AUTH_MODE,
+    localAuthPath: props.provider.codexLocalAuthPath || DEFAULT_CODEX_LOCAL_AUTH_PATH,
+    customUrl: props.provider.codexCustomUrl || DEFAULT_CODEX_BASE_URL,
+  }),
+  set: (values) => {
+    if (typeof values.authMode === "string" && values.authMode !== props.provider.codexAuthMode) {
+      props.provider.codexAuthMode = values.authMode as CodexAuthMode;
+      void refreshCodexAuthStatus();
+    }
+    if (typeof values.localAuthPath === "string") props.provider.codexLocalAuthPath = values.localAuthPath;
+    if (typeof values.customUrl === "string") {
+      props.provider.codexCustomUrl = values.customUrl;
+      if (props.provider.codexAuthMode === "custom_url") props.provider.baseUrl = values.customUrl;
+    }
+  },
+});
+const codexTemplateGroups = computed<ConfigTemplateGroup[]>(() => {
+  const mode = props.provider.codexAuthMode || DEFAULT_CODEX_AUTH_MODE;
+  const fields: ConfigTemplateGroup["rows"] = [{
+    items: [{
+      key: "authMode",
+      label: t("config.api.codexAuthMode"),
+      type: "select",
+      options: codexAuthModeOptions.map((item) => ({ value: item.value, label: item.label })),
+    }],
+  }];
+  if (mode === "read_local") {
+    fields.push({
+      items: [{
+        key: "localAuthPath",
+        label: t("config.api.codexLocalAuthPath"),
+        type: "text",
+        placeholder: DEFAULT_CODEX_LOCAL_AUTH_PATH,
+      }],
+    });
+  } else if (mode === "custom_url") {
+    fields.push({
+      items: [{
+        key: "customUrl",
+        label: t("config.api.codexCustomUrl"),
+        description: t("config.api.codexCustomUrlHint"),
+        type: "text",
+        placeholder: DEFAULT_CODEX_BASE_URL,
+      }],
+    });
+  }
+  return [{ title: t("config.api.codexLogin"), rows: fields }];
+});
 
 const currentCodexAuthStatus = computed(() => codexAuthStatusByProvider.value[props.provider.id] ?? null);
 const currentCodexRateLimitQuery = computed(() => codexRateLimitQueryByProvider.value[props.provider.id] ?? null);

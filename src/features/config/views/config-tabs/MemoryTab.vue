@@ -15,32 +15,21 @@
       </div>
     </div>
 
-    <!-- 记忆配置区 -->
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-3 space-y-3">
-        <div class="flex items-center justify-between">
-          <span class="text-sm font-medium">{{ t('config.memory.vectorization') }}</span>
-          <div class="text-sm opacity-60">{{ t('config.memory.vectorizationHint') }}</div>
-        </div>
+    <ConfigTemplate :model-value="{}" :groups="memoryTemplateGroups">
+      <template #group-actions-vectorization>
+        <span class="text-xs opacity-60">{{ t('config.memory.vectorizationHint') }}</span>
+      </template>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <!-- 嵌入配置 -->
-          <div class="flex flex-col gap-2">
-            <label class="flex w-full flex-col gap-1">
-              <div class="flex items-center justify-between py-0"><span class="text-sm">{{ t('config.memory.embeddingModel') }}</span></div>
-              <select v-model="embeddingApiConfigId" class="select select-bordered select-sm">
-                <option value="">{{ t('config.memory.notConfigured') }}</option>
-                <option v-for="api in embeddingApiConfigs" :key="api.id" :value="api.id">
-                  {{ api.name }}
-                </option>
-              </select>
-            </label>
-            <div class="flex gap-2">
-              <button class="btn btn-sm flex-1" :disabled="loading || !embeddingApiConfigId" @click="testEmbeddingProvider">
+      <template #row-embedding>
+        <div class="grid gap-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="text-sm">{{ t('config.memory.embeddingModel') }}</span>
+            <div class="flex flex-wrap justify-end gap-2">
+              <button class="btn btn-sm" :disabled="loading || !embeddingApiConfigId" @click="testEmbeddingProvider">
                 {{ t('config.memory.testEmbedding') }}
               </button>
               <button
-                class="btn btn-sm btn-primary flex-1"
+                class="btn btn-sm btn-primary"
                 :disabled="loading || syncLocked || (!!embeddingApiConfigId && !embeddingReadyToSave)"
                 @click="saveEmbeddingBinding"
               >
@@ -48,24 +37,25 @@
               </button>
             </div>
           </div>
+          <select v-model="embeddingApiConfigId" class="select select-bordered select-sm w-full" :disabled="syncLocked">
+            <option value="">{{ t('config.memory.notConfigured') }}</option>
+            <option v-for="api in embeddingApiConfigs" :key="api.id" :value="api.id">
+              {{ api.name }}
+            </option>
+          </select>
+        </div>
+      </template>
 
-          <!-- 重排配置 -->
-          <div class="flex flex-col gap-2">
-            <label class="flex w-full flex-col gap-1">
-              <div class="flex items-center justify-between py-0"><span class="text-sm">{{ t('config.memory.rerankModel') }}</span></div>
-              <select v-model="rerankApiConfigId" class="select select-bordered select-sm">
-                <option value="">{{ t('config.memory.notConfigured') }}</option>
-                <option v-for="api in rerankApiConfigs" :key="api.id" :value="api.id">
-                  {{ api.name }}
-                </option>
-              </select>
-            </label>
-            <div class="flex gap-2">
-              <button class="btn btn-sm flex-1" :disabled="loading || !rerankApiConfigId" @click="testRerankProvider">
+      <template #row-rerank>
+        <div class="grid gap-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="text-sm">{{ t('config.memory.rerankModel') }}</span>
+            <div class="flex flex-wrap justify-end gap-2">
+              <button class="btn btn-sm" :disabled="loading || !rerankApiConfigId" @click="testRerankProvider">
                 {{ t('config.memory.testRerank') }}
               </button>
               <button
-                class="btn btn-sm flex-1"
+                class="btn btn-sm"
                 :disabled="loading || syncLocked || (!!rerankApiConfigId && !rerankReadyToSave)"
                 @click="saveRerankBinding"
               >
@@ -73,211 +63,196 @@
               </button>
             </div>
           </div>
-        </div>
-
-        <div v-if="opMessage" class="text-sm break-all rounded-box bg-base-200/50 px-2 py-1.5">
-          {{ opMessage }}
-        </div>
-      </div>
-    </div>
-
-    <!-- 聊天记录搜索区 -->
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-3 gap-3">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div class="text-sm font-medium">{{ t('config.memory.chatHistory') }}</div>
-            <div class="text-xs opacity-60">{{ t('config.memory.chatHistoryHint') }}</div>
-          </div>
-          <div v-if="chatHistoryStats" class="flex flex-wrap items-center gap-2 text-xs opacity-70">
-            <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeAll') }} {{ chatHistoryStats.totalSlices }}</span>
-            <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeVisible') }} {{ chatHistoryStats.visibleSlices }}</span>
-            <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeLocal') }} {{ chatHistoryStats.localConversationSlices }}</span>
-            <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeArchive') }} {{ chatHistoryStats.archiveSlices }}</span>
-            <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeContact') }} {{ chatHistoryStats.contactSlices }}</span>
-            <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeIndex') }} {{ formatBytes(chatHistoryStats.indexStorageBytes) }}</span>
-            <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeCache') }} {{ formatBytes(chatHistoryStats.cachedSliceBytes) }}</span>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 gap-2 md:grid-cols-[180px_minmax(0,1fr)_auto]">
-          <select v-model="chatHistoryAgentId" class="select select-bordered select-sm" :disabled="chatHistoryLoading">
-            <option value="">{{ t('config.memory.selectPersona') }}</option>
-            <option v-for="agent in personaOptions" :key="agent.id" :value="agent.id">
-              {{ agent.name || agent.id }}
+          <select v-model="rerankApiConfigId" class="select select-bordered select-sm w-full" :disabled="syncLocked">
+            <option value="">{{ t('config.memory.notConfigured') }}</option>
+            <option v-for="api in rerankApiConfigs" :key="api.id" :value="api.id">
+              {{ api.name }}
             </option>
           </select>
-          <input
-            v-model.trim="chatHistoryQuery"
-            class="input input-bordered input-sm"
-            :placeholder="t('config.memory.chatHistorySearchPlaceholder')"
-            :disabled="chatHistoryLoading"
-            @keyup.enter="searchChatHistory"
-          />
-          <button
-            class="btn btn-sm btn-primary"
-            :disabled="chatHistoryLoading || !chatHistoryAgentId || !chatHistoryQuery"
-            @click="searchChatHistory"
-          >
-            <span v-if="chatHistoryLoading" class="loading loading-spinner loading-xs"></span>
-            {{ chatHistoryLoading ? t('config.memory.searching') : t('config.memory.searchChatHistory') }}
-          </button>
         </div>
+      </template>
 
-        <div v-if="chatHistoryMessage" class="text-xs opacity-70">
-          {{ chatHistoryMessage }}
+      <template #group-actions-chat-history>
+        <div v-if="chatHistoryStats" class="flex flex-wrap items-center justify-end gap-2 text-xs opacity-70">
+          <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeAll') }} {{ chatHistoryStats.totalSlices }}</span>
+          <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeVisible') }} {{ chatHistoryStats.visibleSlices }}</span>
+          <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeLocal') }} {{ chatHistoryStats.localConversationSlices }}</span>
+          <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeArchive') }} {{ chatHistoryStats.archiveSlices }}</span>
+          <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeContact') }} {{ chatHistoryStats.contactSlices }}</span>
+          <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeIndex') }} {{ formatBytes(chatHistoryStats.indexStorageBytes) }}</span>
+          <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeCache') }} {{ formatBytes(chatHistoryStats.cachedSliceBytes) }}</span>
         </div>
+      </template>
 
-        <div v-if="chatHistoryHits.length > 0" class="max-h-96 overflow-auto">
-          <div class="flex flex-col gap-2">
-            <div
-              v-for="hit in chatHistoryHits"
-              :key="hit.slice.id"
-              class="rounded-box border border-base-300 bg-base-200 p-3"
+      <template #row-chat-history>
+        <div class="grid min-w-0 gap-3">
+          <div class="grid grid-cols-1 gap-2 md:grid-cols-[180px_minmax(0,1fr)_auto]">
+            <select v-model="chatHistoryAgentId" class="select select-bordered select-sm" :disabled="chatHistoryLoading">
+              <option value="">{{ t('config.memory.selectPersona') }}</option>
+              <option v-for="agent in personaOptions" :key="agent.id" :value="agent.id">
+                {{ agent.name || agent.id }}
+              </option>
+            </select>
+            <input
+              v-model.trim="chatHistoryQuery"
+              class="input input-bordered input-sm"
+              :placeholder="t('config.memory.chatHistorySearchPlaceholder')"
+              :disabled="chatHistoryLoading"
+              @keyup.enter="searchChatHistory"
+            />
+            <button
+              class="btn btn-sm btn-primary"
+              :disabled="chatHistoryLoading || !chatHistoryAgentId || !chatHistoryQuery"
+              @click="searchChatHistory"
             >
-              <div class="mb-2 flex flex-wrap items-center gap-2 text-xs opacity-70">
-                <span class="badge badge-sm badge-outline">{{ chatHistorySourceLabel(hit.slice.sourceKind) }}</span>
-                <span>{{ hit.slice.sourceTitle || hit.slice.sourceId }}</span>
-                <span>{{ formatMemoryTime(hit.slice.timeStart || hit.slice.timeEnd) }}</span>
-                <span>BM25 {{ hit.bm25NormalizedScore.toFixed(3) }}</span>
-              </div>
-              <div class="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed">
-                {{ hit.slice.content }}
-              </div>
-              <div class="mt-2 flex flex-wrap gap-1 text-xs opacity-70">
-                <span v-for="speaker in hit.slice.speakers" :key="`${hit.slice.id}-${speaker}`" class="badge badge-sm badge-ghost">
-                  {{ speaker }}
-                </span>
+              <span v-if="chatHistoryLoading" class="loading loading-spinner loading-xs"></span>
+              {{ chatHistoryLoading ? t('config.memory.searching') : t('config.memory.searchChatHistory') }}
+            </button>
+          </div>
+
+          <div v-if="chatHistoryMessage" class="text-xs opacity-70">
+            {{ chatHistoryMessage }}
+          </div>
+
+          <div v-if="chatHistoryHits.length > 0" class="max-h-96 overflow-auto">
+            <div class="flex flex-col gap-2">
+              <div
+                v-for="hit in chatHistoryHits"
+                :key="hit.slice.id"
+                class="rounded-box border border-base-300 bg-base-200 p-3"
+              >
+                <div class="mb-2 flex flex-wrap items-center gap-2 text-xs opacity-70">
+                  <span class="badge badge-sm badge-outline">{{ chatHistorySourceLabel(hit.slice.sourceKind) }}</span>
+                  <span>{{ hit.slice.sourceTitle || hit.slice.sourceId }}</span>
+                  <span>{{ formatMemoryTime(hit.slice.timeStart || hit.slice.timeEnd) }}</span>
+                  <span>BM25 {{ hit.bm25NormalizedScore.toFixed(3) }}</span>
+                </div>
+                <div class="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed">
+                  {{ hit.slice.content }}
+                </div>
+                <div class="mt-2 flex flex-wrap gap-1 text-xs opacity-70">
+                  <span v-for="speaker in hit.slice.speakers" :key="`${hit.slice.id}-${speaker}`" class="badge badge-sm badge-ghost">
+                    {{ speaker }}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </template>
 
-    <!-- 召回诊断区（工具召回 / RAG 召换双模式） -->
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-3 gap-3">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div class="text-sm font-medium">{{ t('config.memory.recallDiagnosis') }}</div>
-            <div class="text-xs opacity-60">{{ t('config.memory.recallDiagnosisHint') }}</div>
-          </div>
-          <!-- 模式开关：工具召回 | RAG 召换 -->
-          <div class="join">
-            <button
-              class="btn btn-sm join-item"
-              :class="recallMode === 'tool' ? 'btn-primary' : 'btn-ghost'"
-              @click="recallMode = 'tool'"
-            >
-              {{ t('config.memory.recallModeTool') }}
-            </button>
-            <button
-              class="btn btn-sm join-item"
-              :class="recallMode === 'rag' ? 'btn-primary' : 'btn-ghost'"
-              @click="recallMode = 'rag'"
-            >
-              {{ t('config.memory.recallModeRag') }}
-            </button>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 gap-2 md:grid-cols-[180px_minmax(0,1fr)_auto]">
-          <select v-model="recallAgentId" class="select select-bordered select-sm" :disabled="recallLoading">
-            <option value="">{{ t('config.memory.selectPersona') }}</option>
-            <option v-for="agent in personaOptions" :key="agent.id" :value="agent.id">
-              {{ agent.name || agent.id }}
-            </option>
-          </select>
-          <input
-            v-model.trim="recallQuery"
-            class="input input-bordered input-sm"
-            :placeholder="t('config.memory.recallQueryPlaceholder')"
-            :disabled="recallLoading"
-            @keyup.enter="searchRecall"
-          />
-          <button
-            class="btn btn-sm btn-primary"
-            :disabled="recallLoading || !recallAgentId || !recallQuery"
-            @click="searchRecall"
-          >
-            <span v-if="recallLoading" class="loading loading-spinner loading-xs"></span>
-            {{ recallLoading ? t('config.memory.searching') : t('config.memory.recallSearch') }}
-          </button>
-        </div>
-
-        <!-- 仅 tool 模式显示时间过滤 -->
-        <div v-if="recallMode === 'tool'" class="grid grid-cols-1 gap-2 md:grid-cols-[180px_minmax(0,1fr)_auto]">
-          <div class="text-xs opacity-60 md:text-right md:pt-2">{{ t('config.memory.recallTimeLabel') }}</div>
-          <input
-            v-model.trim="recallTime"
-            class="input input-bordered input-sm"
-            :placeholder="t('config.memory.recallTimePlaceholder')"
-            :disabled="recallLoading"
-          />
-          <button class="btn btn-sm bg-base-200" :disabled="recallLoading" @click="clearRecall">
-            {{ t('config.memory.clear') }}
-          </button>
-        </div>
-
-        <div v-if="recallMessage" class="text-xs opacity-70">
-          {{ recallMessage }}
-        </div>
-
-        <!-- 只读结果卡（带分数） -->
-        <div v-if="recallResults.length > 0" class="max-h-96 overflow-auto">
-          <div class="flex flex-col gap-2">
-            <div
-              v-for="(memory, index) in recallResults"
-              :key="memory.id"
-              class="rounded-box border border-base-300 bg-base-200 p-3"
-            >
-              <div class="mb-1 flex flex-wrap items-center gap-2 text-xs opacity-70">
-                <span class="badge badge-sm badge-outline">#{{ index + 1 }}</span>
-                <span v-if="memory.ownerAgentId" class="badge badge-sm badge-ghost">{{ ownerAgentName(memory.ownerAgentId) }}</span>
-                <span class="badge badge-sm badge-ghost">{{ memory.memoryType }}</span>
-                <span>BM25 {{ (memory.bm25Score ?? 0).toFixed(3) }}</span>
-                <span>{{ t('config.memory.vectorScoreLabel') }} {{ (memory.vectorScore ?? 0).toFixed(3) }}</span>
-                <span>{{ t('config.memory.rerankScoreLabel') }} {{ (memory.rerankScore ?? 0).toFixed(3) }}</span>
-                <span class="text-primary font-medium">{{ t('config.memory.finalScoreLabel') }} {{ (memory.finalScore ?? 0).toFixed(3) }}</span>
-              </div>
-              <div class="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed">
-                {{ memory.judgment }}
-              </div>
-              <div v-if="memory.reasoning" class="mt-1 text-xs opacity-60 whitespace-pre-wrap wrap-break-word">
-                {{ memory.reasoning }}
-              </div>
-              <div v-if="memory.tags && memory.tags.length > 0" class="mt-2 flex flex-wrap gap-1">
-                <span v-for="tag in memory.tags" :key="tag" class="badge badge-sm badge-ghost">{{ tag }}</span>
-              </div>
-              <progress
-                class="progress progress-primary mt-2 h-1"
-                :value="Math.min(100, (memory.finalScore ?? 0) * 100)"
-                max="100"
-              ></progress>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 记忆列表区 -->
-    <div class="card bg-base-100 min-h-70">
-      <div class="card-body p-3 min-h-0 flex flex-col gap-3">
-        <!-- 标题 + 操作 -->
-        <div class="flex items-center justify-between gap-3">
-          <span class="text-sm font-medium">{{ t('config.memory.list') }}</span>
-          <div class="flex items-center gap-2">
+      <template #row-recall-diagnosis>
+        <div class="grid min-w-0 gap-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="text-xs opacity-60">{{ t('config.memory.recallDiagnosisHint') }}</span>
             <div class="join">
-              <button class="btn btn-sm join-item btn-ghost" :disabled="loading" @click="refreshMemories" :title="t('sidebar.memoryRefresh')">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+              <button
+                class="btn btn-sm join-item"
+                :class="recallMode === 'tool' ? 'btn-primary' : 'btn-ghost'"
+                @click="recallMode = 'tool'"
+              >
+                {{ t('config.memory.recallModeTool') }}
               </button>
-              <MemoryExportCard class="join-item" @exported="handleMemoryExportDone" />
-              <MemoryImportCard class="join-item" @imported="handleMemoryImportDone" />
+              <button
+                class="btn btn-sm join-item"
+                :class="recallMode === 'rag' ? 'btn-primary' : 'btn-ghost'"
+                @click="recallMode = 'rag'"
+              >
+                {{ t('config.memory.recallModeRag') }}
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 gap-2 md:grid-cols-[180px_minmax(0,1fr)_auto]">
+            <select v-model="recallAgentId" class="select select-bordered select-sm" :disabled="recallLoading">
+              <option value="">{{ t('config.memory.selectPersona') }}</option>
+              <option v-for="agent in personaOptions" :key="agent.id" :value="agent.id">
+                {{ agent.name || agent.id }}
+              </option>
+            </select>
+            <input
+              v-model.trim="recallQuery"
+              class="input input-bordered input-sm"
+              :placeholder="t('config.memory.recallQueryPlaceholder')"
+              :disabled="recallLoading"
+              @keyup.enter="searchRecall"
+            />
+            <button
+              class="btn btn-sm btn-primary"
+              :disabled="recallLoading || !recallAgentId || !recallQuery"
+              @click="searchRecall"
+            >
+              <span v-if="recallLoading" class="loading loading-spinner loading-xs"></span>
+              {{ recallLoading ? t('config.memory.searching') : t('config.memory.recallSearch') }}
+            </button>
+          </div>
+
+          <div v-if="recallMode === 'tool'" class="grid grid-cols-1 gap-2 md:grid-cols-[180px_minmax(0,1fr)_auto]">
+            <div class="text-xs opacity-60 md:text-right md:pt-2">{{ t('config.memory.recallTimeLabel') }}</div>
+            <input
+              v-model.trim="recallTime"
+              class="input input-bordered input-sm"
+              :placeholder="t('config.memory.recallTimePlaceholder')"
+              :disabled="recallLoading"
+            />
+            <button class="btn btn-sm bg-base-200" :disabled="recallLoading" @click="clearRecall">
+              {{ t('config.memory.clear') }}
+            </button>
+          </div>
+
+          <div v-if="recallMessage" class="text-xs opacity-70">
+            {{ recallMessage }}
+          </div>
+
+          <div v-if="recallResults.length > 0" class="max-h-96 overflow-auto">
+            <div class="flex flex-col gap-2">
+              <div
+                v-for="(memory, index) in recallResults"
+                :key="memory.id"
+                class="rounded-box border border-base-300 bg-base-200 p-3"
+              >
+                <div class="mb-1 flex flex-wrap items-center gap-2 text-xs opacity-70">
+                  <span class="badge badge-sm badge-outline">#{{ index + 1 }}</span>
+                  <span v-if="memory.ownerAgentId" class="badge badge-sm badge-ghost">{{ ownerAgentName(memory.ownerAgentId) }}</span>
+                  <span class="badge badge-sm badge-ghost">{{ memory.memoryType }}</span>
+                  <span>BM25 {{ (memory.bm25Score ?? 0).toFixed(3) }}</span>
+                  <span>{{ t('config.memory.vectorScoreLabel') }} {{ (memory.vectorScore ?? 0).toFixed(3) }}</span>
+                  <span>{{ t('config.memory.rerankScoreLabel') }} {{ (memory.rerankScore ?? 0).toFixed(3) }}</span>
+                  <span class="text-primary font-medium">{{ t('config.memory.finalScoreLabel') }} {{ (memory.finalScore ?? 0).toFixed(3) }}</span>
+                </div>
+                <div class="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed">
+                  {{ memory.judgment }}
+                </div>
+                <div v-if="memory.reasoning" class="mt-1 text-xs opacity-60 whitespace-pre-wrap wrap-break-word">
+                  {{ memory.reasoning }}
+                </div>
+                <div v-if="memory.tags && memory.tags.length > 0" class="mt-2 flex flex-wrap gap-1">
+                  <span v-for="tag in memory.tags" :key="tag" class="badge badge-sm badge-ghost">{{ tag }}</span>
+                </div>
+                <progress
+                  class="progress progress-primary mt-2 h-1"
+                  :value="Math.min(100, (memory.finalScore ?? 0) * 100)"
+                  max="100"
+                ></progress>
+              </div>
             </div>
           </div>
         </div>
-        <div class="sticky top-0 z-10 space-y-2 bg-base-100/95 py-2 backdrop-blur">
+      </template>
+
+      <template #group-actions-memory-list>
+        <div class="join">
+          <button class="btn btn-sm join-item btn-ghost" :disabled="loading" @click="refreshMemories" :title="t('sidebar.memoryRefresh')">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+          </button>
+          <MemoryExportCard class="join-item" @exported="handleMemoryExportDone" />
+          <MemoryImportCard class="join-item" @imported="handleMemoryImportDone" />
+        </div>
+      </template>
+
+      <template #row-memory-list>
+        <div class="min-h-70 min-h-0 flex flex-col gap-3">
+          <div class="sticky top-0 z-10 space-y-2 bg-base-100/95 py-2 backdrop-blur">
           <div class="flex items-center gap-3">
             <button
               class="btn btn-sm bg-base-200 hover:bg-base-300 shrink-0"
@@ -465,7 +440,12 @@
                     </div>
                   </div>
                 </div>
-      </div>
+        </div>
+      </template>
+    </ConfigTemplate>
+
+    <div v-if="opMessage" class="break-all rounded-box bg-base-200/50 px-2 py-1.5 text-sm">
+      {{ opMessage }}
     </div>
   </div>
 </template>
@@ -475,6 +455,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { LayoutList, List, SlidersHorizontal } from "@lucide/vue";
 import { invokeTauri } from "../../../../services/tauri-api";
+import ConfigTemplate from "../../components/ConfigTemplate.vue";
+import type { ConfigTemplateGroup } from "../../components/config-template";
 import MemoryExportCard from "../../components/MemoryExportCard.vue";
 import MemoryImportCard from "../../components/MemoryImportCard.vue";
 
@@ -713,6 +695,32 @@ const pagedMemories = computed(() => {
   const start = (page - 1) * memoryPageSize.value;
   return sortedMemories.value.slice(start, start + memoryPageSize.value);
 });
+
+const memoryTemplateGroups = computed<ConfigTemplateGroup[]>(() => ([
+  {
+    key: "vectorization",
+    title: t("config.memory.vectorization"),
+    rows: [
+      { key: "embedding", items: [] },
+      { key: "rerank", items: [] },
+    ],
+  },
+  {
+    key: "chat-history",
+    title: t("config.memory.chatHistory"),
+    rows: [{ key: "chat-history", items: [] }],
+  },
+  {
+    key: "recall-diagnosis",
+    title: t("config.memory.recallDiagnosis"),
+    rows: [{ key: "recall-diagnosis", items: [] }],
+  },
+  {
+    key: "memory-list",
+    title: t("config.memory.list"),
+    rows: [{ key: "memory-list", items: [] }],
+  },
+]));
 
 function setMemoryViewMode(mode: "detailed" | "compact"): void {
   if (memoryViewMode.value === mode) return;

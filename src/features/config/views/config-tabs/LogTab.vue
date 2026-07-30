@@ -1,58 +1,55 @@
 <template>
   <div class="grid gap-3">
-    <div class="rounded-lg border border-base-300 bg-base-100 p-4">
-      <div class="flex flex-col gap-3">
-        <div class="flex flex-col gap-1">
-          <div>
-            <div class="text-sm font-semibold">{{ t("config.logs.title") }}</div>
-            <div class="mt-1 text-xs opacity-60">{{ t("config.logs.capacityHint", { count: props.config.llmRoundLogCapacity }) }}</div>
+    <ConfigTemplate :model-value="templateValues" :groups="templateGroups">
+    <template #row-log-panel>
+      <div class="grid min-w-0 gap-4">
+        <div class="flex min-w-0 flex-wrap items-center justify-between gap-3">
+          <div class="min-w-0">
+            <div class="text-sm">{{ t("config.logs.cacheSize") }}</div>
+            <div class="mt-1 text-xs text-base-content/60">{{ t("config.logs.capacityHint", { count: props.config.llmRoundLogCapacity }) }}</div>
+          </div>
+          <div class="join shrink-0">
+            <button
+              v-for="option in logCapacityOptions"
+              :key="option"
+              class="btn btn-sm min-h-9 w-16 join-item"
+              :class="props.config.llmRoundLogCapacity === option ? 'btn-primary' : 'bg-base-200'"
+              type="button"
+              @click="setLogCapacity(option)"
+            >
+              {{ t("config.logs.times", { count: option }) }}
+            </button>
           </div>
         </div>
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="flex flex-wrap gap-2">
-            <button :class="actionButtonClass" @click="props.openRuntimeLogs">
-              {{ t("config.logs.backendLogs") }}
-            </button>
-            <button :class="actionButtonClass" :disabled="loading" @click="reload">
-              {{ t("common.refresh") }}
-            </button>
-            <button
-              :class="actionButtonClass"
-              :disabled="loading || logs.length === 0"
-              @click="clearAll"
-            >
-              {{ t("common.clear") }}
-            </button>
-          </div>
-          <div class="flex flex-wrap items-center gap-2 text-sm">
-            <span class="opacity-70">{{ t("config.logs.cacheSize") }}</span>
-            <div class="join">
-              <button
-                v-for="option in logCapacityOptions"
-                :key="option"
-                class="btn btn-sm min-h-9 w-16 join-item"
-                :class="props.config.llmRoundLogCapacity === option ? 'btn-primary' : 'bg-base-200'"
-                type="button"
-                @click="setLogCapacity(option)"
-              >
-                {{ t("config.logs.times", { count: option }) }}
-              </button>
-            </div>
-          </div>
+
+        <div class="flex min-w-0 flex-wrap items-center gap-2 border-t border-base-200 pt-4">
+          <button :class="actionButtonClass" @click="props.openRuntimeLogs">
+            {{ t("config.logs.backendLogs") }}
+          </button>
+          <button :class="actionButtonClass" :disabled="loading" @click="reload">
+            {{ t("config.logs.refreshPipelineLogs") }}
+          </button>
+          <button
+            :class="actionButtonClass"
+            :disabled="loading || logs.length === 0"
+            @click="clearAll"
+          >
+            {{ t("config.logs.clearPipelineLogs") }}
+          </button>
         </div>
       </div>
-    </div>
+    </template>
+  </ConfigTemplate>
 
-    <div v-if="loading" class="text-sm opacity-70">{{ t("common.loading") }}</div>
+  <div v-if="loading" class="text-sm opacity-70">{{ t("common.loading") }}</div>
     <div v-else-if="logs.length === 0" class="text-sm opacity-50">{{ t("config.logs.noLogs") }}</div>
 
     <div v-else class="space-y-4">
       <section v-if="pipelineLogs.length" class="space-y-3">
-        <div class="text-sm font-medium opacity-80">{{ t("config.logs.pipelineLogs") }}</div>
         <article
           v-for="entry in pipelineLogs"
           :key="entry.id"
-          class="rounded-lg border-2 border-primary/20 bg-base-100 p-4 shadow-sm"
+          class="overflow-hidden rounded-box bg-base-100 p-4"
         >
           <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div class="min-w-0 space-y-2">
@@ -162,7 +159,7 @@
         <article
           v-for="entry in otherLogs"
           :key="entry.id"
-          class="rounded-lg border border-base-300 bg-base-100 p-3"
+          class="overflow-hidden rounded-box bg-base-100 p-4"
         >
           <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div class="min-w-0">
@@ -195,8 +192,9 @@
         </article>
       </section>
     </div>
+  </div>
 
-    <dialog class="modal" :class="{ 'modal-open': !!selectedRound }">
+  <dialog class="modal" :class="{ 'modal-open': !!selectedRound }">
       <div class="modal-box max-w-5xl space-y-4">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0 space-y-1">
@@ -316,13 +314,14 @@
         <button @click="closeRound">close</button>
       </form>
     </dialog>
-  </div>
 </template>
 
 <script setup lang="ts">
 import { computed, defineComponent, h, onMounted, ref, shallowRef, type PropType } from "vue";
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../../services/tauri-api";
+import ConfigTemplate from "../../components/ConfigTemplate.vue";
+import type { ConfigTemplateGroup } from "../../components/config-template";
 import type { AppConfig, LlmRoundLogEntry, LlmRoundLogStage } from "../../../../types/app";
 import { toErrorMessage } from "../../../../utils/error";
 
@@ -419,6 +418,14 @@ const props = defineProps<{
 }>();
 
 const { t, locale } = useI18n();
+const templateValues = {};
+const templateGroups = computed<ConfigTemplateGroup[]>(() => [
+  {
+    key: "logs",
+    title: t("config.logs.title"),
+    rows: [{ key: "log-panel", items: [] }],
+  },
+]);
 const loading = ref(false);
 const logs = shallowRef<LlmRoundLogEntry[]>([]);
 const logCapacityOptions = [1, 3, 10] as const;

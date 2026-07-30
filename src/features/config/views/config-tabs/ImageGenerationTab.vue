@@ -1,88 +1,21 @@
 <template>
   <div class="grid gap-3">
-    <div class="flex items-center gap-2">
-      <button class="btn btn-sm btn-square btn-primary shrink-0" type="button" :title="t('config.imageGeneration.addProvider')" @click="addProvider">
-        <Plus class="h-4 w-4" />
-      </button>
-      <button class="btn btn-sm btn-square shrink-0" :class="providers.length <= 1 ? 'btn-disabled bg-base-200 text-base-content/30' : 'btn-error'" type="button" :title="t('config.imageGeneration.removeProvider')" :disabled="!selectedProvider || providers.length <= 1" @click="removeSelectedProvider">
-        <Trash2 class="h-4 w-4" />
-      </button>
-      <select :value="selectedProviderId" class="select select-bordered select-md min-w-0 flex-1" :disabled="providers.length === 0" @change="selectedProviderId = ($event.target as HTMLSelectElement).value">
-        <option v-if="providers.length === 0" value="">{{ t("config.imageGeneration.emptyProviders") }}</option>
-        <option v-for="provider in providers" :key="provider.id" :value="provider.id">{{ provider.name || provider.id }}（{{ providerTypeLabel(provider.providerType) }}）</option>
-      </select>
-      <button class="btn btn-sm btn-square" :class="imageDirty ? 'btn-info' : 'bg-base-200 text-base-content/30 shadow-none'" type="button" :title="t('common.reset')" :disabled="!imageDirty || props.savingConfig" @click="restoreImageConfig"><RotateCcw class="h-4 w-4" /></button>
-      <button class="api-save-btn btn btn-sm btn-square" :class="imageDirty ? 'btn-success api-save-btn--dirty' : 'bg-base-200 text-base-content/50 shadow-none'" type="button" :title="props.savingConfig ? t('common.saving') : imageDirty ? t('common.save') : t('common.saved')" :disabled="!imageDirty || props.savingConfig || !!enabledWorkflowError" @click="saveImageConfig"><Save v-if="!props.savingConfig" class="h-4 w-4" /><span v-else class="loading loading-spinner loading-sm" /></button>
-    </div>
-
     <div v-if="selectedProvider" class="grid gap-3">
       <ConfigTemplate v-model="providerTemplateValues" :groups="providerTemplateGroups" />
       <section v-if="selectedProvider.providerType !== 'codex'">
-        <h3 class="mb-1 text-base font-semibold">{{ t("config.imageGeneration.apiKeys") }}</h3>
-        <p class="mb-3 text-xs text-base-content/60">{{ t("config.imageGeneration.apiKeysHint") }}</p>
-        <div class="card border border-base-300 bg-base-100">
-            <div class="card-body gap-3 p-4">
-              <div class="flex items-center justify-between gap-2">
-                <div class="text-sm font-medium">{{ t("config.api.apiKeyPool") }}</div>
-                <button class="btn btn-sm bg-base-200" type="button" @click="addApiKey">
-                  <Plus class="h-3.5 w-3.5" />
-                  <span>{{ t("config.api.addApiKey") }}</span>
-                </button>
-              </div>
-
-              <div class="grid gap-2">
-                <div v-for="(apiKey, index) in selectedProvider.apiKeys" :key="`key-${selectedProvider.id}-${index}`"
-                  class="flex items-center gap-2">
-                  <span class="w-4 shrink-0" />
-                  <input
-                    v-model="selectedProvider.apiKeys[index]"
-                    :type="showImageApiKeys[selectedProvider.id]?.[index] ? 'text' : 'password'"
-                    class="input input-bordered input-sm flex-1"
-                    :placeholder="`API Key #${index + 1}`"
-                  />
-                  <button
-                    class="btn btn-sm btn-square bg-base-200"
-                    type="button"
-                    :disabled="index === 0"
-                    :title="t('config.api.pinApiKeyToTop')"
-                    @click="pinApiKeyToTop(index)"
-                  >
-                    <ArrowUpToLine class="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    class="btn btn-sm btn-square bg-base-200"
-                    type="button"
-                    @click="toggleImageApiKeyVisible(selectedProvider.id, index)"
-                  >
-                    <EyeOff v-if="showImageApiKeys[selectedProvider.id]?.[index]" class="h-3.5 w-3.5" />
-                    <Eye v-else class="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    class="btn btn-sm btn-square bg-base-200 text-error"
-                    type="button"
-                    :disabled="selectedProvider.apiKeys.length <= 1"
-                    @click="removeApiKey(index)"
-                  >
-                    <Trash2 class="h-3.5 w-3.5" />
-                  </button>
-                </div>
-                <div
-                  v-if="selectedProvider.apiKeys.length === 0"
-                  class="rounded-box border border-dashed border-base-300 px-3 py-3 text-sm opacity-60"
-                >
-                  {{ t("config.api.noApiKey") }}
-                </div>
-              </div>
-            </div>
-        </div>
+        <h3 class="text-sm font-semibold">{{ t("config.imageGeneration.apiKeys") }}</h3>
+        <ApiKeyListCard
+          :key="selectedProvider.id"
+          :model-value="selectedProvider.apiKeys"
+          @update:model-value="updateSelectedApiKeys"
+        />
       </section>
       <div v-else class="rounded-box border border-info/30 bg-info/5 px-3 py-2 text-xs text-base-content/70">
         {{ t("config.imageGeneration.codexCredentialHint") }}
       </div>
 
       <section>
-        <h3 class="mb-1 text-base font-semibold">{{ t("config.api.modelCards") }}</h3>
-        <p class="mb-3 text-xs text-base-content/60">{{ t("config.api.modelCardsHint") }}</p>
+        <h3 class="text-sm font-semibold">{{ t("config.api.modelCards") }}</h3>
         <div class="card border border-base-300 bg-base-100">
           <div class="card-body gap-3 p-4">
           <div class="flex items-start justify-between gap-3">
@@ -127,8 +60,7 @@
       </section>
 
       <section v-if="selectedProvider.providerType === 'comfyui'">
-        <h3 class="mb-1 text-base font-semibold">{{ t("config.imageGeneration.comfyTitle") }}</h3>
-        <p class="mb-3 text-xs text-base-content/60">{{ t("config.imageGeneration.comfyHint") }}</p>
+        <h3 class="text-sm font-semibold">{{ t("config.imageGeneration.comfyTitle") }}</h3>
         <div class="card border border-base-300 bg-base-100">
           <div class="card-body gap-4 p-4">
           <label class="grid gap-1">
@@ -159,8 +91,7 @@
       </section>
 
       <section>
-        <h3 class="mb-1 text-base font-semibold">{{ t("config.imageGeneration.testTitle") }}</h3>
-        <p class="mb-3 text-xs text-base-content/60">{{ t("config.imageGeneration.testHint") }}</p>
+        <h3 class="text-sm font-semibold">{{ t("config.imageGeneration.testTitle") }}</h3>
         <div class="card border border-base-300 bg-base-100">
         <div class="card-body gap-4 p-4">
           <div v-if="imageDirty" class="alert alert-warning py-2 text-xs">
@@ -238,7 +169,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { ArrowUpToLine, ChevronDown, Copy, Eye, EyeOff, Image as ImageIcon, Plus, RotateCcw, Save, Trash2, Workflow } from "@lucide/vue";
+import { ChevronDown, Copy, Image as ImageIcon, Plus, Trash2 } from "@lucide/vue";
 import type {
   AppConfig,
   ComfyUiWorkflowMapping,
@@ -252,6 +183,7 @@ import {
   readTransportChatImage,
 } from "../../../../services/tauri-api";
 import ConfigTemplate from "../../components/ConfigTemplate.vue";
+import ApiKeyListCard from "../../components/ApiKeyListCard.vue";
 import type { ConfigTemplateGroup } from "../../components/config-template";
 import {
   createImageGenerationModel,
@@ -265,7 +197,6 @@ type ComfyInputMappingKey = Exclude<keyof ComfyUiWorkflowMapping, "outputNodeIds
 
 const props = defineProps<{
   config: AppConfig;
-  configDirty: boolean;
   savingConfig: boolean;
   saveConfigAction: () => Promise<boolean> | boolean;
   lastSavedConfigJson: string;
@@ -287,7 +218,6 @@ const testPreviewDataUrl = ref("");
 const firstTestImage = computed(() => testResult.value?.images[0] || null);
 const activeImageModelPickerId = ref("");
 const imageModelSearch = ref("");
-const showImageApiKeys = ref<Record<string, Record<number, boolean>>>({});
 let localSeed = 0;
 
 const providerTypeOptions: Array<{ value: ImageGenerationProviderKind; label: string }> = [
@@ -369,17 +299,43 @@ const providerTemplateValues = computed<Record<string, unknown>>({
 const providerTemplateGroups = computed<ConfigTemplateGroup[]>(() => {
   const provider = selectedProvider.value;
   if (!provider) return [];
+  const providerTypeField = {
+    key: "providerType",
+    label: t("config.imageGeneration.providerType"),
+    type: "select" as const,
+    options: providerTypeOptions.map((item) => ({ value: item.value, label: item.label })),
+  };
+  const providerNameField = {
+    key: "providerName",
+    label: t("config.imageGeneration.providerName"),
+    type: "text" as const,
+  };
   const endpointField = provider.providerType === "codex"
     ? { key: "codexApiProviderId", label: t("config.imageGeneration.codexApiProvider"), description: t("config.imageGeneration.codexApiProviderHint"), type: "select" as const, options: [{ value: "", label: t("config.imageGeneration.codexApiProviderMissing") }, ...codexApiProviders.value.map((item) => ({ value: item.id, label: item.name }))] }
-    : { key: "baseUrl", label: t("config.imageGeneration.baseUrl"), type: "text" as const };
-  const fields = [
-    { key: "providerType", label: t("config.imageGeneration.providerType"), type: "select" as const, options: providerTypeOptions.map((item) => ({ value: item.value, label: item.label })) },
-    { key: "providerName", label: t("config.imageGeneration.providerName"), type: "text" as const },
-    endpointField,
-    { key: "timeoutSeconds", label: t("config.imageGeneration.timeoutSeconds"), type: "number" as const, min: 10, max: 600 },
+    : { key: "baseUrl", label: t("config.imageGeneration.baseUrl"), type: "text" as const, stacked: true };
+  const timeoutField = {
+    key: "timeoutSeconds",
+    label: t("config.imageGeneration.timeoutSeconds"),
+    type: "number" as const,
+    min: 10,
+    max: 600,
+  };
+  const rows: ConfigTemplateGroup["rows"] = [
+    { items: [providerTypeField] },
+    { items: [providerNameField] },
+    { items: [timeoutField] },
+    { items: [endpointField] },
   ];
-  if (provider.providerType === "seedream") fields.push({ key: "watermark", label: t("config.imageGeneration.watermark"), description: t("config.imageGeneration.watermarkHint"), type: "toggle" as const } as never);
-  const rows: ConfigTemplateGroup["rows"] = fields.map((field) => ({ items: [field] }));
+  if (provider.providerType === "seedream") {
+    rows.push({
+      items: [{
+        key: "watermark",
+        label: t("config.imageGeneration.watermark"),
+        description: t("config.imageGeneration.watermarkHint"),
+        type: "toggle",
+      }],
+    });
+  }
   return [{ title: t("config.imageGeneration.providerSettings"), rows }];
 });
 
@@ -452,6 +408,19 @@ const enabledWorkflowError = computed(() => {
   return "";
 });
 
+const toolbarState = computed(() => ({
+  providers: providers.value.map((provider) => ({
+    id: provider.id,
+    label: `${provider.name || provider.id}（${providerTypeLabel(provider.providerType)}）`,
+  })),
+  selectedProviderId: selectedProviderId.value,
+  dirty: imageDirty.value,
+  saving: props.savingConfig,
+  removeDisabled: !selectedProvider.value || providers.value.length <= 1,
+  restoreDisabled: !imageDirty.value || props.savingConfig,
+  saveDisabled: !imageDirty.value || props.savingConfig || !!enabledWorkflowError.value,
+}));
+
 watch(
   providers,
   (value) => {
@@ -468,6 +437,11 @@ function nextSeed(): string {
 
 function providerTypeLabel(kind: ImageGenerationProviderKind): string {
   return providerTypeOptions.find((option) => option.value === kind)?.label || kind;
+}
+
+function selectProvider(providerId: string) {
+  if (!providers.value.some((provider) => provider.id === providerId)) return;
+  selectedProviderId.value = providerId;
 }
 
 function clearInvalidDefaultModel() {
@@ -489,11 +463,6 @@ function addProvider() {
   }
 }
 
-function setCodexApiProvider(value: string) {
-  if (!selectedProvider.value || selectedProvider.value.providerType !== "codex") return;
-  selectedProvider.value.codexApiProviderId = value.trim() || undefined;
-}
-
 function removeSelectedProvider() {
   const provider = selectedProvider.value;
   if (!provider) return;
@@ -503,33 +472,10 @@ function removeSelectedProvider() {
   clearInvalidDefaultModel();
 }
 
-function addApiKey() {
+function updateSelectedApiKeys(apiKeys: string[]) {
   const provider = selectedProvider.value;
   if (!provider) return;
-  provider.apiKeys.push("");
-}
-
-function removeApiKey(index: number) {
-  const provider = selectedProvider.value;
-  if (!provider || provider.apiKeys.length <= 1) return;
-  provider.apiKeys.splice(index, 1);
-}
-
-function pinApiKeyToTop(index: number) {
-  const provider = selectedProvider.value;
-  if (!provider || index <= 0 || index >= provider.apiKeys.length) return;
-  const [key] = provider.apiKeys.splice(index, 1);
-  provider.apiKeys.unshift(key);
-}
-
-function toggleImageApiKeyVisible(providerId: string, index: number) {
-  showImageApiKeys.value = {
-    ...showImageApiKeys.value,
-    [providerId]: {
-      ...(showImageApiKeys.value[providerId] || {}),
-      [index]: !showImageApiKeys.value[providerId]?.[index],
-    },
-  };
+  provider.apiKeys = apiKeys;
 }
 
 function addModel() {
@@ -618,6 +564,15 @@ async function saveImageConfig() {
   if (!saved) return;
   props.setStatusAction(t("config.imageGeneration.saved"));
 }
+
+defineExpose({
+  toolbarState,
+  selectProvider,
+  addProvider,
+  removeSelectedProvider,
+  restoreImageConfig,
+  saveImageConfig,
+});
 
 async function runImageTest() {
   if (!canRunImageTest.value) return;

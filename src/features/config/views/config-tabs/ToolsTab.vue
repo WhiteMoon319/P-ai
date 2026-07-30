@@ -1,20 +1,19 @@
 <template>
   <div class="grid gap-3">
-    <div class="card bg-base-100 border border-base-300">
-      <div class="flex flex-wrap items-center justify-between gap-3 p-4">
-        <div class="min-w-0 flex-1">
-          <span class="text-sm font-medium">{{ t('config.tools.shellWorkspace') }}</span>
-        </div>
-        <div class="flex flex-wrap items-center justify-end gap-2">
-          <button v-if="localFileSystemAvailable" class="btn btn-sm" type="button" @click="openShellWorkspaceDir">{{ t('config.tools.openDir') }}</button>
-          <button class="btn btn-sm" type="button" :disabled="shellWorkspacePathResetting" @click="resetShellWorkspacePath">{{ t('config.tools.resetWorkspacePath') }}</button>
-          <button class="btn btn-sm" type="button" :disabled="shellWorkspaceInitializing" @click="initializeShellWorkspace">{{ t('config.tools.initializeWorkspace') }}</button>
-          <button class="btn btn-sm btn-primary" :disabled="savingConfig" @click="$emit('saveApiConfig')">
-            {{ t('config.tools.save') }}
-          </button>
-        </div>
+    <div class="flex items-center justify-between gap-3">
+      <h3 class="text-sm font-semibold">{{ t('config.tools.shellWorkspace') }}</h3>
+      <div class="flex flex-wrap items-center justify-end gap-2">
+        <button v-if="localFileSystemAvailable" class="btn btn-sm" type="button" @click="openShellWorkspaceDir">{{ t('config.tools.openDir') }}</button>
+        <button class="btn btn-sm" type="button" :disabled="shellWorkspacePathResetting" @click="resetShellWorkspacePath">{{ t('config.tools.resetWorkspacePath') }}</button>
+        <button class="btn btn-sm" type="button" :disabled="shellWorkspaceInitializing" @click="initializeShellWorkspace">{{ t('config.tools.initializeWorkspace') }}</button>
+        <button class="btn btn-sm btn-primary" :disabled="savingConfig" @click="$emit('saveApiConfig')">
+          {{ t('config.tools.save') }}
+        </button>
       </div>
-      <div class="grid gap-3 px-4 pb-4">
+    </div>
+
+    <div class="card bg-base-100 border border-base-300">
+      <div class="grid gap-3 p-4">
         <div v-for="(ws, index) in config.shellWorkspaces" :key="`ws-${index}-${ws.name}`">
           <div class="mb-3">
             <input v-model.trim="ws.name" class="input input-bordered input-sm w-full" :placeholder="t('config.tools.workspaceName')" />
@@ -47,7 +46,7 @@
           </div>
         </div>
       </div>
-      <div class="mt-3 px-4 pb-4 text-xs opacity-70">
+      <div class="px-4 pb-4 text-xs opacity-70">
         {{ t('config.tools.workspaceHint') }}
       </div>
       <div v-if="shellWorkspaceStatus" class="px-4 pb-4 text-xs" :class="shellWorkspaceStatusError ? 'text-error' : 'opacity-70'">
@@ -55,15 +54,14 @@
       </div>
     </div>
 
-    <div class="border border-base-300 rounded-box bg-base-100 overflow-hidden">
-      <div class="px-4 py-3 border-b border-base-300 flex items-center justify-between gap-3">
-        <div>
-          <div class="font-medium">{{ t("config.tools.systemCatalogTitle") }}</div>
-          <div class="text-xs opacity-60">{{ t("config.tools.systemCatalogReadonly") }}</div>
-        </div>
+    <div>
+      <div class="mb-3">
+        <h3 class="text-sm font-semibold">{{ t("config.tools.systemCatalogTitle") }}</h3>
+        <div class="mt-1 text-sm opacity-60">{{ t("config.tools.systemCatalogReadonly") }}</div>
       </div>
 
-      <div v-if="toolDefinitions.length" class="divide-y divide-base-300/60">
+      <div class="border border-base-300 rounded-box bg-base-100 overflow-hidden">
+        <div v-if="toolDefinitions.length" class="divide-y divide-base-300/60">
         <div
           v-for="item in toolDefinitions"
           :key="item.function.name"
@@ -92,6 +90,7 @@
         </div>
       </div>
       <div v-else class="text-sm opacity-50 text-center py-4">{{ t("config.mcpToolList.empty") }}</div>
+      </div>
     </div>
 
     <dialog ref="initializeWorkspaceDialog" class="modal">

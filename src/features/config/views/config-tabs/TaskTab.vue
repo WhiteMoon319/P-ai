@@ -8,63 +8,63 @@
       {{ message }}
     </div>
 
-    <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
-      <div class="border-b border-base-300/70 px-3 py-2">
-        <div class="flex items-center justify-between gap-2">
-          <div class="font-medium">
-            {{ t("config.task.title") }}
-            <span v-if="filteredTasks.length">（{{ filteredTasks.length }}）</span>
-          </div>
+    <ConfigTemplate :model-value="{}" :groups="taskTemplateGroups">
+      <template #group-actions-task-list>
+        <div class="flex items-center gap-2">
           <button class="btn btn-sm btn-ghost" :disabled="listLoading" @click="loadTasks()">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
           </button>
         </div>
-        <SegmentedControl
-          v-model="filter"
-          class="mt-2"
-          :options="taskFilterOptions"
-          size="sm"
-        />
-      </div>
+      </template>
 
-      <div v-if="listLoading && !tasks.length" class="py-8 text-center text-sm opacity-60">{{ t("common.loading") }}</div>
+      <template #row-task-list>
+        <div class="grid min-w-0 gap-3">
+          <SegmentedControl
+            v-model="filter"
+            :options="taskFilterOptions"
+            size="sm"
+          />
 
-      <div v-else-if="pagedTasks.length" class="divide-y divide-base-300/60">
-        <button
-          v-for="task in pagedTasks"
-          :key="task.taskId"
-          class="block w-full px-3 py-3 text-left transition-colors"
-          :class="selectedTaskId === task.taskId ? 'bg-primary/10' : 'hover:bg-base-200/50'"
-          @click="openEditEditor(task.taskId)"
-        >
-          <div class="flex items-start gap-3">
-            <div class="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" :class="task.completionState === 'completed' ? 'bg-success' : (task.completionState === 'failed_completed' ? 'bg-warning' : 'bg-base-300')"></div>
-            <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-center gap-2">
-                <div class="font-medium text-sm wrap-break-word">{{ task.goal }}</div>
-                <span class="badge badge-ghost">{{ completionStateLabel(task.completionState) }}</span>
+          <div v-if="listLoading && !tasks.length" class="py-8 text-center text-sm opacity-60">{{ t("common.loading") }}</div>
+
+          <div v-else-if="pagedTasks.length" class="divide-y divide-base-300/60">
+            <button
+              v-for="task in pagedTasks"
+              :key="task.taskId"
+              class="block w-full px-3 py-3 text-left transition-colors"
+              :class="selectedTaskId === task.taskId ? 'bg-primary/10' : 'hover:bg-base-200/50'"
+              @click="openEditEditor(task.taskId)"
+            >
+              <div class="flex items-start gap-3">
+                <div class="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" :class="task.completionState === 'completed' ? 'bg-success' : (task.completionState === 'failed_completed' ? 'bg-warning' : 'bg-base-300')"></div>
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <div class="font-medium text-sm wrap-break-word">{{ task.goal }}</div>
+                    <span class="badge badge-ghost">{{ completionStateLabel(task.completionState) }}</span>
+                  </div>
+                  <div class="mt-1 text-xs opacity-60 line-clamp-2">{{ task.todo || t("config.task.noTodo") }}</div>
+                  <div class="mt-2 flex flex-wrap items-center gap-2 text-xs opacity-50">
+                    <span>#{{ task.orderIndex }}</span>
+                    <span v-if="task.trigger.next_run_at">{{ formatTaskTime(task.trigger.next_run_at) }}</span>
+                    <span v-else>{{ formatTaskTime(task.updatedAtLocal) }}</span>
+                  </div>
+                </div>
               </div>
-              <div class="mt-1 text-xs opacity-60 line-clamp-2">{{ task.todo || t("config.task.noTodo") }}</div>
-              <div class="mt-2 flex flex-wrap items-center gap-2 text-xs opacity-50">
-                <span>#{{ task.orderIndex }}</span>
-                <span v-if="task.trigger.next_run_at">{{ formatTaskTime(task.trigger.next_run_at) }}</span>
-                <span v-else>{{ formatTaskTime(task.updatedAtLocal) }}</span>
-              </div>
+            </button>
+          </div>
+
+          <div v-else class="py-6 text-center text-sm opacity-50">{{ t("config.task.empty") }}</div>
+
+          <div v-if="totalPages > 1" class="flex justify-center border-t border-base-300/70 px-3 py-2">
+            <div class="join">
+              <button class="btn btn-sm join-item" :disabled="page <= 1" @click="page -= 1">‹</button>
+              <button class="btn btn-sm join-item btn-active">{{ page }} / {{ totalPages }}</button>
+              <button class="btn btn-sm join-item" :disabled="page >= totalPages" @click="page += 1">›</button>
             </div>
           </div>
-        </button>
-      </div>
-
-      <div v-else class="py-6 text-center text-sm opacity-50">{{ t("config.task.empty") }}</div>
-
-      <div v-if="totalPages > 1" class="flex justify-center border-t border-base-300/70 px-3 py-2">
-        <div class="join">
-          <button class="btn btn-sm join-item" :disabled="page <= 1" @click="page -= 1">‹</button>
-          <button class="btn btn-sm join-item btn-active">{{ page }} / {{ totalPages }}</button>
-          <button class="btn btn-sm join-item" :disabled="page >= totalPages" @click="page += 1">›</button>
         </div>
-      </div>
-    </div>
+      </template>
+    </ConfigTemplate>
 
     <dialog ref="editorDialog" class="modal" @cancel.prevent="onEditorDialogCancel">
       <TaskDebugCard
@@ -134,6 +134,8 @@ import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../../services/tauri-api";
 import { formatIsoToLocalDateTime } from "../../../../utils/time";
 import type { AppConfig, PersonaProfile } from "../../../../types/app";
+import ConfigTemplate from "../../components/ConfigTemplate.vue";
+import type { ConfigTemplateGroup } from "../../components/config-template";
 import SegmentedControl from "../../components/SegmentedControl.vue";
 import TaskDebugCard from "./TaskDebugCard.vue";
 import {
@@ -208,6 +210,14 @@ const taskFilterOptions = computed(() => [
   { value: "active" as const, label: t("config.task.filters.active") },
   { value: "completed" as const, label: t("config.task.filters.completed") },
 ]);
+
+const taskTemplateGroups = computed<ConfigTemplateGroup[]>(() => ([
+  {
+    key: "task-list",
+    title: t("config.task.title"),
+    rows: [{ key: "task-list", items: [] }],
+  },
+]));
 
 const editorDialog = ref<HTMLDialogElement | null>(null);
 const discardConfirmDialog = ref<HTMLDialogElement | null>(null);

@@ -6,8 +6,7 @@
           <HardDrive class="h-6 w-6" />
         </div>
         <div class="min-w-0">
-          <div class="text-xl font-semibold">{{ t("config.storage.pageTitle") }}</div>
-          <div class="mt-1 text-sm opacity-70">{{ t("config.storage.pageHint") }}</div>
+          <div class="text-sm font-semibold">{{ t("config.storage.pageTitle") }}</div>
         </div>
       </div>
       <button
@@ -20,17 +19,17 @@
       </button>
     </div>
 
-    <div class="card bg-base-100 border border-base-300 shadow-sm">
-      <div class="card-body gap-4">
-        <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div>
-            <div class="card-title text-base">{{ t("config.storage.usageTitle") }}</div>
-            <div class="mt-1 text-sm opacity-70">{{ t("config.storage.usageHint") }}</div>
-          </div>
-          <div v-if="storageOverview" class="text-xs opacity-60 break-all md:max-w-sm md:text-right">
-            {{ t("config.storage.rootPath", { path: storageOverview.rootPath }) }}
-          </div>
+    <section>
+      <div class="mb-1 flex items-start justify-between gap-3">
+        <div>
+          <h3 class="text-sm font-semibold">{{ t("config.storage.usageTitle") }}</h3>
         </div>
+        <div v-if="storageOverview" class="text-xs opacity-60 break-all md:max-w-sm md:text-right">
+          {{ t("config.storage.rootPath", { path: storageOverview.rootPath }) }}
+        </div>
+      </div>
+      <div class="card bg-base-100 border border-base-300 shadow-sm">
+      <div class="card-body gap-4">
 
         <div v-if="storageOverview" class="grid gap-4 rounded-box bg-base-200/70 p-3 lg:grid-cols-[auto,1fr]">
           <div class="flex items-center gap-4">
@@ -120,28 +119,26 @@
           <span>{{ storageMessage }}</span>
         </div>
       </div>
-    </div>
+      </div>
+    </section>
 
     <div class="flex items-center gap-3">
       <div class="flex items-center justify-center rounded-box bg-info/15 p-2 text-info">
         <Download class="h-5 w-5" />
       </div>
       <div>
-        <div class="text-lg font-semibold">{{ t("config.migration.pageTitle") }}</div>
-        <div class="mt-1 text-sm opacity-70">{{ t("config.migration.sectionHint") }}</div>
+        <div class="text-sm font-semibold">{{ t("config.migration.pageTitle") }}</div>
       </div>
     </div>
 
-    <div class="grid grid-cols-1 gap-5 xl:grid-cols-2">
-      <div class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="grid grid-cols-1 gap-5">
+      <section>
+        <h3 class="mb-3 text-sm font-semibold">{{ t("config.migration.exportTitle") }}</h3>
+        <div class="card bg-base-100 border border-base-300 shadow-sm">
         <div class="card-body flex flex-col gap-5">
           <div class="flex items-start gap-4">
             <div class="flex items-center justify-center rounded-box bg-info/15 p-3 text-info">
               <Download class="h-6 w-6" />
-            </div>
-            <div>
-              <div class="card-title text-base">{{ t("config.migration.exportTitle") }}</div>
-              <div class="mt-1 text-sm opacity-70">{{ t("config.migration.exportHint") }}</div>
             </div>
           </div>
 
@@ -181,16 +178,15 @@
           </div>
         </div>
       </div>
+      </section>
 
-      <div class="card bg-base-100 border border-base-300 shadow-sm">
+      <section>
+        <h3 class="mb-3 text-sm font-semibold">{{ t("config.migration.importTitle") }}</h3>
+        <div class="card bg-base-100 border border-base-300 shadow-sm">
         <div class="card-body flex flex-col gap-5">
           <div class="flex items-start gap-4">
             <div class="flex items-center justify-center rounded-box bg-success/15 p-3 text-success">
               <Upload class="h-6 w-6" />
-            </div>
-            <div>
-              <div class="card-title text-base">{{ t("config.migration.importTitle") }}</div>
-              <div class="mt-1 text-sm opacity-70">{{ t("config.migration.importHint") }}</div>
             </div>
           </div>
 
@@ -266,7 +262,8 @@
             <span>{{ importMessage }}</span>
           </div>
         </div>
-      </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>

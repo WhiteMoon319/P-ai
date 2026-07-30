@@ -15,7 +15,6 @@
         <header class="flex shrink-0 items-start justify-between gap-4 border-b border-base-300 px-5 py-4">
           <div class="min-w-0">
             <h3 class="font-semibold">{{ t('config.remoteIm.channelBehaviorSettings') }}</h3>
-            <p class="mt-1 text-xs opacity-60">{{ t('config.remoteIm.channelBehaviorSettingsHint') }}</p>
           </div>
           <button type="button" class="btn btn-circle btn-sm btn-ghost" :title="t('common.close')" @click="closeModal">×</button>
         </header>

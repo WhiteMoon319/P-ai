@@ -145,6 +145,9 @@
       "reasoningHigh": "高",
       "reasoningXHigh": "极高",
       "reasoningMax": "最大",
+      "reasoningCapabilityUnknown": "能力未确认",
+      "reasoningCapabilityUnsupported": "未声明支持",
+      "reasoningEffortUnsupported": "后端未声明支持此档位",
       "viewModelDocumentation": "查看文档",
       "codexLogin": "Codex 登录",
       "codexLoginHint": "本地读取只检查凭证文件本身；运行时如果 token 过期，再由后端按需要刷新。",
@@ -489,7 +492,7 @@
       "providerSettings": "供应商设置",
       "connectionSettings": "连接设置",
       "providerName": "供应商名称",
-      "baseUrl": "Base URL",
+      "baseUrl": "基础链接",
       "timeoutSeconds": "超时（秒）",
       "watermark": "添加水印",
       "watermarkHint": "由 Seedream API 控制",
@@ -607,11 +610,13 @@
     "persona": {
       "title": "人格",
       "hint": "定义 AI 的人格，告诉他的自我认知该是什么。",
+      "settings": "人格设置",
       "userTag": "用户",
       "systemTag": "预设",
       "add": "新增人格",
       "remove": "删除当前人格",
       "name": "人格名称",
+      "avatar": "头像",
       "avatarSaving": "头像保存中",
       "editAvatar": "编辑头像",
       "prompt": "人格设定",
@@ -696,6 +701,7 @@
     },
     "department": {
       "title": "部门",
+      "settings": "部门设置",
       "hint": "在这里可以定义 PAI 应该如何办事。",
       "add": "新增",
       "remove": "删除部门",
@@ -806,7 +812,7 @@
       "saveInstructionPresets": "保存指令预设",
       "quickActionsTitle": "快捷操作",
       "openConversationList": "会话列表",
-      "previewRequest": "预览请求体",
+      "previewRequest": "请求体预览",
       "previewSystemPrompt": "系统提示词"
     },
     "networkAccess": {
@@ -1322,11 +1328,12 @@
     "logs": {
       "title": "调用日志（内存）",
       "backendLogs": "后台日志",
+      "refreshPipelineLogs": "刷新调度日志",
+      "clearPipelineLogs": "清空调度日志",
       "cacheSize": "缓存数量",
       "times": "{count} 次",
       "capacityHint": "仅保留最近 {count} 次调度日志；单次调度内的多轮 chat 会聚合到所属 pipeline 中，进程退出后自动清空。",
       "noLogs": "暂无日志",
-      "pipelineLogs": "调度日志",
       "currentPipeline": "本次调度",
       "totalElapsed": "总耗时",
       "modelRounds": "模型轮次",
@@ -2186,6 +2193,9 @@
     "roleTool": "工具"
   },
   "appearance": {
+    "text": "文字",
+    "textLanguage": "文字语言",
+    "textWeight": "文字字重",
     "theme": "主题",
     "markdownFontScale": "全局字重",
     "markdownFontScaleHint": "调节全局界面与 Markdown 字重。",

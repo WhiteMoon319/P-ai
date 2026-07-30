@@ -1,61 +1,70 @@
 <template>
   <SettingsStickyLayout>
     <template #header>
-      <div class="card border border-base-300 bg-base-100">
-        <div class="card-body p-4">
-          <div class="flex w-full flex-col gap-3">
-            <div class="flex items-center justify-between">
-              <span class="text-sm">{{ t("config.department.title") }}</span>
-            </div>
-
-            <div class="flex gap-1">
-              <select
-                :value="selectedDepartmentId"
-                class="select select-bordered select-sm flex-1"
-                @change="switchSelectedDepartment(($event.target as HTMLSelectElement).value)"
-              >
-                <option v-for="department in sortedDepartments" :key="department.id" :value="department.id">
-                  {{ department.name }}{{ department.isBuiltInAssistant ? `（${t("config.department.assistantBadge")}）` : (department.source === "private_workspace" ? `（${t("config.department.privateWorkspaceBadge")}）` : "") }}
-                </option>
-              </select>
-
-              <button
-                class="btn btn-sm btn-square bg-base-200"
-                type="button"
-                :title="t('config.department.add')"
-                :disabled="savingConfig"
-                @click="addDepartment"
-              >
-                <Plus class="h-3.5 w-3.5" />
-              </button>
-
-              <button
-                class="btn btn-sm btn-square"
-                type="button"
-                :class="!departmentDirty ? 'cursor-not-allowed bg-base-200 text-base-content/30' : 'bg-base-200'"
-                :title="t('common.reset')"
-                :disabled="!departmentDirty || savingConfig"
-                @click="restoreDepartmentDraftsFromSaved"
-              >
-                <RotateCcw class="h-3.5 w-3.5" />
-              </button>
-
-              <button
-                class="btn btn-sm btn-square transition-all duration-300"
-                type="button"
-                :class="departmentDirty ? 'btn-primary' : 'bg-base-200 text-base-content/50 shadow-none'"
-                :disabled="!selectedDepartment || !!departmentValidationMessage || !departmentDirty || savingConfig"
-                :title="savingConfig ? t('config.api.saving') : departmentDirty ? t('common.save') : t('status.configSaved')"
-                @click="saveDepartments"
-              >
-                <Save v-if="!savingConfig" class="h-3.5 w-3.5" />
-                <span v-else class="loading loading-spinner loading-sm"></span>
-              </button>
-            </div>
-
-            <div class="text-sm opacity-60">{{ t("config.department.hint") }}</div>
+      <div class="flex w-full flex-col gap-3">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-semibold">{{ t("config.department.settings") }}</span>
+            <span v-if="selectedDepartmentIsPrivateWorkspace" class="badge badge-soft badge-secondary">{{ t("config.department.privateWorkspaceBadge") }}</span>
           </div>
+
+          <button
+            v-if="selectedDepartment && !selectedDepartmentIsSystemBuiltIn"
+            class="btn btn-sm btn-error"
+            type="button"
+            :disabled="savingConfig"
+            @click="handleSelectedDepartmentPrimaryAction"
+          >
+            <Trash2 class="h-4 w-4" />
+            {{ t("config.department.remove") }}
+          </button>
         </div>
+
+        <div class="flex gap-1">
+          <select
+            :value="selectedDepartmentId"
+            class="select select-bordered select-sm flex-1"
+            @change="switchSelectedDepartment(($event.target as HTMLSelectElement).value)"
+          >
+            <option v-for="department in sortedDepartments" :key="department.id" :value="department.id">
+              {{ department.name }}{{ department.isBuiltInAssistant ? `（${t("config.department.assistantBadge")}）` : (department.source === "private_workspace" ? `（${t("config.department.privateWorkspaceBadge")}）` : "") }}
+            </option>
+          </select>
+
+          <button
+            class="btn btn-sm btn-square btn-ghost"
+            type="button"
+            :title="t('config.department.add')"
+            :disabled="savingConfig"
+            @click="addDepartment"
+          >
+            <Plus class="h-3.5 w-3.5" />
+          </button>
+
+          <button
+            class="btn btn-sm btn-square btn-ghost"
+            type="button"
+            :title="t('common.reset')"
+            :disabled="!departmentDirty || savingConfig"
+            @click="restoreDepartmentDraftsFromSaved"
+          >
+            <RotateCcw class="h-3.5 w-3.5" />
+          </button>
+
+          <button
+            class="btn btn-sm btn-square"
+            type="button"
+            :class="departmentDirty ? 'btn-primary' : 'btn-ghost'"
+            :disabled="!selectedDepartment || !!departmentValidationMessage || !departmentDirty || savingConfig"
+            :title="savingConfig ? t('config.api.saving') : departmentDirty ? t('common.save') : t('status.configSaved')"
+            @click="saveDepartments"
+          >
+            <Save v-if="!savingConfig" class="h-3.5 w-3.5" />
+            <span v-else class="loading loading-spinner loading-sm"></span>
+          </button>
+        </div>
+
+        <div class="text-sm opacity-60">{{ t("config.department.hint") }}</div>
       </div>
     </template>
 
@@ -65,26 +74,21 @@
             {{ departmentValidationMessage }}
           </div>
 
-          <div class="flex items-center justify-between gap-2 border-b border-base-300 px-4 py-3">
-            <div class="flex items-center gap-2">
-              <div class="font-medium text-base-content">{{ selectedDepartment.name }}</div>
-              <span v-if="selectedDepartmentIsPrivateWorkspace" class="badge badge-soft badge-secondary">{{ t("config.department.privateWorkspaceBadge") }}</span>
-            </div>
-
-            <button
-              class="btn btn-sm btn-ghost"
-              type="button"
-              :disabled="savingConfig"
-              @click="handleSelectedDepartmentPrimaryAction"
-            >
-              <Trash2 v-if="!selectedDepartmentIsSystemBuiltIn" class="h-4 w-4" />
-              {{ selectedDepartmentIsSystemBuiltIn ? t("config.department.restoreInitial") : t("config.department.remove") }}
-            </button>
-          </div>
-
           <div class="divide-y divide-base-300">
             <div class="min-w-0 px-4 py-4">
-              <div class="mb-2 text-xs uppercase tracking-wide opacity-40">{{ t("config.department.name") }}</div>
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <div class="text-sm font-medium">{{ t("config.department.name") }}</div>
+                <button
+                  v-if="selectedDepartmentIsSystemBuiltIn"
+                  class="btn btn-sm btn-ghost"
+                  type="button"
+                  :disabled="savingConfig"
+                  @click="handleSelectedDepartmentPrimaryAction"
+                >
+                  <RotateCcw class="h-3.5 w-3.5" />
+                  {{ t("config.department.restoreInitial") }}
+                </button>
+              </div>
               <input
                 v-model.trim="selectedDepartment.name"
                 class="input input-bordered input-sm w-full"
@@ -100,7 +104,6 @@
             </div>
 
             <div class="px-4 py-4">
-              <div class="mb-2 text-xs uppercase tracking-wide opacity-40">{{ t("config.department.assignee") }}</div>
               <div class="grid gap-2">
                 <div v-if="availableAssigneePersonas.length === 0" class="text-sm opacity-60">
                   {{ t("config.department.assigneePlaceholder") }}
@@ -125,7 +128,7 @@
             </div>
 
             <div class="px-4 py-4">
-              <div class="mb-2 text-xs uppercase tracking-wide opacity-40">{{ t("config.department.model") }}</div>
+              <div class="mb-2 text-sm font-medium">{{ t("config.department.model") }}</div>
               <div class="grid min-w-0 gap-3">
                 <div
                   v-for="(apiId, idx) in selectedDepartmentVisibleApiConfigIds"
@@ -214,7 +217,7 @@
             </div>
 
             <div class="px-4 py-4">
-              <div class="mb-2 text-xs uppercase tracking-wide opacity-40">{{ t("config.department.summary") }}</div>
+              <div class="mb-2 text-sm font-medium">{{ t("config.department.summary") }}</div>
               <textarea
                 v-model="selectedDepartment.summary"
                 class="textarea textarea-bordered textarea-sm min-h-20 w-full"
@@ -224,7 +227,7 @@
             </div>
 
             <div class="px-4 py-4">
-              <div class="mb-2 text-xs uppercase tracking-wide opacity-40">{{ t("config.department.guide") }}</div>
+              <div class="mb-2 text-sm font-medium">{{ t("config.department.guide") }}</div>
               <textarea
                 v-model="selectedDepartment.guide"
                 class="textarea textarea-bordered textarea-sm min-h-28 w-full"
@@ -237,7 +240,7 @@
             <div class="px-4 py-4">
               <div class="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <div class="text-xs uppercase tracking-wide opacity-40">{{ t("config.department.permissionTitle") }}</div>
+                  <div class="text-sm font-medium">{{ t("config.department.permissionTitle") }}</div>
                   <div class="mt-1 text-xs opacity-60">{{ t("config.department.permissionHint") }}</div>
                 </div>
                 <input

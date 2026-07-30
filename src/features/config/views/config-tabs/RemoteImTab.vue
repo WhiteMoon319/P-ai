@@ -671,7 +671,7 @@
                 <div class="font-medium">{{ t("config.remoteIm.allowSendFiles") }}</div>
                 <input
                   type="checkbox"
-                  class="toggle toggle-primary"
+                  class="toggle toggle-sm toggle-primary"
                   v-model="contactDraft.allowSendFiles"
                 />
               </li>

@@ -1,158 +1,137 @@
 <template>
-  <div class="grid gap-2">
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-4">
-        <div class="grid grid-cols-1 gap-3">
-          <div class="space-y-2">
-            <h3 class="card-title text-base">{{ t("appearance.language") }}</h3>
-            <select
-              class="select select-bordered w-full"
-              :value="props.uiLanguage"
-              @change="$emit('update:uiLanguage', ($event.target as HTMLSelectElement).value)"
-            >
-              <option v-for="opt in props.localeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-            </select>
-          </div>
-        </div>
+  <ConfigTemplate :model-value="templateValues" :groups="templateGroups">
+    <template #row-language>
+      <div class="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <span class="text-sm">{{ t("appearance.textLanguage") }}</span>
+        <select
+          class="select select-bordered select-sm w-52 max-w-full shrink-0"
+          :value="props.uiLanguage"
+          @change="$emit('update:uiLanguage', ($event.target as HTMLSelectElement).value)"
+        >
+          <option v-for="opt in props.localeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+        </select>
       </div>
-    </div>
+    </template>
 
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body gap-3 p-4">
-        <div class="flex items-center justify-between gap-3">
-          <div>
-            <h3 class="card-title text-base">{{ t("appearance.markdownFontScale") }}</h3>
-            <p class="mt-1 text-xs text-base-content/60">{{ t("appearance.markdownFontScaleHint") }}</p>
-          </div>
-        </div>
+    <template #row-markdown-font-scale>
+      <div class="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <span class="text-sm">{{ t("appearance.textWeight") }}</span>
         <SegmentedControl
           :model-value="markdownFontScale < 1 ? 0 : 1"
           :options="markdownFontScaleOptions"
+          :full-width="false"
+          class="max-w-full shrink-0"
           @change="setMarkdownFontScale"
         />
       </div>
-    </div>
+    </template>
 
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body gap-3 p-4">
-        <h3 class="card-title text-base">{{ t("appearance.chatBubble") }}</h3>
-        <div class="grid gap-3">
-          <label class="flex cursor-pointer items-center justify-between gap-3 rounded-box bg-base-200/40 px-3 py-2">
-            <span class="text-sm font-medium">{{ t("appearance.chatBubbleBackground") }}</span>
-            <input
-              :checked="assistantBubbleBackgroundEnabled"
-              type="checkbox"
-              class="toggle toggle-sm"
-              @change="setAssistantBubbleBackgroundEnabled(($event.target as HTMLInputElement).checked)"
-            />
-          </label>
-          <label class="flex cursor-pointer items-center justify-between gap-3 rounded-box bg-base-200/40 px-3 py-2">
-            <span class="text-sm font-medium">{{ t("appearance.chatBubbleSegmentedMarkdown") }}</span>
-            <input
-              :checked="segmentedMarkdownEnabled"
-              type="checkbox"
-              class="toggle toggle-sm"
-              @change="setSegmentedMarkdownEnabled(($event.target as HTMLInputElement).checked)"
-            />
-          </label>
-          <label class="flex cursor-pointer items-center justify-between gap-3 rounded-box bg-base-200/40 px-3 py-2">
-            <span class="text-sm font-medium">{{ t("appearance.chatBubbleFullTime") }}</span>
-            <input
-              :checked="chatTimeDisplayMode === 'absolute'"
-              type="checkbox"
-              class="toggle toggle-sm"
-              @change="setChatTimeDisplayMode(($event.target as HTMLInputElement).checked ? 'absolute' : 'relative')"
-            />
-          </label>
+    <template #row-chat-bubble-background>
+      <label class="flex min-w-0 cursor-pointer items-center justify-between gap-4">
+        <span class="text-sm">{{ t("appearance.chatBubbleBackground") }}</span>
+        <input
+          :checked="assistantBubbleBackgroundEnabled"
+          type="checkbox"
+          class="toggle toggle-sm toggle-primary shrink-0"
+          @change="setAssistantBubbleBackgroundEnabled(($event.target as HTMLInputElement).checked)"
+        />
+      </label>
+    </template>
+    <template #row-chat-bubble-markdown>
+      <label class="flex min-w-0 cursor-pointer items-center justify-between gap-4">
+        <span class="text-sm">{{ t("appearance.chatBubbleSegmentedMarkdown") }}</span>
+        <input
+          :checked="segmentedMarkdownEnabled"
+          type="checkbox"
+          class="toggle toggle-sm toggle-primary shrink-0"
+          @change="setSegmentedMarkdownEnabled(($event.target as HTMLInputElement).checked)"
+        />
+      </label>
+    </template>
+    <template #row-chat-bubble-time>
+      <label class="flex min-w-0 cursor-pointer items-center justify-between gap-4">
+        <span class="text-sm">{{ t("appearance.chatBubbleFullTime") }}</span>
+        <input
+          :checked="chatTimeDisplayMode === 'absolute'"
+          type="checkbox"
+          class="toggle toggle-sm toggle-primary shrink-0"
+          @change="setChatTimeDisplayMode(($event.target as HTMLInputElement).checked ? 'absolute' : 'relative')"
+        />
+      </label>
+    </template>
+
+    <template #row-input-side-file-tags>
+      <label class="flex min-w-0 cursor-pointer items-center justify-between gap-4">
+        <span class="text-sm">{{ t("appearance.inputPanelSideFileTags") }}</span>
+        <input
+          :checked="sideFileTagsEnabled"
+          type="checkbox"
+          class="toggle toggle-sm toggle-primary shrink-0"
+          @change="setSideFileTagsEnabled(($event.target as HTMLInputElement).checked)"
+        />
+      </label>
+    </template>
+    <template #row-input-ide-bridge-file-tags>
+      <label class="flex min-w-0 cursor-pointer items-center justify-between gap-4">
+        <span class="text-sm">{{ t("appearance.inputPanelIdeBridgeFileTags") }}</span>
+        <input
+          :checked="ideBridgeFileTagsEnabled"
+          type="checkbox"
+          class="toggle toggle-sm toggle-primary shrink-0"
+          @change="setIdeBridgeFileTagsEnabled(($event.target as HTMLInputElement).checked)"
+        />
+      </label>
+    </template>
+
+    <template #row-file-reader-line-wrap>
+      <label class="flex min-w-0 cursor-pointer items-center justify-between gap-4">
+        <div class="min-w-0">
+          <div class="text-sm">{{ t("appearance.fileReaderLineWrap") }}</div>
+          <div class="mt-1 text-xs text-base-content/60">{{ t("appearance.fileReaderLineWrapHint") }}</div>
+        </div>
+        <input
+          :checked="fileReaderLineWrapEnabled"
+          type="checkbox"
+          class="toggle toggle-sm toggle-primary shrink-0"
+          @change="setFileReaderLineWrapEnabled(($event.target as HTMLInputElement).checked)"
+        />
+      </label>
+    </template>
+
+    <template #row-ui-size-scale>
+      <div class="grid min-w-0 gap-2">
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-sm">{{ t("appearance.uiSizeScale") }}</span>
+          <output class="text-sm font-medium tabular-nums">{{ uiSizeScale }}%</output>
+        </div>
+        <input
+          class="range range-primary w-full"
+          type="range"
+          min="75"
+          max="150"
+          step="1"
+          :value="uiSizeScale"
+          :aria-label="t('appearance.uiSizeScale')"
+          @input="$emit('update:uiSizeScale', Number(($event.target as HTMLInputElement).value))"
+        />
+        <div class="grid grid-cols-4 gap-1">
+          <button
+            v-for="scale in uiSizeScaleMarks"
+            :key="scale"
+            class="btn btn-xs text-caption tabular-nums"
+            :class="uiSizeScale === scale ? 'btn-primary' : 'btn-ghost text-base-content/60'"
+            :aria-pressed="uiSizeScale === scale"
+            type="button"
+            @click="$emit('update:uiSizeScale', scale)"
+          >
+            {{ scale }}%
+          </button>
         </div>
       </div>
-    </div>
+    </template>
 
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body gap-3 p-4">
-        <h3 class="card-title text-base">{{ t("appearance.inputPanel") }}</h3>
-        <div class="grid gap-3">
-          <label v-if="SIDE_FILE_TAGS_AVAILABLE" class="flex cursor-pointer items-center justify-between gap-3 rounded-box bg-base-200/40 px-3 py-2">
-            <span class="text-sm font-medium">{{ t("appearance.inputPanelSideFileTags") }}</span>
-            <input
-              :checked="sideFileTagsEnabled"
-              type="checkbox"
-              class="toggle toggle-sm"
-              @change="setSideFileTagsEnabled(($event.target as HTMLInputElement).checked)"
-            />
-          </label>
-          <label class="flex cursor-pointer items-center justify-between gap-3 rounded-box bg-base-200/40 px-3 py-2">
-            <span class="text-sm font-medium">{{ t("appearance.inputPanelIdeBridgeFileTags") }}</span>
-            <input
-              :checked="ideBridgeFileTagsEnabled"
-              type="checkbox"
-              class="toggle toggle-sm"
-              @change="setIdeBridgeFileTagsEnabled(($event.target as HTMLInputElement).checked)"
-            />
-          </label>
-        </div>
-      </div>
-    </div>
-
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body gap-3 p-4">
-        <h3 class="card-title text-base">{{ t("appearance.fileReader") }}</h3>
-        <label class="flex cursor-pointer items-center justify-between gap-3 rounded-box bg-base-200/40 px-3 py-2">
-          <span>
-            <span class="block text-sm font-medium">{{ t("appearance.fileReaderLineWrap") }}</span>
-            <span class="mt-0.5 block text-xs text-base-content/60">{{ t("appearance.fileReaderLineWrapHint") }}</span>
-          </span>
-          <input
-            :checked="fileReaderLineWrapEnabled"
-            type="checkbox"
-            class="toggle toggle-sm"
-            @change="setFileReaderLineWrapEnabled(($event.target as HTMLInputElement).checked)"
-          />
-        </label>
-      </div>
-    </div>
-
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body gap-3 p-4">
-        <div>
-          <h3 class="card-title text-base">{{ t("appearance.uiSizeScale") }}</h3>
-          <p class="mt-1 text-xs text-base-content/60">{{ t("appearance.uiSizeScaleHint") }}</p>
-        </div>
-        <div class="grid gap-2">
-          <div class="flex items-center gap-3">
-            <input
-              class="range range-primary flex-1"
-              type="range"
-              min="75"
-              max="150"
-              step="1"
-              :value="uiSizeScale"
-              :aria-label="t('appearance.uiSizeScale')"
-              @input="$emit('update:uiSizeScale', Number(($event.target as HTMLInputElement).value))"
-            />
-            <output class="w-12 text-right text-sm font-medium tabular-nums">{{ uiSizeScale }}%</output>
-          </div>
-          <div class="grid grid-cols-4 gap-1">
-            <button
-              v-for="scale in uiSizeScaleMarks"
-              :key="scale"
-              class="btn btn-xs text-caption tabular-nums"
-              :class="uiSizeScale === scale ? 'btn-primary' : 'btn-ghost text-base-content/60'"
-              :aria-pressed="uiSizeScale === scale"
-              type="button"
-              @click="$emit('update:uiSizeScale', scale)"
-            >
-              {{ scale }}%
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body gap-4 p-4">
-        <h3 class="card-title text-base">{{ t("appearance.theme") }}</h3>
-
+    <template #row-theme>
+      <div class="grid min-w-0 gap-4">
         <div class="tabs tabs-box bg-base-200 p-1">
           <button
             type="button"
@@ -188,14 +167,16 @@
           @reset="$emit('resetGeneratedTheme')"
         />
       </div>
-    </div>
-  </div>
+    </template>
+  </ConfigTemplate>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import SegmentedControl from "../../components/SegmentedControl.vue";
+import ConfigTemplate from "../../components/ConfigTemplate.vue";
+import type { ConfigTemplateGroup } from "../../components/config-template";
 import ThemePreviewGrid from "../../components/ThemePreviewGrid.vue";
 import GeneratedThemeEditor from "../../components/GeneratedThemeEditor.vue";
 import {
@@ -233,6 +214,49 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const templateValues = {};
+const templateGroups = computed<ConfigTemplateGroup[]>(() => [
+  {
+    key: "text",
+    title: t("appearance.text"),
+    rows: [
+      { key: "language", items: [] },
+      { key: "markdown-font-scale", items: [] },
+    ],
+  },
+  {
+    key: "chat-bubble",
+    title: t("appearance.chatBubble"),
+    rows: [
+      { key: "chat-bubble-background", items: [] },
+      { key: "chat-bubble-markdown", items: [] },
+      { key: "chat-bubble-time", items: [] },
+    ],
+  },
+  {
+    key: "input-panel",
+    title: t("appearance.inputPanel"),
+    rows: [
+      ...(SIDE_FILE_TAGS_AVAILABLE ? [{ key: "input-side-file-tags", items: [] }] : []),
+      { key: "input-ide-bridge-file-tags", items: [] },
+    ],
+  },
+  {
+    key: "file-reader",
+    title: t("appearance.fileReader"),
+    rows: [{ key: "file-reader-line-wrap", items: [] }],
+  },
+  {
+    key: "ui-size-scale",
+    title: t("appearance.uiSizeScale"),
+    rows: [{ key: "ui-size-scale", items: [] }],
+  },
+  {
+    key: "theme",
+    title: t("appearance.theme"),
+    rows: [{ key: "theme", items: [] }],
+  },
+]);
 const uiSizeScaleMarks = [75, 100, 125, 150] as const;
 const activeTab = ref<"preset" | "generated">("generated");
 const markdownFontScaleOptions = computed(() => [

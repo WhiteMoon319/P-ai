@@ -16,13 +16,16 @@ export type ConfigTemplateField = {
   max?: number;
   step?: number;
   disabled?: boolean;
+  stacked?: boolean;
 };
 
 export type ConfigTemplateRow = {
+  key?: string;
   items: ConfigTemplateField[];
 };
 
 export type ConfigTemplateGroup = {
+  key?: string;
   title: string;
   rows: ConfigTemplateRow[];
 };

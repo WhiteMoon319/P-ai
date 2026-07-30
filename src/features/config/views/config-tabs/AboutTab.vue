@@ -1,8 +1,16 @@
 <template>
-  <div class="grid gap-2">
-    <div class="card bg-base-100 border border-base-300">
+  <div class="grid gap-3">
+    <section>
+      <div class="flex items-center justify-between gap-3">
+        <h3 class="text-sm font-semibold">{{ t("about.version") }}</h3>
+        <button
+          class="btn btn-sm btn-ghost"
+          :disabled="checkingUpdate"
+          @click="handleCheckUpdate"
+        >{{ checkingUpdate ? t("common.loading") : t("about.checkUpdate") }}</button>
+      </div>
+      <div class="card bg-base-100 border border-base-300">
       <div class="card-body p-4">
-        <h3 class="card-title text-base">{{ t("about.version") }}</h3>
         <p class="text-sm mb-3">{{ `P-ai v${appVersion}` }}</p>
         <div class="mb-3 space-y-2">
           <div class="text-xs font-medium text-base-content/70">{{ t("about.updateMethod") }}</div>
@@ -19,23 +27,21 @@
             </button>
           </div>
         </div>
-        <button
-          class="btn btn-sm"
-          :disabled="checkingUpdate"
-          @click="handleCheckUpdate"
-        >{{ checkingUpdate ? t("common.loading") : t("about.checkUpdate") }}</button>
       </div>
     </div>
+    </section>
 
-    <div class="card bg-base-100 border border-base-300">
+    <section>
+      <h3 class="mb-1 text-sm font-semibold">{{ t("about.repository") }}</h3>
+      <div class="card bg-base-100 border border-base-300">
       <div class="card-body p-4">
-        <h3 class="card-title text-base">{{ t("about.repository") }}</h3>
         <button
           class="btn"
           @click="openRepository"
         >{{ t("about.repository") }}</button>
       </div>
-    </div>
+      </div>
+    </section>
   </div>
 
   <dialog class="modal" :class="{ 'modal-open': updateDialogOpen }">

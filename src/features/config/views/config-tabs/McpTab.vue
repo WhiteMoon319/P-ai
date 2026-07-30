@@ -1,26 +1,26 @@
 <template>
-  <div class="grid gap-3">
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-4">
-        <div class="flex items-center gap-2">
-          <select
-            v-if="servers.length > 0"
-            v-model="selectedServerId"
-            class="select select-sm select-bordered flex-1 min-w-0"
-            :disabled="loading"
-          >
-            <option v-for="server in servers" :key="server.id" :value="server.id">
-              {{ server.name || server.id }}
-            </option>
-          </select>
-          <button class="btn btn-sm bg-base-200 shrink-0" type="button" @click="reloadServers" :disabled="loading">{{ t('config.mcp.refresh') }}</button>
-          <button v-if="localFileSystemAvailable" class="btn btn-sm btn-primary shrink-0" type="button" @click="openMcpDir" :disabled="loading">{{ t('config.mcp.openDir') }}</button>
-          <button class="btn btn-sm btn-primary shrink-0" type="button" @click="addServer">{{ t('config.mcp.add') }}</button>
-        </div>
+  <SettingsStickyLayout>
+    <template #header>
+      <div class="flex items-center gap-2">
+        <div class="text-sm font-semibold">MCP</div>
+        <select
+          v-if="servers.length > 0"
+          v-model="selectedServerId"
+          class="select select-sm select-bordered min-w-0 flex-1"
+          :disabled="loading"
+        >
+          <option v-for="server in servers" :key="server.id" :value="server.id">
+            {{ server.name || server.id }}
+          </option>
+        </select>
+        <button class="btn btn-sm btn-ghost shrink-0" type="button" @click="reloadServers" :disabled="loading">{{ t('config.mcp.refresh') }}</button>
+        <button v-if="localFileSystemAvailable" class="btn btn-sm btn-ghost shrink-0" type="button" @click="openMcpDir" :disabled="loading">{{ t('config.mcp.openDir') }}</button>
+        <button class="btn btn-sm btn-ghost shrink-0" type="button" @click="addServer">{{ t('config.mcp.add') }}</button>
       </div>
-    </div>
+    </template>
 
-    <div v-if="loading" class="text-sm opacity-70">{{ t('config.mcp.loading') }}</div>
+    <div class="grid gap-3">
+      <div v-if="loading" class="text-sm opacity-70">{{ t('config.mcp.loading') }}</div>
 
     <McpServerCard
       v-if="selectedServer"
@@ -38,6 +38,7 @@
       {{ statusText }}
     </div>
   </div>
+  </SettingsStickyLayout>
 </template>
 
 <script setup lang="ts">
@@ -52,6 +53,7 @@ import type {
 } from "../../../../types/app";
 import { toErrorMessage } from "../../../../utils/error";
 import McpServerCard from "./mcp/McpServerCard.vue";
+import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
 
 const { t } = useI18n();
 

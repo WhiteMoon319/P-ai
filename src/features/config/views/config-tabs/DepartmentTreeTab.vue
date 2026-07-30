@@ -1,51 +1,46 @@
 <template>
   <SettingsStickyLayout>
     <template #header>
-      <div class="card border border-base-300 bg-base-100">
-        <div class="card-body p-4">
-          <div class="flex w-full flex-col gap-3">
-            <div class="flex items-center justify-between">
-              <span class="text-sm">{{ t("config.departmentTree.title") }}</span>
-            </div>
-
-            <div class="flex gap-1">
-              <select
-                :value="selectedDepartmentId"
-                class="select select-bordered select-sm flex-1"
-                @change="switchSelectedDepartment(($event.target as HTMLSelectElement).value)"
-              >
-                <option v-for="department in sortedDepartments" :key="department.id" :value="department.id">
-                  {{ department.name }}
-                </option>
-              </select>
-
-              <button
-                class="btn btn-sm btn-square"
-                type="button"
-                :class="!relationDirty ? 'cursor-not-allowed bg-base-200 text-base-content/30' : 'bg-base-200'"
-                :title="t('common.reset')"
-                :disabled="!relationDirty || savingConfig"
-                @click="restoreDraftsFromSaved"
-              >
-                <RotateCcw class="h-3.5 w-3.5" />
-              </button>
-
-              <button
-                class="btn btn-sm btn-square transition-all duration-300"
-                type="button"
-                :class="relationDirty ? 'btn-primary' : 'bg-base-200 text-base-content/50 shadow-none'"
-                :disabled="!selectedDepartment || !!relationValidationMessage || !relationDirty || savingConfig"
-                :title="savingConfig ? t('config.api.saving') : relationDirty ? t('common.save') : t('status.configSaved')"
-                @click="saveDepartmentRelations"
-              >
-                <Save v-if="!savingConfig" class="h-3.5 w-3.5" />
-                <span v-else class="loading loading-spinner loading-sm"></span>
-              </button>
-            </div>
-
-            <div class="text-sm opacity-60">{{ t("config.departmentTree.hint") }}</div>
-          </div>
+      <div class="flex w-full flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-semibold">{{ t("config.departmentTree.title") }}</span>
         </div>
+
+        <div class="flex gap-1">
+          <select
+            :value="selectedDepartmentId"
+            class="select select-bordered select-sm flex-1"
+            @change="switchSelectedDepartment(($event.target as HTMLSelectElement).value)"
+          >
+            <option v-for="department in sortedDepartments" :key="department.id" :value="department.id">
+              {{ department.name }}
+            </option>
+          </select>
+
+          <button
+            class="btn btn-sm btn-square btn-ghost"
+            type="button"
+            :title="t('common.reset')"
+            :disabled="!relationDirty || savingConfig"
+            @click="restoreDraftsFromSaved"
+          >
+            <RotateCcw class="h-3.5 w-3.5" />
+          </button>
+
+          <button
+            class="btn btn-sm btn-square"
+            type="button"
+            :class="relationDirty ? 'btn-primary' : 'btn-ghost'"
+            :disabled="!selectedDepartment || !!relationValidationMessage || !relationDirty || savingConfig"
+            :title="savingConfig ? t('config.api.saving') : relationDirty ? t('common.save') : t('status.configSaved')"
+            @click="saveDepartmentRelations"
+          >
+            <Save v-if="!savingConfig" class="h-3.5 w-3.5" />
+            <span v-else class="loading loading-spinner loading-sm"></span>
+          </button>
+        </div>
+
+        <div class="text-sm opacity-60">{{ t("config.departmentTree.hint") }}</div>
       </div>
     </template>
 
@@ -57,7 +52,7 @@
 
         <div class="px-4 py-4">
           <div class="mb-3 flex items-center justify-between gap-3">
-            <div class="text-xs uppercase tracking-wide opacity-40">{{ t("config.departmentTree.directChildren") }}</div>
+            <div class="text-sm font-medium">{{ t("config.departmentTree.directChildren") }}</div>
             <div class="text-xs opacity-50">{{ selectedChildIds.length }} / {{ candidateDepartments.length }}</div>
           </div>
           <div class="mb-3 text-sm opacity-60">

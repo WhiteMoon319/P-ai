@@ -65,6 +65,36 @@
         />
       </div>
 
+      <div v-else-if="props.configTab === 'mcp'" class="flex-1 min-h-0">
+        <McpTab />
+      </div>
+
+      <div v-else-if="props.configTab === 'skill'" class="flex-1 min-h-0">
+        <SkillTab />
+      </div>
+
+      <div v-else-if="props.configTab === 'persona'" class="flex-1 min-h-0">
+        <PersonaTab
+          :personas="personas"
+          :assistant-personas="assistantPersonas"
+          :persona-editor-id="personaEditorId"
+          :selected-persona="selectedPersona"
+          :selected-persona-avatar-url="selectedPersonaAvatarUrl"
+          :avatar-saving="avatarSaving"
+          :avatar-error="avatarError"
+          :persona-saving="personaSaving"
+          :persona-dirty="personaDirty"
+          @update:persona-editor-id="$emit('update:personaEditorId', $event)"
+          @add-persona="$emit('addPersona')"
+          @remove-selected-persona="$emit('removeSelectedPersona')"
+          @reset-personas="$emit('resetPersonas')"
+          @open-avatar-editor="openAvatarEditorForSelected"
+          @import-persona-memories="$emit('importPersonaMemories', $event)"
+          @save-personas="$emit('savePersonas')"
+          @convert-private-persona-to-public="$emit('convertPrivatePersonaToPublic', $event)"
+        />
+      </div>
+
       <div v-else-if="props.configTab === 'demo' && SHOW_DEV_DEMO_TAB" class="flex-1 min-h-0">
         <DemoTab
           :config="config"
@@ -118,33 +148,6 @@
             :saving-config="savingConfig"
             @save-api-config="onSaveToolsConfig"
             @refresh-tool-statuses="$emit('refreshToolsStatus')"
-          />
-          <McpTab
-            v-else-if="props.configTab === 'mcp'"
-          />
-          <SkillTab
-            v-else-if="props.configTab === 'skill'"
-          />
-
-          <PersonaTab
-            v-else-if="props.configTab === 'persona'"
-            :personas="personas"
-            :assistant-personas="assistantPersonas"
-            :persona-editor-id="personaEditorId"
-            :selected-persona="selectedPersona"
-            :selected-persona-avatar-url="selectedPersonaAvatarUrl"
-            :avatar-saving="avatarSaving"
-            :avatar-error="avatarError"
-            :persona-saving="personaSaving"
-            :persona-dirty="personaDirty"
-            @update:persona-editor-id="$emit('update:personaEditorId', $event)"
-            @add-persona="$emit('addPersona')"
-            @remove-selected-persona="$emit('removeSelectedPersona')"
-            @reset-personas="$emit('resetPersonas')"
-            @open-avatar-editor="openAvatarEditorForSelected"
-            @import-persona-memories="$emit('importPersonaMemories', $event)"
-            @save-personas="$emit('savePersonas')"
-            @convert-private-persona-to-public="$emit('convertPrivatePersonaToPublic', $event)"
           />
 
           <ChatSettingsTab

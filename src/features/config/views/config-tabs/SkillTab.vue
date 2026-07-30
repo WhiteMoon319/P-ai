@@ -1,30 +1,29 @@
 <template>
-  <div class="grid gap-3">
-    <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            <div class="text-sm opacity-70">SKILL 列表</div>
-            <select
-              v-if="skills.length > 0"
-              v-model="selectedSkillPath"
-              class="select select-bordered min-w-[12rem] flex-1 max-w-full"
-              :disabled="loading"
-            >
-              <option v-for="item in skills" :key="item.path" :value="item.path">
-                {{ item.name }}
-              </option>
-            </select>
-          </div>
-          <div class="flex flex-wrap items-center justify-end gap-2">
-            <button class="btn btn-sm bg-base-200" type="button" @click="reload" :disabled="loading">刷新</button>
-            <button v-if="localFileSystemAvailable" class="btn btn-sm btn-primary" type="button" @click="openSkillsDir" :disabled="loading">打开目录</button>
-          </div>
+  <SettingsStickyLayout>
+    <template #header>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <div class="text-sm font-semibold">SKILL 列表</div>
+          <select
+            v-if="skills.length > 0"
+            v-model="selectedSkillPath"
+            class="select select-bordered min-w-[12rem] flex-1 max-w-full"
+            :disabled="loading"
+          >
+            <option v-for="item in skills" :key="item.path" :value="item.path">
+              {{ item.name }}
+            </option>
+          </select>
+        </div>
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <button class="btn btn-sm btn-ghost" type="button" @click="reload" :disabled="loading">刷新</button>
+          <button v-if="localFileSystemAvailable" class="btn btn-sm btn-ghost" type="button" @click="openSkillsDir" :disabled="loading">打开目录</button>
         </div>
       </div>
-    </div>
+    </template>
 
-    <div v-if="loading" class="text-sm opacity-70">加载中...</div>
+    <div class="grid gap-3">
+      <div v-if="loading" class="text-sm opacity-70">加载中...</div>
 
     <div v-if="selectedSkill" class="card bg-base-100 card-border border-base-300 card-sm overflow-hidden">
       <div class="card-body gap-4">
@@ -49,6 +48,7 @@
       {{ statusText }}
     </div>
   </div>
+  </SettingsStickyLayout>
 </template>
 
 <script setup lang="ts">
@@ -56,6 +56,7 @@ import { computed, onMounted, ref } from "vue";
 import { getTransportCapabilities, invokeTauri, openTransportSkillWorkspaceDirectory } from "../../../../services/tauri-api";
 import type { SkillListResult, SkillSummaryItem } from "../../../../types/app";
 import { toErrorMessage } from "../../../../utils/error";
+import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
 
 const loading = ref(false);
 const statusText = ref("");
