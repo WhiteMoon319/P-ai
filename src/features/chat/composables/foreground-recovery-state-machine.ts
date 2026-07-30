@@ -54,8 +54,10 @@ export async function reconcileForegroundRuntime(
     currentFormalTailMessageId: () => string;
     requestLatestFormalTailMessageId: (conversationId: string) => Promise<string>;
     reloadConversation: () => Promise<void>;
+    /** 没有水位变化时不读取 freshness/messageById。保留默认值以兼容旧宿主。 */
+    shouldReconcileTail?: () => boolean;
   },
-): Promise<"handled" | "reloaded" | "stale"> {
+): Promise<"handled" | "tail_reconciled" | "reloaded" | "stale"> {
   const outcome = await recoverForegroundStreaming(input, dependencies);
   if (!dependencies.isCurrent()) return "stale";
   if (outcome === "handled") return "handled";
@@ -64,15 +66,30 @@ export async function reconcileForegroundRuntime(
     return dependencies.isCurrent() ? "reloaded" : "stale";
   }
 
-  const currentTailId = dependencies.currentFormalTailMessageId();
-  const latestTailId = await dependencies.requestLatestFormalTailMessageId(input.conversationId);
+  if (dependencies.shouldReconcileTail && !dependencies.shouldReconcileTail()) return "handled";
+
+  let latestTailId = "";
+  try {
+    latestTailId = await dependencies.requestLatestFormalTailMessageId(input.conversationId);
+  } catch {
+    await dependencies.reloadConversation();
+    return dependencies.isCurrent() ? "tail_reconciled" : "stale";
+  }
   if (!dependencies.isCurrent()) return "stale";
-  if (latestTailId === currentTailId) return "handled";
-  if (latestTailId && await dependencies.refreshMessageById(input.conversationId, latestTailId)) {
-    return "handled";
+  // 水位推进代表服务端的同一条正式消息也可能已经从半截变为终态；
+  // 因而即使 ID 相同也必须以 messageById 的权威 contentBlocks 覆盖。
+  if (!latestTailId) return dependencies.shouldReconcileTail ? "tail_reconciled" : "handled";
+  try {
+    if (await dependencies.refreshMessageById(input.conversationId, latestTailId)) {
+      return dependencies.shouldReconcileTail ? "tail_reconciled" : "handled";
+    }
+  } catch {
+    // 单条原子读取失败时和未找到时一样，回退到既有轻量快照。
   }
   await dependencies.reloadConversation();
-  return dependencies.isCurrent() ? "reloaded" : "stale";
+  return dependencies.isCurrent()
+    ? (dependencies.shouldReconcileTail ? "tail_reconciled" : "reloaded")
+    : "stale";
 }
 
 function normalized(value: unknown): string {

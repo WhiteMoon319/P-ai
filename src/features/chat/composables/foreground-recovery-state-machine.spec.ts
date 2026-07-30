@@ -137,4 +137,48 @@ describe("foregroundRecoveryStateMachine", () => {
     expect(dependencies.refreshMessageById).toHaveBeenCalledWith("conversation-1", "assistant-b");
     expect(reloadConversation).not.toHaveBeenCalled();
   });
+
+  it("没有水位待对账时空闲恢复不读取正式尾部", async () => {
+    const dependencies = createDependencies();
+    const requestLatestFormalTailMessageId = vi.fn(async () => "assistant-b");
+
+    const outcome = await reconcileForegroundRuntime({
+      conversationId: "conversation-1",
+      runtimeSnapshot: { runtimeState: "idle" },
+      frontendStreaming: false,
+    }, {
+      ...dependencies,
+      isCurrent: () => true,
+      currentFormalTailMessageId: () => "assistant-a",
+      requestLatestFormalTailMessageId,
+      shouldReconcileTail: () => false,
+      reloadConversation: vi.fn(async () => {}),
+    });
+
+    expect(outcome).toBe("handled");
+    expect(requestLatestFormalTailMessageId).not.toHaveBeenCalled();
+    expect(dependencies.refreshMessageById).not.toHaveBeenCalled();
+  });
+
+  it("正式尾部原子读取失败时回退轻量快照，并报告水位已由回退应用", async () => {
+    const dependencies = createDependencies();
+    dependencies.refreshMessageById = vi.fn(async () => false);
+    const reloadConversation = vi.fn(async () => {});
+
+    const outcome = await reconcileForegroundRuntime({
+      conversationId: "conversation-1",
+      runtimeSnapshot: { runtimeState: "idle" },
+      frontendStreaming: false,
+    }, {
+      ...dependencies,
+      isCurrent: () => true,
+      currentFormalTailMessageId: () => "assistant-a",
+      requestLatestFormalTailMessageId: vi.fn(async () => "assistant-b"),
+      shouldReconcileTail: () => true,
+      reloadConversation,
+    });
+
+    expect(outcome).toBe("tail_reconciled");
+    expect(reloadConversation).toHaveBeenCalledTimes(1);
+  });
 });

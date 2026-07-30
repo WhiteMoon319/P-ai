@@ -17,6 +17,7 @@ import {
 } from "./chat-message-state-machine";
 import {
   createLatestTaskRunner,
+  createForegroundTailWatermarkCoordinator,
   runForegroundSnapshotBindingTransaction,
   snapshotCanBindAssistantStream,
 } from "./chat-foreground-coordinator";
@@ -89,6 +90,19 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
   );
   let snapshotRequestSequence = 0;
   let disposed = false;
+  const foregroundTailWatermark = createForegroundTailWatermarkCoordinator({
+    requestChanges: async (since) => {
+      const payload = await invokeTauri<{ changed?: Array<{ conversationId?: string }>; serverTime?: string }>("conversation.changedSince", {
+        input: { since: since || null },
+      });
+      return {
+        changedConversationIds: (Array.isArray(payload?.changed) ? payload.changed : [])
+          .map((item) => String(item?.conversationId || "").trim())
+          .filter(Boolean),
+        serverTime: String(payload?.serverTime || "").trim(),
+      };
+    },
+  });
 
   function currentConversationId() {
     if (disposed) return "";
@@ -373,10 +387,21 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     // 统一尾部对账，避免冻结期间漏掉正式消息。
     if (foregroundSyncing.value) await foregroundSyncQueue;
     if (disposed || conversationId !== currentConversationId()) return;
+    try {
+      await foregroundTailWatermark.observeCurrentConversation(conversationId);
+    } catch (error) {
+      console.warn("[追问会话] 前台水位查询失败，回退轻量快照", { conversationId, error });
+      await synchronizeConversation(conversationId, {
+        clearRuntime: true,
+        preserveExistingHistory: true,
+      });
+      return;
+    }
+    if (disposed || conversationId !== currentConversationId()) return;
     const runtimeSnapshot = await requestRuntimeSnapshot(conversationId);
     if (disposed || conversationId !== currentConversationId()) return;
     const frontendStreamCache = flow.readConversationStreamCache?.(conversationId);
-    await reconcileForegroundRuntime({
+    const outcome = await reconcileForegroundRuntime({
       conversationId,
       runtimeSnapshot,
       frontendStreaming: frontendConversationIsStreaming(),
@@ -411,11 +436,13 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
       isCurrent: () => !disposed && conversationId === currentConversationId(),
       currentFormalTailMessageId,
       requestLatestFormalTailMessageId,
+      shouldReconcileTail: () => foregroundTailWatermark.shouldReconcileTail(conversationId),
       reloadConversation: () => synchronizeConversation(conversationId, {
         clearRuntime: true,
         preserveExistingHistory: true,
       }),
     });
+    if (outcome === "tail_reconciled") foregroundTailWatermark.markTailReconciled(conversationId);
   }
 
   const foregroundRecoveryRunner = createLatestTaskRunner(async (reason: string) => {

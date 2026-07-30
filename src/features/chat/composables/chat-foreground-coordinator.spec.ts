@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createLatestTaskRunner,
+  createForegroundTailWatermarkCoordinator,
   runForegroundSnapshotBindingTransaction,
 } from "./chat-foreground-coordinator";
 
@@ -54,5 +55,25 @@ describe("chatForegroundCoordinator", () => {
     finishFirst?.();
     await first;
     expect(values).toEqual(["first", "second"]);
+  });
+
+  it("水位游标由各宿主独立维护，且只把当前会话标记为待正式尾部对账", async () => {
+    const requestChanges = vi.fn(async (since: string) => ({
+      changedConversationIds: since ? ["conversation-b"] : ["conversation-a"],
+      serverTime: since ? "watermark-2" : "watermark-1",
+    }));
+    const app = createForegroundTailWatermarkCoordinator({ requestChanges });
+    const web = createForegroundTailWatermarkCoordinator({ requestChanges });
+
+    await app.observeCurrentConversation("conversation-a");
+    await web.observeCurrentConversation("conversation-b");
+    await app.observeCurrentConversation("conversation-b");
+
+    expect(requestChanges.mock.calls.map(([since]) => since)).toEqual(["", "", "watermark-1"]);
+    expect(app.shouldReconcileTail("conversation-a")).toBe(false);
+    expect(app.shouldReconcileTail("conversation-b")).toBe(true);
+    expect(web.shouldReconcileTail("conversation-b")).toBe(false);
+    app.markTailReconciled("conversation-b");
+    expect(app.shouldReconcileTail("conversation-b")).toBe(false);
   });
 });

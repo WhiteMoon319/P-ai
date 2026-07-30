@@ -3,7 +3,7 @@ import { invokeTauri } from "../../../services/tauri-api";
 import type { AppConfig, ChatMessage } from "../../../types/app";
 import { mergeAuthoritativeConversationMessages } from "./chat-message-state-machine";
 import { formalizeMessages } from "./use-chat-flow-utils";
-import { createLatestTaskRunner } from "./chat-foreground-coordinator";
+import { createForegroundTailWatermarkCoordinator, createLatestTaskRunner } from "./chat-foreground-coordinator";
 import {
   reconcileForegroundRuntime,
   type ForegroundRuntimeSnapshot,
@@ -57,6 +57,19 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
   const CHAT_WINDOW_MIC_PREWARM_DEBOUNCE_MS = 260;
   const foregroundRecordingActive = ref(false);
   let chatMicPrewarmTimer: ReturnType<typeof setTimeout> | null = null;
+  const foregroundTailWatermark = createForegroundTailWatermarkCoordinator({
+    requestChanges: async (since) => {
+      const payload = await invokeTauri<{ changed?: Array<{ conversationId?: string }>; serverTime?: string }>("conversation.changedSince", {
+        input: { since: since || null },
+      });
+      return {
+        changedConversationIds: (Array.isArray(payload?.changed) ? payload.changed : [])
+          .map((item) => String(item?.conversationId || "").trim())
+          .filter(Boolean),
+        serverTime: String(payload?.serverTime || "").trim(),
+      };
+    },
+  });
 
   function clearChatMicPrewarmTimer() {
     if (!chatMicPrewarmTimer) return;
@@ -164,8 +177,6 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
       input: { conversationId, messageId },
     });
     if (!message || String(options.currentChatConversationId.value || "").trim() !== conversationId) return false;
-    const index = options.allMessages.value.findIndex((item) => String(item.id || "").trim() === messageId);
-    if (index < 0) return false;
     options.allMessages.value = mergeAuthoritativeConversationMessages(
       options.allMessages.value,
       [message],
@@ -183,6 +194,14 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
   async function reconcileForegroundConversationAfterWake(reason: string) {
     const conversationId = String(options.currentChatConversationId.value || "").trim();
     if (!conversationId) return;
+    try {
+      await foregroundTailWatermark.observeCurrentConversation(conversationId);
+    } catch (error) {
+      console.warn("[聊天前台恢复] 水位查询失败，回退轻量快照", { conversationId, error });
+      await options.switchUnarchivedConversation(conversationId);
+      return;
+    }
+    if (String(options.currentChatConversationId.value || "").trim() !== conversationId) return;
     const snapshot = await requestConversationRuntimeSnapshot(conversationId);
     if (String(options.currentChatConversationId.value || "").trim() !== conversationId) return;
     const chatFlow = options.getChatFlow();
@@ -234,10 +253,16 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
       isCurrent: () => String(options.currentChatConversationId.value || "").trim() === conversationId,
       currentFormalTailMessageId,
       requestLatestFormalTailMessageId,
+      shouldReconcileTail: () => foregroundTailWatermark.shouldReconcileTail(conversationId),
       reloadConversation: () => options.switchUnarchivedConversation(conversationId),
     });
     if (String(options.currentChatConversationId.value || "").trim() !== conversationId) return;
 
+    if (outcome === "tail_reconciled") {
+      foregroundTailWatermark.markTailReconciled(conversationId);
+      await markConversationReadOnForegroundFocus(conversationId);
+      return;
+    }
     if (outcome === "handled") {
       await markConversationReadOnForegroundFocus(conversationId);
       return;

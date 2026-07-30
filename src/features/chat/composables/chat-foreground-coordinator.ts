@@ -89,3 +89,46 @@ export function createLatestTaskRunner<T>(task: (input: T) => Promise<void>) {
 
   return { run, cancel };
 }
+
+/** `conversation.changedSince` 的宿主无关结果；水位只表示是否需要正式尾部对账。 */
+export type ForegroundWatermarkChanges = {
+  changedConversationIds: string[];
+  serverTime: string;
+};
+
+/**
+ * 每个聊天宿主各自创建一个实例。概览列表的水位不能复用到 ChatView，
+ * 否则列表先同步时会吞掉视图尚未应用的正式消息收口。
+ */
+export function createForegroundTailWatermarkCoordinator(input: {
+  requestChanges: (since: string) => Promise<ForegroundWatermarkChanges>;
+}) {
+  let lastForegroundMessageWatermark = "";
+  let tailReconcilePendingConversationId = "";
+
+  async function observeCurrentConversation(conversationId: string): Promise<void> {
+    const normalizedConversationId = String(conversationId || "").trim();
+    if (!normalizedConversationId) return;
+    const result = await input.requestChanges(lastForegroundMessageWatermark);
+    const nextWatermark = String(result?.serverTime || "").trim();
+    if (nextWatermark) lastForegroundMessageWatermark = nextWatermark;
+    if ((result?.changedConversationIds || []).some((id) => String(id || "").trim() === normalizedConversationId)) {
+      tailReconcilePendingConversationId = normalizedConversationId;
+    }
+  }
+
+  function shouldReconcileTail(conversationId: string): boolean {
+    return tailReconcilePendingConversationId === String(conversationId || "").trim();
+  }
+
+  function markTailReconciled(conversationId: string) {
+    if (shouldReconcileTail(conversationId)) tailReconcilePendingConversationId = "";
+  }
+
+  return {
+    observeCurrentConversation,
+    shouldReconcileTail,
+    markTailReconciled,
+    get lastForegroundMessageWatermark() { return lastForegroundMessageWatermark; },
+  };
+}

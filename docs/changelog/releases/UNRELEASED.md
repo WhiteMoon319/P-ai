@@ -2,6 +2,7 @@
 
 ## 修复：前台会话流式状态恢复
 
+- 修复（chat-foreground-tail-watermark）：前台恢复以会话变更水位决定是否读取正式尾消息；水位推进时强制以单条正式消息收口同 ID 的流式半成品，并在读取失败时回退轻量快照。
 - 修复（chat-foreground-stream-recovery）：压缩中尚未产生正式 assistant 消息时仅显示会话忙态；收到 `roundStarted` 的正式消息 ID 后才显示对应气泡，避免暴露内部占位身份。
 - 修复（chat-stop-preserves-message-activity）：中止调度时直接以正式消息的内容块保存思考与工具活动，不再依赖废弃的前端流式镜像。
 - 修复（chat-virtual-measurement）：聊天时间线改为真实行高驱动的虚拟布局，不再以预估高度定位富文本消息，避免首次加载或切换会话时消息短暂重叠。
