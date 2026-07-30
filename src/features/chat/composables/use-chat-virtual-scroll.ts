@@ -1,7 +1,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type Ref } from "vue";
 import { useVirtualizer } from "@tanstack/vue-virtual";
 import type { ChatRenderItem } from "../utils/chat-render";
-import { estimateChatRenderItemHeight } from "./use-chat-virtual-list";
 
 interface UseChatVirtualScrollOptions {
   renderItems: Ref<ChatRenderItem[]>;
@@ -50,19 +49,10 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
 
   // ==================== virtualizer ====================
 
-  function estimateRenderItemSize(index: number): number {
-    const item = renderItems.value[index];
-    return estimateChatRenderItemHeight(item);
-  }
-
-  function estimateTotalRenderSize(): number {
-    return renderItems.value.reduce((total, _item, index) => total + estimateRenderItemSize(index), 0);
-  }
-
-  function measuredOrEstimatedRenderItemSize(index: number): number {
+  function measuredRenderItemSize(index: number): number {
     const item = renderItems.value[index];
     if (!item) return 0;
-    return measuredVirtualItemHeights.get(item.id) ?? estimateRenderItemSize(index);
+    return measuredVirtualItemHeights.get(item.id) ?? 0;
   }
 
   const latestOwnTailContentHeight = computed(() => {
@@ -73,7 +63,7 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     if (startIndex < 0) return 0;
     let total = 0;
     for (let index = startIndex; index < renderItems.value.length; index += 1) {
-      total += measuredOrEstimatedRenderItemSize(index);
+      total += measuredRenderItemSize(index);
     }
     return total;
   });
@@ -156,7 +146,6 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       + ` scroll=${scrollTop}/${clientHeight}/${scrollHeight}`
       + ` bottom=${distanceToBottom}`
       + ` init=${Math.round(initialBottomOffset.value)}`
-      + ` est=${Math.round(estimateTotalRenderSize())}`
       + ` total=${Math.round(virtualizer.value.getTotalSize())}`
       + ` elastic=${latestOwnElasticItemId.value ? "yes" : "no"}:${Math.round(latestOwnElasticMinHeight.value)}`
       + ` tail=${Math.round(latestOwnTailContentHeight.value)}`,
@@ -168,7 +157,9 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       count: renderItems.value.length,
       getScrollElement: () => scrollContainer.value,
       getItemKey: (index: number) => renderItems.value[index]?.id ?? `row-${index}`,
-      estimateSize: estimateRenderItemSize,
+      // 不用预估高度参与 absolute 行定位。富文本、工具、图片和代码块没有可靠上界，
+      // 低估会让后一行在首帧压住前一行；挂载后统一以真实行元素实测高度定位。
+      estimateSize: () => 0,
       initialOffset: () => initialBottomOffset.value,
       scrollToFn: virtualizerScrollToFn,
       anchorTo: "end",
@@ -210,7 +201,7 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       conversationId: String(activeConversationId.value || "").trim(),
       itemCount: renderItems.value.length,
       initialBottomOffset: Math.round(initialBottomOffset.value),
-      estimatedTotal: Math.round(estimateTotalRenderSize()),
+      measuredTotal: Math.round(virtualizer.value.getTotalSize()),
       totalSize: Math.round(virtualizer.value.getTotalSize()),
       scrollTop: Math.round(scrollEl?.scrollTop ?? 0),
       scrollHeight: Math.round(scrollEl?.scrollHeight ?? 0),
@@ -399,7 +390,7 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
   function resetVirtualizerAtConversationBottom(behavior: "auto" | "smooth" = "auto") {
     const requestId = ++conversationVirtualizerResetRequest;
     clearMeasuredVirtualState();
-    initialBottomOffset.value = estimateTotalRenderSize();
+    initialBottomOffset.value = 0;
     virtualizer.value.measure();
     void nextTick(async () => {
       if (requestId !== conversationVirtualizerResetRequest) return;
@@ -424,7 +415,7 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     const conversationId = String(activeConversationId.value || "").trim();
     pendingConversationBottomInitializationId = conversationId;
     clearMeasuredVirtualState();
-    initialBottomOffset.value = estimateTotalRenderSize();
+    initialBottomOffset.value = 0;
   }
 
   function renderListReadyKey() {
