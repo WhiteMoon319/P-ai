@@ -20,7 +20,7 @@ import {
   runForegroundSnapshotBindingTransaction,
   snapshotCanBindAssistantStream,
 } from "./chat-foreground-coordinator";
-import { recoverForegroundStreaming } from "./foreground-recovery-state-machine";
+import { reconcileForegroundRuntime } from "./foreground-recovery-state-machine";
 import { useChatFlow } from "./use-chat-flow";
 import { DRAFT_USER_ID_PREFIX } from "./use-chat-flow-drafts";
 import type { ConversationRuntimeStreamCacheSnapshot } from "./use-chat-flow-stream-cache";
@@ -368,11 +368,15 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
 
   async function reconcileForegroundConversation(reason: string) {
     const conversationId = currentConversationId();
-    if (!conversationId || foregroundSyncing.value) return;
+    if (!conversationId) return;
+    // 切会话快照进行中时不能丢弃 focus；等待同一串行事务结束后，再对其结果做一次
+    // 统一尾部对账，避免冻结期间漏掉正式消息。
+    if (foregroundSyncing.value) await foregroundSyncQueue;
+    if (disposed || conversationId !== currentConversationId()) return;
     const runtimeSnapshot = await requestRuntimeSnapshot(conversationId);
     if (disposed || conversationId !== currentConversationId()) return;
     const frontendStreamCache = flow.readConversationStreamCache?.(conversationId);
-    const outcome = await recoverForegroundStreaming({
+    await reconcileForegroundRuntime({
       conversationId,
       runtimeSnapshot,
       frontendStreaming: frontendConversationIsStreaming(),
@@ -404,25 +408,13 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
       applyBackgroundBusy: (snapshot) => {
         runtimeState.value = (snapshot.runtimeState as ConversationRuntimeState) || "organizing_context";
       },
-    });
-    if (disposed || conversationId !== currentConversationId()) return;
-    if (outcome === "handled") return;
-    if (outcome === "reload_conversation") {
-      await synchronizeConversation(conversationId, {
+      isCurrent: () => !disposed && conversationId === currentConversationId(),
+      currentFormalTailMessageId,
+      requestLatestFormalTailMessageId,
+      reloadConversation: () => synchronizeConversation(conversationId, {
         clearRuntime: true,
         preserveExistingHistory: true,
-      });
-      return;
-    }
-
-    const currentTailId = currentFormalTailMessageId();
-    const latestTailId = await requestLatestFormalTailMessageId(conversationId);
-    if (disposed || conversationId !== currentConversationId()) return;
-    if (latestTailId === currentTailId) return;
-    if (latestTailId && await refreshMessageById(conversationId, latestTailId)) return;
-    await synchronizeConversation(conversationId, {
-      clearRuntime: true,
-      preserveExistingHistory: true,
+      }),
     });
   }
 

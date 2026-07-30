@@ -350,6 +350,44 @@ describe("useConversationViewRuntime", () => {
     scope.stop();
   });
 
+  it("焦点对账会在压缩消息之后补上后端新增的正式 assistant 消息", async () => {
+    const compaction = message("compaction-a", "上下文已压缩", "assistant");
+    const assistantReply = message("assistant-b", "压缩后的正式回复", "assistant");
+    invokeTauriMock.mockImplementation((command: string) => {
+      if (command === "conversation.foregroundLightSnapshot") {
+        return Promise.resolve({
+          conversationId: "conversation-a",
+          messages: [compaction],
+          runtimeState: "idle",
+          shouldBindStream: false,
+        });
+      }
+      if (command === "conversation.runtimeSnapshot") {
+        return Promise.resolve({ conversationId: "conversation-a", runtimeState: "idle" });
+      }
+      if (command === "conversation.freshnessSnapshot") {
+        return Promise.resolve({ conversationId: "conversation-a", lastMessageId: "assistant-b" });
+      }
+      if (command === "conversation.messageById") {
+        return Promise.resolve(assistantReply);
+      }
+      return Promise.resolve({});
+    });
+
+    const { runtime, scope, windowTarget } = await createRuntime();
+    await vi.waitFor(() => expect(runtime.allMessages.value.map((item) => item.id)).toEqual(["compaction-a"]));
+    windowTarget.dispatchEvent(new Event("focus"));
+
+    await vi.waitFor(() => expect(runtime.allMessages.value.map((item) => item.id)).toEqual([
+      "compaction-a",
+      "assistant-b",
+    ]));
+    expect(invokeTauriMock).toHaveBeenCalledWith("conversation.messageById", {
+      input: { conversationId: "conversation-a", messageId: "assistant-b" },
+    });
+    scope.stop();
+  });
+
   it("视图因主会话切换被卸载后，旧快照不得重新绑定僵尸 Channel", async () => {
     let resolveSnapshot: ((value: unknown) => void) | undefined;
     invokeTauriMock.mockImplementation((command: string) => {

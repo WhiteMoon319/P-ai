@@ -43,6 +43,38 @@ export type ForegroundRecoveryDependencies = {
 
 export type ForegroundRecoveryOutcome = "handled" | "check_freshness" | "reload_conversation";
 
+/**
+ * 宿主无关的前台尾部对账入口。桌面、Web 和侧栏只能注入原子读取与 UI 适配，
+ * 不得各自解释运行态后再写一份 freshness 回退。
+ */
+export async function reconcileForegroundRuntime(
+  input: ForegroundRecoveryInput,
+  dependencies: ForegroundRecoveryDependencies & {
+    isCurrent: () => boolean;
+    currentFormalTailMessageId: () => string;
+    requestLatestFormalTailMessageId: (conversationId: string) => Promise<string>;
+    reloadConversation: () => Promise<void>;
+  },
+): Promise<"handled" | "reloaded" | "stale"> {
+  const outcome = await recoverForegroundStreaming(input, dependencies);
+  if (!dependencies.isCurrent()) return "stale";
+  if (outcome === "handled") return "handled";
+  if (outcome === "reload_conversation") {
+    await dependencies.reloadConversation();
+    return dependencies.isCurrent() ? "reloaded" : "stale";
+  }
+
+  const currentTailId = dependencies.currentFormalTailMessageId();
+  const latestTailId = await dependencies.requestLatestFormalTailMessageId(input.conversationId);
+  if (!dependencies.isCurrent()) return "stale";
+  if (latestTailId === currentTailId) return "handled";
+  if (latestTailId && await dependencies.refreshMessageById(input.conversationId, latestTailId)) {
+    return "handled";
+  }
+  await dependencies.reloadConversation();
+  return dependencies.isCurrent() ? "reloaded" : "stale";
+}
+
 function normalized(value: unknown): string {
   return String(value || "").trim();
 }

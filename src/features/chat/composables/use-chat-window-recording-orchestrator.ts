@@ -5,7 +5,7 @@ import { mergeAuthoritativeConversationMessages } from "./chat-message-state-mac
 import { formalizeMessages } from "./use-chat-flow-utils";
 import { createLatestTaskRunner } from "./chat-foreground-coordinator";
 import {
-  recoverForegroundStreaming,
+  reconcileForegroundRuntime,
   type ForegroundRuntimeSnapshot,
 } from "./foreground-recovery-state-machine";
 import { useChatForegroundActivity } from "./use-chat-foreground-activity";
@@ -187,7 +187,7 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     if (String(options.currentChatConversationId.value || "").trim() !== conversationId) return;
     const chatFlow = options.getChatFlow();
     const frontendStreamCache = chatFlow?.readConversationStreamCache?.(conversationId);
-    const outcome = await recoverForegroundStreaming({
+    const outcome = await reconcileForegroundRuntime({
       conversationId,
       runtimeSnapshot: snapshot,
       frontendStreaming: frontendConversationIsStreaming(),
@@ -231,6 +231,10 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
           options.applyConversationRuntimeStateUpdated({ conversationId, runtimeState: runtimeState as "organizing_context" });
         }
       },
+      isCurrent: () => String(options.currentChatConversationId.value || "").trim() === conversationId,
+      currentFormalTailMessageId,
+      requestLatestFormalTailMessageId,
+      reloadConversation: () => options.switchUnarchivedConversation(conversationId),
     });
     if (String(options.currentChatConversationId.value || "").trim() !== conversationId) return;
 
@@ -238,23 +242,8 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
       await markConversationReadOnForegroundFocus(conversationId);
       return;
     }
-    if (outcome === "reload_conversation") {
-      await options.switchUnarchivedConversation(conversationId);
-      return;
-    }
-
-    const currentTailId = currentFormalTailMessageId();
-    const latestTailId = await requestLatestFormalTailMessageId(conversationId);
-    if (String(options.currentChatConversationId.value || "").trim() !== conversationId) return;
-    if (latestTailId === currentTailId) {
-      await markConversationReadOnForegroundFocus(conversationId);
-      return;
-    }
-    if (latestTailId && await refreshForegroundTargetMessage(conversationId, latestTailId)) {
-      await markConversationReadOnForegroundFocus(conversationId);
-      return;
-    }
-    await options.switchUnarchivedConversation(conversationId);
+    if (outcome === "reloaded" || outcome === "stale") return;
+    await markConversationReadOnForegroundFocus(conversationId);
   }
 
   async function recoverChatAfterForegroundWakeOnce(reason: string) {

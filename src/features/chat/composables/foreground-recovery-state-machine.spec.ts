@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  reconcileForegroundRuntime,
   recoverForegroundStreaming,
   type ForegroundRecoveryDependencies,
 } from "./foreground-recovery-state-machine";
@@ -111,5 +112,29 @@ describe("foregroundRecoveryStateMachine", () => {
     expect(dependencies.applyBackgroundBusy).toHaveBeenCalledTimes(1);
     expect(dependencies.resumeSubscription).not.toHaveBeenCalled();
     expect(dependencies.refreshMessageById).not.toHaveBeenCalled();
+  });
+
+  it("空闲 focus 会以正式尾部锚点补上压缩消息之后的 assistant", async () => {
+    const dependencies = createDependencies();
+    const requestLatestFormalTailMessageId = vi.fn(async () => "assistant-b");
+    const currentFormalTailMessageId = vi.fn(() => "compaction-a");
+    const reloadConversation = vi.fn(async () => {});
+
+    const outcome = await reconcileForegroundRuntime({
+      conversationId: "conversation-1",
+      runtimeSnapshot: { runtimeState: "idle" },
+      frontendStreaming: false,
+    }, {
+      ...dependencies,
+      isCurrent: () => true,
+      currentFormalTailMessageId,
+      requestLatestFormalTailMessageId,
+      reloadConversation,
+    });
+
+    expect(outcome).toBe("handled");
+    expect(requestLatestFormalTailMessageId).toHaveBeenCalledWith("conversation-1");
+    expect(dependencies.refreshMessageById).toHaveBeenCalledWith("conversation-1", "assistant-b");
+    expect(reloadConversation).not.toHaveBeenCalled();
   });
 });
