@@ -122,7 +122,7 @@ describe("useConversationViewRuntime", () => {
     scope.stop();
   });
 
-  it("绑定通道需求不等于会话正在忙碌", async () => {
+  it("没有正式 assistant 消息时即使旧快照声称需要绑定也保持解绑", async () => {
     invokeTauriMock.mockResolvedValueOnce({
       conversationId: "conversation-a",
       messages: [message("assistant-1", "历史正文")],
@@ -135,7 +135,7 @@ describe("useConversationViewRuntime", () => {
 
     expect(runtime.runtimeState.value).toBe("idle");
     expect(runtime.conversationBusy.value).toBe(false);
-    await vi.waitFor(() => expect(flowMock.bindActiveConversationStream).toHaveBeenCalledWith("conversation-a", true));
+    expect(flowMock.bindActiveConversationStream).not.toHaveBeenCalled();
     scope.stop();
   });
 

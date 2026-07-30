@@ -203,22 +203,6 @@ fn get_foreground_conversation_light_snapshot_blocking(
         should_bind_stream = foreground_runtime_snapshot_should_bind(&runtime_snapshot);
         resume_projection_authoritative = true;
         snapshot.runtime_state = Some(runtime_snapshot.runtime_state.clone());
-        if should_bind_stream && runtime_snapshot.stream_cache.has_visible_progress {
-            let before_count = snapshot.messages.len();
-            snapshot.messages = apply_foreground_stream_projection(
-                snapshot.messages,
-                &runtime_snapshot.stream_cache,
-            );
-            runtime_log_info(format!(
-                "[前台恢复投影] 完成，conversation_id={}，message_count_before={}，message_count_after={}，stream_block_count={}，should_bind_stream={}，duration_ms={}",
-                snapshot.conversation_id,
-                before_count,
-                snapshot.messages.len(),
-                runtime_snapshot.stream_cache.stream_blocks.len(),
-                should_bind_stream,
-                started_at.elapsed().as_millis()
-            ));
-        }
         stream_cache = Some(runtime_snapshot.stream_cache);
     }
     runtime_log_debug(format!(
@@ -250,111 +234,12 @@ fn get_foreground_conversation_light_snapshot_blocking(
 
 fn foreground_runtime_snapshot_should_bind(snapshot: &ConversationRuntimeSnapshot) -> bool {
     snapshot.runtime_state == MainSessionState::AssistantStreaming
-        || snapshot.is_processing
-        || snapshot.has_pending_queue
-        || snapshot.pending_queue_count > 0
-}
-
-fn apply_foreground_stream_projection(
-    messages: Vec<ChatMessage>,
-    stream_cache: &ConversationStreamRuntimeCacheSnapshot,
-) -> Vec<ChatMessage> {
-    let persisted_message_id = stream_cache.persisted_assistant_message_id.trim();
-    let mut next_messages = if persisted_message_id.is_empty() {
-        messages
-    } else {
-        messages
-            .into_iter()
-            .filter(|message| message.id.trim() != persisted_message_id)
-            .collect::<Vec<_>>()
-    };
-    next_messages.retain(|message| !message.id.trim().starts_with("__draft_assistant__:"));
-    if let Some(message) = build_foreground_stream_projection_message(stream_cache) {
-        next_messages.push(message);
-    }
-    next_messages
-}
-
-fn foreground_stream_projection_message_id(
-    stream_cache: &ConversationStreamRuntimeCacheSnapshot,
-) -> Option<String> {
-    if !stream_cache.persisted_assistant_message_id.trim().is_empty() {
-        return Some(stream_cache.persisted_assistant_message_id.trim().to_string());
-    }
-    None
-}
-
-fn build_foreground_stream_projection_message(
-    stream_cache: &ConversationStreamRuntimeCacheSnapshot,
-) -> Option<ChatMessage> {
-    let assistant_text = assistant_text_from_stream_blocks(&stream_cache.stream_blocks);
-    let reasoning_text = reasoning_text_from_stream_blocks(&stream_cache.stream_blocks);
-    let fallback_text = stream_cache.assistant_text.trim();
-    let text = if assistant_text.trim().is_empty() {
-        fallback_text.to_string()
-    } else {
-        assistant_text
-    };
-    let message_id = foreground_stream_projection_message_id(stream_cache)?;
-    Some(ChatMessage {
-        id: message_id.clone(),
-        role: "assistant".to_string(),
-        created_at: if stream_cache.started_at.trim().is_empty() {
-            now_iso()
-        } else {
-            stream_cache.started_at.clone()
-        },
-        speaker_agent_id: stream_cache
-            .agent_id
-            .trim()
-            .is_empty()
-            .then(|| None)
-            .unwrap_or_else(|| Some(stream_cache.agent_id.clone())),
-        parts: vec![MessagePart::Text {
-            text,
-            reasoning_content: if reasoning_text.trim().is_empty() {
-                None
-            } else {
-                Some(reasoning_text)
-            },
-        }],
-        extra_text_blocks: Vec::new(),
-        provider_meta: Some(serde_json::json!({
-            "_streaming": true,
-            "_toolStatusText": stream_cache.tool_status_text,
-            "_toolStatusState": stream_cache.tool_status_state,
-            "_streamBlocks": stream_cache.stream_blocks,
-            "_streamTail": "",
-            "_frontendDispatchStartedAtMs": stream_cache.started_at_ms,
-            "_stableRenderId": message_id,
-        })),
-        tool_call: None,
-        mcp_call: None,
-        meme_annotations: None,
-    })
+        && !snapshot.stream_cache.persisted_assistant_message_id.trim().is_empty()
 }
 
 #[cfg(test)]
 mod foreground_resume_projection_tests {
     use super::*;
-
-    fn text_message(id: &str, role: &str, text: &str) -> ChatMessage {
-        ChatMessage {
-            id: id.to_string(),
-            role: role.to_string(),
-            created_at: "2026-06-12T00:00:00Z".to_string(),
-            speaker_agent_id: None,
-            parts: vec![MessagePart::Text {
-                text: text.to_string(),
-                reasoning_content: None,
-            }],
-            extra_text_blocks: Vec::new(),
-            provider_meta: None,
-            tool_call: None,
-            mcp_call: None,
-            meme_annotations: None,
-        }
-    }
 
     fn runtime_snapshot_with_state(
         runtime_state: MainSessionState,
@@ -389,81 +274,23 @@ mod foreground_resume_projection_tests {
     fn streaming_runtime_snapshot_should_bind_stream() {
         let snapshot = runtime_snapshot_with_state(
             MainSessionState::AssistantStreaming,
-            ConversationStreamRuntimeCacheSnapshot::default(),
+            ConversationStreamRuntimeCacheSnapshot {
+                persisted_assistant_message_id: "assistant-1".to_string(),
+                ..Default::default()
+            },
         );
 
         assert!(foreground_runtime_snapshot_should_bind(&snapshot));
     }
 
     #[test]
-    fn foreground_stream_projection_removes_persisted_half_message_and_old_draft() {
-        let messages = vec![
-            text_message("user-1", "user", "hello"),
-            text_message("assistant-half", "assistant", "old half"),
-            text_message("__draft_assistant__:7", "assistant", "old draft"),
-        ];
-        let stream_cache = ConversationStreamRuntimeCacheSnapshot {
-            activation_id: "round-42".to_string(),
-            request_id: "request-1".to_string(),
-            department_id: "department-1".to_string(),
-            agent_id: "agent-1".to_string(),
-            assistant_text: String::new(),
-            tool_status_text: String::new(),
-            tool_status_state: String::new(),
-            stream_blocks: vec![AssistantStreamBlock {
-                reasoning: "thinking".to_string(),
-                text: "new text".to_string(),
-                tools: Vec::new(),
-                pending_text_break: false,
-            }],
-            started_at: "2026-06-12T00:00:01Z".to_string(),
-            started_at_ms: 1000,
-            updated_at: "2026-06-12T00:00:02Z".to_string(),
-            has_visible_progress: true,
-            persisted_assistant_message_id: "assistant-half".to_string(),
-        };
-
-        let projected = apply_foreground_stream_projection(messages, &stream_cache);
-
-        assert_eq!(projected.len(), 2);
-        assert_eq!(projected[0].id, "user-1");
-        assert_eq!(projected[1].id, "assistant-half");
-        assert!(projected
-            .iter()
-            .filter(|message| message.id.starts_with("__draft_assistant__:"))
-            .count()
-            == 0);
-    }
-
-    #[test]
-    fn foreground_stream_projection_preserves_tool_status_meta() {
-        let stream_cache = ConversationStreamRuntimeCacheSnapshot {
-            activation_id: "round-7".to_string(),
-            request_id: "request-7".to_string(),
-            department_id: "department-1".to_string(),
-            agent_id: "agent-1".to_string(),
-            assistant_text: String::new(),
-            tool_status_text: "正在调用工具".to_string(),
-            tool_status_state: "running".to_string(),
-            stream_blocks: Vec::new(),
-            started_at: "2026-06-12T00:00:01Z".to_string(),
-            started_at_ms: 1000,
-            updated_at: "2026-06-12T00:00:02Z".to_string(),
-            has_visible_progress: true,
-            persisted_assistant_message_id: "assistant-tool-status".to_string(),
-        };
-
-        let projected = build_foreground_stream_projection_message(&stream_cache).unwrap();
-        let meta = projected.provider_meta.unwrap_or_default();
-
-        assert_eq!(
-            meta.get("_toolStatusText").and_then(serde_json::Value::as_str),
-            Some("正在调用工具")
+    fn streaming_runtime_snapshot_without_formal_message_should_not_bind_stream() {
+        let snapshot = runtime_snapshot_with_state(
+            MainSessionState::AssistantStreaming,
+            ConversationStreamRuntimeCacheSnapshot::default(),
         );
-        assert_eq!(
-            meta.get("_toolStatusState").and_then(serde_json::Value::as_str),
-            Some("running")
-        );
+
+        assert!(!foreground_runtime_snapshot_should_bind(&snapshot));
     }
 }
 

@@ -37,6 +37,8 @@ export type ForegroundRecoveryDependencies = {
   applyRuntimeSnapshot: (runtimeSnapshot: ForegroundRuntimeSnapshot) => boolean | Promise<boolean>;
   refreshMessageById: (conversationId: string, messageId: string) => Promise<boolean>;
   finalizeMessage: (messageId: string) => void | Promise<void>;
+  /** 后台整理/压缩没有可恢复的 assistant 正式消息；只更新忙态。 */
+  applyBackgroundBusy?: (runtimeSnapshot: ForegroundRuntimeSnapshot) => void | Promise<void>;
 };
 
 export type ForegroundRecoveryOutcome = "handled" | "check_freshness" | "reload_conversation";
@@ -45,14 +47,21 @@ function normalized(value: unknown): string {
   return String(value || "").trim();
 }
 
-function runtimeIsActive(snapshot: ForegroundRuntimeSnapshot): boolean {
+export type ForegroundRuntimeKind = "idle" | "assistant_streaming" | "background_busy";
+
+export function classifyForegroundRuntime(snapshot: ForegroundRuntimeSnapshot): ForegroundRuntimeKind {
   const state = normalized(snapshot.runtimeState);
-  return state === "assistant_streaming"
-    || state === "organizing_context"
+  if (state === "assistant_streaming" && !!normalized(snapshot.streamCache?.persistedAssistantMessageId)) {
+    return "assistant_streaming";
+  }
+  if (state === "organizing_context"
     || state === "compacting"
     || !!snapshot.isProcessing
     || !!snapshot.hasPendingQueue
-    || Math.max(0, Number(snapshot.pendingQueueCount || 0)) > 0;
+    || Math.max(0, Number(snapshot.pendingQueueCount || 0)) > 0) {
+    return "background_busy";
+  }
+  return "idle";
 }
 
 function targetMessageId(snapshot: ForegroundRuntimeSnapshot, fallbackMessageId?: string): string {
@@ -65,7 +74,7 @@ function decide(
   probeState: "unknown" | "healthy" | "unhealthy",
 ) {
   return decideForegroundRecovery({
-    backendStreaming: runtimeIsActive(snapshot),
+    backendStreaming: classifyForegroundRuntime(snapshot) === "assistant_streaming",
     frontendStreaming: input.frontendStreaming,
     backendMessageId: snapshot.streamCache?.persistedAssistantMessageId,
     frontendMessageId: input.frontendMessageId,
@@ -83,6 +92,11 @@ export async function recoverForegroundStreaming(
   input: ForegroundRecoveryInput,
   dependencies: ForegroundRecoveryDependencies,
 ): Promise<ForegroundRecoveryOutcome> {
+  if (classifyForegroundRuntime(input.runtimeSnapshot) === "background_busy") {
+    if (input.frontendMessageId) await dependencies.finalizeMessage(input.frontendMessageId);
+    await dependencies.applyBackgroundBusy?.(input.runtimeSnapshot);
+    return "handled";
+  }
   let action = decide(input, input.runtimeSnapshot, "unknown");
   if (action === "probe_stream") {
     const probeHealthy = await dependencies.probeStream(input.conversationId);
@@ -90,7 +104,7 @@ export async function recoverForegroundStreaming(
   }
 
   if (action === "keep") {
-    return input.frontendStreaming || runtimeIsActive(input.runtimeSnapshot)
+    return input.frontendStreaming || classifyForegroundRuntime(input.runtimeSnapshot) === "assistant_streaming"
       ? "handled"
       : "check_freshness";
   }
@@ -109,7 +123,12 @@ export async function recoverForegroundStreaming(
   const resumedSnapshot = await dependencies.resumeSubscription(input.conversationId);
   const effectiveSnapshot = resumedSnapshot || input.runtimeSnapshot;
   const messageId = targetMessageId(effectiveSnapshot, input.frontendMessageId);
-  if (runtimeIsActive(effectiveSnapshot)) {
+  if (classifyForegroundRuntime(effectiveSnapshot) === "background_busy") {
+    if (input.frontendMessageId) await dependencies.finalizeMessage(input.frontendMessageId);
+    await dependencies.applyBackgroundBusy?.(effectiveSnapshot);
+    return "handled";
+  }
+  if (classifyForegroundRuntime(effectiveSnapshot) === "assistant_streaming") {
     if (!messageId) return "reload_conversation";
     const probeHealthy = await dependencies.probeStream(input.conversationId);
     if (!probeHealthy) return "reload_conversation";

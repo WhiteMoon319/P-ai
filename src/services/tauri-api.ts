@@ -1606,11 +1606,6 @@ function normalizeTransportResult(canonicalCommand: string, result: unknown, web
           : []);
     return { ...record, directories };
   }
-  if (canonicalCommand === "conversation.foregroundLightSnapshot" && webRuntime && result && typeof result === "object") {
-    // Web 的发送请求无法携带原生 Channel，前台必须始终保有统一订阅；
-    // 这个传输差异不能泄漏到聊天状态机或 Sidebar 打开逻辑。
-    return { ...(result as Record<string, unknown>), shouldBindStream: true };
-  }
   if (canonicalCommand === "app.bootstrapSnapshot" && webRuntime && result && typeof result === "object") {
     const snapshot = result as Record<string, unknown>;
     const config = snapshot.config;

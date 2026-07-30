@@ -18,6 +18,7 @@ import {
 import {
   createLatestTaskRunner,
   runForegroundSnapshotBindingTransaction,
+  snapshotCanBindAssistantStream,
 } from "./chat-foreground-coordinator";
 import { recoverForegroundStreaming } from "./foreground-recovery-state-machine";
 import { useChatFlow } from "./use-chat-flow";
@@ -33,7 +34,7 @@ type ConversationViewRuntimeOptions = {
   t: (key: string, params?: Record<string, unknown>) => string;
 };
 
-type ConversationRuntimeState = "idle" | "assistant_streaming" | "organizing_context";
+type ConversationRuntimeState = "idle" | "assistant_streaming" | "organizing_context" | "compacting";
 
 type ConversationLightSnapshot = {
   conversationId?: string;
@@ -183,7 +184,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
           resume: (snapshot) => {
             const runtimeState = String(snapshot?.runtimeState || "").trim();
             const streamCache = snapshot?.streamCache as Record<string, unknown> | null | undefined;
-            if (runtimeState !== "assistant_streaming" && runtimeState !== "organizing_context" && !streamCache?.hasVisibleProgress) {
+            if (runtimeState !== "assistant_streaming" || !snapshotCanBindAssistantStream(snapshot)) {
               return;
             }
             flow.resumeForegroundRuntimeRound({
@@ -400,6 +401,9 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
         await flow.unbindActiveConversationStream().catch(() => {});
         runtimeState.value = "idle";
       },
+      applyBackgroundBusy: (snapshot) => {
+        runtimeState.value = (snapshot.runtimeState as ConversationRuntimeState) || "organizing_context";
+      },
     });
     if (disposed || conversationId !== currentConversationId()) return;
     if (outcome === "handled") return;
@@ -479,6 +483,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
         nextRuntimeState !== "idle"
         && nextRuntimeState !== "assistant_streaming"
         && nextRuntimeState !== "organizing_context"
+        && nextRuntimeState !== "compacting"
       ) return;
       runtimeState.value = nextRuntimeState;
       const frontendStreaming = frontendConversationIsStreaming();

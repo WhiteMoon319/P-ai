@@ -21,7 +21,11 @@ describe("chatForegroundCoordinator", () => {
       }),
       requestSnapshot: async () => {
         order.push("snapshot");
-        return { shouldBindStream: true, streamCache: null };
+        return {
+          shouldBindStream: true,
+          runtimeState: "assistant_streaming",
+          streamCache: { persistedAssistantMessageId: "assistant-1" },
+        };
       },
       applySnapshot: () => { order.push("apply"); },
       bind: async () => { order.push("bind"); },

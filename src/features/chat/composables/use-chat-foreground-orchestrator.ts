@@ -3,7 +3,7 @@ import { i18n } from "../../../i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import { toErrorMessage } from "../../../utils/error";
 import { readLastActiveConversationId } from "../utils/last-active-conversation";
-import { createLatestTaskRunner, runForegroundSnapshotBindingTransaction } from "./chat-foreground-coordinator";
+import { createLatestTaskRunner, runForegroundSnapshotBindingTransaction, snapshotCanBindAssistantStream } from "./chat-foreground-coordinator";
 
 const t = i18n.global.t;
 
@@ -381,7 +381,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
         resume: (nextSnapshot) => {
           const runtimeState = String(nextSnapshot?.runtimeState || "").trim();
           const streamCache = nextSnapshot?.streamCache as Record<string, unknown> | null | undefined;
-          if (runtimeState !== "assistant_streaming" && runtimeState !== "organizing_context" && !streamCache?.hasVisibleProgress) {
+          if (runtimeState !== "assistant_streaming" || !snapshotCanBindAssistantStream(nextSnapshot || {})) {
             return;
           }
           bindings.getChatFlow()?.resumeForegroundRuntimeRound?.({

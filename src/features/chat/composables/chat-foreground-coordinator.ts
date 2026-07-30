@@ -6,9 +6,24 @@ export type ForegroundSnapshotBindingStage =
   | "bind"
   | "resume";
 
+/**
+ * 唯一允许恢复 delta 订阅的快照形态：后端明确标记为 assistant 流，且已给出
+ * 可原子读取/合并的正式 assistant 消息 ID。队列、压缩与整理均不能越过此门槛。
+ */
+export function snapshotCanBindAssistantStream(snapshot: {
+  shouldBindStream?: boolean;
+  runtimeState?: unknown;
+  streamCache?: { persistedAssistantMessageId?: unknown } | null;
+}): boolean {
+  return snapshot.shouldBindStream === true
+    && String(snapshot.runtimeState || "").trim() === "assistant_streaming"
+    && !!String(snapshot.streamCache?.persistedAssistantMessageId || "").trim();
+}
+
 export async function runForegroundSnapshotBindingTransaction<TSnapshot extends {
   shouldBindStream?: boolean;
-  streamCache?: unknown;
+  runtimeState?: unknown;
+  streamCache?: { persistedAssistantMessageId?: unknown } | null;
 }>(input: {
   conversationId: string;
   isCurrent: () => boolean;
@@ -37,7 +52,7 @@ export async function runForegroundSnapshotBindingTransaction<TSnapshot extends 
   input.applySnapshot(snapshot);
   await unbindPromise;
   if (!input.isCurrent()) return null;
-  if (!snapshot.shouldBindStream) return snapshot;
+  if (!snapshotCanBindAssistantStream(snapshot)) return snapshot;
   input.onStage?.("bind");
   await input.bind();
   if (!input.isCurrent()) return null;

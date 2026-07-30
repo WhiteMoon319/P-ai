@@ -267,7 +267,7 @@ describe("统一传输通知适配器", () => {
     expect(request?.params).toEqual({ conversationId: "conversation-read", messageId: "message-1" });
   });
 
-  it("Web 前台轻量快照始终建立统一流订阅，桌面保留后端绑定判断", async () => {
+  it("Web 与桌面都保留后端的前台流绑定判断", async () => {
     installNativeRuntime();
     invokeMock.mockResolvedValue({ conversationId: "conversation-native-idle", shouldBindStream: false });
     await expect(invokeTauri("conversation.foregroundLightSnapshot", {
@@ -281,7 +281,7 @@ describe("统一传输通知适配器", () => {
     await ensureTransportReady();
     await expect(invokeTauri("conversation.foregroundLightSnapshot", {
       input: { conversationId: "conversation-web-idle", resumeProjection: true },
-    })).resolves.toEqual({ conversationId: "conversation-web-idle", shouldBindStream: true });
+    })).resolves.toEqual({ conversationId: "conversation-web-idle", shouldBindStream: false });
   });
 
   it("统一会话维护命令由适配器映射到桌面 command，并在 Web 解包同一参数", async () => {

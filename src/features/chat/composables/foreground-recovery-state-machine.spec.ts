@@ -96,4 +96,20 @@ describe("foregroundRecoveryStateMachine", () => {
     expect(dependencies.probeStream).not.toHaveBeenCalled();
     expect(dependencies.refreshMessageById).not.toHaveBeenCalled();
   });
+
+  it("压缩中没有正式 assistant 消息时只进入忙态", async () => {
+    const dependencies = createDependencies();
+    dependencies.applyBackgroundBusy = vi.fn();
+
+    const outcome = await recoverForegroundStreaming({
+      conversationId: "conversation-1",
+      runtimeSnapshot: { runtimeState: "compacting", isProcessing: true },
+      frontendStreaming: false,
+    }, dependencies);
+
+    expect(outcome).toBe("handled");
+    expect(dependencies.applyBackgroundBusy).toHaveBeenCalledTimes(1);
+    expect(dependencies.resumeSubscription).not.toHaveBeenCalled();
+    expect(dependencies.refreshMessageById).not.toHaveBeenCalled();
+  });
 });

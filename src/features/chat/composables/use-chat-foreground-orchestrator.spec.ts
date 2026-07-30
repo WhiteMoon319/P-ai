@@ -66,7 +66,8 @@ function createBindings(shouldBindStream: boolean, order: string[]) {
       conversationId: "conversation-b",
       messages: [],
       shouldBindStream,
-      streamCache: null,
+      runtimeState: shouldBindStream ? "assistant_streaming" : "idle",
+      streamCache: shouldBindStream ? { persistedAssistantMessageId: "assistant-1" } : null,
     };
   });
   return {

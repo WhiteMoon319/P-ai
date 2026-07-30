@@ -209,6 +209,9 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
         if (runtimeState === "idle" || runtimeState === "assistant_streaming" || runtimeState === "organizing_context") {
           options.applyConversationRuntimeStateUpdated({ conversationId, runtimeState });
         }
+        if (runtimeState !== "assistant_streaming" || !String(runtimeSnapshot.streamCache?.persistedAssistantMessageId || "").trim()) {
+          return false;
+        }
         return (options.getChatFlow()?.resumeForegroundRuntimeRound?.({
           conversationId,
           streamCache: runtimeSnapshot.streamCache || null,
@@ -221,6 +224,12 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
         flow?.clearForegroundRuntimeState?.();
         await Promise.resolve(flow?.unbindActiveConversationStream?.()).catch(() => {});
         options.applyConversationRuntimeStateUpdated({ conversationId, runtimeState: "idle" });
+      },
+      applyBackgroundBusy: (runtimeSnapshot) => {
+        const runtimeState = String(runtimeSnapshot.runtimeState || "organizing_context").trim();
+        if (runtimeState === "organizing_context" || runtimeState === "compacting") {
+          options.applyConversationRuntimeStateUpdated({ conversationId, runtimeState: runtimeState as "organizing_context" });
+        }
       },
     });
     if (String(options.currentChatConversationId.value || "").trim() !== conversationId) return;
