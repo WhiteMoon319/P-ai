@@ -32,7 +32,12 @@ type UseChatFlowExternalEventsOptions = {
     probeBoundChannel: (conversationId?: string | null, timeoutMs?: number) => Promise<boolean>;
     setBoundDisplayGeneration: (gen: number) => void;
   };
-  handleHistoryFlushed: (gen: number, parsed: any, source: "sendChat" | "bound") => Promise<void>;
+  handleHistoryFlushed: (
+    gen: number,
+    parsed: any,
+    source: "sendChat" | "bound",
+    options?: { suppressActivationProjection?: boolean },
+  ) => Promise<void>;
   beginAssistantActivationFromEvent: (payload: any) => number;
   markRoundStarted: (gen: number) => Promise<void>;
   handleRoundCompleted: (gen: number, result: any) => Promise<void>;
@@ -77,6 +82,14 @@ export function externalTerminalTargetsRound(
     .filter(Boolean);
   if (currentActivationId && incomingIds.length > 0 && !incomingIds.includes(currentActivationId)) return false;
   return true;
+}
+
+/** 正式历史照常合并；停止只抑制它对旧轮次的等待/流式投影。 */
+export function shouldSuppressStoppedHistoryActivation(
+  activateAssistant: boolean,
+  hasStoppedRound: boolean,
+): boolean {
+  return activateAssistant && hasStoppedRound;
 }
 
 export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOptions) {
@@ -160,8 +173,14 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     if (currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId) {
       return;
     }
-    if (parsed.activateAssistant && options.hasStoppedRound()) return;
-    if (parsed.activateAssistant) {
+    // 正式历史永远不能因停止而丢弃。停止只禁止旧轮次复活；由于
+    // historyFlushed 没有轮次身份，先合并消息，并把激活投影延后交给
+    // 随后的 roundStarted 按身份精确判断。
+    const suppressActivationProjection = shouldSuppressStoppedHistoryActivation(
+      !!parsed.activateAssistant,
+      options.hasStoppedRound(),
+    );
+    if (parsed.activateAssistant && !suppressActivationProjection) {
       options.clearRecentlyCompletedRoundIds();
     }
     const treatAsSendChat = options.getSendChatActiveGen() > 0 && !!parsed.activateAssistant;
@@ -174,6 +193,7 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
         message: JSON.stringify(parsed),
       },
       source,
+      { suppressActivationProjection },
     );
   }
 

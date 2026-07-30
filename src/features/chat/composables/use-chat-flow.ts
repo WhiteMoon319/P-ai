@@ -767,12 +767,12 @@ export function useChatFlow(options: UseChatFlowOptions) {
     gen: number,
     parsed: AssistantDeltaEvent,
     source: "sendChat" | "bound",
+    behavior?: { suppressActivationProjection?: boolean },
   ) {
     if (source === "sendChat") {
       submitPending.value = false;
     }
     const flushed = readHistoryFlushedPayload(parsed.message);
-    if (flushed?.activateAssistant && hasStoppedRound()) return;
     if (flushed && options.onHistoryFlushed) {
       await options.onHistoryFlushed({
         conversationId: flushed.conversationId,
@@ -781,6 +781,8 @@ export function useChatFlow(options: UseChatFlowOptions) {
         activateAssistant: !!flushed.activateAssistant,
       });
     }
+    // 停止后的迟到正式消息仍须进入历史；仅禁止它把已停止轮次重新投影为等待态。
+    if (behavior?.suppressActivationProjection) return;
     await roundEvents.handleHistoryFlushed(gen, parsed, source);
   }
 
