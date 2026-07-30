@@ -98,19 +98,11 @@ export function useChatWindowMediaOrchestrator(bindings: Record<string, any>) {
     viewMode: bindings.viewMode,
     config: bindings.config,
     recording,
-    currentChatConversationId: bindings.currentChatConversationId,
-    chatting: bindings.chatting,
     recordHotkeyProbeLastSeq: bindings.recordHotkeyProbeLastSeq,
     recordHotkeyProbeDown: bindings.recordHotkeyProbeDown,
-    chatWindowActiveSynced: bindings.chatWindowActiveSynced,
-    allMessages: bindings.allMessages,
-    getChatFlow: bindings.getChatFlow,
-    applyConversationRuntimeStateUpdated: bindings.applyConversationRuntimeStateUpdated,
     startSpeechRecording,
     stopSpeechRecording,
     prewarmMicrophone,
-    syncUnarchivedConversationOverviewChangedSinceWatermark: bindings.syncUnarchivedConversationOverviewChangedSinceWatermark,
-    switchUnarchivedConversation: bindings.switchUnarchivedConversation,
   });
 
   const chatMedia = useChatMedia({

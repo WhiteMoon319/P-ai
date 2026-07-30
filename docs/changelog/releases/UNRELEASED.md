@@ -2,6 +2,7 @@
 
 ## 修复：前台会话流式状态恢复
 
+- 重构（chat-runtime-single-path）：主对话的前台恢复、水位与终态收口从录音模块收敛到唯一聊天运行时；APP 与 Web/VS Code 继续复用同一 `main-chat` 入口和传输门面。
 - 修复（chat-foreground-tail-watermark）：前台恢复以会话变更水位决定是否读取正式尾消息；水位推进时强制以单条正式消息收口同 ID 的流式半成品，并在读取失败时回退轻量快照。
 - 修复（chat-stop-guided-history）：停止回复后，引导消息出队产生的正式历史事件仍会立即合并到当前会话；停止保护仅抑制已停止轮次的等待/流式投影，不再吞掉正式消息。
 - 修复（chat-foreground-stream-recovery）：压缩中尚未产生正式 assistant 消息时仅显示会话忙态；收到 `roundStarted` 的正式消息 ID 后才显示对应气泡，避免暴露内部占位身份。

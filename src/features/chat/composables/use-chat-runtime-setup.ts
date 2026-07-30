@@ -8,6 +8,7 @@ import {
 } from "../../../services/tauri-api";
 import { registerChatFlowRuntime } from "./chat-flow-runtime-registry";
 import { useChatFlow } from "./use-chat-flow";
+import { useChatForegroundRuntime } from "./use-chat-foreground-runtime";
 import { useChatRewindActions } from "./use-chat-rewind-actions";
 import { useConfirmPlan } from "./use-confirm-plan";
 
@@ -229,6 +230,10 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
   });
 
   chatFlowRef = chatFlow;
+  const foregroundRuntime = useChatForegroundRuntime({
+    ...bindings,
+    getChatFlow: () => chatFlow,
+  });
   const unregisterChatFlowRuntime = registerChatFlowRuntime({
     bindingId: chatFlow.bindingId,
     getConversationId: () => String(bindings.currentChatConversationId.value || "").trim(),
@@ -241,6 +246,7 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
 
   return {
     chatFlow,
+    ...foregroundRuntime,
     handleConfirmPlan: confirmPlan.handleConfirmPlan,
     deleteUnarchivedConversation: rewindActions.deleteUnarchivedConversation,
     handleCreateConversationBranchFromTurn: rewindActions.handleCreateConversationBranchFromTurn,

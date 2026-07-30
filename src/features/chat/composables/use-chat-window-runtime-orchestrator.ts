@@ -230,6 +230,14 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
 
   const chatRuntimeSetup = useChatRuntimeSetup({
     chatRuntime,
+    viewMode: bindings.viewMode,
+    chatWindowActiveSynced: bindings.chatWindowActiveSynced,
+    applyConversationRuntimeStateUpdated: bindings.applyConversationRuntimeStateUpdated,
+    syncUnarchivedConversationOverviewChangedSinceWatermark: bindings.syncUnarchivedConversationOverviewChangedSinceWatermark,
+    switchUnarchivedConversation: bindings.switchUnarchivedConversation,
+    onBackground: bindings.onBackground,
+    onVisibilityChange: bindings.onVisibilityChange,
+    onCleanup: bindings.onCleanup,
     chatting: bindings.chatting,
     trimming: bindings.trimming,
     compactingConversation: bindings.compactingConversation,

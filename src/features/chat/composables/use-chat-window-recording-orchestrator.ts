@@ -1,14 +1,5 @@
 import { ref, watch, type Ref } from "vue";
-import { invokeTauri } from "../../../services/tauri-api";
-import type { AppConfig, ChatMessage } from "../../../types/app";
-import { mergeAuthoritativeConversationMessages } from "./chat-message-state-machine";
-import { formalizeMessages } from "./use-chat-flow-utils";
-import { createForegroundTailWatermarkCoordinator, createLatestTaskRunner } from "./chat-foreground-coordinator";
-import {
-  reconcileForegroundRuntime,
-  type ForegroundRuntimeSnapshot,
-} from "./foreground-recovery-state-machine";
-import { useChatForegroundActivity } from "./use-chat-foreground-activity";
+import type { AppConfig } from "../../../types/app";
 import { useRecordHotkey } from "./use-record-hotkey";
 
 type RecordingActivationSource = "foreground" | "background";
@@ -17,59 +8,17 @@ type UseChatWindowRecordingOrchestratorOptions = {
   viewMode: Ref<"chat" | "archives" | "config">;
   config: AppConfig;
   recording: Ref<boolean>;
-  currentChatConversationId: Ref<string>;
-  chatting: Ref<boolean>;
   recordHotkeyProbeLastSeq: Ref<number>;
   recordHotkeyProbeDown: Ref<boolean>;
-  chatWindowActiveSynced: Ref<boolean | null>;
-  allMessages: Ref<ChatMessage[]>;
-  getChatFlow: () => {
-    probeBoundChannel?: (conversationId?: string | null, timeoutMs?: number) => Promise<boolean>;
-    bindActiveConversationStream?: (conversationId: string, force?: boolean) => Promise<void>;
-    unbindActiveConversationStream?: () => Promise<void>;
-    clearForegroundRuntimeState?: () => void;
-    resumeForegroundRuntimeRound?: (input?: {
-      conversationId?: string | null;
-      streamCache?: unknown;
-      statusText?: string;
-      reason?: string;
-    }) => number;
-    frontendRoundPhase?: Ref<"idle" | "queued" | "waiting" | "streaming">;
-    readConversationStreamCache?: (conversationId?: string | null) => {
-      activationId?: string;
-      requestId?: string;
-      updatedAt?: string;
-      persistedAssistantMessageId?: string;
-    } | null;
-  } | null | undefined;
-  applyConversationRuntimeStateUpdated: (payload: {
-    conversationId: string;
-    runtimeState: "idle" | "assistant_streaming" | "organizing_context";
-  }) => void;
   startSpeechRecording: () => Promise<unknown>;
   stopSpeechRecording: (discard: boolean) => Promise<unknown>;
   prewarmMicrophone: () => Promise<unknown>;
-  syncUnarchivedConversationOverviewChangedSinceWatermark: (reason?: string) => Promise<void>;
-  switchUnarchivedConversation: (conversationId: string) => Promise<void>;
 };
 
 export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordingOrchestratorOptions) {
   const CHAT_WINDOW_MIC_PREWARM_DEBOUNCE_MS = 260;
   const foregroundRecordingActive = ref(false);
   let chatMicPrewarmTimer: ReturnType<typeof setTimeout> | null = null;
-  const foregroundTailWatermark = createForegroundTailWatermarkCoordinator({
-    requestChanges: async (since) => {
-      const payload = await invokeTauri<{ changed?: Array<{ conversationId?: string }>; serverTime?: string }>("conversation.changedSince", {
-        input: { since: since || null },
-      });
-      return {
-        changedConversationIds: (Array.isArray(payload?.changed) ? payload.changed : [])
-          .map((item) => String(item?.conversationId || "").trim())
-          .filter(Boolean),
-        serverTime: String(payload?.serverTime || "").trim(),
-      };
-    },
-  });
 
   function clearChatMicPrewarmTimer() {
     if (!chatMicPrewarmTimer) return;
@@ -143,174 +92,6 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     }, delayMs);
   }
 
-  function currentFormalTailMessageId(): string {
-    const formalMessages = formalizeMessages(Array.isArray(options.allMessages.value) ? options.allMessages.value : []);
-    return String(formalMessages[formalMessages.length - 1]?.id || "").trim();
-  }
-
-  async function requestLatestFormalTailMessageId(conversationId: string): Promise<string> {
-    const snapshot = await invokeTauri<any>("conversation.freshnessSnapshot", {
-      input: {
-        conversationId,
-        agentId: null,
-      },
-    });
-    return String(snapshot?.lastMessageId || "").trim();
-  }
-
-  async function markConversationReadOnForegroundFocus(conversationId: string): Promise<void> {
-    const normalizedConversationId = String(conversationId || "").trim();
-    if (!normalizedConversationId) return;
-    await invokeTauri("conversation.markRead", {
-      input: { conversationId: normalizedConversationId },
-    });
-  }
-
-  async function requestConversationRuntimeSnapshot(conversationId: string): Promise<ForegroundRuntimeSnapshot> {
-    return invokeTauri<ForegroundRuntimeSnapshot>("conversation.runtimeSnapshot", {
-      conversationId,
-    });
-  }
-
-  async function refreshForegroundTargetMessage(conversationId: string, messageId: string): Promise<boolean> {
-    const message = await invokeTauri<ChatMessage | null>("conversation.messageById", {
-      input: { conversationId, messageId },
-    });
-    if (!message || String(options.currentChatConversationId.value || "").trim() !== conversationId) return false;
-    options.allMessages.value = mergeAuthoritativeConversationMessages(
-      options.allMessages.value,
-      [message],
-      { forceReplace: true },
-    );
-    return true;
-  }
-
-  function frontendConversationIsStreaming(): boolean {
-    const chatFlow = options.getChatFlow();
-    const phase = String(chatFlow?.frontendRoundPhase?.value || "").trim();
-    return !!options.chatting.value || phase === "queued" || phase === "waiting" || phase === "streaming";
-  }
-
-  async function reconcileForegroundConversationAfterWake(reason: string) {
-    const conversationId = String(options.currentChatConversationId.value || "").trim();
-    if (!conversationId) return;
-    try {
-      await foregroundTailWatermark.observeCurrentConversation(conversationId);
-    } catch (error) {
-      console.warn("[聊天前台恢复] 水位查询失败，回退轻量快照", { conversationId, error });
-      await options.switchUnarchivedConversation(conversationId);
-      return;
-    }
-    if (String(options.currentChatConversationId.value || "").trim() !== conversationId) return;
-    const snapshot = await requestConversationRuntimeSnapshot(conversationId);
-    if (String(options.currentChatConversationId.value || "").trim() !== conversationId) return;
-    const chatFlow = options.getChatFlow();
-    const frontendStreamCache = chatFlow?.readConversationStreamCache?.(conversationId);
-    const outcome = await reconcileForegroundRuntime({
-      conversationId,
-      runtimeSnapshot: snapshot,
-      frontendStreaming: frontendConversationIsStreaming(),
-      frontendMessageId: frontendStreamCache?.persistedAssistantMessageId,
-      frontendActivationId: frontendStreamCache?.activationId,
-      frontendRequestId: frontendStreamCache?.requestId,
-      frontendRevision: frontendStreamCache?.updatedAt,
-    }, {
-      probeStream: (targetConversationId) => options.getChatFlow()?.probeBoundChannel?.(targetConversationId) ?? Promise.resolve(false),
-      resumeSubscription: async (targetConversationId) => {
-        const flow = options.getChatFlow();
-        if (!flow?.bindActiveConversationStream) return null;
-        await flow.bindActiveConversationStream(targetConversationId, true);
-        return requestConversationRuntimeSnapshot(targetConversationId);
-      },
-      applyRuntimeSnapshot: async (runtimeSnapshot) => {
-        if (String(options.currentChatConversationId.value || "").trim() !== conversationId) return false;
-        const runtimeState = String(runtimeSnapshot.runtimeState || "").trim();
-        if (runtimeState === "idle" || runtimeState === "assistant_streaming" || runtimeState === "organizing_context") {
-          options.applyConversationRuntimeStateUpdated({ conversationId, runtimeState });
-        }
-        if (runtimeState !== "assistant_streaming" || !String(runtimeSnapshot.streamCache?.persistedAssistantMessageId || "").trim()) {
-          return false;
-        }
-        return (options.getChatFlow()?.resumeForegroundRuntimeRound?.({
-          conversationId,
-          streamCache: runtimeSnapshot.streamCache || null,
-          reason: `foreground_${reason}`,
-        }) || 0) > 0;
-      },
-      refreshMessageById: refreshForegroundTargetMessage,
-      finalizeMessage: async () => {
-        const flow = options.getChatFlow();
-        flow?.clearForegroundRuntimeState?.();
-        await Promise.resolve(flow?.unbindActiveConversationStream?.()).catch(() => {});
-        options.applyConversationRuntimeStateUpdated({ conversationId, runtimeState: "idle" });
-      },
-      applyBackgroundBusy: (runtimeSnapshot) => {
-        const runtimeState = String(runtimeSnapshot.runtimeState || "organizing_context").trim();
-        if (runtimeState === "organizing_context" || runtimeState === "compacting") {
-          options.applyConversationRuntimeStateUpdated({ conversationId, runtimeState: runtimeState as "organizing_context" });
-        }
-      },
-      isCurrent: () => String(options.currentChatConversationId.value || "").trim() === conversationId,
-      currentFormalTailMessageId,
-      requestLatestFormalTailMessageId,
-      shouldReconcileTail: () => foregroundTailWatermark.shouldReconcileTail(conversationId),
-      reloadConversation: () => options.switchUnarchivedConversation(conversationId),
-    });
-    if (String(options.currentChatConversationId.value || "").trim() !== conversationId) return;
-
-    if (outcome === "tail_reconciled") {
-      foregroundTailWatermark.markTailReconciled(conversationId);
-      await markConversationReadOnForegroundFocus(conversationId);
-      return;
-    }
-    if (outcome === "handled") {
-      await markConversationReadOnForegroundFocus(conversationId);
-      return;
-    }
-    if (outcome === "reloaded" || outcome === "stale") return;
-    await markConversationReadOnForegroundFocus(conversationId);
-  }
-
-  async function recoverChatAfterForegroundWakeOnce(reason: string) {
-    try {
-      await reconcileForegroundConversationAfterWake(reason);
-    } catch (error) {
-      console.warn("[聊天前台恢复] 状态机执行失败", { reason, error });
-    }
-    try {
-      await options.syncUnarchivedConversationOverviewChangedSinceWatermark(reason);
-    } catch (error) {
-      console.warn("[聊天前台恢复] 会话概览同步失败", { reason, error });
-    }
-  }
-
-  const foregroundRecoveryRunner = createLatestTaskRunner(recoverChatAfterForegroundWakeOnce);
-
-  function recoverChatAfterForegroundWake(reason: string) {
-    return foregroundRecoveryRunner.run(reason);
-  }
-
-  const foregroundActivity = useChatForegroundActivity({
-    activeSynced: options.chatWindowActiveSynced,
-    isEnabled: () => options.viewMode.value === "chat",
-    onWake: recoverChatAfterForegroundWake,
-    onBackground: cancelForegroundRecordingOnBackground,
-    onWakeError: (reason, error) => {
-      console.warn("[聊天前台恢复] 传输恢复失败", { reason, error });
-    },
-  });
-
-  const clearChatWindowActiveSyncTimer = foregroundActivity.clearSyncTimer;
-  const scheduleChatWindowActiveStateSync = foregroundActivity.schedule;
-  const syncChatWindowActiveState = foregroundActivity.sync;
-  const handleWindowFocusForStateSync = foregroundActivity.handleFocus;
-  const handleWindowBlurForStateSync = foregroundActivity.handleBlur;
-
-  function handleVisibilityForStateSync() {
-    clearChatMicPrewarmTimer();
-    foregroundActivity.handleVisibilityChange();
-  }
-
   function handleWindowFocusForMicPrewarm() {
     scheduleChatMicPrewarm("focus", CHAT_WINDOW_MIC_PREWARM_DEBOUNCE_MS);
   }
@@ -320,29 +101,21 @@ export function useChatWindowRecordingOrchestrator(options: UseChatWindowRecordi
     scheduleChatMicPrewarm("visibility_visible", CHAT_WINDOW_MIC_PREWARM_DEBOUNCE_MS);
   }
 
-  function cleanupChatForegroundActivity() {
-    foregroundRecoveryRunner.cancel();
-    foregroundActivity.cleanup();
+  function cleanupChatForegroundRecording() {
     clearRecordHotkeyProbeState();
   }
 
   return {
     recordHotkey,
     foregroundRecordingActive,
-    clearChatWindowActiveSyncTimer,
     clearChatMicPrewarmTimer,
     isChatWindowActiveNow,
     startRecording,
     stopRecording,
     cancelForegroundRecordingOnBackground,
     clearRecordHotkeyProbeState,
-    scheduleChatWindowActiveStateSync,
     scheduleChatMicPrewarm,
-    syncChatWindowActiveState,
-    handleWindowFocusForStateSync,
-    handleWindowBlurForStateSync,
-    handleVisibilityForStateSync,
-    cleanupChatForegroundActivity,
+    cleanupChatForegroundRecording,
     handleWindowFocusForMicPrewarm,
     handleVisibilityForMicPrewarm,
   };

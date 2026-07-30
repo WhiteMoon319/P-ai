@@ -90,15 +90,15 @@ export function createLatestTaskRunner<T>(task: (input: T) => Promise<void>) {
   return { run, cancel };
 }
 
-/** `conversation.changedSince` 的宿主无关结果；水位只表示是否需要正式尾部对账。 */
+/** `conversation.changedSince` 的统一结果；水位只表示是否需要正式尾部对账。 */
 export type ForegroundWatermarkChanges = {
   changedConversationIds: string[];
   serverTime: string;
 };
 
 /**
- * 每个聊天宿主各自创建一个实例。概览列表的水位不能复用到 ChatView，
- * 否则列表先同步时会吞掉视图尚未应用的正式消息收口。
+ * 每个独立聊天视图实例维护自己的读取进度。概览列表的水位不能复用到
+ * ChatView，否则列表先同步时会吞掉视图尚未应用的正式消息收口。
  */
 export function createForegroundTailWatermarkCoordinator(input: {
   requestChanges: (since: string) => Promise<ForegroundWatermarkChanges>;
