@@ -6604,6 +6604,259 @@
     }
 
     #[test]
+    fn update_latest_summary_title_should_keep_summary_title_consistent_in_v3() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let mut conversation = test_chat_conversation(
+            "conversation-summary-title-consistency",
+            "active",
+            &now,
+        );
+        let mut summary = test_text_message("assistant", "旧摘要正文", &now);
+        summary.id = "summary-message".to_string();
+        summary.provider_meta = Some(serde_json::json!({
+            "message_meta": {
+                "kind": "context_compaction",
+                "title": "旧标题",
+                "schemaVersion": 1,
+            }
+        }));
+        let mut user = test_text_message("user", "你好", &now);
+        user.id = "user-message".to_string();
+        conversation.messages.push(summary);
+        conversation.messages.push(user);
+        write_conversation_shard(&state.data_path, &conversation).expect("write v2 conversation");
+        message_store::chat_metadata_store_run_v3_migration(&state.data_path)
+            .expect("migrate conversation to v3");
+
+        let changed = conversation_service_v2()
+            .update_latest_summary_title(&state, &conversation.id, "新标题")
+            .expect("update summary title");
+        assert!(changed);
+
+        let paths = message_store::message_store_paths(&state.data_path, &conversation.id)
+            .expect("message store paths");
+        let stored =
+            message_store::read_ready_message_store_message_by_id(&paths, "summary-message")
+                .expect("read stored summary message")
+                .expect("summary message exists");
+        assert_eq!(
+            stored.provider_meta.as_ref().expect("provider meta")["message_meta"]["title"],
+            serde_json::Value::String("新标题".to_string())
+        );
+        let persisted = message_store::read_ready_message_store_meta(&paths)
+            .expect("read persisted meta")
+            .expect("persisted meta exists");
+        assert_eq!(persisted.latest_summary_title().as_deref(), Some("新标题"));
+        let cached = state
+            .cached_conversation_metadata
+            .lock()
+            .expect("lock cached metadata")
+            .get(&conversation.id)
+            .cloned()
+            .expect("cached meta exists");
+        assert_eq!(cached.latest_summary_title().as_deref(), Some("新标题"));
+        let meta_view = conversation_service_v2()
+            .get_conversation_meta(&state, &conversation.id)
+            .expect("read meta view");
+        assert_eq!(meta_view.latest_summary_title.as_deref(), Some("新标题"));
+    }
+
+    #[test]
+    fn full_refresh_should_read_updated_summary_title() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let mut conversation = test_chat_conversation(
+            "conversation-summary-title-full-refresh",
+            "active",
+            &now,
+        );
+        let mut summary = test_text_message("assistant", "摘要正文", &now);
+        summary.id = "full-refresh-summary".to_string();
+        summary.provider_meta = Some(serde_json::json!({
+            "message_meta": {"kind": "context_compaction", "title": "刷新前标题", "schemaVersion": 1}
+        }));
+        conversation.messages.push(summary);
+        write_conversation_shard(&state.data_path, &conversation).expect("write v2 conversation");
+        message_store::chat_metadata_store_run_v3_migration(&state.data_path)
+            .expect("migrate conversation to v3");
+
+        conversation_service_v2()
+            .update_latest_summary_title(&state, &conversation.id, "刷新后标题")
+            .expect("update summary title");
+
+        let summaries = conversation_service_v2()
+            .list_unarchived_conversation_summaries(&state)
+            .expect("list unarchived summaries")
+            .summaries;
+        let target = summaries
+            .iter()
+            .find(|item| item.conversation_id == conversation.id)
+            .expect("conversation in full list");
+        assert_eq!(target.summary_title.as_deref(), Some("刷新后标题"));
+    }
+
+    #[test]
+    fn replacing_non_latest_summary_message_should_not_override_latest_summary_title() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let mut conversation = test_chat_conversation(
+            "conversation-summary-title-preserve",
+            "active",
+            &now,
+        );
+        let mut older = test_text_message("assistant", "旧摘要", &now);
+        older.id = "older-summary".to_string();
+        older.provider_meta = Some(serde_json::json!({
+            "message_meta": {"kind": "context_compaction", "title": "旧标题", "schemaVersion": 1}
+        }));
+        let mut newer = test_text_message("assistant", "新摘要", &now);
+        newer.id = "newer-summary".to_string();
+        newer.provider_meta = Some(serde_json::json!({
+            "message_meta": {"kind": "context_compaction", "title": "最新标题", "schemaVersion": 1}
+        }));
+        conversation.messages.push(older);
+        conversation.messages.push(newer);
+        write_conversation_shard(&state.data_path, &conversation).expect("write v2 conversation");
+        message_store::chat_metadata_store_run_v3_migration(&state.data_path)
+            .expect("migrate conversation to v3");
+
+        conversation_service_v2()
+            .update_unarchived_conversation_by_id(&state, &conversation.id, |updated| {
+                let target = updated
+                    .messages
+                    .iter_mut()
+                    .find(|message| message.id == "older-summary")
+                    .expect("older summary exists");
+                target.provider_meta = Some(serde_json::json!({
+                    "message_meta": {"kind": "context_compaction", "title": "被改写", "schemaVersion": 1}
+                }));
+                Ok(())
+            })
+            .expect("replace older summary");
+
+        let paths = message_store::message_store_paths(&state.data_path, &conversation.id)
+            .expect("message store paths");
+        let persisted = message_store::read_ready_message_store_meta(&paths)
+            .expect("read persisted meta")
+            .expect("persisted meta exists");
+        assert_eq!(
+            persisted.latest_summary_title().as_deref(),
+            Some("最新标题")
+        );
+    }
+
+    #[test]
+    fn batch_provider_meta_patch_should_publish_final_summary_title() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let mut conversation = test_chat_conversation(
+            "conversation-summary-title-batch",
+            "active",
+            &now,
+        );
+        let mut summary = test_text_message("assistant", "摘要正文", &now);
+        summary.id = "batch-summary".to_string();
+        summary.provider_meta = Some(serde_json::json!({
+            "message_meta": {"kind": "context_compaction", "title": "原始标题", "schemaVersion": 1}
+        }));
+        let mut user = test_text_message("user", "你好", &now);
+        user.id = "batch-user".to_string();
+        conversation.messages.push(summary);
+        conversation.messages.push(user);
+        write_conversation_shard(&state.data_path, &conversation).expect("write v2 conversation");
+        message_store::chat_metadata_store_run_v3_migration(&state.data_path)
+            .expect("migrate conversation to v3");
+
+        conversation_service_v2()
+            .patch_message_provider_meta_batch(
+                &state,
+                &MessageProviderMetaBatchPatchInput {
+                    conversation_id: conversation.id.clone(),
+                    items: vec![
+                        MessageProviderMetaPatchItem {
+                            message_id: "batch-summary".to_string(),
+                            provider_meta: Some(serde_json::json!({
+                                "message_meta": {"kind": "context_compaction", "title": "批量新标题", "schemaVersion": 1}
+                            })),
+                        },
+                        MessageProviderMetaPatchItem {
+                            message_id: "batch-user".to_string(),
+                            provider_meta: Some(serde_json::json!({"custom": true})),
+                        },
+                    ],
+                },
+            )
+            .expect("batch patch provider meta");
+
+        let paths = message_store::message_store_paths(&state.data_path, &conversation.id)
+            .expect("message store paths");
+        let persisted = message_store::read_ready_message_store_meta(&paths)
+            .expect("read persisted meta")
+            .expect("persisted meta exists");
+        assert_eq!(
+            persisted.latest_summary_title().as_deref(),
+            Some("批量新标题")
+        );
+    }
+
+    #[test]
+    fn replacing_plain_message_should_keep_summary_title_and_derived_fields() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let mut conversation = test_chat_conversation(
+            "conversation-summary-title-plain-replace",
+            "active",
+            &now,
+        );
+        let mut summary = test_text_message("assistant", "摘要正文", &now);
+        summary.id = "plain-summary".to_string();
+        summary.provider_meta = Some(serde_json::json!({
+            "message_meta": {"kind": "context_compaction", "title": "原标题", "schemaVersion": 1}
+        }));
+        let mut user = test_text_message("user", "很短", &now);
+        user.id = "plain-user".to_string();
+        conversation.messages.push(summary);
+        conversation.messages.push(user);
+        write_conversation_shard(&state.data_path, &conversation).expect("write v2 conversation");
+        message_store::chat_metadata_store_run_v3_migration(&state.data_path)
+            .expect("migrate conversation to v3");
+
+        let paths = message_store::message_store_paths(&state.data_path, &conversation.id)
+            .expect("message store paths");
+        let before = message_store::read_ready_message_store_meta(&paths)
+            .expect("read persisted meta before")
+            .expect("persisted meta exists before");
+
+        conversation_service_v2()
+            .update_unarchived_conversation_by_id(&state, &conversation.id, |updated| {
+                let target = updated
+                    .messages
+                    .iter_mut()
+                    .find(|message| message.id == "plain-user")
+                    .expect("plain user message exists");
+                target.parts = vec![MessagePart::Text {
+                    text: "这是一条长很多的普通用户消息".to_string(),
+                    reasoning_content: None,
+                }];
+                Ok(())
+            })
+            .expect("replace plain message");
+
+        let after = message_store::read_ready_message_store_meta(&paths)
+            .expect("read persisted meta after")
+            .expect("persisted meta exists after");
+        assert_eq!(
+            after.latest_summary_title().as_deref(),
+            before.latest_summary_title().as_deref()
+        );
+        assert_eq!(after.latest_summary_title().as_deref(), Some("原标题"));
+        assert_eq!(after.body_text_length(), before.body_text_length() + 12);
+        assert_eq!(after.last_message_id(), before.last_message_id());
+        assert_eq!(after.message_count(), before.message_count());
+    }
+
+    #[test]
     fn pending_worker_snapshot_taken_before_delete_should_not_rewrite_conversation() {
         let state = test_chat_runtime_state();
         let now = now_iso();

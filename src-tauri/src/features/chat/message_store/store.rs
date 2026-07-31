@@ -512,6 +512,28 @@ pub(super) fn read_ready_message_store_meta(
     Ok(None)
 }
 
+/// 按替换后的消息集合重算最新摘要标题（统一派生规则）。
+/// v3 走轻量摘要范围读取；非 v3 目录型会话按该后端既有整读成本读取并合并替换。
+pub(super) fn recompute_latest_summary_title_after_replace(
+    paths: &MessageStorePaths,
+    updated_messages: &[ChatMessage],
+) -> Result<Option<String>, String> {
+    if paths.is_v3_ready()? {
+        return chat_metadata_store_recompute_latest_summary_title(paths, updated_messages);
+    }
+    let mut current = read_message_store_directory_conversation(paths)?;
+    for updated in updated_messages {
+        if let Some(position) = current
+            .messages
+            .iter()
+            .position(|message| message.id.trim() == updated.id.trim())
+        {
+            current.messages[position] = updated.clone();
+        }
+    }
+    Ok(conversation_latest_summary_title(&current))
+}
+
 pub(super) fn read_ready_message_store_all_messages(
     paths: &MessageStorePaths,
 ) -> Result<Option<Vec<ChatMessage>>, String> {

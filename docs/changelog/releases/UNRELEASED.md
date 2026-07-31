@@ -1,5 +1,10 @@
 # 未发布
 
+## 修复：摘要标题原子账本一致性
+
+- 修复（summary-title-shard-consistency）：自动生成摘要标题后，会话概览与消息正文保持一致。统一 replace / batch replace 的派生标题规则：替换消息若改变摘要标题状态，按替换后消息集合重算 `latest_summary_title`；`update_unarchived_conversation_by_id` 提交 v3 替换时使用统一派生元数据并同步内存缓存，不再用旧派生字段覆盖新标题。
+- 修复（summary-title-batch-consistency）：批量替换 `provider_meta` 与单条替换路径共享同一派生规则，最终元数据与最终消息集合一致；替换非最新摘要、删除标题、多消息替换均按最终摘要范围取值，普通消息替换不改变既有正文长度、预览等派生字段行为。
+
 ## 功能：MCP 一卡一组，组内多服务器与工具名前缀
 
 - 功能（mcp-group-card）：一张 MCP 卡片即一组服务器，definitionJson 可整体保存多个服务器并整组启停；部署时组内每个服务器独立连接、工具合并，已有单卡单服务器数据自然兼容。

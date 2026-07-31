@@ -658,6 +658,33 @@ impl ConversationShardMeta {
         self.preview_messages = preview_messages;
     }
 
+    /// 统一 replace 派生更新：按位置一一对应的前后消息对，更新计数以外的缓存派生字段。
+    /// 当任何一对被替换消息的摘要标题状态发生变化（新增/删除/改写标题）时，
+    /// 调用 `recompute_latest_summary_title` 取得替换后的最新摘要标题并写回；
+    /// 该闭包由调用方按自身掌握的消息范围提供（全量会话重算或轻量摘要读取）。
+    pub(super) fn apply_replaced_messages(
+        &mut self,
+        previous_messages: &[ChatMessage],
+        updated_messages: &[ChatMessage],
+        recompute_latest_summary_title: impl FnOnce() -> Result<Option<String>, String>,
+    ) -> Result<(), String> {
+        let pair_count = previous_messages.len().min(updated_messages.len());
+        for index in 0..pair_count {
+            self.apply_replaced_message(&previous_messages[index], &updated_messages[index]);
+        }
+        let summary_title_touched = previous_messages
+            .iter()
+            .zip(updated_messages.iter())
+            .any(|(previous, updated)| {
+                super::summary_context_message_title(previous)
+                    != super::summary_context_message_title(updated)
+            });
+        if summary_title_touched {
+            self.latest_summary_title = recompute_latest_summary_title()?;
+        }
+        Ok(())
+    }
+
     pub(super) fn apply_replaced_message(
         &mut self,
         previous_message: &ChatMessage,

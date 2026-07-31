@@ -727,12 +727,29 @@ impl ConversationServiceV2 {
                 if !changed_messages.is_empty() {
                     let mut ready_meta = self.ensure_appendable_ready_message_store(state, normalized_conversation_id)?;
                     ready_meta.apply_metadata_fields_from_conversation(&updated_meta_conversation);
+                    let previous_messages = changed_messages
+                        .iter()
+                        .filter_map(|updated| {
+                            original_messages
+                                .iter()
+                                .find(|original| original.id == updated.id)
+                                .cloned()
+                        })
+                        .collect::<Vec<_>>();
+                    ready_meta.apply_replaced_messages(&previous_messages, &changed_messages, || {
+                        Ok(conversation_latest_summary_title(&conversation))
+                    })?;
                     message_store::write_jsonl_snapshot_replaced_messages_shard(
                         &store_paths,
                         &ready_meta.to_persist_meta(),
                         &changed_messages,
                     )?;
                     self.mark_conversation_metadata_cached_persisted(state, normalized_conversation_id)?;
+                    state_override_conversation_metadata_cached(
+                        state,
+                        normalized_conversation_id,
+                        &ready_meta,
+                    )?;
                 }
                 Ok(result)
             },

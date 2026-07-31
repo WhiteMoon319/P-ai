@@ -1262,7 +1262,16 @@ impl ConversationServiceV2 {
                 metadata_conversation.updated_at = updated_at.clone();
                 metadata_conversation.last_assistant_at = last_assistant_at.clone();
                 cached.apply_metadata_fields_from_conversation(&metadata_conversation);
-                cached.apply_replaced_message(&previous_message, updated_message);
+                cached.apply_replaced_messages(
+                    std::slice::from_ref(&previous_message),
+                    std::slice::from_ref(updated_message),
+                    || {
+                        message_store::recompute_latest_summary_title_after_replace(
+                            &paths,
+                            std::slice::from_ref(updated_message),
+                        )
+                    },
+                )?;
                 Ok(())
             },
         )?;

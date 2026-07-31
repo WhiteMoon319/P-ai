@@ -365,6 +365,91 @@ fn chat_metadata_store_read_latest_compaction_message(
     })
 }
 
+/// 轻量重算替换后的最新摘要标题：只读取摘要消息范围（compaction locator 索引 + 按需正文），
+/// 不整读会话。`updated_messages` 为本次替换后的消息；磁盘上未被替换的摘要消息按原样参与计算。
+pub(super) fn chat_metadata_store_recompute_latest_summary_title(
+    paths: &MessageStorePaths,
+    updated_messages: &[ChatMessage],
+) -> Result<Option<String>, String> {
+    chat_metadata_store_with_read_snapshot(paths, || {
+        let conn = chat_metadata_store_open(&paths.data_path)?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT sequence, message_id, block_id, byte_offset, byte_len, compaction_kind, role, created_at
+                 FROM message_locator
+                 WHERE conversation_id=?1 AND compaction_kind IS NOT NULL
+                 ORDER BY sequence DESC",
+            )
+            .map_err(|err| format!("查询 SQLite 摘要消息 locator 失败: {err}"))?;
+        let locators = stmt
+            .query_map([&paths.conversation_id], |row| {
+                Ok(ChatMetadataLocator {
+                    sequence: row.get(0)?,
+                    item: MessageStoreIndexItem {
+                        message_id: row.get(1)?,
+                        block_id: Some(row.get::<_, i64>(2)? as u32),
+                        offset: row.get::<_, i64>(3)? as u64,
+                        byte_len: row.get::<_, i64>(4)? as u64,
+                        compaction_kind: row.get(5)?,
+                        role: row.get(6)?,
+                        created_at: row.get(7)?,
+                    },
+                })
+            })
+            .map_err(|err| format!("读取 SQLite 摘要消息 locator 失败: {err}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|err| format!("读取 SQLite 摘要消息 locator 失败: {err}"))?;
+        let replaced_by_id = updated_messages
+            .iter()
+            .map(|message| (message.id.trim().to_string(), message))
+            .collect::<std::collections::HashMap<_, _>>();
+        let mut candidates = Vec::<(i64, Option<String>)>::with_capacity(locators.len());
+        for locator in &locators {
+            let title = if let Some(updated) = replaced_by_id.get(locator.item.message_id.as_str()) {
+                super::summary_context_message_title(updated)
+            } else {
+                chat_metadata_store_read_messages_for_locators(paths, std::slice::from_ref(locator), false)?
+                    .first()
+                    .and_then(super::summary_context_message_title)
+            };
+            candidates.push((locator.sequence, title));
+        }
+        for updated in updated_messages {
+            if super::summary_context_message_title(updated).is_none() {
+                continue;
+            }
+            let message_id = updated.id.trim();
+            if locators
+                .iter()
+                .any(|locator| locator.item.message_id.as_str() == message_id)
+            {
+                continue;
+            }
+            let sequence = conn
+                .query_row(
+                    "SELECT sequence FROM message_locator WHERE conversation_id=?1 AND message_id=?2",
+                    rusqlite::params![paths.conversation_id, message_id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()
+                .map_err(|err| format!("读取 SQLite 消息序号失败: {err}"))?
+                .ok_or_else(|| {
+                    format!(
+                        "重算摘要标题失败：替换消息不在消息仓库，conversation_id={}，message_id={}",
+                        paths.conversation_id,
+                        message_id
+                    )
+                })?;
+            candidates.push((sequence, super::summary_context_message_title(updated)));
+        }
+        Ok(candidates
+            .into_iter()
+            .filter_map(|(sequence, title)| title.map(|title| (sequence, title)))
+            .max_by_key(|(sequence, _)| *sequence)
+            .map(|(_, title)| title))
+    })
+}
+
 fn chat_metadata_store_read_messages_before(
     paths: &MessageStorePaths,
     message_id: &str,

@@ -672,6 +672,21 @@ fn state_mark_conversation_metadata_direct_persisted(
     Ok(meta)
 }
 
+/// 用最终确定的元数据覆盖内存缓存（不改变 dirty/pending/seq 状态）。
+/// 用于 replace 提交路径：统一派生规则重算摘要标题后，缓存必须与持久化输入一致。
+fn state_override_conversation_metadata_cached(
+    state: &AppState,
+    conversation_id: &str,
+    meta: &message_store::ConversationShardMeta,
+) -> Result<(), String> {
+    let mut metadata = state
+        .cached_conversation_metadata
+        .lock()
+        .map_err(|_| "Failed to lock cached conversation metadata".to_string())?;
+    metadata.insert(conversation_id.trim().to_string(), meta.clone());
+    Ok(())
+}
+
 fn state_mark_conversation_metadata_cached_persisted_unlocked(
     state: &AppState,
     conversation_id: &str,

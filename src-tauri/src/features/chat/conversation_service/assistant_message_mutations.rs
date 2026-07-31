@@ -411,6 +411,7 @@ impl ConversationServiceV2 {
                     )
                 })?;
             ready_meta.apply_metadata_fields_from_meta_view(&conversation_meta);
+            let mut previous_messages = Vec::with_capacity(patch_by_id.len());
             let mut updated_messages = Vec::with_capacity(patch_by_id.len());
             for (message_id, provider_meta) in &patch_by_id {
                 let mut message = message_store::read_ready_message_store_message_by_id(&paths, message_id)?
@@ -420,9 +421,16 @@ impl ConversationServiceV2 {
                             conversation_id, message_id
                         )
                     })?;
+                previous_messages.push(message.clone());
                 message.provider_meta = provider_meta.clone();
                 updated_messages.push(message);
             }
+            ready_meta.apply_replaced_messages(&previous_messages, &updated_messages, || {
+                message_store::recompute_latest_summary_title_after_replace(
+                    &paths,
+                    &updated_messages,
+                )
+            })?;
             message_store::write_jsonl_snapshot_replaced_messages_shard(
                 &paths,
                 &ready_meta.to_persist_meta(),
