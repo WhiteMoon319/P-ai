@@ -373,6 +373,8 @@ fn remote_im_contact_tool_history_events(
 
 const IMAGE_FALLBACK_RECENT_USER_MESSAGE_LIMIT: usize = 7;
 
+// 群聊长度门改写（默认禁用，保留待重新启用）。
+#[allow(dead_code)]
 fn remote_im_record_reply_rewrite_fast_request(
     state: &AppState,
     delegate_id: &str,
@@ -405,6 +407,8 @@ fn remote_im_record_reply_rewrite_fast_request(
     }
 }
 
+// 群聊长度门改写（默认禁用，保留待重新启用）。
+#[allow(dead_code)]
 fn remote_im_group_reply_rewrite_prompt(text: &str, max_units: u32) -> PreparedPrompt {
     let count = count_remote_im_multilingual_text_units(text);
     let preamble = if count.contains_japanese_kana {
@@ -432,6 +436,8 @@ fn remote_im_group_reply_rewrite_prompt(text: &str, max_units: u32) -> PreparedP
     }
 }
 
+// 群聊长度门改写（默认禁用，保留待重新启用）。
+#[allow(dead_code)]
 async fn remote_im_reply_delegate_finalize_group_reply_draft(
     state: &AppState,
     delegate_id: &str,

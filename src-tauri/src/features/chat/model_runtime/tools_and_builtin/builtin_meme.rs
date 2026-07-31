@@ -829,29 +829,6 @@ fn resolve_text_to_persisted_meme_segments(
     Ok(Some(segments))
 }
 
-#[cfg(test)]
-fn persist_meme_segments_into_provider_meta(
-    provider_meta: &mut Option<Value>,
-    segments: Option<&[PersistedMemeSegment]>,
-) {
-    let Some(segments) = segments else {
-        return;
-    };
-    if !segments.iter().any(|segment| matches!(segment, PersistedMemeSegment::Meme { .. })) {
-        return;
-    }
-    let mut meta = provider_meta
-        .take()
-        .unwrap_or_else(|| serde_json::json!({}));
-    if !meta.is_object() {
-        meta = serde_json::json!({});
-    }
-    if let Some(obj) = meta.as_object_mut() {
-        obj.insert("memeSegments".to_string(), serde_json::json!(segments));
-    }
-    *provider_meta = Some(meta);
-}
-
 fn build_meme_annotations(
     state: &AppState,
     text: &str,

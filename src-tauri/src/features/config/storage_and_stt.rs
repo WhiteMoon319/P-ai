@@ -473,15 +473,6 @@ fn is_codex_spark_model(model_id: &str) -> bool {
         || normalized.contains("-codex-spark")
 }
 
-fn strip_model_namespace_for_request_format(value: &str) -> &str {
-    value
-        .split('/')
-        .last()
-        .map(str::trim)
-        .filter(|part| !part.is_empty())
-        .unwrap_or(value)
-}
-
 fn selected_reasoning_effort_for_runtime(selected: &ApiConfig) -> Option<String> {
     let normalized = selected.reasoning_effort.trim().to_ascii_lowercase();
     match normalized.as_str() {

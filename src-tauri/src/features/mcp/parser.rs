@@ -82,7 +82,6 @@ impl McpValidationIssue {
 
 #[derive(Debug, Clone)]
 struct McpDefinitionValidationError {
-    code: String,
     message: String,
     issues: Vec<McpValidationIssue>,
 }
@@ -90,14 +89,9 @@ struct McpDefinitionValidationError {
 impl McpDefinitionValidationError {
     fn from_issue(issue: McpValidationIssue) -> Self {
         Self {
-            code: issue.code.clone(),
             message: issue.message.clone(),
             issues: vec![issue],
         }
-    }
-
-    fn details_text(&self) -> Vec<String> {
-        self.issues.iter().map(|i| i.message.clone()).collect()
     }
 }
 

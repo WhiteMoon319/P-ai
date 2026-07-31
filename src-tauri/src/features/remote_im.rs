@@ -23,6 +23,8 @@ struct RemoteImEnqueueInput {
 }
 
 const FAST_REQUEST_KIND_REMOTE_IM_REPLY_DECISION: &str = "remote_im_reply_decision";
+// 群聊长度门改写（默认禁用，保留待重新启用）。
+#[allow(dead_code)]
 const FAST_REQUEST_KIND_REMOTE_IM_REPLY_REWRITE: &str = "remote_im_reply_rewrite";
 
 fn provider_meta_string(meta: &Option<Value>, key: &str) -> Option<String> {
@@ -427,25 +429,6 @@ fn normalize_contact_blocked_message_prefixes(values: &[String]) -> Vec<String> 
         }
     }
     out
-}
-
-fn remote_im_contact_matches_inbound(
-    contact: &RemoteImContact,
-    input: &RemoteImEnqueueInput,
-) -> bool {
-    contact.channel_id == input.channel_id
-        && contact.remote_contact_type == input.remote_contact_type.trim()
-        && contact.remote_contact_id == input.remote_contact_id
-}
-
-fn remote_im_find_contact_for_inbound<'a>(
-    runtime: &'a RuntimeStateFile,
-    input: &RemoteImEnqueueInput,
-) -> Option<&'a RemoteImContact> {
-    runtime
-        .remote_im_contacts
-        .iter()
-        .find(|contact| remote_im_contact_matches_inbound(contact, input))
 }
 
 fn remote_im_blocked_inbound_message_prefix(

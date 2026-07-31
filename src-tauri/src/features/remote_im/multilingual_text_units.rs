@@ -1,5 +1,7 @@
 use unicode_segmentation::UnicodeSegmentation;
 
+// 群聊长度门改写（默认禁用，保留待重新启用）。
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct MultilingualTextUnitCount {
     east_asian_graphemes: usize,
@@ -8,6 +10,7 @@ struct MultilingualTextUnitCount {
     contains_japanese_kana: bool,
 }
 
+#[allow(dead_code)]
 impl MultilingualTextUnitCount {
     fn total(self) -> usize {
         self.east_asian_graphemes
@@ -16,6 +19,7 @@ impl MultilingualTextUnitCount {
     }
 }
 
+#[allow(dead_code)]
 fn remote_im_is_han_scalar(code_point: u32) -> bool {
     matches!(
         code_point,
@@ -26,6 +30,7 @@ fn remote_im_is_han_scalar(code_point: u32) -> bool {
     )
 }
 
+#[allow(dead_code)]
 fn remote_im_is_japanese_kana_scalar(code_point: u32) -> bool {
     matches!(
         code_point,
@@ -33,6 +38,7 @@ fn remote_im_is_japanese_kana_scalar(code_point: u32) -> bool {
     )
 }
 
+#[allow(dead_code)]
 fn remote_im_is_hangul_scalar(code_point: u32) -> bool {
     matches!(
         code_point,
@@ -40,12 +46,14 @@ fn remote_im_is_hangul_scalar(code_point: u32) -> bool {
     )
 }
 
+#[allow(dead_code)]
 fn remote_im_is_east_asian_text_scalar(code_point: u32) -> bool {
     remote_im_is_han_scalar(code_point)
         || remote_im_is_japanese_kana_scalar(code_point)
         || remote_im_is_hangul_scalar(code_point)
 }
 
+#[allow(dead_code)]
 fn remote_im_is_emoji_scalar(code_point: u32) -> bool {
     matches!(
         code_point,
@@ -66,6 +74,7 @@ fn remote_im_is_emoji_scalar(code_point: u32) -> bool {
     )
 }
 
+#[allow(dead_code)]
 fn count_remote_im_multilingual_text_units(text: &str) -> MultilingualTextUnitCount {
     let normalized = remote_im_strip_simple_markdown(text);
     let mut count = MultilingualTextUnitCount::default();
@@ -95,10 +104,12 @@ fn count_remote_im_multilingual_text_units(text: &str) -> MultilingualTextUnitCo
     count
 }
 
+#[allow(dead_code)]
 fn remote_im_multilingual_text_units(text: &str) -> usize {
     count_remote_im_multilingual_text_units(text).total()
 }
 
+#[allow(dead_code)]
 fn remote_im_multilingual_text_units_exceed_ratio(
     text: &str,
     configured_limit: u32,

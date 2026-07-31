@@ -722,6 +722,8 @@ fn delegate_runtime_thread_conversation_update(
     delegate_runtime_thread_conversation_update_unlocked(app_state, delegate_id, conversation)
 }
 
+// 群聊长度门改写（默认禁用，保留待重新启用）。
+#[allow(dead_code)]
 fn delegate_runtime_thread_append_fast_request(
     app_state: &AppState,
     delegate_id: &str,

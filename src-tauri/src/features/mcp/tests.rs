@@ -1,5 +1,3 @@
-use super::*;
-
 fn expand(json: &str) -> Result<ParsedMcpDefinition, McpDefinitionValidationError> {
     parse_mcp_definition_servers(json)
 }
@@ -300,7 +298,6 @@ mod sse_transport_tests {
     use std::convert::Infallible;
     use std::sync::Arc;
 
-    use axum::extract::State;
     use axum::http::{HeaderMap, StatusCode};
     use axum::response::sse::{Event, Sse};
     use axum::response::IntoResponse;
@@ -442,7 +439,7 @@ mod sse_transport_tests {
             "tools should contain echo, got {:?}",
             tools.tools
         );
-        client.cancel();
+        let _ = client.cancel();
 
         // 断言鉴权头确实传到了 message POST
         let headers = state.post_headers.lock().await.clone();

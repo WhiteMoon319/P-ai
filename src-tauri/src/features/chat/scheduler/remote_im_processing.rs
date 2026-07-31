@@ -588,38 +588,6 @@ fn read_remote_im_debounce_secretary_messages(
     }
 }
 
-fn report_remote_im_dynamic_wake_failure(
-    state: &AppState,
-    conversation_id: &str,
-    contact_id: &str,
-    event_id: &str,
-    stage: &str,
-    error: &str,
-) {
-    runtime_log_error(format!(
-        "[远程唤醒压缩] 失败，conversation_id={}，contact_id={}，event_id={}，stage={}，error={}",
-        conversation_id, contact_id, event_id, stage, error
-    ));
-    let app_handle = match state.app_handle.lock() {
-        Ok(handle) => handle.as_ref().cloned(),
-        Err(_) => None,
-    };
-    let Some(app_handle) = app_handle else {
-        return;
-    };
-    if let Err(notification_error) = send_native_notification(
-        &app_handle,
-        "远程唤醒压缩失败",
-        &format!("联系人 {contact_id} 的{stage}失败；已继续启动应答委托。"),
-        false,
-    ) {
-        runtime_log_warn(format!(
-            "[远程唤醒压缩] 跳过，任务=本地错误通知，conversation_id={}，contact_id={}，error={}",
-            conversation_id, contact_id, notification_error
-        ));
-    }
-}
-
 fn remote_im_source_has_pending_queue_event(
     state: &AppState,
     conversation_id: &str,
