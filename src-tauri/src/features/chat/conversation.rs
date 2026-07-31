@@ -3120,7 +3120,10 @@ fn build_question_and_planning_rule_block(
              ## 计划文件\n\
              - 先把计划写成 Markdown 文件，再调用 plan。\n\
              - 优先写到：{preferred_plan_dir}\n\
-             - 文件命名使用 `.pai/plan/YYYYMMDD_中文关键词.md`。\n\
+             - 先按计划的主要业务产出选择一个领域目录，再写入 `.pai/plan/{{domain}}/`；可用领域包括 `chat`、`remote-im`、`runtime`、`tools`、`storage`、`memory`、`model`、`organization`、`ui`、`platform`、`release`。\n\
+             - 文件命名使用 `.pai/plan/{{domain}}/YYYYMMDD_中文关键词.md`，日期统一使用 8 位数字。\n\
+             - 不按 `active`、`archive` 或年月创建额外状态层级；计划完成后保留在原领域目录。\n\
+             - 计划一旦提交，后续 `plan.present` 与 `plan.complete` 始终使用同一份物理路径，不要擅自移动已提交计划。\n\
              - 计划应包含：用户原始关键指令、目标、需求描述、风险、边界、统一口径、术语解释、应该有的测试；最终呈现结果和相关文件可按需补充。\n\
              - 用户原始关键指令只节选影响目标、边界、风险或验收的原文；用户口误后纠正时，采用纠正后的版本。\n\
              - `plan.present` 只提交 `path`。\n\
