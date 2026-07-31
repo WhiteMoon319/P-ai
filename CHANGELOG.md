@@ -5,6 +5,8 @@
 
 ## 最近版本
 
+- [v0.42.0](docs/changelog/releases/v0.42.0.md) - 功能（mcp-group-card）：一张 MCP 卡片即一组服务器，definitionJson 可整体保存多个服务器并整组启停；部署时组内每个服务器独立连接、工具合并，已有单卡单服务器数据自然兼容。
+- [v0.41.0](docs/changelog/releases/v0.41.0.md) - 重构（chat-runtime-single-path）：主对话的前台恢复、水位与终态收口从录音模块收敛到唯一聊天运行时；APP 与 Web/VS Code 继续复用同一 `main-chat` 入口和传输门面。
 - [v0.40.0](docs/changelog/releases/v0.40.0.md) - 修复：发送消息时不再在附件提示阶段检查文件是否存在，减少 prompt 构建阶段的磁盘访问和额外耗时。
 - [v0.37.3](docs/changelog/releases/v0.37.3.md) - 点击图片预览外的空白区域，或者按键盘的 Esc 键，预览会直接关闭，不用再找关闭按钮。
 - [v0.37.2](docs/changelog/releases/v0.37.2.md) - 代码文件中的超长行现在会自动换行，行号会随对应代码内容同步对齐。

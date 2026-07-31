@@ -1,7 +1,17 @@
 {
-  "generatedAt": "2026-07-27T11:51:03.933Z",
-  "latestVersion": "v0.40.0",
+  "generatedAt": "2026-07-31T13:48:57.911Z",
+  "latestVersion": "v0.42.0",
   "releases": [
+    {
+      "version": "v0.42.0",
+      "path": "docs/changelog/releases/v0.42.0.md",
+      "summary": "功能（mcp-group-card）：一张 MCP 卡片即一组服务器，definitionJson 可整体保存多个服务器并整组启停；部署时组内每个服务器独立连接、工具合并，已有单卡单服务器数据自然兼容。"
+    },
+    {
+      "version": "v0.41.0",
+      "path": "docs/changelog/releases/v0.41.0.md",
+      "summary": "重构（chat-runtime-single-path）：主对话的前台恢复、水位与终态收口从录音模块收敛到唯一聊天运行时；APP 与 Web/VS Code 继续复用同一 `main-chat` 入口和传输门面。"
+    },
     {
       "version": "v0.40.0",
       "path": "docs/changelog/releases/v0.40.0.md",
