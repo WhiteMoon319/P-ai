@@ -185,6 +185,7 @@ fn explorer_department_permission_control() -> DepartmentPermissionControl {
         &["read", "read_media", "exec", "fetch", "websearch"],
         &[
             "workspace-guide",
+            "assistant-space-guide",
             "agents-md-setup",
             "memory-generation",
         ],
@@ -204,6 +205,7 @@ fn saddler_department_permission_control() -> DepartmentPermissionControl {
         &[
             "agents-md-setup",
             "workspace-guide",
+            "assistant-space-guide",
             "memory-generation",
         ],
     )

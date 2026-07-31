@@ -38,6 +38,10 @@ const WORKSPACE_PRESET_SKILLS: &[WorkspacePresetSkill] = &[
         skill_md: include_str!("../../../resources/preset-skills/workspace-guide/SKILL.md"),
     },
     WorkspacePresetSkill {
+        dir_name: "assistant-space-guide",
+        skill_md: include_str!("../../../resources/preset-skills/assistant-space-guide/SKILL.md"),
+    },
+    WorkspacePresetSkill {
         dir_name: "private-organization-guide",
         skill_md: include_str!("../../../resources/preset-skills/private-organization-guide/SKILL.md"),
     },

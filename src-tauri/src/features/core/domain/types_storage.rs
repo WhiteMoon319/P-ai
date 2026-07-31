@@ -659,6 +659,7 @@ fn workspace_preset_skill_name(name: &str) -> bool {
         "agent-office"
             | "agents-md-setup"
             | "assistant-interaction-guide"
+            | "assistant-space-guide"
             | "browser-automation"
             | "mcp-setup"
             | "news-analyst"
