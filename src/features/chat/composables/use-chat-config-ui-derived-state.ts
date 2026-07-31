@@ -19,12 +19,17 @@ export function useChatConfigUiDerivedState(options: UseChatConfigUiDerivedState
   const selectedModelOptions = computed(() => {
     const id = options.config.selectedApiConfigId;
     if (!id) return [];
-    return options.apiModelOptions.value[id] ?? [];
+    const fromApiOptions = options.apiModelOptions.value[id] ?? [];
+    const [providerId] = id.split("::");
+    const provider = options.config.apiProviders.find((p) => p.id === providerId);
+    const fromCache = Array.isArray(provider?.cachedModelOptions) ? provider.cachedModelOptions : [];
+    return Array.from(new Set([...fromApiOptions, ...fromCache].map((item) => String(item || "").trim()).filter(Boolean)));
   });
   const selectedModelRefreshOk = computed(() => {
     const id = options.config.selectedApiConfigId;
     if (!id) return false;
-    return !!options.modelRefreshOkFlags.value[id];
+    const fromCache = selectedModelOptions.value.length > 0;
+    return fromCache;
   });
   const responseStyleOptions = responseStylesJson as ResponseStyleOption[];
   const baseUrlReference = computed(() => {

@@ -1,4 +1,5 @@
 import type { ComputedRef, Ref } from "vue";
+import { watch } from "vue";
 import { invokeTauri, syncTransportTrayIcon } from "../../../services/tauri-api";
 import type {
   ApiConfigItem,
@@ -37,6 +38,15 @@ export function useConfigRuntime(options: UseConfigRuntimeOptions) {
     if (trimmed.length <= 8) return `${trimmed.slice(0, 2)}***${trimmed.slice(-2)}`;
     return `${trimmed.slice(0, 4)}***${trimmed.slice(-4)}`;
   }
+
+  // 切换供应商时清除残留状态
+  watch(
+    () => options.selectedApiProvider.value?.id,
+    () => {
+      options.modelRefreshError.value = "";
+      options.refreshingModels.value = false;
+    },
+  );
 
   function normalizeAvatarError(error: unknown): string {
     const raw = String(error ?? "").trim();
@@ -111,28 +121,27 @@ export function useConfigRuntime(options: UseConfigRuntimeOptions) {
   }
 
   async function refreshModels() {
-    if (!options.selectedApiConfig.value) return;
-    const apiId = options.selectedApiConfig.value.id;
     const provider = options.selectedApiProvider.value;
-    const effectiveRequestFormat = provider?.requestFormat ?? options.selectedApiConfig.value.requestFormat;
-    const effectiveBaseUrl = String(provider?.baseUrl || options.selectedApiConfig.value.baseUrl || "").trim();
-    const effectiveCodexAuthMode = String(
-      provider?.codexAuthMode || options.selectedApiConfig.value.codexAuthMode || "read_local",
-    ).trim() || "read_local";
-    const effectiveCodexLocalAuthPath = String(
-      provider?.codexLocalAuthPath || options.selectedApiConfig.value.codexLocalAuthPath || "~/.codex/auth.json",
-    ).trim() || "~/.codex/auth.json";
+    if (!provider) {
+      const msg = "当前未选中 API 供应商，无法刷新模型列表。";
+      console.warn("[refreshModels]", msg, { selectedApiProvider: options.selectedApiProvider.value });
+      options.setStatus(msg);
+      return;
+    }
+    const effectiveRequestFormat = provider.requestFormat ?? "openai";
+    const effectiveBaseUrl = String(provider.baseUrl || "").trim();
+    const effectiveCodexAuthMode = String(provider.codexAuthMode || "read_local").trim() || "read_local";
+    const effectiveCodexLocalAuthPath = String(provider.codexLocalAuthPath || "~/.codex/auth.json").trim() || "~/.codex/auth.json";
     const isCodex = effectiveRequestFormat === "codex";
     if (isCodex) {
-      console.warn(`[API] 检测到 Codex 模式：跳过 API Key 校验，使用空候选 API Key，selectedApiConfig=${options.selectedApiConfig.value.id}`);
+      console.warn(`[API] 检测到 Codex 模式：跳过 API Key 校验，使用空候选 API Key`);
     }
-    const apiKeys = Array.isArray(provider?.apiKeys)
+    const apiKeys = Array.isArray(provider.apiKeys)
       ? provider.apiKeys.map((value) => String(value || "").trim()).filter(Boolean)
       : [];
-    const fallbackApiKey = String(options.selectedApiConfig.value.apiKey || "").trim();
     const candidateApiKeys = isCodex
       ? [""]
-      : Array.from(new Set([fallbackApiKey, ...apiKeys].filter(Boolean)));
+      : Array.from(new Set(apiKeys.filter(Boolean)));
     options.refreshingModels.value = true;
     options.modelRefreshError.value = "";
     try {
@@ -148,7 +157,7 @@ export function useConfigRuntime(options: UseConfigRuntimeOptions) {
               baseUrl: effectiveBaseUrl,
               apiKey,
               requestFormat: effectiveRequestFormat,
-              providerId: String(provider?.id || "").trim() || null,
+              providerId: String(provider.id || "").trim() || null,
               codexAuthMode: effectiveCodexAuthMode,
               codexLocalAuthPath: effectiveCodexLocalAuthPath,
             },
@@ -174,16 +183,11 @@ export function useConfigRuntime(options: UseConfigRuntimeOptions) {
         );
       }
       const normalizedModels = models.map((m) => m.trim()).filter(Boolean);
-      options.apiModelOptions.value[apiId] = normalizedModels;
-      if (provider) {
-        provider.cachedModelOptions = normalizedModels;
-      }
-      options.modelRefreshOkFlags.value[apiId] = true;
+      provider.cachedModelOptions = normalizedModels;
       options.setStatus(options.t("status.modelListRefreshed", { count: normalizedModels.length }));
     } catch (e) {
       const err = String(e);
       options.modelRefreshError.value = err;
-      options.modelRefreshOkFlags.value[apiId] = false;
       options.setStatus(options.t("status.refreshModelsFailed", { err }));
     } finally {
       options.refreshingModels.value = false;

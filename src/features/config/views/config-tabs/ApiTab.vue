@@ -168,27 +168,26 @@
         <h3 class="mb-3 text-sm font-semibold">{{ t("config.api.modelCards") }}</h3>
         <div class="card border border-base-300 bg-base-100">
           <div class="card-body gap-3 p-4">
-            <div class="flex items-center justify-end gap-2">
-              <button class="btn btn-sm bg-base-200" type="button" :class="{ loading: props.refreshingModels }"
-                :disabled="props.refreshingModels" @click="$emit('refreshModels')">
-                <RefreshCw class="h-3.5 w-3.5" />
-                <span>{{ t("config.api.refreshModels") }}</span>
-              </button>
-              <button class="btn btn-sm bg-base-200" type="button" @click="addModelCard">
-                <Plus class="h-3.5 w-3.5" />
-                <span>{{ t("config.api.addModel") }}</span>
-              </button>
-            </div>
-
-            <div
-              class="text-xs"
-              :class="props.modelRefreshError
-                ? 'text-error'
-                : props.modelRefreshOk
-                  ? 'text-success'
-                  : 'text-transparent'"
-            >
-              {{ props.modelRefreshError || (props.modelRefreshOk ? t("status.modelListRefreshed", { count: providerModelOptions.length }) : " ") }}
+            <div class="flex items-center justify-between gap-2">
+              <span
+                class="text-xs min-w-0 truncate"
+                :class="props.modelRefreshError
+                  ? 'text-error'
+                  : props.modelRefreshOk
+                    ? 'text-success'
+                    : 'text-base-content/55'"
+              >{{ modelRefreshStatusText }}</span>
+              <div class="flex items-center gap-2 shrink-0">
+                <button class="btn btn-sm bg-base-200" type="button" :class="{ loading: props.refreshingModels }"
+                  :disabled="props.refreshingModels" @click="$emit('refreshModels')">
+                  <RefreshCw class="h-3.5 w-3.5" />
+                  <span>{{ t("config.api.refreshModels") }}</span>
+                </button>
+                <button class="btn btn-sm bg-base-200" type="button" @click="addModelCard">
+                  <Plus class="h-3.5 w-3.5" />
+                  <span>{{ t("config.api.addModel") }}</span>
+                </button>
+              </div>
             </div>
 
             <div class="grid gap-3">
@@ -966,6 +965,14 @@ const providerModelOptions = computed(() => {
   if (!provider) return [];
   const cached = Array.isArray(provider.cachedModelOptions) ? provider.cachedModelOptions : [];
   return Array.from(new Set([...props.modelOptions, ...cached].map((item) => String(item || "").trim()).filter(Boolean)));
+});
+
+const modelRefreshStatusText = computed(() => {
+  if (props.modelRefreshError) return props.modelRefreshError;
+  if (props.modelRefreshOk) return t("status.modelListRefreshed", { count: providerModelOptions.value.length });
+  const initialCount = providerModelOptions.value.length;
+  if (initialCount > 0) return t("config.api.modelCount", { count: initialCount });
+  return t("config.api.noModels");
 });
 
 const filteredModels = computed(() => {
