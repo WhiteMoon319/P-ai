@@ -594,6 +594,14 @@
         >
           {{ t('fileReader.copyFilePath') }}
         </button>
+        <button
+          v-if="localFileSystemAvailable && contextMenuTarget.kind !== 'address'"
+          type="button"
+          class="btn btn-ghost btn-sm h-8 w-full justify-start px-2 text-sm font-normal"
+          @click.stop="openContextMenuDirectory"
+        >
+          {{ t('fileReader.openContainingFolder') }}
+        </button>
         <template v-if="contextMenuTarget.kind === 'file'">
           <button
             type="button"
@@ -1322,7 +1330,7 @@ function contextMenuPositionFromEvent(event: MouseEvent, options: { width?: numb
 function openPathOnlyContextMenu(path: string, event: MouseEvent) {
   const normalizedPath = normalizePath(path);
   if (!normalizedPath) return;
-  contextMenuPosition.value = contextMenuPositionFromEvent(event, { height: 42 });
+  contextMenuPosition.value = contextMenuPositionFromEvent(event, { height: localFileSystemAvailable ? 76 : 42 });
   contextMenuTarget.value = {
     kind: "path",
     path: normalizedPath,
@@ -1354,7 +1362,7 @@ function openActiveFileContextMenu(event: MouseEvent) {
   const tab = activeTab.value;
   if (!tab || tab.loading || tab.error) return;
   const selectionContext = readCurrentFileSelection();
-  contextMenuPosition.value = contextMenuPositionFromEvent(event);
+  contextMenuPosition.value = contextMenuPositionFromEvent(event, { height: localFileSystemAvailable ? 160 : 128 });
   contextMenuTarget.value = {
     kind: "file",
     path: normalizePath(tab.path),

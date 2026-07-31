@@ -1,5 +1,9 @@
 # 未发布
 
+## 功能：APP 文件路径右键打开所在文件夹
+
+- 功能（app-file-context-open-containing-folder）：APP 端文件阅读器中，文件路径右键菜单新增“打开所在文件夹”，复用现有本地文件管理器能力；Web 与 VS Code 宿主不显示该菜单项。
+
 ## 修复：摘要标题原子账本一致性
 
 - 修复（summary-title-shard-consistency）：自动生成摘要标题后，会话概览与消息正文保持一致。统一 replace / batch replace 的派生标题规则：替换消息若改变摘要标题状态，按替换后消息集合重算 `latest_summary_title`；`update_unarchived_conversation_by_id` 提交 v3 替换时使用统一派生元数据并同步内存缓存，不再用旧派生字段覆盖新标题。
