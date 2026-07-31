@@ -83,14 +83,66 @@
               @click="collapseDetailsFromContentClick"
             >
               <div class="flex flex-col">
-                <details
-                  v-for="item in resolvedActivityItems(block)"
-                  :key="`${block.id}-activity-${activityItemKey(item)}`"
-                  class="collapse rounded-none border-l border-base-content/15 pl-2"
-                  :open="activityItemOpen(block, item)"
-                  @toggle="onActivityItemToggle(item, $event)"
-                >
-                  <summary class="collapse-title flex min-h-0 items-center gap-1.5 px-1 py-1 text-xs hover:bg-base-200">
+                <template v-for="item in resolvedActivityItems(block)" :key="`${block.id}-activity-${activityItemKey(item)}`">
+                  <details
+                    v-if="activityItemCanExpand(item)"
+                    class="collapse rounded-none border-l border-base-content/15 pl-2"
+                    :open="activityItemOpen(block, item)"
+                    @toggle="onActivityItemToggle(item, $event)"
+                  >
+                    <summary class="collapse-title flex min-h-0 items-start gap-1.5 px-1 py-1 text-xs hover:bg-base-200">
+                      <span
+                        v-if="item.kind === 'tool' && item.status === 'doing'"
+                        class="loading loading-spinner loading-xs shrink-0 text-primary"
+                      ></span>
+                      <span
+                        v-else
+                        class="inline-flex w-3 shrink-0 items-center justify-center font-mono text-xs leading-none"
+                        :class="activityItemMarkerClass(item)"
+                      >{{ activityItemMarker(item) }}</span>
+                      <span
+                        class="ecall-activity-item-summary min-w-0 flex-1"
+                        :class="activityItemTitleClass(item)"
+                      >
+                        <template v-if="item.kind === 'tool'">
+                          <span>{{ activityItemDisplay(item).text }}</span>
+                          <span
+                            v-if="activityItemDisplay(item).adds > 0"
+                            class="ml-1 shrink-0 text-success"
+                          >+{{ activityItemDisplay(item).adds }}</span>
+                          <span
+                            v-if="activityItemDisplay(item).removes > 0"
+                            class="ml-1 shrink-0 text-error"
+                          >-{{ activityItemDisplay(item).removes }}</span>
+                        </template>
+                        <template v-else>
+                          {{ activityItemTitle(item) }}
+                        </template>
+                      </span>
+                      <ChevronDown
+                        class="mt-0.5 h-3.5 w-3.5 shrink-0 text-base-content/45 transition-transform duration-150"
+                        :class="activityItemOpen(block, item) ? 'rotate-180' : ''"
+                      />
+                    </summary>
+                    <div
+                      v-if="activityItemOpen(block, item)"
+                      class="collapse-content pb-2 pr-1 pt-1 pl-[1.375rem]"
+                    >
+                      <div
+                        v-if="item.kind === 'reasoning' || item.kind === 'content'"
+                        class="whitespace-pre-wrap wrap-break-word text-xs leading-relaxed text-base-content/70"
+                      >{{ activityItemRemainingText(item) }}</div>
+                      <pre
+                        v-else
+                        class="m-0 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded bg-base-200/60 p-2 text-xs leading-relaxed text-base-content/75"
+                      ><code>{{ activityToolArgsText(item) }}</code></pre>
+                    </div>
+                  </details>
+                  <div
+                    v-else
+                    class="flex min-h-0 items-start gap-1.5 border-l border-base-content/15 px-1 py-1 pl-3 text-xs"
+                    @click.stop
+                  >
                     <span
                       v-if="item.kind === 'tool' && item.status === 'doing'"
                       class="loading loading-spinner loading-xs shrink-0 text-primary"
@@ -101,11 +153,11 @@
                       :class="activityItemMarkerClass(item)"
                     >{{ activityItemMarker(item) }}</span>
                     <span
-                      class="min-w-0 flex-1 truncate"
+                      class="ecall-activity-item-summary min-w-0 flex-1"
                       :class="activityItemTitleClass(item)"
                     >
                       <template v-if="item.kind === 'tool'">
-                        <span class="truncate">{{ activityItemDisplay(item).text }}</span>
+                        <span>{{ activityItemDisplay(item).text }}</span>
                         <span
                           v-if="activityItemDisplay(item).adds > 0"
                           class="ml-1 shrink-0 text-success"
@@ -119,22 +171,8 @@
                         {{ activityItemTitle(item) }}
                       </template>
                     </span>
-                  </summary>
-                  <div
-                    v-if="activityItemOpen(block, item)"
-                    class="collapse-content px-1 pb-2 pt-1"
-                  >
-                    <div
-                      v-if="item.kind === 'reasoning' || item.kind === 'content'"
-                      class="whitespace-pre-wrap wrap-break-word text-xs leading-relaxed text-base-content/70"
-                    >{{ item.kind === 'content' ? stripToolcallMarkers(item.text) : item.text }}</div>
-                    <pre
-                      v-else-if="activityToolArgsText(item)"
-                      class="m-0 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded bg-base-200/60 p-2 text-xs leading-relaxed text-base-content/75"
-                    ><code>{{ activityToolArgsText(item) }}</code></pre>
-                    <div v-else class="text-xs text-base-content/45">{{ toolTimelineText('noArgs') }}</div>
                   </div>
-                </details>
+                </template>
                 <button
                   type="button"
                   class="btn btn-sm mt-2 w-full border-0 bg-base-300 text-base-content/70 hover:bg-base-300 hover:text-base-content"
@@ -454,7 +492,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, watchEffect, watchPostEffect } from "vue";
 import { useI18n } from "vue-i18n";
-import { Braces, Copy, FileText, ImageIcon, ListCheck, Split, Undo2 } from "@lucide/vue";
+import { Braces, ChevronDown, Copy, FileText, ImageIcon, ListCheck, Split, Undo2 } from "@lucide/vue";
 import { invokeTauri, openTransportWorkspaceFile, readTransportChatImage } from "../../../services/tauri-api";
 import type { ChatActivityItem, ChatMessageBlock } from "../../../types/app";
 import {
@@ -532,7 +570,6 @@ const {
   chatTimeDisplayMode,
 } = useChatMessageAppearance();
 const {
-  compactText,
   joinNonEmpty,
   normalizeToolCallArgs,
   toolCallDisplayName,
@@ -1015,17 +1052,39 @@ function activityItemOpen(block: ChatMessageBlock, item: ChatActivityItem): bool
   return activityShouldAutoExpand(block) || isActivityItemExpanded(item);
 }
 
-function activityReasoningPreview(text: string): string {
-  return compactText(String(text || ""), 120);
+function activityItemText(item: ChatActivityItem): string {
+  if (item.kind === "content") return stripToolcallMarkers(item.text);
+  if (item.kind === "reasoning") return String(item.text || "");
+  return "";
+}
+
+function activityItemTextParts(item: ChatActivityItem): { summary: string; remaining: string } {
+  const text = activityItemText(item);
+  const lineBreakIndex = text.search(/\r\n|\n|\r/);
+  if (lineBreakIndex < 0) return { summary: text, remaining: "" };
+  const lineBreakLength = text.startsWith("\r\n", lineBreakIndex) ? 2 : 1;
+  return {
+    summary: text.slice(0, lineBreakIndex),
+    remaining: text.slice(lineBreakIndex + lineBreakLength),
+  };
+}
+
+function activityItemCanExpand(item: ChatActivityItem): boolean {
+  if (item.kind === "tool") return !!activityToolArgsText(item);
+  return !!activityItemTextParts(item).remaining;
+}
+
+function activityItemRemainingText(item: ChatActivityItem): string {
+  return activityItemTextParts(item).remaining;
 }
 
 function stripToolcallMarkers(text: string): string {
-  return String(text || "").replace(/\s*\[toolcall:[^\]\n]+\]/g, "").trim();
+  return String(text || "").replace(/\[toolcall:[^\]\n]+\]/g, "");
 }
 
 function activityToolArgsText(item: ChatActivityItem): string {
   if (item.kind !== "tool") return "";
-  return String(item.argsText || "").trim();
+  return String(item.argsText || "");
 }
 
 function activityItemMarker(item: ChatActivityItem): string {
@@ -1047,11 +1106,8 @@ function activityItemTitleClass(item: ChatActivityItem): string {
 }
 
 function activityItemTitle(item: ChatActivityItem): string {
-  if (item.kind === "reasoning") {
-    return activityReasoningPreview(item.text);
-  }
-  if (item.kind === "content") {
-    return compactText(stripToolcallMarkers(item.text), 120);
+  if (item.kind === "reasoning" || item.kind === "content") {
+    return activityItemTextParts(item).summary;
   }
   return joinNonEmpty([
     toolCallDisplayName(item.name),
@@ -1611,6 +1667,11 @@ function openAttachmentPath(path: string) {
 </script>
 
 <style scoped>
+.ecall-activity-item-summary {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .ecall-chat-message-row {
   width: 100%;
 }

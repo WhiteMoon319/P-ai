@@ -332,7 +332,7 @@ const surfaceStyle = computed<StyleValue | undefined>(() => {
 }
 
 .ecall-chat-bubble-activity {
-  width: min(100%, 36rem);
+  width: 100%;
 }
 
 .ecall-chat-bubble-tone-assistant .ecall-chat-bubble-surface,
