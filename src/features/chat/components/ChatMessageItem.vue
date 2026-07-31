@@ -90,14 +90,14 @@
                     :open="activityItemOpen(block, item)"
                     @toggle="onActivityItemToggle(item, $event)"
                   >
-                    <summary class="collapse-title flex min-h-0 items-start gap-1.5 px-1 py-1 text-xs hover:bg-base-200">
+                    <summary class="collapse-title flex min-h-0 items-center gap-1.5 px-1 py-1 text-xs hover:bg-base-200">
                       <span
                         v-if="item.kind === 'tool' && item.status === 'doing'"
-                        class="loading loading-spinner loading-xs shrink-0 text-primary"
+                        class="self-baseline loading loading-spinner loading-xs shrink-0 text-primary"
                       ></span>
                       <span
                         v-else
-                        class="inline-flex w-3 shrink-0 items-center justify-center font-mono text-xs leading-none"
+                        class="self-baseline inline-flex w-3 shrink-0 items-center justify-center font-mono text-xs"
                         :class="activityItemMarkerClass(item)"
                       >{{ activityItemMarker(item) }}</span>
                       <span
@@ -142,16 +142,16 @@
                   </details>
                   <div
                     v-else
-                    class="flex min-h-0 items-start gap-1.5 border-l border-base-content/15 px-1 py-1 pl-3 text-xs"
+                    class="flex min-h-0 items-center gap-1.5 border-l border-base-content/15 px-1 py-1 pl-3 text-xs"
                     @click.stop
                   >
                     <span
                       v-if="item.kind === 'tool' && item.status === 'doing'"
-                      class="loading loading-spinner loading-xs shrink-0 text-primary"
+                      class="self-baseline loading loading-spinner loading-xs shrink-0 text-primary"
                     ></span>
                     <span
                       v-else
-                      class="inline-flex w-3 shrink-0 items-center justify-center font-mono text-xs leading-none"
+                      class="self-baseline inline-flex w-3 shrink-0 items-center justify-center font-mono text-xs"
                       :class="activityItemMarkerClass(item)"
                     >{{ activityItemMarker(item) }}</span>
                     <span
