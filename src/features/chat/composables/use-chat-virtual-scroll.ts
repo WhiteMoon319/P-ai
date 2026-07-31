@@ -49,23 +49,24 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
 
   // ==================== virtualizer ====================
 
-  function measuredRenderItemSize(index: number): number {
-    const item = renderItems.value[index];
-    if (!item) return 0;
-    return measuredVirtualItemHeights.get(item.id) ?? 0;
-  }
+  const latestOwnTailContentRange = computed(() => {
+    measuredVirtualItemRevision.value;
+    const itemId = String(latestOwnElasticItemId.value || "").trim();
+    if (!itemId) return [];
+    const startIndex = renderItems.value.findIndex((item) => item.id === itemId);
+    return startIndex < 0 ? [] : renderItems.value.slice(startIndex);
+  });
 
   const latestOwnTailContentHeight = computed(() => {
-    if (measuredVirtualItemRevision.value < 0) return 0;
-    const itemId = String(latestOwnElasticItemId.value || "").trim();
-    if (!itemId) return 0;
-    const startIndex = renderItems.value.findIndex((item) => item.id === itemId);
-    if (startIndex < 0) return 0;
-    let total = 0;
-    for (let index = startIndex; index < renderItems.value.length; index += 1) {
-      total += measuredRenderItemSize(index);
-    }
-    return total;
+    return latestOwnTailContentRange.value.reduce(
+      (total, item) => total + (measuredVirtualItemHeights.get(item.id) ?? 0),
+      0,
+    );
+  });
+
+  const latestOwnTailContentMeasured = computed(() => {
+    const tailItems = latestOwnTailContentRange.value;
+    return tailItems.length > 0 && tailItems.every((item) => measuredVirtualItemHeights.has(item.id));
   });
 
   function chatVirtualScrollDebugEnabled(): boolean {
@@ -511,6 +512,7 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     virtualEntries,
     totalVirtualSize,
     latestOwnTailContentHeight,
+    latestOwnTailContentMeasured,
     virtualDebugVisible,
     virtualDebugState,
     measureVirtualRow,

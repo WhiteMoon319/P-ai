@@ -1302,7 +1302,7 @@ const {
 
 const {
   virtualizer, virtualEntries, totalVirtualSize, measureVirtualRow,
-  latestOwnTailContentHeight, scheduleVirtualMeasure, syncViewportMetrics,
+  latestOwnTailContentHeight, latestOwnTailContentMeasured, scheduleVirtualMeasure, syncViewportMetrics,
   scrollVirtualizerToIndex, scrollVirtualizerToConversationBottomLightweight,
   resetVirtualizerAtConversationBottom, refreshObservedVirtualItemElements,
 } = useChatVirtualScroll({
@@ -1317,10 +1317,20 @@ const {
   onUserScroll: () => onScroll(),
 });
 
-const latestOwnTailSpacerMinHeight = computed(() => {
-  if (!latestOwnElasticItemId.value || latestOwnTailContentHeight.value <= 0) return 0;
-  return Math.max(0, latestOwnElasticMinHeight.value - latestOwnTailContentHeight.value);
-});
+const latestOwnTailSpacerMinHeight = ref(0);
+
+watch(
+  [latestOwnElasticItemId, latestOwnElasticMinHeight, latestOwnTailContentHeight, latestOwnTailContentMeasured],
+  ([itemId, targetHeight, tailContentHeight, tailContentMeasured]) => {
+    if (!itemId) {
+      latestOwnTailSpacerMinHeight.value = targetHeight;
+      return;
+    }
+    if (!tailContentMeasured) return;
+    latestOwnTailSpacerMinHeight.value = Math.max(0, targetHeight - tailContentHeight);
+  },
+  { immediate: true },
+);
 
 const currentWorkspacePermissionKind = computed<"read_only" | "approval" | "full_access" | "autonomous">(() => {
   if (props.currentWorkspaceAutonomousMode) return "autonomous";
