@@ -130,11 +130,13 @@
                     >
                       <div
                         v-if="item.kind === 'reasoning' || item.kind === 'content'"
-                        class="whitespace-pre-wrap wrap-break-word text-xs leading-relaxed text-base-content/70"
+                        class="whitespace-pre-wrap wrap-break-word text-xs leading-relaxed"
+                        :class="activityItemDetailClass(item)"
                       >{{ activityItemRemainingText(item) }}</div>
                       <pre
                         v-else
-                        class="m-0 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded bg-base-200/60 p-2 text-xs leading-relaxed text-base-content/75"
+                        class="m-0 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded bg-base-200/60 p-2 text-xs leading-relaxed"
+                        :class="activityItemDetailClass(item)"
                       ><code>{{ activityToolArgsText(item) }}</code></pre>
                     </div>
                   </details>
@@ -1095,14 +1097,20 @@ function activityItemMarker(item: ChatActivityItem): string {
 
 function activityItemMarkerClass(item: ChatActivityItem): string {
   if (item.kind === "reasoning") return "font-semibold text-warning";
-  if (item.kind === "content") return "font-semibold text-info/70";
-  return "font-semibold text-base-content/45";
+  if (item.kind === "content") return "font-semibold text-base-content";
+  return "font-semibold text-success";
 }
 
 function activityItemTitleClass(item: ChatActivityItem): string {
   if (item.kind === "reasoning") return "font-semibold italic text-warning";
-  if (item.kind === "content") return "text-base-content/70";
-  return "text-base-content/50";
+  if (item.kind === "content") return "text-base-content";
+  return "text-success";
+}
+
+function activityItemDetailClass(item: ChatActivityItem): string {
+  if (item.kind === "reasoning") return "text-warning";
+  if (item.kind === "content") return "text-base-content";
+  return "text-success";
 }
 
 function activityItemTitle(item: ChatActivityItem): string {
