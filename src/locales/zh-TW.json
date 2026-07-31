@@ -1439,6 +1439,8 @@
         "modelRequestStart": "模型請求開始",
         "modelRequestFinish": "模型請求完成",
         "modelReplyReady": "模型回應就緒",
+        "finalAppendStart": "助理訊息組裝完成",
+        "finalAppendFinish": "最終正文寫入完成",
         "persistScheduled": "落庫任務已安排",
         "chatFinish": "調度結束",
         "modelRoundTotal": "模型輪次總耗時"

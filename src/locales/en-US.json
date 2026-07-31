@@ -1439,6 +1439,8 @@
         "modelRequestStart": "Model Request Started",
         "modelRequestFinish": "Model Request Finished",
         "modelReplyReady": "Model Reply Ready",
+        "finalAppendStart": "Assistant Message Assembled",
+        "finalAppendFinish": "Final Text Written",
         "persistScheduled": "Persistence Scheduled",
         "chatFinish": "Dispatch Finished",
         "modelRoundTotal": "Model Round Total"

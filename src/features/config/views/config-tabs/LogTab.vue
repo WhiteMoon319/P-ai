@@ -500,6 +500,8 @@ const stageLabelKeys: Record<string, string> = {
   "pre_send_archive_checked": "config.logs.stages.archiveChecked",
   "prompt_ready": "config.logs.stages.promptReady",
   "model_reply_ready": "config.logs.stages.modelReplyReady",
+  "assistant_final_append.start": "config.logs.stages.finalAppendStart",
+  "assistant_final_append.finish": "config.logs.stages.finalAppendFinish",
   "assistant_message_persist_scheduled": "config.logs.stages.persistScheduled",
   "send_chat_message_inner.finish": "config.logs.stages.chatFinish",
   "model_round_total": "config.logs.stages.modelRoundTotal",
