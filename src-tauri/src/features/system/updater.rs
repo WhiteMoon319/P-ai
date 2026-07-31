@@ -204,15 +204,8 @@ impl Drop for UpdateInProgressGuard {
     }
 }
 
-fn updater_proxy_url(origin: &str) -> String {
-    format!("{UPDATER_GITHUB_PROXY_PREFIX}{origin}")
-}
-
-fn updater_release_page_url(origin: &str, method: GithubUpdateMethod) -> String {
-    match method {
-        GithubUpdateMethod::Direct => origin.to_string(),
-        GithubUpdateMethod::Auto | GithubUpdateMethod::Proxy => updater_proxy_url(origin),
-    }
+fn updater_release_page_url(origin: &str) -> String {
+    origin.to_string()
 }
 
 fn updater_release_api_fallback_urls(method: GithubUpdateMethod) -> Vec<String> {
@@ -803,7 +796,6 @@ async fn check_github_update(
                 .html_url
                 .as_deref()
                 .unwrap_or(UPDATER_GITHUB_RELEASE_PAGE_ORIGIN),
-            method,
         ),
         update_source: "github".to_string(),
         access_mode,
@@ -1978,4 +1970,16 @@ fn maybe_run_portable_update_helper_from_args() -> Result<bool, String> {
         .ok_or_else(|| "便携版更新 helper 缺少计划文件参数".to_string())?;
     run_portable_update_helper(plan_path)?;
     Ok(true)
+}
+
+#[cfg(test)]
+mod updater_release_page_tests {
+    use super::updater_release_page_url;
+
+    #[test]
+    fn release_page_url_keeps_original_github_page() {
+        let origin = "https://github.com/kawayiYokami/P-ai/releases/latest";
+
+        assert_eq!(updater_release_page_url(origin), origin);
+    }
 }
