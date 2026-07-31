@@ -294,7 +294,12 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
       return;
     }
     updateDialogKind.value = "info";
-    updateDialogTitle.value = payload.stage === "completed" ? t("about.updateCompleted") : t("about.downloading");
+    updateDialogTitle.value =
+      payload.stage === "completed"
+        ? t("about.updateCompleted")
+        : payload.stage === "checking"
+          ? t("about.checking")
+          : t("about.downloading");
     const progressLine =
       Number.isFinite(payload.downloadedBytes) || Number.isFinite(payload.contentLength)
         ? `\n\n${t("about.downloadProgress", { current: formatBytes(payload.downloadedBytes), total: formatBytes(payload.contentLength) })}${

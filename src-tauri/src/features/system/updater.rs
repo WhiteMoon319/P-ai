@@ -7,7 +7,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread,
-    time::Duration as StdDuration,
+    time::{Duration as StdDuration, Instant as StdInstant},
 };
 
 use tauri_plugin_updater::UpdaterExt;
@@ -58,6 +58,7 @@ const UPDATE_STAGE_FAILED: &str = "failed";
 const GITHUB_AUTO_UPDATE_COOLDOWN_HOURS: i64 = 8;
 const GITHUB_AUTO_UPDATE_POLL_MINUTES: u64 = 10;
 const GITHUB_AUTO_UPDATE_STARTUP_DELAY_SECONDS: u64 = 45;
+const GITHUB_UPDATE_CHECK_TIMEOUT_SECONDS: u64 = 10;
 const GITHUB_UPDATE_DOWNLOAD_TIMEOUT_SECONDS: u64 = 10 * 60;
 const GITHUB_UPDATE_PROXY_CURSOR_FILE_NAME: &str = "github-update-proxy-cursor.json";
 
@@ -165,6 +166,13 @@ struct GithubUpdateProxyCursor {
 }
 
 #[derive(Debug, Clone)]
+struct GithubUpdateManifestCandidate {
+    endpoint: String,
+    display_name: &'static str,
+    log_name: &'static str,
+}
+
+#[derive(Debug, Clone)]
 struct UpdateRuntimePaths {
     exe_path: StdPathBuf,
     exe_dir: StdPathBuf,
@@ -254,18 +262,46 @@ fn updater_changelog_api_fallback_urls(origin: &str, method: GithubUpdateMethod)
     }
 }
 
-fn updater_manifest_fallback_urls(origin: &str, method: GithubUpdateMethod) -> Vec<String> {
+fn updater_manifest_fallbacks(
+    origin: &str,
+    method: GithubUpdateMethod,
+) -> Vec<GithubUpdateManifestCandidate> {
+    let proxy_a = GithubUpdateManifestCandidate {
+        endpoint: format!("{UPDATER_GITHUB_PROXY_PREFIX}{origin}"),
+        display_name: "中转（A）",
+        log_name: "proxy_a",
+    };
+    let proxy_b = GithubUpdateManifestCandidate {
+        endpoint: format!("{UPDATER_GITHUB_HK_PROXY_PREFIX}{origin}"),
+        display_name: "中转（B）",
+        log_name: "proxy_b",
+    };
+    let direct = GithubUpdateManifestCandidate {
+        endpoint: origin.to_string(),
+        display_name: "直连",
+        log_name: "direct",
+    };
     match method {
-        GithubUpdateMethod::Auto => vec![
-            format!("{UPDATER_GITHUB_PROXY_PREFIX}{origin}"),
-            format!("{UPDATER_GITHUB_HK_PROXY_PREFIX}{origin}"),
-            origin.to_string(),
-        ],
-        GithubUpdateMethod::Direct => vec![origin.to_string()],
-        GithubUpdateMethod::Proxy => vec![
-            format!("{UPDATER_GITHUB_PROXY_PREFIX}{origin}"),
-            format!("{UPDATER_GITHUB_HK_PROXY_PREFIX}{origin}"),
-        ],
+        GithubUpdateMethod::Auto => vec![proxy_a, proxy_b, direct],
+        GithubUpdateMethod::Direct => vec![direct],
+        GithubUpdateMethod::Proxy => vec![proxy_a, proxy_b],
+    }
+}
+
+fn github_update_download_route_name(method: GithubUpdateMethod, cursor: usize) -> &'static str {
+    match method {
+        GithubUpdateMethod::Direct => "直连",
+        GithubUpdateMethod::Auto | GithubUpdateMethod::Proxy => match cursor
+            % UPDATER_GITHUB_DOWNLOAD_PROXY_PREFIXES.len()
+        {
+            0 => "中转（A）",
+            1 => "中转（B）",
+            2 => "中转（C）",
+            3 => "中转（D）",
+            4 => "中转（E）",
+            5 => "中转（F）",
+            _ => "中转（G）",
+        },
     }
 }
 
@@ -330,17 +366,27 @@ fn finish_failed_update_download(
     runtime: &UpdateRuntimePaths,
     method: GithubUpdateMethod,
     cursor: usize,
-    reason: String,
+    failure_detail: String,
 ) -> Result<String, String> {
     ensure_update_not_cancelled()?;
+    let route_name = github_update_download_route_name(method, cursor);
+    runtime_log_warn(format!(
+        "[自动更新] 失败，任务=下载更新，阶段=downloading，线路={}，游标={cursor}，error={failure_detail}",
+        route_name,
+    ));
     if !matches!(method, GithubUpdateMethod::Auto | GithubUpdateMethod::Proxy) {
-        return Ok(reason);
+        return Ok("下载更新失败，请稍后重试或打开 Releases".to_string());
     }
-    let next = advance_github_update_proxy_cursor(runtime, cursor)
-        .map_err(|err| format!("{reason}；切换代理失败：{err}"))?;
-    Ok(format!(
-        "{reason}；已切换到下一个下载代理（游标 {cursor} -> {next}），请重新发起更新"
-    ))
+    let next = advance_github_update_proxy_cursor(runtime, cursor).map_err(|err| {
+        runtime_log_error(format!(
+            "[自动更新] 失败，任务=切换下载线路，当前游标={cursor}，error={err}"
+        ));
+        "下载更新失败，切换下一条线路失败，请稍后重试".to_string()
+    })?;
+    runtime_log_info(format!(
+        "[自动更新] 完成，任务=切换下载线路，当前游标={cursor}，下一游标={next}"
+    ));
+    Ok("下载更新失败，已切换到下一条线路，请重新发起更新".to_string())
 }
 
 fn strip_known_proxy_prefix(url: &str) -> &str {
@@ -1163,6 +1209,86 @@ fn spawn_detached_hidden(exe: &StdPath, args: &[OsString]) -> Result<(), String>
     Ok(())
 }
 
+fn emit_update_checking_progress(
+    app: &AppHandle,
+    runtime_kind: UpdateRuntimeKind,
+    current_version: &str,
+    message: String,
+    target_version: Option<String>,
+) {
+    emit_update_progress(
+        app,
+        build_update_progress(
+            runtime_kind,
+            UPDATE_STAGE_CHECKING,
+            message,
+            Some(current_version.to_string()),
+            target_version,
+            None,
+            None,
+            None,
+        ),
+    );
+}
+
+fn build_manifest_updater(
+    app: &AppHandle,
+    runtime_kind: UpdateRuntimeKind,
+    target: Option<&str>,
+    endpoint: &str,
+    force: bool,
+) -> Result<tauri_plugin_updater::Updater, String> {
+    let mut builder = app.updater_builder().pubkey(updater_public_key()?);
+    if let Some(target) = target {
+        builder = builder.target(target.to_string());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        // NSIS 自动更新如果不显式传入当前安装目录，安装器可能会回落到默认目录。
+        // `/D=...` 需要作为最后一个 NSIS 参数传入，tauri-plugin-updater 会把额外 installer_args
+        // 追加在内部参数之后，这里正好满足要求。
+        if runtime_kind == UpdateRuntimeKind::Installer {
+            let runtime = detect_update_runtime_paths()?;
+            let app_before_exit = app.clone();
+            builder = builder.on_before_exit(move || {
+                shutdown_background_services_before_windows_updater_exit(app_before_exit.clone());
+            });
+            builder = builder.installer_arg(std::ffi::OsString::from(format!(
+                "/D={}",
+                runtime.exe_dir.display()
+            )));
+        }
+    }
+    if force {
+        builder = builder.version_comparator(|_, _| true);
+    }
+    let endpoint = reqwest::Url::parse(endpoint).map_err(|err| format!("解析更新端点失败：{err}"))?;
+    builder
+        .endpoints(vec![endpoint])
+        .map_err(|err| format!("配置更新端点失败：{err}"))?
+        .build()
+        .map_err(|err| format!("构建更新检查器失败：{err}"))
+}
+
+async fn run_manifest_update_check(
+    updater: tauri_plugin_updater::Updater,
+    check_failed_prefix: &str,
+) -> Result<Option<tauri_plugin_updater::Update>, String> {
+    match tokio::time::timeout(
+        StdDuration::from_secs(GITHUB_UPDATE_CHECK_TIMEOUT_SECONDS),
+        updater.check(),
+    )
+    .await
+    {
+        Ok(Ok(update)) => Ok(update),
+        Ok(Err(err)) => Err(format!("{check_failed_prefix}：{err}")),
+        Err(_) => Err(format!(
+            "{check_failed_prefix}：检查超时（{} 秒）",
+            GITHUB_UPDATE_CHECK_TIMEOUT_SECONDS
+        )),
+    }
+}
+
 async fn check_updater_with_manifest_fallbacks(
     app: &AppHandle,
     runtime_kind: UpdateRuntimeKind,
@@ -1174,84 +1300,87 @@ async fn check_updater_with_manifest_fallbacks(
     checking_message: &str,
     check_failed_prefix: &str,
 ) -> Result<tauri_plugin_updater::Update, String> {
-    emit_update_progress(
+    emit_update_checking_progress(
         app,
-        build_update_progress(
-            runtime_kind,
-            UPDATE_STAGE_CHECKING,
-            checking_message,
-            Some(current_version.to_string()),
-            None,
-            None,
-            None,
-            None,
-        ),
+        runtime_kind,
+        current_version,
+        checking_message.to_string(),
+        None,
     );
-    let mut last_error = String::new();
-    for endpoint in updater_manifest_fallback_urls(manifest_origin, method) {
-        for attempt in 1..=3 {
-            ensure_update_not_cancelled()?;
-            let mut builder = app.updater_builder().pubkey(updater_public_key()?);
-            if let Some(ref target) = target {
-                builder = builder.target(target.clone());
-            }
-            #[cfg(target_os = "windows")]
-            {
-                // NSIS 自动更新如果不显式传入当前安装目录，安装器可能会回落到默认目录。
-                // `/D=...` 需要作为最后一个 NSIS 参数传入，tauri-plugin-updater 会把额外 installer_args
-                // 追加在内部参数之后，这里正好满足要求。
-                if runtime_kind == UpdateRuntimeKind::Installer {
-                    let runtime = detect_update_runtime_paths()?;
-                    let app_before_exit = app.clone();
-                    builder = builder.on_before_exit(move || {
-                        shutdown_background_services_before_windows_updater_exit(
-                            app_before_exit.clone(),
-                        );
-                    });
-                    builder = builder.installer_arg(std::ffi::OsString::from(format!(
-                        "/D={}",
-                        runtime.exe_dir.display()
-                    )));
-                }
-            }
-            let mut builder = match reqwest::Url::parse(&endpoint) {
-                Ok(url) => builder.endpoints(vec![url]),
-                Err(err) => {
-                    last_error = format!("解析更新端点失败（地址：{endpoint}，第 {attempt} 次）：{err}");
-                    continue;
-                }
-            }
-            .map_err(|err| format!("配置更新端点失败（地址：{endpoint}，第 {attempt} 次）：{err}"))?;
-            if force {
-                builder = builder.version_comparator(|_, _| true);
-            }
-            let updater = match builder.build() {
-                Ok(updater) => updater,
-                Err(err) => {
-                    last_error =
-                        format!("构建更新检查器失败（地址：{endpoint}，第 {attempt} 次）：{err}");
-                    continue;
-                }
-            };
-            let update = match updater.check().await {
-                Ok(update) => update,
-                Err(err) => {
-                    last_error = format!(
-                        "{check_failed_prefix}（地址：{endpoint}，第 {attempt} 次）：{err}"
-                    );
-                    continue;
-                }
-            };
-            let Some(update) = update else {
-                return Err("当前没有可安装的更新".to_string());
-            };
-            if !is_newer_version(current_version, &update.version) && !force {
+    let candidates = updater_manifest_fallbacks(manifest_origin, method);
+    let candidate_count = candidates.len();
+    for (index, candidate) in candidates.into_iter().enumerate() {
+        ensure_update_not_cancelled()?;
+        emit_update_checking_progress(
+            app,
+            runtime_kind,
+            current_version,
+            format!("正在尝试{}", candidate.display_name),
+            None,
+        );
+        runtime_log_info(format!(
+            "[自动更新] 开始，任务=检查更新清单，阶段=checking，运行类型={}，线路={}，force={force}",
+            runtime_kind.as_str(),
+            candidate.log_name,
+        ));
+        let started_at = StdInstant::now();
+        let updater = build_manifest_updater(
+            app,
+            runtime_kind,
+            target.as_deref(),
+            &candidate.endpoint,
+            force,
+        );
+        let update_result = match updater {
+            Ok(updater) => run_manifest_update_check(updater, check_failed_prefix).await,
+            Err(err) => Err(err),
+        };
+        let update = match update_result {
+            Ok(Some(update)) if force || is_newer_version(current_version, &update.version) => update,
+            Ok(_) => {
+                runtime_log_info(format!(
+                    "[自动更新] 完成，任务=检查更新清单，阶段=checking，运行类型={}，线路={}，结果=当前已是最新版本，耗时={}ms",
+                    runtime_kind.as_str(),
+                    candidate.log_name,
+                    started_at.elapsed().as_millis(),
+                ));
                 return Err("当前没有可安装的更新".to_string());
             }
-            return Ok(update);
-        }
+            Err(error) => {
+                runtime_log_warn(format!(
+                    "[自动更新] 失败，任务=检查更新清单，阶段=checking，运行类型={}，线路={}，耗时={}ms，error={error}",
+                    runtime_kind.as_str(),
+                    candidate.log_name,
+                    started_at.elapsed().as_millis(),
+                ));
+                let message = if index + 1 < candidate_count {
+                    format!("{}无法连接，正在换下一条线路", candidate.display_name)
+                } else {
+                    format!("{}无法连接", candidate.display_name)
+                };
+                emit_update_checking_progress(app, runtime_kind, current_version, message, None);
+                continue;
+            }
+        };
+        runtime_log_info(format!(
+            "[自动更新] 完成，任务=检查更新清单，阶段=checking，运行类型={}，线路={}，结果=发现更新，target_version={}，耗时={}ms",
+            runtime_kind.as_str(),
+            candidate.log_name,
+            update.version,
+            started_at.elapsed().as_millis(),
+        ));
+        emit_update_checking_progress(
+            app,
+            runtime_kind,
+            current_version,
+            format!("正在使用{}更新", candidate.display_name),
+            Some(update.version.clone()),
+        );
+        return Ok(update);
     }
-    Err(last_error)
+    Err(format!(
+        "{check_failed_prefix}：所有线路均无法连接，请稍后重试或打开 Releases"
+    ))
 }
 
 async fn download_update_with_proxy_cursor<C, D>(
@@ -1276,10 +1405,12 @@ where
         .map_err(|err| format!("初始化更新下载客户端失败：{err}"))?;
     let origin_url = strip_known_proxy_prefix(update.download_url.as_str()).to_string();
     let cursor = read_github_update_proxy_cursor(runtime);
+    let route_name = github_update_download_route_name(method, cursor);
     let endpoint = updater_download_endpoint(&origin_url, method, cursor);
+    let started_at = StdInstant::now();
     runtime_log_info(format!(
-        "[自动更新] 开始下载更新：proxy_cursor={}，endpoint={endpoint}",
-        cursor
+        "[自动更新] 开始，任务=下载更新，阶段=downloading，线路={}，游标={cursor}",
+        route_name,
     ));
     ensure_update_not_cancelled()?;
     let response = match client
@@ -1348,9 +1479,10 @@ where
     }
     on_download_finish();
     runtime_log_info(format!(
-        "[自动更新] 更新下载完成：proxy_cursor={}，bytes={}",
-        cursor,
-        bytes.len()
+        "[自动更新] 完成，任务=下载更新，阶段=downloading，线路={}，字节数={}，耗时={}ms",
+        route_name,
+        bytes.len(),
+        started_at.elapsed().as_millis(),
     ));
     Ok(bytes)
 }
@@ -1372,11 +1504,14 @@ async fn prepare_installer_update(
         method,
         force,
         &current_version,
-        "正在检查安装版更新",
+        "正在检查是否有更新",
         "检查安装版更新失败",
     )
     .await?;
     let target_version = update.version.clone();
+    let download_route_name =
+        github_update_download_route_name(method, read_github_update_proxy_cursor(runtime)).to_string();
+    let download_progress_route_name = download_route_name.clone();
     let download_progress_current_version = current_version.clone();
     let download_progress_target_version = target_version.clone();
     let install_progress_current_version = current_version.clone();
@@ -1387,7 +1522,7 @@ async fn prepare_installer_update(
         build_update_progress(
             runtime_kind,
             UPDATE_STAGE_DOWNLOADING,
-            format!("正在下载安装版更新 {target_version}"),
+            format!("正在使用{download_route_name}更新，正在下载安装包 {target_version}"),
             Some(current_version.clone()),
             Some(target_version.clone()),
             Some(0),
@@ -1409,7 +1544,11 @@ async fn prepare_installer_update(
                     build_update_progress(
                         runtime_kind,
                         UPDATE_STAGE_DOWNLOADING,
-                        format!("正在下载安装版更新 {download_progress_target_version}"),
+                        format!(
+                            "正在使用{}更新，正在下载安装包 {}",
+                            download_progress_route_name,
+                            download_progress_target_version
+                        ),
                         Some(download_progress_current_version.clone()),
                         Some(download_progress_target_version.clone()),
                         Some(total),
@@ -1481,11 +1620,14 @@ async fn prepare_portable_update(
         method,
         force,
         &current_version,
-        "正在检查便携版更新",
+        "正在检查是否有更新",
         "检查便携版更新失败",
     )
     .await?;
     let target_version = update.version.clone();
+    let download_route_name =
+        github_update_download_route_name(method, read_github_update_proxy_cursor(runtime)).to_string();
+    let download_progress_route_name = download_route_name.clone();
     let download_progress_current_version = current_version.clone();
     let download_progress_target_version = target_version.clone();
     let verify_progress_current_version = current_version.clone();
@@ -1504,7 +1646,7 @@ async fn prepare_portable_update(
         build_update_progress(
             runtime.runtime_kind,
             UPDATE_STAGE_DOWNLOADING,
-            format!("正在下载便携版更新 {target_version}"),
+            format!("正在使用{download_route_name}更新，正在下载便携版更新 {target_version}"),
             Some(current_version.clone()),
             Some(target_version.clone()),
             Some(0),
@@ -1526,7 +1668,11 @@ async fn prepare_portable_update(
                     build_update_progress(
                         runtime.runtime_kind,
                         UPDATE_STAGE_DOWNLOADING,
-                        format!("正在下载便携版更新 {download_progress_target_version}"),
+                        format!(
+                            "正在使用{}更新，正在下载便携版更新 {}",
+                            download_progress_route_name,
+                            download_progress_target_version
+                        ),
                         Some(download_progress_current_version.clone()),
                         Some(download_progress_target_version.clone()),
                         Some(total),
@@ -2082,9 +2228,52 @@ fn maybe_run_portable_update_helper_from_args() -> Result<bool, String> {
 #[cfg(test)]
 mod updater_release_page_tests {
     use super::{
-        next_github_update_proxy_cursor, updater_download_endpoint, updater_release_page_url,
+        github_update_download_route_name, next_github_update_proxy_cursor,
+        updater_download_endpoint, updater_manifest_fallbacks, updater_release_page_url,
         GithubUpdateMethod, UPDATER_GITHUB_DOWNLOAD_PROXY_PREFIXES,
+        UPDATER_GITHUB_HK_PROXY_PREFIX, UPDATER_GITHUB_PROXY_PREFIX,
     };
+
+    #[test]
+    fn manifest_candidates_keep_proxy_then_direct_order() {
+        let origin = "https://github.com/kawayiYokami/P-ai/releases/latest/download/latest.json";
+        let candidates = updater_manifest_fallbacks(origin, GithubUpdateMethod::Auto);
+
+        assert_eq!(candidates.len(), 3);
+        assert_eq!(candidates[0].display_name, "中转（A）");
+        assert_eq!(candidates[0].endpoint, format!("{UPDATER_GITHUB_PROXY_PREFIX}{origin}"));
+        assert_eq!(candidates[1].display_name, "中转（B）");
+        assert_eq!(candidates[1].endpoint, format!("{UPDATER_GITHUB_HK_PROXY_PREFIX}{origin}"));
+        assert_eq!(candidates[2].display_name, "直连");
+        assert_eq!(candidates[2].endpoint, origin);
+    }
+
+    #[test]
+    fn manifest_candidates_respect_selected_method() {
+        let origin = "https://github.com/kawayiYokami/P-ai/releases/latest/download/latest.json";
+
+        assert_eq!(
+            updater_manifest_fallbacks(origin, GithubUpdateMethod::Proxy)
+                .iter()
+                .map(|candidate| candidate.display_name)
+                .collect::<Vec<_>>(),
+            vec!["中转（A）", "中转（B）"]
+        );
+        assert_eq!(
+            updater_manifest_fallbacks(origin, GithubUpdateMethod::Direct)
+                .iter()
+                .map(|candidate| candidate.display_name)
+                .collect::<Vec<_>>(),
+            vec!["直连"]
+        );
+    }
+
+    #[test]
+    fn download_route_name_is_human_readable() {
+        assert_eq!(github_update_download_route_name(GithubUpdateMethod::Direct, 0), "直连");
+        assert_eq!(github_update_download_route_name(GithubUpdateMethod::Proxy, 0), "中转（A）");
+        assert_eq!(github_update_download_route_name(GithubUpdateMethod::Proxy, 1), "中转（B）");
+    }
 
     #[test]
     fn release_page_url_keeps_original_github_page() {
