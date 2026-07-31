@@ -7,6 +7,14 @@ fn ide_chat_mcp_validate_definition_for_web_settings(params: Value) -> Result<Va
     ide_chat_serialize(mcp_validate_definition_inner(input)?)
 }
 
+async fn ide_chat_mcp_fix_definition_for_web_settings(
+    state: &AppState,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<McpFixDefinitionInput>(params, "input")?;
+    ide_chat_serialize(mcp_fix_definition_inner(input, state).await?)
+}
+
 fn ide_chat_mcp_save_server_for_web_settings(
     state: &AppState,
     params: Value,

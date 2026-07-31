@@ -38,146 +38,70 @@ fn mcp_definition_json_schema() -> Value {
     })
 }
 
+// ========== 结构化校验错误 ==========
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct McpValidationIssue {
+    code: String,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    server_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    field: Option<String>,
+    #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
+    params: std::collections::HashMap<String, String>,
+}
+
+impl McpValidationIssue {
+    fn new(code: &str, message: String) -> Self {
+        Self {
+            code: code.to_string(),
+            message,
+            server_name: None,
+            field: None,
+            params: std::collections::HashMap::new(),
+        }
+    }
+
+    fn with_server(mut self, server_name: &str) -> Self {
+        self.server_name = Some(server_name.to_string());
+        self
+    }
+
+    fn with_field(mut self, field: &str) -> Self {
+        self.field = Some(field.to_string());
+        self
+    }
+
+    fn with_param(mut self, key: &str, value: &str) -> Self {
+        self.params.insert(key.to_string(), value.to_string());
+        self
+    }
+}
+
 #[derive(Debug, Clone)]
 struct McpDefinitionValidationError {
     code: String,
     message: String,
-    details: Vec<String>,
+    issues: Vec<McpValidationIssue>,
 }
 
-fn validate_mcp_servers_schema(value: &Value) -> Result<(), Vec<String>> {
-    fn validate_server_obj(
-        server_obj: &serde_json::Map<String, Value>,
-        path: &str,
-        errors: &mut Vec<String>,
-    ) {
-        let has_command = server_obj
-            .get("command")
-            .and_then(Value::as_str)
-            .map(|s| !s.trim().is_empty())
-            .unwrap_or(false);
-        let has_url = server_obj
-            .get("url")
-            .and_then(Value::as_str)
-            .map(|s| !s.trim().is_empty())
-            .unwrap_or(false);
-        if !has_command && !has_url {
-            errors.push(format!(
-                "{path} must include either non-empty command or url"
-            ));
-        }
-        if let Some(args) = server_obj.get("args") {
-            if !args.is_array() {
-                errors.push(format!("{path}.args must be array"));
-            } else if args
-                .as_array()
-                .map(|items| items.iter().any(|v| !v.is_string()))
-                .unwrap_or(false)
-            {
-                errors.push(format!("{path}.args must be string array"));
-            }
-        }
-        for map_key in ["env", "httpHeaders", "envHttpHeaders"] {
-            if let Some(map_value) = server_obj.get(map_key) {
-                let Some(map) = map_value.as_object() else {
-                    errors.push(format!("{path}.{map_key} must be object"));
-                    continue;
-                };
-                if map.values().any(|v| !v.is_string()) {
-                    errors.push(format!(
-                        "{path}.{map_key} values must be strings"
-                    ));
-                }
-            }
+impl McpDefinitionValidationError {
+    fn from_issue(issue: McpValidationIssue) -> Self {
+        Self {
+            code: issue.code.clone(),
+            message: issue.message.clone(),
+            issues: vec![issue],
         }
     }
 
-    let mut errors = Vec::<String>::new();
-    let Some(root) = value.as_object() else {
-        return Err(vec!["root must be JSON object".to_string()]);
-    };
-
-    if let Some(servers) = root.get("mcpServers").and_then(Value::as_object) {
-        if servers.is_empty() {
-            errors.push("mcpServers is empty".to_string());
-            return Err(errors);
-        }
-        if servers.len() > 1 {
-            errors.push("only one MCP server is allowed per card (mcpServers must contain exactly one entry)".to_string());
-            return Err(errors);
-        }
-        for (name, node) in servers {
-            let Some(server_obj) = node.as_object() else {
-                errors.push(format!("mcpServers.{name} must be object"));
-                continue;
-            };
-            validate_server_obj(server_obj, &format!("mcpServers.{name}"), &mut errors);
-        }
-    } else {
-        // Backward-compatible single-server format:
-        // { "transport": "...", "command": "...", "args": [...] }
-        // or named single-server format:
-        // { "server-name": { "command": "...", "args": [...] } }
-        let has_direct_command_or_url = root
-            .get("command")
-            .and_then(Value::as_str)
-            .map(|s| !s.trim().is_empty())
-            .unwrap_or(false)
-            || root
-                .get("url")
-                .and_then(Value::as_str)
-                .map(|s| !s.trim().is_empty())
-                .unwrap_or(false);
-        if has_direct_command_or_url {
-            validate_server_obj(root, "root", &mut errors);
-        } else if root.len() == 1 {
-            if let Some((name, node)) = root.iter().next() {
-                if let Some(server_obj) = node.as_object() {
-                    validate_server_obj(server_obj, &format!("root.{name}"), &mut errors);
-                } else {
-                    errors.push(format!("root.{name} must be object"));
-                }
-            }
-        } else {
-            errors.push(
-                "root must include command/url, or mcpServers, or a single named MCP server entry"
-                    .to_string(),
-            );
-        }
-    }
-
-    if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(errors)
+    fn details_text(&self) -> Vec<String> {
+        self.issues.iter().map(|i| i.message.clone()).collect()
     }
 }
 
-fn normalize_mcp_definition_for_validation(
-    definition_json: &str,
-) -> Result<(Value, Option<String>), McpDefinitionValidationError> {
-    let parsed: Value = serde_json::from_str(definition_json).map_err(|err| McpDefinitionValidationError {
-        code: "invalid_json".to_string(),
-        message: format!("MCP definition JSON parse failed: {err}"),
-        details: vec!["input must be valid JSON object".to_string()],
-    })?;
-    let root = parsed.as_object().cloned().ok_or_else(|| McpDefinitionValidationError {
-        code: "invalid_root".to_string(),
-        message: "MCP definition must be a JSON object".to_string(),
-        details: vec!["root JSON type must be object".to_string()],
-    })?;
-
-    let normalized = Value::Object(root);
-    if let Err(details) = validate_mcp_servers_schema(&normalized) {
-        return Err(McpDefinitionValidationError {
-            code: "schema_validation_failed".to_string(),
-            message: "MCP definition does not match required schema".to_string(),
-            details,
-        });
-    }
-
-    Ok((normalized, None))
-}
+// ========== JSON 值读取（别名兼容） ==========
 
 fn value_get<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
     value
@@ -210,6 +134,9 @@ fn value_get_string(value: &Value, key: &str) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// 读取字符串映射，兼容两种值形态：
+/// - 字符串: "KEY": "value"
+/// - 对象:   "KEY": { "value": "xxx", "secret": true }（取 value 字段）
 fn value_get_map_string_string(
     value: &Value,
     key: &str,
@@ -219,12 +146,21 @@ fn value_get_map_string_string(
         return out;
     };
     for (k, v) in map {
-        if let Some(text) = v.as_str() {
-            let name = k.trim();
-            let value = text.trim();
-            if !name.is_empty() && !value.is_empty() {
-                out.insert(name.to_string(), value.to_string());
-            }
+        let name = k.trim();
+        if name.is_empty() {
+            continue;
+        }
+        let text = match v {
+            Value::String(s) => s.trim().to_string(),
+            Value::Object(obj) => obj
+                .get("value")
+                .and_then(Value::as_str)
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default(),
+            _ => String::new(),
+        };
+        if !text.is_empty() {
+            out.insert(name.to_string(), text);
         }
     }
     out
@@ -245,54 +181,315 @@ fn value_get_string_array(value: &Value, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn parse_mcp_root_object(definition_json: &str) -> Result<(String, Value), String> {
-    let parsed: Value = serde_json::from_str(definition_json)
-        .map_err(|err| format!("MCP definition JSON parse failed: {err}"))?;
-    let object = parsed
-        .as_object()
-        .ok_or_else(|| "MCP definition must be a JSON object".to_string())?;
+// ========== 多格式展开 ==========
 
-    if let Some(servers) = object.get("mcpServers").and_then(Value::as_object) {
-        if servers.is_empty() {
-            return Err("mcpServers is empty".to_string());
-        }
-        if servers.len() > 1 {
-            return Err(
-                "only one MCP server is allowed per card (mcpServers must contain exactly one entry)"
-                    .to_string(),
+#[derive(Debug, Clone)]
+struct ParsedMcpDefinition {
+    servers: Vec<(String, Value)>,
+    issues: Vec<McpValidationIssue>,
+}
+
+/// 判定某字段是否为"单 server 直接字段"（出现时根对象不再视为命名 server 集合）
+fn is_server_direct_field(key: &str) -> bool {
+    matches!(
+        key,
+        "command"
+            | "args"
+            | "env"
+            | "cwd"
+            | "url"
+            | "transport"
+            | "type"
+            | "headers"
+            | "httpHeaders"
+            | "envHttpHeaders"
+            | "bearerTokenEnvVar"
+            | "enabledTools"
+            | "disabledTools"
+    )
+}
+
+fn issue_server_missing_name(index: usize) -> McpValidationIssue {
+    McpValidationIssue::new(
+        "server_missing_name",
+        format!("server at index {index} is missing required 'name'"),
+    )
+    .with_param("index", &index.to_string())
+}
+
+fn issue_duplicate_name(name: &str) -> McpValidationIssue {
+    McpValidationIssue::new(
+        "duplicate_name",
+        format!("duplicate server name '{name}' in definition"),
+    )
+    .with_server(name)
+}
+
+fn parse_server_array(
+    items: &[Value],
+    field_path: &str,
+) -> Result<ParsedMcpDefinition, McpDefinitionValidationError> {
+    let mut out = Vec::<(String, Value)>::new();
+    let mut issues = Vec::<McpValidationIssue>::new();
+    for (idx, item) in items.iter().enumerate() {
+        let Some(obj) = item.as_object() else {
+            issues.push(
+                McpValidationIssue::new(
+                    "server_item_not_object",
+                    format!("{field_path}[{idx}] must be an object"),
+                )
+                .with_param("index", &idx.to_string()),
             );
+            continue;
+        };
+        let value_obj = Value::Object(obj.clone());
+        let name = value_get_string(&value_obj, "name");
+        let Some(name) = name else {
+            issues.push(issue_server_missing_name(idx));
+            continue;
+        };
+        if out.iter().any(|(n, _)| n == &name) {
+            issues.push(issue_duplicate_name(&name));
+            continue;
         }
-        let (name, node) = servers
-            .iter()
-            .next()
-            .ok_or_else(|| "mcpServers is empty".to_string())?;
-        return Ok((name.clone(), node.clone()));
+        out.push((name, value_obj));
+    }
+    Ok(ParsedMcpDefinition {
+        servers: out,
+        issues,
+    })
+}
+
+fn parse_named_server_map(
+    map: &serde_json::Map<String, Value>,
+    field_path: &str,
+) -> Result<ParsedMcpDefinition, McpDefinitionValidationError> {
+    if map.is_empty() {
+        return Err(McpDefinitionValidationError::from_issue(
+            McpValidationIssue::new("empty_servers", format!("{field_path} is empty")),
+        ));
+    }
+    let mut out = Vec::<(String, Value)>::new();
+    let mut issues = Vec::<McpValidationIssue>::new();
+    for (name, node) in map {
+        let Some(obj) = node.as_object() else {
+            issues.push(
+                McpValidationIssue::new(
+                    "server_not_object",
+                    format!("{field_path}.{name} must be an object"),
+                )
+                .with_server(name),
+            );
+            continue;
+        };
+        out.push((name.clone(), Value::Object(obj.clone())));
+    }
+    Ok(ParsedMcpDefinition {
+        servers: out,
+        issues,
+    })
+}
+
+/// 将 definitionJson 展开为 0..N 个 (server_name, server_obj)，结构问题聚合在 issues。
+/// 支持的嵌套格式：
+/// 1. { "mcpServers": { name: {...}, ... } }
+/// 2. { name: {...}, ... }（根级平铺命名对象）
+/// 3. { "mcpServers": [ {name, ...}, ... ] }
+/// 4. [ {name, ...}, ... ]（根级数组）
+/// 5. 单 server 直接字段（向后兼容）
+///
+/// Err 只用于整体无法解析（JSON 语法错、根类型错、空容器、mcpServers 类型错）。
+fn parse_mcp_definition_servers(
+    definition_json: &str,
+) -> Result<ParsedMcpDefinition, McpDefinitionValidationError> {
+    let parsed: Value = serde_json::from_str(definition_json).map_err(|err| {
+        McpDefinitionValidationError::from_issue(McpValidationIssue::new(
+            "invalid_json",
+            format!("MCP definition JSON parse failed: {err}"),
+        ))
+    })?;
+
+    // 格式 4：根级数组
+    if let Some(items) = parsed.as_array() {
+        if items.is_empty() {
+            return Err(McpDefinitionValidationError::from_issue(
+                McpValidationIssue::new("empty_servers", "root array is empty".to_string()),
+            ));
+        }
+        return parse_server_array(items, "root");
     }
 
-    if object.len() == 1 {
-        if let Some((name, node)) = object.iter().next() {
-            if node.is_object() {
-                return Ok((name.clone(), node.clone()));
+    let root = parsed.as_object().ok_or_else(|| {
+        McpDefinitionValidationError::from_issue(McpValidationIssue::new(
+            "invalid_root",
+            "MCP definition must be a JSON object or array".to_string(),
+        ))
+    })?;
+
+    // mcpServers 键
+    if let Some(servers_value) = root.get("mcpServers") {
+        if let Some(servers) = servers_value.as_object() {
+            return parse_named_server_map(servers, "mcpServers");
+        }
+        if let Some(items) = servers_value.as_array() {
+            if items.is_empty() {
+                return Err(McpDefinitionValidationError::from_issue(
+                    McpValidationIssue::new("empty_servers", "mcpServers is empty".to_string()),
+                ));
+            }
+            return parse_server_array(items, "mcpServers");
+        }
+        return Err(McpDefinitionValidationError::from_issue(
+            McpValidationIssue::new(
+                "mcp_servers_type_error",
+                "mcpServers must be an object or an array".to_string(),
+            ),
+        ));
+    }
+
+    // 格式 2：根级平铺命名对象（无 server 直接字段，且所有值都是对象）
+    let has_direct_field = root
+        .keys()
+        .any(|k| is_server_direct_field(k) || k.eq_ignore_ascii_case("name"));
+    if !has_direct_field && root.values().all(Value::is_object) {
+        return parse_named_server_map(root, "root");
+    }
+
+    // 格式 5：单 server 直接字段（向后兼容）
+    let name = value_get_string(&parsed, "name").unwrap_or_else(|| "mcp-server".to_string());
+    Ok(ParsedMcpDefinition {
+        servers: vec![(name, parsed)],
+        issues: Vec::new(),
+    })
+}
+
+/// 展开 + 逐 server 字段校验，返回 (可用 servers, 全部 issues)。
+/// 结构问题（缺 name、内部重名、类型错）与字段问题（缺 command/url、args/env 类型错）都聚合在 issues。
+fn validate_mcp_definition_servers(
+    definition_json: &str,
+) -> (Vec<(String, Value)>, Vec<McpValidationIssue>) {
+    match parse_mcp_definition_servers(definition_json) {
+        Ok(parsed) => {
+            let mut issues = parsed.issues;
+            for (name, obj) in &parsed.servers {
+                if let Some(obj_map) = obj.as_object() {
+                    validate_single_server_obj(obj_map, name, &mut issues);
+                }
+            }
+            (parsed.servers, issues)
+        }
+        Err(err) => (Vec::new(), err.issues),
+    }
+}
+
+// ========== 单 server 解析（兼容既有调用方） ==========
+
+/// 校验单个 server 对象，错误以 issues 返回
+fn validate_single_server_obj(
+    server_obj: &serde_json::Map<String, Value>,
+    server_name: &str,
+    issues: &mut Vec<McpValidationIssue>,
+) {
+    let has_command = server_obj
+        .get("command")
+        .and_then(Value::as_str)
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+    let has_url = server_obj
+        .get("url")
+        .and_then(Value::as_str)
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+    if !has_command && !has_url {
+        issues.push(
+            McpValidationIssue::new(
+                "server_missing_transport",
+                format!("server '{server_name}' must include either non-empty command or url"),
+            )
+            .with_server(server_name),
+        );
+    }
+    if let Some(args) = server_obj.get("args") {
+        if !args.is_array() {
+            issues.push(
+                McpValidationIssue::new(
+                    "args_type_error",
+                    format!("server '{server_name}' args must be an array"),
+                )
+                .with_server(server_name)
+                .with_field("args"),
+            );
+        } else if args
+            .as_array()
+            .map(|items| items.iter().any(|v| !v.is_string()))
+            .unwrap_or(false)
+        {
+            issues.push(
+                McpValidationIssue::new(
+                    "args_item_type_error",
+                    format!("server '{server_name}' args must be string array"),
+                )
+                .with_server(server_name)
+                .with_field("args"),
+            );
+        }
+    }
+    for map_key in ["env", "headers", "httpHeaders", "envHttpHeaders"] {
+        let Some(map_value) = server_obj.get(map_key) else {
+            continue;
+        };
+        if !map_value.is_object() {
+            issues.push(
+                McpValidationIssue::new(
+                    "map_type_error",
+                    format!("server '{server_name}' {map_key} must be an object"),
+                )
+                .with_server(server_name)
+                .with_field(map_key),
+            );
+            continue;
+        }
+        let map = map_value.as_object().expect("checked is_object above");
+        for (k, v) in map {
+            let value_ok = match v {
+                Value::String(_) => true,
+                Value::Object(obj) => obj
+                    .get("value")
+                    .map(Value::is_string)
+                    .unwrap_or(false),
+                _ => false,
+            };
+            if !value_ok {
+                issues.push(
+                    McpValidationIssue::new(
+                        "map_value_type_error",
+                        format!(
+                            "server '{server_name}' {map_key}.{k} must be a string or {{value}} object"
+                        ),
+                    )
+                    .with_server(server_name)
+                    .with_field(&format!("{map_key}.{k}")),
+                );
             }
         }
     }
-
-    let name = value_get_string(&parsed, "name").unwrap_or_else(|| "mcp-server".to_string());
-    Ok((name, parsed))
 }
 
-fn parse_mcp_server_definition(definition_json: &str) -> Result<(String, ParsedMcpServerDefinition), String> {
-    let (server_name, root) = parse_mcp_root_object(definition_json)?;
-
-    let transport_text = value_get_string(&root, "transport")
-        .or_else(|| value_get_string(&root, "type"))
+fn parse_mcp_server_definition_from_value(
+    _server_name: &str,
+    root: &Value,
+) -> Result<ParsedMcpServerDefinition, String> {
+    let transport_text = value_get_string(root, "transport")
+        .or_else(|| value_get_string(root, "type"))
         .unwrap_or_default()
         .to_ascii_lowercase();
 
-    let command = value_get_string(&root, "command");
-    let url = value_get_string(&root, "url");
+    let command = value_get_string(root, "command");
+    let url = value_get_string(root, "url");
 
-    let transport = if matches!(
+    let transport = if transport_text == "sse" {
+        McpTransportKind::Sse
+    } else if matches!(
         transport_text.as_str(),
         "streamable_http" | "streamable-http" | "http" | "https" | "remote"
     ) {
@@ -304,16 +501,20 @@ fn parse_mcp_server_definition(definition_json: &str) -> Result<(String, ParsedM
     } else if url.is_some() {
         McpTransportKind::StreamableHttp
     } else {
-        return Err("MCP definition must include either command(stdio) or url(streamable HTTP)".to_string());
+        return Err("MCP definition must include either command(stdio) or url(streamable HTTP/sse)".to_string());
     };
 
-    let args = value_get_string_array(&root, "args");
-    let env = value_get_map_string_string(&root, "env");
-    let cwd = value_get_string(&root, "cwd");
-    let bearer_token_env_var = value_get_string(&root, "bearerTokenEnvVar")
-        .or_else(|| value_get_string(&root, "bearer_token_env_var"));
-    let http_headers = value_get_map_string_string(&root, "httpHeaders");
-    let env_http_headers = value_get_map_string_string(&root, "envHttpHeaders");
+    let args = value_get_string_array(root, "args");
+    let env = value_get_map_string_string(root, "env");
+    let cwd = value_get_string(root, "cwd");
+    let bearer_token_env_var = value_get_string(root, "bearerTokenEnvVar")
+        .or_else(|| value_get_string(root, "bearer_token_env_var"));
+    // headers 作为 httpHeaders 的别名，两者都存在时合并
+    let mut http_headers = value_get_map_string_string(root, "headers");
+    for (k, v) in value_get_map_string_string(root, "httpHeaders") {
+        http_headers.insert(k, v);
+    }
+    let env_http_headers = value_get_map_string_string(root, "envHttpHeaders");
 
     match transport {
         McpTransportKind::Stdio => {
@@ -326,27 +527,35 @@ fn parse_mcp_server_definition(definition_json: &str) -> Result<(String, ParsedM
                 return Err("streamable HTTP MCP definition requires url".to_string());
             }
         }
+        McpTransportKind::Sse => {
+            if url.as_deref().unwrap_or_default().trim().is_empty() {
+                return Err("SSE MCP definition requires url".to_string());
+            }
+        }
     }
 
-    Ok((
-        server_name,
-        ParsedMcpServerDefinition {
-            transport,
-            command,
-            args,
-            env,
-            cwd,
-            url,
-            bearer_token_env_var,
-            http_headers,
-            env_http_headers,
-        },
-    ))
+    Ok(ParsedMcpServerDefinition {
+        transport,
+        command,
+        args,
+        env,
+        cwd,
+        url,
+        bearer_token_env_var,
+        http_headers,
+        env_http_headers,
+    })
 }
 
-fn parse_mcp_server_definition_from_config(server: &McpServerConfig) -> Result<ParsedMcpServerDefinition, String> {
-    let (_, parsed) = parse_mcp_server_definition(&server.definition_json)?;
-    Ok(parsed)
+fn parse_mcp_server_definition(definition_json: &str) -> Result<(String, ParsedMcpServerDefinition), String> {
+    let parsed = parse_mcp_definition_servers(definition_json)
+        .map_err(|err| format!("{}", err.message))?;
+    let (server_name, root) = parsed
+        .servers
+        .into_iter()
+        .next()
+        .ok_or_else(|| "MCP definition contains no servers".to_string())?;
+    let parsed = parse_mcp_server_definition_from_value(&server_name, &root)?;
+    Ok((server_name, parsed))
 }
-
 

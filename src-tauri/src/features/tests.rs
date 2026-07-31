@@ -85,3 +85,4 @@
     include!("remote_im/tests.rs");
     include!("system/tests.rs");
     include!("memory/tests.rs");
+    include!("mcp/tests.rs");

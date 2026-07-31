@@ -875,23 +875,41 @@ async fn invoke_quick_model_json_result_with_prepared_prompt(
     let quick_api_config_id = current_tool_review_api_config_id(state)
         .map_err(QuickModelJsonCallError::from_message)?
         .ok_or_else(|| QuickModelJsonCallError::from_message("未配置快速模型"))?;
+    invoke_model_json_result_with_api_config_id(
+        state,
+        &quick_api_config_id,
+        scene,
+        prepared,
+        timeout_secs,
+        required_fields,
+        optional_fields,
+    )
+    .await
+}
+
+async fn invoke_model_json_result_with_api_config_id(
+    state: &AppState,
+    api_config_id: &str,
+    scene: &'static str,
+    prepared: PreparedPrompt,
+    timeout_secs: Option<u64>,
+    required_fields: &[&str],
+    optional_fields: &[&str],
+) -> Result<QuickModelJsonCallOutput, QuickModelJsonCallError> {
     let app_config =
         state_read_config_cached(state).map_err(QuickModelJsonCallError::from_message)?;
-    let selected_api = resolve_selected_api_config(&app_config, Some(&quick_api_config_id))
+    let selected_api = resolve_selected_api_config(&app_config, Some(api_config_id))
         .ok_or_else(|| {
-            QuickModelJsonCallError::from_message(format!(
-                "快速模型配置不存在：{}",
-                quick_api_config_id
-            ))
+            QuickModelJsonCallError::from_message(format!("模型配置不存在：{api_config_id}"))
         })?;
-    let resolved_api = resolve_api_config(&app_config, Some(&quick_api_config_id))
+    let resolved_api = resolve_api_config(&app_config, Some(api_config_id))
         .map_err(QuickModelJsonCallError::from_message)?;
     let model_name = resolved_model_name_for_quick_request(&selected_api, &resolved_api);
     let _ = scene;
     let started_at = std::time::Instant::now();
     let reply = invoke_quick_model_reply_with_prepared_prompt(
         state,
-        &quick_api_config_id,
+        api_config_id,
         prepared,
         timeout_secs,
     )
@@ -979,6 +997,40 @@ async fn invoke_quick_model_json(
     }
     invoke_quick_model_json_with_prepared_prompt(
         state,
+        scene,
+        quick_json_prepared_prompt(prompt),
+        timeout_secs,
+        required_fields,
+        optional_fields,
+    )
+    .await
+}
+
+/// 用专家模型（对话设置中的专家模型）做一次 JSON 输出请求
+async fn invoke_expert_model_json_result(
+    state: &AppState,
+    scene: &'static str,
+    prompt: &str,
+    timeout_secs: Option<u64>,
+    required_fields: &[&str],
+    optional_fields: &[&str],
+) -> Result<QuickModelJsonCallOutput, QuickModelJsonCallError> {
+    if prompt.trim().is_empty() {
+        return Err(QuickModelJsonCallError::from_message(
+            "专家模型 JSON 请求提示词不能为空",
+        ));
+    }
+    let app_config =
+        state_read_config_cached(state).map_err(QuickModelJsonCallError::from_message)?;
+    let expert_id = app_config.assistant_department_api_config_id.trim().to_string();
+    if expert_id.is_empty() {
+        return Err(QuickModelJsonCallError::from_message(
+            "未配置专家模型（请在对话设置中配置专家模型）",
+        ));
+    }
+    invoke_model_json_result_with_api_config_id(
+        state,
+        &expert_id,
         scene,
         quick_json_prepared_prompt(prompt),
         timeout_secs,

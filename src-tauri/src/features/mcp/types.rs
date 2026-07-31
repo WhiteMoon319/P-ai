@@ -12,6 +12,7 @@ use serde::{Deserialize as SerdeDeserialize, Serialize as SerdeSerialize};
 enum McpTransportKind {
     Stdio,
     StreamableHttp,
+    Sse,
 }
 
 impl McpTransportKind {
@@ -19,6 +20,7 @@ impl McpTransportKind {
         match self {
             Self::Stdio => "stdio",
             Self::StreamableHttp => "streamable_http",
+            Self::Sse => "sse",
         }
     }
 }
@@ -56,6 +58,9 @@ struct McpServerIdInput {
 #[serde(rename_all = "camelCase")]
 struct McpDefinitionValidateInput {
     definition_json: String,
+    /// 全工作区其他卡片的组内成员名集合，用于跨卡片重名检测
+    #[serde(default)]
+    existing_member_names: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,7 +77,28 @@ struct McpDefinitionValidateResult {
     #[serde(default)]
     details: Vec<String>,
     #[serde(default)]
+    issues: Vec<McpValidationIssue>,
+    #[serde(default)]
     migrated_definition_json: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct McpFixDefinitionInput {
+    definition_json: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct McpFixDefinitionResult {
+    ok: bool,
+    #[serde(default)]
+    fixed_definition_json: Option<String>,
+    message: String,
+    #[serde(default)]
+    issues: Vec<McpValidationIssue>,
+    #[serde(default)]
+    model_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

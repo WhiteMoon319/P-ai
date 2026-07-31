@@ -29,15 +29,24 @@
       :disabled="loading"
       @remove="removeServer"
       @validate="validateDefinition"
+      @fix="fixDefinition"
       @toggle-deploy="toggleDeploy"
       @toggle-tool="onToggleTool"
       @refresh-tools="refreshTools"
     />
 
+    <div v-if="issueList.length > 0" class="space-y-1">
+      <div v-for="(issue, idx) in issueList" :key="idx" class="flex items-start gap-2 text-sm text-error">
+        <span class="mt-0.5">•</span>
+        <span>{{ issue }}</span>
+      </div>
+    </div>
+
     <div v-if="statusText" class="text-sm" :class="statusError ? 'text-error' : 'opacity-70'">
       {{ statusText }}
     </div>
   </div>
+
   </SettingsStickyLayout>
 </template>
 
@@ -47,15 +56,17 @@ import { useI18n } from "vue-i18n";
 import { getTransportCapabilities, invokeTauri, openTransportMcpWorkspaceDirectory } from "../../../../services/tauri-api";
 import type {
   McpDefinitionValidateResult,
+  McpFixDefinitionResult,
   McpListServerToolsResult,
   McpServerConfig,
   McpToolDescriptor,
+  McpValidationIssue,
 } from "../../../../types/app";
 import { toErrorMessage } from "../../../../utils/error";
 import McpServerCard from "./mcp/McpServerCard.vue";
 import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 
 type McpServerView = McpServerConfig & {
   toolItems: McpToolDescriptor[];
@@ -71,6 +82,8 @@ const servers = ref<McpServerView[]>([]);
 const selectedServerId = ref("");
 const localFileSystemAvailable = getTransportCapabilities().localFileSystem;
 
+const issueList = ref<string[]>([]);
+
 const selectedServer = computed(() =>
   servers.value.find((s) => s.id === selectedServerId.value) ?? null,
 );
@@ -78,6 +91,69 @@ const selectedServer = computed(() =>
 function setStatus(text: string, isError = false) {
   statusText.value = text;
   statusError.value = isError;
+}
+
+function issueText(issue: McpValidationIssue): string {
+  const params: Record<string, string> = {
+    serverName: issue.serverName ?? "",
+    field: issue.field ?? "",
+    index: issue.params?.index ?? "",
+    message: issue.message,
+  };
+  const key = `config.mcp.issues.${issue.code}`;
+  if (te(key)) {
+    return t(key, params);
+  }
+  return t("config.mcp.issues.fallback", params);
+}
+
+/** 从 definitionJson 解析组内成员名（用于跨卡片重名检测） */
+function parseMemberNames(definitionJson: string): string[] {
+  try {
+    const parsed = JSON.parse(definitionJson) as unknown;
+    const names: string[] = [];
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        if (item && typeof item === "object") {
+          names.push(String((item as Record<string, unknown>).name ?? ""));
+        }
+      }
+    } else if (parsed && typeof parsed === "object") {
+      const root = parsed as Record<string, unknown>;
+      const ms = root.mcpServers;
+      if (Array.isArray(ms)) {
+        for (const item of ms) {
+          if (item && typeof item === "object") {
+            names.push(String((item as Record<string, unknown>).name ?? ""));
+          }
+        }
+      } else if (ms && typeof ms === "object") {
+        names.push(...Object.keys(ms as Record<string, unknown>));
+      } else {
+        const hasDirectField = ["command", "url", "transport", "type", "args", "env", "cwd", "headers", "httpHeaders", "envHttpHeaders", "bearerTokenEnvVar", "enabledTools", "disabledTools"].some(
+          (key) => key in root,
+        );
+        if (hasDirectField) {
+          // 单 server 直接字段：取 name 字段
+          const singleName = String(root.name ?? "");
+          if (singleName) names.push(singleName);
+        } else {
+          names.push(...Object.keys(root));
+        }
+      }
+    }
+    return names.filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function applyIssues(issues: McpValidationIssue[] | undefined) {
+  issueList.value = (issues ?? []).map(issueText);
+}
+
+function clearIssues() {
+  issueList.value = [];
 }
 
 function toView(server: McpServerConfig): McpServerView {
@@ -150,7 +226,7 @@ function addServer() {
     id: `mcp-${seed}`,
     name: `MCP ${servers.value.length + 1}`,
     enabled: false,
-    definitionJson: '{\n  "transport": "stdio",\n  "command": "npx",\n  "args": ["-y", "@upstash/context7-mcp"]\n}',
+    definitionJson: '{\n  "name": "mcp-server",\n  "transport": "stdio",\n  "command": "npx",\n  "args": ["-y", "@upstash/context7-mcp"]\n}',
     toolPolicies: [],
     cachedTools: [],
     lastStatus: "",
@@ -183,24 +259,61 @@ async function removeServer(serverId: string) {
 
 async function validateDefinition(server: McpServerView) {
   loading.value = true;
+  clearIssues();
   try {
     const result = await invokeTauri<McpDefinitionValidateResult>("mcp_validate_definition", {
-      input: { definitionJson: server.definitionJson },
+      input: {
+        definitionJson: server.definitionJson,
+        existingMemberNames: servers.value
+          .filter((s) => s.id !== server.id)
+          .flatMap((s) => parseMemberNames(s.definitionJson)),
+      },
     });
     if (!result.ok) {
-      const detailText = Array.isArray(result.details) && result.details.length > 0
-        ? ` | ${result.details.join(" ; ")}`
-        : "";
+      applyIssues(result.issues);
+      const detailText = result.issues && result.issues.length > 0
+        ? ""
+        : (Array.isArray(result.details) && result.details.length > 0
+          ? ` | ${result.details.join(" ; ")}`
+          : "");
       const codeText = result.errorCode ? ` [${result.errorCode}]` : "";
       setStatus(`${t('config.mcp.validateFailed')}${codeText}: ${result.message}${detailText}`, true);
       return;
     }
-    if (result.migratedDefinitionJson) {
-      server.definitionJson = result.migratedDefinitionJson;
-    }
-    setStatus(`${t('config.mcp.validateSuccess')}: ${t('config.mcp.transport', { transport: result.transport || "-" })}`);
+    const serverCountText = result.serverName
+      ? ` (${result.serverName}${result.transport ? `, ${t('config.mcp.transport', { transport: result.transport })}` : ""})`
+      : "";
+    setStatus(`${t('config.mcp.validateSuccess')}${serverCountText}`);
   } catch (error) {
     setStatus(`${t('config.mcp.validateFailed')}: ${toErrorMessage(error)}`, true);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function fixDefinition(server: McpServerView) {
+  loading.value = true;
+  clearIssues();
+  try {
+    const result = await invokeTauri<McpFixDefinitionResult>("mcp_fix_definition", {
+      input: { definitionJson: server.definitionJson },
+    });
+    if (result.fixedDefinitionJson) {
+      server.definitionJson = result.fixedDefinitionJson;
+    }
+    if (result.ok) {
+      if (result.fixedDefinitionJson === server.definitionJson && result.issues.length === 0) {
+        setStatus(t('config.mcp.fixNoNeed'));
+      } else {
+        applyIssues(result.issues);
+        setStatus(`${t('config.mcp.fixSuccess')}${result.modelName ? `（${result.modelName}）` : ""}`);
+      }
+      return;
+    }
+    applyIssues(result.issues);
+    setStatus(`${t('config.mcp.fixStillIssues')}${result.modelName ? `（${result.modelName}）` : ""}: ${result.message}`, true);
+  } catch (error) {
+    setStatus(`${t('config.mcp.fixFailed')}: ${toErrorMessage(error)}`, true);
   } finally {
     loading.value = false;
   }

@@ -1,5 +1,7 @@
 type DynamicMcpClient = rmcp::service::RunningService<rmcp::RoleClient, ()>;
 
+include!("sse_client.rs");
+
 const MCP_CONNECT_TIMEOUT_SECS: u64 = 30;
 const MCP_REQUEST_TIMEOUT_SECS: u64 = 60;
 const MCP_TOOL_CALL_TIMEOUT_SECS: u64 = 300;
@@ -10,9 +12,45 @@ struct McpConnectedClient {
 }
 
 struct CachedMcpClient {
+    group_definition_json: String,
     definition_json: String,
     client: DynamicMcpClient,
     process_tree_guard: Option<McpProcessTreeGuard>,
+}
+
+// ========== 组内成员解析与工具名前缀 ==========
+
+/// 解析卡片（组）内全部成员定义：返回 (成员名, 原始 JSON, 解析结果)
+fn parse_mcp_group_definitions(
+    server: &McpServerConfig,
+) -> Result<Vec<(String, String, ParsedMcpServerDefinition)>, String> {
+    let parsed = parse_mcp_definition_servers(&server.definition_json)
+        .map_err(|err| err.message.clone())?;
+    let mut out = Vec::<(String, String, ParsedMcpServerDefinition)>::new();
+    for (name, obj) in parsed.servers {
+        let raw = serde_json::to_string(&obj)
+            .map_err(|err| format!("序列化 MCP 成员定义失败：{err}"))?;
+        let parsed_def = parse_mcp_server_definition_from_value(&name, &obj)?;
+        out.push((name, raw, parsed_def));
+    }
+    if out.is_empty() {
+        return Err("MCP definition contains no servers".to_string());
+    }
+    Ok(out)
+}
+
+/// 组内成员工具名统一带前缀：{成员名}_{工具名}
+fn mcp_tool_prefixed_name(member_name: &str, tool_name: &str) -> String {
+    format!("{member_name}_{tool_name}")
+}
+
+/// 从带前缀工具名还原 (成员名, 原始工具名)，按最后一个下划线从右拆分
+fn mcp_tool_split_prefixed_name(prefixed: &str) -> Option<(String, String)> {
+    let idx = prefixed.rfind('_')?;
+    if idx == 0 || idx + 1 >= prefixed.len() {
+        return None;
+    }
+    Some((prefixed[..idx].to_string(), prefixed[idx + 1..].to_string()))
 }
 
 #[cfg(target_os = "windows")]
@@ -274,10 +312,14 @@ impl RuntimeToolDyn for McpRuntimeTool {
                 serde_json::from_str::<serde_json::Map<String, Value>>(&args_json)
                     .map_err(|err| format!("Parse MCP tool args failed: {err}"))?
             };
+            // 工具名带 {成员名}_{工具名} 前缀，调用时还原为原始工具名
+            let raw_tool_name = mcp_tool_split_prefixed_name(&name)
+                .map(|(_, raw)| raw)
+                .unwrap_or_else(|| name.as_ref().to_string());
             let result = tokio::time::timeout(
                 std::time::Duration::from_secs(MCP_TOOL_CALL_TIMEOUT_SECS),
                 self.client
-                    .call_tool(rmcp::model::CallToolRequestParams::new(name.clone()).with_arguments(arguments)),
+                    .call_tool(rmcp::model::CallToolRequestParams::new(raw_tool_name.clone()).with_arguments(arguments)),
             )
             .await
             .map_err(|_| {
@@ -379,11 +421,20 @@ impl RuntimeToolDyn for CachedMcpRuntimeTool {
 }
 
 fn mcp_client_cache(
-) -> &'static tokio::sync::Mutex<std::collections::HashMap<String, CachedMcpClient>> {
+) -> &'static tokio::sync::Mutex<
+    std::collections::HashMap<String, std::collections::HashMap<String, CachedMcpClient>>,
+> {
     static CACHE: OnceLock<
-        tokio::sync::Mutex<std::collections::HashMap<String, CachedMcpClient>>,
+        tokio::sync::Mutex<
+            std::collections::HashMap<
+                String,
+                std::collections::HashMap<String, CachedMcpClient>,
+            >,
+        >,
     > = OnceLock::new();
-    CACHE.get_or_init(|| tokio::sync::Mutex::new(std::collections::HashMap::new()))
+    CACHE.get_or_init(|| {
+        tokio::sync::Mutex::new(std::collections::HashMap::new())
+    })
 }
 
 fn mcp_client_connect_locks(
@@ -523,7 +574,7 @@ impl rmcp::transport::streamable_http_client::StreamableHttpClient for CustomStr
     async fn get_stream(
         &self,
         uri: std::sync::Arc<str>,
-        session_id: std::sync::Arc<str>,
+        session_id: Option<std::sync::Arc<str>>,
         last_event_id: Option<String>,
         auth_header: Option<String>,
         custom_headers: std::collections::HashMap<tauri::http::HeaderName, tauri::http::HeaderValue>,
@@ -541,11 +592,13 @@ impl rmcp::transport::streamable_http_client::StreamableHttpClient for CustomStr
                     rmcp::transport::common::http_header::JSON_MIME_TYPE,
                 ]
                 .join(", "),
-            )
-            .header(
+            );
+        if let Some(session_id) = session_id {
+            request_builder = request_builder.header(
                 rmcp::transport::common::http_header::HEADER_SESSION_ID,
                 session_id.as_ref(),
             );
+        }
 
         if let Some(last_event_id) = last_event_id {
             request_builder = request_builder.header(
@@ -598,7 +651,7 @@ impl rmcp::transport::streamable_http_client::StreamableHttpClient for CustomStr
         }
 
         let event_stream =
-            sse_stream::SseStream::from_byte_stream(response.bytes_stream()).boxed();
+            sse_stream::SseStream::from_bytes_stream(response.bytes_stream()).boxed();
         Ok(event_stream)
     }
 
@@ -695,7 +748,7 @@ impl rmcp::transport::streamable_http_client::StreamableHttpClient for CustomStr
                     ) =>
             {
                 let stream =
-                    sse_stream::SseStream::from_byte_stream(response.bytes_stream()).boxed();
+                    sse_stream::SseStream::from_bytes_stream(response.bytes_stream()).boxed();
                 Ok(
                     rmcp::transport::streamable_http_client::StreamableHttpPostResponse::Sse(
                         stream, session_id,
@@ -743,12 +796,14 @@ fn mcp_definition_tool_filters(
 ) {
     let mut allow = std::collections::HashSet::<String>::new();
     let mut deny = std::collections::HashSet::<String>::new();
-    if let Ok((_, root)) = parse_mcp_root_object(raw_definition_json) {
-        for item in value_get_string_array(&root, "enabledTools") {
-            allow.insert(item);
-        }
-        for item in value_get_string_array(&root, "disabledTools") {
-            deny.insert(item);
+    if let Ok(parsed) = parse_mcp_definition_servers(raw_definition_json) {
+        for (member_name, obj) in parsed.servers {
+            for item in value_get_string_array(&obj, "enabledTools") {
+                allow.insert(mcp_tool_prefixed_name(&member_name, &item));
+            }
+            for item in value_get_string_array(&obj, "disabledTools") {
+                deny.insert(mcp_tool_prefixed_name(&member_name, &item));
+            }
         }
     }
     (allow, deny)
@@ -935,60 +990,74 @@ async fn mcp_connect_client(parsed: &ParsedMcpServerDefinition) -> Result<McpCon
                 })
                 .map_err(|err| format!("Connect MCP streamable HTTP server failed: {err}"))
         }
+        McpTransportKind::Sse => {
+            let (sink, stream) = connect_sse_transport(parsed).await?;
+            ().serve((sink, stream))
+                .await
+                .map(|client| McpConnectedClient {
+                    client,
+                    process_tree_guard: None,
+                })
+                .map_err(|err| format!("Connect MCP SSE server failed: {err}"))
+        }
     }
 }
 
-async fn mcp_get_or_connect_client(server: &McpServerConfig) -> Result<(), String> {
-    {
-        let cache = mcp_client_cache();
-        let guard = cache.lock().await;
-        if let Some(hit) = guard.get(&server.id) {
-            if hit.definition_json == server.definition_json {
-                return Ok(());
-            }
-        }
+/// 检查卡片（组）所有成员是否都已连接且 definition 未变化
+fn mcp_group_cache_fully_hit(
+    cache_guard: &std::collections::HashMap<String, std::collections::HashMap<String, CachedMcpClient>>,
+    server_id: &str,
+    members: &[(String, String, ParsedMcpServerDefinition)],
+) -> bool {
+    let Some(member_cache) = cache_guard.get(server_id) else {
+        return false;
+    };
+    if member_cache.len() != members.len() {
+        return false;
     }
+    members.iter().all(|(name, raw, _)| {
+        member_cache
+            .get(name)
+            .map(|c| c.definition_json == *raw)
+            .unwrap_or(false)
+    })
+}
 
-    let connect_lock = mcp_client_connect_lock_for_server(&server.id).await;
-    let _connect_guard = connect_lock.lock().await;
-
-    {
-        let cache = mcp_client_cache();
-        let guard = cache.lock().await;
-        if let Some(hit) = guard.get(&server.id) {
-            if hit.definition_json == server.definition_json {
-                return Ok(());
-            }
-        }
-    }
-
-    let parsed = parse_mcp_server_definition_from_config(server)?;
+async fn mcp_connect_single_member(
+    server: &McpServerConfig,
+    member_name: &str,
+    parsed: &ParsedMcpServerDefinition,
+    raw_definition: &str,
+) -> Result<(), String> {
     let connected = tokio::time::timeout(
         std::time::Duration::from_secs(MCP_CONNECT_TIMEOUT_SECS),
-        mcp_connect_client(&parsed),
+        mcp_connect_client(parsed),
     )
     .await
     .map_err(|_| {
         format!(
-            "Connect MCP server '{}' timed out after {}s",
-            server.id, MCP_CONNECT_TIMEOUT_SECS
+            "Connect MCP member '{member_name}' timed out after {}s",
+            MCP_CONNECT_TIMEOUT_SECS
         )
     })??;
     let mut old_cached: Option<CachedMcpClient> = None;
 
     let cache = mcp_client_cache();
     let mut guard = cache.lock().await;
-    if let Some(old) = guard.remove(&server.id) {
-        old_cached = Some(old);
-    }
-    guard.insert(
-        server.id.clone(),
+    let member_map = guard
+        .entry(server.id.clone())
+        .or_insert_with(std::collections::HashMap::new);
+    if let Some(old) = member_map.insert(
+        member_name.to_string(),
         CachedMcpClient {
-            definition_json: server.definition_json.clone(),
+            group_definition_json: server.definition_json.clone(),
+            definition_json: raw_definition.to_string(),
             client: connected.client,
             process_tree_guard: connected.process_tree_guard,
         },
-    );
+    ) {
+        old_cached = Some(old);
+    }
     drop(guard);
     if let Some(old) = old_cached {
         let CachedMcpClient {
@@ -1002,15 +1071,65 @@ async fn mcp_get_or_connect_client(server: &McpServerConfig) -> Result<(), Strin
     Ok(())
 }
 
+async fn mcp_get_or_connect_client(server: &McpServerConfig) -> Result<(), String> {
+    let members = parse_mcp_group_definitions(server)?;
+    {
+        let cache = mcp_client_cache();
+        let guard = cache.lock().await;
+        if mcp_group_cache_fully_hit(&guard, &server.id, &members) {
+            return Ok(());
+        }
+    }
+
+    let connect_lock = mcp_client_connect_lock_for_server(&server.id).await;
+    let _connect_guard = connect_lock.lock().await;
+
+    {
+        let cache = mcp_client_cache();
+        let guard = cache.lock().await;
+        if mcp_group_cache_fully_hit(&guard, &server.id, &members) {
+            return Ok(());
+        }
+    }
+
+    let mut failures = Vec::<String>::new();
+    for (member_name, raw, parsed) in &members {
+        let cached_ok = {
+            let cache = mcp_client_cache();
+            let guard = cache.lock().await;
+            guard
+                .get(&server.id)
+                .and_then(|member_map| member_map.get(member_name))
+                .map(|c| c.definition_json == *raw)
+                .unwrap_or(false)
+        };
+        if cached_ok {
+            continue;
+        }
+        if let Err(err) = mcp_connect_single_member(server, member_name, parsed, raw).await {
+            failures.push(format!("{member_name}: {err}"));
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "MCP 组内 {} 个成员连接失败: {}",
+            failures.len(),
+            failures.join(" | ")
+        ))
+    }
+}
+
 async fn mcp_disconnect_cached_client(server_id: &str) {
-    let mut old_cached: Option<CachedMcpClient> = None;
+    let mut old_cached = Vec::<CachedMcpClient>::new();
     let cache = mcp_client_cache();
     let mut guard = cache.lock().await;
-    if let Some(old) = guard.remove(server_id) {
-        old_cached = Some(old);
+    if let Some(member_map) = guard.remove(server_id) {
+        old_cached = member_map.into_values().collect();
     }
     drop(guard);
-    if let Some(old) = old_cached {
+    for old in old_cached {
         let CachedMcpClient {
             client,
             process_tree_guard,
@@ -1022,18 +1141,25 @@ async fn mcp_disconnect_cached_client(server_id: &str) {
 }
 
 async fn mcp_disconnect_cached_client_if_definition(server_id: &str, definition_json: &str) {
-    let mut old_cached: Option<CachedMcpClient> = None;
+    let mut old_cached = Vec::<CachedMcpClient>::new();
     let cache = mcp_client_cache();
     let mut guard = cache.lock().await;
-    if guard
+    let definition_changed = guard
         .get(server_id)
-        .map(|cached| cached.definition_json == definition_json)
-        .unwrap_or(false)
-    {
-        old_cached = guard.remove(server_id);
+        .map(|members| {
+            members
+                .values()
+                .any(|c| c.group_definition_json != definition_json)
+        })
+        .unwrap_or(false);
+    // 整组 definition 变化时全部断开重连
+    if definition_changed {
+        if let Some(members) = guard.remove(server_id) {
+            old_cached = members.into_values().collect();
+        }
     }
     drop(guard);
-    if let Some(old) = old_cached {
+    for old in old_cached {
         let CachedMcpClient {
             client,
             process_tree_guard,
@@ -1046,6 +1172,7 @@ async fn mcp_disconnect_cached_client_if_definition(server_id: &str, definition_
 
 async fn mcp_list_tools_with_peer(
     server: &McpServerConfig,
+    member_name: &str,
 ) -> Result<(rmcp::service::Peer<rmcp::RoleClient>, Vec<rmcp::model::Tool>), String> {
     mcp_get_or_connect_client(server).await?;
     let peer = {
@@ -1053,7 +1180,13 @@ async fn mcp_list_tools_with_peer(
         let guard = cache.lock().await;
         let cached = guard
             .get(&server.id)
-            .ok_or_else(|| format!("MCP runtime cache missing server '{}'", server.id))?;
+            .and_then(|member_map| member_map.get(member_name))
+            .ok_or_else(|| {
+                format!(
+                    "MCP runtime cache missing member '{member_name}' of server '{}'",
+                    server.id
+                )
+            })?;
         cached.client.peer().clone()
     };
     let tools = tokio::time::timeout(
@@ -1063,7 +1196,7 @@ async fn mcp_list_tools_with_peer(
     .await
     .map_err(|_| {
         format!(
-            "List MCP tools timed out after {}s for server '{}'",
+            "List MCP tools timed out after {}s for member '{member_name}' of server '{}'",
             MCP_REQUEST_TIMEOUT_SECS, server.id
         )
     })?
@@ -1081,28 +1214,53 @@ async fn mcp_get_or_connect_peer_for_tool(
             tool_name, server.id
         ));
     }
+    let (member_name, _) = mcp_tool_split_prefixed_name(tool_name).ok_or_else(|| {
+        format!("MCP tool '{}' has no member prefix", tool_name)
+    })?;
     mcp_get_or_connect_client(server).await?;
     let cache = mcp_client_cache();
     let guard = cache.lock().await;
     let cached = guard
         .get(&server.id)
-        .ok_or_else(|| format!("MCP runtime cache missing server '{}'", server.id))?;
+        .and_then(|member_map| member_map.get(&member_name))
+        .ok_or_else(|| {
+            format!(
+                "MCP runtime cache missing member '{member_name}' of server '{}'",
+                server.id
+            )
+        })?;
     Ok(cached.client.peer().clone())
 }
 
 async fn mcp_list_server_tools_runtime(server: &McpServerConfig) -> Result<Vec<McpToolDescriptor>, String> {
-    let (_peer, tools) = mcp_list_tools_with_peer(server).await?;
-
+    let members = parse_mcp_group_definitions(server)?;
     let mut out = Vec::<McpToolDescriptor>::new();
-    for def in tools {
-        let name = def.name.to_string();
-        let description = def.description.clone().unwrap_or_default().to_string();
-        out.push(McpToolDescriptor {
-            enabled: mcp_policy_enabled_for_tool(server, &name) && mcp_tool_allowed_by_definition(server, &name),
-            tool_name: name,
-            description,
-            parameters: serde_json::Value::Object(def.input_schema.as_ref().clone()),
-        });
+    let mut seen_names = std::collections::HashSet::<String>::new();
+    let mut duplicate_names = Vec::<String>::new();
+    for (member_name, _, _) in &members {
+        let (_peer, tools) = mcp_list_tools_with_peer(server, member_name).await?;
+        for def in tools {
+            let raw_name = def.name.to_string();
+            let prefixed = mcp_tool_prefixed_name(member_name, &raw_name);
+            if !seen_names.insert(prefixed.clone()) {
+                duplicate_names.push(prefixed.clone());
+                continue;
+            }
+            let description = def.description.clone().unwrap_or_default().to_string();
+            out.push(McpToolDescriptor {
+                enabled: mcp_policy_enabled_for_tool(server, &prefixed)
+                    && mcp_tool_allowed_by_definition(server, &prefixed),
+                tool_name: prefixed,
+                description,
+                parameters: serde_json::Value::Object(def.input_schema.as_ref().clone()),
+            });
+        }
+    }
+    if !duplicate_names.is_empty() {
+        return Err(format!(
+            "MCP 组内工具名重复: {}",
+            duplicate_names.join(", ")
+        ));
     }
     Ok(out)
 }

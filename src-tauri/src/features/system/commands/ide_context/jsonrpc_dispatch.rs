@@ -443,6 +443,7 @@ async fn ide_chat_handle_jsonrpc_request(
         "task_optimize_draft" => ide_chat_task_optimize_draft_for_web_settings(state, request.params).await,
         "mcp_list_servers" => ide_chat_mcp_list_servers_for_web_settings(state),
         "mcp_validate_definition" => ide_chat_mcp_validate_definition_for_web_settings(request.params),
+        "mcp_fix_definition" => ide_chat_mcp_fix_definition_for_web_settings(state, request.params).await,
         "mcp_save_server" => ide_chat_mcp_save_server_for_web_settings(state, request.params),
         "mcp_remove_server" => ide_chat_mcp_remove_server_for_web_settings(state, request.params).await,
         "mcp_list_server_tools" => ide_chat_mcp_list_server_tools_for_web_settings(state, request.params).await,

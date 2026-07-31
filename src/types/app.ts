@@ -524,6 +524,14 @@ export type RemoteImContactDashboardSyncResult = {
   changed: boolean;
 };
 
+export type McpValidationIssue = {
+  code: string;
+  message: string;
+  serverName?: string;
+  field?: string;
+  params?: Record<string, string>;
+};
+
 export type McpDefinitionValidateResult = {
   ok: boolean;
   transport?: string;
@@ -532,7 +540,16 @@ export type McpDefinitionValidateResult = {
   schemaVersion?: string;
   errorCode?: string;
   details?: string[];
+  issues?: McpValidationIssue[];
   migratedDefinitionJson?: string;
+};
+
+export type McpFixDefinitionResult = {
+  ok: boolean;
+  fixedDefinitionJson?: string;
+  message: string;
+  issues: McpValidationIssue[];
+  modelName?: string;
 };
 
 export type McpToolDescriptor = {

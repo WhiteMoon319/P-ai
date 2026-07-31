@@ -1250,6 +1250,7 @@ mod ide_context_tests {
         .to_string();
         let canonical = mcp_validate_definition_inner(McpDefinitionValidateInput {
             definition_json: definition_json.clone(),
+            existing_member_names: Vec::new(),
         })
         .expect("canonical validation");
         let web = ide_chat_mcp_validate_definition_for_web_settings(serde_json::json!({

@@ -1292,6 +1292,7 @@ fn main() {
             mcp_list_servers,
             mcp_validate_definition,
             mcp_save_server,
+            mcp_fix_definition,
             mcp_remove_server,
             mcp_deploy_server,
             mcp_undeploy_server,

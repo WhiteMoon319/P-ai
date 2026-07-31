@@ -53,6 +53,7 @@ impl CachedRuntimeToolSchema {
             permission_candidate_names: vec![
                 format!("{server_name}::{tool_name}"),
                 format!("{server_id}::{tool_name}"),
+                format!("{server_name}_{tool_name}"),
                 tool_name,
             ],
             definition,

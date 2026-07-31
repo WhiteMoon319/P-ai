@@ -1,5 +1,18 @@
 # 未发布
 
+## 功能：MCP 一卡一组，组内多服务器与工具名前缀
+
+- 功能（mcp-group-card）：一张 MCP 卡片即一组服务器，definitionJson 可整体保存多个服务器并整组启停；部署时组内每个服务器独立连接、工具合并，已有单卡单服务器数据自然兼容。
+- 功能（mcp-multi-format）：兼容 mcpServers 对象/数组、根级平铺对象、根级数组与单服务器直接字段五种嵌套格式；`headers` 作为 `httpHeaders` 别名，env 支持 `{value, secret}` 对象形态，`transport: "sse"` 与 `type` 别名识别。
+- 功能（mcp-tool-prefix）：MCP 工具名统一带 `{成员名}_{工具名}` 前缀暴露给 LLM，按最后一个下划线还原路由到对应成员；组内歧义前缀与跨卡片成员重名在部署/校验阶段报可读错误。
+- 功能（mcp-structured-errors）：MCP 校验错误改为结构化错误码 + 参数，前端按 i18n 渲染为可读文案（中/英/繁）。
+- 功能（mcp-ai-fix）：校验失败时可通过专家模型一键修复 MCP 配置格式，敏感字段值脱敏占位、修复后还原，结果回填编辑框由用户确认保存。
+
+## 功能：MCP 支持 SSE transport
+
+- 功能（mcp-sse-transport）：MCP 客户端新增 legacy SSE（HTTP+SSE）传输支持，连接 SSE 端点、经 endpoint 事件获取 message 地址后 POST JSON-RPC，响应经 SSE 通道异步返回；鉴权头在连接与 message 请求中均携带，不再将 `transport: "sse"` 静默降级为 streamable HTTP。
+- 依赖（rmcp-3）：rmcp 升级 2.1.0 → 3.0.1，适配 get_stream 签名变更与 sse-stream 0.2.5 的 API 更名。
+
 ## 功能：更新下载代理游标切换
 
 - 功能（updater-download-proxy-cursor）：自动与中转更新下载每次仅使用当前代理游标；请求失败、HTTP 非成功、响应流中断、下载总时限 10 分钟或内容长度不完整时，持久化推进至下一个 HTTPS 下载代理并结束本次更新；完整下载后保持当前游标，直连模式不受影响。

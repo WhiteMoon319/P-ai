@@ -8,9 +8,12 @@ fn normalize_mcp_server_input(input: McpServerInput) -> Result<McpServerConfig, 
     if definition_json.is_empty() {
         return Err("MCP definition JSON is required".to_string());
     }
-    let parsed_name = parse_mcp_server_definition(&definition_json)
-        .map(|(name, _)| name)
-        .unwrap_or_else(|_| id.clone());
+    // 卡片 = 一组 MCP：definitionJson 可包含多个服务器，整组原样保存
+    // 组内首个成员名作为解析名兜底
+    let parsed_name = parse_mcp_definition_servers(&definition_json)
+        .ok()
+        .and_then(|parsed| parsed.servers.into_iter().next().map(|(name, _)| name))
+        .unwrap_or_else(|| id.clone());
     let name = if input_name.is_empty() {
         parsed_name
     } else {
@@ -105,9 +108,21 @@ fn mcp_supervisor_remote_semaphore() -> Arc<tokio::sync::Semaphore> {
 }
 
 fn mcp_supervisor_semaphore_for_server(server: &McpServerConfig) -> Arc<tokio::sync::Semaphore> {
-    match parse_mcp_server_definition_from_config(server).map(|parsed| parsed.transport) {
-        Ok(McpTransportKind::Stdio) | Err(_) => mcp_supervisor_stdio_semaphore(),
-        Ok(McpTransportKind::StreamableHttp) => mcp_supervisor_remote_semaphore(),
+    // 组内任一成员为远程（streamable HTTP / SSE）时按远程并发控制
+    let has_remote = parse_mcp_group_definitions(server)
+        .map(|members| {
+            members.iter().any(|(_, _, parsed)| {
+                matches!(
+                    parsed.transport,
+                    McpTransportKind::StreamableHttp | McpTransportKind::Sse
+                )
+            })
+        })
+        .unwrap_or(false);
+    if has_remote {
+        mcp_supervisor_remote_semaphore()
+    } else {
+        mcp_supervisor_stdio_semaphore()
     }
 }
 
@@ -318,34 +333,60 @@ fn mcp_validate_definition_inner(
     input: McpDefinitionValidateInput,
 ) -> Result<McpDefinitionValidateResult, String> {
     let _schema = mcp_definition_json_schema();
-    match normalize_mcp_definition_for_validation(&input.definition_json) {
-        Ok((normalized_value, migrated)) => {
-            let normalized_text = serde_json::to_string(&normalized_value)
-                .map_err(|err| format!("序列化标准化 MCP 定义失败：{err}"))?;
-            let (name, parsed) = parse_mcp_server_definition(&normalized_text)?;
-            let _ = migrated;
-            let message = "MCP definition is valid".to_string();
-            Ok(McpDefinitionValidateResult {
-                ok: true,
-                transport: Some(parsed.transport.as_str().to_string()),
-                server_name: Some(name),
-                message,
-                schema_version: None,
-                error_code: None,
-                details: Vec::new(),
-                migrated_definition_json: None,
-            })
+    let (servers, mut issues) = validate_mcp_definition_servers(&input.definition_json);
+    let server_count = servers.len();
+    let first_transport = servers
+        .first()
+        .and_then(|(name, obj)| {
+            parse_mcp_server_definition_from_value(name, obj)
+                .ok()
+                .map(|parsed| parsed.transport.as_str().to_string())
+        });
+    let first_name = servers.first().map(|(name, _)| name.clone());
+
+    // 跨卡片成员重名检测：成员名相同则工具前缀必然冲突
+    if !input.existing_member_names.is_empty() {
+        for (name, _) in &servers {
+            if input
+                .existing_member_names
+                .iter()
+                .any(|n| n == name)
+            {
+                issues.push(
+                    McpValidationIssue::new(
+                        "duplicate_member_name",
+                        format!("server name '{name}' already exists in another group"),
+                    )
+                    .with_server(name),
+                );
+            }
         }
-        Err(err) => Ok(McpDefinitionValidateResult {
+    }
+
+    if issues.is_empty() {
+        Ok(McpDefinitionValidateResult {
+            ok: true,
+            transport: first_transport,
+            server_name: first_name,
+            message: format!("MCP definition is valid ({server_count} server(s))"),
+            schema_version: None,
+            error_code: None,
+            details: Vec::new(),
+            issues: Vec::new(),
+            migrated_definition_json: None,
+        })
+    } else {
+        Ok(McpDefinitionValidateResult {
             ok: false,
             transport: None,
             server_name: None,
-            message: err.message,
+            message: "MCP definition does not match required schema".to_string(),
             schema_version: None,
-            error_code: Some(err.code),
-            details: err.details,
+            error_code: Some("schema_validation_failed".to_string()),
+            details: issues.iter().map(|i| i.message.clone()).collect(),
+            issues,
             migrated_definition_json: None,
-        }),
+        })
     }
 }
 
@@ -504,6 +545,24 @@ async fn mcp_deploy_server_inner(
 
     let server = {
         let server = load_server_by_id(state, server_id)?;
+        // 跨卡片成员名冲突检测：成员名相同则工具前缀必然冲突
+        let current_members = parse_mcp_group_definitions(&server)?
+            .into_iter()
+            .map(|(name, _, _)| name)
+            .collect::<Vec<_>>();
+        let all_servers = load_workspace_mcp_servers(state)?;
+        for other in all_servers.iter().filter(|s| s.id != server_id && s.enabled) {
+            if let Ok(other_members) = parse_mcp_group_definitions(other) {
+                for (other_name, _, _) in other_members {
+                    if current_members.contains(&other_name) {
+                        return Err(format!(
+                            "MCP 成员名 '{other_name}' 与已部署的卡片 '{}' 冲突，工具前缀会重复，请先改名",
+                            other.name
+                        ));
+                    }
+                }
+            }
+        }
         set_workspace_mcp_policy_enabled(state, server_id, true)?;
         server
     };
@@ -595,4 +654,156 @@ fn mcp_set_tool_enabled_inner(
 #[tauri::command]
 fn mcp_open_workspace_dir(state: State<'_, AppState>) -> Result<String, String> {
     open_mcp_workspace_dir(&state)
+}
+
+// ========== AI 修复 MCP 格式（专家模型 + 脱敏还原） ==========
+
+const MCP_FIX_REDACTED_PREFIX: &str = "__PAI_REDACTED_";
+
+/// 把 definitionJson 中敏感字段值替换为占位符，返回 (脱敏文本, 占位符→原值映射)
+fn redact_mcp_definition_sensitive_values(definition_json: &str) -> (String, Vec<(String, String)>) {
+    let mut mapping = Vec::<(String, String)>::new();
+    let Ok(mut value) = serde_json::from_str::<Value>(definition_json) else {
+        return (definition_json.to_string(), mapping);
+    };
+    let mut counter = 0usize;
+    redact_mcp_value(&mut value, &mut counter, &mut mapping);
+    let text = serde_json::to_string(&value).unwrap_or_else(|_| definition_json.to_string());
+    (text, mapping)
+}
+
+fn redact_mcp_value(
+    value: &mut Value,
+    counter: &mut usize,
+    mapping: &mut Vec<(String, String)>,
+) {
+    let Some(obj) = value.as_object_mut() else {
+        return;
+    };
+    for key in ["env", "headers", "httpHeaders"] {
+        if let Some(map) = obj.get_mut(key).and_then(Value::as_object_mut) {
+            for v in map.values_mut() {
+                let Some(text) = v.as_str() else {
+                    continue;
+                };
+                if text.starts_with(MCP_FIX_REDACTED_PREFIX) {
+                    continue;
+                }
+                *counter += 1;
+                let placeholder = format!("{MCP_FIX_REDACTED_PREFIX}{counter}");
+                mapping.push((placeholder.clone(), text.to_string()));
+                *v = Value::String(placeholder);
+            }
+        }
+    }
+}
+
+fn restore_mcp_definition_sensitive_values(
+    fixed_json: &str,
+    mapping: &[(String, String)],
+) -> String {
+    let mut text = fixed_json.to_string();
+    for (placeholder, original) in mapping {
+        text = text.replace(placeholder, original);
+    }
+    text
+}
+
+fn build_mcp_fix_prompt(definition_json: &str, issues: &[McpValidationIssue]) -> String {
+    let mut issue_lines = String::new();
+    for issue in issues {
+        let server = issue
+            .server_name
+            .as_deref()
+            .map(|name| format!("[{name}] "))
+            .unwrap_or_default();
+        issue_lines.push_str(&format!("- {server}{} ({})\n", issue.message, issue.code));
+    }
+    if issue_lines.is_empty() {
+        issue_lines.push_str("- 无\n");
+    }
+    format!(
+        "你是 MCP 配置修复专家。下面是用户粘贴的 MCP 服务器配置 JSON 与校验错误列表。\n\
+         请修复该 JSON，使其成为合法的 MCP 配置（支持 mcpServers 对象、平铺命名对象、数组等任意常见格式）。\n\
+         要求：\n\
+         1. 只修复格式与结构问题，不要更改服务器名称、command、url、args、env 等字段的值\n\
+         2. 不要新增或删除服务器，不要改变服务器数量\n\
+         3. 以 __PAI_REDACTED_ 开头的值是敏感占位符，必须原样保留，不要改动\n\
+         4. 输出格式必须是 JSON 对象：{{\"definition\": <修复后的完整 MCP 配置 JSON>}}\n\n\
+         原始 JSON：\n{definition_json}\n\n\
+         校验错误：\n{issue_lines}"
+    )
+}
+
+#[tauri::command]
+async fn mcp_fix_definition(
+    input: McpFixDefinitionInput,
+    state: State<'_, AppState>,
+) -> Result<McpFixDefinitionResult, String> {
+    mcp_fix_definition_inner(input, state.inner()).await
+}
+
+async fn mcp_fix_definition_inner(
+    input: McpFixDefinitionInput,
+    state: &AppState,
+) -> Result<McpFixDefinitionResult, String> {
+    let definition_json = input.definition_json.trim().to_string();
+    if definition_json.is_empty() {
+        return Err("MCP definition JSON is required".to_string());
+    }
+    let (_, current_issues) = validate_mcp_definition_servers(&definition_json);
+    if current_issues.is_empty() {
+        return Ok(McpFixDefinitionResult {
+            ok: true,
+            fixed_definition_json: Some(definition_json),
+            message: "配置已合法，无需修复".to_string(),
+            issues: Vec::new(),
+            model_name: None,
+        });
+    }
+
+    let (redacted_json, mapping) = redact_mcp_definition_sensitive_values(&definition_json);
+    let prompt = build_mcp_fix_prompt(&redacted_json, &current_issues);
+    let output = invoke_expert_model_json_result(
+        state,
+        "mcp_fix_definition",
+        &prompt,
+        Some(MCP_REQUEST_TIMEOUT_SECS),
+        &["definition"],
+        &[],
+    )
+    .await
+    .map_err(|err| format!("AI 修复请求失败: {}", err.message))?;
+
+    let definition_value = output
+        .value
+        .get("definition")
+        .cloned()
+        .ok_or_else(|| "AI 修复结果缺少 definition 字段".to_string())?;
+    let fixed_raw = match definition_value {
+        Value::String(text) => text,
+        other => serde_json::to_string(&other)
+            .map_err(|err| format!("序列化 AI 修复结果失败: {err}"))?,
+    };
+    let fixed_json = restore_mcp_definition_sensitive_values(&fixed_raw, &mapping);
+
+    // 修复结果必须可解析且校验通过
+    let (_, fixed_issues) = validate_mcp_definition_servers(&fixed_json);
+    if !fixed_issues.is_empty() {
+        return Ok(McpFixDefinitionResult {
+            ok: false,
+            fixed_definition_json: Some(fixed_json),
+            message: format!("AI 修复完成但仍有问题（模型：{}）", output.model_name),
+            issues: fixed_issues,
+            model_name: Some(output.model_name),
+        });
+    }
+
+    Ok(McpFixDefinitionResult {
+        ok: true,
+        fixed_definition_json: Some(fixed_json),
+        message: format!("AI 修复完成（模型：{}）", output.model_name),
+        issues: Vec::new(),
+        model_name: Some(output.model_name),
+    })
 }
