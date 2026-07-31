@@ -17,6 +17,15 @@ use zip::ZipArchive;
 const UPDATER_GITHUB_PROXY_PREFIX: &str = "https://gh-proxy.org/";
 const UPDATER_GITHUB_EDGEONE_PROXY_PREFIX: &str = "https://edgeone.gh-proxy.org/";
 const UPDATER_GITHUB_HK_PROXY_PREFIX: &str = "https://hk.gh-proxy.org/";
+const UPDATER_GITHUB_DOWNLOAD_PROXY_PREFIXES: &[&str] = &[
+    "https://gh-proxy.com/",
+    "https://ghproxy.net/",
+    "https://ghproxy.homeboyc.cn/",
+    "https://github.akams.cn/",
+    UPDATER_GITHUB_PROXY_PREFIX,
+    UPDATER_GITHUB_EDGEONE_PROXY_PREFIX,
+    UPDATER_GITHUB_HK_PROXY_PREFIX,
+];
 const UPDATER_GITHUB_RELEASE_API_ORIGIN: &str =
     "https://api.github.com/repos/kawayiYokami/P-ai/releases/latest";
 const UPDATER_GITHUB_CHANGELOG_LATEST_RAW_ORIGIN: &str =
@@ -49,6 +58,8 @@ const UPDATE_STAGE_FAILED: &str = "failed";
 const GITHUB_AUTO_UPDATE_COOLDOWN_HOURS: i64 = 8;
 const GITHUB_AUTO_UPDATE_POLL_MINUTES: u64 = 10;
 const GITHUB_AUTO_UPDATE_STARTUP_DELAY_SECONDS: u64 = 45;
+const GITHUB_UPDATE_DOWNLOAD_TIMEOUT_SECONDS: u64 = 10 * 60;
+const GITHUB_UPDATE_PROXY_CURSOR_FILE_NAME: &str = "github-update-proxy-cursor.json";
 
 static UPDATE_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 static UPDATE_CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
@@ -146,6 +157,11 @@ struct GithubLatestReleasePayload {
     html_url: Option<String>,
     body: Option<String>,
     published_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
+struct GithubUpdateProxyCursor {
+    index: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -253,23 +269,85 @@ fn updater_manifest_fallback_urls(origin: &str, method: GithubUpdateMethod) -> V
     }
 }
 
-fn updater_download_fallback_urls(origin: &str, method: GithubUpdateMethod) -> Vec<String> {
+fn updater_download_endpoint(origin: &str, method: GithubUpdateMethod, cursor: usize) -> String {
     match method {
-        GithubUpdateMethod::Auto => vec![
-            format!("{UPDATER_GITHUB_PROXY_PREFIX}{origin}"),
-            format!("{UPDATER_GITHUB_HK_PROXY_PREFIX}{origin}"),
-            origin.to_string(),
-        ],
-        GithubUpdateMethod::Direct => vec![origin.to_string()],
-        GithubUpdateMethod::Proxy => vec![
-            format!("{UPDATER_GITHUB_PROXY_PREFIX}{origin}"),
-            format!("{UPDATER_GITHUB_HK_PROXY_PREFIX}{origin}"),
-        ],
+        GithubUpdateMethod::Direct => origin.to_string(),
+        GithubUpdateMethod::Auto | GithubUpdateMethod::Proxy => {
+            let prefix = UPDATER_GITHUB_DOWNLOAD_PROXY_PREFIXES
+                [cursor % UPDATER_GITHUB_DOWNLOAD_PROXY_PREFIXES.len()];
+            format!("{prefix}{origin}")
+        }
     }
 }
 
+fn github_update_proxy_cursor_path(runtime: &UpdateRuntimePaths) -> StdPathBuf {
+    runtime.data_dir.join(GITHUB_UPDATE_PROXY_CURSOR_FILE_NAME)
+}
+
+fn read_github_update_proxy_cursor(runtime: &UpdateRuntimePaths) -> usize {
+    let path = github_update_proxy_cursor_path(runtime);
+    let Ok(raw) = std_fs::read_to_string(&path) else {
+        return 0;
+    };
+    match serde_json::from_str::<GithubUpdateProxyCursor>(&raw) {
+        Ok(cursor) => cursor.index % UPDATER_GITHUB_DOWNLOAD_PROXY_PREFIXES.len(),
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[自动更新] 读取代理游标失败，已回退首个代理：path={}，error={err}",
+                path.display()
+            ));
+            0
+        }
+    }
+}
+
+fn next_github_update_proxy_cursor(current: usize) -> usize {
+    (current + 1) % UPDATER_GITHUB_DOWNLOAD_PROXY_PREFIXES.len()
+}
+
+fn advance_github_update_proxy_cursor(
+    runtime: &UpdateRuntimePaths,
+    current: usize,
+) -> Result<usize, String> {
+    let next = next_github_update_proxy_cursor(current);
+    let path = github_update_proxy_cursor_path(runtime);
+    let content = serde_json::to_vec_pretty(&GithubUpdateProxyCursor { index: next })
+        .map_err(|err| format!("序列化更新代理游标失败：{err}"))?;
+    if let Some(parent) = path.parent() {
+        std_fs::create_dir_all(parent)
+            .map_err(|err| format!("创建更新代理游标目录失败（{}）：{err}", parent.display()))?;
+    }
+    std_fs::write(&path, content)
+        .map_err(|err| format!("写入更新代理游标失败（{}）：{err}", path.display()))?;
+    runtime_log_warn(format!(
+        "[自动更新] 下载代理失败，游标已切换：{} -> {}",
+        current, next
+    ));
+    Ok(next)
+}
+
+fn finish_failed_update_download(
+    runtime: &UpdateRuntimePaths,
+    method: GithubUpdateMethod,
+    cursor: usize,
+    reason: String,
+) -> Result<String, String> {
+    ensure_update_not_cancelled()?;
+    if !matches!(method, GithubUpdateMethod::Auto | GithubUpdateMethod::Proxy) {
+        return Ok(reason);
+    }
+    let next = advance_github_update_proxy_cursor(runtime, cursor)
+        .map_err(|err| format!("{reason}；切换代理失败：{err}"))?;
+    Ok(format!(
+        "{reason}；已切换到下一个下载代理（游标 {cursor} -> {next}），请重新发起更新"
+    ))
+}
+
 fn strip_known_proxy_prefix(url: &str) -> &str {
-    url.strip_prefix(UPDATER_GITHUB_PROXY_PREFIX)
+    UPDATER_GITHUB_DOWNLOAD_PROXY_PREFIXES
+        .iter()
+        .find_map(|prefix| url.strip_prefix(prefix))
+        .or_else(|| url.strip_prefix(UPDATER_GITHUB_PROXY_PREFIX))
         .or_else(|| url.strip_prefix(UPDATER_GITHUB_EDGEONE_PROXY_PREFIX))
         .or_else(|| url.strip_prefix(UPDATER_GITHUB_HK_PROXY_PREFIX))
         .unwrap_or(url)
@@ -305,7 +383,10 @@ fn ensure_update_not_cancelled() -> Result<(), String> {
 }
 
 fn endpoint_access_mode(url: &str) -> &'static str {
-    if url.starts_with(UPDATER_GITHUB_PROXY_PREFIX)
+    if UPDATER_GITHUB_DOWNLOAD_PROXY_PREFIXES
+        .iter()
+        .any(|prefix| url.starts_with(prefix))
+        || url.starts_with(UPDATER_GITHUB_PROXY_PREFIX)
         || url.starts_with(UPDATER_GITHUB_EDGEONE_PROXY_PREFIX)
         || url.starts_with(UPDATER_GITHUB_HK_PROXY_PREFIX)
     {
@@ -1173,7 +1254,8 @@ async fn check_updater_with_manifest_fallbacks(
     Err(last_error)
 }
 
-async fn download_update_with_proxy_fallbacks<C, D>(
+async fn download_update_with_proxy_cursor<C, D>(
+    runtime: &UpdateRuntimePaths,
     update: &tauri_plugin_updater::Update,
     method: GithubUpdateMethod,
     mut on_chunk: C,
@@ -1187,82 +1269,101 @@ where
     use futures_util::StreamExt as _;
 
     let client = reqwest::Client::builder()
+        .timeout(StdDuration::from_secs(
+            GITHUB_UPDATE_DOWNLOAD_TIMEOUT_SECONDS,
+        ))
         .build()
         .map_err(|err| format!("初始化更新下载客户端失败：{err}"))?;
     let origin_url = strip_known_proxy_prefix(update.download_url.as_str()).to_string();
-    let mut on_download_finish = Some(on_download_finish);
-    let mut last_error = String::new();
-    for endpoint in updater_download_fallback_urls(&origin_url, method) {
-        for attempt in 1..=3 {
-            ensure_update_not_cancelled()?;
-            let response = match client
-                .get(&endpoint)
-                .header(
-                    reqwest::header::USER_AGENT,
-                    format!("p-ai/{}", env!("CARGO_PKG_VERSION")),
-                )
-                .send()
-                .await
-            {
-                Ok(response) => response,
-                Err(err) => {
-                    last_error = format!(
-                        "{download_failed_prefix}（地址：{endpoint}，第 {attempt} 次）：{err}"
-                    );
-                    continue;
-                }
-            };
-            if !response.status().is_success() {
-                last_error = format!(
-                    "{download_failed_prefix}（地址：{endpoint}，第 {attempt} 次）：HTTP {}",
-                    response.status().as_u16()
-                );
-                continue;
+    let cursor = read_github_update_proxy_cursor(runtime);
+    let endpoint = updater_download_endpoint(&origin_url, method, cursor);
+    runtime_log_info(format!(
+        "[自动更新] 开始下载更新：proxy_cursor={}，endpoint={endpoint}",
+        cursor
+    ));
+    ensure_update_not_cancelled()?;
+    let response = match client
+        .get(&endpoint)
+        .header(
+            reqwest::header::USER_AGENT,
+            format!("p-ai/{}", env!("CARGO_PKG_VERSION")),
+        )
+        .send()
+        .await
+    {
+        Ok(response) => response,
+        Err(err) => {
+            return Err(finish_failed_update_download(
+                runtime,
+                method,
+                cursor,
+                format!("{download_failed_prefix}（地址：{endpoint}）：{err}"),
+            )?);
+        }
+    };
+    if !response.status().is_success() {
+        return Err(finish_failed_update_download(
+            runtime,
+            method,
+            cursor,
+            format!(
+                "{download_failed_prefix}（地址：{endpoint}）：HTTP {}",
+                response.status().as_u16()
+            ),
+        )?);
+    }
+    let content_length = response.content_length();
+    let mut stream = response.bytes_stream();
+    let mut bytes = Vec::<u8>::new();
+    while let Some(chunk) = stream.next().await {
+        ensure_update_not_cancelled()?;
+        match chunk {
+            Ok(chunk) => {
+                on_chunk(chunk.len(), content_length);
+                bytes.extend_from_slice(&chunk);
             }
-            let content_length = response.content_length();
-            let mut stream = response.bytes_stream();
-            let mut bytes = Vec::<u8>::new();
-            let mut download_error: Option<String> = None;
-            while let Some(chunk) = stream.next().await {
-                if let Err(err) = ensure_update_not_cancelled() {
-                    download_error = Some(err);
-                    break;
-                }
-                match chunk {
-                    Ok(chunk) => {
-                        on_chunk(chunk.len(), content_length);
-                        bytes.extend_from_slice(&chunk);
-                    }
-                    Err(err) => {
-                        download_error = Some(format!(
-                            "{download_failed_prefix}（地址：{endpoint}，第 {attempt} 次）：{err}"
-                        ));
-                        break;
-                    }
-                }
+            Err(err) => {
+                return Err(finish_failed_update_download(
+                    runtime,
+                    method,
+                    cursor,
+                    format!("{download_failed_prefix}（地址：{endpoint}）：{err}"),
+                )?);
             }
-            if let Some(err) = download_error {
-                last_error = err;
-                continue;
-            }
-            ensure_update_not_cancelled()?;
-            if let Some(callback) = on_download_finish.take() {
-                callback();
-            }
-            return Ok(bytes);
         }
     }
-    Err(last_error)
+    ensure_update_not_cancelled()?;
+    if let Some(expected) = content_length {
+        let actual = bytes.len() as u64;
+        if actual != expected {
+            return Err(finish_failed_update_download(
+                runtime,
+                method,
+                cursor,
+                format!(
+                    "{download_failed_prefix}（地址：{endpoint}）：下载大小不完整，期望 {expected} 字节，实际 {actual} 字节"
+                ),
+            )?);
+        }
+    }
+    on_download_finish();
+    runtime_log_info(format!(
+        "[自动更新] 更新下载完成：proxy_cursor={}，bytes={}",
+        cursor,
+        bytes.len()
+    ));
+    Ok(bytes)
 }
 
 async fn prepare_installer_update(
     app: &AppHandle,
+    runtime: &UpdateRuntimePaths,
     force: bool,
     method: GithubUpdateMethod,
 ) -> Result<(), String> {
     ensure_update_not_cancelled()?;
     let current_version = env!("CARGO_PKG_VERSION").to_string();
-    let runtime_kind = UpdateRuntimeKind::Installer;
+    let runtime_kind = runtime.runtime_kind;
     let update = check_updater_with_manifest_fallbacks(
         app,
         runtime_kind,
@@ -1294,7 +1395,8 @@ async fn prepare_installer_update(
             None,
         ),
     );
-    let bytes = download_update_with_proxy_fallbacks(
+    let bytes = download_update_with_proxy_cursor(
+        runtime,
         &update,
         method,
         {
@@ -1365,12 +1467,12 @@ async fn prepare_installer_update(
 
 async fn prepare_portable_update(
     app: &AppHandle,
+    runtime: &UpdateRuntimePaths,
     force: bool,
     method: GithubUpdateMethod,
 ) -> Result<(), String> {
     ensure_update_not_cancelled()?;
     let current_version = env!("CARGO_PKG_VERSION").to_string();
-    let runtime = detect_update_runtime_paths()?;
     let update = check_updater_with_manifest_fallbacks(
         app,
         runtime.runtime_kind,
@@ -1410,7 +1512,8 @@ async fn prepare_portable_update(
             None,
         ),
     );
-    let bytes = download_update_with_proxy_fallbacks(
+    let bytes = download_update_with_proxy_cursor(
+        runtime,
         &update,
         method,
         {
@@ -1605,8 +1708,12 @@ async fn start_github_update(
     let method = GithubUpdateMethod::from_raw(update_method);
     let runtime = detect_update_runtime_paths()?;
     let result = match runtime.runtime_kind {
-        UpdateRuntimeKind::Installer => prepare_installer_update(&app, force, method).await,
-        UpdateRuntimeKind::Portable => prepare_portable_update(&app, force, method).await,
+        UpdateRuntimeKind::Installer => {
+            prepare_installer_update(&app, &runtime, force, method).await
+        }
+        UpdateRuntimeKind::Portable => {
+            prepare_portable_update(&app, &runtime, force, method).await
+        }
     };
     if let Err(err) = &result {
         let cancelled = is_update_cancelled_error(err);
@@ -1974,12 +2081,46 @@ fn maybe_run_portable_update_helper_from_args() -> Result<bool, String> {
 
 #[cfg(test)]
 mod updater_release_page_tests {
-    use super::updater_release_page_url;
+    use super::{
+        next_github_update_proxy_cursor, updater_download_endpoint, updater_release_page_url,
+        GithubUpdateMethod, UPDATER_GITHUB_DOWNLOAD_PROXY_PREFIXES,
+    };
 
     #[test]
     fn release_page_url_keeps_original_github_page() {
         let origin = "https://github.com/kawayiYokami/P-ai/releases/latest";
 
         assert_eq!(updater_release_page_url(origin), origin);
+    }
+
+    #[test]
+    fn download_endpoint_uses_only_current_proxy_cursor() {
+        let origin = "https://github.com/kawayiYokami/P-ai/releases/download/v0.41.0/P-ai.zip";
+
+        assert_eq!(
+            updater_download_endpoint(origin, GithubUpdateMethod::Proxy, 2),
+            format!("{}{}", UPDATER_GITHUB_DOWNLOAD_PROXY_PREFIXES[2], origin)
+        );
+        assert_eq!(
+            updater_download_endpoint(origin, GithubUpdateMethod::Proxy, 3),
+            format!("{}{}", UPDATER_GITHUB_DOWNLOAD_PROXY_PREFIXES[3], origin)
+        );
+    }
+
+    #[test]
+    fn download_proxy_cursor_wraps_after_last_proxy() {
+        let last = UPDATER_GITHUB_DOWNLOAD_PROXY_PREFIXES.len() - 1;
+
+        assert_eq!(next_github_update_proxy_cursor(last), 0);
+    }
+
+    #[test]
+    fn direct_download_endpoint_does_not_use_proxy_cursor() {
+        let origin = "https://github.com/kawayiYokami/P-ai/releases/download/v0.41.0/P-ai.zip";
+
+        assert_eq!(
+            updater_download_endpoint(origin, GithubUpdateMethod::Direct, 3),
+            origin
+        );
     }
 }
