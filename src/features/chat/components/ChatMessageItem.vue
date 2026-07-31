@@ -1086,7 +1086,17 @@ function stripToolcallMarkers(text: string): string {
 
 function activityToolArgsText(item: ChatActivityItem): string {
   if (item.kind !== "tool") return "";
-  return String(item.argsText || "");
+  const raw = String(item.argsText || "");
+  if (!raw.trim()) return raw;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed !== null && parsed !== undefined && (typeof parsed === "object" || Array.isArray(parsed))) {
+      return JSON.stringify(parsed, null, 2);
+    }
+  } catch {
+    // 非 JSON 原文保留
+  }
+  return raw;
 }
 
 function activityItemMarker(item: ChatActivityItem): string {
