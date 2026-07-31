@@ -1,0 +1,10 @@
+#!/bin/sh
+
+set -eu
+
+if ! git diff --cached --quiet -- .pai/; then
+    printf '%s\n' '提交已拒绝：暂存区包含 .pai/ 目录下的文件。' >&2
+    printf '%s\n' '请取消暂存这些文件；如确有必要，必须显式使用 git commit --no-verify。' >&2
+    git diff --cached --name-status -- .pai/ >&2
+    exit 1
+fi
