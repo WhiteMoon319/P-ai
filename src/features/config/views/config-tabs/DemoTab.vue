@@ -147,7 +147,6 @@
               :tone="message.tone"
               :name="message.name"
               :meta="message.meta"
-              :avatar-text="message.avatarText"
               :avatar-url="message.avatarUrl"
               :streaming="!!message.streaming"
               :separated="message.separated"
@@ -295,7 +294,6 @@ type BubbleDemoMessage = {
   personaSlot: "assistant-primary" | "assistant-reviewer" | "assistant-memory" | "assistant-system" | "user";
   name: string;
   meta: string;
-  avatarText: string;
   reasoning?: string[];
   tools?: Array<{
     name: string;
@@ -435,7 +433,6 @@ const bubbleDemoMessages: BubbleDemoMessage[] = [
     personaSlot: "assistant-primary",
     name: "Pai",
     meta: "刚刚",
-    avatarText: "P",
     reasoning: [
       "**Considering layout migration** The user wants to replace DaisyUI chat with a lighter custom message shell.",
       "Need preserve current activity presentation while separating assistant content from user bubbles.",
@@ -459,7 +456,6 @@ const bubbleDemoMessages: BubbleDemoMessage[] = [
     personaSlot: "assistant-reviewer",
     name: "代码审查员",
     meta: "刚刚",
-    avatarText: "审",
     reasoning: [
       "**Reviewing assistant identity** Multiple assistant speakers should stay visually distinct without adding bubbles.",
       "The content column must align name, activity, final answer, and footer under the same speaker identity.",
@@ -482,7 +478,6 @@ const bubbleDemoMessages: BubbleDemoMessage[] = [
     personaSlot: "user",
     name: "我",
     meta: "1 分钟前",
-    avatarText: "我",
     lines: [
       "右侧也保持同一套结构：头像在右，名称和气泡右对齐，不再依赖 DaisyUI chat 的网格。",
     ],
@@ -499,7 +494,6 @@ const bubbleDemoMessages: BubbleDemoMessage[] = [
     personaSlot: "user",
     name: "我",
     meta: "刚刚",
-    avatarText: "我",
     lines: ["这是一条全附件气泡，用来观察不同附件内容放在一起时的层级。"],
     attachments: [
       { kind: "image", label: "screenshot.png", src: bubbleDemoAttachmentImage },
@@ -517,7 +511,6 @@ const bubbleDemoMessages: BubbleDemoMessage[] = [
     personaSlot: "assistant-memory",
     name: "记忆管家",
     meta: "1 分钟前",
-    avatarText: "忆",
     tools: [
       { name: "exec", detail: 'rg -n "ChatBubbleShell|message footer" src/features/chat', icon: "terminal" },
     ],
@@ -535,7 +528,6 @@ const bubbleDemoMessages: BubbleDemoMessage[] = [
     personaSlot: "assistant-system",
     name: "系统人格",
     meta: "2 分钟前",
-    avatarText: "系",
     reasoning: [
       "**Preparing demo patch** Keep the current activity visual language, but make sample tool content match real runtime traces.",
       "The final answer below should remain independent from activity, so future rendering can lazy-load details.",
@@ -577,7 +569,6 @@ const bubbleDemoDisplayMessages = computed<BubbleDemoDisplayMessage[]>(() =>
     return {
       ...message,
       name,
-      avatarText: personaAvatarText(name, message.avatarText),
       avatarUrl: String((persona?.id ? props.personaAvatarUrlMap[persona.id] : "") || "").trim(),
       separated: !!previous && message.tone !== "user" && previous.tone !== "user" && message.side === previous.side,
     };
@@ -606,11 +597,6 @@ function bubbleDemoPersona(slot: BubbleDemoMessage["personaSlot"]): PersonaProfi
   if (slot === "assistant-reviewer") return alternates[0] ?? assistants[1] ?? primary;
   if (slot === "assistant-memory") return alternates[1] ?? assistants[2] ?? primary;
   return alternates[2] ?? assistants[3] ?? primary;
-}
-
-function personaAvatarText(name: string, fallback: string): string {
-  const trimmed = String(name || fallback || "").trim();
-  return trimmed ? trimmed.slice(0, 2) : fallback;
 }
 
 function detailsOpenFromEvent(event: Event): boolean {

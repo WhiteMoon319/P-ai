@@ -39,7 +39,6 @@
       :tone="messageShellTone(block)"
       :name="displayName"
       :meta="assistantMetaText"
-      :avatar-text="avatarInitial(displayName)"
       :avatar-url="avatarUrl"
       :streaming="!!streamingHeaderStatus"
       :streaming-text="streamingHeaderStatus"
@@ -733,12 +732,6 @@ function collapseDetailsFromContentClick(event: MouseEvent): void {
   if (details instanceof HTMLDetailsElement) {
     details.open = false;
   }
-}
-
-function avatarInitial(name: string): string {
-  const text = (name || "").trim();
-  if (!text) return "?";
-  return text[0].toUpperCase();
 }
 
 function messageName(block: ChatMessageBlock): string {

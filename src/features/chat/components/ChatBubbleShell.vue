@@ -1,10 +1,9 @@
 <template>
-  <div :class="['ecall-chat-bubble-shell', `ecall-chat-bubble-shell-${side}`, `ecall-chat-bubble-tone-${tone}`, { 'ecall-chat-bubble-separated': separated, 'ecall-chat-bubble-wide': wide }]">
+  <div :class="['ecall-chat-bubble-shell', `ecall-chat-bubble-shell-${side}`, `ecall-chat-bubble-tone-${tone}`, { 'ecall-chat-bubble-separated': separated, 'ecall-chat-bubble-wide': wide, 'ecall-chat-bubble-no-avatar': !avatarUrl }]">
     <template v-if="tone === 'user'">
       <div class="ecall-chat-bubble-user-row">
-        <div class="ecall-chat-bubble-avatar" :title="name">
-          <img v-if="avatarUrl" :src="avatarUrl" :alt="name" />
-          <span v-else>{{ avatarLabel }}</span>
+        <div v-if="avatarUrl" class="ecall-chat-bubble-avatar" :title="name">
+          <img :src="avatarUrl" :alt="name" />
         </div>
 
         <div class="ecall-chat-bubble-body">
@@ -21,9 +20,8 @@
 
     <template v-else>
       <div class="ecall-chat-bubble-head">
-        <div class="ecall-chat-bubble-avatar" :title="name">
-          <img v-if="avatarUrl" :src="avatarUrl" :alt="name" />
-          <span v-else>{{ avatarLabel }}</span>
+        <div v-if="avatarUrl" class="ecall-chat-bubble-avatar" :title="name">
+          <img :src="avatarUrl" :alt="name" />
         </div>
 
         <div class="ecall-chat-bubble-main">
@@ -63,7 +61,6 @@ const props = withDefaults(defineProps<{
   tone?: "assistant" | "user" | "system";
   name: string;
   meta?: string;
-  avatarText?: string;
   avatarUrl?: string;
   streaming?: boolean;
   streamingText?: string;
@@ -75,7 +72,6 @@ const props = withDefaults(defineProps<{
   side: "left",
   tone: "assistant",
   meta: "",
-  avatarText: "",
   avatarUrl: "",
   streaming: false,
   streamingText: "",
@@ -83,13 +79,6 @@ const props = withDefaults(defineProps<{
   wide: false,
   bubbleBackground: false,
   contentEmpty: false,
-});
-
-const avatarLabel = computed(() => {
-  const explicit = String(props.avatarText || "").trim();
-  if (explicit) return explicit.slice(0, 2).toUpperCase();
-  const name = String(props.name || "").trim();
-  return (name ? name.slice(0, 1) : "?").toUpperCase();
 });
 
 const surfaceStyle = computed<StyleValue | undefined>(() => {
@@ -229,6 +218,31 @@ const surfaceStyle = computed<StyleValue | undefined>(() => {
 
 .ecall-chat-bubble-shell-right:not(.ecall-chat-bubble-tone-user) .ecall-chat-bubble-body {
   justify-self: end;
+}
+
+/* ========== 无头像：不占头像列，内容直接对齐 ========== */
+.ecall-chat-bubble-shell-no-avatar:not(.ecall-chat-bubble-tone-user) {
+  grid-template-columns: minmax(0, min(var(--ecall-bubble-max-width), 100%));
+  grid-template-areas:
+    "main"
+    "body";
+}
+
+.ecall-chat-bubble-shell-no-avatar:not(.ecall-chat-bubble-tone-user) .ecall-chat-bubble-body {
+  padding-left: 0;
+}
+
+.ecall-chat-bubble-shell-no-avatar.ecall-chat-bubble-separated::before {
+  left: 0;
+}
+
+.ecall-chat-bubble-shell-no-avatar.ecall-chat-bubble-shell-right.ecall-chat-bubble-separated::before {
+  right: 0;
+  left: auto;
+}
+
+.ecall-chat-bubble-shell-no-avatar.ecall-chat-bubble-tone-user .ecall-chat-bubble-body {
+  max-width: min(var(--ecall-bubble-max-width), 100%);
 }
 
 .ecall-chat-bubble-avatar {
