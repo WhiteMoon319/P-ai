@@ -160,7 +160,7 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       getItemKey: (index: number) => renderItems.value[index]?.id ?? `row-${index}`,
       // 不用预估高度参与 absolute 行定位。富文本、工具、图片和代码块没有可靠上界，
       // 低估会让后一行在首帧压住前一行；挂载后统一以真实行元素实测高度定位。
-      estimateSize: () => 0,
+      estimateSize: () => 1,
       initialOffset: () => initialBottomOffset.value,
       scrollToFn: virtualizerScrollToFn,
       anchorTo: "end",
