@@ -61,7 +61,7 @@ jobs:
           echo "Updated $GRADLE:"
           grep -n 'usesCleartextTraffic' "$GRADLE" || true
 
-      - name: Inject git-based version (MAA-Meow style)
+      - name: Inject git-based version
         run: bash scripts/patch-android-version.sh
 
       - name: Copy Android app icons

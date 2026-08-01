@@ -1,6 +1,6 @@
 # 未发布
 
-- 重构（android-ci）：Android 构建 CI 改为 debug 包构建，触发分支改为 `main`/`dev`；APK 版本号与命名参照 MAA-Meow 改为 git 派生（`versionCode` = 提交总数，`versionName` = `git describe` 派生），新增 `scripts/patch-android-version.sh` 注入版本逻辑；只上传签名后的 debug APK，重命名为 `P-ai-${GITHUB_REF_NAME}-aarch64.apk` 到 artifact。
+- 重构（android-ci）：Android 构建 CI 改为 debug 包构建，触发分支改为 `main`/`dev`；APK 版本号与命名改为 git 派生（`versionCode` = 提交总数，`versionName` = `git describe` 派生），新增 `scripts/patch-android-version.sh` 注入版本逻辑；只上传签名后的 debug APK，重命名为 `P-ai-${GITHUB_REF_NAME}-aarch64.apk` 到 artifact。
 - 调整（android-ci）：debug 构建 workflow 仅监听 `dev` 分支（`main` 只由 release tag 流程覆盖）。
 - 修复（android-ci）：修复 `patch-android-version.sh` 注入的 Kotlin `Regex` 语法错误（`r"""` 前缀非法，Kotlin 三引号本身即 raw string），导致 Android release 构建失败。
 - 新增（android-ci）：新增 Android release CI workflow，`v*` tag 推送或手动触发，release 构建后使用仓库 secrets（`KEYSTORE_BASE64`/`KEYSTORE_PASSWORD`/`KEY_ALIAS`/`KEY_PASSWORD`）签名并 verify，发布签名 APK 到 GitHub Release。

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 将 MAA-Meow 式 git 驱动版本号注入 Tauri Android 工程（CI 中 init 后执行，幂等）。
+# 将 git 驱动版本号注入 Tauri Android 工程（CI 中 init 后执行，幂等）。
 # versionCode = git rev-list --count HEAD
 # versionName = git describe --tags --always 派生：
 #   精确 tag vX.Y.Z            -> X.Y.Z
@@ -25,8 +25,7 @@ python3 - "$GRADLE" <<'PY'
 import sys
 path = sys.argv[1]
 src = open(path, encoding='utf-8').read()
-block = r'''// git 驱动版本号（参照 MAA-Meow）：versionCode = 提交总数，versionName = git describe 派生
-val gitVersionCode: Int by lazy {
+block = r'''val gitVersionCode: Int by lazy {
     providers.exec {
         commandLine("git", "rev-list", "--count", "HEAD")
     }.standardOutput.asText.get().trim().toInt()
