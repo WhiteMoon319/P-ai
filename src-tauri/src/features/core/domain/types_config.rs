@@ -518,13 +518,6 @@ fn preset_assistant_child_department_ids() -> Vec<String> {
     ]
 }
 
-fn is_fixed_assistant_child_department_id(id: &str) -> bool {
-    matches!(
-        id.trim(),
-        DEPUTY_DEPARTMENT_ID | REVIEWER_DEPARTMENT_ID | SADDLER_DEPARTMENT_ID
-    )
-}
-
 fn default_departments(api_config_id: &str) -> Vec<DepartmentConfig> {
     let default_api_config_id = if api_config_id.trim().is_empty() {
         ""

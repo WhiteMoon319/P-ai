@@ -459,7 +459,7 @@
     }
 
     #[test]
-    fn normalize_app_config_should_restore_deputy_department_and_attach_to_assistant() {
+    fn normalize_app_config_should_restore_missing_deputy_without_rewriting_assistant_children() {
         let mut cfg = AppConfig::default();
         cfg.departments
             .retain(|item| item.id != DEPUTY_DEPARTMENT_ID);
@@ -488,16 +488,11 @@
             .iter()
             .find(|item| item.id == ASSISTANT_DEPARTMENT_ID || item.is_built_in_assistant)
             .expect("assistant department");
-        assert!(
-            assistant
-                .child_department_ids
-                .iter()
-                .any(|id| id == DEPUTY_DEPARTMENT_ID)
-        );
+        assert!(assistant.child_department_ids.is_empty());
     }
 
     #[test]
-    fn normalize_app_config_should_preserve_preset_department_customizations_and_restore_tree() {
+    fn normalize_app_config_should_preserve_preset_department_customizations_and_multi_parent_tree() {
         let mut cfg = AppConfig::default();
         for department in &mut cfg.departments {
             if department.id == ASSISTANT_DEPARTMENT_ID || department.is_built_in_assistant {
@@ -511,7 +506,7 @@
                 department.api_config_id = MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string();
                 department.model_failure_fallback_enabled = true;
                 department.permission_control = DepartmentPermissionControl::default();
-                department.child_department_ids = vec!["department-other".to_string()];
+                department.child_department_ids = vec![REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string()];
             }
             if department.id == REVIEWER_DEPARTMENT_ID {
                 department.name = "自定义审查".to_string();
@@ -521,6 +516,7 @@
                 department.api_config_id = MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string();
                 department.model_failure_fallback_enabled = true;
                 department.permission_control = department_whitelist_permission_control(&["read"], &[]);
+                department.child_department_ids = vec![REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string()];
             }
             if department.id == SADDLER_DEPARTMENT_ID {
                 department.name = "自定义能力资产".to_string();
@@ -529,13 +525,18 @@
                 department.api_config_ids = vec![MODEL_ROLE_QUICK_API_CONFIG_ID.to_string()];
                 department.api_config_id = MODEL_ROLE_QUICK_API_CONFIG_ID.to_string();
                 department.permission_control = DepartmentPermissionControl::default();
+                department.child_department_ids = vec![REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string()];
             }
         }
 
         let mut parent = default_assistant_department(MODEL_ROLE_EXPERT_API_CONFIG_ID);
         parent.id = "department-other".to_string();
         parent.is_built_in_assistant = false;
-        parent.child_department_ids = vec![DEPUTY_DEPARTMENT_ID.to_string()];
+        parent.child_department_ids = vec![
+            DEPUTY_DEPARTMENT_ID.to_string(),
+            REVIEWER_DEPARTMENT_ID.to_string(),
+            SADDLER_DEPARTMENT_ID.to_string(),
+        ];
         cfg.departments.push(parent);
 
         normalize_app_config(&mut cfg);
@@ -545,14 +546,7 @@
             .iter()
             .find(|item| item.id == ASSISTANT_DEPARTMENT_ID)
             .expect("assistant department");
-        assert_eq!(
-            assistant.child_department_ids,
-            vec![
-                DEPUTY_DEPARTMENT_ID.to_string(),
-                REVIEWER_DEPARTMENT_ID.to_string(),
-                SADDLER_DEPARTMENT_ID.to_string(),
-            ]
-        );
+        assert!(assistant.child_department_ids.is_empty());
 
         let explorer = cfg
             .departments
@@ -564,7 +558,10 @@
         assert_eq!(explorer.guide, "自定义指南");
         assert_eq!(explorer.api_config_id, MODEL_ROLE_EXPERT_API_CONFIG_ID);
         assert!(explorer.model_failure_fallback_enabled);
-        assert_eq!(explorer.child_department_ids, Vec::<String>::new());
+        assert_eq!(
+            explorer.child_department_ids,
+            vec![REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string()]
+        );
         assert_eq!(explorer.permission_control, DepartmentPermissionControl::default());
 
         let reviewer = cfg
@@ -577,7 +574,10 @@
         assert_eq!(reviewer.guide, "自定义指南");
         assert_eq!(reviewer.api_config_id, MODEL_ROLE_EXPERT_API_CONFIG_ID);
         assert!(reviewer.model_failure_fallback_enabled);
-        assert_eq!(reviewer.child_department_ids, Vec::<String>::new());
+        assert_eq!(
+            reviewer.child_department_ids,
+            vec![REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string()]
+        );
         assert_eq!(
             reviewer.permission_control,
             department_whitelist_permission_control(&["read"], &[])
@@ -602,7 +602,10 @@
         assert_eq!(saddler.summary, "自定义概述");
         assert_eq!(saddler.guide, "自定义指南");
         assert_eq!(saddler.api_config_id, MODEL_ROLE_QUICK_API_CONFIG_ID);
-        assert_eq!(saddler.child_department_ids, Vec::<String>::new());
+        assert_eq!(
+            saddler.child_department_ids,
+            vec![REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string()]
+        );
         assert_eq!(saddler.permission_control, DepartmentPermissionControl::default());
 
         let other = cfg
@@ -610,10 +613,14 @@
             .iter()
             .find(|item| item.id == "department-other")
             .expect("other department");
-        assert!(!other
-            .child_department_ids
-            .iter()
-            .any(|id| id == DEPUTY_DEPARTMENT_ID));
+        assert_eq!(
+            other.child_department_ids,
+            vec![
+                DEPUTY_DEPARTMENT_ID.to_string(),
+                REVIEWER_DEPARTMENT_ID.to_string(),
+                SADDLER_DEPARTMENT_ID.to_string(),
+            ]
+        );
     }
 
     #[test]
