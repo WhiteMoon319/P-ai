@@ -1650,7 +1650,7 @@
     "workspacePickerTitle": "允許 AI 存取的目錄",
     "workspacePickerHint": "在這裡，你可以設定希望 AI 看到的資料夾，以及工具執行的根目錄。",
     "workspaceWorkModeDirectory": "在此目錄",
-    "workspaceWorkModeIsolated": "在隔離工作樹",
+    "workspaceWorkModeIsolated": "工作樹",
     "workspaceWorkModeIndependent": "獨立工作樹",
     "workspaceWorktreeRequiresApproval": "工作樹模式至少需要審批權限。",
     "workspaceWorktreeUnavailable": "所選目錄不是 Git 倉庫根目錄，已切換為「在此目錄」。",

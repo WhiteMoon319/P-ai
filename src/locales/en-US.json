@@ -1527,7 +1527,7 @@
     "workspacePickerTitle": "Directories AI Can Access",
     "workspacePickerHint": "Here you can choose the folders you want the AI to see, and the root directory where tools run.",
     "workspaceWorkModeDirectory": "In this directory",
-    "workspaceWorkModeIsolated": "In an isolated worktree",
+    "workspaceWorkModeIsolated": "Worktree",
     "workspaceWorkModeIndependent": "Independent worktree",
     "workspaceWorktreeRequiresApproval": "Worktree modes require at least approval access.",
     "workspaceWorktreeUnavailable": "The selected directory is not a Git repository root. Work location was changed to ‘In this directory’.",

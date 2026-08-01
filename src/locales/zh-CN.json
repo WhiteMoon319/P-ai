@@ -1651,7 +1651,7 @@
     "workspacePickerTitle": "允许 AI 访问的目录",
     "workspacePickerHint": "在这里，你可以设置希望 AI 看到的文件夹，以及工具执行的根目录。",
     "workspaceWorkModeDirectory": "在此目录",
-    "workspaceWorkModeIsolated": "在隔离工作树",
+    "workspaceWorkModeIsolated": "工作树",
     "workspaceWorkModeIndependent": "独立工作树",
     "workspaceWorktreeRequiresApproval": "工作树模式至少需要审批权限。",
     "workspaceWorktreeUnavailable": "所选目录不是 Git 仓库根目录，已切换为“在此目录”。",
