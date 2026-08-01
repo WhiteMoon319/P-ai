@@ -9,6 +9,10 @@ default-run = "p-ai"
 name = "p-ai"
 path = "src/main.rs"
 
+[lib]
+name = "easy_call_ai_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -20,11 +24,8 @@ encoding_rs = "0.8"
 toml = "1.1.2"
 directories = "6.0.0"
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
-tauri-plugin-global-shortcut = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
-tauri-plugin-single-instance = "2"
-tauri-plugin-updater = "2"
 time = { version = "0.3.53", features = ["local-offset"] }
 rmcp = { version = "3.0.1", features = ["client", "macros", "transport-child-process", "transport-io", "transport-streamable-http-client", "transport-streamable-http-client-reqwest"] }
 tokio = { version = "1.52.1", features = ["rt-multi-thread", "sync", "time"] }
@@ -44,7 +45,6 @@ once_cell = "1"
 scraper = "0.27.0"
 rs-trafilatura = "0.2"
 urlencoding = "2.1"
-webbrowser = "1.0"
 futures-util = "0.3"
 socket2 = "0.6.4"
 os_info = "3"
@@ -53,16 +53,12 @@ sha2 = "0.11.0"
 pdf_oxide = { version = "0.3.70", default-features = false }
 hayro = "0.7.1"
 aho-corasick = "1.1"
-enigo = "0.6"
-arboard = "3"
 webp = "0.3"
 rayon = "1.10"
 tiktoken-rs = "0.12.0"
-xcap = "0.9.6"
 rusqlite = { version = "0.39.0", features = ["bundled"] }
 parking_lot = "0.12"
 tantivy = "0.26.0"
-font-kit = "0.14"
 chrono = { version = "0.4", features = ["serde"] }
 undoc = "0.5.2"
 litchi = { git = "https://github.com/DevExzh/litchi.git", rev = "5a931961d58bf71c6bb5b7e82f450bda34349e3d" }
@@ -70,6 +66,21 @@ walkdir = "2.5.0"
 zip = { version = "8.5.1", default-features = false, features = ["deflate", "aes-crypto"] }
 ropey = "1.6.1"
 unicode-segmentation = "1.13.3"
+
+# 桌面专属依赖（Android 构建时排除）
+[target.'cfg(not(target_os = "android"))'.dependencies]
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
+enigo = "0.6"
+arboard = "3"
+xcap = "0.9.6"
+font-kit = "0.14"
+webbrowser = "1.0"
+
+# Android：openssl 走源码编译（dingtalk-stream -> tokio-tungstenite(native-tls) 依赖 openssl-sys）
+[target.'cfg(target_os = "android")'.dependencies]
+openssl-sys = { version = "0.9", features = ["vendored"] }
 
 [features]
 default = ["custom-protocol"]

@@ -1390,8 +1390,15 @@ fn open_external_url(url: String) -> Result<(), String> {
     if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
         return Err("Only http/https URLs are allowed.".to_string());
     }
+    #[cfg(target_os = "android")]
+    {
+        Err(format!("当前平台暂不支持打开外部浏览器：{trimmed}"))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
     webbrowser::open(trimmed).map_err(|err| format!("Open browser failed: {err}"))?;
     Ok(())
+    }
 }
 
 #[tauri::command]

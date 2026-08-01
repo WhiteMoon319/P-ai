@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "label": "chat",
+        "url": "chat.html",
+        "title": "P-ai",
+        "visible": true
+      }
+    ]
+  }
+}

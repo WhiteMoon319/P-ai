@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default desktop capability",
+  "description": "Default capability",
   "windows": ["main", "chat", "archives", "quick-setup"],
   "permissions": [
     "core:default",
@@ -15,11 +15,9 @@
     "core:window:allow-set-always-on-top",
     "core:window:allow-is-always-on-top",
     "core:window:allow-set-size",
-    "global-shortcut:default",
     "dialog:allow-open",
     "dialog:allow-save",
     "dialog:allow-message",
-    "notification:default",
-    "updater:default"
+    "notification:default"
   ]
 }

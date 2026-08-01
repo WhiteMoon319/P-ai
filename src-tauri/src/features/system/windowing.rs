@@ -439,6 +439,7 @@ fn focus_file_reader_window(app: &AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window(FILE_READER_WINDOW_LABEL)
         .ok_or_else(|| "文件阅读窗口不存在".to_string())?;
+    #[cfg(not(target_os = "android"))]
     let _ = window.unminimize();
     let _ = window.show();
     ensure_window_visible_after_show(app, FILE_READER_WINDOW_LABEL, "focus_file_reader_window");
@@ -497,7 +498,7 @@ fn schedule_file_reader_window_creation(app: &AppHandle, path: String) -> Result
 
             let encoded_path = urlencoding::encode(&path);
             let url = format!("file-reader.html?path={encoded_path}");
-            let window = match tauri::WebviewWindowBuilder::new(
+            let builder = tauri::WebviewWindowBuilder::new(
                 &app_handle,
                 FILE_READER_WINDOW_LABEL,
                 tauri::WebviewUrl::App(url.into()),
@@ -505,11 +506,10 @@ fn schedule_file_reader_window_creation(app: &AppHandle, path: String) -> Result
             .title("PAI - 文件阅读")
             .inner_size(1040.0, 760.0)
             .min_inner_size(720.0, 520.0)
-            .resizable(true)
-            .decorations(false)
-            .shadow(true)
-            .visible(false)
-            .build()
+            .resizable(true);
+            #[cfg(not(target_os = "android"))]
+            let builder = builder.decorations(false).shadow(true).visible(false);
+            let window = match builder.build()
             {
                 Ok(window) => window,
                 Err(err) => {
@@ -529,6 +529,7 @@ fn schedule_file_reader_window_creation(app: &AppHandle, path: String) -> Result
                     err
                 ));
             }
+            #[cfg(not(target_os = "android"))]
             let _ = window.unminimize();
             let _ = window.show();
             ensure_window_visible_after_show(
@@ -888,6 +889,7 @@ fn position_window_on_monitor(
     let _ = window.set_position(Position::Physical(PhysicalPosition::new(x, y)));
 }
 
+#[cfg(not(target_os = "android"))]
 fn restore_window_to_default_drag_size(
     window: &tauri::WebviewWindow,
     label: &str,
@@ -1102,6 +1104,7 @@ fn apply_window_layout_before_show(app: &AppHandle, label: &str) -> Result<(), S
             }
         }
         if saved.maximized {
+            #[cfg(not(target_os = "android"))]
             let _ = window.maximize();
         }
         return Ok(());
@@ -1219,6 +1222,7 @@ fn attach_window_layout_persistence(app: &AppHandle) {
     }
 }
 
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn sync_default_tray_icon(app: &AppHandle) -> Result<(), String> {
     let tray = app
         .tray_by_id(MAIN_TRAY_ID)
@@ -1227,6 +1231,11 @@ fn sync_default_tray_icon(app: &AppHandle) -> Result<(), String> {
     tray
         .set_icon(app.default_window_icon().cloned())
         .map_err(|err| format!("Set tray icon failed: {err}"))
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+fn sync_default_tray_icon(_app: &AppHandle) -> Result<(), String> {
+    Ok(())
 }
 
 fn show_window(app: &AppHandle, label: &str) -> Result<(), String> {
@@ -1241,6 +1250,7 @@ fn show_window(app: &AppHandle, label: &str) -> Result<(), String> {
         .get_webview_window(label)
         .ok_or_else(|| format!("Window '{label}' not found"))?;
 
+    #[cfg(not(target_os = "android"))]
     let _ = window.unminimize();
     let _ = window.show();
     ensure_window_visible_after_show(app, label, "show_window");
@@ -1248,6 +1258,7 @@ fn show_window(app: &AppHandle, label: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 fn toggle_window_maximize_with_default_restore(
     app: &AppHandle,
     label: &str,
@@ -1299,6 +1310,15 @@ fn toggle_window_maximize_with_default_restore(
     Ok(maximized)
 }
 
+#[cfg(target_os = "android")]
+fn toggle_window_maximize_with_default_restore(
+    _app: &AppHandle,
+    _label: &str,
+) -> Result<bool, String> {
+    Ok(false)
+}
+
+#[cfg(not(target_os = "android"))]
 fn start_window_drag_with_default_restore(app: &AppHandle, label: &str) -> Result<(), String> {
     let window = app
         .get_webview_window(label)
@@ -1340,6 +1360,11 @@ fn start_window_drag_with_default_restore(app: &AppHandle, label: &str) -> Resul
         .map_err(|err| format!("Start dragging window failed: {err}"))
 }
 
+#[cfg(target_os = "android")]
+fn start_window_drag_with_default_restore(_app: &AppHandle, _label: &str) -> Result<(), String> {
+    Ok(())
+}
+
 fn toggle_window(app: &AppHandle, label: &str) -> Result<(), String> {
     let window = app
         .get_webview_window(label)
@@ -1369,6 +1394,7 @@ fn normalize_hotkey_for_parser(raw: &str) -> String {
     text
 }
 
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn parse_hotkey(raw: &str) -> Result<Shortcut, String> {
     let normalized = normalize_hotkey_for_parser(raw);
     Shortcut::from_str(&normalized)
@@ -1376,16 +1402,29 @@ fn parse_hotkey(raw: &str) -> Result<Shortcut, String> {
         .map_err(|err| format!("Parse hotkey failed: {err}"))
 }
 
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn register_default_hotkey(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     let config = read_config(&state.config_path).unwrap_or_default();
     register_hotkeys_from_config(app, &config)
 }
 
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+fn register_default_hotkey(_app: &AppHandle) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn register_hotkey_from_config(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
     register_hotkeys_from_config(app, config)
 }
 
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+fn register_hotkey_from_config(_app: &AppHandle, _config: &AppConfig) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn register_hotkeys_from_config(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
     let summon_shortcut = parse_hotkey(&config.hotkey)?;
     let manager = app.global_shortcut();
@@ -1492,6 +1531,7 @@ fn show_runtime_logs_window(app: &AppHandle) -> Result<(), String> {
                 RUNTIME_LOGS_WINDOW_LABEL
             ),
         );
+        #[cfg(not(target_os = "android"))]
         if let Err(err) = window.unminimize() {
             append_window_diagnostic_log(
                 app,
@@ -1544,7 +1584,7 @@ fn show_runtime_logs_window(app: &AppHandle) -> Result<(), String> {
                 );
                 return;
             }
-            let window = match tauri::WebviewWindowBuilder::new(
+            let builder = tauri::WebviewWindowBuilder::new(
                 &app_handle,
                 RUNTIME_LOGS_WINDOW_LABEL,
                 tauri::WebviewUrl::App("runtime-logs.html".into()),
@@ -1552,11 +1592,10 @@ fn show_runtime_logs_window(app: &AppHandle) -> Result<(), String> {
             .title("PAI - 运行日志")
             .inner_size(900.0, 600.0)
             .min_inner_size(600.0, 400.0)
-            .resizable(true)
-            .decorations(false)
-            .shadow(true)
-            .visible(false)
-            .build()
+            .resizable(true);
+            #[cfg(not(target_os = "android"))]
+            let builder = builder.decorations(false).shadow(true).visible(false);
+            let window = match builder.build()
             {
                 Ok(w) => w,
                 Err(err) => {
@@ -1579,6 +1618,7 @@ fn show_runtime_logs_window(app: &AppHandle) -> Result<(), String> {
                     ),
                 );
             }
+            #[cfg(not(target_os = "android"))]
             if let Err(err) = window.unminimize() {
                 append_window_diagnostic_log(
                     &app_handle,
@@ -1631,6 +1671,7 @@ fn show_runtime_logs_window(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn build_tray(app: &AppHandle) -> Result<(), String> {
     let config = MenuItem::with_id(app, "config", "配置", true, None::<&str>)
         .map_err(|err| format!("Create tray menu item failed: {err}"))?;
@@ -1685,6 +1726,11 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
         .build(app)
         .map_err(|err| format!("Build tray failed: {err}"))?;
 
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+fn build_tray(_app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
@@ -1745,7 +1791,7 @@ fn rebuild_crashed_window(app: &AppHandle, label: &str) {
     let (min_w, min_h) = minimum_window_size(label);
     let resizable = !is_fixed_window_size(label);
 
-    let result = tauri::WebviewWindowBuilder::new(
+    let builder = tauri::WebviewWindowBuilder::new(
         app,
         label,
         tauri::WebviewUrl::App(url.into()),
@@ -1753,11 +1799,10 @@ fn rebuild_crashed_window(app: &AppHandle, label: &str) {
     .title(format!("PAI - {label}"))
     .inner_size(default_w as f64, default_h as f64)
     .min_inner_size(min_w as f64, min_h as f64)
-    .resizable(resizable)
-    .decorations(false)
-    .shadow(true)
-    .visible(false)
-    .build();
+    .resizable(resizable);
+    #[cfg(not(target_os = "android"))]
+    let builder = builder.decorations(false).shadow(true).visible(false);
+    let result = builder.build();
 
     match result {
         Ok(window) => {

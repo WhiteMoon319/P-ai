@@ -1,3 +1,4 @@
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn is_shortcut_match(shortcut: &Shortcut, raw_hotkey: &str) -> bool {
     match parse_hotkey(raw_hotkey) {
         Ok(parsed) => parsed == *shortcut,
@@ -25,6 +26,7 @@ static RECORD_HOTKEY_PROBE_PARSED: std::sync::OnceLock<
     std::sync::Arc<std::sync::Mutex<Option<ParsedRecordHotkey>>>,
 > = std::sync::OnceLock::new();
 
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn handle_global_shortcut_probe(app: &AppHandle, shortcut: &Shortcut, state: ShortcutState) {
     if state != ShortcutState::Pressed {
         return;
@@ -54,7 +56,6 @@ fn handle_global_shortcut_probe(app: &AppHandle, shortcut: &Shortcut, state: Sho
     }
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 #[derive(Debug, Clone)]
 struct ParsedRecordHotkey {
     modifiers: std::collections::HashSet<String>,
@@ -71,14 +72,12 @@ struct RecordHotkeyProbeState {
     active: bool,
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn normalize_record_hotkey_text(raw: &str) -> String {
     let mut text = raw.trim().to_string();
     text = text.replace('＋', "+").replace('`', "·");
     text
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn parse_record_hotkey(raw: &str) -> Option<ParsedRecordHotkey> {
     let text = normalize_record_hotkey_text(raw);
     let tokens: Vec<String> = text
@@ -111,7 +110,6 @@ fn parse_record_hotkey(raw: &str) -> Option<ParsedRecordHotkey> {
     })
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn record_hotkey_modifier_display(token: &str) -> &'static str {
     match token {
         "CTRL" => "Ctrl",
@@ -122,7 +120,6 @@ fn record_hotkey_modifier_display(token: &str) -> &'static str {
     }
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn record_hotkey_main_display(token: &str) -> String {
     match token {
         "CTRL" | "ALT" | "SHIFT" | "META" => record_hotkey_modifier_display(token).to_string(),
@@ -133,7 +130,6 @@ fn record_hotkey_main_display(token: &str) -> String {
     }
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn normalize_record_hotkey_label(raw: &str) -> Result<String, String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -154,7 +150,6 @@ fn normalize_record_hotkey_label(raw: &str) -> Result<String, String> {
     Ok(parts.join("+"))
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn record_hotkey_signature(raw: &str) -> Option<String> {
     let parsed = parse_record_hotkey(raw)?;
     if parsed.modifiers.len() == 1 && parsed.modifiers.contains(&parsed.main) {

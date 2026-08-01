@@ -507,12 +507,19 @@ fn debug_crash_webview(webview: tauri::Webview) -> Result<(), String> {
 
 #[tauri::command]
 fn list_system_fonts() -> Result<Vec<String>, String> {
+    #[cfg(target_os = "android")]
+    {
+        Ok(Vec::new())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
     let mut families = font_kit::source::SystemSource::new()
         .all_families()
         .map_err(|err| format!("列出系统字体失败：{err}"))?;
     families.sort_by_key(|name| name.to_ascii_lowercase());
     families.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
     Ok(families)
+    }
 }
 
 fn validate_record_hotkey_available(config: &AppConfig) -> Result<String, String> {

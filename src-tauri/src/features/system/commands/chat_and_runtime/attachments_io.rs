@@ -671,6 +671,13 @@ async fn copy_local_chat_image_to_clipboard(
     input: ReadLocalChatImageThumbnailInput,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    #[cfg(target_os = "android")]
+    {
+        let _ = (input, state);
+        Err("当前平台不支持复制图片到剪贴板".to_string())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
     let app_state = state.inner().clone();
     tokio::task::spawn_blocking(move || {
         let path = resolve_local_chat_image_path(&app_state, &input.path)?;
@@ -700,6 +707,7 @@ async fn copy_local_chat_image_to_clipboard(
     })
     .await
     .map_err(|err| format!("复制本地图片任务异常：{err}"))?
+    }
 }
 
 #[tauri::command]
