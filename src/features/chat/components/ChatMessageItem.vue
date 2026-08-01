@@ -1106,20 +1106,20 @@ function activityItemMarker(item: ChatActivityItem): string {
 }
 
 function activityItemMarkerClass(item: ChatActivityItem): string {
-  if (item.kind === "reasoning") return "font-semibold text-warning";
+  if (item.kind === "reasoning") return "text-neutral/80";
   if (item.kind === "content") return "font-semibold text-base-content";
   return "font-semibold text-success";
 }
 
 function activityItemTitleClass(item: ChatActivityItem): string {
-  if (item.kind === "reasoning") return "font-semibold italic text-warning";
+  if (item.kind === "reasoning") return "italic text-neutral/80";
   if (item.kind === "content") return "text-base-content";
   return "text-success";
 }
 
 function activityItemDetailClass(item: ChatActivityItem): string {
-  if (item.kind === "reasoning") return "text-warning";
-  if (item.kind === "content") return "text-base-content";
+  if (item.kind === "reasoning") return "text-neutral/80";
+  if (item.kind === "content") return "text-base-content/80";
   return "text-success";
 }
 
