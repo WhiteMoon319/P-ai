@@ -255,6 +255,8 @@ async fn refresh_conversation_meta_after_migration(state: AppState) {
 
 /// 阶段 2 延迟初始化：在 backend_ready 之后异步执行，避免阻塞前端首屏渲染。
 async fn run_deferred_setup(app_handle: AppHandle) {
+    #[cfg(target_os = "android")]
+    std::eprintln!("[P-AI Android] run_deferred_setup: started");
     let app_state = app_handle.state::<AppState>();
 
     let emit_progress = |step: &str| {
@@ -389,12 +391,16 @@ async fn run_deferred_setup(app_handle: AppHandle) {
         }
     }
     let ide_context_runtime = app_handle.state::<IdeContextRuntime>().inner().clone();
+    #[cfg(target_os = "android")]
+    std::eprintln!("[P-AI Android] run_deferred_setup: calling start_web_access_server");
     start_web_access_server(
         app_handle.clone(),
         app_state.inner().clone(),
         ide_context_runtime,
     )
     .await;
+    #[cfg(target_os = "android")]
+    std::eprintln!("[P-AI Android] run_deferred_setup: start_web_access_server returned");
     let _ = sync_default_tray_icon(&app_handle);
     if should_enable_devtools() {
         runtime_log_warn(format!("[启动-延迟] 检测到 devtools 开关已开启，但当前构建未启用 open_devtools API，跳过打开 devtools"));
@@ -866,6 +872,7 @@ pub fn run() {
         }
     };
 
+    #[cfg(not(target_os = "android"))]
     let state = match AppState::new() {
         Ok(state) => state,
         Err(err) => {
@@ -873,40 +880,43 @@ pub fn run() {
             return;
         }
     };
-    if let Err(err) = cleanup_portable_update_temp_artifacts_for_current_runtime() {
-        runtime_log_error(format!("[自动更新] 清理便携版更新临时文件失败: {err}"));
-    }
-    init_last_panic_snapshot_slot(state.last_panic_snapshot.clone());
+    #[cfg(not(target_os = "android"))]
     {
-        let panic_slot = state.last_panic_snapshot.clone();
-        let previous_hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(move |info| {
-            let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
-                (*s).to_string()
-            } else if let Some(s) = info.payload().downcast_ref::<String>() {
-                s.clone()
-            } else {
-                "unknown panic payload".to_string()
-            };
-            let location = info
-                .location()
-                .map(|loc| format!("{}:{}", loc.file(), loc.line()))
-                .unwrap_or_else(|| "unknown location".to_string());
-            let thread_name = std::thread::current()
-                .name()
-                .unwrap_or("unnamed")
-                .to_string();
-            let snapshot = format!(
-                "{} thread={} payload={}",
-                location.trim(),
-                thread_name.trim(),
-                payload.trim()
-            );
-            if let Ok(mut slot) = panic_slot.lock() {
-                *slot = Some(snapshot);
-            }
-            previous_hook(info);
-        }));
+        if let Err(err) = cleanup_portable_update_temp_artifacts_for_current_runtime() {
+            runtime_log_error(format!("[自动更新] 清理便携版更新临时文件失败: {err}"));
+        }
+        init_last_panic_snapshot_slot(state.last_panic_snapshot.clone());
+        {
+            let panic_slot = state.last_panic_snapshot.clone();
+            let previous_hook = std::panic::take_hook();
+            std::panic::set_hook(Box::new(move |info| {
+                let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
+                    (*s).to_string()
+                } else if let Some(s) = info.payload().downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "unknown panic payload".to_string()
+                };
+                let location = info
+                    .location()
+                    .map(|loc| format!("{}:{}", loc.file(), loc.line()))
+                    .unwrap_or_else(|| "unknown location".to_string());
+                let thread_name = std::thread::current()
+                    .name()
+                    .unwrap_or("unnamed")
+                    .to_string();
+                let snapshot = format!(
+                    "{} thread={} payload={}",
+                    location.trim(),
+                    thread_name.trim(),
+                    payload.trim()
+                );
+                if let Ok(mut slot) = panic_slot.lock() {
+                    *slot = Some(snapshot);
+                }
+                previous_hook(info);
+            }));
+        }
     }
 
     let builder = tauri::Builder::default();
@@ -960,10 +970,54 @@ pub fn run() {
                 })
                 .build(),
         );
-    builder
-        .manage(state)
+    #[cfg(not(target_os = "android"))]
+    let builder = builder.manage(state);
+    let builder = builder
         .manage(ide_context_runtime)
         .setup(|app| {
+            // Android: construct AppState from the app data directory
+            #[cfg(target_os = "android")]
+            {
+                let app_root = app.path().app_data_dir()
+                    .map_err(|e| format!("获取应用数据目录失败: {e}"))?;
+                std::eprintln!("[P-AI Android] app_data_dir={:?}", app_root);
+                let state = AppState::new_with_root(app_root)
+                    .map_err(|e| format!("初始化应用状态失败: {e}"))?;
+                std::eprintln!("[P-AI Android] AppState constructed, config_path={:?}", state.config_path);
+                init_last_panic_snapshot_slot(state.last_panic_snapshot.clone());
+                {
+                    let panic_slot = state.last_panic_snapshot.clone();
+                    let previous_hook = std::panic::take_hook();
+                    std::panic::set_hook(Box::new(move |info| {
+                        let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
+                            (*s).to_string()
+                        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+                            s.clone()
+                        } else {
+                            "unknown panic payload".to_string()
+                        };
+                        let location = info
+                            .location()
+                            .map(|loc| format!("{}:{}", loc.file(), loc.line()))
+                            .unwrap_or_else(|| "unknown location".to_string());
+                        let thread_name = std::thread::current()
+                            .name()
+                            .unwrap_or("unnamed")
+                            .to_string();
+                        let snapshot = format!(
+                            "{} thread={} payload={}",
+                            location.trim(),
+                            thread_name.trim(),
+                            payload.trim()
+                        );
+                        if let Ok(mut slot) = panic_slot.lock() {
+                            *slot = Some(snapshot);
+                        }
+                        previous_hook(info);
+                    }));
+                }
+                app.manage(state);
+            }
             let app_handle = app.handle().clone();
             match app_handle.state::<AppState>().app_handle.lock() {
                 Ok(mut handle_slot) => {
@@ -984,23 +1038,28 @@ pub fn run() {
             initialize_window_layout_store(&app_handle);
             attach_window_layout_persistence(&app_handle);
             hide_on_close(&app_handle);
-            let startup_window_label = match state_read_config_cached(app_state.inner()) {
-                Ok(mut config) => {
-                    normalize_app_config(&mut config);
-                    startup_window_label_for_config(&config)
-                }
-                Err(err) => {
-                    runtime_log_error(format!("[启动] 读取启动窗口配置失败: {err}"));
-                    "quick-setup"
-                }
-            };
-            if let Err(err) = show_window(&app_handle, startup_window_label) {
-                runtime_log_error(format!("[启动] 显示启动窗口失败: target={startup_window_label}, error={err}"));
-                if let Some(window) = app_handle.get_webview_window(startup_window_label) {
-                    #[cfg(not(target_os = "android"))]
-                    let _ = window.unminimize();
-                    let _ = window.show();
-                    let _ = window.set_focus();
+            // Android：静态配置已声明 chat 窗口（sidebar.html，visible:true），跳过桌面多窗口启动逻辑
+            #[cfg(target_os = "android")]
+            let _ = &app_state;
+            #[cfg(not(target_os = "android"))]
+            {
+                let startup_window_label = match state_read_config_cached(app_state.inner()) {
+                    Ok(mut config) => {
+                        normalize_app_config(&mut config);
+                        startup_window_label_for_config(&config)
+                    }
+                    Err(err) => {
+                        runtime_log_error(format!("[启动] 读取启动窗口配置失败: {err}"));
+                        "quick-setup"
+                    }
+                };
+                if let Err(err) = show_window(&app_handle, startup_window_label) {
+                    runtime_log_error(format!("[启动] 显示启动窗口失败: target={startup_window_label}, error={err}"));
+                    if let Some(window) = app_handle.get_webview_window(startup_window_label) {
+                        let _ = window.unminimize();
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
                 }
             }
             app_handle

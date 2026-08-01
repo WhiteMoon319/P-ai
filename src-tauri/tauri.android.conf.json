@@ -4,7 +4,7 @@
     "windows": [
       {
         "label": "chat",
-        "url": "chat.html",
+        "url": "sidebar.html?chatUrl=ws%3A%2F%2F127.0.0.1%3A8429%2Fchat",
         "title": "P-ai",
         "visible": true
       }

@@ -53,6 +53,13 @@ jobs:
       - name: Initialize Android project
         run: pnpm tauri android init --ci
 
+      - name: Enable cleartext traffic for WebView WebSocket
+        run: |
+          GRADLE="src-tauri/gen/android/app/build.gradle.kts"
+          sed -i 's/manifestPlaceholders\["usesCleartextTraffic"\] = "false"/manifestPlaceholders["usesCleartextTraffic"] = "true"/g' "$GRADLE"
+          echo "Updated $GRADLE:"
+          grep -n 'usesCleartextTraffic' "$GRADLE" || true
+
       - name: Build Android APK (aarch64)
         run: pnpm tauri android build --apk --target aarch64
 

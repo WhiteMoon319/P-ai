@@ -238,6 +238,30 @@ impl AppState {
                     .unwrap_or_else(|| legacy_config_dir.clone());
                 (config_dir, legacy_config_dir, app_root, legacy_app_root)
             };
+        Self::init_from_dirs(config_dir, app_root, legacy_app_root)
+    }
+
+    /// Android / embedded entry point: construct AppState from a caller-supplied root directory,
+    /// skipping portable detection and `ProjectDirs` resolution (which depends on `$HOME`/XDG,
+    /// not reliably set on Android).
+    fn new_with_root(app_root: PathBuf) -> Result<Self, String> {
+        let config_dir = app_root.join("config");
+        fs::create_dir_all(&config_dir).map_err(|err| {
+            format!(
+                "Create config directory from root failed ({}): {err}",
+                config_dir.display()
+            )
+        })?;
+        // No legacy migration needed on a fresh mobile data directory.
+        let legacy_app_root = app_root.clone();
+        Self::init_from_dirs(config_dir, app_root, legacy_app_root)
+    }
+
+    fn init_from_dirs(
+        config_dir: PathBuf,
+        app_root: PathBuf,
+        legacy_app_root: PathBuf,
+    ) -> Result<Self, String> {
         for dir_name in ["avatars", "media", "exports"] {
             let legacy = config_dir.join(dir_name);
             let target = app_root.join(dir_name);

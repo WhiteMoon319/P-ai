@@ -92,14 +92,27 @@ fn ide_context_ws_request_host_matches(request: &Request, origin_host: &str, por
 
 fn ide_context_ws_origin_allowed(request: &Request, port: u16) -> bool {
     let Some(origin) = ide_context_ws_header_value(request, "origin") else {
+        std::eprintln!("[P-AI Android] origin check: no Origin header, allowing");
         return true;
     };
+    std::eprintln!("[P-AI Android] origin check: Origin={}", origin);
     if origin.starts_with("vscode-webview://") {
+        return true;
+    }
+    // Tauri 内嵌 WebView（Android: http://tauri.localhost，iOS/Linux: tauri://localhost）
+    if origin.starts_with("tauri://") {
         return true;
     }
     let Ok(parsed) = reqwest::Url::parse(&origin) else {
         return false;
     };
+    if parsed
+        .host_str()
+        .map(|host| host.eq_ignore_ascii_case("tauri.localhost"))
+        .unwrap_or(false)
+    {
+        return true;
+    }
     if parsed.scheme() != "http" || parsed.port_or_known_default() != Some(port) {
         return false;
     }
