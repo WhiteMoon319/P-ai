@@ -169,7 +169,21 @@ fn backend_log_path() -> &'static Option<PathBuf> {
     BACKEND_LOG_PATH.get_or_init(resolve_backend_log_path)
 }
 
+static ANDROID_LOG_ROOT: OnceLock<PathBuf> = OnceLock::new();
+
+pub fn set_android_log_root(root: PathBuf) {
+    let _ = ANDROID_LOG_ROOT.set(root);
+}
+
 fn resolve_backend_log_path() -> Option<PathBuf> {
+    // Android: use the app data directory set via set_android_log_root
+    #[cfg(target_os = "android")]
+    if let Some(root) = ANDROID_LOG_ROOT.get() {
+        let log_dir = root.join("logs");
+        if fs::create_dir_all(&log_dir).is_ok() {
+            return Some(log_dir.join(BACKEND_LOG_FILE_NAME));
+        }
+    }
     let log_dir = detect_portable_runtime_root()
         .or_else(|| {
             ProjectDirs::from("ai", "easycall", "p-ai")

@@ -382,6 +382,7 @@ async fn run_genai_tool_loop(
         model_name,
         request_api_key,
         service_target,
+    tool_abort_state,
     );
     let options = build_provider_genai_chat_options(
         &api_config,
@@ -436,7 +437,6 @@ async fn run_genai_tool_loop(
                 model_name,
             )
             .await?;
-            std::eprintln!("[P-AI Android] tool_loop: guard passed, calling exec_chat_stream");
             let mut turn_text = String::new();
             let mut turn_reasoning = String::new();
             let mut reasoning_delta_emitted = false;
@@ -465,7 +465,6 @@ async fn run_genai_tool_loop(
                     .map_err(|err| format!("GenAI 流式请求构建失败：{err}"))?
                     .stream
             };
-            std::eprintln!("[P-AI Android] tool_loop: exec_chat_stream returned, stream opened");
 
             while let Some(chunk) = stream.next().await {
                 match chunk {
@@ -1035,6 +1034,7 @@ async fn run_genai_tool_loop_non_stream(
         model_name,
         request_api_key,
         service_target,
+    tool_abort_state,
     );
     let options = build_provider_genai_chat_options(
         &api_config,

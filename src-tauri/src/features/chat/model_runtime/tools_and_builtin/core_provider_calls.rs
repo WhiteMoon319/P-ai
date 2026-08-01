@@ -631,6 +631,7 @@ fn build_provider_genai_client_and_model_spec_from_target(
     model_name: &str,
     request_api_key: String,
     service_target: genai::ServiceTarget,
+    app_state: Option<&AppState>,
 ) -> (genai::Client, genai::ModelSpec) {
     let adapter_kind = (api_config.request_format.is_genai_chat()
         || api_config.request_format.is_auto())
@@ -649,14 +650,20 @@ fn build_provider_genai_client_and_model_spec_from_target(
             model: genai::ModelIden::new(adapter_kind, model_name.to_string()),
         };
         (
-            genai::Client::builder()
-                .with_adapter_kind(adapter_kind)
-                .build(),
+            {
+            let mut b = genai::Client::builder().with_adapter_kind(adapter_kind);
+            if let Some(s) = app_state { b = b.with_reqwest(s.shared_http_client.clone()); }
+            b.build()
+        },
             genai::ModelSpec::from_target(target),
         )
     } else {
         (
-            genai::Client::builder().build(),
+            {
+            let mut b = genai::Client::builder();
+            if let Some(s) = app_state { b = b.with_reqwest(s.shared_http_client.clone()); }
+            b.build()
+        },
             genai::ModelSpec::from_target(service_target),
         )
     }
@@ -782,6 +789,7 @@ async fn call_model_openai_stream_internal(
         model_name,
         request_api_key,
         service_target,
+    app_state,
     );
     let mut stream = client
         .exec_chat_stream(model_spec, request, Some(&options))
@@ -848,6 +856,7 @@ async fn call_model_openai_non_stream(
         model_name,
         request_api_key,
         service_target,
+    app_state,
     );
     let response = client
         .exec_chat(model_spec, request, Some(&options))
@@ -915,6 +924,7 @@ async fn call_model_openai_responses(
         model_name,
         request_api_key,
         service_target,
+    app_state,
     );
     let mut stream = client
         .exec_chat_stream(model_spec, request, Some(&options))
@@ -961,6 +971,7 @@ async fn call_model_gemini(
         model_name,
         request_api_key,
         service_target,
+    app_state,
     );
     let response = client
         .exec_chat(model_spec, request, Some(&options))
@@ -1025,6 +1036,7 @@ async fn call_model_anthropic(
         model_name,
         request_api_key,
         service_target,
+    app_state,
     );
     let mut stream = client
         .exec_chat_stream(model_spec, request, Some(&options))

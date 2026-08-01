@@ -981,6 +981,7 @@ pub fn run() {
                 let app_root = app.path().app_data_dir()
                     .map_err(|e| format!("获取应用数据目录失败: {e}"))?;
                 std::eprintln!("[P-AI Android] app_data_dir={:?}", app_root);
+                set_android_log_root(app_root.clone());
                 let state = AppState::new_with_root(app_root)
                     .map_err(|e| format!("初始化应用状态失败: {e}"))?;
                 std::eprintln!("[P-AI Android] AppState constructed, config_path={:?}", state.config_path);
