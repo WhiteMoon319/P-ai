@@ -2,11 +2,40 @@
 <html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>P-ai Settings</title>
+    <style>
+      html {
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        padding-left: env(safe-area-inset-left, 0px);
+        padding-right: env(safe-area-inset-right, 0px);
+      }
+      #mobile-back-btn {
+        display: none;
+        position: fixed;
+        top: calc(env(safe-area-inset-top, 8px) + 4px);
+        right: 12px;
+        z-index: 30;
+        padding: 6px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--color-base-300, #d1d5db);
+        background: var(--color-base-100, #ffffff);
+        color: var(--color-base-content, #1f2328);
+        font-size: 13px;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+      }
+    </style>
   </head>
   <body>
+    <button id="mobile-back-btn" onclick="history.back()">← 对话</button>
     <div id="app"></div>
+    <script>
+      if (document.referrer && document.referrer.indexOf('sidebar.html') !== -1) {
+        document.getElementById('mobile-back-btn').style.display = 'block';
+      }
+    </script>
     <script type="module" src="/src/main-settings.ts"></script>
   </body>
 </html>

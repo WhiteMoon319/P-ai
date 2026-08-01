@@ -60,6 +60,19 @@ jobs:
           echo "Updated $GRADLE:"
           grep -n 'usesCleartextTraffic' "$GRADLE" || true
 
+      - name: Copy Android app icons
+        run: |
+          if [ -d "src-tauri/icons/android" ]; then
+            cp -rf src-tauri/icons/android/* src-tauri/gen/android/app/src/main/res/
+            echo "Custom icons copied to Android res/"
+            ls src-tauri/gen/android/app/src/main/res/mipmap-hdpi/ic_launcher.png || echo "WARNING: icon not found"
+          else
+            echo "No custom Android icons found"
+          fi
+
+      - name: Patch Android microphone permissions and safe area
+        run: bash scripts/patch-android-project.sh
+
       - name: Build Android APK (aarch64)
         run: pnpm tauri android build --apk --target aarch64
 

@@ -1,5 +1,7 @@
 <template>
-  <ConfigWindowApp v-if="ready" />
+  <div v-if="ready" class="h-full">
+    <ConfigWindowApp />
+  </div>
   <div v-else class="flex min-h-screen items-center justify-center bg-base-200 px-4 text-base-content">
     <div class="w-full max-w-sm rounded-box border border-base-300 bg-base-100 p-5 shadow-xl">
       <div class="text-base font-semibold">P-ai 设置</div>

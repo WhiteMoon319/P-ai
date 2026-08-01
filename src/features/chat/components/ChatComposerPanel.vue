@@ -287,11 +287,11 @@
             <Paperclip class="h-3.5 w-3.5" />
           </button>
           <button
-            v-if="showConversationActions"
+            v-if="showConversationActions || isAndroid"
             class="btn btn-sm btn-circle shrink-0"
             :class="recording ? 'btn-error' : 'btn-ghost'"
             :disabled="!canRecord"
-            :title="recording ? t('chat.recording', { seconds: Math.max(1, Math.round(recordingMs / 1000)) }) : t('chat.holdRecord', { hotkey: recordHotkey })"
+            :title="micTitle"
             @mousedown.prevent="emit('startRecording')"
             @mouseup.prevent="emit('stopRecording')"
             @mouseleave.prevent="recording && emit('stopRecording')"
@@ -473,7 +473,16 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const queueEnabled = computed(() => true);
+const sidebarMode = computed(() => !!props.sidebarMode);
+const bridgeRequest = computed(() => props.bridgeRequest);
+const bridgeSubscribe = computed(() => props.bridgeSubscribe);
+const queueEnabled = computed(() => !sidebarMode.value || typeof bridgeRequest.value === "function");
+const isAndroid = /chatUrl=.*127\.0\.0\.1/.test(window.location.search);
+const micTitle = computed(() => {
+  if (props.recording) return t('chat.recording', { seconds: Math.max(1, Math.round(props.recordingMs / 1000)) });
+  if (isAndroid) return t('chat.holdToRecord');
+  return t('chat.holdRecord', { hotkey: props.recordHotkey });
+});
 const showConversationActions = computed(() => props.showConversationActions ?? true);
 const systemNotificationMode = computed(() => !!props.systemNotificationMode);
 const remoteContactMode = computed(() => !!props.remoteContactMode);

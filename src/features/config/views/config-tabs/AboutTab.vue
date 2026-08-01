@@ -12,7 +12,7 @@
       <div class="card bg-base-100 border border-base-300">
       <div class="card-body p-4">
         <p class="text-sm mb-3">{{ `P-ai v${appVersion}` }}</p>
-        <div class="mb-3 space-y-2">
+        <div v-if="!props.isAndroid" class="mb-3 space-y-2">
           <div class="text-xs font-medium text-base-content/70">{{ t("about.updateMethod") }}</div>
           <div class="tabs tabs-box bg-base-200 p-1">
             <button
@@ -69,6 +69,7 @@ import type { GithubUpdateMethod } from "../../../../types/app";
 const props = defineProps<{
   githubUpdateMethod: GithubUpdateMethod;
   checkingUpdate: boolean;
+  isAndroid?: boolean;
 }>();
 
 const emit = defineEmits<{

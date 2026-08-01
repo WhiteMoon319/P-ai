@@ -22,7 +22,7 @@
         <div class="min-w-0 truncate text-sm font-medium">{{ activeConfigTabTitle }}</div>
       </div>
 
-      <div class="flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden">
+      <div class="flex min-h-0 flex-1 min-w-0 flex-col overflow-y-auto">
       <div v-if="props.configTab === 'api'" class="flex-1 min-h-0">
         <ApiTab
           :config="config"
@@ -239,6 +239,7 @@
             v-else-if="props.configTab === 'about'"
             :github-update-method="props.config.githubUpdateMethod || 'auto'"
             :checking-update="checkingUpdate"
+            :is-android="isAndroid"
             @update:github-update-method="$emit('update:githubUpdateMethod', $event)"
             @check-update="$emit('checkUpdate')"
             @open-github="$emit('openGithub')"
@@ -251,6 +252,7 @@
       <label for="config-drawer-toggle" aria-label="关闭设置导航" class="drawer-overlay"></label>
       <aside
         class="relative flex h-full min-h-0 w-44 flex-col border-r border-base-300 bg-base-200 px-2"
+        style="padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);"
         @mouseenter="navScrollbarRef?.reveal()"
         @mouseleave="navScrollbarRef?.hide()"
       >
@@ -426,14 +428,15 @@ type ConfigNavItem = {
   labelKey?: string;
   label?: string;
   devOnly?: boolean;
+  desktopOnly?: boolean;
 };
 const SHOW_DEV_DEMO_TAB = import.meta.env.DEV;
 
 const CONFIG_NAV_ITEMS: ConfigNavItem[] = [
   { tab: "welcome", icon: Home, labelKey: "config.tabs.welcome" },
   { tab: "notification", icon: Bell, labelKey: "config.tabs.notification" },
-  { tab: "networkAccess", icon: Wifi, labelKey: "config.tabs.networkAccess" },
-  { tab: "hotkey", icon: Keyboard, labelKey: "config.tabs.hotkey" },
+  { tab: "networkAccess", icon: Wifi, labelKey: "config.tabs.networkAccess", desktopOnly: true },
+  { tab: "hotkey", icon: Keyboard, labelKey: "config.tabs.hotkey", desktopOnly: true },
   { tab: "api", icon: Cpu, labelKey: "config.tabs.api" },
   { tab: "tools", icon: Wrench, labelKey: "config.tabs.tools" },
   { tab: "mcp", icon: Puzzle, label: "MCP" },
@@ -606,10 +609,17 @@ const workspaceMigrationStageLabel = computed(() => {
   if (stage === "failed") return t("config.tools.migrateWorkspaceStageFailed");
   return t("config.tools.migrateWorkspacePreparing");
 });
-const visibleConfigNavItems = computed(() => CONFIG_NAV_ITEMS.filter((item) => !item.devOnly || SHOW_DEV_DEMO_TAB));
+const isAndroid = new URLSearchParams(window.location.search).get("platform") === "android";
+const visibleConfigNavItems = computed(() =>
+  CONFIG_NAV_ITEMS.filter((item) => {
+    if (item.devOnly && !SHOW_DEV_DEMO_TAB) return false;
+    if (item.desktopOnly && isAndroid) return false;
+    return true;
+  }),
+);
 const activeConfigNavItem = computed(() =>
   visibleConfigNavItems.value.find((item) => item.tab === props.configTab)
-  ?? visibleConfigNavItems.value.find((item) => item.tab === "hotkey")
+  ?? visibleConfigNavItems.value[0]
   ?? null,
 );
 const activeConfigTabTitle = computed(() => {

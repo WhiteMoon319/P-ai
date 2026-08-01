@@ -32,6 +32,23 @@ export function useHotkeyRecordTest(options: {
     microphonePermissionState.value = text ? "unknown" : "unsupported";
   }
 
+  function isAndroidWebViewRuntime() {
+    try {
+      const search = typeof window !== "undefined" ? window.location?.search || "" : "";
+      if (new URLSearchParams(search).get("platform") === "android") return true;
+    } catch {
+      // ignore malformed location search
+    }
+    const userAgent = typeof navigator !== "undefined" ? String(navigator.userAgent || "") : "";
+    return /\bAndroid\b/i.test(userAgent);
+  }
+
+  function microphoneErrorIndicatesPermissionDenied(error: unknown) {
+    const record = error && typeof error === "object" ? error as { name?: unknown } : null;
+    const name = String(record?.name || "").trim();
+    return name === "NotAllowedError" || name === "SecurityError" || name === "PermissionDeniedError";
+  }
+
   function clearTimers() {
     if (!tickTimer) return;
     clearInterval(tickTimer);
@@ -58,20 +75,24 @@ export function useHotkeyRecordTest(options: {
       microphonePermissionState.value = "unsupported";
       return microphonePermissionState.value;
     }
-    if (!navigator.permissions?.query) {
-      microphonePermissionState.value = "unknown";
-      return microphonePermissionState.value;
-    }
-    try {
-      permissionStatus = await navigator.permissions.query({ name: "microphone" as PermissionName });
-      setMicrophonePermissionState(permissionStatus.state);
-      if (!permissionStatusChangeHandler) {
-        permissionStatusChangeHandler = () => {
-          setMicrophonePermissionState(permissionStatus?.state);
-        };
+    if (!isAndroidWebViewRuntime() && navigator.permissions?.query) {
+      try {
+        permissionStatus = await navigator.permissions.query({ name: "microphone" as PermissionName });
+        setMicrophonePermissionState(permissionStatus.state);
+        if (!permissionStatusChangeHandler) {
+          permissionStatusChangeHandler = () => {
+            setMicrophonePermissionState(permissionStatus?.state);
+          };
+        }
+        permissionStatus.onchange = permissionStatusChangeHandler;
+        return microphonePermissionState.value;
+      } catch {
+        // Android WebView 可能不支持 navigator.permissions.query("microphone")
       }
-      permissionStatus.onchange = permissionStatusChangeHandler;
-    } catch {
+    }
+    // 无法通过 query 检测时保持当前状态，不触发权限弹窗
+    // requestMicrophonePermission() 会在用户主动请求后更新状态
+    if (microphonePermissionState.value === "unknown" || microphonePermissionState.value === "unsupported") {
       microphonePermissionState.value = "unknown";
     }
     return microphonePermissionState.value;
@@ -89,11 +110,10 @@ export function useHotkeyRecordTest(options: {
       const nextStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       for (const track of nextStream.getTracks()) track.stop();
       microphonePermissionState.value = "granted";
-      await refreshMicrophonePermissionState();
       options.setStatus(options.t("status.microphonePermissionGranted"));
       return true;
     } catch (error) {
-      await refreshMicrophonePermissionState();
+      microphonePermissionState.value = microphoneErrorIndicatesPermissionDenied(error) ? "denied" : "unknown";
       options.setStatusError("status.microphonePermissionRequestFailed", error);
       return false;
     } finally {
@@ -146,6 +166,7 @@ export function useHotkeyRecordTest(options: {
       hotkeyTestRecording.value = false;
       clearTimers();
       stopStream();
+      microphonePermissionState.value = microphoneErrorIndicatesPermissionDenied(error) ? "denied" : "unknown";
       await refreshMicrophonePermissionState();
       options.setStatusError("status.recordTestFailed", error);
     }
