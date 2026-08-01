@@ -228,7 +228,7 @@ import { useI18n } from "vue-i18n";
 import { Eye, EyeOff, Moon, RefreshCw, Sun } from "@lucide/vue";
 import ApiModelCard from "../../components/ApiModelCard.vue";
 import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
-import { openTransportWindow } from "../../../../services/tauri-api";
+import { openTransportWindow, hideCurrentTransportWindow } from "../../../../services/tauri-api";
 import { clearSimpleSetupDraft, saveSimpleSetupDraft, simpleProviderOptions, useSimpleSetup } from "../../quick-setup/use-simple-setup";
 import type { SimpleModelCard, SimpleReasoningEffort } from "../../quick-setup/use-simple-setup";
 
@@ -257,7 +257,6 @@ const {
   startHotkeyCapture,
   saveAll,
 } = useSimpleSetup();
-
 const providerOptions = simpleProviderOptions.filter((option) => option.id !== "opencode");
 
 const modelCards = computed(() => {
@@ -288,6 +287,7 @@ async function handleSave() {
   if (!errorText.value) {
     clearSimpleSetupDraft();
     await openTransportWindow("chat");
+    await hideCurrentTransportWindow();
   }
 }
 </script>
