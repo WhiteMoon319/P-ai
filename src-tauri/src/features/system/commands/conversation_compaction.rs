@@ -278,6 +278,17 @@ async fn run_context_compaction_pipeline_inner(
         "[归档流程] 上下文整理消息写入校验通过: conversation_id={}, message_id={}",
         source.id, compression_message_id
     ));
+    if let Err(err) = update_conversation_todos_and_emit(state, &source.id, Vec::new()) {
+        runtime_log_warn(format!(
+            "[归档流程] 清空会话待办失败: conversation_id={}, error={}",
+            source.id, err
+        ));
+    } else {
+        runtime_log_info(format!(
+            "[归档流程] 清空会话待办完成: conversation_id={}",
+            source.id
+        ));
+    }
     match clear_apply_patch_temp(&state.data_path) {
         Ok((record_count, blob_count)) => {
             runtime_log_info(format!(
