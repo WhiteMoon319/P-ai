@@ -1493,7 +1493,10 @@ async function refreshChatReaderDirectoryOnWorkspaceChange() {
   const panel = chatReaderPanelRef.value;
   const workspaceRootPath = String(props.currentWorkspaceRootPath || "").trim();
   if (!panel || !workspaceRootPath) return;
-  await panel.openDirectoryTree(workspaceRootPath);
+  // 目录树已展开时跟随工作区路径刷新；用户未展开/已关闭时保持关闭，不强制弹出
+  if (String(panel.directoryRootPath || "").trim()) {
+    await panel.openDirectoryTree(workspaceRootPath);
+  }
 }
 
 function selectChatRightPanelMode(mode: ChatRightPanelMode) {
@@ -1504,7 +1507,7 @@ function selectChatRightPanelMode(mode: ChatRightPanelMode) {
   }
 }
 
-// 打开右侧面板 / 切到 reader / 工作区变化时：无打开文件则自动展开目录；工作区变化时强刷目录树
+// 打开右侧面板 / 切到 reader / 工作区变化时：无打开文件则自动展开目录；工作区变化时刷新已展开的目录树
 watch(
   () => [
     effectiveToolReviewPanelOpen.value,
@@ -1518,8 +1521,10 @@ watch(
 );
 
 watch(
-  () => String(props.currentWorkspaceRootPath || "").trim(),
-  (nextRoot, prevRoot) => {
+  () => [String(props.activeConversationId || "").trim(), String(props.currentWorkspaceRootPath || "").trim()] as const,
+  ([conversationId, nextRoot], [prevConversationId, prevRoot]) => {
+    // 会话切换会重拉会话级工作区路径，这是正常变化，不应触发目录强刷
+    if (conversationId !== prevConversationId) return;
     if (!nextRoot || nextRoot === prevRoot) return;
     void refreshChatReaderDirectoryOnWorkspaceChange();
   },
