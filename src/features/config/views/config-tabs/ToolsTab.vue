@@ -14,6 +14,14 @@
             <span v-if="androidWorkspaceImportingRootfs" class="loading loading-spinner loading-xs"></span>
             {{ t('config.tools.androidWorkspaceImportRootfsArchive') }}
           </button>
+          <button class="btn btn-sm btn-outline" type="button" :disabled="androidWorkspaceBusy" @click="repairAndroidWorkspaceRuntime">
+            <span v-if="androidWorkspaceRepairing" class="loading loading-spinner loading-xs"></span>
+            {{ t('config.tools.androidWorkspaceRepairRuntime') }}
+          </button>
+          <button class="btn btn-sm btn-error btn-outline" type="button" :disabled="androidWorkspaceBusy" @click="resetAndroidWorkspaceRuntime">
+            <span v-if="androidWorkspaceResetting" class="loading loading-spinner loading-xs"></span>
+            {{ t('config.tools.androidWorkspaceResetRuntime') }}
+          </button>
           <button class="btn btn-sm btn-ghost" type="button" :disabled="androidWorkspaceBusy || androidWorkspaceStatus?.state === 'not_downloaded'" @click="disableAndroidWorkspace">
             {{ t('config.tools.androidWorkspaceDisable') }}
           </button>
@@ -75,7 +83,7 @@
                   {{ t('config.tools.androidWorkspaceFileManagerStandaloneHint') }}
                 </div>
               </div>
-              <button class="btn btn-sm btn-neutral" type="button" :disabled="!androidWorkspaceReady" @click="openAndroidWorkspaceFileManager">
+              <button class="btn btn-sm btn-neutral" type="button" :disabled="androidWorkspaceBusy" @click="openAndroidWorkspaceFileManager">
                 <FolderOpen class="h-4 w-4" />
                 <span>{{ t('config.tools.androidWorkspaceOpenFileManager') }}</span>
               </button>
@@ -188,9 +196,26 @@
 
     <AndroidWorkspaceFileManagerDialog
       ref="androidWorkspaceFileManagerDialog"
-      :ready="androidWorkspaceReady"
       @status-changed="onAndroidWorkspaceStatusChanged"
     />
+
+    <dialog ref="androidWorkspaceResetDialog" class="modal" @cancel.prevent="cancelAndroidWorkspaceReset">
+      <div class="modal-box max-w-md p-4">
+        <h3 class="text-sm font-semibold">{{ t("config.tools.androidWorkspaceResetRuntimeConfirmTitle") }}</h3>
+        <p class="mt-3 text-sm whitespace-pre-wrap">{{ t("config.tools.androidWorkspaceResetRuntimeConfirm") }}</p>
+        <div class="modal-action mt-4">
+          <button class="btn btn-sm btn-ghost" type="button" @click="cancelAndroidWorkspaceReset">
+            {{ t("common.cancel") }}
+          </button>
+          <button class="btn btn-sm btn-error" type="button" @click="confirmAndroidWorkspaceReset">
+            {{ t("config.tools.androidWorkspaceResetRuntimeConfirmAction") }}
+          </button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop">
+        <button aria-label="close" @click="cancelAndroidWorkspaceReset">close</button>
+      </form>
+    </dialog>
 
     <dialog ref="initializeWorkspaceDialog" class="modal">
       <div class="modal-box max-w-md p-4">
@@ -258,6 +283,8 @@ type AndroidWorkspaceState = "not_downloaded" | "downloading" | "ready";
 type AndroidWorkspaceStatus = {
   state: AndroidWorkspaceState;
   rootPath: string;
+  llmWorkspaceRoot?: string | null;
+  runtimeRoot?: string | null;
   initializedAt?: string | null;
   updatedAt?: string | null;
   lastError?: string | null;
@@ -288,7 +315,11 @@ const androidWorkspaceLoading = ref(false);
 const androidWorkspaceInitializing = ref(false);
 const androidWorkspaceImportingRootfs = ref(false);
 const androidWorkspaceDisabling = ref(false);
+const androidWorkspaceRepairing = ref(false);
+const androidWorkspaceResetting = ref(false);
 const androidWorkspaceRootfsInput = ref<HTMLInputElement | null>(null);
+const androidWorkspaceResetDialog = ref<HTMLDialogElement | null>(null);
+let resolveAndroidWorkspaceResetConfirm: ((value: boolean) => void) | null = null;
 const androidWorkspaceMessage = ref("");
 const androidWorkspaceMessageError = ref(false);
 const androidWorkspaceFileManagerDialog = ref<InstanceType<typeof AndroidWorkspaceFileManagerDialog> | null>(null);
@@ -299,7 +330,12 @@ const tauriRuntimeAvailable = isTauriRuntimeAvailable();
 const terminalShellKindValue = computed(() => String(props.config.terminalShellKind || "auto"));
 const androidWorkspaceReady = computed(() => androidWorkspaceStatus.value?.state === "ready");
 const androidWorkspaceBusy = computed(
-  () => androidWorkspaceInitializing.value || androidWorkspaceImportingRootfs.value || androidWorkspaceDisabling.value,
+  () =>
+    androidWorkspaceInitializing.value
+    || androidWorkspaceImportingRootfs.value
+    || androidWorkspaceDisabling.value
+    || androidWorkspaceRepairing.value
+    || androidWorkspaceResetting.value,
 );
 const androidWorkspaceStateLabel = computed(() => {
   const state = androidWorkspaceStatus.value?.state || "not_downloaded";
@@ -438,8 +474,67 @@ async function disableAndroidWorkspace() {
   }
 }
 
+async function repairAndroidWorkspaceRuntime() {
+  if (androidWorkspaceBusy.value) return;
+  androidWorkspaceRepairing.value = true;
+  setAndroidWorkspaceMessage("");
+  try {
+    androidWorkspaceStatus.value = await invokeTauri<AndroidWorkspaceStatus>("repair_android_workspace_runtime");
+    setAndroidWorkspaceMessage(t("config.tools.androidWorkspaceRepairRuntimeDone"));
+  } catch (error) {
+    setAndroidWorkspaceMessage(t("config.tools.androidWorkspaceRepairRuntimeFailed", { err: toErrorMessage(error) }), true);
+    await loadAndroidWorkspaceStatus();
+  } finally {
+    androidWorkspaceRepairing.value = false;
+  }
+}
+
+function requestAndroidWorkspaceResetConfirm(): Promise<boolean> {
+  const dialog = androidWorkspaceResetDialog.value;
+  if (!dialog || dialog.open || resolveAndroidWorkspaceResetConfirm) {
+    return Promise.resolve(false);
+  }
+  return new Promise((resolve) => {
+    resolveAndroidWorkspaceResetConfirm = resolve;
+    dialog.showModal();
+  });
+}
+
+function settleAndroidWorkspaceResetConfirm(value: boolean) {
+  const dialog = androidWorkspaceResetDialog.value;
+  if (dialog?.open) dialog.close();
+  const resolve = resolveAndroidWorkspaceResetConfirm;
+  resolveAndroidWorkspaceResetConfirm = null;
+  resolve?.(value);
+}
+
+function cancelAndroidWorkspaceReset() {
+  settleAndroidWorkspaceResetConfirm(false);
+}
+
+function confirmAndroidWorkspaceReset() {
+  settleAndroidWorkspaceResetConfirm(true);
+}
+
+async function resetAndroidWorkspaceRuntime() {
+  if (androidWorkspaceBusy.value) return;
+  const confirmed = await requestAndroidWorkspaceResetConfirm();
+  if (!confirmed) return;
+  androidWorkspaceResetting.value = true;
+  setAndroidWorkspaceMessage("");
+  try {
+    androidWorkspaceStatus.value = await invokeTauri<AndroidWorkspaceStatus>("reset_android_workspace_runtime");
+    setAndroidWorkspaceMessage(t("config.tools.androidWorkspaceResetRuntimeDone"));
+  } catch (error) {
+    setAndroidWorkspaceMessage(t("config.tools.androidWorkspaceResetRuntimeFailed", { err: toErrorMessage(error) }), true);
+    await loadAndroidWorkspaceStatus();
+  } finally {
+    androidWorkspaceResetting.value = false;
+  }
+}
+
 function openAndroidWorkspaceFileManager() {
-  if (!androidWorkspaceReady.value) return;
+  if (androidWorkspaceBusy.value) return;
   androidWorkspaceFileManagerDialog.value?.open();
 }
 
@@ -803,5 +898,6 @@ onMounted(() => {
 onUnmounted(() => {
   androidWorkspaceStatusUnlisten?.();
   androidWorkspaceStatusUnlisten = null;
+  settleAndroidWorkspaceResetConfirm(false);
 });
 </script>

@@ -32,7 +32,6 @@ tokio = { version = "1.52.1", features = ["rt-multi-thread", "sync", "time"] }
 tokio-util = { version = "0.7.18", features = ["rt"] }
 tokio-tungstenite = { version = "0.29.0", features = ["rustls-tls-webpki-roots"] }
 axum = { version = "0.8", features = ["ws"] }
-dingtalk-stream = "0.1.5"
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "stream", "multipart", "query", "form", "rustls"] }
 webpki-root-certs = "1"
 genai = "0.7.0-beta.9"
@@ -66,6 +65,7 @@ chrono = { version = "0.4", features = ["serde"] }
 undoc = "0.5.2"
 litchi = { git = "https://github.com/DevExzh/litchi.git", rev = "5a931961d58bf71c6bb5b7e82f450bda34349e3d" }
 walkdir = "2.5.0"
+regex = "1.12.4"
 zip = { version = "8.5.1", default-features = false, features = ["deflate", "aes-crypto"] }
 ropey = "1.6.1"
 unicode-segmentation = "1.13.3"
@@ -75,6 +75,7 @@ unicode-segmentation = "1.13.3"
 # hickory-dns 纯 Rust 解析器依赖 /etc/resolv.conf，Android 上无此文件会导致 DNS 解析卡死；
 # 仅桌面启用，Android 退回系统默认 getaddrinfo 解析器。
 reqwest = { version = "0.13.4", default-features = false, features = ["hickory-dns"] }
+dingtalk-stream = "0.1.5"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
@@ -83,10 +84,6 @@ arboard = "3"
 xcap = "0.9.6"
 font-kit = "0.14"
 webbrowser = "1.0"
-
-# Android 专属依赖
-[target.'cfg(target_os = "android")'.dependencies]
-openssl-sys = { version = "0.9", features = ["vendored"] }
 
 [features]
 default = ["custom-protocol"]

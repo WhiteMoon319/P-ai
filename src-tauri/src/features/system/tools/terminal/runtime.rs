@@ -285,7 +285,7 @@ fn detect_terminal_shell_candidates() -> Vec<TerminalShellProfile> {
     {
         return vec![TerminalShellProfile {
             kind: "android-proot".to_string(),
-            path: "runtime/linux:/bin/bash".to_string(),
+            path: "runtime/android-workspace/default/linux:/bin/sh".to_string(),
             args_prefix: vec!["-lc".to_string()],
         }];
     }

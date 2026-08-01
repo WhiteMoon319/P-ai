@@ -5,6 +5,8 @@ struct SandboxRequest {
     cwd: std::path::PathBuf,
     timeout_ms: u64,
     cwd_pre_validated: bool,
+    stdin: Option<Vec<u8>>,
+    cancel_token: Option<tokio_util::sync::CancellationToken>,
 }
 
 #[derive(Debug, Clone)]

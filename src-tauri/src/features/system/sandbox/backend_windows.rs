@@ -43,7 +43,9 @@ fn sandbox_run_with_windows_job_backend_blocking(
     command_builder.current_dir(&cwd);
     command_builder.stdout(std::process::Stdio::piped());
     command_builder.stderr(std::process::Stdio::piped());
-    command_builder.stdin(std::process::Stdio::null());
+    if request.stdin.is_some() {
+        command_builder.stdin(std::process::Stdio::piped());
+    }
     command_builder.creation_flags(CREATE_NO_WINDOW);
     terminal_apply_windows_utf8_env(&mut command_builder);
     for arg in &shell.args_prefix {
@@ -83,6 +85,20 @@ fn sandbox_run_with_windows_job_backend_blocking(
         buf
     });
 
+    // 先建 Job、启动输出读取线程，再写 stdin；写入放在独立线程避免子进程不消费
+    // stdin 时阻塞主循环（超时/取消轮询永远到不了）。线程在命令退出后回收：
+    // 子进程退出或超时 kill 后管道关闭，写线程会以 EPIPE 结束。
+    let mut stdin_writer: Option<std::thread::JoinHandle<std::io::Result<()>>> = None;
+    if let Some(bytes) = &request.stdin {
+        if let Some(mut child_stdin) = child.stdin.take() {
+            let bytes = bytes.clone();
+            stdin_writer = Some(std::thread::spawn(move || {
+                use std::io::Write as _;
+                child_stdin.write_all(&bytes)
+            }));
+        }
+    }
+
     let timeout_ms = request.timeout_ms.max(1);
     let started = std::time::Instant::now();
     loop {
@@ -91,6 +107,16 @@ fn sandbox_run_with_windows_job_backend_blocking(
             .map_err(|err| format!("terminal_exec try_wait failed: {err}"))?
         {
             break;
+        }
+        if request
+            .cancel_token
+            .as_ref()
+            .map(|token| token.is_cancelled())
+            .unwrap_or(false)
+        {
+            drop(job);
+            let _ = child.kill();
+            return Err("terminal_exec cancelled".to_string());
         }
         if started.elapsed().as_millis() >= timeout_ms as u128 {
             drop(job);
@@ -126,6 +152,16 @@ fn sandbox_run_with_windows_job_backend_blocking(
     let stderr = stderr_reader
         .join()
         .map_err(|_| "Join stderr reader thread failed.".to_string())?;
+    if let Some(writer) = stdin_writer {
+        if let Err(err) = writer
+            .join()
+            .map_err(|_| "Join stdin writer thread failed.".to_string())?
+        {
+            if err.kind() != std::io::ErrorKind::BrokenPipe {
+                return Err(format!("terminal_exec stdin write failed: {err}"));
+            }
+        }
+    }
     let duration_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
 
     Ok(SandboxExecutionResult {

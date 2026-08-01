@@ -137,7 +137,7 @@ fn operate_provider_tool_definition() -> ProviderToolDefinition {
 fn read_provider_tool_definition() -> ProviderToolDefinition {
     ProviderToolDefinition::new(
         READ_TOOL_NAME,
-        "读取本地文档内容。支持文本、代码、PDF 与 Office 文件；path 必须是绝对路径；对文本、代码、Office 等非 PDF 内容，offset 表示跳过行，limit 表示返回行数；对 PDF 则代表页。图片、音频、视频请改用 read_media。",
+        "读取本地文档内容。支持文本、代码、PDF 与 Office 文件；path 必须是绝对路径；Android proot 中也可直接传 /workspace/... 或 /root/.pai/... 这类沙盒内路径，工具会映射到应用私有工作区；对文本、代码、Office 等非 PDF 内容，offset 表示跳过行，limit 表示返回行数；对 PDF 则代表页。图片、音频、视频请改用 read_media。",
         serde_json::json!({
             "type": "object",
             "properties": {
@@ -164,7 +164,7 @@ fn read_provider_tool_definition() -> ProviderToolDefinition {
 fn read_media_provider_tool_definition() -> ProviderToolDefinition {
     ProviderToolDefinition::new(
         READ_MEDIA_TOOL_NAME,
-        "解析本地图片、音频或视频；仅在当前看不到图片，或需要解析音频、视频时使用。",
+        "解析本地图片、音频或视频；仅在当前看不到图片，或需要解析音频、视频时使用。Android proot 中可直接传 /workspace/... 或 /root/.pai/... 这类沙盒内路径。",
         serde_json::json!({
             "type": "object",
             "properties": {
@@ -785,8 +785,8 @@ impl RuntimeToolDyn for AndroidWorkspaceCheckedRuntimeTool {
     }
 
     fn call_json(&self, args_json: String) -> RuntimeToolCallFuture<'_> {
-        if !is_android_workspace_ready(&self.app_state) {
-            if let Some(reason) = android_workspace_gate_error_for_tool(&self.tool_name, self.inner.is_mcp_tool()) {
+        if let Some(reason) = android_workspace_gate_error_for_tool(&self.tool_name, self.inner.is_mcp_tool()) {
+            if !is_android_workspace_ready(&self.app_state) {
                 let tool_name = self.tool_name.clone();
                 return Box::pin(async move {
                     Ok(ProviderToolResult::error(format!(

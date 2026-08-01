@@ -89,9 +89,21 @@ jobs:
             ar x "/tmp/$name" --output="/tmp/extract-$name"
             tar -xf "/tmp/extract-$name/data.tar.xz" -C "/tmp/extract-$name"
           done
-          # proot 二进制
+          # proot 二进制（exec + loader，loader 缺失时 guest execve 无法初始化）。
+          # Termux 包中 loader 位于 usr/libexec/proot/loader，按 libproot_loader.so 命名打包。
           cp /tmp/extract-proot_5.1.107.89_aarch64.deb/data/data/com.termux/files/usr/bin/proot "$JNI_DIR/libproot_exec.so"
           chmod +x "$JNI_DIR/libproot_exec.so"
+          LOADER_SRC="/tmp/extract-proot_5.1.107.89_aarch64.deb/data/data/com.termux/files/usr/libexec/proot/loader"
+          if [ ! -f "$LOADER_SRC" ]; then
+            LOADER_SRC="/tmp/extract-proot_5.1.107.89_aarch64.deb/data/data/com.termux/files/usr/lib/libproot_loader.so"
+          fi
+          if [ -f "$LOADER_SRC" ]; then
+            cp "$LOADER_SRC" "$JNI_DIR/libproot_loader.so"
+            chmod 0644 "$JNI_DIR/libproot_loader.so"
+          else
+            echo "ERROR: libproot_loader.so not found in proot deb (checked usr/libexec/proot/loader and usr/lib); proot guest execve will fail" >&2
+            exit 1
+          fi
           # Android native libs 只稳定打包 lib*.so；把 Termux 的 libtalloc.so.2 改名并同步修补 NEEDED。
           cp /tmp/extract-libtalloc_2.4.3_aarch64.deb/data/data/com.termux/files/usr/lib/libtalloc.so.2 "$JNI_DIR/libtalloc.so"
           chmod 0644 "$JNI_DIR/libtalloc.so"

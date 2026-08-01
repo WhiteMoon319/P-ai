@@ -97,6 +97,8 @@ async fn sandbox_execute_command(
     cwd: &std::path::Path,
     timeout_ms: u64,
     cwd_pre_validated: bool,
+    stdin: Option<Vec<u8>>,
+    cancel_token: Option<tokio_util::sync::CancellationToken>,
 ) -> Result<SandboxExecutionResult, String> {
     let manager = SandboxManager::from_state(state);
     let request = SandboxRequest {
@@ -105,6 +107,8 @@ async fn sandbox_execute_command(
         cwd: cwd.to_path_buf(),
         timeout_ms,
         cwd_pre_validated,
+        stdin,
+        cancel_token,
     };
     manager.run(state, request).await
 }

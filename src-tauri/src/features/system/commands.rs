@@ -16,6 +16,7 @@ include!("commands/prompt_assembly.rs");
 include!("commands/debug_log_commands.rs");
 
 // ==================== Android 沙盒工作区 ====================
+include!("commands/android_workspace_paths.rs");
 include!("commands/android_workspace.rs");
 
 // ==================== 分享导出命令 ====================

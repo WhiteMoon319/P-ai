@@ -85,7 +85,10 @@ include!("features/chat/scheduler.rs");
 include!("features/remote_im/channel_store.rs");
 include!("features/remote_im/markdown_filter.rs");
 include!("features/remote_im/onebot_v11_ws.rs");
+#[cfg(not(target_os = "android"))]
 include!("features/remote_im/dingtalk_stream.rs");
+#[cfg(target_os = "android")]
+include!("features/remote_im/dingtalk_stream_android_stub.rs");
 include!("features/remote_im/weixin_oc.rs");
 include!("features/remote_im.rs");
 include!("features/remote_im/maintenance.rs");
@@ -1335,7 +1338,14 @@ pub fn run() {
             init_android_workspace,
             import_android_workspace_rootfs_archive,
             reset_android_workspace_state,
+            repair_android_workspace_runtime,
+            reset_android_workspace_runtime,
             list_android_workspace_files,
+            read_android_workspace_text,
+            write_android_workspace_text,
+            move_android_workspace_file,
+            glob_android_workspace_files,
+            grep_android_workspace_files,
             import_file_to_android_workspace,
             export_file_from_android_workspace,
             delete_file_from_android_workspace,

@@ -908,7 +908,8 @@ async fn builtin_shell_exec(
     if cmd.is_empty() {
         return Err("exec.command is empty".to_string());
     }
-    let autonomous_mode = terminal_session_shell_autonomous_mode(state, &normalized_session)?;
+    let android_proot_unrestricted = cfg!(target_os = "android") && runtime_shell.kind == "android-proot";
+    let autonomous_mode = android_proot_unrestricted || terminal_session_shell_autonomous_mode(state, &normalized_session)?;
     if !autonomous_mode {
         if let Some(reason) = terminal_command_block_reason(cmd) {
             let review = terminal_local_review_value(&ui_language, terminal_local_rule_reason_message(&ui_language, reason));
@@ -959,8 +960,8 @@ async fn builtin_shell_exec(
     };
     let timeout_ms = normalize_terminal_timeout_ms(timeout_ms);
     let command_analysis = terminal_analyze_command(&cwd, cmd, &runtime_shell.kind);
-    let is_read_whitelist =
-        terminal_command_is_read_whitelist(cmd, &runtime_shell.kind, &command_analysis);
+    let is_read_whitelist = android_proot_unrestricted
+        || terminal_command_is_read_whitelist(cmd, &runtime_shell.kind, &command_analysis);
     let read_whitelist_diagnostics = if is_read_whitelist {
         None
     } else {
@@ -979,7 +980,9 @@ async fn builtin_shell_exec(
             &command_analysis,
         ))
     };
-    let execution_cwd = if is_read_whitelist {
+    let execution_cwd = if android_proot_unrestricted {
+        cwd.clone()
+    } else if is_read_whitelist {
         terminal_read_whitelist_cwd_for_execution(cmd, &runtime_shell.kind, &cwd)
     } else {
         cwd.clone()
@@ -1017,7 +1020,11 @@ async fn builtin_shell_exec(
     } else {
         terminal_strictest_workspace_access(&matched_write_accesses)
     };
-    let write_risk = command_analysis.write_risk.clone();
+    let write_risk = if android_proot_unrestricted {
+        TerminalWriteRisk::None
+    } else {
+        command_analysis.write_risk.clone()
+    };
     let is_write_command = !matches!(write_risk, TerminalWriteRisk::None);
     if !is_read_whitelist {
         let relative_unmatched_paths = unmatched_paths
@@ -1548,7 +1555,7 @@ async fn builtin_shell_exec(
         }
     }
 
-    let execution_result = sandbox_execute_command(state, &normalized_session, cmd, &execution_cwd, timeout_ms, is_read_whitelist).await;
+    let execution_result = sandbox_execute_command(state, &normalized_session, cmd, &execution_cwd, timeout_ms, is_read_whitelist, None, None).await;
     let execution = match execution_result {
         Ok(execution) => execution,
         Err(err) if terminal_is_timeout_error(&err) => {

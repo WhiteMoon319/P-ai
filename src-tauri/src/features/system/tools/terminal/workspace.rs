@@ -963,9 +963,9 @@ fn terminal_prompt_trusted_roots_block(
     lines.push(format!("当前操作系统: {}", std::env::consts::OS));
     lines.push(format!("当前 shell: {}", shell_title));
     if runtime_shell.kind == "android-proot" {
-        lines.push("说明: 当前工作在 Android 沙盒内的 Ubuntu 24.04.3 arm64 Linux 运行环境（通过 proot 挂载）。沙盒根目录的 workspace 文件区映射到 Linux 内的 /workspace；可在此目录下自由读写文件、管理 Git 仓库。".to_string());
-        lines.push("/workspace 是 Shell 会话的默认当前目录。你可以使用 apt、pip 等标准工具安装所需软件包；安装的软件仅限于本次沙盒会话，但文件修改和 Git 提交会持久保存在 /workspace 中。".to_string());
-        lines.push("PAI 助理空间资源在 Linux 内同步映射到 /root/.pai；其中 Skill 可从 /root/.pai/skills 或 /workspace/skills 访问，私有组织配置可从 /root/.pai/private-organization 访问。".to_string());
+        lines.push("说明: 当前工作在 Android 沙盒内的 Ubuntu 24.04.3 arm64 Linux 运行环境（通过 proot 挂载）。宿主 PAI 助理空间 llm-workspace 会在 Linux 内同时映射为 /workspace 与 /root/.pai；可在 /workspace 下自由读写文件、管理 Git 仓库。".to_string());
+        lines.push("/workspace 是 Shell 会话的默认当前目录。Android proot 内不套用桌面端只读命令白名单，可直接使用标准 Linux 命令；apt、pip 等安装内容会持久保存在 Linux rootfs 中，手动重置沙盒时才会删除。文件修改和 Git 提交会持久保存在 llm-workspace 中。".to_string());
+        lines.push("/workspace 与 /root/.pai 指向同一个 PAI 助理空间；Skill 可从 /root/.pai/skills 或 /workspace/skills 访问，私有组织配置可从 /root/.pai/private-organization 或 /workspace/private-organization 访问。read/read_media/write/delete/update/move 等文件工具也支持 /workspace/... 与 /root/.pai/... 这类 Android proot 路径，并会自动映射到应用私有工作区。".to_string());
     } else {
         lines.push("说明: 当前工作目录是用户任务的默认执行目录。".to_string());
     }
