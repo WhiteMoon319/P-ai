@@ -48,10 +48,7 @@ impl MemoryEmbeddingProvider for GeminiEmbeddingProvider {
         let api_key = self.api_key.trim().to_string();
 
         memory_run_async(async move {
-            let client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(60))
-                .build()
-                .map_err(|err| format!("Build Gemini embedding HTTP client failed: {err}"))?;
+            let client = memory_http_client()?;
             let resp = client
                 .post(&url)
                 .query(&[("key", api_key.clone())])

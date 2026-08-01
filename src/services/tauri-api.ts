@@ -203,6 +203,15 @@ export type TransportCapabilities = {
 };
 
 /**
+ * Android 上同样是 Tauri WebView（会注入 __TAURI_INTERNALS__），但移动端
+ * 没有可操作的最小化/最大化/关闭窗口语义，窗口控制按钮必须隐藏。
+ */
+function isAndroidRuntime(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /android/i.test(String(navigator.userAgent || ""));
+}
+
+/**
  * 文件对话框也是传输边界的一部分。
  *
  * 业务层只消费这个与运行时无关的结果；原生插件的动态 import 只能出现在
@@ -424,7 +433,7 @@ function postTransportHostMessage(message: unknown): boolean {
 export function getTransportCapabilities(): TransportCapabilities {
   const native = isTauriRuntimeAvailable();
   return {
-    windowControls: native,
+    windowControls: native && !isAndroidRuntime(),
     localFileSystem: native,
     localPathPicker: native,
   };
@@ -1034,7 +1043,7 @@ async function ensureWebTransportConversationContext(conversationId: string, for
 
 /** 设置入口由适配器决定打开原生窗口、宿主页或普通浏览器页面。 */
 export async function openTransportSettings(): Promise<boolean> {
-  if (isTauriRuntimeAvailable()) {
+  if (isTauriRuntimeAvailable() && !isAndroidRuntime()) {
     return openTransportWindow("main");
   }
   if (typeof window === "undefined") return false;
@@ -1042,6 +1051,13 @@ export async function openTransportSettings(): Promise<boolean> {
   const url = new URL(path, window.location.href);
   const config = ensureWebBridgeConfig();
   if (config?.chatUrl) url.searchParams.set("chatUrl", config.chatUrl);
+  // Android WebView（回环地址 + Tauri runtime 无独立 main 窗口）：在 WebView 内
+  // 导航到设置页并注入平台标识，不能调用 show_main_window（Android 只有 chat 窗口）。
+  if (isAndroidRuntime()) {
+    url.searchParams.set("platform", "android");
+    window.location.href = url.toString();
+    return true;
+  }
   // VS Code 侧边栏不能直接使用 Tauri 窗口命令，由扩展宿主打开本机设置地址。
   if (getVsCodeHostApi() && postTransportHostMessage({ type: "pai-open-settings", url: url.toString() })) {
     return true;

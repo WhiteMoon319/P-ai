@@ -50,10 +50,7 @@ impl MemoryRerankProvider for VllmRerankProvider {
         let auth = self.api_key.clone();
 
         memory_run_async(async move {
-            let client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(60))
-                .build()
-                .map_err(|err| format!("Build vLLM rerank HTTP client failed: {err}"))?;
+            let client = memory_http_client()?;
             let mut req = client
                 .post(&url)
                 .header(CONTENT_TYPE, "application/json")

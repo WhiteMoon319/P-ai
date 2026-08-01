@@ -485,7 +485,7 @@ mod sse_transport_tests {
         let url_b = spawn_sse_mock(&["fetch"]).await;
         let server = group_server_with_urls(&[("alpha", &url_a), ("beta", &url_b)]);
 
-        let tools = mcp_list_server_tools_runtime(&server)
+        let tools = mcp_list_server_tools_runtime(None, &server)
             .await
             .expect("list group tools");
         let names = tools
@@ -509,7 +509,7 @@ mod sse_transport_tests {
         let url_b = spawn_sse_mock(&["b_c"]).await;
         let server = group_server_with_urls(&[("a_b", &url_a), ("a", &url_b)]);
 
-        let err = mcp_list_server_tools_runtime(&server)
+        let err = mcp_list_server_tools_runtime(None, &server)
             .await
             .expect_err("应检测到前缀冲突");
         assert!(err.contains("重复"), "错误应提示重复, got: {err}");
@@ -535,5 +535,3 @@ mod sse_transport_tests {
         );
     }
 }
-
-

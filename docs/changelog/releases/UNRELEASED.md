@@ -36,6 +36,10 @@
 - 修复（android-workspace）：Android proot `PROOT_TMP_DIR` 统一改为基于 canonical root 计算，与 `-r` rootfs 路径同源，修复 `/data/data` 与 `/data/user/0` 前缀不一致导致 proot 找不到 glue 临时目录、rootfs 未挂载的问题；`android_workspace_proot_temp_root` 与 repair 命令同步 canonicalize。
 - 修复（android-workspace）：Android proot exec 改为宿主侧 `TMPDIR` 指向应用私有 runtime（此前误设 guest 内 `/tmp`，导致 `--link2symlink` glue rootfs 在 Android 宿主 chmod 失败、rootfs 未挂载）；启动前显式探测 `PROOT_TMP_DIR` 可写性并校验 `/usr/bin/sh`/`/bin/sh` 入口，失败时给出可诊断错误而非裸 `execve` 失败。
 - 修复（android-workspace）：Android rootfs 入口自愈同时覆盖 `/usr/bin/sh` 与 `/bin/sh`（Ubuntu 中 `/bin -> /usr/bin` symlink，proot 实际 execve `/usr/bin/sh`），并放宽就绪判定为 dash + `/usr/bin/sh` 同时可用，避免 rootfs 就绪但 exec 必挂。
+- 修复（android-memory）：Android 端嵌入（OpenAI/Gemini）与重排（vLLM）模型调用改用静态 WebPKI 根证书构建 HTTP 客户端，避免 reqwest 默认 `rustls-platform-verifier` 在 Android 上未初始化 panic 导致记忆检索调用异常。
+- 修复（android）：合并上游 0.43 后补注册 `list_transport_conversations`、`list_conversation_create_options`、`get_conversation_workspace_permission`、`select_conversation_workspace_permission`、`save_conversation_workspace_layout`、`list_conversation_workspaces` 六个 Tauri 命令，修复前端 `workspace.list`/`workspace.layout.save`/`workspace.permission` 调用找不到命令导致工作区与沙盒状态加载失败的问题。
+- 修复（android）：Android WebView 同样注入 `__TAURI_INTERNALS__`，窗口控制按钮显隐改为在传输适配层按平台能力判定，移动端不再显示最小化/最大化/关闭按钮。
+- 修复（android）：Android 上打开设置不再调用 `show_main_window`（仅配置了 chat 窗口会报 "Window 'main' not found"），改为 WebView 内导航 `settings.html` 并注入 `platform=android`，恢复设置页打开与工具页 Android 沙盒管理入口。
 
 >
 

@@ -438,6 +438,9 @@ const props = defineProps<{
   attachedIdeContextReferences: IdeContextReferenceItem[];
   currentTheme?: string;
   showConversationActions?: boolean;
+  sidebarMode?: boolean;
+  bridgeRequest?: unknown;
+  bridgeSubscribe?: unknown;
   chatUsagePercent?: number;
 }>();
 

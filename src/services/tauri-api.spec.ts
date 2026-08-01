@@ -36,15 +36,16 @@ vi.mock("@tauri-apps/api/webview", () => ({
 }));
 
 import {
+  applyTransportConfigMigrationPackage,
   bindTransportConversationStream,
   createTransportChannel,
   disconnectTransport,
   emitTransportEvent,
   ensureTransportReady,
   exportTransportConfigMigrationPackage,
+  getTransportCapabilities,
   invokeTauri,
   onTransportNotification,
-  applyTransportConfigMigrationPackage,
   previewTransportConfigMigrationPackage,
   probeTransportConversationStream,
   unbindTransportConversationStream,
@@ -565,5 +566,41 @@ describe("统一传输通知适配器", () => {
       conversationId: "conversation-race",
       probeId: "probe-expired",
     })).toBe(false);
+  });
+});
+
+describe("transport capabilities 平台差异", () => {
+  function mockRuntime(ua: string) {
+    vi.stubGlobal("window", {
+      __TAURI_INTERNALS__: { invoke: () => Promise.resolve() },
+    });
+    Object.defineProperty(globalThis.navigator, "userAgent", {
+      value: ua,
+      configurable: true,
+    });
+    return () => {
+      vi.unstubAllGlobals();
+    };
+  }
+
+  it("Android Tauri WebView 隐藏窗口控制按钮", () => {
+    const restore = mockRuntime("Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36");
+    try {
+      const caps = getTransportCapabilities();
+      expect(caps.windowControls).toBe(false);
+      expect(caps.localFileSystem).toBe(true);
+    } finally {
+      restore();
+    }
+  });
+
+  it("桌面 Tauri 保留窗口控制按钮", () => {
+    const restore = mockRuntime("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+    try {
+      const caps = getTransportCapabilities();
+      expect(caps.windowControls).toBe(true);
+    } finally {
+      restore();
+    }
   });
 });

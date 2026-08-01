@@ -47,10 +47,7 @@ impl MemoryEmbeddingProvider for OpenAIEmbeddingProvider {
         let api_key = self.api_key.trim().to_string();
 
         memory_run_async(async move {
-            let client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(60))
-                .build()
-                .map_err(|err| format!("Build OpenAI embedding HTTP client failed: {err}"))?;
+            let client = memory_http_client()?;
             let resp = client
                 .post(&url)
                 .header(AUTHORIZATION, format!("Bearer {api_key}"))

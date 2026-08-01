@@ -1,3 +1,4 @@
+include!("providers/http_client.rs");
 include!("providers/types.rs");
 include!("providers/openai_embedding.rs");
 include!("providers/gemini_embedding.rs");

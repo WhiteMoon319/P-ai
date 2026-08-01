@@ -27,7 +27,7 @@
           </button>
         </div>
         <div v-else class="flex flex-wrap items-center justify-end gap-2">
-          <button v-if="tauriRuntimeAvailable" class="btn btn-sm" type="button" @click="openShellWorkspaceDir">{{ t('config.tools.openDir') }}</button>
+          <button v-if="localFileSystemAvailable" class="btn btn-sm" type="button" @click="openShellWorkspaceDir">{{ t('config.tools.openDir') }}</button>
           <button class="btn btn-sm" type="button" :disabled="shellWorkspacePathResetting" @click="resetShellWorkspacePath">{{ t('config.tools.resetWorkspacePath') }}</button>
           <button class="btn btn-sm" type="button" :disabled="shellWorkspaceInitializing" @click="initializeShellWorkspace">{{ t('config.tools.initializeWorkspace') }}</button>
           <button class="btn btn-sm btn-primary" :disabled="savingConfig" @click="$emit('saveApiConfig')">
@@ -147,15 +147,14 @@
       </template>
     </div>
 
-    <div class="border border-base-300 rounded-box bg-base-100 overflow-hidden">
-      <div class="px-4 py-3 border-b border-base-300 flex items-center justify-between gap-3">
-        <div>
-          <div class="font-medium">{{ t("config.tools.systemCatalogTitle") }}</div>
-          <div class="text-xs opacity-60">{{ t("config.tools.systemCatalogReadonly") }}</div>
-        </div>
+    <div>
+      <div class="mb-3">
+        <h3 class="text-sm font-semibold">{{ t("config.tools.systemCatalogTitle") }}</h3>
+        <div class="mt-1 text-sm opacity-60">{{ t("config.tools.systemCatalogReadonly") }}</div>
       </div>
 
-      <div v-if="toolDefinitions.length" class="divide-y divide-base-300/60">
+      <div class="border border-base-300 rounded-box bg-base-100 overflow-hidden">
+        <div v-if="toolDefinitions.length" class="divide-y divide-base-300/60">
         <div
           v-for="item in toolDefinitions"
           :key="item.function.name"
@@ -184,6 +183,7 @@
         </div>
       </div>
       <div v-else class="text-sm opacity-50 text-center py-4">{{ t("config.mcpToolList.empty") }}</div>
+      </div>
     </div>
 
     <input
@@ -247,7 +247,15 @@ import type {
   FrontendToolDefinition,
   ToolLoadStatus,
 } from "../../../../types/app";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../../services/tauri-api";
+import {
+  getTransportCapabilities,
+  getTransportDefaultChatShellWorkspacePath,
+  invokeTauri,
+  openTransportExternalUrl,
+  openTransportFileDialog,
+  openTransportWorkspaceDirectory,
+  resetTransportChatShellWorkspace,
+} from "../../../../services/tauri-api";
 import { toErrorMessage } from "../../../../utils/error";
 import { open } from "@tauri-apps/plugin-dialog";
 import AndroidWorkspaceFileManagerDialog from "./AndroidWorkspaceFileManagerDialog.vue";
@@ -326,7 +334,7 @@ const androidWorkspaceFileManagerDialog = ref<InstanceType<typeof AndroidWorkspa
 let androidWorkspaceStatusUnlisten: UnlistenFn | null = null;
 const GIT_DOWNLOAD_URL = "https://git-scm.com/downloads";
 const isWindowsHost = typeof navigator !== "undefined" && /windows/i.test(String(navigator.userAgent || ""));
-const tauriRuntimeAvailable = isTauriRuntimeAvailable();
+const localFileSystemAvailable = getTransportCapabilities().localFileSystem;
 const terminalShellKindValue = computed(() => String(props.config.terminalShellKind || "auto"));
 const androidWorkspaceReady = computed(() => androidWorkspaceStatus.value?.state === "ready");
 const androidWorkspaceBusy = computed(
@@ -403,7 +411,7 @@ function setAndroidWorkspaceMessage(text: string, isError = false) {
 }
 
 async function loadAndroidWorkspaceStatus() {
-  if (!props.isAndroid || !tauriRuntimeAvailable) return;
+  if (!props.isAndroid) return;
   androidWorkspaceLoading.value = true;
   try {
     androidWorkspaceStatus.value = await invokeTauri<AndroidWorkspaceStatus>("get_android_workspace_status");
@@ -584,11 +592,9 @@ function onTerminalShellKindChange(event: Event) {
 }
 
 async function openShellWorkspaceDir() {
-  if (!tauriRuntimeAvailable) return;
+  if (!localFileSystemAvailable) return;
   try {
-    const opened = await invokeTauri<string>("open_chat_shell_workspace_dir", {
-      input: { workspacePath: props.config.shellWorkspaces[0]?.path || "" },
-    });
+    const opened = await openTransportWorkspaceDirectory(props.config.shellWorkspaces[0]?.path || "");
     setShellWorkspaceStatus(t("config.tools.openDirOpened", { path: opened }));
   } catch (error) {
     setShellWorkspaceStatus(t("config.tools.openDirFailed", { err: toErrorMessage(error) }), true);
@@ -601,9 +607,7 @@ async function initializeShellWorkspace() {
   if (!confirmed) return;
   shellWorkspaceInitializing.value = true;
   try {
-    const root = await invokeTauri<string>("reset_chat_shell_workspace", {
-      input: { workspacePath: props.config.shellWorkspaces[0]?.path || "" },
-    });
+    const root = await resetTransportChatShellWorkspace(props.config.shellWorkspaces[0]?.path || "");
     setShellWorkspaceStatus(t("config.tools.initializeWorkspaceDone", { path: root }));
   } catch (error) {
     setShellWorkspaceStatus(t("config.tools.initializeWorkspaceFailed", { err: toErrorMessage(error) }), true);
@@ -642,7 +646,7 @@ async function resetShellWorkspacePath() {
   if (shellWorkspacePathResetting.value) return;
   shellWorkspacePathResetting.value = true;
   try {
-    const defaultPath = await invokeTauri<string>("get_default_chat_shell_workspace_path");
+    const defaultPath = await getTransportDefaultChatShellWorkspacePath();
     if (!Array.isArray(props.config.shellWorkspaces) || props.config.shellWorkspaces.length === 0) {
       props.config.shellWorkspaces = [{
         id: "system-workspace",
@@ -682,7 +686,7 @@ function defaultWorkspaceNameFromPath(path: string): string {
 async function pickWorkspacePath(index: number) {
   const item = props.config.shellWorkspaces[index];
   if (!item) return;
-  const picked = await open({
+  const picked = await openTransportFileDialog({
     directory: true,
     multiple: false,
     defaultPath: item.path || undefined,
@@ -874,7 +878,7 @@ function toolParameterExamples(id: string): string[] {
 }
 
 function openGitDownloadLink() {
-  void invokeTauri("open_external_url", { url: GIT_DOWNLOAD_URL });
+  void openTransportExternalUrl(GIT_DOWNLOAD_URL);
 }
 
 onMounted(() => {
