@@ -1441,6 +1441,7 @@
         "modelReplyReady": "模型响应就绪",
         "finalAppendStart": "助理消息组装完成",
         "finalAppendFinish": "最终正文写入完成",
+        "stageElapsed": "本阶段用时",
         "persistScheduled": "落库任务已安排",
         "chatFinish": "调度结束",
         "modelRoundTotal": "模型轮次总耗时"

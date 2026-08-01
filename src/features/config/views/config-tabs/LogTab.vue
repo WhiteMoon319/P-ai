@@ -334,8 +334,9 @@ type Metric = {
 type TimelineItem = {
   key: string;
   label: string;
-  elapsed: string;
-  sincePrev: string;
+  timeDisplay: string;
+  delta: string;
+  total: string;
 };
 
 type RoundDetailTabId = "answer" | "usage" | "raw" | "tools" | "headers" | "error";
@@ -383,13 +384,28 @@ const TimelineList = defineComponent({
     items: { type: Array as PropType<TimelineItem[]>, required: true },
   },
   setup(props) {
-    return () => h("div", { class: "space-y-2" }, props.items.map((item) =>
-      h("div", { key: item.key, class: "grid gap-2 rounded-lg bg-base-100 px-3 py-2 text-sm sm:grid-cols-[1fr_auto_auto]" }, [
-        h("div", { class: "min-w-0 font-medium" }, item.label),
-        h("div", { class: "opacity-70" }, item.sincePrev),
-        h("div", { class: "opacity-50" }, item.elapsed),
-      ]),
-    ));
+    return () => h("ul", { class: "timeline timeline-vertical timeline-snap-icon max-md:timeline-compact" }, props.items.map((item, index) => {
+      const isFirst = index === 0;
+      const isLast = index === props.items.length - 1;
+      const isStart = index % 2 === 0;
+      const content = [
+        h("time", { class: "font-mono italic text-primary" }, item.total),
+        h("div", { class: "font-black" }, item.label),
+        `${t("config.logs.stages.stageElapsed")} +${item.delta}`,
+      ];
+      return h("li", { key: item.key }, [
+        isFirst ? null : h("hr"),
+        h("div", { class: "timeline-middle" },
+          h("svg", { xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 20 20", fill: "currentColor", class: "h-5 w-5 text-primary" },
+            h("path", { "fill-rule": "evenodd", d: "M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z", "clip-rule": "evenodd" }),
+          ),
+        ),
+        isStart
+          ? h("div", { class: "timeline-start mb-10 md:text-end" }, content)
+          : h("div", { class: "timeline-end md:mb-10" }, content),
+        isLast ? null : h("hr"),
+      ]);
+    }));
   },
 });
 
@@ -544,9 +560,16 @@ function toPretty(input: unknown): string {
   }
 }
 
+function formatTimeDelta(ms: number): string {
+  const rounded = Math.max(0, Math.round(ms));
+  if (rounded >= 100) return `${(rounded / 1000).toFixed(1)}秒`;
+  return `${rounded}ms`;
+}
+
 function msText(value: number | null | undefined): string {
   const ms = Math.max(0, Math.round(Number(value || 0)));
-  return t("config.logs.ms", { ms });
+  if (ms >= 100) return `${(ms / 1000).toFixed(1)}s`;
+  return `${ms}ms`;
 }
 
 function formatLocalTime(value: string): string {
@@ -574,8 +597,9 @@ function timelineItems(entry: LlmRoundLogEntry): TimelineItem[] {
   return (entry.timeline ?? []).map((item: LlmRoundLogStage, index) => ({
     key: `${index}:${item.stage}:${item.elapsedMs}`,
     label: stageLabel(item.stage),
-    elapsed: t("config.logs.elapsedShort", { ms: item.elapsedMs }),
-    sincePrev: t("config.logs.sincePrev", { ms: item.sincePrevMs }),
+    timeDisplay: `${formatTimeDelta(item.elapsedMs)}（+${formatTimeDelta(item.sincePrevMs)}）`,
+    delta: formatTimeDelta(item.sincePrevMs),
+    total: formatTimeDelta(item.elapsedMs),
   }));
 }
 
