@@ -38,7 +38,7 @@ val gitVersionName: String by lazy {
         isIgnoreExitValue = true
     }.standardOutput.asText.get().trim()
     val match =
-        Regex(r"""^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.]+))?(?:-(\d+)-g[0-9a-f]+)?$""").matchEntire(
+        Regex("""^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.]+))?(?:-(\d+)-g[0-9a-f]+)?$""").matchEntire(
             desc
         )
     if (match != null) {
