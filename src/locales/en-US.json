@@ -2006,6 +2006,7 @@
     "configLoaded": "Config loaded.",
     "savingConfig": "Saving config...",
     "configSaved": "Config saved.",
+    "saved": "Saved.",
     "saveConfigBackend404": "Save failed: backend command not reachable (404). Please run `pnpm tauri dev`.",
     "saveConfigFailed": "Save failed: {err}",
     "saveConfigDialogTitle": "Failed to save config",

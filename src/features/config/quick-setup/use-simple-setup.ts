@@ -9,7 +9,7 @@ import { applyUiSizeScale } from "../../shell/composables/use-ui-size-appearance
 import { defaultToolBindings } from "../utils/builtin-tools";
 import { normalizeApiRequestFormat } from "../utils/api-request-format";
 import { apiConfigDisplayName } from "../utils/api-config-display";
-import { MODEL_ROLE_EXPERT_API_CONFIG_ID, MODEL_ROLE_QUICK_API_CONFIG_ID } from "../utils/model-role-options";
+import { MODEL_ROLE_EXPERT_API_CONFIG_ID } from "../utils/model-role-options";
 import { hasUsableTextLlm } from "./usable-text-llm";
 
 export type SimpleProviderId = "deepseek" | "opencode" | "custom";
@@ -536,9 +536,7 @@ export function useSimpleSetup() {
     const department = assistantDepartment();
     if (department) {
       department.apiConfigId = MODEL_ROLE_EXPERT_API_CONFIG_ID;
-      department.apiConfigIds = includeVision
-        ? [MODEL_ROLE_EXPERT_API_CONFIG_ID, MODEL_ROLE_QUICK_API_CONFIG_ID, SIMPLE_SETUP_ENDPOINT_IDS.vision]
-        : [MODEL_ROLE_EXPERT_API_CONFIG_ID, MODEL_ROLE_QUICK_API_CONFIG_ID];
+      department.apiConfigIds = [MODEL_ROLE_EXPERT_API_CONFIG_ID];
       department.modelFailureFallbackEnabled = true;
       department.updatedAt = new Date().toISOString();
     }

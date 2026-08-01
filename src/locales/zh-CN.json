@@ -2006,6 +2006,7 @@
     "configLoaded": "配置已加载。",
     "savingConfig": "正在保存配置...",
     "configSaved": "配置已保存。",
+    "saved": "已保存。",
     "saveConfigBackend404": "保存失败：后端命令不可达（404）。请使用 `pnpm tauri dev` 启动桌面端。",
     "saveConfigFailed": "保存失败: {err}",
     "saveConfigDialogTitle": "保存配置失败",

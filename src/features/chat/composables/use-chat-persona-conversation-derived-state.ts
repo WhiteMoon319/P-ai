@@ -2,6 +2,7 @@ import { computed } from "vue";
 import type { ChatMentionEntry } from "../../../types/app";
 import { resolveModelRoleApiConfigId } from "../../config/utils/model-role-options";
 import { buildDepartmentPersonaOptions } from "../../shared/department-persona-options";
+import appIconUrl from "../../../../src-tauri/icons/128x128.png";
 
 export function useChatPersonaConversationDerivedState(bindings: Record<string, any>) {
   const userPersona = computed(
@@ -121,7 +122,11 @@ export function useChatPersonaConversationDerivedState(bindings: Record<string, 
       const id = String(persona.id || "").trim();
       if (!id) continue;
       const url = bindings.resolveAvatarUrl(persona.avatarPath, persona.avatarUpdatedAt);
-      if (url) next[id] = url;
+      if (url) {
+        next[id] = url;
+      } else if (!persona.isBuiltInUser && !persona.isBuiltInSystem && persona.id !== "user-persona" && persona.id !== "system-persona") {
+        next[id] = appIconUrl;
+      }
     }
     return next;
   });

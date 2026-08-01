@@ -279,6 +279,7 @@ import { normalizeLocale } from "./i18n";
 import { useWindowShell } from "./features/shell/composables/use-window-shell";
 import { useAppTheme, isDarkAppTheme } from "./features/shell/composables/use-app-theme";
 import { useAppLifecycle } from "./features/shell/composables/use-app-lifecycle";
+import appIconUrl from "../src-tauri/icons/128x128.png";
 import { useAppCore } from "./features/shell/composables/use-app-core";
 import { useConfigCore } from "./features/config/composables/use-config-core";
 import { useConfigRuntime } from "./features/config/composables/use-config-runtime";
@@ -491,7 +492,11 @@ const chatPersonaAvatarUrlMap = computed<Record<string, string>>(() => {
     const id = String(persona.id || "").trim();
     if (!id) continue;
     const url = resolveAvatarUrl(persona.avatarPath, persona.avatarUpdatedAt);
-    if (url) next[id] = url;
+    if (url) {
+      next[id] = url;
+    } else if (!persona.isBuiltInUser && !persona.isBuiltInSystem && persona.id !== "user-persona" && persona.id !== "system-persona") {
+      next[id] = appIconUrl;
+    }
   }
   return next;
 });
