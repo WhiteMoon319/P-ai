@@ -108,6 +108,12 @@ struct McpToolDescriptor {
     description: String,
     enabled: bool,
     #[serde(default)]
+    compatibility_error: Option<String>,
+    #[serde(default)]
+    member_name: String,
+    #[serde(default)]
+    raw_tool_name: String,
+    #[serde(default)]
     parameters: serde_json::Value,
 }
 

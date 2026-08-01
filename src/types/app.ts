@@ -556,6 +556,7 @@ export type McpToolDescriptor = {
   toolName: string;
   description: string;
   enabled: boolean;
+  compatibilityError?: string;
   parameters: Record<string, unknown>;
 };
 

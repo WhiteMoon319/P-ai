@@ -12,6 +12,9 @@
     @refresh="emit('refreshTools')"
   >
     <template #item-extra="{ item }">
+      <div v-if="toolCompatibilityError(item.id)" class="mt-1 text-xs text-error break-all">
+        {{ toolCompatibilityError(item.id) }}
+      </div>
       <div v-if="toolParameterSummary(item.id).length" class="mt-1 flex flex-wrap gap-1">
         <span
           v-for="paramText in toolParameterSummary(item.id)"
@@ -52,14 +55,17 @@ const emit = defineEmits<{
 }>();
 
 const toolItems = computed<ToolListItem[]>(() =>
-  props.tools.map((tool) => ({
-    id: tool.toolName,
-    name: tool.toolName,
-    description: tool.description,
-    enabled: tool.enabled,
-    statusClass: tool.enabled ? "bg-success" : "bg-base-content/30",
-    statusTitle: tool.enabled ? t("config.mcp.toolEnabled") : t("config.mcp.toolDisabled"),
-  })),
+  props.tools.map((tool) => {
+    const compatibilityError = String(tool.compatibilityError || "").trim();
+    return {
+      id: tool.toolName,
+      name: tool.toolName,
+      description: tool.description,
+      enabled: tool.enabled,
+      statusClass: compatibilityError ? "bg-error" : tool.enabled ? "bg-success" : "bg-base-content/30",
+      statusTitle: compatibilityError || (tool.enabled ? t("config.mcp.toolEnabled") : t("config.mcp.toolDisabled")),
+    };
+  }),
 );
 
 function onToggleItem(payload: { id: string; enabled: boolean }) {
@@ -71,6 +77,10 @@ function onToggleItem(payload: { id: string; enabled: boolean }) {
 
 function toolById(id: string): McpToolDescriptor | undefined {
   return props.tools.find((tool) => tool.toolName === id);
+}
+
+function toolCompatibilityError(id: string): string {
+  return String(toolById(id)?.compatibilityError || "").trim();
 }
 
 type ToolSchemaShape = Record<string, unknown>;

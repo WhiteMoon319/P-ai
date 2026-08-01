@@ -215,21 +215,20 @@ fn test_server_with_definition(definition_json: &str) -> McpServerConfig {
 }
 
 #[test]
-fn tool_prefixed_name_roundtrip() {
+fn tool_prefixed_name_normalizes_member_name_and_preserves_raw_tool_name() {
     assert_eq!(mcp_tool_prefixed_name("context7", "search"), "context7_search");
     assert_eq!(
-        mcp_tool_split_prefixed_name("context7_search"),
-        Some(("context7".to_string(), "search".to_string()))
+        mcp_tool_prefixed_name("Akasha Terminal", "akasha_search"),
+        "Akasha_Terminal_akasha_search"
     );
-    // 成员名/工具名本身含下划线：按最后一个下划线从右拆分（歧义由冲突检测兜底）
     assert_eq!(
-        mcp_tool_split_prefixed_name("my_server_do_thing"),
-        Some(("my_server_do".to_string(), "thing".to_string()))
+        mcp_tool_prefixed_name("中文成员", "search"),
+        "中文成员_search"
     );
-    // 无下划线 / 下划线在开头或结尾 → None
-    assert_eq!(mcp_tool_split_prefixed_name("search"), None);
-    assert_eq!(mcp_tool_split_prefixed_name("_search"), None);
-    assert_eq!(mcp_tool_split_prefixed_name("context7_"), None);
+    assert_eq!(
+        mcp_member_name_compatibility_error("中文成员"),
+        Some("MCP 组成员名规范化后没有可用字符，工具无法挂载".to_string())
+    );
 }
 
 #[test]
@@ -251,6 +250,29 @@ fn parse_group_definitions_multi_members() {
 }
 
 #[test]
+fn normalized_member_name_collision_across_servers_is_rejected() {
+    let next = test_server_with_definition(
+        r#"{
+            "mcpServers": {
+                "Akasha Terminal": { "command": "npx" }
+            }
+        }"#,
+    );
+    let mut existing = test_server_with_definition(
+        r#"{
+            "mcpServers": {
+                "Akasha_Terminal": { "command": "npx" }
+            }
+        }"#,
+    );
+    existing.id = "mcp-existing".to_string();
+
+    let error = ensure_mcp_member_names_are_unique_across_servers(&next, &[existing])
+        .expect_err("规范化后成员名冲突必须拒绝保存");
+    assert!(error.contains("Akasha_Terminal"));
+}
+
+#[test]
 fn normalize_mcp_server_input_allows_multi_server_group() {
     let input = McpServerInput {
         id: "mcp-group".to_string(),
@@ -258,7 +280,7 @@ fn normalize_mcp_server_input_allows_multi_server_group() {
         enabled: false,
         definition_json: r#"{
             "mcpServers": {
-                "zhihu_search": { "command": "npx", "args": ["-y", "pkg"] },
+                "Akasha Terminal": { "command": "npx", "args": ["-y", "pkg"] },
                 "global_search": { "url": "https://x/sse", "transport": "sse" }
             }
         }"#
@@ -266,7 +288,7 @@ fn normalize_mcp_server_input_allows_multi_server_group() {
     };
     let config = normalize_mcp_server_input(input).expect("整组保存不应报错");
     assert_eq!(config.name, "知乎组");
-    assert!(config.definition_json.contains("zhihu_search"));
+    assert!(config.definition_json.contains("Akasha_Terminal"));
     assert!(config.definition_json.contains("global_search"));
 }
 
