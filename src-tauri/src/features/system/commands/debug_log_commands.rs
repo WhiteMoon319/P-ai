@@ -164,9 +164,23 @@ fn backend_log_write_lock() -> &'static Mutex<()> {
     BACKEND_LOG_WRITE_LOCK.get_or_init(|| Mutex::new(()))
 }
 
-fn backend_log_path() -> &'static Option<PathBuf> {
+#[cfg(not(target_os = "android"))]
+fn backend_log_path() -> Option<PathBuf> {
     static BACKEND_LOG_PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
-    BACKEND_LOG_PATH.get_or_init(resolve_backend_log_path)
+    BACKEND_LOG_PATH.get_or_init(resolve_backend_log_path).clone()
+}
+
+#[cfg(target_os = "android")]
+fn backend_log_path() -> Option<PathBuf> {
+    static ANDROID_BACKEND_LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
+    if let Some(path) = ANDROID_BACKEND_LOG_PATH.get() {
+        return Some(path.clone());
+    }
+    let path = resolve_backend_log_path()?;
+    if ANDROID_BACKEND_LOG_PATH.set(path.clone()).is_err() {
+        return ANDROID_BACKEND_LOG_PATH.get().cloned();
+    }
+    Some(path)
 }
 
 static ANDROID_LOG_ROOT: OnceLock<PathBuf> = OnceLock::new();
@@ -175,15 +189,18 @@ pub fn set_android_log_root(root: PathBuf) {
     let _ = ANDROID_LOG_ROOT.set(root);
 }
 
+#[cfg(target_os = "android")]
 fn resolve_backend_log_path() -> Option<PathBuf> {
-    // Android: use the app data directory set via set_android_log_root
-    #[cfg(target_os = "android")]
-    if let Some(root) = ANDROID_LOG_ROOT.get() {
-        let log_dir = root.join("logs");
-        if fs::create_dir_all(&log_dir).is_ok() {
-            return Some(log_dir.join(BACKEND_LOG_FILE_NAME));
-        }
+    let root = ANDROID_LOG_ROOT.get()?;
+    let log_dir = root.join("logs");
+    if fs::create_dir_all(&log_dir).is_err() {
+        return None;
     }
+    Some(log_dir.join(BACKEND_LOG_FILE_NAME))
+}
+
+#[cfg(not(target_os = "android"))]
+fn resolve_backend_log_path() -> Option<PathBuf> {
     let log_dir = detect_portable_runtime_root()
         .or_else(|| {
             ProjectDirs::from("ai", "easycall", "p-ai")
@@ -292,7 +309,7 @@ fn now_log_local_rfc3339() -> String {
 }
 
 fn append_backend_log_line(level: &str, message: &str) {
-    let Some(path) = backend_log_path().as_ref() else {
+    let Some(path) = backend_log_path() else {
         return;
     };
     let Ok(_guard) = backend_log_write_lock().lock() else {
@@ -304,18 +321,18 @@ fn append_backend_log_line(level: &str, message: &str) {
         level.to_uppercase(),
         message
     );
-    rotate_backend_log_if_needed(path, line.len() as u64);
-    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+    rotate_backend_log_if_needed(&path, line.len() as u64);
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
         let _ = std::io::Write::write_all(&mut file, line.as_bytes());
     }
 }
 
 fn init_backend_file_logging() {
-    let Some(path) = backend_log_path().as_ref() else {
+    let Some(path) = backend_log_path() else {
         return;
     };
     if let Ok(_guard) = backend_log_write_lock().lock() {
-        archive_backend_log(path);
+        archive_backend_log(&path);
     }
     append_backend_log_line("info", "========== 本次启动开始 ==========");
 }

@@ -146,6 +146,7 @@
             :tool-api-config="toolApiConfig"
             :tool-statuses="toolStatuses"
             :saving-config="savingConfig"
+            :is-android="isAndroid"
             @save-api-config="onSaveToolsConfig"
             @refresh-tool-statuses="$emit('refreshToolsStatus')"
           />

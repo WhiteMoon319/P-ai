@@ -280,6 +280,31 @@ fn ensure_absolute_media_path(request: &ReadMediaRequest) -> Result<std::path::P
     Ok(path)
 }
 
+fn ensure_file_path_for_read(state: &AppState, request: &ReadFileRequest) -> Result<std::path::PathBuf, String> {
+    if let Some(path) = android_workspace_resolve_existing_file_path(state, &request.path)? {
+        if matches!(request.limit, Some(0)) {
+            return Err("limit 必须大于等于 1".to_string());
+        }
+        let metadata = std::fs::metadata(&path).map_err(|err| format!("读取文件信息失败: {err}"))?;
+        if !metadata.is_file() {
+            return Err(format!("目标不是文件：{}", path.display()));
+        }
+        return Ok(path);
+    }
+    ensure_absolute_file_path(request)
+}
+
+fn ensure_media_path_for_read(state: &AppState, request: &ReadMediaRequest) -> Result<std::path::PathBuf, String> {
+    if let Some(path) = android_workspace_resolve_existing_file_path(state, &request.path)? {
+        let metadata = std::fs::metadata(&path).map_err(|err| format!("读取文件信息失败: {err}"))?;
+        if !metadata.is_file() {
+            return Err(format!("目标不是文件：{}", path.display()));
+        }
+        return Ok(path);
+    }
+    ensure_absolute_media_path(request)
+}
+
 fn paginate_lines(lines: &[String], start: usize, count: Option<usize>) -> (Vec<String>, Option<usize>) {
     if start >= lines.len() {
         return (Vec::new(), None);
@@ -1251,7 +1276,7 @@ async fn builtin_read_media(
     state: &AppState,
     request: ReadMediaRequest,
 ) -> Result<Value, String> {
-    let path = ensure_absolute_media_path(&request)?;
+    let path = ensure_media_path_for_read(state, &request)?;
     let detected = detect_read_media_type(&path).ok_or_else(|| "read_media 仅支持图片、音频或视频文件".to_string())?;
     let app_config = state_read_config_cached(state)?;
     let selected_api = resolve_vision_api_config(&app_config)?;
@@ -1514,13 +1539,13 @@ impl ReadFileReader for TextFileReader {
 
     fn read(
         &self,
-        _state: &AppState,
+        state: &AppState,
         _session_id: &str,
         _api_config_id: &str,
         request: &ReadFileRequest,
         detected: ReadFileDetectedType,
     ) -> Result<Value, String> {
-        let path = ensure_absolute_file_path(request)?;
+        let path = ensure_file_path_for_read(state, request)?;
         let decoded = decode_text_file_from_path(&path)
             .map_err(|err| format!("读取文本文件失败：{err}"))?;
         Ok(build_text_read_result(
@@ -1554,7 +1579,7 @@ impl ReadFileReader for PdfFileReader {
         request: &ReadFileRequest,
         detected: ReadFileDetectedType,
     ) -> Result<Value, String> {
-        let path = ensure_absolute_file_path(request)?;
+        let path = ensure_file_path_for_read(state, request)?;
         let conversation_id = read_file_conversation_cache_key(session_id);
         let include_images = resolve_pdf_image_mode(state, api_config_id)?;
         let structured = match get_or_extract_pdf_structured(
@@ -1661,13 +1686,13 @@ impl ReadFileReader for OfficeLitchiReader {
 
     fn read(
         &self,
-        _state: &AppState,
+        state: &AppState,
         _session_id: &str,
         _api_config_id: &str,
         request: &ReadFileRequest,
         detected: ReadFileDetectedType,
     ) -> Result<Value, String> {
-        let path = ensure_absolute_file_path(request)?;
+        let path = ensure_file_path_for_read(state, request)?;
         let path_for_read = path.clone();
         let detected_for_read = detected;
         let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || -> Result<String, String> {
@@ -1737,7 +1762,7 @@ async fn builtin_read_file(
     request: ReadFileRequest,
 ) -> Result<Value, String> {
     let started = std::time::Instant::now();
-    let path = ensure_absolute_file_path(&request)?;
+    let path = ensure_file_path_for_read(state, &request)?;
     let detected = detect_read_file_type(&path);
     runtime_log_info(format!(
         "[read] 开始，任务=read，session_id={}，api_config_id={}，{}，detected_type={}",

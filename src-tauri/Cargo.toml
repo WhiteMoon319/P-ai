@@ -51,6 +51,8 @@ socket2 = "0.6.4"
 os_info = "3"
 sse-stream = "0.2"
 sha2 = "0.11.0"
+flate2 = "1.1"
+tar = "0.4"
 pdf_oxide = { version = "0.3.70", default-features = false }
 hayro = "0.7.1"
 aho-corasick = "1.1"

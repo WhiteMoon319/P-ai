@@ -106,11 +106,11 @@ async fn prepare_ide_context_bridge_server_start(
     ide_context_runtime: &IdeContextRuntime,
     port_service: &Arc<LocalPortServiceCore>,
 ) -> Option<(tokio::net::TcpListener, u16, String)> {
-    std::eprintln!("[P-AI Android] prepare_ide_context_bridge_server_start: entered");
+    eprintln!("[P-AI Android] prepare_ide_context_bridge_server_start: entered");
     let config = match state_read_config_cached(state) {
         Ok(config) => config,
         Err(err) => {
-            std::eprintln!("[P-AI Android] prepare: config read failed: {}", err);
+            eprintln!("[P-AI Android] prepare: config read failed: {}", err);
             runtime_log_error(format!(
                 "[网络访问] 读取配置失败，使用默认端口: {}",
                 err
@@ -119,7 +119,7 @@ async fn prepare_ide_context_bridge_server_start(
         }
     };
     if !config.web_access_enabled {
-        std::eprintln!("[P-AI Android] prepare: web_access_enabled=false, skipping");
+        eprintln!("[P-AI Android] prepare: web_access_enabled=false, skipping");
         IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
         ide_context_set_current_port(ide_context_runtime, None);
         clear_ide_context_bridge_discovery();
@@ -137,14 +137,14 @@ async fn prepare_ide_context_bridge_server_start(
         .await;
     port_service.set_last_error(WEB_ACCESS_SERVICE_ID, None).await;
     let preferred_port = normalize_web_access_port(config.web_access_port);
-    std::eprintln!("[P-AI Android] prepare: binding to port {}", preferred_port);
+    eprintln!("[P-AI Android] prepare: binding to port {}", preferred_port);
     let (listener, port) = match bind_ide_context_bridge_listener(preferred_port).await {
         Ok(result) => {
-            std::eprintln!("[P-AI Android] prepare: bind OK, port={}", result.1);
+            eprintln!("[P-AI Android] prepare: bind OK, port={}", result.1);
             result
         }
         Err(err) => {
-            std::eprintln!("[P-AI Android] prepare: bind FAILED: {}", err);
+            eprintln!("[P-AI Android] prepare: bind FAILED: {}", err);
             IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
             ide_context_set_current_port(ide_context_runtime, None);
             clear_ide_context_bridge_discovery();
@@ -179,7 +179,7 @@ async fn prepare_ide_context_bridge_server_start(
                 .set_last_error(WEB_ACCESS_SERVICE_ID, Some(err.clone()))
                 .await;
             runtime_log_error(format!("[网络访问] 初始化远程访问密码失败，error={}", err));
-            std::eprintln!("[P-AI Android] prepare: remote password FAILED: {}", err);
+            eprintln!("[P-AI Android] prepare: remote password FAILED: {}", err);
             return None;
         }
     };
@@ -197,7 +197,7 @@ async fn prepare_ide_context_bridge_server_start(
             .set_last_error(WEB_ACCESS_SERVICE_ID, Some(err.clone()))
             .await;
         runtime_log_error(format!("[网络访问] 写入发现文件失败，error={}", err));
-        std::eprintln!("[P-AI Android] prepare: discovery write FAILED: {}", err);
+        eprintln!("[P-AI Android] prepare: discovery write FAILED: {}", err);
         return None;
     }
     port_service
@@ -212,7 +212,7 @@ async fn prepare_ide_context_bridge_server_start(
         )
         .await;
     runtime_log_info(format!("[网络访问] 已监听 {}", bridge_url));
-    std::eprintln!("[P-AI Android] prepare: SUCCESS, returning listener on port {}", port);
+    eprintln!("[P-AI Android] prepare: SUCCESS, returning listener on port {}", port);
     Some((listener, port, bridge_url))
 }
 

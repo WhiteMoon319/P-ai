@@ -194,10 +194,17 @@ fn configured_workspace_root_from_config(config: &AppConfig, state: &AppState) -
 }
 
 fn configured_workspace_root_path(state: &AppState) -> Result<PathBuf, String> {
-    let mut config = state_read_config_cached(state)?;
-    normalize_app_config(&mut config);
-    let _ = ensure_default_shell_workspace_in_config(&mut config, state);
-    Ok(configured_workspace_root_from_config(&config, state))
+    #[cfg(target_os = "android")]
+    {
+        return Ok(android_workspace_root(state));
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let mut config = state_read_config_cached(state)?;
+        normalize_app_config(&mut config);
+        let _ = ensure_default_shell_workspace_in_config(&mut config, state);
+        Ok(configured_workspace_root_from_config(&config, state))
+    }
 }
 
 fn configured_workspace_root_canonical(state: &AppState) -> Result<PathBuf, String> {
@@ -227,10 +234,34 @@ struct TerminalWorkspaceResolved {
     path: PathBuf,
 }
 
+fn android_terminal_workspace_resolved(state: &AppState) -> Result<TerminalWorkspaceResolved, String> {
+    #[cfg(target_os = "android")]
+    let root = android_workspace_canonical_root_if_ready(state)?
+        .ok_or_else(|| ANDROID_WORKSPACE_NOT_READY_MESSAGE.to_string())?;
+    #[cfg(not(target_os = "android"))]
+    let root = ensure_workspace_root_ready(&android_workspace_root(state))?;
+    Ok(TerminalWorkspaceResolved {
+        id: "android-sandbox-workspace".to_string(),
+        name: "Android 沙盒工作区".to_string(),
+        level: SHELL_WORKSPACE_LEVEL_SYSTEM.to_string(),
+        access: SHELL_WORKSPACE_ACCESS_FULL_ACCESS.to_string(),
+        built_in: true,
+        path: root,
+    })
+}
+
 fn terminal_conversation_shell_autonomous_mode(conversation: Option<&Conversation>) -> bool {
-    conversation
-        .map(|value| value.shell_autonomous_mode)
-        .unwrap_or(false)
+    #[cfg(target_os = "android")]
+    {
+        let _ = conversation;
+        false
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        conversation
+            .map(|value| value.shell_autonomous_mode)
+            .unwrap_or(false)
+    }
 }
 
 fn terminal_session_shell_autonomous_mode(state: &AppState, session_id: &str) -> Result<bool, String> {
@@ -653,7 +684,14 @@ fn terminal_allowed_workspaces_for_conversation_canonical(
     state: &AppState,
     conversation: Option<&Conversation>,
 ) -> Result<Vec<TerminalWorkspaceResolved>, String> {
-    let config_workspaces = terminal_config_allowed_workspaces_canonical(state)?;
+    #[cfg(target_os = "android")]
+    {
+        let _ = conversation;
+        return Ok(vec![android_terminal_workspace_resolved(state)?]);
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let config_workspaces = terminal_config_allowed_workspaces_canonical(state)?;
     let system_workspace = config_workspaces
         .iter()
         .find(|workspace| workspace.level == SHELL_WORKSPACE_LEVEL_SYSTEM)
@@ -747,12 +785,20 @@ fn terminal_allowed_workspaces_for_conversation_canonical(
             .then_with(|| left.name.to_ascii_lowercase().cmp(&right.name.to_ascii_lowercase()))
     });
     Ok(out)
+    }
 }
 
 fn terminal_allowed_workspaces_canonical(
     state: &AppState,
 ) -> Result<Vec<TerminalWorkspaceResolved>, String> {
-    terminal_config_allowed_workspaces_canonical(state)
+    #[cfg(target_os = "android")]
+    {
+        return Ok(vec![android_terminal_workspace_resolved(state)?]);
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        terminal_config_allowed_workspaces_canonical(state)
+    }
 }
 
 fn terminal_allowed_project_roots_canonical(state: &AppState) -> Result<Vec<PathBuf>, String> {
@@ -794,10 +840,17 @@ fn terminal_allowed_project_roots_for_session_canonical(
 }
 
 fn terminal_system_workspace_resolved(state: &AppState) -> Result<TerminalWorkspaceResolved, String> {
-    terminal_config_allowed_workspaces_canonical(state)?
-        .into_iter()
-        .find(|workspace| workspace.level == SHELL_WORKSPACE_LEVEL_SYSTEM)
-        .ok_or_else(|| "No assistant space available".to_string())
+    #[cfg(target_os = "android")]
+    {
+        return android_terminal_workspace_resolved(state);
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        terminal_config_allowed_workspaces_canonical(state)?
+            .into_iter()
+            .find(|workspace| workspace.level == SHELL_WORKSPACE_LEVEL_SYSTEM)
+            .ok_or_else(|| "No assistant space available".to_string())
+    }
 }
 
 fn terminal_default_workspace_resolved(state: &AppState) -> Result<TerminalWorkspaceResolved, String> {
@@ -957,6 +1010,13 @@ fn terminal_default_session_root_canonical(state: &AppState) -> Result<PathBuf, 
 }
 
 fn terminal_session_root_canonical(state: &AppState, session_id: &str) -> Result<PathBuf, String> {
+    #[cfg(target_os = "android")]
+    {
+        let _ = session_id;
+        return Ok(android_terminal_workspace_resolved(state)?.path);
+    }
+    #[cfg(not(target_os = "android"))]
+    {
     if let Some(conversation) = terminal_session_conversation(state, session_id)? {
         return Ok(terminal_default_workspace_for_conversation_resolved(state, Some(&conversation))?.path);
     }
@@ -978,6 +1038,7 @@ fn terminal_session_root_canonical(state: &AppState, session_id: &str) -> Result
             Ok(path)
         }
         _ => Ok(default_root),
+    }
     }
 }
 

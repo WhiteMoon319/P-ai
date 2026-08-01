@@ -256,7 +256,7 @@ async fn refresh_conversation_meta_after_migration(state: AppState) {
 /// 阶段 2 延迟初始化：在 backend_ready 之后异步执行，避免阻塞前端首屏渲染。
 async fn run_deferred_setup(app_handle: AppHandle) {
     #[cfg(target_os = "android")]
-    std::eprintln!("[P-AI Android] run_deferred_setup: started");
+    eprintln!("[P-AI Android] run_deferred_setup: started");
     let app_state = app_handle.state::<AppState>();
 
     let emit_progress = |step: &str| {
@@ -392,7 +392,7 @@ async fn run_deferred_setup(app_handle: AppHandle) {
     }
     let ide_context_runtime = app_handle.state::<IdeContextRuntime>().inner().clone();
     #[cfg(target_os = "android")]
-    std::eprintln!("[P-AI Android] run_deferred_setup: calling start_web_access_server");
+    eprintln!("[P-AI Android] run_deferred_setup: calling start_web_access_server");
     start_web_access_server(
         app_handle.clone(),
         app_state.inner().clone(),
@@ -400,7 +400,7 @@ async fn run_deferred_setup(app_handle: AppHandle) {
     )
     .await;
     #[cfg(target_os = "android")]
-    std::eprintln!("[P-AI Android] run_deferred_setup: start_web_access_server returned");
+    eprintln!("[P-AI Android] run_deferred_setup: start_web_access_server returned");
     let _ = sync_default_tray_icon(&app_handle);
     if should_enable_devtools() {
         runtime_log_warn(format!("[启动-延迟] 检测到 devtools 开关已开启，但当前构建未启用 open_devtools API，跳过打开 devtools"));
@@ -980,11 +980,12 @@ pub fn run() {
             {
                 let app_root = app.path().app_data_dir()
                     .map_err(|e| format!("获取应用数据目录失败: {e}"))?;
-                std::eprintln!("[P-AI Android] app_data_dir={:?}", app_root);
                 set_android_log_root(app_root.clone());
+                init_backend_file_logging();
+                eprintln!("[P-AI Android] app_data_dir={:?}", app_root);
                 let state = AppState::new_with_root(app_root)
                     .map_err(|e| format!("初始化应用状态失败: {e}"))?;
-                std::eprintln!("[P-AI Android] AppState constructed, config_path={:?}", state.config_path);
+                eprintln!("[P-AI Android] AppState constructed, config_path={:?}", state.config_path);
                 init_last_panic_snapshot_slot(state.last_panic_snapshot.clone());
                 {
                     let panic_slot = state.last_panic_snapshot.clone();
@@ -1330,6 +1331,14 @@ pub fn run() {
             demo_restart_app,
             get_host_runtime_prerequisites,
             install_host_runtime_prerequisite,
+            get_android_workspace_status,
+            init_android_workspace,
+            import_android_workspace_rootfs_archive,
+            reset_android_workspace_state,
+            list_android_workspace_files,
+            import_file_to_android_workspace,
+            export_file_from_android_workspace,
+            delete_file_from_android_workspace,
             terminal_self_check,
             list_terminal_shell_candidates,
             open_chat_shell_workspace_dir,

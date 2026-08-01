@@ -92,10 +92,10 @@ fn ide_context_ws_request_host_matches(request: &Request, origin_host: &str, por
 
 fn ide_context_ws_origin_allowed(request: &Request, port: u16) -> bool {
     let Some(origin) = ide_context_ws_header_value(request, "origin") else {
-        std::eprintln!("[P-AI Android] origin check: no Origin header, allowing");
+        eprintln!("[P-AI Android] origin check: no Origin header, allowing");
         return true;
     };
-    std::eprintln!("[P-AI Android] origin check: Origin={}", origin);
+    eprintln!("[P-AI Android] origin check: Origin={}", origin);
     if origin.starts_with("vscode-webview://") {
         return true;
     }

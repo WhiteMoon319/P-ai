@@ -228,7 +228,7 @@ async fn mcp_probe_server_tools_background(
         "[MCP监管] 开始 server_id={} trigger={}",
         server.id, trigger
     ));
-    let tools_res = mcp_list_server_tools_runtime(&server).await;
+    let tools_res = mcp_list_server_tools_runtime(&state, &server).await;
 
     let tools = match tools_res {
         Ok(tools) => tools,
@@ -458,7 +458,7 @@ async fn mcp_list_server_tools_inner(
 
     let started = std::time::Instant::now();
     mcp_runtime_state_mark_starting(&server);
-    let tools = match mcp_list_server_tools_runtime(&server).await {
+    let tools = match mcp_list_server_tools_runtime(state, &server).await {
         Ok(tools) => tools,
         Err(err) => {
             let status = mcp_status_from_runtime_error(&err);

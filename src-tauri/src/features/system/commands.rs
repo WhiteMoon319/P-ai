@@ -15,6 +15,9 @@ include!("commands/prompt_assembly.rs");
 // ==================== 调试日志命令 ====================
 include!("commands/debug_log_commands.rs");
 
+// ==================== Android 沙盒工作区 ====================
+include!("commands/android_workspace.rs");
+
 // ==================== 分享导出命令 ====================
 include!("commands/share_export_commands.rs");
 

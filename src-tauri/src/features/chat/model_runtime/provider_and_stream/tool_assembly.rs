@@ -702,6 +702,12 @@ struct AuthorizationCheckedRuntimeTool {
     executor_department_id: String,
 }
 
+struct AndroidWorkspaceCheckedRuntimeTool {
+    inner: Box<dyn RuntimeToolDyn>,
+    app_state: AppState,
+    tool_name: String,
+}
+
 fn runtime_builtin_tool_authorization_error(
     state: &AppState,
     tool_name: &str,
@@ -763,6 +769,46 @@ impl RuntimeToolDyn for AuthorizationCheckedRuntimeTool {
         }
         self.inner.call_json(args_json)
     }
+}
+
+impl RuntimeToolDyn for AndroidWorkspaceCheckedRuntimeTool {
+    fn name(&self) -> String {
+        self.inner.name()
+    }
+
+    fn timeout_override(&self, args_json: &str) -> Option<std::time::Duration> {
+        self.inner.timeout_override(args_json)
+    }
+
+    fn is_mcp_tool(&self) -> bool {
+        self.inner.is_mcp_tool()
+    }
+
+    fn call_json(&self, args_json: String) -> RuntimeToolCallFuture<'_> {
+        if !is_android_workspace_ready(&self.app_state) {
+            if let Some(reason) = android_workspace_gate_error_for_tool(&self.tool_name, self.inner.is_mcp_tool()) {
+                let tool_name = self.tool_name.clone();
+                return Box::pin(async move {
+                    Ok(ProviderToolResult::error(format!(
+                        "工具 `{tool_name}` 当前不可用：{reason}"
+                    )))
+                });
+            }
+        }
+        self.inner.call_json(args_json)
+    }
+}
+
+fn android_workspace_checked_runtime_tool(
+    inner: Box<dyn RuntimeToolDyn>,
+    app_state: AppState,
+    tool_name: String,
+) -> Box<dyn RuntimeToolDyn> {
+    Box::new(AndroidWorkspaceCheckedRuntimeTool {
+        inner,
+        app_state,
+        tool_name,
+    })
 }
 
 fn empty_runtime_tool_assembly(tool_manifest: Vec<Value>) -> RuntimeToolAssembly {
@@ -996,16 +1042,19 @@ fn build_builtin_runtime_tool_executor(
         }),
         _ => return Err(format!("未知内置工具：{tool_name}")),
     };
-    if builtin_tool_requires_execution_reauthorization(tool_name) {
-        return Ok(Box::new(AuthorizationCheckedRuntimeTool {
+    let tool_name = tool_name.to_string();
+    let tool = if builtin_tool_requires_execution_reauthorization(&tool_name) {
+        Box::new(AuthorizationCheckedRuntimeTool {
             inner: tool,
-            app_state: state,
-            tool_name: tool_name.to_string(),
+            app_state: state.clone(),
+            tool_name: tool_name.clone(),
             tool_session_id: tool_session_id.to_string(),
             executor_department_id: executor_department_id.to_string(),
-        }));
-    }
-    Ok(tool)
+        }) as Box<dyn RuntimeToolDyn>
+    } else {
+        tool
+    };
+    Ok(android_workspace_checked_runtime_tool(tool, state, tool_name))
 }
 
 fn build_cached_mcp_runtime_tool_executor(
@@ -1031,12 +1080,17 @@ fn build_cached_mcp_runtime_tool_executor(
         current_tool.description,
         input_schema,
     );
-    Ok(Box::new(CachedMcpRuntimeTool {
+    let inner: Box<dyn RuntimeToolDyn> = Box::new(CachedMcpRuntimeTool {
         app_state: state.clone(),
         server_id: server.id,
         executor_department_id: executor_department_id.to_string(),
         definition: runtime_definition,
-    }))
+    });
+    Ok(android_workspace_checked_runtime_tool(
+        inner,
+        state.clone(),
+        definition.name.clone(),
+    ))
 }
 
 #[derive(Debug, Clone)]

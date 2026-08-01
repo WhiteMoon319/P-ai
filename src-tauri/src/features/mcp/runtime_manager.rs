@@ -398,7 +398,7 @@ impl RuntimeToolDyn for CachedMcpRuntimeTool {
                     "MCP 工具 `{qualified_by_name}` 当前不可用：部门权限已撤销"
                 )));
             }
-            let peer = match mcp_get_or_connect_peer_for_tool(&server, definition.name.as_ref()).await {
+            let peer = match mcp_get_or_connect_peer_for_tool(Some(&app_state), &server, definition.name.as_ref()).await {
                 Ok(peer) => peer,
                 Err(err) => {
                     return Ok(ProviderToolResult::error(format!(
@@ -820,7 +820,7 @@ fn mcp_tool_allowed_by_definition(server: &McpServerConfig, tool_name: &str) -> 
     allow.contains(tool_name)
 }
 
-fn mcp_connect_stdio_command(parsed: &ParsedMcpServerDefinition) -> Result<tokio::process::Command, String> {
+fn mcp_connect_stdio_command(state: Option<&AppState>, parsed: &ParsedMcpServerDefinition) -> Result<tokio::process::Command, String> {
     let command = parsed
         .command
         .as_deref()
@@ -856,7 +856,13 @@ fn mcp_connect_stdio_command(parsed: &ParsedMcpServerDefinition) -> Result<tokio
         cmd.creation_flags(0x08000000);
     }
 
-    if let Some(cwd) = &parsed.cwd {
+    let cwd_override = match state {
+        Some(state) => android_workspace_canonical_root_if_ready(state)?,
+        None => None,
+    };
+    if let Some(root) = cwd_override {
+        cmd.current_dir(root);
+    } else if let Some(cwd) = &parsed.cwd {
         let path = std::path::PathBuf::from(cwd);
         if path.is_dir() {
             cmd.current_dir(path);
@@ -868,10 +874,10 @@ fn mcp_connect_stdio_command(parsed: &ParsedMcpServerDefinition) -> Result<tokio
     Ok(cmd)
 }
 
-async fn mcp_connect_client(parsed: &ParsedMcpServerDefinition) -> Result<McpConnectedClient, String> {
+async fn mcp_connect_client(state: Option<&AppState>, parsed: &ParsedMcpServerDefinition) -> Result<McpConnectedClient, String> {
     match parsed.transport {
         McpTransportKind::Stdio => {
-            let cmd = mcp_connect_stdio_command(parsed)?;
+            let cmd = mcp_connect_stdio_command(state, parsed)?;
             let (transport, stderr_opt) = rmcp::transport::TokioChildProcess::builder(cmd)
                 .stderr(std::process::Stdio::piped())
                 .spawn()
@@ -1024,6 +1030,7 @@ fn mcp_group_cache_fully_hit(
 }
 
 async fn mcp_connect_single_member(
+    state: Option<&AppState>,
     server: &McpServerConfig,
     member_name: &str,
     parsed: &ParsedMcpServerDefinition,
@@ -1031,7 +1038,7 @@ async fn mcp_connect_single_member(
 ) -> Result<(), String> {
     let connected = tokio::time::timeout(
         std::time::Duration::from_secs(MCP_CONNECT_TIMEOUT_SECS),
-        mcp_connect_client(parsed),
+        mcp_connect_client(state, parsed),
     )
     .await
     .map_err(|_| {
@@ -1071,7 +1078,7 @@ async fn mcp_connect_single_member(
     Ok(())
 }
 
-async fn mcp_get_or_connect_client(server: &McpServerConfig) -> Result<(), String> {
+async fn mcp_get_or_connect_client(state: Option<&AppState>, server: &McpServerConfig) -> Result<(), String> {
     let members = parse_mcp_group_definitions(server)?;
     {
         let cache = mcp_client_cache();
@@ -1106,7 +1113,7 @@ async fn mcp_get_or_connect_client(server: &McpServerConfig) -> Result<(), Strin
         if cached_ok {
             continue;
         }
-        if let Err(err) = mcp_connect_single_member(server, member_name, parsed, raw).await {
+        if let Err(err) = mcp_connect_single_member(state, server, member_name, parsed, raw).await {
             failures.push(format!("{member_name}: {err}"));
         }
     }
@@ -1171,10 +1178,11 @@ async fn mcp_disconnect_cached_client_if_definition(server_id: &str, definition_
 }
 
 async fn mcp_list_tools_with_peer(
+    state: Option<&AppState>,
     server: &McpServerConfig,
     member_name: &str,
 ) -> Result<(rmcp::service::Peer<rmcp::RoleClient>, Vec<rmcp::model::Tool>), String> {
-    mcp_get_or_connect_client(server).await?;
+    mcp_get_or_connect_client(state, server).await?;
     let peer = {
         let cache = mcp_client_cache();
         let guard = cache.lock().await;
@@ -1205,6 +1213,7 @@ async fn mcp_list_tools_with_peer(
 }
 
 async fn mcp_get_or_connect_peer_for_tool(
+    state: Option<&AppState>,
     server: &McpServerConfig,
     tool_name: &str,
 ) -> Result<rmcp::service::Peer<rmcp::RoleClient>, String> {
@@ -1217,7 +1226,7 @@ async fn mcp_get_or_connect_peer_for_tool(
     let (member_name, _) = mcp_tool_split_prefixed_name(tool_name).ok_or_else(|| {
         format!("MCP tool '{}' has no member prefix", tool_name)
     })?;
-    mcp_get_or_connect_client(server).await?;
+    mcp_get_or_connect_client(state, server).await?;
     let cache = mcp_client_cache();
     let guard = cache.lock().await;
     let cached = guard
@@ -1232,13 +1241,13 @@ async fn mcp_get_or_connect_peer_for_tool(
     Ok(cached.client.peer().clone())
 }
 
-async fn mcp_list_server_tools_runtime(server: &McpServerConfig) -> Result<Vec<McpToolDescriptor>, String> {
+async fn mcp_list_server_tools_runtime(state: Option<&AppState>, server: &McpServerConfig) -> Result<Vec<McpToolDescriptor>, String> {
     let members = parse_mcp_group_definitions(server)?;
     let mut out = Vec::<McpToolDescriptor>::new();
     let mut seen_names = std::collections::HashSet::<String>::new();
     let mut duplicate_names = Vec::<String>::new();
     for (member_name, _, _) in &members {
-        let (_peer, tools) = mcp_list_tools_with_peer(server, member_name).await?;
+        let (_peer, tools) = mcp_list_tools_with_peer(state, server, member_name).await?;
         for def in tools {
             let raw_name = def.name.to_string();
             let prefixed = mcp_tool_prefixed_name(member_name, &raw_name);

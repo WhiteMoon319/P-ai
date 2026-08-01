@@ -18,10 +18,10 @@ async fn start_ide_context_bridge_server_inner(
     )
     .await
     else {
-        std::eprintln!("[P-AI Android] start_ide_context_bridge_server_inner: prepare returned None, aborting");
+        eprintln!("[P-AI Android] start_ide_context_bridge_server_inner: prepare returned None, aborting");
         return;
     };
-    std::eprintln!("[P-AI Android] start_ide_context_bridge_server_inner: got listener on port {}, spawning server task", port);
+    eprintln!("[P-AI Android] start_ide_context_bridge_server_inner: got listener on port {}, spawning server task", port);
     spawn_ide_context_bridge_server_task(
         app,
         state,
@@ -185,12 +185,12 @@ async fn ide_context_ws_handle_connection(
         if let Ok(mut slot) = path_holder_clone.lock() {
             *slot = request.uri().path().to_string();
         }
-        std::eprintln!("[P-AI Android] WS handshake: peer={}, path={}", peer_addr, request.uri().path());
+        eprintln!("[P-AI Android] WS handshake: peer={}, path={}", peer_addr, request.uri().path());
         if !ide_context_ws_origin_allowed(request, port) {
-            std::eprintln!("[P-AI Android] WS handshake: origin REJECTED for peer={}", peer_addr);
+            eprintln!("[P-AI Android] WS handshake: origin REJECTED for peer={}", peer_addr);
             return Err(ide_context_ws_forbidden_response("Forbidden origin"));
         }
-        std::eprintln!("[P-AI Android] WS handshake: origin OK for peer={}", peer_addr);
+        eprintln!("[P-AI Android] WS handshake: origin OK for peer={}", peer_addr);
         Ok(response)
     })
     .await

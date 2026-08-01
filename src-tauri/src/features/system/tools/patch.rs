@@ -1351,6 +1351,7 @@ async fn builtin_apply_patch_with_name(
     let resolved = apply_patch_resolve_ops(&cwd, parsed)?;
     let preview = apply_patch_build_preview(&resolved)?;
     let target_paths = apply_patch_collect_target_paths(&resolved);
+    android_workspace_ensure_paths_within_sandbox(state, &target_paths)?;
     let existing_paths = apply_patch_collect_existing_paths(&resolved);
     let summary = apply_patch_operation_summary(&resolved);
 

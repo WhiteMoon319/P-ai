@@ -26,6 +26,20 @@ class MainActivity : TauriActivity() {
 }
 KOTLIN
 
+if ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
+  sed -i '/<application/i\    <uses-permission android:name="android.permission.INTERNET" />' "$MANIFEST"
+  echo "Added INTERNET permission"
+else
+  echo "INTERNET permission already exists"
+fi
+
+if ! grep -q 'android.permission.ACCESS_NETWORK_STATE' "$MANIFEST"; then
+  sed -i '/<application/i\    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' "$MANIFEST"
+  echo "Added ACCESS_NETWORK_STATE permission"
+else
+  echo "ACCESS_NETWORK_STATE permission already exists"
+fi
+
 if ! grep -q 'android.permission.RECORD_AUDIO' "$MANIFEST"; then
   sed -i '/<application/i\    <uses-permission android:name="android.permission.RECORD_AUDIO" />' "$MANIFEST"
   echo "Added RECORD_AUDIO permission"
@@ -49,5 +63,5 @@ fi
 
 echo "=== MainActivity.kt ==="
 cat "$ACTIVITY"
-echo "=== AndroidManifest.xml microphone entries ==="
-grep -nE 'RECORD_AUDIO|MODIFY_AUDIO_SETTINGS|android.hardware.microphone' "$MANIFEST" || true
+echo "=== AndroidManifest.xml permission entries ==="
+grep -nE 'INTERNET|ACCESS_NETWORK_STATE|RECORD_AUDIO|MODIFY_AUDIO_SETTINGS|android.hardware.microphone' "$MANIFEST" || true
