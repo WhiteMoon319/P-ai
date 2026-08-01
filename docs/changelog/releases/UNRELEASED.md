@@ -1,5 +1,8 @@
 # 未发布
 
+- 重构（android-ci）：Android 构建 CI 改为 debug 包构建，触发分支改为 `main`/`dev`；APK 版本号与命名参照 MAA-Meow 改为 git 派生（`versionCode` = 提交总数，`versionName` = `git describe` 派生），新增 `scripts/patch-android-version.sh` 注入版本逻辑；只上传签名后的 debug APK，重命名为 `P-ai-${GITHUB_REF_NAME}-aarch64.apk` 到 artifact。
+- 新增（android-ci）：新增 Android release CI workflow，`v*` tag 推送或手动触发，release 构建后使用仓库 secrets（`KEYSTORE_BASE64`/`KEYSTORE_PASSWORD`/`KEY_ALIAS`/`KEY_PASSWORD`）签名并 verify，发布签名 APK 到 GitHub Release。
+- 文档（android）：README 改写为 Android 移植版说明，突出桌面版原仓库 `kawayiYokami/P-ai`。
 - 新增（android-workspace）：Android 工具页复用“PAI 助理空间”卡片提供可选 Linux 运行环境初始化，下载 Ubuntu Base 24.04.3 arm64 rootfs（约 28.5 MiB）、校验 SHA256、解压到 `runtime/android-workspace/default/linux` 并展示下载进度；未就绪时仅拦截终端与 MCP 类工具，文件、配置、补丁与操作类工具仍可维护助理空间，ready 后将终端 cwd 和 MCP stdio cwd 收敛到 `/workspace`。
 - 重构（android-workspace）：参考 RikkaHub workspace 思路，Android 端将应用私有 `llm-workspace` 整根同时 bind 到 Linux 内的 `/workspace` 与 `/root/.pai`，rootfs、下载缓存、staging 与 proot 临时目录迁出 `llm-workspace`，放入应用私有 runtime，避免工作区 bind 自引用和运行时文件污染用户空间。
 

@@ -1,14 +1,13 @@
-name: Android Build (Debug)
+name: Android Release
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-      - dev
+    tags:
+      - 'v*'
 
 jobs:
-  build-android:
+  build-release:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -95,7 +94,6 @@ jobs:
             tar -xf "/tmp/extract-$name/data.tar.xz" -C "/tmp/extract-$name"
           done
           # proot 二进制（exec + loader，loader 缺失时 guest execve 无法初始化）。
-          # Termux 包中 loader 位于 usr/libexec/proot/loader，按 libproot_loader.so 命名打包。
           cp /tmp/extract-proot_5.1.107.89_aarch64.deb/data/data/com.termux/files/usr/bin/proot "$JNI_DIR/libproot_exec.so"
           chmod +x "$JNI_DIR/libproot_exec.so"
           LOADER_SRC="/tmp/extract-proot_5.1.107.89_aarch64.deb/data/data/com.termux/files/usr/libexec/proot/loader"
@@ -106,10 +104,9 @@ jobs:
             cp "$LOADER_SRC" "$JNI_DIR/libproot_loader.so"
             chmod 0644 "$JNI_DIR/libproot_loader.so"
           else
-            echo "ERROR: libproot_loader.so not found in proot deb (checked usr/libexec/proot/loader and usr/lib); proot guest execve will fail" >&2
+            echo "ERROR: libproot_loader.so not found in proot deb" >&2
             exit 1
           fi
-          # Android native libs 只稳定打包 lib*.so；把 Termux 的 libtalloc.so.2 改名并同步修补 NEEDED。
           cp /tmp/extract-libtalloc_2.4.3_aarch64.deb/data/data/com.termux/files/usr/lib/libtalloc.so.2 "$JNI_DIR/libtalloc.so"
           chmod 0644 "$JNI_DIR/libtalloc.so"
           patchelf --set-soname libtalloc.so "$JNI_DIR/libtalloc.so" || true
@@ -118,24 +115,60 @@ jobs:
           if patchelf --print-needed "$JNI_DIR/libproot_exec.so" | grep -qx 'libtalloc.so.2'; then
             patchelf --replace-needed libtalloc.so.2 libtalloc.so "$JNI_DIR/libproot_exec.so"
           fi
-          # 设置 rpath: DT_RPATH 比 DT_RUNPATH 更可靠，$ORIGIN 让动态库在同目录解析。
           patchelf --force-rpath --set-rpath '$ORIGIN' "$JNI_DIR/libproot_exec.so"
           echo "proot rpath: $(patchelf --print-rpath "$JNI_DIR/libproot_exec.so")"
           echo "jniLibs: $(ls -lh "$JNI_DIR")"
-          echo "proot info: $(file "$JNI_DIR/libproot_exec.so")"
           echo "proot deps: $(patchelf --print-needed "$JNI_DIR/libproot_exec.so")"
           rm -rf /tmp/proot_*.deb /tmp/libtalloc_*.deb /tmp/libandroid-shmem_*.deb /tmp/extract-*
 
-      - name: Build Debug APK (aarch64)
-        run: pnpm tauri android build --apk --target aarch64 --debug
-
-      - name: Rename signed debug APK
+      - name: Decode release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          APK_DIR="src-tauri/gen/android/app/build/outputs/apk/universal/debug"
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "KEYSTORE_BASE64 secret not configured" >&2
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          ls -la "$RUNNER_TEMP/release.jks"
+
+      - name: Build Release APK (aarch64)
+        run: pnpm tauri android build --apk --target aarch64
+
+      - name: Sign APK with release keystore
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME/build-tools/"* | sort -V | tail -n 1)
+          APK_DIR="src-tauri/gen/android/app/build/outputs/apk/universal/release"
           ls -la "$APK_DIR"
+          for apk in "$APK_DIR"/*-unsigned.apk; do
+            [ -e "$apk" ] || { echo "No unsigned APK found in $APK_DIR" >&2; exit 1; }
+            signed="${apk/-unsigned/-signed}"
+            "$BUILD_TOOLS/apksigner" sign \
+              --ks "$RUNNER_TEMP/release.jks" \
+              --ks-pass "pass:${KEYSTORE_PASSWORD}" \
+              --ks-key-alias "${KEY_ALIAS}" \
+              --key-pass "pass:${KEY_PASSWORD}" \
+              --out "$signed" "$apk"
+          done
+          ls -la "$APK_DIR"
+
+      - name: Verify APK signature
+        run: |
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME/build-tools/"* | sort -V | tail -n 1)
+          APK_DIR="src-tauri/gen/android/app/build/outputs/apk/universal/release"
+          for apk in "$APK_DIR"/*-signed.apk; do
+            "$BUILD_TOOLS/apksigner" verify "$apk"
+          done
+
+      - name: Rename signed APK
+        run: |
+          APK_DIR="src-tauri/gen/android/app/build/outputs/apk/universal/release"
           TAG="${GITHUB_REF_NAME:-dev}"
-          for apk in "$APK_DIR"/*.apk; do
-            [ -e "$apk" ] || { echo "No APK found in $APK_DIR" >&2; exit 1; }
+          for apk in "$APK_DIR"/*-signed.apk; do
             mv "$apk" "$APK_DIR/P-ai-${TAG}-aarch64.apk"
             echo "Renamed to P-ai-${TAG}-aarch64.apk"
           done
@@ -143,6 +176,25 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v6
         with:
-          name: p-ai-android-debug
-          path: src-tauri/gen/android/app/build/outputs/apk/universal/debug/*.apk
+          name: p-ai-android-release
+          path: src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
           if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: p-ai-android-release
+          path: release-apk
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-apk/*.apk
+          generate_release_notes: true
