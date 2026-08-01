@@ -130,25 +130,29 @@ fn normalize_agent_tools(agent: &mut AgentProfile) -> bool {
     changed
 }
 
-fn ensure_required_builtin_agents(data: &mut AppData) -> bool {
+fn ensure_required_builtin_agents_in_list(agents: &mut Vec<AgentProfile>) -> bool {
     let mut changed = false;
-    if !data.agents.iter().any(|agent| agent.id == DEFAULT_AGENT_ID) {
-        data.agents.push(default_agent());
+    if !agents.iter().any(|agent| agent.id == DEFAULT_AGENT_ID) {
+        agents.push(default_agent());
         changed = true;
     }
-    if !data.agents.iter().any(|agent| agent.id == DEPUTY_AGENT_ID) {
-        data.agents.push(default_deputy_agent());
+    if !agents.iter().any(|agent| agent.id == DEPUTY_AGENT_ID) {
+        agents.push(default_deputy_agent());
         changed = true;
     }
-    if !data.agents.iter().any(|agent| agent.id == USER_PERSONA_ID) {
-        data.agents.push(default_user_persona());
+    if !agents.iter().any(|agent| agent.id == USER_PERSONA_ID) {
+        agents.push(default_user_persona());
         changed = true;
     }
-    if !data.agents.iter().any(|agent| agent.id == SYSTEM_PERSONA_ID) {
-        data.agents.push(default_system_persona());
+    if !agents.iter().any(|agent| agent.id == SYSTEM_PERSONA_ID) {
+        agents.push(default_system_persona());
         changed = true;
     }
     changed
+}
+
+fn ensure_required_builtin_agents(data: &mut AppData) -> bool {
+    ensure_required_builtin_agents_in_list(&mut data.agents)
 }
 
 fn fill_missing_conversation_message_speaker_agent_ids(conversation: &mut Conversation) -> bool {

@@ -544,6 +544,8 @@ fn collect_workspace_load_snapshot(
         ));
     }
     let mut config = read_config(&state.config_path)?;
+    normalize_app_config(&mut config);
+    let _ = ensure_default_shell_workspace_in_config(&mut config, state);
     let mut data = read_app_data(&state.data_path)?;
     let private_org = merge_private_organization_into_runtime(&state.data_path, &mut config, &mut data.agents)?;
     let mcp_loaded = servers.iter().map(|s| s.id.clone()).collect::<Vec<_>>();

@@ -435,22 +435,25 @@ fn apply_runtime_state_to_app_data(data: &mut AppData, runtime: &RuntimeStateFil
 }
 
 fn read_agents_shard(path: &PathBuf) -> Result<Vec<AgentProfile>, String> {
-    if !app_layout_exists(path) && path.exists() {
-        return Ok(read_app_data(path)?.agents);
-    }
-    if app_layout_agents_path(path).exists() {
-        Ok(read_json_file::<AgentsFile>(&app_layout_agents_path(path), "agents file")?.agents)
+    let mut agents = if !app_layout_exists(path) && path.exists() {
+        read_app_data(path)?.agents
+    } else if app_layout_agents_path(path).exists() {
+        read_json_file::<AgentsFile>(&app_layout_agents_path(path), "agents file")?.agents
     } else {
-        Ok(AppData::default().agents)
-    }
+        AppData::default().agents
+    };
+    ensure_required_builtin_agents_in_list(&mut agents);
+    Ok(agents)
 }
 
 fn write_agents_shard(path: &PathBuf, agents: &[AgentProfile]) -> Result<bool, String> {
     fs::create_dir_all(app_layout_config_dir(path))
         .map_err(|err| format!("Create config layout dir failed: {err}"))?;
+    let mut normalized_agents = agents.to_vec();
+    ensure_required_builtin_agents_in_list(&mut normalized_agents);
     write_json_file_atomic_if_changed(
         &app_layout_agents_path(path),
-        &build_agents_file(agents),
+        &build_agents_file(&normalized_agents),
         "agents file",
     )
 }
@@ -1000,11 +1003,12 @@ fn read_legacy_split_app_data(path: &PathBuf) -> Result<AppData, String> {
 }
 
 fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
-    let agents = if app_layout_agents_path(path).exists() {
+    let mut agents = if app_layout_agents_path(path).exists() {
         read_json_file::<AgentsFile>(&app_layout_agents_path(path), "agents file")?.agents
     } else {
         AppData::default().agents
     };
+    ensure_required_builtin_agents_in_list(&mut agents);
 
     let runtime = if app_layout_runtime_state_path(path).exists() {
         read_json_file::<RuntimeStateFile>(&app_layout_runtime_state_path(path), "runtime state file")?
@@ -1383,11 +1387,7 @@ fn read_app_data(path: &PathBuf) -> Result<AppData, String> {
     let migration_version_before = parsed.data_migration_version;
     let run_v1_baseline_migrations =
         migration_version_before < DATA_MIGRATION_VERSION_V1_BASELINE;
-    let builtin_agents_filled = if run_v1_baseline_migrations {
-        ensure_required_builtin_agents(&mut parsed)
-    } else {
-        false
-    };
+    let builtin_agents_filled = ensure_required_builtin_agents(&mut parsed);
     let conversation_metadata_filled = if run_v1_baseline_migrations {
         fill_missing_conversation_metadata(&mut parsed)
     } else {
@@ -1421,8 +1421,7 @@ fn read_app_data(path: &PathBuf) -> Result<AppData, String> {
             }
         }
     }
-    let data_migration_version_recorded =
-        if parsed.data_migration_version < DATA_MIGRATION_VERSION_V1_BASELINE {
+    let data_migration_version_recorded = if parsed.data_migration_version < DATA_MIGRATION_VERSION_V1_BASELINE {
         parsed.data_migration_version = DATA_MIGRATION_VERSION_V1_BASELINE;
         true
     } else {

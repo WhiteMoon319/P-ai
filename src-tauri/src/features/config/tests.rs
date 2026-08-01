@@ -875,7 +875,7 @@
     }
 
     #[test]
-    fn normalize_app_config_should_preserve_empty_expert_model_while_defaulting_department_role() {
+    fn normalize_app_config_should_restore_empty_expert_model_from_text_chat_api() {
         let mut cfg = AppConfig {
             hotkey: "Alt+·".to_string(),
             ui_language: default_ui_language(),
@@ -960,9 +960,38 @@
 
         normalize_app_config(&mut cfg);
 
-        assert_eq!(cfg.assistant_department_api_config_id, "");
+        assert_eq!(cfg.assistant_department_api_config_id, "chat-a");
         assert_eq!(cfg.departments[0].api_config_id, MODEL_ROLE_EXPERT_API_CONFIG_ID);
         assert_eq!(cfg.departments[0].api_config_ids, vec![MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string()]);
+    }
+
+    #[test]
+    fn normalize_app_config_should_restore_expert_model_from_provider_endpoint() {
+        let mut cfg = AppConfig::default();
+        let expected_endpoint_id = provider_first_endpoint_id(
+            cfg.api_providers
+                .first()
+                .expect("default provider exists"),
+        )
+        .expect("default provider has endpoint");
+        cfg.api_configs.clear();
+        cfg.selected_api_config_id.clear();
+        cfg.assistant_department_api_config_id.clear();
+
+        normalize_app_config(&mut cfg);
+
+        assert_eq!(cfg.assistant_department_api_config_id, expected_endpoint_id);
+        let assistant = cfg
+            .departments
+            .iter()
+            .find(|item| item.id == ASSISTANT_DEPARTMENT_ID)
+            .expect("assistant department");
+        assert_eq!(assistant.api_config_id, MODEL_ROLE_EXPERT_API_CONFIG_ID);
+        assert_eq!(assistant.api_config_ids, vec![MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string()]);
+        assert_eq!(
+            resolve_department_chat_api_config_id(&cfg, MODEL_ROLE_EXPERT_API_CONFIG_ID).as_deref(),
+            Some(cfg.assistant_department_api_config_id.as_str())
+        );
     }
 
     #[test]

@@ -73,6 +73,42 @@ jobs:
       - name: Patch Android microphone permissions and safe area
         run: bash scripts/patch-android-project.sh
 
+      - name: Download proot native libs (arm64)
+        run: |
+          JNI_DIR="src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
+          mkdir -p "$JNI_DIR"
+          sudo apt-get update -qq && sudo apt-get install -y -qq patchelf binutils
+          # 从 Termux 官方包仓库下载 proot 及宿主侧动态依赖
+          PROOT_URL="https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.1.107.89_aarch64.deb"
+          TALLOC_URL="https://packages.termux.dev/apt/termux-main/pool/main/libt/libtalloc/libtalloc_2.4.3_aarch64.deb"
+          SHMEM_URL="https://packages.termux.dev/apt/termux-main/pool/main/liba/libandroid-shmem/libandroid-shmem_0.7_aarch64.deb"
+          for url in "$PROOT_URL" "$TALLOC_URL" "$SHMEM_URL"; do
+            name=$(basename "$url")
+            curl -fsSL --connect-timeout 30 --retry 3 "$url" -o "/tmp/$name"
+            mkdir -p "/tmp/extract-$name"
+            ar x "/tmp/$name" --output="/tmp/extract-$name"
+            tar -xf "/tmp/extract-$name/data.tar.xz" -C "/tmp/extract-$name"
+          done
+          # proot 二进制
+          cp /tmp/extract-proot_5.1.107.89_aarch64.deb/data/data/com.termux/files/usr/bin/proot "$JNI_DIR/libproot_exec.so"
+          chmod +x "$JNI_DIR/libproot_exec.so"
+          # Android native libs 只稳定打包 lib*.so；把 Termux 的 libtalloc.so.2 改名并同步修补 NEEDED。
+          cp /tmp/extract-libtalloc_2.4.3_aarch64.deb/data/data/com.termux/files/usr/lib/libtalloc.so.2 "$JNI_DIR/libtalloc.so"
+          chmod 0644 "$JNI_DIR/libtalloc.so"
+          patchelf --set-soname libtalloc.so "$JNI_DIR/libtalloc.so" || true
+          cp /tmp/extract-libandroid-shmem_0.7_aarch64.deb/data/data/com.termux/files/usr/lib/libandroid-shmem.so "$JNI_DIR/libandroid-shmem.so"
+          chmod 0644 "$JNI_DIR/libandroid-shmem.so"
+          if patchelf --print-needed "$JNI_DIR/libproot_exec.so" | grep -qx 'libtalloc.so.2'; then
+            patchelf --replace-needed libtalloc.so.2 libtalloc.so "$JNI_DIR/libproot_exec.so"
+          fi
+          # 设置 rpath: DT_RPATH 比 DT_RUNPATH 更可靠，$ORIGIN 让动态库在同目录解析。
+          patchelf --force-rpath --set-rpath '$ORIGIN' "$JNI_DIR/libproot_exec.so"
+          echo "proot rpath: $(patchelf --print-rpath "$JNI_DIR/libproot_exec.so")"
+          echo "jniLibs: $(ls -lh "$JNI_DIR")"
+          echo "proot info: $(file "$JNI_DIR/libproot_exec.so")"
+          echo "proot deps: $(patchelf --print-needed "$JNI_DIR/libproot_exec.so")"
+          rm -rf /tmp/proot_*.deb /tmp/libtalloc_*.deb /tmp/libandroid-shmem_*.deb /tmp/extract-*
+
       - name: Build Android APK (aarch64)
         run: pnpm tauri android build --apk --target aarch64
 

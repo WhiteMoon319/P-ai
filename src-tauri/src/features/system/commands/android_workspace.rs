@@ -9,6 +9,7 @@ const ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH: u64 = 29_865_086;
 const ANDROID_WORKSPACE_ROOTFS_CONNECT_TIMEOUT_SECS: u64 = 30;
 const ANDROID_WORKSPACE_ROOTFS_CHUNK_TIMEOUT_SECS: u64 = 60;
 const ANDROID_WORKSPACE_ROOTFS_MARKER_FILE: &str = ".pai-rootfs-installed";
+const ANDROID_WORKSPACE_FILE_TRANSFER_MAX_BYTES: u64 = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -358,6 +359,127 @@ fn android_workspace_rootfs_resolve_entry_path(
     Ok(target)
 }
 
+fn android_workspace_rootfs_normalize_path(path: &std::path::Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            std::path::Component::RootDir => normalized.push(std::path::MAIN_SEPARATOR.to_string()),
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            std::path::Component::Normal(part) => normalized.push(part),
+        }
+    }
+    normalized
+}
+
+fn android_workspace_rootfs_resolve_symlink_target(
+    root: &std::path::Path,
+    link_path: &std::path::Path,
+    link_target: &std::path::Path,
+) -> Option<PathBuf> {
+    let root = android_workspace_rootfs_normalize_path(root);
+    let link_path = android_workspace_rootfs_normalize_path(link_path);
+    let resolved = if link_target.is_absolute() {
+        let mut target = root.clone();
+        for component in link_target.components() {
+            match component {
+                std::path::Component::Normal(part) => target.push(part),
+                std::path::Component::CurDir | std::path::Component::RootDir => {}
+                std::path::Component::ParentDir => {
+                    target.pop();
+                }
+                std::path::Component::Prefix(_) => return None,
+            }
+        }
+        android_workspace_rootfs_normalize_path(&target)
+    } else {
+        let parent = link_path.parent()?;
+        android_workspace_rootfs_normalize_path(&parent.join(link_target))
+    };
+    resolved.starts_with(&root).then_some(resolved)
+}
+
+fn android_workspace_rootfs_relative_symlink_target(
+    root: &std::path::Path,
+    link_path: &std::path::Path,
+    link_target: &std::path::Path,
+) -> Option<String> {
+    let root = android_workspace_rootfs_normalize_path(root);
+    let link_path = android_workspace_rootfs_normalize_path(link_path);
+    let parent = link_path.parent()?;
+    let resolved = android_workspace_rootfs_resolve_symlink_target(&root, &link_path, link_target)?;
+    let from = parent.strip_prefix(&root).ok()?;
+    let to = resolved.strip_prefix(&root).ok()?;
+    let from_parts = from
+        .components()
+        .filter_map(|component| match component {
+            std::path::Component::Normal(part) => Some(part.to_string_lossy().to_string()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let to_parts = to
+        .components()
+        .filter_map(|component| match component {
+            std::path::Component::Normal(part) => Some(part.to_string_lossy().to_string()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let mut common = 0usize;
+    while common < from_parts.len() && common < to_parts.len() && from_parts[common] == to_parts[common] {
+        common += 1;
+    }
+    let mut relative = Vec::<String>::new();
+    for _ in common..from_parts.len() {
+        relative.push("..".to_string());
+    }
+    relative.extend(to_parts.into_iter().skip(common));
+    Some(if relative.is_empty() { ".".to_string() } else { relative.join("/") })
+}
+
+fn android_workspace_unpack_rootfs_symlink<R: std::io::Read>(
+    entry: &mut tar::Entry<'_, R>,
+    runtime_root: &std::path::Path,
+    relative_path: &std::path::Path,
+) -> Result<(), String> {
+    let target_path = android_workspace_rootfs_resolve_entry_path(runtime_root, relative_path)?;
+    let link_name = entry
+        .link_name()
+        .map_err(|err| format!("读取 Android Linux 运行环境符号链接目标失败 ({}): {err}", relative_path.display()))?
+        .ok_or_else(|| format!("Android Linux 运行环境符号链接缺少目标：{}", relative_path.display()))?
+        .into_owned();
+    let host_link_target = android_workspace_rootfs_relative_symlink_target(runtime_root, &target_path, &link_name)
+        .ok_or_else(|| format!("Android Linux 运行环境符号链接目标非法：{} -> {}", relative_path.display(), link_name.display()))?;
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("创建 Android Linux 运行环境符号链接目录失败 ({}): {err}", parent.display()))?;
+    }
+    if let Ok(metadata) = fs::symlink_metadata(&target_path) {
+        if metadata.is_dir() && !metadata.file_type().is_symlink() {
+            fs::remove_dir_all(&target_path)
+                .map_err(|err| format!("清理 Android Linux 运行环境符号链接目录失败 ({}): {err}", relative_path.display()))?;
+        } else {
+            fs::remove_file(&target_path)
+                .map_err(|err| format!("清理 Android Linux 运行环境符号链接目标失败 ({}): {err}", relative_path.display()))?;
+        }
+    }
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(&host_link_target, &target_path)
+            .map_err(|err| format!("创建 Android Linux 运行环境符号链接失败 ({} -> {}): {err}", relative_path.display(), host_link_target))?;
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = host_link_target;
+        entry
+            .unpack_in(runtime_root)
+            .map_err(|err| format!("解压 Android Linux 运行环境符号链接失败 ({}): {err}", relative_path.display()))
+    }
+}
+
 fn android_workspace_unpack_rootfs_hard_link<R: std::io::Read>(
     entry: &mut tar::Entry<'_, R>,
     runtime_root: &std::path::Path,
@@ -427,6 +549,10 @@ fn extract_android_workspace_rootfs_archive(
         }
         if entry_type.is_hard_link() {
             android_workspace_unpack_rootfs_hard_link(&mut entry, runtime_root, &relative_path)?;
+            continue;
+        }
+        if entry_type.is_symlink() {
+            android_workspace_unpack_rootfs_symlink(&mut entry, runtime_root, &relative_path)?;
             continue;
         }
         android_workspace_rootfs_resolve_entry_path(runtime_root, &relative_path)?;
@@ -750,26 +876,34 @@ fn android_workspace_sanitize_file_name(raw: &str) -> String {
     }
 }
 
-fn android_workspace_unique_import_path(imports_dir: &std::path::Path, file_name: &str) -> PathBuf {
-    let candidate = imports_dir.join(file_name);
+fn android_workspace_unique_sibling_path(candidate: &std::path::Path) -> PathBuf {
     if !candidate.exists() {
-        return candidate;
+        return candidate.to_path_buf();
     }
+    let parent = candidate.parent().unwrap_or_else(|| std::path::Path::new(""));
+    let file_name = candidate
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("imported-file");
     let path = std::path::Path::new(file_name);
     let stem = path.file_stem().and_then(|value| value.to_str()).unwrap_or("imported-file");
     let ext = path.extension().and_then(|value| value.to_str()).unwrap_or("");
     for index in 1..1000 {
         let next_name = if ext.is_empty() {
-            format!("{stem}-{index}")
+            format!("{stem} ({index})")
         } else {
-            format!("{stem}-{index}.{ext}")
+            format!("{stem} ({index}).{ext}")
         };
-        let next = imports_dir.join(next_name);
+        let next = parent.join(next_name);
         if !next.exists() {
             return next;
         }
     }
-    imports_dir.join(format!("{}-{}", Uuid::new_v4(), file_name))
+    parent.join(format!("{}-{}", Uuid::new_v4(), file_name))
+}
+
+fn android_workspace_unique_import_path(imports_dir: &std::path::Path, file_name: &str) -> PathBuf {
+    android_workspace_unique_sibling_path(&imports_dir.join(file_name))
 }
 
 fn android_workspace_resolve_import_target_path(
@@ -1188,11 +1322,13 @@ fn import_file_to_android_workspace(
         let root = android_workspace_root(&state)
             .canonicalize()
             .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
-        let target = android_workspace_resolve_import_target_path(&root, &file_name, target_path.as_deref())?;
+        let mut target = android_workspace_resolve_import_target_path(&root, &file_name, target_path.as_deref())?;
         android_workspace_ensure_paths_within_sandbox(&state, &[target.clone()])?;
         android_workspace_ensure_user_file_manager_path(&root, &target, false)?;
         if target.exists() {
-            return Err(format!("导入目标已存在，请先删除或换一个文件名：{}", android_workspace_relative_display(&root, &target)));
+            target = android_workspace_unique_sibling_path(&target);
+            android_workspace_ensure_paths_within_sandbox(&state, &[target.clone()])?;
+            android_workspace_ensure_user_file_manager_path(&root, &target, false)?;
         }
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent)
@@ -1202,6 +1338,13 @@ fn import_file_to_android_workspace(
         let bytes = B64
             .decode(data_base64.trim())
             .map_err(|err| format!("解析导入文件失败: {err}"))?;
+        if bytes.len() as u64 > ANDROID_WORKSPACE_FILE_TRANSFER_MAX_BYTES {
+            return Err(format!(
+                "导入文件过大：{} bytes，当前 Android 文件管理器单文件上限为 {} bytes。",
+                bytes.len(),
+                ANDROID_WORKSPACE_FILE_TRANSFER_MAX_BYTES
+            ));
+        }
         fs::write(&target, &bytes)
             .map_err(|err| format!("写入 Android 工作区导入文件失败 ({}): {err}", target.display()))?;
         let status = normalize_android_workspace_status(&state);
@@ -1246,6 +1389,13 @@ fn export_file_from_android_workspace(
             .map_err(|err| format!("读取 Android 工作区导出文件失败 ({}): {err}", target.display()))?;
         if !metadata.is_file() {
             return Err("只能导出文件，不能导出目录。".to_string());
+        }
+        if metadata.len() > ANDROID_WORKSPACE_FILE_TRANSFER_MAX_BYTES {
+            return Err(format!(
+                "导出文件过大：{} bytes，当前 Android 文件管理器单文件上限为 {} bytes。",
+                metadata.len(),
+                ANDROID_WORKSPACE_FILE_TRANSFER_MAX_BYTES
+            ));
         }
         let bytes = fs::read(&target)
             .map_err(|err| format!("读取 Android 工作区导出文件失败 ({}): {err}", target.display()))?;

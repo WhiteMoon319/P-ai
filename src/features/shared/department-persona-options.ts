@@ -1,5 +1,5 @@
 import type { ApiConfigItem, DepartmentConfig, PersonaProfile } from "../../types/app";
-import { resolveModelRoleApiConfigId } from "../config/utils/model-role-options";
+import { MODEL_ROLE_EXPERT_API_CONFIG_ID, resolveModelRoleApiConfigId } from "../config/utils/model-role-options";
 
 export type DepartmentPersonaOption = {
   id: string;
@@ -22,12 +22,47 @@ type BuildDepartmentPersonaOptionsInput = {
   departments: DepartmentConfig[] | null | undefined;
   personas: PersonaProfile[] | null | undefined;
   apiConfigs: ApiConfigItem[] | null | undefined;
+  selectedApiConfigId?: string;
   assistantDepartmentApiConfigId?: string;
   toolReviewApiConfigId?: string | null;
 };
 
 function trimText(value: unknown): string {
   return String(value || "").trim();
+}
+
+const TEXT_CHAT_REQUEST_FORMATS = new Set([
+  "auto",
+  "openai",
+  "deepseek",
+  "openai_responses",
+  "codex",
+  "gemini",
+  "anthropic",
+  "fireworks",
+  "together",
+  "groq",
+  "mimo",
+  "minimax",
+  "moonshot",
+  "nebius",
+  "xai",
+  "zai",
+  "bigmodel",
+  "aliyun",
+  "baidu",
+  "cohere",
+  "ollama",
+  "ollama_cloud",
+  "vertex",
+  "github_copilot",
+  "opencode_go",
+  "bedrock_api",
+]);
+
+function isTextChatApi(api: ApiConfigItem): boolean {
+  const format = trimText(api.requestFormat).toLowerCase();
+  return !!api.enableText && (format === "deepseek/kimi" || TEXT_CHAT_REQUEST_FORMATS.has(format));
 }
 
 function departmentPrimaryApiConfigId(department: DepartmentConfig | null | undefined): string {
@@ -38,19 +73,32 @@ function departmentPrimaryApiConfigId(department: DepartmentConfig | null | unde
   return trimText(department?.apiConfigId);
 }
 
+function fallbackConversationApiConfigId(input: BuildDepartmentPersonaOptionsInput): string {
+  const apiConfigs = input.apiConfigs || [];
+  const selectedId = trimText(input.selectedApiConfigId);
+  const selectedApi = apiConfigs.find((api) => trimText(api.id) === selectedId && isTextChatApi(api));
+  if (selectedApi) return trimText(selectedApi.id);
+  return trimText(apiConfigs.find((api) => isTextChatApi(api))?.id);
+}
+
 function departmentConversationApiConfigId(
   department: DepartmentConfig,
   input: BuildDepartmentPersonaOptionsInput,
 ): string {
   const directId = departmentPrimaryApiConfigId(department);
   if (directId) {
-    return resolveModelRoleApiConfigId(directId, {
+    const resolvedId = resolveModelRoleApiConfigId(directId, {
       assistantDepartmentApiConfigId: trimText(input.assistantDepartmentApiConfigId),
       toolReviewApiConfigId: trimText(input.toolReviewApiConfigId),
     });
+    if (resolvedId) return resolvedId;
+    if (directId === MODEL_ROLE_EXPERT_API_CONFIG_ID) {
+      return fallbackConversationApiConfigId(input);
+    }
+    return "";
   }
   if (department.id === "assistant-department" || department.isBuiltInAssistant) {
-    return trimText(input.assistantDepartmentApiConfigId);
+    return trimText(input.assistantDepartmentApiConfigId) || fallbackConversationApiConfigId(input);
   }
   return "";
 }
@@ -70,7 +118,7 @@ export function buildDepartmentPersonaOptions(
   const apiConfigs = new Map(
     (input.apiConfigs || [])
       .map((api) => [trimText(api.id), api] as const)
-      .filter(([id, api]) => !!id && !!api.enableText),
+      .filter(([id, api]) => !!id && isTextChatApi(api)),
   );
   const options: DepartmentPersonaOption[] = [];
   for (const department of input.departments || []) {

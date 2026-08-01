@@ -1,12 +1,14 @@
 #[derive(Debug, Clone, Copy)]
 enum SandboxBackendKind {
+    #[cfg(target_os = "android")]
+    AndroidProotBackend,
     #[cfg(target_os = "windows")]
     WindowsJobBackend,
     #[cfg(target_os = "linux")]
     LinuxBubblewrapBackend,
     #[cfg(target_os = "macos")]
     MacosSeatbeltBackend,
-    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+    #[cfg(not(any(target_os = "android", target_os = "windows", target_os = "linux", target_os = "macos")))]
     ProcessBackend,
 }
 
@@ -17,6 +19,13 @@ struct SandboxManager {
 
 impl SandboxManager {
     fn from_state(_state: &AppState) -> Self {
+        #[cfg(target_os = "android")]
+        {
+            return Self {
+                backend: SandboxBackendKind::AndroidProotBackend,
+            };
+        }
+
         #[cfg(target_os = "windows")]
         {
             return Self {
@@ -38,7 +47,7 @@ impl SandboxManager {
             };
         }
 
-        #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+        #[cfg(not(any(target_os = "android", target_os = "windows", target_os = "linux", target_os = "macos")))]
         Self {
             backend: SandboxBackendKind::ProcessBackend,
         }
@@ -57,6 +66,10 @@ impl SandboxManager {
         }
         let runtime_shell = terminal_shell_for_state(state);
         match self.backend {
+            #[cfg(target_os = "android")]
+            SandboxBackendKind::AndroidProotBackend => {
+                sandbox_run_with_android_proot_backend(&request, state).await
+            }
             #[cfg(target_os = "windows")]
             SandboxBackendKind::WindowsJobBackend => {
                 sandbox_run_with_windows_job_backend(&runtime_shell, &request).await
@@ -69,7 +82,7 @@ impl SandboxManager {
             SandboxBackendKind::MacosSeatbeltBackend => {
                 sandbox_run_with_macos_seatbelt_backend(&runtime_shell, &request).await
             }
-            #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+            #[cfg(not(any(target_os = "android", target_os = "windows", target_os = "linux", target_os = "macos")))]
             SandboxBackendKind::ProcessBackend => {
                 sandbox_run_with_process_backend(&runtime_shell, &request).await
             }

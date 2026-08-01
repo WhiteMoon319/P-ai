@@ -1,6 +1,6 @@
 import { computed } from "vue";
 import type { ApiRequestFormat, AppConfig } from "../../../types/app";
-import { isModelRoleApiConfigId, resolveModelRoleApiConfigId } from "../../config/utils/model-role-options";
+import { MODEL_ROLE_EXPERT_API_CONFIG_ID, isModelRoleApiConfigId, resolveModelRoleApiConfigId } from "../../config/utils/model-role-options";
 
 export function useChatConfigDerivedState(config: AppConfig) {
   const TEXT_REQUEST_FORMATS = new Set<ApiRequestFormat>([
@@ -74,13 +74,25 @@ export function useChatConfigDerivedState(config: AppConfig) {
     return department?.modelFailureFallbackEnabled ? ordered : ordered.slice(0, 1);
   }
 
+  function fallbackConversationApiConfigId(): string {
+    const selectedId = String(config.selectedApiConfigId || "").trim();
+    return textCapableApiConfigs.value.find((api) => api.id === selectedId)?.id
+      || textCapableApiConfigs.value[0]?.id
+      || "";
+  }
+
   function departmentConversationApiConfigId(
     department?: { id?: string; isBuiltInAssistant?: boolean; apiConfigId?: string; apiConfigIds?: string[] } | null,
   ): string {
     const directId = departmentPrimaryApiConfigId(department);
-    if (directId) return resolveModelRoleApiConfigId(directId, config);
+    if (directId) {
+      const resolvedId = resolveModelRoleApiConfigId(directId, config);
+      if (resolvedId) return resolvedId;
+      if (directId === MODEL_ROLE_EXPERT_API_CONFIG_ID) return fallbackConversationApiConfigId();
+      return "";
+    }
     if (department?.id === "assistant-department" || department?.isBuiltInAssistant) {
-      return String(config.assistantDepartmentApiConfigId || "").trim();
+      return String(config.assistantDepartmentApiConfigId || "").trim() || fallbackConversationApiConfigId();
     }
     return "";
   }

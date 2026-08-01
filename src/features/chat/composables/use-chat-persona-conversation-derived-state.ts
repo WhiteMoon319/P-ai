@@ -1,6 +1,6 @@
 import { computed } from "vue";
 import type { ChatMentionEntry } from "../../../types/app";
-import { resolveModelRoleApiConfigId } from "../../config/utils/model-role-options";
+import { MODEL_ROLE_EXPERT_API_CONFIG_ID, resolveModelRoleApiConfigId } from "../../config/utils/model-role-options";
 import { buildDepartmentPersonaOptions } from "../../shared/department-persona-options";
 
 export function useChatPersonaConversationDerivedState(bindings: Record<string, any>) {
@@ -45,8 +45,16 @@ export function useChatPersonaConversationDerivedState(bindings: Record<string, 
     () => String(currentForegroundConversationSummary.value?.agentId || "").trim(),
   );
   function resolveForegroundTextApiConfigId(apiConfigId: string): string {
-    const resolvedId = resolveModelRoleApiConfigId(apiConfigId, bindings.config);
-    return bindings.config.apiConfigs.some((item: any) => item.id === resolvedId && item.enableText)
+    const rawId = String(apiConfigId || "").trim();
+    const resolvedId = resolveModelRoleApiConfigId(rawId, bindings.config)
+      || (rawId === MODEL_ROLE_EXPERT_API_CONFIG_ID
+        ? bindings.departmentConversationApiConfigId(currentForegroundDepartment.value)
+        : "");
+    return bindings.config.apiConfigs.some((item: any) =>
+      item.id === resolvedId
+      && item.enableText
+      && bindings.isTextRequestFormat(item.requestFormat)
+    )
       ? resolvedId
       : "";
   }
@@ -158,6 +166,7 @@ export function useChatPersonaConversationDerivedState(bindings: Record<string, 
       );
       const boundDepartments = (departmentsByPersonaId.get(agentId) || [])
         .map((department: any) => ({
+          department,
           departmentId: String(department.id || "").trim(),
           departmentName: String(department.name || "").trim() || String(department.id || "").trim(),
           apiConfigIds: bindings.departmentOrderedApiConfigIds(department),
@@ -186,7 +195,11 @@ export function useChatPersonaConversationDerivedState(bindings: Record<string, 
       for (const department of boundDepartments) {
         const isCurrentRuntimeAgent = department.departmentId === currentDepartmentId && agentId === currentAgentId;
         const hasTextModel = department.apiConfigIds.some((apiConfigId: string) => {
-          const resolvedId = resolveModelRoleApiConfigId(apiConfigId, bindings.config);
+          const rawId = String(apiConfigId || "").trim();
+          const resolvedId = resolveModelRoleApiConfigId(rawId, bindings.config)
+            || (rawId === MODEL_ROLE_EXPERT_API_CONFIG_ID
+              ? bindings.departmentConversationApiConfigId(department.department)
+              : "");
           return textCapableApiIds.has(resolvedId);
         });
         let mentionable = true;
@@ -237,6 +250,7 @@ export function useChatPersonaConversationDerivedState(bindings: Record<string, 
       departments: bindings.config.departments || [],
       personas: bindings.personas.value || [],
       apiConfigs: bindings.config.apiConfigs || [],
+      selectedApiConfigId: bindings.config.selectedApiConfigId,
       assistantDepartmentApiConfigId: bindings.config.assistantDepartmentApiConfigId,
       toolReviewApiConfigId: bindings.config.toolReviewApiConfigId,
     }),

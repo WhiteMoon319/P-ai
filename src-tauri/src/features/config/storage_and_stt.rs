@@ -879,6 +879,24 @@ fn is_text_chat_api(api: &ApiConfig) -> bool {
     api.enable_text && api.request_format.is_chat_text()
 }
 
+fn normalized_assistant_department_api_config_id(config: &AppConfig) -> String {
+    let current_id = config.assistant_department_api_config_id.trim();
+    config
+        .api_configs
+        .iter()
+        .find(|api| api.id == current_id && is_text_chat_api(api))
+        .or_else(|| {
+            let selected_id = config.selected_api_config_id.trim();
+            config
+                .api_configs
+                .iter()
+                .find(|api| api.id == selected_id && is_text_chat_api(api))
+        })
+        .or_else(|| config.api_configs.iter().find(|api| is_text_chat_api(api)))
+        .map(|api| api.id.clone())
+        .unwrap_or_default()
+}
+
 fn chat_api_has_required_auth(api: &ApiConfig) -> bool {
     if api.request_format.is_codex()
         && matches!(
@@ -929,9 +947,6 @@ fn startup_window_label_for_config(config: &AppConfig) -> &'static str {
 }
 
 fn normalize_departments(config: &mut AppConfig) {
-    if config.api_configs.is_empty() {
-        return;
-    }
     let fallback_api_id = config
         .api_configs
         .iter()
@@ -1270,14 +1285,7 @@ fn normalize_app_config(config: &mut AppConfig) {
             .unwrap_or_default();
     }
 
-    let chat_valid = config.api_configs.iter().any(|a| {
-        a.id == config.assistant_department_api_config_id
-            && a.enable_text
-            && a.request_format.is_chat_text()
-    });
-    if !chat_valid {
-        config.assistant_department_api_config_id.clear();
-    }
+    config.assistant_department_api_config_id = normalized_assistant_department_api_config_id(config);
 
     if config.min_record_seconds == 0 {
         config.min_record_seconds = default_min_record_seconds();
@@ -1315,6 +1323,18 @@ fn normalize_app_config(config: &mut AppConfig) {
     normalize_provider_non_stream_base_urls(config);
     normalize_departments(config);
     normalize_image_generation_config(config);
+}
+
+fn normalize_app_config_and_detect_changes(config: &mut AppConfig) -> bool {
+    let before = serde_json::to_value(&*config);
+    normalize_app_config(config);
+    match before {
+        Ok(before_value) => match serde_json::to_value(&*config) {
+            Ok(after_value) => after_value != before_value,
+            Err(_) => true,
+        },
+        Err(_) => true,
+    }
 }
 
 const MEDIA_REF_PREFIX: &str = "@media:";

@@ -1186,7 +1186,9 @@ fn state_read_agents_cached(state: &AppState) -> Result<Vec<AgentProfile>, Strin
             (cached.as_ref(), *cached_mtime, disk_mtime)
         {
             if cached_time == disk_time {
-                return Ok(agents.clone());
+                let mut agents = agents.clone();
+                ensure_required_builtin_agents_in_list(&mut agents);
+                return Ok(agents);
             }
         }
     }
@@ -1203,6 +1205,8 @@ fn state_read_agents_cached(state: &AppState) -> Result<Vec<AgentProfile>, Strin
 }
 
 fn state_write_agents_cached(state: &AppState, agents: &[AgentProfile]) -> Result<(), String> {
+    let mut normalized_agents = agents.to_vec();
+    ensure_required_builtin_agents_in_list(&mut normalized_agents);
     let seq = state
         .app_data_persist_latest_seq
         .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
@@ -1211,17 +1215,17 @@ fn state_write_agents_cached(state: &AppState, agents: &[AgentProfile]) -> Resul
         .app_data_persist_write_lock
         .lock()
         .map_err(|_| "Failed to lock app data persist write lock".to_string())?;
-    let _ = write_agents_shard(&state.data_path, agents)?;
+    let _ = write_agents_shard(&state.data_path, &normalized_agents)?;
     let disk_mtime = path_modified_time(&app_layout_agents_path(&state.data_path));
     *state
         .cached_agents
         .lock()
-        .map_err(|_| "Failed to lock cached agents".to_string())? = Some(agents.to_vec());
+        .map_err(|_| "Failed to lock cached agents".to_string())? = Some(normalized_agents.clone());
     *state
         .cached_agents_mtime
         .lock()
         .map_err(|_| "Failed to lock cached agents mtime".to_string())? = disk_mtime;
-    sync_cached_app_data_agents(state, agents)?;
+    sync_cached_app_data_agents(state, &normalized_agents)?;
     if let Ok(mut pending) = state.app_data_persist_pending.lock() {
         if pending
             .as_ref()

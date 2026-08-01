@@ -281,7 +281,16 @@ fn detect_terminal_shell_candidates() -> Vec<TerminalShellProfile> {
         return out;
     }
 
-    #[cfg(all(unix, not(target_os = "macos")))]
+    #[cfg(target_os = "android")]
+    {
+        return vec![TerminalShellProfile {
+            kind: "android-proot".to_string(),
+            path: "runtime/linux:/bin/bash".to_string(),
+            args_prefix: vec!["-lc".to_string()],
+        }];
+    }
+
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
     {
         let mut out = Vec::<TerminalShellProfile>::new();
         for candidate in ["/bin/bash", "/usr/bin/bash", "/bin/sh"] {
@@ -374,10 +383,11 @@ fn terminal_shell_runtime_label(shell: &TerminalShellProfile) -> String {
         "powershell7" => "PowerShell 7",
         "powershell5" => "Windows PowerShell 5.1",
         "git-bash" => "Git Bash",
+        "android-proot" => "Ubuntu 24.04 Linux (proot 沙盒)",
         "missing-terminal-shell" => "Unavailable",
         other => other,
     };
-    if shell.path.trim().is_empty() {
+    if shell.path.trim().is_empty() || shell.kind == "android-proot" {
         return title.to_string();
     }
     format!("{title} ({})", shell.path.trim())

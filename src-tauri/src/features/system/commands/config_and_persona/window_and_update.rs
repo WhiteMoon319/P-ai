@@ -426,11 +426,11 @@ fn get_department_default_draft_inner(
 
 fn load_config_inner(state: &AppState) -> Result<AppConfig, String> {
     let mut result = state_read_config_cached(&state)?;
-    normalize_app_config(&mut result);
+    let config_changed_by_normalize = normalize_app_config_and_detect_changes(&mut result);
     let workspace_changed = ensure_default_shell_workspace_in_config(&mut result, &state);
     let remote_im_private_state_migrated =
         remote_im_migrate_channel_private_states(&state, &mut result)?;
-    if workspace_changed || remote_im_private_state_migrated {
+    if config_changed_by_normalize || workspace_changed || remote_im_private_state_migrated {
         state_write_config_cached(&state, &result)?;
     }
     let _ = run_app_data_migrations_with_state(&state, &result)?;
@@ -442,11 +442,11 @@ fn load_config_inner(state: &AppState) -> Result<AppConfig, String> {
 
 fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstrapSnapshot, String> {
     let mut config = state_read_config_cached(state)?;
-    normalize_app_config(&mut config);
+    let config_changed_by_normalize = normalize_app_config_and_detect_changes(&mut config);
     let workspace_changed = ensure_default_shell_workspace_in_config(&mut config, state);
     let remote_im_private_state_migrated =
         remote_im_migrate_channel_private_states(state, &mut config)?;
-    if workspace_changed || remote_im_private_state_migrated {
+    if config_changed_by_normalize || workspace_changed || remote_im_private_state_migrated {
         state_write_config_cached(state, &config)?;
     }
     let _ = run_app_data_migrations_with_state(state, &config)?;

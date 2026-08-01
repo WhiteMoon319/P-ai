@@ -43,8 +43,10 @@ fn build_runtime_organization_snapshot_from_parts(
     base_agents: &[AgentProfile],
 ) -> Result<RuntimeOrganizationSnapshot, String> {
     let mut config = base_config.clone();
+    normalize_app_config(&mut config);
     let mut runtime_data = AppData::default();
     runtime_data.agents = base_agents.to_vec();
+    ensure_required_builtin_agents_in_list(&mut runtime_data.agents);
     merge_private_organization_into_runtime_data(data_path, &mut config, &mut runtime_data)?;
     normalize_runtime_organization_department_children(&mut config);
 

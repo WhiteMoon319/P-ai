@@ -61,6 +61,13 @@ else
   echo "Microphone feature declaration already exists"
 fi
 
+if ! grep -q 'extractNativeLibs' "$MANIFEST"; then
+  sed -i 's/<application/<application android:extractNativeLibs="true"/' "$MANIFEST"
+  echo "Added extractNativeLibs=true"
+else
+  echo "extractNativeLibs already present"
+fi
+
 echo "=== MainActivity.kt ==="
 cat "$ACTIVITY"
 echo "=== AndroidManifest.xml permission entries ==="
