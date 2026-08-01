@@ -3,6 +3,7 @@ const SHELL_WORKSPACE_LEVEL_MAIN: &str = "main";
 const SHELL_WORKSPACE_LEVEL_SECONDARY: &str = "secondary";
 const SHELL_WORK_MODE_DIRECTORY: &str = "directory";
 const SHELL_WORK_MODE_ISOLATED_WORKTREE: &str = "isolated_worktree";
+const SHELL_WORK_MODE_INDEPENDENT_WORKTREE: &str = "independent_worktree";
 
 const SHELL_WORKSPACE_ACCESS_APPROVAL: &str = "approval";
 const SHELL_WORKSPACE_ACCESS_FULL_ACCESS: &str = "full_access";
@@ -23,8 +24,16 @@ fn default_shell_work_mode() -> String {
 fn normalize_shell_work_mode_text(raw: &str) -> String {
     match raw.trim().to_ascii_lowercase().as_str() {
         SHELL_WORK_MODE_ISOLATED_WORKTREE => SHELL_WORK_MODE_ISOLATED_WORKTREE.to_string(),
+        SHELL_WORK_MODE_INDEPENDENT_WORKTREE => SHELL_WORK_MODE_INDEPENDENT_WORKTREE.to_string(),
         _ => SHELL_WORK_MODE_DIRECTORY.to_string(),
     }
+}
+
+fn shell_work_mode_requires_git_root(mode: &str) -> bool {
+    matches!(
+        normalize_shell_work_mode_text(mode).as_str(),
+        SHELL_WORK_MODE_ISOLATED_WORKTREE | SHELL_WORK_MODE_INDEPENDENT_WORKTREE
+    )
 }
 
 const CODEX_AUTH_MODE_READ_LOCAL: &str = "read_local";

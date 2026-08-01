@@ -61,6 +61,13 @@
                     >
                       {{ t("chat.workspaceWorkModeIsolated") }}
                     </option>
+                    <option
+                      v-if="worktreeAvailable || workMode === 'independent_worktree' || Boolean(worktreeCheckMessage)"
+                      value="independent_worktree"
+                      :disabled="!worktreeAvailable && workMode !== 'independent_worktree'"
+                    >
+                      {{ t("chat.workspaceWorkModeIndependent") }}
+                    </option>
                   </select>
                 </div>
               </div>
@@ -197,7 +204,7 @@ function onAutonomousModeChange(event: Event) {
 
 function onWorkModeChange(event: Event) {
   const nextMode = String((event.target as HTMLSelectElement | null)?.value || "").trim();
-  if (nextMode !== "directory" && nextMode !== "isolated_worktree") return;
+  if (nextMode !== "directory" && nextMode !== "isolated_worktree" && nextMode !== "independent_worktree") return;
   emit("setWorkMode", nextMode);
 }
 </script>

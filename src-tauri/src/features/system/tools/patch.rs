@@ -790,11 +790,11 @@ fn apply_patch_assess_safety(
     _session_id: &str,
     _cwd: &Path,
     ops: &[ApplyPatchResolvedOp],
-) -> ApplyPatchSafetyCheck {
+) -> Result<ApplyPatchSafetyCheck, String> {
     if ops.is_empty() {
-        return ApplyPatchSafetyCheck::Reject {
+        return Ok(ApplyPatchSafetyCheck::Reject {
             reason: "empty patch".to_string(),
-        };
+        });
     }
     let mut target_paths = Vec::<PathBuf>::new();
     for op in ops {
@@ -811,39 +811,42 @@ fn apply_patch_assess_safety(
     }
     let target_paths = terminal_dedup_paths(target_paths);
     if target_paths.is_empty() {
-        return ApplyPatchSafetyCheck::Reject {
+        return Ok(ApplyPatchSafetyCheck::Reject {
             reason: "empty patch".to_string(),
-        };
+        });
     }
     let mut accesses = Vec::<String>::new();
-    for path in terminal_dedup_paths(target_paths) {
-        let Some(workspace) = terminal_match_workspace_for_session_target(state, _session_id, &path)
+    for path in &target_paths {
+        let Some(workspace) = terminal_match_workspace_for_session_target(state, _session_id, path)
             .unwrap_or(None)
         else {
-            return ApplyPatchSafetyCheck::Reject {
+            return Ok(ApplyPatchSafetyCheck::Reject {
                 reason: format!(
                     "补丁路径未命中已配置工作目录：{}",
                     terminal_path_for_user(&path)
                 ),
-            };
+            });
         };
         accesses.push(workspace.access);
     }
     let effective_access = terminal_strictest_workspace_access(&accesses);
     if effective_access == SHELL_WORKSPACE_ACCESS_READ_ONLY {
-        return ApplyPatchSafetyCheck::Reject {
+        return Ok(ApplyPatchSafetyCheck::Reject {
             reason: "当前目录权限为只读，禁止执行补丁。".to_string(),
-        };
+        });
+    }
+    if let Some(reason) = terminal_worktree_write_rejection(state, _session_id, &target_paths)? {
+        return Ok(ApplyPatchSafetyCheck::Reject { reason });
     }
     if effective_access == SHELL_WORKSPACE_ACCESS_APPROVAL {
-        return ApplyPatchSafetyCheck::AskUser {
+        return Ok(ApplyPatchSafetyCheck::AskUser {
             existing_paths: apply_patch_collect_existing_paths(ops)
                 .into_iter()
                 .filter(|path| path.exists())
                 .collect::<Vec<_>>(),
-        };
+        });
     }
-    ApplyPatchSafetyCheck::AutoApprove
+    Ok(ApplyPatchSafetyCheck::AutoApprove)
 }
 
 fn apply_patch_apply_update(
@@ -1354,7 +1357,7 @@ async fn builtin_apply_patch_with_name(
     let existing_paths = apply_patch_collect_existing_paths(&resolved);
     let summary = apply_patch_operation_summary(&resolved);
 
-    let safety = apply_patch_assess_safety(state, &normalized_session, &cwd, &resolved);
+    let safety = apply_patch_assess_safety(state, &normalized_session, &cwd, &resolved)?;
     let mut smart_review_unavailable_notice = None::<String>;
     let mut smart_review_handled = false;
     let mut smart_review_history = None::<Value>;

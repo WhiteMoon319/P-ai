@@ -1175,6 +1175,37 @@ async fn builtin_shell_exec(
         }
     }
 
+    if is_write_command {
+        let mode_write_targets = if matches!(write_risk, TerminalWriteRisk::Unknown) {
+            vec![command_analysis.final_execution_cwd(&cwd)]
+        } else {
+            write_target_paths.clone()
+        };
+        if let Some(reason) = terminal_worktree_write_rejection(
+            state,
+            &normalized_session,
+            &mode_write_targets,
+        )? {
+            let review = terminal_local_review_value(
+                &ui_language,
+                "当前工作模式的附加写入范围已拒绝本次终端命令；请按返回的允许路径调整命令。",
+            );
+            return Ok(serde_json::json!({
+                "ok": false,
+                "approved": false,
+                "blockedReason": "worktree_mode_write_restricted",
+                "message": reason,
+                "toolReview": review,
+                "rootPath": session_root_text,
+                "workspacePath": workspace_path_text,
+                "allowedProjectRoots": allowed_project_roots,
+                "cwd": terminal_path_for_user(&cwd),
+                "command": cmd,
+                "writeTargets": mode_write_targets.iter().map(|path| terminal_path_for_user(path)).collect::<Vec<_>>(),
+            }));
+        }
+    }
+
     let mut smart_review_unavailable_notice = None::<String>;
     let mut smart_review_handled = false;
     let mut smart_review_history: Option<Value>;
