@@ -8,3 +8,4 @@
 
 - 升级 @tanstack/vue-virtual 至 3.13.35（virtual-core 3.17.7）：修复上方行尺寸变化时的一帧视口跳动、流式消息跨折叠线增长不再拖拽滚动位置、短内容时滚动偏移负值等问题。
 - 升级 daisyui 至 5.7.9：修复 join 嵌套泄漏、按钮激活态、modal RTL、进度条动画等组件细节问题。
+- 升级 genai 至 0.7.0-beta.15：Anthropic 工具调用 JSON 解析错误不再中断流式响应、OpenAI 显式提示缓存与消息结构优化提升缓存利用率、推理档位 none 兼容 zero 命名。
