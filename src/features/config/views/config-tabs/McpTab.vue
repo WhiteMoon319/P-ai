@@ -27,6 +27,7 @@
       :key="selectedServer.id"
       :server="selectedServer"
       :disabled="loading"
+      :has-issues="issueList.length > 0"
       @remove="removeServer"
       @validate="validateDefinition"
       @fix="fixDefinition"

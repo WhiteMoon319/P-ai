@@ -3,7 +3,7 @@
     <div class="space-y-3">
       <div class="flex items-center gap-2">
         <button class="btn btn-sm bg-base-100" type="button" :disabled="disabled" @click="emitValidate">{{ t('config.mcpServerCard.validate') }}</button>
-        <button class="btn btn-sm btn-ghost" type="button" :disabled="disabled" @click="emitFix">{{ t('config.mcp.fixFormat') }}</button>
+        <button v-if="hasIssues" class="btn btn-sm btn-ghost" type="button" :disabled="disabled" @click="emitFix">{{ t('config.mcp.fixFormat') }}</button>
         <button
           class="btn btn-sm"
           :class="draft.enabled ? 'btn-warning' : 'btn-success'"
@@ -100,6 +100,7 @@ type McpMemberView = {
 const props = defineProps<{
   server: McpServerView;
   disabled?: boolean;
+  hasIssues?: boolean;
 }>();
 
 const emit = defineEmits<{
