@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-07-31T13:48:57.911Z",
-  "latestVersion": "v0.42.0",
+  "generatedAt": "2026-08-01T03:03:42.394Z",
+  "latestVersion": "v0.43.0",
   "releases": [
+    {
+      "version": "v0.43.0",
+      "path": "docs/changelog/releases/v0.43.0.md",
+      "summary": "修复（prepend-anchor-stability）：聊天窗口向上加载更多历史消息时，新消息刷出不再引起画面跳动；加载完成后必须脱离顶部一次才可继续加载更多，避免连续误触。"
+    },
     {
       "version": "v0.42.0",
       "path": "docs/changelog/releases/v0.42.0.md",

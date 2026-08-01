@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.43.0](docs/changelog/releases/v0.43.0.md) - 修复（prepend-anchor-stability）：聊天窗口向上加载更多历史消息时，新消息刷出不再引起画面跳动；加载完成后必须脱离顶部一次才可继续加载更多，避免连续误触。
 - [v0.42.0](docs/changelog/releases/v0.42.0.md) - 功能（mcp-group-card）：一张 MCP 卡片即一组服务器，definitionJson 可整体保存多个服务器并整组启停；部署时组内每个服务器独立连接、工具合并，已有单卡单服务器数据自然兼容。
 - [v0.41.0](docs/changelog/releases/v0.41.0.md) - 重构（chat-runtime-single-path）：主对话的前台恢复、水位与终态收口从录音模块收敛到唯一聊天运行时；APP 与 Web/VS Code 继续复用同一 `main-chat` 入口和传输门面。
 - [v0.40.0](docs/changelog/releases/v0.40.0.md) - 修复：发送消息时不再在附件提示阶段检查文件是否存在，减少 prompt 构建阶段的磁盘访问和额外耗时。
