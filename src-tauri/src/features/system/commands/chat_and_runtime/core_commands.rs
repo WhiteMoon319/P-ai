@@ -1018,10 +1018,10 @@ fn enqueue_user_mention_result_message(
         meme_annotations: None,
     };
     let delegate_message_seed = delegate_message.id.clone();
-    populate_assistant_meme_annotations(
+    delegate_message.meme_annotations = populate_assistant_meme_annotations(
         app_state,
         &delegate_message_seed,
-        &mut delegate_message,
+        text,
     )?;
     append_delegate_result_message_and_emit(
         app_state,

@@ -323,6 +323,30 @@ fn request_message_text_content(message: &Value) -> String {
     }
 }
 
+fn extract_final_assistant_text_and_meta(request_messages: &[Value]) -> (String, Option<String>) {
+    request_messages
+        .iter()
+        .rev()
+        .find(|message| {
+            let role = message
+                .get("role")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or_default();
+            role.eq_ignore_ascii_case("assistant") && !request_message_has_tool_calls(message)
+        })
+        .map(|message| {
+            let reasoning_text = message
+                .get("reasoning_content")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned);
+            (request_message_text_content(message), reasoning_text)
+        })
+        .unwrap_or_else(|| (String::new(), None))
+}
+
 fn fold_request_messages_to_assistant_content(
     request_messages: &[Value],
 ) -> FoldedAssistantRequestMessages {
@@ -408,19 +432,8 @@ fn build_assistant_message_from_request_sequence(
 fn populate_assistant_meme_annotations(
     state: &AppState,
     seed_source: &str,
-    message: &mut ChatMessage,
-) -> Result<(), String> {
-    if message.role.trim() != "assistant" {
-        return Ok(());
-    }
-    let assistant_text = message
-        .parts
-        .iter()
-        .find_map(|part| match part {
-            MessagePart::Text { text, .. } => Some(text.as_str()),
-            _ => None,
-        })
-        .unwrap_or("");
+    assistant_text: &str,
+) -> Result<Option<Vec<MemeAnnotation>>, String> {
     let annotations = build_meme_annotations(state, assistant_text, seed_source)?;
     let annotation_tokens = annotations
         .iter()
@@ -428,20 +441,18 @@ fn populate_assistant_meme_annotations(
         .collect::<Vec<_>>()
         .join(",");
     runtime_log_debug(format!(
-        "[表情替换] 生成，message_id={}，seed_source={}，text_len={}，annotation_count={}，tokens=[{}]，text={}",
-        message.id,
+        "[表情替换] 生成，seed_source={}，text_len={}，annotation_count={}，tokens=[{}]，text={}",
         seed_source,
         assistant_text.chars().count(),
         annotations.len(),
         annotation_tokens,
         assistant_text.replace('\n', "\\n")
     ));
-    message.meme_annotations = if annotations.is_empty() {
+    Ok(if annotations.is_empty() {
         None
     } else {
         Some(annotations)
-    };
-    Ok(())
+    })
 }
 
 fn tool_history_markdown_lines_from_message(message: &ChatMessage) -> Vec<String> {
@@ -616,6 +627,53 @@ mod message_semantics_tests {
         );
         assert_eq!(history[1].role, "tool");
         assert_eq!(history[1].tool_call_id.as_deref(), Some("fc_1"));
+    }
+
+    #[test]
+    fn extract_final_assistant_text_and_meta_should_ignore_tool_history_without_cloning_it() {
+        let request_messages = vec![
+            serde_json::json!({
+                "role": "assistant",
+                "content": "先调用工具",
+                "tool_calls": [{"id": "call-1"}]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call-1",
+                "content": "工具结果"
+            }),
+            serde_json::json!({
+                "role": "assistant",
+                "content": "最终答复",
+                "reasoning_content": "  已核对工具结果。  "
+            }),
+        ];
+
+        let (text, reasoning) = extract_final_assistant_text_and_meta(&request_messages);
+
+        assert_eq!(text, "最终答复");
+        assert_eq!(reasoning.as_deref(), Some("已核对工具结果。"));
+    }
+
+    #[test]
+    fn extract_final_assistant_text_and_meta_should_return_empty_when_only_tool_rounds_exist() {
+        let request_messages = vec![
+            serde_json::json!({
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [{"id": "call-1"}]
+            }),
+            serde_json::json!({
+                "role": "tool",
+                "tool_call_id": "call-1",
+                "content": "工具结果"
+            }),
+        ];
+
+        let (text, reasoning) = extract_final_assistant_text_and_meta(&request_messages);
+
+        assert!(text.is_empty());
+        assert!(reasoning.is_none());
     }
 
     #[test]

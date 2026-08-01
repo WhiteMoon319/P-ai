@@ -2716,40 +2716,23 @@ async fn send_chat_message_inner(
                 }
             }
             if !suppress_assistant_message {
-                let mut assistant_message = build_assistant_message_from_request_sequence(
-                    assistant_message_id.clone(),
-                    &current_agent.id,
-                    now_iso(),
-                    &assistant_request_messages,
-                    provider_meta,
-                );
-                populate_assistant_meme_annotations(
+                let (final_text, reasoning_text) =
+                    extract_final_assistant_text_and_meta(&assistant_request_messages);
+                let provider_meta_patch = normalize_assistant_provider_meta(provider_meta);
+                let meme_annotations = populate_assistant_meme_annotations(
                     &state,
                     &assistant_message_id,
-                    &mut assistant_message,
+                    &final_text,
                 )?;
-                let (final_text, reasoning_text) = assistant_message
-                    .parts
-                    .iter()
-                    .find_map(|part| match part {
-                        MessagePart::Text {
-                            text,
-                            reasoning_content,
-                        } => Some((text.clone(), reasoning_content.clone())),
-                        _ => None,
-                    })
-                    .unwrap_or_else(|| (String::new(), None));
                 runtime_log_debug(format!(
                     "[表情替换] 提交前，conversation_id={}，assistant_message_id={}，annotation_count={}，tokens=[{}]，final_text={}",
                     conversation_id,
                     assistant_message_id,
-                    assistant_message
-                        .meme_annotations
+                    meme_annotations
                         .as_ref()
                         .map(Vec::len)
                         .unwrap_or(0),
-                    assistant_message
-                        .meme_annotations
+                    meme_annotations
                         .as_ref()
                         .map(|items| items.iter().map(|item| item.meme.trim().to_string()).collect::<Vec<_>>().join(","))
                         .unwrap_or_default(),
@@ -2763,8 +2746,8 @@ async fn send_chat_message_inner(
                         assistant_message_id: assistant_message_id.clone(),
                         final_text,
                         reasoning_text,
-                        provider_meta_patch: assistant_message.provider_meta.clone(),
-                        meme_annotations: assistant_message.meme_annotations.clone(),
+                        provider_meta_patch,
+                        meme_annotations,
                     },
                 );
                 log_run_stage("assistant_final_append.finish");
@@ -2827,10 +2810,17 @@ async fn send_chat_message_inner(
                     &assistant_request_messages,
                     provider_meta,
                 );
-                populate_assistant_meme_annotations(
+                assistant_message.meme_annotations = populate_assistant_meme_annotations(
                     &state,
                     &assistant_message_id,
-                    &mut assistant_message,
+                    assistant_message
+                        .parts
+                        .iter()
+                        .find_map(|part| match part {
+                            MessagePart::Text { text, .. } => Some(text.as_str()),
+                            _ => None,
+                        })
+                        .unwrap_or(""),
                 )?;
                 persisted_assistant_message = Some(conversation_upsert_final_assistant_message(
                     &mut conversation,

@@ -549,10 +549,17 @@ impl ConversationServiceV2 {
             )
         };
         let assistant_message_seed = assistant_message.id.clone();
-        populate_assistant_meme_annotations(
+        assistant_message.meme_annotations = populate_assistant_meme_annotations(
             state,
             &assistant_message_seed,
-            &mut assistant_message,
+            assistant_message
+                .parts
+                .iter()
+                .find_map(|part| match part {
+                    MessagePart::Text { text, .. } => Some(text.as_str()),
+                    _ => None,
+                })
+                .unwrap_or(""),
         )?;
         let conversation_id = match target {
             StopChatConversationTarget::Runtime(mut conversation) => {
