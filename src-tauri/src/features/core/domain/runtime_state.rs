@@ -295,13 +295,22 @@ impl AppState {
             .map_err(|err| format!("Create llm workspace failed: {err}"))?;
         let terminal_shell_candidates = detect_terminal_shell_candidates();
         let terminal_shell = detect_default_terminal_shell();
-        let shared_http_client = reqwest::Client::builder()
+        let mut shared_http_client_builder = reqwest::Client::builder()
             .user_agent(app_http_user_agent())
             .default_headers(app_identity_headers())
             .timeout(std::time::Duration::from_secs(12))
             .connect_timeout(std::time::Duration::from_secs(8))
             .pool_idle_timeout(std::time::Duration::from_secs(90))
-            .redirect(reqwest::redirect::Policy::limited(10))
+            .redirect(reqwest::redirect::Policy::limited(10));
+        #[cfg(target_os = "android")]
+        {
+            shared_http_client_builder = shared_http_client_builder.tls_certs_only(
+                webpki_root_certs::TLS_SERVER_ROOT_CERTS
+                    .iter()
+                    .map(|der| reqwest::tls::Certificate::from_der(der.as_ref()).unwrap()),
+            );
+        }
+        let shared_http_client = shared_http_client_builder
             .build()
             .map_err(|err| format!("Build shared HTTP client failed: {err}"))?;
 
