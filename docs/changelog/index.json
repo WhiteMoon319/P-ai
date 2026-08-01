@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-08-01T03:03:42.394Z",
-  "latestVersion": "v0.43.0",
+  "generatedAt": "2026-08-01T17:38:11.163Z",
+  "latestVersion": "v0.44.0",
   "releases": [
+    {
+      "version": "v0.44.0",
+      "path": "docs/changelog/releases/v0.44.0.md",
+      "summary": "修复（ide-bridge-discovery）：同时运行安装版与调试构建时，后启动的实例不再清除对方发布的连接信息，侧边栏不再偶发失联。"
+    },
     {
       "version": "v0.43.0",
       "path": "docs/changelog/releases/v0.43.0.md",
