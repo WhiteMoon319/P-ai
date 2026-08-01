@@ -433,13 +433,27 @@ fn run_winget_host_runtime_install(kind: &str, elevated: bool) -> Result<(), Str
         let script = format!(
             "$p = Start-Process -FilePath 'winget' -Verb RunAs -Wait -PassThru -ArgumentList @({quoted_args}); if ($null -eq $p) {{ exit 1 }}; exit $p.ExitCode"
         );
-        std::process::Command::new("powershell")
-            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script])
+        let mut command = std::process::Command::new("powershell");
+        command.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script]);
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt as _;
+            // PowerShell 是控制台程序，提权安装不能让 GUI 应用弹出控制台窗口。
+            command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+        command
             .status()
             .map_err(|err| format!("拉起管理员安装失败：{err}"))?
     } else {
-        std::process::Command::new("winget")
-            .args(winget_args)
+        let mut command = std::process::Command::new("winget");
+        command.args(winget_args);
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt as _;
+            // winget 是控制台程序，后台安装不能让 GUI 应用弹出控制台窗口。
+            command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+        command
             .status()
             .map_err(|err| format!("启动 winget 失败：{err}"))?
     };
@@ -1344,6 +1358,12 @@ fn open_shell_terminal_at_path(state: &AppState, path: &Path, preferred_kind: Op
             let mut command = std::process::Command::new("powershell");
             command.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script]);
             terminal_apply_windows_utf8_env(&mut command);
+            // powershell 只是启动器，自身不能弹多余控制台；WSL 窗口由 Start-Process 正常弹出。
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::process::CommandExt as _;
+                command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            }
             command
                 .spawn()
                 .map_err(|err| format!("打开 WSL 失败：{err}"))?;
@@ -1379,6 +1399,12 @@ fn open_shell_terminal_at_path(state: &AppState, path: &Path, preferred_kind: Op
         let mut command = std::process::Command::new("powershell");
         command.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &script]);
         terminal_apply_windows_utf8_env(&mut command);
+        // powershell 只是启动器，自身不能弹多余控制台；Shell 窗口由 Start-Process 正常弹出。
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt as _;
+            command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
         command
             .spawn()
             .map_err(|err| format!("打开 Shell 失败：{err}"))?;
@@ -2573,8 +2599,15 @@ fn open_file_with_default_program(path: String) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", raw_path])
+        let mut command = std::process::Command::new("cmd");
+        command.args(["/C", "start", "", raw_path]);
+        // cmd 只是启动器，自身不能弹多余控制台；文件由默认程序正常打开。
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt as _;
+            command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+        command
             .status()
             .map_err(|err| format!("Failed to open file: {err}"))?;
         return Ok(());

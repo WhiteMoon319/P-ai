@@ -72,6 +72,12 @@ async fn git_run_output(
                     cmd.env(key, value);
                 }
             }
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::process::CommandExt as _;
+                // Git 是控制台程序，后台快照不能让 GUI 应用弹出控制台窗口。
+                cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            }
             cmd.output().map_err(|err| {
                 format!(
                     "执行 git 命令失败: cwd={} args={:?} err={}",
