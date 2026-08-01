@@ -33,6 +33,7 @@
       :update-to-latest-label="updateToLatestLabel"
       :update-to-latest-title="updateToLatestTitle"
       :window-controls-visible="windowControlsVisible"
+      :simple-setup-mode="!!config.simpleSetupMode"
       @start-drag="startDrag"
       @update:config-search-query="updateConfigSearchQuery"
       @select-config-search-result="handleSelectConfigSearchResult"
@@ -40,12 +41,14 @@
       @minimize-window="minimizeWindow"
       @toggle-maximize-window="toggleMaximizeWindow"
       @close-window="closeWindow"
+      @update:simple-setup-mode="setSimpleSetupMode"
     />
 
     <div class="window-content p-0 min-h-0 overflow-hidden">
       <ConfigView
         :config="config"
         :config-tab="configTab"
+        :simple-setup-mode="!!config.simpleSetupMode"
         :ui-language="config.uiLanguage"
         :locale-options="localeOptions"
         :current-theme="currentTheme"
@@ -100,6 +103,7 @@
         :last-saved-config-json="lastSavedConfigJson"
         :set-status-action="setStatus"
         @update:config-tab="(value) => { configTab = value; }"
+        @update:simple-setup-mode="setSimpleSetupMode"
         @update:ui-language="setUiLanguage"
         @update:persona-editor-id="updatePersonaEditorIdWithNotice"
         @update:assistant-department-agent-id="updateAssistantDepartmentAgentId"
@@ -753,6 +757,13 @@ const {
 
 function updateConfigSearchQuery(value: string) {
   configSearchQuery.value = String(value || "");
+}
+
+function setSimpleSetupMode(value: boolean) {
+  const next = !!value;
+  if (!!config.simpleSetupMode === next) return;
+  config.simpleSetupMode = next;
+  void saveConfig();
 }
 
 function handleSelectConfigSearchResult(tab: ConfigSearchTab) {

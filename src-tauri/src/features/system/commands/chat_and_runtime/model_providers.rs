@@ -858,7 +858,7 @@ async fn quick_genai_chat_inner(
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .unwrap_or("quick-setup"),
+            .unwrap_or("simple-setup"),
         model,
         &resolved_api.base_url,
         masked_auth_headers(&resolved_api.api_key),

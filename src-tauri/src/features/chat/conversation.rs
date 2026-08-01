@@ -2853,6 +2853,7 @@ fn departments_only_config(departments: &[DepartmentConfig]) -> AppConfig {
         image_generation_model_id: None,
         stt_auto_send: false,
         terminal_shell_kind: default_terminal_shell_kind(),
+        simple_setup_mode: false,
         shell_workspaces: Vec::new(),
         mcp_servers: Vec::new(),
         remote_im_channels: Vec::new(),

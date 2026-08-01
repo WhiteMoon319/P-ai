@@ -1099,6 +1099,10 @@ fn default_terminal_shell_kind() -> String {
     "auto".to_string()
 }
 
+fn default_simple_setup_mode() -> bool {
+    false
+}
+
 fn default_api_temperature() -> f64 {
     1.0
 }
@@ -1286,6 +1290,8 @@ struct AppConfig {
     stt_auto_send: bool,
     #[serde(default = "default_terminal_shell_kind")]
     terminal_shell_kind: String,
+    #[serde(default = "default_simple_setup_mode")]
+    simple_setup_mode: bool,
     #[serde(default)]
     shell_workspaces: Vec<ShellWorkspaceConfig>,
     #[serde(default = "default_mcp_servers")]
@@ -1333,6 +1339,7 @@ impl Default for AppConfig {
             image_generation_model_id: None,
             stt_auto_send: false,
             terminal_shell_kind: default_terminal_shell_kind(),
+            simple_setup_mode: true,
             shell_workspaces: Vec::new(),
             mcp_servers: default_mcp_servers(),
             remote_im_channels: default_remote_im_channels(),

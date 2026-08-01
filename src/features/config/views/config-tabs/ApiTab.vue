@@ -190,210 +190,36 @@
               </div>
             </div>
 
-            <div class="grid gap-3">
-              <div v-for="modelCard in activeModelCards" :key="modelCard.id"
-                class="card border border-base-300 bg-base-200/50 transition"
-                :class="selectedModel?.id === modelCard.id ? '' : ''">
-                <div class="card-body gap-3 p-4">
-                  <div class="flex items-start justify-between gap-2">
-                    <button class="min-w-0 flex-1 text-left" type="button" @click="selectModelCard(modelCard.id)">
-                      <div class="card-title text-base mb-1">{{ modelGroupDisplayLabel(modelCard) }}</div>
-                    </button>
-                    <button class="btn btn-sm btn-square btn-ghost" type="button"
-                      :class="activeModelGroups.length <= 1 ? 'text-base-content/30' : 'text-error'"
-                      :disabled="activeModelGroups.length <= 1" @click="removeModelGroup(modelCard)">
-                      <Trash2 class="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                  <div class="grid gap-3">
-                    <label class="flex flex-col gap-1">
-                      <span class="text-sm font-medium">{{ t("config.api.model") }}</span>
-                      <div class="join">
-                        <input v-model="modelCard.model" class="input input-bordered input-sm join-item flex-1"
-                          placeholder="model" @focus="selectModelCard(modelCard.id)"
-                          @blur="void syncModelMetadata(modelCard)"
-                          @keydown.enter.prevent="void syncModelMetadata(modelCard)" />
-                        <button class="btn btn-sm join-item bg-base-300" type="button"
-                          :disabled="providerModelOptions.length === 0" @click="openModelPicker(modelCard.id)">
-                          <ChevronDown class="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                      <div v-if="selectedProtocol === 'auto' && resolvedAdapterByModelId[modelCard.id]"
-                        class="mt-1 text-xs opacity-70">
-                        {{ t("config.api.matchedProtocol", { protocol: resolvedAdapterByModelId[modelCard.id] }) }}
-                      </div>
-                      <div v-if="shouldWarnDeepSeekKimiProtocol(modelCard)"
-                        class="alert alert-warning mt-2 py-2 text-xs">
-                        <AlertTriangle class="h-4 w-4 shrink-0" />
-                        <span>{{ t("config.api.deepSeekKimiProtocolHint") }}</span>
-                      </div>
-                    </label>
-                    <div v-if="activeModelPickerId === modelCard.id"
-                      class="rounded-box border border-base-300 bg-base-200/50 p-3">
-                      <input v-model="modelSearch" class="input input-bordered input-sm mb-2 w-full"
-                        :placeholder="t('config.api.searchModel')" @keydown.esc.stop.prevent="closeModelPicker" />
-                      <div class="max-h-48 overflow-auto">
-                        <button v-for="option in filteredModels" :key="`${modelCard.id}-${option}`"
-                          class="btn btn-ghost btn-sm mb-1 mr-1" type="button"
-                          @click="selectModelOption(modelCard, option)">
-                          {{ option }}
-                        </button>
-                        <div v-if="filteredModels.length === 0" class="px-2 py-3 text-sm opacity-50">{{
-                          t("config.api.noModelFound") }}</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div v-if="selectedCapability === 'text'" class="flex flex-wrap gap-3">
-                    <label
-                      class="flex min-w-40 flex-1 items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
-                      <span class="text-sm">{{ t("config.api.capImage") }}</span>
-                      <input
-                        v-model="modelCard.enableImage"
-                        type="checkbox"
-                        class="checkbox checkbox-sm"
-                      />
-                    </label>
-                    <label
-                      class="flex min-w-40 flex-1 items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
-                      <span class="text-sm">{{ t("config.api.capAudio") }}</span>
-                      <input
-                        v-model="modelCard.enableAudio"
-                        type="checkbox"
-                        class="checkbox checkbox-sm"
-                      />
-                    </label>
-                    <label
-                      class="flex min-w-40 flex-1 items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
-                      <span class="text-sm">{{ t("config.api.capVideo") }}</span>
-                      <input
-                        v-model="modelCard.enableVideo"
-                        type="checkbox"
-                        class="checkbox checkbox-sm"
-                      />
-                    </label>
-                    <label
-                      class="flex min-w-40 flex-1 items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
-                      <span class="text-sm">{{ t("config.api.capTools") }}</span>
-                      <input v-model="modelCard.enableTools" type="checkbox" class="checkbox checkbox-sm" />
-                    </label>
-                    <label
-                      class="flex min-w-40 flex-1 items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
-                      <span class="text-sm">{{ t("config.api.temperature") }}</span>
-                      <input v-model="modelCard.customTemperatureEnabled" type="checkbox" class="checkbox checkbox-sm" />
-                    </label>
-                    <label
-                      class="flex min-w-40 flex-1 items-center justify-between rounded-box border border-base-300 bg-base-300 px-3 py-2">
-                      <span class="text-sm">{{ t("config.api.maxOutputTokens") }}</span>
-                      <input
-                        v-model="modelCard.customMaxOutputTokensEnabled"
-                        type="checkbox"
-                        class="checkbox checkbox-sm"
-                        @change="handleCustomMaxOutputTokensToggle(modelCard)"
-                      />
-                    </label>
-                  </div>
-
-                  <div v-if="selectedCapability === 'text'" class="grid gap-3">
-                    <label class="flex flex-col gap-1">
-                      <span class="text-sm font-medium">{{ t("config.api.contextWindow") }}</span>
-                      <div class="flex items-center gap-2">
-                        <input :value="modelCard.contextWindowTokens"
-                          @input="modelCard.contextWindowTokens = Number(($event.target as HTMLInputElement).value)"
-                          type="range" :min="SLIDER_CONTEXT_MIN" :max="contextWindowMax(modelCard)" step="1000"
-                          class="range range-sm flex-1" />
-                        <div class="relative w-28">
-                          <input :value="Math.round(Number(modelCard.contextWindowTokens || 0) / 1000)"
-                            @input="modelCard.contextWindowTokens = Number(($event.target as HTMLInputElement).value || 0) * 1000"
-                            @blur="clampManualContextWindowValue(modelCard)"
-                            type="number" :min="Math.round(SLIDER_CONTEXT_MIN / 1000)"
-                            :max="2000" step="1"
-                            class="input input-bordered input-sm w-full pr-7 text-right font-mono" />
-                          <span class="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs opacity-70">K</span>
-                        </div>
-                      </div>
-                    </label>
-
-                    <button
-                      v-if="modelDocumentationUrl(modelCard)"
-                      type="button"
-                      class="btn btn-outline btn-sm justify-start"
-                      @click="openModelDocumentation(modelCard)"
-                    >
-                      {{ t("config.api.viewModelDocumentation") }}
-                    </button>
-
-                    <div v-if="showReasoningEffort(modelCard)" class="flex flex-col gap-2">
-                      <div class="flex items-center gap-2">
-                        <span class="text-sm font-medium">{{ t("config.api.reasoningEffort") }}</span>
-                        <span
-                          v-if="reasoningCapabilityStatus(modelCard) === 'unknown'"
-                          class="text-xs opacity-60"
-                          :title="t('config.api.reasoningCapabilityUnknown')"
-                        >
-                          {{ t("config.api.reasoningCapabilityUnknown") }}
-                        </span>
-                        <span
-                          v-else-if="reasoningCapabilityStatus(modelCard) === 'unsupported'"
-                          class="text-xs text-warning"
-                          :title="t('config.api.reasoningCapabilityUnsupported')"
-                        >
-                          {{ t("config.api.reasoningCapabilityUnsupported") }}
-                        </span>
-                      </div>
-                      <div class="flex flex-wrap gap-x-4 gap-y-2">
-                        <label
-                          v-for="item in reasoningEffortItems(modelCard)"
-                          :key="item.value"
-                          class="flex items-center gap-2 text-sm"
-                          :class="item.disabled ? 'cursor-not-allowed opacity-50' : ''"
-                          :title="item.disabled ? t('config.api.reasoningEffortUnsupported') : undefined"
-                        >
-                          <input
-                            type="checkbox"
-                            class="checkbox checkbox-sm"
-                            :checked="groupHasReasoningEffort(modelCard, item.value)"
-                            :disabled="item.disabled"
-                            @change="setGroupReasoningEffort(modelCard, item.value, ($event.target as HTMLInputElement).checked)"
-                          />
-                          <span>{{ item.label }}</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <label v-if="modelCard.customTemperatureEnabled" class="flex flex-col gap-1">
-                      <span class="text-sm font-medium">{{ t("config.api.temperature") }}</span>
-                      <div class="flex items-center gap-2">
-                        <input :value="modelCard.temperature"
-                          @input="modelCard.temperature = Number(($event.target as HTMLInputElement).value)"
-                          type="range" min="0" max="2" step="0.1" class="range range-sm flex-1" />
-                        <span class="text-xs font-mono w-8 text-right">{{ modelCard.temperature.toFixed(1) }}</span>
-                      </div>
-                    </label>
-
-                    <label v-if="modelCard.customMaxOutputTokensEnabled" class="flex flex-col gap-1">
-                      <span class="text-sm font-medium">{{ t("config.api.maxOutputTokens") }}</span>
-                      <div class="flex items-center gap-2">
-                        <input :value="modelCard.maxOutputTokens"
-                          @input="modelCard.maxOutputTokens = Number(($event.target as HTMLInputElement).value)"
-                          type="range" min="8192" max="128000" step="256"
-                          class="range range-sm flex-1" />
-                        <input :value="Math.round(Number(modelCard.maxOutputTokens ?? 0))"
-                          @input="modelCard.maxOutputTokens = Number(($event.target as HTMLInputElement).value || 0)"
-                          type="number" step="1"
-                          class="input input-bordered input-sm w-28 text-right font-mono" />
-                      </div>
-                    </label>
-                  </div>
-
-                  <div v-if="modelConnectionResult[modelCard.id]" class="rounded-box border px-3 py-2 text-xs"
-                    :class="modelConnectionResult[modelCard.id]?.success ? 'border-success/30 text-success' : 'border-error/30 text-error'">
-                    {{ modelConnectionResult[modelCard.id]?.success
-                      ? t('config.api.testConnectionSuccess', { latency: modelConnectionResult[modelCard.id]?.latencyMs })
-                      : t('config.api.testConnectionFailed', { error: modelConnectionResult[modelCard.id]?.error }) }}
-                  </div>
-                </div>
-              </div>
+                        <div class="grid gap-3">
+              <ApiModelCard
+                v-for="modelCard in activeModelCards"
+                :key="modelCard.id"
+                :card="modelCard"
+                :title="modelGroupDisplayLabel(modelCard)"
+                :model-options="providerModelOptions"
+                :show-delete="true"
+                :delete-disabled="activeModelGroups.length <= 1"
+                :show-capability-toggles="selectedCapability === 'text'"
+                :show-context-window="selectedCapability === 'text'"
+                :show-reasoning="selectedCapability === 'text'"
+                :show-temperature="selectedCapability === 'text'"
+                :show-max-output-tokens="selectedCapability === 'text'"
+                :reasoning-items="reasoningEffortItems(modelCard)"
+                :reasoning-checked-values="reasoningEffortCheckedValues(modelCard)"
+                :reasoning-status="reasoningCapabilityStatus(modelCard)"
+                :protocol-hint="selectedProtocol === 'auto' ? resolvedAdapterByModelId[modelCard.id] : ''"
+                :warning-text="shouldWarnDeepSeekKimiProtocol(modelCard) ? t('config.api.deepSeekKimiProtocolHint') : ''"
+                :documentation-url="modelDocumentationUrl(modelCard)"
+                :connection-result="modelConnectionResult[modelCard.id] ?? null"
+                :context-window-max="contextWindowMax(modelCard)"
+                @select="selectModelCard(modelCard.id)"
+                @remove="removeModelGroup(modelCard)"
+                @sync-metadata="void syncModelMetadata(modelCard)"
+                @select-option="(option: string) => selectModelOption(modelCard, option)"
+                @toggle-max-output="handleCustomMaxOutputTokensToggle(modelCard)"
+                @reasoning-change="(payload: { value: string; checked: boolean }) => setGroupReasoningEffort(modelCard, payload.value, payload.checked)"
+                @open-documentation="openModelDocumentation(modelCard)"
+              />
             </div>
           </div>
         </div>
@@ -433,9 +259,10 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { AlertTriangle, ChevronDown, ExternalLink, Plus, RefreshCw, Trash2, WandSparkles } from "@lucide/vue";
+import { ExternalLink, Plus, RefreshCw, WandSparkles } from "@lucide/vue";
 import type { ApiModelConfigItem, ApiProviderConfigItem, ApiRequestFormat, AppConfig, CodexAuthMode, CodexAuthStatus } from "../../../../types/app";
 import ApiKeyListCard, { type ApiKeyConnectionStatus } from "../../components/ApiKeyListCard.vue";
+import ApiModelCard from "../../components/ApiModelCard.vue";
 import ConfigTemplate from "../../components/ConfigTemplate.vue";
 import ProviderToolbar, { type ProviderToolbarOption } from "../../components/ProviderToolbar.vue";
 import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
@@ -553,8 +380,6 @@ const geminiReasoningEffortOptions = computed(() => [
 const baseUrlHelperOpen = ref(false);
 const linkHelperActiveProtocol = ref<ApiRequestFormat>("openai");
 const selectedPresetId = ref("openai-official");
-const activeModelPickerId = ref("");
-const modelSearch = ref("");
 const providerDeleteDialogOpen = ref(false);
 const pendingDeleteProviderId = ref("");
 const pendingDeleteProviderName = ref("");
@@ -975,11 +800,6 @@ const modelRefreshStatusText = computed(() => {
   return t("config.api.noModels");
 });
 
-const filteredModels = computed(() => {
-  const search = modelSearch.value.trim().toLowerCase();
-  if (!search) return providerModelOptions.value;
-  return providerModelOptions.value.filter((item) => item.toLowerCase().includes(search));
-});
 const savedProviderMap = computed(() => {
   const raw = String(props.lastSavedConfigJson || "").trim();
   if (!raw) return new Map<string, ApiProviderConfigItem>();
@@ -1157,6 +977,12 @@ function groupHasReasoningEffort(modelCard: ApiModelConfigItem, effort: string):
   const normalized = String(effort || "").trim().toLowerCase() || "default";
   return (modelGroupForCard(modelCard)?.cards || [modelCard])
     .some((item) => (String(item.reasoningEffort || "").trim().toLowerCase() || "default") === normalized);
+}
+
+function reasoningEffortCheckedValues(modelCard: ApiModelConfigItem): string[] {
+  return reasoningEffortItems(modelCard)
+    .filter((item) => groupHasReasoningEffort(modelCard, item.value))
+    .map((item) => item.value);
 }
 
 function setGroupReasoningEffort(modelCard: ApiModelConfigItem, effort: string, enabled: boolean) {
@@ -1666,7 +1492,6 @@ function addModelCard() {
   provider.models.push(model);
   applyProtocolDefaults(provider);
   props.config.selectedApiConfigId = `${provider.id}::${model.id}`;
-  activeModelPickerId.value = model.id;
 }
 
 function deprecateModelCards(provider: ApiProviderConfigItem, models: ApiModelConfigItem[]) {
@@ -1696,17 +1521,6 @@ function removeModelCard(modelId: string) {
   const model = provider.models.find((item) => item.id === modelId && !item.deprecated);
   if (!model || activeModelCount(provider) <= 1) return;
   deprecateModelCards(provider, [model]);
-}
-
-function openModelPicker(modelId: string) {
-  activeModelPickerId.value = activeModelPickerId.value === modelId ? "" : modelId;
-  modelSearch.value = "";
-  selectModelCard(modelId);
-}
-
-function closeModelPicker() {
-  activeModelPickerId.value = "";
-  modelSearch.value = "";
 }
 
 function contextWindowMax(modelCard: ApiModelConfigItem): number {
@@ -1771,7 +1585,6 @@ function selectModelOption(modelCard: ApiModelConfigItem, option: string) {
   }
   applyAutoContextWindowTokens(modelCard);
   void syncModelMetadata(modelCard);
-  closeModelPicker();
 }
 
 async function syncModelMetadata(modelCard: ApiModelConfigItem) {

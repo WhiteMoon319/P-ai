@@ -579,13 +579,12 @@ export async function openTransportExternalUrl(url: string): Promise<boolean> {
  * Web 没有同等的原生窗口控制；调用方可据返回值决定是否显示/提示，
  * 但不需要再自行探测运行时。
  */
-export type TransportWindowTarget = "main" | "chat" | "archives" | "quickSetup" | "runtimeLogs";
+export type TransportWindowTarget = "main" | "chat" | "archives" | "runtimeLogs";
 
 const TRANSPORT_WINDOW_COMMANDS: Record<TransportWindowTarget, string> = {
   main: "show_main_window",
   chat: "show_chat_window",
   archives: "show_archives_window",
-  quickSetup: "show_quick_setup_window",
   runtimeLogs: "open_runtime_logs_window",
 };
 
@@ -594,13 +593,6 @@ export async function openTransportWindow(target: TransportWindowTarget): Promis
   const command = TRANSPORT_WINDOW_COMMANDS[target];
   if (!command) return false;
   await invokeTauri(command);
-  return true;
-}
-
-/** 完成快速设置并打开聊天；后端语义必须保留在传输适配器内。 */
-export async function completeTransportQuickSetupAndOpenChat(): Promise<boolean> {
-  if (!isTauriRuntimeAvailable()) return false;
-  await invokeTauri("complete_quick_setup_and_open_chat");
   return true;
 }
 

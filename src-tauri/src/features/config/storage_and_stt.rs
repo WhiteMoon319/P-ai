@@ -924,7 +924,7 @@ fn startup_window_label_for_config(config: &AppConfig) -> &'static str {
     if has_usable_text_llm(config) {
         "chat"
     } else {
-        "quick-setup"
+        "main"
     }
 }
 

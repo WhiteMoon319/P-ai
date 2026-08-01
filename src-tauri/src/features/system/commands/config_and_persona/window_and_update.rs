@@ -14,11 +14,6 @@ fn show_archives_window(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn show_quick_setup_window(app: AppHandle) -> Result<(), String> {
-    show_window(&app, "quick-setup")
-}
-
-#[tauri::command]
 fn open_runtime_logs_window(app: AppHandle) -> Result<(), String> {
     show_runtime_logs_window(&app)
 }
@@ -36,15 +31,6 @@ fn toggle_current_window_maximize(window: tauri::Window, app: AppHandle) -> Resu
 #[tauri::command]
 fn start_current_window_drag(window: tauri::Window, app: AppHandle) -> Result<(), String> {
     start_window_drag_with_default_restore(&app, window.label())
-}
-
-#[tauri::command]
-fn complete_quick_setup_and_open_chat(app: AppHandle) -> Result<(), String> {
-    show_window(&app, "chat")?;
-    if let Some(window) = app.get_webview_window("quick-setup") {
-        let _ = window.hide();
-    }
-    Ok(())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

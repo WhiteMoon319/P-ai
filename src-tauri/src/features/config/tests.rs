@@ -30,10 +30,10 @@
     }
 
     #[test]
-    fn startup_window_label_should_open_quick_setup_without_usable_text_llm() {
+    fn startup_window_label_should_open_main_without_usable_text_llm() {
         let mut cfg = AppConfig::default();
         normalize_app_config(&mut cfg);
-        assert_eq!(startup_window_label_for_config(&cfg), "quick-setup");
+        assert_eq!(startup_window_label_for_config(&cfg), "main");
 
         let api_id = cfg.assistant_department_api_config_id.clone();
         let api = cfg
@@ -123,7 +123,7 @@
             }
         }
         cfg.assistant_department_api_config_id.clear();
-        assert_eq!(startup_window_label_for_config(&cfg), "quick-setup");
+        assert_eq!(startup_window_label_for_config(&cfg), "main");
     }
 
     #[test]
@@ -148,6 +148,7 @@
             message_notification_sound_enabled: default_message_notification_sound_enabled(),
             selected_api_config_id: "a1".to_string(),
             assistant_department_api_config_id: "a1".to_string(),
+            simple_setup_mode: false,
             vision_api_config_id: None,
             image_generation_model_id: None,
             image_providers: Vec::new(),
@@ -258,6 +259,7 @@
             image_generation_model_id: None,
             image_providers: Vec::new(),
             stt_api_config_id: None,
+            simple_setup_mode: false,
             stt_auto_send: false,
             provider_non_stream_base_urls: Vec::new(),
             terminal_shell_kind: default_terminal_shell_kind(),
@@ -721,6 +723,7 @@
             image_providers: Vec::new(),
             stt_api_config_id: None,
             stt_auto_send: false,
+            simple_setup_mode: false,
             provider_non_stream_base_urls: Vec::new(),
             terminal_shell_kind: default_terminal_shell_kind(),
             shell_workspaces: Vec::new(),
@@ -908,6 +911,7 @@
             image_providers: Vec::new(),
             stt_api_config_id: None,
             stt_auto_send: false,
+            simple_setup_mode: false,
             provider_non_stream_base_urls: Vec::new(),
             terminal_shell_kind: default_terminal_shell_kind(),
             shell_workspaces: Vec::new(),

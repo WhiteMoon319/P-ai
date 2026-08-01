@@ -909,7 +909,7 @@ fn main() {
                     }
                     Err(err) => {
                         runtime_log_error(format!("[单实例] 读取启动窗口配置失败: {err}"));
-                        "quick-setup"
+                        "main"
                     }
                 }
             };
@@ -967,7 +967,7 @@ fn main() {
                 }
                 Err(err) => {
                     runtime_log_error(format!("[启动] 读取启动窗口配置失败: {err}"));
-                    "quick-setup"
+                    "main"
                 }
             };
             if let Err(err) = show_window(&app_handle, startup_window_label) {
@@ -999,13 +999,11 @@ fn main() {
             show_main_window,
             show_chat_window,
             show_archives_window,
-            show_quick_setup_window,
             open_runtime_logs_window,
             hide_current_window,
             toggle_current_window_maximize,
             start_current_window_drag,
             set_chat_window_side_expanded,
-            complete_quick_setup_and_open_chat,
             set_chat_window_active,
             get_github_update_state,
             check_github_update,

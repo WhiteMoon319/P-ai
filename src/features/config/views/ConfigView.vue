@@ -1,6 +1,7 @@
 <template>
   <div class="h-full min-h-0 overflow-hidden">
-  <div class="config-drawer-shell drawer md:drawer-open h-full min-h-0 overflow-hidden">
+  <SimpleSetupPanel v-if="props.simpleSetupMode" class="h-full" />
+  <div v-else class="config-drawer-shell drawer md:drawer-open h-full min-h-0 overflow-hidden">
     <input
       id="config-drawer-toggle"
       v-model="configDrawerOpen"
@@ -112,6 +113,7 @@
             :config="config"
             :personas="personas"
             @jump="$emit('update:configTab', $event)"
+            @open-simple-setup="$emit('update:simpleSetupMode', true)"
           />
 
           <HotkeyTab
@@ -239,6 +241,7 @@
             v-else-if="props.configTab === 'about'"
             :github-update-method="props.config.githubUpdateMethod || 'auto'"
             :checking-update="checkingUpdate"
+            :current-theme="currentTheme"
             @update:github-update-method="$emit('update:githubUpdateMethod', $event)"
             @check-update="$emit('checkUpdate')"
             @open-github="$emit('openGithub')"
@@ -409,6 +412,7 @@ import LogTab from "./config-tabs/LogTab.vue";
 import AppearanceTab from "./config-tabs/AppearanceTab.vue";
 import StorageTab from "./config-tabs/StorageTab.vue";
 import AboutTab from "./config-tabs/AboutTab.vue";
+import SimpleSetupPanel from "./config-tabs/SimpleSetupPanel.vue";
 import {
   invokeTauri,
   migrateTransportShellWorkspaceDirectory,
@@ -456,6 +460,7 @@ const CONFIG_NAV_ITEMS: ConfigNavItem[] = [
 const props = defineProps<{
   config: AppConfig;
   configTab: ConfigTab;
+  simpleSetupMode?: boolean;
   uiLanguage: "zh-CN" | "en-US" | "zh-TW";
   localeOptions: Array<{ value: "zh-CN" | "en-US" | "zh-TW"; label: string }>;
   currentTheme: string;
@@ -513,6 +518,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "update:configTab", value: ConfigTab): void;
+  (e: "update:simpleSetupMode", value: boolean): void;
   (e: "update:uiLanguage", value: string): void;
   (e: "update:uiSizeScale", value: number): void;
   (e: "update:githubUpdateMethod", value: AppConfig["githubUpdateMethod"]): void;

@@ -1446,7 +1446,12 @@
         "chatFinish": "調度結束",
         "modelRoundTotal": "模型輪次總耗時"
       }
-    }
+    },
+    "simpleSetupModeToggle": "簡單模式 / 進階模式",
+    "simpleSetupModeSimple": "簡單",
+    "simpleSetupModeAdvanced": "進階",
+    "simpleSetupModeSwitchToAdvanced": "切換到進階",
+    "simpleSetupModeSwitchToSimple": "切換到簡單"
   },
   "responseStyle": {
     "none": "無要求",
@@ -2608,5 +2613,28 @@
     "actionOpenDefault": "用預設程式開啟",
     "actionOpenShell": "開啟 Shell",
     "actionOpenDirectory": "開啟目錄"
+  },
+  "simpleSetup": {
+    "provider": "供應商",
+    "models": "模型",
+    "modelQuick": "快速",
+    "modelExpert": "專家",
+    "modelVision": "多模態",
+    "modelVisionHint": "多模態指可讀取圖片、音訊與視訊",
+    "modelPlaceholder": "輸入模型名稱",
+    "style": "對話風格",
+    "styleNone": "無要求",
+    "appearance": "外觀",
+    "shell": "Shell",
+    "hotkeys": "快捷鍵",
+    "siliconFlow": "矽基流動（進階，可選）",
+    "siliconFlowHint": "填寫後自動設定向量模型、重排模型與語音辨識；留空則跳過。",
+    "effortLow": "低",
+    "effortMedium": "中",
+    "effortHigh": "高",
+    "refreshModelsNeedKey": "前請先填寫 API Key 與 base_url",
+    "refreshModelsDone": "已取得 {count} 個模型",
+    "refreshModelsFailed": "取得模型列表失敗：{error}",
+    "overwriteHint": "儲存後將覆蓋原有設定"
   }
 }

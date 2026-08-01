@@ -1446,7 +1446,12 @@
         "chatFinish": "调度结束",
         "modelRoundTotal": "模型轮次总耗时"
       }
-    }
+    },
+    "simpleSetupModeToggle": "简单模式 / 高级模式",
+    "simpleSetupModeSimple": "简单",
+    "simpleSetupModeAdvanced": "高级",
+    "simpleSetupModeSwitchToAdvanced": "切换到高级",
+    "simpleSetupModeSwitchToSimple": "切换到简单"
   },
   "responseStyle": {
     "none": "无要求",
@@ -2608,5 +2613,28 @@
     "actionOpenDefault": "用默认程序打开",
     "actionOpenShell": "打开 Shell",
     "actionOpenDirectory": "打开目录"
+  },
+  "simpleSetup": {
+    "provider": "供应商",
+    "models": "模型",
+    "modelQuick": "快速",
+    "modelExpert": "专家",
+    "modelVision": "多模态",
+    "modelVisionHint": "多模态指可读取图片、音频和视频",
+    "modelPlaceholder": "输入模型名称",
+    "style": "对话风格",
+    "styleNone": "无要求",
+    "appearance": "外观",
+    "shell": "Shell",
+    "hotkeys": "快捷键",
+    "siliconFlow": "硅基流动（高级，可选）",
+    "siliconFlowHint": "填写后自动配置向量模型、重排模型和语音识别；留空则跳过。",
+    "effortLow": "低",
+    "effortMedium": "中",
+    "effortHigh": "高",
+    "refreshModelsNeedKey": "前请先填写 API Key 和 base_url",
+    "refreshModelsDone": "已获取 {count} 个模型",
+    "refreshModelsFailed": "获取模型列表失败：{error}",
+    "overwriteHint": "保存后将覆盖原有设置"
   }
 }

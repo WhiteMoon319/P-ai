@@ -53,8 +53,6 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "show_main_window"
             | "show_chat_window"
             | "show_archives_window"
-            | "show_quick_setup_window"
-            | "complete_quick_setup_and_open_chat"
             | "open_runtime_logs_window"
             | "sync_tray_icon"
             | "get_github_update_state"

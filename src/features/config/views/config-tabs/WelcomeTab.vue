@@ -184,8 +184,9 @@ const props = defineProps<{
   personas: PersonaProfile[];
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (e: "jump", value: ConfigTab): void;
+  (e: "open-simple-setup"): void;
 }>();
 
 const { t } = useI18n();
@@ -490,6 +491,6 @@ async function installRuntimePrerequisite(card: WelcomeCard) {
 }
 
 function openQuickSetupWindow() {
-  void openTransportWindow("quickSetup");
+  emit("open-simple-setup");
 }
 </script>

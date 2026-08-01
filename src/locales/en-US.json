@@ -1446,7 +1446,12 @@
         "chatFinish": "Dispatch Finished",
         "modelRoundTotal": "Model Round Total"
       }
-    }
+    },
+    "simpleSetupModeToggle": "Simple / Advanced",
+    "simpleSetupModeSimple": "Simple",
+    "simpleSetupModeAdvanced": "Advanced",
+    "simpleSetupModeSwitchToAdvanced": "Switch to Advanced",
+    "simpleSetupModeSwitchToSimple": "Switch to Simple"
   },
   "responseStyle": {
     "none": "No Preference",
@@ -2608,5 +2613,28 @@
     "actionOpenDefault": "Open with default program",
     "actionOpenShell": "Open Shell",
     "actionOpenDirectory": "Open directory"
+  },
+  "simpleSetup": {
+    "provider": "Provider",
+    "models": "Models",
+    "modelQuick": "Quick",
+    "modelExpert": "Expert",
+    "modelVision": "Multimodal",
+    "modelVisionHint": "Multimodal: reads images, audio and video",
+    "modelPlaceholder": "Enter model name",
+    "style": "Response Style",
+    "styleNone": "No preference",
+    "appearance": "Appearance",
+    "shell": "Shell",
+    "hotkeys": "Hotkeys",
+    "siliconFlow": "SiliconFlow (advanced, optional)",
+    "siliconFlowHint": "Filling this auto-configures embedding, rerank and STT; leave empty to skip.",
+    "effortLow": "Low",
+    "effortMedium": "Medium",
+    "effortHigh": "High",
+    "refreshModelsNeedKey": "Please fill in API Key and base_url first",
+    "refreshModelsDone": "Fetched {count} models",
+    "refreshModelsFailed": "Failed to fetch models: {error}",
+    "overwriteHint": "Saving overwrites existing settings"
   }
 }
