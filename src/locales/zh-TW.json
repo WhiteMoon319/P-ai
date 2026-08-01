@@ -2314,7 +2314,9 @@
     },
     "themeOptions": {
       "light": "淺色",
-      "dark": "深色"
+      "dark": "深色",
+      "switchToLight": "切換到亮色",
+      "switchToDark": "切換到暗色"
     },
     "providers": {
       "custom": "自訂"

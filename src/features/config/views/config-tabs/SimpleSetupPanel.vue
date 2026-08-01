@@ -5,7 +5,22 @@
         <div v-if="errorText" class="alert alert-error py-2 text-sm">{{ errorText }}</div>
         <div v-if="statusText" class="alert alert-success py-2 text-sm">{{ statusText }}</div>
         <div class="flex items-center justify-between gap-2">
-          <span class="text-xs opacity-70">{{ t("simpleSetup.overwriteHint") }}</span>
+          <div class="flex min-w-0 items-center gap-2">
+            <button
+              class="btn btn-ghost btn-sm h-8 min-h-8 gap-1.5 px-2.5"
+              type="button"
+              :title="t('quickSetup.themeOptions.switchToDark')"
+              @click="toggleThemeDraft"
+            >
+              <span class="swap swap-rotate pointer-events-none">
+                <input type="checkbox" class="hidden" :checked="draft.theme === 'forest'" tabindex="-1" />
+                <Moon class="swap-on h-3.5 w-3.5" />
+                <Sun class="swap-off h-3.5 w-3.5" />
+              </span>
+              <span>{{ draft.theme === "autumn" ? t("quickSetup.themeOptions.switchToDark") : t("quickSetup.themeOptions.switchToLight") }}</span>
+            </button>
+            <span class="text-xs opacity-70">{{ t("simpleSetup.overwriteHint") }}</span>
+          </div>
           <button
             class="btn btn-primary btn-sm"
             type="button"
@@ -28,21 +43,6 @@
         <div class="card-body gap-3 p-4">
           <h3 class="text-sm font-semibold">{{ t("simpleSetup.appearance") }}</h3>
           <div class="grid gap-3">
-            <div class="grid gap-1.5">
-              <span class="text-xs font-medium opacity-70">{{ t("appearance.theme") }}</span>
-              <div class="grid grid-cols-2 gap-2">
-                <button
-                  v-for="option in themeOptions"
-                  :key="option.value"
-                  class="btn btn-sm"
-                  :class="draft.theme === option.value ? 'btn-primary' : 'bg-base-200'"
-                  type="button"
-                  @click="setThemeDraft(option.value)"
-                >
-                  {{ option.label }}
-                </button>
-              </div>
-            </div>
             <div class="grid gap-1.5">
               <span class="text-xs font-medium opacity-70">{{ t("appearance.language") }}</span>
               <div class="grid grid-cols-3 gap-2">
@@ -225,7 +225,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
-import { Eye, EyeOff, RefreshCw } from "@lucide/vue";
+import { Eye, EyeOff, Moon, RefreshCw, Sun } from "@lucide/vue";
 import ApiModelCard from "../../components/ApiModelCard.vue";
 import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
 import { openTransportWindow } from "../../../../services/tauri-api";
@@ -246,7 +246,6 @@ const {
   refreshingCustomModels,
   draft,
   languageOptions,
-  themeOptions,
   providerApiKeyUrl,
   loadSnapshot,
   selectProvider,
@@ -254,7 +253,7 @@ const {
   openProviderKeyUrl,
   openSiliconFlowKeyUrl,
   setUiLanguage,
-  setThemeDraft,
+  toggleThemeDraft,
   startHotkeyCapture,
   saveAll,
 } = useSimpleSetup();

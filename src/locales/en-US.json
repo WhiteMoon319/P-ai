@@ -2314,7 +2314,9 @@
     },
     "themeOptions": {
       "light": "Light",
-      "dark": "Dark"
+      "dark": "Dark",
+      "switchToLight": "Switch to light",
+      "switchToDark": "Switch to dark"
     },
     "providers": {
       "custom": "Custom"

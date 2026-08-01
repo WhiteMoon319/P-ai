@@ -201,10 +201,6 @@ export function useSimpleSetup() {
     { value: "zh-TW" as const, label: t("quickSetup.languages.zhTW") },
     { value: "en-US" as const, label: t("quickSetup.languages.enUS") },
   ];
-  const themeOptions = [
-    { value: "autumn" as const, label: t("quickSetup.themeOptions.light") },
-    { value: "forest" as const, label: t("quickSetup.themeOptions.dark") },
-  ];
 
   const selectedProvider = computed(() => simpleProviderOptions.find((item) => item.id === draft.providerId) || simpleProviderOptions[0]);
   const providerApiKeyUrl = computed(() => selectedProvider.value.keyUrl);
@@ -401,9 +397,10 @@ export function useSimpleSetup() {
     }
   }
 
-  function setThemeDraft(value: "autumn" | "forest") {
-    draft.theme = value;
-    setTheme(value);
+  function toggleThemeDraft() {
+    const next = draft.theme === "autumn" ? "forest" : "autumn";
+    draft.theme = next;
+    setTheme(next);
   }
 
   function currentProviderBaseUrl(): string {
@@ -754,7 +751,6 @@ export function useSimpleSetup() {
     draft,
     hasDraft,
     languageOptions,
-    themeOptions,
     selectedProvider,
     providerApiKeyUrl,
     refreshingCustomModels,
@@ -764,7 +760,7 @@ export function useSimpleSetup() {
     openProviderKeyUrl,
     openSiliconFlowKeyUrl,
     setUiLanguage,
-    setThemeDraft,
+    toggleThemeDraft,
     startHotkeyCapture,
     stopHotkeyCapture,
     saveAll,
