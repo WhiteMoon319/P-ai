@@ -1106,21 +1106,27 @@ function activityItemMarker(item: ChatActivityItem): string {
 }
 
 function activityItemMarkerClass(item: ChatActivityItem): string {
-  if (item.kind === "reasoning") return "text-neutral/80";
+  if (item.kind === "reasoning") {
+    return props.markdownIsDark ? "font-semibold ecall-activity-reasoning-dark" : "font-semibold ecall-activity-reasoning";
+  }
   if (item.kind === "content") return "font-semibold text-base-content";
-  return "font-semibold text-success";
+  return props.markdownIsDark ? "font-semibold ecall-activity-tool-dark" : "font-semibold ecall-activity-tool";
 }
 
 function activityItemTitleClass(item: ChatActivityItem): string {
-  if (item.kind === "reasoning") return "italic text-neutral/80";
+  if (item.kind === "reasoning") {
+    return props.markdownIsDark ? "italic ecall-activity-reasoning-dark" : "italic ecall-activity-reasoning";
+  }
   if (item.kind === "content") return "text-base-content";
-  return "text-success";
+  return props.markdownIsDark ? "ecall-activity-tool-dark" : "ecall-activity-tool";
 }
 
 function activityItemDetailClass(item: ChatActivityItem): string {
-  if (item.kind === "reasoning") return "text-neutral/80";
+  if (item.kind === "reasoning") {
+    return props.markdownIsDark ? "ecall-activity-reasoning-dark" : "ecall-activity-reasoning";
+  }
   if (item.kind === "content") return "text-base-content/80";
-  return "text-success";
+  return props.markdownIsDark ? "ecall-activity-tool-dark" : "ecall-activity-tool";
 }
 
 function activityItemTitle(item: ChatActivityItem): string {
@@ -1685,6 +1691,24 @@ function openAttachmentPath(path: string) {
 </script>
 
 <style scoped>
+/* 浅色主题：思维链橙色、工具绿色（加深保证白底可读） */
+.ecall-activity-reasoning {
+  color: #c2410c;
+}
+
+.ecall-activity-tool {
+  color: #15803d;
+}
+
+/* 深色主题：思维链橙色、工具绿色（提亮保证深底可读） */
+.ecall-activity-reasoning-dark {
+  color: #fb923c;
+}
+
+.ecall-activity-tool-dark {
+  color: #4ade80;
+}
+
 .ecall-activity-item-summary {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
