@@ -34,7 +34,8 @@
     "chatTitle": "Chat with {name}",
     "minimize": "Minimize",
     "maximize": "Maximize",
-    "restore": "Restore Window"
+    "restore": "Restore Window",
+    "startChat": "Start Chat"
   },
   "config": {
     "tabs": {
@@ -2635,6 +2636,7 @@
     "refreshModelsNeedKey": "Please fill in API Key and base_url first",
     "refreshModelsDone": "Fetched {count} models",
     "refreshModelsFailed": "Failed to fetch models: {error}",
-    "overwriteHint": "Saving overwrites existing settings"
+    "overwriteHint": "Saving overwrites existing settings",
+    "saveAndStart": "Save & Start Chat"
   }
 }

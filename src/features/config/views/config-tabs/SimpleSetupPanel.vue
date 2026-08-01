@@ -13,7 +13,7 @@
             @click="handleSave"
           >
             <span v-if="saving" class="loading loading-spinner loading-xs"></span>
-            {{ t("common.save") }}
+            {{ t("simpleSetup.saveAndStart") }}
           </button>
         </div>
       </div>
@@ -228,6 +228,7 @@ import { useI18n } from "vue-i18n";
 import { Eye, EyeOff, RefreshCw } from "@lucide/vue";
 import ApiModelCard from "../../components/ApiModelCard.vue";
 import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
+import { openTransportWindow } from "../../../../services/tauri-api";
 import { clearSimpleSetupDraft, saveSimpleSetupDraft, simpleProviderOptions, useSimpleSetup } from "../../quick-setup/use-simple-setup";
 import type { SimpleModelCard, SimpleReasoningEffort } from "../../quick-setup/use-simple-setup";
 
@@ -287,6 +288,7 @@ async function handleSave() {
   await saveAll();
   if (!errorText.value) {
     clearSimpleSetupDraft();
+    await openTransportWindow("chat");
   }
 }
 </script>

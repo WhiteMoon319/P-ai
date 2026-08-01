@@ -42,6 +42,7 @@
       @toggle-maximize-window="toggleMaximizeWindow"
       @close-window="closeWindow"
       @update:simple-setup-mode="setSimpleSetupMode"
+      @start-chat="startChat"
     />
 
     <div class="window-content p-0 min-h-0 overflow-hidden">
@@ -764,6 +765,10 @@ function setSimpleSetupMode(value: boolean) {
   if (!!config.simpleSetupMode === next) return;
   config.simpleSetupMode = next;
   void saveConfig();
+}
+
+function startChat() {
+  void openTransportWindow("chat");
 }
 
 function handleSelectConfigSearchResult(tab: ConfigSearchTab) {

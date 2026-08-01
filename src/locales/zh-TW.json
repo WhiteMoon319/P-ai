@@ -34,7 +34,8 @@
     "chatTitle": "與 {name} 的對話",
     "minimize": "最小化",
     "maximize": "最大化",
-    "restore": "還原視窗"
+    "restore": "還原視窗",
+    "startChat": "開始對話"
   },
   "config": {
     "tabs": {
@@ -2635,6 +2636,7 @@
     "refreshModelsNeedKey": "前請先填寫 API Key 與 base_url",
     "refreshModelsDone": "已取得 {count} 個模型",
     "refreshModelsFailed": "取得模型列表失敗：{error}",
-    "overwriteHint": "儲存後將覆蓋原有設定"
+    "overwriteHint": "儲存後將覆蓋原有設定",
+    "saveAndStart": "儲存並開始對話"
   }
 }
