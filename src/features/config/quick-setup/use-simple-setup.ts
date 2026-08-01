@@ -36,7 +36,7 @@ export interface SimpleSetupDraft {
   customModelOptions: string[];
   responseStyleId: string;
   uiLanguage: AppConfig["uiLanguage"];
-  theme: "corporate" | "dracula";
+  theme: "autumn" | "forest";
   hotkey: string;
   recordHotkey: string;
   siliconFlowKey: string;
@@ -100,7 +100,7 @@ export function defaultSimpleSetupDraft(): SimpleSetupDraft {
     customModelOptions: [],
     responseStyleId: "none",
     uiLanguage: "zh-CN",
-    theme: "corporate",
+    theme: "autumn",
     hotkey: "Alt+·",
     recordHotkey: "CapsLock",
     siliconFlowKey: "",
@@ -141,7 +141,7 @@ function parseDraft(raw: unknown): SimpleSetupDraft | null {
   const lang = String(obj.uiLanguage || "");
   if (lang === "zh-CN" || lang === "zh-TW" || lang === "en-US") draft.uiLanguage = lang;
   const theme = String(obj.theme || "");
-  if (theme === "corporate" || theme === "dracula") draft.theme = theme;
+  if (theme === "autumn" || theme === "forest") draft.theme = theme;
   const hotkey = String(obj.hotkey || "");
   if (hotkey) draft.hotkey = hotkey;
   const recordHotkey = String(obj.recordHotkey || "");
@@ -202,8 +202,8 @@ export function useSimpleSetup() {
     { value: "en-US" as const, label: t("quickSetup.languages.enUS") },
   ];
   const themeOptions = [
-    { value: "corporate" as const, label: t("quickSetup.themeOptions.light") },
-    { value: "dracula" as const, label: t("quickSetup.themeOptions.dark") },
+    { value: "autumn" as const, label: t("quickSetup.themeOptions.light") },
+    { value: "forest" as const, label: t("quickSetup.themeOptions.dark") },
   ];
 
   const selectedProvider = computed(() => simpleProviderOptions.find((item) => item.id === draft.providerId) || simpleProviderOptions[0]);
@@ -320,7 +320,7 @@ export function useSimpleSetup() {
         Object.assign(draft, savedDraft);
         hasDraft.value = true;
       } else {
-        draft.theme = isDarkAppTheme(currentTheme.value) ? "dracula" : "corporate";
+        draft.theme = isDarkAppTheme(currentTheme.value) ? "forest" : "autumn";
       }
       hotkeyCaptureHint.value = t("quickSetup.hotkeyHints.idle");
     } catch (error) {
@@ -401,7 +401,7 @@ export function useSimpleSetup() {
     }
   }
 
-  function setThemeDraft(value: "corporate" | "dracula") {
+  function setThemeDraft(value: "autumn" | "forest") {
     draft.theme = value;
     setTheme(value);
   }
