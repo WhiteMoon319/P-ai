@@ -67,6 +67,8 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "open_file_reader_window_command"
             | "read_local_binary_file"
             | "set_chat_window_side_expanded"
+            | "show_quick_setup_window"
+            | "complete_quick_setup_and_open_chat"
     )
 }
 
