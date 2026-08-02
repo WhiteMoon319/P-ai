@@ -598,6 +598,7 @@ export function useChatWindowApp() {
     createApiProvider,
     chatErrorText,
     currentForegroundApiConfigId,
+    chatUsagePercent: contentOrchestrator.messageBlocks.chatUsagePercent,
     currentForegroundAgentId,
     currentForegroundDepartmentId,
     currentForegroundConversationSummary,

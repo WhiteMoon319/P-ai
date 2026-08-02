@@ -25,6 +25,7 @@
 - 修复流式输出期间日志无限刷 `TAURI Couldn't find callback id` 导致前端卡死：前端页面重载（HMR / 手动刷新 / 崩溃重建）后旧 bindingId 的流式 channel 注册残留在 Rust 侧，且 `Channel::send` 在 JS callback 失效时仍返回 Ok，僵尸注册无法自动清理；现于窗口启动/重载时（`appBootstrapMount`）先清理本窗口残留流式绑定，再重新绑定新 channel。
 - 降低折叠思维链时的流式渲染开销：思维链面板折叠时跳过全文签名计算（`activityPanelMemoKey` 不再对思维链全文做哈希与全量转换），避免每次 delta 都做全文哈希与全量转换；`activityItemsSignature` 保留内容哈希，确保工具结果等长内容替换仍可感知。
 - 修复上下文压缩完成后标题栏用量圆环不归零的问题：压缩消息是追加在消息末尾的最新一条（无 usage 字段），用量计算从尾部往前找 assistant 消息时跳过它、回退到压缩前旧消息的高占用率；现识别压缩消息（`context_compaction` / `summary_context_seed`）后直接按 20k tokens 折算占用率，不再回退到压缩前旧值。
+- 修复压缩卡片右上角用量百分比与标题栏不一致的问题：压缩卡片此前在 blockPage 消息里独立重算占用率（同样会跳过压缩消息回退旧值），现改为直接复用标题栏同一数据源 `chatUsagePercent`，两处始终一致。
 - 工具执行期间标题栏用量圆环动态更新：工具结果落盘时把上下文用量写入流式缓存（`stream_cache`），随后续每个 delta 事件下发，前端实时更新占用率；切屏恢复时也直接来自流式缓存，无需旁路广播 `context_usage_update` 事件。
 - 设置窗标题栏「切换到简单」按钮改用主题色（`btn-primary`），不再使用 ghost 样式。
 - 移除设置窗标题栏「开始对话」按钮（原入口过时），按钮迁移至欢迎页主内容区右上角（原「打开快速设置」位置），点击直接打开对话窗。

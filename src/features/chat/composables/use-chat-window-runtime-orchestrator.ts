@@ -40,6 +40,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     config: bindings.config,
     locale: bindings.locale,
     normalizeLocale: bindings.normalizeLocale,
+    chatUsagePercent: bindings.chatUsagePercent,
     suppressAutosave: bindings.suppressAutosave,
     loading: bindings.loading,
     saving: bindings.saving,
