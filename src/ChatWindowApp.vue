@@ -317,6 +317,7 @@
       :on-reached-chat-bottom="() => undefined"
       :on-recall-turn="handleRecallTurn"
       :on-regenerate-turn="handleRegenerateTurn"
+      :request-recall-mode="requestRecallMode"
       :confirm-plan="handleConfirmPlan"
       :on-lock-chat-workspace="openChatWorkspacePicker"
       :on-switch-conversation="switchChatConversation"

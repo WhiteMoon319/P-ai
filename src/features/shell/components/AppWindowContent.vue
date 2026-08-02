@@ -320,6 +320,7 @@
               :deny-terminal-approval="(requestId) => denyTerminalApproval(requestId)"
               :approve-terminal-approval-for-session="(requestId) => approveTerminalApprovalForSession(requestId)"
               :approve-terminal-approval-for-workspace="(requestId) => approveTerminalApprovalForWorkspace(requestId)"
+              :request-recall-mode="requestRecallMode"
             />
           </div>
         </template>
@@ -791,6 +792,11 @@ const props = defineProps<{
   onCreateConversationBranchFromTurn: (payload: { turnId: string }) => void;
   onRecallTurn: (payload: { turnId: string }) => void;
   onRegenerateTurn: (payload: { turnId: string }) => void;
+  requestRecallMode: (payload: {
+    turnId: string;
+    targetUserMessageId: string;
+    conversationId?: string;
+  }) => Promise<"with_patch" | "message_only" | "cancel">;
   confirmPlan: (payload: { messageId: string }) => void;
   onLockChatWorkspace: () => void;
   openSupervisionTaskDialog: () => void;
