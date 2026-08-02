@@ -532,6 +532,24 @@ mod scheduler_stream_block_tests {
     }
 
     #[test]
+    fn high_frequency_deltas_should_skip_stream_cache_snapshot() {
+        // 钉死：高频逐 token 事件（正文 delta kind=None、思维链 delta
+        // activity_reasoning_delta）不随事件下发 stream_cache——前端只要看到
+        // streamCache 就走 reduceStreamSnapshot 全量覆盖，轻量快照的
+        // assistantText 为空会把正文覆盖成空白，实测表现为正文/思维链完全不显示、
+        // 只有工具事件带完整快照时刷一下。无 streamCache 时前端才走增量渲染。
+        // 工具三兄弟（低频关键事件）必须保持完整快照做权威校正。
+        assert!(should_use_slim_stream_cache_snapshot(None));
+        assert!(should_use_slim_stream_cache_snapshot(Some("activity_reasoning_delta")));
+        assert!(!should_use_slim_stream_cache_snapshot(Some("assistant_tool_event")));
+        assert!(!should_use_slim_stream_cache_snapshot(Some("assistant_tool_result")));
+        assert!(!should_use_slim_stream_cache_snapshot(Some("tool_status")));
+        assert!(!should_use_slim_stream_cache_snapshot(Some("round_completed")));
+        assert!(!should_use_slim_stream_cache_snapshot(Some("round_failed")));
+        assert!(!should_use_slim_stream_cache_snapshot(Some("context_usage_update")));
+    }
+
+    #[test]
     fn assistant_delta_broadcast_event_should_strip_high_frequency_payload() {
         let mut event = assistant_delta_event_for_test(Some("tool_status"), "token");
         event.tool_status = Some("running".to_string());
@@ -852,6 +870,16 @@ fn conversation_stream_runtime_cache_snapshot(
     }
 }
 
+/// 判断该事件是否应随事件下发 stream_cache 快照。
+/// 高频逐 token 事件（正文 delta / 思维链 delta）不挂快照：前端对无
+/// streamCache 的 delta 走增量渲染逐字累积，挂了快照反而会触发前端全量
+/// 覆盖路径（只要 streamCache 存在就走 reduceStreamSnapshot），轻量快照
+/// 的 assistantText 为空会把正文覆盖成空白。低频关键事件（工具三兄弟）
+/// 仍带完整快照做权威校正。
+fn should_use_slim_stream_cache_snapshot(kind: Option<&str>) -> bool {
+    matches!(kind, None | Some("activity_reasoning_delta"))
+}
+
 fn set_stream_cache_context_usage(
     state: &AppState,
     conversation_id: &str,
@@ -958,6 +986,14 @@ fn update_conversation_stream_runtime_cache(
         }
     }
     cache.updated_at = now_iso();
+    // 高频逐 token 事件（正文 delta / 思维链 delta）不随事件下发 stream_cache：
+    // 前端只要看到 streamCache 就走 reduceStreamSnapshot 全量覆盖路径，轻量
+    // 快照的 assistantText 为空会把正文覆盖成空白；无 streamCache 时前端才走
+    // 增量渲染逐字累积。后端缓存照常全量更新，恢复查询仍拿完整快照。
+    // 低频关键事件（工具三兄弟）仍下发完整快照做权威校正。
+    if should_use_slim_stream_cache_snapshot(event.kind.as_deref()) {
+        return Ok(None);
+    }
     let snapshot = conversation_stream_runtime_cache_snapshot(cache.clone());
     if matches!(
         event.kind.as_deref(),
