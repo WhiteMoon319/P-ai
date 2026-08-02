@@ -1157,6 +1157,7 @@ fn main() {
             submit_user_async_delegate,
             bind_active_chat_view_stream,
             unbind_active_chat_view_stream,
+            clear_window_chat_view_stream_bindings_command,
             probe_active_chat_view_stream,
              stop_chat_message,
              get_chat_queue_snapshot,

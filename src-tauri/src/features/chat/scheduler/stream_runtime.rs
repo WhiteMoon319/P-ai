@@ -1034,3 +1034,40 @@ pub(crate) fn clear_active_chat_view_stream_binding(
     bindings.remove(&active_chat_view_binding_key(window_label, binding_id));
     Ok(())
 }
+
+/// 清空指定窗口的全部活动聊天流绑定。
+///
+/// 前端页面重载（HMR / 手动刷新 / 崩溃重建）后，旧 bindingId 的 channel 在
+/// JS 侧已失效，但 Rust 侧仍持有注册；Tauri 的 Channel::send 在 callback
+/// 不存在时仍返回 Ok，导致僵尸注册无法通过 send 失败自动清理，流式期间会
+/// 反复向失效 channel 投递并刷 `Couldn't find callback id` 警告。
+/// 前端在每次窗口启动/重载后调用本命令，先清掉本窗口残留绑定，再重新绑定新 channel。
+pub(crate) fn clear_window_chat_view_stream_bindings(
+    state: &AppState,
+    window_label: &str,
+) -> Result<(), String> {
+    let mut bindings = state
+        .active_chat_view_bindings
+        .lock()
+        .map_err(|_| "Failed to lock active chat view bindings".to_string())?;
+    let window_label = window_label.trim();
+    if window_label.is_empty() {
+        return Ok(());
+    }
+    let removed = bindings
+        .keys()
+        .filter(|key| key.starts_with(&format!("{}::", window_label)))
+        .cloned()
+        .collect::<Vec<_>>();
+    for key in &removed {
+        bindings.remove(key);
+    }
+    if !removed.is_empty() {
+        runtime_log_debug(format!(
+            "[聊天流式订阅] 窗口重载后清理残留绑定: window={}, removed={}",
+            window_label,
+            removed.len()
+        ));
+    }
+    Ok(())
+}

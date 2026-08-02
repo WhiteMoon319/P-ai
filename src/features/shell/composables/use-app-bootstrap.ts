@@ -1,6 +1,6 @@
 import type { AgentWorkSignalPayload, AppConfig } from "../../../types/app";
 import type { AppThemeState } from "../theme/theme-types";
-import { onTransportNotification } from "../../../services/tauri-api";
+import { clearWindowChatViewStreamBindings, onTransportNotification } from "../../../services/tauri-api";
 
 type ViewMode = "chat" | "archives" | "config";
 type ConversationApiSettingsPayload = {
@@ -60,6 +60,11 @@ export function useAppBootstrap(options: AppBootstrapOptions) {
   async function mount() {
     const mode = options.initWindowMode();
     options.setViewMode(mode);
+    // 窗口启动/重载后先清理本窗口残留的流式绑定（旧 bindingId 的 channel 在 JS 侧
+    // 已失效但 Rust 侧注册仍残留，且 Tauri 的 Channel::send 在 callback 不存在时仍
+    // 返回 Ok，僵尸注册无法自动清理）。必须在重新绑定之前执行——绑定只发生在用户
+    // 切换会话或发送消息时，晚于本处。
+    void clearWindowChatViewStreamBindings();
     try {
       const subscribe = <T>(method: string, handler: (payload: T) => void) => {
         unlisteners.push(onTransportNotification<T>(method, handler));

@@ -1940,6 +1940,25 @@ export async function unbindTransportConversationStream(input: { bindingId: stri
   webTransportStreamBindings.delete(bindingId);
 }
 
+/**
+ * 清空当前窗口的全部活动聊天流绑定。
+ *
+ * 前端页面重载（HMR / 手动刷新 / 崩溃重建）后，旧 bindingId 的 channel 在 JS 侧
+ * 已失效，但 Rust 侧注册仍残留；Tauri 的 Channel::send 在 callback 不存在时仍返回
+ * Ok，僵尸注册无法通过 send 失败自动清理，流式期间会反复投递失效 channel 并刷
+ * `Couldn't find callback id` 警告。窗口启动/重载后调用本函数先清残留，再重新绑定。
+ */
+export async function clearWindowChatViewStreamBindings(): Promise<void> {
+  if (!isTauriRuntimeAvailable()) return;
+  try {
+    await invokeTauri("clear_window_chat_view_stream_bindings_command", {});
+  } catch (error) {
+    console.warn("[聊天] 清理本窗口残留流式绑定失败", {
+      message: String((error as { message?: string })?.message ?? error ?? ""),
+    });
+  }
+}
+
 export async function probeTransportConversationStream(input: {
   bindingId: string;
   conversationId?: string;

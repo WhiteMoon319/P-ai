@@ -19,6 +19,8 @@
 - 修复侧边追问会话无法撤回消息的问题：消息气泡底部撤回/重新生成按钮与右键菜单撤回在侧边会话中事件断链（未绑定 `recallTurn`/`regenerateTurn`），已接入与主会话一致的撤回链路，确认弹窗按焦点会话查询撤回预览。
 - 修复侧边追问会话右键「从消息创建分支」无效的问题：侧边会话未绑定分支创建事件，右键菜单分支点击无反应；已接通无弹窗一键创建链路，创建后自动刷新侧边会话列表并切换到新分支。
 - 修复 `ApiConfigTreeSelect` 多根节点（div + Teleport）导致非 prop 属性无法自动继承的问题：外部传入的 `id`（如批量归档模型选择的 label 关联目标）不再触发 Vue extraneous attrs 警告，`inheritAttrs: false` + 根节点 `v-bind="$attrs"` 手动承接。
+- 修复流式输出期间日志无限刷 `TAURI Couldn't find callback id` 导致前端卡死：前端页面重载（HMR / 手动刷新 / 崩溃重建）后旧 bindingId 的流式 channel 注册残留在 Rust 侧，且 `Channel::send` 在 JS callback 失效时仍返回 Ok，僵尸注册无法自动清理；现于窗口启动/重载时（`appBootstrapMount`）先清理本窗口残留流式绑定，再重新绑定新 channel。
+- 降低折叠思维链时的流式渲染开销：`activityItemsSignature` 全文哈希改为长度签名，折叠时 `activityPanelMemoKey` 跳过思维链全文签名计算，避免每次 delta 都做全文哈希与全量转换。
 
 ## 依赖
 
