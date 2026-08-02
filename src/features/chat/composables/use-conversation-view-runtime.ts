@@ -544,6 +544,11 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
 
   function handleForegroundWake(event: Event) {
     if (document.visibilityState === "hidden") return;
+    console.warn("[焦点恢复] focus/visibility 触发", {
+      eventType: event.type,
+      visibilityState: document.visibilityState,
+      conversationId: currentConversationId(),
+    });
     void scheduleForegroundRecovery(event.type);
   }
 
