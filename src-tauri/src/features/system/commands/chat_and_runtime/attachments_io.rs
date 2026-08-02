@@ -626,7 +626,14 @@ async fn read_local_chat_image_thumbnail(
     input: ReadLocalChatImageThumbnailInput,
     state: State<'_, AppState>,
 ) -> Result<ReadLocalChatImageThumbnailOutput, String> {
-    let app_state = state.inner().clone();
+    read_local_chat_image_thumbnail_inner(input, state.inner()).await
+}
+
+async fn read_local_chat_image_thumbnail_inner(
+    input: ReadLocalChatImageThumbnailInput,
+    state: &AppState,
+) -> Result<ReadLocalChatImageThumbnailOutput, String> {
+    let app_state = state.clone();
     tokio::task::spawn_blocking(move || {
         let path = resolve_local_chat_image_path(&app_state, &input.path)?;
         let max_edge = input.max_edge.unwrap_or(LOCAL_IMAGE_THUMBNAIL_MAX_EDGE);
@@ -650,7 +657,14 @@ async fn read_local_chat_image_original(
     input: ReadLocalChatImageThumbnailInput,
     state: State<'_, AppState>,
 ) -> Result<ReadLocalChatImageOutput, String> {
-    let app_state = state.inner().clone();
+    read_local_chat_image_original_inner(input, state.inner()).await
+}
+
+async fn read_local_chat_image_original_inner(
+    input: ReadLocalChatImageThumbnailInput,
+    state: &AppState,
+) -> Result<ReadLocalChatImageOutput, String> {
+    let app_state = state.clone();
     tokio::task::spawn_blocking(move || {
         let path = resolve_local_chat_image_path(&app_state, &input.path)?;
         let render = local_image_read_original(&path)?;

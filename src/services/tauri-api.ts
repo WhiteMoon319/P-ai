@@ -733,7 +733,7 @@ export async function readTransportChatImage(input: {
     });
   }
   const path = String(input.path || "").trim();
-  if (!path || !isTauriRuntimeAvailable()) return null;
+  if (!path) return null;
   return invokeTauri<TransportChatImageData>(
     input.original ? "read_local_chat_image_original" : "read_local_chat_image_thumbnail",
     {
@@ -1250,8 +1250,6 @@ function prepareInvokeValue(value: unknown, webRuntime: boolean, seen: WeakSet<o
 }
 
 const WEB_BRIDGE_NATIVE_ONLY_COMMANDS = new Set([
-  "read_local_chat_image_thumbnail",
-  "read_local_chat_image_original",
   "list_file_reader_directory",
   "list_file_reader_directory_open_targets",
   "read_file_reader_file",
@@ -1312,6 +1310,7 @@ const WEB_BRIDGE_NATIVE_ONLY_COMMANDS = new Set([
   "bind_active_chat_view_stream",
   "probe_active_chat_view_stream",
   "unbind_active_chat_view_stream",
+  "clear_window_chat_view_stream_bindings_command",
   "set_chat_window_active",
   "open_file_reader_window_command",
   "read_local_binary_file",

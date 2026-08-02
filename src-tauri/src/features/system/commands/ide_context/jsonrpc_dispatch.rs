@@ -3,8 +3,6 @@ const WEB_NATIVE_CAPABILITY_UNAVAILABLE: &str = "WEB_NATIVE_CAPABILITY_UNAVAILAB
 fn ide_chat_web_native_only_method(method: &str) -> bool {
     matches!(
         method,
-            | "read_local_chat_image_thumbnail"
-            | "read_local_chat_image_original"
             | "list_file_reader_directory"
             | "list_file_reader_directory_open_targets"
             | "read_file_reader_file"
@@ -63,6 +61,7 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "bind_active_chat_view_stream"
             | "probe_active_chat_view_stream"
             | "unbind_active_chat_view_stream"
+            | "clear_window_chat_view_stream_bindings_command"
             | "set_chat_window_active"
             | "open_file_reader_window_command"
             | "read_local_binary_file"
@@ -309,6 +308,14 @@ async fn ide_chat_handle_jsonrpc_request(
             let input = ide_chat_parse_param_field::<ChatImageDataUrlInput>(request.params, "input")?;
             ide_chat_serialize(read_chat_image_data_url_inner(input, state)?)
         })(),
+        "read_local_chat_image_thumbnail" => (|| async {
+            let input = ide_chat_parse_param_field::<ReadLocalChatImageThumbnailInput>(request.params, "input")?;
+            ide_chat_serialize(read_local_chat_image_thumbnail_inner(input, state).await?)
+        })().await,
+        "read_local_chat_image_original" => (|| async {
+            let input = ide_chat_parse_param_field::<ReadLocalChatImageThumbnailInput>(request.params, "input")?;
+            ide_chat_serialize(read_local_chat_image_original_inner(input, state).await?)
+        })().await,
         "read_avatar_data_url" => (|| -> Result<Value, String> {
             let input = ide_chat_parse_param_field::<AvatarDataPathInput>(request.params, "input")?;
             ide_chat_serialize(read_avatar_data_url_inner(input, state)?)
@@ -721,7 +728,6 @@ mod web_native_capability_tests {
     fn local_file_and_window_methods_should_be_explicitly_native_only() {
         for method in [
             "read_file_reader_file",
-            "read_local_chat_image_original",
             "open_storage_usage_item_directory",
             "mcp_open_workspace_dir",
             "migrate_shell_workspace_directory",
@@ -768,6 +774,8 @@ mod web_native_capability_tests {
             "fileReader.directory.list",
             "fileReader.readFile",
             "fileReader.readFileBlock",
+            "read_local_chat_image_thumbnail",
+            "read_local_chat_image_original",
             "conversation.plan.readFile",
             "conversation.rewindPreview",
             "conversation.archive",
