@@ -405,7 +405,7 @@ impl RuntimeToolDyn for CachedMcpRuntimeTool {
                     "MCP 工具 `{qualified_by_name}` 当前不可用：部门权限已撤销"
                 )));
             }
-let (peer, _) = match mcp_get_or_connect_peer_for_tool(Some(&app_state), &server, &runtime_tool_name).await {
+            let (peer, _) = match mcp_get_or_connect_peer_for_tool(Some(&app_state), &server, &runtime_tool_name).await {
                 Ok(result) => result,
                 Err(err) => {
                     return Ok(ProviderToolResult::error(format!(
@@ -1231,7 +1231,7 @@ async fn mcp_get_or_connect_peer_for_tool(
             tool_name, server.id
         ));
     }
-let member_name = parse_mcp_group_definitions(server)?
+    let member_name = parse_mcp_group_definitions(server)?
         .into_iter()
         .map(|(member_name, _, _)| member_name)
         .filter(|member_name| {
@@ -1261,7 +1261,7 @@ async fn mcp_list_server_tools_runtime(state: Option<&AppState>, server: &McpSer
     let mut seen_names = std::collections::HashSet::<String>::new();
     let mut duplicate_names = Vec::<String>::new();
     for (member_name, _, _) in &members {
-let member_compatibility_error = mcp_member_name_compatibility_error(member_name);
+        let member_compatibility_error = mcp_member_name_compatibility_error(member_name);
         let (_peer, tools) = mcp_list_tools_with_peer(state, server, member_name).await?;
         for def in tools {
             let raw_name = def.name.to_string();

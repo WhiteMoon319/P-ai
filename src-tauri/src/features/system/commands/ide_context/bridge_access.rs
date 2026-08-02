@@ -295,9 +295,15 @@ Get-NetIPConfiguration | ForEach-Object {
   }
 } | ConvertTo-Json -Depth 5 -Compress
 "#;
-    let output = std::process::Command::new("powershell")
-        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script])
-        .output();
+    let mut command = std::process::Command::new("powershell");
+    command.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script]);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt as _;
+        // PowerShell 是控制台程序，后台探测不能让 GUI 应用弹出控制台窗口。
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let output = command.output();
     let Ok(output) = output else {
         return Vec::new();
     };

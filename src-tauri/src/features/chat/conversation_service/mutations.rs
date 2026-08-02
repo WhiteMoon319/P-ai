@@ -311,9 +311,18 @@ fn validate_isolated_worktree_root(path: &str) -> Result<(), String> {
     let canonical_workspace = std::path::Path::new(raw_path)
         .canonicalize()
         .map_err(|err| format!("无法读取隔离工作树目录：{err}"))?;
-    let output = std::process::Command::new("git")
+    let mut command = std::process::Command::new("git");
+    command
         .current_dir(&canonical_workspace)
-        .args(["rev-parse", "--show-toplevel"])
+        .args(["rev-parse", "--show-toplevel"]);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt as _;
+
+        // 新建隔离工作树会话时同步校验 Git 根目录，不能让 GUI 应用弹出控制台窗口。
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let output = command
         .output()
         .map_err(|err| format!("无法运行 Git 检查隔离工作树目录：{err}"))?;
     if !output.status.success() {
