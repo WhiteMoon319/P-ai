@@ -576,7 +576,7 @@ async fn summarize_archived_conversation_with_model_v2(
     let parsed = parse_memory_curation_draft(&reply.assistant_text).ok_or_else(|| {
         SummaryContextModelError::InvalidJson(format!(
             "SummaryContext JSON 解析失败，raw={}",
-            reply.assistant_text.chars().take(240).collect::<String>()
+            reply.assistant_text
         ))
     })?;
     let open_loops = parsed

@@ -2,6 +2,7 @@
 
 ## 修复
 
+- 修复 SummaryContext 归档压缩 JSON 解析失败无法定位的问题：模型将 `openLoops` 输出为 `[{"loop": "..."}]` 对象形态，与契约要求的字符串数组不符，`MemoryCurationDraft` 反序列化报 `invalid type: map, expected a string` 整段失败；解析器新增 `deserialize_open_loops` 兼容两种形态（纯字符串直接收、对象形态提取 `loop` 字段），无效元素跳过不中断；json_contract 明确 `openLoops` 元素必须是纯字符串；失败日志不再截断 raw（去掉 `chars().take(240)`），完整保留模型原始输出便于定位。
 - 消除流式输出期间高频 channel 事件的大 payload IPC 阻塞：普通正文 delta 与思维链 delta（逐 token 高频事件）不再随事件下发 `stream_cache` 快照——前端只要看到 streamCache 就走 `reduceStreamSnapshot` 全量覆盖路径，轻量快照的空正文会把流式内容覆盖成空白，因此高频事件直接不带快照，前端走增量渲染逐字累积，每个事件 payload 降到只有 delta 文本本身；完整快照仍保留给低频关键事件（工具调用/结果/状态）做权威校正，后端缓存照常全量更新、恢复查询不受影响。事件远低于 Tauri 8KB 阈值，改走 eval 快路径而非 fetch 路径，消除 `sendIpcMessage` 高频同步阻塞。
 - 消除聊天虚拟滚动在流式输出期间的 Layout Thrashing（强制同步布局）：`measureElement` 不再每次无条件 `getBoundingClientRect` 读几何属性——tanstack 内部 ResizeObserver 触发时用 `borderBoxSize` 异步测量，主动测量优先读 `measuredVirtualItemHeights` 缓存、仅首次挂载才读 DOM；`:ref` 回调 `measureVirtualRow` 对「同一元素 + 已有缓存高度」直接短路，跳过 DOM 读取与 `measureElement`，尺寸变化由 ResizeObserver 异步兜底；`handleVirtualItemResize` 调整为先更新缓存再测量，避免缓存分支读到旧值导致 virtualizer 布局不更新。
 - 修复 Web 端消息图片无法显示的问题：移除「Web 端禁止读取本地图片路径」的多余权限限制（应用本身具备文件浏览器与宿主文件读写能力，此限制与产品定位矛盾），`read_local_chat_image_thumbnail` / `read_local_chat_image_original` 从 Web native-only 名单移除并接入 Web dispatcher 转发，前端读取聊天图片不再因 Web 环境返回空；图片附件路径保持真实落盘路径。
