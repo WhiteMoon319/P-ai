@@ -87,6 +87,7 @@
     @load-older-history="runtime.loadOlderHistory"
     @recall-turn="runtime.handleRecallTurn"
     @regenerate-turn="runtime.handleRegenerateTurn"
+    @create-conversation-branch-from-turn="props.createConversationBranchFromTurn"
     @approve-terminal-approval="approveTerminalApproval?.($event)"
     @deny-terminal-approval="denyTerminalApproval?.($event)"
     @approve-terminal-approval-for-session="approveTerminalApprovalForSession?.($event)"
@@ -135,6 +136,7 @@ const props = defineProps<{
     targetUserMessageId: string;
     conversationId?: string;
   }) => Promise<"with_patch" | "message_only" | "cancel">;
+  createConversationBranchFromTurn?: (payload: { turnId: string }) => Promise<void> | void;
 }>();
 
 const { t } = useI18n();

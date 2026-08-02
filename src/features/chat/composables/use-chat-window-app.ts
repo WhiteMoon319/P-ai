@@ -744,6 +744,31 @@ export function useChatWindowApp() {
     }
     return conversationId;
   };
+  const createSideConversationBranchFromTurn = async (payload: { turnId: string; sourceConversationId?: string }) => {
+    const sourceConversationId = String(payload?.sourceConversationId || "").trim();
+    const turnMessageId = String(payload?.turnId || "").trim();
+    if (!sourceConversationId || !turnMessageId) return;
+    try {
+      const result = await invokeTauri<{
+        conversationId: string;
+        title: string;
+        warning?: string | null;
+      }>("conversation.branchFromMessage", {
+        input: {
+          sourceConversationId,
+          turnMessageId,
+        },
+      });
+      const conversationId = String(result?.conversationId || "").trim();
+      if (!conversationId) return;
+      await refreshChatUnarchivedConversations().catch((error) => {
+        setStatusError("status.requestFailed", error);
+      });
+      selectSideChatConversation(conversationId);
+    } catch (error) {
+      setStatusError("status.createBranchFailed", error);
+    }
+  };
   const closeSideChatConversations = async (conversationIds: string[]) => {
     const orderedIds = sideConversations.value.map((item) => String(item.conversationId || "").trim()).filter(Boolean);
     const requestedIds = new Set((conversationIds || []).map((item) => String(item || "").trim()).filter(Boolean));
@@ -1024,6 +1049,7 @@ export function useChatWindowApp() {
     sideConversationId,
     selectSideChatConversation,
     createSideChatConversation,
+    createSideConversationBranchFromTurn,
     closeSideChatConversations,
     openSettingsWindow,
     summonChatWindowFromConfig,

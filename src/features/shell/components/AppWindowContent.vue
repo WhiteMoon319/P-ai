@@ -321,6 +321,7 @@
               :approve-terminal-approval-for-session="(requestId) => approveTerminalApprovalForSession(requestId)"
               :approve-terminal-approval-for-workspace="(requestId) => approveTerminalApprovalForWorkspace(requestId)"
               :request-recall-mode="requestRecallMode"
+              :create-conversation-branch-from-turn="(payload) => createSideConversationBranchFromTurn?.({ ...payload, sourceConversationId: sideConversationId })"
             />
           </div>
         </template>
@@ -642,6 +643,7 @@ const props = defineProps<{
   sideConversationId?: string;
   createSideChatConversation?: () => Promise<string> | string;
   selectSideChatConversation?: (conversationId: string) => void;
+  createSideConversationBranchFromTurn?: (payload: { turnId: string; sourceConversationId?: string }) => Promise<void> | void;
   closeSideChatConversations?: (conversationIds: string[]) => Promise<void> | void;
   currentChatTodos: ChatTodoItem[];
   chatSupervisionActive: boolean;
