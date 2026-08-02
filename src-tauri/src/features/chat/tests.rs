@@ -5758,7 +5758,7 @@
         );
 
         let compaction_source = conversation_service_v2()
-            .read_archive_pipeline_cross_message_context(&state, &conversation.id)
+            .read_archive_pipeline_last_block_conversation(&state, &conversation.id)
             .expect("read compaction source after completed tool round");
         let compaction_assistant = compaction_source
             .messages

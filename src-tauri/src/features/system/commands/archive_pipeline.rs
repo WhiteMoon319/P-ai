@@ -1936,20 +1936,20 @@ mod archive_pipeline_tests {
 
         let latest_line = preserved_dialogue_message_line(
             source.messages.last().expect("latest message"),
-            "遥酱",
+            "用户",
             "PAI",
         )
         .expect("latest preserved line");
         let budget = estimated_tokens_for_text(&latest_line).ceil() as usize;
         let block = collect_block_preserved_dialogue(
             &source.messages,
-            "遥酱",
+            "用户",
             "PAI",
             PreservedDialogueBudget::Tokens(budget),
         );
 
         assert!(block.contains("PAI：这是最近的一条超长助手回复"));
-        assert!(!block.contains("遥酱：这是更早的一条用户短消息"));
+        assert!(!block.contains("用户：这是更早的一条用户短消息"));
         assert!(!block.contains("PAI：这是更早的一条助手消息"));
     }
 

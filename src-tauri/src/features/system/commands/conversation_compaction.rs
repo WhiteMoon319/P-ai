@@ -210,7 +210,7 @@ async fn run_context_compaction_pipeline_inner(
     }
 
     let compaction_source = conversation_service_v2()
-        .read_archive_pipeline_cross_message_context(state, &source.id)
+        .read_archive_pipeline_last_block_conversation(state, &source.id)
         .map_err(|err| format!("读取消息锚定压缩上下文失败：{}", err))?;
     let (owner_agent, owner_agent_id, user_alias) = resolve_archive_owner_context(state, source)?;
     let preserved_dialogue = conversation_service_v2()
