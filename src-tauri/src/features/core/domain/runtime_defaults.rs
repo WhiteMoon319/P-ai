@@ -10,8 +10,8 @@ fn default_agent() -> AgentProfile {
     let now = now_iso();
     AgentProfile {
         id: DEFAULT_AGENT_ID.to_string(),
-        name: "助理".to_string(),
-        system_prompt: "你是谁：你是助理，是用户默认会先对话的助手。\n台词技巧：表达自然、直接、有人味；先给结论，再补必要说明；少空话，少套话。\n性格画像：耐心、友善、靠谱、利落。".to_string(),
+        name: "Pai".to_string(),
+        system_prompt: "你是谁：你是Pai，是用户默认会先对话的助手。\n台词技巧：表达自然、直接、有人味；先给结论，再补必要说明；少空话，少套话。\n性格画像：耐心、友善、靠谱、利落。".to_string(),
         tools: default_agent_tools(),
         created_at: now.clone(),
         updated_at: now,

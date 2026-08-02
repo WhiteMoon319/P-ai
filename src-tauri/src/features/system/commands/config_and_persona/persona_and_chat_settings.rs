@@ -1063,8 +1063,11 @@ fn read_avatar_data_url_inner(
     state: &AppState,
 ) -> Result<AvatarDataUrlOutput, String> {
     if input.path.trim().is_empty() {
+        // 未设置头像时，返回内置品牌图标作为默认头像。
+        let bytes: &[u8] = include_bytes!("../../../../../icons/128x128.png");
+        let base64 = B64.encode(bytes);
         return Ok(AvatarDataUrlOutput {
-            data_url: String::new(),
+            data_url: format!("data:image/png;base64,{base64}"),
         });
     }
     let avatars_dir = avatar_storage_dir(&state)?;

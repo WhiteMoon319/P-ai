@@ -279,7 +279,6 @@ import { normalizeLocale } from "./i18n";
 import { useWindowShell } from "./features/shell/composables/use-window-shell";
 import { useAppTheme, isDarkAppTheme } from "./features/shell/composables/use-app-theme";
 import { useAppLifecycle } from "./features/shell/composables/use-app-lifecycle";
-import appIconUrl from "../src-tauri/icons/128x128.png";
 import { useAppCore } from "./features/shell/composables/use-app-core";
 import { useConfigCore } from "./features/config/composables/use-config-core";
 import { useConfigRuntime } from "./features/config/composables/use-config-runtime";
@@ -473,7 +472,7 @@ const toolDepartment = computed(() =>
 );
 const toolApiConfig = computed(() => config.apiConfigs.find((a) => a.id === (toolDepartment.value?.apiConfigId || "")) ?? null);
 
-const { resolveAvatarUrl, ensureAvatarCached, preloadPersonaAvatars } = useAvatarCache({ personas });
+const { resolveAvatarUrl, resolveBrandAvatarUrl, ensureAvatarCached, preloadPersonaAvatars } = useAvatarCache({ personas });
 const userAvatarUrl = computed(() => resolveAvatarUrl(userPersona.value?.avatarPath, userPersona.value?.avatarUpdatedAt));
 const userPersonaAvatarUrl = computed(() => userAvatarUrl.value);
 const selectedPersonaEditorAvatarUrl = computed(() => resolveAvatarUrl(selectedPersonaEditor.value?.avatarPath, selectedPersonaEditor.value?.avatarUpdatedAt));
@@ -494,8 +493,8 @@ const chatPersonaAvatarUrlMap = computed<Record<string, string>>(() => {
     const url = resolveAvatarUrl(persona.avatarPath, persona.avatarUpdatedAt);
     if (url) {
       next[id] = url;
-    } else if (!persona.isBuiltInUser && !persona.isBuiltInSystem && persona.id !== "user-persona" && persona.id !== "system-persona") {
-      next[id] = appIconUrl;
+    } else if (!persona.isBuiltInUser && persona.id !== "user-persona") {
+      next[id] = resolveBrandAvatarUrl();
     }
   }
   return next;
