@@ -102,6 +102,7 @@
       "builtinTabInstruction": "快捷指令",
       "builtinEscStopReplying": "打斷目前回覆",
       "builtinShiftTabPlanMode": "切換計劃模式",
+      "builtinAltZLineWrap": "切換程式碼預覽自動換行",
       "builtinShiftWheelConversationSwitch": "切換會話"
     },
     "notification": {

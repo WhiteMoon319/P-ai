@@ -102,6 +102,7 @@
       "builtinTabInstruction": "Shortcut Command",
       "builtinEscStopReplying": "Interrupt current reply",
       "builtinShiftTabPlanMode": "Toggle Plan Mode",
+      "builtinAltZLineWrap": "Toggle line wrap in code previews",
       "builtinShiftWheelConversationSwitch": "Switch Conversation"
     },
     "notification": {
