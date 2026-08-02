@@ -37,6 +37,10 @@ export type ChatMessageStreamSnapshot = {
   persistedAssistantMessageId?: string;
   speakerAgentId?: string;
   agentId?: string;
+  contextUsageRatio?: number;
+  contextUsagePercent?: number;
+  effectivePromptTokens?: number;
+  contextWindowTokens?: number;
 };
 
 export type ChatAssistantDelta = {

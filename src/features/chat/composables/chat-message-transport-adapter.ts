@@ -68,6 +68,10 @@ export function transportAssistantDeltaToMessageEvent(
         speakerAgentId: normalized(streamCache.speakerAgentId || streamCache.agentId) || undefined,
         frontendDispatchStartedAtMs: Math.max(0, Math.round(Number(streamCache.frontendDispatchStartedAtMs) || 0)) || undefined,
         frontendDispatchElapsedMs: Math.max(0, Math.round(Number(streamCache.frontendDispatchElapsedMs) || 0)) || undefined,
+        contextUsageRatio: typeof streamCache.contextUsageRatio === "number" ? streamCache.contextUsageRatio : undefined,
+        contextUsagePercent: typeof streamCache.contextUsagePercent === "number" ? streamCache.contextUsagePercent : undefined,
+        effectivePromptTokens: Math.max(0, Math.round(Number(streamCache.effectivePromptTokens) || 0)) || undefined,
+        contextWindowTokens: Math.max(0, Math.round(Number(streamCache.contextWindowTokens) || 0)) || undefined,
       } : undefined,
     },
   };

@@ -497,7 +497,38 @@ mod scheduler_stream_block_tests {
             updated_at: "2026-01-01T00:00:01Z".to_string(),
             has_visible_progress: true,
             persisted_assistant_message_id: "assistant-1".to_string(),
+            context_usage_ratio: 0.0,
+            context_usage_percent: 0,
+            effective_prompt_tokens: 0,
+            context_window_tokens: 0,
         }
+    }
+
+    #[test]
+    fn stream_cache_snapshot_should_carry_context_usage_fields() {
+        // 钉死：流式缓存快照必须携带上下文用量字段（ratio/percent/tokens），
+        // 前端随每个 delta 事件的 stream_cache 拿到最新占用率；若丢失这些字段，
+        // 工具执行期间的用量动态更新与切屏恢复都会失效。
+        let mut cache = ConversationStreamRuntimeCache::default();
+        cache.activation_id = "request-1".to_string();
+        cache.persisted_assistant_message_id = "assistant-1".to_string();
+        cache.assistant_text = "assistant text".to_string();
+        cache.tool_status_text = "running".to_string();
+        cache.tool_status_state = "running".to_string();
+        cache.updated_at = "2026-01-01T00:00:01Z".to_string();
+        cache.started_at = "2026-01-01T00:00:00Z".to_string();
+        cache.started_at_ms = 1;
+        cache.context_usage_ratio = 0.42;
+        cache.context_usage_percent = 42;
+        cache.effective_prompt_tokens = 4200;
+        cache.context_window_tokens = 10_000;
+
+        let snapshot = conversation_stream_runtime_cache_snapshot(cache);
+
+        assert_eq!(snapshot.context_usage_ratio, 0.42);
+        assert_eq!(snapshot.context_usage_percent, 42);
+        assert_eq!(snapshot.effective_prompt_tokens, 4200);
+        assert_eq!(snapshot.context_window_tokens, 10_000);
     }
 
     #[test]
@@ -814,7 +845,44 @@ fn conversation_stream_runtime_cache_snapshot(
         updated_at: stream_cache.updated_at,
         has_visible_progress,
         persisted_assistant_message_id: stream_cache.persisted_assistant_message_id,
+        context_usage_ratio: stream_cache.context_usage_ratio,
+        context_usage_percent: stream_cache.context_usage_percent,
+        effective_prompt_tokens: stream_cache.effective_prompt_tokens,
+        context_window_tokens: stream_cache.context_window_tokens,
     }
+}
+
+fn set_stream_cache_context_usage(
+    state: &AppState,
+    conversation_id: &str,
+    effective_prompt_tokens: u64,
+    context_window_tokens: u32,
+) {
+    if effective_prompt_tokens == 0 || context_window_tokens == 0 {
+        return;
+    }
+    let mut slots = match lock_conversation_runtime_slots(state) {
+        Ok(slots) => slots,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[聊天流式缓存] 更新上下文用量失败，锁错误: {err}"
+            ));
+            return;
+        }
+    };
+    let cid = conversation_id.trim();
+    if cid.is_empty() {
+        return;
+    }
+    let slot = conversation_slot_mut(&mut slots, cid);
+    let ratio = effective_prompt_tokens as f64 / f64::from(context_window_tokens);
+    slot.stream_cache.effective_prompt_tokens = effective_prompt_tokens;
+    slot.stream_cache.context_window_tokens = context_window_tokens;
+    slot.stream_cache.context_usage_ratio = ratio;
+    slot.stream_cache.context_usage_percent = ratio
+        .mul_add(100.0, 0.0)
+        .round()
+        .clamp(0.0, 100.0) as u32;
 }
 
 fn update_conversation_stream_runtime_cache(
