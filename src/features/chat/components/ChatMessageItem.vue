@@ -1022,16 +1022,18 @@ function activityExpandedItemsSignature(block: ChatMessageBlock): string {
 }
 
 function activityPanelMemoKey(block: ChatMessageBlock): unknown[] {
+  const panelOpen = activityPanelOpen(block);
   return [
     String(block.id || "").trim(),
     showActivityPanel(block),
     activityExpanded.value,
-    activityPanelOpen(block),
+    panelOpen,
     activityStatusText(block),
     activityReasoningCountLabel(block),
     activityToolCountsLabel(block),
-    activityItemsSignature(block),
-    activityExpandedItemsSignature(block),
+    // 折叠时内容区不渲染，items 全文签名只用于展开态检测内容变化；
+    // 数字/状态变化已由上面几项覆盖，折叠态跳过可避免流式时对思维链全文反复哈希。
+    ...(panelOpen ? [activityItemsSignature(block), activityExpandedItemsSignature(block)] : []),
   ];
 }
 

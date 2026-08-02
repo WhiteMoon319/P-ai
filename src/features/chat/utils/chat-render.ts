@@ -1,5 +1,4 @@
 import type { ChatMessageBlock } from "../../../types/app";
-import { textContentSignature } from "./text-signature";
 
 // ==================== 类型 ====================
 
@@ -71,10 +70,10 @@ function activityItemsSignature(block: ChatMessageBlock): string {
   return (block.activityItems || [])
     .map((item) => {
       if (item.kind === "reasoning") {
-        return ["r", item.id || "", textContentSignature(item.text), item.running ? "1" : "0"].join(":");
+        return ["r", item.id || "", String(item.text || "").length, item.running ? "1" : "0"].join(":");
       }
       if (item.kind === "content") {
-        return ["c", item.id || "", textContentSignature(item.text), item.running ? "1" : "0"].join(":");
+        return ["c", item.id || "", String(item.text || "").length, item.running ? "1" : "0"].join(":");
       }
       return [
         "t",
@@ -82,8 +81,8 @@ function activityItemsSignature(block: ChatMessageBlock): string {
         item.toolCallId || "",
         item.name || "",
         item.status || "",
-        textContentSignature(item.argsText),
-        textContentSignature(item.resultText),
+        String(item.argsText || "").length,
+        String(item.resultText || "").length,
       ].join(":");
     })
     .join("|");
