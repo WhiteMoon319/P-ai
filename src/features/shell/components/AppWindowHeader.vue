@@ -188,7 +188,7 @@
     <div v-if="viewMode !== 'chat'" class="relative z-10 min-w-0 justify-self-start flex items-center gap-2" @mousedown.stop>
       <button
         v-if="viewMode === 'config'"
-        class="btn btn-ghost btn-sm h-8 min-h-8 gap-1.5 px-2.5"
+        class="btn btn-primary btn-sm h-8 min-h-8 gap-1.5 px-2.5"
         type="button"
         :title="t('config.simpleSetupModeToggle')"
         @click.stop="$emit('update:simple-setup-mode', !simpleSetupMode)"
@@ -265,15 +265,6 @@
     </div>
 
     <div v-if="viewMode !== 'chat'" class="relative z-10 flex shrink-0 flex-nowrap justify-self-end gap-1 px-2" @mousedown.stop>
-      <button
-        v-if="viewMode === 'config'"
-        class="btn btn-primary btn-sm"
-        :title="t('window.startChat')"
-        @click.stop="$emit('start-chat')"
-      >
-        <MessageSquare class="h-3.5 w-3.5" />
-        <span>{{ t("window.startChat") }}</span>
-      </button>
       <button
         v-if="showWindowControls"
         class="btn btn-ghost btn-sm"
@@ -460,7 +451,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { getTransportCapabilities, invokeTauri, openTransportFileDialog } from "../../../services/tauri-api";
-import { Bolt, Columns3Cog, Download, FoldVertical, FolderOpen, History, MessageSquare, Minus, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, Search, Settings, Square, SquarePen, X } from "@lucide/vue";
+import { Bolt, Columns3Cog, Download, FoldVertical, FolderOpen, History, Minus, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, Search, Settings, Square, SquarePen, X } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ShellWorkspace, ShellWorkspaceAccess, ShellWorkMode } from "../../../types/app";
 import { defaultWorkspaceNameFromPath } from "../../../utils/shell-workspaces";
 import { buildWorkspaceConversationSections } from "../../chat/utils/conversation-sections";
@@ -567,7 +558,6 @@ const emit = defineEmits<{
   (e: "update:config-search-query", value: string): void;
   (e: "select-config-search-result", tab: ConfigSearchTab): void;
   (e: "update-to-latest"): void;
-  (e: "start-chat"): void;
   (e: "update:simple-setup-mode", value: boolean): void;
 }>();
 

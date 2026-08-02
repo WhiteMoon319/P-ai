@@ -113,7 +113,7 @@
             :config="config"
             :personas="personas"
             @jump="$emit('update:configTab', $event)"
-            @open-simple-setup="$emit('update:simpleSetupMode', true)"
+            @start-chat="$emit('start-chat')"
           />
 
           <HotkeyTab
@@ -518,7 +518,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "update:configTab", value: ConfigTab): void;
-  (e: "update:simpleSetupMode", value: boolean): void;
   (e: "update:uiLanguage", value: string): void;
   (e: "update:uiSizeScale", value: number): void;
   (e: "update:githubUpdateMethod", value: AppConfig["githubUpdateMethod"]): void;
@@ -562,6 +561,7 @@ const emit = defineEmits<{
   (e: "clearAgentAvatar", value: { agentId: string }): void;
   (e: "checkUpdate"): void;
   (e: "openGithub"): void;
+  (e: "start-chat"): void;
 }>();
 
 const { t } = useI18n();
