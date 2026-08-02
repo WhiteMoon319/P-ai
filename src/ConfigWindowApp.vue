@@ -212,6 +212,7 @@
       :update-dialog-skip-version-visible="updateDialogSkipVersionVisible"
       :update-dialog-cancel-update-visible="updateDialogCancelUpdateVisible"
       :update-dialog-cancel-pending="updateCancelPending"
+      :markdown-is-dark="markdownIsDark"
       :runtime-logs-dialog-open="false"
       :runtime-logs="[]"
       :runtime-logs-loading="false"
@@ -271,7 +272,7 @@ import { getTransportCapabilities, invokeTauri, openTransportWindow } from "./se
 import type { AppConfig, PromptCommandPreset } from "./types/app";
 import { normalizeLocale } from "./i18n";
 import { useWindowShell } from "./features/shell/composables/use-window-shell";
-import { useAppTheme } from "./features/shell/composables/use-app-theme";
+import { useAppTheme, isDarkAppTheme } from "./features/shell/composables/use-app-theme";
 import { useAppLifecycle } from "./features/shell/composables/use-app-lifecycle";
 import { useAppCore } from "./features/shell/composables/use-app-core";
 import { useConfigCore } from "./features/config/composables/use-config-core";
@@ -409,6 +410,8 @@ const {
   resetGeneratedTheme,
   restoreThemeFromStorage,
 } = useAppTheme();
+
+const markdownIsDark = computed(() => isDarkAppTheme(currentTheme.value));
 
 const {
   setStatus,

@@ -293,6 +293,102 @@ fn parse_named_server_map(
 /// 5. 单 server 直接字段（向后兼容）
 ///
 /// Err 只用于整体无法解析（JSON 语法错、根类型错、空容器、mcpServers 类型错）。
+fn normalize_mcp_member_name(raw: &str) -> Option<String> {
+    let mut out = String::with_capacity(raw.len());
+    let mut has_legal_identifier_char = false;
+    let mut previous_was_separator = false;
+    for ch in raw.trim().chars() {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-') {
+            has_legal_identifier_char = true;
+            out.push(ch);
+            previous_was_separator = false;
+        } else if ch.is_ascii_whitespace() || matches!(ch, '.' | ':' | '/' | '\\') {
+            if !previous_was_separator && !out.is_empty() {
+                out.push('_');
+                previous_was_separator = true;
+            }
+        }
+    }
+    if !has_legal_identifier_char {
+        return None;
+    }
+    Some(out.trim_matches('_').to_string())
+}
+
+fn normalized_mcp_member_name_or_original(raw: &str) -> String {
+    normalize_mcp_member_name(raw).unwrap_or_else(|| raw.trim().to_string())
+}
+
+fn normalized_unique_mcp_member_name(raw: &str, used_names: &mut std::collections::HashSet<String>) -> String {
+    let base = normalized_mcp_member_name_or_original(raw);
+    if used_names.insert(base.clone()) {
+        return base;
+    }
+    let mut suffix = 2usize;
+    loop {
+        let candidate = format!("{base}_{suffix}");
+        if used_names.insert(candidate.clone()) {
+            return candidate;
+        }
+        suffix += 1;
+    }
+}
+
+fn normalize_mcp_member_name_in_array(items: &mut [Value]) {
+    let mut used_names = std::collections::HashSet::<String>::new();
+    for item in items {
+        let Some(object) = item.as_object_mut() else {
+            continue;
+        };
+        let Some(name) = object.get("name").and_then(Value::as_str) else {
+            continue;
+        };
+        object.insert(
+            "name".to_string(),
+            Value::String(normalized_unique_mcp_member_name(name, &mut used_names)),
+        );
+    }
+}
+
+fn normalize_mcp_member_name_in_map(map: &mut serde_json::Map<String, Value>) {
+    let original = std::mem::take(map);
+    let mut used_names = std::collections::HashSet::<String>::new();
+    for (name, value) in original {
+        map.insert(normalized_unique_mcp_member_name(&name, &mut used_names), value);
+    }
+}
+
+fn normalize_mcp_definition_member_names(definition_json: &str) -> Result<String, String> {
+    let mut definition: Value = serde_json::from_str(definition_json)
+        .map_err(|err| format!("Parse MCP definition JSON failed: {err}"))?;
+    if let Some(items) = definition.as_array_mut() {
+        normalize_mcp_member_name_in_array(items);
+    } else if let Some(root) = definition.as_object_mut() {
+        if let Some(servers) = root.get_mut("mcpServers") {
+            if let Some(map) = servers.as_object_mut() {
+                normalize_mcp_member_name_in_map(map);
+            } else if let Some(items) = servers.as_array_mut() {
+                normalize_mcp_member_name_in_array(items);
+            }
+        } else {
+            let is_named_server_map = !root
+                .keys()
+                .any(|key| is_server_direct_field(key) || key.eq_ignore_ascii_case("name"))
+                && root.values().all(Value::is_object);
+            if is_named_server_map {
+                normalize_mcp_member_name_in_map(root);
+            } else if let Some(name) = root.get("name").and_then(Value::as_str) {
+                root.insert(
+                    "name".to_string(),
+                    Value::String(normalized_mcp_member_name_or_original(name)),
+                );
+            }
+        }
+    }
+    serde_json::to_string_pretty(&definition)
+        .map_err(|err| format!("Serialize normalized MCP definition JSON failed: {err}"))
+}
+
 fn parse_mcp_definition_servers(
     definition_json: &str,
 ) -> Result<ParsedMcpDefinition, McpDefinitionValidationError> {

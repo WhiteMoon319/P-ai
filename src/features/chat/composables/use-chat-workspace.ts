@@ -84,14 +84,19 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
     return "read_only";
   });
   const chatWorkspacePermissionLabel = computed(() => {
-    if (chatWorkspaceAutonomousMode.value) return t("chat.workspacePermissionFull");
-    if (chatWorkspaceEffectiveAccess.value === "full_access") return t("chat.workspacePermissionDirectoryFull");
-    if (chatWorkspaceEffectiveAccess.value === "approval") return t("chat.workspacePermissionDirectoryApproval");
-    return t("chat.workspacePermissionReadOnly");
+    if (chatWorkspaceAutonomousMode.value) return t("chat.workspaceStatusPermissionAutonomous");
+    if (chatWorkspaceEffectiveAccess.value === "full_access") return t("chat.workspaceStatusPermissionFull");
+    if (chatWorkspaceEffectiveAccess.value === "approval") return t("chat.workspaceStatusPermissionApproval");
+    return t("chat.workspaceStatusPermissionReadOnly");
+  });
+  const chatWorkspaceWorkModeLabel = computed(() => {
+    if (chatWorkspaceWorkMode.value === "independent_worktree") return t("chat.workspaceStatusModeIndependentWorktree");
+    if (chatWorkspaceWorkMode.value === "isolated_worktree") return t("chat.workspaceStatusModeWorktree");
+    return t("chat.workspaceStatusModeDirectory");
   });
   const chatWorkspaceDisplayName = computed(() => {
     const workspaceName = String(chatWorkspaceName.value || "").trim() || DEFAULT_CHAT_WORKSPACE_NAME;
-    return `${chatWorkspacePermissionLabel.value} · ${workspaceName}`;
+    return `${chatWorkspaceWorkModeLabel.value} · ${chatWorkspacePermissionLabel.value} · ${workspaceName}`;
   });
 
   function applyChatWorkspaceState(state: ChatShellWorkspaceState) {
@@ -99,7 +104,9 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
     chatWorkspaceRootPath.value = nextPath;
     chatWorkspaceItems.value = Array.isArray(state.workspaces) ? state.workspaces : [];
     chatWorkspaceAutonomousMode.value = Boolean(state.autonomousMode);
-    chatWorkspaceWorkMode.value = state.shellWorkMode === "isolated_worktree" ? "isolated_worktree" : "directory";
+    chatWorkspaceWorkMode.value = state.shellWorkMode === "isolated_worktree" || state.shellWorkMode === "independent_worktree"
+      ? state.shellWorkMode
+      : "directory";
     chatWorkspaceName.value = resolveWorkspaceDisplayName(nextPath, String(state.workspaceName || "").trim());
     chatWorkspacePath.value = nextPath;
   }
@@ -192,7 +199,9 @@ export function useChatWorkspace(options: UseChatWorkspaceOptions) {
     const previousWorkMode = chatWorkspaceWorkMode.value;
     applyChatWorkspaceDraft(workspaces);
     chatWorkspaceAutonomousMode.value = Boolean(autonomousMode);
-    chatWorkspaceWorkMode.value = workMode === "isolated_worktree" ? "isolated_worktree" : "directory";
+    chatWorkspaceWorkMode.value = workMode === "isolated_worktree" || workMode === "independent_worktree"
+      ? workMode
+      : "directory";
     try {
       const state = await invokeTauri<ChatShellWorkspaceState>("workspace.layout.save", {
         conversationId,

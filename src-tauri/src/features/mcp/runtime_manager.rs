@@ -39,18 +39,15 @@ fn parse_mcp_group_definitions(
     Ok(out)
 }
 
-/// 组内成员工具名统一带前缀：{成员名}_{工具名}
+/// 组内成员工具名统一带规范化前缀：{成员名}_{工具名}
 fn mcp_tool_prefixed_name(member_name: &str, tool_name: &str) -> String {
-    format!("{member_name}_{tool_name}")
+    format!("{}_{tool_name}", normalized_mcp_member_name_or_original(member_name))
 }
 
-/// 从带前缀工具名还原 (成员名, 原始工具名)，按最后一个下划线从右拆分
-fn mcp_tool_split_prefixed_name(prefixed: &str) -> Option<(String, String)> {
-    let idx = prefixed.rfind('_')?;
-    if idx == 0 || idx + 1 >= prefixed.len() {
-        return None;
-    }
-    Some((prefixed[..idx].to_string(), prefixed[idx + 1..].to_string()))
+fn mcp_member_name_compatibility_error(member_name: &str) -> Option<String> {
+    normalize_mcp_member_name(member_name).is_none().then(|| {
+        "MCP 组成员名规范化后没有可用字符，工具无法挂载".to_string()
+    })
 }
 
 #[cfg(target_os = "windows")]
@@ -121,6 +118,7 @@ fn mcp_try_attach_windows_process_tree_guard_for_label(
 #[derive(Clone)]
 struct McpRuntimeTool {
     definition: rmcp::model::Tool,
+    raw_tool_name: String,
     client: rmcp::service::Peer<rmcp::RoleClient>,
 }
 
@@ -129,6 +127,7 @@ struct CachedMcpRuntimeTool {
     app_state: AppState,
     server_id: String,
     executor_department_id: String,
+    runtime_tool_name: String,
     definition: rmcp::model::Tool,
 }
 
@@ -305,6 +304,7 @@ impl RuntimeToolDyn for McpRuntimeTool {
 
     fn call_json(&self, args_json: String) -> RuntimeToolCallFuture<'_> {
         let name = self.definition.name.clone();
+        let raw_tool_name = self.raw_tool_name.clone();
         Box::pin(async move {
             let arguments = if args_json.trim().is_empty() {
                 serde_json::Map::new()
@@ -312,10 +312,6 @@ impl RuntimeToolDyn for McpRuntimeTool {
                 serde_json::from_str::<serde_json::Map<String, Value>>(&args_json)
                     .map_err(|err| format!("Parse MCP tool args failed: {err}"))?
             };
-            // 工具名带 {成员名}_{工具名} 前缀，调用时还原为原始工具名
-            let raw_tool_name = mcp_tool_split_prefixed_name(&name)
-                .map(|(_, raw)| raw)
-                .unwrap_or_else(|| name.as_ref().to_string());
             let result = tokio::time::timeout(
                 std::time::Duration::from_secs(MCP_TOOL_CALL_TIMEOUT_SECS),
                 self.client
@@ -348,6 +344,7 @@ impl RuntimeToolDyn for CachedMcpRuntimeTool {
         let app_state = self.app_state.clone();
         let server_id = self.server_id.clone();
         let executor_department_id = self.executor_department_id.clone();
+        let runtime_tool_name = self.runtime_tool_name.clone();
         let definition = self.definition.clone();
         Box::pin(async move {
             let server = match load_server_by_id(&app_state, &server_id) {
@@ -366,14 +363,19 @@ impl RuntimeToolDyn for CachedMcpRuntimeTool {
                 }
             };
             let tool_name = definition.name.to_string();
-            let current_tool_enabled = list_tools_from_runtime(&server)
+            let current_tool = list_tools_from_runtime(&server)
                 .into_iter()
-                .any(|tool| tool.tool_name == tool_name && tool.enabled);
-            if !current_tool_enabled {
+                .find(|tool| tool.tool_name == runtime_tool_name && tool.enabled);
+            let Some(current_tool) = current_tool else {
                 return Ok(ProviderToolResult::error(format!(
                     "MCP 工具 `{tool_name}` 当前不可用：工具已停用或运行态已失效"
                 )));
-            }
+            };
+            let raw_tool_name = if current_tool.raw_tool_name.is_empty() {
+                tool_name.clone()
+            } else {
+                current_tool.raw_tool_name.clone()
+            };
             let app_config = match state_read_config_cached(&app_state) {
                 Ok(config) => config,
                 Err(err) => {
@@ -387,19 +389,24 @@ impl RuntimeToolDyn for CachedMcpRuntimeTool {
                     "MCP 工具 `{tool_name}` 当前不可用：执行部门已不存在"
                 )));
             };
-            let qualified_by_name = format!("{}::{tool_name}", server.name);
-            let qualified_by_id = format!("{}::{tool_name}", server.id);
+            let qualified_by_name = format!("{}::{runtime_tool_name}", server.name);
+            let qualified_by_id = format!("{}::{runtime_tool_name}", server.id);
             if !department_permission_allows_any_name(
                 Some(department),
                 DepartmentPermissionCategory::McpTool,
-                &[qualified_by_name.as_str(), qualified_by_id.as_str(), tool_name.as_str()],
+                &[
+                    qualified_by_name.as_str(),
+                    qualified_by_id.as_str(),
+                    runtime_tool_name.as_str(),
+                    tool_name.as_str(),
+                ],
             ) {
                 return Ok(ProviderToolResult::error(format!(
                     "MCP 工具 `{qualified_by_name}` 当前不可用：部门权限已撤销"
                 )));
             }
-            let peer = match mcp_get_or_connect_peer_for_tool(Some(&app_state), &server, definition.name.as_ref()).await {
-                Ok(peer) => peer,
+let (peer, _) = match mcp_get_or_connect_peer_for_tool(Some(&app_state), &server, &runtime_tool_name).await {
+                Ok(result) => result,
                 Err(err) => {
                     return Ok(ProviderToolResult::error(format!(
                         "MCP 工具 `{tool_name}` 暂时不可用，已跳过本次调用：{err}"
@@ -408,6 +415,7 @@ impl RuntimeToolDyn for CachedMcpRuntimeTool {
             };
             let tool = McpRuntimeTool {
                 definition,
+                raw_tool_name,
                 client: peer,
             };
             match tool.call_json(args_json).await {
@@ -1216,16 +1224,22 @@ async fn mcp_get_or_connect_peer_for_tool(
     state: Option<&AppState>,
     server: &McpServerConfig,
     tool_name: &str,
-) -> Result<rmcp::service::Peer<rmcp::RoleClient>, String> {
+) -> Result<(rmcp::service::Peer<rmcp::RoleClient>, String), String> {
     if !mcp_policy_enabled_for_tool(server, tool_name) || !mcp_tool_allowed_by_definition(server, tool_name) {
         return Err(format!(
             "MCP tool '{}' is disabled by policy for server '{}'",
             tool_name, server.id
         ));
     }
-    let (member_name, _) = mcp_tool_split_prefixed_name(tool_name).ok_or_else(|| {
-        format!("MCP tool '{}' has no member prefix", tool_name)
-    })?;
+let member_name = parse_mcp_group_definitions(server)?
+        .into_iter()
+        .map(|(member_name, _, _)| member_name)
+        .filter(|member_name| {
+            let prefix = format!("{}_", normalized_mcp_member_name_or_original(member_name));
+            tool_name.starts_with(&prefix)
+        })
+        .max_by_key(|member_name| member_name.len())
+        .ok_or_else(|| format!("MCP tool '{}' has no matching member prefix", tool_name))?;
     mcp_get_or_connect_client(state, server).await?;
     let cache = mcp_client_cache();
     let guard = cache.lock().await;
@@ -1238,7 +1252,7 @@ async fn mcp_get_or_connect_peer_for_tool(
                 server.id
             )
         })?;
-    Ok(cached.client.peer().clone())
+    Ok((cached.client.peer().clone(), member_name))
 }
 
 async fn mcp_list_server_tools_runtime(state: Option<&AppState>, server: &McpServerConfig) -> Result<Vec<McpToolDescriptor>, String> {
@@ -1247,6 +1261,7 @@ async fn mcp_list_server_tools_runtime(state: Option<&AppState>, server: &McpSer
     let mut seen_names = std::collections::HashSet::<String>::new();
     let mut duplicate_names = Vec::<String>::new();
     for (member_name, _, _) in &members {
+let member_compatibility_error = mcp_member_name_compatibility_error(member_name);
         let (_peer, tools) = mcp_list_tools_with_peer(state, server, member_name).await?;
         for def in tools {
             let raw_name = def.name.to_string();
@@ -1261,6 +1276,9 @@ async fn mcp_list_server_tools_runtime(state: Option<&AppState>, server: &McpSer
                     && mcp_tool_allowed_by_definition(server, &prefixed),
                 tool_name: prefixed,
                 description,
+                compatibility_error: member_compatibility_error.clone(),
+                member_name: member_name.clone(),
+                raw_tool_name: raw_name,
                 parameters: serde_json::Value::Object(def.input_schema.as_ref().clone()),
             });
         }

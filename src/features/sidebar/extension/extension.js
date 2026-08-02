@@ -347,12 +347,6 @@ class PaiSidebarProvider {
         });
         return;
       }
-      if (message && message.type === "pai-open-settings") {
-        openExternalUrl(message.url).catch((error) => {
-          const detail = error && error.message ? error.message : String(error);
-          void vscode.window.showWarningMessage(`打开本机设置失败：${detail}`);
-        });
-      }
     });
     webview.html = this.html(webview, assets);
     this.postDiscovery();

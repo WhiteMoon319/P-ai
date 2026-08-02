@@ -464,8 +464,6 @@ const SYSTEM_DEPARTMENT_IDS = new Set([
   "saddler-department",
   "remote-customer-service-department",
 ]);
-const FIXED_PRESET_DEPARTMENT_IDS = new Set(["deputy-department", "reviewer-department", "saddler-department"]);
-const FIXED_PRESET_ASSISTANT_CHILD_IDS = ["deputy-department", "reviewer-department", "saddler-department"];
 
 const TEXT_REQUEST_FORMATS = new Set([
   "auto",
@@ -1221,7 +1219,7 @@ function applyUpdatedAtToChangedDepartments(
 }
 
 function prepareDepartmentsForSave(departments: DepartmentConfig[]) {
-  const normalized = departments.map((department) => {
+  return departments.map((department) => {
     const departmentId = String(department.id || "").trim();
     const apiConfigIds = departmentModelIdsForSave(department);
     return {
@@ -1229,22 +1227,8 @@ function prepareDepartmentsForSave(departments: DepartmentConfig[]) {
       apiConfigIds,
       apiConfigId: apiConfigIds[0] || "",
       modelFailureFallbackEnabled: departmentCanEnableModelFailureFallback(department) && department.modelFailureFallbackEnabled,
-      childDepartmentIds: FIXED_PRESET_DEPARTMENT_IDS.has(departmentId)
-        ? []
-        : normalizeDepartmentChildIds(department.childDepartmentIds, departmentId).filter((childId) =>
-            !FIXED_PRESET_DEPARTMENT_IDS.has(childId) || departmentId === "assistant-department" || !!department.isBuiltInAssistant
-          ),
+      childDepartmentIds: normalizeDepartmentChildIds(department.childDepartmentIds, departmentId),
       permissionControl: normalizePermissionControl(department.permissionControl),
-    };
-  });
-  return normalized.map((department) => {
-    if (String(department.id || "").trim() !== "assistant-department" && !department.isBuiltInAssistant) return department;
-    return {
-      ...department,
-      childDepartmentIds: normalizeDepartmentChildIds(
-        [...department.childDepartmentIds, ...FIXED_PRESET_ASSISTANT_CHILD_IDS],
-        department.id,
-      ),
     };
   });
 }

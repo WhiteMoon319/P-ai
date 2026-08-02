@@ -1047,6 +1047,16 @@ export async function openTransportSettings(): Promise<boolean> {
     return openTransportWindow("main");
   }
   if (typeof window === "undefined") return false;
+  // VS Code 侧边栏：直接通知后端打开本机设置窗口，不经过扩展宿主打开外部 URL。
+  if (getVsCodeHostApi()) {
+    try {
+      await invokeWebBridge("show_main_window");
+      return true;
+    } catch (error) {
+      console.warn("[设置] 通知后端打开设置窗口失败:", error);
+      return false;
+    }
+  }
   const path = window.location.pathname.endsWith(".html") ? "settings.html" : "/settings";
   const url = new URL(path, window.location.href);
   const config = ensureWebBridgeConfig();
@@ -1056,10 +1066,6 @@ export async function openTransportSettings(): Promise<boolean> {
   if (isAndroidRuntime()) {
     url.searchParams.set("platform", "android");
     window.location.href = url.toString();
-    return true;
-  }
-  // VS Code 侧边栏不能直接使用 Tauri 窗口命令，由扩展宿主打开本机设置地址。
-  if (getVsCodeHostApi() && postTransportHostMessage({ type: "pai-open-settings", url: url.toString() })) {
     return true;
   }
   return openTransportExternalUrl(url.toString());

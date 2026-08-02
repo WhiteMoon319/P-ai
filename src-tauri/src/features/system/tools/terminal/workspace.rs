@@ -917,6 +917,52 @@ fn terminal_match_workspace_for_session_target(
     terminal_match_workspace_for_target_in_conversation(state, conversation.as_ref(), target)
 }
 
+fn terminal_worktree_write_rejection(
+    state: &AppState,
+    session_id: &str,
+    targets: &[PathBuf],
+) -> Result<Option<String>, String> {
+    let Some(conversation) = terminal_session_conversation(state, session_id)? else {
+        return Ok(None);
+    };
+    if conversation.shell_autonomous_mode {
+        return Ok(None);
+    }
+    let mode = normalize_shell_work_mode_text(&conversation.shell_work_mode);
+    if mode == SHELL_WORK_MODE_DIRECTORY {
+        return Ok(None);
+    }
+    let root = terminal_default_workspace_for_conversation_resolved(state, Some(&conversation))?.path;
+    let pai_dir = terminal_normalize_for_access_check(&root.join(".pai"));
+    let worktree_dir = terminal_normalize_for_access_check(&pai_dir.join(".worktree"));
+    let dedicated_dir = terminal_normalize_for_access_check(
+        &worktree_dir.join(conversation.id.chars().take(8).collect::<String>()),
+    );
+    for target in targets {
+        let target = terminal_normalize_for_access_check(target);
+        if !path_is_within(&pai_dir, &target) {
+            return Ok(Some(format!(
+                "当前工作模式为“{}”，写入目标“{}”不在允许范围内。工作树模式只能写入“{}”；请改用该目录下的路径。",
+                if mode == SHELL_WORK_MODE_INDEPENDENT_WORKTREE { "独立工作树" } else { "在隔离工作树" },
+                terminal_path_for_user(&target),
+                terminal_path_for_user(&pai_dir),
+            )));
+        }
+        if mode == SHELL_WORK_MODE_INDEPENDENT_WORKTREE
+            && path_is_within(&worktree_dir, &target)
+            && !path_is_within(&dedicated_dir, &target)
+        {
+            return Ok(Some(format!(
+                "当前工作模式为“独立工作树”，写入目标“{}”属于其他工作树。当前会话只能在“{}”修改项目；计划、Skill 等工作记录仍可写入“{}”。",
+                terminal_path_for_user(&target),
+                terminal_path_for_user(&dedicated_dir),
+                terminal_path_for_user(&pai_dir),
+            )));
+        }
+    }
+    Ok(None)
+}
+
 fn terminal_prompt_trusted_roots_block(
     state: &AppState,
     selected_api: &ApiConfig,
@@ -977,15 +1023,28 @@ fn terminal_prompt_trusted_roots_block(
             "{}：当前工作目录（Session Working Directory）",
             terminal_path_for_user(&default_workspace.path)
         ));
-        if conversation
+        let work_mode = conversation
             .map(|value| normalize_shell_work_mode_text(&value.shell_work_mode))
-            .as_deref()
-            == Some(SHELL_WORK_MODE_ISOLATED_WORKTREE)
-        {
+            .unwrap_or_else(default_shell_work_mode);
+        if work_mode == SHELL_WORK_MODE_ISOLATED_WORKTREE {
             let root = terminal_path_for_user(&default_workspace.path);
             lines.push(format!(
                 "用户希望在隔离工作树中工作。请以「{}」作为 Git 仓库根目录，根据任务需要在「{}/.pai/.worktree/」下创建或复用 Git worktree，并在对应工作树中完成修改；不要直接修改仓库根工作区的项目文件。",
                 root, root
+            ));
+            lines.push("创建前检查仓库根工作区是否存在未提交改动；如果任务依赖这些改动，先询问用户，不得自行提交、暂存、stash 或复制。".to_string());
+            lines.push("注意不要让 .pai/ 被 Git 追踪。不要自动删除工作树或分支，除非用户明确要求。".to_string());
+        } else if work_mode == SHELL_WORK_MODE_INDEPENDENT_WORKTREE {
+            let root = terminal_path_for_user(&default_workspace.path);
+            let session_id = conversation.map(|value| value.id.chars().take(8).collect::<String>()).unwrap_or_default();
+            let worktree = format!("{root}/.pai/.worktree/{session_id}");
+            lines.push(format!(
+                "用户希望在独立工作树中工作。项目修改只能发生在「{}」；本项目的工作记录仍维护在「{}/.pai/**」，包括 plan、skill 等所有 .pai 文件。",
+                worktree, root
+            ));
+            lines.push(format!(
+                "指定工作树不存在时，先检查 Git 状态后自行在该固定目录创建；不得改用其他工作树，也不得修改原始项目根目录的项目文件。默认 cwd 保持「{}」，需要项目修改时请显式进入或指定该工作树。",
+                root
             ));
             lines.push("创建前检查仓库根工作区是否存在未提交改动；如果任务依赖这些改动，先询问用户，不得自行提交、暂存、stash 或复制。".to_string());
             lines.push("注意不要让 .pai/ 被 Git 追踪。不要自动删除工作树或分支，除非用户明确要求。".to_string());
@@ -1816,6 +1875,146 @@ mod terminal_workspace_tests {
         assert!(block.contains("不要让 .pai/ 被 Git 追踪"));
         assert!(block.contains("不得自行提交、暂存、stash 或复制"));
         assert!(!block.contains("用户希望直接在当前工作目录中工作"));
+        let _ = std::fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn terminal_prompt_trusted_roots_block_should_describe_independent_worktree_mode() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "easy-call-ai-terminal-independent-worktree-prompt-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp_root).expect("create workspace");
+        let state = build_test_state(temp_root.clone());
+        let mut config = AppConfig::default();
+        config.shell_workspaces = vec![ShellWorkspaceConfig {
+            id: "workspace-main".to_string(),
+            name: "项目".to_string(),
+            path: temp_root.to_string_lossy().to_string(),
+            level: SHELL_WORKSPACE_LEVEL_MAIN.to_string(),
+            access: SHELL_WORKSPACE_ACCESS_APPROVAL.to_string(),
+            built_in: false,
+        }];
+        state_write_config_cached(&state, &config).expect("write config");
+        let mut conversation = build_workspace_test_conversation("a1b2c3d4-independent-worktree");
+        conversation.shell_workspaces = config.shell_workspaces.clone();
+        conversation.shell_work_mode = SHELL_WORK_MODE_INDEPENDENT_WORKTREE.to_string();
+        let mut api = ApiConfig::default();
+        api.enable_tools = true;
+        api.tools = vec![ApiToolConfig {
+            id: "exec".to_string(),
+            command: String::new(),
+            args: Vec::new(),
+            enabled: true,
+            values: Value::Null,
+        }];
+
+        let block = terminal_prompt_trusted_roots_block(&state, &api, Some(&conversation))
+            .expect("terminal block");
+
+        assert!(block.contains("独立工作树"));
+        assert!(block.contains(".pai/.worktree/a1b2c3d4"));
+        assert!(block.contains("不得改用其他工作树"));
+        assert!(block.contains("工作记录仍维护"));
+        let _ = std::fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn terminal_worktree_write_rejection_should_enforce_mode_boundaries() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "easy-call-ai-terminal-worktree-write-boundary-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let root = temp_root.join("project");
+        let pai_dir = root.join(".pai");
+        let dedicated_dir = pai_dir.join(".worktree").join("a1b2c3d4");
+        let other_worktree_dir = pai_dir.join(".worktree").join("other-session");
+        std::fs::create_dir_all(pai_dir.join("plan")).expect("create plan directory");
+        std::fs::create_dir_all(&dedicated_dir).expect("create dedicated worktree directory");
+        std::fs::create_dir_all(&other_worktree_dir).expect("create other worktree directory");
+        let state = build_test_state(root.clone());
+        let workspace = ShellWorkspaceConfig {
+            id: "workspace-main".to_string(),
+            name: "项目".to_string(),
+            path: root.to_string_lossy().to_string(),
+            level: SHELL_WORKSPACE_LEVEL_MAIN.to_string(),
+            access: SHELL_WORKSPACE_ACCESS_FULL_ACCESS.to_string(),
+            built_in: false,
+        };
+        let mut config = AppConfig::default();
+        config.shell_workspaces = vec![workspace.clone()];
+        state_write_config_cached(&state, &config).expect("write config");
+        let mut conversation = build_workspace_test_conversation("a1b2c3d4-conversation");
+        conversation.shell_workspaces = vec![workspace];
+        let session_id = normalize_terminal_tool_session_id(&inflight_chat_key(
+            DEFAULT_AGENT_ID,
+            Some(&conversation.id),
+        ));
+        let mut data = AppData::default();
+        data.conversations.push(conversation.clone());
+
+        conversation.shell_work_mode = SHELL_WORK_MODE_ISOLATED_WORKTREE.to_string();
+        data.conversations[0] = conversation.clone();
+        state_write_app_data_cached(&state, &data).expect("write isolated conversation");
+        let root_source_rejection = terminal_worktree_write_rejection(
+            &state,
+            &session_id,
+            &[root.join("src").join("main.rs")],
+        )
+        .expect("check isolated root source");
+        assert!(root_source_rejection
+            .as_deref()
+            .is_some_and(|reason| reason.contains("允许范围")));
+        assert!(terminal_worktree_write_rejection(
+            &state,
+            &session_id,
+            &[pai_dir.join("plan").join("record.md")],
+        )
+        .expect("check isolated plan")
+        .is_none());
+
+        conversation.shell_work_mode = SHELL_WORK_MODE_INDEPENDENT_WORKTREE.to_string();
+        data.conversations[0] = conversation.clone();
+        state_write_app_data_cached(&state, &data).expect("write independent conversation");
+        assert!(terminal_worktree_write_rejection(
+            &state,
+            &session_id,
+            &[dedicated_dir.join("src").join("main.rs")],
+        )
+        .expect("check dedicated worktree")
+        .is_none());
+        let other_worktree_rejection = terminal_worktree_write_rejection(
+            &state,
+            &session_id,
+            &[other_worktree_dir.join("src").join("main.rs")],
+        )
+        .expect("check other worktree");
+        assert!(other_worktree_rejection
+            .as_deref()
+            .is_some_and(|reason| reason.contains("属于其他工作树")));
+
+        conversation.shell_work_mode = SHELL_WORK_MODE_DIRECTORY.to_string();
+        data.conversations[0] = conversation.clone();
+        state_write_app_data_cached(&state, &data).expect("write directory conversation");
+        assert!(terminal_worktree_write_rejection(
+            &state,
+            &session_id,
+            &[root.join("src").join("main.rs")],
+        )
+        .expect("check directory mode")
+        .is_none());
+
+        conversation.shell_work_mode = SHELL_WORK_MODE_INDEPENDENT_WORKTREE.to_string();
+        conversation.shell_autonomous_mode = true;
+        data.conversations[0] = conversation;
+        state_write_app_data_cached(&state, &data).expect("write autonomous conversation");
+        assert!(terminal_worktree_write_rejection(
+            &state,
+            &session_id,
+            &[root.join("src").join("main.rs")],
+        )
+        .expect("check autonomous mode")
+        .is_none());
         let _ = std::fs::remove_dir_all(temp_root);
     }
 }

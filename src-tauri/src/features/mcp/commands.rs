@@ -1,14 +1,41 @@
+fn normalized_mcp_member_names(definition_json: &str) -> Result<std::collections::HashSet<String>, String> {
+    let parsed = parse_mcp_definition_servers(definition_json)
+        .map_err(|err| err.message.clone())?;
+    Ok(parsed
+        .servers
+        .into_iter()
+        .map(|(member_name, _)| normalized_mcp_member_name_or_original(&member_name))
+        .collect())
+}
+
+fn ensure_mcp_member_names_are_unique_across_servers(
+    next: &McpServerConfig,
+    existing_servers: &[McpServerConfig],
+) -> Result<(), String> {
+    let next_member_names = normalized_mcp_member_names(&next.definition_json)?;
+    for server in existing_servers.iter().filter(|server| server.id != next.id) {
+        let existing_member_names = normalized_mcp_member_names(&server.definition_json)?;
+        if let Some(member_name) = next_member_names.intersection(&existing_member_names).next() {
+            return Err(format!(
+                "MCP 组成员名规范化后与现有卡片重复：{member_name}"
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn normalize_mcp_server_input(input: McpServerInput) -> Result<McpServerConfig, String> {
     let id = input.id.trim().to_string();
     if id.is_empty() {
         return Err("MCP server id is required".to_string());
     }
     let input_name = input.name.trim().to_string();
-    let definition_json = input.definition_json.trim().to_string();
-    if definition_json.is_empty() {
+    let raw_definition_json = input.definition_json.trim();
+    if raw_definition_json.is_empty() {
         return Err("MCP definition JSON is required".to_string());
     }
-    // 卡片 = 一组 MCP：definitionJson 可包含多个服务器，整组原样保存
+    let definition_json = normalize_mcp_definition_member_names(raw_definition_json)?;
+    // 卡片 = 一组 MCP：definitionJson 可包含多个服务器，保存时规范化成员名。
     // 组内首个成员名作为解析名兜底
     let parsed_name = parse_mcp_definition_servers(&definition_json)
         .ok()
@@ -70,6 +97,9 @@ fn list_tools_from_runtime_or_policy(server: &McpServerConfig) -> Vec<McpToolDes
             tool_name: policy.tool_name.clone(),
             description: String::new(),
             enabled: mcp_tool_allowed_by_definition(server, &policy.tool_name) && policy.enabled,
+            compatibility_error: None,
+            member_name: String::new(),
+            raw_tool_name: String::new(),
             parameters: serde_json::Value::Object(serde_json::Map::new()),
         })
         .collect()
@@ -403,6 +433,8 @@ fn mcp_save_server_inner(
     state: &AppState,
 ) -> Result<McpServerConfig, String> {
     let next = normalize_mcp_server_input(input)?;
+    let existing_servers = load_workspace_mcp_servers(state)?;
+    ensure_mcp_member_names_are_unique_across_servers(&next, &existing_servers)?;
     save_workspace_mcp_server(state, &next)?;
     let mut saved = load_server_by_id(state, &next.id)?;
     saved = overlay_runtime_state_on_server(saved);

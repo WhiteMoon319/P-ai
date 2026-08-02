@@ -437,15 +437,20 @@ fn create_unarchived_conversation_shared(
     if copy_source_conversation_id.is_none() {
         if let Some(shell_work_mode) = input.shell_work_mode.as_deref() {
             conversation.shell_work_mode = normalize_shell_work_mode_text(shell_work_mode);
-            if conversation.shell_work_mode == SHELL_WORK_MODE_ISOLATED_WORKTREE {
+            if shell_work_mode_requires_git_root(&conversation.shell_work_mode) {
                 let workspace = conversation
                     .shell_workspaces
                     .iter()
                     .find(|workspace| workspace.level == SHELL_WORKSPACE_LEVEL_MAIN)
                     .or_else(|| conversation.shell_workspaces.first())
-                    .ok_or_else(|| "隔离工作树需要至少一个工作区。".to_string())?;
+                    .ok_or_else(|| "工作树模式需要至少一个工作区。".to_string())?;
                 if workspace.access.trim() == SHELL_WORKSPACE_ACCESS_READ_ONLY {
-                    return Err("在隔离工作树中工作至少需要审批权限。".to_string());
+                    let mode_name = if conversation.shell_work_mode == SHELL_WORK_MODE_INDEPENDENT_WORKTREE {
+                        "独立工作树"
+                    } else {
+                        "在隔离工作树中工作"
+                    };
+                    return Err(format!("{mode_name}至少需要审批权限。"));
                 }
                 validate_isolated_worktree_root(&workspace.path)?;
             }

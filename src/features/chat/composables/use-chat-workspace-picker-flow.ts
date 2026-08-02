@@ -156,7 +156,7 @@ export function useChatWorkspacePickerFlow(options: UseChatWorkspacePickerFlowOp
     try {
       const draft = cloneChatWorkspaceChoices(chatWorkspaceDraftChoices.value);
       const mainWorkspace = draft.find((item) => item.level === "main");
-      if (chatWorkspaceDraftWorkMode.value === "isolated_worktree" && mainWorkspace?.access === "read_only") {
+      if ((chatWorkspaceDraftWorkMode.value === "isolated_worktree" || chatWorkspaceDraftWorkMode.value === "independent_worktree") && mainWorkspace?.access === "read_only") {
         chatWorkspaceDraftError.value = options.worktreeRequiresApprovalText;
         options.setStatus(options.worktreeRequiresApprovalText);
         return;

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ShellWorkMode } from "../../../types/app";
 import { useChatWorkspacePickerFlow } from "./use-chat-workspace-picker-flow";
 
-function createFlow(access: "read_only" | "approval") {
+function createFlow(access: "read_only" | "approval", mode: ShellWorkMode = "isolated_worktree") {
   const saveChatWorkspaces = vi.fn(async () => undefined);
   const setStatus = vi.fn();
   const flow = useChatWorkspacePickerFlow({
@@ -15,14 +15,14 @@ function createFlow(access: "read_only" | "approval") {
       access,
     }]),
     chatWorkspaceAutonomousMode: ref(false),
-    chatWorkspaceWorkMode: ref<ShellWorkMode>("isolated_worktree"),
+    chatWorkspaceWorkMode: ref<ShellWorkMode>(mode),
     openChatWorkspacePickerBase: vi.fn(),
     closeChatWorkspacePickerBase: vi.fn(),
     saveChatWorkspaces,
     setStatus,
     setStatusError: vi.fn(),
     workspaceAlreadyExistsText: "目录已存在",
-    worktreeRequiresApprovalText: "在隔离工作树中工作至少需要审批权限。",
+    worktreeRequiresApprovalText: "工作树模式至少需要审批权限。",
     worktreeUnavailableText: "目录不是 Git 根目录",
     checkChatWorkspaceGitRoot: vi.fn(async () => true),
   });
@@ -37,8 +37,17 @@ describe("useChatWorkspacePickerFlow", () => {
     await flow.saveChatWorkspacePicker();
 
     expect(saveChatWorkspaces).not.toHaveBeenCalled();
-    expect(setStatus).toHaveBeenCalledWith("在隔离工作树中工作至少需要审批权限。");
-    expect(flow.chatWorkspaceDraftError.value).toBe("在隔离工作树中工作至少需要审批权限。");
+    expect(setStatus).toHaveBeenCalledWith("工作树模式至少需要审批权限。");
+    expect(flow.chatWorkspaceDraftError.value).toBe("工作树模式至少需要审批权限。");
+  });
+
+  it("blocks saving independent worktree mode for a read-only shell workspace", async () => {
+    const { flow, saveChatWorkspaces, setStatus } = createFlow("read_only", "independent_worktree");
+
+    await flow.saveChatWorkspacePicker();
+
+    expect(saveChatWorkspaces).not.toHaveBeenCalled();
+    expect(setStatus).toHaveBeenCalledWith("工作树模式至少需要审批权限。");
   });
 
   it("persists isolated worktree mode when shell workspace access is approval", async () => {

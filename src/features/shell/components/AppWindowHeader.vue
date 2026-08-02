@@ -392,6 +392,7 @@
         >
           <option value="directory">{{ t("chat.workspaceWorkModeDirectory") }}</option>
           <option value="isolated_worktree" :disabled="createConversationWorkspaceAccess === 'read_only' || !createConversationWorktreeAvailable">{{ t("chat.workspaceWorkModeIsolated") }}</option>
+          <option value="independent_worktree" :disabled="createConversationWorkspaceAccess === 'read_only' || !createConversationWorktreeAvailable">{{ t("chat.workspaceWorkModeIndependent") }}</option>
         </select>
         <div
           v-if="createConversationWorkspacePath && createConversationWorkspaceAccess !== 'read_only' && createConversationWorktreeCheckMessage"

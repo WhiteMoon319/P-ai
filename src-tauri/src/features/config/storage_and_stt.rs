@@ -1107,21 +1107,18 @@ fn normalize_departments(config: &mut AppConfig) {
             if item.agent_ids.is_empty() {
                 item.agent_ids = vec![DEPUTY_AGENT_ID.to_string()];
             }
-            item.child_department_ids.clear();
         } else if item.id == REVIEWER_DEPARTMENT_ID {
             item.is_deputy = false;
             normalize_department_api_bindings(item, &valid_text_chat_api_ids);
             if item.agent_ids.is_empty() {
                 item.agent_ids = vec![DEFAULT_AGENT_ID.to_string()];
             }
-            item.child_department_ids.clear();
         } else if item.id == SADDLER_DEPARTMENT_ID {
             item.is_deputy = false;
             normalize_department_api_bindings(item, &valid_text_chat_api_ids);
             if item.agent_ids.is_empty() {
                 item.agent_ids = vec![DEFAULT_AGENT_ID.to_string()];
             }
-            item.child_department_ids.clear();
         } else if item.id == LEADER_DEPARTMENT_ID {
             item.is_deputy = false;
             let defaults = default_leader_department(MODEL_ROLE_EXPERT_API_CONFIG_ID);
@@ -1160,38 +1157,12 @@ fn normalize_departments(config: &mut AppConfig) {
         item.child_department_ids = normalize_department_child_ids(
             &item.child_department_ids,
             &item.id,
-        )
-        .into_iter()
-        .filter(|child_id| {
-            !is_fixed_assistant_child_department_id(child_id)
-                || item.id == ASSISTANT_DEPARTMENT_ID
-                || item.is_built_in_assistant
-        })
-        .into_iter()
-        .collect::<Vec<_>>();
+        );
         if (item.id == ASSISTANT_DEPARTMENT_ID || item.is_built_in_assistant)
             && item.agent_ids.is_empty()
         {
             item.agent_ids = vec![DEFAULT_AGENT_ID.to_string()];
         }
-    }
-    if let Some(assistant) = out
-        .iter_mut()
-        .find(|item| item.id == ASSISTANT_DEPARTMENT_ID || item.is_built_in_assistant)
-    {
-        for child_id in preset_assistant_child_department_ids() {
-            if !assistant
-                .child_department_ids
-                .iter()
-                .any(|id| id.trim() == child_id)
-            {
-                assistant.child_department_ids.push(child_id);
-            }
-        }
-        assistant.child_department_ids = normalize_department_child_ids(
-            &assistant.child_department_ids,
-            &assistant.id,
-        );
     }
     let removed_cyclic_edges = remove_cyclic_department_child_ids(&mut out);
     if !removed_cyclic_edges.is_empty() {

@@ -290,10 +290,10 @@
                   </div>
                   <span
                     class="block max-h-32 min-w-0 overflow-y-auto whitespace-pre-wrap break-words text-center leading-5"
-                    :class="chatStatusBanner.tone === 'error' || chatStatusBanner.tone === 'info' || chatStatusBanner.tone === 'success'
+                    :class="chatStatusBanner.tone === 'error' || chatStatusBanner.tone === 'success'
                       ? ''
                       : 'text-base-content/80 ecall-shimmer-text ecall-reasoning-shimmer'"
-                    :data-shimmer-text="chatStatusBanner.tone === 'error' || chatStatusBanner.tone === 'info' || chatStatusBanner.tone === 'success' ? '' : chatStatusBanner.text"
+                    :data-shimmer-text="chatStatusBanner.tone === 'error' || chatStatusBanner.tone === 'success' ? '' : chatStatusBanner.text"
                   >{{ chatStatusBanner.text }}</span>
                 </div>
               </div>

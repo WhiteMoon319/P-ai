@@ -1,7 +1,7 @@
 {
   "name": "easy-call-ai",
   "private": true,
-  "version": "0.43.0",
+  "version": "0.44.0",
   "packageManager": "pnpm@10.29.2+sha512.bef43fa759d91fd2da4b319a5a0d13ef7a45bb985a3d7342058470f9d2051a3ba8674e629672654686ef9443ad13a82da2beb9eeb3e0221c87b8154fff9d74b8",
   "type": "module",
   "scripts": {
@@ -22,7 +22,7 @@
   "dependencies": {
     "@dagrejs/dagre": "^3.0.0",
     "@lucide/vue": "1.23.0",
-    "@tanstack/vue-virtual": "^3.13.31",
+    "@tanstack/vue-virtual": "^3.13.35",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@terrastruct/d2": "^0.1.33",
@@ -46,7 +46,7 @@
     "@tailwindcss/typography": "^0.5.20",
     "@tauri-apps/cli": "^2.11.4",
     "@vitejs/plugin-vue": "^6.0.7",
-    "daisyui": "^5.6.12",
+    "daisyui": "^5.7.9",
     "postcss": "8.5.16",
     "tailwindcss": "^4.3.2",
     "type-fest": "^5.7.0",

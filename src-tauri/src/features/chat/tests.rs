@@ -5271,6 +5271,40 @@
     }
 
     #[test]
+    fn conversation_service_v2_should_create_independent_worktree_conversation() {
+        let state = test_chat_runtime_state();
+        let git_init = std::process::Command::new("git")
+            .args(["init", "--quiet"])
+            .current_dir(&state.llm_workspace_path)
+            .output()
+            .expect("initialize git workspace");
+        assert!(git_init.status.success(), "git init should succeed");
+
+        let created = conversation_service_v2()
+            .create_conversation(
+                &state,
+                &CreateUnarchivedConversationInput {
+                    api_config_id: None,
+                    agent_id: Some(DEFAULT_AGENT_ID.to_string()),
+                    department_id: Some(ASSISTANT_DEPARTMENT_ID.to_string()),
+                    title: Some("独立工作树会话".to_string()),
+                    copy_source_conversation_id: None,
+                    shell_workspaces: None,
+                    shell_work_mode: Some(SHELL_WORK_MODE_INDEPENDENT_WORKTREE.to_string()),
+                    shell_autonomous_mode: None,
+                },
+            )
+            .expect("create independent worktree conversation");
+
+        let conversation = state_read_conversation_cached(&state, &created.conversation_id)
+            .expect("created conversation should exist");
+        assert_eq!(
+            conversation.shell_work_mode,
+            SHELL_WORK_MODE_INDEPENDENT_WORKTREE
+        );
+    }
+
+    #[test]
     fn conversation_service_v2_should_reject_isolated_worktree_for_read_only_workspace() {
         let state = test_chat_runtime_state();
         let git_init = std::process::Command::new("git")
@@ -5304,6 +5338,43 @@
         match result {
             Ok(_) => panic!("read-only workspace must reject isolated worktree mode"),
             Err(error) => assert_eq!(error, "在隔离工作树中工作至少需要审批权限。"),
+        }
+    }
+
+    #[test]
+    fn conversation_service_v2_should_reject_independent_worktree_for_read_only_workspace() {
+        let state = test_chat_runtime_state();
+        let git_init = std::process::Command::new("git")
+            .args(["init", "--quiet"])
+            .current_dir(&state.llm_workspace_path)
+            .output()
+            .expect("initialize git workspace");
+        assert!(git_init.status.success(), "git init should succeed");
+
+        let result = conversation_service_v2().create_conversation(
+            &state,
+            &CreateUnarchivedConversationInput {
+                api_config_id: None,
+                agent_id: Some(DEFAULT_AGENT_ID.to_string()),
+                department_id: Some(ASSISTANT_DEPARTMENT_ID.to_string()),
+                title: Some("只读独立工作树会话".to_string()),
+                copy_source_conversation_id: None,
+                shell_workspaces: Some(vec![ShellWorkspaceConfig {
+                    id: "main-workspace".to_string(),
+                    name: "测试 Git 根".to_string(),
+                    path: terminal_path_for_user(&state.llm_workspace_path),
+                    level: SHELL_WORKSPACE_LEVEL_MAIN.to_string(),
+                    access: SHELL_WORKSPACE_ACCESS_READ_ONLY.to_string(),
+                    built_in: false,
+                }]),
+                shell_work_mode: Some(SHELL_WORK_MODE_INDEPENDENT_WORKTREE.to_string()),
+                shell_autonomous_mode: None,
+            },
+        );
+
+        match result {
+            Ok(_) => panic!("read-only workspace must reject independent worktree mode"),
+            Err(error) => assert_eq!(error, "独立工作树至少需要审批权限。"),
         }
     }
 

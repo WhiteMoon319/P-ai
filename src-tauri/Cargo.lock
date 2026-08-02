@@ -1846,7 +1846,7 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
 name = "easy-call-ai"
-version = "0.43.0"
+version = "0.44.0"
 dependencies = [
  "aes 0.9.1",
  "aho-corasick",
@@ -2587,9 +2587,9 @@ dependencies = [
 
 [[package]]
 name = "genai"
-version = "0.7.0-beta.9"
+version = "0.7.0-beta.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2fec4a7c740c16ee0d86cf87476dd6a6a1945aeab45a8548bf8fc630504ec79"
+checksum = "7e37764d4ee8623da893d3bdfeb030aa0da4636884843add800504cbe2e09a28"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -6649,6 +6649,7 @@ version = "1.0.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8014e44b4736ed0538adeecded0fce2a272f22dc9578a7eb6b2d9993c74cfb9"
 dependencies = [
+ "indexmap 2.14.0",
  "itoa",
  "memchr",
  "serde",

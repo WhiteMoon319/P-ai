@@ -1,6 +1,6 @@
 [package]
 name = "easy-call-ai"
-version = "0.43.0"
+version = "0.44.0"
 edition = "2021"
 description = "P-ai desktop app"
 default-run = "p-ai"
@@ -34,7 +34,7 @@ tokio-tungstenite = { version = "0.29.0", features = ["rustls-tls-webpki-roots"]
 axum = { version = "0.8", features = ["ws"] }
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "stream", "multipart", "query", "form", "rustls"] }
 webpki-root-certs = "1"
-genai = "0.7.0-beta.9"
+genai = "0.7.0-beta.15"
 base64 = "0.22"
 aes = "0.9.1"
 md5 = "0.8"

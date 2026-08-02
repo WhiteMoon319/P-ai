@@ -147,7 +147,8 @@ async fn prepare_ide_context_bridge_server_start(
             eprintln!("[P-AI Android] prepare: bind FAILED: {}", err);
             IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
             ide_context_set_current_port(ide_context_runtime, None);
-            clear_ide_context_bridge_discovery();
+            // 端口被占用说明可能有另一个实例正在监听并维护 discovery 文件，
+            // 此处不能清掉它，否则 VSCode 侧边栏会丢失后端发现信息。
             port_service
                 .set_status_text(WEB_ACCESS_SERVICE_ID, Some("bind_failed".to_string()))
                 .await;

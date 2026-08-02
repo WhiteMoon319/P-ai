@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
 import { Star } from "@lucide/vue";
+import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
 import type { RuntimeLogEntry } from "../../../types/app";
 import RuntimeLogsDialog from "./RuntimeLogsDialog.vue";
 import ConversationMaintenanceDialog from "../../chat/components/dialogs/ConversationMaintenanceDialog.vue";
@@ -8,6 +9,8 @@ import type {
   TrimCompactionPreviewResult,
   TrimPreviewResult,
 } from "../../chat/composables/use-conversation-maintenance-dialog";
+
+initKatex();
 
 type UpdateDialogKind = "error" | "info" | "warning";
 type UpdateDialogPrimaryAction = "force" | "download" | "restart" | null | undefined;
@@ -29,6 +32,7 @@ const props = defineProps<{
   updateDialogSkipVersionVisible?: boolean;
   updateDialogCancelUpdateVisible?: boolean;
   updateDialogCancelPending?: boolean;
+  markdownIsDark?: boolean;
   runtimeLogsDialogOpen: boolean;
   runtimeLogs: RuntimeLogEntry[];
   runtimeLogsLoading: boolean;
@@ -112,9 +116,16 @@ function canShowUpdateSecondaryActions() {
         {{ updateDialogTitle }}
       </h3>
       <pre
-        class="mt-2 whitespace-pre-wrap break-words text-sm overflow-x-hidden"
-        :class="updateDialogKind === 'error' ? 'text-error' : 'text-base-content'"
+        v-if="updateDialogKind === 'error'"
+        class="mt-2 whitespace-pre-wrap break-words text-sm overflow-x-hidden text-error"
       >{{ updateDialogBody }}</pre>
+      <div v-else class="mt-2 overflow-x-hidden">
+        <AppMarkdownRenderer
+          :text="updateDialogBody"
+          :is-dark="!!props.markdownIsDark"
+          variant="document"
+        />
+      </div>
       <progress
         v-if="typeof updateProgressPercent === 'number'"
         class="progress progress-primary mt-4 w-full"

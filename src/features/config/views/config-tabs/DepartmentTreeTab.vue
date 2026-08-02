@@ -219,32 +219,12 @@ type DepartmentFlowNodeData = {
 type DepartmentFlowNode = FlowNode<DepartmentFlowNodeData>;
 type DepartmentFlowEdge = FlowEdge;
 let lastFlowLayoutSignature = "";
-const FIXED_PRESET_DEPARTMENT_IDS = new Set(["deputy-department", "reviewer-department", "saddler-department"]);
-const FIXED_PRESET_ASSISTANT_CHILD_IDS = ["deputy-department", "reviewer-department", "saddler-department"];
-
-function isAssistantDepartmentId(id: string): boolean {
-  return String(id || "").trim() === "assistant-department";
-}
-
-function isFixedPresetAssistantEdge(sourceId: string, targetId: string): boolean {
-  return isAssistantDepartmentId(sourceId) && FIXED_PRESET_DEPARTMENT_IDS.has(String(targetId || "").trim());
-}
-
-function relationDraftsWithFixedPresetTree(drafts: DepartmentRelationDraft[]): DepartmentRelationDraft[] {
-  return drafts.map((draft) => {
-    const id = String(draft.id || "").trim();
-    const childDepartmentIds = isAssistantDepartmentId(id)
-      ? normalizeDepartmentChildIds([...draft.childDepartmentIds, ...FIXED_PRESET_ASSISTANT_CHILD_IDS], id)
-      : normalizeDepartmentChildIds(draft.childDepartmentIds, id).filter((childId) => !FIXED_PRESET_DEPARTMENT_IDS.has(childId));
-    return { id, childDepartmentIds };
-  });
-}
 
 function cloneRelationDrafts(departments: DepartmentConfig[] | null | undefined): DepartmentRelationDraft[] {
-  return relationDraftsWithFixedPresetTree((departments || []).map((department) => ({
+  return (departments || []).map((department) => ({
     id: String(department.id || "").trim(),
     childDepartmentIds: normalizeDepartmentChildIds(department.childDepartmentIds, department.id),
-  })));
+  }));
 }
 
 function buildRelationSnapshot(drafts: DepartmentRelationDraft[]): string {
@@ -338,7 +318,6 @@ const candidateDepartments = computed(() => {
     .filter((department) => {
       const departmentId = String(department.id || "").trim();
       if (!departmentId || departmentId === selectedId) return false;
-      if (!isAssistantDepartmentId(selectedId) && FIXED_PRESET_DEPARTMENT_IDS.has(departmentId)) return false;
       return !selectedAncestorIdSet.value.has(departmentId);
     })
     .sort((left, right) => {
@@ -372,8 +351,6 @@ function toggleChildDepartment(childDepartmentId: string) {
   if (!draft) return;
   const childId = String(childDepartmentId || "").trim();
   if (!childId || childId === departmentId) return;
-  if (isFixedPresetAssistantEdge(departmentId, childId)) return;
-  if (!isAssistantDepartmentId(departmentId) && FIXED_PRESET_DEPARTMENT_IDS.has(childId)) return;
   const next = new Set(draft.childDepartmentIds);
   if (next.has(childId)) {
     next.delete(childId);
@@ -424,8 +401,6 @@ function handleConnect(connection: Connection) {
     props.setStatusAction(t("config.departmentTree.connectSelfForbidden"));
     return;
   }
-  if (isFixedPresetAssistantEdge(sourceId, targetId)) return;
-  if (!isAssistantDepartmentId(sourceId) && FIXED_PRESET_DEPARTMENT_IDS.has(targetId)) return;
   const sourceDraft = relationDrafts.value.find((item) => item.id === sourceId);
   if (!sourceDraft) return;
   if (sourceDraft.childDepartmentIds.includes(targetId)) {
@@ -449,7 +424,6 @@ function handleEdgeClick(payload: { edge?: { source?: string; target?: string } 
   const sourceId = String(payload?.edge?.source || "").trim();
   const targetId = String(payload?.edge?.target || "").trim();
   if (!sourceId || !targetId) return;
-  if (isFixedPresetAssistantEdge(sourceId, targetId)) return;
   const sourceDraft = relationDrafts.value.find((item) => item.id === sourceId);
   if (!sourceDraft) return;
   sourceDraft.childDepartmentIds = sourceDraft.childDepartmentIds.filter((id) => id !== targetId);
@@ -462,7 +436,7 @@ async function saveDepartmentRelations() {
     ...department,
     childDepartmentIds: [...(department.childDepartmentIds || [])],
   }));
-  props.config.departments = mergeRelationDraftsIntoDepartments(previousDepartments, relationDraftsWithFixedPresetTree(relationDrafts.value), true);
+  props.config.departments = mergeRelationDraftsIntoDepartments(previousDepartments, relationDrafts.value, true);
   const saved = await Promise.resolve(props.saveConfigAction());
   if (!saved) {
     props.config.departments = previousDepartments;

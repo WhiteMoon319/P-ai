@@ -242,7 +242,7 @@ export type ImageGenerationResult = {
 export type ShellWorkspaceLevel = "system" | "main" | "secondary";
 
 export type ShellWorkspaceAccess = "approval" | "full_access" | "read_only";
-export type ShellWorkMode = "directory" | "isolated_worktree";
+export type ShellWorkMode = "directory" | "isolated_worktree" | "independent_worktree";
 export type GithubUpdateMethod = "auto" | "direct" | "proxy";
 
 export type ShellWorkspace = {
@@ -556,6 +556,7 @@ export type McpToolDescriptor = {
   toolName: string;
   description: string;
   enabled: boolean;
+  compatibilityError?: string;
   parameters: Record<string, unknown>;
 };
 

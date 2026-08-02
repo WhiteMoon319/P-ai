@@ -20,6 +20,7 @@ enum CachedRuntimeToolSource {
     Mcp {
         server_id: String,
         server_name: String,
+        runtime_tool_name: String,
     },
 }
 
@@ -28,6 +29,7 @@ struct CachedRuntimeToolSchema {
     source: CachedRuntimeToolSource,
     permission_candidate_names: Vec<String>,
     definition: ProviderToolDefinition,
+    compatibility_error: Option<String>,
 }
 
 impl CachedRuntimeToolSchema {
@@ -36,27 +38,33 @@ impl CachedRuntimeToolSchema {
             permission_candidate_names: vec![definition.name.clone()],
             source: CachedRuntimeToolSource::Builtin,
             definition,
+            compatibility_error: None,
         }
     }
 
     fn mcp(
         server_id: &str,
         server_name: &str,
+        runtime_tool_name: &str,
+        compatibility_error: Option<String>,
         definition: ProviderToolDefinition,
     ) -> Self {
-        let tool_name = definition.name.clone();
+        let provider_tool_name = definition.name.clone();
         Self {
             source: CachedRuntimeToolSource::Mcp {
                 server_id: server_id.to_string(),
                 server_name: server_name.to_string(),
+                runtime_tool_name: runtime_tool_name.to_string(),
             },
             permission_candidate_names: vec![
-                format!("{server_name}::{tool_name}"),
-                format!("{server_id}::{tool_name}"),
-                format!("{server_name}_{tool_name}"),
-                tool_name,
+                format!("{server_name}::{runtime_tool_name}"),
+                format!("{server_id}::{runtime_tool_name}"),
+                format!("{server_name}_{runtime_tool_name}"),
+                runtime_tool_name.to_string(),
+                provider_tool_name,
             ],
             definition,
+            compatibility_error,
         }
     }
 
@@ -208,6 +216,25 @@ fn read_media_tool_timeout_override(args_json: &str) -> std::time::Duration {
     std::time::Duration::from_secs(timeout_secs)
 }
 
+fn model_mcp_tool_name(
+    member_name: &str,
+    raw_tool_name: &str,
+    builtin_tool_names: &HashSet<String>,
+    mcp_tool_name_counts: &std::collections::HashMap<String, usize>,
+) -> String {
+    let overlaps_builtin = builtin_tool_names.contains(raw_tool_name);
+    let overlaps_mcp = mcp_tool_name_counts
+        .get(raw_tool_name)
+        .copied()
+        .unwrap_or_default()
+        > 1;
+    if overlaps_builtin || overlaps_mcp {
+        mcp_tool_prefixed_name(member_name, raw_tool_name)
+    } else {
+        raw_tool_name.to_string()
+    }
+}
+
 fn build_global_tool_schema_cache(state: &AppState) -> Vec<CachedRuntimeToolSchema> {
     let preview_session_id = "__tool_schema_cache__".to_string();
     let _preview_api_id = "__tool_schema_cache__".to_string();
@@ -324,6 +351,10 @@ fn build_global_tool_schema_cache(state: &AppState) -> Vec<CachedRuntimeToolSche
         }
         .provider_tool_definition(),
     ];
+    let builtin_tool_names = builtin_definitions
+        .iter()
+        .map(|definition| definition.name.clone())
+        .collect::<HashSet<_>>();
     let mut definitions = builtin_definitions
         .into_iter()
         .map(CachedRuntimeToolSchema::builtin)
@@ -331,21 +362,48 @@ fn build_global_tool_schema_cache(state: &AppState) -> Vec<CachedRuntimeToolSche
 
     match load_workspace_mcp_servers(state) {
         Ok(servers) => {
-            for server in servers.into_iter().filter(|server| server.enabled) {
-                for tool in list_tools_from_runtime(&server)
-                    .into_iter()
-                    .filter(|tool| tool.enabled)
-                {
-                    definitions.push(CachedRuntimeToolSchema::mcp(
-                        &server.id,
-                        &server.name,
-                        ProviderToolDefinition::new(
-                            tool.tool_name,
-                            tool.description,
-                            tool.parameters,
-                        ),
-                    ));
-                }
+            let mcp_tools = servers
+                .into_iter()
+                .filter(|server| server.enabled)
+                .flat_map(|server| {
+                    list_tools_from_runtime(&server)
+                        .into_iter()
+                        .filter(|tool| tool.enabled)
+                        .map(move |tool| (server.clone(), tool))
+                })
+                .collect::<Vec<_>>();
+            let mut mcp_tool_name_counts = std::collections::HashMap::<String, usize>::new();
+            for (_, tool) in &mcp_tools {
+                let raw_tool_name = if tool.raw_tool_name.is_empty() {
+                    &tool.tool_name
+                } else {
+                    &tool.raw_tool_name
+                };
+                *mcp_tool_name_counts.entry(raw_tool_name.clone()).or_default() += 1;
+            }
+            for (server, tool) in mcp_tools {
+                let raw_tool_name = if tool.raw_tool_name.is_empty() {
+                    tool.tool_name.clone()
+                } else {
+                    tool.raw_tool_name.clone()
+                };
+                let provider_tool_name = model_mcp_tool_name(
+                    &tool.member_name,
+                    &raw_tool_name,
+                    &builtin_tool_names,
+                    &mcp_tool_name_counts,
+                );
+                definitions.push(CachedRuntimeToolSchema::mcp(
+                    &server.id,
+                    &server.name,
+                    &tool.tool_name,
+                    tool.compatibility_error,
+                    ProviderToolDefinition::new(
+                        provider_tool_name,
+                        tool.description,
+                        tool.parameters,
+                    ),
+                ));
             }
         }
         Err(err) => runtime_log_warn(format!("[工具Schema缓存] 加载 MCP 配置失败: {err}")),
@@ -655,6 +713,30 @@ fn resolve_legal_runtime_tools_for_department(
     let mut manifest = Vec::<Value>::new();
     let mut attached_provider_names = HashSet::<String>::new();
     for tool in discoverable_tools {
+        if let Some(reason) = tool.compatibility_error.clone() {
+            if let CachedRuntimeToolSource::Mcp {
+                server_id,
+                server_name,
+                ..
+            } = &tool.source
+            {
+                runtime_log_warn(format!(
+                    "[MCP工具装配] 跳过，server_id={}，server_name={}，tool_name={}，原因={}",
+                    server_id,
+                    server_name,
+                    tool.definition.name,
+                    reason
+                ));
+            }
+            manifest.push(tool_manifest_item(
+                &tool.source_label(),
+                &tool.definition.name,
+                true,
+                false,
+                Some(reason),
+            ));
+            continue;
+        }
         if let Some(reason) = runtime_tool_denied_reason(
             app_config,
             selected_api,
@@ -880,11 +962,16 @@ async fn assemble_runtime_tools(
                 executor_department_id.unwrap_or_default(),
                 &descriptor.definition.name,
             ),
-            CachedRuntimeToolSource::Mcp { server_id, .. } => {
+            CachedRuntimeToolSource::Mcp {
+                server_id,
+                runtime_tool_name,
+                ..
+            } => {
                 build_cached_mcp_runtime_tool_executor(
                     state,
                     server_id,
                     executor_department_id.unwrap_or_default(),
+                    runtime_tool_name,
                     &descriptor.definition,
                 )
             }
@@ -1061,6 +1148,7 @@ fn build_cached_mcp_runtime_tool_executor(
     state: &AppState,
     server_id: &str,
     executor_department_id: &str,
+    runtime_tool_name: &str,
     definition: &ProviderToolDefinition,
 ) -> Result<Box<dyn RuntimeToolDyn>, String> {
     let server = load_server_by_id(state, server_id)?;
@@ -1069,8 +1157,8 @@ fn build_cached_mcp_runtime_tool_executor(
     }
     let current_tool = list_tools_from_runtime(&server)
         .into_iter()
-        .find(|tool| tool.tool_name == definition.name && tool.enabled)
-        .ok_or_else(|| format!("MCP 工具当前未启用：{}::{}", server.id, definition.name))?;
+        .find(|tool| tool.tool_name == runtime_tool_name && tool.enabled)
+        .ok_or_else(|| format!("MCP 工具当前未启用：{}::{}", server.id, runtime_tool_name))?;
     let input_schema = Arc::new(match current_tool.parameters {
         Value::Object(map) => map,
         _ => serde_json::Map::new(),
@@ -1084,6 +1172,7 @@ fn build_cached_mcp_runtime_tool_executor(
         app_state: state.clone(),
         server_id: server.id,
         executor_department_id: executor_department_id.to_string(),
+        runtime_tool_name: runtime_tool_name.to_string(),
         definition: runtime_definition,
     });
     Ok(android_workspace_checked_runtime_tool(
@@ -1517,7 +1606,13 @@ mod tool_assembly_permission_tests {
         let tools = vec![
             CachedRuntimeToolSchema::builtin(test_definition("config")),
             CachedRuntimeToolSchema::builtin(test_definition("todo")),
-            CachedRuntimeToolSchema::mcp("server-id", "server-name", test_definition("search")),
+            CachedRuntimeToolSchema::mcp(
+                "server-id",
+                "server-name",
+                "server-name_search",
+                None,
+                test_definition("search"),
+            ),
         ];
         let memory = test_memory_context(true);
         let resolved = resolve_legal_runtime_tools_for_department(
@@ -1552,6 +1647,8 @@ mod tool_assembly_permission_tests {
         let tools = vec![CachedRuntimeToolSchema::mcp(
             "server-id",
             "server-name",
+            "server-name_search",
+            None,
             test_definition("search"),
         )];
         let memory = test_memory_context(true);
@@ -1579,6 +1676,78 @@ mod tool_assembly_permission_tests {
             &tools,
         );
         assert_eq!(resolved.attached.len(), 1);
+    }
+
+    #[test]
+    fn legal_tool_resolver_skips_mcp_with_a_runtime_compatibility_error() {
+        let policy = RuntimeToolPolicy {
+            conversation_resolved: true,
+            local_conversation: true,
+            ..RuntimeToolPolicy::default()
+        };
+        let tools = vec![CachedRuntimeToolSchema::mcp(
+            "server-id",
+            "server-name",
+            "中文成员_search",
+            Some("MCP 组成员名规范化后没有可用字符，工具无法挂载".to_string()),
+            test_definition("search"),
+        )];
+        let resolved = resolve_legal_runtime_tools_for_department(
+            &AppConfig::default(),
+            &test_api(),
+            None,
+            &policy,
+            Some(&test_memory_context(true)),
+            &tools,
+        );
+
+        assert!(resolved.attached.is_empty());
+        assert_eq!(
+            resolved.manifest[0].get("reason").and_then(Value::as_str),
+            Some("MCP 组成员名规范化后没有可用字符，工具无法挂载")
+        );
+    }
+
+    #[test]
+    fn mcp_model_name_uses_raw_name_without_a_collision() {
+        let builtin_names = HashSet::from(["read".to_string()]);
+        let mcp_name_counts = std::collections::HashMap::from([("akasha_search".to_string(), 1)]);
+
+        assert_eq!(
+            model_mcp_tool_name(
+                "Akasha Terminal",
+                "akasha_search",
+                &builtin_names,
+                &mcp_name_counts,
+            ),
+            "akasha_search"
+        );
+    }
+
+    #[test]
+    fn mcp_model_name_prefixes_only_mcp_when_it_overlaps_a_builtin() {
+        let builtin_names = HashSet::from(["search".to_string()]);
+        let mcp_name_counts = std::collections::HashMap::from([("search".to_string(), 1)]);
+
+        assert_eq!(
+            model_mcp_tool_name("Akasha Terminal", "search", &builtin_names, &mcp_name_counts),
+            "Akasha_Terminal_search"
+        );
+    }
+
+    #[test]
+    fn mcp_model_name_prefixes_each_mcp_when_raw_names_overlap() {
+        let builtin_names = HashSet::new();
+        let mcp_name_counts = std::collections::HashMap::from([("search".to_string(), 2)]);
+
+        assert_eq!(
+            model_mcp_tool_name("context7", "search", &builtin_names, &mcp_name_counts),
+            "context7_search"
+        );
+        assert_eq!(
+            model_mcp_tool_name("Akasha Terminal", "search", &builtin_names, &mcp_name_counts),
+            "Akasha_Terminal_search"
+        );
     }
 
     #[test]
