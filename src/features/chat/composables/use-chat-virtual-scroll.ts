@@ -175,7 +175,24 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
         // 只补偿当前视口上方的尺寸变化；底部新增内容和视口内变化不要自动推着用户往下走。
         return item.end <= viewportTop || viewportBottom <= 0;
       },
-      measureElement: (element: Element) => (element as HTMLElement).getBoundingClientRect().height,
+      measureElement: (element: Element, entry?: ResizeObserverEntry) => {
+        // tanstack 内部 ResizeObserver 触发时携带 entry：用 borderBoxSize 异步测量，
+        // 不触发强制同步布局；该尺寸已是浏览器计算好的实时值，不能回落到缓存。
+        if (entry?.borderBoxSize) {
+          const box = entry.borderBoxSize[0];
+          if (box) {
+            return Math.round(box.blockSize);
+          }
+        }
+        // 无 entry（主动测量）：优先读已缓存高度，避免流式输出时每次 render 都触发
+        // 强制同步布局；缓存由 ResizeObserver 异步维护（handleVirtualItemResize），
+        // 首次挂载才读 DOM。
+        const cachedHeight = measuredVirtualItemHeights.get(String((element as HTMLElement).getAttribute("data-render-item-id") || "").trim());
+        if (cachedHeight !== undefined) {
+          return cachedHeight;
+        }
+        return (element as HTMLElement).getBoundingClientRect().height;
+      },
       overscan: 600,
     })),
   );
@@ -251,9 +268,11 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       observedVirtualItemElements.set(itemId, element);
       return;
     }
-    virtualizer.value.measureElement(element);
+    // 先更新缓存再测量：measureElement 的缓存分支会读取 measuredVirtualItemHeights，
+    // 若仍为旧值会返回旧高度导致 virtualizer 不更新布局。
     measuredVirtualItemHeights.set(itemId, nextHeight);
     measuredVirtualItemRevision.value += 1;
+    virtualizer.value.measureElement(element);
     observedVirtualItemElements.set(itemId, element);
   }
 
@@ -320,10 +339,16 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       }
       return;
     }
-    virtualizer.value.measureElement(target);
     const resolvedItemId = normalizedItemId || String(target.getAttribute("data-render-item-id") || "").trim();
     if (resolvedItemId && target instanceof HTMLElement) {
       const previousResizeElement = observedVirtualItemResizeElements.get(resolvedItemId);
+      // 同一元素且已有缓存高度：跳过 DOM 读取（流式输出时每帧 render 都会走到这里，
+      // 无条件 getBoundingClientRect 会触发强制同步布局）；尺寸变化由 ResizeObserver
+      // 异步处理（handleVirtualItemResize），首次挂载或元素更换才真正测量。
+      if (previousResizeElement === target && measuredVirtualItemHeights.has(resolvedItemId)) {
+        observedVirtualItemElements.set(resolvedItemId, target);
+        return;
+      }
       if (previousResizeElement && previousResizeElement !== target && virtualItemResizeObserver) {
         virtualItemResizeObserver.unobserve(previousResizeElement);
       }
@@ -332,10 +357,9 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       }
       observedVirtualItemResizeElements.set(resolvedItemId, target);
       const nextHeight = Math.round(target.getBoundingClientRect().height);
-      if (measuredVirtualItemHeights.get(resolvedItemId) !== nextHeight) {
-        measuredVirtualItemHeights.set(resolvedItemId, nextHeight);
-        measuredVirtualItemRevision.value += 1;
-      }
+      measuredVirtualItemHeights.set(resolvedItemId, nextHeight);
+      measuredVirtualItemRevision.value += 1;
+      virtualizer.value.measureElement(target);
       observedVirtualItemElements.set(resolvedItemId, target);
     }
   }
