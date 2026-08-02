@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootRef" class="relative min-w-0">
+  <div ref="rootRef" class="relative min-w-0" v-bind="$attrs">
     <!-- 触发按钮 -->
     <button
       type="button"
@@ -41,6 +41,8 @@ import { useI18n } from "vue-i18n";
 import type { ApiConfigItem } from "../../../types/app";
 import { buildApiConfigSelectionTree } from "../utils/api-config-selection-tree";
 import ApiConfigSelectionMenu from "./ApiConfigSelectionMenu.vue";
+
+defineOptions({ inheritAttrs: false });
 
 const props = withDefaults(defineProps<{
   modelValue?: string;
