@@ -746,7 +746,7 @@ async fn resolve_request_api_config(
     Ok(next)
 }
 
-async fn call_model_openai_stream_internal(
+async fn call_model_genai_stream_internal(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
@@ -811,14 +811,14 @@ async fn call_model_openai_stream_internal(
     .await
 }
 
-async fn call_model_openai_stream(
+async fn call_model_genai_stream(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
     app_state: Option<&AppState>,
     usage_conversation_id: Option<&str>,
 ) -> Result<ModelReply, String> {
-    call_model_openai_stream_internal(
+    call_model_genai_stream_internal(
         api_config,
         model_name,
         prepared,
@@ -831,7 +831,7 @@ async fn call_model_openai_stream(
     .await
 }
 
-async fn call_model_openai_stream_with_tools(
+async fn call_model_genai_stream_with_tools(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
@@ -839,7 +839,7 @@ async fn call_model_openai_stream_with_tools(
     app_state: Option<&AppState>,
     usage_conversation_id: Option<&str>,
 ) -> Result<ModelReply, String> {
-    call_model_openai_stream_internal(
+    call_model_genai_stream_internal(
         api_config,
         model_name,
         prepared,
@@ -852,14 +852,14 @@ async fn call_model_openai_stream_with_tools(
     .await
 }
 
-async fn call_model_openai_non_stream(
+async fn call_model_genai_non_stream(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
     app_state: Option<&AppState>,
     usage_conversation_id: Option<&str>,
 ) -> Result<ModelReply, String> {
-    call_model_openai_non_stream_with_definitions(
+    call_model_genai_non_stream_with_definitions(
         api_config,
         model_name,
         prepared,
@@ -870,7 +870,7 @@ async fn call_model_openai_non_stream(
     .await
 }
 
-async fn call_model_openai_non_stream_with_definitions(
+async fn call_model_genai_non_stream_with_definitions(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,

@@ -2203,7 +2203,7 @@ async fn send_chat_message_inner(
                 attempt + 1
             );
             log_run_stage(&request_start_stage);
-            let chat_round_execution = call_model_openai_style(
+            let chat_round_execution = call_model_dispatch(
                 &candidate_resolved_api,
                 &app_config,
                 &candidate_selected_api,

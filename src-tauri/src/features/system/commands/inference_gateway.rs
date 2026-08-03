@@ -438,10 +438,10 @@ async fn invoke_model_by_format(
 ) -> Result<ModelReply, String> {
     if resolved_api.request_format.is_genai_chat() || resolved_api.request_format.is_auto() {
         if tool_definitions.is_empty() {
-            return call_model_openai_stream(resolved_api, model_name, prepared, app_state, None)
+            return call_model_genai_stream(resolved_api, model_name, prepared, app_state, None)
                 .await;
         }
-        return call_model_openai_stream_with_tools(
+        return call_model_genai_stream_with_tools(
             resolved_api,
             model_name,
             prepared,
@@ -466,10 +466,10 @@ async fn invoke_model_non_stream_by_format(
 ) -> Result<ModelReply, String> {
     if resolved_api.request_format.is_genai_chat() || resolved_api.request_format.is_auto() {
         if tool_definitions.is_empty() {
-            return call_model_openai_non_stream(resolved_api, model_name, prepared, app_state, None)
+            return call_model_genai_non_stream(resolved_api, model_name, prepared, app_state, None)
                 .await;
         }
-        return call_model_openai_non_stream_with_definitions(
+        return call_model_genai_non_stream_with_definitions(
             resolved_api,
             model_name,
             prepared,

@@ -1203,7 +1203,7 @@ async fn describe_media_with_multimodal_api(
         );
     let reply = if resolved_api.request_format.is_genai_chat() || resolved_api.request_format.is_auto() {
         if prefer_non_stream {
-            call_model_openai_non_stream(
+            call_model_genai_non_stream(
                 resolved_api,
                 &selected_api.model,
                 prepared,
@@ -1212,7 +1212,7 @@ async fn describe_media_with_multimodal_api(
             )
             .await?
         } else {
-            match call_model_openai_stream(
+            match call_model_genai_stream(
                 resolved_api,
                 &selected_api.model,
                 prepared.clone(),
@@ -1226,7 +1226,7 @@ async fn describe_media_with_multimodal_api(
                     if supports_non_stream_fallback
                         && is_streaming_request_payload_format_error(&err) =>
                 {
-                    call_model_openai_non_stream(
+                    call_model_genai_non_stream(
                         resolved_api,
                         &selected_api.model,
                         prepared,

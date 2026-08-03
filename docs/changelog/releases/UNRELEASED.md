@@ -1,5 +1,9 @@
 # 未发布
 
+## 重构
+
+- 统一模型调度入口与 genai 通用执行器改名，消除「openai 命名承载全协议职责」的误导：`call_model_openai_style` → `call_model_dispatch`（聊天主循环唯一调度入口，内部按 request_format 分发给 gemini/anthropic/openai 全协议）；`call_model_openai_stream` / `call_model_openai_stream_internal` / `call_model_openai_stream_with_tools` / `call_model_openai_non_stream` / `call_model_openai_non_stream_with_definitions` → `call_model_genai_*`（协议无关的 genai 执行层，被 vision/read_file/inference_gateway/model_providers 跨协议复用）。仅服务 OpenAI 兼容族的 `call_model_openai_with_tools` / `call_model_openai_responses*` 与 `requestFormat="openai"` 序列化键保留不动。
+
 ## 修复
 
 - 整体删除旧布局（app_data.json 单文件 / app_data/ 子目录）的读取与迁移链：`read_legacy_app_data` / `read_legacy_split_app_data` / `legacy_app_data_split_*` 路径辅助全部删除，`read_app_data` 退化为纯分片聚合（等价 `read_layout_app_data`）；V1 baseline 迁移 7 步（内置 agents 补全、会话元数据补全、头像路径迁移、归档合并、内联媒体外置、主会话标记归一、工具评审遗留清理）及 `migrate_legacy_app_data_if_needed` 显式迁移入口删除，启动门闩与 bootstrap 快照不再执行旧布局迁移；`DATA_MIGRATION_VERSION_V1_BASELINE` 常量删除，最低迁移版本从 V2 起算；`AppData.archived_conversations` 字段删除（仅旧归档合并使用）。产品不再支持旧布局直接升级，代码中不存在任何读取旧数据文件的路径。
