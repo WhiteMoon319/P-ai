@@ -206,6 +206,13 @@ impl<R: Runtime> NotificationBuilder<R> {
         self
     }
 
+    /// Sets the short critical text shown on the live update chip / lock screen
+    /// (Android 13+ / API 33). Falls back to the content title when absent.
+    pub fn short_text(mut self, short_text: impl Into<String>) -> Self {
+        self.data.short_text.replace(short_text.into());
+        self
+    }
+
     /// Sets a progress bar on the notification (Android).
     ///
     /// `indeterminate` shows an activity indicator without a concrete value.

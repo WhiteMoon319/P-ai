@@ -166,6 +166,7 @@ fn live_update_send(
     id: i32,
     title: &str,
     body: &str,
+    short_text: Option<&str>,
     ongoing: bool,
     promoted: bool,
 ) {
@@ -211,6 +212,12 @@ fn live_update_send(
         .title(normalized_title)
         .body(normalized_body)
         .icon("ic_stat_pai");
+    if let Some(short) = short_text {
+        let normalized_short = short.trim();
+        if !normalized_short.is_empty() {
+            builder = builder.short_text(normalized_short);
+        }
+    }
     if ongoing {
         builder = builder.ongoing();
         if promoted {
@@ -302,17 +309,27 @@ fn live_update_chat_started(state: &AppState, conversation_id: &str) {
     else {
         return;
     };
-    let body = live_update_todo_step_text(state, conversation_id, settings.ui_language)
-        .unwrap_or_else(|| {
-            local_chat_notification_text(
-                settings.ui_language,
-                "正在回复…",
-                "正在回覆…",
-                "Replying…",
-            )
-        });
+    let todo_text = live_update_todo_step_text(state, conversation_id, settings.ui_language);
+    let body = todo_text.clone().unwrap_or_else(|| {
+        local_chat_notification_text(
+            settings.ui_language,
+            "正在回复…",
+            "正在回覆…",
+            "Replying…",
+        )
+    });
+    // 岛/锁屏短文本：有 todo 显示当前步骤，无 todo 显示对话标题。
+    let short = todo_text.unwrap_or_else(|| title.clone());
     live_update_owner_set(&CHAT_LIVE_UPDATE_OWNER, conversation_id);
-    live_update_send(&app, CHAT_LIVE_UPDATE_NOTIFICATION_ID, &title, &body, true, true);
+    live_update_send(
+        &app,
+        CHAT_LIVE_UPDATE_NOTIFICATION_ID,
+        &title,
+        &body,
+        Some(&short),
+        true,
+        true,
+    );
 }
 
 #[cfg(target_os = "android")]
@@ -365,7 +382,15 @@ fn live_update_chat_finished(
         }
     };
     // 终态通知非 ongoing，用户可手动划掉；不重复弹完成/失败通知。
-    live_update_send(&app, CHAT_LIVE_UPDATE_NOTIFICATION_ID, &title, &body, false, false);
+    live_update_send(
+        &app,
+        CHAT_LIVE_UPDATE_NOTIFICATION_ID,
+        &title,
+        &body,
+        None,
+        false,
+        false,
+    );
 }
 
 #[cfg(target_os = "android")]
@@ -397,7 +422,15 @@ fn live_update_goal_changed(
             "目標已結束。",
             "Goal finished.",
         );
-        live_update_send(&app, GOAL_LIVE_UPDATE_NOTIFICATION_ID, &title, &body, false, false);
+        live_update_send(
+            &app,
+            GOAL_LIVE_UPDATE_NOTIFICATION_ID,
+            &title,
+            &body,
+            None,
+            false,
+            false,
+        );
         return;
     };
     if goal.status.trim() != "active" {
@@ -413,7 +446,15 @@ fn live_update_goal_changed(
             "目標已結束。",
             "Goal finished.",
         );
-        live_update_send(&app, GOAL_LIVE_UPDATE_NOTIFICATION_ID, &title, &body, false, false);
+        live_update_send(
+            &app,
+            GOAL_LIVE_UPDATE_NOTIFICATION_ID,
+            &title,
+            &body,
+            None,
+            false,
+            false,
+        );
         return;
     }
     // 目标进行中：记录归属会话并发送 ongoing 常驻通知。
@@ -423,20 +464,69 @@ fn live_update_goal_changed(
         &goal.objective,
         LIVE_UPDATE_BODY_MAX_CHARS,
     );
-    let body = live_update_todo_step_text(state, conversation_id, settings.ui_language)
-        .unwrap_or_else(|| {
-            if objective.trim().is_empty() {
-                local_chat_notification_text(
-                    settings.ui_language,
-                    "目标进行中…",
-                    "目標進行中…",
-                    "Goal in progress…",
-                )
-            } else {
-                objective
-            }
-        });
-    live_update_send(&app, GOAL_LIVE_UPDATE_NOTIFICATION_ID, &title, &body, true, true);
+    let todo_text = live_update_todo_step_text(state, conversation_id, settings.ui_language);
+    let body = todo_text.clone().unwrap_or_else(|| {
+        if objective.trim().is_empty() {
+            local_chat_notification_text(
+                settings.ui_language,
+                "目标进行中…",
+                "目標進行中…",
+                "Goal in progress…",
+            )
+        } else {
+            objective
+        }
+    });
+    // 岛/锁屏短文本：有 todo 显示当前步骤，无 todo 显示对话标题。
+    let short = todo_text.unwrap_or_else(|| title.clone());
+    live_update_send(
+        &app,
+        GOAL_LIVE_UPDATE_NOTIFICATION_ID,
+        &title,
+        &body,
+        Some(&short),
+        true,
+        true,
+    );
+}
+
+// todo 列表变化（新增/进度推进/状态切换）后刷新 live 通知：
+// 同 id 重发 ongoing 通知，让岛/通知栏展示最新步骤文本。
+#[cfg(target_os = "android")]
+fn live_update_todos_changed(state: &AppState, conversation_id: &str) {
+    // 只有归属会话才刷新：通知可能已被其他会话的 live 通知覆盖。
+    if !live_update_owner_matches(&CHAT_LIVE_UPDATE_OWNER, conversation_id) {
+        return;
+    }
+    let Some(app) = live_update_app_handle(state) else {
+        return;
+    };
+    let settings = local_chat_notification_settings(state, conversation_id);
+    let Some(title) =
+        live_update_chat_meta_title(state, conversation_id, settings.ui_language, false)
+    else {
+        return;
+    };
+    let todo_text = live_update_todo_step_text(state, conversation_id, settings.ui_language);
+    let body = todo_text.clone().unwrap_or_else(|| {
+        local_chat_notification_text(
+            settings.ui_language,
+            "正在回复…",
+            "正在回覆…",
+            "Replying…",
+        )
+    });
+    // 岛/锁屏短文本：有 todo 显示当前步骤，无 todo 显示对话标题。
+    let short = todo_text.unwrap_or_else(|| title.clone());
+    live_update_send(
+        &app,
+        CHAT_LIVE_UPDATE_NOTIFICATION_ID,
+        &title,
+        &body,
+        Some(&short),
+        true,
+        true,
+    );
 }
 
 #[cfg(not(target_os = "android"))]
@@ -458,3 +548,6 @@ fn live_update_goal_changed(
     _goal: Option<&ConversationGoalState>,
 ) {
 }
+
+#[cfg(not(target_os = "android"))]
+fn live_update_todos_changed(_state: &AppState, _conversation_id: &str) {}

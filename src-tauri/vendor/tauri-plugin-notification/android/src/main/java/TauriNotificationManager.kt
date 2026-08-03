@@ -165,6 +165,13 @@ class TauriNotificationManager(
       // ongoing notification to a live update (chip + lock screen). No-op below API 35.
       mBuilder.setRequestPromotedOngoing(true)
     }
+    if (notification.shortText != null) {
+      // Android 13 (API 33) short critical text: shown on the live update chip /
+      // lock screen instead of the full title. Ignored on lower API levels.
+      if (SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        mBuilder.setShortCriticalText(notification.shortText)
+      }
+    }
     if (notification.progressMax != null || notification.progressIndeterminate) {
       mBuilder.setProgress(
         notification.progressCurrent ?: 0,

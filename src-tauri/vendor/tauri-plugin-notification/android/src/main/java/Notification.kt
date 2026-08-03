@@ -32,6 +32,7 @@ class Notification {
   var isOngoing = false
   var isAutoCancel = false
   var requestPromotedOngoing = false
+  var shortText: String? = null
   var progressCurrent: Int? = null
   var progressMax: Int? = null
   var progressIndeterminate = false

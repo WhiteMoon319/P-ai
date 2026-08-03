@@ -178,6 +178,8 @@ pub struct NotificationData {
     pub(crate) silent: bool,
     #[serde(default)]
     pub(crate) request_promoted_ongoing: bool,
+    /// Android 13+ short critical text：灵动岛/锁屏胶囊显示的短文本。
+    pub(crate) short_text: Option<String>,
     pub(crate) progress_current: Option<i32>,
     pub(crate) progress_max: Option<i32>,
     #[serde(default)]
@@ -212,6 +214,7 @@ impl Default for NotificationData {
             auto_cancel: false,
             silent: false,
             request_promoted_ongoing: false,
+            short_text: None,
             progress_current: None,
             progress_max: None,
             progress_indeterminate: false,
