@@ -109,7 +109,12 @@
       "enableLabel": "是否通知",
       "enableHint": "關閉後，背景本地會話完成或失敗時不再彈出系統通知。",
       "soundLabel": "是否聲音",
-      "soundHint": "開啟後，Windows 原生通知會使用系統預設提示音。"
+      "soundHint": "開啟後，Windows 原生通知會使用系統預設提示音。",
+      "testLabel": "通知測試",
+      "testHint": "發送測試通知，驗證普通通知與即時通知（島）是否正常顯示。",
+      "testNormalLabel": "普通通知",
+      "testLiveUpdateLabel": "即時通知",
+      "testFailedLabel": "通知測試失敗"
     },
     "api": {
       "saving": "保存中...",

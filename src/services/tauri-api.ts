@@ -894,6 +894,12 @@ export function sendTransportNativeNotificationDemo<T>(): Promise<T> {
   return invokeRequiredNativeTransport<T>("本机通知演示", "demo_send_native_notification");
 }
 
+export function sendTransportNotificationTest<T>(kind: "normal" | "live_update"): Promise<T> {
+  return invokeRequiredNativeTransport<T>("通知测试", "demo_test_notification", {
+    input: { kind: String(kind) },
+  });
+}
+
 export function restartTransportApplicationDemo(): Promise<void> {
   return invokeRequiredNativeTransport<void>("应用重启演示", "demo_restart_app");
 }
@@ -1309,6 +1315,7 @@ const WEB_BRIDGE_NATIVE_ONLY_COMMANDS = new Set([
   "migrate_shell_workspace_directory",
   "desktop_screenshot",
   "demo_send_native_notification",
+  "demo_test_notification",
   "demo_restart_app",
   "xcap",
   "start_current_window_drag",

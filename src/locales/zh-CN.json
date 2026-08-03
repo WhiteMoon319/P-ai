@@ -109,7 +109,12 @@
       "enableLabel": "是否通知",
       "enableHint": "关闭后，后台本地会话完成或失败时不再弹出系统通知。",
       "soundLabel": "是否声音",
-      "soundHint": "开启后，Windows 原生通知会使用系统默认提示音。"
+      "soundHint": "开启后，Windows 原生通知会使用系统默认提示音。",
+      "testLabel": "通知测试",
+      "testHint": "发送测试通知，验证普通通知与实时通知（岛）是否正常显示。",
+      "testNormalLabel": "普通通知",
+      "testLiveUpdateLabel": "实时通知",
+      "testFailedLabel": "通知测试失败"
     },
     "api": {
       "saving": "保存中...",

@@ -38,6 +38,7 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
             | "migrate_shell_workspace_directory"
             | "desktop_screenshot"
             | "demo_send_native_notification"
+            | "demo_test_notification"
             | "demo_restart_app"
             | "xcap"
             | "start_current_window_drag"
@@ -727,6 +728,7 @@ mod web_native_capability_tests {
             "migrate_shell_workspace_directory",
             "desktop_screenshot",
             "demo_send_native_notification",
+            "demo_test_notification",
             "demo_restart_app",
             "show_main_window",
             "sync_tray_icon",

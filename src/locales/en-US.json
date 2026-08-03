@@ -109,7 +109,12 @@
       "enableLabel": "Enable notifications",
       "enableHint": "When off, no system notification is shown for background local chat completion or failure.",
       "soundLabel": "Enable sound",
-      "soundHint": "When on, Windows native notifications use the system default sound."
+      "soundHint": "When on, Windows native notifications use the system default sound.",
+      "testLabel": "Test notifications",
+      "testHint": "Send a test notification to verify normal and live update (island) notifications.",
+      "testNormalLabel": "Normal",
+      "testLiveUpdateLabel": "Live update",
+      "testFailedLabel": "Notification test failed"
     },
     "api": {
       "saving": "Saving...",

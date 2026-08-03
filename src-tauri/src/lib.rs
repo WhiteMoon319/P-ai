@@ -1331,6 +1331,7 @@ pub fn run() {
             desktop_screenshot,
             xcap,
             demo_send_native_notification,
+            demo_test_notification,
             demo_restart_app,
             get_host_runtime_prerequisites,
             install_host_runtime_prerequisite,

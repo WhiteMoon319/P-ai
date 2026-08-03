@@ -58,6 +58,9 @@
 
 ## 功能
 
+- 新增（android-live-update）：live update 通知在 TODO 更新后自动刷新。`update_conversation_todos_and_emit` 更新 todo 成功后新增 `live_update_todos_changed` 刷新入口，同 id 重发 ongoing 通知，让岛/通知栏实时展示最新步骤文本；并复用「有 todo 显示步骤、无 todo 显示对话标题」的正文逻辑。桌面端为空实现，行为不变。
+- 新增（android-live-update）：live update 通知新增短文本（Android 13+ `shortText`）。Rust builder 新增 `short_text()`，Kotlin 端在 API 33+ 调用 `setShortCriticalText`，岛/锁屏胶囊优先显示 todo 当前步骤，无 todo 时显示对话标题，展开通知仍显示完整标题与正文。
+- 新增（android-notification）：通知设置页新增「通知测试」，可分别发送普通通知与实时通知测试：普通通知立即弹出一条；实时通知在 Android 上模拟 live update 完整生命周期（ongoing 第 1/2 步 → 2 秒后刷新第 2/2 步 → 2 秒后转终态），桌面端降级为普通通知。
 - 新增（android-live-update）：Android 端新增消息输出与目标 live update 通知。消息轮次开始/进行中显示常驻 ongoing 通知（“正在回复…”），完成或失败后同 id 更新为可手动划掉的终态通知，不再重复打扰；目标创建/更新显示进行中通知并展示目标摘要，目标结束后更新为终态。参考 MAA-Meow TaskExecutionService 的 live update 模式，采用“同通知 id 更新 + ongoing 切换”实现，多会话并发时用 owner 记录保证只有当前显示归属会话结束才更新终态，避免覆盖仍在进行中的其他会话通知。桌面端为空实现，行为不变。
 - 新增（android-live-update）：Android 15 (API 35) 官方 live updates（promoted ongoing）。将 tauri-plugin-notification 2.3.3 vendor 进 `src-tauri/vendor/`（path 依赖），扩展 Android 端通知能力：Rust builder 新增 `request_promoted_ongoing()` 与 `progress()`；Kotlin 端 `Notification` 数据类新增 promoted/进度字段，`buildNotification` 在 ongoing + promoted 时调用 `setRequestPromotedOngoing`，并在提供进度时设置进度条；插件 manifest 声明 `POST_PROMOTED_NOTIFICATIONS` 权限（随 manifest merge 进应用），插件依赖 `androidx.core:core-ktx` 升至 1.17.0（`setRequestPromotedOngoing` 自该版本加入）。消息输出中/目标进行中的 ongoing 通知现以标准样式（BigTextStyle + 不确定进度）请求系统提升，API 35+ 默认展开、锁屏可见，API 35 以下静默降级为普通 ongoing；终态通知不请求提升。桌面端行为不变。
 - 修复（android-welcome）：设置页欢迎界面的 Git/Node.js/ripgrep 运行时检测在 Android 上改走沙盒 Linux 环境：宿主 PATH 检测在 Android 恒判未安装（git/node/rg 实际运行在 proot Ubuntu 沙盒内），现改为沙盒就绪后在沙盒内执行 `command -v` 检测，未就绪视为未安装；同时欢迎界面接收 Android 平台标记，Android 上 Git/Node 卡片隐藏不可用的“一键安装/手动安装”按钮（winget 仅桌面端），并提示在沙盒终端用 `apt install` 安装，桌面端行为不变。
