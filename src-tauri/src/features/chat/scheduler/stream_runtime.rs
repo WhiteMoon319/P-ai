@@ -117,10 +117,16 @@ fn conversation_has_focused_chat_view(state: &AppState, conversation_id: &str) -
     {
         // Android 是单 WebView，没有桌面式窗口焦点语义：wry 的 android 端
         // set_visible/focus 均为 Unsupported，is_focused/is_visible 也没有对应
-        // 消息处理，走这条判定要么恒失效要么阻塞等待响应。
-        // 前台跳过不适用，直接返回 false，保证轮次完成/失败通知总能发送。
-        let _ = (state, conversation_id);
-        return false;
+        // 消息处理，走桌面判定要么恒失效要么阻塞等待响应。
+        // 前台状态改由前端上报：会话有活跃 binding 且聊天视图处于前台激活
+        // （visibility + focus + viewMode==="chat"）时才视为前台、跳过通知。
+        let has_binding = match state.active_chat_view_bindings.lock() {
+            Ok(bindings) => bindings
+                .values()
+                .any(|binding| binding.conversation_id.trim() == conversation_id.trim()),
+            Err(_) => false,
+        };
+        has_binding && chat_view_foreground_active()
     }
     #[cfg(not(target_os = "android"))]
     {

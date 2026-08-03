@@ -50,7 +50,7 @@
 
 ## 修复
 
-- 修复（android-notification）：Android 端轮次完成/失败通知不再执行桌面式“聊天窗口前台跳过”判定。Android 为单 WebView，wry 端窗口可见性/焦点均无实现（`set_visible`/`focus` 为 Unsupported，`is_focused`/`is_visible` 无对应消息处理），该判定要么恒失效要么阻塞等待响应；现 Android 下 `conversation_has_focused_chat_view` 直接返回 false，保证通知总能发送，桌面端行为不变。
+- 修复（android-notification）：Android 端轮次完成/失败通知恢复“前台跳过”语义。Android 为单 WebView，wry 端窗口可见性/焦点均无实现（`set_visible`/`focus` 为 Unsupported，`is_focused`/`is_visible` 无对应消息处理），桌面式窗口焦点判定不可用；现改由前端 `useChatForegroundActivity` 上报聊天视图前台激活状态（`visibilitychange` + focus + 聊天视图），后端 `set_chat_window_active` 全平台存储该状态，Android 下会话有活跃 binding 且聊天视图前台激活时才跳过通知，前台不打扰、切后台正常提醒，桌面端行为不变。
 - 修复新建“隔离工作树”会话时 Git 根目录二次校验会弹出控制台窗口的问题：Windows 下以 `CREATE_NO_WINDOW` 执行校验进程。
 - 修复后台子进程弹出控制台窗口的遗漏点：Git 幽灵快照、VSCode 桥接网络探测、winget 安装、WSL/Shell 终端启动器、默认程序打开文件，均以 `CREATE_NO_WINDOW` 抑制多余控制台窗口。
 

@@ -68,6 +68,20 @@ struct RecordHotkeyUpdateResult {
     max_record_seconds: u32,
 }
 
+// 聊天视图前台激活状态：由前端 useChatForegroundActivity 上报
+// （visibility + focus + viewMode==="chat"），所有平台统一存储，
+// Android 无窗口焦点 API，通知等逻辑依赖该状态判断"会话是否在前台可见"。
+static CHAT_VIEW_FOREGROUND_ACTIVE: std::sync::OnceLock<std::sync::atomic::AtomicBool> =
+    std::sync::OnceLock::new();
+
+#[cfg(target_os = "android")]
+fn chat_view_foreground_active() -> bool {
+    CHAT_VIEW_FOREGROUND_ACTIVE
+        .get()
+        .map(|flag| flag.load(std::sync::atomic::Ordering::Relaxed))
+        .unwrap_or(false)
+}
+
 #[tauri::command]
 fn set_chat_window_active(active: bool) {
     static CHAT_WINDOW_INACTIVE_LOGGED_ONCE: std::sync::atomic::AtomicBool =
@@ -75,6 +89,9 @@ fn set_chat_window_active(active: bool) {
     if !active && !CHAT_WINDOW_INACTIVE_LOGGED_ONCE.swap(true, std::sync::atomic::Ordering::Relaxed) {
         runtime_log_warn(format!("[系统] 聊天窗口激活状态变更：跳过"));
     }
+    let flag = CHAT_VIEW_FOREGROUND_ACTIVE
+        .get_or_init(|| std::sync::atomic::AtomicBool::new(active));
+    flag.store(active, std::sync::atomic::Ordering::Relaxed);
     set_record_hotkey_probe_chat_window_active(active);
 }
 
