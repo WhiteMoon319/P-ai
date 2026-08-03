@@ -393,12 +393,6 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
     if (rewindInFlight || !!branchingConversation?.value) {
       return;
     }
-    if (options.chatting.value || options.trimming.value || options.compactingConversation.value) {
-      const message = t('dialogs.rewind.failedBusy');
-      options.setChatErrorText(message);
-      options.setStatusError("status.createBranchFailed", message);
-      return;
-    }
     const currentMessages = [...options.allMessages.value];
     const directIndex = findMessageIndexByTurnId(currentMessages, payload.turnId);
     const targetMessageId = String(payload.turnId || "").trim();

@@ -1019,21 +1019,22 @@ function canConfirmPlan(block: ChatMessageBlock): boolean {
 
 const messageSelectionDelegateOnly = ref(false);
 
-function openSelectionMenu(options: { delegateOnly?: boolean } = {}) {
-  if (props.chatting || props.frozen || conversationInteractionBusy.value) return;
+function openSelectionMenu(options: { delegateOnly?: boolean; allowWhenBusy?: boolean } = {}) {
+  // 多选入口忙碌时禁用；分支/委托/转发/分享属于子代理或纯读取操作，
+  // 不影响主轮次，忙碌时允许进入选择模式（allowWhenBusy）。
+  if (!options.allowWhenBusy && (props.chatting || props.frozen || conversationInteractionBusy.value)) return;
   clearNativeTextSelection();
   messageSelectionDelegateOnly.value = !!options.delegateOnly;
   messageSelectionModeEnabled.value = true;
   selectedMessageRenderIds.value = [];
   void nextTick(() => composerPanelRef.value?.focusInput?.({ preventScroll: true }));
 }
-const openBranchSelectionMenu = () => openSelectionMenu();
-const openDelegateSelectionMenu = () => openSelectionMenu({ delegateOnly: true });
-const openForwardSelectionMenu = () => openSelectionMenu();
-const openShareSelectionMenu = () => openSelectionMenu();
+const openBranchSelectionMenu = () => openSelectionMenu({ allowWhenBusy: true });
+const openDelegateSelectionMenu = () => openSelectionMenu({ delegateOnly: true, allowWhenBusy: true });
+const openForwardSelectionMenu = () => openSelectionMenu({ allowWhenBusy: true });
+const openShareSelectionMenu = () => openSelectionMenu({ allowWhenBusy: true });
 
 function openTaskCreateDialog() {
-  if (props.chatting || props.frozen || conversationInteractionBusy.value) return;
   taskDialogMode.value = "create";
   taskDialogTask.value = null;
   taskDialogOpen.value = true;

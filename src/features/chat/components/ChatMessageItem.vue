@@ -382,7 +382,6 @@
           type="button"
           class="ecall-message-footer-action inline-flex h-6 w-6 items-center justify-center rounded text-base-content/55 hover:text-base-content"
           :title="t('chat.copy')"
-          :disabled="selectionModeEnabled"
           @click="emit('copyMessage', block)"
         >
           <Copy class="h-3.5 w-3.5" />
@@ -391,7 +390,7 @@
           type="button"
           class="ecall-message-footer-action inline-flex h-6 w-6 items-center justify-center rounded text-base-content/55 hover:text-base-content"
           :title="t('chat.selection.copyImageAsImage')"
-          :disabled="selectionModeEnabled || copyMessageImageBusy"
+          :disabled="copyMessageImageBusy"
           @click="copyCurrentMessageAsImage"
         >
           <ImageIcon class="h-3.5 w-3.5" />
@@ -1361,6 +1360,8 @@ function handleContextMenuAction(action: string) {
   const mathCopyText = mathContextCopyText.value;
   closeContextMenu();
   if (action === "select") {
+    // 多选模式忙碌时禁用；分支/转发等子代理操作不受影响
+    if (props.chatting || props.busy || props.frozen) return;
     emit("enterSelectionMode", props.selectionKey);
   } else if (action === "copy") {
     emit("copyMessage", props.block);
