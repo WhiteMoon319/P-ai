@@ -1302,23 +1302,6 @@ fn tool_review_prune_legacy_batch_report_records(
     Ok(true)
 }
 
-fn tool_review_cleanup_legacy_artifacts(
-    data_path: &PathBuf,
-    conversation: &mut Conversation,
-) -> Result<bool, String> {
-    let before_len = conversation.messages.len();
-    conversation
-        .messages
-        .retain(|message| !is_tool_review_report_message(message));
-    let removed_legacy_messages = conversation.messages.len() != before_len;
-    let removed_legacy_reports = if conversation.id.trim().is_empty() {
-        false
-    } else {
-        tool_review_prune_legacy_batch_report_records(data_path, conversation.id.trim())?
-    };
-    Ok(removed_legacy_messages || removed_legacy_reports)
-}
-
 fn tool_review_create_pending_report(
     data_path: &PathBuf,
     conversation_id: &str,
@@ -2120,7 +2103,7 @@ async fn submit_tool_review_code_internal(
 
 #[cfg(test)]
 mod tool_review_tests {
-    use super::{tool_review_build_context, tool_review_cleanup_legacy_artifacts, tool_review_preview_for_item, tool_review_prune_legacy_batch_report_records, ChatMessage, Conversation, MessagePart, ToolReviewCollectedItem, ToolReviewReportRecord};
+    use super::{tool_review_build_context, tool_review_preview_for_item, tool_review_prune_legacy_batch_report_records, ChatMessage, Conversation, MessagePart, ToolReviewCollectedItem, ToolReviewReportRecord};
     use crate::{app_root_from_data_path, ConversationCumulativeUsage, ASSISTANT_DEPARTMENT_ID, DEFAULT_AGENT_ID};
     use std::{env, fs};
     use uuid::Uuid;
@@ -2349,46 +2332,6 @@ mod tool_review_tests {
         assert!(changed);
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].scope, "commit");
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn tool_review_cleanup_legacy_artifacts_should_remove_report_messages_and_batch_records() {
-        let root = env::temp_dir().join(format!("easy-call-ai-tool-review-{}", Uuid::new_v4()));
-        let data_path = root.join("app_data.json");
-        let conversation_id = "conversation-2";
-        let reports_dir = app_root_from_data_path(&data_path)
-            .join("tool-review-reports")
-            .join(conversation_id);
-        fs::create_dir_all(&reports_dir).expect("create reports dir");
-        fs::write(
-            reports_dir.join("reports.jsonl"),
-            "{\"id\":\"r1\",\"conversationId\":\"conversation-2\",\"title\":\"\",\"status\":\"success\",\"scope\":\"batch\",\"target\":\"第 1 批\",\"workspacePath\":\"E:/workspace\",\"createdAt\":\"2026-05-05T00:00:00.000Z\",\"updatedAt\":\"2026-05-05T00:00:00.000Z\",\"reportText\":\"old\"}\n",
-        )
-        .expect("write reports");
-        let mut conversation = test_conversation(
-            conversation_id,
-            vec![
-                test_chat_message("u1", "user"),
-                test_tool_review_report_message("legacy-report"),
-                test_chat_message("a1", "assistant"),
-            ],
-        );
-
-        let changed = tool_review_cleanup_legacy_artifacts(&data_path, &mut conversation)
-            .expect("cleanup legacy artifacts");
-
-        assert!(changed);
-        assert_eq!(conversation.messages.len(), 2);
-        assert!(conversation
-            .messages
-            .iter()
-            .all(|message| !super::is_tool_review_report_message(message)));
-        assert!(
-            super::tool_review_read_report_records(&data_path, conversation_id)
-                .expect("read reports after cleanup")
-                .is_empty()
-        );
         let _ = fs::remove_dir_all(root);
     }
 }

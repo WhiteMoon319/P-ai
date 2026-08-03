@@ -140,8 +140,6 @@ struct AppData {
     #[serde(default)]
     conversation_section_orders: ConversationSectionOrders,
     conversations: Vec<Conversation>,
-    #[serde(default, skip_serializing)]
-    archived_conversations: Vec<ConversationArchive>,
     #[serde(default)]
     image_text_cache: Vec<ImageTextCacheEntry>,
     #[serde(default)]
@@ -177,7 +175,6 @@ impl Default for AppData {
             pinned_conversation_ids: Vec::new(),
             conversation_section_orders: ConversationSectionOrders::default(),
             conversations: Vec::new(),
-            archived_conversations: Vec::new(),
             image_text_cache: Vec::new(),
             pdf_text_cache: Vec::new(),
             pdf_image_cache: Vec::new(),

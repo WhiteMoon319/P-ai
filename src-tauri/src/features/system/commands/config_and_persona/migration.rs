@@ -414,7 +414,6 @@ fn build_export_payload(state: &AppState) -> Result<MigrationPayload, String> {
 
     runtime_data.main_conversation_id = None;
     runtime_data.conversations.clear();
-    runtime_data.archived_conversations.clear();
     runtime_data.image_text_cache.clear();
     runtime_data.pdf_text_cache.clear();
     runtime_data.pdf_image_cache.clear();
@@ -558,7 +557,7 @@ fn migration_manifest_version(manifest: &MigrationManifest, payload: &MigrationP
     manifest
         .migration_version
         .max(payload.runtime_data.data_migration_version)
-        .max(DATA_MIGRATION_VERSION_V1_BASELINE)
+        .max(DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES)
 }
 
 fn assert_manifest_version(
@@ -826,7 +825,7 @@ fn export_config_migration_package_to_path(
     ));
     let manifest = MigrationManifest {
         schema_version: MIGRATION_SCHEMA_VERSION,
-        migration_version: payload.runtime_data.data_migration_version.max(DATA_MIGRATION_VERSION_V1_BASELINE),
+        migration_version: payload.runtime_data.data_migration_version.max(DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES),
         app_version: env!("CARGO_PKG_VERSION").to_string(),
         exported_at: now_iso(),
     };

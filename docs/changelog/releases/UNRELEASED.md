@@ -2,6 +2,7 @@
 
 ## 修复
 
+- 整体删除旧布局（app_data.json 单文件 / app_data/ 子目录）的读取与迁移链：`read_legacy_app_data` / `read_legacy_split_app_data` / `legacy_app_data_split_*` 路径辅助全部删除，`read_app_data` 退化为纯分片聚合（等价 `read_layout_app_data`）；V1 baseline 迁移 7 步（内置 agents 补全、会话元数据补全、头像路径迁移、归档合并、内联媒体外置、主会话标记归一、工具评审遗留清理）及 `migrate_legacy_app_data_if_needed` 显式迁移入口删除，启动门闩与 bootstrap 快照不再执行旧布局迁移；`DATA_MIGRATION_VERSION_V1_BASELINE` 常量删除，最低迁移版本从 V2 起算；`AppData.archived_conversations` 字段删除（仅旧归档合并使用）。产品不再支持旧布局直接升级，代码中不存在任何读取旧数据文件的路径。
 - 废弃 `user_alias` 旧字段：旧数据迁移时直接抛弃 `user_alias`，不再拷贝进运行时状态（`RuntimeStateFile` 删除该字段及 `build_runtime_state_file` / `apply_runtime_state_to_app_data` / `read_layout_app_data` 中的拷贝逻辑）；业务消费方一律改从 agents 用户人格（user-persona）的 name 取昵称——历史记忆索引签名/渲染、微信入站联系人显示名、IDE persona、压缩兜底、聊天准备快照全部切换，`AppData.user_alias` 仅保留用于旧文件反序列化兼容，不再流向运行时。
 - 剥离旧数据（app_data.json）的非迁移读取：旧布局数据只允许在迁移流程中被读取——新增显式迁移入口 `migrate_legacy_app_data_if_needed`（幂等，检测旧布局存在时读入 app_data.json 并触发 V1 迁移写回分片），启动门闩与 bootstrap 快照在业务读取前执行；删除 `read_agents_shard` / `read_runtime_state_shard` / `read_conversation_meta_shard` / `read_conversation_shard_raw` / `collect_chat_index_items_from_storage` 六处 legacy 兜底分支，业务读取一律只走分片；MCP/Skills 刷新不再整读 `read_app_data`，改用 `state_read_agents_cached`。迁移完成后 AppData 数据不再进入内存缓存。
 - exec 工具的系统提示词补充 rg 使用约定：明确 `rg -r` 是 `--replace`（必须带参数），`-rn` 会被解析成 `-r n` 把匹配替换成字符 `n` 输出产生假结果；统一使用 `rg -n` 搜索（rg 默认递归），避免短选项拼接陷阱。

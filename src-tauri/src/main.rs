@@ -204,10 +204,6 @@ async fn frontend_ready_start_remote_im_services(app: AppHandle) -> Result<bool,
 async fn refresh_conversation_meta_after_migration(state: AppState) {
     let started = std::time::Instant::now();
     let result = tokio::task::spawn_blocking(move || {
-        let legacy_migrated = migrate_legacy_app_data_if_needed(&state.data_path)?;
-        if legacy_migrated {
-            runtime_log_info("[启动] 旧布局数据迁移完成，任务=read_app_data V1 迁移写回分片".to_string());
-        }
         let chat_index = collect_chat_index_items_from_storage(&state.data_path)?;
         let mut refreshed = 0usize;
         for item in &chat_index {

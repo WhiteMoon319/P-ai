@@ -1,132 +1,4 @@
-fn migrate_app_data_inline_media_to_refs(data_path: &PathBuf, data: &mut AppData) -> bool {
-    let mut changed = false;
-    for conversation in &mut data.conversations {
-        for message in &mut conversation.messages {
-            changed |= externalize_message_parts_to_media_refs_lossy(&mut message.parts, data_path);
-        }
-    }
-    for archive in &mut data.archived_conversations {
-        for message in &mut archive.source_conversation.messages {
-            changed |= externalize_message_parts_to_media_refs_lossy(&mut message.parts, data_path);
-        }
-    }
-    changed
-}
-
-fn migrate_app_data_archives_into_conversations(
-    data_path: &PathBuf,
-    data: &mut AppData,
-) -> Result<bool, String> {
-    if data.archived_conversations.is_empty() {
-        return Ok(false);
-    }
-    let backup_file = app_layout_backups_dir(data_path).join(format!(
-        "app_data.pre_archive_merge.{}.json",
-        now_utc().unix_timestamp()
-    ));
-    write_json_file_atomic(&backup_file, data, "pre-migration app_data backup")?;
-
-    for archive in data.archived_conversations.clone() {
-        let mut conv = archive.source_conversation;
-        if conv.id.trim().is_empty() {
-            conv.id = Uuid::new_v4().to_string();
-        }
-        if conv.archived_at.as_deref().unwrap_or("").trim().is_empty() {
-            conv.archived_at = Some(archive.archived_at.clone());
-        }
-        if conv.status.trim() != "archived" {
-            conv.status = "archived".to_string();
-        }
-        conv.fast_request_turns.clear();
-
-        if let Some(existing_idx) = data.conversations.iter().position(|c| c.id == conv.id) {
-            let should_replace = {
-                let existing = &data.conversations[existing_idx];
-                existing.summary.trim().is_empty() && !conv.summary.trim().is_empty()
-            };
-            if should_replace {
-                data.conversations[existing_idx] = conv;
-            }
-        } else {
-            data.conversations.push(conv);
-        }
-    }
-
-    data.archived_conversations.clear();
-    Ok(true)
-}
-
-fn migrate_agent_avatar_paths(data_path: &PathBuf, data: &mut AppData) -> bool {
-    let root = app_root_from_data_path(data_path);
-    let new_avatar_dir = root.join("avatars");
-    let legacy_avatar_dir = root.join("config").join("avatars");
-    let mut changed = false;
-
-    for agent in &mut data.agents {
-        let Some(path_raw) = agent.avatar_path.as_ref() else {
-            continue;
-        };
-        if path_raw.trim().is_empty() {
-            continue;
-        }
-        let old_path = PathBuf::from(path_raw);
-        let file_name = old_path
-            .file_name()
-            .map(|v| v.to_owned())
-            .or_else(|| {
-                PathBuf::from(path_raw)
-                    .components()
-                    .last()
-                    .map(|c| std::ffi::OsString::from(c.as_os_str()))
-            });
-        let Some(file_name) = file_name else {
-            continue;
-        };
-        let new_path = new_avatar_dir.join(file_name);
-
-        if new_path.exists() {
-            let next = new_path.to_string_lossy().to_string();
-            if next != *path_raw {
-                agent.avatar_path = Some(next);
-                changed = true;
-            }
-            continue;
-        }
-
-        let legacy_candidate = if old_path.exists() {
-            old_path.clone()
-        } else {
-            legacy_avatar_dir.join(
-                old_path
-                    .file_name()
-                    .unwrap_or_else(|| std::ffi::OsStr::new("")),
-            )
-        };
-        if !legacy_candidate.exists() {
-            continue;
-        }
-        let _ = fs::create_dir_all(&new_avatar_dir);
-        if fs::rename(&legacy_candidate, &new_path).is_err() {
-            if fs::copy(&legacy_candidate, &new_path).is_ok() {
-                let _ = fs::remove_file(&legacy_candidate);
-            }
-        }
-        if new_path.exists() {
-            let next = new_path.to_string_lossy().to_string();
-            if next != *path_raw {
-                agent.avatar_path = Some(next);
-                changed = true;
-            }
-        }
-    }
-
-    changed
-}
-
 const LEGACY_APP_DATA_SPLIT_DIR_NAME: &str = "app_data";
-const LEGACY_APP_DATA_PROFILE_FILE_NAME: &str = "profile.json";
-const LEGACY_APP_DATA_CONVERSATIONS_FILE_NAME: &str = "conversations.json";
-const LEGACY_APP_DATA_IMAGE_CACHE_FILE_NAME: &str = "image_text_cache.json";
 
 const LAYOUT_DIR_CONFIG: &str = "config";
 const LAYOUT_DIR_STATE: &str = "state";
@@ -667,24 +539,6 @@ fn legacy_app_data_split_dir(path: &PathBuf) -> PathBuf {
     parent.join(LEGACY_APP_DATA_SPLIT_DIR_NAME)
 }
 
-fn legacy_app_data_split_profile_path(path: &PathBuf) -> PathBuf {
-    legacy_app_data_split_dir(path).join(LEGACY_APP_DATA_PROFILE_FILE_NAME)
-}
-
-fn legacy_app_data_split_conversations_path(path: &PathBuf) -> PathBuf {
-    legacy_app_data_split_dir(path).join(LEGACY_APP_DATA_CONVERSATIONS_FILE_NAME)
-}
-
-fn legacy_app_data_split_image_cache_path(path: &PathBuf) -> PathBuf {
-    legacy_app_data_split_dir(path).join(LEGACY_APP_DATA_IMAGE_CACHE_FILE_NAME)
-}
-
-fn legacy_app_data_split_exists(path: &PathBuf) -> bool {
-    legacy_app_data_split_profile_path(path).exists()
-        || legacy_app_data_split_conversations_path(path).exists()
-        || legacy_app_data_split_image_cache_path(path).exists()
-}
-
 fn read_json_file<T>(path: &PathBuf, label: &str) -> Result<T, String>
 where
     T: serde::de::DeserializeOwned,
@@ -851,113 +705,7 @@ where
     Ok(true)
 }
 
-fn read_legacy_app_data(path: &PathBuf) -> Result<AppData, String> {
-    if !path.exists() {
-        return Ok(AppData::default());
-    }
-    let mut parsed = read_json_file::<AppData>(path, "legacy app_data")?;
-    parsed.version = APP_DATA_SCHEMA_VERSION;
-    Ok(parsed)
-}
-
-fn read_legacy_split_app_data(path: &PathBuf) -> Result<AppData, String> {
-    let defaults = AppData::default();
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct LegacyProfile {
-        version: u32,
-        #[serde(default)]
-        data_migration_version: u32,
-        #[serde(default, alias = "messageStoreMigrationVersion")]
-        message_store_migration_version: u32,
-        agents: Vec<AgentProfile>,
-        #[serde(alias = "selectedAgentId", alias = "selected_agent_id")]
-        assistant_department_agent_id: String,
-        user_alias: String,
-        response_style_id: String,
-        #[serde(default = "default_pdf_read_mode")]
-        pdf_read_mode: String,
-        #[serde(default = "default_background_voice_screenshot_keywords")]
-        background_voice_screenshot_keywords: String,
-        #[serde(default = "default_background_voice_screenshot_mode")]
-        background_voice_screenshot_mode: String,
-        #[serde(default)]
-        instruction_presets: Vec<PromptCommandPreset>,
-    }
-    #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-    #[serde(rename_all = "camelCase")]
-    struct LegacyConversations {
-        #[serde(default)]
-        conversations: Vec<Conversation>,
-    }
-    #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-    #[serde(rename_all = "camelCase")]
-    struct LegacyImageCache {
-        #[serde(default)]
-        image_text_cache: Vec<ImageTextCacheEntry>,
-    }
-
-    let profile_path = legacy_app_data_split_profile_path(path);
-    let conversations_path = legacy_app_data_split_conversations_path(path);
-    let image_cache_path = legacy_app_data_split_image_cache_path(path);
-
-    let profile = if profile_path.exists() {
-        read_json_file::<LegacyProfile>(&profile_path, "legacy app_data profile")?
-    } else {
-        LegacyProfile {
-            version: defaults.version,
-            data_migration_version: defaults.data_migration_version,
-            message_store_migration_version: defaults.message_store_migration_version,
-            agents: defaults.agents.clone(),
-            assistant_department_agent_id: defaults.assistant_department_agent_id.clone(),
-            user_alias: defaults.user_alias.clone(),
-            response_style_id: defaults.response_style_id.clone(),
-            pdf_read_mode: defaults.pdf_read_mode.clone(),
-            background_voice_screenshot_keywords: defaults
-                .background_voice_screenshot_keywords
-                .clone(),
-            background_voice_screenshot_mode: defaults
-                .background_voice_screenshot_mode
-                .clone(),
-            instruction_presets: defaults.instruction_presets.clone(),
-        }
-    };
-    let conversations = if conversations_path.exists() {
-        read_json_file::<LegacyConversations>(&conversations_path, "legacy app_data conversations")?
-    } else {
-        LegacyConversations::default()
-    };
-    let image_cache = if image_cache_path.exists() {
-        read_json_file::<LegacyImageCache>(&image_cache_path, "legacy app_data image cache")?
-    } else {
-        LegacyImageCache::default()
-    };
-
-    Ok(AppData {
-        version: profile.version,
-        data_migration_version: profile.data_migration_version,
-        message_store_migration_version: profile.message_store_migration_version,
-        agents: profile.agents,
-        assistant_department_agent_id: profile.assistant_department_agent_id,
-        user_alias: profile.user_alias,
-        response_style_id: profile.response_style_id,
-        pdf_read_mode: profile.pdf_read_mode,
-        background_voice_screenshot_keywords: profile.background_voice_screenshot_keywords,
-        background_voice_screenshot_mode: profile.background_voice_screenshot_mode,
-        instruction_presets: profile.instruction_presets,
-        main_conversation_id: None,
-        pinned_conversation_ids: Vec::new(),
-        conversation_section_orders: ConversationSectionOrders::default(),
-        conversations: conversations.conversations,
-        archived_conversations: Vec::new(),
-        image_text_cache: image_cache.image_text_cache,
-        remote_im_contacts: Vec::new(),
-        remote_im_contact_checkpoints: Vec::new(),
-        pdf_text_cache: Vec::new(),
-        pdf_image_cache: Vec::new(),
-    })
-}
-
+#[cfg(test)]
 fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
     let agents = if app_layout_agents_path(path).exists() {
         read_json_file::<AgentsFile>(&app_layout_agents_path(path), "agents file")?.agents
@@ -1017,7 +765,6 @@ fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
         pinned_conversation_ids: runtime.pinned_conversation_ids,
         conversation_section_orders: runtime.conversation_section_orders,
         conversations,
-        archived_conversations: Vec::new(),
         image_text_cache: runtime.image_text_cache,
         remote_im_contacts: runtime.remote_im_contacts,
         remote_im_contact_checkpoints: runtime.remote_im_contact_checkpoints,
@@ -1028,7 +775,6 @@ fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
 
 // ========== 数据迁移 registry ==========
 //
-// v1 是历史兼容合集，继续由 read_app_data() 的 baseline 门禁处理。
 // v2+ 需要显式上下文，避免在只有 app_data 路径时猜测助理空间位置或名称。
 struct DataMigrationContext<'a> {
     state: &'a AppState,
@@ -1330,130 +1076,11 @@ fn sync_assistant_workspace_label_for_unarchived_conversations(
     Ok(changed)
 }
 
+#[cfg(test)]
 fn read_app_data(path: &PathBuf) -> Result<AppData, String> {
-    let mut parsed = if app_layout_exists(path) {
-        read_layout_app_data(path)?
-    } else if legacy_app_data_split_exists(path) {
-        read_legacy_split_app_data(path)?
-    } else {
-        read_legacy_app_data(path)?
-    };
+    let mut parsed = read_layout_app_data(path)?;
     parsed.version = APP_DATA_SCHEMA_VERSION;
-    let migration_version_before = parsed.data_migration_version;
-    let run_v1_baseline_migrations =
-        migration_version_before < DATA_MIGRATION_VERSION_V1_BASELINE;
-    let builtin_agents_filled = if run_v1_baseline_migrations {
-        ensure_required_builtin_agents(&mut parsed)
-    } else {
-        false
-    };
-    let conversation_metadata_filled = if run_v1_baseline_migrations {
-        fill_missing_conversation_metadata(&mut parsed)
-    } else {
-        false
-    };
-    let avatar_paths_migrated = if run_v1_baseline_migrations {
-        migrate_agent_avatar_paths(path, &mut parsed)
-    } else {
-        false
-    };
-    let merged_archives = if run_v1_baseline_migrations {
-        migrate_app_data_archives_into_conversations(path, &mut parsed)?
-    } else {
-        false
-    };
-    let migrated = if run_v1_baseline_migrations {
-        migrate_app_data_inline_media_to_refs(path, &mut parsed)
-    } else {
-        false
-    };
-    let main_conversation_marker_changed = if run_v1_baseline_migrations {
-        normalize_main_conversation_marker(&mut parsed, "")
-    } else {
-        false
-    };
-    let mut tool_review_legacy_cleaned = false;
-    if run_v1_baseline_migrations {
-        for conversation in parsed.conversations.iter_mut() {
-            if tool_review_cleanup_legacy_artifacts(path, conversation)? {
-                tool_review_legacy_cleaned = true;
-            }
-        }
-    }
-    let data_migration_version_recorded =
-        if parsed.data_migration_version < DATA_MIGRATION_VERSION_V1_BASELINE {
-        parsed.data_migration_version = DATA_MIGRATION_VERSION_V1_BASELINE;
-        true
-    } else {
-        false
-    };
-    if conversation_metadata_filled
-        || builtin_agents_filled
-        || avatar_paths_migrated
-        || merged_archives
-        || migrated
-        || tool_review_legacy_cleaned
-        || main_conversation_marker_changed
-        || !app_layout_exists(path)
-    {
-        #[allow(deprecated)]
-        let started = std::time::Instant::now();
-        let stats = write_app_data_with_stats(path, &parsed)?;
-        runtime_log_debug(format!(
-            "[应用数据读入迁移] 完成，任务=读入后兼容写回，触发条件=read_app_data，migration_version_before={}，migration_version_after={}，run_v1_baseline_migrations={}，data_migration_version_recorded={}，builtin_agents_filled={}，conversation_metadata_filled={}，avatar_paths_migrated={}，merged_archives={}，inline_media_migrated={}，tool_review_legacy_cleaned={}，main_conversation_marker_changed={}，layout_missing={}，agents_written={}，runtime_written={}，conversation_writes={}，conversation_deletes={}，duration_ms={}",
-            migration_version_before,
-            parsed.data_migration_version,
-            run_v1_baseline_migrations,
-            data_migration_version_recorded,
-            builtin_agents_filled,
-            conversation_metadata_filled,
-            avatar_paths_migrated,
-            merged_archives,
-            migrated,
-            tool_review_legacy_cleaned,
-            main_conversation_marker_changed,
-            !app_layout_exists(path),
-            stats.agents_written,
-            stats.runtime_written,
-            stats.conversation_writes,
-            stats.conversation_deletes,
-            started.elapsed().as_millis()
-        ));
-    } else if data_migration_version_recorded {
-        let mut runtime = build_runtime_state_file(&parsed);
-        if app_layout_runtime_state_path(path).exists() {
-            if let Ok(existing_runtime) =
-                read_json_file::<RuntimeStateFile>(&app_layout_runtime_state_path(path), "runtime state file")
-            {
-                runtime.data_migration_version = runtime
-                    .data_migration_version
-                    .max(existing_runtime.data_migration_version);
-                runtime.message_store_migration_version = runtime
-                    .message_store_migration_version
-                    .max(existing_runtime.message_store_migration_version);
-            }
-        }
-        let runtime_written = write_runtime_state_shard(path, &runtime)?;
-        runtime_log_debug(format!(
-            "[应用数据读入迁移] 完成，任务=记录迁移版本，触发条件=read_app_data，migration_version_before={}，migration_version_after={}，run_v1_baseline_migrations={}，runtime_written={}，conversation_writes=0",
-            migration_version_before,
-            parsed.data_migration_version,
-            run_v1_baseline_migrations,
-            runtime_written
-        ));
-    }
     Ok(parsed)
-}
-
-/// 旧布局迁移专用入口：仅当新布局分片不存在且旧数据文件存在时，读取 app_data.json
-/// 并触发 V1 迁移写回。迁移完成后新布局分片存在，后续调用直接返回 false（幂等）。
-/// 业务代码禁止直接调用 read_app_data——旧数据只允许在迁移流程中被读取。
-fn migrate_legacy_app_data_if_needed(path: &PathBuf) -> Result<bool, String> {
-    if app_layout_exists(path) || !path.exists() {
-        return Ok(false);
-    }
-    let _data = read_app_data(path)?;
-    Ok(true)
 }
 
 fn normalize_conversation_runtime_volatile_fields(conversation: &mut Conversation) {

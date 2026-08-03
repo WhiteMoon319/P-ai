@@ -3,16 +3,12 @@ const APP_DATA_SCHEMA_VERSION: u32 = 1;
 // ========== 数据迁移版本门禁 ==========
 //
 // 版本语义：
-//   - DATA_MIGRATION_VERSION_V1_BASELINE：历史启动期兼容迁移的合集。
-//     这些迁移在「显式版本号」机制引入之前就已存在，因此 v1 不拆成单步，
-//     统一由 read_app_data() 里的 run_v1_baseline_migrations 门禁触发。
 //   - DATA_MIGRATION_CURRENT_VERSION：当前数据迁移版本，启动期写回 runtime_state。
+//   - V2/V3：data_migration_steps() 注册的版本化迁移步骤，按版本号递增执行。
 //
 // 新增迁移（v2+）的接入流程：
 //   1. 在 app_data_layout.rs 的 data_migration_steps() 注册一个 DataMigrationStep；
-//   2. 在此处新增 DATA_MIGRATION_VERSION_V2 常量，并把 CURRENT_VERSION 提到它；
-//   3. 不要继续往 v1 baseline 门禁块里堆叠。
-const DATA_MIGRATION_VERSION_V1_BASELINE: u32 = 1;
+//   2. 在此处新增 DATA_MIGRATION_VERSION_V2 常量，并把 CURRENT_VERSION 提到它。
 const DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES: u32 = 2;
 const DATA_MIGRATION_VERSION_V3_CHAT_METADATA_SQLITE: u32 = 3;
 const DATA_MIGRATION_CURRENT_VERSION: u32 = DATA_MIGRATION_VERSION_V3_CHAT_METADATA_SQLITE;

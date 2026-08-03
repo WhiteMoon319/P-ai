@@ -1535,10 +1535,6 @@ fn externalize_message_parts_to_media_refs(
     Ok(changed)
 }
 
-fn externalize_message_parts_to_media_refs_lossy(parts: &mut [MessagePart], data_path: &PathBuf) -> bool {
-    externalize_message_parts_to_media_refs(parts, data_path).unwrap_or(false)
-}
-
 fn materialize_message_parts_from_media_refs(parts: &mut [MessagePart], data_path: &PathBuf) {
     for part in parts {
         match part {

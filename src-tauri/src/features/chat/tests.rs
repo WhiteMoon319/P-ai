@@ -4270,35 +4270,6 @@
     }
 
     #[test]
-    fn state_read_chat_index_cached_should_rebuild_after_legacy_app_data_migration() {
-        let state = test_chat_runtime_state();
-        let now = now_iso();
-        let conversation = test_chat_conversation("conversation-legacy-index", "active", &now);
-        let mut data = AppData::default();
-        data.conversations = vec![conversation.clone()];
-        std::fs::write(
-            &state.data_path,
-            serde_json::to_vec_pretty(&data).expect("serialize legacy app data"),
-        )
-        .expect("write legacy app data");
-
-        let migrated =
-            migrate_legacy_app_data_if_needed(&state.data_path).expect("migrate legacy app data");
-        assert!(migrated);
-        assert!(app_layout_exists(&state.data_path));
-        let migrated_again =
-            migrate_legacy_app_data_if_needed(&state.data_path).expect("idempotent check");
-        assert!(!migrated_again);
-
-        let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
-        assert!(chat_index
-            .conversations
-            .iter()
-            .any(|item| item.id == conversation.id));
-        assert!(!app_layout_chat_index_path(&state.data_path).exists());
-    }
-
-    #[test]
     fn state_schedule_conversation_persist_should_update_memory_chat_index_only() {
         let state = test_chat_runtime_state();
         let now = now_iso();

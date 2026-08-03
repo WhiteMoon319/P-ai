@@ -130,27 +130,6 @@ fn normalize_agent_tools(agent: &mut AgentProfile) -> bool {
     changed
 }
 
-fn ensure_required_builtin_agents(data: &mut AppData) -> bool {
-    let mut changed = false;
-    if !data.agents.iter().any(|agent| agent.id == DEFAULT_AGENT_ID) {
-        data.agents.push(default_agent());
-        changed = true;
-    }
-    if !data.agents.iter().any(|agent| agent.id == DEPUTY_AGENT_ID) {
-        data.agents.push(default_deputy_agent());
-        changed = true;
-    }
-    if !data.agents.iter().any(|agent| agent.id == USER_PERSONA_ID) {
-        data.agents.push(default_user_persona());
-        changed = true;
-    }
-    if !data.agents.iter().any(|agent| agent.id == SYSTEM_PERSONA_ID) {
-        data.agents.push(default_system_persona());
-        changed = true;
-    }
-    changed
-}
-
 fn fill_missing_conversation_message_speaker_agent_ids(conversation: &mut Conversation) -> bool {
     fn provider_meta_speaker_agent_id(message: &ChatMessage) -> Option<String> {
         let meta = message.provider_meta.as_ref()?;
@@ -197,28 +176,6 @@ fn fill_missing_conversation_message_speaker_agent_ids(conversation: &mut Conver
                         host_agent_id.clone()
                     }
                 }));
-            changed = true;
-        }
-    }
-    changed
-}
-
-fn fill_missing_conversation_metadata(data: &mut AppData) -> bool {
-    let mut changed = false;
-    for conversation in &mut data.conversations {
-        if conversation.conversation_kind.trim().is_empty() {
-            conversation.conversation_kind = CONVERSATION_KIND_CHAT.to_string();
-            changed = true;
-        }
-    }
-    for archive in &mut data.archived_conversations {
-        if archive
-            .source_conversation
-            .conversation_kind
-            .trim()
-            .is_empty()
-        {
-            archive.source_conversation.conversation_kind = CONVERSATION_KIND_CHAT.to_string();
             changed = true;
         }
     }
