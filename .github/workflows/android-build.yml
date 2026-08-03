@@ -117,8 +117,10 @@ jobs:
           if patchelf --print-needed "$JNI_DIR/libproot_exec.so" | grep -qx 'libtalloc.so.2'; then
             patchelf --replace-needed libtalloc.so.2 libtalloc.so "$JNI_DIR/libproot_exec.so"
           fi
-          # 设置 rpath: DT_RPATH 比 DT_RUNPATH 更可靠，$ORIGIN 让动态库在同目录解析。
-          patchelf --force-rpath --set-rpath '$ORIGIN' "$JNI_DIR/libproot_exec.so"
+          # 设置 rpath: Android bionic linker 只识别 DT_RUNPATH，旧式 DT_RPATH 会被忽略并
+          # 在每次加载时打 "unused DT entry: DT_RPATH" 警告；patchelf 默认写 DT_RUNPATH，
+          # $ORIGIN 让动态库在同目录解析（bionic 支持 DT_RUNPATH 中的 $ORIGIN）。
+          patchelf --set-rpath '$ORIGIN' "$JNI_DIR/libproot_exec.so"
           echo "proot rpath: $(patchelf --print-rpath "$JNI_DIR/libproot_exec.so")"
           echo "jniLibs: $(ls -lh "$JNI_DIR")"
           echo "proot info: $(file "$JNI_DIR/libproot_exec.so")"

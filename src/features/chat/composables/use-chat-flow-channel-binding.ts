@@ -151,7 +151,12 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
       "bound",
       () => options.getRoundActiveGen() || boundDisplayGeneration,
       () => options.getRoundActiveGen() || boundDisplayGeneration,
-      () => channelSeq === boundChannelSeq && boundDeltaChannel === channel,
+      () => channelSeq === boundChannelSeq
+        && boundDeltaChannel === channel
+        // channel 事件本身不带会话标识，guard 不能只靠序列匹配：
+        // 切走会话后旧 channel 事件仍可能穿过（例如 round_completed 完整消息），
+        // 必须在序列之外再加前台会话匹配，避免把别的会话消息带进当前显示。
+        && isSameForegroundConversation(id),
     );
     boundDeltaChannel = channel;
     boundConversationId = id;

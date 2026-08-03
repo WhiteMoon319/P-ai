@@ -2,7 +2,6 @@
 enum PromptBuildMode {
     Chat,
     Delegate,
-    SummaryContext,
 }
 
 #[derive(Debug, Clone, Default)]

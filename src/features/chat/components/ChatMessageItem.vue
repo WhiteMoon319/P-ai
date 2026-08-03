@@ -39,7 +39,6 @@
       :tone="messageShellTone(block)"
       :name="displayName"
       :meta="assistantMetaText"
-      :avatar-text="avatarInitial(displayName)"
       :avatar-url="avatarUrl"
       :streaming="!!streamingHeaderStatus"
       :streaming-text="streamingHeaderStatus"
@@ -383,7 +382,6 @@
           type="button"
           class="ecall-message-footer-action inline-flex h-6 w-6 items-center justify-center rounded text-base-content/55 hover:text-base-content"
           :title="t('chat.copy')"
-          :disabled="selectionModeEnabled"
           @click="emit('copyMessage', block)"
         >
           <Copy class="h-3.5 w-3.5" />
@@ -392,7 +390,7 @@
           type="button"
           class="ecall-message-footer-action inline-flex h-6 w-6 items-center justify-center rounded text-base-content/55 hover:text-base-content"
           :title="t('chat.selection.copyImageAsImage')"
-          :disabled="selectionModeEnabled || copyMessageImageBusy"
+          :disabled="copyMessageImageBusy"
           @click="copyCurrentMessageAsImage"
         >
           <ImageIcon class="h-3.5 w-3.5" />
@@ -735,12 +733,6 @@ function collapseDetailsFromContentClick(event: MouseEvent): void {
   }
 }
 
-function avatarInitial(name: string): string {
-  const text = (name || "").trim();
-  if (!text) return "?";
-  return text[0].toUpperCase();
-}
-
 function messageName(block: ChatMessageBlock): string {
   if (block.remoteImOrigin) {
     return block.remoteImOrigin.senderName || block.remoteImOrigin.remoteContactName || "IM";
@@ -1029,16 +1021,18 @@ function activityExpandedItemsSignature(block: ChatMessageBlock): string {
 }
 
 function activityPanelMemoKey(block: ChatMessageBlock): unknown[] {
+  const panelOpen = activityPanelOpen(block);
   return [
     String(block.id || "").trim(),
     showActivityPanel(block),
     activityExpanded.value,
-    activityPanelOpen(block),
+    panelOpen,
     activityStatusText(block),
     activityReasoningCountLabel(block),
     activityToolCountsLabel(block),
-    activityItemsSignature(block),
-    activityExpandedItemsSignature(block),
+    // 折叠时内容区不渲染，items 全文签名只用于展开态检测内容变化；
+    // 数字/状态变化已由上面几项覆盖，折叠态跳过可避免流式时对思维链全文反复哈希。
+    ...(panelOpen ? [activityItemsSignature(block), activityExpandedItemsSignature(block)] : []),
   ];
 }
 
@@ -1366,6 +1360,8 @@ function handleContextMenuAction(action: string) {
   const mathCopyText = mathContextCopyText.value;
   closeContextMenu();
   if (action === "select") {
+    // 多选模式忙碌时禁用；分支/转发等子代理操作不受影响
+    if (props.chatting || props.busy || props.frozen) return;
     emit("enterSelectionMode", props.selectionKey);
   } else if (action === "copy") {
     emit("copyMessage", props.block);

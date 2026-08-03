@@ -194,6 +194,10 @@ pub(crate) struct ConversationStreamRuntimeCacheSnapshot {
     pub updated_at: String,
     pub has_visible_progress: bool,
     pub persisted_assistant_message_id: String,
+    pub context_usage_ratio: f64,
+    pub context_usage_percent: u32,
+    pub effective_prompt_tokens: u64,
+    pub context_window_tokens: u32,
 }
 
 const CHAT_QUEUE_SNAPSHOT_EVENT: &str = "easy-call:chat-queue-snapshot";
@@ -210,7 +214,7 @@ const GOAL_CONTINUE_DISPLAY_TEXT: &str = "继续完成目标";
 
 include!("scheduler/queue_management.rs");
 include!("scheduler/stream_runtime.rs");
-pub(crate) fn trigger_chat_queue_processing(state: &AppState) {
+include!("scheduler/live_update.rs");pub(crate) fn trigger_chat_queue_processing(state: &AppState) {
     let state_clone = state.clone();
     tauri::async_runtime::spawn(async move {
         if let Err(err) = process_chat_queue(&state_clone).await {

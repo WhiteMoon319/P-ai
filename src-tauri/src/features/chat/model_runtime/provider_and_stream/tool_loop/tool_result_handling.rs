@@ -368,6 +368,16 @@ fn persist_completed_tool_group_result(
                     &result.0,
                 );
             }
+            // 工具结果落盘时把上下文用量写进流式缓存：前端随后续 delta 的
+            // stream_cache 拿到最新占用率，切屏恢复也直接来自缓存，无需旁路广播。
+            if let Some(tokens) = trusted_input_tokens.filter(|value| *value > 0) {
+                set_stream_cache_context_usage(
+                    state,
+                    &context.conversation_id,
+                    tokens,
+                    selected_api.context_window_tokens,
+                );
+            }
             maybe_spawn_remote_im_tool_persist_auto_send(
                 state,
                 context,

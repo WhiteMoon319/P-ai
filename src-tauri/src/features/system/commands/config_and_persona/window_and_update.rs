@@ -68,6 +68,20 @@ struct RecordHotkeyUpdateResult {
     max_record_seconds: u32,
 }
 
+// 聊天视图前台激活状态：由前端 useChatForegroundActivity 上报
+// （visibility + focus + viewMode==="chat"），所有平台统一存储，
+// Android 无窗口焦点 API，通知等逻辑依赖该状态判断"会话是否在前台可见"。
+static CHAT_VIEW_FOREGROUND_ACTIVE: std::sync::OnceLock<std::sync::atomic::AtomicBool> =
+    std::sync::OnceLock::new();
+
+#[cfg(target_os = "android")]
+fn chat_view_foreground_active() -> bool {
+    CHAT_VIEW_FOREGROUND_ACTIVE
+        .get()
+        .map(|flag| flag.load(std::sync::atomic::Ordering::Relaxed))
+        .unwrap_or(false)
+}
+
 #[tauri::command]
 fn set_chat_window_active(active: bool) {
     static CHAT_WINDOW_INACTIVE_LOGGED_ONCE: std::sync::atomic::AtomicBool =
@@ -75,6 +89,9 @@ fn set_chat_window_active(active: bool) {
     if !active && !CHAT_WINDOW_INACTIVE_LOGGED_ONCE.swap(true, std::sync::atomic::Ordering::Relaxed) {
         runtime_log_warn(format!("[系统] 聊天窗口激活状态变更：跳过"));
     }
+    let flag = CHAT_VIEW_FOREGROUND_ACTIVE
+        .get_or_init(|| std::sync::atomic::AtomicBool::new(active));
+    flag.store(active, std::sync::atomic::Ordering::Relaxed);
     set_record_hotkey_probe_chat_window_active(active);
 }
 
@@ -434,6 +451,10 @@ fn load_config_inner(state: &AppState) -> Result<AppConfig, String> {
         state_write_config_cached(&state, &result)?;
     }
     let _ = run_app_data_migrations_with_state(&state, &result)?;
+    // 无可用 LLM 时强制进入简单设置模式，方便首次启动用户直接配置供应商。
+    if !has_usable_text_llm(&result) {
+        result.simple_setup_mode = true;
+    }
     let runtime_agents = state_read_agents_cached(&state)?;
     let snapshot =
         build_runtime_organization_snapshot_from_parts(&state.data_path, &result, &runtime_agents)?;
@@ -450,6 +471,10 @@ fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstrapSnapshot,
         state_write_config_cached(state, &config)?;
     }
     let _ = run_app_data_migrations_with_state(state, &config)?;
+    // 无可用 LLM 时强制进入简单设置模式，方便首次启动用户直接配置供应商。
+    if !has_usable_text_llm(&config) {
+        config.simple_setup_mode = true;
+    }
     // 启动快照阶段修复会话总索引，避免旧版本误删归档入口后仍需人工恢复。
     let _ = state_read_chat_index_cached(state)?;
     let mut data = state_read_agents_runtime_snapshot(state)?;

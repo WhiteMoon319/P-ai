@@ -141,54 +141,90 @@ export async function recoverForegroundStreaming(
   input: ForegroundRecoveryInput,
   dependencies: ForegroundRecoveryDependencies,
 ): Promise<ForegroundRecoveryOutcome> {
-  if (classifyForegroundRuntime(input.runtimeSnapshot) === "background_busy") {
+  const traceDecision = (stage: string, detail: Record<string, unknown>) => {
+    console.warn(`[焦点恢复][${stage}] 判断理由`, {
+      conversationId: input.conversationId,
+      ...detail,
+    });
+  };
+  const initialKind = classifyForegroundRuntime(input.runtimeSnapshot);
+  traceDecision("初始分类", {
+    runtimeState: String(input.runtimeSnapshot.runtimeState || ""),
+    kind: initialKind,
+    backendMessageId: input.runtimeSnapshot.streamCache?.persistedAssistantMessageId,
+    frontendStreaming: input.frontendStreaming,
+  });
+  if (initialKind === "background_busy") {
+    traceDecision("命中 background_busy", { action: "finalize + applyBackgroundBusy", frontendMessageId: input.frontendMessageId });
     if (input.frontendMessageId) await dependencies.finalizeMessage(input.frontendMessageId);
     await dependencies.applyBackgroundBusy?.(input.runtimeSnapshot);
     return "handled";
   }
   let action = decide(input, input.runtimeSnapshot, "unknown");
+  traceDecision("初判", { action, probeState: "unknown" });
   if (action === "probe_stream") {
     const probeHealthy = await dependencies.probeStream(input.conversationId);
+    traceDecision("测活完成", { probeHealthy });
     action = decide(input, input.runtimeSnapshot, probeHealthy ? "healthy" : "unhealthy");
+    traceDecision("测活后重判", { action, probeState: probeHealthy ? "healthy" : "unhealthy" });
   }
 
   if (action === "keep") {
-    return input.frontendStreaming || classifyForegroundRuntime(input.runtimeSnapshot) === "assistant_streaming"
+    const keepOutcome = input.frontendStreaming || classifyForegroundRuntime(input.runtimeSnapshot) === "assistant_streaming"
       ? "handled"
       : "check_freshness";
+    traceDecision("决策 keep", { outcome: keepOutcome });
+    return keepOutcome;
   }
 
   if (action === "refresh_target_message") {
     const messageId = targetMessageId(input.runtimeSnapshot, input.frontendMessageId);
+    traceDecision("决策 refresh_target_message", { messageId });
     if (!messageId || !await dependencies.refreshMessageById(input.conversationId, messageId)) {
+      traceDecision("refresh 失败", { outcome: "reload_conversation" });
       return "reload_conversation";
     }
     await dependencies.finalizeMessage(messageId);
     return "handled";
   }
 
-  if (action !== "resume_stream") return "reload_conversation";
-
+  if (action !== "resume_stream") {
+    traceDecision("决策非 resume_stream", { action, outcome: "reload_conversation" });
+    return "reload_conversation";
+  }
+  traceDecision("决策 resume_stream", { outcome: "开始重建订阅" });
   const resumedSnapshot = await dependencies.resumeSubscription(input.conversationId);
   const effectiveSnapshot = resumedSnapshot || input.runtimeSnapshot;
   const messageId = targetMessageId(effectiveSnapshot, input.frontendMessageId);
-  if (classifyForegroundRuntime(effectiveSnapshot) === "background_busy") {
+  const resumedKind = classifyForegroundRuntime(effectiveSnapshot);
+  traceDecision("重建订阅后", { resumedKind, messageId, hasResumedSnapshot: !!resumedSnapshot });
+  if (resumedKind === "background_busy") {
+    traceDecision("重建后仍 busy", { action: "finalize + applyBackgroundBusy" });
     if (input.frontendMessageId) await dependencies.finalizeMessage(input.frontendMessageId);
     await dependencies.applyBackgroundBusy?.(effectiveSnapshot);
     return "handled";
   }
-  if (classifyForegroundRuntime(effectiveSnapshot) === "assistant_streaming") {
-    if (!messageId) return "reload_conversation";
+  if (resumedKind === "assistant_streaming") {
+    if (!messageId) {
+      traceDecision("流式但无消息ID", { outcome: "reload_conversation" });
+      return "reload_conversation";
+    }
     const probeHealthy = await dependencies.probeStream(input.conversationId);
-    if (!probeHealthy) return "reload_conversation";
-    return await dependencies.applyRuntimeSnapshot(effectiveSnapshot)
-      ? "handled"
-      : "reload_conversation";
+    traceDecision("流式后测活", { probeHealthy });
+    if (!probeHealthy) {
+      traceDecision("流式后测活失败", { outcome: "reload_conversation" });
+      return "reload_conversation";
+    }
+    const applied = await dependencies.applyRuntimeSnapshot(effectiveSnapshot);
+    traceDecision("应用快照", { applied, outcome: applied ? "handled" : "reload_conversation" });
+    return applied ? "handled" : "reload_conversation";
   }
 
   if (!messageId || !await dependencies.refreshMessageById(input.conversationId, messageId)) {
+    traceDecision("非流式无消息ID", { outcome: "reload_conversation" });
     return "reload_conversation";
   }
   await dependencies.finalizeMessage(messageId);
+  traceDecision("非流式收尾", { outcome: "handled" });
   return "handled";
 }

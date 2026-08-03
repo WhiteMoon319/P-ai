@@ -34,7 +34,8 @@
     "chatTitle": "Chat with {name}",
     "minimize": "Minimize",
     "maximize": "Maximize",
-    "restore": "Restore Window"
+    "restore": "Restore Window",
+    "startChat": "Start Chat"
   },
   "config": {
     "tabs": {
@@ -101,6 +102,7 @@
       "builtinTabInstruction": "Shortcut Command",
       "builtinEscStopReplying": "Interrupt current reply",
       "builtinShiftTabPlanMode": "Toggle Plan Mode",
+      "builtinAltZLineWrap": "Toggle line wrap in code previews",
       "builtinShiftWheelConversationSwitch": "Switch Conversation"
     },
     "notification": {
@@ -109,7 +111,12 @@
       "enableLabel": "Enable notifications",
       "enableHint": "When off, no system notification is shown for background local chat completion or failure.",
       "soundLabel": "Enable sound",
-      "soundHint": "When on, Windows native notifications use the system default sound."
+      "soundHint": "When on, Windows native notifications use the system default sound.",
+      "testLabel": "Test notifications",
+      "testHint": "Send a test notification to verify normal and live update (island) notifications.",
+      "testNormalLabel": "Normal",
+      "testLiveUpdateLabel": "Live update",
+      "testFailedLabel": "Notification test failed"
     },
     "api": {
       "saving": "Saving...",
@@ -373,7 +380,8 @@
           "currentOk": "Git was detected.",
           "currentMissing": "Git was not detected yet. Try automatic install; if it fails, the official page will open.",
           "action": "Open Tools",
-          "install": "Install Git"
+          "install": "Install Git",
+          "currentMissingAndroid": "Not installed. Ask PAI to run apt install git in the sandbox terminal."
         },
         "node": {
           "title": "Node.js",
@@ -381,7 +389,8 @@
           "currentOk": "Node.js was detected.",
           "currentMissing": "Node.js was not detected yet. Try automatic install; if it fails, the official page will open.",
           "action": "Open Tools",
-          "install": "Install Node.js"
+          "install": "Install Node.js",
+          "currentMissingAndroid": "Not installed. Ask PAI to run apt install nodejs in the sandbox terminal."
         },
         "ripgrep": {
           "title": "ripgrep (rg)",
@@ -1550,7 +1559,12 @@
         "chatFinish": "Dispatch Finished",
         "modelRoundTotal": "Model Round Total"
       }
-    }
+    },
+    "simpleSetupModeToggle": "Simple / Advanced",
+    "simpleSetupModeSimple": "Simple",
+    "simpleSetupModeAdvanced": "Advanced",
+    "simpleSetupModeSwitchToAdvanced": "Switch to Advanced",
+    "simpleSetupModeSwitchToSimple": "Switch to Simple"
   },
   "responseStyle": {
     "none": "No Preference",
@@ -2105,6 +2119,7 @@
     "configLoaded": "Config loaded.",
     "savingConfig": "Saving config...",
     "configSaved": "Config saved.",
+    "saved": "Saved.",
     "saveConfigBackend404": "Save failed: backend command not reachable (404). Please run `pnpm tauri dev`.",
     "saveConfigFailed": "Save failed: {err}",
     "saveConfigDialogTitle": "Failed to save config",
@@ -2412,7 +2427,9 @@
     },
     "themeOptions": {
       "light": "Light",
-      "dark": "Dark"
+      "dark": "Dark",
+      "switchToLight": "Switch to light",
+      "switchToDark": "Switch to dark"
     },
     "providers": {
       "custom": "Custom"
@@ -2713,5 +2730,29 @@
     "actionOpenDefault": "Open with default program",
     "actionOpenShell": "Open Shell",
     "actionOpenDirectory": "Open directory"
+  },
+  "simpleSetup": {
+    "provider": "Provider",
+    "models": "Models",
+    "modelQuick": "Quick",
+    "modelExpert": "Expert",
+    "modelVision": "Multimodal",
+    "modelVisionHint": "Multimodal: reads images, audio and video",
+    "modelPlaceholder": "Enter model name",
+    "style": "Response Style",
+    "styleNone": "No preference",
+    "appearance": "Appearance",
+    "shell": "Shell",
+    "hotkeys": "Hotkeys",
+    "siliconFlow": "SiliconFlow (advanced, optional)",
+    "siliconFlowHint": "Filling this auto-configures embedding, rerank and STT; leave empty to skip.",
+    "effortLow": "Low",
+    "effortMedium": "Medium",
+    "effortHigh": "High",
+    "refreshModelsNeedKey": "Please fill in API Key and base_url first",
+    "refreshModelsDone": "Fetched {count} models",
+    "refreshModelsFailed": "Failed to fetch models: {error}",
+    "overwriteHint": "Saving overwrites existing settings",
+    "saveAndStart": "Save & Start Chat"
   }
 }

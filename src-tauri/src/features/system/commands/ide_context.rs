@@ -410,7 +410,11 @@ fn ide_chat_persona_payload(state: &AppState, active_agent_id: Option<&str>) -> 
     let runtime = state_read_runtime_state_cached(state)?;
     let runtime_org = load_runtime_organization_snapshot(state)?;
     let agents = runtime_org.agents;
-    let user_alias = runtime.user_alias.trim();
+    let user_alias = agents
+        .iter()
+        .find(|agent| agent.id == USER_PERSONA_ID || agent.is_built_in_user)
+        .map(|agent| agent.name.trim().to_string())
+        .unwrap_or_default();
     let active_agent_id = active_agent_id
         .map(str::trim)
         .filter(|value| !value.is_empty())

@@ -56,6 +56,7 @@ fn emit_round_started_event(
     started_at: &str,
     started_at_ms: u64,
 ) {
+    live_update_chat_started(state, conversation_id);
     let app_handle = match state.app_handle.lock() {
         Ok(guard) => guard.as_ref().cloned(),
         Err(_) => None,
@@ -95,6 +96,7 @@ fn emit_round_completed_event(
     activation_id: Option<&str>,
     request_id: Option<&str>,
 ) {
+    live_update_chat_finished(state, conversation_id, false, &result.assistant_text);
     notify_local_chat_round_completed(state, conversation_id, &result.assistant_text);
     let app_handle = match state.app_handle.lock() {
         Ok(guard) => guard.as_ref().cloned(),
@@ -449,6 +451,7 @@ fn emit_round_failed_event(
     activation_id: Option<&str>,
     request_id: Option<&str>,
 ) {
+    live_update_chat_finished(state, conversation_id, true, error_text);
     notify_local_chat_round_failed(state, conversation_id, error_text);
     let app_handle = match state.app_handle.lock() {
         Ok(guard) => guard.as_ref().cloned(),

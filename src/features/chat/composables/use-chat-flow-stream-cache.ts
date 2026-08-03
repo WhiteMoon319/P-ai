@@ -50,6 +50,10 @@ export type ConversationRuntimeStreamCacheSnapshot = {
   streamBlocks?: AssistantStreamBlock[];
   hasVisibleProgress?: boolean;
   persistedAssistantMessageId?: string;
+  contextUsageRatio?: number;
+  contextUsagePercent?: number;
+  effectivePromptTokens?: number;
+  contextWindowTokens?: number;
 };
 
 type UseChatFlowStreamCacheOptions = {

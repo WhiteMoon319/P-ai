@@ -138,4 +138,54 @@ describe("useChatFlowStreamingEvents terminal identity", () => {
       requestId: undefined,
     });
   });
+
+  it("updates context usage preview from stream cache during tool rounds", () => {
+    // 钉死：工具执行期间用量随流式缓存（streamCache）下发，前端把最新占用率
+    // 写入 contextUsagePreview，圆环实时更新，无需旁路广播 context_usage_update。
+    const runtime = createRuntime({
+      phase: "streaming",
+      gen: 2,
+      messageId: "assistant-new",
+    });
+
+    runtime.handleStreamingEvent(2, {
+      kind: "assistant_tool_result",
+      streamCache: {
+        persistedAssistantMessageId: "assistant-new",
+        contextUsageRatio: 0.42,
+        contextUsagePercent: 42,
+        effectivePromptTokens: 4200,
+        contextWindowTokens: 10_000,
+      },
+    });
+
+    expect(runtime.contextUsagePreview.value).toEqual({
+      conversationId: "conversation-1",
+      contextUsagePercent: 42,
+      contextUsageRatio: 0.42,
+      effectivePromptTokens: 4200,
+      contextWindowTokens: 10_000,
+      source: "stream_cache",
+      eventReason: "provider_tool_round",
+    });
+  });
+
+  it("does not overwrite preview when stream cache carries no usage", () => {
+    // 钉死：无用量字段的 streamCache（旧后端或非工具事件）不得清空或改写 preview。
+    const runtime = createRuntime({
+      phase: "streaming",
+      gen: 2,
+      messageId: "assistant-new",
+    });
+    const before = runtime.contextUsagePreview.value;
+
+    runtime.handleStreamingEvent(2, {
+      kind: "assistant_tool_result",
+      streamCache: {
+        persistedAssistantMessageId: "assistant-new",
+      },
+    });
+
+    expect(runtime.contextUsagePreview.value).toBe(before);
+  });
 });

@@ -85,6 +85,9 @@
     @stop-chat="runtime.stop"
     @clear-chat-error="clearChatError"
     @load-older-history="runtime.loadOlderHistory"
+    @recall-turn="runtime.handleRecallTurn"
+    @regenerate-turn="runtime.handleRegenerateTurn"
+    @create-conversation-branch-from-turn="props.createConversationBranchFromTurn"
     @approve-terminal-approval="approveTerminalApproval?.($event)"
     @deny-terminal-approval="denyTerminalApproval?.($event)"
     @approve-terminal-approval-for-session="approveTerminalApprovalForSession?.($event)"
@@ -128,6 +131,12 @@ const props = defineProps<{
   denyTerminalApproval?: (requestId: string) => void;
   approveTerminalApprovalForSession?: (requestId: string) => void;
   approveTerminalApprovalForWorkspace?: (requestId: string) => void;
+  requestRecallMode?: (payload: {
+    turnId: string;
+    targetUserMessageId: string;
+    conversationId?: string;
+  }) => Promise<"with_patch" | "message_only" | "cancel">;
+  createConversationBranchFromTurn?: (payload: { turnId: string }) => Promise<void> | void;
 }>();
 
 const { t } = useI18n();
@@ -141,6 +150,7 @@ const runtime = useConversationViewRuntime({
   agentId,
   departmentId,
   subscriptionSlot: props.subscriptionSlot,
+  requestRecallMode: props.requestRecallMode,
   t,
 });
 const activeApiConfig = computed(() =>

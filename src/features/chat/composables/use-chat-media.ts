@@ -186,6 +186,15 @@ export function useChatMedia(options: UseChatMediaOptions) {
     const apiConfig = options.activeChatApiConfig.value;
     if (!apiConfig) return;
     const collected = collectPastedFiles(event);
+    // 焦点位于某个会话输入框（主会话或侧边追问）内时，文本粘贴交给浏览器
+    // 原生行为，内容会落到焦点所在的 textarea，而不是被全局拦截后固定写进
+    // 主会话输入框；图片文件仍由本通道统一接管进入附件队列。
+    const activeElement = document.activeElement;
+    const composerInputFocused = activeElement instanceof HTMLElement
+      && activeElement.classList.contains("ecall-chat-composer-input");
+    if (composerInputFocused && collected.length === 0) {
+      return;
+    }
     if (collected.length > 0) {
       event.preventDefault();
       options.setChatError("");

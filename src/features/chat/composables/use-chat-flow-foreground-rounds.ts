@@ -281,6 +281,27 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     const snapshotBlocks = normalizeAssistantStreamBlocks(input?.streamCache?.streamBlocks || []);
     if (input?.streamCache) {
       bindings.writeConversationStreamCacheSnapshot(conversationId, input.streamCache);
+      // 切屏恢复时流式缓存里带的最新用量直接落到预览，圆环无需等待后续事件。
+      const cacheUsage = input.streamCache;
+      if (
+        bindings.contextUsagePreview
+        && typeof cacheUsage?.contextUsageRatio === "number"
+        && (cacheUsage.contextUsageRatio > 0 || Number(cacheUsage.contextUsagePercent) > 0)
+      ) {
+        const ratio = Math.max(0, cacheUsage.contextUsageRatio);
+        const percent = typeof cacheUsage.contextUsagePercent === "number"
+          ? Math.round(cacheUsage.contextUsagePercent)
+          : Math.round(ratio * 100);
+        bindings.contextUsagePreview.value = {
+          conversationId,
+          contextUsagePercent: Math.min(100, Math.max(0, percent)),
+          contextUsageRatio: ratio,
+          effectivePromptTokens: Math.max(0, Math.round(Number(cacheUsage.effectivePromptTokens) || 0)),
+          contextWindowTokens: Math.max(0, Math.round(Number(cacheUsage.contextWindowTokens) || 0)),
+          source: "stream_cache",
+          eventReason: "foreground_resume",
+        };
+      }
     }
     const cache = bindings.readConversationStreamCache(conversationId);
     const round = bindings.getRound();

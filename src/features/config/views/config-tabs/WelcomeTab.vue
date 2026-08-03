@@ -15,8 +15,9 @@
             <p class="mt-2 text-base opacity-80">{{ t("config.welcome.subtitle") }}</p>
           </div>
           <div class="flex shrink-0 flex-col items-end gap-3">
-            <button class="btn btn-sm btn-primary" type="button" @click="openQuickSetupWindow">
-              {{ t("quickSetup.actions.openQuickSetup") }}
+            <button class="btn btn-sm btn-primary" type="button" @click="emit('start-chat')">
+              <MessageSquare class="h-3.5 w-3.5" />
+              {{ t("window.startChat") }}
             </button>
             <!-- 配置完成度 -->
             <div class="radial-progress text-primary" :style="`--value:${completionRate};--size:5rem`" role="progressbar">
@@ -135,6 +136,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { MessageSquare } from "@lucide/vue";
 import type { ApiConfigItem, AppConfig, PersonaProfile } from "../../../../types/app";
 import {
   getTransportHostRuntimePrerequisites,
@@ -182,10 +184,12 @@ type WelcomeCard = {
 const props = defineProps<{
   config: AppConfig;
   personas: PersonaProfile[];
+  isAndroid?: boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (e: "jump", value: ConfigTab): void;
+  (e: "start-chat"): void;
 }>();
 
 const { t } = useI18n();
@@ -270,12 +274,14 @@ const cards = computed(() => {
       summary: t("config.welcome.cards.git.summary"),
       current: gitInstalled
         ? t("config.welcome.cards.git.currentOk")
-        : t("config.welcome.cards.git.currentMissing"),
+        : (props.isAndroid
+            ? t("config.welcome.cards.git.currentMissingAndroid")
+            : t("config.welcome.cards.git.currentMissing")),
       action: t("config.welcome.cards.git.action"),
       targetTab: "tools" as ConfigTab,
-      externalUrl: GIT_DOWNLOAD_URL,
+      externalUrl: props.isAndroid ? undefined : GIT_DOWNLOAD_URL,
       externalLabel: t("config.welcome.cards.git.install"),
-      installerKind: "git" as HostRuntimePrerequisiteKind,
+      installerKind: props.isAndroid ? undefined : ("git" as HostRuntimePrerequisiteKind),
     },
     {
       id: "node-runtime",
@@ -285,12 +291,14 @@ const cards = computed(() => {
       summary: t("config.welcome.cards.node.summary"),
       current: nodeInstalled
         ? t("config.welcome.cards.node.currentOk")
-        : t("config.welcome.cards.node.currentMissing"),
+        : (props.isAndroid
+            ? t("config.welcome.cards.node.currentMissingAndroid")
+            : t("config.welcome.cards.node.currentMissing")),
       action: t("config.welcome.cards.node.action"),
       targetTab: "tools" as ConfigTab,
-      externalUrl: NODE_DOWNLOAD_URL,
+      externalUrl: props.isAndroid ? undefined : NODE_DOWNLOAD_URL,
       externalLabel: t("config.welcome.cards.node.install"),
-      installerKind: "node" as HostRuntimePrerequisiteKind,
+      installerKind: props.isAndroid ? undefined : ("node" as HostRuntimePrerequisiteKind),
     },
     {
       id: "text-model",
@@ -487,9 +495,5 @@ async function installRuntimePrerequisite(card: WelcomeCard) {
   } finally {
     installingPrerequisite.value = null;
   }
-}
-
-function openQuickSetupWindow() {
-  void openTransportWindow("quickSetup");
 }
 </script>

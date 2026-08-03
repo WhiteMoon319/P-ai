@@ -177,7 +177,7 @@ async fn get_prompt_preview_inner(
                 .cloned()
                 .ok_or_else(|| "Selected agent not found.".to_string())?;
             build_prepared_prompt_for_mode(
-                PromptBuildMode::SummaryContext,
+                PromptBuildMode::Chat,
                 &conversation,
                 &owner_agent,
                 &data.agents,
@@ -187,7 +187,7 @@ async fn get_prompt_preview_inner(
                 &data.response_style_id,
                 &app_config.ui_language,
                 Some(&state.data_path),
-                last_archive_summary.as_deref(),
+                None,
                 None,
                 Some(ChatPromptOverrides {
                     executor_department_id: Some(conversation.department_id.trim().to_string()),
@@ -206,7 +206,7 @@ async fn get_prompt_preview_inner(
                 Some(state),
                 Some(&api_config),
                 Some(&resolved_api),
-                Some(data.pdf_read_mode == "image" && api_config.enable_image),
+                None,
             )?
         }
     };

@@ -749,14 +749,8 @@ fn finalize_system_prompt_with_manager(
     _system_preamble_blocks: &[String],
     stage_logger: Option<&dyn Fn(&str)>,
 ) -> String {
-    let mode = match mode_label.trim() {
-        "delegate" => PromptBuildMode::Delegate,
-        "summary_context" => PromptBuildMode::SummaryContext,
-        _ => PromptBuildMode::Chat,
-    };
     conversation_prompt_service().finalize_system_prompt(
         state,
-        mode,
         mode_label,
         conversation,
         agent,

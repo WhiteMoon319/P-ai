@@ -33,6 +33,7 @@
       :update-to-latest-label="updateToLatestLabel"
       :update-to-latest-title="updateToLatestTitle"
       :window-controls-visible="windowControlsVisible"
+      :simple-setup-mode="!!config.simpleSetupMode"
       @start-drag="startDrag"
       @update:config-search-query="updateConfigSearchQuery"
       @select-config-search-result="handleSelectConfigSearchResult"
@@ -40,12 +41,14 @@
       @minimize-window="minimizeWindow"
       @toggle-maximize-window="toggleMaximizeWindow"
       @close-window="closeWindow"
+      @update:simple-setup-mode="setSimpleSetupMode"
     />
 
     <div class="window-content p-0 min-h-0 overflow-hidden">
       <ConfigView
         :config="config"
         :config-tab="configTab"
+        :simple-setup-mode="!!config.simpleSetupMode"
         :ui-language="config.uiLanguage"
         :locale-options="localeOptions"
         :current-theme="currentTheme"
@@ -100,6 +103,7 @@
         :last-saved-config-json="lastSavedConfigJson"
         :set-status-action="setStatus"
         @update:config-tab="(value) => { configTab = value; }"
+        @update:simple-setup-mode="setSimpleSetupMode"
         @update:ui-language="setUiLanguage"
         @update:persona-editor-id="updatePersonaEditorIdWithNotice"
         @update:assistant-department-agent-id="updateAssistantDepartmentAgentId"
@@ -143,6 +147,7 @@
         @clear-agent-avatar="clearAgentAvatar"
         @check-update="manualCheckGithubUpdate"
         @open-github="openGithubRepository"
+        @start-chat="startChat"
       />
     </div>
 
@@ -467,7 +472,7 @@ const toolDepartment = computed(() =>
 );
 const toolApiConfig = computed(() => config.apiConfigs.find((a) => a.id === (toolDepartment.value?.apiConfigId || "")) ?? null);
 
-const { resolveAvatarUrl, ensureAvatarCached, preloadPersonaAvatars } = useAvatarCache({ personas });
+const { resolveAvatarUrl, resolveBrandAvatarUrl, ensureAvatarCached, preloadPersonaAvatars } = useAvatarCache({ personas });
 const userAvatarUrl = computed(() => resolveAvatarUrl(userPersona.value?.avatarPath, userPersona.value?.avatarUpdatedAt));
 const userPersonaAvatarUrl = computed(() => userAvatarUrl.value);
 const selectedPersonaEditorAvatarUrl = computed(() => resolveAvatarUrl(selectedPersonaEditor.value?.avatarPath, selectedPersonaEditor.value?.avatarUpdatedAt));
@@ -486,7 +491,11 @@ const chatPersonaAvatarUrlMap = computed<Record<string, string>>(() => {
     const id = String(persona.id || "").trim();
     if (!id) continue;
     const url = resolveAvatarUrl(persona.avatarPath, persona.avatarUpdatedAt);
-    if (url) next[id] = url;
+    if (url) {
+      next[id] = url;
+    } else if (!persona.isBuiltInUser && persona.id !== "user-persona") {
+      next[id] = resolveBrandAvatarUrl();
+    }
   }
   return next;
 });
@@ -753,6 +762,17 @@ const {
 
 function updateConfigSearchQuery(value: string) {
   configSearchQuery.value = String(value || "");
+}
+
+function setSimpleSetupMode(value: boolean) {
+  const next = !!value;
+  if (!!config.simpleSetupMode === next) return;
+  config.simpleSetupMode = next;
+  void saveConfig();
+}
+
+function startChat() {
+  void openTransportWindow("chat");
 }
 
 function handleSelectConfigSearchResult(tab: ConfigSearchTab) {

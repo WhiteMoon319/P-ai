@@ -113,41 +113,59 @@ fn prune_failed_active_chat_view_bindings(state: &AppState, binding_keys: &[Stri
 }
 
 fn conversation_has_focused_chat_view(state: &AppState, conversation_id: &str) -> bool {
-    let app_handle = match state.app_handle.lock() {
-        Ok(guard) => guard.as_ref().cloned(),
-        Err(_) => None,
-    };
-    let Some(app_handle) = app_handle else {
-        return false;
-    };
-    let focused_window_labels = match state.active_chat_view_bindings.lock() {
-        Ok(bindings) => bindings
-            .values()
-            .filter_map(|binding| {
-                if binding.conversation_id.trim() != conversation_id.trim() {
-                    return None;
-                }
-                Some(binding.window_label.clone())
-            })
-            .collect::<Vec<_>>(),
-        Err(_) => return false,
-    };
-    if focused_window_labels.is_empty() {
-        return false;
+    #[cfg(target_os = "android")]
+    {
+        // Android 是单 WebView，没有桌面式窗口焦点语义：wry 的 android 端
+        // set_visible/focus 均为 Unsupported，is_focused/is_visible 也没有对应
+        // 消息处理，走桌面判定要么恒失效要么阻塞等待响应。
+        // 前台状态改由前端上报：会话有活跃 binding 且聊天视图处于前台激活
+        // （visibility + focus + viewMode==="chat"）时才视为前台、跳过通知。
+        let has_binding = match state.active_chat_view_bindings.lock() {
+            Ok(bindings) => bindings
+                .values()
+                .any(|binding| binding.conversation_id.trim() == conversation_id.trim()),
+            Err(_) => false,
+        };
+        has_binding && chat_view_foreground_active()
     }
-    if focused_window_labels.iter().any(|window_label| {
-        let Some(window) = app_handle.get_webview_window(window_label) else {
+    #[cfg(not(target_os = "android"))]
+    {
+        let app_handle = match state.app_handle.lock() {
+            Ok(guard) => guard.as_ref().cloned(),
+            Err(_) => None,
+        };
+        let Some(app_handle) = app_handle else {
             return false;
         };
-        let is_visible = window.is_visible().unwrap_or(false);
-        let is_focused = window.is_focused().unwrap_or(false);
-        is_visible && is_focused
-    }) {
-        return true;
+        let focused_window_labels = match state.active_chat_view_bindings.lock() {
+            Ok(bindings) => bindings
+                .values()
+                .filter_map(|binding| {
+                    if binding.conversation_id.trim() != conversation_id.trim() {
+                        return None;
+                    }
+                    Some(binding.window_label.clone())
+                })
+                .collect::<Vec<_>>(),
+            Err(_) => return false,
+        };
+        if focused_window_labels.is_empty() {
+            return false;
+        }
+        if focused_window_labels.iter().any(|window_label| {
+            let Some(window) = app_handle.get_webview_window(window_label) else {
+                return false;
+            };
+            let is_visible = window.is_visible().unwrap_or(false);
+            let is_focused = window.is_focused().unwrap_or(false);
+            is_visible && is_focused
+        }) {
+            return true;
+        }
+        // VS Code 侧边栏通过 WebSocket 连接，不在 active_chat_view_bindings 中，
+        // 但会注册到 detached_chat_windows；只要会话已打开就应跳过通知。
+        detached_chat_window_for_conversation(conversation_id).is_some()
     }
-    // VS Code 侧边栏通过 WebSocket 连接，不在 active_chat_view_bindings 中，
-    // 但会注册到 detached_chat_windows；只要会话已打开就应跳过通知。
-    detached_chat_window_for_conversation(conversation_id).is_some()
 }
 
 fn emit_assistant_delta_app_event(
@@ -497,7 +515,56 @@ mod scheduler_stream_block_tests {
             updated_at: "2026-01-01T00:00:01Z".to_string(),
             has_visible_progress: true,
             persisted_assistant_message_id: "assistant-1".to_string(),
+            context_usage_ratio: 0.0,
+            context_usage_percent: 0,
+            effective_prompt_tokens: 0,
+            context_window_tokens: 0,
         }
+    }
+
+    #[test]
+    fn stream_cache_snapshot_should_carry_context_usage_fields() {
+        // 钉死：流式缓存快照必须携带上下文用量字段（ratio/percent/tokens），
+        // 前端随每个 delta 事件的 stream_cache 拿到最新占用率；若丢失这些字段，
+        // 工具执行期间的用量动态更新与切屏恢复都会失效。
+        let mut cache = ConversationStreamRuntimeCache::default();
+        cache.activation_id = "request-1".to_string();
+        cache.persisted_assistant_message_id = "assistant-1".to_string();
+        cache.assistant_text = "assistant text".to_string();
+        cache.tool_status_text = "running".to_string();
+        cache.tool_status_state = "running".to_string();
+        cache.updated_at = "2026-01-01T00:00:01Z".to_string();
+        cache.started_at = "2026-01-01T00:00:00Z".to_string();
+        cache.started_at_ms = 1;
+        cache.context_usage_ratio = 0.42;
+        cache.context_usage_percent = 42;
+        cache.effective_prompt_tokens = 4200;
+        cache.context_window_tokens = 10_000;
+
+        let snapshot = conversation_stream_runtime_cache_snapshot(cache);
+
+        assert_eq!(snapshot.context_usage_ratio, 0.42);
+        assert_eq!(snapshot.context_usage_percent, 42);
+        assert_eq!(snapshot.effective_prompt_tokens, 4200);
+        assert_eq!(snapshot.context_window_tokens, 10_000);
+    }
+
+    #[test]
+    fn high_frequency_deltas_should_skip_stream_cache_snapshot() {
+        // 钉死：高频逐 token 事件（正文 delta kind=None、思维链 delta
+        // activity_reasoning_delta）不随事件下发 stream_cache——前端只要看到
+        // streamCache 就走 reduceStreamSnapshot 全量覆盖，轻量快照的
+        // assistantText 为空会把正文覆盖成空白，实测表现为正文/思维链完全不显示、
+        // 只有工具事件带完整快照时刷一下。无 streamCache 时前端才走增量渲染。
+        // 工具三兄弟（低频关键事件）必须保持完整快照做权威校正。
+        assert!(should_use_slim_stream_cache_snapshot(None));
+        assert!(should_use_slim_stream_cache_snapshot(Some("activity_reasoning_delta")));
+        assert!(!should_use_slim_stream_cache_snapshot(Some("assistant_tool_event")));
+        assert!(!should_use_slim_stream_cache_snapshot(Some("assistant_tool_result")));
+        assert!(!should_use_slim_stream_cache_snapshot(Some("tool_status")));
+        assert!(!should_use_slim_stream_cache_snapshot(Some("round_completed")));
+        assert!(!should_use_slim_stream_cache_snapshot(Some("round_failed")));
+        assert!(!should_use_slim_stream_cache_snapshot(Some("context_usage_update")));
     }
 
     #[test]
@@ -814,7 +881,54 @@ fn conversation_stream_runtime_cache_snapshot(
         updated_at: stream_cache.updated_at,
         has_visible_progress,
         persisted_assistant_message_id: stream_cache.persisted_assistant_message_id,
+        context_usage_ratio: stream_cache.context_usage_ratio,
+        context_usage_percent: stream_cache.context_usage_percent,
+        effective_prompt_tokens: stream_cache.effective_prompt_tokens,
+        context_window_tokens: stream_cache.context_window_tokens,
     }
+}
+
+/// 判断该事件是否应随事件下发 stream_cache 快照。
+/// 高频逐 token 事件（正文 delta / 思维链 delta）不挂快照：前端对无
+/// streamCache 的 delta 走增量渲染逐字累积，挂了快照反而会触发前端全量
+/// 覆盖路径（只要 streamCache 存在就走 reduceStreamSnapshot），轻量快照
+/// 的 assistantText 为空会把正文覆盖成空白。低频关键事件（工具三兄弟）
+/// 仍带完整快照做权威校正。
+fn should_use_slim_stream_cache_snapshot(kind: Option<&str>) -> bool {
+    matches!(kind, None | Some("activity_reasoning_delta"))
+}
+
+fn set_stream_cache_context_usage(
+    state: &AppState,
+    conversation_id: &str,
+    effective_prompt_tokens: u64,
+    context_window_tokens: u32,
+) {
+    if effective_prompt_tokens == 0 || context_window_tokens == 0 {
+        return;
+    }
+    let mut slots = match lock_conversation_runtime_slots(state) {
+        Ok(slots) => slots,
+        Err(err) => {
+            runtime_log_warn(format!(
+                "[聊天流式缓存] 更新上下文用量失败，锁错误: {err}"
+            ));
+            return;
+        }
+    };
+    let cid = conversation_id.trim();
+    if cid.is_empty() {
+        return;
+    }
+    let slot = conversation_slot_mut(&mut slots, cid);
+    let ratio = effective_prompt_tokens as f64 / f64::from(context_window_tokens);
+    slot.stream_cache.effective_prompt_tokens = effective_prompt_tokens;
+    slot.stream_cache.context_window_tokens = context_window_tokens;
+    slot.stream_cache.context_usage_ratio = ratio;
+    slot.stream_cache.context_usage_percent = ratio
+        .mul_add(100.0, 0.0)
+        .round()
+        .clamp(0.0, 100.0) as u32;
 }
 
 fn update_conversation_stream_runtime_cache(
@@ -890,6 +1004,14 @@ fn update_conversation_stream_runtime_cache(
         }
     }
     cache.updated_at = now_iso();
+    // 高频逐 token 事件（正文 delta / 思维链 delta）不随事件下发 stream_cache：
+    // 前端只要看到 streamCache 就走 reduceStreamSnapshot 全量覆盖路径，轻量
+    // 快照的 assistantText 为空会把正文覆盖成空白；无 streamCache 时前端才走
+    // 增量渲染逐字累积。后端缓存照常全量更新，恢复查询仍拿完整快照。
+    // 低频关键事件（工具三兄弟）仍下发完整快照做权威校正。
+    if should_use_slim_stream_cache_snapshot(event.kind.as_deref()) {
+        return Ok(None);
+    }
     let snapshot = conversation_stream_runtime_cache_snapshot(cache.clone());
     if matches!(
         event.kind.as_deref(),
@@ -1032,5 +1154,42 @@ pub(crate) fn clear_active_chat_view_stream_binding(
         .lock()
         .map_err(|_| "Failed to lock active chat view bindings".to_string())?;
     bindings.remove(&active_chat_view_binding_key(window_label, binding_id));
+    Ok(())
+}
+
+/// 清空指定窗口的全部活动聊天流绑定。
+///
+/// 前端页面重载（HMR / 手动刷新 / 崩溃重建）后，旧 bindingId 的 channel 在
+/// JS 侧已失效，但 Rust 侧仍持有注册；Tauri 的 Channel::send 在 callback
+/// 不存在时仍返回 Ok，导致僵尸注册无法通过 send 失败自动清理，流式期间会
+/// 反复向失效 channel 投递并刷 `Couldn't find callback id` 警告。
+/// 前端在每次窗口启动/重载后调用本命令，先清掉本窗口残留绑定，再重新绑定新 channel。
+pub(crate) fn clear_window_chat_view_stream_bindings(
+    state: &AppState,
+    window_label: &str,
+) -> Result<(), String> {
+    let mut bindings = state
+        .active_chat_view_bindings
+        .lock()
+        .map_err(|_| "Failed to lock active chat view bindings".to_string())?;
+    let window_label = window_label.trim();
+    if window_label.is_empty() {
+        return Ok(());
+    }
+    let removed = bindings
+        .keys()
+        .filter(|key| key.starts_with(&format!("{}::", window_label)))
+        .cloned()
+        .collect::<Vec<_>>();
+    for key in &removed {
+        bindings.remove(key);
+    }
+    if !removed.is_empty() {
+        runtime_log_debug(format!(
+            "[聊天流式订阅] 窗口重载后清理残留绑定: window={}, removed={}",
+            window_label,
+            removed.len()
+        ));
+    }
     Ok(())
 }

@@ -34,7 +34,8 @@
     "chatTitle": "与 {name} 的对话",
     "minimize": "最小化",
     "maximize": "最大化",
-    "restore": "还原窗口"
+    "restore": "还原窗口",
+    "startChat": "开始对话"
   },
   "config": {
     "tabs": {
@@ -101,6 +102,7 @@
       "builtinTabInstruction": "快捷指令",
       "builtinEscStopReplying": "打断当前回复",
       "builtinShiftTabPlanMode": "切换计划模式",
+      "builtinAltZLineWrap": "切换代码预览自动换行",
       "builtinShiftWheelConversationSwitch": "切换会话"
     },
     "notification": {
@@ -109,7 +111,12 @@
       "enableLabel": "是否通知",
       "enableHint": "关闭后，后台本地会话完成或失败时不再弹出系统通知。",
       "soundLabel": "是否声音",
-      "soundHint": "开启后，Windows 原生通知会使用系统默认提示音。"
+      "soundHint": "开启后，Windows 原生通知会使用系统默认提示音。",
+      "testLabel": "通知测试",
+      "testHint": "发送测试通知，验证普通通知与实时通知（岛）是否正常显示。",
+      "testNormalLabel": "普通通知",
+      "testLiveUpdateLabel": "实时通知",
+      "testFailedLabel": "通知测试失败"
     },
     "api": {
       "saving": "保存中...",
@@ -373,7 +380,8 @@
           "currentOk": "已装好，没问题。",
           "currentMissing": "还没装。点一键安装，失败时会自动打开官网。",
           "action": "去看工具",
-          "install": "安装 Git"
+          "install": "安装 Git",
+          "currentMissingAndroid": "还没装。可让 PAI 在沙盒终端里执行 apt install git 安装。"
         },
         "node": {
           "title": "Node.js",
@@ -381,7 +389,8 @@
           "currentOk": "已装好，没问题。",
           "currentMissing": "还没装。点一键安装，失败时会自动打开官网。",
           "action": "去看工具",
-          "install": "安装 Node.js"
+          "install": "安装 Node.js",
+          "currentMissingAndroid": "还没装。可让 PAI 在沙盒终端里执行 apt install nodejs 安装。"
         },
         "ripgrep": {
           "title": "ripgrep（rg）",
@@ -1550,7 +1559,12 @@
         "chatFinish": "调度结束",
         "modelRoundTotal": "模型轮次总耗时"
       }
-    }
+    },
+    "simpleSetupModeToggle": "简单模式 / 高级模式",
+    "simpleSetupModeSimple": "简单",
+    "simpleSetupModeAdvanced": "高级",
+    "simpleSetupModeSwitchToAdvanced": "切换到高级",
+    "simpleSetupModeSwitchToSimple": "切换到简单"
   },
   "responseStyle": {
     "none": "无要求",
@@ -2105,6 +2119,7 @@
     "configLoaded": "配置已加载。",
     "savingConfig": "正在保存配置...",
     "configSaved": "配置已保存。",
+    "saved": "已保存。",
     "saveConfigBackend404": "保存失败：后端命令不可达（404）。请使用 `pnpm tauri dev` 启动桌面端。",
     "saveConfigFailed": "保存失败: {err}",
     "saveConfigDialogTitle": "保存配置失败",
@@ -2412,7 +2427,9 @@
     },
     "themeOptions": {
       "light": "浅色",
-      "dark": "深色"
+      "dark": "深色",
+      "switchToLight": "切换到亮色",
+      "switchToDark": "切换到暗色"
     },
     "providers": {
       "custom": "自定义"
@@ -2713,5 +2730,29 @@
     "actionOpenDefault": "用默认程序打开",
     "actionOpenShell": "打开 Shell",
     "actionOpenDirectory": "打开目录"
+  },
+  "simpleSetup": {
+    "provider": "供应商",
+    "models": "模型",
+    "modelQuick": "快速",
+    "modelExpert": "专家",
+    "modelVision": "多模态",
+    "modelVisionHint": "多模态指可读取图片、音频和视频",
+    "modelPlaceholder": "输入模型名称",
+    "style": "对话风格",
+    "styleNone": "无要求",
+    "appearance": "外观",
+    "shell": "Shell",
+    "hotkeys": "快捷键",
+    "siliconFlow": "硅基流动（高级，可选）",
+    "siliconFlowHint": "填写后自动配置向量模型、重排模型和语音识别；留空则跳过。",
+    "effortLow": "低",
+    "effortMedium": "中",
+    "effortHigh": "高",
+    "refreshModelsNeedKey": "前请先填写 API Key 和 base_url",
+    "refreshModelsDone": "已获取 {count} 个模型",
+    "refreshModelsFailed": "获取模型列表失败：{error}",
+    "overwriteHint": "保存后将覆盖原有设置",
+    "saveAndStart": "保存并开始对话"
   }
 }

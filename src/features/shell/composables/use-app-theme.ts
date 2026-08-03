@@ -311,8 +311,11 @@ export function useAppTheme() {
       applyPresetTheme(savedTheme);
       return;
     }
-    const fallbackMode = savedTheme ? resolveLegacyThemeMode(savedTheme) : activeGeneratedMode.value;
-    applyGeneratedTheme(generatedThemeControlsByMode.value[fallbackMode]);
+    // 全新安装无任何主题记录：跟随系统明暗，亮色用秋日、暗色用森林。
+    const systemPrefersDark =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches;
+    applyPresetTheme(systemPrefersDark ? "forest" : "autumn");
   }
 
   function emitThemeChanged(state: AppThemeState) {

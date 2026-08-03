@@ -123,6 +123,134 @@ fn demo_send_native_notification(app: AppHandle) -> Result<NativeNotificationDem
     })
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DemoTestNotificationInput {
+    kind: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DemoTestNotificationResult {
+    kind: String,
+    sent_at: String,
+    title: String,
+    body: String,
+}
+
+// 通知设置页的“通知测试”：kind = normal 发普通通知；
+// kind = live_update 在 Android 上模拟 live update 完整生命周期
+// （ongoing 步骤 1/2 → 2s 后刷新步骤 2/2 → 2s 后转终态），
+// 桌面端没有岛语义，降级为普通通知。
+#[cfg(target_os = "android")]
+const DEMO_LIVE_UPDATE_NOTIFICATION_ID: i32 = 0x50414903;
+
+#[tauri::command]
+async fn demo_test_notification(
+    app: AppHandle,
+    input: DemoTestNotificationInput,
+) -> Result<DemoTestNotificationResult, String> {
+    let sent_at = now_local_rfc3339();
+    let kind = input.kind.trim().to_string();
+    match kind.as_str() {
+        "normal" => {
+            let title = "PAI 通知测试".to_string();
+            let body = format!("这是一条普通通知测试。时间：{sent_at}");
+            send_native_notification(&app, &title, &body, true)?;
+            runtime_log_info(format!(
+                "[通知测试] 完成，kind=normal，sent_at={}",
+                sent_at
+            ));
+            Ok(DemoTestNotificationResult {
+                kind,
+                sent_at,
+                title,
+                body,
+            })
+        }
+        "live_update" => {
+            #[cfg(target_os = "android")]
+            {
+                use tauri_plugin_notification::{NotificationExt, PermissionState};
+
+                let notifications = app.notification();
+                let permission = match notifications.permission_state() {
+                    Ok(permission) => permission,
+                    Err(err) => {
+                        return Err(format!("读取通知权限失败：{err}"));
+                    }
+                };
+                let permission = match permission {
+                    PermissionState::Prompt | PermissionState::PromptWithRationale => {
+                        notifications
+                            .request_permission()
+                            .map_err(|err| format!("请求通知权限失败：{err}"))?
+                    }
+                    state => state,
+                };
+                if permission == PermissionState::Denied {
+                    return Err("系统通知权限已被拒绝，请先在系统设置里允许通知。".to_string());
+                }
+
+                let title = "PAI 实时通知测试";
+                let send_live = |step_title: &str, step_short: &str, ongoing: bool, promoted: bool| {
+                    let mut builder = notifications
+                        .builder()
+                        .id(DEMO_LIVE_UPDATE_NOTIFICATION_ID)
+                        .title(title)
+                        .body(step_title)
+                        .short_text(step_short)
+                        .icon("ic_stat_pai");
+                    if ongoing {
+                        builder = builder
+                            .ongoing()
+                            .request_promoted_ongoing()
+                            .large_body(step_title)
+                            .progress(0, 0, true);
+                    }
+                    builder.show().map_err(|err| format!("发送实时通知失败：{err}"))
+                };
+
+                // 1/2：ongoing + promoted，模拟“正在执行第 1 步”
+                send_live("第 1/2 步：模拟任务执行中…", "第 1/2 步：模拟任务", true, true)?;
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                // 2/2：同 id 刷新为第 2 步
+                send_live("第 2/2 步：模拟任务即将完成…", "第 2/2 步：模拟任务", true, true)?;
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                // 终态：转普通通知，可手动划掉
+                send_live("实时通知测试完成。", "实时通知测试完成", false, false)?;
+                runtime_log_info(format!(
+                    "[通知测试] 完成，kind=live_update，sent_at={}",
+                    sent_at
+                ));
+                Ok(DemoTestNotificationResult {
+                    kind,
+                    sent_at,
+                    title: title.to_string(),
+                    body: "实时通知测试完成。".to_string(),
+                })
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                let title = "PAI 实时通知测试".to_string();
+                let body = format!("当前平台（非 Android）不支持实时通知（岛），已发送普通通知代替。时间：{sent_at}");
+                send_native_notification(&app, &title, &body, true)?;
+                runtime_log_info(format!(
+                    "[通知测试] 完成，kind=live_update（降级为普通通知），sent_at={}",
+                    sent_at
+                ));
+                Ok(DemoTestNotificationResult {
+                    kind,
+                    sent_at,
+                    title,
+                    body,
+                })
+            }
+        }
+        other => Err(format!("未知的通知测试类型：{other}")),
+    }
+}
+
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -391,11 +519,64 @@ fn host_runtime_prerequisite_installed(kind: &str) -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn get_host_runtime_prerequisites() -> HostRuntimePrerequisites {
-    HostRuntimePrerequisites {
-        git_installed: host_runtime_prerequisite_installed("git").unwrap_or(false),
-        node_installed: host_runtime_prerequisite_installed("node").unwrap_or(false),
-        rg_installed: host_runtime_prerequisite_installed("rg").unwrap_or(false),
+async fn get_host_runtime_prerequisites(
+    state: State<'_, AppState>,
+) -> Result<HostRuntimePrerequisites, String> {
+    #[cfg(target_os = "android")]
+    {
+        // Android 宿主没有 git/node/rg，实际运行环境是沙盒 Linux（proot）。
+        // 沙盒未就绪时视为未安装；就绪后在沙盒内检测命令是否存在。
+        if !is_android_workspace_ready(&state) {
+            return Ok(HostRuntimePrerequisites {
+                git_installed: false,
+                node_installed: false,
+                rg_installed: false,
+            });
+        }
+        let session_id = normalize_terminal_tool_session_id("ui-welcome-runtime-check");
+        let cwd = match resolve_terminal_cwd(&state, &session_id, None) {
+            Ok(cwd) => cwd,
+            Err(_) => {
+                return Ok(HostRuntimePrerequisites {
+                    git_installed: false,
+                    node_installed: false,
+                    rg_installed: false,
+                });
+            }
+        };
+        let git_installed =
+            android_sandbox_command_exists(&state, &session_id, &cwd, "git").await;
+        let node_installed =
+            android_sandbox_command_exists(&state, &session_id, &cwd, "node").await;
+        let rg_installed = android_sandbox_command_exists(&state, &session_id, &cwd, "rg").await;
+        Ok(HostRuntimePrerequisites {
+            git_installed,
+            node_installed,
+            rg_installed,
+        })
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = state;
+        Ok(HostRuntimePrerequisites {
+            git_installed: host_runtime_prerequisite_installed("git").unwrap_or(false),
+            node_installed: host_runtime_prerequisite_installed("node").unwrap_or(false),
+            rg_installed: host_runtime_prerequisite_installed("rg").unwrap_or(false),
+        })
+    }
+}
+
+#[cfg(target_os = "android")]
+async fn android_sandbox_command_exists(
+    state: &AppState,
+    session_id: &str,
+    cwd: &std::path::Path,
+    command: &str,
+) -> bool {
+    let script = format!("command -v {command} >/dev/null 2>&1");
+    match sandbox_execute_command(state, session_id, &script, cwd, 15_000, false, None, None).await {
+        Ok(execution) => execution.ok,
+        Err(_) => false,
     }
 }
 

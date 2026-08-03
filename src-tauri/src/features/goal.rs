@@ -86,6 +86,7 @@ fn goal_output(conversation_id: &str, goal: ConversationGoalState) -> GoalMutati
 }
 
 fn emit_goal_updated(state: &AppState, conversation_id: &str, goal: Option<&ConversationGoalState>) {
+    live_update_goal_changed(state, conversation_id, goal);
     let payload = serde_json::json!({
         "conversationId": conversation_id,
         "goal": goal,

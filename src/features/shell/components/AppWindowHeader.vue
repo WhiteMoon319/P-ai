@@ -188,15 +188,21 @@
     <div v-if="viewMode !== 'chat'" class="relative z-10 min-w-0 justify-self-start flex items-center gap-2" @mousedown.stop>
       <button
         v-if="viewMode === 'config'"
-        class="btn btn-ghost btn-sm h-8 min-h-8 w-8 px-0"
-        :title="t('about.changelog')"
-        @click.stop="openChangelogDialog"
+        class="btn btn-primary btn-sm h-8 min-h-8 gap-1.5 px-2.5"
+        type="button"
+        :title="t('config.simpleSetupModeToggle')"
+        @click.stop="$emit('update:simple-setup-mode', !simpleSetupMode)"
       >
-        <ScrollText class="h-3.5 w-3.5" />
+        <span class="swap swap-rotate pointer-events-none">
+          <input type="checkbox" class="hidden" :checked="simpleSetupMode" tabindex="-1" />
+          <Columns3Cog class="swap-on h-3.5 w-3.5" />
+          <Bolt class="swap-off h-3.5 w-3.5" />
+        </span>
+        <span>{{ simpleSetupMode ? t("config.simpleSetupModeSwitchToAdvanced") : t("config.simpleSetupModeSwitchToSimple") }}</span>
       </button>
 
       <button
-        v-if="viewMode === 'config' && showUpdateToLatestButton"
+        v-if="viewMode === 'config' && !simpleSetupMode && showUpdateToLatestButton"
         class="btn btn-success btn-sm h-8 min-h-8 gap-2 px-3 relative shadow-sm"
         :title="updateToLatestTitle || ''"
         @click.stop="$emit('update-to-latest')"
@@ -218,7 +224,7 @@
       @mousedown.stop
     >
       <label
-        v-if="viewMode === 'config'"
+        v-if="viewMode === 'config' && !simpleSetupMode"
         ref="configSearchPopoverRef"
         class="input input-bordered input-sm relative flex h-8 w-[clamp(9rem,24vw,13rem)] items-center gap-2 bg-base-100"
       >
@@ -439,74 +445,22 @@
     @update:access="handleCreateConversationWorkspacePickerAccessChange"
     @update:autonomous-mode="createConversationMaxPermission = $event"
   />
-
-  <dialog v-if="viewMode === 'config'" class="modal" :class="{ 'modal-open': changelogDialogOpen }">
-    <div class="modal-box h-[90vh] w-[90vw] max-w-none p-0">
-      <div class="flex items-center justify-between border-b border-base-300 px-4 py-3">
-        <div class="text-sm font-medium">{{ t("about.changelog") }}</div>
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            class="btn btn-sm btn-ghost"
-            :disabled="changelogLoading"
-            @click="loadProjectChangelog(true)"
-          >
-            <span v-if="changelogLoading" class="loading loading-spinner loading-xs"></span>
-            {{ t("common.refresh") }}
-          </button>
-          <button
-            type="button"
-            class="btn btn-sm btn-ghost"
-            @click="closeChangelogDialog"
-          >
-            {{ t("common.close") }}
-          </button>
-        </div>
-      </div>
-      <div class="config-changelog-markdown h-[calc(90vh-118px)] overflow-auto px-5 py-4">
-        <div v-if="changelogLoading && !changelogMarkdown" class="flex h-full min-h-0 items-center justify-center text-sm text-base-content/70">
-          <span class="loading loading-spinner loading-sm mr-2"></span>
-          {{ t("about.changelogLoading") }}
-        </div>
-        <div v-else-if="changelogError" class="rounded-box border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
-          {{ changelogError }}
-        </div>
-        <AppMarkdownRenderer
-          v-else-if="changelogMarkdown"
-          class="ecall-markdown-content max-w-none"
-          :text="changelogMarkdown"
-          :is-dark="markdownIsDark"
-          variant="document"
-        />
-        <div v-else class="flex h-full min-h-0 items-center justify-center text-sm text-base-content/70">
-          {{ t("about.changelogEmpty") }}
-        </div>
-      </div>
-    </div>
-    <form method="dialog" class="modal-backdrop">
-      <button @click.prevent="closeChangelogDialog">close</button>
-    </form>
-  </dialog>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { getTransportCapabilities, invokeTauri, openTransportFileDialog } from "../../../services/tauri-api";
-import { Download, FoldVertical, FolderOpen, History, Minus, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, ScrollText, Search, Settings, Square, SquarePen, X } from "@lucide/vue";
+import { Bolt, Columns3Cog, Download, FoldVertical, FolderOpen, History, Minus, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, Search, Settings, Square, SquarePen, X } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ShellWorkspace, ShellWorkspaceAccess, ShellWorkMode } from "../../../types/app";
 import { defaultWorkspaceNameFromPath } from "../../../utils/shell-workspaces";
 import { buildWorkspaceConversationSections } from "../../chat/utils/conversation-sections";
 import { resolveConversationDisplayTitle } from "../../chat/utils/conversation-title";
-import { AppMarkdownRenderer, initKatex } from "../../chat/markdown";
 import type { ConfigSearchResult, ConfigSearchTab } from "../../config/search/config-search";
 import DepartmentPersonaSelect from "../../shared/components/DepartmentPersonaSelect.vue";
 import WorkspaceDirectoryPickerDialog from "../../shared/components/WorkspaceDirectoryPickerDialog.vue";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
-import { isDarkAppTheme } from "../composables/use-app-theme";
 import { usePipelineStatus } from "../composables/use-pipeline-status";
-
-initKatex();
 
 const RING_RADIUS = 14;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
@@ -533,8 +487,6 @@ type WorkspaceDirectoryListResult = {
 
 const RECENT_CONVERSATION_TOPICS_STORAGE_KEY = "easy_call.recent_conversation_topics.v1";
 const RECENT_CONVERSATION_TOPICS_LIMIT = 7;
-
-const markdownIsDark = computed(() => isDarkAppTheme(props.currentTheme));
 
 const props = withDefaults(defineProps<{
   viewMode: "chat" | "archives" | "config";
@@ -567,6 +519,7 @@ const props = withDefaults(defineProps<{
   configSearchQuery?: string;
   configSearchResults?: ConfigSearchResult[];
   configSearchPlaceholder?: string;
+  simpleSetupMode?: boolean;
   showUpdateToLatestButton?: boolean;
   hasAvailableUpdate?: boolean;
   checkingUpdate?: boolean;
@@ -577,6 +530,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   windowControlsVisible: true,
   pipelineStatusEnabled: true,
+  simpleSetupMode: false,
 });
 
 const pipelineStatus = props.pipelineStatusEnabled
@@ -604,6 +558,7 @@ const emit = defineEmits<{
   (e: "update:config-search-query", value: string): void;
   (e: "select-config-search-result", tab: ConfigSearchTab): void;
   (e: "update-to-latest"): void;
+  (e: "update:simple-setup-mode", value: boolean): void;
 }>();
 
 const { t, locale } = useI18n();
@@ -789,11 +744,6 @@ const createConversationWorkspaceDirectoryError = ref("");
 const createConversationWorkspaceDirectoryItems = ref<Array<{ path: string; name: string }>>([]);
 const importConversationLoading = ref(false);
 const configSearchOpen = ref(false);
-const changelogDialogOpen = ref(false);
-const changelogLoading = ref(false);
-const changelogError = ref("");
-const changelogMarkdown = ref("");
-const changelogLoaded = ref(false);
 
 const currentWorkspaceAccessByPath = computed(() => {
   const map = new Map<string, ShellWorkspaceAccess>();
@@ -1147,9 +1097,6 @@ function handleWindowKeydown(event: KeyboardEvent) {
   if (event.key === "Escape" && configSearchOpen.value) {
     configSearchOpen.value = false;
   }
-  if (event.key === "Escape" && changelogDialogOpen.value) {
-    closeChangelogDialog();
-  }
 }
 
 function openSettingsSearchPopover() {
@@ -1248,30 +1195,6 @@ function handleOpenCreateConversationDialogEvent(event: Event) {
     return;
   }
   openCreateConversationDialogWithWorkspace(workspace);
-}
-
-async function loadProjectChangelog(force = false) {
-  if (changelogLoading.value) return;
-  if (changelogLoaded.value && !force) return;
-  changelogLoading.value = true;
-  changelogError.value = "";
-  try {
-    changelogMarkdown.value = await invokeTauri<string>("fetch_project_changelog_markdown");
-    changelogLoaded.value = true;
-  } catch (error) {
-    changelogError.value = String(error);
-  } finally {
-    changelogLoading.value = false;
-  }
-}
-
-function openChangelogDialog() {
-  changelogDialogOpen.value = true;
-  void loadProjectChangelog();
-}
-
-function closeChangelogDialog() {
-  changelogDialogOpen.value = false;
 }
 
 function closeCreateConversationDialog() {
@@ -1421,41 +1344,4 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.config-changelog-markdown:deep(.ecall-markdown-content.prose) {
-  max-width: none;
-}
-
-.config-changelog-markdown:deep(.ecall-markdown-content) {
-  color: inherit;
-  line-height: 1.75;
-  font-size: var(--app-text-base-size);
-}
-
-.config-changelog-markdown:deep(.ecall-markdown-content :where(p,ul,ol,blockquote,pre,table,figure,.paragraph-node,.list-node,.blockquote,.table-node-wrapper,.code-block-container,._mermaid,.vmr-container)) {
-  margin-top: 0.85rem;
-  margin-bottom: 0.85rem;
-}
-
-.config-changelog-markdown:deep(.ecall-markdown-content :where(h1,h2,h3,h4,.heading-node)) {
-  margin-top: 1.25rem;
-  margin-bottom: 0.75rem;
-  font-weight: 700;
-}
-
-.config-changelog-markdown:deep(.ecall-markdown-content :where(a,.link-node)) {
-  color: hsl(var(--p));
-  text-decoration: underline;
-}
-
-.config-changelog-markdown:deep(.ecall-markdown-content :where(blockquote,.blockquote)) {
-  padding-left: 0.9rem;
-  opacity: 0.9;
-}
-
-.config-changelog-markdown:deep(.ecall-markdown-content :where(:not(pre) > code,.inline-code)) {
-  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
-  border-radius: 0.45rem;
-  padding: 0.08rem 0.35rem;
-  background: color-mix(in srgb, currentColor 6%, transparent);
-}
 </style>

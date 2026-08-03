@@ -129,7 +129,11 @@ export function useChatPersonaConversationDerivedState(bindings: Record<string, 
       const id = String(persona.id || "").trim();
       if (!id) continue;
       const url = bindings.resolveAvatarUrl(persona.avatarPath, persona.avatarUpdatedAt);
-      if (url) next[id] = url;
+      if (url) {
+        next[id] = url;
+      } else if (!persona.isBuiltInUser && persona.id !== "user-persona") {
+        next[id] = bindings.resolveBrandAvatarUrl();
+      }
     }
     return next;
   });

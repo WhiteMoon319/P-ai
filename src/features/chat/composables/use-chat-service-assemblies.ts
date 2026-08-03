@@ -120,6 +120,7 @@ export function useChatServiceAssemblies(bindings: Record<string, any>) {
     t: bindings.tr,
     configTab: bindings.configTab,
     allMessages: bindings.allMessages,
+    chatUsagePercent: bindings.chatUsagePercent,
     currentForegroundApiConfigId: bindings.currentForegroundApiConfigId,
     currentForegroundAgentId: bindings.currentForegroundAgentId,
     currentForegroundDepartmentId: bindings.currentForegroundDepartmentId,

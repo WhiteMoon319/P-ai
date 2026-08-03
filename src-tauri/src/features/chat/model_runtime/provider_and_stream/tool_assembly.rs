@@ -61,6 +61,9 @@ impl CachedRuntimeToolSchema {
                 format!("{server_id}::{runtime_tool_name}"),
                 format!("{server_name}_{runtime_tool_name}"),
                 runtime_tool_name.to_string(),
+                format!("{server_name}::{provider_tool_name}"),
+                format!("{server_id}::{provider_tool_name}"),
+                format!("{server_name}_{provider_tool_name}"),
                 provider_tool_name,
             ],
             definition,
@@ -902,7 +905,7 @@ fn empty_runtime_tool_assembly(tool_manifest: Vec<Value>) -> RuntimeToolAssembly
     }
 }
 
-async fn assemble_runtime_tools(
+pub(crate) async fn assemble_runtime_tools(
     app_config: &AppConfig,
     selected_api: &ApiConfig,
     agent: &AgentProfile,

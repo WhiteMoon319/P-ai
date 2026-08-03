@@ -23,8 +23,15 @@ import {
 } from "./chat-foreground-coordinator";
 import { reconcileForegroundRuntime } from "./foreground-recovery-state-machine";
 import { useChatFlow } from "./use-chat-flow";
+import { useChatRewindActions } from "./use-chat-rewind-actions";
 import { DRAFT_USER_ID_PREFIX } from "./use-chat-flow-drafts";
 import type { ConversationRuntimeStreamCacheSnapshot } from "./use-chat-flow-stream-cache";
+import {
+  extractMessageAttachmentFiles,
+  extractMessageImages,
+  messageText,
+  removeBinaryPlaceholders,
+} from "../../../utils/chat-message";
 
 type ConversationViewRuntimeOptions = {
   conversationId: Ref<string>;
@@ -33,6 +40,11 @@ type ConversationViewRuntimeOptions = {
   departmentId: Ref<string>;
   subscriptionSlot?: ExclusiveChatViewSubscriptionSlot;
   t: (key: string, params?: Record<string, unknown>) => string;
+  requestRecallMode?: (payload: {
+    turnId: string;
+    targetUserMessageId: string;
+    conversationId?: string;
+  }) => Promise<"with_patch" | "message_only" | "cancel">;
 };
 
 type ConversationRuntimeState = "idle" | "assistant_streaming" | "organizing_context" | "compacting";
@@ -544,11 +556,51 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
 
   function handleForegroundWake(event: Event) {
     if (document.visibilityState === "hidden") return;
+    console.warn("[焦点恢复] focus/visibility 触发", {
+      eventType: event.type,
+      visibilityState: document.visibilityState,
+      conversationId: currentConversationId(),
+    });
     void scheduleForegroundRecovery(event.type);
   }
 
   window.addEventListener("focus", handleForegroundWake);
   document.addEventListener("visibilitychange", handleForegroundWake);
+
+  const rewindActions = useChatRewindActions({
+    activeApiConfigId: preferredApiConfigId,
+    activeAgentId: options.agentId,
+    currentConversationId: options.conversationId,
+    allMessages,
+    chatting,
+    trimming,
+    compactingConversation: ref(false),
+    chatErrorText,
+    chatInput,
+    selectedMentions,
+    clipboardImages,
+    queuedAttachmentNotices,
+    deleteUnarchivedConversationFromArchives: async () => {},
+    sendChat: async () => flow.sendChat(),
+    setStatusError: () => {},
+    setChatErrorText: (text: string) => {
+      chatErrorText.value = text;
+    },
+    removeBinaryPlaceholders,
+    messageText,
+    extractMessageImages,
+    extractMessageAttachmentFiles,
+    requestRecallMode: options.requestRecallMode || (async () => "message_only"),
+    requestCreateConversationBranchFromMessageConfirm: async () => false,
+    createConversationBranchFromMessage: async () => {},
+    branchingConversation: ref(false),
+    refreshForegroundConversationAfterRewind: async (conversationId: string) => {
+      await synchronizeConversation(conversationId, {
+        clearRuntime: true,
+        preserveExistingHistory: false,
+      });
+    },
+  });
 
   onScopeDispose(() => {
     disposed = true;
@@ -592,6 +644,8 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     planModeEnabled,
     send: () => flow.sendChat(),
     stop: () => flow.stopChat(),
+    handleRecallTurn: rewindActions.handleRecallTurn,
+    handleRegenerateTurn: rewindActions.handleRegenerateTurn,
     loadSnapshot,
     loadOlderHistory,
   };

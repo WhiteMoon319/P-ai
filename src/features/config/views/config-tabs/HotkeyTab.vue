@@ -178,6 +178,18 @@
         <span class="text-right text-sm opacity-60">{{ t("config.hotkey.builtinEscStopReplying") }}</span>
       </div>
     </template>
+    <template #row-builtin-shift-tab>
+      <div class="flex items-center justify-between gap-4">
+        <span class="font-mono">Shift + Tab</span>
+        <span class="text-right text-sm opacity-60">{{ t("config.hotkey.builtinShiftTabPlanMode") }}</span>
+      </div>
+    </template>
+    <template #row-builtin-alt-z>
+      <div class="flex items-center justify-between gap-4">
+        <span class="font-mono">Alt + Z</span>
+        <span class="text-right text-sm opacity-60">{{ t("config.hotkey.builtinAltZLineWrap") }}</span>
+      </div>
+    </template>
     <template #row-builtin-wheel>
       <div class="flex items-center justify-between gap-4">
         <span class="font-mono">Shift + Wheel</span>
@@ -252,6 +264,8 @@ const templateGroups = computed<ConfigTemplateGroup[]>(() => [
     rows: [
       { key: "builtin-tab", items: [] },
       { key: "builtin-esc", items: [] },
+      { key: "builtin-shift-tab", items: [] },
+      { key: "builtin-alt-z", items: [] },
       { key: "builtin-wheel", items: [] },
     ],
   },

@@ -43,6 +43,7 @@ type UseConversationMaintenanceDialogOptions = {
   t: (key: string, params?: Record<string, unknown>) => string;
   currentConversationId: Readonly<Ref<string>>;
   conversationSummaries: Readonly<Ref<readonly ConversationMaintenanceSummary[]>>;
+  chatUsagePercent: Readonly<Ref<number>>;
   trimCompactNow: () => Promise<void>;
   trimNow: (conversationId?: string | null) => Promise<void>;
   deleteConversation: (conversationId: string) => Promise<void> | void;
@@ -84,17 +85,6 @@ export function useConversationMaintenanceDialog(options: UseConversationMainten
     return messages.some((message) => String(message.role || "").trim().toLowerCase() === "assistant");
   }
 
-  function latestBackendContextUsagePercent(messages: ChatMessage[]): number {
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index];
-      if (String(message.role || "").trim().toLowerCase() !== "assistant") continue;
-      const raw = Number((message.providerMeta || {}).contextUsagePercent);
-      if (!Number.isFinite(raw)) continue;
-      return Math.min(100, Math.max(0, Math.round(raw)));
-    }
-    return 0;
-  }
-
   function buildTrimCompactionPreview(
     conversationId: string,
     lastBlockMessages: ChatMessage[],
@@ -103,7 +93,7 @@ export function useConversationMaintenanceDialog(options: UseConversationMainten
     const messageCount = countArchiveCandidateMessages(lastBlockMessages);
     const assistantReplyPresent = hasAssistantReply(lastBlockMessages);
     const isEmpty = lastBlockMessages.length === 0;
-    const contextUsagePercent = latestBackendContextUsagePercent(lastBlockMessages);
+    const contextUsagePercent = Math.min(100, Math.max(0, Math.round(Number(options.chatUsagePercent.value || 0))));
     const conversationLongEnough = messageCount >= SHORT_CONVERSATION_COMPACTION_THRESHOLD;
     const contextUsageHighEnough = contextUsagePercent >= 10;
     let compactionDisabledReason: string | null = null;

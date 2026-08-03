@@ -1557,6 +1557,7 @@ fn update_conversation_todos_and_emit(
             current_todos: stored_todos,
         };
         emit_conversation_todos_updated_payload(state, &todo_payload);
+        live_update_todos_changed(state, cid);
         return Ok(());
     }
     let Some(todo_update) = conversation_service_v2().update_conversation_todos(
@@ -1572,6 +1573,7 @@ fn update_conversation_todos_and_emit(
         current_todos: stored_todos,
     };
     emit_conversation_todos_updated_payload(state, &todo_payload);
+    live_update_todos_changed(state, cid);
     emit_unarchived_conversation_overview_item_updated_from_state(state, cid)?;
     Ok(())
 }

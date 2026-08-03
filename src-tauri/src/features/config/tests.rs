@@ -30,10 +30,10 @@
     }
 
     #[test]
-    fn startup_window_label_should_open_quick_setup_without_usable_text_llm() {
+    fn startup_window_label_should_open_main_without_usable_text_llm() {
         let mut cfg = AppConfig::default();
         normalize_app_config(&mut cfg);
-        assert_eq!(startup_window_label_for_config(&cfg), "quick-setup");
+        assert_eq!(startup_window_label_for_config(&cfg), "main");
 
         let api_id = cfg.assistant_department_api_config_id.clone();
         let api = cfg
@@ -123,7 +123,7 @@
             }
         }
         cfg.assistant_department_api_config_id.clear();
-        assert_eq!(startup_window_label_for_config(&cfg), "quick-setup");
+        assert_eq!(startup_window_label_for_config(&cfg), "main");
     }
 
     #[test]
@@ -148,6 +148,7 @@
             message_notification_sound_enabled: default_message_notification_sound_enabled(),
             selected_api_config_id: "a1".to_string(),
             assistant_department_api_config_id: "a1".to_string(),
+            simple_setup_mode: false,
             vision_api_config_id: None,
             image_generation_model_id: None,
             image_providers: Vec::new(),
@@ -258,6 +259,7 @@
             image_generation_model_id: None,
             image_providers: Vec::new(),
             stt_api_config_id: None,
+            simple_setup_mode: false,
             stt_auto_send: false,
             provider_non_stream_base_urls: Vec::new(),
             terminal_shell_kind: default_terminal_shell_kind(),
@@ -721,6 +723,7 @@
             image_providers: Vec::new(),
             stt_api_config_id: None,
             stt_auto_send: false,
+            simple_setup_mode: false,
             provider_non_stream_base_urls: Vec::new(),
             terminal_shell_kind: default_terminal_shell_kind(),
             shell_workspaces: Vec::new(),
@@ -908,6 +911,7 @@
             image_providers: Vec::new(),
             stt_api_config_id: None,
             stt_auto_send: false,
+            simple_setup_mode: false,
             provider_non_stream_base_urls: Vec::new(),
             terminal_shell_kind: default_terminal_shell_kind(),
             shell_workspaces: Vec::new(),
@@ -1643,10 +1647,7 @@ model = "gpt-4.1"
         let runtime = read_runtime_state_shard(&data_path).expect("read runtime shard");
 
         assert_eq!(runtime.data_migration_version, 0);
-        assert_eq!(
-            runtime.message_store_migration_version,
-            DATA_MIGRATION_VERSION_V1_BASELINE
-        );
+        assert_eq!(runtime.message_store_migration_version, 1);
     }
 
     #[test]
@@ -1658,24 +1659,29 @@ model = "gpt-4.1"
         write_app_data_with_stats(&data_path, &data).expect("seed layout");
 
         let mut runtime = read_runtime_state_shard(&data_path).expect("read runtime shard");
-        runtime.data_migration_version = DATA_MIGRATION_VERSION_V1_BASELINE;
+        runtime.data_migration_version =
+            DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES;
         assert!(write_runtime_state_shard(&data_path, &runtime).expect("write baseline migration version"));
 
         let stats = write_app_data_with_stats(&data_path, &data).expect("write app data again");
         let restored = read_runtime_state_shard(&data_path).expect("read restored runtime shard");
 
-        assert_eq!(restored.data_migration_version, DATA_MIGRATION_VERSION_V1_BASELINE);
+        assert_eq!(
+            restored.data_migration_version,
+            DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES
+        );
         assert_eq!(restored.message_store_migration_version, 0);
         assert!(!stats.runtime_written);
     }
 
     #[test]
-    fn runtime_volatile_normalization_should_not_require_rewriting_after_baseline_recorded() {
+    fn runtime_volatile_normalization_should_not_require_rewriting_after_migration_version_recorded() {
         let root = std::env::temp_dir().join(format!("eca-read-baseline-migration-{}", Uuid::new_v4()));
         std::fs::create_dir_all(root.join("config")).expect("create temp config dir");
         let data_path = root.join("config").join("app_data.json");
         let mut data = AppData::default();
-        data.data_migration_version = DATA_MIGRATION_VERSION_V1_BASELINE;
+        data.data_migration_version =
+            DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES;
         data.conversations = vec![build_test_conversation("conv-baseline", "Baseline")];
         write_app_data_with_stats(&data_path, &data).expect("seed layout");
         let paths = message_store::message_store_paths(&data_path, "conv-baseline")
@@ -1685,7 +1691,10 @@ model = "gpt-4.1"
         let mut restored = read_app_data(&data_path).expect("read app data");
         let after = message_store::message_store_shard_write_signature(&paths);
 
-        assert_eq!(restored.data_migration_version, DATA_MIGRATION_VERSION_V1_BASELINE);
+        assert_eq!(
+            restored.data_migration_version,
+            DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES
+        );
         assert_eq!(after, before);
         assert!(restored.conversations[0].messages[0].speaker_agent_id.is_none());
         for conversation in restored.conversations.iter_mut() {
@@ -1693,45 +1702,6 @@ model = "gpt-4.1"
         }
         assert_eq!(
             restored.conversations[0].messages[0].speaker_agent_id.as_deref(),
-            Some(USER_PERSONA_ID)
-        );
-    }
-
-    #[test]
-    fn read_app_data_should_record_baseline_without_rewriting_conversations_for_volatile_fields() {
-        let root = std::env::temp_dir().join(format!("eca-read-record-baseline-{}", Uuid::new_v4()));
-        std::fs::create_dir_all(root.join("config")).expect("create temp config dir");
-        let data_path = root.join("config").join("app_data.json");
-        let mut data = AppData::default();
-        data.data_migration_version = 0;
-        data.conversations = vec![build_test_conversation("conv-baseline", "Baseline")];
-        write_app_data_with_stats(&data_path, &data).expect("seed layout");
-        let paths = message_store::message_store_paths(&data_path, "conv-baseline")
-            .expect("conversation paths");
-        let before = message_store::message_store_shard_write_signature(&paths);
-
-        let restored = read_app_data(&data_path).expect("read app data");
-        let after = message_store::message_store_shard_write_signature(&paths);
-        let runtime = read_runtime_state_shard(&data_path).expect("read runtime shard");
-
-        assert_eq!(
-            restored.data_migration_version,
-            DATA_MIGRATION_VERSION_V1_BASELINE
-        );
-        assert_eq!(
-            runtime.data_migration_version,
-            DATA_MIGRATION_VERSION_V1_BASELINE
-        );
-        assert_eq!(restored.message_store_migration_version, 0);
-        assert_eq!(runtime.message_store_migration_version, 0);
-        assert_eq!(after, before);
-        assert!(restored.conversations[0].messages[0].speaker_agent_id.is_none());
-        let mut runtime_view = restored.clone();
-        for conversation in runtime_view.conversations.iter_mut() {
-            normalize_conversation_runtime_volatile_fields(conversation);
-        }
-        assert_eq!(
-            runtime_view.conversations[0].messages[0].speaker_agent_id.as_deref(),
             Some(USER_PERSONA_ID)
         );
     }
@@ -1978,7 +1948,8 @@ model = "gpt-4.1"
     fn migration_package_version_should_allow_importing_older_data_versions() {
         let manifest = MigrationManifest {
             schema_version: MIGRATION_SCHEMA_VERSION,
-            migration_version: DATA_MIGRATION_VERSION_V1_BASELINE,
+            migration_version:
+                DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES,
             app_version: "0.18.8".to_string(),
             exported_at: "2026-07-07T00:00:00Z".to_string(),
         };
@@ -1989,10 +1960,14 @@ model = "gpt-4.1"
             oauth_files: Vec::new(),
             avatar_files: Vec::new(),
         };
-        payload.runtime_data.data_migration_version = DATA_MIGRATION_VERSION_V1_BASELINE;
+        payload.runtime_data.data_migration_version =
+            DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES;
 
         let version = assert_manifest_version(&manifest, &payload).expect("allow older import");
-        assert_eq!(version, DATA_MIGRATION_VERSION_V1_BASELINE);
+        assert_eq!(
+            version,
+            DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES
+        );
     }
 
     #[test]

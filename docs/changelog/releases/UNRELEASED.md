@@ -50,9 +50,20 @@
 
 ## 修复
 
+- 修复（android-notification）：Android 端轮次完成/失败通知恢复“前台跳过”语义。Android 为单 WebView，wry 端窗口可见性/焦点均无实现（`set_visible`/`focus` 为 Unsupported，`is_focused`/`is_visible` 无对应消息处理），桌面式窗口焦点判定不可用；现改由前端 `useChatForegroundActivity` 上报聊天视图前台激活状态（`visibilitychange` + focus + 聊天视图），后端 `set_chat_window_active` 全平台存储该状态，Android 下会话有活跃 binding 且聊天视图前台激活时才跳过通知，前台不打扰、切后台正常提醒，桌面端行为不变。
 - 修复新建“隔离工作树”会话时 Git 根目录二次校验会弹出控制台窗口的问题：Windows 下以 `CREATE_NO_WINDOW` 执行校验进程。
 - 修复后台子进程弹出控制台窗口的遗漏点：Git 幽灵快照、VSCode 桥接网络探测、winget 安装、WSL/Shell 终端启动器、默认程序打开文件，均以 `CREATE_NO_WINDOW` 抑制多余控制台窗口。
 
 ## 依赖
 
 ## 功能
+
+- 新增（android-live-update）：live update 通知在 TODO 更新后自动刷新。`update_conversation_todos_and_emit` 更新 todo 成功后新增 `live_update_todos_changed` 刷新入口，同 id 重发 ongoing 通知，让岛/通知栏实时展示最新步骤文本；并复用「有 todo 显示步骤、无 todo 显示对话标题」的正文逻辑。桌面端为空实现，行为不变。
+- 新增（android-live-update）：live update 通知新增短文本（Android 13+ `shortText`）。Rust builder 新增 `short_text()`，Kotlin 端在 API 33+ 调用 `setShortCriticalText`，岛/锁屏胶囊优先显示 todo 当前步骤，无 todo 时显示对话标题，展开通知仍显示完整标题与正文。
+- 新增（android-notification）：通知设置页新增「通知测试」，可分别发送普通通知与实时通知测试：普通通知立即弹出一条；实时通知在 Android 上模拟 live update 完整生命周期（ongoing 第 1/2 步 → 2 秒后刷新第 2/2 步 → 2 秒后转终态），桌面端降级为普通通知。
+- 新增（android-live-update）：Android 端新增消息输出与目标 live update 通知。消息轮次开始/进行中显示常驻 ongoing 通知（“正在回复…”），完成或失败后同 id 更新为可手动划掉的终态通知，不再重复打扰；目标创建/更新显示进行中通知并展示目标摘要，目标结束后更新为终态。参考 MAA-Meow TaskExecutionService 的 live update 模式，采用“同通知 id 更新 + ongoing 切换”实现，多会话并发时用 owner 记录保证只有当前显示归属会话结束才更新终态，避免覆盖仍在进行中的其他会话通知。桌面端为空实现，行为不变。
+- 新增（android-live-update）：Android 15 (API 35) 官方 live updates（promoted ongoing）。将 tauri-plugin-notification 2.3.3 vendor 进 `src-tauri/vendor/`（path 依赖），扩展 Android 端通知能力：Rust builder 新增 `request_promoted_ongoing()` 与 `progress()`；Kotlin 端 `Notification` 数据类新增 promoted/进度字段，`buildNotification` 在 ongoing + promoted 时调用 `setRequestPromotedOngoing`，并在提供进度时设置进度条；插件 manifest 声明 `POST_PROMOTED_NOTIFICATIONS` 权限（随 manifest merge 进应用），插件依赖 `androidx.core:core-ktx` 升至 1.17.0（`setRequestPromotedOngoing` 自该版本加入）。消息输出中/目标进行中的 ongoing 通知现以标准样式（BigTextStyle + 不确定进度）请求系统提升，API 35+ 默认展开、锁屏可见，API 35 以下静默降级为普通 ongoing；终态通知不请求提升。桌面端行为不变。
+- 修复（android-welcome）：设置页欢迎界面的 Git/Node.js/ripgrep 运行时检测在 Android 上改走沙盒 Linux 环境：宿主 PATH 检测在 Android 恒判未安装（git/node/rg 实际运行在 proot Ubuntu 沙盒内），现改为沙盒就绪后在沙盒内执行 `command -v` 检测，未就绪视为未安装；同时欢迎界面接收 Android 平台标记，Android 上 Git/Node 卡片隐藏不可用的“一键安装/手动安装”按钮（winget 仅桌面端），并提示在沙盒终端用 `apt install` 安装，桌面端行为不变。
+- 新增（android-live-update）：live update 通知小图标改为 PAI 原图标：通知插件全局配置与 live 通知 builder 均指定 `ic_stat_pai`，`scripts/patch-android-project.sh` 将 `src-tauri/icons/android/drawable/ic_stat_pai.png` 复制为 Android drawable 资源，随构建自动生效，桌面端不变。
+- 新增（android-live-update）：live update 通知正文显示 TODO 当前步骤：目标进行中 / 消息输出中的 ongoing 通知优先展示会话当前 todo 的进行中步骤（`第 X/N 步：内容`，英文 `Step X/N: ...`），无 todo 时回退原正文（目标摘要 / “正在回复…”）。
+- 新增（android-live-update）：Android 后台任务保活前台服务：保活由任务生命周期驱动（回复轮次开始 / 目标激活时启动，全部结束 / 目标结束时停止），Rust 侧维护活跃任务集合并通过通知插件新增的 `keep_alive_start` / `keep_alive_stop` 命令启停 `specialUse` 前台服务（引用计数，通知插件 Kotlin 端新增 `startKeepAlive` / `stopKeepAlive` 命令），独立于通知权限与 live 通知发送结果——通知权限被拒时任务仍在后台运行，进程照样保活；服务自带低打扰保活通知，任务结束后自动移除。插件 manifest 新增 `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_SPECIAL_USE` 权限与 service 声明。

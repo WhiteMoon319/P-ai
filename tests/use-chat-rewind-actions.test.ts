@@ -86,7 +86,7 @@ describe("useChatRewindActions", () => {
     await actions.handleRecallTurn({ turnId: "assistant-2" });
 
     expect(hoisted.invokeTauriMock).toHaveBeenCalledWith(
-      "rewind_conversation_from_message",
+      "conversation.rewind",
       expect.any(Object),
     );
     expect(allMessages.value).toBe(before);
@@ -110,6 +110,7 @@ describe("useChatRewindActions", () => {
     expect(requestRecallMode).toHaveBeenCalledWith({
       turnId: "assistant-2",
       targetUserMessageId: "assistant-2",
+      conversationId: "conversation-a",
     });
     expect(hoisted.invokeTauriMock).toHaveBeenCalledTimes(1);
   });
@@ -162,12 +163,13 @@ describe("useChatRewindActions", () => {
 
     // 后端应收到 assistant-2（不是 user-2）
     expect(hoisted.invokeTauriMock).toHaveBeenCalledWith(
-      "rewind_conversation_from_message",
+      "conversation.rewind",
       expect.objectContaining({
-        input: expect.objectContaining({
-          messageId: "assistant-2",
-          undoApplyPatch: false,
+        session: expect.objectContaining({
+          conversationId: "conversation-a",
         }),
+        messageId: "assistant-2",
+        undoApplyPatch: false,
       }),
     );
     // 输入框不应被回填
@@ -222,12 +224,13 @@ describe("useChatRewindActions", () => {
 
     // 后端应收到 user-2
     expect(hoisted.invokeTauriMock).toHaveBeenCalledWith(
-      "rewind_conversation_from_message",
+      "conversation.rewind",
       expect.objectContaining({
-        input: expect.objectContaining({
-          messageId: "user-2",
-          undoApplyPatch: false,
+        session: expect.objectContaining({
+          conversationId: "conversation-a",
         }),
+        messageId: "user-2",
+        undoApplyPatch: false,
       }),
     );
     // 输入框应被回填
