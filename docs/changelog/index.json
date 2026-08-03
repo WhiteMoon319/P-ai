@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-08-03T08:14:25.730Z",
-  "latestVersion": "v0.50.1",
+  "generatedAt": "2026-08-03T16:35:22.894Z",
+  "latestVersion": "v0.51.0",
   "releases": [
+    {
+      "version": "v0.51.0",
+      "path": "docs/changelog/releases/v0.51.0.md",
+      "summary": "计划模式切换改为内存态处理，不再写入会话记录与磁盘、不再经过会话互斥锁；忙碌（流式输出 / 整理上下文）期间也可以自由切换计划模式，不需要等当前轮次结束。"
+    },
     {
       "version": "v0.50.1",
       "path": "docs/changelog/releases/v0.50.1.md",
