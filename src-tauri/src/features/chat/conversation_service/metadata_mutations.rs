@@ -202,23 +202,6 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn set_plan_mode_enabled(
-        &self,
-        state: &AppState,
-        conversation_id: &str,
-        enabled: bool,
-    ) -> Result<Conversation, String> {
-        self.apply_external_metadata_patch(
-            state,
-            conversation_id,
-            "conversation_v2_set_plan_mode_enabled",
-            ConversationExternalMetadataPatch {
-                plan_mode_enabled: Some(enabled),
-                ..Default::default()
-            },
-        )
-    }
-
     fn refresh_unarchived_conversation_overview(
         &self,
         state: &AppState,

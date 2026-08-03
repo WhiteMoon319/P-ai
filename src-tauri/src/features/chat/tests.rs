@@ -12763,4 +12763,47 @@
             violations
         );
     }
-    
+
+    // ========== 计划模式内存态 ==========
+
+    #[test]
+    fn plan_mode_set_should_only_write_runtime_slot() {
+        let state = test_chat_runtime_state();
+
+        assert!(!get_conversation_plan_mode_enabled(&state, "conversation-plan-a").unwrap());
+        set_conversation_plan_mode_enabled(&state, "conversation-plan-a", true).unwrap();
+        assert!(get_conversation_plan_mode_enabled(&state, "conversation-plan-a").unwrap());
+        set_conversation_plan_mode_enabled(&state, "conversation-plan-a", false).unwrap();
+        assert!(!get_conversation_plan_mode_enabled(&state, "conversation-plan-a").unwrap());
+    }
+
+    #[test]
+    fn plan_mode_without_slot_should_default_false_even_if_meta_has_old_value() {
+        let state = test_chat_runtime_state();
+
+        assert!(!get_conversation_plan_mode_enabled(&state, "conversation-plan-b").unwrap());
+        set_conversation_plan_mode_enabled(&state, "conversation-plan-b", true).unwrap();
+        assert!(get_conversation_plan_mode_enabled(&state, "conversation-plan-b").unwrap());
+
+        // 模拟无 slot（新会话）时不再回退 meta，直接 false
+        let other = "conversation-plan-c";
+        assert!(!get_conversation_plan_mode_enabled(&state, other).unwrap());
+        let slots = lock_conversation_runtime_slots(&state).unwrap();
+        assert!(slots.get(other).is_none());
+    }
+
+    #[test]
+    fn plan_mode_slot_is_independent_per_conversation() {
+        let state = test_chat_runtime_state();
+
+        set_conversation_plan_mode_enabled(&state, "conversation-plan-d", true).unwrap();
+        set_conversation_plan_mode_enabled(&state, "conversation-plan-e", false).unwrap();
+
+        assert!(get_conversation_plan_mode_enabled(&state, "conversation-plan-d").unwrap());
+        assert!(!get_conversation_plan_mode_enabled(&state, "conversation-plan-e").unwrap());
+        // 设置一个会话不影响其他会话
+        set_conversation_plan_mode_enabled(&state, "conversation-plan-d", false).unwrap();
+        assert!(!get_conversation_plan_mode_enabled(&state, "conversation-plan-d").unwrap());
+        assert!(!get_conversation_plan_mode_enabled(&state, "conversation-plan-e").unwrap());
+    }
+

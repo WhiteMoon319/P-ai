@@ -634,7 +634,7 @@ fn build_unarchived_conversation_summary_from_meta_view(
         pin_index,
         runtime_state: unarchived_conversation_runtime_state(state, &conversation_meta.id),
         current_todo: conversation_current_todo_text_from_items(&conversation_meta.current_todos),
-        plan_mode_enabled: conversation_meta.plan_mode_enabled,
+        plan_mode_enabled: get_conversation_plan_mode_enabled(state, conversation_id).unwrap_or(false),
         auto_push_remote_contact_id: conversation_meta.auto_push_remote_contact_id.clone(),
         detached_window_open: detached_window_label.is_some(),
         detached_window_label,

@@ -12,9 +12,6 @@ type UseConversationPlanModeOptions<T extends ConversationPlanModeSummary> = {
 };
 
 export function useConversationPlanMode<T extends ConversationPlanModeSummary>(options: UseConversationPlanModeOptions<T>) {
-  const inFlightPlanModeRequests = new Map<string, Promise<boolean>>();
-  const confirmedConversationPlanModeStates = new Map<string, boolean>();
-
   function getConversationPlanModeEnabledById(conversationId: string): boolean {
     const normalizedConversationId = String(conversationId || "").trim();
     if (!normalizedConversationId) return false;
@@ -45,57 +42,32 @@ export function useConversationPlanMode<T extends ConversationPlanModeSummary>(o
     }
   }
 
-  function queueConversationPlanModeUpdate(
-    conversationId: string,
-    task: () => Promise<boolean>,
-  ): Promise<boolean> {
-    const previous = inFlightPlanModeRequests.get(conversationId) ?? Promise.resolve(true);
-    let queued!: Promise<boolean>;
-    queued = previous
-      .catch(() => false)
-      .then(task, task)
-      .finally(() => {
-        if (inFlightPlanModeRequests.get(conversationId) === queued) {
-          inFlightPlanModeRequests.delete(conversationId);
-        }
-      });
-    inFlightPlanModeRequests.set(conversationId, queued);
-    return queued;
-  }
-
   async function setConversationPlanMode(conversationId: string, value: boolean): Promise<boolean> {
     const normalizedConversationId = String(conversationId || "").trim();
     if (!normalizedConversationId) return false;
     const nextValue = !!value;
     const previousValue = getConversationPlanModeEnabledById(normalizedConversationId);
-    if (!confirmedConversationPlanModeStates.has(normalizedConversationId)) {
-      confirmedConversationPlanModeStates.set(normalizedConversationId, previousValue);
-    }
     if (previousValue === nextValue) return true;
     patchConversationPlanModeInOverview(normalizedConversationId, nextValue);
-    return queueConversationPlanModeUpdate(normalizedConversationId, async () => {
-      try {
-        await invokeTauri<{ conversationId: string; planModeEnabled: boolean }>("conversation.planMode.set", {
-          input: {
-            conversationId: normalizedConversationId,
-            planModeEnabled: nextValue,
-          },
-        });
-        confirmedConversationPlanModeStates.set(normalizedConversationId, nextValue);
-        return true;
-      } catch (error) {
-        const fallbackValue = confirmedConversationPlanModeStates.get(normalizedConversationId) ?? previousValue;
-        if (getConversationPlanModeEnabledById(normalizedConversationId) === nextValue) {
-          patchConversationPlanModeInOverview(normalizedConversationId, fallbackValue);
-        }
-        console.warn("[计划模式] 保存会话计划状态失败", {
+    try {
+      await invokeTauri<{ conversationId: string; planModeEnabled: boolean }>("conversation.planMode.set", {
+        input: {
           conversationId: normalizedConversationId,
-          nextValue,
-          error,
-        });
-        return false;
+          planModeEnabled: nextValue,
+        },
+      });
+      return true;
+    } catch (error) {
+      if (getConversationPlanModeEnabledById(normalizedConversationId) === nextValue) {
+        patchConversationPlanModeInOverview(normalizedConversationId, previousValue);
       }
-    });
+      console.warn("[计划模式] 切换会话计划模式失败", {
+        conversationId: normalizedConversationId,
+        nextValue,
+        error,
+      });
+      return false;
+    }
   }
 
   async function setCurrentConversationPlanMode(value: boolean): Promise<boolean> {

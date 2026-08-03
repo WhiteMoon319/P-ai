@@ -711,7 +711,7 @@ const filteredMentionOptions = computed<MentionOptionView[]>(() => {
     });
 });
 
-const planModeToggleAllowed = computed(() => !props.chatting && !props.frozen);
+const planModeToggleAllowed = computed(() => !props.frozen);
 
 function loadChatInputHistory() {
   try {
