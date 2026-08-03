@@ -73,6 +73,7 @@ fn live_update_send(
     title: &str,
     body: &str,
     ongoing: bool,
+    promoted: bool,
 ) {
     use tauri_plugin_notification::{NotificationExt, PermissionState};
 
@@ -117,6 +118,14 @@ fn live_update_send(
         .body(normalized_body);
     if ongoing {
         builder = builder.ongoing();
+        if promoted {
+            // 官方 live updates：标准样式（BigTextStyle + 进度）+ ongoing +
+            // 请求系统提升（API 35+ 生效，低版本 no-op）。
+            builder = builder
+                .request_promoted_ongoing()
+                .large_body(normalized_body)
+                .progress(0, 0, true);
+        }
     }
     if let Err(err) = builder.show() {
         runtime_log_warn(format!(
@@ -172,7 +181,7 @@ fn live_update_chat_started(state: &AppState, conversation_id: &str) {
         "Replying…",
     );
     live_update_owner_set(&CHAT_LIVE_UPDATE_OWNER, conversation_id);
-    live_update_send(&app, CHAT_LIVE_UPDATE_NOTIFICATION_ID, &title, &body, true);
+    live_update_send(&app, CHAT_LIVE_UPDATE_NOTIFICATION_ID, &title, &body, true, true);
 }
 
 #[cfg(target_os = "android")]
@@ -223,7 +232,7 @@ fn live_update_chat_finished(
         }
     };
     // 终态通知非 ongoing，用户可手动划掉；不重复弹完成/失败通知。
-    live_update_send(&app, CHAT_LIVE_UPDATE_NOTIFICATION_ID, &title, &body, false);
+    live_update_send(&app, CHAT_LIVE_UPDATE_NOTIFICATION_ID, &title, &body, false, false);
 }
 
 #[cfg(target_os = "android")]
@@ -253,7 +262,7 @@ fn live_update_goal_changed(
             "目標已結束。",
             "Goal finished.",
         );
-        live_update_send(&app, GOAL_LIVE_UPDATE_NOTIFICATION_ID, &title, &body, false);
+        live_update_send(&app, GOAL_LIVE_UPDATE_NOTIFICATION_ID, &title, &body, false, false);
         return;
     };
     if goal.status.trim() != "active" {
@@ -267,7 +276,7 @@ fn live_update_goal_changed(
             "目標已結束。",
             "Goal finished.",
         );
-        live_update_send(&app, GOAL_LIVE_UPDATE_NOTIFICATION_ID, &title, &body, false);
+        live_update_send(&app, GOAL_LIVE_UPDATE_NOTIFICATION_ID, &title, &body, false, false);
         return;
     }
     // 目标进行中：记录归属会话并发送 ongoing 常驻通知。
@@ -286,7 +295,7 @@ fn live_update_goal_changed(
     } else {
         objective
     };
-    live_update_send(&app, GOAL_LIVE_UPDATE_NOTIFICATION_ID, &title, &body, true);
+    live_update_send(&app, GOAL_LIVE_UPDATE_NOTIFICATION_ID, &title, &body, true, true);
 }
 
 #[cfg(not(target_os = "android"))]
