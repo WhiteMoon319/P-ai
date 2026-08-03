@@ -479,15 +479,24 @@ fn chat_history_segments_from_message_store(
     }
 }
 
+fn chat_history_user_persona_name(agents: &[AgentProfile]) -> String {
+    agents
+        .iter()
+        .find(|agent| agent.id == USER_PERSONA_ID || agent.is_built_in_user)
+        .map(|agent| agent.name.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_default()
+}
+
 fn chat_history_collect_slices_for_state(
     state: &AppState,
 ) -> Result<(String, Vec<ChatHistorySlice>, ChatHistorySearchStats), String> {
     let started_stats = ChatHistorySearchStats::default();
     let mut stats = started_stats;
     let agents = state_read_agents_cached(state)?;
-    let runtime = state_read_runtime_state_cached(state)?;
     let chat_index = state_read_chat_index_cached(state)?;
-    let signature = chat_history_index_signature(&chat_index, &agents, &runtime.user_alias);
+    let user_alias = chat_history_user_persona_name(&agents);
+    let signature = chat_history_index_signature(&chat_index, &agents, &user_alias);
     let mut slices = Vec::<ChatHistorySlice>::new();
 
     for item in chat_index.conversations {
@@ -543,7 +552,7 @@ fn chat_history_collect_slices_for_state(
         stats.indexed_conversations += 1;
         for segment in segments {
             let before = slices.len();
-            let built = chat_history_slices_from_segment(&segment, &agents, &runtime.user_alias);
+            let built = chat_history_slices_from_segment(&segment, &agents, &user_alias);
             if built.is_empty() {
                 stats.skipped_no_agent_segments += 1;
                 continue;
@@ -822,8 +831,8 @@ fn chat_history_rebuild_persisted_index(
 fn chat_history_cached_index_for_state(state: &AppState) -> Result<(), String> {
     let chat_index = state_read_chat_index_cached(state)?;
     let agents = state_read_agents_cached(state)?;
-    let runtime = state_read_runtime_state_cached(state)?;
-    let expected_signature = chat_history_index_signature(&chat_index, &agents, &runtime.user_alias);
+    let user_alias = chat_history_user_persona_name(&agents);
+    let expected_signature = chat_history_index_signature(&chat_index, &agents, &user_alias);
     {
         let mut cache = chat_history_index_cache()
             .lock()

@@ -156,7 +156,6 @@ struct RuntimeStateFile {
     message_store_migration_version: u32,
     #[serde(alias = "selectedAgentId", alias = "selected_agent_id")]
     assistant_department_agent_id: String,
-    user_alias: String,
     response_style_id: String,
     #[serde(default = "default_pdf_read_mode")]
     pdf_read_mode: String,
@@ -197,7 +196,6 @@ impl Default for RuntimeStateFile {
             data_migration_version: 0,
             message_store_migration_version: 0,
             assistant_department_agent_id: default_assistant_department_agent_id(),
-            user_alias: default_user_alias(),
             response_style_id: default_response_style_id(),
             pdf_read_mode: default_pdf_read_mode(),
             background_voice_screenshot_keywords: default_background_voice_screenshot_keywords(),
@@ -339,7 +337,6 @@ fn build_runtime_state_file(data: &AppData) -> RuntimeStateFile {
         data_migration_version: data.data_migration_version,
         message_store_migration_version: data.message_store_migration_version,
         assistant_department_agent_id: data.assistant_department_agent_id.clone(),
-        user_alias: data.user_alias.clone(),
         response_style_id: data.response_style_id.clone(),
         pdf_read_mode: data.pdf_read_mode.clone(),
         background_voice_screenshot_keywords: data.background_voice_screenshot_keywords.clone(),
@@ -417,7 +414,6 @@ fn apply_runtime_state_to_app_data(data: &mut AppData, runtime: &RuntimeStateFil
     data.data_migration_version = runtime.data_migration_version;
     data.message_store_migration_version = runtime.message_store_migration_version;
     data.assistant_department_agent_id = runtime.assistant_department_agent_id.clone();
-    data.user_alias = runtime.user_alias.clone();
     data.response_style_id = runtime.response_style_id.clone();
     data.pdf_read_mode = runtime.pdf_read_mode.clone();
     data.background_voice_screenshot_keywords =
@@ -1011,7 +1007,7 @@ fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
         message_store_migration_version: runtime.message_store_migration_version,
         agents,
         assistant_department_agent_id: runtime.assistant_department_agent_id,
-        user_alias: runtime.user_alias,
+        user_alias: default_user_alias(),
         response_style_id: runtime.response_style_id,
         pdf_read_mode: runtime.pdf_read_mode,
         background_voice_screenshot_keywords: runtime.background_voice_screenshot_keywords,

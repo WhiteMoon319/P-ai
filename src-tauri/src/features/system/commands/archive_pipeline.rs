@@ -180,14 +180,13 @@ fn resolve_archive_owner_context(
     source: &Conversation,
 ) -> Result<(AgentProfile, String, String), String> {
     let runtime_snapshot = load_runtime_organization_snapshot(state)?;
-    let runtime = state_read_runtime_state_cached(state)?;
     let user_alias = runtime_snapshot
         .agents
         .iter()
         .find(|agent| agent.id == USER_PERSONA_ID || agent.is_built_in_user)
         .map(|agent| agent.name.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| runtime.user_alias.clone());
+        .unwrap_or_default();
     let owner_agent_id = resolve_archive_owner_agent_id(
         &runtime_snapshot.config,
         &runtime_snapshot.agents,

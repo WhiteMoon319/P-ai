@@ -870,7 +870,6 @@ async fn send_chat_message_inner(
             let mut data = AppData::default();
             data.agents = runtime_agents.to_vec();
             data.assistant_department_agent_id = runtime_state.assistant_department_agent_id.clone();
-            data.user_alias = runtime_state.user_alias.clone();
             data.response_style_id = runtime_state.response_style_id.clone();
             data.pdf_read_mode = runtime_state.pdf_read_mode.clone();
             data.background_voice_screenshot_keywords =
@@ -957,7 +956,6 @@ async fn send_chat_message_inner(
         let mut data = AppData::default();
         data.agents = runtime_agents.to_vec();
         data.assistant_department_agent_id = runtime_state.assistant_department_agent_id.clone();
-        data.user_alias = runtime_state.user_alias.clone();
         data.response_style_id = runtime_state.response_style_id.clone();
         data.pdf_read_mode = runtime_state.pdf_read_mode.clone();
         data.background_voice_screenshot_keywords =

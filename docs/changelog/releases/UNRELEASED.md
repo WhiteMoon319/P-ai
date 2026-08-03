@@ -2,6 +2,7 @@
 
 ## 修复
 
+- 废弃 `user_alias` 旧字段：旧数据迁移时直接抛弃 `user_alias`，不再拷贝进运行时状态（`RuntimeStateFile` 删除该字段及 `build_runtime_state_file` / `apply_runtime_state_to_app_data` / `read_layout_app_data` 中的拷贝逻辑）；业务消费方一律改从 agents 用户人格（user-persona）的 name 取昵称——历史记忆索引签名/渲染、微信入站联系人显示名、IDE persona、压缩兜底、聊天准备快照全部切换，`AppData.user_alias` 仅保留用于旧文件反序列化兼容，不再流向运行时。
 - 剥离旧数据（app_data.json）的非迁移读取：旧布局数据只允许在迁移流程中被读取——新增显式迁移入口 `migrate_legacy_app_data_if_needed`（幂等，检测旧布局存在时读入 app_data.json 并触发 V1 迁移写回分片），启动门闩与 bootstrap 快照在业务读取前执行；删除 `read_agents_shard` / `read_runtime_state_shard` / `read_conversation_meta_shard` / `read_conversation_shard_raw` / `collect_chat_index_items_from_storage` 六处 legacy 兜底分支，业务读取一律只走分片；MCP/Skills 刷新不再整读 `read_app_data`，改用 `state_read_agents_cached`。迁移完成后 AppData 数据不再进入内存缓存。
 - exec 工具的系统提示词补充 rg 使用约定：明确 `rg -r` 是 `--replace`（必须带参数），`-rn` 会被解析成 `-r n` 把匹配替换成字符 `n` 输出产生假结果；统一使用 `rg -n` 搜索（rg 默认递归），避免短选项拼接陷阱。
 - 修复压缩/归档请求体预览与实际执行不一致的问题：`get_prompt_preview` 的 compaction/archive 预览此前仍走独立的 `SummaryContext` 模式构建（独立 system 模板、清空历史媒体），与已切换为 Chat 模式的实际压缩执行产生差异，预览展示的请求体与实际发出不一致；现预览分支改为与实际压缩完全同构（Chat 模式 + `LatestUserPayloadIntent::SummaryContext` 注入、data_path/工具参数一致），并清理 `PromptBuildMode::SummaryContext` 全部死分支（枚举变体、构建分支、模式解析、system 快照与 preamble 中的模式判断）。
