@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-08-01T17:38:11.163Z",
-  "latestVersion": "v0.44.0",
+  "generatedAt": "2026-08-03T05:03:20.790Z",
+  "latestVersion": "v0.50.0",
   "releases": [
+    {
+      "version": "v0.50.0",
+      "path": "docs/changelog/releases/v0.50.0.md",
+      "summary": "上下文压缩请求与正常对话完全对齐，供应商缓存命中率从 0 提升到 98.65%，长会话压缩明显变快，也不再出现压缩后旧账残留。"
+    },
     {
       "version": "v0.44.0",
       "path": "docs/changelog/releases/v0.44.0.md",
