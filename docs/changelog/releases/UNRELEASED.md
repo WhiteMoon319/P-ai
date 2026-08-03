@@ -13,6 +13,7 @@
 - 修复（department-tree）：部门树节点与直属下级多选显示人格头像，标题栏增加人格页跳转入口。
 - 修复（codex）：移除 codex 端点伪造请求头，升级 genai 至官方修复版本（仅对 api.openai.com 注入 prompt_cache_options），修复 codex 请求 400 报错。
 - 修复（chat）：PDF 附件不再随请求发送二进制，仅保留路径提示，模型需要内容时通过 read_file 工具读取；移除 prompt 构建阶段 PDF 自动提取逻辑。
+- 修复（chat）：流式期间顶部 10% 区域切换虚拟列表 anchorTo 为 end，恢复加载更多历史时 prepend 锚定补偿。
 
 ## 依赖
 
