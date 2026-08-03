@@ -763,13 +763,11 @@ impl ConversationPromptService {
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty()),
         );
-        if mode_label.trim() != "summary_context" {
-            if let Some(profile_block) = user_profile_memory_block
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-            {
-                department_blocks.push(profile_block.to_string());
-            }
+        if let Some(profile_block) = user_profile_memory_block
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            department_blocks.push(profile_block.to_string());
         }
         let department_prompt = flatten_system_prompt_blocks(&department_blocks);
         let environment_prompt = flatten_system_prompt_blocks(
@@ -827,7 +825,6 @@ impl ConversationPromptService {
 
     fn build_internal_system_preamble_blocks(
         &self,
-        mode: PromptBuildMode,
         state: Option<&AppState>,
         conversation: &Conversation,
         _agent: &AgentProfile,
@@ -879,19 +876,17 @@ impl ConversationPromptService {
             if let Some(log_stage) = stage_logger {
                 log_stage("prepare_context.remote_im_contact_downloads_ready");
             }
-            if mode != PromptBuildMode::SummaryContext && overrides.todo_tool_enabled {
+            if overrides.todo_tool_enabled {
                 blocks.push(build_todo_guide_block());
             }
             if let Some(log_stage) = stage_logger {
                 log_stage("prepare_context.todo_guide_ready");
             }
-            if mode != PromptBuildMode::SummaryContext {
-                if let Some(runtime_block) = build_remote_im_activation_runtime_block(
-                    &overrides.remote_im_activation_sources,
-                    ui_language,
-                ) {
-                    blocks.push(runtime_block);
-                }
+            if let Some(runtime_block) = build_remote_im_activation_runtime_block(
+                &overrides.remote_im_activation_sources,
+                ui_language,
+            ) {
+                blocks.push(runtime_block);
             }
             if let Some(log_stage) = stage_logger {
                 log_stage("prepare_context.im_runtime_ready");
@@ -998,7 +993,6 @@ impl ConversationPromptService {
     fn finalize_system_prompt(
         &self,
         state: Option<&AppState>,
-        mode: PromptBuildMode,
         mode_label: &str,
         conversation: &Conversation,
         agent: &AgentProfile,
@@ -1054,7 +1048,6 @@ impl ConversationPromptService {
             stage_logger,
         );
         let system_preamble_blocks = self.build_internal_system_preamble_blocks(
-            mode,
             state,
             conversation,
             agent,
@@ -1171,7 +1164,6 @@ impl ConversationPromptService {
                 let overrides = chat_overrides.unwrap_or_default();
                 prepared.preamble = self.finalize_system_prompt(
                     state,
-                    PromptBuildMode::Chat,
                     "chat",
                     conversation,
                     agent,
@@ -1230,7 +1222,6 @@ impl ConversationPromptService {
                 let overrides = chat_overrides.unwrap_or_default();
                 prepared.preamble = self.finalize_system_prompt(
                     state,
-                    PromptBuildMode::Delegate,
                     "delegate",
                     conversation,
                     agent,
@@ -1254,76 +1245,6 @@ impl ConversationPromptService {
                 ) =
                     self.build_latest_user_payload(
                         PromptBuildMode::Delegate,
-                        state,
-                        conversation,
-                        agent,
-                        &overrides,
-                        &prepared,
-                        stage_logger,
-                    );
-                apply_chat_latest_user_payload(
-                    &mut prepared,
-                    latest_user_text,
-                    latest_user_meta_text,
-                    &latest_user_extra_blocks,
-                    latest_user_extra_blocks_mode,
-                    overrides.latest_images,
-                    overrides.latest_audios,
-                );
-                Ok(prepared)
-            }
-            PromptBuildMode::SummaryContext => {
-                let mut prepared = build_prompt_with_stage_logger(
-                    conversation,
-                    agent,
-                    agents,
-                    departments,
-                    user_name,
-                    user_intro,
-                    response_style_id,
-                    ui_language,
-                    data_path,
-                    state,
-                    stage_logger,
-                    resolved_api,
-                    enable_pdf_images.unwrap_or(false),
-                )?;
-                for message in &mut prepared.history_messages {
-                    message.images.clear();
-                    message.audios.clear();
-                }
-                prepared.latest_user_meta_text.clear();
-                prepared.latest_user_extra_text.clear();
-                prepared.latest_user_extra_blocks.clear();
-                prepared.latest_images.clear();
-                prepared.latest_audios.clear();
-                let overrides = chat_overrides.unwrap_or_default();
-                prepared.preamble = self.finalize_system_prompt(
-                    state,
-                    PromptBuildMode::SummaryContext,
-                    "summary_context",
-                    conversation,
-                    agent,
-                    departments,
-                    selected_api,
-                    ui_language,
-                    &prepared.preamble,
-                    None,
-                    terminal_block_override.as_deref(),
-                    &overrides,
-                    stage_logger,
-                );
-                if let Some(log_stage) = stage_logger {
-                    log_stage("prepare_context.prompt_system_finalize_ready");
-                }
-                let (
-                    latest_user_text,
-                    latest_user_meta_text,
-                    latest_user_extra_blocks,
-                    latest_user_extra_blocks_mode,
-                ) =
-                    self.build_latest_user_payload(
-                        PromptBuildMode::SummaryContext,
                         state,
                         conversation,
                         agent,
