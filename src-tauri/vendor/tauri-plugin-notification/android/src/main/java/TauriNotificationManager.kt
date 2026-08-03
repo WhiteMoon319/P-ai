@@ -232,6 +232,13 @@ class TauriNotificationManager(
         NotificationPlugin.triggerNotification(notification)
       } catch (_: JSONException) {
       }
+      // 保活：ongoing + promoted 的 live 通知绑定前台服务，任务运行期间提升进程优先级；
+      // 终态（非 ongoing）通知到达时解除绑定，所有 live 通知结束后服务自动停止。
+      if (notification.isOngoing && notification.requestPromotedOngoing) {
+        PaiForegroundService.startLive(context, notification.id, buildNotification)
+      } else {
+        PaiForegroundService.stopLive(context, notification.id)
+      }
     }
   }
 
@@ -400,6 +407,7 @@ class TauriNotificationManager(
       dismissVisibleNotification(id)
       cancelTimerForNotification(id)
       storage.deleteNotification(id.toString())
+      PaiForegroundService.stopLive(context, id)
     }
   }
 

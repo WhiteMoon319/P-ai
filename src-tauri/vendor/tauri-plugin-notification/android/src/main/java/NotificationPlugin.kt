@@ -91,6 +91,29 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
     }
   }
 
+  init {
+    // 监听 Activity 前后台切换：仅后台运行任务时启动保活前台服务
+    activity.application.registerActivityLifecycleCallbacks(
+      object : android.app.Application.ActivityLifecycleCallbacks {
+        override fun onActivityResumed(activity: Activity) {
+          PaiForegroundService.onAppForegroundChanged(applicationContext(), true)
+        }
+
+        override fun onActivityPaused(activity: Activity) {
+          PaiForegroundService.onAppForegroundChanged(applicationContext(), false)
+        }
+
+        override fun onActivityCreated(activity: Activity, savedInstanceState: android.os.Bundle?) {}
+        override fun onActivityStarted(activity: Activity) {}
+        override fun onActivityStopped(activity: Activity) {}
+        override fun onActivitySaveInstanceState(activity: Activity, outState: android.os.Bundle) {}
+        override fun onActivityDestroyed(activity: Activity) {}
+      }
+    )
+  }
+
+  private fun applicationContext(): Context = activity.applicationContext
+
   override fun load(webView: WebView) {
     instance = this
 

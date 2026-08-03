@@ -5,10 +5,21 @@ ROOT_DIR="${1:-.}"
 ANDROID_APP_DIR="$ROOT_DIR/src-tauri/gen/android/app"
 ACTIVITY="$ANDROID_APP_DIR/src/main/java/ai/easycall/app/MainActivity.kt"
 MANIFEST="$ANDROID_APP_DIR/src/main/AndroidManifest.xml"
+NOTIFICATION_ICON_SRC="$ROOT_DIR/src-tauri/icons/android/drawable/ic_stat_pai.png"
+NOTIFICATION_ICON_DST="$ANDROID_APP_DIR/src/main/res/drawable/ic_stat_pai.png"
 
 if [[ ! -f "$MANIFEST" ]]; then
   echo "Android manifest not found: $MANIFEST" >&2
   exit 1
+fi
+
+# 通知小图标：PAI 原图标（通知插件全局配置 icon=ic_stat_pai 引用）
+if [[ -f "$NOTIFICATION_ICON_SRC" ]]; then
+  mkdir -p "$(dirname "$NOTIFICATION_ICON_DST")"
+  cp "$NOTIFICATION_ICON_SRC" "$NOTIFICATION_ICON_DST"
+  echo "Copied notification icon to $NOTIFICATION_ICON_DST"
+else
+  echo "Notification icon source not found: $NOTIFICATION_ICON_SRC" >&2
 fi
 
 mkdir -p "$(dirname "$ACTIVITY")"

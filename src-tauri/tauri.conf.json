@@ -97,6 +97,9 @@
       "windows": {
         "installMode": "passive"
       }
+    },
+    "notification": {
+      "icon": "ic_stat_pai"
     }
   }
 }

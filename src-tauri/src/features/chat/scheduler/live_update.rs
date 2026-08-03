@@ -115,7 +115,8 @@ fn live_update_send(
         .builder()
         .id(id)
         .title(normalized_title)
-        .body(normalized_body);
+        .body(normalized_body)
+        .icon("ic_stat_pai");
     if ongoing {
         builder = builder.ongoing();
         if promoted {
@@ -133,6 +134,38 @@ fn live_update_send(
             id, err
         ));
     }
+}
+
+#[cfg(target_os = "android")]
+fn live_update_todo_step_text(
+    state: &AppState,
+    conversation_id: &str,
+    ui_language: &str,
+) -> Option<String> {
+    let meta = conversation_service_v2()
+        .get_conversation_meta(state, conversation_id)
+        .ok()?;
+    let todos = &meta.current_todos;
+    if todos.is_empty() {
+        return None;
+    }
+    let active_index = todos
+        .iter()
+        .position(|item| item.status.trim() == "in_progress")
+        .or_else(|| todos.iter().position(|item| item.status.trim() == "pending"))?;
+    let content = native_notification_text_excerpt(
+        &todos[active_index].content,
+        LIVE_UPDATE_BODY_MAX_CHARS,
+    );
+    if content.trim().is_empty() {
+        return None;
+    }
+    let step = active_index + 1;
+    let total = todos.len();
+    Some(match ui_language.trim() {
+        "en-US" => format!("Step {step}/{total}: {content}"),
+        _ => format!("第 {step}/{total} 步：{content}"),
+    })
 }
 
 #[cfg(target_os = "android")]
@@ -174,12 +207,15 @@ fn live_update_chat_started(state: &AppState, conversation_id: &str) {
     else {
         return;
     };
-    let body = local_chat_notification_text(
-        settings.ui_language,
-        "正在回复…",
-        "正在回覆…",
-        "Replying…",
-    );
+    let body = live_update_todo_step_text(state, conversation_id, settings.ui_language)
+        .unwrap_or_else(|| {
+            local_chat_notification_text(
+                settings.ui_language,
+                "正在回复…",
+                "正在回覆…",
+                "Replying…",
+            )
+        });
     live_update_owner_set(&CHAT_LIVE_UPDATE_OWNER, conversation_id);
     live_update_send(&app, CHAT_LIVE_UPDATE_NOTIFICATION_ID, &title, &body, true, true);
 }
@@ -285,16 +321,19 @@ fn live_update_goal_changed(
         &goal.objective,
         LIVE_UPDATE_BODY_MAX_CHARS,
     );
-    let body = if objective.trim().is_empty() {
-        local_chat_notification_text(
-            settings.ui_language,
-            "目标进行中…",
-            "目標進行中…",
-            "Goal in progress…",
-        )
-    } else {
-        objective
-    };
+    let body = live_update_todo_step_text(state, conversation_id, settings.ui_language)
+        .unwrap_or_else(|| {
+            if objective.trim().is_empty() {
+                local_chat_notification_text(
+                    settings.ui_language,
+                    "目标进行中…",
+                    "目標進行中…",
+                    "Goal in progress…",
+                )
+            } else {
+                objective
+            }
+        });
     live_update_send(&app, GOAL_LIVE_UPDATE_NOTIFICATION_ID, &title, &body, true, true);
 }
 
