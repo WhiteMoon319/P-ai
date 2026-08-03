@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-08-03T05:03:20.790Z",
-  "latestVersion": "v0.50.0",
+  "generatedAt": "2026-08-03T08:14:25.730Z",
+  "latestVersion": "v0.50.1",
   "releases": [
+    {
+      "version": "v0.50.1",
+      "path": "docs/changelog/releases/v0.50.1.md",
+      "summary": "修复流式输出期间消息行重叠：上一版「消除流式卡顿」的优化误伤了消息行高度测量，回复增长时用户消息会和助理消息叠在同一行；已恢复可靠的高度测量，流式消息与普通消息不再重叠。"
+    },
     {
       "version": "v0.50.0",
       "path": "docs/changelog/releases/v0.50.0.md",
