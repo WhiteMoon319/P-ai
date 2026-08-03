@@ -170,10 +170,6 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     if (!parsed) return;
     const currentConversationId = options.getCurrentConversationId();
     const payloadConversationId = String(parsed.conversationId || "").trim();
-    console.warn(
-      `[聊天事件] history_flushed current=${currentConversationId || "空"} payload=${payloadConversationId || "空"}`
-      + ` messages=${parsed.messages?.length ?? 0} blocked=${!!(currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId)}`,
-    );
     if (currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId) {
       return;
     }
@@ -207,10 +203,6 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     if (!parsed) return;
     const currentConversationId = options.getCurrentConversationId();
     const payloadConversationId = String(parsed.conversationId || "").trim();
-    console.warn(
-      `[聊天事件] roundStarted current=${currentConversationId || "空"} payload=${payloadConversationId || "空"}`
-      + ` blocked=${!!(currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId)}`,
-    );
     if (currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId) {
       return;
     }
@@ -234,11 +226,6 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     if (!parsed) return;
     const currentConversationId = options.getCurrentConversationId();
     const payloadConversationId = String(parsed.conversationId || "").trim();
-    console.warn(
-      `[聊天事件] roundCompleted current=${currentConversationId || "空"} payload=${payloadConversationId || "空"}`
-      + ` assistantMessage=${!!parsed.assistantMessage} assistantText=${String(parsed.assistantText || "").slice(0, 40)}`
-      + ` blocked=${!!(currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId)}`,
-    );
     if (currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId) {
       options.clearConversationStreamCache(payloadConversationId);
       return;
@@ -342,10 +329,6 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     const currentConversationId = options.getCurrentConversationId();
     const payloadConversationId = String(rawObj?.conversationId || "").trim();
     const parsed = readAssistantEvent(rawObj?.event ?? payload);
-    console.warn(
-      `[聊天事件] assistantDelta current=${currentConversationId || "空"} payload=${payloadConversationId || "空"}`
-      + ` kind=${parsed.kind || "?"} blocked=${!!(currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId)}`,
-    );
     const cacheConversationId = payloadConversationId || currentConversationId;
     const round = options.getRound();
     if (options.matchesStoppedRound(parsed)) return;

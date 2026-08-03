@@ -42,6 +42,14 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
   let completionLayoutGuardFrame = 0;
   let explicitVirtualScrollActive = false;
   let explicitVirtualScrollFrame = 0;
+  // 切换会话后「最后一条消息可见」意图：非空且匹配当前会话时，放行 tanstack 滚动，
+  // 并在行测量期间持续重试 scrollToIndex，直到最后一条消息进入视口或用户介入。
+  let pendingLastItemVisibleIntent = "";
+  let lastItemIntentRetryFrame = 0;
+  let lastItemIntentStableTotal = -1;
+  let lastItemIntentStableFrames = 0;
+  let lastItemIntentStartedAt = 0;
+  let stopScrollContainerIntentWatch: (() => void) | null = null;
 
   const initialBottomOffset = ref(0);
   let conversationVirtualizerResetRequest = 0;
@@ -101,6 +109,17 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     const scrollEl = instance.scrollElement instanceof HTMLElement ? instance.scrollElement : null;
     if (!scrollEl) return;
     const nextTop = Math.max(0, Math.round(Number(offset || 0)));
+    // 切换会话后的「最后一条可见」意图期间放行滚动：scrollToIndex 的偏移基于当前
+    // 最新测量，行未挂载时可能是估计值，需要在行测高后重试修正，因此期间不能拦。
+    const currentConversationId = String(activeConversationId.value || "").trim();
+    const intentActive = pendingLastItemVisibleIntent && pendingLastItemVisibleIntent === currentConversationId;
+    if (intentActive) {
+      scrollEl.scrollTo({
+        top: nextTop,
+        behavior: options.behavior || "auto",
+      });
+      return;
+    }
     // 覆盖 virtualizer 的尺寸修正滚动：我们定位到流式消息高度持续增长时，
     // @tanstack/virtual 会走 ResizeObserver -> resizeItem -> applyScrollAdjustment
     // -> _scrollToOffset -> scrollToFn，把 scrollTop 连续往下补，维持距底部固定偏移。
@@ -163,7 +182,11 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       estimateSize: () => 1,
       initialOffset: () => initialBottomOffset.value,
       scrollToFn: virtualizerScrollToFn,
-      anchorTo: "end",
+      // 流式期间锚定顶部：流式拦截会挡住 scrollToFn 的 DOM 滚动，但 tanstack 内部
+      // 逻辑 offset 仍会因 anchorTo="end" 持续下推，造成逻辑位置与 DOM 脱节、
+      // 行定位错位（切会话滚到底也依赖 tanstack 数据而失效）。流式期间改为
+      // start（锚定视口顶部），行增长不再推 offset；静止后恢复 end 锚定。
+      anchorTo: chatStreamingActive() ? "start" : "end",
       // 仅在精确贴底时才允许尾部锚定跟随，避免“接近底部”时被持续往下带。
       scrollEndThreshold: 0,
       shouldAdjustScrollPositionOnItemSizeChange: (item: { end: number }, _delta: number, instance: {
@@ -240,6 +263,62 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
 
   // ==================== helpers ====================
 
+  function cancelCompletionLayoutGuard() {
+    if (completionLayoutGuardFrame && typeof window !== "undefined") {
+      window.cancelAnimationFrame(completionLayoutGuardFrame);
+      completionLayoutGuardFrame = 0;
+    }
+    completionLayoutGuardActive = false;
+  }
+
+  function cancelPendingLastItemIntent(source: string) {
+    pendingLastItemVisibleIntent = "";
+    if (lastItemIntentRetryFrame && typeof window !== "undefined") {
+      window.cancelAnimationFrame(lastItemIntentRetryFrame);
+      lastItemIntentRetryFrame = 0;
+    }
+  }
+
+  // 切换会话后的「弹性尾部可见」等待：行挂载且测量稳定后，用 tanstack 的
+  // scrollToIndex(最后一条, align=end) 一次性定位到弹性尾部底部（对齐视口底部）。
+  // 不用 DOM 逐帧修正：行测量/translateY/tailSpacer 更新与滚动互相交错时，
+  // DOM 偏差修正会形成反馈振荡（scrollHeight 反复横跳、scrollTop 被钳到顶）。
+  // 等 totalSize 连续 2 帧稳定（或超时兜底）再定位，此时行定位已正确。
+  function maybeRetryLastItemVisibleIntent() {
+    const conversationId = String(activeConversationId.value || "").trim();
+    if (!pendingLastItemVisibleIntent || pendingLastItemVisibleIntent !== conversationId) return;
+    const lastIndex = renderItems.value.length - 1;
+    if (lastIndex < 0) {
+      pendingLastItemVisibleIntent = "";
+      return;
+    }
+    const scrollEl = scrollContainer.value;
+    if (!scrollEl) return;
+    const lastItem = renderItems.value[lastIndex];
+    const lastItemId = String(lastItem?.id || "").trim();
+    const lastElement = lastItemId ? observedVirtualItemElements.get(lastItemId) : undefined;
+    const total = Math.round(virtualizer.value.getTotalSize());
+    if (total === lastItemIntentStableTotal) {
+      lastItemIntentStableFrames += 1;
+    } else {
+      lastItemIntentStableTotal = total;
+      lastItemIntentStableFrames = 0;
+    }
+    const elapsedMs = lastItemIntentStartedAt > 0 ? Date.now() - lastItemIntentStartedAt : 0;
+    if (lastElement && (lastItemIntentStableFrames >= 2 || elapsedMs > 1000)) {
+      virtualizer.value.scrollToIndex(lastIndex, { align: "end", behavior: "auto" });
+      pendingLastItemVisibleIntent = "";
+      scrollbarRef.value?.updateThumb();
+      return;
+    }
+    if (!lastItemIntentRetryFrame && typeof window !== "undefined") {
+      lastItemIntentRetryFrame = requestAnimationFrame(() => {
+        lastItemIntentRetryFrame = 0;
+        maybeRetryLastItemVisibleIntent();
+      });
+    }
+  }
+
   // ==================== resize handling ====================
 
   function handleVirtualItemResize(element: HTMLElement) {
@@ -257,6 +336,7 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     measuredVirtualItemRevision.value += 1;
     virtualizer.value.measureElement(element);
     observedVirtualItemElements.set(itemId, element);
+    maybeRetryLastItemVisibleIntent();
   }
 
   function scheduleVirtualMeasure() {
@@ -337,6 +417,7 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       measuredVirtualItemRevision.value += 1;
       virtualizer.value.measureElement(target);
       observedVirtualItemElements.set(resolvedItemId, target);
+      maybeRetryLastItemVisibleIntent();
     }
   }
 
@@ -415,6 +496,8 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
   function beginConversationBottomInitialization() {
     const conversationId = String(activeConversationId.value || "").trim();
     pendingConversationBottomInitializationId = conversationId;
+    cancelPendingLastItemIntent("begin");
+    cancelCompletionLayoutGuard();
     clearMeasuredVirtualState();
     initialBottomOffset.value = 0;
   }
@@ -431,7 +514,23 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     if (!pendingConversationBottomInitializationId || pendingConversationBottomInitializationId !== conversationId) return;
     if (renderItems.value.length <= 0) return;
     pendingConversationBottomInitializationId = "";
-    resetVirtualizerAtConversationBottom();
+    // 以「最后一条消息可见」为意图替代单次 scrollToEnd：切会话时行尚未挂载，
+    // scrollToEnd 的偏移基于 estimateSize=1 的低估 totalSize，会卡在中间；
+    // 意图模式下滚动目标锚定最后一条消息，行测高期间由 maybeRetryLastItemVisibleIntent
+    // 持续重试，直到最后一条消息进入视口，或用户滚动介入清除。
+    pendingLastItemVisibleIntent = conversationId;
+    lastItemIntentStartedAt = Date.now();
+    lastItemIntentStableTotal = -1;
+    lastItemIntentStableFrames = 0;
+    cancelCompletionLayoutGuard();
+    clearMeasuredVirtualState();
+    initialBottomOffset.value = 0;
+    virtualizer.value.measure();
+    void nextTick(() => {
+      if (pendingLastItemVisibleIntent !== conversationId) return;
+      // 首次定位统一走弹性尾部定位（maybeRetry 内部等测量稳定后 scrollToIndex 一次到位）
+      maybeRetryLastItemVisibleIntent();
+    });
   }
 
   function syncViewportMetrics() {
@@ -461,6 +560,24 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     }
   });
 
+  // 用户主动滚动（滚轮/触屏）立即取消「最后一条可见」意图，避免重试循环与用户对抗。
+  const cancelByWheel = () => cancelPendingLastItemIntent("wheel");
+  const cancelByTouch = () => cancelPendingLastItemIntent("touch");
+  stopScrollContainerIntentWatch = watch(
+    scrollContainer,
+    (el, oldEl) => {
+      if (oldEl) {
+        oldEl.removeEventListener("wheel", cancelByWheel);
+        oldEl.removeEventListener("touchstart", cancelByTouch);
+      }
+      if (el) {
+        el.addEventListener("wheel", cancelByWheel, { passive: true });
+        el.addEventListener("touchstart", cancelByTouch, { passive: true });
+      }
+    },
+    { immediate: true },
+  );
+
   watch(
     () => String(activeConversationId.value || "").trim(),
     () => {
@@ -488,6 +605,13 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       explicitVirtualScrollFrame = 0;
     }
     explicitVirtualScrollActive = false;
+    pendingLastItemVisibleIntent = "";
+    if (lastItemIntentRetryFrame && typeof window !== "undefined") {
+      window.cancelAnimationFrame(lastItemIntentRetryFrame);
+      lastItemIntentRetryFrame = 0;
+    }
+    stopScrollContainerIntentWatch?.();
+    stopScrollContainerIntentWatch = null;
     conversationVirtualizerResetRequest += 1;
     pendingConversationBottomInitializationId = "";
     virtualItemResizeObserver?.disconnect();
