@@ -263,9 +263,6 @@ fn prepared_prompt_latest_user_text_blocks(prepared: &PreparedPrompt) -> Vec<Str
             .into_iter()
             .filter(|block| !block.starts_with("[系统提醒]")),
     );
-    if blocks.is_empty() {
-        blocks.push(" ".to_string());
-    }
     blocks
 }
 

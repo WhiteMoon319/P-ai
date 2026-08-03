@@ -2969,7 +2969,9 @@
             Ok(())
         })
         .expect("update contact atomically");
-        stale_before_update.user_alias = "stale-writer-unrelated-change".to_string();
+        stale_before_update
+            .pinned_conversation_ids
+            .push("stale-writer-unrelated-change".to_string());
         state_write_runtime_state_cached(&state, &stale_before_update)
             .expect("stale writer after update");
         let after_update = state_read_runtime_state_cached(&state).expect("read updated contact");

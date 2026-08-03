@@ -206,12 +206,30 @@ export function useChatMessageBlocks(options: UseChatMessageBlocksOptions) {
     return signature;
   }
 
+  // 压缩消息本身不携带 usage；压缩完成后上下文按默认 20k tokens 折算占用率，
+  // 避免从尾部回退到压缩前旧消息的高占用率，导致标题栏上下文圆环不归零。
+  const COMPACTION_FALLBACK_CONTEXT_TOKENS = 20000;
+
+  function isCompactionMessage(message: ChatMessage | undefined): boolean {
+    const providerMeta = (message?.providerMeta || {}) as Record<string, unknown>;
+    const messageMeta = (
+      providerMeta.message_meta
+      || providerMeta.messageMeta
+      || {}
+    ) as Record<string, unknown>;
+    const kind = String(messageMeta.kind || providerMeta.messageKind || "").trim();
+    return kind === "context_compaction" || kind === "summary_context_seed";
+  }
+
   function latestBackendContextUsageRatio(
     messages: ChatMessage[],
     fallbackContextWindowTokens: number,
   ): number | null {
     for (let idx = messages.length - 1; idx >= 0; idx -= 1) {
       const message = messages[idx];
+      if (isCompactionMessage(message)) {
+        return Math.max(0, COMPACTION_FALLBACK_CONTEXT_TOKENS / Math.max(1, fallbackContextWindowTokens));
+      }
       if (message.role !== "assistant") continue;
       const ratio = readContextUsageRatioFromRecord(
         (message.providerMeta || {}) as Record<string, unknown>,

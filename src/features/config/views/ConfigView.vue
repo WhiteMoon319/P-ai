@@ -1,6 +1,7 @@
 <template>
   <div class="h-full min-h-0 overflow-hidden">
-  <div class="config-drawer-shell drawer md:drawer-open h-full min-h-0 overflow-hidden">
+  <SimpleSetupPanel v-if="props.simpleSetupMode" class="h-full" />
+  <div v-else class="config-drawer-shell drawer md:drawer-open h-full min-h-0 overflow-hidden">
     <input
       id="config-drawer-toggle"
       v-model="configDrawerOpen"
@@ -113,6 +114,7 @@
             :personas="personas"
             :is-android="isAndroid"
             @jump="$emit('update:configTab', $event)"
+            @start-chat="$emit('start-chat')"
           />
 
           <HotkeyTab
@@ -242,6 +244,7 @@
             :github-update-method="props.config.githubUpdateMethod || 'auto'"
             :checking-update="checkingUpdate"
             :is-android="isAndroid"
+            :current-theme="currentTheme"
             @update:github-update-method="$emit('update:githubUpdateMethod', $event)"
             @check-update="$emit('checkUpdate')"
             @open-github="$emit('openGithub')"
@@ -413,6 +416,7 @@ import LogTab from "./config-tabs/LogTab.vue";
 import AppearanceTab from "./config-tabs/AppearanceTab.vue";
 import StorageTab from "./config-tabs/StorageTab.vue";
 import AboutTab from "./config-tabs/AboutTab.vue";
+import SimpleSetupPanel from "./config-tabs/SimpleSetupPanel.vue";
 import {
   invokeTauri,
   migrateTransportShellWorkspaceDirectory,
@@ -461,6 +465,7 @@ const CONFIG_NAV_ITEMS: ConfigNavItem[] = [
 const props = defineProps<{
   config: AppConfig;
   configTab: ConfigTab;
+  simpleSetupMode?: boolean;
   uiLanguage: "zh-CN" | "en-US" | "zh-TW";
   localeOptions: Array<{ value: "zh-CN" | "en-US" | "zh-TW"; label: string }>;
   currentTheme: string;
@@ -561,6 +566,7 @@ const emit = defineEmits<{
   (e: "clearAgentAvatar", value: { agentId: string }): void;
   (e: "checkUpdate"): void;
   (e: "openGithub"): void;
+  (e: "start-chat"): void;
 }>();
 
 const { t } = useI18n();

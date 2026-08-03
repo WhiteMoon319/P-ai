@@ -843,7 +843,7 @@ async fn quick_genai_chat_inner(
     let started_at = std::time::Instant::now();
     let reply = tokio::time::timeout(
         std::time::Duration::from_secs(30),
-        call_model_openai_non_stream(&resolved_api, model, prepared, Some(&state), None),
+        call_model_genai_non_stream(&resolved_api, model, prepared, Some(&state), None),
     )
     .await
     .map_err(|_| "Quick setup connectivity test timed out.".to_string())??;
@@ -858,7 +858,7 @@ async fn quick_genai_chat_inner(
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .unwrap_or("quick-setup"),
+            .unwrap_or("simple-setup"),
         model,
         &resolved_api.base_url,
         masked_auth_headers(&resolved_api.api_key),

@@ -384,6 +384,7 @@ export type AppConfig = {
   sttApiConfigId?: string;
   sttAutoSend?: boolean;
   terminalShellKind?: string;
+  simpleSetupMode?: boolean;
   shellWorkspaces: ShellWorkspace[];
   mcpServers: McpServerConfig[];
   remoteImChannels: RemoteImChannelConfig[];

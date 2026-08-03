@@ -2323,6 +2323,15 @@ async fn unbind_active_chat_view_stream(
 }
 
 #[tauri::command]
+async fn clear_window_chat_view_stream_bindings_command(
+    state: State<'_, AppState>,
+    window: tauri::Window,
+) -> Result<(), String> {
+    let window_label = window.label().to_string();
+    clear_window_chat_view_stream_bindings(state.inner(), &window_label)
+}
+
+#[tauri::command]
 async fn probe_active_chat_view_stream(
     input: ProbeActiveChatViewStreamInput,
     state: State<'_, AppState>,

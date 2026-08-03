@@ -1,12 +1,7 @@
 fn weixin_oc_contact_display_name(
-    runtime: &RuntimeStateFile,
     channel: &RemoteImChannelConfig,
     user_id: &str,
 ) -> String {
-    let user_alias = runtime.user_alias.trim();
-    if !user_alias.is_empty() {
-        return user_alias.to_string();
-    }
     let channel_name = channel.name.trim();
     if !channel_name.is_empty() {
         return channel_name.to_string();
@@ -76,16 +71,7 @@ async fn handle_weixin_oc_inbound_message(
         ChatIngressPart::Text { text } => Some(text.trim()),
         ChatIngressPart::Attachment { .. } => None,
     }).filter(|text| !text.is_empty()).collect::<Vec<_>>().join("\n");
-    let display_name = match state_read_runtime_state_cached(state) {
-        Ok(runtime) => weixin_oc_contact_display_name(&runtime, channel, from_user_id),
-        Err(err) => {
-            runtime_log_warn(format!(
-                "[远程IM][个人微信事件] 联系人显示名缓存读取失败，使用 sender_id 降级继续，sender_id={}，error={}",
-                from_user_id, err
-            ));
-            from_user_id.to_string()
-        }
-    };
+    let display_name = weixin_oc_contact_display_name(channel, from_user_id);
     let message_id = msg
         .message_id
         .or(msg.msg_id)
@@ -224,7 +210,7 @@ fn upsert_weixin_oc_contact(
     user_id: &str,
 ) -> (String, bool) {
     let normalized_user_id = user_id.trim();
-    let display_name = weixin_oc_contact_display_name(runtime, channel, normalized_user_id);
+    let display_name = weixin_oc_contact_display_name(channel, normalized_user_id);
     if let Some(contact) = runtime.remote_im_contacts.iter_mut().find(|item| {
         item.channel_id == channel.id
             && item.remote_contact_type == "private"
@@ -281,9 +267,7 @@ mod weixin_oc_inbound_tests {
     use super::*;
 
     #[test]
-    fn weixin_oc_contact_display_name_prefers_user_alias() {
-        let mut runtime = RuntimeStateFile::default();
-        runtime.user_alias = "派蒙".to_string();
+    fn weixin_oc_contact_display_name_prefers_channel_name() {
         let channel = RemoteImChannelConfig {
             id: "channel-1".to_string(),
             name: "我的微信".to_string(),
@@ -298,9 +282,9 @@ mod weixin_oc_inbound_tests {
             behavior_settings: RemoteImChannelBehaviorSettings::default(),
         };
 
-        let display_name = weixin_oc_contact_display_name(&runtime, &channel, "wxid_123");
+        let display_name = weixin_oc_contact_display_name(&channel, "wxid_123");
 
-        assert_eq!(display_name, "派蒙".to_string());
+        assert_eq!(display_name, "我的微信".to_string());
     }
 }
 

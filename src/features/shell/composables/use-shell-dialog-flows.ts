@@ -14,6 +14,7 @@ type UseShellDialogFlowsOptions = {
   t: (key: string, params?: Record<string, unknown>) => string;
   configTab: Ref<string>;
   allMessages: Ref<ChatMessage[]>;
+  chatUsagePercent: Readonly<Ref<number>>;
   currentForegroundApiConfigId: Ref<string>;
   currentForegroundAgentId: Ref<string>;
   currentForegroundDepartmentId: Ref<string>;
@@ -39,6 +40,7 @@ export function useShellDialogFlows(options: UseShellDialogFlowsOptions) {
   const conversationMaintenanceDialog = useConversationMaintenanceDialog({
     t: options.t,
     currentConversationId: options.currentChatConversationId,
+    chatUsagePercent: options.chatUsagePercent,
     conversationSummaries: options.unarchivedConversations,
     trimCompactNow: options.trimCompactNow,
     trimNow: options.trimNow,

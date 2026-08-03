@@ -2853,6 +2853,7 @@ fn departments_only_config(departments: &[DepartmentConfig]) -> AppConfig {
         image_generation_model_id: None,
         stt_auto_send: false,
         terminal_shell_kind: default_terminal_shell_kind(),
+        simple_setup_mode: false,
         shell_workspaces: Vec::new(),
         mcp_servers: Vec::new(),
         remote_im_channels: Vec::new(),
@@ -3469,7 +3470,7 @@ fn build_conversation_prompt_payload(
         } else {
             (Vec::new(), Vec::new())
         };
-        if text.trim().is_empty() && images.is_empty() && audios.is_empty() {
+        if text.trim().is_empty() && (!images.is_empty() || !audios.is_empty()) {
             text = " ".to_string();
         }
         history_messages.push(PreparedHistoryMessage {
@@ -3550,8 +3551,7 @@ fn build_conversation_prompt_payload(
         if latest_user_text.trim().is_empty()
             && latest_user_meta_text.trim().is_empty()
             && latest_user_extra_blocks.is_empty()
-            && latest_images.is_empty()
-            && latest_audios.is_empty()
+            && (!latest_images.is_empty() || !latest_audios.is_empty())
         {
             latest_user_text = " ".to_string();
         }

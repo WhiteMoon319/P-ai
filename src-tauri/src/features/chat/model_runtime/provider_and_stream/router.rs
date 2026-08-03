@@ -373,7 +373,7 @@ async fn execute_openai_style_request(
                 )
                 .await
             } else if prefer_non_stream {
-                call_model_openai_non_stream(
+                call_model_genai_non_stream(
                     api_config,
                     model_name,
                     prepared,
@@ -382,7 +382,7 @@ async fn execute_openai_style_request(
                 )
                 .await
             } else {
-                call_model_openai_stream(
+                call_model_genai_stream(
                     api_config,
                     model_name,
                     prepared,
@@ -439,7 +439,7 @@ async fn call_openai_style_non_stream_fallback(
     .await
 }
 
-async fn call_model_openai_style(
+async fn call_model_dispatch(
     api_config: &ResolvedApiConfig,
     app_config: &AppConfig,
     selected_api: &ApiConfig,

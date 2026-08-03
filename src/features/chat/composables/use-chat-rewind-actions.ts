@@ -35,7 +35,7 @@ type UseChatRewindActionsOptions = {
   messageText: (message: ChatMessage) => string;
   extractMessageImages: (message: ChatMessage) => Array<{ mime: string; bytesBase64?: string; mediaRef?: string }>;
   extractMessageAttachmentFiles: (message: ChatMessage) => Array<{ fileName: string; path: string; mime?: string }>;
-  requestRecallMode: (payload: { turnId: string; targetUserMessageId: string }) => Promise<RecallConfirmMode>;
+  requestRecallMode: (payload: { turnId: string; targetUserMessageId: string; conversationId?: string }) => Promise<RecallConfirmMode>;
   requestCreateConversationBranchFromMessageConfirm: (payload: { turnId: string; targetUserMessageId: string }) => Promise<boolean>;
   createConversationBranchFromMessage: (payload: { turnId: string; targetUserMessageId: string }) => Promise<void>;
   branchingConversation: Ref<boolean>;
@@ -299,6 +299,7 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
       const mode = await options.requestRecallMode({
         turnId: payload.turnId,
         targetUserMessageId: targetMessageId,
+        conversationId: String(options.currentConversationId.value || "").trim(),
       });
       console.debug("[会话撤回] 弹窗选择结果", {
         mode,
@@ -390,12 +391,6 @@ export function useChatRewindActions(options: UseChatRewindActionsOptions) {
   async function handleCreateConversationBranchFromTurn(payload: { turnId: string }) {
     const branchingConversation = options.branchingConversation;
     if (rewindInFlight || !!branchingConversation?.value) {
-      return;
-    }
-    if (options.chatting.value || options.trimming.value || options.compactingConversation.value) {
-      const message = t('dialogs.rewind.failedBusy');
-      options.setChatErrorText(message);
-      options.setStatusError("status.createBranchFailed", message);
       return;
     }
     const currentMessages = [...options.allMessages.value];

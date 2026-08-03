@@ -19,9 +19,9 @@ struct ScreenshotArtifactEntry {
 
 const SCREENSHOT_ARTIFACT_MAX_ITEMS: usize = 24;
 
-struct RuntimeToolAssembly {
+pub struct RuntimeToolAssembly {
     tools: Vec<Box<dyn RuntimeToolDyn>>,
-    tool_definitions: Vec<ProviderToolDefinition>,
+    pub tool_definitions: Vec<ProviderToolDefinition>,
     tool_manifest: Vec<Value>,
     unavailable_tool_notices: Vec<String>,
 }

@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import { resolve } from "node:path";
@@ -9,7 +10,6 @@ const htmlEntryAliases = new Set([
   "/index.html",
   "/chat.html",
   "/archives.html",
-  "/quick-setup.html",
   "/file-reader.html",
   "/runtime-logs.html",
   "/sidebar.html",
@@ -72,7 +72,6 @@ export default defineConfig({
         config: resolve(entryDir, "index.html"),
         chat: resolve(entryDir, "chat.html"),
         archives: resolve(entryDir, "archives.html"),
-        quickSetup: resolve(entryDir, "quick-setup.html"),
         fileReader: resolve(entryDir, "file-reader.html"),
         runtimeLogs: resolve(entryDir, "runtime-logs.html"),
         sidebar: resolve(entryDir, "sidebar.html"),
@@ -99,5 +98,18 @@ export default defineConfig({
         "**/relay_tool_probe/**",
       ],
     },
+  },
+  test: {
+    // .pai/ 下的参考项目快照（第三方组件，独立依赖树）与隔离工作树（旧版本
+    // 副本，各自有 pnpm test）不属于主仓测试范围；vitest 默认 include 会全仓
+    // 扫描把它们的测试卷进来，导致缺依赖/快照过期类的无关失败。
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/cypress/**",
+      "**/.{idea,git,cache,output,temp}/**",
+      "**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build,eslint,prettier}.config.*",
+      "**/.pai/**",
+    ],
   },
 });

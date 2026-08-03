@@ -38,6 +38,7 @@ export function useChatWindowContentOrchestrator(bindings: ChatWindowContentOrch
     departmentOrderedApiConfigIds: configDerived.departmentOrderedApiConfigIds,
     isTextRequestFormat: configDerived.isTextRequestFormat,
     resolveAvatarUrl: avatarCache.resolveAvatarUrl,
+    resolveBrandAvatarUrl: avatarCache.resolveBrandAvatarUrl,
     agentWorkPresence: bindings.agentWorkPresence,
   });
   const messageHelpers = useChatWindowMessageHelpers({

@@ -22,8 +22,11 @@ export function useRewindConfirmation(options: UseRewindConfirmationOptions) {
   const branchFromMessageConfirmDialogOpen = ref(false);
   let branchFromMessageConfirmResolver: ((confirmed: boolean) => void) | null = null;
 
-  async function getUndoAvailabilityForTurn(targetMessageId: string): Promise<{ canUndo: boolean; hint: string }> {
-    const conversationId = String(options.currentConversationId.value || "").trim();
+  async function getUndoAvailabilityForTurn(
+    targetMessageId: string,
+    conversationIdOverride?: string,
+  ): Promise<{ canUndo: boolean; hint: string }> {
+    const conversationId = String(conversationIdOverride || options.currentConversationId.value || "").trim();
     const messageId = String(targetMessageId || "").trim();
     if (!messageId || !conversationId) {
       return { canUndo: false, hint: "缺少撤回预览所需的会话上下文。" };
@@ -48,9 +51,13 @@ export function useRewindConfirmation(options: UseRewindConfirmationOptions) {
     }
   }
 
-  async function requestRecallMode(payload: { turnId: string; targetUserMessageId: string }): Promise<RecallMode> {
+  async function requestRecallMode(payload: {
+    turnId: string;
+    targetUserMessageId: string;
+    conversationId?: string;
+  }): Promise<RecallMode> {
     cancelPendingRewindConfirm();
-    const availability = await getUndoAvailabilityForTurn(payload.targetUserMessageId);
+    const availability = await getUndoAvailabilityForTurn(payload.targetUserMessageId, payload.conversationId);
     rewindConfirmCanUndoPatch.value = availability.canUndo;
     rewindConfirmUndoHint.value = availability.hint;
     rewindConfirmDialogOpen.value = true;

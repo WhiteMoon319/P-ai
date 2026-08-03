@@ -356,7 +356,6 @@ fn default_window_size(label: &str) -> (u32, u32) {
         "main" => (900_u32, 900_u32),
         "chat" => (618_u32, 1000_u32),
         "archives" => (900_u32, 900_u32),
-        "quick-setup" => (800_u32, 600_u32),
         FILE_READER_WINDOW_LABEL => (1040_u32, 760_u32),
         _ => (900_u32, 900_u32),
     }
@@ -367,7 +366,6 @@ fn minimum_window_size(label: &str) -> (u32, u32) {
         "main" => (900_u32, 600_u32),
         "chat" => (520_u32, 520_u32),
         "archives" => (560_u32, 560_u32),
-        "quick-setup" => (800_u32, 600_u32),
         FILE_READER_WINDOW_LABEL => (720_u32, 520_u32),
         _ => (520_u32, 520_u32),
     }
@@ -378,10 +376,6 @@ fn restore_window_minimum_size(label: &str) -> (u32, u32) {
         "main" => (900_u32, 600_u32),
         _ => minimum_window_size(label),
     }
-}
-
-fn is_fixed_window_size(label: &str) -> bool {
-    matches!(label, "quick-setup")
 }
 
 fn detached_chat_windows() -> &'static Mutex<std::collections::HashMap<String, String>> {
@@ -556,7 +550,7 @@ fn monitor_logical_size(monitor: &tauri::Monitor) -> tauri::LogicalSize<f64> {
 
 fn default_window_size_for_monitor(label: &str, monitor: &tauri::Monitor) -> (u32, u32) {
     let fallback = default_window_size(label);
-    if matches!(label, "chat" | "quick-setup") {
+    if matches!(label, "chat") {
         return fallback;
     }
     let logical = monitor_logical_size(monitor);
@@ -598,16 +592,8 @@ fn resolved_window_size_for_monitor(
     let monitor_logical = monitor_logical_size(monitor);
     let max_width = monitor_logical.width.max(1.0).round() as u32;
     let max_height = monitor_logical.height.max(1.0).round() as u32;
-    let target_width = if is_fixed_window_size(label) {
-        default_width
-    } else {
-        width.unwrap_or(default_width)
-    };
-    let target_height = if is_fixed_window_size(label) {
-        default_height
-    } else {
-        height.unwrap_or(default_height)
-    };
+    let target_width = width.unwrap_or(default_width);
+    let target_height = height.unwrap_or(default_height);
     (
         target_width
             .max(restore_min_width.min(max_width))
@@ -1016,19 +1002,6 @@ fn apply_window_layout_before_show(app: &AppHandle, label: &str) -> Result<(), S
     let saved = layouts.windows.get(label);
     let fallback_monitor = preferred_window_monitor(&window);
 
-    if matches!(label, "quick-setup") {
-        if let Some(monitor) = fallback_monitor.as_ref() {
-            position_window_on_monitor(&window, label, monitor, None, None);
-        } else {
-            let (width, height) = default_window_size(label);
-            let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(
-                width as f64,
-                height as f64,
-            )));
-        }
-        return Ok(());
-    }
-
     if let Some(saved) = saved {
         if let Some(monitor) = fallback_monitor.as_ref() {
             let preferred_width = saved.width;
@@ -1266,9 +1239,6 @@ fn toggle_window_maximize_with_default_restore(
     let window = app
         .get_webview_window(label)
         .ok_or_else(|| format!("Window '{label}' not found"))?;
-    if is_fixed_window_size(label) {
-        return Ok(false);
-    }
     let was_maximized = window
         .is_maximized()
         .map_err(|err| format!("Read window maximized state failed: {err}"))?;
@@ -1323,12 +1293,6 @@ fn start_window_drag_with_default_restore(app: &AppHandle, label: &str) -> Resul
     let window = app
         .get_webview_window(label)
         .ok_or_else(|| format!("Window '{label}' not found"))?;
-    if is_fixed_window_size(label) {
-        return window
-            .start_dragging()
-            .map_err(|err| format!("Start dragging window failed: {err}"));
-    }
-
     let was_maximized = window
         .is_maximized()
         .map_err(|err| format!("Read window maximized state failed: {err}"))?;
@@ -1471,7 +1435,7 @@ fn show_chat_entry_window(app: &AppHandle) -> Result<(), String> {
         }
         Err(err) => {
             runtime_log_error(format!("[托盘] 读取对话入口配置失败: {err}"));
-            "quick-setup"
+            "main"
         }
     };
     show_window(app, target)
@@ -1735,7 +1699,7 @@ fn build_tray(_app: &AppHandle) -> Result<(), String> {
 }
 
 fn hide_on_close(app: &AppHandle) {
-    for label in ["main", "chat", "archives", "quick-setup"] {
+    for label in ["main", "chat", "archives"] {
         if let Some(window) = app.get_webview_window(label) {
             let cloned = window.clone();
             let _ = window.on_window_event(move |event| {
@@ -1772,7 +1736,6 @@ fn webview_window_url_for_label(label: &str) -> &'static str {
         "main" => "index.html",
         "chat" => "chat.html",
         "archives" => "archives.html",
-        "quick-setup" => "quick-setup.html",
         _ => "index.html",
     }
 }
@@ -1789,7 +1752,7 @@ fn rebuild_crashed_window(app: &AppHandle, label: &str) {
     let url = webview_window_url_for_label(label);
     let (default_w, default_h) = default_window_size(label);
     let (min_w, min_h) = minimum_window_size(label);
-    let resizable = !is_fixed_window_size(label);
+    let resizable = true;
 
     let builder = tauri::WebviewWindowBuilder::new(
         app,

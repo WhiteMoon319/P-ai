@@ -87,10 +87,12 @@ function sourceFiles(directory: string): string[] {
 describe("统一传输边界", () => {
   it("Sidebar 只能复用统一聊天入口，不得保留第二套 Vue 前台", () => {
     const entrySource = readFileSync(sidebarEntryPath, "utf8");
+    // 样式入口（sidebar-theme.css 按 data-host 分流宿主主题）不属于 Vue 前台，
+    // 唯一前台必须是 main-chat，不得出现第二套聊天状态机/视图。
     const entryImports = Array.from(
       entrySource.matchAll(/^\s*import\s+["']([^"']+)["'];?\s*$/gm),
       (match) => match[1],
-    );
+    ).filter((path) => !path.startsWith("./assets/") && !path.endsWith(".css"));
     expect(entryImports).toEqual(["../../main-chat"]);
 
     const independentSources = sourceFiles(sidebarRoot)

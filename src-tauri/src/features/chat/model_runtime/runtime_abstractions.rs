@@ -1,9 +1,8 @@
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-struct ProviderToolDefinition {
-    name: String,
-    description: String,
-    parameters: Value,
+pub struct ProviderToolDefinition {
+    pub name: String,
+    pub description: String,
+    pub parameters: Value,
 }
 
 impl ProviderToolDefinition {

@@ -25,59 +25,59 @@
           class="dropdown-content menu z-50 w-64 rounded-box border border-base-300 bg-base-100 p-3 text-sm shadow-xl"
           :class="menuPlacement === 'top' ? 'mb-3' : 'mt-3'"
         >
-          <li v-if="showCodeReviewMenuItem && !busy">
-            <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openCodeReview')">
+          <li v-if="showCodeReviewMenuItem">
+            <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" @click="emit('openCodeReview')">
               <ClipboardCheck class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t('chat.toolbar.codeReview') }}</span>
             </button>
           </li>
-          <li v-if="!busy">
-            <button v-if="showTaskCreateMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openTaskCreate')">
+          <li>
+            <button v-if="showTaskCreateMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" @click="emit('openTaskCreate')">
               <ListTodo class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t("chat.newTask") }}</span>
             </button>
           </li>
-          <li v-if="!busy">
-            <button v-if="showDelegateMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openDelegateSelection')">
+          <li>
+            <button v-if="showDelegateMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" @click="emit('openDelegateSelection')">
               <ClipboardList class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t("chat.conversationMenu.startDelegate") }}</span>
             </button>
           </li>
-          <li v-if="!busy">
-            <button v-if="showBranchMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openBranchSelection')">
+          <li>
+            <button v-if="showBranchMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" @click="emit('openBranchSelection')">
               <Split class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t("chat.conversationMenu.branchConversation") }}</span>
             </button>
           </li>
-          <li v-if="!busy">
-            <button v-if="showAutoPushMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openAutoPush')">
+          <li>
+            <button v-if="showAutoPushMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" @click="emit('openAutoPush')">
               <Send class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t("chat.conversationMenu.autoPush") }}</span>
             </button>
           </li>
-          <li v-if="!busy">
-            <button v-if="showForwardMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openForwardSelection')">
+          <li>
+            <button v-if="showForwardMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" @click="emit('openForwardSelection')">
               <Package class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t("chat.conversationMenu.forwardConversation") }}</span>
             </button>
           </li>
-          <li v-if="!busy">
-            <button v-if="showShareMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy" @click="emit('openShareSelection')">
+          <li>
+            <button v-if="showShareMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" @click="emit('openShareSelection')">
               <ExternalLink class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t("chat.conversationMenu.shareConversation") }}</span>
             </button>
           </li>
-          <li v-if="showWorkspaceMenuItem && !busy && !workspaceButtonDisabled">
-            <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="busy || workspaceButtonDisabled" @click="emit('lockWorkspace')">
+          <li v-if="showWorkspaceMenuItem && !workspaceButtonDisabled">
+            <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="workspaceButtonDisabled" @click="emit('lockWorkspace')">
               <Folder class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t("chat.conversationMenu.setWorkspace") }}</span>
             </button>
           </li>
-          <li v-if="showOpenInBrowserButton && !busy && !openInBrowserDisabled">
+          <li v-if="showOpenInBrowserButton && !openInBrowserDisabled">
             <button
               type="button"
               class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left"
-              :disabled="busy || openInBrowserDisabled"
+              :disabled="openInBrowserDisabled"
               @click="emit('openConversationInBrowser')"
             >
               <ExternalLink class="h-4 w-4 shrink-0" />
@@ -91,7 +91,7 @@
         class="min-w-0 flex-1"
         :workspace-button-label="workspaceButtonLabel"
         :workspace-button-name="workspaceButtonName"
-        :workspace-button-disabled="busy || workspaceButtonDisabled"
+        :workspace-button-disabled="workspaceButtonDisabled"
         :workspace-permission-kind="workspacePermissionKind"
         :auto-push-active="autoPushActive"
         :delegates="delegateStatuses || []"

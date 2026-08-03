@@ -563,6 +563,13 @@ struct ConversationStreamRuntimeCache {
     started_at_ms: u64,
     updated_at: String,
     persisted_assistant_message_id: String,
+    // 上下文用量随流式缓存下发：工具执行期间落盘用量后写入，
+    // 前端随每个 delta 事件的 stream_cache 拿到最新准确占用率，
+    // 切屏恢复时也直接来自缓存，无需旁路广播。
+    context_usage_ratio: f64,
+    context_usage_percent: u32,
+    effective_prompt_tokens: u64,
+    context_window_tokens: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

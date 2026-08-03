@@ -34,7 +34,8 @@
     "chatTitle": "與 {name} 的對話",
     "minimize": "最小化",
     "maximize": "最大化",
-    "restore": "還原視窗"
+    "restore": "還原視窗",
+    "startChat": "開始對話"
   },
   "config": {
     "tabs": {
@@ -101,6 +102,7 @@
       "builtinTabInstruction": "快捷指令",
       "builtinEscStopReplying": "打斷目前回覆",
       "builtinShiftTabPlanMode": "切換計劃模式",
+      "builtinAltZLineWrap": "切換程式碼預覽自動換行",
       "builtinShiftWheelConversationSwitch": "切換會話"
     },
     "notification": {
@@ -1557,7 +1559,12 @@
         "chatFinish": "調度結束",
         "modelRoundTotal": "模型輪次總耗時"
       }
-    }
+    },
+    "simpleSetupModeToggle": "簡單模式 / 進階模式",
+    "simpleSetupModeSimple": "簡單",
+    "simpleSetupModeAdvanced": "進階",
+    "simpleSetupModeSwitchToAdvanced": "切換到進階",
+    "simpleSetupModeSwitchToSimple": "切換到簡單"
   },
   "responseStyle": {
     "none": "無要求",
@@ -2112,6 +2119,7 @@
     "configLoaded": "配置已加载。",
     "savingConfig": "正在保存配置...",
     "configSaved": "配置已保存。",
+    "saved": "已儲存。",
     "saveConfigBackend404": "保存失败：后端命令不可达（404）。请使用 `pnpm tauri dev` 启动桌面端。",
     "saveConfigFailed": "保存失败: {err}",
     "saveConfigDialogTitle": "保存配置失败",
@@ -2419,7 +2427,9 @@
     },
     "themeOptions": {
       "light": "淺色",
-      "dark": "深色"
+      "dark": "深色",
+      "switchToLight": "切換到亮色",
+      "switchToDark": "切換到暗色"
     },
     "providers": {
       "custom": "自訂"
@@ -2720,5 +2730,29 @@
     "actionOpenDefault": "用預設程式開啟",
     "actionOpenShell": "開啟 Shell",
     "actionOpenDirectory": "開啟目錄"
+  },
+  "simpleSetup": {
+    "provider": "供應商",
+    "models": "模型",
+    "modelQuick": "快速",
+    "modelExpert": "專家",
+    "modelVision": "多模態",
+    "modelVisionHint": "多模態指可讀取圖片、音訊與視訊",
+    "modelPlaceholder": "輸入模型名稱",
+    "style": "對話風格",
+    "styleNone": "無要求",
+    "appearance": "外觀",
+    "shell": "Shell",
+    "hotkeys": "快捷鍵",
+    "siliconFlow": "矽基流動（進階，可選）",
+    "siliconFlowHint": "填寫後自動設定向量模型、重排模型與語音辨識；留空則跳過。",
+    "effortLow": "低",
+    "effortMedium": "中",
+    "effortHigh": "高",
+    "refreshModelsNeedKey": "前請先填寫 API Key 與 base_url",
+    "refreshModelsDone": "已取得 {count} 個模型",
+    "refreshModelsFailed": "取得模型列表失敗：{error}",
+    "overwriteHint": "儲存後將覆蓋原有設定",
+    "saveAndStart": "儲存並開始對話"
   }
 }

@@ -15,8 +15,9 @@
             <p class="mt-2 text-base opacity-80">{{ t("config.welcome.subtitle") }}</p>
           </div>
           <div class="flex shrink-0 flex-col items-end gap-3">
-            <button class="btn btn-sm btn-primary" type="button" @click="openQuickSetupWindow">
-              {{ t("quickSetup.actions.openQuickSetup") }}
+            <button class="btn btn-sm btn-primary" type="button" @click="emit('start-chat')">
+              <MessageSquare class="h-3.5 w-3.5" />
+              {{ t("window.startChat") }}
             </button>
             <!-- 配置完成度 -->
             <div class="radial-progress text-primary" :style="`--value:${completionRate};--size:5rem`" role="progressbar">
@@ -135,6 +136,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { MessageSquare } from "@lucide/vue";
 import type { ApiConfigItem, AppConfig, PersonaProfile } from "../../../../types/app";
 import {
   getTransportHostRuntimePrerequisites,
@@ -185,8 +187,9 @@ const props = defineProps<{
   isAndroid?: boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (e: "jump", value: ConfigTab): void;
+  (e: "start-chat"): void;
 }>();
 
 const { t } = useI18n();
@@ -492,9 +495,5 @@ async function installRuntimePrerequisite(card: WelcomeCard) {
   } finally {
     installingPrerequisite.value = null;
   }
-}
-
-function openQuickSetupWindow() {
-  void openTransportWindow("quickSetup");
 }
 </script>

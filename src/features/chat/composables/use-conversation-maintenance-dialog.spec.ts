@@ -14,12 +14,12 @@ describe("useConversationMaintenanceDialog", () => {
     invokeTauriMock.mockReset();
   });
 
-  it("两端共用同一块页预览和压缩执行入口", async () => {
+  it("两端共用同一块页预览和压缩执行入口，占用率直接复用 chatUsagePercent 数据源", async () => {
     const messages = Array.from({ length: 10 }, (_, index) => ({
       id: `message-${index}`,
       role: index % 2 === 0 ? "user" : "assistant",
       parts: [{ type: "text", text: `text-${index}` }],
-      providerMeta: index === 9 ? { contextUsagePercent: 20 } : undefined,
+      providerMeta: undefined,
     }));
     invokeTauriMock.mockResolvedValue({ selectedBlockId: 1, messages });
     const trimCompactNow = vi.fn(async () => {});
@@ -35,6 +35,7 @@ describe("useConversationMaintenanceDialog", () => {
         hasAssistantReply: true,
         runtimeState: "idle",
       }]),
+      chatUsagePercent: ref(20),
       trimCompactNow,
       trimNow,
       deleteConversation,

@@ -588,13 +588,12 @@ export async function openTransportExternalUrl(url: string): Promise<boolean> {
  * Web 没有同等的原生窗口控制；调用方可据返回值决定是否显示/提示，
  * 但不需要再自行探测运行时。
  */
-export type TransportWindowTarget = "main" | "chat" | "archives" | "quickSetup" | "runtimeLogs";
+export type TransportWindowTarget = "main" | "chat" | "archives" | "runtimeLogs";
 
 const TRANSPORT_WINDOW_COMMANDS: Record<TransportWindowTarget, string> = {
   main: "show_main_window",
   chat: "show_chat_window",
   archives: "show_archives_window",
-  quickSetup: "show_quick_setup_window",
   runtimeLogs: "open_runtime_logs_window",
 };
 
@@ -603,13 +602,6 @@ export async function openTransportWindow(target: TransportWindowTarget): Promis
   const command = TRANSPORT_WINDOW_COMMANDS[target];
   if (!command) return false;
   await invokeTauri(command);
-  return true;
-}
-
-/** 完成快速设置并打开聊天；后端语义必须保留在传输适配器内。 */
-export async function completeTransportQuickSetupAndOpenChat(): Promise<boolean> {
-  if (!isTauriRuntimeAvailable()) return false;
-  await invokeTauri("complete_quick_setup_and_open_chat");
   return true;
 }
 
@@ -750,7 +742,7 @@ export async function readTransportChatImage(input: {
     });
   }
   const path = String(input.path || "").trim();
-  if (!path || !isTauriRuntimeAvailable()) return null;
+  if (!path) return null;
   return invokeTauri<TransportChatImageData>(
     input.original ? "read_local_chat_image_original" : "read_local_chat_image_thumbnail",
     {
@@ -1280,8 +1272,6 @@ function prepareInvokeValue(value: unknown, webRuntime: boolean, seen: WeakSet<o
 }
 
 const WEB_BRIDGE_NATIVE_ONLY_COMMANDS = new Set([
-  "read_local_chat_image_thumbnail",
-  "read_local_chat_image_original",
   "list_file_reader_directory",
   "list_file_reader_directory_open_targets",
   "read_file_reader_file",
@@ -1343,6 +1333,7 @@ const WEB_BRIDGE_NATIVE_ONLY_COMMANDS = new Set([
   "bind_active_chat_view_stream",
   "probe_active_chat_view_stream",
   "unbind_active_chat_view_stream",
+  "clear_window_chat_view_stream_bindings_command",
   "set_chat_window_active",
   "open_file_reader_window_command",
   "read_local_binary_file",
@@ -1969,6 +1960,25 @@ export async function unbindTransportConversationStream(input: { bindingId: stri
   if (!binding) return;
   disposeWebTransportStreamBinding(binding);
   webTransportStreamBindings.delete(bindingId);
+}
+
+/**
+ * 清空当前窗口的全部活动聊天流绑定。
+ *
+ * 前端页面重载（HMR / 手动刷新 / 崩溃重建）后，旧 bindingId 的 channel 在 JS 侧
+ * 已失效，但 Rust 侧注册仍残留；Tauri 的 Channel::send 在 callback 不存在时仍返回
+ * Ok，僵尸注册无法通过 send 失败自动清理，流式期间会反复投递失效 channel 并刷
+ * `Couldn't find callback id` 警告。窗口启动/重载后调用本函数先清残留，再重新绑定。
+ */
+export async function clearWindowChatViewStreamBindings(): Promise<void> {
+  if (!isTauriRuntimeAvailable()) return;
+  try {
+    await invokeTauri("clear_window_chat_view_stream_bindings_command", {});
+  } catch (error) {
+    console.warn("[聊天] 清理本窗口残留流式绑定失败", {
+      message: String((error as { message?: string })?.message ?? error ?? ""),
+    });
+  }
 }
 
 export async function probeTransportConversationStream(input: {

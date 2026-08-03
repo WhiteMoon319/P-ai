@@ -62,6 +62,28 @@ export function streamingTerminalTargetsRound(
 }
 
 export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOptions) {
+  function applyStreamCacheContextUsageToPreview(parsed: AssistantDeltaEvent) {
+    const cache = parsed.streamCache;
+    if (!cache || typeof cache.contextUsageRatio !== "number") return;
+    if (!options.contextUsagePreview) return;
+    const conversationId = options.getConversationId ? options.getConversationId() : "";
+    if (!conversationId) return;
+    const ratio = Math.max(0, cache.contextUsageRatio);
+    if (!(ratio > 0) && !(Number(cache.contextUsagePercent) > 0)) return;
+    const percent = typeof cache.contextUsagePercent === "number"
+      ? Math.round(cache.contextUsagePercent)
+      : Math.round(ratio * 100);
+    options.contextUsagePreview.value = {
+      conversationId,
+      contextUsagePercent: Math.min(100, Math.max(0, percent)),
+      contextUsageRatio: ratio,
+      effectivePromptTokens: Math.max(0, Math.round(Number(cache.effectivePromptTokens) || 0)),
+      contextWindowTokens: Math.max(0, Math.round(Number(cache.contextWindowTokens) || 0)),
+      source: "stream_cache",
+      eventReason: "provider_tool_round",
+    };
+  }
+
   function handleStreamingEvent(currentGen: number, parsed: AssistantDeltaEvent) {
     if (parsed.kind === "context_usage_update") {
       const p = readContextUsageUpdatePayload(parsed.message);
@@ -73,6 +95,8 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
       }
       return;
     }
+    // 工具执行期间用量随流式缓存下发：直接更新预览，无需旁路广播。
+    applyStreamCacheContextUsageToPreview(parsed);
     const round = options.getRound();
     if (
       !currentGen

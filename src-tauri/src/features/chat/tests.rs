@@ -1263,7 +1263,7 @@
 
         let messages = prepared_prompt_to_messages_json(&prepared);
 
-        assert_eq!(messages.len(), 6);
+        assert_eq!(messages.len(), 5);
         assert_eq!(messages[1]["role"], "user");
         assert_eq!(messages[2]["role"], "assistant");
         assert_eq!(
@@ -1475,7 +1475,7 @@
 
         let messages = prepared_prompt_to_messages_json(&prepared);
 
-        assert_eq!(messages.len(), 3);
+        assert_eq!(messages.len(), 2);
         assert_eq!(messages[1]["role"], "assistant");
         assert_eq!(messages[1]["content"].as_str(), Some("这是结论"));
         assert_eq!(
@@ -1724,7 +1724,7 @@
     }
 
     #[test]
-    fn prepared_prompt_to_messages_json_should_keep_blank_latest_user_turn_for_provider_compatibility() {
+    fn prepared_prompt_to_messages_json_should_skip_empty_latest_user_turn_when_no_media() {
         let prepared = PreparedPrompt {
             preamble: "sys".to_string(),
             history_messages: vec![
@@ -1760,11 +1760,13 @@
         };
 
         let messages = prepared_prompt_to_messages_json(&prepared);
-        assert_eq!(messages.len(), 4);
+        assert_eq!(messages.len(), 3);
         assert_eq!(messages[1].get("role").and_then(Value::as_str), Some("user"));
         assert_eq!(messages[2].get("role").and_then(Value::as_str), Some("assistant"));
-        assert_eq!(messages[3].get("role").and_then(Value::as_str), Some("user"));
-        assert_eq!(messages[3].get("content").and_then(Value::as_str), Some(" "));
+        assert!(!messages.iter().any(|message| {
+            message.get("role").and_then(Value::as_str) == Some("user")
+                && message.get("content").and_then(Value::as_str) == Some(" ")
+        }));
     }
 
     #[test]
@@ -4268,29 +4270,6 @@
     }
 
     #[test]
-    fn state_read_chat_index_cached_should_rebuild_from_legacy_app_data_file() {
-        let state = test_chat_runtime_state();
-        let now = now_iso();
-        let conversation = test_chat_conversation("conversation-legacy-index", "active", &now);
-        let mut data = AppData::default();
-        data.conversations = vec![conversation.clone()];
-        std::fs::write(
-            &state.data_path,
-            serde_json::to_vec_pretty(&data).expect("serialize legacy app data"),
-        )
-        .expect("write legacy app data");
-
-        let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
-
-        assert_eq!(chat_index.conversations.len(), 2);
-        assert!(chat_index
-            .conversations
-            .iter()
-            .any(|item| item.id == conversation.id));
-        assert!(!app_layout_chat_index_path(&state.data_path).exists());
-    }
-
-    #[test]
     fn state_schedule_conversation_persist_should_update_memory_chat_index_only() {
         let state = test_chat_runtime_state();
         let now = now_iso();
@@ -5758,7 +5737,7 @@
         );
 
         let compaction_source = conversation_service_v2()
-            .read_archive_pipeline_cross_message_context(&state, &conversation.id)
+            .read_archive_pipeline_last_block_conversation(&state, &conversation.id)
             .expect("read compaction source after completed tool round");
         let compaction_assistant = compaction_source
             .messages

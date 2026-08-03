@@ -124,9 +124,6 @@ fn migrate_agent_avatar_paths(data_path: &PathBuf, data: &mut AppData) -> bool {
 }
 
 const LEGACY_APP_DATA_SPLIT_DIR_NAME: &str = "app_data";
-const LEGACY_APP_DATA_PROFILE_FILE_NAME: &str = "profile.json";
-const LEGACY_APP_DATA_CONVERSATIONS_FILE_NAME: &str = "conversations.json";
-const LEGACY_APP_DATA_IMAGE_CACHE_FILE_NAME: &str = "image_text_cache.json";
 
 const LAYOUT_DIR_CONFIG: &str = "config";
 const LAYOUT_DIR_STATE: &str = "state";
@@ -156,7 +153,6 @@ struct RuntimeStateFile {
     message_store_migration_version: u32,
     #[serde(alias = "selectedAgentId", alias = "selected_agent_id")]
     assistant_department_agent_id: String,
-    user_alias: String,
     response_style_id: String,
     #[serde(default = "default_pdf_read_mode")]
     pdf_read_mode: String,
@@ -197,7 +193,6 @@ impl Default for RuntimeStateFile {
             data_migration_version: 0,
             message_store_migration_version: 0,
             assistant_department_agent_id: default_assistant_department_agent_id(),
-            user_alias: default_user_alias(),
             response_style_id: default_response_style_id(),
             pdf_read_mode: default_pdf_read_mode(),
             background_voice_screenshot_keywords: default_background_voice_screenshot_keywords(),
@@ -339,7 +334,6 @@ fn build_runtime_state_file(data: &AppData) -> RuntimeStateFile {
         data_migration_version: data.data_migration_version,
         message_store_migration_version: data.message_store_migration_version,
         assistant_department_agent_id: data.assistant_department_agent_id.clone(),
-        user_alias: data.user_alias.clone(),
         response_style_id: data.response_style_id.clone(),
         pdf_read_mode: data.pdf_read_mode.clone(),
         background_voice_screenshot_keywords: data.background_voice_screenshot_keywords.clone(),
@@ -417,7 +411,6 @@ fn apply_runtime_state_to_app_data(data: &mut AppData, runtime: &RuntimeStateFil
     data.data_migration_version = runtime.data_migration_version;
     data.message_store_migration_version = runtime.message_store_migration_version;
     data.assistant_department_agent_id = runtime.assistant_department_agent_id.clone();
-    data.user_alias = runtime.user_alias.clone();
     data.response_style_id = runtime.response_style_id.clone();
     data.pdf_read_mode = runtime.pdf_read_mode.clone();
     data.background_voice_screenshot_keywords =
@@ -459,10 +452,7 @@ fn write_agents_shard(path: &PathBuf, agents: &[AgentProfile]) -> Result<bool, S
 }
 
 fn read_runtime_state_shard(path: &PathBuf) -> Result<RuntimeStateFile, String> {
-    let mut runtime = if !app_layout_exists(path) && path.exists() {
-        let data = read_app_data(path)?;
-        build_runtime_state_file(&data)
-    } else if app_layout_runtime_state_path(path).exists() {
+    let mut runtime = if app_layout_runtime_state_path(path).exists() {
         read_json_file::<RuntimeStateFile>(&app_layout_runtime_state_path(path), "runtime state file")?
     } else {
         RuntimeStateFile::default()
@@ -531,18 +521,6 @@ fn read_conversation_meta_shard(
         let rebuilt = message_store::ConversationShardMeta::from_conversation(&conversation);
         write_conversation_meta_shard_from_meta(path, &rebuilt)?;
         return Ok(rebuilt);
-    }
-    if !app_layout_exists(path) && path.exists() {
-        let data = read_app_data(path)?;
-        if let Some(conversation) = data
-            .conversations
-            .into_iter()
-            .find(|item| item.id.trim() == conversation_id)
-        {
-            let rebuilt = message_store::ConversationShardMeta::from_conversation(&conversation);
-            write_conversation_meta_shard_from_meta(path, &rebuilt)?;
-            return Ok(rebuilt);
-        }
     }
     Err(format!("Conversation '{conversation_id}' not found."))
 }
@@ -635,25 +613,6 @@ fn read_conversation_shard_raw(path: &PathBuf, conversation_id: &str) -> Result<
         }
         return Ok(conversation);
     }
-    if !app_layout_exists(path) && path.exists() {
-        let data = read_app_data(path)?;
-        if let Some(conversation) = data
-            .conversations
-            .into_iter()
-            .find(|item| item.id.trim() == conversation_id)
-        {
-            if conversation
-                .cumulative_usage
-                .needs_legacy_total_tokens_backfill()
-            {
-                let mut repaired = conversation;
-                repaired.cumulative_usage = repaired.cumulative_usage.clone().normalized_legacy_totals();
-                let _ = write_conversation_shard(path, &repaired)?;
-                return Ok(repaired);
-            }
-            return Ok(conversation);
-        }
-    }
     Err(format!("Conversation '{conversation_id}' not found."))
 }
 
@@ -709,24 +668,6 @@ fn legacy_app_data_split_dir(path: &PathBuf) -> PathBuf {
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| PathBuf::from("."));
     parent.join(LEGACY_APP_DATA_SPLIT_DIR_NAME)
-}
-
-fn legacy_app_data_split_profile_path(path: &PathBuf) -> PathBuf {
-    legacy_app_data_split_dir(path).join(LEGACY_APP_DATA_PROFILE_FILE_NAME)
-}
-
-fn legacy_app_data_split_conversations_path(path: &PathBuf) -> PathBuf {
-    legacy_app_data_split_dir(path).join(LEGACY_APP_DATA_CONVERSATIONS_FILE_NAME)
-}
-
-fn legacy_app_data_split_image_cache_path(path: &PathBuf) -> PathBuf {
-    legacy_app_data_split_dir(path).join(LEGACY_APP_DATA_IMAGE_CACHE_FILE_NAME)
-}
-
-fn legacy_app_data_split_exists(path: &PathBuf) -> bool {
-    legacy_app_data_split_profile_path(path).exists()
-        || legacy_app_data_split_conversations_path(path).exists()
-        || legacy_app_data_split_image_cache_path(path).exists()
 }
 
 fn read_json_file<T>(path: &PathBuf, label: &str) -> Result<T, String>
@@ -895,113 +836,6 @@ where
     Ok(true)
 }
 
-fn read_legacy_app_data(path: &PathBuf) -> Result<AppData, String> {
-    if !path.exists() {
-        return Ok(AppData::default());
-    }
-    let mut parsed = read_json_file::<AppData>(path, "legacy app_data")?;
-    parsed.version = APP_DATA_SCHEMA_VERSION;
-    Ok(parsed)
-}
-
-fn read_legacy_split_app_data(path: &PathBuf) -> Result<AppData, String> {
-    let defaults = AppData::default();
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct LegacyProfile {
-        version: u32,
-        #[serde(default)]
-        data_migration_version: u32,
-        #[serde(default, alias = "messageStoreMigrationVersion")]
-        message_store_migration_version: u32,
-        agents: Vec<AgentProfile>,
-        #[serde(alias = "selectedAgentId", alias = "selected_agent_id")]
-        assistant_department_agent_id: String,
-        user_alias: String,
-        response_style_id: String,
-        #[serde(default = "default_pdf_read_mode")]
-        pdf_read_mode: String,
-        #[serde(default = "default_background_voice_screenshot_keywords")]
-        background_voice_screenshot_keywords: String,
-        #[serde(default = "default_background_voice_screenshot_mode")]
-        background_voice_screenshot_mode: String,
-        #[serde(default)]
-        instruction_presets: Vec<PromptCommandPreset>,
-    }
-    #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-    #[serde(rename_all = "camelCase")]
-    struct LegacyConversations {
-        #[serde(default)]
-        conversations: Vec<Conversation>,
-    }
-    #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-    #[serde(rename_all = "camelCase")]
-    struct LegacyImageCache {
-        #[serde(default)]
-        image_text_cache: Vec<ImageTextCacheEntry>,
-    }
-
-    let profile_path = legacy_app_data_split_profile_path(path);
-    let conversations_path = legacy_app_data_split_conversations_path(path);
-    let image_cache_path = legacy_app_data_split_image_cache_path(path);
-
-    let profile = if profile_path.exists() {
-        read_json_file::<LegacyProfile>(&profile_path, "legacy app_data profile")?
-    } else {
-        LegacyProfile {
-            version: defaults.version,
-            data_migration_version: defaults.data_migration_version,
-            message_store_migration_version: defaults.message_store_migration_version,
-            agents: defaults.agents.clone(),
-            assistant_department_agent_id: defaults.assistant_department_agent_id.clone(),
-            user_alias: defaults.user_alias.clone(),
-            response_style_id: defaults.response_style_id.clone(),
-            pdf_read_mode: defaults.pdf_read_mode.clone(),
-            background_voice_screenshot_keywords: defaults
-                .background_voice_screenshot_keywords
-                .clone(),
-            background_voice_screenshot_mode: defaults
-                .background_voice_screenshot_mode
-                .clone(),
-            instruction_presets: defaults.instruction_presets.clone(),
-        }
-    };
-    let conversations = if conversations_path.exists() {
-        read_json_file::<LegacyConversations>(&conversations_path, "legacy app_data conversations")?
-    } else {
-        LegacyConversations::default()
-    };
-    let image_cache = if image_cache_path.exists() {
-        read_json_file::<LegacyImageCache>(&image_cache_path, "legacy app_data image cache")?
-    } else {
-        LegacyImageCache::default()
-    };
-
-    Ok(AppData {
-        version: profile.version,
-        data_migration_version: profile.data_migration_version,
-        message_store_migration_version: profile.message_store_migration_version,
-        agents: profile.agents,
-        assistant_department_agent_id: profile.assistant_department_agent_id,
-        user_alias: profile.user_alias,
-        response_style_id: profile.response_style_id,
-        pdf_read_mode: profile.pdf_read_mode,
-        background_voice_screenshot_keywords: profile.background_voice_screenshot_keywords,
-        background_voice_screenshot_mode: profile.background_voice_screenshot_mode,
-        instruction_presets: profile.instruction_presets,
-        main_conversation_id: None,
-        pinned_conversation_ids: Vec::new(),
-        conversation_section_orders: ConversationSectionOrders::default(),
-        conversations: conversations.conversations,
-        archived_conversations: Vec::new(),
-        image_text_cache: image_cache.image_text_cache,
-        remote_im_contacts: Vec::new(),
-        remote_im_contact_checkpoints: Vec::new(),
-        pdf_text_cache: Vec::new(),
-        pdf_image_cache: Vec::new(),
-    })
-}
-
 fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
     let mut agents = if app_layout_agents_path(path).exists() {
         read_json_file::<AgentsFile>(&app_layout_agents_path(path), "agents file")?.agents
@@ -1052,7 +886,7 @@ fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
         message_store_migration_version: runtime.message_store_migration_version,
         agents,
         assistant_department_agent_id: runtime.assistant_department_agent_id,
-        user_alias: runtime.user_alias,
+        user_alias: default_user_alias(),
         response_style_id: runtime.response_style_id,
         pdf_read_mode: runtime.pdf_read_mode,
         background_voice_screenshot_keywords: runtime.background_voice_screenshot_keywords,
@@ -1062,18 +896,17 @@ fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
         pinned_conversation_ids: runtime.pinned_conversation_ids,
         conversation_section_orders: runtime.conversation_section_orders,
         conversations,
-        archived_conversations: Vec::new(),
         image_text_cache: runtime.image_text_cache,
         remote_im_contacts: runtime.remote_im_contacts,
         remote_im_contact_checkpoints: runtime.remote_im_contact_checkpoints,
         pdf_text_cache: runtime.pdf_text_cache,
         pdf_image_cache: runtime.pdf_image_cache,
+        archived_conversations: Vec::new(),
     })
 }
 
 // ========== 数据迁移 registry ==========
 //
-// v1 是历史兼容合集，继续由 read_app_data() 的 baseline 门禁处理。
 // v2+ 需要显式上下文，避免在只有 app_data 路径时猜测助理空间位置或名称。
 struct DataMigrationContext<'a> {
     state: &'a AppState,
@@ -1376,13 +1209,7 @@ fn sync_assistant_workspace_label_for_unarchived_conversations(
 }
 
 fn read_app_data(path: &PathBuf) -> Result<AppData, String> {
-    let mut parsed = if app_layout_exists(path) {
-        read_layout_app_data(path)?
-    } else if legacy_app_data_split_exists(path) {
-        read_legacy_split_app_data(path)?
-    } else {
-        read_legacy_app_data(path)?
-    };
+    let mut parsed = read_layout_app_data(path)?;
     parsed.version = APP_DATA_SCHEMA_VERSION;
     let migration_version_before = parsed.data_migration_version;
     let run_v1_baseline_migrations =

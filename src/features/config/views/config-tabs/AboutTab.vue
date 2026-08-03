@@ -32,6 +32,43 @@
     </section>
 
     <section>
+      <div class="flex items-center justify-between gap-3">
+        <h3 class="text-sm font-semibold">{{ t("about.changelog") }}</h3>
+        <button
+          class="btn btn-sm btn-ghost"
+          :disabled="changelogLoading"
+          @click="loadProjectChangelog(true)"
+        >
+          <span v-if="changelogLoading" class="loading loading-spinner loading-xs"></span>
+          {{ t("common.refresh") }}
+        </button>
+      </div>
+      <div class="card bg-base-100 border border-base-300">
+        <div class="card-body p-4">
+          <div class="config-changelog-markdown max-h-96 overflow-auto">
+            <div v-if="changelogLoading && !changelogMarkdown" class="flex min-h-0 items-center justify-center py-8 text-sm text-base-content/70">
+              <span class="loading loading-spinner loading-sm mr-2"></span>
+              {{ t("about.changelogLoading") }}
+            </div>
+            <div v-else-if="changelogError" class="rounded-box border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
+              {{ changelogError }}
+            </div>
+            <AppMarkdownRenderer
+              v-else-if="changelogMarkdown"
+              class="ecall-markdown-content max-w-none"
+              :text="changelogMarkdown"
+              :is-dark="markdownIsDark"
+              variant="document"
+            />
+            <div v-else class="flex min-h-0 items-center justify-center py-8 text-sm text-base-content/70">
+              {{ t("about.changelogEmpty") }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
       <h3 class="mb-1 text-sm font-semibold">{{ t("about.repository") }}</h3>
       <div class="card bg-base-100 border border-base-300">
       <div class="card-body p-4">
@@ -64,12 +101,15 @@
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { invokeTauri, openTransportExternalUrl } from "../../../../services/tauri-api";
+import { AppMarkdownRenderer } from "../../../chat/markdown";
+import { isDarkAppTheme } from "../../../shell/composables/use-app-theme";
 import type { GithubUpdateMethod } from "../../../../types/app";
 
 const props = defineProps<{
   githubUpdateMethod: GithubUpdateMethod;
   checkingUpdate: boolean;
   isAndroid?: boolean;
+  currentTheme: string;
 }>();
 
 const emit = defineEmits<{
@@ -84,6 +124,11 @@ const updateDialogTitle = ref("");
 const updateDialogBody = ref("");
 const updateDialogReleaseUrl = ref("");
 const appVersion = ref("...");
+const changelogLoading = ref(false);
+const changelogError = ref("");
+const changelogMarkdown = ref("");
+const changelogLoaded = ref(false);
+const markdownIsDark = computed(() => isDarkAppTheme(props.currentTheme));
 const updateMethodOptions = computed<Array<{ value: GithubUpdateMethod; label: string }>>(() => [
   { value: "auto", label: t("about.updateMethodAuto") },
   { value: "direct", label: t("about.updateMethodDirect") },
@@ -101,7 +146,23 @@ onMounted(async () => {
     console.warn("[关于] load app version failed:", error);
     appVersion.value = "unknown";
   }
+  void loadProjectChangelog();
 });
+
+async function loadProjectChangelog(force = false) {
+  if (changelogLoading.value) return;
+  if (changelogLoaded.value && !force) return;
+  changelogLoading.value = true;
+  changelogError.value = "";
+  try {
+    changelogMarkdown.value = await invokeTauri<string>("fetch_project_changelog_markdown");
+    changelogLoaded.value = true;
+  } catch (error) {
+    changelogError.value = String(error);
+  } finally {
+    changelogLoading.value = false;
+  }
+}
 
 async function openRepository() {
   try {
@@ -141,5 +202,45 @@ defineExpose({
   showUpdateDialog,
 });
 </script>
+
+<style scoped>
+.config-changelog-markdown:deep(.ecall-markdown-content.prose) {
+  max-width: none;
+}
+
+.config-changelog-markdown:deep(.ecall-markdown-content) {
+  color: inherit;
+  line-height: 1.75;
+  font-size: var(--app-text-base-size);
+}
+
+.config-changelog-markdown:deep(.ecall-markdown-content :where(p,ul,ol,blockquote,pre,table,figure,.paragraph-node,.list-node,.blockquote,.table-node-wrapper,.code-block-container,._mermaid,.vmr-container)) {
+  margin-top: 0.85rem;
+  margin-bottom: 0.85rem;
+}
+
+.config-changelog-markdown:deep(.ecall-markdown-content :where(h1,h2,h3,h4,.heading-node)) {
+  margin-top: 1.25rem;
+  margin-bottom: 0.75rem;
+  font-weight: 700;
+}
+
+.config-changelog-markdown:deep(.ecall-markdown-content :where(a,.link-node)) {
+  color: hsl(var(--p));
+  text-decoration: underline;
+}
+
+.config-changelog-markdown:deep(.ecall-markdown-content :where(blockquote,.blockquote)) {
+  padding-left: 0.9rem;
+  opacity: 0.9;
+}
+
+.config-changelog-markdown:deep(.ecall-markdown-content :where(:not(pre) > code,.inline-code)) {
+  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  border-radius: 0.45rem;
+  padding: 0.08rem 0.35rem;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+</style>
 
 
