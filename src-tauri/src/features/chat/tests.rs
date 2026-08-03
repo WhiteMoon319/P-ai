@@ -1263,7 +1263,7 @@
 
         let messages = prepared_prompt_to_messages_json(&prepared);
 
-        assert_eq!(messages.len(), 6);
+        assert_eq!(messages.len(), 5);
         assert_eq!(messages[1]["role"], "user");
         assert_eq!(messages[2]["role"], "assistant");
         assert_eq!(
@@ -1475,7 +1475,7 @@
 
         let messages = prepared_prompt_to_messages_json(&prepared);
 
-        assert_eq!(messages.len(), 3);
+        assert_eq!(messages.len(), 2);
         assert_eq!(messages[1]["role"], "assistant");
         assert_eq!(messages[1]["content"].as_str(), Some("这是结论"));
         assert_eq!(
@@ -1724,7 +1724,7 @@
     }
 
     #[test]
-    fn prepared_prompt_to_messages_json_should_keep_blank_latest_user_turn_for_provider_compatibility() {
+    fn prepared_prompt_to_messages_json_should_skip_empty_latest_user_turn_when_no_media() {
         let prepared = PreparedPrompt {
             preamble: "sys".to_string(),
             history_messages: vec![
@@ -1760,11 +1760,13 @@
         };
 
         let messages = prepared_prompt_to_messages_json(&prepared);
-        assert_eq!(messages.len(), 4);
+        assert_eq!(messages.len(), 3);
         assert_eq!(messages[1].get("role").and_then(Value::as_str), Some("user"));
         assert_eq!(messages[2].get("role").and_then(Value::as_str), Some("assistant"));
-        assert_eq!(messages[3].get("role").and_then(Value::as_str), Some("user"));
-        assert_eq!(messages[3].get("content").and_then(Value::as_str), Some(" "));
+        assert!(!messages.iter().any(|message| {
+            message.get("role").and_then(Value::as_str) == Some("user")
+                && message.get("content").and_then(Value::as_str) == Some(" ")
+        }));
     }
 
     #[test]

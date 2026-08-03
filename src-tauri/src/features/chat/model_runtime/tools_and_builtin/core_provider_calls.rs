@@ -260,7 +260,9 @@ fn prepared_history_to_genai_messages(
     let normalized_history_messages = normalized_prepared_history_messages(&prepared.history_messages);
     for hm in normalized_history_messages.iter() {
         if hm.role == "user" {
-            let base_user_text = if hm.text.trim().is_empty() {
+            let base_user_text = if hm.text.trim().is_empty()
+                && (!hm.images.is_empty() || !hm.audios.is_empty())
+            {
                 " ".to_string()
             } else {
                 hm.text.clone()
@@ -435,8 +437,9 @@ fn build_genai_chat_request(prepared: &PreparedPrompt) -> Result<genai::chat::Ch
     .append_message(genai::chat::ChatMessage::user(
         genai::chat::MessageContent::from_parts(latest_parts),
     ));
-    if !prepared.preamble.trim().is_empty() {
-        request = request.with_system(prepared.preamble.clone());
+    let system = prepared.preamble.trim();
+    if !system.is_empty() {
+        request = request.with_system(system.to_string());
     }
     Ok(request)
 }
@@ -751,6 +754,7 @@ async fn call_model_openai_stream_internal(
     on_delta: Option<&tauri::ipc::Channel<AssistantDeltaEvent>>,
     app_state: Option<&AppState>,
     usage_conversation_id: Option<&str>,
+    tool_definitions: Option<&[ProviderToolDefinition]>,
 ) -> Result<ModelReply, String> {
     let api_config = resolve_request_api_config(api_config).await?;
     let _provider_concurrency_guard =
@@ -768,7 +772,14 @@ async fn call_model_openai_stream_internal(
             genai::adapter::AdapterKind::OpenAIResp,
         ),
     };
-    let request = build_provider_genai_request(&prepared)?;
+    let mut request = build_provider_genai_request(&prepared)?;
+    if let Some(definitions) = tool_definitions {
+        if !definitions.is_empty() {
+            let genai_tools =
+                runtime_tool_definitions_for_genai(definitions, adapter_kind).await?;
+            request = request.with_tools(genai_tools);
+        }
+    }
     let service_target = build_provider_genai_service_target(
         &api_config,
         adapter_kind,
@@ -815,6 +826,28 @@ async fn call_model_openai_stream(
         None,
         app_state,
         usage_conversation_id,
+        None,
+    )
+    .await
+}
+
+async fn call_model_openai_stream_with_tools(
+    api_config: &ResolvedApiConfig,
+    model_name: &str,
+    prepared: PreparedPrompt,
+    tool_definitions: Vec<ProviderToolDefinition>,
+    app_state: Option<&AppState>,
+    usage_conversation_id: Option<&str>,
+) -> Result<ModelReply, String> {
+    call_model_openai_stream_internal(
+        api_config,
+        model_name,
+        prepared,
+        OpenAiApiKind::ChatCompletions,
+        None,
+        app_state,
+        usage_conversation_id,
+        Some(&tool_definitions),
     )
     .await
 }
@@ -823,6 +856,25 @@ async fn call_model_openai_non_stream(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
+    app_state: Option<&AppState>,
+    usage_conversation_id: Option<&str>,
+) -> Result<ModelReply, String> {
+    call_model_openai_non_stream_with_definitions(
+        api_config,
+        model_name,
+        prepared,
+        Vec::new(),
+        app_state,
+        usage_conversation_id,
+    )
+    .await
+}
+
+async fn call_model_openai_non_stream_with_definitions(
+    api_config: &ResolvedApiConfig,
+    model_name: &str,
+    prepared: PreparedPrompt,
+    tool_definitions: Vec<ProviderToolDefinition>,
     app_state: Option<&AppState>,
     usage_conversation_id: Option<&str>,
 ) -> Result<ModelReply, String> {
@@ -841,7 +893,11 @@ async fn call_model_openai_non_stream(
         model_name,
         request_api_key.clone(),
     );
-    let request = build_genai_chat_request(&prepared)?;
+    let mut request = build_genai_chat_request(&prepared)?;
+    if !tool_definitions.is_empty() {
+        let genai_tools = runtime_tool_definitions_for_genai(&tool_definitions, adapter_kind).await?;
+        request = request.with_tools(genai_tools);
+    }
     let options = build_provider_genai_chat_options(&api_config, true, false);
     let (client, model_spec) = build_provider_genai_client_and_model_spec_from_target(
         &api_config,

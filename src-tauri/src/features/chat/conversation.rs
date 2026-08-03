@@ -3470,7 +3470,7 @@ fn build_conversation_prompt_payload(
         } else {
             (Vec::new(), Vec::new())
         };
-        if text.trim().is_empty() && images.is_empty() && audios.is_empty() {
+        if text.trim().is_empty() && (!images.is_empty() || !audios.is_empty()) {
             text = " ".to_string();
         }
         history_messages.push(PreparedHistoryMessage {
@@ -3551,8 +3551,7 @@ fn build_conversation_prompt_payload(
         if latest_user_text.trim().is_empty()
             && latest_user_meta_text.trim().is_empty()
             && latest_user_extra_blocks.is_empty()
-            && latest_images.is_empty()
-            && latest_audios.is_empty()
+            && (!latest_images.is_empty() || !latest_audios.is_empty())
         {
             latest_user_text = " ".to_string();
         }

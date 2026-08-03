@@ -1,4 +1,4 @@
-async fn runtime_tool_definitions_for_genai(
+pub async fn runtime_tool_definitions_for_genai(
     definitions: &[ProviderToolDefinition],
     adapter_kind: genai::adapter::AdapterKind,
 ) -> Result<Vec<genai::chat::Tool>, String> {

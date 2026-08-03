@@ -859,7 +859,7 @@ fn empty_runtime_tool_assembly(tool_manifest: Vec<Value>) -> RuntimeToolAssembly
     }
 }
 
-async fn assemble_runtime_tools(
+pub(crate) async fn assemble_runtime_tools(
     app_config: &AppConfig,
     selected_api: &ApiConfig,
     agent: &AgentProfile,

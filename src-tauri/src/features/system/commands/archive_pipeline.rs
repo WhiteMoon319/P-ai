@@ -181,7 +181,13 @@ fn resolve_archive_owner_context(
 ) -> Result<(AgentProfile, String, String), String> {
     let runtime_snapshot = load_runtime_organization_snapshot(state)?;
     let runtime = state_read_runtime_state_cached(state)?;
-    let user_alias = runtime.user_alias.clone();
+    let user_alias = runtime_snapshot
+        .agents
+        .iter()
+        .find(|agent| agent.id == USER_PERSONA_ID || agent.is_built_in_user)
+        .map(|agent| agent.name.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| runtime.user_alias.clone());
     let owner_agent_id = resolve_archive_owner_agent_id(
         &runtime_snapshot.config,
         &runtime_snapshot.agents,
@@ -505,6 +511,30 @@ impl From<String> for SummaryContextModelError {
     }
 }
 
+async fn assemble_compaction_tool_definitions(
+    state: &AppState,
+    app_config: &AppConfig,
+    selected_api: &ApiConfig,
+    agent: &AgentProfile,
+    conversation_id: &str,
+    department_id: &str,
+) -> Vec<ProviderToolDefinition> {
+    if !selected_api.enable_tools {
+        return Vec::new();
+    }
+    let chat_session_key = inflight_chat_key(&agent.id, Some(conversation_id));
+    let assembly = assemble_runtime_tools(
+        app_config,
+        selected_api,
+        agent,
+        Some(state),
+        &chat_session_key,
+        Some(department_id),
+    )
+    .await;
+    assembly.tool_definitions
+}
+
 async fn summarize_archived_conversation_with_model_v2(
     state: &AppState,
     resolved_api: &ResolvedApiConfig,
@@ -519,17 +549,24 @@ async fn summarize_archived_conversation_with_model_v2(
     let runtime_snapshot = load_runtime_organization_snapshot(state)?;
     let app_config = runtime_snapshot.config;
     let agents = runtime_snapshot.agents;
-    let mut prepared = build_prepared_prompt_for_mode(
-        PromptBuildMode::SummaryContext,
+    let runtime_state = state_read_runtime_state_cached(state)?;
+    let response_style_id = runtime_state.response_style_id.clone();
+    let user_intro = agents
+        .iter()
+        .find(|agent| agent.id == USER_PERSONA_ID || agent.is_built_in_user)
+        .map(|agent| agent.system_prompt.trim().to_string())
+        .unwrap_or_default();
+    let prepared = build_prepared_prompt_for_mode(
+        PromptBuildMode::Chat,
         source_conversation,
         agent,
         &agents,
         &app_config.departments,
         user_alias,
-        "",
-        "concise",
+        &user_intro,
+        &response_style_id,
         "zh-CN",
-        None,
+        Some(&state.data_path),
         None,
         None,
         Some(ChatPromptOverrides {
@@ -547,15 +584,23 @@ async fn summarize_archived_conversation_with_model_v2(
         Some(resolved_api),
         None,
     )?;
-    prepared.latest_images.clear();
-    prepared.latest_audios.clear();
     let timeout_secs = 360u64;
+    let tool_definitions = assemble_compaction_tool_definitions(
+        state,
+        &app_config,
+        selected_api,
+        agent,
+        &source_conversation.id,
+        source_conversation.department_id.trim(),
+    )
+    .await;
     let archive_summary_execution = call_archive_summary_model_with_timeout(
         state,
         resolved_api,
         selected_api,
         prepared,
         timeout_secs,
+        tool_definitions,
     )
     .await;
     push_model_call_log_parts(Some(state), &archive_summary_execution);

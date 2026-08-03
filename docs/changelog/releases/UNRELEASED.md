@@ -2,6 +2,9 @@
 
 ## 修复
 
+- 修复压缩/归档请求与正常对话请求结构不一致导致供应商缓存命中率低的问题：压缩路径原来自建 `SummaryContext` 独立模式，system 区块、user_alias、user_intro、response_style_id、tools、记忆注入全部与正常对话不一致，缓存前缀必然 miss；现压缩改为与正常对话完全一致的 `Chat` 模式，仅最后一条 user 消息注入压缩指令——user_alias/user_intro 改从 agents 用户人格读取（废弃 `runtime.user_alias` 残留）、response_style_id 改读运行态、tool_session_id 改用 `inflight_chat_key(agent.id, conversation_id)` 格式（plan/task 工具不再被 policy 过滤，工具数从 24 恢复到 26）、data_path 传 `Some(&state.data_path)` 修复记忆召回、压缩路径同步透传工具定义；实测缓存命中从 0 提升到 98.65%（system/tools/messages 静态部分完全一致）。
+- 修复空 user 消息被错误补空格的问题：临时消息块（计划/goal 提示词渲染为空）和纯空消息不该生成 `user ' '`，补空格只在「有图片/音频但无文本」时才有意义；历史消息补位、latest_user 补位、genai 序列化层三处条件统一改为「文本空且带媒体才补空格」，并删除 latest user 文本块全空兜底补 `' '` 的逻辑，避免请求里出现脏空消息。
+- 修复压缩请求 system 尾部多一个换行的问题：`build_genai_chat_request` 判断空用 trim、发送用原值，导致压缩与正常对话 system 字符数不一致，改为 trim 后发送。
 - 修复上下文压缩/归档输入被错误精简导致历史消息丢失的问题：07-10 的 remote-im 提交把压缩/归档输入从「最后 block 完整消息」换成固定 10K 字符的保留对话读取器并过滤旧压缩消息，导致长会话压缩时前面的消息全部丢失、后面的消息被裁剪、上一轮摘要消失；已恢复 `read_archive_pipeline_last_block_conversation`（读取最后 block 完整消息、不过滤压缩消息），删除远程唤醒精简读取器（远程唤醒早已移除 LLM 压缩，该读取器为纯残留），压缩与归档输入恢复完整历史。
 - 修复 SummaryContext 归档压缩 JSON 解析失败无法定位的问题：模型将 `openLoops` 输出为 `[{"loop": "..."}]` 对象形态，与契约要求的字符串数组不符，`MemoryCurationDraft` 反序列化报 `invalid type: map, expected a string` 整段失败；解析器新增 `deserialize_open_loops` 兼容两种形态（纯字符串直接收、对象形态提取 `loop` 字段），无效元素跳过不中断；json_contract 明确 `openLoops` 元素必须是纯字符串；失败日志不再截断 raw（去掉 `chars().take(240)`），完整保留模型原始输出便于定位。
 - 消除流式输出期间高频 channel 事件的大 payload IPC 阻塞：普通正文 delta 与思维链 delta（逐 token 高频事件）不再随事件下发 `stream_cache` 快照——前端只要看到 streamCache 就走 `reduceStreamSnapshot` 全量覆盖路径，轻量快照的空正文会把流式内容覆盖成空白，因此高频事件直接不带快照，前端走增量渲染逐字累积，每个事件 payload 降到只有 delta 文本本身；完整快照仍保留给低频关键事件（工具调用/结果/状态）做权威校正，后端缓存照常全量更新、恢复查询不受影响。事件远低于 Tauri 8KB 阈值，改走 eval 快路径而非 fetch 路径，消除 `sendIpcMessage` 高频同步阻塞。

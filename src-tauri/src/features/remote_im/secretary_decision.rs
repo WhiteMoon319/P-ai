@@ -487,6 +487,7 @@ async fn run_remote_im_secretary_decision(
             json_only: true,
         },
         Some(state),
+        Vec::new(),
     )
     .await;
     push_model_call_log_parts(Some(state), &execution);

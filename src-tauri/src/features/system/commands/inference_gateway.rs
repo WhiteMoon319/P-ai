@@ -434,9 +434,22 @@ async fn invoke_model_by_format(
     model_name: &str,
     prepared: PreparedPrompt,
     app_state: Option<&AppState>,
+    tool_definitions: Vec<ProviderToolDefinition>,
 ) -> Result<ModelReply, String> {
     if resolved_api.request_format.is_genai_chat() || resolved_api.request_format.is_auto() {
-        return call_model_openai_stream(resolved_api, model_name, prepared, app_state, None).await;
+        if tool_definitions.is_empty() {
+            return call_model_openai_stream(resolved_api, model_name, prepared, app_state, None)
+                .await;
+        }
+        return call_model_openai_stream_with_tools(
+            resolved_api,
+            model_name,
+            prepared,
+            tool_definitions,
+            app_state,
+            None,
+        )
+        .await;
     }
     Err(format!(
         "Request format '{}' is not supported for inference gateway.",
@@ -449,11 +462,24 @@ async fn invoke_model_non_stream_by_format(
     model_name: &str,
     prepared: PreparedPrompt,
     app_state: Option<&AppState>,
+    tool_definitions: Vec<ProviderToolDefinition>,
 ) -> Result<ModelReply, String> {
     if resolved_api.request_format.is_genai_chat() || resolved_api.request_format.is_auto() {
-        return call_model_openai_non_stream(resolved_api, model_name, prepared, app_state, None).await;
+        if tool_definitions.is_empty() {
+            return call_model_openai_non_stream(resolved_api, model_name, prepared, app_state, None)
+                .await;
+        }
+        return call_model_openai_non_stream_with_definitions(
+            resolved_api,
+            model_name,
+            prepared,
+            tool_definitions,
+            app_state,
+            None,
+        )
+        .await;
     }
-    invoke_model_by_format(resolved_api, model_name, prepared, app_state).await
+    invoke_model_by_format(resolved_api, model_name, prepared, app_state, tool_definitions).await
 }
 
 async fn invoke_model_by_format_with_timeout(
@@ -463,11 +489,12 @@ async fn invoke_model_by_format_with_timeout(
     timeout_secs: u64,
     scene: &str,
     app_state: Option<&AppState>,
+    tool_definitions: Vec<ProviderToolDefinition>,
 ) -> Result<ModelReply, String> {
     let call_started = std::time::Instant::now();
     tokio::time::timeout(
         std::time::Duration::from_secs(timeout_secs),
-        invoke_model_by_format(resolved_api, model_name, prepared, app_state),
+        invoke_model_by_format(resolved_api, model_name, prepared, app_state, tool_definitions),
     )
     .await
     .map_err(|_| {
@@ -486,11 +513,18 @@ async fn invoke_model_non_stream_by_format_with_timeout(
     timeout_secs: u64,
     scene: &str,
     app_state: Option<&AppState>,
+    tool_definitions: Vec<ProviderToolDefinition>,
 ) -> Result<ModelReply, String> {
     let call_started = std::time::Instant::now();
     tokio::time::timeout(
         std::time::Duration::from_secs(timeout_secs),
-        invoke_model_non_stream_by_format(resolved_api, model_name, prepared, app_state),
+        invoke_model_non_stream_by_format(
+            resolved_api,
+            model_name,
+            prepared,
+            app_state,
+            tool_definitions,
+        ),
     )
     .await
     .map_err(|_| {
@@ -508,6 +542,7 @@ async fn invoke_model_with_policy(
     prepared: PreparedPrompt,
     policy: CallPolicy,
     app_state: Option<&AppState>,
+    tool_definitions: Vec<ProviderToolDefinition>,
 ) -> ModelCallExecutionResult {
     let started_at = std::time::Instant::now();
     let mut prepared = prepared;
@@ -545,11 +580,18 @@ async fn invoke_model_with_policy(
                 timeout_secs,
                 policy.scene,
                 app_state,
+                tool_definitions.clone(),
             )
             .await
         } else {
-            invoke_model_non_stream_by_format(resolved_api, model_name, prepared.clone(), app_state)
-                .await
+            invoke_model_non_stream_by_format(
+                resolved_api,
+                model_name,
+                prepared.clone(),
+                app_state,
+                tool_definitions.clone(),
+            )
+            .await
         }
     } else {
         if let Some(timeout_secs) = policy.timeout_secs {
@@ -560,10 +602,18 @@ async fn invoke_model_with_policy(
                 timeout_secs,
                 policy.scene,
                 app_state,
+                tool_definitions.clone(),
             )
             .await
         } else {
-            invoke_model_by_format(resolved_api, model_name, prepared.clone(), app_state).await
+            invoke_model_by_format(
+                resolved_api,
+                model_name,
+                prepared.clone(),
+                app_state,
+                tool_definitions.clone(),
+            )
+            .await
         }
     };
     let stream_first_attempt_succeeded = !prefer_non_stream
@@ -599,10 +649,18 @@ async fn invoke_model_with_policy(
                         timeout_secs,
                         policy.scene,
                         app_state,
+                        tool_definitions.clone(),
                     )
                     .await
                 } else {
-                    invoke_model_by_format(resolved_api, model_name, fallback, app_state).await
+                    invoke_model_by_format(
+                        resolved_api,
+                        model_name,
+                        fallback,
+                        app_state,
+                        tool_definitions.clone(),
+                    )
+                    .await
                 }
             }
         }
@@ -634,11 +692,18 @@ async fn invoke_model_with_policy(
                     timeout_secs,
                     policy.scene,
                     app_state,
+                    tool_definitions,
                 )
                 .await
             } else {
-                invoke_model_non_stream_by_format(resolved_api, model_name, prepared, app_state)
-                    .await
+                invoke_model_non_stream_by_format(
+                    resolved_api,
+                    model_name,
+                    prepared,
+                    app_state,
+                    tool_definitions,
+                )
+                .await
             }
         }
         Err(err) => Err(err),
@@ -1046,6 +1111,7 @@ async fn call_archive_summary_model_with_timeout(
     selected_api: &ApiConfig,
     prepared: PreparedPrompt,
     timeout_secs: u64,
+    tool_definitions: Vec<ProviderToolDefinition>,
 ) -> ModelCallExecutionResult {
     invoke_model_with_policy(
         resolved_api,
@@ -1053,6 +1119,7 @@ async fn call_archive_summary_model_with_timeout(
         prepared,
         CallPolicy::archive_json(timeout_secs),
         Some(state),
+        tool_definitions,
     )
     .await
 }
