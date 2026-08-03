@@ -3787,9 +3787,6 @@ mod core_send_inner_tests {
             prompt_cache_key: None,
             extra_headers: vec![("Session-Id".to_string(), "random-uuid".to_string())],
             codex_auth: None,
-            codex_auth_mode: None,
-            codex_originator: None,
-            codex_residency_requirement: None,
             codex_custom_api_key: None,
         };
 
@@ -3827,9 +3824,6 @@ mod core_send_inner_tests {
             prompt_cache_key: None,
             extra_headers: Vec::new(),
             codex_auth: None,
-            codex_auth_mode: None,
-            codex_originator: None,
-            codex_residency_requirement: None,
             codex_custom_api_key: None,
         };
 

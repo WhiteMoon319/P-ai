@@ -1638,9 +1638,6 @@ fn resolve_api_config(
                 prompt_cache_key: None,
                 extra_headers: Vec::new(),
                 codex_auth: None,
-                codex_auth_mode: None,
-                codex_originator: None,
-                codex_residency_requirement: None,
                 codex_custom_api_key: None,
             });
         }
@@ -1760,9 +1757,6 @@ fn resolve_api_config(
         prompt_cache_key: None,
         extra_headers,
         codex_auth,
-        codex_auth_mode: Some(selected.codex_auth_mode.clone()),
-        codex_originator: Some(selected.codex_originator.clone()),
-        codex_residency_requirement: selected.codex_residency_requirement.clone(),
         codex_custom_api_key: selected.codex_custom_api_key.clone(),
     })
 }

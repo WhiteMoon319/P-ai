@@ -468,6 +468,7 @@ async fn run_genai_tool_loop(
             while let Some(chunk) = stream.next().await {
                 match chunk {
                     Ok(genai::chat::ChatStreamEvent::Start) => {}
+                    Ok(genai::chat::ChatStreamEvent::Heartbeat) => {}
                     Ok(genai::chat::ChatStreamEvent::Chunk(text)) => {
                         if emit_text_boundary_before_next_chunk && !text.content.is_empty() {
                             send_text_delta_event(on_delta, "\n");

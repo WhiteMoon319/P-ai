@@ -1,9 +1,6 @@
 struct CodexImageAuth {
     access_token: String,
     base_url: String,
-    account_id: Option<String>,
-    originator: String,
-    residency_requirement: Option<String>,
 }
 
 const CODEX_IMAGE_TOOL_OUTPUT_FORMAT: &str = "png";
@@ -36,16 +33,13 @@ async fn resolve_codex_image_auth(
     }
 
     let auth_mode = normalize_codex_auth_mode(&api_provider.codex_auth_mode);
-    let (access_token, account_id) = if auth_mode == CODEX_AUTH_MODE_CUSTOM_URL {
-        (
-            api_provider
-                .codex_custom_api_key
-                .as_deref()
-                .unwrap_or_default()
-                .trim()
-                .to_string(),
-            None,
-        )
+    let access_token = if auth_mode == CODEX_AUTH_MODE_CUSTOM_URL {
+        api_provider
+            .codex_custom_api_key
+            .as_deref()
+            .unwrap_or_default()
+            .trim()
+            .to_string()
     } else {
         let snapshot = read_codex_runtime_auth_snapshot(
             &api_provider.id,
@@ -53,7 +47,7 @@ async fn resolve_codex_image_auth(
             &api_provider.codex_local_auth_path,
         )?;
         let fresh = ensure_codex_runtime_auth_fresh(&snapshot).await?;
-        (fresh.access_token, fresh.account_id)
+        fresh.access_token
     };
     if access_token.trim().is_empty() {
         return Err(format!(
@@ -77,25 +71,9 @@ async fn resolve_codex_image_auth(
     } else {
         base_url
     };
-    let originator = api_provider
-        .codex_originator
-        .trim()
-        .to_string();
     Ok(CodexImageAuth {
         access_token,
         base_url,
-        account_id,
-        originator: if originator.is_empty() {
-            "codex-tui".to_string()
-        } else {
-            originator
-        },
-        residency_requirement: api_provider
-            .codex_residency_requirement
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned),
     })
 }
 
@@ -309,67 +287,12 @@ async fn generate_codex_image_once(
     }
     let auth = resolve_codex_image_auth(state, &resolved.provider).await?;
     let endpoint = append_image_generation_endpoint(&auth.base_url, "/responses");
-    let session_id = Uuid::new_v4().to_string();
-    let turn_metadata = serde_json::json!({
-        "session_id": session_id,
-        "thread_id": session_id,
-        "thread_source": "user",
-        "turn_id": Uuid::new_v4().to_string(),
-        "workspaces": {},
-        "sandbox": "none",
-        "turn_started_at_unix_ms": chrono::Utc::now().timestamp_millis(),
-        "request_kind": "turn",
-        "window_id": format!("{session_id}:0"),
-    });
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
     headers.insert(
         reqwest::header::ACCEPT,
         HeaderValue::from_static("text/event-stream"),
     );
-    headers.insert(
-        reqwest::header::HeaderName::from_static("originator"),
-        HeaderValue::from_str(&auth.originator).map_err(|err| format!("Codex Originator 无效：{err}"))?,
-    );
-    headers.insert(
-        reqwest::header::USER_AGENT,
-        HeaderValue::from_str(&codex_cli_user_agent(&auth.originator))
-            .map_err(|err| format!("Codex User-Agent 无效：{err}"))?,
-    );
-    headers.insert(
-        reqwest::header::HeaderName::from_static("x-codex-beta-features"),
-        HeaderValue::from_static(CODEX_BETA_FEATURES),
-    );
-    headers.insert(
-        reqwest::header::HeaderName::from_static("session-id"),
-        HeaderValue::from_str(&session_id).map_err(|err| format!("Codex Session-Id 无效：{err}"))?,
-    );
-    headers.insert(
-        reqwest::header::HeaderName::from_static("x-client-request-id"),
-        HeaderValue::from_str(&session_id).map_err(|err| format!("Codex 请求 ID 无效：{err}"))?,
-    );
-    headers.insert(
-        reqwest::header::HeaderName::from_static("x-codex-turn-metadata"),
-        HeaderValue::from_str(&turn_metadata.to_string())
-            .map_err(|err| format!("Codex Turn Metadata 无效：{err}"))?,
-    );
-    if let Some(account_id) = auth.account_id.as_deref().filter(|value| !value.trim().is_empty()) {
-        headers.insert(
-            reqwest::header::HeaderName::from_static("chatgpt-account-id"),
-            HeaderValue::from_str(account_id).map_err(|err| format!("Codex 账号 ID 无效：{err}"))?,
-        );
-    }
-    if let Some(residency) = auth
-        .residency_requirement
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-    {
-        headers.insert(
-            reqwest::header::HeaderName::from_static("x-openai-internal-codex-residency"),
-            HeaderValue::from_str(residency)
-                .map_err(|err| format!("Codex Residency 无效：{err}"))?,
-        );
-    }
     let response = state
         .shared_http_client
         .post(endpoint)

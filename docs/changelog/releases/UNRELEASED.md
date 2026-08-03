@@ -11,6 +11,7 @@
 - 修复（updater）：关于页更新日志接口缓存 1 小时，避免反复请求 GitHub。
 - 修复（about）：仓库入口与检查更新移入版本卡片右上角，更新日志卡片高度随窗口自适应。
 - 修复（department-tree）：部门树节点与直属下级多选显示人格头像，标题栏增加人格页跳转入口。
+- 修复（codex）：移除 codex 端点伪造请求头，升级 genai 至官方修复版本（仅对 api.openai.com 注入 prompt_cache_options），修复 codex 请求 400 报错。
 
 ## 依赖
 
