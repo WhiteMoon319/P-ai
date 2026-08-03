@@ -9,7 +9,7 @@
     html_favicon_url = "https://github.com/tauri-apps/tauri/raw/dev/app-icon.png"
 )]
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 #[cfg(mobile)]
 use tauri::plugin::PluginHandle;
 #[cfg(desktop)]
@@ -241,9 +241,24 @@ impl<R: Runtime, T: Manager<R>> crate::NotificationExt<R> for T {
     }
 }
 
+/// Notification 插件配置（对应 tauri.conf.json 的 plugins.notification）。
+///
+/// 不能使用默认 `C = ()`：一旦配置存在（如 `icon`），插件初始化时
+/// `serde_json::from_value::<()>` 会反序列化失败，导致 App 启动中断。
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationConfig {
+  /// 通知小图标资源名（Android 置于 app 模块 res/drawable）。
+  pub icon: Option<String>,
+  /// 通知声音资源名。
+  pub sound: Option<String>,
+  /// 通知图标颜色（ARGB）。
+  pub icon_color: Option<String>,
+}
+
 /// Initializes the plugin.
-pub fn init<R: Runtime>() -> TauriPlugin<R> {
-    Builder::new("notification")
+pub fn init<R: Runtime>() -> TauriPlugin<R, NotificationConfig> {
+    Builder::<R, NotificationConfig>::new("notification")
         .invoke_handler(tauri::generate_handler![
             commands::notify,
             commands::request_permission,
