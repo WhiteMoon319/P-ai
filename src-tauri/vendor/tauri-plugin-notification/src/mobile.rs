@@ -49,6 +49,20 @@ impl<R: Runtime> Notification<R> {
         crate::NotificationBuilder::new(self.0.clone())
     }
 
+    /// 后台任务保活：启动前台服务提升进程优先级（仅 Android，其他平台 no-op）。
+    pub fn keep_alive_start(&self) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin("startKeepAlive", ())
+            .map_err(Into::into)
+    }
+
+    /// 后台任务保活：停止前台服务（仅 Android，其他平台 no-op）。
+    pub fn keep_alive_stop(&self) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin("stopKeepAlive", ())
+            .map_err(Into::into)
+    }
+
     pub fn request_permission(&self) -> crate::Result<PermissionState> {
         self.0
             .run_mobile_plugin::<PermissionResponse>("requestPermissions", ())

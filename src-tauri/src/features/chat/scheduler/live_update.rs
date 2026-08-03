@@ -27,6 +27,21 @@ static GOAL_LIVE_UPDATE_OWNER: std::sync::OnceLock<
     std::sync::Mutex<Option<String>>,
 > = std::sync::OnceLock::new();
 
+// 保活：后台任务（回复轮次 / 目标）活跃会话集合。任务启动时加入、结束时移除，
+// 集合非空则启动前台服务提升进程优先级，空则停止。保活独立于通知权限，
+// 通知权限被拒时任务仍在后台运行，进程仍需保活。
+#[cfg(target_os = "android")]
+static CHAT_KEEP_ALIVE: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashSet<String>>,
+> = std::sync::OnceLock::new();
+#[cfg(target_os = "android")]
+static GOAL_KEEP_ALIVE: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashSet<String>>,
+> = std::sync::OnceLock::new();
+#[cfg(target_os = "android")]
+static KEEP_ALIVE_ACTIVE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 #[cfg(target_os = "android")]
 fn live_update_owner_take(owner: &'static std::sync::OnceLock<std::sync::Mutex<Option<String>>>) {
     if let Ok(mut guard) = owner.get_or_init(|| std::sync::Mutex::new(None)).lock() {
@@ -64,6 +79,85 @@ fn live_update_app_handle(state: &AppState) -> Option<tauri::AppHandle> {
         Ok(guard) => guard.as_ref().cloned(),
         Err(_) => None,
     }
+}
+
+#[cfg(target_os = "android")]
+fn live_update_keep_alive_changed(app: &tauri::AppHandle) {
+    use tauri_plugin_notification::NotificationExt;
+
+    let chat_active = match CHAT_KEEP_ALIVE
+        .get_or_init(|| std::sync::Mutex::new(Default::default()))
+        .lock()
+    {
+        Ok(guard) => !guard.is_empty(),
+        Err(_) => false,
+    };
+    let goal_active = match GOAL_KEEP_ALIVE
+        .get_or_init(|| std::sync::Mutex::new(Default::default()))
+        .lock()
+    {
+        Ok(guard) => !guard.is_empty(),
+        Err(_) => false,
+    };
+    let active = chat_active || goal_active;
+    let previous = KEEP_ALIVE_ACTIVE.swap(active, std::sync::atomic::Ordering::SeqCst);
+    if previous == active {
+        return;
+    }
+    let notifications = app.notification();
+    let result = if active {
+        notifications.keep_alive_start()
+    } else {
+        notifications.keep_alive_stop()
+    };
+    if let Err(err) = result {
+        runtime_log_warn(format!(
+            "[Live更新] 保活命令失败，active={}，error={}",
+            active, err
+        ));
+    }
+}
+
+#[cfg(target_os = "android")]
+fn live_update_keep_alive_chat(state: &AppState, conversation_id: &str, active: bool) {
+    let Some(app) = live_update_app_handle(state) else {
+        return;
+    };
+    let mut guard = match CHAT_KEEP_ALIVE
+        .get_or_init(|| std::sync::Mutex::new(Default::default()))
+        .lock()
+    {
+        Ok(guard) => guard,
+        Err(_) => return,
+    };
+    if active {
+        guard.insert(conversation_id.trim().to_string());
+    } else {
+        guard.remove(conversation_id.trim());
+    }
+    drop(guard);
+    live_update_keep_alive_changed(&app);
+}
+
+#[cfg(target_os = "android")]
+fn live_update_keep_alive_goal(state: &AppState, conversation_id: &str, active: bool) {
+    let Some(app) = live_update_app_handle(state) else {
+        return;
+    };
+    let mut guard = match GOAL_KEEP_ALIVE
+        .get_or_init(|| std::sync::Mutex::new(Default::default()))
+        .lock()
+    {
+        Ok(guard) => guard,
+        Err(_) => return,
+    };
+    if active {
+        guard.insert(conversation_id.trim().to_string());
+    } else {
+        guard.remove(conversation_id.trim());
+    }
+    drop(guard);
+    live_update_keep_alive_changed(&app);
 }
 
 #[cfg(target_os = "android")]
@@ -201,6 +295,7 @@ fn live_update_chat_started(state: &AppState, conversation_id: &str) {
     let Some(app) = live_update_app_handle(state) else {
         return;
     };
+    live_update_keep_alive_chat(state, conversation_id, true);
     let settings = local_chat_notification_settings(state, conversation_id);
     let Some(title) =
         live_update_chat_meta_title(state, conversation_id, settings.ui_language, false)
@@ -227,6 +322,8 @@ fn live_update_chat_finished(
     failed: bool,
     text: &str,
 ) {
+    // 保活集合与通知归属解耦：每个 started 必然对应一个 finished，无条件移除。
+    live_update_keep_alive_chat(state, conversation_id, false);
     // 当前 live 通知可能已被其他会话的输出覆盖，只有归属会话结束才更新终态。
     if !live_update_owner_matches(&CHAT_LIVE_UPDATE_OWNER, conversation_id) {
         return;
@@ -287,6 +384,8 @@ fn live_update_goal_changed(
         return;
     };
     let Some(goal) = goal else {
+        // 保活集合与通知归属解耦：目标结束/删除无条件移除。
+        live_update_keep_alive_goal(state, conversation_id, false);
         // 目标被删除/清除：只有归属会话结束才更新终态。
         if !live_update_owner_matches(&GOAL_LIVE_UPDATE_OWNER, conversation_id) {
             return;
@@ -302,6 +401,8 @@ fn live_update_goal_changed(
         return;
     };
     if goal.status.trim() != "active" {
+        // 保活集合与通知归属解耦：目标结束/删除无条件移除。
+        live_update_keep_alive_goal(state, conversation_id, false);
         if !live_update_owner_matches(&GOAL_LIVE_UPDATE_OWNER, conversation_id) {
             return;
         }
@@ -316,6 +417,7 @@ fn live_update_goal_changed(
         return;
     }
     // 目标进行中：记录归属会话并发送 ongoing 常驻通知。
+    live_update_keep_alive_goal(state, conversation_id, true);
     live_update_owner_set(&GOAL_LIVE_UPDATE_OWNER, conversation_id);
     let objective = native_notification_text_excerpt(
         &goal.objective,

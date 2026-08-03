@@ -250,6 +250,18 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
   }
 
   @Command
+  fun startKeepAlive(invoke: Invoke) {
+    PaiForegroundService.start(activity)
+    invoke.resolve()
+  }
+
+  @Command
+  fun stopKeepAlive(invoke: Invoke) {
+    PaiForegroundService.stop(activity)
+    invoke.resolve()
+  }
+
+  @Command
   fun deleteChannel(invoke: Invoke) {
     channelManager.deleteChannel(invoke)
   }

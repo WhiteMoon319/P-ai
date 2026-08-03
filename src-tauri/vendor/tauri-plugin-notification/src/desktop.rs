@@ -65,6 +65,14 @@ impl<R: Runtime> Notification<R> {
     pub fn permission_state(&self) -> crate::Result<PermissionState> {
         Ok(PermissionState::Granted)
     }
+
+    pub fn keep_alive_start(&self) -> crate::Result<()> {
+        Ok(())
+    }
+
+    pub fn keep_alive_stop(&self) -> crate::Result<()> {
+        Ok(())
+    }
 }
 
 mod imp {

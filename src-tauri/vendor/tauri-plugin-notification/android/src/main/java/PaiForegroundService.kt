@@ -1,123 +1,100 @@
 package app.tauri.notification
 
 import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import java.util.concurrent.ConcurrentHashMap
+import androidx.core.app.NotificationCompat
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 后台任务保活前台服务。
  *
- * 语义：仅当「应用处于后台」且存在 ongoing + promoted 的 live 通知（任务运行中）时，
- * 将最后一条活跃 live 通知绑定为前台服务通知，提升进程优先级，保证后台轮询 /
+ * Rust 侧在任务启动（回复轮次开始 / 目标激活）时调用 start，任务全部结束
+ * （回复完成 / 目标结束）时调用 stop。服务将进程提升为前台，保证后台轮询 /
  * 网络请求不被系统回收或进入 Doze 深度限制。
- * 应用回到前台或所有 live 通知结束后服务自动停止（通知保留，由后续终态通知覆盖）。
+ *
+ * 保活不依赖通知权限：API 33+ 前台服务可脱离 POST_NOTIFICATIONS 运行，
+ * 通知不显示但进程仍保持前台优先级。
  */
 class PaiForegroundService : Service() {
   companion object {
-    private const val EXTRA_NOTIFICATION_ID = "notificationId"
-    private const val EXTRA_NOTIFICATION = "notification"
+    private const val CHANNEL_ID = "pai_keep_alive"
+    private const val NOTIFICATION_ID = 0x50414910
 
-    // 活跃 live 通知 id 集合（CHAT / GOAL 各一条）与最近一次通知对象缓存
-    private val activeLiveIds: MutableSet<Int> = ConcurrentHashMap.newKeySet()
-    private val liveNotifications = ConcurrentHashMap<Int, Notification>()
-
-    @Volatile
-    private var appInForeground = true
+    // 活跃后台任务数（回复 + 目标），大于 0 时保活
+    private val activeTaskCount = AtomicInteger(0)
 
     @JvmStatic
-    fun startLive(context: Context, notificationId: Int, notification: Notification) {
-      activeLiveIds.add(notificationId)
-      liveNotifications[notificationId] = notification
-      if (!appInForeground) {
-        startService(context, notificationId, notification)
-      }
-    }
-
-    @JvmStatic
-    fun stopLive(context: Context, notificationId: Int) {
-      activeLiveIds.remove(notificationId)
-      liveNotifications.remove(notificationId)
-      if (activeLiveIds.isEmpty()) {
-        try {
-          context.stopService(Intent(context, PaiForegroundService::class.java))
-        } catch (e: Exception) {
-          // 服务可能已停止，忽略
-        }
-      }
-    }
-
-    @JvmStatic
-    fun onAppForegroundChanged(context: Context, foreground: Boolean) {
-      appInForeground = foreground
-      if (foreground) {
-        // 回到前台：解除前台服务，通知保留（onDestroy DETACH），避免前台常驻服务
-        try {
-          context.stopService(Intent(context, PaiForegroundService::class.java))
-        } catch (e: Exception) {
-          // 服务可能已停止，忽略
-        }
-      } else if (activeLiveIds.isNotEmpty()) {
-        // 退到后台且仍有任务运行：用最后一条活跃 live 通知重新启动保活
-        val lastId = activeLiveIds.maxOrNull()
-        val notification = lastId?.let { liveNotifications[it] }
-        if (lastId != null && notification != null) {
-          startService(context, lastId, notification)
-        }
-      }
-    }
-
-    private fun startService(context: Context, notificationId: Int, notification: Notification) {
-      val intent = Intent(context, PaiForegroundService::class.java).apply {
-        putExtra(EXTRA_NOTIFICATION_ID, notificationId)
-        putExtra(EXTRA_NOTIFICATION, notification)
-      }
+    fun start(context: Context) {
+      if (activeTaskCount.incrementAndGet() > 1) return
       try {
-        context.startForegroundService(intent)
+        context.startForegroundService(Intent(context, PaiForegroundService::class.java))
       } catch (e: Exception) {
-        // 后台启动受限（如部分厂商后台限制）时降级为普通通知，不阻断通知流程
-        activeLiveIds.remove(notificationId)
+        // 后台启动受限（如部分厂商后台限制）时降级，不阻塞任务流程
+        activeTaskCount.decrementAndGet()
+      }
+    }
+
+    @JvmStatic
+    fun stop(context: Context) {
+      val remaining = activeTaskCount.decrementAndGet()
+      if (remaining > 0) return
+      activeTaskCount.set(0)
+      try {
+        context.stopService(Intent(context, PaiForegroundService::class.java))
+      } catch (e: Exception) {
+        // 服务可能已停止，忽略
       }
     }
   }
 
   override fun onBind(intent: Intent?): IBinder? = null
 
-  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    if (intent != null && intent.hasExtra(EXTRA_NOTIFICATION_ID)) {
-      val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0)
-      val notification = getNotificationExtra(intent)
-      if (notification != null) {
-        startAsForeground(notificationId, notification)
-        return START_STICKY
-      }
-    }
-    stopSelf()
-    return START_NOT_STICKY
+  override fun onCreate() {
+    super.onCreate()
+    ensureChannel()
+    startAsForeground(NOTIFICATION_ID, buildNotification())
   }
 
   override fun onDestroy() {
-    // 解除前台状态但保留通知，由后续终态通知覆盖；避免与插件 notify 竞态误删。
+    // 解除前台状态并移除保活通知；live update 通知独立于本服务，不受影响。
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-      stopForeground(STOP_FOREGROUND_DETACH)
+      stopForeground(STOP_FOREGROUND_REMOVE)
     } else {
       @Suppress("DEPRECATION")
-      stopForeground(false)
+      stopForeground(true)
     }
     super.onDestroy()
   }
 
-  @Suppress("DEPRECATION")
-  private fun getNotificationExtra(intent: Intent): Notification? {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      intent.getParcelableExtra(EXTRA_NOTIFICATION, Notification::class.java)
-    } else {
-      intent.getParcelableExtra(EXTRA_NOTIFICATION)
+  private fun ensureChannel() {
+    val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+    if (manager.getNotificationChannel(CHANNEL_ID) != null) return
+    val channel = NotificationChannel(
+      CHANNEL_ID,
+      "后台任务保活",
+      NotificationManager.IMPORTANCE_LOW,
+    ).apply {
+      description = "后台任务运行期间保持进程存活"
+      setShowBadge(false)
     }
+    manager.createNotificationChannel(channel)
+  }
+
+  private fun buildNotification(): Notification {
+    return NotificationCompat.Builder(this, CHANNEL_ID)
+      .setSmallIcon(R.drawable.ic_stat_pai)
+      .setContentTitle("PAI 正在后台运行任务")
+      .setContentText("任务结束后自动停止")
+      .setOngoing(true)
+      .setSilent(true)
+      .build()
   }
 
   private fun startAsForeground(notificationId: Int, notification: Notification) {
