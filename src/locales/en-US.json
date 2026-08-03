@@ -770,6 +770,7 @@
       "exitFullscreen": "Exit Fullscreen",
       "autoLayoutDone": "The department tree was auto-arranged.",
       "noPersonaBound": "No persona bound",
+      "managePersonas": "Manage Personas",
       "connectSelfForbidden": "A department cannot connect to itself.",
       "connectDuplicateIgnored": "This relationship already exists.",
       "connectCycleForbidden": "This edge would create a cycle. A parent cannot connect to its own ancestor.",

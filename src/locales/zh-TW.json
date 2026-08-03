@@ -770,6 +770,7 @@
       "exitFullscreen": "退出全屏",
       "autoLayoutDone": "已自動重排部門樹。",
       "noPersonaBound": "未綁定人格",
+      "managePersonas": "管理人格",
       "connectSelfForbidden": "不能把部門連到自己。",
       "connectDuplicateIgnored": "這條上下級關係已經存在。",
       "connectCycleForbidden": "這條連線會形成循環，上級不能連到自己的祖先。",
