@@ -26,11 +26,8 @@ export function stringifyExternalEventPayload(payload: unknown, eventName: strin
   if (payload && typeof payload === "object") {
     try {
       return JSON.stringify(payload);
-    } catch (error) {
-      console.warn("[聊天事件] 外部事件 payload 序列化失败", {
-        eventName,
-        error,
-      });
+    } catch {
+      // payload 不可序列化时按空串兜底，调用方自行处理
     }
   }
   return "";
