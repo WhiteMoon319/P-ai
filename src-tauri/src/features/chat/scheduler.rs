@@ -210,7 +210,7 @@ const GOAL_CONTINUE_DISPLAY_TEXT: &str = "继续完成目标";
 
 include!("scheduler/queue_management.rs");
 include!("scheduler/stream_runtime.rs");
-pub(crate) fn trigger_chat_queue_processing(state: &AppState) {
+include!("scheduler/live_update.rs");pub(crate) fn trigger_chat_queue_processing(state: &AppState) {
     let state_clone = state.clone();
     tauri::async_runtime::spawn(async move {
         if let Err(err) = process_chat_queue(&state_clone).await {

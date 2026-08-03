@@ -57,3 +57,5 @@
 ## 依赖
 
 ## 功能
+
+- 新增（android-live-update）：Android 端新增消息输出与目标 live update 通知。消息轮次开始/进行中显示常驻 ongoing 通知（“正在回复…”），完成或失败后同 id 更新为可手动划掉的终态通知，不再重复打扰；目标创建/更新显示进行中通知并展示目标摘要，目标结束后更新为终态。参考 MAA-Meow TaskExecutionService 的 live update 模式，但受 tauri-plugin-notification 2.3.3 能力限制（Android 端未实现 ProgressStyle），采用“同通知 id 更新 + ongoing 切换”实现，不含进度条。多会话并发时用 owner 记录保证只有当前显示归属会话结束才更新终态，避免覆盖仍在进行中的其他会话通知。桌面端为空实现，行为不变。
