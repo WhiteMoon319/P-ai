@@ -391,11 +391,64 @@ fn host_runtime_prerequisite_installed(kind: &str) -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn get_host_runtime_prerequisites() -> HostRuntimePrerequisites {
-    HostRuntimePrerequisites {
-        git_installed: host_runtime_prerequisite_installed("git").unwrap_or(false),
-        node_installed: host_runtime_prerequisite_installed("node").unwrap_or(false),
-        rg_installed: host_runtime_prerequisite_installed("rg").unwrap_or(false),
+async fn get_host_runtime_prerequisites(
+    state: State<'_, AppState>,
+) -> Result<HostRuntimePrerequisites, String> {
+    #[cfg(target_os = "android")]
+    {
+        // Android 宿主没有 git/node/rg，实际运行环境是沙盒 Linux（proot）。
+        // 沙盒未就绪时视为未安装；就绪后在沙盒内检测命令是否存在。
+        if !is_android_workspace_ready(&state) {
+            return Ok(HostRuntimePrerequisites {
+                git_installed: false,
+                node_installed: false,
+                rg_installed: false,
+            });
+        }
+        let session_id = normalize_terminal_tool_session_id("ui-welcome-runtime-check");
+        let cwd = match resolve_terminal_cwd(&state, &session_id, None) {
+            Ok(cwd) => cwd,
+            Err(_) => {
+                return Ok(HostRuntimePrerequisites {
+                    git_installed: false,
+                    node_installed: false,
+                    rg_installed: false,
+                });
+            }
+        };
+        let git_installed =
+            android_sandbox_command_exists(&state, &session_id, &cwd, "git").await;
+        let node_installed =
+            android_sandbox_command_exists(&state, &session_id, &cwd, "node").await;
+        let rg_installed = android_sandbox_command_exists(&state, &session_id, &cwd, "rg").await;
+        Ok(HostRuntimePrerequisites {
+            git_installed,
+            node_installed,
+            rg_installed,
+        })
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = state;
+        Ok(HostRuntimePrerequisites {
+            git_installed: host_runtime_prerequisite_installed("git").unwrap_or(false),
+            node_installed: host_runtime_prerequisite_installed("node").unwrap_or(false),
+            rg_installed: host_runtime_prerequisite_installed("rg").unwrap_or(false),
+        })
+    }
+}
+
+#[cfg(target_os = "android")]
+async fn android_sandbox_command_exists(
+    state: &AppState,
+    session_id: &str,
+    cwd: &std::path::Path,
+    command: &str,
+) -> bool {
+    let script = format!("command -v {command} >/dev/null 2>&1");
+    match sandbox_execute_command(state, session_id, &script, cwd, 15_000, false, None, None).await {
+        Ok(execution) => execution.ok,
+        Err(_) => false,
     }
 }
 

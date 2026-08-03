@@ -373,7 +373,8 @@
           "currentOk": "已装好，没问题。",
           "currentMissing": "还没装。点一键安装，失败时会自动打开官网。",
           "action": "去看工具",
-          "install": "安装 Git"
+          "install": "安装 Git",
+          "currentMissingAndroid": "还没装。可让 PAI 在沙盒终端里执行 apt install git 安装。"
         },
         "node": {
           "title": "Node.js",
@@ -381,7 +382,8 @@
           "currentOk": "已装好，没问题。",
           "currentMissing": "还没装。点一键安装，失败时会自动打开官网。",
           "action": "去看工具",
-          "install": "安装 Node.js"
+          "install": "安装 Node.js",
+          "currentMissingAndroid": "还没装。可让 PAI 在沙盒终端里执行 apt install nodejs 安装。"
         },
         "ripgrep": {
           "title": "ripgrep（rg）",

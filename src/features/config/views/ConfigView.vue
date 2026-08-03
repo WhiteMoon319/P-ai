@@ -111,6 +111,7 @@
             v-if="props.configTab === 'welcome'"
             :config="config"
             :personas="personas"
+            :is-android="isAndroid"
             @jump="$emit('update:configTab', $event)"
           />
 

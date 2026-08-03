@@ -373,7 +373,8 @@
           "currentOk": "Git was detected.",
           "currentMissing": "Git was not detected yet. Try automatic install; if it fails, the official page will open.",
           "action": "Open Tools",
-          "install": "Install Git"
+          "install": "Install Git",
+          "currentMissingAndroid": "Not installed. Ask PAI to run apt install git in the sandbox terminal."
         },
         "node": {
           "title": "Node.js",
@@ -381,7 +382,8 @@
           "currentOk": "Node.js was detected.",
           "currentMissing": "Node.js was not detected yet. Try automatic install; if it fails, the official page will open.",
           "action": "Open Tools",
-          "install": "Install Node.js"
+          "install": "Install Node.js",
+          "currentMissingAndroid": "Not installed. Ask PAI to run apt install nodejs in the sandbox terminal."
         },
         "ripgrep": {
           "title": "ripgrep (rg)",
