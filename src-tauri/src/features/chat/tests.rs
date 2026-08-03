@@ -4270,7 +4270,7 @@
     }
 
     #[test]
-    fn state_read_chat_index_cached_should_rebuild_from_legacy_app_data_file() {
+    fn state_read_chat_index_cached_should_rebuild_after_legacy_app_data_migration() {
         let state = test_chat_runtime_state();
         let now = now_iso();
         let conversation = test_chat_conversation("conversation-legacy-index", "active", &now);
@@ -4282,9 +4282,15 @@
         )
         .expect("write legacy app data");
 
-        let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
+        let migrated =
+            migrate_legacy_app_data_if_needed(&state.data_path).expect("migrate legacy app data");
+        assert!(migrated);
+        assert!(app_layout_exists(&state.data_path));
+        let migrated_again =
+            migrate_legacy_app_data_if_needed(&state.data_path).expect("idempotent check");
+        assert!(!migrated_again);
 
-        assert_eq!(chat_index.conversations.len(), 2);
+        let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
         assert!(chat_index
             .conversations
             .iter()

@@ -2,6 +2,7 @@
 
 ## 修复
 
+- 剥离旧数据（app_data.json）的非迁移读取：旧布局数据只允许在迁移流程中被读取——新增显式迁移入口 `migrate_legacy_app_data_if_needed`（幂等，检测旧布局存在时读入 app_data.json 并触发 V1 迁移写回分片），启动门闩与 bootstrap 快照在业务读取前执行；删除 `read_agents_shard` / `read_runtime_state_shard` / `read_conversation_meta_shard` / `read_conversation_shard_raw` / `collect_chat_index_items_from_storage` 六处 legacy 兜底分支，业务读取一律只走分片；MCP/Skills 刷新不再整读 `read_app_data`，改用 `state_read_agents_cached`。迁移完成后 AppData 数据不再进入内存缓存。
 - exec 工具的系统提示词补充 rg 使用约定：明确 `rg -r` 是 `--replace`（必须带参数），`-rn` 会被解析成 `-r n` 把匹配替换成字符 `n` 输出产生假结果；统一使用 `rg -n` 搜索（rg 默认递归），避免短选项拼接陷阱。
 - 修复压缩/归档请求体预览与实际执行不一致的问题：`get_prompt_preview` 的 compaction/archive 预览此前仍走独立的 `SummaryContext` 模式构建（独立 system 模板、清空历史媒体），与已切换为 Chat 模式的实际压缩执行产生差异，预览展示的请求体与实际发出不一致；现预览分支改为与实际压缩完全同构（Chat 模式 + `LatestUserPayloadIntent::SummaryContext` 注入、data_path/工具参数一致），并清理 `PromptBuildMode::SummaryContext` 全部死分支（枚举变体、构建分支、模式解析、system 快照与 preamble 中的模式判断）。
 - 修复压缩/归档请求与正常对话请求结构不一致导致供应商缓存命中率低的问题：压缩路径原来自建 `SummaryContext` 独立模式，system 区块、user_alias、user_intro、response_style_id、tools、记忆注入全部与正常对话不一致，缓存前缀必然 miss；现压缩改为与正常对话完全一致的 `Chat` 模式，仅最后一条 user 消息注入压缩指令——user_alias/user_intro 改从 agents 用户人格读取（废弃 `runtime.user_alias` 残留）、response_style_id 改读运行态、tool_session_id 改用 `inflight_chat_key(agent.id, conversation_id)` 格式（plan/task 工具不再被 policy 过滤，工具数从 24 恢复到 26）、data_path 传 `Some(&state.data_path)` 修复记忆召回、压缩路径同步透传工具定义；实测缓存命中从 0 提升到 98.65%（system/tools/messages 静态部分完全一致）。

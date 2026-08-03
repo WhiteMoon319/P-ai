@@ -544,8 +544,8 @@ fn collect_workspace_load_snapshot(
         ));
     }
     let mut config = read_config(&state.config_path)?;
-    let mut data = read_app_data(&state.data_path)?;
-    let private_org = merge_private_organization_into_runtime(&state.data_path, &mut config, &mut data.agents)?;
+    let mut agents = state_read_agents_cached(state)?;
+    let private_org = merge_private_organization_into_runtime(&state.data_path, &mut config, &mut agents)?;
     let mcp_loaded = servers.iter().map(|s| s.id.clone()).collect::<Vec<_>>();
     let skills_loaded = skills.iter().map(|s| s.name.clone()).collect::<Vec<_>>();
     let skill_summary = render_skill_summary(&skills);
@@ -579,7 +579,7 @@ fn collect_workspace_load_snapshot(
         repair_items: Vec::new(),
         needs_repair: false,
     };
-    Ok((result, servers, data.agents, config.departments))
+    Ok((result, servers, agents, config.departments))
 }
 
 async fn disconnect_workspace_mcp_runtime_clients(state: &AppState) {

@@ -435,9 +435,6 @@ fn apply_runtime_state_to_app_data(data: &mut AppData, runtime: &RuntimeStateFil
 }
 
 fn read_agents_shard(path: &PathBuf) -> Result<Vec<AgentProfile>, String> {
-    if !app_layout_exists(path) && path.exists() {
-        return Ok(read_app_data(path)?.agents);
-    }
     if app_layout_agents_path(path).exists() {
         Ok(read_json_file::<AgentsFile>(&app_layout_agents_path(path), "agents file")?.agents)
     } else {
@@ -456,10 +453,7 @@ fn write_agents_shard(path: &PathBuf, agents: &[AgentProfile]) -> Result<bool, S
 }
 
 fn read_runtime_state_shard(path: &PathBuf) -> Result<RuntimeStateFile, String> {
-    let mut runtime = if !app_layout_exists(path) && path.exists() {
-        let data = read_app_data(path)?;
-        build_runtime_state_file(&data)
-    } else if app_layout_runtime_state_path(path).exists() {
+    let mut runtime = if app_layout_runtime_state_path(path).exists() {
         read_json_file::<RuntimeStateFile>(&app_layout_runtime_state_path(path), "runtime state file")?
     } else {
         RuntimeStateFile::default()
@@ -528,18 +522,6 @@ fn read_conversation_meta_shard(
         let rebuilt = message_store::ConversationShardMeta::from_conversation(&conversation);
         write_conversation_meta_shard_from_meta(path, &rebuilt)?;
         return Ok(rebuilt);
-    }
-    if !app_layout_exists(path) && path.exists() {
-        let data = read_app_data(path)?;
-        if let Some(conversation) = data
-            .conversations
-            .into_iter()
-            .find(|item| item.id.trim() == conversation_id)
-        {
-            let rebuilt = message_store::ConversationShardMeta::from_conversation(&conversation);
-            write_conversation_meta_shard_from_meta(path, &rebuilt)?;
-            return Ok(rebuilt);
-        }
     }
     Err(format!("Conversation '{conversation_id}' not found."))
 }
@@ -631,25 +613,6 @@ fn read_conversation_shard_raw(path: &PathBuf, conversation_id: &str) -> Result<
             return Ok(repaired);
         }
         return Ok(conversation);
-    }
-    if !app_layout_exists(path) && path.exists() {
-        let data = read_app_data(path)?;
-        if let Some(conversation) = data
-            .conversations
-            .into_iter()
-            .find(|item| item.id.trim() == conversation_id)
-        {
-            if conversation
-                .cumulative_usage
-                .needs_legacy_total_tokens_backfill()
-            {
-                let mut repaired = conversation;
-                repaired.cumulative_usage = repaired.cumulative_usage.clone().normalized_legacy_totals();
-                let _ = write_conversation_shard(path, &repaired)?;
-                return Ok(repaired);
-            }
-            return Ok(conversation);
-        }
     }
     Err(format!("Conversation '{conversation_id}' not found."))
 }
@@ -1484,6 +1447,17 @@ fn read_app_data(path: &PathBuf) -> Result<AppData, String> {
         ));
     }
     Ok(parsed)
+}
+
+/// 旧布局迁移专用入口：仅当新布局分片不存在且旧数据文件存在时，读取 app_data.json
+/// 并触发 V1 迁移写回。迁移完成后新布局分片存在，后续调用直接返回 false（幂等）。
+/// 业务代码禁止直接调用 read_app_data——旧数据只允许在迁移流程中被读取。
+fn migrate_legacy_app_data_if_needed(path: &PathBuf) -> Result<bool, String> {
+    if app_layout_exists(path) || !path.exists() {
+        return Ok(false);
+    }
+    let _data = read_app_data(path)?;
+    Ok(true)
 }
 
 fn normalize_conversation_runtime_volatile_fields(conversation: &mut Conversation) {

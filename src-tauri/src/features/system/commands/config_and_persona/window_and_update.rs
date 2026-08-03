@@ -439,6 +439,7 @@ fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstrapSnapshot,
     if workspace_changed || remote_im_private_state_migrated {
         state_write_config_cached(state, &config)?;
     }
+    let _ = migrate_legacy_app_data_if_needed(&state.data_path)?;
     let _ = run_app_data_migrations_with_state(state, &config)?;
     // 无可用 LLM 时强制进入简单设置模式，方便首次启动用户直接配置供应商。
     if !has_usable_text_llm(&config) {

@@ -170,14 +170,6 @@ fn collect_chat_index_items_from_storage(
     }
     let conv_dir = app_layout_chat_conversations_dir(data_path);
     if !conv_dir.exists() {
-        if !app_layout_exists(data_path) && data_path.exists() {
-            let data = read_app_data(data_path)?;
-            return Ok(data
-                .conversations
-                .iter()
-                .map(build_chat_index_item)
-                .collect::<Vec<_>>());
-        }
         return Ok(Vec::new());
     }
     let mut items =
