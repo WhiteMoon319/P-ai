@@ -19,7 +19,7 @@
     <div
       v-if="activeToolcallPreviews.length > 0"
       ref="toolcallPopupRef"
-      class="ecall-md-toolcall-popup fixed z-1200 w-max min-w-[18rem] max-w-[calc(100vw-0.75rem)] rounded-box border border-base-300 bg-base-100 text-base-content shadow-xl"
+      class="ecall-md-toolcall-popup fixed z-1200 w-max min-w-[18rem] rounded-box border border-base-300 bg-base-100 text-base-content shadow-xl"
       :style="toolcallPopupStyle"
       data-toolcall-popup="true"
     >
@@ -239,6 +239,22 @@ function handleToolcallFileLinkClick(event: MouseEvent, filePath: string) {
   closeToolcallPreview();
 }
 
+function resolveToolcallPopupContainer(anchor: HTMLElement | null): HTMLElement | null {
+  if (!(anchor instanceof HTMLElement)) return null;
+  return anchor.closest("[data-chat-center-pane]")
+    ?? anchor.closest(".ecall-chat-message-row")
+    ?? null;
+}
+
+function resolveToolcallPopupMaxWidth(anchor: HTMLElement | null): number {
+  // 以中间对话区域为基准：弹窗宽度不超过其 92%
+  const container = resolveToolcallPopupContainer(anchor);
+  const baseWidth = container instanceof HTMLElement
+    ? container.getBoundingClientRect().width
+    : (window.innerWidth || 0);
+  return Math.max(288, Math.round(baseWidth * 0.92));
+}
+
 async function positionToolcallPopup() {
   const anchor = activeToolcallAnchorEl.value;
   const popup = toolcallPopupRef.value;
@@ -248,9 +264,18 @@ async function positionToolcallPopup() {
   const popupRect = popup.getBoundingClientRect();
   const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
   const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  // 弹窗不允许超出中间对话区域（找不到时退回视口边界）
+  const container = resolveToolcallPopupContainer(anchor);
+  let leftMin = margin;
+  let leftMax = Math.max(margin, viewportWidth - popupRect.width - margin);
+  if (container instanceof HTMLElement) {
+    const paneRect = container.getBoundingClientRect();
+    leftMin = Math.max(margin, paneRect.left + margin);
+    leftMax = Math.min(leftMax, paneRect.right - popupRect.width - margin);
+  }
   const left = Math.min(
-    Math.max(margin, anchorRect.left),
-    Math.max(margin, viewportWidth - popupRect.width - margin),
+    Math.max(leftMin, anchorRect.left),
+    Math.max(leftMin, leftMax),
   );
   const belowTop = anchorRect.bottom + 8;
   const aboveTop = anchorRect.top - popupRect.height - 8;
@@ -258,6 +283,7 @@ async function positionToolcallPopup() {
     ? belowTop
     : Math.max(margin, aboveTop);
   toolcallPopupStyle.value = {
+    ...toolcallPopupStyle.value,
     left: `${Math.round(left)}px`,
     top: `${Math.round(top)}px`,
   };
@@ -274,6 +300,7 @@ async function openToolcallPreview(ids: string[], anchorEl: HTMLButtonElement | 
   if (availableIds.length === 0) return;
   activeToolcallIds.value = availableIds;
   activeToolcallAnchorEl.value = anchorEl;
+  toolcallPopupStyle.value.maxWidth = `${resolveToolcallPopupMaxWidth(anchorEl)}px`;
   await nextTick();
   toolcallScrollbarRef.value?.updateThumb();
   await positionToolcallPopup();
