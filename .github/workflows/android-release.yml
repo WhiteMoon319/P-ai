@@ -115,7 +115,7 @@ jobs:
           if patchelf --print-needed "$JNI_DIR/libproot_exec.so" | grep -qx 'libtalloc.so.2'; then
             patchelf --replace-needed libtalloc.so.2 libtalloc.so "$JNI_DIR/libproot_exec.so"
           fi
-          patchelf --force-rpath --set-rpath '$ORIGIN' "$JNI_DIR/libproot_exec.so"
+          patchelf --set-rpath '$ORIGIN' "$JNI_DIR/libproot_exec.so"
           echo "proot rpath: $(patchelf --print-rpath "$JNI_DIR/libproot_exec.so")"
           echo "jniLibs: $(ls -lh "$JNI_DIR")"
           echo "proot deps: $(patchelf --print-needed "$JNI_DIR/libproot_exec.so")"
