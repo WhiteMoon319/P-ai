@@ -172,7 +172,6 @@ struct ToolLoopAutoCompactionContext {
     ui_language: String,
     last_archive_summary: Option<String>,
     chat_overrides: Option<ChatPromptOverrides>,
-    enable_pdf_images: bool,
     trusted_prompt_usage: std::sync::Arc<std::sync::Mutex<Option<TrustedPromptUsage>>>,
     /// 写入前闸门命中压缩时，把压缩保留消息交回外层调度。
     compaction_preserved_messages:
@@ -334,7 +333,6 @@ fn build_tool_loop_prepared_for_continuation(
         Some(state),
         Some(selected_api),
         Some(resolved_api),
-        Some(context.enable_pdf_images),
     )?;
     append_tool_loop_transient_history_to_prepared(&mut prepared, transient_tool_history);
     Ok(Some((conversation, prepared)))

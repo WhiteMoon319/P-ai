@@ -60,7 +60,6 @@ fn build_prepared_prompt_for_mode(
     state: Option<&AppState>,
     selected_api: Option<&ApiConfig>,
     resolved_api: Option<&ResolvedApiConfig>,
-    enable_pdf_images: Option<bool>,
 ) -> Result<PreparedPrompt, String> {
     build_prepared_prompt_for_mode_with_stage_logger(
         mode,
@@ -80,7 +79,6 @@ fn build_prepared_prompt_for_mode(
         None,
         selected_api,
         resolved_api,
-        enable_pdf_images,
     )
 }
 
@@ -102,7 +100,6 @@ fn build_prepared_prompt_for_mode_with_stage_logger(
     stage_logger: Option<&dyn Fn(&str)>,
     selected_api: Option<&ApiConfig>,
     resolved_api: Option<&ResolvedApiConfig>,
-    enable_pdf_images: Option<bool>,
 ) -> Result<PreparedPrompt, String> {
     conversation_prompt_service().build_prepared_prompt_for_mode(
         mode,
@@ -122,7 +119,6 @@ fn build_prepared_prompt_for_mode_with_stage_logger(
         stage_logger,
         selected_api,
         resolved_api,
-        enable_pdf_images,
     )
 }
 
@@ -907,7 +903,6 @@ mod prompt_assembly_tests {
             None,
             Some(&ApiConfig::default()),
             None,
-            Some(false),
         )
         .expect("build prepared prompt");
 
@@ -948,7 +943,6 @@ mod prompt_assembly_tests {
             None,
             Some(&ApiConfig::default()),
             None,
-            Some(false),
         )
         .expect("build prepared prompt");
 

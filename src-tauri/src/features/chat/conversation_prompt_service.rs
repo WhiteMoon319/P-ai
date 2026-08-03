@@ -1142,7 +1142,6 @@ impl ConversationPromptService {
         stage_logger: Option<&dyn Fn(&str)>,
         selected_api: Option<&ApiConfig>,
         resolved_api: Option<&ResolvedApiConfig>,
-        enable_pdf_images: Option<bool>,
     ) -> Result<PreparedPrompt, String> {
         match mode {
             PromptBuildMode::Chat => {
@@ -1159,7 +1158,6 @@ impl ConversationPromptService {
                     state,
                     stage_logger,
                     resolved_api,
-                    enable_pdf_images.unwrap_or(false),
                 )?;
                 let overrides = chat_overrides.unwrap_or_default();
                 prepared.preamble = self.finalize_system_prompt(
@@ -1217,7 +1215,6 @@ impl ConversationPromptService {
                     state,
                     stage_logger,
                     resolved_api,
-                    enable_pdf_images.unwrap_or(false),
                 )?;
                 let overrides = chat_overrides.unwrap_or_default();
                 prepared.preamble = self.finalize_system_prompt(

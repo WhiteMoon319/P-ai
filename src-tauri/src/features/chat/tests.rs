@@ -43,7 +43,6 @@
             None,
             None,
             None,
-            false,
         );
 
         assert!(
@@ -111,7 +110,6 @@
             None,
             None,
             None,
-            false,
         );
 
         let final_assistant_messages = prepared
@@ -502,7 +500,6 @@
             None,
             None,
             None,
-            false,
         );
 
         assert_eq!(prepared.history_messages.len(), 2);
@@ -710,7 +707,6 @@
             Some(&state.data_path),
             None,
             None,
-            false,
         );
 
         let history_extra = prepared.history_messages[0].extra_text_blocks.join("\n");
@@ -1145,7 +1141,6 @@
             None,
             None,
             None,
-            false,
         );
 
         assert!(prepared.latest_user_text.trim().is_empty());
@@ -1179,7 +1174,6 @@
             None,
             None,
             None,
-            false,
         );
 
         assert_eq!(prepared.history_messages.len(), 2);
@@ -1571,7 +1565,6 @@
             None,
             None,
             None,
-            false,
         );
 
         let tool_reasonings = prepared
@@ -1676,7 +1669,6 @@
             None,
             None,
             None,
-            false,
         );
 
         assert!(prepared.history_messages.iter().any(|message| {
@@ -1837,7 +1829,6 @@
             None,
             None,
             None,
-            false,
         );
 
         assert!(prepared.history_messages.iter().any(|message| {
@@ -2180,7 +2171,6 @@
             None,
             None,
             None,
-            false,
         );
 
         assert_eq!(prepared.latest_user_text, "@fairy,@钟离\n请你看看这个方案");
@@ -2272,7 +2262,6 @@
             None,
             None,
             None,
-            false,
         );
 
         assert_eq!(prepared.history_messages.len(), 1);
@@ -2348,7 +2337,6 @@
             None,
             None,
             None,
-            false,
         );
 
         assert_eq!(prepared.history_messages.len(), 2);
@@ -2428,7 +2416,6 @@
             None,
             None,
             None,
-            false,
         );
 
         assert_eq!(prepared.latest_user_text, "继续");
@@ -2495,7 +2482,6 @@
             None,
             None,
             None,
-            false,
         );
 
         assert_eq!(prepared.latest_user_text, "这是压缩后的最新用户消息");
@@ -2541,7 +2527,6 @@
             None,
             None,
             None,
-            false,
         );
 
         assert_eq!(prepared.history_messages.len(), 2);
@@ -2575,7 +2560,6 @@
             None,
             None,
             None,
-            false,
         );
 
         assert_eq!(prepared.history_messages.len(), 2);
@@ -11186,7 +11170,6 @@
             None,
             Some(&selected_api),
             None,
-            Some(false),
         )
         .expect("build alpha prepared prompt");
         let beta_prepared = build_prepared_prompt_for_mode(
@@ -11209,7 +11192,6 @@
             None,
             Some(&selected_api),
             None,
-            Some(false),
         )
         .expect("build beta prepared prompt");
 
@@ -11951,7 +11933,6 @@
                 Some(&state),
                 Some(&ApiConfig::default()),
                 None,
-                Some(false),
             )
             .expect("build perf probe prepared prompt");
             latest_extra_len = prepared.latest_user_extra_text.len();
