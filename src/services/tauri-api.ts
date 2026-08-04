@@ -1856,20 +1856,11 @@ function createWebTransportStreamBinding(
       ? payload as { conversationId?: unknown; event?: unknown }
       : null;
     const payloadConversationId = String(record?.conversationId || "").trim();
+    if (payloadConversationId !== conversationId) return;
     const event = record?.event;
     const kind = event && typeof event === "object"
       ? String((event as { kind?: unknown }).kind || "").trim()
       : "";
-    console.log("[Web流式][bridge] 收到 assistantDelta 通知", {
-      bindingConversationId: conversationId,
-      payloadConversationId,
-      conversationMatched: payloadConversationId === conversationId,
-      kind: kind || "delta",
-      deltaLength: event && typeof event === "object"
-        ? String((event as { delta?: unknown }).delta || "").length
-        : 0,
-    });
-    if (payloadConversationId !== conversationId) return;
     // 与桌面 Channel 保持同一语义：低频广播事件只走统一通知订阅，
     // 不能同时再灌入流通道，否则 Web 会把同一状态处理两次。
     if (kind === "tool_status" || kind === "context_usage_update") return;

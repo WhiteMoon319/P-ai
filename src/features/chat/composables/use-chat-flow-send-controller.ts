@@ -140,11 +140,6 @@ export function useChatFlowSendController(options: UseChatFlowSendControllerOpti
       sendSession,
       sendConversationId,
     } = prepared;
-    console.log("[Web流式][sendChat] 用户点击发送", {
-      sendConversationId,
-      sendSession,
-      textLength: plainText.length,
-    });
 
     const hasForegroundRoundInFlight =
       options.chatting.value
