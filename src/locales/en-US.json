@@ -297,12 +297,12 @@
       "updatedAt": "Updated: {time}",
       "conversationAvatar": "Conversation avatar",
       "columns": {
-        "provider": "Provider",
         "model": "Model",
         "weightedTokens": "Weighted",
-        "totalTokens": "Total Input",
+        "totalTokens": "Total",
         "cacheHitRate": "Cache Hit Rate",
         "outputTokens": "Output",
+        "reasoningTokens": "Reasoning",
         "cacheReadTokens": "Cache Read",
         "cacheWrite": "Cache Write",
         "conversationCount": "Conversations",
@@ -320,14 +320,10 @@
         "archived": "Archived"
       },
       "stats": {
-        "weightedTokens": "Weighted",
-        "referenceOnly": "Reference only",
-        "outputTokens": "Total Output",
+        "totalTokens": "Total",
+        "outputTokens": "Output",
         "reasoningTokens": "Reasoning",
-        "cacheReadTokens": "Total Cache Read",
-        "cacheWrite": "Cache Write",
-        "averageCacheHitRate": "Avg. Cache Hit Rate",
-        "cacheHitRateHint": "Includes non-cacheable requests"
+        "averageCacheHitRate": "Cache Hit Rate"
       }
     },
     "migration": {

@@ -297,12 +297,12 @@
       "updatedAt": "更新：{time}",
       "conversationAvatar": "会话头像",
       "columns": {
-        "provider": "供应商",
         "model": "模型",
         "weightedTokens": "综合总量",
-        "totalTokens": "总输入",
+        "totalTokens": "总量",
         "cacheHitRate": "缓存命中率",
         "outputTokens": "输出",
+        "reasoningTokens": "思考",
         "cacheReadTokens": "缓存读",
         "cacheWrite": "缓存写入",
         "conversationCount": "会话",
@@ -320,14 +320,10 @@
         "archived": "归档"
       },
       "stats": {
-        "weightedTokens": "综合总量",
-        "referenceOnly": "仅供参考",
-        "outputTokens": "总输出",
-        "reasoningTokens": "思维链",
-        "cacheReadTokens": "总缓存读取",
-        "cacheWrite": "缓存写入",
-        "averageCacheHitRate": "平均缓存命中率",
-        "cacheHitRateHint": "未排除无法缓存的"
+        "totalTokens": "总量",
+        "outputTokens": "输出",
+        "reasoningTokens": "思考",
+        "averageCacheHitRate": "缓存命中率"
       }
     },
     "migration": {
