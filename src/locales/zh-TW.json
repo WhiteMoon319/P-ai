@@ -935,6 +935,8 @@
       "enabled": "啟用網路訪問",
       "enabledHint": "關閉後停止 Web 訪問服務，本機和遠端連結都不可訪問。",
       "port": "訪問端口",
+      "passwordPlaceholder": "電腦 PAI 的遠端存取密碼（可留空）",
+      "password": "存取密碼",
       "localLink": "本機連結",
       "remoteLinks": "遠端連結",
       "remotePassword": "遠端訪問密碼",

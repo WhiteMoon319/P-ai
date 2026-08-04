@@ -38,6 +38,17 @@
           @keydown.enter="connect"
         />
       </label>
+      <label class="grid gap-1">
+        <span class="text-sm">{{ t("config.remoteFrontend.password") }}</span>
+        <input
+          v-model="password"
+          class="input input-bordered input-sm w-full font-mono"
+          type="password"
+          autocomplete="off"
+          :placeholder="t('config.remoteFrontend.passwordPlaceholder')"
+          @keydown.enter="connect"
+        />
+      </label>
       <button class="btn btn-primary btn-sm w-fit" :disabled="!canConnect" @click="connect">
         {{ t("config.remoteFrontend.connect") }}
       </button>
@@ -60,6 +71,7 @@ const { remoteActive, remoteTarget, remoteTargetText, enterRemote, exitRemote } 
 
 const host = ref("");
 const port = ref("");
+const password = ref("");
 const errorText = ref("");
 
 const connected = computed(() => remoteActive.value && !!remoteTarget.value);
@@ -70,6 +82,7 @@ onMounted(() => {
   if (remoteTarget.value) {
     host.value = remoteTarget.value.host;
     port.value = String(remoteTarget.value.port);
+    password.value = remoteTarget.value.password || "";
   }
 });
 
@@ -80,7 +93,11 @@ function connect() {
     return;
   }
   errorText.value = "";
-  enterRemote(target);
+  const passwordText = String(password.value || "").trim();
+  enterRemote({
+    ...target,
+    ...(passwordText ? { password: passwordText } : {}),
+  });
   // Android 单 WebView：settings 页与 chat 页同目录，相对导航回 chat 进入远程模式。
   window.location.href = "chat.html";
 }

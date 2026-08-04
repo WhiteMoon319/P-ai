@@ -13,6 +13,7 @@ export const DEFAULT_REMOTE_PORT = 8429;
 export type RemoteTarget = {
   host: string;
   port: number;
+  password?: string;
 };
 
 export type RemoteView = "chat" | "settings";
@@ -22,11 +23,12 @@ function readRemoteTarget(): RemoteTarget | null {
   try {
     const raw = window.localStorage.getItem(REMOTE_TARGET_STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { host?: unknown; port?: unknown };
+    const parsed = JSON.parse(raw) as { host?: unknown; port?: unknown; password?: unknown };
     const host = String(parsed?.host || "").trim();
     const port = Number(parsed?.port);
     if (!host || !Number.isInteger(port) || port < 1 || port > 65535) return null;
-    return { host, port };
+    const password = typeof parsed?.password === "string" ? parsed.password : "";
+    return { host, port, password: password || undefined };
   } catch {
     return null;
   }

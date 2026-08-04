@@ -935,6 +935,8 @@
       "enabled": "启用网络访问",
       "enabledHint": "关闭后停止 Web 访问服务，本机和远程链接都不可访问。",
       "port": "访问端口",
+      "passwordPlaceholder": "电脑 PAI 的远程访问密码（可留空）",
+      "password": "访问密码",
       "localLink": "本机链接",
       "remoteLinks": "远程链接",
       "remotePassword": "远程访问密码",

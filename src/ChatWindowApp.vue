@@ -532,6 +532,8 @@ import { invokeTauri } from "./services/tauri-api";
 
 // 远程桥消息来源标识，与 tauri-api.ts emitWebBridgeNotification 的转发一致。
 const REMOTE_BRIDGE_SOURCE = "pai-remote-bridge";
+// 远程认证桥消息来源标识，与 tauri-api.ts requestRemotePasswordFromParent 的请求一致。
+const REMOTE_AUTH_BRIDGE_SOURCE = "pai-remote-bridge-auth";
 // delta 流式事件节流间隔：同 id ongoing 通知最小刷新间隔，避免高频刷新。
 const REMOTE_NOTIFY_THROTTLE_MS = 1000;
 
@@ -582,6 +584,24 @@ export default defineComponent({
       if (!remote.isRemoteMode.value) return;
       const data = event.data as { source?: unknown; method?: unknown; payload?: unknown } | null;
       if (!data || typeof data !== "object") return;
+      if (data.source === REMOTE_AUTH_BRIDGE_SOURCE) {
+        // 电脑 PAI 页面在 iframe 内请求远程访问密码：用已保存密码自动回复，
+        // 避免 Android WebView 拦截跨域 iframe 的 window.prompt。
+        if (data.method !== "request-password") return;
+        const password = String(remote.remoteTarget.value?.password || "").trim();
+        if (!password) return;
+        const frame = remoteFrameRef.value as HTMLIFrameElement | null;
+        if (!frame?.contentWindow) return;
+        try {
+          frame.contentWindow.postMessage(
+            { source: REMOTE_AUTH_BRIDGE_SOURCE, method: "password", payload: { password } },
+            "*",
+          );
+        } catch {
+          // 跨域投递失败不影响本地处理
+        }
+        return;
+      }
       if (data.source !== REMOTE_BRIDGE_SOURCE) return;
       if (data.method !== "chat.assistantDelta") return;
       const record = data.payload as { conversationId?: unknown; event?: unknown } | null;

@@ -1,5 +1,6 @@
 # 未发布
 
+- 新增（android-remote）：远程前端模式连接表单新增「访问密码」输入框，密码随远程目标存入 localStorage；连接后手机壳层监听 iframe 内电脑 PAI 页面的密码请求，用已保存密码自动回复完成认证，规避 Android WebView 对跨域 iframe `window.prompt` 的静默拦截；电脑 PAI 页面在 iframe 嵌入时优先向父窗口请求密码，桌面独立窗口仍走原密码弹窗，行为不变。
 - 修复（android-model）：Android 端模型列表刷新的 4 条获取路径（OpenAI/Gemini/Anthropic/genai）统一注入静态 WebPKI 根证书，修复 HTTPS 模型列表请求因 Android 无系统根证书校验失败导致模型列表加载不出来的问题（与 Linux rootfs 下载同因）。
 - 重构（android-ci）：Android 构建 CI 改为 debug 包构建，触发分支改为 `main`/`dev`；APK 版本号与命名改为 git 派生（`versionCode` = 提交总数，`versionName` = `git describe` 派生），新增 `scripts/patch-android-version.sh` 注入版本逻辑；只上传签名后的 debug APK，重命名为 `P-ai-${GITHUB_REF_NAME}-aarch64.apk` 到 artifact。
 - 调整（android-ci）：debug 构建 workflow 仅监听 `dev` 分支（`main` 只由 release tag 流程覆盖）。

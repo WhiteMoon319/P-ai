@@ -935,6 +935,8 @@
       "enabled": "Enable Network Access",
       "enabledHint": "When disabled, the web access service stops and local/remote links are unavailable.",
       "port": "Access Port",
+      "passwordPlaceholder": "PC PAI remote access password (optional)",
+      "password": "Access password",
       "localLink": "Local Link",
       "remoteLinks": "Remote Links",
       "remotePassword": "Remote Password",
