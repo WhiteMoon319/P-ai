@@ -660,8 +660,22 @@ export default defineComponent({
         notifyKind = "started";
       } else if (kind === "round_completed") {
         notifyKind = "completed";
-        const message = eventPayload?.message as { assistantText?: unknown } | null;
-        assistantText = String(message?.assistantText || "").trim();
+        // 电脑 PAI 端 round_completed 事件把 message 序列化为 JSON 字符串
+        // （{conversationId, activationId, requestId, assistantText, ...}），
+        // 需要先解析再取 assistantText；兼容对象形式。
+        const rawMessage = eventPayload?.message;
+        if (typeof rawMessage === "string" && rawMessage.trim()) {
+          try {
+            const parsed = JSON.parse(rawMessage) as { assistantText?: unknown } | null;
+            assistantText = String(parsed?.assistantText || "").trim();
+          } catch {
+            assistantText = "";
+          }
+        } else if (rawMessage && typeof rawMessage === "object") {
+          assistantText = String(
+            (rawMessage as { assistantText?: unknown }).assistantText || "",
+          ).trim();
+        }
       } else if (kind === "round_failed") {
         notifyKind = "failed";
         reason = String(eventPayload?.reason || "").trim();
