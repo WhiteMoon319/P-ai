@@ -44,14 +44,14 @@
       @update:config-search-query="updateConfigSearchQuery"
       @select-config-search-result="handleSelectConfigSearchResult"
       @update-to-latest="triggerUpdateToLatest"
-      @toggle-side-conversation-list="toggleSideConversationList"
+      @toggle-side-conversation-list="handleToggleSideConversationList"
       @toggle-tool-review-panel="toggleToolReviewPanel"
       @switch-conversation="switchChatConversation"
       @rename-conversation="renameCurrentConversation"
       @toggle-pin-conversation="toggleConversationPin"
       @archive-conversation="archiveConversationFromList"
       @delete-conversation="deleteUnarchivedConversationFromArchives"
-      @create-conversation="createUnarchivedConversation"
+      @create-conversation="handleCreateConversation"
       @trim-conversation="openTrimActionDialog"
       @start-drag="startDrag"
       @close-window="handleCloseWindow"
@@ -528,12 +528,15 @@ import AppWindowHeader from "./features/shell/components/AppWindowHeader.vue";
 import ShellDialogsHost from "./features/shell/components/ShellDialogsHost.vue";
 import { useChatWindowApp } from "./features/chat/composables/use-chat-window-app";
 import { useRemoteMode } from "./features/shell/composables/use-remote-mode";
+import type { ShellWorkspace, ShellWorkMode } from "./types/app";
 import { invokeTauri } from "./services/tauri-api";
 
 // 远程桥消息来源标识，与 tauri-api.ts emitWebBridgeNotification 的转发一致。
 const REMOTE_BRIDGE_SOURCE = "pai-remote-bridge";
 // 远程认证桥消息来源标识，与 tauri-api.ts requestRemotePasswordFromParent 的请求一致。
 const REMOTE_AUTH_BRIDGE_SOURCE = "pai-remote-bridge-auth";
+// 手机壳层 → iframe 内电脑 PAI 页面的会话命令消息来源标识（与 PR 分支监听端一致）。
+const REMOTE_COMMAND_SOURCE = "pai-remote-bridge-command";
 // delta 流式事件节流间隔：同 id ongoing 通知最小刷新间隔，避免高频刷新。
 const REMOTE_NOTIFY_THROTTLE_MS = 1000;
 
@@ -559,6 +562,44 @@ export default defineComponent({
         return;
       }
       app.openSettingsWindow();
+    }
+
+    function forwardRemoteCommand(method: string) {
+      const frame = remoteFrameRef.value as HTMLIFrameElement | null;
+      if (!frame?.contentWindow) return;
+      try {
+        frame.contentWindow.postMessage(
+          { source: REMOTE_COMMAND_SOURCE, method },
+          "*",
+        );
+      } catch {
+        // 跨域投递失败不阻断本地操作
+      }
+    }
+
+    function handleToggleSideConversationList() {
+      if (remote.isRemoteMode.value) {
+        forwardRemoteCommand("toggle-conversation-list");
+        return;
+      }
+      void app.toggleSideConversationList();
+    }
+
+    function handleCreateConversation(input?: {
+      title?: string;
+      departmentId?: string;
+      agentId?: string;
+      copyCurrent?: boolean;
+      importPath?: string;
+      shellWorkspaces?: ShellWorkspace[];
+      shellWorkMode?: ShellWorkMode;
+      shellAutonomousMode?: boolean;
+    }) {
+      if (remote.isRemoteMode.value) {
+        forwardRemoteCommand("create-conversation");
+        return;
+      }
+      void app.createUnarchivedConversation(input);
     }
 
     function handleRemoteBackToChat() {
@@ -663,6 +704,8 @@ export default defineComponent({
       handleOpenSettings,
       handleRemoteBackToChat,
       handleExitRemote,
+      handleToggleSideConversationList,
+      handleCreateConversation,
     };
   },
 });
