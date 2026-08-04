@@ -613,7 +613,7 @@ const workspaceMigrationStageLabel = computed(() => {
 const visibleConfigNavItems = computed(() => CONFIG_NAV_ITEMS.filter((item) => !item.devOnly || SHOW_DEV_DEMO_TAB));
 const activeConfigNavItem = computed(() =>
   visibleConfigNavItems.value.find((item) => item.tab === props.configTab)
-  ?? visibleConfigNavItems.value.find((item) => item.tab === "hotkey")
+  ?? visibleConfigNavItems.value.find((item) => item.tab === "welcome")
   ?? null,
 );
 const activeConfigTabTitle = computed(() => {

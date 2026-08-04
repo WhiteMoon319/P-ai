@@ -371,7 +371,7 @@ const selectedPdfReadMode = ref<"text" | "image">("image");
 const backgroundVoiceScreenshotKeywords = ref("");
 const backgroundVoiceScreenshotMode = ref<"desktop" | "focused_window">("focused_window");
 const instructionPresets = ref<PromptCommandPreset[]>([]);
-const configTab = ref<ConfigTab>("hotkey");
+const configTab = ref<ConfigTab>("welcome");
 const configSearchQuery = ref("");
 
 const status = ref("");
