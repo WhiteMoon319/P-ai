@@ -2220,6 +2220,19 @@ function isWebBridgeAuthenticationRefreshError(error: unknown): boolean {
 }
 
 function emitWebBridgeNotification(method: string, payload: unknown) {
+  // 远程前端模式：远程 sidebar 被手机 PAI 以 iframe 嵌入时（window.self !== window.top），
+  // 把 bridge 通知转发给父窗口（手机 PAI 壳层），由壳层构建 Android 通知。
+  // 桌面独立窗口 self === top 不触发，既有行为不变。
+  if (typeof window !== "undefined" && window.self !== window.top) {
+    try {
+      window.parent.postMessage(
+        { source: "pai-remote-bridge", method, payload },
+        "*",
+      );
+    } catch {
+      // 转发失败不影响本地事件分发
+    }
+  }
   const handlers = webBridgeNotificationHandlers.get(method);
   if (!handlers) return;
   for (const handler of handlers) handler(payload);

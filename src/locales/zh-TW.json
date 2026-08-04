@@ -964,6 +964,16 @@
       "copied": "已複製",
       "copyFailed": "複製失敗"
     },
+    "remoteFrontend": {
+      "summary": "輸入電腦 PAI 的位址與連接埠，將手機 PAI 作為電腦 PAI 的遠端前端。連線後手機顯示電腦 PAI 的聊天與設定介面，電腦 PAI 回覆訊息時手機仍會收到通知。",
+      "host": "電腦 PAI 位址",
+      "hostPlaceholder": "例如 192.168.1.100",
+      "port": "連接埠",
+      "connect": "連線",
+      "disconnect": "斷開連線",
+      "connectedTo": "已連線到 {target}",
+      "invalidTarget": "請輸入有效的位址與連接埠"
+    },
     "remoteIm": {
       "title": "聯絡人渠道",
       "addChannel": "新增渠道",
@@ -1672,6 +1682,9 @@
     "holdToRecord": "按住按鈕錄音",
     "placeholder": "向 PAI 說話吧",
     "trimTip": "點擊選擇壓縮或歸檔當前對話",
+    "exitRemote": "退出遠端",
+    "remoteBackToChat": "返回遠端聊天",
+    "remoteModeTitle": "遠端模式 · {target}",
     "branchingConversation": "正在建立會話分支...",
     "branchingConversationDetail": "請稍候，正在準備新的會話分支。",
     "forwardingConversationSelection": "正在轉發到會話...",

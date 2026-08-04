@@ -102,11 +102,18 @@
 
       <div
         class="relative z-30 flex min-w-0 flex-1 self-stretch items-center justify-start gap-1 px-2"
-        :title="combinedTitleTooltip"
+        :title="remoteMode ? t('chat.remoteModeTitle', { target: remoteTargetText }) : combinedTitleTooltip"
       >
         <span
+          v-if="remoteMode"
+          class="badge badge-primary badge-sm shrink-0 gap-1"
+        >
+          <span class="h-1.5 w-1.5 rounded-full bg-current animate-pulse"></span>
+          {{ remoteTargetText }}
+        </span>
+        <span
           class="truncate text-sm font-semibold text-base-content"
-        >{{ combinedTitle }}</span>
+        >{{ remoteMode ? t("chat.remoteModeTitle", { target: remoteTargetText }) : combinedTitle }}</span>
       </div>
 
       <div class="relative z-40 flex min-w-0 items-center justify-end gap-1" @mousedown.stop>
@@ -145,7 +152,28 @@
       </button>
 
       <button
+        v-if="remoteMode && remoteView === 'settings'"
         class="btn btn-ghost btn-sm"
+        :title="t('chat.remoteBackToChat')"
+        @mousedown.stop
+        @click.stop="$emit('remote-back-to-chat')"
+      >
+        <PanelLeft class="h-3.5 w-3.5" />
+      </button>
+
+      <button
+        v-if="remoteMode"
+        class="btn btn-ghost btn-sm hover:bg-error hover:text-error-content"
+        :title="t('chat.exitRemote')"
+        @mousedown.stop
+        @click.stop="$emit('exit-remote')"
+      >
+        <LogOut class="h-3.5 w-3.5" />
+      </button>
+
+      <button
+        class="btn btn-ghost btn-sm"
+        :class="remoteMode && remoteView === 'settings' ? 'btn-active bg-base-100 hover:bg-base-100' : ''"
         :title="openSettingsTitle || t('common.settings')"
         @mousedown.stop
         @click.stop="$emit('open-settings')"
@@ -451,7 +479,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { getTransportCapabilities, invokeTauri, openTransportFileDialog } from "../../../services/tauri-api";
-import { Bolt, Columns3Cog, Download, FoldVertical, FolderOpen, History, Minus, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, Search, Settings, Square, SquarePen, X } from "@lucide/vue";
+import { Bolt, Columns3Cog, Download, FoldVertical, FolderOpen, History, LogOut, Minus, PanelLeft, PanelLeftClose, PanelRight, PanelRightClose, Search, Settings, Square, SquarePen, X } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ShellWorkspace, ShellWorkspaceAccess, ShellWorkMode } from "../../../types/app";
 import { defaultWorkspaceNameFromPath } from "../../../utils/shell-workspaces";
 import { buildWorkspaceConversationSections } from "../../chat/utils/conversation-sections";
@@ -527,6 +555,9 @@ const props = withDefaults(defineProps<{
   updateToLatestTitle?: string;
   windowControlsVisible?: boolean;
   pipelineStatusEnabled?: boolean;
+  remoteMode?: boolean;
+  remoteView?: "chat" | "settings";
+  remoteTargetText?: string;
 }>(), {
   windowControlsVisible: true,
   pipelineStatusEnabled: true,
@@ -559,6 +590,8 @@ const emit = defineEmits<{
   (e: "select-config-search-result", tab: ConfigSearchTab): void;
   (e: "update-to-latest"): void;
   (e: "update:simple-setup-mode", value: boolean): void;
+  (e: "exit-remote"): void;
+  (e: "remote-back-to-chat"): void;
 }>();
 
 const { t, locale } = useI18n();

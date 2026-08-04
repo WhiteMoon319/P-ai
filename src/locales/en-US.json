@@ -964,6 +964,16 @@
       "copied": "Copied",
       "copyFailed": "Copy failed"
     },
+    "remoteFrontend": {
+      "summary": "Enter the PC PAI address and port to use your phone PAI as a remote frontend for the PC PAI. Once connected, your phone shows the PC PAI chat and settings; notifications still arrive on your phone when the PC PAI replies.",
+      "host": "PC PAI address",
+      "hostPlaceholder": "e.g. 192.168.1.100",
+      "port": "Port",
+      "connect": "Connect",
+      "disconnect": "Disconnect",
+      "connectedTo": "Connected to {target}",
+      "invalidTarget": "Enter a valid address and port"
+    },
     "remoteIm": {
       "title": "Contact Channels",
       "addChannel": "Add Channel",
@@ -1802,6 +1812,9 @@
     "holdToRecord": "Hold button to record",
     "placeholder": "Talk to PAI",
     "trimTip": "Choose compact or archive for the current chat",
+    "exitRemote": "Exit remote",
+    "remoteBackToChat": "Back to remote chat",
+    "remoteModeTitle": "Remote · {target}",
     "branchingConversation": "Creating conversation branch...",
     "branchingConversationDetail": "Please wait while the new conversation branch is prepared.",
     "forwardingConversationSelection": "Forwarding to conversation...",

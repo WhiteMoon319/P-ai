@@ -551,3 +551,142 @@ fn live_update_goal_changed(
 
 #[cfg(not(target_os = "android"))]
 fn live_update_todos_changed(_state: &AppState, _conversation_id: &str) {}
+
+// ==================== 远程前端模式通知 ====================
+// 远程模式下手机 PAI 壳层把 iframe 转发的电脑 PAI 聊天事件转成 Android 通知。
+// 事件来源是电脑 PAI 广播的 chat.assistantDelta（conversationId + event），
+// 手机端本地没有电脑 PAI 的会话元数据，标题/正文全部由事件 payload 提供：
+//  - started / delta（流式输出）→ ongoing 通知「正在回复…」
+//  - completed → 同 id 更新为回复摘录（非 ongoing，可手动划掉）
+//  - failed → 同 id 更新为失败原因
+//  - clear（退出远程）→ 移除活动通知
+// 桌面端无此语义，no-op。
+
+#[cfg(target_os = "android")]
+const REMOTE_LIVE_UPDATE_NOTIFICATION_ID: i32 = 0x50414903;
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteLiveUpdatePayload {
+    #[serde(default)]
+    pub conversation_id: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub delta: String,
+    #[serde(default)]
+    pub assistant_text: String,
+    #[serde(default)]
+    pub reason: String,
+}
+
+/// 远程模式下电脑 PAI 聊天事件 → Android 通知（桌面端 no-op）。
+/// 命令包装见 commands/remote_live_update.rs，本函数只做平台实现。
+#[cfg(target_os = "android")]
+pub(crate) fn remote_live_update_notify_android(
+    state: &AppState,
+    payload: &RemoteLiveUpdatePayload,
+) {
+    let Some(app) = live_update_app_handle(state) else {
+        return;
+    };
+    use tauri_plugin_notification::NotificationExt;
+    let kind = payload.kind.trim();
+    let conversation_id = payload.conversation_id.trim();
+    match kind {
+        "clear" => {
+            let _ = app
+                .notification()
+                .remove_active(vec![REMOTE_LIVE_UPDATE_NOTIFICATION_ID]);
+            runtime_log_info(format!(
+                "[远程通知] 完成，任务=清理远程通知，conversation_id={}",
+                conversation_id
+            ));
+        }
+        "completed" | "failed" => {
+            let title = remote_live_update_title(conversation_id, kind == "failed");
+            let body = if kind == "failed" {
+                let reason =
+                    native_notification_text_excerpt(&payload.reason, LIVE_UPDATE_BODY_MAX_CHARS);
+                if reason.trim().is_empty() {
+                    "本轮回复失败。".to_string()
+                } else {
+                    reason
+                }
+            } else {
+                let excerpt = native_notification_text_excerpt(
+                    &payload.assistant_text,
+                    LIVE_UPDATE_BODY_MAX_CHARS,
+                );
+                if excerpt.trim().is_empty() {
+                    "本轮回复完成。".to_string()
+                } else {
+                    excerpt
+                }
+            };
+            live_update_send(
+                &app,
+                REMOTE_LIVE_UPDATE_NOTIFICATION_ID,
+                &title,
+                &body,
+                None,
+                false,
+                false,
+            );
+            runtime_log_info(format!(
+                "[远程通知] 完成，任务=远程回复终态通知，kind={}，conversation_id={}",
+                kind, conversation_id
+            ));
+        }
+        _ => {
+            // started / delta：ongoing 常驻通知，提示正在回复。
+            let title = remote_live_update_title(conversation_id, false);
+            let delta =
+                native_notification_text_excerpt(&payload.delta, LIVE_UPDATE_BODY_MAX_CHARS);
+            let body = if delta.trim().is_empty() {
+                "正在回复…".to_string()
+            } else {
+                delta
+            };
+            live_update_send(
+                &app,
+                REMOTE_LIVE_UPDATE_NOTIFICATION_ID,
+                &title,
+                &body,
+                Some(&body),
+                true,
+                true,
+            );
+        }
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+pub(crate) fn remote_live_update_notify_android(
+    _state: &AppState,
+    _payload: &RemoteLiveUpdatePayload,
+) {
+}
+
+#[cfg(target_os = "android")]
+fn remote_live_update_title(conversation_id: &str, failed: bool) -> String {
+    // 远程会话标题不在事件 payload 中，首版用固定前缀 + 会话 id 短尾区分会话。
+    let suffix = if conversation_id.is_empty() {
+        String::new()
+    } else {
+        let short: String = conversation_id
+            .chars()
+            .rev()
+            .take(6)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        format!(" · {short}")
+    };
+    if failed {
+        format!("远程 PAI 回复失败{suffix}")
+    } else {
+        format!("远程 PAI{suffix}")
+    }
+}

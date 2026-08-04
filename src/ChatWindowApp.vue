@@ -38,7 +38,7 @@
       :update-to-latest-label="updateToLatestLabel"
       :update-to-latest-title="updateToLatestTitle"
       @open-archives="openConversationList"
-      @open-settings="openSettingsWindow"
+      @open-settings="handleOpenSettings"
       @minimize-window="minimizeWindowAndClearForeground"
       @toggle-maximize-window="toggleMaximizeWindow"
       @update:config-search-query="updateConfigSearchQuery"
@@ -55,9 +55,28 @@
       @trim-conversation="openTrimActionDialog"
       @start-drag="startDrag"
       @close-window="handleCloseWindow"
+      :remote-mode="isRemoteMode"
+      :remote-view="remoteView"
+      :remote-target-text="remoteTargetText"
+      @exit-remote="handleExitRemote"
+      @remote-back-to-chat="handleRemoteBackToChat"
     />
 
+    <div
+      v-if="isRemoteMode"
+      class="relative flex-1 min-h-0 bg-base-100"
+    >
+      <iframe
+        :key="remoteUrl"
+        ref="remoteFrameRef"
+        :src="remoteUrl"
+        class="h-full w-full border-0"
+        allow="clipboard-write; clipboard-read; microphone; camera"
+      ></iframe>
+    </div>
+
     <AppWindowContent
+      v-else
       :t="tr"
       :view-mode="viewMode"
       :side-conversation-list-visible="sideConversationListVisible"
@@ -501,13 +520,20 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from "vue";
+import { defineComponent, onBeforeUnmount, onMounted, ref } from "vue";
 import Win10ResizeHandles from "./features/shell/components/Win10ResizeHandles.vue";
 import ChatWorkspacePickerDialog from "./features/chat/components/dialogs/ChatWorkspacePickerDialog.vue";
 import AppWindowContent from "./features/shell/components/AppWindowContent.vue";
 import AppWindowHeader from "./features/shell/components/AppWindowHeader.vue";
 import ShellDialogsHost from "./features/shell/components/ShellDialogsHost.vue";
 import { useChatWindowApp } from "./features/chat/composables/use-chat-window-app";
+import { useRemoteMode } from "./features/shell/composables/use-remote-mode";
+import { invokeTauri } from "./services/tauri-api";
+
+// 远程桥消息来源标识，与 tauri-api.ts emitWebBridgeNotification 的转发一致。
+const REMOTE_BRIDGE_SOURCE = "pai-remote-bridge";
+// delta 流式事件节流间隔：同 id ongoing 通知最小刷新间隔，避免高频刷新。
+const REMOTE_NOTIFY_THROTTLE_MS = 1000;
 
 export default defineComponent({
   name: "ChatWindowApp",
@@ -519,7 +545,105 @@ export default defineComponent({
     ShellDialogsHost,
   },
   setup() {
-    return useChatWindowApp();
+    const app = useChatWindowApp();
+    const remote = useRemoteMode();
+    const remoteFrameRef = ref<HTMLIFrameElement | null>(null);
+    let remoteStartedConversationId = "";
+    let remoteLastStartedNotifyAt = 0;
+
+    function handleOpenSettings() {
+      if (remote.isRemoteMode.value) {
+        remote.setRemoteView("settings");
+        return;
+      }
+      app.openSettingsWindow();
+    }
+
+    function handleRemoteBackToChat() {
+      remote.setRemoteView("chat");
+    }
+
+    function handleExitRemote() {
+      void invokeTauri("remote_live_update_notify", {
+        payload: {
+          conversationId: "",
+          kind: "clear",
+          delta: "",
+          assistantText: "",
+          reason: "",
+        },
+      }).catch(() => undefined);
+      remote.exitRemote();
+      // Android 单 WebView：清除 active 后重新加载本地 chat 页面。
+      window.location.reload();
+    }
+
+    function handleRemoteBridgeMessage(event: MessageEvent) {
+      if (!remote.isRemoteMode.value) return;
+      const data = event.data as { source?: unknown; method?: unknown; payload?: unknown } | null;
+      if (!data || typeof data !== "object") return;
+      if (data.source !== REMOTE_BRIDGE_SOURCE) return;
+      if (data.method !== "chat.assistantDelta") return;
+      const record = data.payload as { conversationId?: unknown; event?: unknown } | null;
+      if (!record || typeof record !== "object") return;
+      const conversationId = String(record.conversationId || "").trim();
+      const eventPayload = record.event as
+        | { kind?: unknown; delta?: unknown; message?: unknown; reason?: unknown }
+        | null;
+      const kind = String(eventPayload?.kind || "").trim();
+      const delta = String(eventPayload?.delta || "").trim();
+      let notifyKind = "";
+      let assistantText = "";
+      let reason = "";
+      if (delta) {
+        notifyKind = "started";
+      } else if (kind === "round_completed") {
+        notifyKind = "completed";
+        const message = eventPayload?.message as { assistantText?: unknown } | null;
+        assistantText = String(message?.assistantText || "").trim();
+      } else if (kind === "round_failed") {
+        notifyKind = "failed";
+        reason = String(eventPayload?.reason || "").trim();
+      }
+      if (!notifyKind) return;
+      // started 事件高频出现，节流刷新同 id ongoing 通知；终态无节流。
+      if (notifyKind === "started") {
+        const now = Date.now();
+        if (
+          remoteStartedConversationId === conversationId
+          && now - remoteLastStartedNotifyAt < REMOTE_NOTIFY_THROTTLE_MS
+        ) {
+          return;
+        }
+        remoteStartedConversationId = conversationId;
+        remoteLastStartedNotifyAt = now;
+      }
+      void invokeTauri("remote_live_update_notify", {
+        payload: {
+          conversationId,
+          kind: notifyKind,
+          delta,
+          assistantText,
+          reason,
+        },
+      }).catch(() => undefined);
+    }
+
+    onMounted(() => {
+      window.addEventListener("message", handleRemoteBridgeMessage);
+    });
+    onBeforeUnmount(() => {
+      window.removeEventListener("message", handleRemoteBridgeMessage);
+    });
+
+    return {
+      ...app,
+      ...remote,
+      remoteFrameRef,
+      handleOpenSettings,
+      handleRemoteBackToChat,
+      handleExitRemote,
+    };
   },
 });
 </script>

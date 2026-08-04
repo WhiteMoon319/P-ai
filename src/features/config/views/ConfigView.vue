@@ -181,6 +181,9 @@
             :save-config-action="saveConfigAction"
             :last-saved-config-json="lastSavedConfigJson"
           />
+          <RemoteFrontendTab
+            v-else-if="props.configTab === 'networkAccess' && isAndroid"
+          />
           <NetworkAccessTab
             v-else-if="props.configTab === 'networkAccess'"
             :config="config"
@@ -409,6 +412,7 @@ import DemoTab from "./config-tabs/DemoTab.vue";
 import ChatSettingsTab from "./config-tabs/ChatSettingsTab.vue";
 import NotificationTab from "./config-tabs/NotificationTab.vue";
 import NetworkAccessTab from "./config-tabs/NetworkAccessTab.vue";
+import RemoteFrontendTab from "./config-tabs/RemoteFrontendTab.vue";
 import RemoteImTab from "./config-tabs/RemoteImTab.vue";
 import UsageTab from "./config-tabs/UsageTab.vue";
 import MemoryTab from "./config-tabs/MemoryTab.vue";
@@ -442,7 +446,7 @@ const SHOW_DEV_DEMO_TAB = import.meta.env.DEV;
 const CONFIG_NAV_ITEMS: ConfigNavItem[] = [
   { tab: "welcome", icon: Home, labelKey: "config.tabs.welcome" },
   { tab: "notification", icon: Bell, labelKey: "config.tabs.notification" },
-  { tab: "networkAccess", icon: Wifi, labelKey: "config.tabs.networkAccess", desktopOnly: true },
+  { tab: "networkAccess", icon: Wifi, labelKey: "config.tabs.networkAccess" },
   { tab: "hotkey", icon: Keyboard, labelKey: "config.tabs.hotkey", desktopOnly: true },
   { tab: "api", icon: Cpu, labelKey: "config.tabs.api" },
   { tab: "tools", icon: Wrench, labelKey: "config.tabs.tools" },

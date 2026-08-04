@@ -5,6 +5,9 @@ include!("commands/config_and_persona.rs");
 // ==================== 工具审查命令 ====================
 include!("commands/tool_review.rs");
 
+// ==================== 远程前端模式通知命令 ====================
+include!("commands/remote_live_update.rs");
+
 // ==================== Codex OAuth 命令 ====================
 include!("commands/codex_auth.rs");
 include!("commands/codex_usage.rs");
