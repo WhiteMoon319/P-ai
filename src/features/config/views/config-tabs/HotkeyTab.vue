@@ -47,7 +47,7 @@
       </div>
     </template>
 
-    <template #row-background-wake>
+    <template v-if="isWindowsHost" #row-background-wake>
       <div class="flex min-w-0 items-center justify-between gap-4">
         <div class="min-w-0">
           <div class="text-sm">{{ t("config.hotkey.backgroundWakeOn") }}</div>
@@ -235,6 +235,8 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+// 录音后台唤醒仅 Windows 支持，其他平台直接隐藏开关
+const isWindowsHost = typeof navigator !== "undefined" && /windows/i.test(String(navigator.userAgent || ""));
 const templateValues = {};
 const templateGroups = computed<ConfigTemplateGroup[]>(() => [
   {

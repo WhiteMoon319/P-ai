@@ -991,7 +991,7 @@ fn default_provider_non_stream_base_urls() -> Vec<String> {
 }
 
 fn default_record_background_wake_enabled() -> bool {
-    true
+    false
 }
 
 fn default_message_notification_enabled() -> bool {

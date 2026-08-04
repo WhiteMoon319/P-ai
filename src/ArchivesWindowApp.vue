@@ -193,7 +193,7 @@ const config = reactive<AppConfig>({
   githubUpdateMethod: "auto",
   skippedGithubUpdateVersion: "",
   recordHotkey: "CapsLock",
-  recordBackgroundWakeEnabled: true,
+  recordBackgroundWakeEnabled: false,
   minRecordSeconds: 1,
   maxRecordSeconds: 60,
   llmRoundLogCapacity: 3,
