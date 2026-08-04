@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col gap-6 pb-20 [&_div]:[transition:background-color_200ms,border-color_200ms,box-shadow_200ms,border-radius_200ms_ease-out]">
+  <div class="flex flex-col gap-4 pb-20 [&_div]:[transition:background-color_200ms,border-color_200ms,box-shadow_200ms,border-radius_200ms_ease-out]">
     <!-- 仪表盘：品牌 + 缺失项提示 + 开始对话，只占一行 -->
     <div class="card bg-base-100 card-border border-base-300 from-base-content/5 bg-linear-to-bl to-50% card-sm overflow-hidden">
       <div class="card-body flex-row flex-wrap items-center gap-2 px-4 py-2.5">
