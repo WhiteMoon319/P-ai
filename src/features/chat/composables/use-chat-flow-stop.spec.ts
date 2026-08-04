@@ -57,6 +57,7 @@ describe("useChatFlowStop", () => {
       deleteSendStartedAtMs: vi.fn(),
       clearConversationStreamCache: vi.fn(),
       reasoningStartedAtMs: ref(0),
+      flushStreamTextBuffer: vi.fn(),
     });
 
     await stopChat();

@@ -64,7 +64,10 @@
             >
               <span class="flex min-w-0 flex-1 items-center gap-1.5">
                 <span class="shrink-0">
-                  {{ activitySummaryLabel(block) }}
+                  <template v-if="showActivityPanel(block)">
+                    {{ activityStatusText(block) }}<AnimatedCountText :target="block.activityReasoningCharCount || 0" />
+                  </template>
+                  <template v-else>{{ t("chat.messageItem.notThought") }}</template>
                 </span>
                 <span v-if="showActivityPanel(block) && activityToolCountsLabel(block)" class="inline-flex h-3 items-center text-base-content/40">·</span>
                 <span
@@ -509,10 +512,12 @@ import { textContentSignature } from "../utils/text-signature";
 import { createToolCallPresentation } from "../utils/tool-call-presentation";
 import { buildToolcallPreviewMap } from "../utils/toolcall-preview";
 import { generateShareFromMessageIds } from "../utils/share-generator";
+import { frontendDispatchElapsedByMessageId } from "../composables/use-chat-flow-frontend-dispatch";
 import { displayFileName, extraTextReferenceDisplayParts } from "../utils/chat-attachment-display";
 import ChatBubbleShell from "./ChatBubbleShell.vue";
 import ChatAttachmentItem from "./ChatAttachmentItem.vue";
 import PlainMarkdownRenderer from "./PlainMarkdownRenderer.vue";
+import AnimatedCountText from "./AnimatedCountText.vue";
 
 initKatex();
 
@@ -920,13 +925,6 @@ function showActivitySummary(block: ChatMessageBlock): boolean {
   return !block.isStreaming;
 }
 
-function activitySummaryLabel(block: ChatMessageBlock): string {
-  if (!showActivityPanel(block)) {
-    return t('chat.messageItem.notThought');
-  }
-  return `${activityStatusText(block)}${activityReasoningCountLabel(block)}`;
-}
-
 function hasExpandableActivityItem(item: ChatActivityItem): boolean {
   if (item.kind === "reasoning") return !!String(item.text || "").trim();
   if (item.kind === "tool") return !!String(item.name || item.argsText || item.resultText || "").trim();
@@ -1241,8 +1239,12 @@ function numericMetaValue(block: ChatMessageBlock, key: string): number {
 
 function frontendDispatchElapsedLabel(block: ChatMessageBlock): string {
   if (!showStreamingUi(block)) return "";
-  const elapsedMs = numericMetaValue(block, "frontendDispatchElapsedMs")
-    || numericMetaValue(block, "_frontendDispatchElapsedMs");
+  const messageId = String(block.sourceMessageId || block.id || "").trim();
+  // 优先读独立计时器状态：它每秒更新但不触碰消息对象，避免带动虚拟列表重算；
+  // 无活跃计时器时（历史消息/缓存恢复）回退读 block 投影里的耗时字段。
+  const liveElapsedMs = messageId ? frontendDispatchElapsedByMessageId.get(messageId) : undefined;
+  const elapsedMs = liveElapsedMs ?? (numericMetaValue(block, "frontendDispatchElapsedMs")
+    || numericMetaValue(block, "_frontendDispatchElapsedMs"));
   const startedAtMs = numericMetaValue(block, "_frontendDispatchStartedAtMs");
   if (elapsedMs <= 0 && startedAtMs <= 0) return "";
   return formatDispatchElapsed(elapsedMs);

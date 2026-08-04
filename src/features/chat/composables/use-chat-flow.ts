@@ -97,7 +97,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
     mergeAttachmentPayloads,
   });
   const frontendDispatch = useChatFlowFrontendDispatch({
-    allMessages: options.allMessages,
     getMessageIdForGen: (gen) => {
       if ((round.phase === "queued" || round.phase === "streaming") && round.gen === gen) {
         return round.messageId;
@@ -445,6 +444,9 @@ export function useChatFlow(options: UseChatFlowOptions) {
     },
     clearConversationStreamCache,
     reasoningStartedAtMs,
+    flushStreamTextBuffer: () => {
+      streamingEvents.flushStreamTextBuffer();
+    },
   });
   const sendRecovery = useChatFlowSendRecovery({
     chatting: options.chatting,

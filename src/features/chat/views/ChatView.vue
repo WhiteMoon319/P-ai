@@ -68,8 +68,7 @@
                 v-for="entry in virtualEntries"
                 :key="entry.item.id"
                 :data-index="entry.row.index"
-                :data-render-item-id="entry.item.id"
-                :ref="(el) => measureVirtualRow(entry.item.id, el)"
+                :ref="measureElementRef"
                 class="absolute left-0 top-0 w-full ecall-chat-virtual-item"
                 :style="{ transform: `translateY(${entry.row.start}px)` }"
               >
@@ -1302,10 +1301,11 @@ const {
 // ==================== virtual scroll ====================
 
 const {
-  virtualizer, virtualEntries, totalVirtualSize, measureVirtualRow,
+  virtualizer, virtualEntries, totalVirtualSize,
   latestOwnTailContentHeight, latestOwnTailContentMeasured, scheduleVirtualMeasure, syncViewportMetrics,
   scrollVirtualizerToIndex, scrollVirtualizerToConversationBottomLightweight,
-  resetVirtualizerAtConversationBottom, refreshObservedVirtualItemElements,
+  resetVirtualizerAtConversationBottom,
+  measureElementRef,
 } = useChatVirtualScroll({
   renderItems: virtualRenderItems,
   scrollContainer, scrollbarRef: chatScrollbarRef as Ref<{ updateThumb: () => void } | null>,
@@ -1591,7 +1591,6 @@ const {
   onScroll, scheduleVirtualMeasure,
   scrollConversationToBottomLightweight: scrollVirtualizerToConversationBottomLightweight,
   resetConversationToBottom: resetVirtualizerAtConversationBottom,
-  refreshObservedVirtualItemElements,
   olderHistoryCorrectionAllowed,
   props: {
     hasMoreHistory: toRef(props, "hasMoreHistory"), loadingOlderHistory: toRef(props, "loadingOlderHistory"),
