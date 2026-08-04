@@ -340,7 +340,7 @@
               @click="composerInputBlank ? (sendModeMenuOpen = !sendModeMenuOpen) : handleSendChat()"
               @contextmenu.prevent="sendModeMenuOpen = !sendModeMenuOpen"
             >
-              <ArrowUp v-if="composerInputBlank" class="h-3.5 w-3.5" />
+              <ChevronUp v-if="composerInputBlank" class="h-3.5 w-3.5" />
               <CornerRightUp v-else class="h-3.5 w-3.5" />
             </button>
             <div
@@ -400,7 +400,7 @@
 <script setup lang="ts">
 import { Teleport, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { CalendarPlus, Check, ChevronDown, ClipboardList, CornerRightUp, FileText, History, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X, ArrowUp } from "@lucide/vue";
+import { CalendarPlus, Check, ChevronDown, ChevronUp, ClipboardList, CornerRightUp, FileText, History, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption } from "../../../types/app";
 import ChatQueuePreview from "./ChatQueuePreview.vue";
 import ChatSelectionActionPanel from "./ChatSelectionActionPanel.vue";
