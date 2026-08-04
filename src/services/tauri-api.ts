@@ -850,7 +850,7 @@ export function installTransportHostRuntimePrerequisite<T>(kind: string): Promis
 }
 
 export function updateTransportRecordHotkey<T>(recordHotkey: string): Promise<T> {
-  return invokeRequiredNativeTransport<T>("录音热键注册", "update_record_hotkey", {
+  return invokeRequiredNativeTransport<T>("录音快捷键注册", "update_record_hotkey", {
     input: { recordHotkey: String(recordHotkey || "").trim() },
   });
 }
