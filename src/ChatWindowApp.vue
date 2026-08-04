@@ -648,6 +648,7 @@ export default defineComponent({
       const record = data.payload as { conversationId?: unknown; event?: unknown } | null;
       if (!record || typeof record !== "object") return;
       const conversationId = String(record.conversationId || "").trim();
+      const conversationTitle = String(record.conversationTitle || "").trim();
       const eventPayload = record.event as
         | { kind?: unknown; delta?: unknown; message?: unknown; reason?: unknown }
         | null;
@@ -700,6 +701,7 @@ export default defineComponent({
           delta,
           assistantText,
           reason,
+          title: conversationTitle,
         },
       }).catch(() => undefined);
     }

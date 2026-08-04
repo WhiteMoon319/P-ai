@@ -578,6 +578,9 @@ pub struct RemoteLiveUpdatePayload {
     pub assistant_text: String,
     #[serde(default)]
     pub reason: String,
+    /// 电脑 PAI 广播时附带的会话标题（与本地通知标题同源），为空时回退固定前缀。
+    #[serde(default)]
+    pub title: String,
 }
 
 /// 远程模式下电脑 PAI 聊天事件 → Android 通知（桌面端 no-op）。
@@ -604,7 +607,7 @@ pub(crate) fn remote_live_update_notify_android(
             ));
         }
         "completed" | "failed" => {
-            let title = remote_live_update_title(conversation_id, kind == "failed");
+            let title = remote_live_update_title(payload, kind == "failed");
             let body = if kind == "failed" {
                 let reason =
                     native_notification_text_excerpt(&payload.reason, LIVE_UPDATE_BODY_MAX_CHARS);
@@ -640,7 +643,7 @@ pub(crate) fn remote_live_update_notify_android(
         }
         _ => {
             // started / delta：ongoing 常驻通知，提示正在回复。
-            let title = remote_live_update_title(conversation_id, false);
+            let title = remote_live_update_title(payload, false);
             let delta =
                 native_notification_text_excerpt(&payload.delta, LIVE_UPDATE_BODY_MAX_CHARS);
             let body = if delta.trim().is_empty() {
@@ -669,24 +672,34 @@ pub(crate) fn remote_live_update_notify_android(
 }
 
 #[cfg(target_os = "android")]
-fn remote_live_update_title(conversation_id: &str, failed: bool) -> String {
-    // 远程会话标题不在事件 payload 中，首版用固定前缀 + 会话 id 短尾区分会话。
-    let suffix = if conversation_id.is_empty() {
-        String::new()
+fn remote_live_update_title(payload: &RemoteLiveUpdatePayload, failed: bool) -> String {
+    let conversation_id = payload.conversation_id.trim();
+    // 电脑 PAI 广播附带的会话标题与本地通知标题同源；为空时回退固定前缀 + 会话 id 短尾。
+    let title = payload.title.trim();
+    if !title.is_empty() {
+        if failed {
+            format!("{title} · 失败")
+        } else {
+            title.to_string()
+        }
     } else {
-        let short: String = conversation_id
-            .chars()
-            .rev()
-            .take(6)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .collect();
-        format!(" · {short}")
-    };
-    if failed {
-        format!("远程 PAI 回复失败{suffix}")
-    } else {
-        format!("远程 PAI{suffix}")
+        let suffix = if conversation_id.is_empty() {
+            String::new()
+        } else {
+            let short: String = conversation_id
+                .chars()
+                .rev()
+                .take(6)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
+            format!(" · {short}")
+        };
+        if failed {
+            format!("远程 PAI 回复失败{suffix}")
+        } else {
+            format!("远程 PAI{suffix}")
+        }
     }
 }
