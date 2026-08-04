@@ -333,13 +333,15 @@
           </button>
           <div v-else ref="sendModeMenuRef" class="relative flex shrink-0">
             <button
-              class="btn btn-sm btn-circle shrink-0 btn-success"
-              :disabled="frozen || busy"
-              :title="t('chat.send')"
-              @click="handleSendChat()"
+              class="btn btn-sm btn-circle shrink-0"
+              :class="composerInputBlank ? 'btn-ghost' : 'btn-success'"
+              :disabled="!composerInputBlank && (frozen || busy)"
+              :title="composerInputBlank ? t('chat.sendModeMenu') : t('chat.send')"
+              @click="composerInputBlank ? (sendModeMenuOpen = !sendModeMenuOpen) : handleSendChat()"
               @contextmenu.prevent="sendModeMenuOpen = !sendModeMenuOpen"
             >
-              <CornerRightUp class="h-3.5 w-3.5" />
+              <ArrowUp v-if="composerInputBlank" class="h-3.5 w-3.5" />
+              <CornerRightUp v-else class="h-3.5 w-3.5" />
             </button>
             <div
               v-if="sendModeMenuOpen"
@@ -398,7 +400,7 @@
 <script setup lang="ts">
 import { Teleport, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { CalendarPlus, Check, ChevronDown, ClipboardList, CornerRightUp, FileText, History, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X } from "@lucide/vue";
+import { CalendarPlus, Check, ChevronDown, ClipboardList, CornerRightUp, FileText, History, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X, ArrowUp } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption } from "../../../types/app";
 import ChatQueuePreview from "./ChatQueuePreview.vue";
 import ChatSelectionActionPanel from "./ChatSelectionActionPanel.vue";
@@ -510,6 +512,12 @@ const queueEnabled = computed(() => true);
 const showConversationActions = computed(() => props.showConversationActions ?? true);
 const systemNotificationMode = computed(() => !!props.systemNotificationMode);
 const remoteContactMode = computed(() => !!props.remoteContactMode);
+
+/** 输入区无可发送内容（无文字、无图片、无待发附件）时，发送按钮降级为菜单入口。 */
+const composerInputBlank = computed(() => {
+  if (String(props.chatInput || "").trim()) return false;
+  return props.clipboardImages.length === 0 && props.queuedAttachmentNotices.length === 0;
+});
 
 // Product rule: an in-flight assistant reply must not lock the input toolbar.
 // Users can keep typing while streaming, so do not use `chatting` as the disabled

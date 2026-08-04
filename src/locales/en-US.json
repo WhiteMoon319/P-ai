@@ -1436,6 +1436,7 @@
     "send": "Send",
     "sendModeEnter": "Send message with Enter",
     "sendModeCtrlEnter": "Send message with Ctrl + Enter",
+    "sendModeMenu": "Switch send shortcut",
     "newConversation": "New Conversation",
     "newTask": "New Task",
     "conversationList": "Conversation List",

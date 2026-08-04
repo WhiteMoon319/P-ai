@@ -1555,6 +1555,7 @@
     "dropImageOrPdf": "拖放檔案（圖片/PDF 可直接多模態）",
     "attach": "新增附件",
     "send": "發送",
+    "sendModeMenu": "切換發送快捷鍵",
     "newConversation": "新建會話",
     "newTask": "新建任務",
     "conversationList": "會話列表",
