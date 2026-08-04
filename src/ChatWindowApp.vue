@@ -645,7 +645,9 @@ export default defineComponent({
       }
       if (data.source !== REMOTE_BRIDGE_SOURCE) return;
       if (data.method !== "chat.assistantDelta") return;
-      const record = data.payload as { conversationId?: unknown; event?: unknown } | null;
+      const record = data.payload as
+        | { conversationId?: unknown; event?: unknown; conversationTitle?: unknown }
+        | null;
       if (!record || typeof record !== "object") return;
       const conversationId = String(record.conversationId || "").trim();
       const conversationTitle = String(record.conversationTitle || "").trim();
