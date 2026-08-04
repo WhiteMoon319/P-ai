@@ -119,7 +119,7 @@
           />
 
           <HotkeyTab
-            v-else-if="props.configTab === 'hotkey'"
+            v-else-if="props.configTab === 'hotkey' && !isAndroid"
             :config="config"
             :hotkey-test-recording="hotkeyTestRecording"
             :hotkey-test-recording-ms="hotkeyTestRecordingMs"

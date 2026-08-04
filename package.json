@@ -10,8 +10,6 @@
     "clean:cargo-cache:all": "powershell -ExecutionPolicy Bypass -File scripts/clean-cargo-cache.ps1 -All",
     "dev": "vite",
     "build": "tsc && vite build",
-    "package:vscode-sidebar": "powershell -ExecutionPolicy Bypass -File scripts/package-vscode-sidebar.ps1",
-    "publish:vscode-sidebar": "powershell -ExecutionPolicy Bypass -File scripts/publish-vscode-sidebar.ps1",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
     "smoke": "powershell -ExecutionPolicy Bypass -File scripts/smoke.ps1",
