@@ -1167,6 +1167,12 @@ function isInteractiveHeaderTarget(target: HTMLElement): boolean {
 }
 
 function handleCreateConversation() {
+  // 远程前端模式：不打开本地新建对话框，直接把创建命令交给 iframe 内电脑 PAI 页面执行，
+  // 由电脑 PAI 在自己的会话状态上创建（使用其默认部门），避免创建落在安卓端本地。
+  if (props.remoteMode) {
+    emit("create-conversation");
+    return;
+  }
   createConversationTitle.value = "";
   const activeConversation = props.conversationItems.find(
     (item) => String(item.conversationId || "").trim() === String(props.activeConversationId || "").trim(),
