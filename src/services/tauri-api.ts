@@ -190,7 +190,7 @@ const WEB_BRIDGE_COMMAND_TIMEOUT_MS: Record<string, number> = {
   test_voice_connection: WEB_BRIDGE_LONG_TIMEOUT_MS,
 };
 
-function isTauriRuntimeAvailable(): boolean {
+export function isTauriRuntimeAvailable(): boolean {
   if (typeof window === "undefined") return false;
   const internals = (window as Window & { __TAURI_INTERNALS__?: { invoke?: unknown } }).__TAURI_INTERNALS__;
   return typeof internals?.invoke === "function";
@@ -1855,11 +1855,21 @@ function createWebTransportStreamBinding(
     const record = payload && typeof payload === "object"
       ? payload as { conversationId?: unknown; event?: unknown }
       : null;
-    if (String(record?.conversationId || "").trim() !== conversationId) return;
+    const payloadConversationId = String(record?.conversationId || "").trim();
     const event = record?.event;
     const kind = event && typeof event === "object"
       ? String((event as { kind?: unknown }).kind || "").trim()
       : "";
+    console.log("[Web流式][bridge] 收到 assistantDelta 通知", {
+      bindingConversationId: conversationId,
+      payloadConversationId,
+      conversationMatched: payloadConversationId === conversationId,
+      kind: kind || "delta",
+      deltaLength: event && typeof event === "object"
+        ? String((event as { delta?: unknown }).delta || "").length
+        : 0,
+    });
+    if (payloadConversationId !== conversationId) return;
     // 与桌面 Channel 保持同一语义：低频广播事件只走统一通知订阅，
     // 不能同时再灌入流通道，否则 Web 会把同一状态处理两次。
     if (kind === "tool_status" || kind === "context_usage_update") return;

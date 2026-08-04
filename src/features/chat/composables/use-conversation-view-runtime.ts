@@ -2,6 +2,7 @@ import { computed, onScopeDispose, ref, shallowRef, watch, type Ref } from "vue"
 import {
   bindTransportConversationStream,
   invokeTauri,
+  isTauriRuntimeAvailable,
   onTransportNotification,
   probeTransportConversationStream,
   unbindTransportConversationStream,
@@ -207,6 +208,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
           requestSnapshot: () => requestSnapshot(conversationId),
           applySnapshot: (snapshot) => applySnapshot(snapshot, syncOptions.preserveExistingHistory),
           bind: () => flow.bindActiveConversationStream(conversationId, true),
+          alwaysBind: !isTauriRuntimeAvailable(),
           resume: (snapshot) => {
             const runtimeState = String(snapshot?.runtimeState || "").trim();
             const streamCache = snapshot?.streamCache as Record<string, unknown> | null | undefined;

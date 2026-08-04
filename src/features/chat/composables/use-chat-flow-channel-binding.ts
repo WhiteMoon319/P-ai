@@ -81,18 +81,30 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
   ) {
     channel.onmessage = (event) => {
       if (guard && !guard()) {
-        if (options.debug) {
-          if (source === "bound") {
-            console.debug("[聊天] 丢弃过期 bound channel 事件", {
-              conversationId: boundConversationId,
-            });
-          } else {
-            console.debug("[聊天] 丢弃已切出会话的 sendChat 事件");
-          }
+        if (source === "bound") {
+          console.log("[Web流式][guard] 丢弃过期 bound channel 事件", {
+            conversationId: boundConversationId,
+            boundInitialized: boundConversationInitialized,
+            boundDeltaChannelAlive: boundDeltaChannel === channel,
+            foregroundConversation: options.getConversationId ? options.getConversationId() : "",
+          });
+        } else {
+          console.log("[Web流式][guard] 丢弃已切出会话的 sendChat 事件");
         }
         return;
       }
       const parsed = readAssistantEvent(event);
+      if (source === "bound") {
+        const rawDelta = parsed.kind === "delta"
+          ? String((event as { delta?: unknown })?.delta ?? "")
+          : "";
+        console.log("[Web流式][bound] 收到流式事件", {
+          conversationId: boundConversationId,
+          kind: parsed.kind || "delta",
+          deltaLength: rawDelta.length,
+          hasStreamCache: !!(parsed as { streamCache?: unknown }).streamCache,
+        });
+      }
       if (parsed.kind === "stream_probe") {
         const probeId = String(parsed.message || "").trim();
         if (probeId) {
@@ -134,6 +146,14 @@ export function useChatFlowChannelBinding(options: UseChatFlowChannelBindingOpti
 
   async function bindActiveConversationStream(conversationId: string, force = false) {
     const id = String(conversationId || "").trim();
+    console.log("[Web流式][bind] bindActiveConversationStream", {
+      conversationId: id,
+      force,
+      invokeBindProvided: !!options.invokeBindActiveChatViewStream,
+      boundConversationInitialized,
+      boundConversationId,
+      alreadyBound: !force && boundConversationInitialized && id === boundConversationId,
+    });
     if (!id) {
       await unbindActiveConversationStream();
       return;

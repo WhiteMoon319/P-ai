@@ -1,6 +1,7 @@
 import { onBeforeUnmount, ref } from "vue";
 import type { AssistantStreamBlock, ChatMessage } from "../../../types/app";
 import { normalizeAssistantStreamBlocks } from "../../../utils/chat-message-semantics";
+import { isTauriRuntimeAvailable } from "../../../services/tauri-api";
 import { useChatFlowChannelBinding } from "./use-chat-flow-channel-binding";
 import {
   useChatFlowDrafts,
@@ -536,6 +537,11 @@ export function useChatFlow(options: UseChatFlowOptions) {
     getConversationId: options.getConversationId,
     getSession: options.getSession,
     createSendChatDeltaChannel: channelBinding.createSendChatDeltaChannel,
+    // 仅 Web 端注入：桌面端 sendChat 原生 Tauri Channel 已覆盖流式，再 bind 会双通道双写。
+    // 使用 coordinated 包装版，保证与订阅槽位（subscriptionSlot）协调一致。
+    bindActiveConversationStream: isTauriRuntimeAvailable()
+      ? undefined
+      : bindActiveConversationStream,
     invokeSendChatMessage: options.invokeSendChatMessage,
     onOwnUserDraftInserted: options.onOwnUserDraftInserted,
     onStreamingAssistantBubbleInserted: options.onStreamingAssistantBubbleInserted,

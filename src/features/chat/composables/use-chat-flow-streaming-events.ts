@@ -132,6 +132,24 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
   }
 
   function handleStreamingEvent(currentGen: number, parsed: AssistantDeltaEvent) {
+    if (parsed.kind !== "context_usage_update") {
+      const roundSnapshot = options.getRound();
+      console.log("[Web流式][state] 进入 handleStreamingEvent", {
+        kind: parsed.kind || "delta",
+        currentGen,
+        roundPhase: roundSnapshot.phase,
+        roundGen: "gen" in roundSnapshot ? roundSnapshot.gen : undefined,
+        roundMessageId: "messageId" in roundSnapshot ? roundSnapshot.messageId : undefined,
+        accepted: !!currentGen
+          && (roundSnapshot.phase === "queued" || roundSnapshot.phase === "streaming")
+          && "gen" in roundSnapshot
+          && roundSnapshot.gen === currentGen,
+        deltaLength: parsed.kind === "delta"
+          ? String((parsed as { delta?: unknown }).delta || "").length
+          : 0,
+        hasStreamCache: !!parsed.streamCache,
+      });
+    }
     if (parsed.kind === "round_completed" || parsed.kind === "round_failed") {
       // 终态事件到达时先冲刷文本缓冲，避免最后一段正文/思维链丢失。
       flushStreamTextBuffer();
