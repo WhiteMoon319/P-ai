@@ -1025,6 +1025,7 @@ fn main() {
             refresh_storage_usage_overview,
             get_usage_overview,
             refresh_usage_overview,
+            get_usage_trail,
             open_storage_usage_item_directory,
             cleanup_storage_legacy_items,
             load_app_bootstrap_snapshot,

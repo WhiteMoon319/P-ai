@@ -115,9 +115,18 @@ fn add_provider_usage_delta_to_conversation(
                 delegate_runtime_thread_conversation_update(
                     app_state,
                     conversation_id,
-                    conversation,
+                    conversation.clone(),
                 )
-                .map(|_| true)
+                .map(|_| {
+                    usage_trail_record_conversation_delta(
+                        app_state,
+                        &conversation,
+                        provider_key,
+                        model_name,
+                        usage,
+                    );
+                    true
+                })
             } else {
                 Ok(false)
             }

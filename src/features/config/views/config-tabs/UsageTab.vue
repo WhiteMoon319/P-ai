@@ -48,7 +48,7 @@
                 </thead>
                 <tbody>
                   <tr v-for="item in sortedProviderModels" :key="`provider-model-${item.key}`">
-                    <td class="min-w-28">{{ item.providerLabel }}</td>
+                    <td class="min-w-28">{{ providerLabel(item) }}</td>
                     <td class="min-w-36">{{ item.modelName }}</td>
                     <td class="text-right">{{ formatTokens(item.weightedTokens) }}</td>
                     <td class="text-right">{{ formatTokens(totalInputTokens(item)) }}</td>
@@ -85,7 +85,7 @@
                 </thead>
                 <tbody>
                   <tr v-for="item in sortedAgents" :key="`agent-${item.key}`">
-                    <td class="min-w-36">{{ item.label }}</td>
+                    <td class="min-w-36">{{ agentLabel(item) }}</td>
                     <td class="text-right">{{ formatTokens(item.weightedTokens) }}</td>
                     <td class="text-right">{{ formatTokens(totalInputTokens(item)) }}</td>
                     <td class="text-right">{{ formatPercent(cacheHitRate(item)) }}</td>
@@ -121,7 +121,7 @@
                 </thead>
                 <tbody>
                   <tr v-for="item in sortedKinds" :key="`kind-${item.key}`">
-                    <td>{{ item.label }}</td>
+                    <td>{{ kindLabel(item) }}</td>
                     <td class="text-right">{{ formatTokens(item.weightedTokens) }}</td>
                     <td class="text-right">{{ formatTokens(totalInputTokens(item)) }}</td>
                     <td class="text-right">{{ formatPercent(cacheHitRate(item)) }}</td>
@@ -478,6 +478,34 @@ function columnLabel(key: string): string {
   return t(`config.usage.columns.${key}`);
 }
 
+// 用量页 by_kind 的 label 由后端硬编码中文，这里按 kind key 映射到当前语言
+function kindLabel(item: UsageAggregateItem): string {
+  const kindKeyMap: Record<string, string> = {
+    normal: t("config.usage.kinds.normal"),
+    delegate: t("config.usage.kinds.delegate"),
+    archived: t("config.usage.kinds.archived"),
+    system_notification: t("config.usage.kinds.systemNotification"),
+    remote_im_contact: t("config.usage.kinds.remoteImContact"),
+  };
+  return kindKeyMap[item.key] ?? item.label;
+}
+
+// 后端对未识别供应商写入硬编码中文占位，这里映射到当前语言
+function providerLabel(item: UsageProviderModelAggregateItem): string {
+  if (item.providerLabel === "未识别供应商") {
+    return t("config.usage.unknownProvider");
+  }
+  return item.providerLabel;
+}
+
+// 后端对未绑定人格写入硬编码中文占位，这里映射到当前语言
+function agentLabel(item: UsageAggregateItem): string {
+  if (item.label === "未绑定人格") {
+    return t("config.usage.unboundAgent");
+  }
+  return item.label;
+}
+
 function compareNumber(left: number, right: number): number {
   return left - right;
 }
@@ -639,6 +667,10 @@ function formatConversationMeta(item: UsageConversationItem): string {
 }
 
 function displayConversationTitle(item: UsageConversationItem): string {
+  // 后端对已删除会话写入硬编码中文占位，这里映射到当前语言
+  if (item.title === "已删除会话") {
+    return t("config.usage.deletedConversation");
+  }
   return resolveConversationDisplayTitle(
     {
       conversationId: item.conversationId,
@@ -663,7 +695,10 @@ function conversationAvatarUrl(item: UsageConversationItem): string {
 
 function conversationAvatarLabel(item: UsageConversationItem): string {
   const fallback = t("config.usage.conversationAvatar");
-  return String(item.agentName || displayConversationTitle(item) || fallback).trim() || fallback;
+  const agentName = item.agentName === "未绑定人格"
+    ? t("config.usage.unboundAgent")
+    : item.agentName;
+  return String(agentName || displayConversationTitle(item) || fallback).trim() || fallback;
 }
 
 function conversationAvatarInitial(item: UsageConversationItem): string {

@@ -1,5 +1,8 @@
 <template>
   <div class="flex flex-col gap-6 pb-20 [&_div]:[transition:background-color_200ms,border-color_200ms,box-shadow_200ms,border-radius_200ms_ease-out]">
+    <!-- 足迹墙（欢迎页顶部） -->
+    <UsageTrailWall />
+
     <!-- 欢迎主卡片（全宽） -->
         <div class="card bg-base-100 card-border border-base-300 from-base-content/5 bg-linear-to-bl to-50% card-sm overflow-hidden">
       <div class="card-body gap-6">
@@ -138,6 +141,7 @@ import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { MessageSquare } from "@lucide/vue";
 import type { ApiConfigItem, AppConfig, PersonaProfile } from "../../../../types/app";
+import UsageTrailWall from "./UsageTrailWall.vue";
 import {
   getTransportHostRuntimePrerequisites,
   installTransportHostRuntimePrerequisite,
