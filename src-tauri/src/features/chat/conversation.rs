@@ -3445,7 +3445,7 @@ fn build_conversation_prompt_payload(
         } else {
             (None, Vec::new())
         };
-        let mut text = if is_user {
+        let text = if is_user {
             // goal_continue 映射为 user 后仍须读取持久化 hiddenPromptText。
             if message_is_goal_continue(message) {
                 render_message_content_for_model(message)
@@ -3468,8 +3468,9 @@ fn build_conversation_prompt_payload(
         } else {
             (Vec::new(), Vec::new())
         };
-        if text.trim().is_empty() && (!images.is_empty() || !audios.is_empty()) {
-            text = " ".to_string();
+        // 空消息（无文本无媒体，如 plan/goal 提示词渲染为空）不进请求体
+        if text.trim().is_empty() && images.is_empty() && audios.is_empty() {
+            continue;
         }
         history_messages.push(PreparedHistoryMessage {
             role: role.clone(),
@@ -3545,13 +3546,6 @@ fn build_conversation_prompt_payload(
                 continue;
             }
             latest_user_extra_blocks.push(trimmed.to_string());
-        }
-        if latest_user_text.trim().is_empty()
-            && latest_user_meta_text.trim().is_empty()
-            && latest_user_extra_blocks.is_empty()
-            && (!latest_images.is_empty() || !latest_audios.is_empty())
-        {
-            latest_user_text = " ".to_string();
         }
     }
 
