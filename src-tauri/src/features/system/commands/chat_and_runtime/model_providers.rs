@@ -2,6 +2,21 @@ const MODELS_DEV_CACHE_FILE_NAME: &str = "models_dev_api_cache.json";
 const MODELS_DEV_CACHE_MAX_AGE_MS: i64 = 24 * 60 * 60 * 1000;
 const MODELS_DEV_API_URL: &str = "https://models.dev/api.json";
 
+// Android 上 reqwest 无法访问系统根证书，必须注入 webpki 静态根证书，
+// 否则 HTTPS 模型列表请求会因证书校验失败（与 Linux rootfs 下载同因）。
+fn build_models_refresh_http_client() -> Result<reqwest::Client, String> {
+    let mut builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20));
+    #[cfg(target_os = "android")]
+    {
+        builder = android_workspace_apply_static_webpki_roots(builder)?;
+    }
+    builder
+        .build()
+        .map_err(|err| format!("Build HTTP client failed: {err}"))
+}
+
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ModelsDevCacheFile {
     updated_at: String,
@@ -126,10 +141,7 @@ async fn fetch_models_gemini_native(input: &RefreshModelsInput) -> Result<Vec<St
     let api_key_header = HeaderValue::from_str(api_key)
         .map_err(|err| format!("Build x-goog-api-key header failed: {err}"))?;
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(20))
-        .build()
-        .map_err(|err| format!("Build HTTP client failed: {err}"))?;
+    let client = build_models_refresh_http_client()?;
 
     let resp = client
         .get(&url)
@@ -185,10 +197,7 @@ async fn fetch_models_anthropic(input: &RefreshModelsInput) -> Result<Vec<String
         .map_err(|err| format!("Build x-api-key header failed: {err}"))?;
     let anthropic_version = HeaderValue::from_static("2023-06-01");
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(20))
-        .build()
-        .map_err(|err| format!("Build HTTP client failed: {err}"))?;
+    let client = build_models_refresh_http_client()?;
 
     let resp = client
         .get(&url)
@@ -351,6 +360,7 @@ async fn fetch_models_genai(
     }
     let client = genai::Client::builder()
         .with_adapter_kind(adapter_kind)
+        .with_reqwest(build_models_refresh_http_client()?)
         .build();
     let mut models = tokio::time::timeout(
         std::time::Duration::from_secs(20),

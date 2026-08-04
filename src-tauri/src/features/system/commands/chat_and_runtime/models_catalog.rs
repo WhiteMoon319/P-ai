@@ -15,10 +15,7 @@ async fn fetch_models_openai(input: &RefreshModelsInput) -> Result<Vec<String>, 
                 "Build authorization header failed: {err}. The API key may contain invalid characters."
             )
         })?;
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(20))
-        .build()
-        .map_err(|err| format!("Build HTTP client failed: {err}"))?;
+    let client = build_models_refresh_http_client()?;
 
     let mut urls = vec![format!("{base}/models")];
     if !base.to_ascii_lowercase().ends_with("/v1") {
