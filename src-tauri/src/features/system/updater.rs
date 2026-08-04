@@ -34,8 +34,12 @@ const UPDATER_GITHUB_CHANGELOG_REMOTE_RAW_ORIGIN: &str =
     "https://raw.githubusercontent.com/kawayiYokami/P-ai/main/docs/changelog/remote.md";
 const UPDATER_GITHUB_RELEASE_PAGE_ORIGIN: &str =
     "https://github.com/kawayiYokami/P-ai/releases/latest";
+#[cfg(target_os = "windows")]
 const UPDATER_GITHUB_INSTALLER_MANIFEST_ORIGIN: &str =
     "https://github.com/kawayiYokami/P-ai/releases/latest/download/latest.json";
+#[cfg(not(target_os = "windows"))]
+const UPDATER_GITHUB_INSTALLER_MANIFEST_ORIGIN: &str =
+    "https://github.com/kawayiYokami/P-ai/releases/latest/download/latest-linux.json";
 const UPDATER_GITHUB_PORTABLE_MANIFEST_ORIGIN: &str =
     "https://github.com/kawayiYokami/P-ai/releases/latest/download/latest-portable.json";
 const PORTABLE_UPDATE_EVENT_NAME: &str = "easy-call:update-status";
@@ -535,7 +539,15 @@ fn current_installer_target() -> &'static str {
     {
         return "windows-i686";
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    {
+        return "linux-x86_64";
+    }
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    {
+        return "linux-aarch64";
+    }
+    #[cfg(target_os = "macos")]
     {
         return "unsupported";
     }
@@ -1803,7 +1815,7 @@ async fn prepare_portable_update(
 }
 
 async fn run_auto_update_cycle(app: AppHandle) {
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
     {
         let _ = app;
         return;
@@ -1850,7 +1862,7 @@ async fn run_auto_update_cycle(app: AppHandle) {
 }
 
 fn start_github_auto_update_worker(app: AppHandle) {
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
     {
         let _ = app;
         return;

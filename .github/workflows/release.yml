@@ -339,6 +339,40 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
 
+      - name: Generate Linux updater manifest
+        run: |
+          set -euo pipefail
+          TAG_NAME="v${PACKAGE_VERSION}"
+          APPIMAGE_PATH="$(find src-tauri/target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' | head -n1)"
+          if [ -z "${APPIMAGE_PATH}" ]; then
+            echo "未找到 AppImage 产物" >&2
+            exit 1
+          fi
+          SIG_PATH="${APPIMAGE_PATH}.sig"
+          if [ ! -f "${SIG_PATH}" ]; then
+            echo "未找到 AppImage 签名文件: ${SIG_PATH}" >&2
+            exit 1
+          fi
+          SIGNATURE="$(cat "${SIG_PATH}")"
+          APPIMAGE_NAME="$(basename "${APPIMAGE_PATH}")"
+          PUB_DATE="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+          URL="https://gh-proxy.org/https://github.com/${{ github.repository }}/releases/download/${TAG_NAME}/${APPIMAGE_NAME}"
+          cat > src-tauri/target/release/bundle/appimage/latest-linux.json <<EOF
+          {
+            "version": "${PACKAGE_VERSION}",
+            "notes": "Linux update package for ${TAG_NAME}",
+            "pub_date": "${PUB_DATE}",
+            "platforms": {
+              "linux-x86_64": {
+                "signature": "${SIGNATURE}",
+                "url": "${URL}"
+              }
+            }
+          }
+          EOF
+          echo "=== linux updater manifest ==="
+          cat src-tauri/target/release/bundle/appimage/latest-linux.json
+
       - name: List packaged artifacts
         run: |
           echo "=== release bundle files ==="
@@ -352,6 +386,8 @@ jobs:
             src-tauri/target/release/bundle/**/*.deb
             src-tauri/target/release/bundle/**/*.AppImage
             src-tauri/target/release/bundle/**/*.appimage
+            src-tauri/target/release/bundle/**/*.sig
+            src-tauri/target/release/bundle/**/latest-linux.json
           if-no-files-found: error
 
   release:
