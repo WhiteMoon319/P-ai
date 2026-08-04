@@ -112,7 +112,6 @@
           <WelcomeTab
             v-if="props.configTab === 'welcome'"
             :config="config"
-            :personas="personas"
             @jump="$emit('update:configTab', $event)"
             @start-chat="$emit('start-chat')"
           />

@@ -365,15 +365,9 @@
       "applySuccess": "遷移匯入完成，應用即將重新啟動。"
     },
     "welcome": {
-      "title": "首次設定歡迎頁",
-      "subtitle": "下面這些大卡片會直接檢查你的關鍵配置是否完整。先補必須項，再看建議項，就能比較穩定地開始用。",
-      "askLlmHint": "如果你不知道怎麼配，最簡單的方法就是截圖給 LLM，讓它一步一步教你設定。",
-      "requiredBadge": "必須",
-      "stronglyRecommendedBadge": "強烈建議",
-      "recommendedBadge": "建議",
-      "currentState": "目前狀態：",
       "autoInstall": "一鍵安裝",
-      "manualInstall": "手動安裝",
+      "notInstalled": "未安裝",
+      "notSet": "未設置",
       "installing": "安裝中...",
       "installSuccess": "安裝完成，已重新偵測。",
       "installFailedFallback": "自動安裝失敗，已開啟官方下載頁：{err}",
@@ -408,109 +402,21 @@
         ],
         "chartPolar": "極區圖"
       },
-      "stats": {},
       "cards": {
         "git": {
-          "title": "Git",
-          "summary": "必須安裝 Git。終端工作流、Git Bash 與很多後續開發協作都會直接依賴它。",
-          "currentOk": "已偵測到 Git。",
-          "currentMissing": "還沒裝。點一鍵安裝，失敗時會自動開啟官網。",
-          "action": "去看工具",
-          "install": "安裝 Git"
+          "title": "Git"
         },
         "node": {
-          "title": "Node.js",
-          "summary": "必須安裝 Node.js。前端開發、很多腳本工具以及後續安裝 MCP / skill 都會用到它。",
-          "currentOk": "已偵測到 Node.js。",
-          "currentMissing": "還沒裝。點一鍵安裝，失敗時會自動開啟官網。",
-          "action": "去看工具",
-          "install": "安裝 Node.js"
+          "title": "Node.js"
         },
         "ripgrep": {
-          "title": "ripgrep（rg）",
-          "summary": "rg 是程式開發常用的高速程式碼搜尋工具，大專案裡搜檔案、搜文字會更快。",
-          "currentOk": "已偵測到 rg。",
-          "currentMissing": "未偵測到 rg。可以直接問 PAI：怎麼安裝 rg？",
-          "action": "去看工具"
-        },
-        "textModel": {
-          "title": "可用文字模型",
-          "summary": "系統至少需要一個可用的文字模型，建議優先準備一個同時支援圖片的多模態模型。",
-          "currentOkMultimodal": "已找到可用多模態文字模型：{name}",
-          "currentOk": "已找到可用文字模型：{name}。但暫時還不是多模態。",
-          "currentMissing": "還沒有偵測到任何可用文字模型。",
-          "action": "去設定 LLM"
+          "title": "ripgrep（rg）"
         },
         "expertModel": {
-          "title": "專家模型",
-          "summary": "主要對話和專家任務預設使用這裡。",
-          "currentOk": "已設定：{name}",
-          "currentMissing": "尚未設定專家模型。",
-          "action": "去設定模型分工"
+          "title": "專家模型"
         },
         "quickModel": {
-          "title": "快速模型",
-          "summary": "工具審查、聯絡人秘書等輕量流程預設使用這裡。",
-          "currentOk": "已設定：{name}",
-          "currentMissing": "尚未設定快速模型。",
-          "action": "去設定模型分工"
-        },
-        "voice": {
-          "title": "語音辨識",
-          "summary": "如果你想直接語音輸入，這是很值得補上的配置。",
-          "currentOk": "已找到語音辨識模型：{name}",
-          "currentMissing": "還沒有偵測到語音辨識模型。",
-          "action": "去設定語音"
-        },
-        "embedding": {
-          "title": "嵌入模型",
-          "summary": "如果你想把記憶、檢索、知識召回這套能力跑順，最好盡早準備一個嵌入模型。",
-          "currentOk": "已找到嵌入模型：{name}",
-          "currentMissing": "還沒有偵測到嵌入模型。",
-          "action": "去設定嵌入"
-        },
-        "rerank": {
-          "title": "重排模型",
-          "summary": "這會幫 AI 在很多資料裡更穩地挑出最相關的內容。做檢索和記憶時很有幫助，屬於強烈建議盡早補上的配置。",
-          "currentOk": "已找到重排模型：{name}",
-          "currentMissing": "還沒有偵測到重排模型。",
-          "action": "去設定重排"
-        },
-        "memory": {
-          "title": "記憶功能",
-          "summary": "記憶能讓 AI 更容易記住重要事情。前面準備好嵌入和重排之後，最好再來這裡把它真正啟用。",
-          "currentOk": "記憶功能已經準備好了。",
-          "currentMissingModel": "你還沒準備好記憶用的模型，之後想用記憶時再來補就行。",
-          "currentMissingBinding": "你已經有嵌入或重排模型了，但記憶頁裡還沒正式設定完成。",
-          "action": "去設定記憶"
-        },
-        "persona": {
-          "title": "人格",
-          "summary": "人格就像不同的助手風格。你可以做一個寫作型、一個執行型，也可以做一個專門陪你聊天的。",
-          "currentOk": "你已經準備了 {count} 個可用人格。",
-          "currentMissing": "你現在還沒有額外的人格，先用預設助理也完全可以。",
-          "action": "去看人格"
-        },
-        "department": {
-          "title": "部門",
-          "summary": "部門就像分工小組。以後你可以把收集、整理、執行這類工作拆給不同部門去做。",
-          "currentOk": "你已經準備了 {count} 個額外部門。",
-          "currentMissing": "你現在還沒有額外部門，先只用主部門也沒問題。",
-          "action": "去看部門"
-        },
-        "skill": {
-          "title": "技能",
-          "summary": "技能像是一張張小教學，告訴 AI 某件事應該怎麼做。不會配置也沒關係，後面慢慢加就行。",
-          "currentOk": "已偵測到 {count} 個技能。",
-          "currentMissing": "還沒有偵測到技能，先空著也可以。",
-          "action": "去看技能"
-        },
-        "mcp": {
-          "title": "MCP",
-          "summary": "MCP 可以把更多外部能力接進來，比如連接別的服務或工具。新手可以先不碰，等需要時再加。",
-          "currentOk": "已啟用 {count} 個 MCP 服務。",
-          "currentMissing": "還沒有啟用 MCP 服務，這不是問題。",
-          "action": "去看 MCP"
+          "title": "快速模型"
         }
       }
     },
