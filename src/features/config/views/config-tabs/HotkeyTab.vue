@@ -398,12 +398,15 @@ function startHotkeyCapture() {
       stopHotkeyCapture();
       return;
     }
+    if (event.metaKey) {
+      hotkeyCaptureHint.value = t("config.hotkey.captureMetaNotSupportedHint");
+      return;
+    }
 
     const modifiers: string[] = [];
     if (event.ctrlKey) modifiers.push("Ctrl");
     if (event.altKey) modifiers.push("Alt");
     if (event.shiftKey) modifiers.push("Shift");
-    if (event.metaKey) modifiers.push("Meta");
 
     if (isModifierKey(event.code)) {
       hotkeyCaptureHint.value = t("config.hotkey.captureNeedMainKeyHint");
@@ -438,12 +441,12 @@ function startRecordHotkeyCapture() {
       stopRecordHotkeyCapture();
       return;
     }
+    if (event.metaKey) return;
 
     const modifiers: string[] = [];
     if (event.ctrlKey) modifiers.push("Ctrl");
     if (event.altKey) modifiers.push("Alt");
     if (event.shiftKey) modifiers.push("Shift");
-    if (event.metaKey) modifiers.push("Meta");
 
     if (isModifierKey(event.code)) {
       const modifierOnly = modifiers[0];

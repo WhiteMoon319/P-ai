@@ -249,6 +249,7 @@ fn token_from_key(key: rdev::Key) -> Option<String> {
         rdev::Key::Slash => "/",
         rdev::Key::Return => "ENTER",
         rdev::Key::Tab => "TAB",
+        rdev::Key::CapsLock => "CAPSLOCK",
         _ => return None,
     };
     Some(token.to_string())
