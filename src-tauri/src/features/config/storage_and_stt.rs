@@ -732,7 +732,10 @@ fn normalize_shell_workspaces(config: &mut AppConfig) {
                 }
             }
         }
+        #[cfg(target_os = "windows")]
         let path_key = normalized_path.to_ascii_lowercase();
+        #[cfg(not(target_os = "windows"))]
+        let path_key = normalized_path.clone();
         if !seen_paths.insert(path_key) {
             continue;
         }

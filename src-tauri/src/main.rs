@@ -285,12 +285,21 @@ async fn run_deferred_setup(app_handle: AppHandle) {
             .await;
         }
     });
-    emit_progress("启动录音热键探针");
-    if let Err(err) = start_record_hotkey_probe(
-        app_handle.clone(),
-        app_state.config_path.clone(),
-    ) {
-        runtime_log_error(format!("[启动-延迟] 启动录音热键探针失败: {err}"));
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    {
+        let wayland_only =
+            cfg!(target_os = "linux") && std::env::var_os("WAYLAND_DISPLAY").is_some();
+        if wayland_only {
+            runtime_log_info("[启动-延迟] Wayland 会话不支持按键监听，跳过录音热键探针".to_string());
+        } else {
+            emit_progress("启动录音热键探针");
+            if let Err(err) = start_record_hotkey_probe(
+                app_handle.clone(),
+                app_state.config_path.clone(),
+            ) {
+                runtime_log_error(format!("[启动-延迟] 启动录音热键探针失败: {err}"));
+            }
+        }
     }
     emit_progress("配置自检");
     match state_read_config_cached(app_state.inner()) {
