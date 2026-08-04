@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-08-03T16:35:22.894Z",
-  "latestVersion": "v0.51.0",
+  "generatedAt": "2026-08-04T11:19:13.086Z",
+  "latestVersion": "v0.52.0",
   "releases": [
+    {
+      "version": "v0.52.0",
+      "path": "docs/changelog/releases/v0.52.0.md",
+      "summary": "Linux 应用内自动更新（AppImage）：支持自动检查、下载并替换安装新版本，发布流程同步生成 Linux 更新清单与签名；macOS 仍不启用。"
+    },
     {
       "version": "v0.51.0",
       "path": "docs/changelog/releases/v0.51.0.md",
@@ -901,11 +906,6 @@
       "version": "v0.9.0",
       "path": "docs/changelog/releases/v0.9.0.md",
       "summary": "发布（release-0.9.0）：整理并发布当前这一轮聊天窗口、Markdown 渲染、流式输出与会话链路重构成果"
-    },
-    {
-      "version": "UNRELEASED",
-      "path": "docs/changelog/releases/UNRELEASED.md",
-      "summary": ""
     }
   ]
 }
