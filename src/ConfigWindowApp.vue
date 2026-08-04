@@ -142,7 +142,6 @@
         @play-hotkey-record-test="playHotkeyRecordTest"
         @request-microphone-permission="requestMicrophonePermission"
         @capture-hotkey="captureHotkey"
-        @summon-chat-now="summonChatNow"
         @save-agent-avatar="saveAgentAvatar"
         @clear-agent-avatar="clearAgentAvatar"
         @check-update="manualCheckGithubUpdate"
@@ -708,7 +707,7 @@ const {
   },
 });
 
-const { summonChatWindowFromConfig, openGithubRepository } = useWindowActions({
+const { openGithubRepository } = useWindowActions({
   closeWindow,
   minimizeWindow,
   freezeForegroundConversation: () => undefined,
@@ -832,10 +831,6 @@ function openRuntimeLogs() {
   void openTransportWindow("runtimeLogs").catch((error) => {
     console.warn("[运行日志] 打开日志窗口失败", error);
   });
-}
-
-function summonChatNow() {
-  summonChatWindowFromConfig();
 }
 
 async function refreshAllViewData() {

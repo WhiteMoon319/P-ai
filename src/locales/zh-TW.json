@@ -67,10 +67,8 @@
     },
     "language": {},
     "hotkey": {
-      "label": "呼唤热键",
+      "label": "热键",
       "recordButton": "录制热键",
-      "callNowButton": "呼叫 AI",
-      "callNowHint": "本軟體支援系統匣，可透過系統匣選單開啟聊天視窗。",
       "recording": "按键中...",
       "captureDefaultHint": "点击「录制热键」，然后按下组合键（如 Alt+·）。Esc 取消。",
       "captureListeningHint": "请按下组合键...",
@@ -99,12 +97,17 @@
       "holdToRecord": "按住开始录音",
       "holdRecordButton": "按住录音",
       "playRecord": "播放录音",
-      "builtinShortcuts": "內建快捷鍵",
       "builtinTabInstruction": "快捷指令",
+      "builtinTabInstructionHint": "開啟快捷指令面板，快速選擇指令。",
       "builtinEscStopReplying": "打斷目前回覆",
+      "builtinEscStopReplyingHint": "停止 AI 正在進行的回覆。",
       "builtinShiftTabPlanMode": "切換計劃模式",
+      "builtinShiftTabPlanModeHint": "在普通模式與計劃模式之間切換。",
       "builtinAltZLineWrap": "切換程式碼預覽自動換行",
-      "builtinShiftWheelConversationSwitch": "切換會話"
+      "builtinAltZLineWrapHint": "切換程式碼預覽的自動換行顯示。",
+      "builtinShiftWheelConversationSwitch": "切換會話",
+      "builtinShiftWheelConversationSwitchHint": "滾動切換最近會話。",
+      "builtinWheelKey": "滾輪"
     },
     "notification": {
       "title": "訊息通知",

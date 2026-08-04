@@ -323,15 +323,48 @@
             {{ t("chat.plan.mode") }}
           </span>
           <button
-            class="btn btn-sm btn-circle shrink-0"
-            :class="showStopAction ? 'btn-error' : 'btn-success'"
-            :disabled="frozen || busy || (showStopAction && !!stopChatDisabled)"
-            :title="showStopAction ? `${t('chat.stop')} / ${t('chat.stopReplying')}` : t('chat.send')"
-            @click="showStopAction ? emit('stopChat') : handleSendChat()"
+            v-if="showStopAction"
+            class="btn btn-sm btn-circle shrink-0 btn-error"
+            :disabled="frozen || busy || !!stopChatDisabled"
+            :title="`${t('chat.stop')} / ${t('chat.stopReplying')}`"
+            @click="emit('stopChat')"
           >
-            <Square v-if="showStopAction" class="h-3.5 w-3.5 fill-current" />
-            <CornerRightUp v-else class="h-3.5 w-3.5" />
+            <Square class="h-3.5 w-3.5 fill-current" />
           </button>
+          <div v-else ref="sendModeMenuRef" class="relative flex shrink-0">
+            <button
+              class="btn btn-sm btn-circle shrink-0 btn-success"
+              :disabled="frozen || busy"
+              :title="t('chat.send')"
+              @click="handleSendChat()"
+              @contextmenu.prevent="sendModeMenuOpen = !sendModeMenuOpen"
+            >
+              <CornerRightUp class="h-3.5 w-3.5" />
+            </button>
+            <div
+              v-if="sendModeMenuOpen"
+              class="absolute bottom-full right-0 z-50 mb-1.5 min-w-52 overflow-hidden rounded-box border border-base-300 bg-base-100 text-base-content shadow-xl"
+            >
+              <div class="flex flex-col p-1">
+                <button
+                  type="button"
+                  class="flex min-h-8 w-full items-center justify-between gap-3 rounded-lg px-2.5 text-left text-sm transition-colors hover:bg-base-200"
+                  @click="setSendMode('enter')"
+                >
+                  <span>{{ t("chat.sendModeEnter") }}</span>
+                  <Check v-if="sendMode === 'enter'" class="h-4 w-4 shrink-0 text-primary" />
+                </button>
+                <button
+                  type="button"
+                  class="flex min-h-8 w-full items-center justify-between gap-3 rounded-lg px-2.5 text-left text-sm transition-colors hover:bg-base-200"
+                  @click="setSendMode('ctrl_enter')"
+                >
+                  <span>{{ t("chat.sendModeCtrlEnter") }}</span>
+                  <Check v-if="sendMode === 'ctrl_enter'" class="h-4 w-4 shrink-0 text-primary" />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -365,7 +398,7 @@
 <script setup lang="ts">
 import { Teleport, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { CalendarPlus, ChevronDown, ClipboardList, CornerRightUp, FileText, History, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X } from "@lucide/vue";
+import { CalendarPlus, Check, ChevronDown, ClipboardList, CornerRightUp, FileText, History, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption } from "../../../types/app";
 import ChatQueuePreview from "./ChatQueuePreview.vue";
 import ChatSelectionActionPanel from "./ChatSelectionActionPanel.vue";
@@ -520,10 +553,16 @@ function handleOpenConfig() {
 }
 
 function onMenuOutsideClick(event: MouseEvent) {
-  if (!menuOpen.value) return;
   const target = event.target as Node | null;
-  if (menuWrapperRef.value && menuWrapperRef.value.contains(target)) return;
-  closeMenu();
+  if (menuOpen.value) {
+    if (menuWrapperRef.value && menuWrapperRef.value.contains(target)) return;
+    closeMenu();
+  }
+  if (sendModeMenuOpen.value) {
+    const sendModeRoot = sendModeMenuRef.value;
+    if (sendModeRoot && sendModeRoot.contains(target)) return;
+    sendModeMenuOpen.value = false;
+  }
 }
 
 onMounted(() => { document.addEventListener('pointerdown', onMenuOutsideClick); });
@@ -551,8 +590,33 @@ const localChatInput = computed({
 });
 const CHAT_INPUT_HISTORY_STORAGE_KEY = "easy_call.chat_input_history.v1";
 const CHAT_INPUT_HISTORY_LIMIT = 100;
+const SEND_MODE_STORAGE_KEY = "easy_call.send_mode.v1";
+type SendMode = "enter" | "ctrl_enter";
 const composerRootRef = ref<HTMLDivElement | null>(null);
 const chatInputRef = ref<HTMLTextAreaElement | null>(null);
+
+const sendMode = ref<SendMode>("enter");
+const sendModeMenuOpen = ref(false);
+const sendModeMenuRef = ref<HTMLDivElement | null>(null);
+
+function loadSendMode() {
+  try {
+    const raw = window.localStorage.getItem(SEND_MODE_STORAGE_KEY);
+    if (raw === "ctrl_enter") sendMode.value = "ctrl_enter";
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function setSendMode(mode: SendMode) {
+  sendMode.value = mode;
+  sendModeMenuOpen.value = false;
+  try {
+    window.localStorage.setItem(SEND_MODE_STORAGE_KEY, mode);
+  } catch {
+    // ignore persistence failures
+  }
+}
 
 const chatInputHistory = ref<string[]>([]);
 const chatInputHistoryCursor = ref(-1);
@@ -1193,7 +1257,18 @@ function handleChatInputKeydown(event: KeyboardEvent) {
     emit("stopChat");
     return;
   }
-  if (event.key === "Enter" && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+  const ctrlEnterPressed = event.key === "Enter" && event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
+  const plainEnterPressed = event.key === "Enter" && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
+  if (sendMode.value === "ctrl_enter") {
+    if (ctrlEnterPressed) {
+      if (props.frozen) return;
+      event.preventDefault();
+      handleSendChat();
+      return;
+    }
+    // Ctrl+Enter 模式：普通 Enter 保留为换行
+    if (plainEnterPressed) return;
+  } else if (plainEnterPressed) {
     if (props.frozen) return;
     event.preventDefault();
     handleSendChat();
@@ -1278,6 +1353,7 @@ defineExpose({
 
 onMounted(() => {
   loadChatInputHistory();
+  loadSendMode();
   window.addEventListener("keydown", handleWindowKeydown);
   window.addEventListener("resize", refreshMentionPanelPosition);
   window.addEventListener("scroll", refreshMentionPanelPosition, true);

@@ -131,7 +131,6 @@
             @play-hotkey-record-test="$emit('playHotkeyRecordTest')"
             @request-microphone-permission="$emit('requestMicrophonePermission')"
             @capture-hotkey="$emit('captureHotkey', $event)"
-            @summon-chat-now="$emit('summonChatNow')"
             @update:record-hotkey="onRecordHotkeyChanged"
             @update:record-background-wake-enabled="onRecordBackgroundWakeChanged"
             @update:min-record-seconds="onMinRecordSecondsChanged"
@@ -556,7 +555,6 @@ const emit = defineEmits<{
   (e: "playHotkeyRecordTest"): void;
   (e: "requestMicrophonePermission"): void;
   (e: "captureHotkey", value: string): void;
-  (e: "summonChatNow"): void;
   (e: "saveAgentAvatar", value: { agentId: string; mime: string; bytesBase64: string }): void;
   (e: "clearAgentAvatar", value: { agentId: string }): void;
   (e: "checkUpdate"): void;
