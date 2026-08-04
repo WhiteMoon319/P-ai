@@ -54,6 +54,17 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
   const initialBottomOffset = ref(0);
   let conversationVirtualizerResetRequest = 0;
   let pendingConversationBottomInitializationId = "";
+  // 顶部 10% 区域切换到 anchorTo="end"，让加载更多 prepend 走 tanstack 锚定补偿；
+  // 其余区域流式期间保持 "start"，不随行增长推 offset。
+  const ANCHOR_TOP_ZONE_RATIO = 0.1;
+  const nearTopZone = ref(false);
+  let stopScrollContainerAnchorWatch: (() => void) | null = null;
+
+  function evaluateNearTopZone() {
+    const scrollEl = scrollContainer.value;
+    if (!scrollEl) return;
+    nearTopZone.value = scrollEl.scrollTop <= scrollEl.clientHeight * ANCHOR_TOP_ZONE_RATIO;
+  }
 
   // ==================== virtualizer ====================
 
@@ -186,7 +197,10 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
       // 逻辑 offset 仍会因 anchorTo="end" 持续下推，造成逻辑位置与 DOM 脱节、
       // 行定位错位（切会话滚到底也依赖 tanstack 数据而失效）。流式期间改为
       // start（锚定视口顶部），行增长不再推 offset；静止后恢复 end 锚定。
-      anchorTo: chatStreamingActive() ? "start" : "end",
+      // 靠近顶部 10% 区域时切回 end：tanstack 的 prepend 锚定补偿只在 anchorTo="end"
+      // 时计算（setOptions 里 merged.anchorTo === "end" 分支），顶部区域对应加载更多
+      // 场景，prepend 后视口需要补偿保持。
+      anchorTo: chatStreamingActive() && !nearTopZone.value ? "start" : "end",
       // 仅在精确贴底时才允许尾部锚定跟随，避免“接近底部”时被持续往下带。
       scrollEndThreshold: 0,
       shouldAdjustScrollPositionOnItemSizeChange: (item: { end: number }, _delta: number, instance: {
@@ -578,6 +592,20 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     { immediate: true },
   );
 
+  // 监听滚动更新顶部 10% 区域，驱动 anchorTo 切换（带 1 秒冷却）。
+  stopScrollContainerAnchorWatch = watch(
+    scrollContainer,
+    (el, oldEl) => {
+      if (oldEl) {
+        oldEl.removeEventListener("scroll", evaluateNearTopZone);
+      }
+      if (el) {
+        el.addEventListener("scroll", evaluateNearTopZone, { passive: true });
+      }
+    },
+    { immediate: true },
+  );
+
   watch(
     () => String(activeConversationId.value || "").trim(),
     () => {
@@ -612,6 +640,8 @@ export function useChatVirtualScroll(options: UseChatVirtualScrollOptions) {
     }
     stopScrollContainerIntentWatch?.();
     stopScrollContainerIntentWatch = null;
+    stopScrollContainerAnchorWatch?.();
+    stopScrollContainerAnchorWatch = null;
     conversationVirtualizerResetRequest += 1;
     pendingConversationBottomInitializationId = "";
     virtualItemResizeObserver?.disconnect();

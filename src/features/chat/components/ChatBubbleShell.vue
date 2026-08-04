@@ -349,6 +349,15 @@ const surfaceStyle = computed<StyleValue | undefined>(() => {
   width: 100%;
 }
 
+/* 展开区左移：对齐到头像中心线往左的整体偏移，折叠头保持原位 */
+.ecall-chat-bubble-shell:not(.ecall-chat-bubble-tone-user) .ecall-chat-bubble-activity :deep(.collapse-content) {
+  margin-left: calc(-1 * var(--ecall-bubble-avatar-track) + var(--ecall-bubble-body-offset));
+}
+
+.ecall-chat-bubble-shell-no-avatar:not(.ecall-chat-bubble-tone-user) .ecall-chat-bubble-activity :deep(.collapse-content) {
+  margin-left: 0;
+}
+
 .ecall-chat-bubble-tone-assistant .ecall-chat-bubble-surface,
 .ecall-chat-bubble-tone-system .ecall-chat-bubble-surface {
   padding: 0.15rem 0;

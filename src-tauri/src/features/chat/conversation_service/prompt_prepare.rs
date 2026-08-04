@@ -86,7 +86,6 @@ impl ConversationServiceV2 {
         Ok(Some(self.build_prompt_prepare_resolution_v2(
             data,
             &conversation_before,
-            selected_api,
             is_runtime_conversation,
         )))
     }
@@ -95,7 +94,6 @@ impl ConversationServiceV2 {
         &self,
         data: &AppData,
         conversation_before: &Conversation,
-        selected_api: &ApiConfig,
         is_runtime_conversation: bool,
     ) -> PromptPrepareConversationResolution {
         let is_remote_im_contact_conversation = conversation_is_remote_im_contact(conversation_before);
@@ -118,7 +116,6 @@ impl ConversationServiceV2 {
             response_style_id: data.response_style_id.clone(),
             user_name: user_persona_name(data),
             user_intro: user_persona_intro(data),
-            enable_pdf_images: data.pdf_read_mode == "image" && selected_api.enable_image,
             is_runtime_conversation,
         }
     }

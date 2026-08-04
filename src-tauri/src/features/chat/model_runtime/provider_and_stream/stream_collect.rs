@@ -59,6 +59,7 @@ where
     while let Some(chunk) = stream.next().await {
         match chunk {
             Ok(genai::chat::ChatStreamEvent::Start) => {}
+            Ok(genai::chat::ChatStreamEvent::Heartbeat) => {}
             Ok(genai::chat::ChatStreamEvent::Chunk(text)) => {
                 assistant_text.push_str(&text.content);
                 if let Some(channel) = on_delta {

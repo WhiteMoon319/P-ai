@@ -881,6 +881,7 @@
       "exitFullscreen": "Exit Fullscreen",
       "autoLayoutDone": "The department tree was auto-arranged.",
       "noPersonaBound": "No persona bound",
+      "managePersonas": "Manage Personas",
       "connectSelfForbidden": "A department cannot connect to itself.",
       "connectDuplicateIgnored": "This relationship already exists.",
       "connectCycleForbidden": "This edge would create a cycle. A parent cannot connect to its own ancestor.",
@@ -934,6 +935,8 @@
       "enabled": "Enable Network Access",
       "enabledHint": "When disabled, the web access service stops and local/remote links are unavailable.",
       "port": "Access Port",
+      "passwordPlaceholder": "PC PAI remote access password (optional)",
+      "password": "Access password",
       "localLink": "Local Link",
       "remoteLinks": "Remote Links",
       "remotePassword": "Remote Password",
@@ -962,6 +965,16 @@
       "openFailed": "Failed to open link",
       "copied": "Copied",
       "copyFailed": "Copy failed"
+    },
+    "remoteFrontend": {
+      "summary": "Enter the PC PAI address and port to use your phone PAI as a remote frontend for the PC PAI. Once connected, your phone shows the PC PAI chat and settings; notifications still arrive on your phone when the PC PAI replies.",
+      "host": "PC PAI address",
+      "hostPlaceholder": "e.g. 192.168.1.100",
+      "port": "Port",
+      "connect": "Connect",
+      "disconnect": "Disconnect",
+      "connectedTo": "Connected to {target}",
+      "invalidTarget": "Enter a valid address and port"
     },
     "remoteIm": {
       "title": "Contact Channels",
@@ -1801,6 +1814,9 @@
     "holdToRecord": "Hold button to record",
     "placeholder": "Talk to PAI",
     "trimTip": "Choose compact or archive for the current chat",
+    "exitRemote": "Exit remote",
+    "remoteBackToChat": "Back to remote chat",
+    "remoteModeTitle": "Remote · {target}",
     "branchingConversation": "Creating conversation branch...",
     "branchingConversationDetail": "Please wait while the new conversation branch is prepared.",
     "forwardingConversationSelection": "Forwarding to conversation...",

@@ -407,11 +407,6 @@ pub(crate) fn set_conversation_plan_mode_enabled(
     conversation_id: &str,
     enabled: bool,
 ) -> Result<(), String> {
-    conversation_service_v2().set_plan_mode_enabled(
-        state,
-        conversation_id,
-        enabled,
-    )?;
     let normalized_conversation_id = conversation_id.trim();
     let mut slots = lock_conversation_runtime_slots(state)?;
     let slot = conversation_slot_mut(&mut slots, normalized_conversation_id);
@@ -424,16 +419,10 @@ pub(crate) fn get_conversation_plan_mode_enabled(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<bool, String> {
-    let normalized_conversation_id = conversation_id.trim();
-    {
-        let slots = lock_conversation_runtime_slots(state)?;
-        if let Some(slot) = slots.get(normalized_conversation_id) {
-            return Ok(slot.plan_mode_enabled);
-        }
-    }
-    Ok(conversation_service_v2()
-        .get_conversation_meta(state, normalized_conversation_id)
-        .map(|conversation_meta| conversation_meta.plan_mode_enabled)
+    let slots = lock_conversation_runtime_slots(state)?;
+    Ok(slots
+        .get(conversation_id.trim())
+        .map(|slot| slot.plan_mode_enabled)
         .unwrap_or(false))
 }
 

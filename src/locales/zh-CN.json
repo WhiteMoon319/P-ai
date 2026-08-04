@@ -881,6 +881,7 @@
       "exitFullscreen": "退出全屏",
       "autoLayoutDone": "已自动重排部门树。",
       "noPersonaBound": "未绑定人格",
+      "managePersonas": "管理人格",
       "connectSelfForbidden": "不能把部门连到自己。",
       "connectDuplicateIgnored": "这条上下级关系已经存在了。",
       "connectCycleForbidden": "这条连线会形成循环，上级不能连到自己的祖先。",
@@ -934,6 +935,8 @@
       "enabled": "启用网络访问",
       "enabledHint": "关闭后停止 Web 访问服务，本机和远程链接都不可访问。",
       "port": "访问端口",
+      "passwordPlaceholder": "电脑 PAI 的远程访问密码（可留空）",
+      "password": "访问密码",
       "localLink": "本机链接",
       "remoteLinks": "远程链接",
       "remotePassword": "远程访问密码",
@@ -962,6 +965,16 @@
       "openFailed": "打开链接失败",
       "copied": "已复制",
       "copyFailed": "复制失败"
+    },
+    "remoteFrontend": {
+      "summary": "输入电脑 PAI 的地址和端口，将手机 PAI 作为电脑 PAI 的远程前端。连接后手机显示电脑 PAI 的聊天与设置界面，电脑 PAI 回复消息时手机仍会收到通知。",
+      "host": "电脑 PAI 地址",
+      "hostPlaceholder": "例如 192.168.1.100",
+      "port": "端口",
+      "connect": "连接",
+      "disconnect": "断开连接",
+      "connectedTo": "已连接到 {target}",
+      "invalidTarget": "请输入有效的地址和端口"
     },
     "remoteIm": {
       "title": "渠道列表",
@@ -1672,6 +1685,9 @@
     "holdToRecord": "按住按钮录音",
     "placeholder": "跟PAI说话吧",
     "trimTip": "点击选择压缩或归档当前对话",
+    "exitRemote": "退出远程",
+    "remoteBackToChat": "返回远程聊天",
+    "remoteModeTitle": "远程模式 · {target}",
     "branchingConversation": "正在创建会话分支...",
     "branchingConversationDetail": "请稍候，正在准备新的会话分支。",
     "forwardingConversationSelection": "正在转发到会话...",

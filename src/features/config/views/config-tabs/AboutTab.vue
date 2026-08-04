@@ -3,15 +3,23 @@
     <section>
       <div class="flex items-center justify-between gap-3">
         <h3 class="text-sm font-semibold">{{ t("about.version") }}</h3>
-        <button
-          class="btn btn-sm btn-ghost"
-          :disabled="checkingUpdate"
-          @click="handleCheckUpdate"
-        >{{ checkingUpdate ? t("common.loading") : t("about.checkUpdate") }}</button>
       </div>
       <div class="card bg-base-100 border border-base-300">
       <div class="card-body p-4">
-        <p class="text-sm mb-3">{{ `P-ai v${appVersion}` }}</p>
+        <div class="mb-3 flex items-start justify-between gap-3">
+          <p class="text-sm">{{ `P-ai v${appVersion}` }}</p>
+          <div class="flex shrink-0 items-center gap-2">
+            <button
+              class="btn btn-sm btn-primary text-primary-content"
+              @click="openRepository"
+            >{{ t("about.repository") }}</button>
+            <button
+              class="btn btn-sm btn-secondary text-secondary-content"
+              :disabled="checkingUpdate"
+              @click="handleCheckUpdate"
+            >{{ checkingUpdate ? t("common.loading") : t("about.checkUpdate") }}</button>
+          </div>
+        </div>
         <div v-if="!props.isAndroid" class="mb-3 space-y-2">
           <div class="text-xs font-medium text-base-content/70">{{ t("about.updateMethod") }}</div>
           <div class="tabs tabs-box bg-base-200 p-1">
@@ -45,7 +53,7 @@
       </div>
       <div class="card bg-base-100 border border-base-300">
         <div class="card-body p-4">
-          <div class="config-changelog-markdown max-h-96 overflow-auto">
+          <div class="config-changelog-markdown max-h-[60vh] overflow-auto">
             <div v-if="changelogLoading && !changelogMarkdown" class="flex min-h-0 items-center justify-center py-8 text-sm text-base-content/70">
               <span class="loading loading-spinner loading-sm mr-2"></span>
               {{ t("about.changelogLoading") }}
@@ -65,18 +73,6 @@
             </div>
           </div>
         </div>
-      </div>
-    </section>
-
-    <section>
-      <h3 class="mb-1 text-sm font-semibold">{{ t("about.repository") }}</h3>
-      <div class="card bg-base-100 border border-base-300">
-      <div class="card-body p-4">
-        <button
-          class="btn"
-          @click="openRepository"
-        >{{ t("about.repository") }}</button>
-      </div>
       </div>
     </section>
   </div>

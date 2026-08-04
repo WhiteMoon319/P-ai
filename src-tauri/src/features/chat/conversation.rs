@@ -1560,7 +1560,7 @@ fn build_prepared_binary_payloads_from_message_parts(
                     format!("附件#{attachment_number}")
                 };
                 match kind {
-                    "image" | "pdf" => {
+                    "image" => {
                         match std::fs::read(path) {
                             Ok(raw) => {
                                 if let Some(image) = prepared_image_payload_for_llm_request(
@@ -1573,11 +1573,13 @@ fn build_prepared_binary_payloads_from_message_parts(
                                 }
                             }
                             Err(err) => runtime_log_warn(format!(
-                                "[附件投影] 当前消息图片或 PDF 读取失败，跳过二进制但保留路径提示，path={}，error={}",
+                                "[附件投影] 当前消息图片读取失败，跳过二进制但保留路径提示，path={}，error={}",
                                 path, err
                             )),
                         }
                     }
+                    // PDF 不随请求发送二进制，路径提示由投影链路给出，模型需要内容时自行通过 read_file 读取。
+                    "pdf" => {}
                     "audio" => {
                         match std::fs::read(path) {
                             Ok(raw) => audios.push(PreparedBinaryPayload {
@@ -1671,10 +1673,12 @@ fn build_effective_prompt_media_from_prepared(
                 prepared.saved_path = requested.saved_path.clone();
             }
             if prepared.mime.trim().eq_ignore_ascii_case("application/pdf") {
+                // PDF 不随请求发送二进制，仅保留文本占位，路径提示由 attachment_relative_paths 提供，
+                // 模型需要内容时自行通过 read_file 读取。
                 chunks.push("[pdf]".to_string());
-            } else {
-                chunks.push("[image]".to_string());
+                continue;
             }
+            chunks.push("[image]".to_string());
             images.push(prepared);
         }
     }
@@ -2521,7 +2525,7 @@ fn resolve_media_from_message(
             continue;
         };
         match kind.as_str() {
-            "image" | "pdf" => {
+            "image" => {
                 if let Some(image) = prepared_image_payload_for_llm_request(
                     mime,
                     content_base64,
@@ -2531,6 +2535,8 @@ fn resolve_media_from_message(
                     images.push(image);
                 }
             }
+            // PDF 不随请求发送二进制，路径提示由附件投影链路给出，模型需要内容时自行通过 read_file 读取。
+            "pdf" => {}
             "audio" => audios.push(PreparedBinaryPayload {
                 mime,
                 content: content_base64,
@@ -3178,7 +3184,6 @@ fn build_prompt(
     data_path: Option<&PathBuf>,
     state: Option<&AppState>,
     resolved_api: Option<&ResolvedApiConfig>,
-    enable_pdf_images: bool,
 ) -> PreparedPrompt {
     build_prompt_with_stage_logger(
         conversation,
@@ -3193,7 +3198,6 @@ fn build_prompt(
         state,
         None,
         resolved_api,
-        enable_pdf_images,
     )
     .expect("build prompt")
 }
@@ -3211,7 +3215,6 @@ fn build_prompt_with_stage_logger(
     state: Option<&AppState>,
     stage_logger: Option<&dyn Fn(&str)>,
     resolved_api: Option<&ResolvedApiConfig>,
-    enable_pdf_images: bool,
 ) -> Result<PreparedPrompt, String> {
     build_prompt_with_mode(
         conversation,
@@ -3225,7 +3228,6 @@ fn build_prompt_with_stage_logger(
         state,
         stage_logger,
         resolved_api,
-        enable_pdf_images,
     )
 }
 
@@ -3240,7 +3242,6 @@ fn build_delegate_prompt(
     data_path: Option<&PathBuf>,
     state: Option<&AppState>,
     resolved_api: Option<&ResolvedApiConfig>,
-    enable_pdf_images: bool,
 ) -> PreparedPrompt {
     build_delegate_prompt_with_stage_logger(
         conversation,
@@ -3253,7 +3254,6 @@ fn build_delegate_prompt(
         state,
         None,
         resolved_api,
-        enable_pdf_images,
     )
     .expect("build delegate prompt")
 }
@@ -3269,7 +3269,6 @@ fn build_delegate_prompt_with_stage_logger(
     state: Option<&AppState>,
     stage_logger: Option<&dyn Fn(&str)>,
     resolved_api: Option<&ResolvedApiConfig>,
-    enable_pdf_images: bool,
 ) -> Result<PreparedPrompt, String> {
     build_prompt_with_mode(
         conversation,
@@ -3283,7 +3282,6 @@ fn build_delegate_prompt_with_stage_logger(
         state,
         stage_logger,
         resolved_api,
-        enable_pdf_images,
     )
 }
 
@@ -3579,7 +3577,6 @@ fn build_prompt_with_mode(
     state: Option<&AppState>,
     stage_logger: Option<&dyn Fn(&str)>,
     _resolved_api: Option<&ResolvedApiConfig>,
-    enable_pdf_images: bool,
 ) -> Result<PreparedPrompt, String> {
     let prompt_agent = resolve_conversation_bound_agent(conversation, agents, departments)?;
     let source_messages = match find_last_context_compaction_index(
@@ -3590,111 +3587,7 @@ fn build_prompt_with_mode(
         None => conversation.messages.as_slice(),
     };
 
-    let mut enriched_messages = source_messages.to_vec();
-
-    if let Some(state) = state {
-        for message in &mut enriched_messages {
-            if let Some(meta) = message.provider_meta.as_ref() {
-                if let Some(attachments) = meta.get("attachments").and_then(Value::as_array) {
-                    for item in attachments {
-                        let mime = item.get("mime").and_then(Value::as_str).unwrap_or("");
-                        if mime != "application/pdf" {
-                            continue;
-                        }
-                        let relative_path =
-                            item.get("relativePath").and_then(Value::as_str).unwrap_or("");
-                        if relative_path.is_empty() {
-                            continue;
-                        }
-                        let file_name = item.get("fileName").and_then(Value::as_str).unwrap_or("");
-                        let include_images = enable_pdf_images;
-                        let workspace_root = configured_workspace_root_path(state)
-                            .unwrap_or_else(|_| state.llm_workspace_path.clone());
-                        let file_path = workspace_root.join(relative_path);
-                        let Some(file_path_str) = file_path.to_str() else {
-                            runtime_log_warn(format!(
-                                "[PDF提取] 跳过 路径包含非UTF-8字符, conversation_id={}, relative_path={}",
-                                conversation.id, relative_path
-                            ));
-                            continue;
-                        };
-                        let conversation_id = conversation.id.clone();
-                        match get_or_extract_pdf_structured(
-                            state,
-                            &conversation_id,
-                            file_path_str,
-                            include_images,
-                        ) {
-                            Ok(result) => {
-                                if enable_pdf_images {
-                                    for page in result.pages {
-                                        for (img_idx, img) in page.images.iter().enumerate() {
-                                            let outcome = normalize_attachment_ingress(
-                                                state,
-                                                AttachmentIngressInput {
-                                                    path: None,
-                                                    bytes_base64: Some(img.bytes_base64.clone()),
-                                                    mime: img.mime.clone(),
-                                                    name: format!(
-                                                        "{}_p{}_img{}.webp",
-                                                        result.file_name,
-                                                        page.page_index + 1,
-                                                        img_idx + 1,
-                                                    ),
-                                                    storage_subdir: Some(conversation.id.clone()),
-                                                },
-                                            );
-                                            for warning in outcome.warnings {
-                                                runtime_log_warn(format!(
-                                                    "[PDF提取] 图片附件降级继续，conversation_id={}，warning={}",
-                                                    conversation.id, warning
-                                                ));
-                                            }
-                                            if let Some(part) = outcome.part {
-                                                message.parts.push(part);
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    for page in result.pages {
-                                        let page_text = format!(
-                                            "[PDF文档分页]\n文件名：{}\n页码：{}/{}\n\n{}",
-                                            result.file_name,
-                                            page.page_index + 1,
-                                            result.total_pages,
-                                            page.text
-                                        );
-                                        message.extra_text_blocks.push(page_text);
-                                    }
-                                }
-                                message.extra_text_blocks.push(format!(
-                                    "提示：如需阅读完整内容，请使用 shell 工具读取 {}",
-                                    relative_path
-                                ));
-                            }
-                            Err(e) => {
-                                if is_pdf_page_limit_exceeded_error(&e) {
-                                    message.extra_text_blocks.push(format!(
-                                        "提示：PDF 页数超过 {} 页，已按普通文件处理，不进行自动提取。",
-                                        100
-                                    ));
-                                    message.extra_text_blocks.push(format!(
-                                        "提示：如需阅读完整内容，请使用 shell 工具读取 {}",
-                                        relative_path
-                                    ));
-                                    continue;
-                                }
-                                runtime_log_error(format!(
-                                    "[PDF提取] 失败 conversation_id={}, file_name={}, error={:?}",
-                                    conversation_id, file_name, e
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    let enriched_messages = source_messages.to_vec();
 
     let enriched_conversation = Conversation {
         id: conversation.id.clone(),

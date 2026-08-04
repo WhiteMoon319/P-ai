@@ -764,7 +764,6 @@ async fn send_chat_message_inner(
         prompt_conversation_before: Conversation,
         is_remote_im_contact_conversation: bool,
         remote_im_contact_processing_mode: String,
-        enable_pdf_images: bool,
         is_runtime_conversation: bool,
         runtime_conversation_id: Option<String>,
     }
@@ -853,7 +852,6 @@ async fn send_chat_message_inner(
             ),
             is_remote_im_contact_conversation: resolved.is_remote_im_contact_conversation,
             remote_im_contact_processing_mode: resolved.remote_im_contact_processing_mode,
-            enable_pdf_images: resolved.enable_pdf_images,
             is_runtime_conversation: resolved.is_runtime_conversation,
             runtime_conversation_id: runtime_conversation_id_for_prepare.clone(),
         }))
@@ -1792,7 +1790,6 @@ async fn send_chat_message_inner(
             Some(&log_run_stage),
             Some(&selected_api),
             Some(&resolved_api),
-            Some(snapshot.enable_pdf_images),
         )?;
         if requested_plan_mode_enabled
             && !conversation_latest_user_has_plan_mode_block(&conversation, &current_agent.id)
@@ -1844,7 +1841,6 @@ async fn send_chat_message_inner(
                 ui_language: app_config.ui_language.clone(),
                 last_archive_summary: snapshot.last_archive_summary.clone(),
                 chat_overrides: chat_overrides.clone(),
-                enable_pdf_images: snapshot.enable_pdf_images,
                 trusted_prompt_usage: std::sync::Arc::new(std::sync::Mutex::new(None)),
                 compaction_preserved_messages: std::sync::Arc::new(std::sync::Mutex::new(None)),
             })
@@ -3787,9 +3783,6 @@ mod core_send_inner_tests {
             prompt_cache_key: None,
             extra_headers: vec![("Session-Id".to_string(), "random-uuid".to_string())],
             codex_auth: None,
-            codex_auth_mode: None,
-            codex_originator: None,
-            codex_residency_requirement: None,
             codex_custom_api_key: None,
         };
 
@@ -3827,9 +3820,6 @@ mod core_send_inner_tests {
             prompt_cache_key: None,
             extra_headers: Vec::new(),
             codex_auth: None,
-            codex_auth_mode: None,
-            codex_originator: None,
-            codex_residency_requirement: None,
             codex_custom_api_key: None,
         };
 
@@ -4312,9 +4302,9 @@ mod core_send_inner_tests {
         let (images, audios) =
             build_prepared_binary_payloads_from_message_parts(&parts, &[], &[]);
 
-        assert_eq!(images.len(), 2);
-        assert_eq!(images[0].label, "附件#1");
-        assert_eq!(images[1].label, "图片#1");
+        // PDF 不随请求发送二进制，仅保留路径提示；附件编号仍按出现顺序占用。
+        assert_eq!(images.len(), 1);
+        assert_eq!(images[0].label, "图片#1");
         assert_eq!(audios.len(), 1);
         assert_eq!(audios[0].label, "附件#3");
         let _ = std::fs::remove_dir_all(root);

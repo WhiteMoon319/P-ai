@@ -502,7 +502,6 @@ mod goal_tests {
             None,
             Some(&ApiConfig::default()),
             None,
-            Some(false),
         )
         .expect("build goal prompt test prepared prompt")
     }

@@ -61,11 +61,14 @@ const GITHUB_AUTO_UPDATE_STARTUP_DELAY_SECONDS: u64 = 45;
 const GITHUB_UPDATE_CHECK_TIMEOUT_SECONDS: u64 = 10;
 const GITHUB_UPDATE_DOWNLOAD_TIMEOUT_SECONDS: u64 = 10 * 60;
 const GITHUB_UPDATE_PROXY_CURSOR_FILE_NAME: &str = "github-update-proxy-cursor.json";
+const CHANGELOG_FETCH_COOLDOWN_HOURS: i64 = 1;
 
 static UPDATE_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 static UPDATE_CANCEL_REQUESTED: AtomicBool = AtomicBool::new(false);
 static PREPARED_GITHUB_UPDATE: Mutex<Option<PreparedGithubUpdate>> = Mutex::new(None);
 static LAST_AUTO_UPDATE_CHECKED_AT: std::sync::Mutex<Option<OffsetDateTime>> =
+    std::sync::Mutex::new(None);
+static CHANGELOG_MARKDOWN_CACHE: std::sync::Mutex<Option<CachedChangelogMarkdown>> =
     std::sync::Mutex::new(None);
 static GITHUB_UPDATE_STATE: std::sync::LazyLock<std::sync::Mutex<GithubUpdateState>> =
     std::sync::LazyLock::new(|| std::sync::Mutex::new(GithubUpdateState::default()));
@@ -684,13 +687,41 @@ async fn fetch_remote_changelog_markdown(origin: &str, method: GithubUpdateMetho
     Err(last_error)
 }
 
+struct CachedChangelogMarkdown {
+    fetched_at: OffsetDateTime,
+    markdown: String,
+}
+
 #[tauri::command]
 async fn fetch_project_changelog_markdown() -> Result<String, String> {
-    fetch_remote_changelog_markdown(
+    // 1 小时内已成功拉取过则直接返回缓存，避免反复请求 GitHub
+    {
+        let guard = CHANGELOG_MARKDOWN_CACHE
+            .lock()
+            .map_err(|err| format!("读取更新日志缓存失败：{err}"))?;
+        if let Some(cached) = guard.as_ref() {
+            if (now_utc() - cached.fetched_at).whole_hours() < CHANGELOG_FETCH_COOLDOWN_HOURS {
+                runtime_log_info(format!(
+                    "[更新日志] 命中缓存（{} 小时内），跳过远程拉取",
+                    CHANGELOG_FETCH_COOLDOWN_HOURS
+                ));
+                return Ok(cached.markdown.clone());
+            }
+        }
+    }
+    let markdown = fetch_remote_changelog_markdown(
         UPDATER_GITHUB_CHANGELOG_REMOTE_RAW_ORIGIN,
         GithubUpdateMethod::Auto,
     )
-    .await
+    .await?;
+    let mut guard = CHANGELOG_MARKDOWN_CACHE
+        .lock()
+        .map_err(|err| format!("写入更新日志缓存失败：{err}"))?;
+    *guard = Some(CachedChangelogMarkdown {
+        fetched_at: now_utc(),
+        markdown: markdown.clone(),
+    });
+    Ok(markdown)
 }
 
 fn github_auto_update_cooldown_active(

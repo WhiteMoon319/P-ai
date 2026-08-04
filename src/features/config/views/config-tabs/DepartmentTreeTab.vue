@@ -4,6 +4,15 @@
       <div class="flex w-full flex-col gap-3">
         <div class="flex items-center justify-between">
           <span class="text-sm font-semibold">{{ t("config.departmentTree.title") }}</span>
+          <button
+            class="btn btn-sm btn-ghost"
+            type="button"
+            :title="t('config.departmentTree.managePersonas')"
+            @click="emit('openPersonaPage')"
+          >
+            <User class="h-3.5 w-3.5" />
+            {{ t("config.departmentTree.managePersonas") }}
+          </button>
         </div>
 
         <div class="flex gap-1">
@@ -84,6 +93,17 @@
               >
                 <Check class="h-3 w-3" />
               </span>
+              <span
+                class="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-base-200 text-[10px] font-semibold text-base-content/70"
+              >
+                <img
+                  v-if="departmentAvatarInfo(department).avatarUrl"
+                  :src="departmentAvatarInfo(department).avatarUrl"
+                  :alt="department.name"
+                  class="h-full w-full object-cover"
+                />
+                <span v-else>{{ departmentAvatarInfo(department).avatarText }}</span>
+              </span>
               <span class="truncate text-sm font-medium">{{ department.name }}</span>
             </button>
           </div>
@@ -152,17 +172,32 @@
                   :class="nodeProps.id === selectedDepartmentId ? 'border-primary bg-primary/5 shadow-md' : 'border-base-300 hover:border-base-content/20'"
                 >
                   <Handle type="target" :position="Position.Top" class="!h-2 !w-2 !border-0 !bg-base-content/30" />
-                  <div class="flex items-center justify-between gap-2">
-                    <div class="truncate text-sm font-semibold">{{ nodeProps.data.name }}</div>
-                    <span v-if="nodeProps.data.isBuiltInAssistant" class="badge badge-xs badge-primary">
-                      {{ t("config.department.assistantBadge") }}
-                    </span>
-                  </div>
-                  <div
-                    class="mt-1 truncate text-xs"
-                    :class="nodeProps.data.hasPersona ? 'opacity-65' : 'opacity-45'"
-                  >
-                    {{ nodeProps.data.personaText }}
+                  <div class="flex items-center gap-2.5">
+                    <div
+                      class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-base-200 text-xs font-semibold text-base-content/70"
+                    >
+                      <img
+                        v-if="nodeProps.data.avatarUrl"
+                        :src="nodeProps.data.avatarUrl"
+                        :alt="nodeProps.data.name"
+                        class="h-full w-full object-cover"
+                      />
+                      <span v-else>{{ nodeProps.data.avatarText }}</span>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-center justify-between gap-2">
+                        <div class="truncate text-sm font-semibold">{{ nodeProps.data.name }}</div>
+                        <span v-if="nodeProps.data.isBuiltInAssistant" class="badge badge-xs badge-primary">
+                          {{ t("config.department.assistantBadge") }}
+                        </span>
+                      </div>
+                      <div
+                        class="mt-1 truncate text-xs"
+                        :class="nodeProps.data.hasPersona ? 'opacity-65' : 'opacity-45'"
+                      >
+                        {{ nodeProps.data.personaText }}
+                      </div>
+                    </div>
                   </div>
                   <Handle type="source" :position="Position.Bottom" class="!h-2 !w-2 !border-0 !bg-base-content/30" />
                 </div>
@@ -185,7 +220,7 @@ import { Handle, MarkerType, Position, VueFlow, type Connection, type Edge as Fl
 import "@vue-flow/core/dist/style.css";
 import "@vue-flow/core/dist/theme-default.css";
 import "@vue-flow/controls/dist/style.css";
-import { Check, Maximize2, Minimize2, RotateCcw, Save } from "@lucide/vue";
+import { Check, Maximize2, Minimize2, RotateCcw, Save, User } from "@lucide/vue";
 import type { AppConfig, DepartmentConfig, PersonaProfile } from "../../../../types/app";
 import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
 import {
@@ -194,6 +229,7 @@ import {
   normalizeDepartmentChildIds,
 } from "../../utils/department-graph";
 import { validateDepartmentConfig } from "../../utils/department-validation";
+import { useAvatarCache } from "../../../chat/composables/use-avatar-cache";
 
 const props = defineProps<{
   config: AppConfig;
@@ -201,6 +237,10 @@ const props = defineProps<{
   savingConfig: boolean;
   saveConfigAction: () => Promise<boolean> | boolean;
   setStatusAction: (text: string) => void;
+}>();
+
+const emit = defineEmits<{
+  (e: "openPersonaPage"): void;
 }>();
 
 const { t } = useI18n();
@@ -215,10 +255,16 @@ type DepartmentFlowNodeData = {
   personaText: string;
   hasPersona: boolean;
   isBuiltInAssistant: boolean;
+  avatarUrl: string;
+  avatarText: string;
 };
 type DepartmentFlowNode = FlowNode<DepartmentFlowNodeData>;
 type DepartmentFlowEdge = FlowEdge;
 let lastFlowLayoutSignature = "";
+
+const { resolveAvatarUrl, preloadPersonaAvatars } = useAvatarCache({
+  personas: computed(() => props.personas),
+});
 
 function cloneRelationDrafts(departments: DepartmentConfig[] | null | undefined): DepartmentRelationDraft[] {
   return (departments || []).map((department) => ({
@@ -284,13 +330,6 @@ const flowNodes = ref<DepartmentFlowNode[]>([]);
 const flowEdges = ref<DepartmentFlowEdge[]>([]);
 const flowInstance = ref<VueFlowStore | null>(null);
 const isFlowFullscreen = ref(false);
-const personaNameById = computed(() =>
-  new Map(
-    (props.personas || [])
-      .map((persona) => [String(persona.id || "").trim(), String(persona.name || "").trim()] as const)
-      .filter(([id, name]) => !!id && !!name),
-  ),
-);
 
 const sortedDepartments = computed(() =>
   [...(props.config.departments || [])].sort(compareDepartments),
@@ -482,16 +521,42 @@ function syncFlowGraph(forceReset: boolean) {
   lastFlowLayoutSignature = nextLayoutSignature;
 }
 
+const personaById = computed(() =>
+  new Map(
+    (props.personas || []).map((persona) => [String(persona.id || "").trim(), persona] as const),
+  ),
+);
+
+function departmentAvatarInfo(department: DepartmentConfig): { avatarUrl: string; avatarText: string } {
+  const id = String(department.id || "").trim();
+  const boundPersonas = (department.agentIds || [])
+    .map((agentId) => personaById.value.get(String(agentId || "").trim()))
+    .filter((persona): persona is PersonaProfile => !!persona);
+  const avatarPersona = boundPersonas.find((persona) => !!persona.avatarPath);
+  const displayName = String(department.name || "").trim() || id;
+  return {
+    avatarUrl: avatarPersona
+      ? resolveAvatarUrl(avatarPersona.avatarPath, avatarPersona.avatarUpdatedAt)
+      : "",
+    avatarText: displayName.charAt(0) || id.charAt(0) || "部",
+  };
+}
+
 function buildFlowNodes(departments: DepartmentConfig[]): DepartmentFlowNode[] {
   const positions = buildDepartmentPositions(departments);
   return [...departments].sort(compareDepartments).map((department) => {
     const id = String(department.id || "").trim();
-    const personaNames = (department.agentIds || [])
-      .map((agentId) => personaNameById.value.get(String(agentId || "").trim()) || "")
+    const boundPersonas = (department.agentIds || [])
+      .map((agentId) => personaById.value.get(String(agentId || "").trim()))
+      .filter((persona): persona is PersonaProfile => !!persona);
+    const personaNames = boundPersonas
+      .map((persona) => String(persona.name || "").trim())
       .filter(Boolean);
     const personaText = personaNames.length > 0
       ? personaNames.join(" / ")
       : t("config.departmentTree.noPersonaBound");
+    const displayName = String(department.name || "").trim() || id;
+    const avatar = departmentAvatarInfo(department);
     return {
       id,
       type: "department",
@@ -500,10 +565,12 @@ function buildFlowNodes(departments: DepartmentConfig[]): DepartmentFlowNode[] {
       sourcePosition: Position.Bottom,
       targetPosition: Position.Top,
       data: {
-        name: String(department.name || "").trim() || id,
+        name: displayName,
         personaText,
         hasPersona: personaNames.length > 0,
         isBuiltInAssistant: !!department.isBuiltInAssistant,
+        avatarUrl: avatar.avatarUrl,
+        avatarText: avatar.avatarText,
       },
     };
   });
@@ -624,9 +691,27 @@ function handleWindowKeydown(event: KeyboardEvent) {
   void closeFlowFullscreen();
 }
 
+async function refreshFlowPersonaAvatars() {
+  try {
+    await preloadPersonaAvatars();
+  } catch {
+    // 头像预加载失败时保留占位，不阻断树渲染
+  }
+  syncFlowGraph(false);
+}
+
 onMounted(() => {
   window.addEventListener("keydown", handleWindowKeydown);
+  void refreshFlowPersonaAvatars();
 });
+
+watch(
+  () => props.personas,
+  () => {
+    void refreshFlowPersonaAvatars();
+  },
+  { deep: true },
+);
 
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", handleWindowKeydown);

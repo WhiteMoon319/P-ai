@@ -1333,6 +1333,7 @@ pub fn run() {
             xcap,
             demo_send_native_notification,
             demo_test_notification,
+            remote_live_update_notify,
             demo_restart_app,
             get_host_runtime_prerequisites,
             install_host_runtime_prerequisite,
