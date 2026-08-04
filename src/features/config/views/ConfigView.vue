@@ -63,6 +63,7 @@
           :saving-config="savingConfig"
           :save-config-action="saveConfigAction"
           :set-status-action="setStatusAction"
+          @open-persona-page="handleOpenPersonaPage"
         />
       </div>
 
@@ -801,6 +802,10 @@ function requestTabChange(nextTab: ConfigTab) {
     return;
   }
   emit("update:configTab", nextTab);
+}
+
+function handleOpenPersonaPage() {
+  requestTabChange("persona");
 }
 
 function onMemorySyncLockChange(locked: boolean) {

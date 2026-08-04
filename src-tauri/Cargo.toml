@@ -1,6 +1,6 @@
 [package]
 name = "easy-call-ai"
-version = "0.50.1"
+version = "0.51.0"
 edition = "2021"
 description = "P-ai desktop app"
 default-run = "p-ai"
@@ -32,9 +32,10 @@ tokio = { version = "1.52.1", features = ["rt-multi-thread", "sync", "time"] }
 tokio-util = { version = "0.7.18", features = ["rt"] }
 tokio-tungstenite = { version = "0.29.0", features = ["rustls-tls-webpki-roots"] }
 axum = { version = "0.8", features = ["ws"] }
+dingtalk-stream = "0.1.5"
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "stream", "multipart", "query", "form", "rustls"] }
 webpki-root-certs = "1"
-genai = "0.7.0-beta.15"
+genai = { git = "https://github.com/jeremychone/rust-genai.git", rev = "cf3396e3ac9c6bf74be5a9ed4c2400ff920f29e7" }
 base64 = "0.22"
 aes = "0.9.1"
 md5 = "0.8"
@@ -75,7 +76,6 @@ unicode-segmentation = "1.13.3"
 # hickory-dns 纯 Rust 解析器依赖 /etc/resolv.conf，Android 上无此文件会导致 DNS 解析卡死；
 # 仅桌面启用，Android 退回系统默认 getaddrinfo 解析器。
 reqwest = { version = "0.13.4", default-features = false, features = ["hickory-dns"] }
-dingtalk-stream = "0.1.5"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"

@@ -521,23 +521,6 @@ fn provider_genai_headers(api_config: &ResolvedApiConfig) -> genai::Headers {
     match api_config.request_format {
         RequestFormat::Codex => {
             let mut headers = app_identity_genai_headers();
-            let auth_mode = api_config
-                .codex_auth_mode
-                .as_deref()
-                .map(normalize_codex_auth_mode)
-                .unwrap_or_else(default_codex_auth_mode);
-            if auth_mode == CODEX_AUTH_MODE_CUSTOM_URL {
-                let originator = api_config.codex_originator.as_deref().unwrap_or("codex-tui");
-                let session_id = api_config
-                    .extra_headers
-                    .iter()
-                    .find(|(key, _)| key.eq_ignore_ascii_case("session_id") || key.eq_ignore_ascii_case("session-id"))
-                    .map(|(_, value)| value.as_str())
-                    .or(api_config.prompt_cache_key.as_deref());
-                let thread_id = session_id;
-                let residency = api_config.codex_residency_requirement.as_deref();
-                headers = codex_genai_headers(originator, session_id, thread_id, residency);
-            }
             headers.merge(api_config.extra_headers.clone());
             headers
         }
@@ -745,11 +728,6 @@ async fn resolve_request_api_config(
     let mut next = api_config.clone();
     next.api_key = fresh_auth.access_token.clone();
     next.codex_auth = Some(fresh_auth.clone());
-    next.extra_headers.retain(|(key, _)| key != "ChatGPT-Account-Id");
-    if let Some(account_id) = fresh_auth.account_id.as_deref().filter(|value| !value.is_empty()) {
-        next.extra_headers
-            .push(("ChatGPT-Account-Id".to_string(), account_id.to_string()));
-    }
     Ok(next)
 }
 
@@ -1335,9 +1313,6 @@ mod openai_responses_genai_request_tests {
             prompt_cache_key: Some("conversation-1".to_string()),
             extra_headers: Vec::new(),
             codex_auth: None,
-            codex_auth_mode: None,
-            codex_originator: None,
-            codex_residency_requirement: None,
             codex_custom_api_key: None,
         };
 
@@ -1365,9 +1340,6 @@ mod openai_responses_genai_request_tests {
             prompt_cache_key: Some("conversation-responses".to_string()),
             extra_headers: Vec::new(),
             codex_auth: None,
-            codex_auth_mode: None,
-            codex_originator: None,
-            codex_residency_requirement: None,
             codex_custom_api_key: None,
         };
 
@@ -1398,9 +1370,6 @@ mod openai_responses_genai_request_tests {
             prompt_cache_key: Some("conversation-codex".to_string()),
             extra_headers: Vec::new(),
             codex_auth: None,
-            codex_auth_mode: None,
-            codex_originator: None,
-            codex_residency_requirement: None,
             codex_custom_api_key: None,
         };
 
@@ -1428,9 +1397,6 @@ mod openai_responses_genai_request_tests {
             prompt_cache_key: None,
             extra_headers: Vec::new(),
             codex_auth: None,
-            codex_auth_mode: None,
-            codex_originator: None,
-            codex_residency_requirement: None,
             codex_custom_api_key: None,
         };
 
@@ -1477,9 +1443,6 @@ mod openai_responses_genai_request_tests {
             prompt_cache_key: Some("conversation-codex".to_string()),
             extra_headers: Vec::new(),
             codex_auth: None,
-            codex_auth_mode: None,
-            codex_originator: None,
-            codex_residency_requirement: None,
             codex_custom_api_key: None,
         };
 
@@ -1507,9 +1470,6 @@ mod openai_responses_genai_request_tests {
             prompt_cache_key: None,
             extra_headers: Vec::new(),
             codex_auth: None,
-            codex_auth_mode: None,
-            codex_originator: None,
-            codex_residency_requirement: None,
             codex_custom_api_key: None,
         };
 
@@ -1545,9 +1505,6 @@ mod openai_responses_genai_request_tests {
             prompt_cache_key: None,
             extra_headers: Vec::new(),
             codex_auth: None,
-            codex_auth_mode: None,
-            codex_originator: None,
-            codex_residency_requirement: None,
             codex_custom_api_key: None,
         };
 
@@ -1582,9 +1539,6 @@ mod openai_responses_genai_request_tests {
             prompt_cache_key: None,
             extra_headers: Vec::new(),
             codex_auth: None,
-            codex_auth_mode: None,
-            codex_originator: None,
-            codex_residency_requirement: None,
             codex_custom_api_key: None,
         };
 
@@ -1619,9 +1573,6 @@ mod openai_responses_genai_request_tests {
             prompt_cache_key: None,
             extra_headers: Vec::new(),
             codex_auth: None,
-            codex_auth_mode: None,
-            codex_originator: None,
-            codex_residency_requirement: None,
             codex_custom_api_key: None,
         };
 
@@ -1919,9 +1870,6 @@ mod openai_responses_genai_request_tests {
                 prompt_cache_key: None,
                 extra_headers: Vec::new(),
                 codex_auth: None,
-                codex_auth_mode: None,
-                codex_originator: None,
-                codex_residency_requirement: None,
                 codex_custom_api_key: None,
             },
             "gemini-2.5-flash",
@@ -1956,9 +1904,6 @@ mod openai_responses_genai_request_tests {
                 prompt_cache_key: None,
                 extra_headers: Vec::new(),
                 codex_auth: None,
-                codex_auth_mode: None,
-                codex_originator: None,
-                codex_residency_requirement: None,
                 codex_custom_api_key: None,
             },
             "claude-3-7-sonnet",

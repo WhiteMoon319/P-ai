@@ -598,7 +598,6 @@ fn create_side_chat_conversation_blocking(
     side_chat.shell_autonomous_mode = parent.shell_autonomous_mode;
     side_chat.shell_work_mode = normalize_shell_work_mode_text(&parent.shell_work_mode);
     side_chat.current_todos = parent.current_todos.clone();
-    side_chat.plan_mode_enabled = parent.plan_mode_enabled;
     side_chat.user_profile_snapshot = parent.user_profile_snapshot.clone();
     side_chat.preferred_api_config_id = parent.preferred_api_config_id.clone();
     side_chat.messages = copied_messages;

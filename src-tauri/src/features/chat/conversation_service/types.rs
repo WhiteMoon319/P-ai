@@ -80,7 +80,6 @@ struct PromptPrepareConversationResolution {
     response_style_id: String,
     user_name: String,
     user_intro: String,
-    enable_pdf_images: bool,
     is_runtime_conversation: bool,
 }
 

@@ -165,7 +165,6 @@ async fn get_prompt_preview_inner(
             Some(state),
             Some(&api_config),
             Some(&resolved_api),
-            Some(data.pdf_read_mode == "image" && api_config.enable_image),
         )?,
         PromptPreviewMode::Compaction | PromptPreviewMode::Archive => {
             let owner_agent_id =
@@ -206,7 +205,6 @@ async fn get_prompt_preview_inner(
                 Some(state),
                 Some(&api_config),
                 Some(&resolved_api),
-                None,
             )?
         }
     };

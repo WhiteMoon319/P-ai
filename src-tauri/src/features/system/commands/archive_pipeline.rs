@@ -581,7 +581,6 @@ async fn summarize_archived_conversation_with_model_v2(
         Some(state),
         Some(selected_api),
         Some(resolved_api),
-        None,
     )?;
     let timeout_secs = 360u64;
     let tool_definitions = assemble_compaction_tool_definitions(

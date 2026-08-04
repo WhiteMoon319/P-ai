@@ -881,6 +881,7 @@
       "exitFullscreen": "退出全屏",
       "autoLayoutDone": "已自动重排部门树。",
       "noPersonaBound": "未绑定人格",
+      "managePersonas": "管理人格",
       "connectSelfForbidden": "不能把部门连到自己。",
       "connectDuplicateIgnored": "这条上下级关系已经存在了。",
       "connectCycleForbidden": "这条连线会形成循环，上级不能连到自己的祖先。",
