@@ -258,7 +258,7 @@
         @mouseleave="navScrollbarRef?.hide()"
       >
         <div ref="navScrollerRef" class="ecall-floating-scroll-target min-h-0 flex-1 overflow-y-auto pr-1">
-          <ul class="menu w-full gap-1 p-0 [&>li>a]:w-full">
+          <ul class="menu w-full gap-1 p-0 pt-2 [&>li>a]:w-full">
             <li v-for="item in visibleConfigNavItems" :key="item.tab">
               <a :class="configNavLinkClass(item.tab)" @click="selectConfigNavTab(item.tab)">
                 <component :is="item.icon" class="h-4 w-4 shrink-0" />
