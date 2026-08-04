@@ -80,7 +80,7 @@
       "captureCapturedHint": "Captured: {combo}",
       "voiceTitle": "Voice",
       "recordKey": "Record Key",
-      "backgroundWakeHint": "Enable background voice wake (hold record hotkey)",
+      "backgroundWakeTitle": "Background Voice Wake (hold record key)",
       "backgroundWakeOn": "Background Wake: On",
       "backgroundWakeOff": "Background Wake: Off",
       "minRecordSeconds": "Min Record (s)",

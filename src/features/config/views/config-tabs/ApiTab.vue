@@ -4,7 +4,7 @@
       <div class="flex flex-col gap-3">
         <div class="join w-full">
           <button v-for="tab in capabilityTabs" :key="tab.id" class="btn btn-sm join-item flex-1" type="button"
-            :class="activeTopTab === tab.id ? 'btn-primary' : 'btn-ghost'" @click="switchCapabilityTab(tab.id)">
+            :class="activeTopTab === tab.id ? 'btn-primary' : 'bg-base-100'" @click="switchCapabilityTab(tab.id)">
             {{ tab.label }}
           </button>
         </div>

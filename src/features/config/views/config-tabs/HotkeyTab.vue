@@ -54,10 +54,7 @@
 
     <template v-if="isWindowsHost" #row-background-wake>
       <div class="flex min-w-0 items-center justify-between gap-4">
-        <div class="min-w-0">
-          <div class="text-sm">{{ t("config.hotkey.backgroundWakeOn") }}</div>
-          <p class="mt-1 text-xs text-base-content/60">{{ t('config.hotkey.backgroundWakeHint') }}</p>
-        </div>
+        <div class="text-sm">{{ t("config.hotkey.backgroundWakeTitle") }}</div>
         <button
           type="button"
           class="btn btn-sm shrink-0"

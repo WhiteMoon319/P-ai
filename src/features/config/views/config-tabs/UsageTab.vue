@@ -4,8 +4,8 @@
       <div>
         <div class="text-sm font-semibold">{{ t("config.usage.pageTitle") }}</div>
       </div>
-      <button class="btn btn-primary btn-sm shrink-0" :disabled="loading" @click="refreshOverview">
-        <span v-if="loading" class="loading loading-spinner loading-xs"></span>
+      <button class="btn btn-sm bg-base-100 shrink-0" :disabled="loading" @click="refreshOverview">
+        <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': loading }" />
         <span>{{ t("common.refresh") }}</span>
       </button>
     </div>
@@ -229,6 +229,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
+import { RefreshCw } from "@lucide/vue";
 import { invokeTauri } from "../../../../services/tauri-api";
 import type {
   PersonaProfile,

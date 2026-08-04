@@ -3,10 +3,20 @@
     <div class="flex items-center justify-between gap-3">
       <h3 class="text-sm font-semibold">{{ t('config.tools.shellWorkspace') }}</h3>
       <div class="flex flex-wrap items-center justify-end gap-2">
-        <button v-if="localFileSystemAvailable" class="btn btn-sm" type="button" @click="openShellWorkspaceDir">{{ t('config.tools.openDir') }}</button>
-        <button class="btn btn-sm" type="button" :disabled="shellWorkspacePathResetting" @click="resetShellWorkspacePath">{{ t('config.tools.resetWorkspacePath') }}</button>
-        <button class="btn btn-sm" type="button" :disabled="shellWorkspaceInitializing" @click="initializeShellWorkspace">{{ t('config.tools.initializeWorkspace') }}</button>
+        <button v-if="localFileSystemAvailable" class="btn btn-sm bg-base-100" type="button" @click="openShellWorkspaceDir">
+          <FolderOpen class="h-4 w-4" />
+          {{ t('config.tools.openDir') }}
+        </button>
+        <button class="btn btn-sm bg-base-100" type="button" :disabled="shellWorkspacePathResetting" @click="resetShellWorkspacePath">
+          <RotateCcw class="h-4 w-4" />
+          {{ t('config.tools.resetWorkspacePath') }}
+        </button>
+        <button class="btn btn-sm bg-base-100" type="button" :disabled="shellWorkspaceInitializing" @click="initializeShellWorkspace">
+          <FolderPlus class="h-4 w-4" />
+          {{ t('config.tools.initializeWorkspace') }}
+        </button>
         <button class="btn btn-sm btn-primary" :disabled="savingConfig" @click="$emit('saveApiConfig')">
+          <Save class="h-4 w-4" />
           {{ t('config.tools.save') }}
         </button>
       </div>
@@ -116,6 +126,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { FolderOpen, FolderPlus, RotateCcw, Save } from "@lucide/vue";
 import type {
   AppConfig,
   FrontendToolDefinition,
