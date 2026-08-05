@@ -315,13 +315,24 @@
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <span
+          <button
             v-if="planModeEnabled"
+            type="button"
             class="inline-flex h-8 min-h-8 shrink-0 select-none items-center rounded-full bg-info px-3 text-xs font-medium leading-none text-info-content"
             :title="`Shift+Tab ${t('chat.plan.mode')}`"
+            @click="togglePlanMode()"
           >
             {{ t("chat.plan.mode") }}
-          </span>
+          </button>
+          <button
+            v-else-if="planSuggestionVisible"
+            type="button"
+            class="inline-flex h-8 min-h-8 shrink-0 select-none items-center rounded-full bg-base-200 px-3 text-xs font-medium leading-none text-base-content"
+            :title="`Shift+Tab ${t('chat.plan.mode')}`"
+            @click="togglePlanMode()"
+          >
+            {{ t("chat.plan.mode") }}
+          </button>
           <button
             v-if="showStopAction"
             class="btn btn-sm btn-circle shrink-0 btn-error"
@@ -516,6 +527,15 @@ const remoteContactMode = computed(() => !!props.remoteContactMode);
 const composerInputBlank = computed(() => {
   if (String(props.chatInput || "").trim()) return false;
   return props.clipboardImages.length === 0 && props.queuedAttachmentNotices.length === 0;
+});
+
+/** 计划类请求关键词：命中时显示可点击的「计划」按钮（base-200），点击进入计划模式。 */
+const PLAN_SUGGESTION_KEYWORDS = ["计划", "方案", "plan", "design"];
+const planSuggestionVisible = computed(() => {
+  if (props.planModeEnabled) return false;
+  const text = String(props.chatInput || "").toLowerCase();
+  if (!text) return false;
+  return PLAN_SUGGESTION_KEYWORDS.some((keyword) => text.includes(keyword.toLowerCase()));
 });
 
 // Product rule: an in-flight assistant reply must not lock the input toolbar.
