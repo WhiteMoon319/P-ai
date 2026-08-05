@@ -28,7 +28,7 @@
         ></span>
         <button
           class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
-          :class="sideConversationListVisible ? 'btn-active bg-base-100 hover:bg-base-100' : ''"
+          :class="sideConversationListVisible ? 'btn-active border-0 bg-base-100/60 hover:bg-base-100/60' : ''"
           :title="t('chat.conversationList')"
           @click.stop="emit('toggle-side-conversation-list')"
         >
@@ -51,7 +51,7 @@
           ></span>
           <button
             class="btn btn-ghost btn-sm h-8 min-h-8 px-2"
-            :class="sideConversationListVisible ? 'btn-active bg-base-100 hover:bg-base-100' : ''"
+            :class="sideConversationListVisible ? 'btn-active border-0 bg-base-100/60 hover:bg-base-100/60' : ''"
             :title="t('chat.conversationList')"
             @click.stop="emit('toggle-side-conversation-list')"
           >
@@ -135,7 +135,7 @@
 
       <button
         class="btn btn-ghost btn-sm"
-        :class="toolReviewPanelOpenVisible ? 'btn-active bg-base-100 hover:bg-base-100' : ''"
+        :class="toolReviewPanelOpenVisible ? 'btn-active border-0 bg-base-100/60 hover:bg-base-100/60' : ''"
         :title="t('chat.rightSidebarToggle')"
         @mousedown.stop
         @click.stop="$emit('toggle-tool-review-panel')"
