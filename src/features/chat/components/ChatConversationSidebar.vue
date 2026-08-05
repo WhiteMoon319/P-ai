@@ -116,7 +116,7 @@
                     @keydown.enter.prevent="handleConversationCardClick(item)"
                     @keydown.space.prevent="handleConversationCardClick(item)"
                   >
-                    <div class="flex items-center gap-2 py-2">
+                    <div class="flex items-center gap-2 py-1">
                     <div class="shrink-0">
                       <div class="indicator">
                         <span
@@ -266,6 +266,26 @@
                   </div>
 
                 </div>
+            <template v-for="item in section.visibleItems" :key="`followers-${item.conversationId}`">
+              <button
+                v-for="simpleItem in (section.simpleFollowers[String(item.conversationId || '').trim()] || [])"
+                :key="`simple-${simpleItem.conversationId}`"
+                type="button"
+                class="mx-1 flex w-[calc(100%-0.5rem)] items-center rounded-lg py-1 pl-2 pr-2 text-left text-sm transition-colors hover:bg-base-100/70"
+                :class="String(simpleItem.conversationId || '').trim() === String(props.activeConversationId || '').trim() ? 'bg-base-300/60' : 'bg-transparent'"
+                :title="conversationDisplayTitle(simpleItem)"
+                @click="handleConversationCardClick(simpleItem)"
+              >
+                <span class="relative w-10 shrink-0 self-stretch" aria-hidden="true">
+                  <span
+                    class="absolute right-0 top-1 bottom-1 w-1 rounded-full transition-colors"
+                    :class="simpleItemIndicatorClass(simpleItem)"
+                  ></span>
+                </span>
+                <span class="min-w-0 truncate pl-2 font-medium">{{ conversationDisplayTitle(simpleItem) }}</span>
+                <span class="ml-auto shrink-0 tabular-nums text-xs text-base-content/45">{{ formatConversationTime(simpleItem.updatedAt) }}</span>
+              </button>
+            </template>
             <div v-if="section.hiddenItemCount > 0" class="px-3 pb-2 pt-1">
               <button
                 type="button"
@@ -445,6 +465,10 @@ import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
 import ApiConfigTreeSelect from "../../config/components/ApiConfigTreeSelect.vue";
 import { formatConversationListTime } from "../utils/conversation-time";
 import {
+  aggregateConversationItems,
+  conversationLastUsedMs,
+} from "../utils/conversation-aggregation";
+import {
   applyConversationSectionOrder,
   buildRecentConversationSection,
   buildRemoteConversationSections,
@@ -461,6 +485,8 @@ import ChatTaskSidebarPanel from "./ChatTaskSidebarPanel.vue";
 type ConversationSidebarTab = "local" | "contact" | "task";
 type DisplayConversationSection = ConversationSection & {
   visibleItems: ChatConversationOverviewItem[];
+  /** full 会话 id → 聚合其后的简单条目（同人格旧会话，按更新时间倒序） */
+  simpleFollowers: Record<string, ChatConversationOverviewItem[]>;
   hiddenItemCount: number;
   totalItemCount: number;
 };
@@ -865,13 +891,6 @@ function conversationSectionDragIndicator(section: ConversationSection): "before
   return dragOverConversationSectionPlacement.value;
 }
 
-function conversationLastUsedMs(item: ChatConversationOverviewItem): number {
-  const raw = String(item.lastMessageAt || item.updatedAt || "").trim();
-  if (!raw) return 0;
-  const timestamp = Date.parse(raw);
-  return Number.isFinite(timestamp) ? timestamp : 0;
-}
-
 function defaultVisibleConversationCount(section: ConversationSection): number {
   const items = Array.isArray(section.items) ? section.items : [];
   if (items.length <= CONVERSATION_SECTION_MIN_VISIBLE) return items.length;
@@ -896,9 +915,13 @@ function buildDisplayedConversationSection(section: ConversationSection): Displa
   const baseVisibleCount = defaultVisibleConversationCount(section);
   const extraVisibleCount = Math.max(0, Number(conversationSectionLoadMoreCounts.value[section.key] || 0));
   const visibleCount = Math.min(items.length, baseVisibleCount + extraVisibleCount);
+  const { reorderedItems, simpleFollowers } = aggregateConversationItems(items.slice(0, visibleCount), {
+    searchActive: !!normalizedConversationSearchQuery.value,
+  });
   return {
     ...section,
-    visibleItems: items.slice(0, visibleCount),
+    visibleItems: reorderedItems,
+    simpleFollowers,
     hiddenItemCount: Math.max(0, items.length - visibleCount),
     totalItemCount: items.length,
   };
@@ -1153,6 +1176,22 @@ function conversationSourceBadgeLabel(item: ChatConversationOverviewItem): strin
     || workspaceNameFromPath(workspacePath)
     || t("chat.defaultWorkspace"),
   ).trim();
+}
+
+function simpleItemIndicatorClass(item: ChatConversationOverviewItem): string {
+  if (unreadCountBadge(item)) return "bg-error";
+  const previews = normalizedPreviewMessages(item);
+  const last = previews[previews.length - 1];
+  if (!last) return "bg-success";
+  const role = last.role || "";
+  const speakerId = String(last.speakerAgentId || "").trim();
+  if (role === "tool" || role === "system") return "bg-warning";
+  if (role === "user") {
+    // 系统提醒/压缩摘要等系统消息的 role 也是 user，须用 agentId 区分用户与系统
+    if (!speakerId || speakerId === "user-persona") return "bg-info";
+    return "bg-warning";
+  }
+  return "bg-success";
 }
 
 function handleConversationCardClick(item: ChatConversationOverviewItem) {
