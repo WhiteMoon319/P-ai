@@ -263,7 +263,6 @@ fn build_global_tool_schema_cache(state: &AppState) -> Vec<CachedRuntimeToolSche
         }
         .provider_tool_definition(),
         operate_provider_tool_definition(),
-        BuiltinReloadTool { app_state: state.clone() }.provider_tool_definition(),
         read_provider_tool_definition(),
         read_media_provider_tool_definition(),
         BuiltinTerminalExecTool {
@@ -1009,7 +1008,6 @@ fn build_builtin_runtime_tool_executor(
             session_id: tool_session_id.to_string(),
             model_supports_image: selected_api.enable_image,
         }),
-        "reload" => Box::new(BuiltinReloadTool { app_state: state.clone() }),
         "read" => Box::new(BuiltinReadFileTool {
             app_state: state.clone(),
             session_id: tool_session_id.to_string(),

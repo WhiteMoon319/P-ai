@@ -839,20 +839,6 @@ fn tool_restricted_by_department(
     ) {
         return Some(reason);
     }
-    let is_assistant = department.id == ASSISTANT_DEPARTMENT_ID || department.is_built_in_assistant;
-    if !is_assistant
-        && matches!(tool_id, "reload" | "organize_context" | "screenshot" | "operate")
-    {
-        let department_name = department.name.trim();
-        let department_name = if department_name.is_empty() {
-            "当前部门"
-        } else {
-            department_name
-        };
-        return Some(format!(
-            "因为当前人格在 {department_name} 部门，本工具不被允许"
-        ));
-    }
     department_permission_restricted_reason(
         Some(department),
         DepartmentPermissionCategory::BuiltinTool,
@@ -1036,11 +1022,6 @@ mod types_storage_tests {
         ));
         assert!(!department_permission_allows_any_name(
             Some(&deputy),
-            DepartmentPermissionCategory::BuiltinTool,
-            &["screenshot"],
-        ));
-        assert!(!department_permission_allows_any_name(
-            Some(&deputy),
             DepartmentPermissionCategory::Skill,
             &["workspace-guide"],
         ));
@@ -1049,6 +1030,67 @@ mod types_storage_tests {
             DepartmentPermissionCategory::Skill,
             &["github-project-breakdown"],
         ));
+    }
+
+    #[test]
+    fn operate_should_be_controlled_by_permission_card_for_regular_departments() {
+        let mut regular_whitelisted = build_department_with_permission_control(
+            "whitelist",
+            vec!["fetch", "operate"],
+            vec![],
+            vec![],
+        );
+        regular_whitelisted.is_built_in_assistant = false;
+
+        let mut regular_blocklisted = build_department_with_permission_control(
+            "blacklist",
+            vec!["operate"],
+            vec![],
+            vec![],
+        );
+        regular_blocklisted.is_built_in_assistant = false;
+
+        let mut regular_whitelist_without_operate = build_department_with_permission_control(
+            "whitelist",
+            vec!["fetch"],
+            vec![],
+            vec![],
+        );
+        regular_whitelist_without_operate.is_built_in_assistant = false;
+
+        let mut regular_control_disabled = build_department_with_permission_control(
+            "whitelist",
+            vec![],
+            vec![],
+            vec![],
+        );
+        regular_control_disabled.is_built_in_assistant = false;
+        regular_control_disabled.permission_control.enabled = false;
+
+        // 白名单显式授权 operate → 允许
+        assert_eq!(
+            tool_restricted_by_department(Some(&regular_whitelisted), "operate"),
+            None
+        );
+        // 黑名单显式拒绝 operate → 拒绝
+        assert!(tool_restricted_by_department(Some(&regular_blocklisted), "operate").is_some());
+        // 白名单未授权 operate → 拒绝
+        assert!(tool_restricted_by_department(Some(&regular_whitelist_without_operate), "operate")
+            .is_some());
+        // 权限卡未启用 → 默认放行（普通工具语义）
+        assert_eq!(
+            tool_restricted_by_department(Some(&regular_control_disabled), "operate"),
+            None
+        );
+    }
+
+    #[test]
+    fn operate_should_stay_restricted_for_deputy_department_by_default_guard() {
+        let mut deputy = default_deputy_department("api-a");
+        deputy.permission_control.enabled = false;
+        deputy.is_deputy = true;
+
+        assert!(tool_restricted_by_department(Some(&deputy), "operate").is_some());
     }
 
     #[test]

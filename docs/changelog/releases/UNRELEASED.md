@@ -22,6 +22,8 @@
 
 ## 修复
 
+- operate 工具权限普通化：移除 `tool_restricted_by_department` 中「非 assistant 部门一律拒绝 reload/organize_context/screenshot/operate」的硬编码分支，operate 改为普通工具，权限完全由部门权限卡（白/黑名单）控制；副手部门默认防护与预设白名单保持不变。前端部门权限页同步移除对 operate 等工具的强制隐藏。
+- 全链清理死名工具：删除从未装配的 `reload`（已被 config 工具取代）、`organize_context`（用户整理功能被错误封装成 LLM 工具的历史残留）与 `screenshot`（能力已并入 operate）三个工具名的全部残留——后端实现、tool_loop 的 OrganizeContext 机制与压缩检查点、`legacy_command_enabled` 兼容逻辑、前端默认工具列表与展示分支、相关测试，零兼容保留。
 - 计划模式入口改为可点击：输入命中计划类关键词（计划/方案/设计/架构等）时，输入框旁出现 base-200「计划」按钮，点击开启计划模式；激活状态的高亮徽标也可点击取消。
 - 对话设置页「多模态分析模型」改用新的模型树选择器（ApiConfigTreeSelect），与专家模型、工具审查模型等选择器统一；空值项仍可通过「无」占位选项清除。
 - 「简洁」对话风格提示词新增约束：同一要点只讲一个面向，不提供正反两面讲解。

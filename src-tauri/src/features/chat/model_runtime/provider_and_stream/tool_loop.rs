@@ -237,7 +237,6 @@ fn tool_loop_guided_close_reply(
 
 #[derive(Debug, Clone)]
 enum DeferredToolLoopOutcome {
-    OrganizeContext,
     PlanPresent(TerminalToolResultMessage),
 }
 
@@ -246,9 +245,6 @@ fn deferred_tool_loop_outcome_from_result(
     tool_args: &str,
     tool_result: &ProviderToolResult,
 ) -> Option<DeferredToolLoopOutcome> {
-    if organize_context_succeeded(tool_name, tool_result) {
-        return Some(DeferredToolLoopOutcome::OrganizeContext);
-    }
     terminal_plan_present_result(tool_name, tool_args, tool_result)
         .map(DeferredToolLoopOutcome::PlanPresent)
 }
@@ -260,17 +256,6 @@ fn finalize_deferred_tool_loop_outcome(
     trusted_input_tokens: Option<u64>,
 ) -> ModelReply {
     match outcome {
-        DeferredToolLoopOutcome::OrganizeContext => ModelReply {
-            assistant_text: String::new(),
-            final_response_text: String::new(),
-            activity_reasoning_text: full_activity_reasoning_text,
-            assistant_provider_meta: None,
-            tool_history_events: tool_history_without_organize_context(tool_history_events),
-            suppress_assistant_message: true,
-            trusted_input_tokens: None,
-            usage: None,
-            round_logs_recorded_internally: true,
-        },
         DeferredToolLoopOutcome::PlanPresent(plan_result) => {
             ModelReply {
                 assistant_text: plan_result.assistant_text.clone(),
@@ -336,16 +321,6 @@ fn build_tool_loop_prepared_for_continuation(
     )?;
     append_tool_loop_transient_history_to_prepared(&mut prepared, transient_tool_history);
     Ok(Some((conversation, prepared)))
-}
-
-fn organize_context_succeeded(tool_name: &str, tool_result: &ProviderToolResult) -> bool {
-    if tool_name != "organize_context" {
-        return false;
-    }
-    matches!(
-        tool_result.metadata.control,
-        ProviderToolControl::OrganizeContext { applied: true }
-    )
 }
 
 include!("tool_loop/remote_im_tools.rs");
@@ -884,26 +859,6 @@ async fn run_genai_tool_loop(
                 tool_history_events,
                 trusted_input_tokens,
             ));
-        }
-
-        if deferred_outcome
-            .as_ref()
-            .is_some_and(|outcome| matches!(outcome, DeferredToolLoopOutcome::OrganizeContext))
-        {
-            apply_organize_context_compaction_checkpoint(
-                tool_abort_state,
-                auto_compaction_context,
-                selected_api,
-                resolved_api,
-                on_delta,
-                &tool_history_events,
-                &full_assistant_text,
-                &full_activity_reasoning_text,
-                chat_session_key,
-                &mut pending_tool_group_result_persists,
-            )
-            .await?;
-            return Err(CHAT_DISPATCH_RESTART_AFTER_COMPACTION.to_string());
         }
 
         if let Some(outcome) = deferred_outcome {
@@ -1451,26 +1406,6 @@ async fn run_genai_tool_loop_non_stream(
             ));
         }
 
-        if deferred_outcome
-            .as_ref()
-            .is_some_and(|outcome| matches!(outcome, DeferredToolLoopOutcome::OrganizeContext))
-        {
-            apply_organize_context_compaction_checkpoint(
-                tool_abort_state,
-                auto_compaction_context,
-                selected_api,
-                resolved_api,
-                on_delta,
-                &tool_history_events,
-                &full_assistant_text,
-                &full_activity_reasoning_text,
-                chat_session_key,
-                &mut pending_tool_group_result_persists,
-            )
-            .await?;
-            return Err(CHAT_DISPATCH_RESTART_AFTER_COMPACTION.to_string());
-        }
-
         if let Some(outcome) = deferred_outcome {
             return Ok(finalize_deferred_tool_loop_outcome(
                 outcome,
@@ -1787,57 +1722,6 @@ mod tool_loop_tests {
         assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "workspace_edit"));
         assert!(runtime_tool_call_requires_serial_execution(&tools, &definitions, "repo_lookup"));
         assert!(!runtime_tool_call_requires_serial_execution(&tools, &definitions, "profile_lookup"));
-    }
-
-    #[test]
-    fn tool_history_without_organize_context_should_keep_prior_business_tools() {
-        let read_call_id = "call-read";
-        let organize_call_id = "call-organize";
-        let events = vec![
-            serde_json::json!({
-                "role": "assistant",
-                "content": Value::Null,
-                "tool_calls": [{
-                    "id": read_call_id,
-                    "type": "function",
-                    "function": {
-                        "name": "read",
-                        "arguments": "{}"
-                    }
-                }]
-            }),
-            serde_json::json!({
-                "role": "tool",
-                "tool_call_id": read_call_id,
-                "content": "读取完成"
-            }),
-            serde_json::json!({
-                "role": "assistant",
-                "content": Value::Null,
-                "tool_calls": [{
-                    "id": organize_call_id,
-                    "type": "function",
-                    "function": {
-                        "name": "organize_context",
-                        "arguments": "{}"
-                    }
-                }]
-            }),
-            serde_json::json!({
-                "role": "tool",
-                "tool_call_id": organize_call_id,
-                "content": r#"{"ok":true,"applied":true}"#
-            }),
-        ];
-
-        let filtered = tool_history_without_organize_context(events);
-
-        assert_eq!(filtered.len(), 2);
-        assert_eq!(
-            filtered[0]["tool_calls"][0]["function"]["name"].as_str(),
-            Some("read")
-        );
-        assert_eq!(filtered[1]["tool_call_id"].as_str(), Some(read_call_id));
     }
 
     #[test]

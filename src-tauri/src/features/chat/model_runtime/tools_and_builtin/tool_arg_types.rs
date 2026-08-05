@@ -43,9 +43,6 @@ struct RecallToolArgs {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-struct EmptyToolArgs {}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
 struct TerminalExecToolArgs {
     #[serde(default)]
     action: Option<String>,
