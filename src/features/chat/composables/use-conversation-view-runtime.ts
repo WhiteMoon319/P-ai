@@ -95,10 +95,18 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
   const planModeEnabled = ref(false);
   const runtimeState = ref<ConversationRuntimeState>("idle");
   const foregroundSyncing = ref(false);
+  // flow 发送保护用：流式/提交/组织上下文都算忙碌（与主窗口 use-chat-runtime-setup 一致）。
   const conversationBusy = computed(() =>
     submitPending.value
     || chatting.value
     || runtimeState.value === "assistant_streaming"
+    || runtimeState.value === "organizing_context"
+  );
+  // 视图层交互忙碌：不含流式态。流式时停止按钮必须可用（chatting 单独走 :chatting
+  // prop 控制停止按钮显示），只有提交挂起与组织上下文这类结构性忙才禁用交互，
+  // 与主窗口 conversation-busy（只含 trimming/compacting）语义对齐。
+  const viewBusy = computed(() =>
+    submitPending.value
     || runtimeState.value === "organizing_context"
   );
   let snapshotRequestSequence = 0;
@@ -638,6 +646,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     submitPending,
     runtimeState,
     conversationBusy,
+    viewBusy,
     foregroundSyncing,
     preferredApiConfigId,
     hasMoreHistory,

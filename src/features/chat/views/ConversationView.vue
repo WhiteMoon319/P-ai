@@ -37,7 +37,7 @@
     :chatting="runtime.chatting.value"
     :trimming="false"
     :compacting-conversation="false"
-    :conversation-busy="runtime.conversationBusy.value"
+    :conversation-busy="runtime.viewBusy.value"
     :frozen="false"
     :message-blocks="messageBlocks.visibleMessageBlocks.value"
     :has-more-history="runtime.hasMoreHistory.value"

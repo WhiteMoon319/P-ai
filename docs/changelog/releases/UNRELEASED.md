@@ -26,6 +26,8 @@
 
 ## 修复
 
+- 追问会话（ConversationView）流式期间停止按钮被禁用的问题：视图层忙碌态拆出 `viewBusy`（仅含提交挂起与组织上下文），不再把 `assistant_streaming`/`chatting` 计入，流式时停止按钮恢复可用，与主窗口 `conversation-busy` 语义对齐；`conversationBusy` 保留给 flow 发送保护（含流式态），二者职责分离。顺带修复该视图 spec 的 tauri-api mock 缺失 `isTauriRuntimeAvailable` 导致 11 个用例全挂的问题，并补「流式期间 viewBusy=false / conversationBusy=true」钉死用例。
+
 - 输入法组合确认回车判定抽为纯函数并加固（`chat-composer-ime`）：IME 确认键永远是裸 Enter，带 Ctrl/Shift/Alt/Meta 修饰的 Enter 直接放行，不再受 compositionend 后 100ms 窗口影响——修复 ctrl_enter 发送模式下组合输入后 Ctrl+Enter 被误吞的问题；同时补 `compositionEndedAt` 初始 0 值边界（页面加载后 100ms 内普通 Enter 不再被误判为组合确认），并补齐窗口边界与修饰键放行的单元测试。
 
 - 修复 macOS 支持 PR（#18）合并后的三类问题：rdev 录音热键回调返回类型错误导致 Windows/Linux 分支无法编译（回调改为 `if let` 消费 token）；macOS 构建拆分为签名/未签名两个互斥步骤（按 `APPLE_CERTIFICATE` secrets 是否存在分流，避免 tauri-bundler 对空字符串 env 走证书导入分支导致构建失败；签名步骤注入证书 env，公证三件套任一缺失时 shell 内 unset 让 bundler warn 跳过公证，未配置时走未签名构建不阻塞；分流条件经 job env 中转 `HAS_APPLE_CERTIFICATE` 读取，GHA 的 `if` 不允许直接引用 secrets context，直接引用会导致 workflow 求值失败）；Linux 手动未签名构建补 `Generate updater manifest` 发布条件（非发布路径不再因缺 `.sig` 失败）。
