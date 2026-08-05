@@ -342,8 +342,8 @@ async fn run_genai_tool_loop(
     chat_session_key: &str,
     usage_conversation_id: Option<&str>,
 ) -> Result<ModelReply, String> {
-    // 一次调度开始：允许该会话在本轮调度内再次发送桌面操作提醒。
-    reset_desktop_operation_notice_for_session(chat_session_key);
+    // 本轮调度内桌面操作提醒最多一次：局部变量随调度结束销毁，无全局状态。
+    let mut desktop_notice_sent = false;
     let api_config = resolve_request_api_config(api_config).await?;
     let request_api_key = consume_api_key_for_request(&api_config);
     let service_target = build_provider_genai_service_target(
@@ -642,6 +642,17 @@ async fn run_genai_tool_loop(
             let mut repeat_block = None::<(PreparedToolCall, String)>;
             let mut batch_repeat_signatures = std::collections::HashSet::new();
             for call in batch.calls {
+                // 模型即将操作电脑：本轮调度内首次调用 operate 时发一次系统通知（由调度器控制，无全局状态）。
+                if !desktop_notice_sent && call.tool_name == "operate" {
+                    desktop_notice_sent = true;
+                    if let Some(state) = tool_abort_state {
+                        if let Ok(args) = serde_json::from_str::<Value>(&call.tool_args) {
+                            if let Some(script) = args.get("script").and_then(Value::as_str) {
+                                notify_desktop_operation_started(state, script);
+                            }
+                        }
+                    }
+                }
                 let repeat_streak = register_tool_repeat_attempt_once_per_batch(
                     &mut tool_repeat_guard,
                     &mut batch_repeat_signatures,
@@ -976,8 +987,8 @@ async fn run_genai_tool_loop_non_stream(
     chat_session_key: &str,
     usage_conversation_id: Option<&str>,
 ) -> Result<ModelReply, String> {
-    // 一次调度开始：允许该会话在本轮调度内再次发送桌面操作提醒。
-    reset_desktop_operation_notice_for_session(chat_session_key);
+    // 本轮调度内桌面操作提醒最多一次：局部变量随调度结束销毁，无全局状态。
+    let mut desktop_notice_sent = false;
     let api_config = resolve_request_api_config(api_config).await?;
     let request_api_key = consume_api_key_for_request(&api_config);
     let service_target = build_provider_genai_service_target(
@@ -1187,6 +1198,17 @@ async fn run_genai_tool_loop_non_stream(
             let mut repeat_block = None::<(PreparedToolCall, String)>;
             let mut batch_repeat_signatures = std::collections::HashSet::new();
             for call in batch.calls {
+                // 模型即将操作电脑：本轮调度内首次调用 operate 时发一次系统通知（由调度器控制，无全局状态）。
+                if !desktop_notice_sent && call.tool_name == "operate" {
+                    desktop_notice_sent = true;
+                    if let Some(state) = tool_abort_state {
+                        if let Ok(args) = serde_json::from_str::<Value>(&call.tool_args) {
+                            if let Some(script) = args.get("script").and_then(Value::as_str) {
+                                notify_desktop_operation_started(state, script);
+                            }
+                        }
+                    }
+                }
                 let repeat_streak = register_tool_repeat_attempt_once_per_batch(
                     &mut tool_repeat_guard,
                     &mut batch_repeat_signatures,

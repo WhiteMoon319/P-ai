@@ -1004,8 +1004,6 @@ fn build_builtin_runtime_tool_executor(
             memory_context: memory_context.ok_or_else(|| "记忆上下文不可用".to_string())?,
         }),
         "operate" => Box::new(BuiltinOperateTool {
-            app_state: state.clone(),
-            session_id: tool_session_id.to_string(),
             model_supports_image: selected_api.enable_image,
         }),
         "read" => Box::new(BuiltinReadFileTool {
@@ -1131,38 +1129,10 @@ fn build_cached_mcp_runtime_tool_executor(
     }))
 }
 
-fn desktop_operation_notice_state() -> &'static Mutex<std::collections::HashMap<String, bool>> {
-    static STORE: OnceLock<Mutex<std::collections::HashMap<String, bool>>> = OnceLock::new();
-    STORE.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
-}
-
-/// 一次调度开始时调用：允许该会话在本轮调度内再次提醒。
-fn reset_desktop_operation_notice_for_session(session_id: &str) {
-    let mut guard = match desktop_operation_notice_state().lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    guard.insert(session_id.to_string(), false);
-}
-
-/// 本轮调度是否应该发送桌面操作提醒：每次调度（reset 后）首次触发返回 true 并置位，
-/// 同调度内再次调用返回 false；不同会话互不影响。
-fn desktop_operation_notice_should_send(session_id: &str) -> bool {
-    let mut guard = match desktop_operation_notice_state().lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    if guard.get(session_id).copied().unwrap_or(false) {
-        return false;
-    }
-    guard.insert(session_id.to_string(), true);
-    true
-}
-
 /// 模型即将操作电脑（operate 工具）时，发送一条系统通知提醒用户。
-/// 每次调度（一次完整执行，可能含多轮工具循环）内最多提醒一次，受配置开关控制；
+/// 每轮调度内最多提醒一次由调度器（tool_loop）控制，本函数只负责发通知；
 /// 通知异步发出，不等待提交确认，不阻塞工具执行。
-fn notify_desktop_operation_started(state: &AppState, session_id: &str, script: &str) {
+fn notify_desktop_operation_started(state: &AppState, script: &str) {
     let enabled = match state_read_config_cached(state) {
         Ok(config) => config.desktop_operation_notice_enabled,
         Err(err) => {
@@ -1173,9 +1143,6 @@ fn notify_desktop_operation_started(state: &AppState, session_id: &str, script: 
         }
     };
     if !enabled {
-        return;
-    }
-    if !desktop_operation_notice_should_send(session_id) {
         return;
     }
     let app_handle = match state.app_handle.lock() {
@@ -1201,8 +1168,6 @@ fn notify_desktop_operation_started(state: &AppState, session_id: &str, script: 
 
 #[derive(Debug, Clone)]
 struct BuiltinOperateTool {
-    app_state: AppState,
-    session_id: String,
     model_supports_image: bool,
 }
 
@@ -1235,8 +1200,6 @@ impl RuntimeValueTool for BuiltinOperateTool {
 
     fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         let model_supports_image = self.model_supports_image;
-        let app_state = self.app_state.clone();
-        let session_id = self.session_id.clone();
         Box::pin(async move {
             // 如果模型不支持图片，检查脚本中是否包含 screenshot 动作
             if !model_supports_image && script_contains_screenshot(&args.script) {
@@ -1244,8 +1207,8 @@ impl RuntimeValueTool for BuiltinOperateTool {
                     "你的驱动模型并不支持图片，请放弃该功能".to_string(),
                 ));
             }
-            // 模型即将操作电脑：发送系统通知提醒用户（仅在脚本会真正执行时触发）
-            notify_desktop_operation_started(&app_state, &session_id, &args.script);
+            // 模型即将操作电脑：通知发送已移至调度器（tool_loop）统一控制，
+            // 此处仅检查脚本是否包含截图动作（驱动模型不支持图片时拒绝）。
             let args_value = serde_json::to_value(&args).unwrap_or(Value::Null);
             runtime_log_debug(format!(
                 "[工具调试] 内置工具执行开始 name=operate args={}",
@@ -1358,29 +1321,6 @@ impl RuntimeValueTool for BuiltinReadMediaTool {
 #[cfg(test)]
 mod tool_assembly_permission_tests {
     use super::*;
-
-    #[test]
-    fn desktop_operation_notice_should_send_once_per_schedule_and_reset() {
-        // 与既有测试隔离：先复位会话状态。
-        reset_desktop_operation_notice_for_session("notice-sess-a");
-        reset_desktop_operation_notice_for_session("notice-sess-b");
-
-        // 调度内首次触发：应发送并置位。
-        assert!(desktop_operation_notice_should_send("notice-sess-a"));
-        // 同调度再次触发：跳过。
-        assert!(!desktop_operation_notice_should_send("notice-sess-a"));
-        // 其他会话不受影响。
-        assert!(desktop_operation_notice_should_send("notice-sess-b"));
-        assert!(!desktop_operation_notice_should_send("notice-sess-b"));
-
-        // 新调度开始（reset）后，同一会话可再次提醒。
-        reset_desktop_operation_notice_for_session("notice-sess-a");
-        assert!(desktop_operation_notice_should_send("notice-sess-a"));
-
-        // 收尾复位，避免影响并行测试。
-        reset_desktop_operation_notice_for_session("notice-sess-a");
-        reset_desktop_operation_notice_for_session("notice-sess-b");
-    }
 
     fn test_definition(name: &str) -> ProviderToolDefinition {
         ProviderToolDefinition::new(
