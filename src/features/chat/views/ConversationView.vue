@@ -109,7 +109,7 @@ import ChatView from "./ChatView.vue";
 import { useChatMessageBlocks } from "../composables/use-chat-turns";
 import { useConversationViewRuntime } from "../composables/use-conversation-view-runtime";
 import { isViewLayerBusy } from "../composables/chat-view-busy";
-import { getActiveChatComposerScope } from "../composables/chat-composer-focus";
+import { getActiveChatComposerScope, clearChatComposerFocus } from "../composables/chat-composer-focus";
 import { collectPastedFiles, ingestPastedImages } from "../composables/chat-paste-ingest";
 import { useI18n } from "vue-i18n";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
@@ -215,5 +215,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener("paste", handleSidePaste);
+  // 追问视图卸载后不再有 paste 监听：主动清掉共享焦点归属，
+  // 避免 scope 残留 side 导致主会话误判而丢弃图片（回退主会话接管）。
+  clearChatComposerFocus("side");
 });
 </script>
