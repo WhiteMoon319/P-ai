@@ -54,5 +54,6 @@
 - 设置窗口打开默认落在欢迎页，不再停留在快捷键页。
 - 「热键」文案统一改回「快捷键」：设置页快捷键页标题、录制按钮、录制提示、全局快捷键提示、呼唤快捷键、快速设置校验提示等 zh-CN / zh-TW 同步修正（19860ed5 误改为「热键」）。
 - 修复 config 迁移测试 `runtime_volatile_normalization_should_not_require_rewriting_after_migration_version_recorded` 的矛盾断言：99f5b81d 合并旧测试时新增的 `restored.conversations[0].messages.is_empty()` 在分片读取布局下必然不成立（messages 从 message store 分片读出，天然非空），删除该断言；核心行为（迁移版本已记录后读取不触发重写、运行时可规范化）由其余断言钉死。
+- 追问视图（ConversationView）发送消息后不再平滑滚动到底部的问题：追问外壳此前把 `conversation-scroll-to-bottom-request` 硬编码为 `0`、`scroll-to-bottom-behavior` 硬编码为 `'auto'`，且运行时未接入滚动协调器，缺少主会话 `triggerConversationScrollToBottom(..., "smooth_light")` 的触发链路。现复用同一套 `useChatScrollCoordinator`（双实例，各自服务各自的 ChatView），追问运行时接入 `onOwnUserDraftInserted` / `onStreamingAssistantBubbleInserted` 回调触发弹性上滑，发送消息与流式气泡插入时与主会话行为一致。
 
 ## 依赖

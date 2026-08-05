@@ -24,6 +24,7 @@ import {
 } from "./chat-foreground-coordinator";
 import { reconcileForegroundRuntime } from "./foreground-recovery-state-machine";
 import { useChatFlow } from "./use-chat-flow";
+import { useChatScrollCoordinator } from "./use-chat-scroll-coordinator";
 import { useChatRewindActions } from "./use-chat-rewind-actions";
 import { DRAFT_USER_ID_PREFIX } from "./use-chat-flow-drafts";
 import type { ConversationRuntimeStreamCacheSnapshot } from "./use-chat-flow-stream-cache";
@@ -290,6 +291,14 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     return true;
   }
 
+  const {
+    conversationScrollToBottomRequest,
+    scrollToBottomBehavior,
+    triggerConversationScrollToBottom,
+  } = useChatScrollCoordinator({
+    currentChatConversationId: options.conversationId,
+  });
+
   const flow = useChatFlow({
     chatting,
     submitPending,
@@ -371,6 +380,13 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
       });
     },
     onReloadMessages: loadSnapshot,
+    onOwnUserDraftInserted: ({ conversationId }) => {
+      triggerConversationScrollToBottom(conversationId, "draft_inserted", "smooth_light");
+    },
+    onStreamingAssistantBubbleInserted: () => {
+      const cid = currentConversationId();
+      if (cid) triggerConversationScrollToBottom(cid, "assistant_bubble_inserted", "smooth_light");
+    },
     onHistoryFlushed: async ({ conversationId, pendingMessages }) => {
       if (conversationId !== currentConversationId()) return;
       allMessages.value = mergeAuthoritativeMessages(allMessages.value, pendingMessages, {
@@ -642,6 +658,8 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     runtimeState,
     conversationBusy,
     foregroundSyncing,
+    conversationScrollToBottomRequest,
+    scrollToBottomBehavior,
     preferredApiConfigId,
     hasMoreHistory,
     loadingOlderHistory,
