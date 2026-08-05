@@ -1679,7 +1679,9 @@ model = "gpt-4.1"
             conversation.messages[0].speaker_agent_id.as_deref(),
             Some(USER_PERSONA_ID)
         );
-        assert!(restored.conversations[0].messages.is_empty());
+        // 迁移版本已记录时读取不重写 message store：上面 after == before 已钉死。
+        // 不断言 restored.conversations[0].messages 为空——分片读取必然返回完整消息，
+        // 该断言在旧布局删除后不可能成立（99f5b81d 合并测试时遗留的矛盾断言）。
     }
 
     #[test]

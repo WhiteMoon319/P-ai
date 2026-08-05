@@ -52,5 +52,6 @@
 - 修复压缩/归档摘要请求未按模型能力处理历史图片的问题：上下文整理链路补齐与正常对话一致的媒体降级（不支持图片的模型上历史图片走 vision 转文或丢弃，不再以 image_url 泄漏导致请求 400 失败），并补防回归测试钉死该行为。
 - 设置窗口打开默认落在欢迎页，不再停留在快捷键页。
 - 「热键」文案统一改回「快捷键」：设置页快捷键页标题、录制按钮、录制提示、全局快捷键提示、呼唤快捷键、快速设置校验提示等 zh-CN / zh-TW 同步修正（19860ed5 误改为「热键」）。
+- 修复 config 迁移测试 `runtime_volatile_normalization_should_not_require_rewriting_after_migration_version_recorded` 的矛盾断言：99f5b81d 合并旧测试时新增的 `restored.conversations[0].messages.is_empty()` 在分片读取布局下必然不成立（messages 从 message store 分片读出，天然非空），删除该断言；核心行为（迁移版本已记录后读取不触发重写、运行时可规范化）由其余断言钉死。
 
 ## 依赖
