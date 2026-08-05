@@ -450,11 +450,18 @@ fn run_capture_window_tool(input: ScreenshotRequest, window_id: Option<u32>) -> 
 }
 
 async fn run_screenshot_tool(input: ScreenshotRequest) -> DesktopToolResult<ScreenshotResponse> {
-    validate_screenshot_request(&input)?;
-    let started = Instant::now();
-
-    let (rgba, width, height, bounds, capture_ms) = capture_once_xcap(&input)?;
-    encode_screenshot_response(&input, &rgba, width, height, bounds, capture_ms, started)
+    // 截图捕获、WebP 编码与写盘都是同步 IO + CPU 密集操作，移到 blocking 线程池，
+    // 避免每次截图占住 tokio 工作线程。
+    tokio::task::spawn_blocking(move || {
+        validate_screenshot_request(&input)?;
+        let started = Instant::now();
+        let (rgba, width, height, bounds, capture_ms) = capture_once_xcap(&input)?;
+        encode_screenshot_response(&input, &rgba, width, height, bounds, capture_ms, started)
+    })
+    .await
+    .map_err(|err| {
+        DesktopToolError::internal_error(format!("screenshot task failed: {err}"))
+    })?
 }
 
 #[cfg(test)]

@@ -1749,7 +1749,14 @@ async fn prepare_portable_update(
     .await
     .map_err(|err| format!("下载便携版更新失败：{err}"))?;
     ensure_update_not_cancelled()?;
-    std_fs::write(&zip_path, &bytes).map_err(|err| {
+    // 写入更新包（可达数十 MB）与解压是同步 IO + CPU 密集操作，移到 blocking 线程池执行。
+    let zip_path_for_write = zip_path.clone();
+    tokio::task::spawn_blocking(move || {
+        std_fs::write(&zip_path_for_write, &bytes)
+    })
+    .await
+    .map_err(|err| format!("写入便携版更新包任务失败：{err}"))?
+    .map_err(|err| {
         format!("写入便携版更新包失败（{}）：{err}", zip_path.display())
     })?;
     emit_update_progress(
@@ -1766,7 +1773,13 @@ async fn prepare_portable_update(
         ),
     );
     ensure_update_not_cancelled()?;
-    let extracted_files = extract_zip_to_dir(&zip_path, &staging_dir)?;
+    let zip_path_for_extract = zip_path.clone();
+    let staging_dir_for_extract = staging_dir.clone();
+    let extracted_files = tokio::task::spawn_blocking(move || {
+        extract_zip_to_dir(&zip_path_for_extract, &staging_dir_for_extract)
+    })
+    .await
+    .map_err(|err| format!("解压便携版更新包任务失败：{err}"))??;
     let target_exe_name = runtime
         .exe_path
         .file_name()
