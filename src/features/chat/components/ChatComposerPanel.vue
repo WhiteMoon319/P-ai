@@ -191,6 +191,8 @@
             rows="1"
             :placeholder="effectiveChatInputPlaceholder"
             @input="handleChatInputInput"
+            @compositionstart="handleChatInputCompositionStart"
+            @compositionend="handleChatInputCompositionEnd"
             @keydown="handleChatInputKeydown"
           ></textarea>
         </div>
@@ -416,6 +418,7 @@ import ChatQueuePreview from "./ChatQueuePreview.vue";
 import ChatSelectionActionPanel from "./ChatSelectionActionPanel.vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import { useChatQueue } from "../composables/use-chat-queue";
+import { chatInputEnterConfirmsComposition } from "../composables/chat-composer-ime";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
 import ApiConfigSelectionMenu from "../../config/components/ApiConfigSelectionMenu.vue";
 import { formatApiConfigOptionLabel } from "../../config/utils/api-config-display";
@@ -635,6 +638,8 @@ const SEND_MODE_STORAGE_KEY = "easy_call.send_mode.v1";
 type SendMode = "enter" | "ctrl_enter";
 const composerRootRef = ref<HTMLDivElement | null>(null);
 const chatInputRef = ref<HTMLTextAreaElement | null>(null);
+const chatInputComposing = ref(false);
+const chatInputCompositionEndedAt = ref(0);
 
 const sendMode = ref<SendMode>("enter");
 const sendModeMenuOpen = ref(false);
@@ -1153,6 +1158,15 @@ function handleChatInputInput() {
   updateMentionState();
 }
 
+function handleChatInputCompositionStart() {
+  chatInputComposing.value = true;
+}
+
+function handleChatInputCompositionEnd() {
+  chatInputComposing.value = false;
+  chatInputCompositionEndedAt.value = performance.now();
+}
+
 function scheduleResizeChatInput() {
   if (resizeInputRaf.value) cancelAnimationFrame(resizeInputRaf.value);
   resizeInputRaf.value = requestAnimationFrame(() => {
@@ -1243,7 +1257,16 @@ function handleWindowKeydown(event: KeyboardEvent) {
 }
 
 function handleChatInputKeydown(event: KeyboardEvent) {
-  if (event.isComposing) return;
+  if (
+    chatInputEnterConfirmsComposition(
+      event,
+      chatInputComposing.value,
+      chatInputCompositionEndedAt.value,
+      performance.now(),
+    )
+  ) {
+    return;
+  }
   if (mentionPanelOpen.value) {
     if (event.key === "Escape") {
       event.preventDefault();
