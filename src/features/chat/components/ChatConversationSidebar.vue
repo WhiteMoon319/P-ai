@@ -66,6 +66,7 @@
             <CollapsibleGroup
               v-for="section in displayedConversationSections"
               :key="section.key"
+              :ref="(el) => setConversationSectionElement(section.key, el)"
               :title="section.title"
               :count="section.totalItemCount"
               :model-value="isConversationSectionCollapsed(section.key)"
@@ -136,8 +137,13 @@
                           </div>
                           <span
                             v-if="isRecentConversationSection(section.key)"
-                            class="pointer-events-none absolute bottom-0 left-1/2 z-20 inline-block max-w-10 -translate-x-1/2 translate-y-1/3 truncate rounded-full bg-neutral px-1.5 py-[1px] text-micro font-normal leading-3 text-neutral-content shadow-sm"
-                            :title="conversationSourceBadgeLabel(item)"
+                            class="absolute bottom-0 left-1/2 z-20 inline-block max-w-10 -translate-x-1/2 translate-y-1/3 cursor-pointer truncate rounded-full bg-neutral px-1.5 py-[1px] text-micro font-normal leading-3 text-neutral-content shadow-sm transition-colors hover:bg-primary hover:text-primary-content"
+                            :title="t('chat.revealConversationSection')"
+                            role="button"
+                            tabindex="0"
+                            @click.stop="revealConversationSection(item)"
+                            @keydown.enter.prevent="revealConversationSection(item)"
+                            @keydown.space.prevent="revealConversationSection(item)"
                           >
                             {{ conversationSourceBadgeLabel(item) }}
                           </span>
@@ -712,18 +718,6 @@ watch(
 );
 
 watch(
-  () => [
-    props.activeConversationId,
-    activeConversationTab.value,
-    orderedConversationSections.value.map((section) => `${section.key}:${section.items.length}`).join("|"),
-  ] as const,
-  () => {
-    expandSectionForActiveConversation();
-  },
-  { immediate: true },
-);
-
-watch(
   () => activeConversationTab.value,
   (nextValue, previousValue) => {
     if (previousValue && previousValue !== nextValue) {
@@ -986,42 +980,30 @@ function expandConversationSection(key: string) {
   scheduleConversationListScrollbarUpdate();
 }
 
-function shouldKeepSectionOpenDuringAutoExpand(sectionKey: string, targetKey: string): boolean {
-  return sectionKey === targetKey
-    || sectionKey === "pinned"
-    || sectionKey === RECENT_CONVERSATION_SECTION_KEY;
+const conversationSectionElements = new Map<string, HTMLElement>();
+
+function setConversationSectionElement(key: string, element: unknown) {
+  const root = element instanceof HTMLElement
+    ? element
+    : (element as { $el?: HTMLElement | null } | null)?.$el ?? null;
+  if (root) conversationSectionElements.set(key, root);
+  else conversationSectionElements.delete(key);
 }
 
-function expandConversationSectionExclusively(key: string) {
-  if (!key) return;
-  let changed = false;
-  const next = { ...collapsedConversationSectionKeys.value };
-  for (const section of orderedConversationSections.value) {
-    if (shouldKeepSectionOpenDuringAutoExpand(section.key, key)) continue;
-    if (next[section.key] !== true) {
-      next[section.key] = true;
-      changed = true;
-    }
-  }
-  if (next[key] !== false) {
-    next[key] = false;
-    changed = true;
-  }
-  if (!changed) return;
-  collapsedConversationSectionKeys.value = next;
-  scheduleConversationListScrollbarUpdate();
-}
-
-function expandSectionForActiveConversation() {
-  if (normalizedConversationSearchQuery.value) return;
-  const activeConversationId = String(props.activeConversationId || "").trim();
-  if (!activeConversationId) return;
+function revealConversationSection(item: ChatConversationOverviewItem) {
+  const conversationId = String(item.conversationId || "").trim();
+  if (!conversationId) return;
   const section = orderedConversationSections.value.find((entry) =>
     entry.key !== RECENT_CONVERSATION_SECTION_KEY
-    && entry.items.some((item) => String(item.conversationId || "").trim() === activeConversationId),
+    && entry.items.some((candidate) => String(candidate.conversationId || "").trim() === conversationId),
   );
   if (!section) return;
-  expandConversationSectionExclusively(section.key);
+  const wasCollapsed = isConversationSectionCollapsed(section.key);
+  expandConversationSection(section.key);
+  const element = conversationSectionElements.get(section.key);
+  window.setTimeout(() => {
+    if (element) conversationFloatingScrollRef.value?.scrollToElement(element);
+  }, wasCollapsed ? 220 : 0);
 }
 
 function collapseAllConversationSections() {

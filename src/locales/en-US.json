@@ -1442,6 +1442,7 @@
     "untitledConversation": "Untitled",
     "mainConversationPinned": "System notification conversation is always pinned",
     "recentConversations": "Recent",
+    "revealConversationSection": "Reveal group",
     "pinnedConversations": "Pinned",
     "otherConversations": "Others",
     "localConversationTab": "Local",

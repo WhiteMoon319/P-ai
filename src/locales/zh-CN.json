@@ -1569,6 +1569,7 @@
     "untitledConversation": "未命名会话",
     "mainConversationPinned": "系统通知会话始终置顶",
     "recentConversations": "最近会话",
+    "revealConversationSection": "展开所在分组",
     "pinnedConversations": "置顶",
     "otherConversations": "其他",
     "localConversationTab": "本地",
