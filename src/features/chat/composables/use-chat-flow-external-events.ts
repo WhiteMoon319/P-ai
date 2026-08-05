@@ -214,8 +214,16 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       options.clearConversationStreamCache(payloadConversationId || currentConversationId);
       options.clearFrontendDispatchTimer();
       options.setActiveActivationId("");
-      // 这里是外部终态兜底：当前前台已经不持有该轮次时，仍需走既有对账链路，避免切会话后失去正式历史刷新。
-      await options.onReloadMessages();
+      // 外部终态兜底：事件自带后端正式消息时直接应用（停止/他窗口收尾都走这条，
+      // 本地已冻结的消息被覆盖一次即可），避免多余的全量重拉；事件没带消息才重拉。
+      if (parsed.assistantMessage) {
+        await options.onAssistantMessageCompleted?.({
+          conversationId: payloadConversationId || currentConversationId,
+          assistantMessage: parsed.assistantMessage,
+        });
+      } else {
+        await options.onReloadMessages();
+      }
       return;
     }
     if (!terminalTargetsCurrentRound(terminalIdentity)) return;
