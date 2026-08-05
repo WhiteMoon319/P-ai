@@ -2522,8 +2522,12 @@ mod terminal_exec_tests {
         let root = std::env::temp_dir().join(format!("eca-terminal-commitment-{}", Uuid::new_v4()));
         fs::create_dir_all(&root).expect("create root");
         let shell = shell_candidate_by_kind("powershell7")
-            .or_else(|| shell_candidate_by_kind("powershell5"))
-            .expect("powershell shell");
+            .or_else(|| shell_candidate_by_kind("powershell5"));
+        let Some(shell) = shell else {
+            // 非 Windows 或未安装 PowerShell：无可用 shell，跳过该场景测试
+            let _ = fs::remove_dir_all(&root);
+            return;
+        };
         let state = build_test_state(shell, root.clone());
         let (_system_root, main_root, _secondary_root) = configure_test_workspaces(
             &state,
