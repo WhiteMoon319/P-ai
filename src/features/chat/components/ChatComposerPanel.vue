@@ -345,14 +345,13 @@
           <div v-else ref="sendModeMenuRef" class="relative flex shrink-0">
             <button
               class="btn btn-sm btn-circle shrink-0"
-              :class="composerInputBlank ? 'btn-ghost' : 'btn-success'"
+              :class="composerInputBlank ? 'bg-base-200' : 'btn-success'"
               :disabled="!composerInputBlank && (frozen || busy)"
               :title="composerInputBlank ? t('chat.sendModeMenu') : t('chat.send')"
               @click="composerInputBlank ? (sendModeMenuOpen = !sendModeMenuOpen) : handleSendChat()"
               @contextmenu.prevent="sendModeMenuOpen = !sendModeMenuOpen"
             >
-              <ChevronUp v-if="composerInputBlank" class="h-3.5 w-3.5" />
-              <CornerRightUp v-else class="h-3.5 w-3.5" />
+              <CornerRightUp class="h-3.5 w-3.5" />
             </button>
             <div
               v-if="sendModeMenuOpen"
@@ -411,7 +410,7 @@
 <script setup lang="ts">
 import { Teleport, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { CalendarPlus, Check, ChevronDown, ChevronUp, ClipboardList, CornerRightUp, FileText, History, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X } from "@lucide/vue";
+import { CalendarPlus, Check, ChevronDown, ClipboardList, CornerRightUp, FileText, History, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption } from "../../../types/app";
 import ChatQueuePreview from "./ChatQueuePreview.vue";
 import ChatSelectionActionPanel from "./ChatSelectionActionPanel.vue";
