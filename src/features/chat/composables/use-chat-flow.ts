@@ -65,7 +65,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
   let activeActivationId = "";
   let recentlyCompletedActivationId = "";
   let recentlyCompletedRequestId = "";
-  let stoppedRound: { conversationId: string; messageId: string; activationId: string } | null = null;
   let activeRoundAgentId = "";
   let queuedStreamingState: {
     assistantText: string;
@@ -333,11 +332,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
     hasRecentlyCompletedRoundIds,
     markRecentlyCompletedRoundIds,
     matchesRecentlyCompletedRoundIds,
-    hasStoppedRound,
-    matchesStoppedRound,
-    clearStoppedRound: () => {
-      stoppedRound = null;
-    },
     getRound: () => round,
     setRound,
     getSendChatActiveGen: () => sendChatActiveGen,
@@ -352,15 +346,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
     clearFrontendDispatchTimer,
     onReloadMessages: options.onReloadMessages,
     onAssistantMessageCompleted: options.onAssistantMessageCompleted,
-    applyStoppedAssistantMessage: async (assistantMessage) => {
-      const messageId = String(assistantMessage?.id || "").trim();
-      if (!messageId || !matchesStoppedRound({ assistantMessageId: messageId })) return;
-      finalizeMessage(messageId, assistantMessage);
-      const conversationId = String(options.getConversationId ? options.getConversationId() : "").trim();
-      if (conversationId && options.onAssistantMessageCompleted) {
-        await options.onAssistantMessageCompleted({ conversationId, assistantMessage });
-      }
-    },
     setChatErrorText,
     formatRequestFailed: options.formatRequestFailed,
     latestAssistantText: options.latestAssistantText,
@@ -426,13 +411,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
     getActiveActivationId: () => activeActivationId,
     setActiveRoundAgentId: (value: string) => {
       activeRoundAgentId = String(value || "").trim();
-    },
-    markStoppedRound: ({ messageId, activationId }) => {
-      stoppedRound = {
-        conversationId: String(options.getConversationId ? options.getConversationId() : "").trim(),
-        messageId: String(messageId || "").trim(),
-        activationId: String(activationId || "").trim(),
-      };
     },
     clearFrontendDispatchTimer,
     getPendingUserDraftId,
@@ -686,30 +664,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
     );
   }
 
-  function matchesStoppedRound(input: {
-    assistantMessageId?: string;
-    activationId?: string;
-    requestId?: string;
-  }): boolean {
-    const currentStoppedRound = stoppedRound;
-    if (!currentStoppedRound || !hasStoppedRound()) return false;
-    const incomingMessageId = String(input.assistantMessageId || "").trim();
-    if (incomingMessageId) return incomingMessageId === currentStoppedRound.messageId;
-    const incomingIds = [
-      String(input.activationId || "").trim(),
-      String(input.requestId || "").trim(),
-    ].filter(Boolean);
-    if (incomingIds.length === 0) return true;
-    if (!currentStoppedRound.activationId) return true;
-    return incomingIds.includes(currentStoppedRound.activationId);
-  }
-
-  function hasStoppedRound(): boolean {
-    if (!stoppedRound) return false;
-    const conversationId = String(options.getConversationId ? options.getConversationId() : "").trim();
-    return !!conversationId && stoppedRound.conversationId === conversationId;
-  }
-
   // =========================================================================
   // 显示状态重置（只在 history_flushed 清屏时调用）
   // =========================================================================
@@ -739,22 +693,18 @@ export function useChatFlow(options: UseChatFlowOptions) {
   }
 
   function ensureForegroundWaitingRound(statusText = options.t("chat.statusWaitingReply")) {
-    if (hasStoppedRound()) return 0;
     return foregroundRounds?.ensureForegroundWaitingRound(statusText) ?? 0;
   }
 
   function ensureForegroundStreamingRound() {
-    if (hasStoppedRound()) return 0;
     return foregroundRounds?.ensureForegroundStreamingRound() ?? 0;
   }
 
   function resumeForegroundRuntimeRound(input?: ResumeForegroundRuntimeRoundInput) {
-    if (hasStoppedRound()) return 0;
     return foregroundRounds?.resumeForegroundRuntimeRound(input) ?? 0;
   }
 
   function resumeForegroundStreamCacheProjection(input?: { conversationId?: string | null; reason?: string }) {
-    if (hasStoppedRound()) return 0;
     return foregroundRounds?.resumeForegroundStreamCacheProjection(input) ?? 0;
   }
 
@@ -775,7 +725,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
     gen: number,
     parsed: AssistantDeltaEvent,
     source: "sendChat" | "bound",
-    behavior?: { suppressActivationProjection?: boolean },
   ) {
     if (source === "sendChat") {
       submitPending.value = false;
@@ -789,8 +738,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
         activateAssistant: !!flushed.activateAssistant,
       });
     }
-    // 停止后的迟到正式消息仍须进入历史；仅禁止它把已停止轮次重新投影为等待态。
-    if (behavior?.suppressActivationProjection) return;
     await roundEvents.handleHistoryFlushed(gen, parsed, source);
   }
 
@@ -838,7 +785,6 @@ export function useChatFlow(options: UseChatFlowOptions) {
   // =========================================================================
 
   async function sendChat(overrides?: SendChatOverrides) {
-    stoppedRound = null;
     clearContextUsagePreview();
     await sendController.sendChat(overrides);
   }

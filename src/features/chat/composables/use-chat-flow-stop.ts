@@ -33,7 +33,6 @@ type UseChatFlowStopOptions = {
   setActiveActivationId: (value: string) => void;
   getActiveActivationId: () => string;
   setActiveRoundAgentId: (value: string) => void;
-  markStoppedRound: (input: { messageId: string; activationId?: string }) => void;
   clearFrontendDispatchTimer: () => void;
   getPendingUserDraftId: () => string;
   removeMessage: (messageId: string) => void;
@@ -130,9 +129,6 @@ export function useChatFlowStop(options: UseChatFlowStopOptions) {
       options.removeMessage(pendingUserDraftId);
     }
 
-    if (messageId) {
-      options.markStoppedRound({ messageId, activationId });
-    }
     if (round.phase === "streaming" || round.phase === "queued") {
       options.deleteSendStartedAtMs(round.gen);
     }
