@@ -168,7 +168,7 @@ describe("useConversationViewRuntime", () => {
     scope.stop();
   });
 
-  it("流式期间 viewBusy 为 false（停止按钮可用），conversationBusy 为 true（flow 发送保护保留）", async () => {
+  it("流式期间 conversationBusy 为 true（flow 发送保护保留），视图层忙碌由 isViewLayerBusy 判定（chat-view-busy.spec.ts 钉死）", async () => {
     invokeTauriMock.mockResolvedValueOnce({
       conversationId: "conversation-a",
       messages: [message("user-1", "question", "user")],
@@ -187,7 +187,6 @@ describe("useConversationViewRuntime", () => {
     });
 
     expect(runtime.runtimeState.value).toBe("assistant_streaming");
-    expect(runtime.viewBusy.value).toBe(false);
     expect(runtime.conversationBusy.value).toBe(true);
     scope.stop();
   });

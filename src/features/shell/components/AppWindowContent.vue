@@ -154,8 +154,14 @@
         :compacting-conversation="compactingConversation"
         :compacting-conversation-id="compactingConversationId"
         :conversation-busy="
-          (trimming && (!trimmingConversationId || trimmingConversationId === currentChatConversationId))
-          || (compactingConversation && (!compactingConversationId || compactingConversationId === currentChatConversationId))
+          isViewLayerBusy({
+            trimming,
+            trimmingConversationId,
+            compactingConversation,
+            compactingConversationId,
+            activeConversationId: currentChatConversationId,
+            organizingContext: false,
+          })
         "
         :frozen="branchingConversation || forwardingConversationSelection"
         :message-blocks="visibleMessageBlocks"
@@ -493,6 +499,7 @@ import type { GeneratedThemeControls, GeneratedThemeTokens } from "../../shell/t
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
 import type { ChatMonitorPanelMode, ChatRightPanelMode } from "../../chat/composables/chat-ui-layout-storage";
 import { createExclusiveChatViewSubscriptionSlot } from "../../chat/composables/exclusive-chat-view-subscription-slot";
+import { isViewLayerBusy } from "../../chat/composables/chat-view-busy";
 import {
   buildShareExportFileName,
   generateShareFromMessageIds,

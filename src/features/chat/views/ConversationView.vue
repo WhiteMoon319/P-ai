@@ -37,7 +37,14 @@
     :chatting="runtime.chatting.value"
     :trimming="false"
     :compacting-conversation="false"
-    :conversation-busy="runtime.viewBusy.value"
+    :conversation-busy="
+      isViewLayerBusy({
+        trimming: false,
+        compactingConversation: false,
+        activeConversationId: conversationId,
+        organizingContext: runtime.runtimeState.value === 'organizing_context',
+      })
+    "
     :frozen="false"
     :message-blocks="messageBlocks.visibleMessageBlocks.value"
     :has-more-history="runtime.hasMoreHistory.value"
@@ -100,6 +107,7 @@ import type { ApiConfigItem, PromptCommandPreset, ShellWorkspace } from "../../.
 import ChatView from "./ChatView.vue";
 import { useChatMessageBlocks } from "../composables/use-chat-turns";
 import { useConversationViewRuntime } from "../composables/use-conversation-view-runtime";
+import { isViewLayerBusy } from "../composables/chat-view-busy";
 import { useI18n } from "vue-i18n";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
 import type { ExclusiveChatViewSubscriptionSlot } from "../composables/exclusive-chat-view-subscription-slot";

@@ -102,13 +102,8 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     || runtimeState.value === "assistant_streaming"
     || runtimeState.value === "organizing_context"
   );
-  // 视图层交互忙碌：不含流式态。流式时停止按钮必须可用（chatting 单独走 :chatting
-  // prop 控制停止按钮显示），只有提交挂起与组织上下文这类结构性忙才禁用交互，
-  // 与主窗口 conversation-busy（只含 trimming/compacting）语义对齐。
-  const viewBusy = computed(() =>
-    submitPending.value
-    || runtimeState.value === "organizing_context"
-  );
+  // 视图层交互忙碌由组件层统一调用 isViewLayerBusy 判定（chat-view-busy.ts），
+  // 不再在 runtime 内自建一份拼装，避免与主会话外壳分叉。
   let snapshotRequestSequence = 0;
   let disposed = false;
   const foregroundTailWatermark = createForegroundTailWatermarkCoordinator({
@@ -646,7 +641,6 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     submitPending,
     runtimeState,
     conversationBusy,
-    viewBusy,
     foregroundSyncing,
     preferredApiConfigId,
     hasMoreHistory,

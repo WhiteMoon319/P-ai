@@ -19,6 +19,7 @@
 ## 重构
 
 - 清理死代码：移除已无引用的会话列表浮动卡片组件 `ChatConversationListCard` 与其专属头部 `ChatConversationListHeader`（会话列表入口已由 `ChatConversationSidebar` 收口）。
+- 视图层「忙碌」语义收敛为统一纯函数 `isViewLayerBusy`（chat-view-busy.ts）：主会话外壳（AppWindowContent）与追问外壳（ConversationView）不再各自拼装 `conversation-busy` 表达式，统一按「修剪/压缩命中当前会话或组织上下文进行中」判定；追问 runtime 中的 `viewBusy` 拼装与 `submitPending` 冗余一并移除（`stop-chat-disabled` 已覆盖提交挂起），语义钉死由新增 spec 承接。
 
 ## 功能
 
