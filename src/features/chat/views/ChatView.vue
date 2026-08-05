@@ -540,7 +540,8 @@
           <ToolReviewSidebar class="min-h-0 flex-1"
             :active-tab="toolReviewSidebarActiveTab"
             :batches="toolReviewBatches" :current-batch-key="toolReviewCurrentBatchKey"
-            :detail-map="toolReviewDetailMap" :detail-loading-call-id="toolReviewDetailLoadingCallId"
+            :detail-map="toolReviewDetailMap" :segment-map="toolReviewSegmentMap"
+            :detail-loading-call-id="toolReviewDetailLoadingCallId"
             :reviewing-call-id="toolReviewReviewingCallId" :batch-reviewing-key="toolReviewBatchReviewingKey"
             :error-text="toolReviewErrorText"
             :markdown-is-dark="markdownIsDark"
@@ -1451,7 +1452,7 @@ const showJumpToNextUserMessage = computed(() =>
 
 const {
   toolReviewPanelOpen, toolReviewBatches, toolReviewCurrentBatchKey,
-  toolReviewDetailMap, toolReviewDetailLoadingCallId, toolReviewReviewingCallId,
+  toolReviewDetailMap, toolReviewSegmentMap, toolReviewDetailLoadingCallId, toolReviewReviewingCallId,
   toolReviewBatchReviewingKey, toolReviewSubmittingBatchKey, toolReviewErrorText,
   setToolReviewCurrentBatchKey,
   loadToolReviewItemDetail, runToolReviewForCall, runToolReviewForBatch,

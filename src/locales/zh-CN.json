@@ -1836,7 +1836,8 @@
       "durationHoursMinutes": "{hours}时{minutes}分",
       "durationMinutesSeconds": "{minutes}分{seconds}秒",
       "durationSeconds": "{seconds}秒",
-      "scopeUnknown": "未知范围"
+      "scopeUnknown": "未知范围",
+      "patchOperationMove": "移动"
     },
     "fastRequest": {
       "tab": "杂务",
