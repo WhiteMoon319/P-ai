@@ -871,7 +871,7 @@ fn tool_review_segments_for_apply_patch(item: &ToolReviewCollectedItem) -> Vec<T
                     .unwrap_or_default();
                 if ranges.is_empty() {
                     let mut lines = tool_review_segment_update_lines(1, old_string, new_string);
-                    if lines.len() <= 1 && old_string.is_empty() && !new_string.is_empty() {
+                    if old_string.is_empty() && !new_string.is_empty() {
                         lines = vec![tool_review_git_hunk_header(0, 0, 1, new_string.lines().count())];
                         lines.extend(tool_review_prefixed_git_lines("+", new_string));
                     }
