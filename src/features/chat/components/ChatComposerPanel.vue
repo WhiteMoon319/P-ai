@@ -194,6 +194,8 @@
             @compositionstart="handleChatInputCompositionStart"
             @compositionend="handleChatInputCompositionEnd"
             @keydown="handleChatInputKeydown"
+            @focus="handleChatInputFocus"
+            @blur="handleChatInputBlur"
           ></textarea>
         </div>
         <FloatingScrollbar v-if="chatInputRef" :target="chatInputRef" />
@@ -419,6 +421,7 @@ import ChatSelectionActionPanel from "./ChatSelectionActionPanel.vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import { useChatQueue } from "../composables/use-chat-queue";
 import { chatInputEnterConfirmsComposition } from "../composables/chat-composer-ime";
+import { clearChatComposerFocus, registerChatComposerFocus } from "../composables/chat-composer-focus";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
 import ApiConfigSelectionMenu from "../../config/components/ApiConfigSelectionMenu.vue";
 import { formatApiConfigOptionLabel } from "../../config/utils/api-config-display";
@@ -441,6 +444,7 @@ type MentionOptionView = {
 };
 
 const props = defineProps<{
+  composerScope?: "main" | "side";
   selectionModeEnabled: boolean;
   selectionDelegateOnly?: boolean;
   selectedMessageCount: number;
@@ -1254,6 +1258,18 @@ function handleWindowKeydown(event: KeyboardEvent) {
   if (!textareaFocused && !composerFocused) return;
   event.preventDefault();
   togglePlanMode();
+}
+
+function handleChatInputFocus() {
+  if (props.composerScope) {
+    registerChatComposerFocus(props.composerScope);
+  }
+}
+
+function handleChatInputBlur() {
+  if (props.composerScope) {
+    clearChatComposerFocus(props.composerScope);
+  }
 }
 
 function handleChatInputKeydown(event: KeyboardEvent) {

@@ -1,6 +1,7 @@
 <template>
   <ChatView
     class="h-full"
+    composer-scope="side"
     :user-alias="userAlias"
     :persona-name="personaName"
     :user-avatar-url="userAvatarUrl"
@@ -102,12 +103,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRef } from "vue";
+import { computed, onBeforeUnmount, onMounted, toRef } from "vue";
 import type { ApiConfigItem, PromptCommandPreset, ShellWorkspace } from "../../../types/app";
 import ChatView from "./ChatView.vue";
 import { useChatMessageBlocks } from "../composables/use-chat-turns";
 import { useConversationViewRuntime } from "../composables/use-conversation-view-runtime";
 import { isViewLayerBusy } from "../composables/chat-view-busy";
+import { getActiveChatComposerScope } from "../composables/chat-composer-focus";
+import { collectPastedFiles, ingestPastedImages } from "../composables/chat-paste-ingest";
 import { useI18n } from "vue-i18n";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
 import type { ExclusiveChatViewSubscriptionSlot } from "../composables/exclusive-chat-view-subscription-slot";
@@ -186,4 +189,31 @@ function updateChatInput(value: string) {
 function clearChatError() {
   runtime.chatErrorText.value = "";
 }
+
+// 焦点在本视图输入框内时的图片粘贴：与主会话共用同一份入队逻辑，
+// 由共享的「最后活跃输入框」状态判断归属，避免图片进错会话队列。
+function handleSidePaste(event: ClipboardEvent) {
+  if (getActiveChatComposerScope() !== "side") return;
+  const apiConfig = activeApiConfig.value;
+  if (!apiConfig) return;
+  const collected = collectPastedFiles(event);
+  if (collected.length === 0) return;
+  event.preventDefault();
+  clearChatError();
+  void ingestPastedImages(collected, apiConfig, {
+    setChatError: clearChatError,
+    setStatusError: () => {},
+    clipboardImages: runtime.clipboardImages,
+    queuedAttachmentNotices: runtime.queuedAttachmentNotices,
+    hasVisionFallback: false,
+  });
+}
+
+onMounted(() => {
+  window.addEventListener("paste", handleSidePaste);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("paste", handleSidePaste);
+});
 </script>

@@ -352,6 +352,7 @@
           </div>
           <ChatComposerPanel
             v-else ref="composerPanelRef" :selection-mode-enabled="messageSelectionModeEnabled"
+            :composer-scope="composerScope"
             :selected-message-count="selectedMessageBlocks.length"
             :chat-input="chatInput" :instruction-presets="instructionPresets" :mention-entries="mentionEntries"
             :selected-mentions="selectedMentions"
@@ -660,6 +661,7 @@ import { clearNativeTextSelection } from "../../../utils/native-selection";
 // ==================== props / emits ====================
 
 const props = defineProps<{
+  composerScope?: "main" | "side";
   userAlias: string; personaName: string; userAvatarUrl: string; assistantAvatarUrl: string;
   personaNameMap: Record<string, string>; personaAvatarUrlMap: Record<string, string>;
   mentionEntries: ChatMentionEntry[]; selectedMentions: ChatMentionTarget[];

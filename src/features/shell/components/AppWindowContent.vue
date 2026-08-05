@@ -112,6 +112,7 @@
     <div v-else-if="viewMode === 'chat'" class="relative flex-1 min-h-0">
       <ChatView
         ref="chatViewRef"
+        composer-scope="main"
         :user-alias="userAlias"
         :persona-name="selectedPersonaName"
         :user-avatar-url="userAvatarUrl"
