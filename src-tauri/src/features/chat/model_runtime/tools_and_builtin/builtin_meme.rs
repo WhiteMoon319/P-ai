@@ -1156,8 +1156,17 @@ impl RuntimeValueTool for BuiltinMemeTool {
                 ));
             }
             meme_check_gif_size_limit(&detected.ext, &source_path).map_err(ToolInvokeError::from)?;
-            let normalized =
-                meme_prepare_image_asset(&source_path).map_err(ToolInvokeError::from)?;
+            // 读文件 + 解码 + 编码是同步 IO 与 CPU 密集操作，移到 blocking 线程池，
+            // 避免占住 async 工作线程阻塞其他并发任务（流式回复/工具调用）。
+            let prepare_source = source_path.clone();
+            let normalized = tokio::task::spawn_blocking(move || {
+                meme_prepare_image_asset(&prepare_source)
+            })
+            .await
+            .map_err(|err| {
+                ToolInvokeError::from(format!("表情素材准备任务失败: err={err}"))
+            })?
+            .map_err(ToolInvokeError::from)?;
             let target_path = meme_target_path_for_new_asset(
                 &self.app_state,
                 &emotion,
@@ -1165,7 +1174,17 @@ impl RuntimeValueTool for BuiltinMemeTool {
                 &mut dhash_index,
             )
             .map_err(ToolInvokeError::from)?;
-            std::fs::write(&target_path, &normalized.bytes).map_err(|err| {
+            let output_size = normalized.bytes.len();
+            let write_target = target_path.clone();
+            let write_bytes = normalized.bytes;
+            tokio::task::spawn_blocking(move || {
+                std::fs::write(&write_target, &write_bytes)
+            })
+            .await
+            .map_err(|err| {
+                ToolInvokeError::from(format!("表情保存任务失败: err={err}"))
+            })?
+            .map_err(|err| {
                 ToolInvokeError::from(format!(
                     "保存表情失败: from={}, to={}, err={err}",
                     source_path.display(),
@@ -1183,7 +1202,7 @@ impl RuntimeValueTool for BuiltinMemeTool {
                 normalized.width,
                 normalized.height,
                 normalized.frame_count,
-                normalized.bytes.len()
+                output_size
             ));
             let relative_path = workspace_relative_path(&self.app_state, &target_path);
             dhash_index.insert(relative_path.clone(), source_hash);
