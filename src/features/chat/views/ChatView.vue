@@ -354,7 +354,7 @@
             v-else ref="composerPanelRef" :selection-mode-enabled="messageSelectionModeEnabled"
             :selected-message-count="selectedMessageBlocks.length"
             :chat-input="chatInput" :instruction-presets="instructionPresets" :mention-entries="mentionEntries"
-            :selected-mentions="selectedMentions" :chat-input-placeholder="chatInputPlaceholder"
+            :selected-mentions="selectedMentions"
             :clipboard-images="clipboardImages" :queued-attachment-notices="queuedAttachmentNotices"
             :link-open-error-text="linkOpenErrorText"
             :transcribing="transcribing" :can-record="canRecord" :recording="recording" :recording-ms="recordingMs"
@@ -669,7 +669,7 @@ const props = defineProps<{
   toolStatusText: string; toolStatusState: "running" | "done" | "failed" | "";
   chatErrorText: string; clipboardImages: Array<{ mime: string; bytesBase64: string; previewDataUrl?: string }>;
   queuedAttachmentNotices: Array<{ id: string; fileName: string; path: string; mime: string }>;
-  chatInput: string; instructionPresets: PromptCommandPreset[]; chatInputPlaceholder: string;
+  chatInput: string; instructionPresets: PromptCommandPreset[];
   canRecord: boolean; recording: boolean; recordingMs: number; transcribing: boolean; recordHotkey: string;
   conversationCallPrimaryApiConfigId: string; preferredChatModelId?: string; toolReviewApiConfigId?: string; toolReviewRefreshTick: number; chatModelOptions: ApiConfigItem[];
   planModeEnabled: boolean; chatUsagePercent: number;

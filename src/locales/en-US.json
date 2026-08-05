@@ -1640,7 +1640,7 @@
     "recording": "Recording {seconds}s",
     "transcribing": "Transcribing voice...",
     "holdRecord": "Hold {hotkey} or button to record",
-    "placeholder": "Ask Pai",
+    "placeholder": "Ask {personaName}",
     "placeholderBusyIdle": "Keep sending—{personaName} will process them one by one after finishing",
     "placeholderBusyQueued": "Queued messages can switch to guide mode so {personaName} gets them sooner",
     "placeholderGuided": "Keep guiding more messages; {personaName} receives all guided messages at once",

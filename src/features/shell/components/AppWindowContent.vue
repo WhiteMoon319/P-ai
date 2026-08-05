@@ -132,7 +132,6 @@
         :queued-attachment-notices="queuedAttachmentNotices"
         :chat-input="chatInput"
         :instruction-presets="instructionPresets"
-        :chat-input-placeholder="chatInputPlaceholder"
         :can-record="speechRecognitionSupported"
         :recording="recording"
         :recording-ms="recordingMs"
@@ -313,7 +312,6 @@
               :workspaces="currentChatWorkspaces"
               :workspace-access="currentChatWorkspaces.find((item) => item.level === 'main')?.access || 'read_only'"
               :current-theme="currentTheme"
-              :chat-input-placeholder="chatInputPlaceholder"
               :terminal-approvals="terminalApprovals"
               :terminal-approval-resolving="terminalApprovalResolving"
               :approve-terminal-approval="(requestId) => approveTerminalApproval(requestId)"
@@ -599,7 +597,6 @@ const props = defineProps<{
   clipboardImages: Array<{ mime: string; bytesBase64: string }>;
   queuedAttachmentNotices: Array<{ id: string; fileName: string; path: string; mime: string }>;
   chatInput: string;
-  chatInputPlaceholder: string;
   speechRecognitionSupported: boolean;
   recording: boolean;
   recordingMs: number;

@@ -435,7 +435,6 @@ const props = defineProps<{
   instructionPresets: PromptCommandPreset[];
   mentionEntries: ChatMentionEntry[];
   selectedMentions: ChatMentionTarget[];
-  chatInputPlaceholder: string;
   clipboardImages: BinaryAttachment[];  queuedAttachmentNotices: QueuedAttachmentNotice[];
   linkOpenErrorText: string;
   transcribing: boolean;
@@ -604,7 +603,7 @@ const effectiveChatInputPlaceholder = computed(() => {
   if (props.busy || props.chatting) {
     return t("chat.placeholderBusyIdle", { personaName });
   }
-  return props.chatInputPlaceholder;
+  return t("chat.placeholder", { personaName });
 });
 
 const localChatInput = computed({

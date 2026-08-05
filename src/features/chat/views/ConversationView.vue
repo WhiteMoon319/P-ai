@@ -21,7 +21,6 @@
     :queued-attachment-notices="runtime.queuedAttachmentNotices.value"
     :chat-input="runtime.chatInput.value"
     :instruction-presets="instructionPresets"
-    :chat-input-placeholder="chatInputPlaceholder"
     :can-record="false"
     :recording="false"
     :recording-ms="0"
@@ -124,7 +123,6 @@ const props = defineProps<{
   workspaces: ShellWorkspace[];
   workspaceAccess: "read_only" | "approval" | "full_access";
   currentTheme: string;
-  chatInputPlaceholder: string;
   terminalApprovals?: TerminalApprovalConversationItem[];
   terminalApprovalResolving?: boolean;
   approveTerminalApproval?: (requestId: string) => void;
