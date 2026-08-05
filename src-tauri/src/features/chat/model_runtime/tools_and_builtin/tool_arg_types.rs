@@ -53,6 +53,8 @@ struct TerminalExecToolArgs {
     command: Option<String>,
     #[serde(default)]
     timeout_ms: Option<u64>,
+    #[serde(default)]
+    commitment: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
