@@ -67,7 +67,7 @@ export const SILICON_FLOW_EMBEDDING_MODEL = "BAAI/bge-m3";
 export const SILICON_FLOW_RERANK_MODEL = "BAAI/bge-reranker-v2-m3";
 export const SILICON_FLOW_STT_MODEL = "TeleAI/TeleSpeechASR";
 
-export const responseStyleOptions = (responseStylesJson as ResponseStyleOption[]).filter((style) => style.id !== "abstract");
+export const responseStyleOptions = responseStylesJson as ResponseStyleOption[];
 
 export function createDraftModelCard(id: string, model: string, reasoningEffort: SimpleReasoningEffort): ApiModelConfigItem {
   return {

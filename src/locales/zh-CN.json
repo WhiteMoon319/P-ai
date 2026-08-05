@@ -1409,8 +1409,7 @@
     "none": "无要求",
     "concise": "简洁",
     "academic": "学术",
-    "teaching": "教学",
-    "abstract": "抽象"
+    "teaching": "教学"
   },
   "chat": {
     "loadingOlderMessages": "加载更早消息中",
