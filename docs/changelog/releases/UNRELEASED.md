@@ -21,6 +21,7 @@
 - 清理死代码：移除已无引用的会话列表浮动卡片组件 `ChatConversationListCard` 与其专属头部 `ChatConversationListHeader`（会话列表入口已由 `ChatConversationSidebar` 收口）。
 - 视图层「忙碌」语义收敛为统一纯函数 `isViewLayerBusy`（chat-view-busy.ts）：主会话外壳（AppWindowContent）与追问外壳（ConversationView）不再各自拼装 `conversation-busy` 表达式，统一按「修剪/压缩命中当前会话或组织上下文进行中」判定；追问 runtime 中的 `viewBusy` 拼装与 `submitPending` 冗余一并移除（`stop-chat-disabled` 已覆盖提交挂起），语义钉死由新增 spec 承接。
 - 图片粘贴按焦点归属路由到正确会话的附件队列：新增共享「最后活跃输入框」状态（chat-composer-focus.ts，主会话与追问输入框 focus/blur 时注册），追问视图挂载自己的 paste 监听，焦点在追问输入框内时图片进追问队列而非误入主会话队列；粘贴图片的收集/分类/入队逻辑抽为公共模块（chat-paste-ingest.ts），主会话与追问共用同一份实现，杜绝再次分叉；追问视图卸载时主动清掉共享焦点归属，避免 scope 残留 `side` 导致主会话误判而丢弃图片（回退主会话接管）。
+- 追问会话（side_chat）不再广播 `conversation.overviewItemUpdated` 列表项事件：其 `read_unarchived_conversation_summary` 对 side_chat 的豁免本是为追问轻量快照保留的，但同一函数被事件广播路径复用后，side_chat 的列表项事件被前端无条件 push 进「最近会话」列表（追问发消息后、下次整表刷新前可见）。改为事件出口按 `conversation_kind` 拦截 side_chat，轻量快照路径不受影响，主会话列表与归档窗口的未归档列表不再混入追问会话。
 
 ## 功能
 
