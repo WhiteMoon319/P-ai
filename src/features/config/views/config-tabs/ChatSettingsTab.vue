@@ -6,10 +6,12 @@
           <div class="text-sm">{{ t("config.chatSettings.visionApi") }}</div>
           <div class="mt-1 text-xs text-base-content/60">{{ t("config.chatSettings.visionApiHint") }}</div>
         </div>
-        <select :value="config.visionApiConfigId ?? ''" class="select select-bordered select-sm w-full" @change="onVisionSelectChange">
-          <option value="">{{ t("config.chatSettings.noVision") }}</option>
-          <option v-for="a in imageCapableApiConfigs" :key="a.id" :value="a.id">{{ a.name }}</option>
-        </select>
+        <ApiConfigTreeSelect
+          :model-value="config.visionApiConfigId ?? ''"
+          :api-configs="imageCapableApiConfigs"
+          :placeholder="t('config.chatSettings.noVision')"
+          @update:model-value="onVisionSelect"
+        />
       </label>
     </template>
 
@@ -242,8 +244,8 @@ const emit = defineEmits<{
   (e: "openSystemPromptPreview"): void;
 }>();
 
-function onVisionSelectChange(event: Event) {
-  props.config.visionApiConfigId = ((event.target as HTMLSelectElement).value || undefined);
+function onVisionSelect(value: string) {
+  props.config.visionApiConfigId = value || undefined;
   emit("patchConversationApiSettings", {
     visionApiConfigId: props.config.visionApiConfigId ?? null,
   });
