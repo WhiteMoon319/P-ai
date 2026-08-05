@@ -189,7 +189,7 @@
             v-model="localChatInput"
             class="ecall-chat-composer-input w-full resize-none overflow-y-auto chat-input-no-focus min-h-0"
             rows="1"
-            :placeholder="chatInputPlaceholder"
+            :placeholder="effectiveChatInputPlaceholder"
             @input="handleChatInputInput"
             @keydown="handleChatInputKeydown"
           ></textarea>
@@ -436,8 +436,7 @@ const props = defineProps<{
   mentionEntries: ChatMentionEntry[];
   selectedMentions: ChatMentionTarget[];
   chatInputPlaceholder: string;
-  clipboardImages: BinaryAttachment[];
-  queuedAttachmentNotices: QueuedAttachmentNotice[];
+  clipboardImages: BinaryAttachment[];  queuedAttachmentNotices: QueuedAttachmentNotice[];
   linkOpenErrorText: string;
   transcribing: boolean;
   canRecord: boolean;
@@ -465,6 +464,7 @@ const props = defineProps<{
   remoteImContactConversations: RemoteImContactConversationOption[];
   userAlias: string;
   userAvatarUrl: string;
+  personaName: string;
   personaNameMap: Record<string, string>;
   personaAvatarUrlMap: Record<string, string>;
   createConversationDepartmentOptions: ConversationDepartmentOption[];
@@ -591,6 +591,21 @@ const visibleQueueEvents = computed(() => {
 const queueUserPersonaName = computed(() =>
   String(props.personaNameMap["user-persona"] || props.userAlias || "").trim(),
 );
+
+/** 输入框占位文案：按忙碌/队列/引导状态切换，忙碌态嵌入人格名。 */
+const effectiveChatInputPlaceholder = computed(() => {
+  const personaName = String(props.personaName || "").trim();
+  if (visibleQueueEvents.value.some((event) => event.queueMode === "guided")) {
+    return t("chat.placeholderGuided", { personaName });
+  }
+  if (visibleQueueEvents.value.length > 0) {
+    return t("chat.placeholderBusyQueued", { personaName });
+  }
+  if (props.busy || props.chatting) {
+    return t("chat.placeholderBusyIdle", { personaName });
+  }
+  return props.chatInputPlaceholder;
+});
 
 const localChatInput = computed({
   get: () => props.chatInput,

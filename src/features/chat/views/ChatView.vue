@@ -376,7 +376,7 @@
             :active-conversation-id="activeConversationId" :unarchived-conversation-items="unarchivedConversationItems"
             :remote-im-contact-conversations="remoteImContactConversations"
             :user-alias="userAlias" :user-avatar-url="userAvatarUrl"
-            :persona-name-map="personaNameMap" :persona-avatar-url-map="personaAvatarUrlMap"
+            :persona-name="personaName" :persona-name-map="personaNameMap" :persona-avatar-url-map="personaAvatarUrlMap"
             :create-conversation-department-options="createConversationDepartmentOptions"
             :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
             :ide-context-groups="mergedVisibleIdeContextGroups" :attached-ide-context-references="attachedIdeContextReferences"
