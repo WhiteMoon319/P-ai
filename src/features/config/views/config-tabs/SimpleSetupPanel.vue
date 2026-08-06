@@ -139,23 +139,26 @@
             </button>
           </div>
           <div class="grid gap-3">
-            <ApiModelCard
-              v-for="card in modelCards"
-              :key="card.id"
-              :card="draft.models[card.id]"
-              :title="card.label"
-              :hint="card.hint"
-              :model-options="draft.providerId === 'custom' ? draft.customModelOptions : []"
-              :show-delete="false"
-              :show-capability-toggles="false"
-              :show-context-window="false"
-              :show-reasoning="card.id !== 'vision'"
-              :show-temperature="false"
-              :show-max-output-tokens="false"
-              :reasoning-items="reasoningEffortOptions"
-              :reasoning-checked-values="[String(draft.models[card.id].reasoningEffort || '')]"
-              @reasoning-change="(payload: { value: string; checked: boolean }) => { if (payload.checked) draft.models[card.id].reasoningEffort = payload.value as SimpleReasoningEffort }"
-            />
+            <div v-for="card in modelCards" :key="card.id">
+              <div class="mb-2 flex items-center gap-3">
+                <span class="whitespace-nowrap text-sm font-semibold">{{ card.label }}</span>
+                <div class="divider divider-sm my-0 flex-1"></div>
+              </div>
+              <ApiModelCard
+                :card="draft.models[card.id]"
+                :hint="card.hint"
+                :model-options="draft.providerId === 'custom' ? draft.customModelOptions : []"
+                :show-delete="false"
+                :show-capability-toggles="false"
+                :show-context-window="false"
+                :show-reasoning="card.id !== 'vision'"
+                :show-temperature="false"
+                :show-max-output-tokens="false"
+                :reasoning-items="reasoningEffortOptions"
+                :reasoning-checked-values="[String(draft.models[card.id].reasoningEffort || '')]"
+                @reasoning-change="(payload: { value: string; checked: boolean }) => { if (payload.checked) draft.models[card.id].reasoningEffort = payload.value as SimpleReasoningEffort }"
+              />
+            </div>
           </div>
         </div>
       </section>

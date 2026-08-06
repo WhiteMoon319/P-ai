@@ -1379,6 +1379,7 @@ model = "gpt-4.1"
                     ApiModelConfig {
                         id: model_a.clone(),
                         model: "gpt-4.1".to_string(),
+                        display_name: String::new(),
                         deprecated: false,
                         enable_image: false,
                         enable_audio: false,
@@ -1394,6 +1395,7 @@ model = "gpt-4.1"
                     ApiModelConfig {
                         id: model_b.clone(),
                         model: "gpt-4.1-mini".to_string(),
+                        display_name: String::new(),
                         deprecated: false,
                         enable_image: false,
                         enable_audio: false,
@@ -1467,6 +1469,7 @@ model = "gpt-4.1"
                 models: vec![ApiModelConfig {
                     id: model_id.clone(),
                     model: "gpt-5.4".to_string(),
+                    display_name: String::new(),
                     deprecated: false,
                     enable_image: false,
                     enable_audio: false,

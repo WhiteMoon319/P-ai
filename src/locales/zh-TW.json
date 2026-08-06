@@ -137,6 +137,8 @@
       "modelCardsHint": "支援手填模型名，也支援從刷新結果裡點選輔助填入。",
       "addModel": "新增模型",
       "unnamedModel": "未命名模型",
+      "editDisplayName": "點擊修改顯示名稱",
+      "displayNamePlaceholder": "預設：{model}",
       "matchedProtocol": "匹配協議：{protocol}",
       "capabilityText": "大模型",
       "capabilityVoice": "語音",

@@ -139,6 +139,8 @@
       "modelCardsHint": "Enter model names manually, or pick from refreshed results.",
       "addModel": "Add Model",
       "unnamedModel": "Unnamed Model",
+      "editDisplayName": "Click to edit display name",
+      "displayNamePlaceholder": "Default: {model}",
       "matchedProtocol": "Matched protocol: {protocol}",
       "capabilityText": "Models",
       "capabilityVoice": "Voice",

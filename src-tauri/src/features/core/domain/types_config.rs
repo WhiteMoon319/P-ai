@@ -776,6 +776,8 @@ struct ApiModelConfig {
     id: String,
     model: String,
     #[serde(default)]
+    display_name: String,
+    #[serde(default)]
     deprecated: bool,
     #[serde(default = "default_false")]
     enable_image: bool,
@@ -804,6 +806,7 @@ impl Default for ApiModelConfig {
         Self {
             id: "default-model".to_string(),
             model: "gpt-4o-mini".to_string(),
+            display_name: String::new(),
             deprecated: false,
             enable_image: false,
             enable_audio: false,

@@ -105,6 +105,7 @@ export function createDraftModelCard(id: string, model: string, reasoningEffort:
   return {
     id,
     model,
+    displayName: "",
     enableImage: false,
     enableAudio: false,
     enableVideo: false,

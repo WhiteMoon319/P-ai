@@ -169,6 +169,8 @@ struct ApiModelConfig {
     id: String,
     model: String,
     #[serde(default)]
+    display_name: String,
+    #[serde(default)]
     enable_image: bool,
     #[serde(default)]
     enable_audio: bool,
@@ -1752,6 +1754,7 @@ fn build_new_provider(name: &str) -> ApiProviderConfig {
         models: vec![ApiModelConfig {
             id: "default-model".to_string(),
             model: "gpt-4o-mini".to_string(),
+            display_name: String::new(),
             enable_image: false,
             enable_audio: false,
             enable_video: false,

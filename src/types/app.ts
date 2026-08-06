@@ -120,6 +120,7 @@ export type ApiConfigItem = {
 export type ApiModelConfigItem = {
   id: string;
   model: string;
+  displayName?: string;
   deprecated?: boolean;
   enableImage: boolean;
   enableAudio?: boolean;

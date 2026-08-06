@@ -611,7 +611,8 @@ function modelGroupForCard(modelCard: ApiModelConfigItem): ActiveModelGroup | nu
 
 function modelGroupDisplayLabel(modelCard: ApiModelConfigItem): string {
   const group = modelGroupForCard(modelCard);
-  const modelName = String(modelCard.model || "").trim() || t("config.api.unnamedModel");
+  const displayName = String(modelCard.displayName || "").trim();
+  const modelName = displayName || String(modelCard.model || "").trim() || t("config.api.unnamedModel");
   const sameNameGroups = activeModelGroups.value.filter((candidate) => candidate.primary.model === modelCard.model);
   if (!group || sameNameGroups.length <= 1) return modelName;
   const peers = sameNameGroups.map((candidate) => candidate.primary);

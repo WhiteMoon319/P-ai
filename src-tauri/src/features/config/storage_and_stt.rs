@@ -264,6 +264,7 @@ fn migrate_legacy_api_configs_into_providers(config: &mut AppConfig) {
                 models: vec![ApiModelConfig {
                     id: model_id,
                     model: legacy.model.clone(),
+                    display_name: String::new(),
                     deprecated: false,
                     enable_image: legacy.enable_image,
                     enable_audio: false,
