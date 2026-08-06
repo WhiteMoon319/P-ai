@@ -113,6 +113,7 @@ fn should_enable_devtools() -> bool {
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn unix_extend_process_path_from_login_shell() {
+    use users::os::unix::UserExt;
     const PATH_BEGIN: &str = "__PAI_LOGIN_PATH_BEGIN__";
     const PATH_END: &str = "__PAI_LOGIN_PATH_END__";
     let shell = std::env::var_os("SHELL")
@@ -140,7 +141,7 @@ fn unix_extend_process_path_from_login_shell() {
         }
     };
     let Some(stdout_pipe) = child.stdout.take() else {
-        runtime_log_warn("[启动] 获取登录 shell stdout 失败，跳过环境同步");
+        runtime_log_warn("[启动] 获取登录 shell stdout 失败，跳过环境同步".to_string());
         return;
     };
     // 读线程负责读 stdout 直到 EOF：shell 退出但 rc 启动的后台进程仍持有
@@ -170,7 +171,7 @@ fn unix_extend_process_path_from_login_shell() {
         if std::time::Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
-            runtime_log_warn("[启动] 读取登录 shell PATH 超时，跳过环境同步");
+            runtime_log_warn("[启动] 读取登录 shell PATH 超时，跳过环境同步".to_string());
             return;
         }
         std::thread::sleep(std::time::Duration::from_millis(50));

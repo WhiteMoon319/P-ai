@@ -43,6 +43,7 @@
 - 修复 macOS 支持 PR（#18）合并后的三类问题：rdev 录音热键回调返回类型错误导致 Windows/Linux 分支无法编译（回调改为 `if let` 消费 token）；macOS 构建拆分为签名/未签名两个互斥步骤（按 `APPLE_CERTIFICATE` secrets 是否存在分流，避免 tauri-bundler 对空字符串 env 走证书导入分支导致构建失败；签名步骤注入证书 env，公证三件套任一缺失时 shell 内 unset 让 bundler warn 跳过公证，未配置时走未签名构建不阻塞；分流条件经 job env 中转 `HAS_APPLE_CERTIFICATE` 读取，GHA 的 `if` 不允许直接引用 secrets context，直接引用会导致 workflow 求值失败）；Linux 手动未签名构建补 `Generate updater manifest` 发布条件（非发布路径不再因缺 `.sig` 失败）。
 - 登录 shell PATH 同步加固：shell 解析改为 `SHELL` → 系统账户登录 shell（`users` 查询 passwd）→ `/bin/sh` 兜底，不再固定回退 `/bin/zsh`（Linux 不保证存在）；同步改为 spawn + stdin 隔离 + 5 秒超时 kill，stdout 由子线程读取、主线程统一超时轮询，避免用户 rc 文件存在阻塞命令或后台进程持有 stdout 时应用永久卡在启动阶段，超时后降级系统默认 PATH 并记录 warn 日志。
 
+- 修复登录 shell PATH 同步在 Linux/macOS 上的编译错误：`users::User::shell()` 需要导入 `users::os::unix::UserExt` trait；两处 `runtime_log_warn` 传 `&str` 改为 `String`（Windows 本地编译不到 unix 分支，此前未暴露）。
 - 移除副手部门（deputy/explorer）的硬编码工具限制：删除 `c8d53b02` 引入的「副手部门默认只能使用调查型工具、预设 Skill 一律禁止」硬编码短路（`deputy_department_builtin_tool_allowed` / `deputy_department_restricted_reason` 及 `is_deputy` 判定分支）。副手部门与其他部门一样完全由部门权限卡（白/黑名单）控制，权限控制外不再有任何硬编码限制；该硬编码因配置归一化强制 `is_deputy=false` 本就从未在运行时生效。
 - 工具审查侧边栏新建文件场景补丁行号起点修正：ranges 为空且 `old_string` 为空、`new_string` 非空时直接判定为新增（原 `lines.len() <= 1` 条件恒不成立导致永不进入修正分支），hunk 头从 0 行起算（`@@ -0,0 +1,n @@`），新建文件补丁视图行号不再错位。
 - 终端 exec 承诺确认测试健壮性：`commitment_approval_should_bypass_local_rule_block` 在无可用 PowerShell 环境（非 Windows 或未安装）时改为跳过而非 panic（原 `expect` 直接崩溃）。
