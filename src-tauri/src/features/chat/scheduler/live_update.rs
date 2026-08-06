@@ -641,6 +641,31 @@ pub(crate) fn remote_live_update_notify_android(
                 kind, conversation_id
             ));
         }
+        "todo" => {
+            // todo 列表变化：刷新 ongoing 常驻通知为当前目标文本（非消息 delta）。
+            // 无目标文本时回退「正在回复…」保持通知连续。
+            let title = remote_live_update_title(payload, false);
+            let todo_text =
+                native_notification_text_excerpt(&payload.delta, LIVE_UPDATE_BODY_MAX_CHARS);
+            let body = if todo_text.trim().is_empty() {
+                "正在回复…".to_string()
+            } else {
+                todo_text
+            };
+            live_update_send(
+                &app,
+                REMOTE_LIVE_UPDATE_NOTIFICATION_ID,
+                &title,
+                &body,
+                Some(&body),
+                true,
+                true,
+            );
+            runtime_log_info(format!(
+                "[远程通知] 完成，任务=刷新远程 todo 目标通知，conversation_id={}，todo={}",
+                conversation_id, body
+            ));
+        }
         _ => {
             // started / delta：ongoing 常驻通知，提示正在回复。
             let title = remote_live_update_title(payload, false);
