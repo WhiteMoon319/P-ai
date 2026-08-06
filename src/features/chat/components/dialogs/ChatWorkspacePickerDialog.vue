@@ -4,39 +4,57 @@
     class="fixed inset-0 z-80 flex items-center justify-center bg-black/30 px-4 py-8"
     @click.self="emit('close')"
   >
-    <div class="w-full max-w-2xl rounded-2xl border border-base-300 bg-base-100 shadow-2xl">
-      <div class="flex items-start justify-between gap-3 border-b border-base-300 px-4 py-3">
-        <div class="min-w-0">
-          <div class="text-sm font-semibold">{{ t("chat.workspacePickerTitle") }}</div>
-          <div class="mt-1 text-xs opacity-70">{{ t("chat.workspacePickerHint") }}</div>
+    <div class="flex max-h-[calc(100dvh-4rem)] w-full max-w-2xl flex-col rounded-2xl border border-base-300 bg-base-100 shadow-2xl">
+      <div class="flex shrink-0 flex-col gap-3 border-b border-base-300 px-4 py-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="text-sm font-semibold">{{ t("chat.workspacePickerTitle") }}</div>
+            <div class="mt-1 text-xs opacity-70">{{ t("chat.workspacePickerHint") }}</div>
+          </div>
+          <button
+            v-if="!hideAddWorkspace"
+            class="btn btn-sm shrink-0"
+            type="button"
+            :disabled="saving"
+            @click="emit('addWorkspace')"
+          >
+            {{ t("config.tools.addWorkspace") }}
+          </button>
         </div>
-        <button
-          v-if="!hideAddWorkspace"
-          class="btn btn-sm shrink-0"
-          type="button"
-          :disabled="saving"
-          @click="emit('addWorkspace')"
-        >
-          {{ t("config.tools.addWorkspace") }}
-        </button>
+        <label class="block">
+          <span class="sr-only">{{ t("chat.workspacePickerSearchPlaceholder") }}</span>
+          <input
+            v-model="searchQuery"
+            type="search"
+            class="input input-bordered input-sm w-full"
+            :placeholder="t('chat.workspacePickerSearchPlaceholder')"
+          />
+        </label>
       </div>
-      <div class="max-h-[65vh] overflow-y-auto">
+      <div class="min-h-0 flex-1 overflow-y-auto">
         <div
-          v-if="displayedWorkspaces.length === 0"
+          v-if="filteredWorkspaces.length === 0"
           class="m-4 rounded-box border border-dashed border-base-300 bg-base-200/20 px-4 py-6 text-center text-sm opacity-70"
         >
-          {{ t("chat.workspacePickerEmpty") }}
+          {{ searchQuery.trim() ? t("chat.workspacePickerSearchEmpty") : t("chat.workspacePickerEmpty") }}
         </div>
-        <div v-else class="divide-y divide-base-300">
+        <template v-else>
           <div
-            v-for="item in displayedWorkspaces"
+            v-if="hiddenWorkspaceCount > 0"
+            class="sticky top-0 z-10 border-b border-base-300 bg-base-100/95 px-3 py-2 text-xs opacity-70 backdrop-blur"
+          >
+            {{ t("chat.workspacePickerMoreMatches", { count: hiddenWorkspaceCount }) }}
+          </div>
+          <div class="divide-y divide-base-300">
+          <div
+            v-for="item in visibleWorkspaces"
             :key="item.id"
             class="px-3 py-3 text-left"
             :title="item.path"
           >
-            <div class="flex min-w-0 items-center gap-3">
+            <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
               <div class="min-w-0 flex-1 text-left">
-                <div class="flex min-w-0 items-center gap-2 overflow-hidden">
+                <div class="flex min-w-0 flex-wrap items-center gap-2">
                   <span
                     class="min-w-0 flex-1 truncate text-sm font-medium"
                     :title="item.path"
@@ -112,9 +130,10 @@
               </div>
             </div>
           </div>
-        </div>
+          </div>
+        </template>
       </div>
-      <div class="flex items-center justify-between gap-3 border-t border-base-300 px-4 py-3">
+      <div class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-base-300 px-4 py-3">
         <label
           class="flex max-w-64 shrink-0 cursor-pointer items-center gap-2 rounded-full bg-base-200 px-3 py-2 text-xs font-medium leading-tight"
           :title="t('chat.workspacePickerAutonomousHint')"
@@ -128,8 +147,8 @@
             @change="onAutonomousModeChange"
           />
         </label>
-        <div class="ml-auto flex min-w-0 items-center gap-3">
-          <span v-if="validationMessage" class="max-w-72 text-right text-xs text-error">{{ validationMessage }}</span>
+        <div class="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-3">
+          <span v-if="validationMessage" class="max-w-72 min-w-0 break-words text-right text-xs text-error">{{ validationMessage }}</span>
           <div class="flex items-center gap-2">
           <button class="btn btn-sm btn-ghost" type="button" :disabled="saving" @click="emit('close')">
           {{ t("common.cancel") }}
@@ -145,7 +164,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { SquareTerminal, Trash2 } from "@lucide/vue";
 import { useI18n } from "vue-i18n";
 import type { ChatWorkspaceChoice } from "../../composables/use-chat-workspace";
@@ -178,7 +197,20 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const MAX_DISPLAYED_WORKSPACES = 100;
+const searchQuery = ref("");
 const displayedWorkspaces = computed(() => props.workspaces.filter((item) => item.level !== "system"));
+const filteredWorkspaces = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase();
+  if (!query) return displayedWorkspaces.value;
+  return displayedWorkspaces.value.filter((item) => {
+    const name = String(item.name || "").toLowerCase();
+    const path = String(item.path || "").toLowerCase();
+    return name.includes(query) || path.includes(query);
+  });
+});
+const visibleWorkspaces = computed(() => filteredWorkspaces.value.slice(0, MAX_DISPLAYED_WORKSPACES));
+const hiddenWorkspaceCount = computed(() => Math.max(0, filteredWorkspaces.value.length - visibleWorkspaces.value.length));
 
 const hasExplicitTerminalDirectory = computed(() => props.workspaces.some((item) => item.level === "main"));
 
