@@ -8,7 +8,7 @@
               ref="titleInputRef"
               v-model="titleDraft"
               class="input input-bordered input-sm mb-1 w-full"
-              :placeholder="t('config.api.displayNamePlaceholder', { model: card.model })"
+              :placeholder="t('config.api.displayNamePlaceholder')"
               @blur="commitTitle"
               @keydown.enter.prevent="commitTitle"
               @keydown.esc.stop.prevent="cancelTitle"
@@ -16,12 +16,13 @@
           </template>
           <template v-else>
             <button
-              class="block min-w-0 w-full text-left"
+              class="flex min-w-0 w-full items-center gap-1.5 text-left"
               type="button"
               :title="t('config.api.editDisplayName')"
               @click="startEditTitle"
             >
-              <div class="card-title text-base mb-1 truncate">{{ displayTitle }}</div>
+              <div class="card-title text-base mb-0 truncate">{{ displayTitle }}</div>
+              <Pencil class="h-3.5 w-3.5 shrink-0 opacity-50" />
             </button>
             <span v-if="hint" class="text-xs font-normal opacity-60">{{ hint }}</span>
           </template>
@@ -264,7 +265,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { AlertTriangle, ChevronDown, Trash2 } from "@lucide/vue";
+import { AlertTriangle, ChevronDown, Pencil, Trash2 } from "@lucide/vue";
 import type { ApiModelConfigItem } from "../../../types/app";
 
 const SLIDER_CONTEXT_MIN = 16_000;
