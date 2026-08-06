@@ -2581,6 +2581,7 @@
     "actionOpenDirectory": "打开目录"
   },
   "simpleSetup": {
+    "providerName": "简单供应商",
     "provider": "供应商",
     "apiProtocol": "API 协议",
     "models": "模型",

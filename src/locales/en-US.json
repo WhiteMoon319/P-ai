@@ -2581,6 +2581,7 @@
     "actionOpenDirectory": "Open directory"
   },
   "simpleSetup": {
+    "providerName": "Simple Provider",
     "provider": "Provider",
     "apiProtocol": "API Protocol",
     "models": "Models",

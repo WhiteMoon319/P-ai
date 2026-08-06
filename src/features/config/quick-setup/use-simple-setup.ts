@@ -508,7 +508,7 @@ export function useSimpleSetup() {
     ];
     const provider: ApiProviderConfigItem = {
       id: SIMPLE_SETUP_PROVIDER_ID,
-      name: selectedProvider.value.label,
+      name: t("simpleSetup.providerName"),
       requestFormat,
       allowConcurrentRequests: true,
       enableText,

@@ -2577,6 +2577,7 @@
     "actionOpenDirectory": "開啟目錄"
   },
   "simpleSetup": {
+    "providerName": "簡單供應商",
     "provider": "供應商",
     "apiProtocol": "API 協定",
     "models": "模型",
