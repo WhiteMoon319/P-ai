@@ -160,11 +160,13 @@ fn get_foreground_conversation_freshness_snapshot_blocking(
         ForegroundConversationFreshnessOutput {
             conversation_id: conversation_meta.id,
             last_message_id,
+            updated_at: Some(conversation_meta.updated_at.clone()),
         }
     } else {
         ForegroundConversationFreshnessOutput {
             conversation_id: String::new(),
             last_message_id: None,
+            updated_at: None,
         }
     })
 }

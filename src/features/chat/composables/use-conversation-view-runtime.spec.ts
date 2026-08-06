@@ -389,11 +389,8 @@ describe("useConversationViewRuntime", () => {
       if (command === "conversation.runtimeSnapshot") {
         return Promise.resolve({ conversationId: "conversation-a", runtimeState: "idle" });
       }
-      if (command === "conversation.changedSince") {
-        return Promise.resolve({ changed: [{ conversationId: "conversation-a" }], serverTime: "watermark-1" });
-      }
       if (command === "conversation.freshnessSnapshot") {
-        return Promise.resolve({ conversationId: "conversation-a", lastMessageId: "assistant-b" });
+        return Promise.resolve({ conversationId: "conversation-a", lastMessageId: "assistant-b", updatedAt: "2026-08-07T00:00:01Z" });
       }
       if (command === "conversation.messageById") {
         return Promise.resolve(assistantReply);
@@ -415,7 +412,7 @@ describe("useConversationViewRuntime", () => {
     scope.stop();
   });
 
-  it("水位推进时即使尾消息 ID 相同也以正式消息覆盖半截内容", async () => {
+  it("会话 freshness 变化时即使尾消息 ID 相同也以正式消息覆盖半截内容", async () => {
     invokeTauriMock.mockImplementation((command: string) => {
       if (command === "conversation.foregroundLightSnapshot") {
         return Promise.resolve({
@@ -425,11 +422,10 @@ describe("useConversationViewRuntime", () => {
           shouldBindStream: false,
         });
       }
-      if (command === "conversation.changedSince") {
-        return Promise.resolve({ changed: [{ conversationId: "conversation-a" }], serverTime: "watermark-1" });
-      }
       if (command === "conversation.runtimeSnapshot") return Promise.resolve({ runtimeState: "idle" });
-      if (command === "conversation.freshnessSnapshot") return Promise.resolve({ lastMessageId: "assistant-b" });
+      if (command === "conversation.freshnessSnapshot") {
+        return Promise.resolve({ lastMessageId: "assistant-b", updatedAt: "2026-08-07T00:00:01Z" });
+      }
       if (command === "conversation.messageById") return Promise.resolve(message("assistant-b", "完成态"));
       return Promise.resolve({});
     });
@@ -444,22 +440,33 @@ describe("useConversationViewRuntime", () => {
     scope.stop();
   });
 
-  it("水位不变时空闲 focus 不读取 freshness 或单条消息", async () => {
+  it("会话 freshness 未变化时空闲 focus 不读取单条消息", async () => {
     invokeTauriMock.mockImplementation((command: string) => {
       if (command === "conversation.foregroundLightSnapshot") {
         return Promise.resolve({ conversationId: "conversation-a", messages: [message("assistant-a", "正文")], runtimeState: "idle" });
       }
-      if (command === "conversation.changedSince") return Promise.resolve({ changed: [], serverTime: "watermark-1" });
       if (command === "conversation.runtimeSnapshot") return Promise.resolve({ runtimeState: "idle" });
+      if (command === "conversation.freshnessSnapshot") {
+        return Promise.resolve({ lastMessageId: "assistant-a", updatedAt: "2026-08-07T00:00:00Z" });
+      }
+      if (command === "conversation.messageById") return Promise.resolve(message("assistant-a", "正文"));
       return Promise.resolve({});
     });
     const { scope, windowTarget } = await createRuntime();
     await vi.waitFor(() => expect(invokeTauriMock).toHaveBeenCalledWith("conversation.foregroundLightSnapshot", expect.anything()));
     windowTarget.dispatchEvent(new Event("focus"));
-    await vi.waitFor(() => expect(invokeTauriMock).toHaveBeenCalledWith("conversation.changedSince", {
-      input: { since: null },
+    await vi.waitFor(() => expect(invokeTauriMock).toHaveBeenCalledWith("conversation.freshnessSnapshot", {
+      input: { conversationId: "conversation-a", agentId: null },
     }));
-    expect(invokeTauriMock.mock.calls.some(([command]) => command === "conversation.freshnessSnapshot")).toBe(false);
+    // 首次 focus 建立基线后会按 lastMessageId 对账一次
+    await vi.waitFor(() => expect(invokeTauriMock).toHaveBeenCalledWith("conversation.messageById", {
+      input: { conversationId: "conversation-a", messageId: "assistant-a" },
+    }));
+    invokeTauriMock.mockClear();
+    windowTarget.dispatchEvent(new Event("focus"));
+    await vi.waitFor(() => expect(invokeTauriMock).toHaveBeenCalledWith("conversation.freshnessSnapshot", {
+      input: { conversationId: "conversation-a", agentId: null },
+    }));
     expect(invokeTauriMock.mock.calls.some(([command]) => command === "conversation.messageById")).toBe(false);
     scope.stop();
   });

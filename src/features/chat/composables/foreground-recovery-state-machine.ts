@@ -66,24 +66,51 @@ export async function reconcileForegroundRuntime(
     return dependencies.isCurrent() ? "reloaded" : "stale";
   }
 
-  if (dependencies.shouldReconcileTail && !dependencies.shouldReconcileTail()) return "handled";
+  if (dependencies.shouldReconcileTail && !dependencies.shouldReconcileTail()) {
+    console.warn("[焦点恢复][尾部对账] 跳过", {
+      conversationId: input.conversationId,
+      reason: "shouldReconcileTail=false（freshness 指纹未变化或非本会话待对账）",
+    });
+    return "handled";
+  }
 
   let latestTailId = "";
   try {
     latestTailId = await dependencies.requestLatestFormalTailMessageId(input.conversationId);
   } catch {
+    console.warn("[焦点恢复][尾部对账] freshness 查询失败，回退重载", {
+      conversationId: input.conversationId,
+    });
     await dependencies.reloadConversation();
     return dependencies.isCurrent() ? "tail_reconciled" : "stale";
   }
   if (!dependencies.isCurrent()) return "stale";
   // 水位推进代表服务端的同一条正式消息也可能已经从半截变为终态；
   // 因而即使 ID 相同也必须以 messageById 的权威 contentBlocks 覆盖。
+  console.warn("[焦点恢复][尾部对账] freshness 结果", {
+    conversationId: input.conversationId,
+    latestTailId: latestTailId || "(空)",
+    localTailId: dependencies.currentFormalTailMessageId() || "(空)",
+    shouldReconcileTail: dependencies.shouldReconcileTail?.(),
+  });
   if (!latestTailId) return dependencies.shouldReconcileTail ? "tail_reconciled" : "handled";
   try {
     if (await dependencies.refreshMessageById(input.conversationId, latestTailId)) {
+      console.warn("[焦点恢复][尾部对账] messageById 覆盖成功", {
+        conversationId: input.conversationId,
+        latestTailId,
+      });
       return dependencies.shouldReconcileTail ? "tail_reconciled" : "handled";
     }
+    console.warn("[焦点恢复][尾部对账] messageById 未命中，回退重载", {
+      conversationId: input.conversationId,
+      latestTailId,
+    });
   } catch {
+    console.warn("[焦点恢复][尾部对账] messageById 查询失败，回退轻量快照", {
+      conversationId: input.conversationId,
+      latestTailId,
+    });
     // 单条原子读取失败时和未找到时一样，回退到既有轻量快照。
   }
   await dependencies.reloadConversation();
@@ -161,7 +188,14 @@ export async function recoverForegroundStreaming(
     return "handled";
   }
   let action = decide(input, input.runtimeSnapshot, "unknown");
-  traceDecision("初判", { action, probeState: "unknown" });
+  traceDecision("初判", {
+    action,
+    probeState: "unknown",
+    backendStreaming: classifyForegroundRuntime(input.runtimeSnapshot) === "assistant_streaming",
+    frontendStreaming: input.frontendStreaming,
+    backendMessageId: input.runtimeSnapshot.streamCache?.persistedAssistantMessageId || "(空)",
+    frontendMessageId: input.frontendMessageId || "(空)",
+  });
   if (action === "probe_stream") {
     const probeHealthy = await dependencies.probeStream(input.conversationId);
     traceDecision("测活完成", { probeHealthy });
@@ -173,7 +207,12 @@ export async function recoverForegroundStreaming(
     const keepOutcome = input.frontendStreaming || classifyForegroundRuntime(input.runtimeSnapshot) === "assistant_streaming"
       ? "handled"
       : "check_freshness";
-    traceDecision("决策 keep", { outcome: keepOutcome });
+    traceDecision("决策 keep", {
+      outcome: keepOutcome,
+      frontendStreaming: input.frontendStreaming,
+      runtimeState: String(input.runtimeSnapshot.runtimeState || ""),
+      kind: classifyForegroundRuntime(input.runtimeSnapshot),
+    });
     return keepOutcome;
   }
 

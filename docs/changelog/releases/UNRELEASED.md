@@ -22,5 +22,6 @@
 - 远程桥接安全加固：与 iframe 父窗口（手机壳层）的 postMessage 双向通信统一校验约定 origin，转发 targetOrigin 不再使用通配 `*`，防恶意页面伪造密码/会话命令或窃听通知事件
 - 远程桥接安全加固：密码消息接收侧额外校验 event.source 必须等于 window.parent，拒绝同 origin 下其他窗口伪造的密码注入
 - 远程通知标题测试：会话标题广播测试覆盖全部非本地会话过滤分支（delegate / remote-IM / system-notification），并验证标题跟随用户 ui_language 配置（en-US 兜底文案）
+- 焦点恢复尾部对账改按会话自身 freshness（updatedAt + lastMessageId）指纹判定：不再依赖全局概览水位，避免列表先同步时吞掉视图尚未应用的正式消息收口；同时补充焦点恢复状态机关键路径日志（[焦点恢复] 前缀）便于排查
 
 ## 依赖

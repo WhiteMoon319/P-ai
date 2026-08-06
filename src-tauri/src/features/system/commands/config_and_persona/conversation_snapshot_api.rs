@@ -1263,6 +1263,8 @@ struct ForegroundConversationFreshnessOutput {
     conversation_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     last_message_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    updated_at: Option<String>,
 }
 
 const DEFAULT_FOREGROUND_SNAPSHOT_RECENT_LIMIT: usize = 4;

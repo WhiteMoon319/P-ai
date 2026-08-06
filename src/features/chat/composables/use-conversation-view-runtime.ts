@@ -108,15 +108,13 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
   let snapshotRequestSequence = 0;
   let disposed = false;
   const foregroundTailWatermark = createForegroundTailWatermarkCoordinator({
-    requestChanges: async (since) => {
-      const payload = await invokeTauri<{ changed?: Array<{ conversationId?: string }>; serverTime?: string }>("conversation.changedSince", {
-        input: { since: since || null },
+    requestFreshness: async (conversationId) => {
+      const snapshot = await invokeTauri<{ lastMessageId?: string | null; updatedAt?: string | null }>("conversation.freshnessSnapshot", {
+        input: { conversationId, agentId: null },
       });
       return {
-        changedConversationIds: (Array.isArray(payload?.changed) ? payload.changed : [])
-          .map((item) => String(item?.conversationId || "").trim())
-          .filter(Boolean),
-        serverTime: String(payload?.serverTime || "").trim(),
+        lastMessageId: String(snapshot?.lastMessageId || "").trim(),
+        updatedAt: String(snapshot?.updatedAt || "").trim(),
       };
     },
   });
