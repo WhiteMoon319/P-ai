@@ -304,11 +304,11 @@
           >
             <Mic class="h-3.5 w-3.5" />
           </button>
-          <div v-if="normalizedChatModelOptions.length > 0" ref="modelDropdownRef" class="relative">
+          <div v-if="normalizedChatModelOptions.length > 0" ref="modelDropdownRef" class="relative min-w-0">
             <button
               ref="modelDropdownTriggerRef"
               type="button"
-              class="btn btn-sm h-8 min-h-8 w-auto min-w-28 max-w-56 justify-between border-0 shadow-none bg-base-100 text-base-content hover:bg-base-200 max-md:min-w-0 max-md:max-w-28"
+              class="btn btn-sm h-8 min-h-8 w-auto min-w-28 max-w-56 justify-between border-0 shadow-none bg-base-100 text-base-content hover:bg-base-200 max-md:min-w-0"
               :disabled="normalizedChatModelOptions.length === 0"
               :title="selectedModelTitle"
               @click="modelDropdownOpen = !modelDropdownOpen"
