@@ -49,14 +49,14 @@
       "department": "部門",
       "departmentTree": "部門樹",
       "demo": "Demo",
-      "chatSettings": "对话",
+      "chatSettings": "常用",
       "notification": "通知",
       "networkAccess": "網路訪問",
       "remoteIm": "聯絡人",
       "usage": "用量",
       "memory": "记忆",
       "task": "任務",
-      "logs": "日志",
+      "logs": "調試",
       "appearance": "外观",
       "migration": "儲存",
       "about": "关于"
@@ -1303,7 +1303,7 @@
       "recentElapsed": "最近拉取耗時"
     },
     "logs": {
-      "title": "呼叫日誌（記憶體）",
+      "title": "調試設定",
       "backendLogs": "後台日誌",
       "refreshPipelineLogs": "刷新調度日誌",
       "clearPipelineLogs": "清空調度日誌",

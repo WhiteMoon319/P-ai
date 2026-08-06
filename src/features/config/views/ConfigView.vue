@@ -166,9 +166,6 @@
             @update:instruction-presets="$emit('update:instructionPresets', $event)"
             @patch-conversation-api-settings="$emit('patchConversationApiSettings', $event)"
             @patch-chat-settings="$emit('patchChatSettings', $event)"
-            @open-conversation-list="$emit('openConversationList')"
-            @open-prompt-preview="$emit('openPromptPreview')"
-            @open-system-prompt-preview="$emit('openSystemPromptPreview')"
           />
           <NotificationTab
             v-else-if="props.configTab === 'notification'"
@@ -214,6 +211,9 @@
             v-else-if="props.configTab === 'logs'"
             :config="config"
             :open-runtime-logs="() => $emit('openRuntimeLogs')"
+            :open-conversation-list="() => $emit('openConversationList')"
+            :open-prompt-preview="() => $emit('openPromptPreview')"
+            :open-system-prompt-preview="() => $emit('openSystemPromptPreview')"
           />
 
           <AppearanceTab

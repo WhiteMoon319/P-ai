@@ -131,19 +131,6 @@
       </div>
     </template>
 
-    <template #row-quick-actions>
-      <div class="grid grid-cols-3 gap-2">
-        <button class="btn btn-sm w-full bg-base-200" @click="$emit('openConversationList')">
-          {{ t("config.chatSettings.openConversationList") }}
-        </button>
-        <button class="btn btn-sm w-full bg-base-200" @click="$emit('openPromptPreview')">
-          {{ t("config.chatSettings.previewRequest") }}
-        </button>
-        <button class="btn btn-sm w-full bg-base-200" @click="$emit('openSystemPromptPreview')">
-          {{ t("config.chatSettings.previewSystemPrompt") }}
-        </button>
-      </div>
-    </template>
   </ConfigTemplate>
 </template>
 
@@ -194,11 +181,6 @@ const templateGroups = computed<ConfigTemplateGroup[]>(() => [
     title: t("config.chatSettings.instructionPresetsTitle"),
     rows: [{ key: "instruction-presets", items: [] }],
   },
-  {
-    key: "quick-actions",
-    title: t("config.chatSettings.quickActionsTitle"),
-    rows: [{ key: "quick-actions", items: [] }],
-  },
 ]);
 const responseStyleSegmentOptions = computed(() =>
   props.responseStyleOptions.map((style) => ({
@@ -215,9 +197,6 @@ const emit = defineEmits<{
   (e: "update:instructionPresets", value: PromptCommandPreset[]): void;
   (e: "patchConversationApiSettings", value: ConversationApiSettingsPatch): void;
   (e: "patchChatSettings", value: ChatSettingsPatch): void;
-  (e: "openConversationList"): void;
-  (e: "openPromptPreview"): void;
-  (e: "openSystemPromptPreview"): void;
 }>();
 
 function onVisionSelect(value: string) {

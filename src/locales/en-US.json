@@ -49,14 +49,14 @@
       "department": "Departments",
       "departmentTree": "Department Tree",
       "demo": "Demo",
-      "chatSettings": "Chat",
+      "chatSettings": "Common",
       "notification": "Notification",
       "networkAccess": "Network",
       "remoteIm": "Contacts",
       "usage": "Usage",
       "memory": "Memory",
       "task": "Task",
-      "logs": "Logs",
+      "logs": "Debug",
       "appearance": "Appearance",
       "migration": "Storage",
       "about": "About"
@@ -1305,7 +1305,7 @@
       "recentElapsed": "Recent elapsed time"
     },
     "logs": {
-      "title": "Call Logs (Memory)",
+      "title": "Debug Settings",
       "backendLogs": "Backend Logs",
       "refreshPipelineLogs": "Refresh Pipeline Logs",
       "clearPipelineLogs": "Clear Pipeline Logs",
