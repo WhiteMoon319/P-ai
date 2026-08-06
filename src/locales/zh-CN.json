@@ -518,10 +518,6 @@
       "testFailed": "生图测试失败"
     },
     "tools": {
-      "gitRequiredHint": "检测到未安装可用终端。请先安装 Git，并使用 Git Bash。",
-      "installGit": "安装 Git（Git Bash）",
-      "terminalRuntime": "终端运行环境",
-      "terminalRuntimeHint": "",
       "shellWorkspace": "PAI 助理空间",
       "openDir": "打开目录",
       "initializeWorkspace": "初始化助理空间",
@@ -737,6 +733,10 @@
     "chatSettings": {
       "defaultModelsTitle": "模型分工",
       "defaultModelsHint": "这里设置各类默认模型，其他地方没设置时优先使用这里。",
+      "execTerminalTitle": "执行终端",
+      "execTerminalHint": "",
+      "gitRequiredHint": "检测到未安装可用终端。请先安装 Git，并使用 Git Bash。",
+      "installGit": "安装 Git（Git Bash）",
       "visionApi": "多模态分析模型（可选）",
       "visionApiHint": "给 `read_media` 绑定专用的多模态分析模型；可用于图片、音频、视频理解；选择不配置时不会向模型提供 read_media 工具。",
       "toolReviewApi": "快速模型",
@@ -746,7 +746,7 @@
       "sttTitle": "语音转文字模型",
       "sttHint": "未单独指定语音转文字时，优先使用这里。",
       "sttLocalWebSpeech": "本地（Web Speech）",
-      "sttAutoSend": "完成后发送",
+      "sttAutoSend": "语音转文字后直接发送",
       "noVision": "不配置多模态分析模型",
       "responseStyle": "对话风格",
       "pdfReadMode": "PDF 阅读方式",

@@ -89,7 +89,6 @@
 
     <template #row-response-style>
       <div class="grid min-w-0 gap-2">
-        <div class="text-sm">{{ t("config.chatSettings.responseStyle") }}</div>
         <SegmentedControl
           :model-value="responseStyleId"
           :options="responseStyleSegmentOptions"
@@ -99,12 +98,30 @@
       </div>
     </template>
 
-    <template #group-actions-instruction-presets>
-      <button class="btn btn-sm btn-ghost shrink-0" @click="addInstructionPreset">
-        <Plus class="h-4 w-4" />
-        <span>{{ t("config.chatSettings.addInstructionPreset") }}</span>
-      </button>
+    <template #row-exec-terminal>
+      <div v-if="isWindowsHost" class="grid gap-2">
+        <div v-if="t('config.chatSettings.execTerminalHint')" class="text-xs opacity-70">
+          {{ t("config.chatSettings.execTerminalHint") }}
+        </div>
+        <select
+          class="select select-bordered select-sm w-full"
+          :value="terminalShellKindValue"
+          :disabled="terminalShellOptionsLoading || savingConfig"
+          @change="onTerminalShellKindChange"
+        >
+          <option v-for="item in terminalShellOptions" :key="item.kind" :value="item.kind">
+            {{ item.label }}
+          </option>
+        </select>
+        <div v-if="showGitInstallHintInWorkspace" class="text-xs bg-warning/10 text-base-content rounded px-2 py-1 flex items-center gap-2">
+          <span>{{ t("config.chatSettings.gitRequiredHint") }}</span>
+          <button class="btn btn-sm bg-base-100" @click="openGitDownloadLink">
+            {{ t("config.chatSettings.installGit") }}
+          </button>
+        </div>
+      </div>
     </template>
+
     <template #row-instruction-presets>
       <div class="grid min-w-0 gap-3">
         <div v-if="instructionPresetsDraft.length === 0" class="text-sm opacity-60">
@@ -115,7 +132,7 @@
             <input
               v-model="item.prompt"
               type="text"
-              class="input input-ghost input-sm min-w-0 flex-1"
+              class="input input-bordered input-sm min-w-0 flex-1"
               :placeholder="t('config.chatSettings.instructionPresetPlaceholder')"
             />
             <button class="btn btn-sm btn-ghost btn-square shrink-0" @click="removeInstructionPreset(item.id)">
@@ -123,7 +140,11 @@
             </button>
           </div>
         </div>
-        <div class="flex justify-end">
+        <div class="flex items-center justify-between">
+          <button class="btn btn-sm btn-ghost shrink-0" @click="addInstructionPreset">
+            <Plus class="h-4 w-4" />
+            <span>{{ t("config.chatSettings.addInstructionPreset") }}</span>
+          </button>
           <button class="btn btn-sm btn-primary" :disabled="!instructionPresetsDirty" @click="saveInstructionPresets">
             {{ t("config.chatSettings.saveInstructionPresets") }}
           </button>
@@ -135,15 +156,30 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { Plus, Trash2 } from "@lucide/vue";
 import SegmentedControl from "../../components/SegmentedControl.vue";
 import ConfigTemplate from "../../components/ConfigTemplate.vue";
 import type { ConfigTemplateGroup } from "../../components/config-template";
 import ApiConfigTreeSelect from "../../components/ApiConfigTreeSelect.vue";
-import type { AppConfig, ApiConfigItem, ChatSettingsPatch, ConversationApiSettingsPatch, PromptCommandPreset, ResponseStyleOption } from "../../../../types/app";
+import type { AppConfig, ApiConfigItem, ChatSettingsPatch, ConversationApiSettingsPatch, PromptCommandPreset, ResponseStyleOption, ToolLoadStatus } from "../../../../types/app";
+import { invokeTauri, openTransportExternalUrl } from "../../../../services/tauri-api";
 import { deriveImageGenerationModelOptions } from "../../utils/image-generation-config";
+
+type TerminalShellCandidate = {
+  kind: string;
+  label: string;
+  available: boolean;
+  path?: string;
+};
+
+type TerminalShellCandidatesResult = {
+  preferredKind?: string;
+  currentKind?: string;
+  currentPath?: string;
+  options?: TerminalShellCandidate[];
+};
 
 const props = defineProps<{
   config: AppConfig;
@@ -154,10 +190,65 @@ const props = defineProps<{
   responseStyleId: string;
   pdfReadMode: "text" | "image";
   instructionPresets: PromptCommandPreset[];
+  toolStatuses: ToolLoadStatus[];
+  savingConfig: boolean;
 }>();
 
 const { t } = useI18n();
 const templateValues = {};
+const terminalShellOptionsLoading = ref(false);
+const terminalShellOptions = ref<TerminalShellCandidate[]>([]);
+const GIT_DOWNLOAD_URL = "https://git-scm.com/downloads";
+const isWindowsHost = typeof navigator !== "undefined" && /windows/i.test(String(navigator.userAgent || ""));
+const terminalShellKindValue = computed(() => String(props.config.terminalShellKind || "auto"));
+
+async function loadTerminalShellCandidates() {
+  if (!isWindowsHost) return;
+  terminalShellOptionsLoading.value = true;
+  try {
+    const payload = await invokeTauri<TerminalShellCandidatesResult>("list_terminal_shell_candidates");
+    const options = Array.isArray(payload.options) ? payload.options : [];
+    terminalShellOptions.value =
+      options.length > 0
+        ? options
+        : [{ kind: "auto", label: "Auto", available: true }];
+    const preferred = String(payload.preferredKind || "").trim();
+    if (preferred) {
+      props.config.terminalShellKind = preferred;
+    } else if (!String(props.config.terminalShellKind || "").trim()) {
+      props.config.terminalShellKind = "auto";
+    }
+  } catch {
+    terminalShellOptions.value = [{ kind: "auto", label: "Auto", available: true }];
+    if (!String(props.config.terminalShellKind || "").trim()) {
+      props.config.terminalShellKind = "auto";
+    }
+  } finally {
+    terminalShellOptionsLoading.value = false;
+  }
+}
+
+function onTerminalShellKindChange(event: Event) {
+  const target = event.target as HTMLSelectElement | null;
+  const next = String(target?.value || "auto").trim() || "auto";
+  props.config.terminalShellKind = next;
+}
+
+function toolStatusById(id: string): ToolLoadStatus | undefined {
+  return props.toolStatuses.find((s) => s.id === id);
+}
+
+const showGitInstallHintInWorkspace = computed(
+  () => isWindowsHost && toolStatusById("exec")?.status === "unavailable",
+);
+
+function openGitDownloadLink() {
+  void openTransportExternalUrl(GIT_DOWNLOAD_URL);
+}
+
+onMounted(() => {
+  void loadTerminalShellCandidates();
+});
 const templateGroups = computed<ConfigTemplateGroup[]>(() => [
   {
     key: "default-models",
@@ -175,6 +266,11 @@ const templateGroups = computed<ConfigTemplateGroup[]>(() => [
     key: "response-style",
     title: t("config.chatSettings.responseStyle"),
     rows: [{ key: "response-style", items: [] }],
+  },
+  {
+    key: "exec-terminal",
+    title: t("config.chatSettings.execTerminalTitle"),
+    rows: [{ key: "exec-terminal", items: [] }],
   },
   {
     key: "instruction-presets",

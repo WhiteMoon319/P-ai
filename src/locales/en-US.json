@@ -518,10 +518,6 @@
       "testFailed": "Image generation test failed"
     },
     "tools": {
-      "gitRequiredHint": "No supported shell was detected. Install Git first and use Git Bash.",
-      "installGit": "Install Git (Git Bash)",
-      "terminalRuntime": "Terminal Runtime",
-      "terminalRuntimeHint": "",
       "shellWorkspace": "PAI Assistant Space",
       "openDir": "Open Directory",
       "initializeWorkspace": "Initialize Assistant Space",
@@ -737,6 +733,10 @@
     "chatSettings": {
       "defaultModelsTitle": "Model Roles",
       "defaultModelsHint": "Set the default model for each role here when nothing more specific is configured.",
+      "execTerminalTitle": "Execute Terminal",
+      "execTerminalHint": "",
+      "gitRequiredHint": "No supported shell was detected. Install Git first and use Git Bash.",
+      "installGit": "Install Git (Git Bash)",
       "visionApi": "Multimodal Analysis Model (Optional)",
       "visionApiHint": "Bind a dedicated multimodal model for `read_media` to analyze images, audio, and video. When set to none, the read_media tool is not offered to the model.",
       "toolReviewApi": "Fast Model",
@@ -746,7 +746,7 @@
       "sttTitle": "Speech-to-Text Model",
       "sttHint": "Used first when no STT model is set elsewhere.",
       "sttLocalWebSpeech": "Local (Web Speech)",
-      "sttAutoSend": "Send on completion",
+      "sttAutoSend": "Send directly after speech-to-text",
       "noVision": "No multimodal model",
       "responseStyle": "Response Style",
       "pdfReadMode": "PDF Read Mode",

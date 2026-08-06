@@ -161,6 +161,8 @@
             :response-style-id="responseStyleId"
             :pdf-read-mode="pdfReadMode"
             :instruction-presets="instructionPresets"
+            :tool-statuses="toolStatuses"
+            :saving-config="savingConfig"
             @update:response-style-id="$emit('update:responseStyleId', $event)"
             @update:pdf-read-mode="$emit('update:pdfReadMode', $event)"
             @update:instruction-presets="$emit('update:instructionPresets', $event)"
@@ -418,7 +420,7 @@ import {
   onTransportNotification,
 } from "../../../services/tauri-api";
 import { toErrorMessage } from "../../../utils/error";
-import { ArrowLeftRight, Beaker, Bell, Building2, ClipboardList, Code, Cpu, Database, Home, Info, Keyboard, Menu, MessageSquare, Network, Palette, Puzzle, Radio, ScrollText, User, Wifi, Wrench } from "@lucide/vue";
+import { ArrowLeftRight, Beaker, Bell, Building2, ClipboardList, Code, Cpu, Database, Home, Info, Keyboard, Menu, Network, Palette, Puzzle, Radio, ScrollText, Star, User, Wifi, Wrench } from "@lucide/vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 
 type ConfigTab = "welcome" | "hotkey" | "api" | "tools" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "networkAccess" | "remoteIm" | "usage" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
@@ -434,6 +436,7 @@ const SHOW_DEV_DEMO_TAB = import.meta.env.DEV;
 
 const CONFIG_NAV_ITEMS: ConfigNavItem[] = [
   { tab: "welcome", icon: Home, labelKey: "config.tabs.welcome" },
+  { tab: "chatSettings", icon: Star, labelKey: "config.tabs.chatSettings" },
   { tab: "notification", icon: Bell, labelKey: "config.tabs.notification" },
   { tab: "networkAccess", icon: Wifi, labelKey: "config.tabs.networkAccess" },
   { tab: "hotkey", icon: Keyboard, labelKey: "config.tabs.hotkey" },
@@ -444,7 +447,6 @@ const CONFIG_NAV_ITEMS: ConfigNavItem[] = [
   { tab: "persona", icon: User, labelKey: "config.tabs.persona" },
   { tab: "department", icon: Building2, labelKey: "config.tabs.department" },
   { tab: "departmentTree", icon: Network, labelKey: "config.tabs.departmentTree" },
-  { tab: "chatSettings", icon: MessageSquare, labelKey: "config.tabs.chatSettings" },
   { tab: "remoteIm", icon: Radio, labelKey: "config.tabs.remoteIm" },
   { tab: "memory", icon: Database, labelKey: "config.tabs.memory" },
   { tab: "task", icon: ClipboardList, labelKey: "config.tabs.task" },
