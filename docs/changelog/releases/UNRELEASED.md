@@ -2,69 +2,8 @@
 
 ## 功能
 
-- 标题栏左右侧边栏切换按钮激活态改为 `base-100/60` 并去掉激活边框，与文件阅读器 tab 栏按钮样式统一。
-- 文件阅读器右侧目录栏的「打开目标」按钮组（按目标打开当前目录 + 切换打开目标下拉）移到顶部 tab 栏、目录树切换按钮左侧，常驻显示：目录树未打开时改用兜底目录路径（初始根目录 / 当前活动文件目录）仍可打开；按钮样式与标签页统一（等高等宽、去边框、激活态与悬停反馈同色系）。
-- exec 工具新增 commitment（承诺）参数：平时留空；遇到本地规则拦截的高危命令时返回确认提示与承诺文案，向用户说明危险性并取得明确许可后，填入承诺文案重新调用即可放行执行。
-- 会话控制面板的 @ 人格列表不再显示被禁用的条目（如用户人格自身、未归属部门、当前运行人格、无前台部门、无文本模型的人格），仅保留可 @ 的候选。
-- 表情贴纸 GIF 入库不再转 WebP，原样保留动图文件（帧动画与时序不丢失），后缀跟随真实格式存为 `.gif`；GIF 超过 5MB 拒绝入库，返回「图片过大，无法作为表情」。
-- 表情贴纸素材准备与落盘改为 `spawn_blocking` 异步化：读文件、图片解码/缩放/WebP 编码、写文件等同步 IO 与 CPU 密集操作移到 blocking 线程池执行，不再占住 tokio 工作线程阻塞其他会话的流式回复与工具调用。
-- read 工具整体改为 `spawn_blocking` 执行：文本整读、PDF 解析与页图渲染等同步 IO 与 CPU 密集操作移到 blocking 线程池，不再占住 tokio 工作线程（每次 read 工具调用都会触发）。
-- 聊天发送链路的附件读取改用 `block_in_place`：prompt 构建时历史/新附件二进制读取、图片编码（`build_prepared_binary_payloads_from_message_parts` / `collect_prompt_media_parts`）不再卡死 tokio executor，其他任务可调度到别的 worker 线程；百炼多模态缓存命中校验的同步读文件与哈希计算同样改为 `block_in_place`。
-- 截图工具整体改为 `spawn_blocking` 执行：屏幕捕获、WebP 编码与写盘等同步 IO 与 CPU 密集操作移到 blocking 线程池；便携版更新包的写入与解压同样移入 `spawn_blocking`。
-- 工具审查侧边栏文件改动按文件分组展示：后端按 operation 切段返回 git 格式 hunk（`@@ -a,b +c,d @@` + 增减行），前端按文件分组、组内时间顺序内联渲染，每段自带动作标签与 `+a -b` 统计；文件工具卡片去掉点击交互，单卡评估入口随内联化移除，shell 工具保持原卡片。
-- 补丁 diff 卡组件重构：去掉 DaisyUI mockup-code，自绘表格结构（旧/新行号列 + 符号列，行号列宽随位数自适应），颜色参考 GitHub diff 浅/深两套写死，标题栏显示修改类型与行号增减（`+` 用增色、`-` 用减色）；点击标题折叠单卡、右键标题折叠同组所有卡，分组手风琴一次只展开一个；内容区边距落在行内（随增/减颜色背景延伸）。
-- 会话列表不再随打开会话自动展开所在分组；最近会话条目头像底部的文件夹胶囊改为可点击，点击展开该会话所在分组并滚动定位，悬停时主题色高亮。
-- 会话列表分组内聚合同目录同人格会话：同一分组内相同目录（workspaceRootPath）且绑定助手（agentId）相同的会话相邻展示，最新一条保留完整样式，其余折叠为单行简单条目（仅标题与日期、无头像、可点击切换，新的在上）紧跟其后；聚合仅在分组内进行，不参与部门判定，搜索模式下不聚合。
-
 ## 重构
 
-- 清理死代码：移除已无引用的会话列表浮动卡片组件 `ChatConversationListCard` 与其专属头部 `ChatConversationListHeader`（会话列表入口已由 `ChatConversationSidebar` 收口）。
-- 视图层「忙碌」语义收敛为统一纯函数 `isViewLayerBusy`（chat-view-busy.ts）：主会话外壳（AppWindowContent）与追问外壳（ConversationView）不再各自拼装 `conversation-busy` 表达式，统一按「修剪/压缩命中当前会话或组织上下文进行中」判定；追问 runtime 中的 `viewBusy` 拼装与 `submitPending` 冗余一并移除（`stop-chat-disabled` 已覆盖提交挂起），语义钉死由新增 spec 承接。
-- 图片粘贴按焦点归属路由到正确会话的附件队列：新增共享「最后活跃输入框」状态（chat-composer-focus.ts，主会话与追问输入框 focus/blur 时注册），追问视图挂载自己的 paste 监听，焦点在追问输入框内时图片进追问队列而非误入主会话队列；粘贴图片的收集/分类/入队逻辑抽为公共模块（chat-paste-ingest.ts），主会话与追问共用同一份实现，杜绝再次分叉；追问视图卸载时主动清掉共享焦点归属，避免 scope 残留 `side` 导致主会话误判而丢弃图片（回退主会话接管）。
-- 追问会话（side_chat）不再广播 `conversation.overviewItemUpdated` 列表项事件：其 `read_unarchived_conversation_summary` 对 side_chat 的豁免本是为追问轻量快照保留的，但同一函数被事件广播路径复用后，side_chat 的列表项事件被前端无条件 push 进「最近会话」列表（追问发消息后、下次整表刷新前可见）。改为事件出口按 `conversation_kind` 拦截 side_chat，轻量快照路径不受影响，主会话列表与归档窗口的未归档列表不再混入追问会话。
-- 删除前端 stoppedRound 自造状态机制：停止后不再用会话级标志拦截恢复/补建/重绑入口（`resumeForegroundRuntimeRound` / `resumeForegroundStreamCacheProjection` / `ensureForegroundWaitingRound` / `ensureForegroundStreamingRound` / `handleExternalStreamRebindRequired` 的 `hasStoppedRound` 门槛）与信号（`history_flushed` 激活投影抑制、`round_started` / 终态 / 在途 delta 的 `matchesStoppedRound` 拦截）。停止语义收敛为「发停止请求 + 用后端确认结果收尾」，忙碌判定复用后端快照与视图内既有 `conversationInteractionBusy` / `chatting`，气泡由信号驱动，不再存在「被停轮次」概念——消除停止后前端与后端状态分离、以及停止记录残留锁死恢复的卡死问题。
-
-## 功能
-
-- 输入框占位文案按状态动态切换：正常「问问Pai吧」；忙碌中提示可继续发消息；有排队消息提示可切换为引导；有引导消息提示可继续引导（忙碌态文案嵌入人格名）。
-- 最高指令（highest-instruction）新增「程序讲解」一节：讲解调用链时先摸清函数调用链、理解函数/变量在上下文中的作用，以函数名/变量名为主位、括号内注释上下文含义；对作用没把握时先调查再讲，调查后仍不理解向用户澄清。
-- 气泡分段改占位符方案：流式累积时「工具后新正文」边界写入专用占位符（替代原 `\n\n` 拼接），正式/历史消息投影时按「前段含工具标记、后段为新正文」注入同一占位符；渲染层分段模式按占位符切段，非分段模式还原为换行，行为与之前一致；分享文本导出前同样还原占位符。
-- 气泡分段模式下计划卡套上与正文段一致的卡片容器（圆角 + 背景 + 内边距），不再平铺在气泡表面。
-- 气泡分段不再依赖气泡背景开关：无背景模式时分段同样生效，段间用分割线（border-top）区分，计划卡顶部同步加分割线。
-- 流式「思考与工具」面板不再显示纯工具标记、无正文的内容条目：去标记后无正文的内容与正式消息刷新后的行为一致，不再占位闪烁。
-- operate 截图总是保存并返回路径：脚本未给 `save=` 时也落盘到 `temp/screenshots/{会话}/operate_{时间戳}.webp`（应用数据根目录下按会话建目录，重启不清），给了 `save=` 仍存指定路径；驱动模型不支持图片时不再拒绝截图，只返回保存路径（跳过 base64 编码），支持图片时额外携带 base64；会话压缩/归档/删除/撤回时按会话清空对应截图目录（撤回按消息撤，删除该消息及其后所有消息后清空该会话目录语义一致）。
-
 ## 修复
-
-- 追问会话（ConversationView）流式期间停止按钮被禁用的问题：视图层忙碌态拆出 `viewBusy`（仅含提交挂起与组织上下文），不再把 `assistant_streaming`/`chatting` 计入，流式时停止按钮恢复可用，与主窗口 `conversation-busy` 语义对齐；`conversationBusy` 保留给 flow 发送保护（含流式态），二者职责分离。顺带修复该视图 spec 的 tauri-api mock 缺失 `isTauriRuntimeAvailable` 导致 11 个用例全挂的问题，并补「流式期间 viewBusy=false / conversationBusy=true」钉死用例。
-
-- 输入法组合确认回车判定抽为纯函数并加固（`chat-composer-ime`）：IME 确认键永远是裸 Enter，带 Ctrl/Shift/Alt/Meta 修饰的 Enter 直接放行，不再受 compositionend 后 100ms 窗口影响——修复 ctrl_enter 发送模式下组合输入后 Ctrl+Enter 被误吞的问题；同时补 `compositionEndedAt` 初始 0 值边界（页面加载后 100ms 内普通 Enter 不再被误判为组合确认），并补齐窗口边界与修饰键放行的单元测试。
-
-- 修复 macOS 支持 PR（#18）合并后的三类问题：rdev 录音热键回调返回类型错误导致 Windows/Linux 分支无法编译（回调改为 `if let` 消费 token）；macOS 构建拆分为签名/未签名两个互斥步骤（按 `APPLE_CERTIFICATE` secrets 是否存在分流，避免 tauri-bundler 对空字符串 env 走证书导入分支导致构建失败；签名步骤注入证书 env，公证三件套任一缺失时 shell 内 unset 让 bundler warn 跳过公证，未配置时走未签名构建不阻塞；分流条件经 job env 中转 `HAS_APPLE_CERTIFICATE` 读取，GHA 的 `if` 不允许直接引用 secrets context，直接引用会导致 workflow 求值失败）；Linux 手动未签名构建补 `Generate updater manifest` 发布条件（非发布路径不再因缺 `.sig` 失败）。
-- 登录 shell PATH 同步加固：shell 解析改为 `SHELL` → 系统账户登录 shell（`users` 查询 passwd）→ `/bin/sh` 兜底，不再固定回退 `/bin/zsh`（Linux 不保证存在）；同步改为 spawn + stdin 隔离 + 5 秒超时 kill，stdout 由子线程读取、主线程统一超时轮询，避免用户 rc 文件存在阻塞命令或后台进程持有 stdout 时应用永久卡在启动阶段，超时后降级系统默认 PATH 并记录 warn 日志。
-
-- 修复登录 shell PATH 同步在 Linux/macOS 上的编译错误：`users::User::shell()` 需要导入 `users::os::unix::UserExt` trait；两处 `runtime_log_warn` 传 `&str` 改为 `String`（Windows 本地编译不到 unix 分支，此前未暴露）。
-- 修复登录 shell PATH 同步残留的 unix 编译错误：`user.shell()` 返回 `&Path` 而非 `PathBuf`，改用 `as_os_str().to_os_string()` 保持链路类型不变（Windows 本地编译不到 unix 分支，CI 三平台构建才暴露）。
-- CI 三平台发布构建接入缓存：`actions/setup-node` 增加 `cache: 'pnpm'`（前端依赖），Rust 编译接入 `swatinem/rust-cache@v2`（缓存 `~/.cargo/registry` 与 `src-tauri/target` 依赖产物，按 Cargo.lock 哈希自动失效，持久化前清理增量产物与超一周的旧产物）；首次构建仍冷编译，后续构建显著提速。
-- 移除副手部门（deputy/explorer）的硬编码工具限制：删除 `c8d53b02` 引入的「副手部门默认只能使用调查型工具、预设 Skill 一律禁止」硬编码短路（`deputy_department_builtin_tool_allowed` / `deputy_department_restricted_reason` 及 `is_deputy` 判定分支）。副手部门与其他部门一样完全由部门权限卡（白/黑名单）控制，权限控制外不再有任何硬编码限制；该硬编码因配置归一化强制 `is_deputy=false` 本就从未在运行时生效。
-- 工具审查侧边栏新建文件场景补丁行号起点修正：ranges 为空且 `old_string` 为空、`new_string` 非空时直接判定为新增（原 `lines.len() <= 1` 条件恒不成立导致永不进入修正分支），hunk 头从 0 行起算（`@@ -0,0 +1,n @@`），新建文件补丁视图行号不再错位。
-- 终端 exec 承诺确认测试健壮性：`commitment_approval_should_bypass_local_rule_block` 在无可用 PowerShell 环境（非 Windows 或未安装）时改为跳过而非 panic（原 `expect` 直接崩溃）。
-- 桌面操作提醒改由调度器统一发送：移除 tool_assembly 全局提醒状态表（`desktop_operation_notice_state` / `reset_desktop_operation_notice_for_session` / `desktop_operation_notice_should_send`），改为 tool_loop 两个调度函数各持局部 bool，每轮调度内首次调用 operate 工具时发一次系统通知，调度结束变量随栈销毁——消除全局缓存无界增长，通知频率控制与发送职责收口到调度器。
-- operate 工具权限普通化：移除 `tool_restricted_by_department` 中「非 assistant 部门一律拒绝 reload/organize_context/screenshot/operate」的硬编码分支，operate 改为普通工具，权限完全由部门权限卡（白/黑名单）控制；副手部门默认防护与预设白名单保持不变。前端部门权限页同步移除对 operate 等工具的强制隐藏。
-- 全链清理死名工具：删除从未装配的 `reload`（已被 config 工具取代）、`organize_context`（用户整理功能被错误封装成 LLM 工具的历史残留）与 `screenshot`（能力已并入 operate）三个工具名的全部残留——后端实现、tool_loop 的 OrganizeContext 机制与压缩检查点、`legacy_command_enabled` 兼容逻辑、前端默认工具列表与展示分支、相关测试，零兼容保留。
-- 计划模式入口改为可点击：输入命中计划类关键词（计划/方案/设计/架构等）时，输入框旁出现 base-200「计划」按钮，点击开启计划模式；激活状态的高亮徽标也可点击取消。
-- 对话设置页「多模态分析模型」改用新的模型树选择器（ApiConfigTreeSelect），与专家模型、工具审查模型等选择器统一；空值项仍可通过「无」占位选项清除。
-- 「简洁」对话风格提示词新增约束：同一要点只讲一个面向，不提供正反两面讲解。
-- 移除「抽象」对话风格（不再支持）：数据源、三语 i18n 键与快捷设置过滤同步清理。
-- 活动状态「思考与工具」计数动画时长从 1 秒缩短为 300ms：流结束后数字不再多跑约 1 秒才停，显示更跟手。
-- 输入框为空时发送按钮降级为 base-200 背景（图标保持原样），点击弹出发送快捷键切换菜单（Enter / Ctrl+Enter），不再需要右键才发现。
-- 修复 Web 端（VS Code 侧边栏 / 浏览器直连）自己发起对话不流式的问题：打开/切换会话时注册流式订阅（恢复一次请求建立），发起对话前幂等补绑定，正文 delta 不再全量刷出。
-- 修复压缩/归档摘要请求未按模型能力处理历史图片的问题：上下文整理链路补齐与正常对话一致的媒体降级（不支持图片的模型上历史图片走 vision 转文或丢弃，不再以 image_url 泄漏导致请求 400 失败），并补防回归测试钉死该行为。
-- 设置窗口打开默认落在欢迎页，不再停留在快捷键页。
-- 「热键」文案统一改回「快捷键」：设置页快捷键页标题、录制按钮、录制提示、全局快捷键提示、呼唤快捷键、快速设置校验提示等 zh-CN / zh-TW 同步修正（19860ed5 误改为「热键」）。
-- 修复 config 迁移测试 `runtime_volatile_normalization_should_not_require_rewriting_after_migration_version_recorded` 的矛盾断言：99f5b81d 合并旧测试时新增的 `restored.conversations[0].messages.is_empty()` 在分片读取布局下必然不成立（messages 从 message store 分片读出，天然非空），删除该断言；核心行为（迁移版本已记录后读取不触发重写、运行时可规范化）由其余断言钉死。
-- 追问视图（ConversationView）发送消息后不再平滑滚动到底部的问题：追问外壳此前把 `conversation-scroll-to-bottom-request` 硬编码为 `0`、`scroll-to-bottom-behavior` 硬编码为 `'auto'`，且运行时未接入滚动协调器，缺少主会话 `triggerConversationScrollToBottom(..., "smooth_light")` 的触发链路。现复用同一套 `useChatScrollCoordinator`（双实例，各自服务各自的 ChatView），追问运行时接入 `onOwnUserDraftInserted` / `onStreamingAssistantBubbleInserted` 回调触发弹性上滑，发送消息与流式气泡插入时与主会话行为一致。
-- 清理弃置的 MCP operate 独立服务：删除 `--mcp-operate-server` 启动分支与 operate_mcp.rs（genai 已支持工具调用携带 base64，该历史变通入口不再需要）；operate 截图默认保存路径与 base64 开关不再以 Option 透传，签名收敛为必填参数。
-- 停止/他窗口收尾时不再多余地全量重拉消息：外部 `round_completed` 事件落在已 idle 的前台轮次时，事件自带后端正式消息（停止后后端落盘部分结果并广播）则直接应用该消息（本地已冻结的消息被覆盖一次），不再无条件 `onReloadMessages()` 重拉整个历史；仅事件未带消息时才回退重拉兜底。
 
 ## 依赖

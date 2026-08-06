@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.55.0](docs/changelog/releases/v0.55.0.md) - 会话列表分组优化：同目录、同助手的会话自动聚合，最新一条完整展示，其余折叠为单行条目；打开会话不再自动展开所在分组，最近会话的文件夹胶囊可点击展开并定位到分组。
 - [v0.52.0](docs/changelog/releases/v0.52.0.md) - Linux 应用内自动更新（AppImage）：支持自动检查、下载并替换安装新版本，发布流程同步生成 Linux 更新清单与签名；macOS 仍不启用。
 - [v0.51.0](docs/changelog/releases/v0.51.0.md) - 计划模式切换改为内存态处理，不再写入会话记录与磁盘、不再经过会话互斥锁；忙碌（流式输出 / 整理上下文）期间也可以自由切换计划模式，不需要等当前轮次结束。
 - [v0.50.1](docs/changelog/releases/v0.50.1.md) - 修复流式输出期间消息行重叠：上一版「消除流式卡顿」的优化误伤了消息行高度测量，回复增长时用户消息会和助理消息叠在同一行；已恢复可靠的高度测量，流式消息与普通消息不再重叠。
@@ -186,4 +187,5 @@
 - [v0.9.3](docs/changelog/releases/v0.9.3.md) - 发布（release-0.9.3）：同步版本号并承接当前 `rust-genai` 运行时迁移成果
 - [v0.9.1](docs/changelog/releases/v0.9.1.md) - 发布（release-0.9.1）：整合委托功能修复与聊天交互打磨后发布补丁版本
 - [v0.9.0](docs/changelog/releases/v0.9.0.md) - 发布（release-0.9.0）：整理并发布当前这一轮聊天窗口、Markdown 渲染、流式输出与会话链路重构成果
+- [UNRELEASED](docs/changelog/releases/UNRELEASED.md)
 

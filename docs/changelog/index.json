@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-08-04T13:54:06.168Z",
-  "latestVersion": "v0.52.0",
+  "generatedAt": "2026-08-06T03:12:42.181Z",
+  "latestVersion": "v0.55.0",
   "releases": [
+    {
+      "version": "v0.55.0",
+      "path": "docs/changelog/releases/v0.55.0.md",
+      "summary": "会话列表分组优化：同目录、同助手的会话自动聚合，最新一条完整展示，其余折叠为单行条目；打开会话不再自动展开所在分组，最近会话的文件夹胶囊可点击展开并定位到分组。"
+    },
     {
       "version": "v0.52.0",
       "path": "docs/changelog/releases/v0.52.0.md",
@@ -906,6 +911,11 @@
       "version": "v0.9.0",
       "path": "docs/changelog/releases/v0.9.0.md",
       "summary": "发布（release-0.9.0）：整理并发布当前这一轮聊天窗口、Markdown 渲染、流式输出与会话链路重构成果"
+    },
+    {
+      "version": "UNRELEASED",
+      "path": "docs/changelog/releases/UNRELEASED.md",
+      "summary": ""
     }
   ]
 }
