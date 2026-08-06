@@ -293,5 +293,14 @@ mod operate_actions_tests {
             ms_part.parse::<u128>().is_ok(),
             "timestamp part should be numeric: {file_name}"
         );
+        // 默认路径必须落在传入的会话截图根目录下（按会话建目录）。
+        let parent = std::path::Path::new(&path)
+            .parent()
+            .expect("path should have a parent");
+        let parent_norm = parent.to_string_lossy().replace('\\', "/");
+        assert_eq!(
+            parent_norm, "C:/tmp/screenshots",
+            "default path must stay inside the per-conversation screenshots root"
+        );
     }
 }
