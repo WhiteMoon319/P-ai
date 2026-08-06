@@ -13,6 +13,11 @@ type WebBridgeConfig = {
 // 远程前端模式：iframe 内电脑 PAI 页面与手机 PAI 壳层之间的密码认证消息源标识。
 const REMOTE_AUTH_BRIDGE_SOURCE = "pai-remote-bridge-auth";
 
+// 远程前端模式：允许 postMessage 桥接的壳层 origin 白名单。
+// Android Tauri WebView asset 协议 origin 为 http://tauri.localhost（注意是 http 非 https，
+// 与桌面壳层约定不同）；接收侧校验 event.origin、转发侧 targetOrigin 均使用此值。
+export const REMOTE_BRIDGE_ALLOWED_ORIGIN = "http://tauri.localhost";
+
 export type TransportHostWorkspace = {
   path: string;
   name: string;
@@ -427,7 +432,7 @@ function postTransportHostMessage(message: unknown): boolean {
     return true;
   }
   if (window.parent && window.parent !== window) {
-    window.parent.postMessage(message, "*");
+    window.parent.postMessage(message, REMOTE_BRIDGE_ALLOWED_ORIGIN);
     return true;
   }
   return false;
@@ -2108,6 +2113,9 @@ function requestRemotePasswordFromParent(): Promise<string> {
       resolve(password);
     };
     const listener = (event: MessageEvent) => {
+      // 只接受约定壳层 origin 且来源为父窗口的消息，防恶意页面伪造密码注入。
+      if (event.origin !== REMOTE_BRIDGE_ALLOWED_ORIGIN) return;
+      if (event.source !== window.parent) return;
       const data = event.data as { source?: unknown; method?: unknown; payload?: unknown } | null;
       if (!data || typeof data !== "object") return;
       if (data.source !== REMOTE_AUTH_BRIDGE_SOURCE) return;
@@ -2120,7 +2128,7 @@ function requestRemotePasswordFromParent(): Promise<string> {
     try {
       window.parent.postMessage(
         { source: REMOTE_AUTH_BRIDGE_SOURCE, method: "request-password" },
-        "*",
+        REMOTE_BRIDGE_ALLOWED_ORIGIN,
       );
     } catch {
       settle("");
@@ -2272,7 +2280,7 @@ function emitWebBridgeNotification(method: string, payload: unknown) {
     try {
       window.parent.postMessage(
         { source: "pai-remote-bridge", method, payload },
-        "*",
+        REMOTE_BRIDGE_ALLOWED_ORIGIN,
       );
     } catch {
       // 转发失败不影响本地事件分发
