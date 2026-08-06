@@ -962,7 +962,8 @@ pub fn run() {
 
     let builder = builder
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_notification::init());
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_workspace_io::init());
     #[cfg(not(target_os = "android"))]
     let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -1259,6 +1260,7 @@ pub fn run() {
             attachment_transfer_complete,
             attachment_transfer_abort,
             attachment_ingest_local_path,
+            attachment_ingest_content_uri,
             read_local_chat_image_thumbnail,
             read_local_chat_image_original,
             copy_local_chat_image_to_clipboard,
@@ -1350,6 +1352,7 @@ pub fn run() {
             glob_android_workspace_files,
             grep_android_workspace_files,
             import_file_to_android_workspace,
+            import_android_workspace_file_from_uri,
             export_file_from_android_workspace,
             delete_file_from_android_workspace,
             terminal_self_check,

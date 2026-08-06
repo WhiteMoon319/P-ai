@@ -946,6 +946,79 @@ fn import_file_to_android_workspace(
     }
 }
 
+/// 通过 Android `content://` URI 直接把文件流式导入沙盒工作区。
+///
+/// WebView 只传 URI 字符串，字节流由 Kotlin 侧 ContentResolver 写入沙盒
+/// 目标路径（绝对路径，已在 Rust 侧完成沙盒与用户可见性校验）。
+#[tauri::command]
+fn import_android_workspace_file_from_uri(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    file_name: String,
+    uri: String,
+    target_path: Option<String>,
+) -> Result<AndroidWorkspaceImportResult, String> {
+    #[cfg(target_os = "android")]
+    {
+        use tauri_plugin_workspace_io::WorkspaceIoExt;
+
+        let file_name = if file_name.trim().is_empty() {
+            app.workspace_io()
+                .resolve_display_name(uri.clone())
+                .unwrap_or_default()
+        } else {
+            file_name
+        };
+
+        let root = android_workspace_root(&state)
+            .canonicalize()
+            .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
+        let mut target = android_workspace_resolve_import_target_path(&root, &file_name, target_path.as_deref())?;
+        android_workspace_ensure_paths_within_sandbox(&state, &[target.clone()])?;
+        android_workspace_ensure_user_file_manager_path(&root, &target, false)?;
+        if target.exists() {
+            target = android_workspace_unique_sibling_path(&target);
+            android_workspace_ensure_paths_within_sandbox(&state, &[target.clone()])?;
+            android_workspace_ensure_user_file_manager_path(&root, &target, false)?;
+        }
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|err| format!("创建 Android 工作区导入目录失败 ({}): {err}", parent.display()))?;
+        }
+        let safe_name = android_workspace_sanitize_file_name(&file_name);
+        let result = app
+            .workspace_io()
+            .import_stream(tauri_plugin_workspace_io::ImportStreamRequest {
+                uri,
+                target_path: target.to_string_lossy().to_string(),
+            })
+            .map_err(|err| format!("Android 工作区 URI 导入失败: {err}"))?;
+        if result.bytes == 0 {
+            return Err("Android 工作区导入文件为空。".to_string());
+        }
+        let status = normalize_android_workspace_status(&state);
+        Ok(AndroidWorkspaceImportResult {
+            status,
+            imported_path: android_workspace_relative_display(&root, &target),
+            file_name: target
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or(&safe_name)
+                .to_string(),
+            bytes: result.bytes as usize,
+        })
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        let _ = state;
+        let _ = file_name;
+        let _ = uri;
+        let _ = target_path;
+        Err("Android 工作区导入仅在 Android 端可用。".to_string())
+    }
+}
+
 #[tauri::command]
 fn export_file_from_android_workspace(
     state: State<'_, AppState>,

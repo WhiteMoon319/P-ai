@@ -21,7 +21,7 @@
           <ChevronLeft class="h-4 w-4" />
           <span class="min-w-0 truncate">{{ t('config.tools.androidWorkspaceParentDirectory') }}</span>
         </button>
-        <button class="btn btn-sm w-full justify-start sm:w-auto" type="button" :disabled="busy" @click="chooseImportFile">
+        <button class="btn btn-sm w-full justify-start sm:w-auto" type="button" :disabled="busy || importing" @click="chooseImportFile">
           <FileUp class="h-4 w-4" />
           <span class="min-w-0 truncate">{{ t('config.tools.androidWorkspaceImportHere') }}</span>
         </button>
@@ -300,7 +300,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { ChevronLeft, Download, Eye, FilePen, FileText, FileUp, Folder, FolderOpen, Move, RefreshCw, Search, Trash2, X } from "@lucide/vue";
 import { useI18n } from "vue-i18n";
-import { invokeTauri } from "../../../../services/tauri-api";
+import { invokeTauri, isAndroidRuntime } from "../../../../services/tauri-api";
 import { toErrorMessage } from "../../../../utils/error";
 
 type AndroidWorkspaceState = "not_downloaded" | "downloading" | "ready";
@@ -624,6 +624,10 @@ function openEntry(entry: AndroidWorkspaceFileEntry) {
 
 function chooseImportFile() {
   if (busy.value) return;
+  if (isAndroidRuntime()) {
+    void pickAndImportAndroidFile();
+    return;
+  }
   importInput.value?.click();
 }
 
@@ -647,6 +651,33 @@ async function onImportFileChange(event: Event) {
     setMessage(t("config.tools.androidWorkspaceImportDone", { path: result.importedPath || targetPath }));
     await loadFiles(currentPath.value);
     selectedFilePath.value = result.importedPath || targetPath;
+  } catch (error) {
+    setMessage(t("config.tools.androidWorkspaceImportFailed", { err: toErrorMessage(error) }), true);
+  } finally {
+    importing.value = false;
+  }
+}
+
+/** Android 上通过系统文件选择器拿 content URI，直接流式导入沙盒工作区（绕开 base64）。 */
+async function pickAndImportAndroidFile() {
+  if (busy.value || importing.value) return;
+  importing.value = true;
+  setMessage("");
+  try {
+    const dialog = await import("@tauri-apps/plugin-dialog");
+    const selected = await dialog.open({ multiple: false, directory: false });
+    const uri = String(selected || "").trim();
+    if (!uri.startsWith("content://")) return;
+    const result = await invokeTauri<AndroidWorkspaceImportResult>("import_android_workspace_file_from_uri", {
+      file_name: "",
+      uri,
+      target_path: null,
+    });
+    emit("statusChanged", result);
+    const fallbackPath = result.fileName ? joinWorkspacePath(currentPath.value, result.fileName) : "";
+    setMessage(t("config.tools.androidWorkspaceImportDone", { path: result.importedPath || fallbackPath }));
+    await loadFiles(currentPath.value);
+    selectedFilePath.value = result.importedPath || fallbackPath;
   } catch (error) {
     setMessage(t("config.tools.androidWorkspaceImportFailed", { err: toErrorMessage(error) }), true);
   } finally {

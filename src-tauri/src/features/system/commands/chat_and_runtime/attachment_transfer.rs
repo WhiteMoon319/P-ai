@@ -798,6 +798,99 @@ async fn attachment_ingest_local_path_inner(
     })?
 }
 
+/// Android 专用：通过 `content://` URI 直接把附件流式写入沙盒 downloads。
+///
+/// 前端只传 URI 字符串，字节流由 Kotlin 侧 ContentResolver 分块写入暂存文件，
+/// 再复用现有暂存/落盘/receipt 链路生成附件回执，绕开 base64 全量内存。
+#[tauri::command]
+async fn attachment_ingest_content_uri(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    uri: String,
+    file_name: Option<String>,
+    mime: Option<String>,
+) -> Result<AttachmentReceipt, String> {
+    #[cfg(target_os = "android")]
+    {
+        use tauri_plugin_workspace_io::WorkspaceIoExt;
+
+        let uri_text = uri.trim().to_string();
+        if uri_text.is_empty() || !uri_text.starts_with("content://") {
+            return Err(attachment_transfer_error(
+                "ATTACHMENT_IO_ERROR",
+                "Android 附件 URI 为空或格式无效",
+            ));
+        }
+        let suggested_name = if file_name.as_deref().map(str::trim).filter(|value| !value.is_empty()).is_some() {
+            file_name.as_deref().unwrap().trim().to_string()
+        } else {
+            app.workspace_io()
+                .resolve_display_name(uri_text.clone())
+                .unwrap_or_default()
+                .trim()
+                .to_string()
+        };
+        let suggested_name = if suggested_name.is_empty() {
+            "attachment".to_string()
+        } else {
+            suggested_name
+        };
+        let normalized_mime =
+            attachment_transfer_normalized_mime(&suggested_name, mime.as_deref().unwrap_or(""));
+        let transfer_id = Uuid::new_v4().to_string();
+        let staging_path = attachment_transfer_create_staging_file(state.inner(), &transfer_id)?;
+        let result = (|| -> Result<AttachmentReceipt, String> {
+            let streamed = app
+                .workspace_io()
+                .import_stream(tauri_plugin_workspace_io::ImportStreamRequest {
+                    uri: uri_text.clone(),
+                    target_path: staging_path.to_string_lossy().to_string(),
+                })
+                .map_err(|err| {
+                    attachment_transfer_error(
+                        "ATTACHMENT_IO_ERROR",
+                        format!("Android 附件 URI 导入失败：{err}"),
+                    )
+                })?;
+            if streamed.bytes == 0 {
+                return Err(attachment_transfer_error(
+                    "ATTACHMENT_IO_ERROR",
+                    "Android 附件内容为空",
+                ));
+            }
+            let saved_path = attachment_finalize_staging_file(
+                state.inner(),
+                &staging_path,
+                &suggested_name,
+                &normalized_mime,
+            )?;
+            Ok(attachment_receipt_from_saved_path(
+                transfer_id,
+                &suggested_name,
+                &normalized_mime,
+                streamed.bytes,
+                saved_path,
+            ))
+        })();
+        if result.is_err() {
+            let _ = std::fs::remove_file(&staging_path);
+        }
+        result
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        let _ = state;
+        let _ = uri;
+        let _ = file_name;
+        let _ = mime;
+        Err(attachment_transfer_error(
+            "ATTACHMENT_IO_ERROR",
+            "Android 附件 URI 导入仅在 Android 端可用。",
+        ))
+    }
+}
+
 fn attachment_transfer_parse_header(
     request: &tauri::ipc::Request<'_>,
     name: &str,
