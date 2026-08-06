@@ -195,6 +195,7 @@ async fn xcap(input: XcapToolInput) -> Result<Value, String> {
                 region: None,
                 save_path: xcap_optional_save_path(&args),
                 webp_quality: xcap_optional_webp_quality(&args),
+                include_base64: true,
             };
             let data = run_capture_window_tool(req, None)
                 .map_err(|err| to_tool_err_string(&err))?;
@@ -212,6 +213,7 @@ async fn xcap(input: XcapToolInput) -> Result<Value, String> {
                 region: None,
                 save_path: xcap_optional_save_path(&args),
                 webp_quality: xcap_optional_webp_quality(&args),
+                include_base64: true,
             };
             let data = run_capture_window_tool(req, Some(window_id))
                 .map_err(|err| to_tool_err_string(&err))?;
@@ -229,6 +231,7 @@ async fn xcap(input: XcapToolInput) -> Result<Value, String> {
                 region: None,
                 save_path: xcap_optional_save_path(&args),
                 webp_quality: xcap_optional_webp_quality(&args),
+                include_base64: true,
             };
             let data = run_screenshot_tool(req)
                 .await
@@ -259,6 +262,7 @@ async fn xcap(input: XcapToolInput) -> Result<Value, String> {
                 }),
                 save_path: xcap_optional_save_path(&args),
                 webp_quality: xcap_optional_webp_quality(&args),
+                include_base64: true,
             };
             let data = run_screenshot_tool(req)
                 .await

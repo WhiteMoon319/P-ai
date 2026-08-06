@@ -1,4 +1,8 @@
-async fn run_operate_tool(input: OperateRequest) -> DesktopToolResult<OperateResponse> {
+async fn run_operate_tool(
+    input: OperateRequest,
+    screenshots_root: Option<&std::path::Path>,
+    include_base64: bool,
+) -> DesktopToolResult<OperateResponse> {
     let started = std::time::Instant::now();
     ensure_dpi_awareness_once();
     let actions = parse_script(&input)?;
@@ -95,7 +99,8 @@ async fn run_operate_tool(input: OperateRequest) -> DesktopToolResult<OperateRes
                 steps.push(step);
             }
             DesktopScriptAction::Screenshot { line, mode, save_path, quality } => {
-                let (result, mode_name) = execute_screenshot_action(&mode, save_path, quality).await?;
+                let (result, mode_name) =
+                    execute_screenshot_action(&mode, save_path, quality, screenshots_root, include_base64).await?;
                 latest_screenshot = Some(LatestScreenshotInfo {
                     mode: mode_name.clone(),
                     width: result.width,
@@ -103,7 +108,7 @@ async fn run_operate_tool(input: OperateRequest) -> DesktopToolResult<OperateRes
                     saved_path: result.path.clone(),
                 });
                 image_mime = Some(result.image_mime.clone());
-                image_base64 = Some(result.image_base64.clone());
+                image_base64 = result.image_base64.clone();
                 width = Some(result.width);
                 height = Some(result.height);
                 let step = DesktopScriptStepResult {
@@ -158,6 +163,31 @@ async fn run_operate_tool(input: OperateRequest) -> DesktopToolResult<OperateRes
         width,
         height,
     })
+}
+
+/// 清空 operate 截图临时目录（temp/screenshots/），会话压缩时调用。
+/// 返回 (删除文件数, 删除子目录数)；目录不存在时视为已清空。
+fn clear_operate_screenshots_temp(data_path: &PathBuf) -> Result<(usize, usize), String> {
+    let dir = app_root_from_data_path(data_path).join("temp").join("screenshots");
+    let mut removed_files = 0usize;
+    let mut removed_dirs = 0usize;
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                std::fs::remove_file(&path).map_err(|err| {
+                    format!("清理 operate 截图失败（{}）：{err}", path.to_string_lossy())
+                })?;
+                removed_files = removed_files.saturating_add(1);
+            } else if path.is_dir() {
+                std::fs::remove_dir_all(&path).map_err(|err| {
+                    format!("清理 operate 截图子目录失败（{}）：{err}", path.to_string_lossy())
+                })?;
+                removed_dirs = removed_dirs.saturating_add(1);
+            }
+        }
+    }
+    Ok((removed_files, removed_dirs))
 }
 
 #[cfg(test)]

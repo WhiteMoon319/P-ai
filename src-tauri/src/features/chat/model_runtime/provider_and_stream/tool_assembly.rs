@@ -1004,6 +1004,7 @@ fn build_builtin_runtime_tool_executor(
             memory_context: memory_context.ok_or_else(|| "记忆上下文不可用".to_string())?,
         }),
         "operate" => Box::new(BuiltinOperateTool {
+            app_state: state.clone(),
             model_supports_image: selected_api.enable_image,
         }),
         "read" => Box::new(BuiltinReadFileTool {
@@ -1168,6 +1169,7 @@ fn notify_desktop_operation_started(state: &AppState, script: &str) {
 
 #[derive(Debug, Clone)]
 struct BuiltinOperateTool {
+    app_state: AppState,
     model_supports_image: bool,
 }
 
@@ -1200,21 +1202,18 @@ impl RuntimeValueTool for BuiltinOperateTool {
 
     fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         let model_supports_image = self.model_supports_image;
+        let screenshots_root = app_root_from_data_path(&self.app_state.data_path)
+            .join("temp")
+            .join("screenshots");
         Box::pin(async move {
-            // 如果模型不支持图片，检查脚本中是否包含 screenshot 动作
-            if !model_supports_image && script_contains_screenshot(&args.script) {
-                return Err(ToolInvokeError::from(
-                    "你的驱动模型并不支持图片，请放弃该功能".to_string(),
-                ));
-            }
-            // 模型即将操作电脑：通知发送已移至调度器（tool_loop）统一控制，
-            // 此处仅检查脚本是否包含截图动作（驱动模型不支持图片时拒绝）。
+            // 截图始终可执行：驱动模型不支持图片时仍返回保存路径，
+            // 是否携带 base64 由模型能力决定（不支持时跳过编码省 CPU）。
             let args_value = serde_json::to_value(&args).unwrap_or(Value::Null);
             runtime_log_debug(format!(
                 "[工具调试] 内置工具执行开始 name=operate args={}",
                 debug_value_snippet(&args_value, 240)
             ));
-            let result = run_operate_tool(args)
+            let result = run_operate_tool(args, Some(&screenshots_root), model_supports_image)
                 .await
                 .map_err(|err| ToolInvokeError::from(err.message))
                 .and_then(|output| {

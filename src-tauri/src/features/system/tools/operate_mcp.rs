@@ -33,7 +33,7 @@ impl OperateMcpServer {
             .filter(|line| !line.trim().is_empty())
             .count();
         let _script_char_count = args.script.chars().count();
-        let result = run_operate_tool(args).await.map_err(|err| {
+        let result = run_operate_tool(args, None, true).await.map_err(|err| {
             rmcp::ErrorData::internal_error(
                 "operate failed",
                 Some(serde_json::json!({

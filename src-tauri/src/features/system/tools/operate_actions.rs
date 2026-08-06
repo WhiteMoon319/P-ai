@@ -198,7 +198,25 @@ async fn execute_text_action(enigo: &mut enigo::Enigo, text: &str, repeat: u32, 
     Ok(())
 }
 
-async fn execute_screenshot_action(mode: &ScreenshotModeSpec, save_path: Option<String>, quality: f32) -> DesktopToolResult<(ScreenshotResponse, String)> {
+async fn execute_screenshot_action(
+    mode: &ScreenshotModeSpec,
+    save_path: Option<String>,
+    quality: f32,
+    screenshots_root: Option<&std::path::Path>,
+    include_base64: bool,
+) -> DesktopToolResult<(ScreenshotResponse, String)> {
+    let save_path = save_path.or_else(|| {
+        let root = screenshots_root?;
+        let ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or_default();
+        Some(
+            root.join(format!("operate_{ms}.webp"))
+                .to_string_lossy()
+                .to_string(),
+        )
+    });
     let request = ScreenshotRequest {
         mode: match mode {
             ScreenshotModeSpec::Desktop | ScreenshotModeSpec::FocusedWindow => ScreenshotMode::Desktop,
@@ -214,6 +232,7 @@ async fn execute_screenshot_action(mode: &ScreenshotModeSpec, save_path: Option<
         },
         save_path,
         webp_quality: quality,
+        include_base64,
     };
     let result = match mode {
         ScreenshotModeSpec::Desktop | ScreenshotModeSpec::Region(_) => run_screenshot_tool(request).await?,

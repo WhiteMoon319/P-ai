@@ -271,7 +271,11 @@ fn encode_screenshot_response(
         },
     )
     .map_err(DesktopToolError::internal_error)?;
-    let image_base64 = B64.encode(&normalized.bytes);
+    let image_base64 = if input.include_base64 {
+        Some(B64.encode(&normalized.bytes))
+    } else {
+        None
+    };
     let encode_ms = encode_started.elapsed().as_millis() as u64;
 
     let (path, save_ms) = maybe_save_screenshot_bytes(input, &normalized.bytes)?;
@@ -473,6 +477,7 @@ fn encode_screenshot_response_should_reject_over_10k_capture() {
         region: None,
         save_path: None,
         webp_quality: 75.0,
+        include_base64: true,
     };
     let width = 10_001u32;
     let height = 8u32;
