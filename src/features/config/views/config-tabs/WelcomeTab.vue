@@ -70,6 +70,7 @@ import { MessageSquare } from "@lucide/vue";
 import type { ApiConfigItem, AppConfig } from "../../../../types/app";
 import UsageTrailWall from "./UsageTrailWall.vue";
 import {
+  canUseTransportHostRuntimeCheck,
   getTransportHostRuntimePrerequisites,
   installTransportHostRuntimePrerequisite,
   invokeTauri,
@@ -141,15 +142,15 @@ async function loadAppVersion() {
   }
 }
 
-// 已装的不提示，缺失的才出现
+// 只有后端明确返回某项依赖未安装（=== false）才列出；
+// 未返回字段、返回 true、Web/VS Code 宿主无本机检测，都不应显示"未安装"。
 const missingDeps = computed<MissingDep[]>(() => {
-  const gitInstalled = !!hostRuntimePrerequisites.value.gitInstalled;
-  const nodeInstalled = !!hostRuntimePrerequisites.value.nodeInstalled;
-  const rgInstalled = !!hostRuntimePrerequisites.value.rgInstalled;
+  if (!canUseTransportHostRuntimeCheck()) return [];
+  const prerequisites = hostRuntimePrerequisites.value;
   const items: MissingDep[] = [];
-  if (!gitInstalled) items.push({ kind: "git", label: t("config.welcome.cards.git.title") });
-  if (!nodeInstalled) items.push({ kind: "node", label: t("config.welcome.cards.node.title") });
-  if (!rgInstalled) items.push({ kind: "rg", label: t("config.welcome.cards.ripgrep.title") });
+  if (prerequisites.gitInstalled === false) items.push({ kind: "git", label: t("config.welcome.cards.git.title") });
+  if (prerequisites.nodeInstalled === false) items.push({ kind: "node", label: t("config.welcome.cards.node.title") });
+  if (prerequisites.rgInstalled === false) items.push({ kind: "rg", label: t("config.welcome.cards.ripgrep.title") });
   return items;
 });
 

@@ -45,6 +45,7 @@ import {
   invokeTauri,
   isTauriRuntimeAvailable,
   onTransportNotification,
+  pickBrowserTransportFiles,
   applyTransportConfigMigrationPackage,
   previewTransportConfigMigrationPackage,
   probeTransportConversationStream,
@@ -676,5 +677,142 @@ describe("requestRemotePasswordFromParent", () => {
     );
     runTimeout();
     await expect(promise).resolves.toBe("");
+  });
+});
+
+describe("pickBrowserTransportFiles 安卓 focus/change 时序", () => {
+  type FakeInput = {
+    type: string;
+    multiple: boolean;
+    style: Record<string, string>;
+    accept: string;
+    files: File[] | null;
+    listeners: Map<string, () => void>;
+    addEventListener: ReturnType<typeof vi.fn>;
+    removeEventListener: ReturnType<typeof vi.fn>;
+    click: ReturnType<typeof vi.fn>;
+    remove: ReturnType<typeof vi.fn>;
+  };
+
+  function createFileDialogHost() {
+    const focusListeners = new Set<() => void>();
+    const input: FakeInput = {
+      type: "",
+      multiple: false,
+      style: {},
+      accept: "",
+      files: null,
+      listeners: new Map(),
+      addEventListener: vi.fn((type: string, listener: () => void) => {
+        input.listeners.set(type, listener);
+      }),
+      removeEventListener: vi.fn(() => undefined),
+      click: vi.fn(() => undefined),
+      remove: vi.fn(() => undefined),
+    };
+    const doc = {
+      createElement: vi.fn((tag: string) => {
+        if (tag !== "input") throw new Error(`unexpected tag ${tag}`);
+        return input;
+      }),
+      body: { appendChild: vi.fn(() => undefined) },
+    };
+    const win = {
+      setTimeout: (cb: () => void, ms?: number) => setTimeout(cb, ms ?? 0),
+      clearTimeout: (id: number) => clearTimeout(id),
+      addEventListener: vi.fn((type: string, listener: () => void) => {
+        if (type === "focus") focusListeners.add(listener);
+      }),
+      removeEventListener: vi.fn((type: string, listener: () => void) => {
+        if (type === "focus") focusListeners.delete(listener);
+      }),
+    };
+    const prevDoc = globalThis.document;
+    const prevWin = globalThis.window;
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      writable: true,
+      value: doc,
+    });
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      writable: true,
+      value: win,
+    });
+    return {
+      input,
+      doc,
+      win,
+      focusListeners,
+      triggerFocus: () => {
+        for (const listener of [...focusListeners]) listener();
+      },
+      triggerChange: () => {
+        input.listeners.get("change")?.();
+      },
+      triggerCancel: () => {
+        input.listeners.get("cancel")?.();
+      },
+      restore: () => {
+        Object.defineProperty(globalThis, "document", {
+          configurable: true,
+          writable: true,
+          value: prevDoc,
+        });
+        Object.defineProperty(globalThis, "window", {
+          configurable: true,
+          writable: true,
+          value: prevWin,
+        });
+      },
+    };
+  }
+
+  it("focus 先于 change 触发时不丢弃已选文件（安卓 Photo Picker 时序）", async () => {
+    const host = createFileDialogHost();
+    try {
+      const file = new File(["a"], "photo.jpg", { type: "image/jpeg" });
+      const promise = pickBrowserTransportFiles({ multiple: true });
+      expect(host.input.click).toHaveBeenCalledTimes(1);
+
+      // 安卓时序：返回页面先触发 window focus，此时 files 尚未填充。
+      host.input.files = null;
+      host.triggerFocus();
+      // focus 兜底定时器未到点，change 随后到达且已带文件。
+      host.input.files = [file];
+      host.triggerChange();
+      await expect(promise).resolves.toEqual([file]);
+    } finally {
+      host.restore();
+    }
+  });
+
+  it("focus 触发后 change 未到且 files 为空时视为取消返回空数组", async () => {
+    vi.useFakeTimers();
+    const host = createFileDialogHost();
+    try {
+      const promise = pickBrowserTransportFiles({ multiple: true });
+      host.input.files = null;
+      host.triggerFocus();
+      // 模拟 focus 兜底 1000ms 到点，仍无 change → 视为取消。
+      await vi.advanceTimersByTimeAsync(1100);
+      await expect(promise).resolves.toEqual([]);
+    } finally {
+      vi.useRealTimers();
+      host.restore();
+    }
+  });
+
+  it("change 正常先触发时直接返回已选文件", async () => {
+    const host = createFileDialogHost();
+    try {
+      const file = new File(["b"], "doc.txt", { type: "text/plain" });
+      const promise = pickBrowserTransportFiles({ multiple: true });
+      host.input.files = [file];
+      host.triggerChange();
+      await expect(promise).resolves.toEqual([file]);
+    } finally {
+      host.restore();
+    }
   });
 });

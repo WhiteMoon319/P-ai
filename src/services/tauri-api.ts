@@ -300,7 +300,8 @@ function browserFileAcceptValue(filters: TransportFileDialogOptions["filters"]):
     .join(",");
 }
 
-function pickBrowserTransportFiles(options: TransportFileDialogOptions): Promise<File[]> {
+/** 浏览器 File 选择入口。导出仅为单测可直测安卓 focus/change 时序；生产调用面不变。 */
+export function pickBrowserTransportFiles(options: TransportFileDialogOptions): Promise<File[]> {
   if (typeof document === "undefined") return Promise.resolve([]);
   return new Promise<File[]>((resolve) => {
     const input = document.createElement("input");
@@ -320,10 +321,16 @@ function pickBrowserTransportFiles(options: TransportFileDialogOptions): Promise
       input.remove();
       resolve(files);
     };
+    // 安卓「照片与视频」选择器返回时 focus 先于 change 触发，且 focus 时
+    // input.files 尚未填充；直接在此刻 finish 会把已选文件静默丢弃。
+    // 延迟后先看 change 是否已处理（settled），给 change 让路；
+    // 超时仍未收到 change 时，files 非空视为选中、为空视为用户取消。
+    // 窗口取 1000ms：Photo Picker 多选返回慢，change 可能晚于 focus 数百毫秒才到。
     const handleFocus = () => {
       focusTimer = window.setTimeout(() => {
+        if (settled) return;
         finish(Array.from(input.files || []));
-      }, 0);
+      }, 1000);
     };
     input.addEventListener("change", () => finish(Array.from(input.files || [])), { once: true });
     input.addEventListener("cancel", () => finish([]), { once: true });
@@ -460,6 +467,11 @@ export function getTransportCapabilities(): TransportCapabilities {
 
 /** 应用更新仅依赖桌面宿主的原生更新能力，业务层无需自行探测运行时。 */
 export function canUseTransportGithubUpdate(): boolean {
+  return isTauriRuntimeAvailable();
+}
+
+/** 本机依赖检测仅桌面宿主提供；Web/VS Code 无本机环境可查，业务层直接读语义能力。 */
+export function canUseTransportHostRuntimeCheck(): boolean {
   return isTauriRuntimeAvailable();
 }
 
