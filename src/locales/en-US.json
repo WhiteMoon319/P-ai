@@ -139,6 +139,7 @@
       "modelCardsHint": "Enter model names manually, or pick from refreshed results.",
       "addModel": "Add Model",
       "unnamedModel": "Unnamed Model",
+      "emptyModelNotAllowed": "There are model cards without a model name. Fill in the model name or remove the card before saving.",
       "editDisplayName": "Click to edit display name",
       "displayNamePlaceholder": "Enter the display name you want",
       "matchedProtocol": "Matched protocol: {protocol}",

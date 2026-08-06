@@ -693,7 +693,6 @@ const providerTemplateValues = computed<Record<string, unknown>>({
     if (typeof values.baseUrl === "string") provider.baseUrl = values.baseUrl;
     if (typeof values.requestFormat === "string" && values.requestFormat !== provider.requestFormat) {
       provider.requestFormat = values.requestFormat as ApiRequestFormat;
-      applyProtocolDefaults(provider);
       if (provider.requestFormat !== "codex") {
         stopCodexAuthPolling();
       } else {
@@ -1266,7 +1265,7 @@ function normalizeProviderRequestFormats() {
   }
 }
 
-function createModel(seed: string, name = "gpt-4o-mini"): ApiModelConfigItem {
+function createModel(seed: string, name = ""): ApiModelConfigItem {
   return {
     id: `api-model-${seed}`,
     model: name,
@@ -1303,8 +1302,8 @@ function createProvider(seed: string, capability: ApiCapability = selectedCapabi
     codexLocalAuthPath: DEFAULT_CODEX_LOCAL_AUTH_PATH,
     apiKeys: isCodex ? [] : [""],
     keyCursor: 0,
-    cachedModelOptions: isCodex ? ["gpt-5.5"] : ["gpt-4o-mini"],
-    models: [createModel(seed, isCodex ? "gpt-5.5" : "gpt-4o-mini")],
+    cachedModelOptions: [],
+    models: [createModel(seed)],
     failureRetryCount: 0,
   };
 }
@@ -1346,10 +1345,8 @@ function selectModelCard(modelId: string) {
 async function addProvider() {
   const seed = buildProviderSeed();
   const provider = createProvider(seed, selectedCapability.value);
-  applyProtocolDefaults(provider);
   props.config.apiProviders.push(provider);
   props.config.selectedApiConfigId = `${provider.id}::${provider.models[0].id}`;
-  await Promise.resolve(props.saveApiConfigAction());
 }
 
 function firstActiveApiConfigIdExcluding(excludedIds: Set<string>): string {
@@ -1456,10 +1453,8 @@ async function switchCapabilityTab(capability: ApiTopTab) {
   }
   const seed = buildProviderSeed();
   const provider = createProvider(seed, capability);
-  applyProtocolDefaults(provider);
   props.config.apiProviders.push(provider);
   props.config.selectedApiConfigId = `${provider.id}::${provider.models[0].id}`;
-  await Promise.resolve(props.saveApiConfigAction());
 }
 
 function revertUnsavedConfigIfNeeded() {
@@ -1491,7 +1486,6 @@ function addModelCard() {
     model.model = "gpt-5.5";
   }
   provider.models.push(model);
-  applyProtocolDefaults(provider);
   props.config.selectedApiConfigId = `${provider.id}::${model.id}`;
 }
 
@@ -1646,7 +1640,6 @@ async function syncModelMetadata(modelCard: ApiModelConfigItem) {
 
 function resolveCodexProvider(provider?: ApiProviderConfigItem | null): ApiProviderConfigItem | null {
   if (!provider || provider.requestFormat !== "codex") return null;
-  applyProtocolDefaults(provider);
   return provider;
 }
 
@@ -1774,7 +1767,6 @@ function applyGeneratedBaseUrl(presetId?: string) {
   }
   if (!generatedBaseUrl.value) return;
   selectedProvider.value.requestFormat = linkHelperActiveProtocol.value;
-  applyProtocolDefaults(selectedProvider.value);
   selectedProvider.value.baseUrl = generatedBaseUrl.value;
 }
 
@@ -1790,7 +1782,13 @@ async function openProviderSite(preset: ProviderPreset) {
 async function handleSaveApiConfig() {
   const provider = selectedProvider.value;
   if (provider) {
-    applyProtocolDefaults(provider);
+    const hasEmptyModel = (provider.models || []).some(
+      (model) => !model.deprecated && !String(model.model || "").trim(),
+    );
+    if (hasEmptyModel) {
+      props.setStatusAction(t("config.api.emptyModelNotAllowed"));
+      return;
+    }
     provider.cachedModelOptions = Array.from(new Set(providerModelOptions.value));
   }
   await Promise.resolve(props.saveApiConfigAction());
