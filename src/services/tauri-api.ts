@@ -13,6 +13,9 @@ type WebBridgeConfig = {
 // 远程前端模式：iframe 内电脑 PAI 页面与手机 PAI 壳层之间的密码认证消息源标识。
 const REMOTE_AUTH_BRIDGE_SOURCE = "pai-remote-bridge-auth";
 
+// 远程前端模式：手机 PAI 壳层 → 本页面的会话命令消息源标识（与认证方向相反）。
+const REMOTE_COMMAND_BRIDGE_SOURCE = "pai-remote-bridge-command";
+
 // 远程前端模式：允许与 iframe 内电脑 PAI 页面做 postMessage 桥接的父窗口 origin。
 // 与手机 PAI 壳层约定：壳层页面必须以该 origin 加载（Tauri Android WebView 默认
 // asset 协议为 https://tauri.localhost）。桌面独立窗口（self === top）与 VSCode
@@ -1908,7 +1911,15 @@ function createWebTransportStreamBinding(
 /**
  * 统一前台流式绑定。桌面端注册 Tauri Channel；网络端把同一份后端通知
  * 适配成 TransportChannel，聊天状态机不再维护第二套订阅实现。
+ *
+ * 当前传输下聊天流是否需要前端显式发起绑定：
+ * 桌面端 sendChat 的原生 Tauri Channel 已覆盖流式，再 bind 会双通道双写；
+ * Web 端 Channel 无法穿过 JSON-RPC，必须显式 bind 才能收到正文 delta。
  */
+export function chatStreamNeedsFrontendBind(): boolean {
+  return !isTauriRuntimeAvailable();
+}
+
 export async function bindTransportConversationStream<T>(input: {
   bindingId: string;
   conversationId?: string;
@@ -2092,6 +2103,25 @@ async function requestWebBridgePassword(): Promise<string> {
   const password = String(window.prompt("请输入 PAI 远程访问密码") || "").trim();
   if (!password) throw new Error("远程访问认证已取消");
   return password;
+}
+
+/**
+ * 订阅远程前端壳层的会话命令（toggle-conversation-list / create-conversation）。
+ * 只接受约定壳层 origin 与来源标识的消息，防恶意父页面伪造会话操作。
+ * 返回取消订阅函数；桌面独立窗口（self === top）不注册监听。
+ */
+export function onTransportRemoteChatCommand(handler: (method: string) => void): () => void {
+  if (typeof window === "undefined" || window.self === window.top) return () => {};
+  const listener = (event: MessageEvent) => {
+    if (event.origin !== REMOTE_BRIDGE_ALLOWED_ORIGIN) return;
+    const data = event.data as { source?: unknown; method?: unknown } | null;
+    if (!data || typeof data !== "object") return;
+    if (data.source !== REMOTE_COMMAND_BRIDGE_SOURCE) return;
+    const method = String(data.method || "").trim();
+    if (method) handler(method);
+  };
+  window.addEventListener("message", listener);
+  return () => window.removeEventListener("message", listener);
 }
 
 /** 向父窗口（手机 PAI 壳层）请求远程访问密码；父窗口未回复或超时返回空串。

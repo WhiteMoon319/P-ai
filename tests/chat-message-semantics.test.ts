@@ -15,7 +15,13 @@ import {
   projectStreamingChatActivityForDisplay,
   streamBlocksActivitySignature,
   streamBlocksToToolHistoryEvents,
+  TOOL_TEXT_BREAK_PLACEHOLDER,
 } from "../src/utils/chat-message-semantics";
+
+/** 与 UI 渲染/导出一致：占位符是分段边界，展示时转成可见换行 */
+function displayText(text: string): string {
+  return String(text || "").split(TOOL_TEXT_BREAK_PLACEHOLDER).join("\n\n");
+}
 
 function textMessage(id: string, role: ChatMessage["role"], text: string): ChatMessage {
   return {
@@ -59,7 +65,7 @@ describe("chat-message semantics", () => {
 
     const projection = projectMessageForDisplay(message);
 
-    expect(projection.text).toBe("[toolcall:fc_1]\n\n我查好了");
+    expect(displayText(projection.text)).toBe("[toolcall:fc_1]\n\n我查好了");
     expect(projection.activityItems[0]).toMatchObject({ kind: "reasoning", text: "先检查上下文" });
     expect(projection.toolCallCount).toBe(1);
     expect(projection.lastToolName).toBe("remote_im_send");
@@ -314,7 +320,7 @@ describe("chat-message semantics", () => {
       ],
     };
 
-    expect(projectMessageForDisplay(message).text).toBe("先说明第一步 [toolcall:call_1]\n\n再说明第二步 [toolcall:call_2]\n\n最后汇总");
+    expect(displayText(projectMessageForDisplay(message).text)).toBe("先说明第一步 [toolcall:call_1]\n\n再说明第二步 [toolcall:call_2]\n\n最后汇总");
   });
 
   it("does not duplicate assistant history text when final text already contains it", () => {
@@ -773,7 +779,7 @@ describe("chat-message semantics", () => {
     }));
     blocks = appendTextDeltaToStreamBlocks(blocks, "正文2。");
 
-    expect(assistantTextFromStreamBlocks(blocks)).toBe(
+    expect(displayText(assistantTextFromStreamBlocks(blocks))).toBe(
       "正文1。 [toolcall:tool-middle]\n\n正文2。",
     );
   });
@@ -794,7 +800,7 @@ describe("chat-message semantics", () => {
     }));
     blocks = appendTextDeltaToStreamBlocks(blocks, "```ts\nconsole.log(1);\n```");
 
-    expect(assistantTextFromStreamBlocks(blocks)).toBe(
+    expect(displayText(assistantTextFromStreamBlocks(blocks))).toBe(
       "先说明。 [toolcall:tool-before-code]\n\n```ts\nconsole.log(1);\n```",
     );
   });
@@ -832,13 +838,13 @@ describe("chat-message semantics", () => {
     }));
     blocks = appendTextDeltaToStreamBlocks(blocks, "下面继续正文。");
 
-    expect(assistantTextFromStreamBlocks(blocks)).toBe(
+    expect(displayText(assistantTextFromStreamBlocks(blocks))).toBe(
       "先说明要并发读取。 [toolcall:tool-a] [toolcall:tool-b]\n\n下面继续正文。",
     );
     expect(blocks).toEqual([{
       reasoning: "",
       reasoningCharCount: 0,
-      text: "先说明要并发读取。 [toolcall:tool-a] [toolcall:tool-b]\n\n下面继续正文。",
+      text: `先说明要并发读取。 [toolcall:tool-a] [toolcall:tool-b]${TOOL_TEXT_BREAK_PLACEHOLDER}下面继续正文。`,
       tools: [{
         toolCallId: "tool-a",
         name: "read",
@@ -876,13 +882,13 @@ describe("chat-message semantics", () => {
     }));
     blocks = appendTextDeltaToStreamBlocks(blocks, "后面才开始正文。");
 
-    expect(assistantTextFromStreamBlocks(blocks)).toBe(
+    expect(displayText(assistantTextFromStreamBlocks(blocks))).toBe(
       "[toolcall:tool-first]\n\n后面才开始正文。",
     );
     expect(blocks).toEqual([{
       reasoning: "",
       reasoningCharCount: 0,
-      text: "[toolcall:tool-first]\n\n后面才开始正文。",
+      text: `[toolcall:tool-first]${TOOL_TEXT_BREAK_PLACEHOLDER}后面才开始正文。`,
       tools: [{
         toolCallId: "tool-first",
         name: "read",
@@ -936,7 +942,7 @@ describe("chat-message semantics", () => {
       ],
     };
 
-    expect(projectMessageForDisplay(message).text).toBe(
+    expect(displayText(projectMessageForDisplay(message).text)).toBe(
       "[toolcall:call_a] [toolcall:call_b]\n\n最后汇总",
     );
   });

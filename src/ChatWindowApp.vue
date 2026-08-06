@@ -501,17 +501,14 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, onBeforeUnmount, onMounted } from "vue";
+import { defineComponent, onBeforeUnmount } from "vue";
 import Win10ResizeHandles from "./features/shell/components/Win10ResizeHandles.vue";
 import ChatWorkspacePickerDialog from "./features/chat/components/dialogs/ChatWorkspacePickerDialog.vue";
 import AppWindowContent from "./features/shell/components/AppWindowContent.vue";
 import AppWindowHeader from "./features/shell/components/AppWindowHeader.vue";
 import ShellDialogsHost from "./features/shell/components/ShellDialogsHost.vue";
 import { useChatWindowApp } from "./features/chat/composables/use-chat-window-app";
-import { REMOTE_BRIDGE_ALLOWED_ORIGIN } from "./services/tauri-api";
-
-/** 远程前端壳层 → 本页面的命令消息来源标识（与 tauri-api.ts 通知转发方向相反）。 */
-const REMOTE_COMMAND_SOURCE = "pai-remote-bridge-command";
+import { onTransportRemoteChatCommand } from "./services/tauri-api";
 
 /** iframe 嵌入且非 VSCode 宿主时隐藏窗口栏：远程前端模式下由宿主壳层提供 header。 */
 function isEmbeddedWebHost(): boolean {
@@ -539,21 +536,16 @@ export default defineComponent({
 
     // 远程前端模式：手机壳层 header 的会话操作（切换对话列表/新建对话）通过
     // postMessage 转发到这里执行，由电脑 PAI 页面在自己的会话状态上完成操作。
+    // 监听与安全校验统一收敛在 tauri-api 的 onTransportRemoteChatCommand。
     if (embedded) {
-      const handleRemoteCommand = (event: MessageEvent) => {
-        // 只接受约定壳层 origin 的命令，防恶意父页面伪造会话操作。
-        if (event.origin !== REMOTE_BRIDGE_ALLOWED_ORIGIN) return;
-        const data = event.data as { source?: unknown; method?: unknown } | null;
-        if (!data || typeof data !== "object") return;
-        if (data.source !== REMOTE_COMMAND_SOURCE) return;
-        if (data.method === "toggle-conversation-list") {
+      const stopRemoteCommands = onTransportRemoteChatCommand((method) => {
+        if (method === "toggle-conversation-list") {
           void app.toggleSideConversationList();
-        } else if (data.method === "create-conversation") {
+        } else if (method === "create-conversation") {
           void app.createUnarchivedConversation();
         }
-      };
-      onMounted(() => window.addEventListener("message", handleRemoteCommand));
-      onBeforeUnmount(() => window.removeEventListener("message", handleRemoteCommand));
+      });
+      onBeforeUnmount(stopRemoteCommands);
     }
 
     return {

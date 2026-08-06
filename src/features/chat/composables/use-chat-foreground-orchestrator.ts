@@ -1,6 +1,6 @@
 import { nextTick } from "vue";
 import { i18n } from "../../../i18n";
-import { invokeTauri, isTauriRuntimeAvailable } from "../../../services/tauri-api";
+import { chatStreamNeedsFrontendBind, invokeTauri } from "../../../services/tauri-api";
 import { toErrorMessage } from "../../../utils/error";
 import { readLastActiveConversationId } from "../utils/last-active-conversation";
 import { createLatestTaskRunner, runForegroundSnapshotBindingTransaction, snapshotCanBindAssistantStream } from "./chat-foreground-coordinator";
@@ -378,7 +378,7 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
           }
           await bindActiveConversationStream(cid, true);
         },
-        alwaysBind: !isTauriRuntimeAvailable(),
+        alwaysBind: chatStreamNeedsFrontendBind(),
         resume: (nextSnapshot) => {
           const runtimeState = String(nextSnapshot?.runtimeState || "").trim();
           const streamCache = nextSnapshot?.streamCache as Record<string, unknown> | null | undefined;

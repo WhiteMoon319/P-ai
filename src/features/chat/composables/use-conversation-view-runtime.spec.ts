@@ -26,6 +26,7 @@ const flowMock = vi.hoisted(() => ({
 vi.mock("../../../services/tauri-api", () => ({
   invokeTauri: invokeTauriMock,
   isTauriRuntimeAvailable: vi.fn(() => true),
+  chatStreamNeedsFrontendBind: vi.fn(() => false),
   bindTransportConversationStream: vi.fn(async () => {}),
   unbindTransportConversationStream: vi.fn(async () => {}),
   probeTransportConversationStream: vi.fn(async () => true),
