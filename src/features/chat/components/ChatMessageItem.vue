@@ -209,7 +209,11 @@
               <PlainMarkdownRenderer :text="assistantRenderedText" />
             </div>
             <div v-else ref="markdownContainerRef">
-              <div v-if="assistantUsesSegmentedMarkdown" class="ecall-assistant-segment-list">
+              <div
+                v-if="assistantUsesSegmentedMarkdown"
+                class="ecall-assistant-segment-list"
+                :class="{ 'ecall-assistant-segment-list-plain': !assistantBubbleBackgroundEnabled }"
+              >
                 <div
                   v-for="(segment, segmentIndex) in assistantMarkdownSegments"
                   :key="segment.key"
@@ -253,7 +257,11 @@
             class="space-y-3"
             :class="[
               block.text ? 'mt-3' : '',
-              assistantUsesSegmentedMarkdown ? 'ecall-assistant-segment ecall-assistant-segment-text ecall-assistant-segment-surface' : '',
+              assistantUsesSegmentedMarkdown
+                ? assistantBubbleBackgroundEnabled
+                  ? 'ecall-assistant-segment ecall-assistant-segment-text ecall-assistant-segment-surface'
+                  : 'ecall-assistant-segment ecall-assistant-segment-text ecall-assistant-segment-plain ecall-assistant-segment-plan-separated'
+                : '',
             ]"
           >
             <div class="text-xs italic opacity-60 mb-1">{{ t("chat.plan.sidebarHint") }}</div>
@@ -607,7 +615,7 @@ const assistantRawRenderedText = computed(() => formatAssistantStreamingText(pro
 const assistantRenderedText = computed(() =>
   assistantRawRenderedText.value.split(TOOL_TEXT_BREAK_PLACEHOLDER).join("\n\n"),
 );
-const segmentedMarkdownActive = computed(() => segmentedMarkdownEnabled.value && assistantBubbleBackgroundEnabled.value);
+const segmentedMarkdownActive = computed(() => segmentedMarkdownEnabled.value);
 const assistantMarkdownSegments = computed<MarkdownSegment[]>(() => {
   if (plainMarkdownDebugEnabled || !segmentedMarkdownActive.value) return [];
   const text = assistantRawRenderedText.value;
@@ -2029,6 +2037,22 @@ function openAttachmentPath(path: string) {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+/* 无背景模式：段之间用分割线区分，替代卡片背景 */
+.ecall-assistant-segment-list-plain {
+  gap: 0;
+}
+
+.ecall-assistant-segment-list-plain > .ecall-assistant-segment + .ecall-assistant-segment {
+  border-top: 1px solid var(--color-base-300);
+  padding-top: 0.5rem;
+}
+
+/* 无背景模式：计划卡跟在正文段后，顶部用分割线区分 */
+.ecall-assistant-segment-plan-separated {
+  border-top: 1px solid var(--color-base-300);
+  padding-top: 0.5rem;
 }
 
 .ecall-assistant-segment {
