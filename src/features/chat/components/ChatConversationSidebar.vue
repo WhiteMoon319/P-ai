@@ -93,15 +93,14 @@
                 <SquarePen class="h-3.5 w-3.5" />
               </button>
             </template>
-            <div
-              v-for="item in section.visibleItems"
-              :key="item.conversationId"
-              class="group relative mx-1"
-              @contextmenu.prevent="handleCardContextMenu(item, $event)"
-              @pointerdown="handleCardPointerDown(item, $event)"
-              @pointerup="handleCardPointerUp(item)"
-              @pointerleave="handleCardPointerLeave"
-            >
+            <template v-for="item in section.visibleItems" :key="item.conversationId">
+              <div
+                class="group relative mx-1"
+                @contextmenu.prevent="handleCardContextMenu(item, $event)"
+                @pointerdown="handleCardPointerDown(item, $event)"
+                @pointerup="handleCardPointerUp(item)"
+                @pointerleave="handleCardPointerLeave"
+              >
                   <div
                     class="block rounded-lg px-2 text-left transition-colors hover:bg-base-100/70"
                     :class="[
@@ -266,25 +265,26 @@
                   </div>
 
                 </div>
-            <template v-for="item in section.visibleItems" :key="`followers-${item.conversationId}`">
-              <button
-                v-for="simpleItem in (section.simpleFollowers[String(item.conversationId || '').trim()] || [])"
-                :key="`simple-${simpleItem.conversationId}`"
-                type="button"
-                class="mx-1 flex w-[calc(100%-0.5rem)] items-center rounded-lg py-1 pl-2 pr-2 text-left text-sm transition-colors hover:bg-base-100/70"
-                :class="String(simpleItem.conversationId || '').trim() === String(props.activeConversationId || '').trim() ? 'bg-base-300/60' : 'bg-transparent'"
-                :title="conversationDisplayTitle(simpleItem)"
-                @click="handleConversationCardClick(simpleItem)"
-              >
-                <span class="relative w-10 shrink-0 self-stretch" aria-hidden="true">
-                  <span
-                    class="absolute right-0 top-1 bottom-1 w-1 rounded-full transition-colors"
-                    :class="simpleItemIndicatorClass(simpleItem)"
-                  ></span>
-                </span>
-                <span class="min-w-0 truncate pl-2 font-medium">{{ conversationDisplayTitle(simpleItem) }}</span>
-                <span class="ml-auto shrink-0 tabular-nums text-xs text-base-content/45">{{ formatConversationTime(simpleItem.updatedAt) }}</span>
-              </button>
+                <template v-if="(section.simpleFollowers[String(item.conversationId || '').trim()] || []).length > 0">
+                  <button
+                    v-for="simpleItem in (section.simpleFollowers[String(item.conversationId || '').trim()] || [])"
+                    :key="`simple-${simpleItem.conversationId}`"
+                    type="button"
+                    class="mx-1 flex w-[calc(100%-0.5rem)] items-center rounded-lg py-1 pl-2 pr-2 text-left text-sm transition-colors hover:bg-base-100/70"
+                    :class="String(simpleItem.conversationId || '').trim() === String(props.activeConversationId || '').trim() ? 'bg-base-300/60' : 'bg-transparent'"
+                    :title="conversationDisplayTitle(simpleItem)"
+                    @click="handleConversationCardClick(simpleItem)"
+                  >
+                    <span class="relative w-10 shrink-0 self-stretch" aria-hidden="true">
+                      <span
+                        class="absolute right-0 top-1 bottom-1 w-1 rounded-full transition-colors"
+                        :class="simpleItemIndicatorClass(simpleItem)"
+                      ></span>
+                    </span>
+                    <span class="min-w-0 truncate pl-2 font-medium">{{ conversationDisplayTitle(simpleItem) }}</span>
+                    <span class="ml-auto shrink-0 tabular-nums text-xs text-base-content/45">{{ formatConversationTime(simpleItem.updatedAt) }}</span>
+                  </button>
+                </template>
             </template>
             <div v-if="section.hiddenItemCount > 0" class="px-3 pb-2 pt-1">
               <button
