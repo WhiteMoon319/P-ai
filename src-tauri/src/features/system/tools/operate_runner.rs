@@ -1,6 +1,6 @@
 async fn run_operate_tool(
     input: OperateRequest,
-    screenshots_root: Option<&std::path::Path>,
+    screenshots_root: &std::path::Path,
     include_base64: bool,
 ) -> DesktopToolResult<OperateResponse> {
     let started = std::time::Instant::now();
@@ -245,5 +245,43 @@ mod operate_tool_tests {
             DesktopScriptAction::Screenshot { mode: ScreenshotModeSpec::Region(_), .. } => {}
             _ => panic!("expected screenshot region"),
         }
+    }
+
+    #[test]
+    fn clear_operate_screenshots_temp_should_only_remove_screenshots() {
+        let root = std::env::temp_dir().join("easy-call-ai-clear-operate-test");
+        let _ = std::fs::remove_dir_all(&root);
+        let data_path = root.join("config");
+        let screenshots = root.join("temp").join("screenshots");
+        let sub = screenshots.join("sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(screenshots.join("a.webp"), b"a").unwrap();
+        std::fs::write(sub.join("b.webp"), b"b").unwrap();
+        let records = root.join("temp").join("apply_patch").join("records");
+        let blobs = root.join("temp").join("apply_patch").join("blobs");
+        std::fs::create_dir_all(&records).unwrap();
+        std::fs::create_dir_all(&blobs).unwrap();
+        std::fs::write(records.join("r.json"), b"{}").unwrap();
+        std::fs::write(blobs.join("b.json"), b"{}").unwrap();
+
+        let (files, dirs) = clear_operate_screenshots_temp(&data_path).unwrap();
+        assert_eq!(files, 1, "top-level screenshot file should be removed");
+        assert_eq!(dirs, 1, "nested screenshot dir should be removed recursively");
+        assert!(!screenshots.join("a.webp").exists());
+        assert!(!sub.exists(), "nested dir with inner file should be gone");
+        assert!(
+            !screenshots.join("sub").join("b.webp").exists(),
+            "inner screenshot file should be gone with its dir"
+        );
+        assert!(
+            records.join("r.json").exists(),
+            "apply_patch records must survive cleanup"
+        );
+        assert!(
+            blobs.join("b.json").exists(),
+            "apply_patch blobs must survive cleanup"
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

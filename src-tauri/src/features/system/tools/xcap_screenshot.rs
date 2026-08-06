@@ -501,3 +501,48 @@ fn encode_screenshot_response_should_reject_over_10k_capture() {
     assert!(matches!(err.code, DesktopToolErrorCode::InvalidParams));
     assert!(err.message.contains("10000x10000"));
 }
+
+#[test]
+fn encode_screenshot_response_should_skip_base64_and_save_file_when_disabled() {
+    let save_path = std::env::temp_dir()
+        .join(format!("easy-call-ai-encode-test-{}.webp", Uuid::new_v4()))
+        .to_string_lossy()
+        .to_string();
+    let input = ScreenshotRequest {
+        mode: ScreenshotMode::Desktop,
+        monitor_id: None,
+        region: None,
+        save_path: Some(save_path.clone()),
+        webp_quality: 75.0,
+        include_base64: false,
+    };
+    let width = 64u32;
+    let height = 64u32;
+    let rgba = vec![0u8; (width as usize) * (height as usize) * 4];
+    let result = encode_screenshot_response(
+        &input,
+        &rgba,
+        width,
+        height,
+        ScreenBounds {
+            x: 0,
+            y: 0,
+            width,
+            height,
+        },
+        0,
+        Instant::now(),
+    )
+    .expect("small screenshot should encode");
+
+    assert!(
+        result.image_base64.is_none(),
+        "base64 should be skipped when include_base64=false"
+    );
+    let saved = result.path.expect("file should be saved when save_path given");
+    assert!(
+        std::path::Path::new(&saved).exists(),
+        "screenshot file should exist on disk: {saved}"
+    );
+    let _ = std::fs::remove_file(&saved);
+}

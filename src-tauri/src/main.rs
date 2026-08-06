@@ -939,12 +939,6 @@ fn main() {
         }
         return;
     }
-    if std::env::args().any(|arg| arg == MCP_OPERATE_SERVER_FLAG) {
-        if let Err(err) = run_operate_mcp_server() {
-            runtime_log_info(format!("{err}"));
-        }
-        return;
-    }
     match maybe_run_portable_update_helper_from_args() {
         Ok(true) => return,
         Ok(false) => {}

@@ -124,7 +124,7 @@ fn runtime_tool_names_for_log(tool_assembly: &RuntimeToolAssembly) -> Option<Val
 
 fn operate_provider_tool_definition() -> ProviderToolDefinition {
     ProviderToolDefinition::new(
-        MCP_OPERATE_TOOL_NAME,
+        OPERATE_TOOL_NAME,
         "统一桌面脚本工具。入参只有 script:string，一行一个动作。\n可用语法：\nmouse <button> click @x,y [repeat=n] [delay=s] [pre_delay=s] [press=s]\nmouse scroll_up [repeat=n] [delay=s] [pre_delay=s]\nmouse scroll_down [repeat=n] [delay=s] [pre_delay=s]\nkey <combo> [repeat=n] [delay=s] [pre_delay=s] [press=s]\ntext \"内容\" [repeat=n] [delay=s] [pre_delay=s]\nwait <seconds>\nscreenshot [focused_window] [region=@x,y,w,h] [save=\"绝对路径\"] [quality=1..100]\n参数说明：button=left|right|middle|back|forward；combo 用 + 连接按键，如 Control+L、Control+Shift+P、Enter；x/y/w/h 为 0~1 百分比坐标；repeat=1~100；delay/pre_delay/press=0~300 秒；save 必须是绝对路径；quality 默认 75。规则：screenshot 对模型只保留最新一张，旧画面视为已经离去。",
         serde_json::json!({
             "type": "object",
@@ -1167,6 +1167,8 @@ fn notify_desktop_operation_started(state: &AppState, script: &str) {
     });
 }
 
+const OPERATE_TOOL_NAME: &str = "operate";
+
 #[derive(Debug, Clone)]
 struct BuiltinOperateTool {
     app_state: AppState,
@@ -1192,7 +1194,7 @@ impl RuntimeToolMetadata for BuiltinOperateTool {
 }
 
 impl RuntimeValueTool for BuiltinOperateTool {
-    const NAME: &'static str = MCP_OPERATE_TOOL_NAME;
+    const NAME: &'static str = OPERATE_TOOL_NAME;
     type Args = OperateRequest;
     type Error = ToolInvokeError;
 
@@ -1213,7 +1215,7 @@ impl RuntimeValueTool for BuiltinOperateTool {
                 "[工具调试] 内置工具执行开始 name=operate args={}",
                 debug_value_snippet(&args_value, 240)
             ));
-            let result = run_operate_tool(args, Some(&screenshots_root), model_supports_image)
+            let result = run_operate_tool(args, &screenshots_root, model_supports_image)
                 .await
                 .map_err(|err| ToolInvokeError::from(err.message))
                 .and_then(|output| {
