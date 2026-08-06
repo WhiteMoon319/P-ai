@@ -26,5 +26,6 @@
 - 远程通知标题测试：会话标题广播测试覆盖全部非本地会话过滤分支（delegate / remote-IM / system-notification），并验证标题跟随用户 ui_language 配置（en-US 兜底文案）
 - 焦点恢复尾部对账改按会话自身 freshness（updatedAt + lastMessageId）指纹判定：不再依赖全局概览水位，避免列表先同步时吞掉视图尚未应用的正式消息收口；同时补充焦点恢复状态机关键路径日志（[焦点恢复] 前缀）便于排查
 - 会话列表聚合位置修复：同一人格聚合块内的简化条目不再被统一排在列表末尾，改为紧跟其完整条目显示，避免与相邻目录的会话错位
+- 修复聊天窗口启动崩溃：ChatView 中监听右侧面板状态的 watch 在 `rightPaneOverlay` 初始化前执行触发 TDZ（ReferenceError），导致 setup 崩溃并连锁引发 `instance.update is not a function` 等报错，前端无法打开；调整声明顺序后恢复正常
 
 ## 依赖
