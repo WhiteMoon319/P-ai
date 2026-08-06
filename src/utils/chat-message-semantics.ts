@@ -364,6 +364,16 @@ export function stripToolcallMarkers(text: string): string {
   return String(text || "").replace(/\s*\[toolcall:[^\]\n]+\]/g, "").trim();
 }
 
+/**
+ * 把旧协议（后端 streamCache 快照）里「工具标记后正文边界」的真实换行
+ * 归一化为分段占位符。本地流式追加与正式消息投影已直接写占位符，
+ * 只有刷新恢复路径的 streamBlocks 仍是 `\n\n`，渲染层无法据此分段。
+ */
+export function normalizeLegacyToolBreakToPlaceholder(text: string): string {
+  return String(text || "")
+    .replace(/(\[toolcall:[^\]\n]+\])\n\n(?=\S)/g, `$1${TOOL_TEXT_BREAK_PLACEHOLDER}`);
+}
+
 function chatActivityStats(
   items: ChatActivityItem[],
   running: boolean,

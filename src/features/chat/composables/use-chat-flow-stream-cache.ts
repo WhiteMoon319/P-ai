@@ -6,6 +6,7 @@ import {
   appendReasoningDeltaToStreamBlocks,
   appendTextDeltaToStreamBlocks,
   normalizeAssistantStreamBlocks,
+  normalizeLegacyToolBreakToPlaceholder,
 } from "../../../utils/chat-message-semantics";
 import {
   readDeltaMessage,
@@ -210,7 +211,12 @@ export function useChatFlowStreamCache(options: UseChatFlowStreamCacheOptions) {
     }
     if (options.streamBlocks && !input?.skipStreamBlocks) {
       if (cache.streamBlocks.length > 0 || options.streamBlocks.value.length === 0) {
-        options.streamBlocks.value = normalizeAssistantStreamBlocks(cache.streamBlocks);
+        options.streamBlocks.value = normalizeAssistantStreamBlocks(
+          cache.streamBlocks.map((block) => ({
+            ...block,
+            text: normalizeLegacyToolBreakToPlaceholder(block.text || ""),
+          })),
+        );
       }
     }
     return true;

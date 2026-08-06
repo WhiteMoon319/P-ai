@@ -10,6 +10,7 @@ import {
   assistantStreamBlocksFromMessageForDisplay,
   inspectUndoablePatchCalls,
   normalizeMessageToolHistoryEvents,
+  normalizeLegacyToolBreakToPlaceholder,
   projectChatActivityForDisplay,
   projectMessageForDisplay,
   projectStreamingChatActivityForDisplay,
@@ -992,5 +993,29 @@ describe("chat-message semantics", () => {
     expect(projectMessageForDisplay(message).text).toBe(
       "[toolcall:call_a] [toolcall:call_b]\n\n最后汇总",
     );
+  });
+
+  it("normalizes legacy backend tool-break newlines into the segment placeholder", () => {
+    expect(normalizeLegacyToolBreakToPlaceholder(
+      "先说明要并发读取。 [toolcall:call-a] [toolcall:call-b]\n\n下面继续正文。",
+    )).toBe(
+      `先说明要并发读取。 [toolcall:call-a] [toolcall:call-b]${TOOL_TEXT_BREAK_PLACEHOLDER}下面继续正文。`,
+    );
+    // 单工具标记：工具先完成、正文后才开始的场景
+    expect(normalizeLegacyToolBreakToPlaceholder(
+      "[toolcall:tool-first]\n\n后面才开始正文。",
+    )).toBe(
+      `[toolcall:tool-first]${TOOL_TEXT_BREAK_PLACEHOLDER}后面才开始正文。`,
+    );
+  });
+
+  it("keeps legacy normalization idempotent and leaves non-tool breaks untouched", () => {
+    // 已是占位符的文本不得二次转换
+    const alreadyNormalized = `先说明。 [toolcall:done]${TOOL_TEXT_BREAK_PLACEHOLDER}正文。`;
+    expect(normalizeLegacyToolBreakToPlaceholder(alreadyNormalized)).toBe(alreadyNormalized);
+    // 无工具标记的正文换行保持原样
+    expect(normalizeLegacyToolBreakToPlaceholder("普通正文\n\n第二段")).toBe("普通正文\n\n第二段");
+    // 工具标记后无正文（段落结尾）不转换
+    expect(normalizeLegacyToolBreakToPlaceholder("[toolcall:done]\n\n")).toBe("[toolcall:done]\n\n");
   });
 });
