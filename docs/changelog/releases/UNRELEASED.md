@@ -44,6 +44,8 @@
 - 登录 shell PATH 同步加固：shell 解析改为 `SHELL` → 系统账户登录 shell（`users` 查询 passwd）→ `/bin/sh` 兜底，不再固定回退 `/bin/zsh`（Linux 不保证存在）；同步改为 spawn + stdin 隔离 + 5 秒超时 kill，stdout 由子线程读取、主线程统一超时轮询，避免用户 rc 文件存在阻塞命令或后台进程持有 stdout 时应用永久卡在启动阶段，超时后降级系统默认 PATH 并记录 warn 日志。
 
 - 修复登录 shell PATH 同步在 Linux/macOS 上的编译错误：`users::User::shell()` 需要导入 `users::os::unix::UserExt` trait；两处 `runtime_log_warn` 传 `&str` 改为 `String`（Windows 本地编译不到 unix 分支，此前未暴露）。
+- 修复登录 shell PATH 同步残留的 unix 编译错误：`user.shell()` 返回 `&Path` 而非 `PathBuf`，改用 `as_os_str().to_os_string()` 保持链路类型不变（Windows 本地编译不到 unix 分支，CI 三平台构建才暴露）。
+- CI 三平台发布构建接入缓存：`actions/setup-node` 增加 `cache: 'pnpm'`（前端依赖），Rust 编译接入 `swatinem/rust-cache@v2`（缓存 `~/.cargo/registry` 与 `src-tauri/target` 依赖产物，按 Cargo.lock 哈希自动失效，持久化前清理增量产物与超一周的旧产物）；首次构建仍冷编译，后续构建显著提速。
 - 移除副手部门（deputy/explorer）的硬编码工具限制：删除 `c8d53b02` 引入的「副手部门默认只能使用调查型工具、预设 Skill 一律禁止」硬编码短路（`deputy_department_builtin_tool_allowed` / `deputy_department_restricted_reason` 及 `is_deputy` 判定分支）。副手部门与其他部门一样完全由部门权限卡（白/黑名单）控制，权限控制外不再有任何硬编码限制；该硬编码因配置归一化强制 `is_deputy=false` 本就从未在运行时生效。
 - 工具审查侧边栏新建文件场景补丁行号起点修正：ranges 为空且 `old_string` 为空、`new_string` 非空时直接判定为新增（原 `lines.len() <= 1` 条件恒不成立导致永不进入修正分支），hunk 头从 0 行起算（`@@ -0,0 +1,n @@`），新建文件补丁视图行号不再错位。
 - 终端 exec 承诺确认测试健壮性：`commitment_approval_should_bypass_local_rule_block` 在无可用 PowerShell 环境（非 Windows 或未安装）时改为跳过而非 panic（原 `expect` 直接崩溃）。

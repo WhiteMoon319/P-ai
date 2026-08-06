@@ -120,7 +120,7 @@ fn unix_extend_process_path_from_login_shell() {
         .filter(|path| PathBuf::from(path).is_file())
         .or_else(|| {
             users::get_user_by_uid(users::get_current_uid())
-                .map(|user| user.shell().to_os_string())
+                .map(|user| user.shell().as_os_str().to_os_string())
                 .filter(|path| PathBuf::from(path).is_file())
         })
         .unwrap_or_else(|| "/bin/sh".into());
