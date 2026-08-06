@@ -721,7 +721,7 @@ export function streamBlocksToActivityItems(rawBlocks: unknown, running = false)
       });
     }
     const text = String(block.text || "").trim();
-    if (text) {
+    if (stripToolcallMarkers(text)) {
       items.push({
         kind: "content",
         id: `stream-block-${blockIndex}-content`,
