@@ -248,7 +248,14 @@
               />
             </div>
           </div>
-          <div v-if="block.planCard" class="space-y-3" :class="block.text ? 'mt-3' : ''">
+          <div
+            v-if="block.planCard"
+            class="space-y-3"
+            :class="[
+              block.text ? 'mt-3' : '',
+              assistantUsesSegmentedMarkdown ? 'ecall-assistant-segment ecall-assistant-segment-text ecall-assistant-segment-surface' : '',
+            ]"
+          >
             <div class="text-xs italic opacity-60 mb-1">{{ t("chat.plan.sidebarHint") }}</div>
             <div @click="emit('assistantLinkClick', $event)">
               <a :href="block.planCard.path" class="link link-primary text-sm" :title="block.planCard.path">{{ t("chat.plan.linkLabel") }}{{ block.planCard.path.split(/[/\\]/).filter(Boolean).pop() }}</a>
