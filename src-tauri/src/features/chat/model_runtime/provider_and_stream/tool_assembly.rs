@@ -1006,6 +1006,7 @@ fn build_builtin_runtime_tool_executor(
         "operate" => Box::new(BuiltinOperateTool {
             app_state: state.clone(),
             model_supports_image: selected_api.enable_image,
+            session_id: tool_session_id.to_string(),
         }),
         "read" => Box::new(BuiltinReadFileTool {
             app_state: state.clone(),
@@ -1173,6 +1174,7 @@ const OPERATE_TOOL_NAME: &str = "operate";
 struct BuiltinOperateTool {
     app_state: AppState,
     model_supports_image: bool,
+    session_id: String,
 }
 
 #[derive(Debug, Clone)]
@@ -1204,9 +1206,14 @@ impl RuntimeValueTool for BuiltinOperateTool {
 
     fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
         let model_supports_image = self.model_supports_image;
+        // 截图按会话建目录：解析 session_id（agent_id::conversation_id）取 conversation_id，
+        // 解析失败时用完整 session_id 兜底，保证不同会话目录天然隔离。
+        let conversation_id = delegate_session_conversation_id(&self.session_id)
+            .unwrap_or_else(|| self.session_id.clone());
         let screenshots_root = app_root_from_data_path(&self.app_state.data_path)
             .join("temp")
-            .join("screenshots");
+            .join("screenshots")
+            .join(conversation_id);
         Box::pin(async move {
             // 截图始终可执行：驱动模型不支持图片时仍返回保存路径，
             // 是否携带 base64 由模型能力决定（不支持时跳过编码省 CPU）。

@@ -165,10 +165,16 @@ async fn run_operate_tool(
     })
 }
 
-/// 清空 operate 截图临时目录（temp/screenshots/），会话压缩时调用。
-/// 返回 (删除文件数, 删除子目录数)；目录不存在时视为已清空。
-fn clear_operate_screenshots_temp(data_path: &PathBuf) -> Result<(usize, usize), String> {
-    let dir = app_root_from_data_path(data_path).join("temp").join("screenshots");
+/// 清空指定会话的 operate 截图临时目录（temp/screenshots/{conversation_id}/），
+/// 会话压缩/归档/删除/撤回时调用。返回 (删除文件数, 删除子目录数)；目录不存在时视为已清空。
+fn clear_operate_screenshots_temp(
+    data_path: &PathBuf,
+    conversation_id: &str,
+) -> Result<(usize, usize), String> {
+    let dir = app_root_from_data_path(data_path)
+        .join("temp")
+        .join("screenshots")
+        .join(conversation_id);
     let mut removed_files = 0usize;
     let mut removed_dirs = 0usize;
     if let Ok(entries) = std::fs::read_dir(&dir) {
@@ -252,11 +258,19 @@ mod operate_tool_tests {
         let root = std::env::temp_dir().join("easy-call-ai-clear-operate-test");
         let _ = std::fs::remove_dir_all(&root);
         let data_path = root.join("config");
-        let screenshots = root.join("temp").join("screenshots");
+        let conversation_id = "convo-test-1";
+        let screenshots = root
+            .join("temp")
+            .join("screenshots")
+            .join(conversation_id);
         let sub = screenshots.join("sub");
         std::fs::create_dir_all(&sub).unwrap();
         std::fs::write(screenshots.join("a.webp"), b"a").unwrap();
         std::fs::write(sub.join("b.webp"), b"b").unwrap();
+        // 其他会话的截图不应被清理
+        let other = root.join("temp").join("screenshots").join("convo-other");
+        std::fs::create_dir_all(&other).unwrap();
+        std::fs::write(other.join("keep.webp"), b"keep").unwrap();
         let records = root.join("temp").join("apply_patch").join("records");
         let blobs = root.join("temp").join("apply_patch").join("blobs");
         std::fs::create_dir_all(&records).unwrap();
@@ -264,7 +278,7 @@ mod operate_tool_tests {
         std::fs::write(records.join("r.json"), b"{}").unwrap();
         std::fs::write(blobs.join("b.json"), b"{}").unwrap();
 
-        let (files, dirs) = clear_operate_screenshots_temp(&data_path).unwrap();
+        let (files, dirs) = clear_operate_screenshots_temp(&data_path, conversation_id).unwrap();
         assert_eq!(files, 1, "top-level screenshot file should be removed");
         assert_eq!(dirs, 1, "nested screenshot dir should be removed recursively");
         assert!(!screenshots.join("a.webp").exists());
@@ -272,6 +286,10 @@ mod operate_tool_tests {
         assert!(
             !screenshots.join("sub").join("b.webp").exists(),
             "inner screenshot file should be gone with its dir"
+        );
+        assert!(
+            other.join("keep.webp").exists(),
+            "other conversation screenshots must survive"
         );
         assert!(
             records.join("r.json").exists(),
