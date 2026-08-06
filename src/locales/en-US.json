@@ -1646,7 +1646,7 @@
     "transcribing": "Transcribing voice...",
     "holdRecord": "Hold {hotkey} or button to record",
     "placeholder": "Ask {personaName}",
-    "placeholderBusyIdle": "Keep sending—{personaName} will process them one by one after finishing",
+    "placeholderBusyIdle": "Messages you send now will be processed in order by {personaName}",
     "placeholderBusyQueued": "Queued messages can switch to guide mode so {personaName} gets them sooner",
     "placeholderGuided": "Keep guiding more messages; {personaName} receives all guided messages at once",
     "trimTip": "Choose compact or archive for the current chat",

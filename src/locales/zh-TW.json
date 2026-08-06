@@ -1510,7 +1510,7 @@
     "recording": "錄音中 {seconds}s",
     "holdRecord": "按住 {hotkey} 或按鈕錄音",
     "placeholder": "問問{personaName}",
-    "placeholderBusyIdle": "繼續發訊息，{personaName} 忙碌完成後一條一條發送",
+    "placeholderBusyIdle": "現在發送的訊息，{personaName}將會按順序處理",
     "placeholderBusyQueued": "排隊的訊息可以切換為引導，讓 {personaName} 盡快收到此訊息",
     "placeholderGuided": "你可以繼續引導更多訊息，{personaName} 接受引導時會一次性收到所有引導訊息",
     "trimTip": "點擊選擇壓縮或歸檔當前對話",

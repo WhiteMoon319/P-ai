@@ -291,7 +291,7 @@
             <Paperclip class="h-3.5 w-3.5" />
           </button>
           <button
-            v-if="showConversationActions"
+            v-if="showConversationActions && !isMobileTouchViewport()"
             class="btn btn-sm btn-circle shrink-0"
             :class="recording ? 'btn-error' : 'btn-ghost'"
             :disabled="!canRecord"
@@ -308,7 +308,7 @@
             <button
               ref="modelDropdownTriggerRef"
               type="button"
-              class="btn btn-sm h-8 min-h-8 w-44 max-w-44 justify-between border-0 shadow-none bg-base-100 text-base-content hover:bg-base-200"
+              class="btn btn-sm h-8 min-h-8 w-44 max-w-44 justify-between border-0 shadow-none bg-base-100 text-base-content hover:bg-base-200 max-md:w-auto max-md:max-w-28"
               :disabled="normalizedChatModelOptions.length === 0"
               :title="selectedModelTitle"
               @click="modelDropdownOpen = !modelDropdownOpen"

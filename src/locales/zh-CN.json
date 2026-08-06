@@ -1513,7 +1513,7 @@
     "transcribing": "语音转写中...",
     "holdRecord": "按住{hotkey}或按钮录音",
     "placeholder": "问问{personaName}",
-    "placeholderBusyIdle": "继续发消息，{personaName} 忙碌完成后一条一条发送",
+    "placeholderBusyIdle": "现在发送的消息，{personaName}将会按顺序处理",
     "placeholderBusyQueued": "排队的消息可以切换为引导，让 {personaName} 尽快收到此消息",
     "placeholderGuided": "你可以继续引导更多消息，{personaName} 接受引导时会一次性收到所有引导消息",
     "trimTip": "点击选择压缩或归档当前对话",
