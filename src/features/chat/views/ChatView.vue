@@ -1506,20 +1506,23 @@ async function refreshChatReaderDirectoryOnWorkspaceChange() {
 function selectChatRightPanelMode(mode: ChatRightPanelMode) {
   emit("update:chatRightPanelMode", mode);
   emit("toolReviewPanelOpenChange", true);
-  if (mode === "reader") {
+  // 覆盖模式下不主动展开目录，避免遮挡对话主体
+  if (mode === "reader" && !rightPaneOverlay.value) {
     void openChatReaderDirectoryIfEmpty();
   }
 }
 
-// 打开右侧面板 / 切到 reader / 工作区变化时：无打开文件则自动展开目录；工作区变化时刷新已展开的目录树
+// 打开右侧面板 / 切到 reader / 工作区变化时：无打开文件则自动展开目录；工作区变化时刷新已展开的目录树。
+// 覆盖模式（面板浮在内容上）下不主动展开目录，避免遮挡对话主体，由用户自行决定。
 watch(
   () => [
     effectiveToolReviewPanelOpen.value,
     props.chatRightPanelMode,
+    rightPaneOverlay.value,
     String(props.activeConversationId || "").trim(),
   ] as const,
-  ([panelOpen, mode]) => {
-    if (!panelOpen || mode !== "reader") return;
+  ([panelOpen, mode, overlay]) => {
+    if (!panelOpen || mode !== "reader" || overlay) return;
     void openChatReaderDirectoryIfEmpty();
   },
 );
