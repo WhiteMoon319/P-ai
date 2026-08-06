@@ -502,10 +502,11 @@ import {
   normalizeAssistantStreamBlocks,
   assistantContentBlocksFromMessage,
   streamBlocksToActivityItems,
+  TOOL_TEXT_BREAK_PLACEHOLDER,
 } from "../../../utils/chat-message-semantics";
 import { formatIsoToLocalDateTime } from "../../../utils/time";
 import { useChatMessageAppearance } from "../../shell/composables/use-chat-message-appearance";
-import { AppMarkdownRenderer, groupMarkdownSegments, initKatex, parseMarkdownBlocks, type MarkdownBlock, type MarkdownSegment } from "../markdown";
+import { AppMarkdownRenderer, groupMarkdownSegments, initKatex, parseMarkdownBlocks, type MarkdownSegment } from "../markdown";
 import { hideIncompleteInlineMath } from "../markdown/streaming-math";
 import { normalizeLocalLinkHref } from "../utils/local-link";
 import { textContentSignature } from "../utils/text-signature";
@@ -595,15 +596,27 @@ const planMarkdownText = ref("");
 const planMarkdownError = ref("");
 const planMarkdownLoading = ref(false);
 const plainMarkdownDebugEnabled = debugPlainMarkdownRender;
-const assistantRenderedText = computed(() => formatAssistantStreamingText(props.block));
+const assistantRawRenderedText = computed(() => formatAssistantStreamingText(props.block));
+const assistantRenderedText = computed(() =>
+  assistantRawRenderedText.value.split(TOOL_TEXT_BREAK_PLACEHOLDER).join("\n\n"),
+);
 const segmentedMarkdownActive = computed(() => segmentedMarkdownEnabled.value && assistantBubbleBackgroundEnabled.value);
-const assistantMarkdownBlocks = computed<MarkdownBlock[]>(() => {
+const assistantMarkdownSegments = computed<MarkdownSegment[]>(() => {
   if (plainMarkdownDebugEnabled || !segmentedMarkdownActive.value) return [];
-  const text = assistantRenderedText.value;
+  const text = assistantRawRenderedText.value;
   if (!text) return [];
-  return parseMarkdownBlocks(text, !!props.block.isStreaming);
+  const pieces = text.split(TOOL_TEXT_BREAK_PLACEHOLDER);
+  const segments: MarkdownSegment[] = [];
+  pieces.forEach((piece, pieceIndex) => {
+    if (!piece.trim()) return;
+    const blocks = parseMarkdownBlocks(piece, !!props.block.isStreaming);
+    const grouped = groupMarkdownSegments(blocks);
+    for (const segment of grouped) {
+      segments.push({ ...segment, key: `seg-${pieceIndex}-${segment.key}` });
+    }
+  });
+  return segments;
 });
-const assistantMarkdownSegments = computed<MarkdownSegment[]>(() => groupMarkdownSegments(assistantMarkdownBlocks.value));
 const assistantUsesSegmentedMarkdown = computed(() => {
   if (plainMarkdownDebugEnabled || !segmentedMarkdownActive.value) return false;
   return assistantMarkdownSegments.value.length > 0;
