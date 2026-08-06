@@ -475,6 +475,11 @@ export function canUseTransportHostRuntimeCheck(): boolean {
   return isTauriRuntimeAvailable();
 }
 
+/** 按住说话录音仅桌面宿主展示；Web 端不提供该能力，业务层直接读语义能力控制显隐。 */
+export function canUseTransportSpeechRecording(): boolean {
+  return isTauriRuntimeAvailable();
+}
+
 function nativeTransportConnectionState(): TransportConnectionState {
   return {
     configured: true,
