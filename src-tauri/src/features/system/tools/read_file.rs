@@ -416,11 +416,11 @@ fn build_text_read_result(
 
 fn resolve_pdf_image_mode(state: &AppState, api_config_id: &str) -> Result<bool, String> {
     let app_config = state_read_config_cached(state)?;
-    let runtime = state_read_runtime_state_cached(state)?;
     let selected_api = resolve_selected_api_config(&app_config, Some(api_config_id))
         .or_else(|| resolve_selected_api_config(&app_config, None))
         .ok_or_else(|| "当前未找到可用聊天模型配置。".to_string())?;
-    Ok(runtime.pdf_read_mode == "image" && selected_api.enable_image)
+    // PDF 阅读方式固定为图片模式：忽略持久化的 pdf_read_mode，仅受模型图片能力约束
+    Ok(selected_api.enable_image)
 }
 
 fn build_pdf_image_read_result(

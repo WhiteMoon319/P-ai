@@ -99,21 +99,6 @@
       </div>
     </template>
 
-    <template #row-pdf-read-mode>
-      <div class="grid min-w-0 gap-2">
-        <div>
-          <div class="text-sm">{{ t("config.chatSettings.pdfReadMode") }}</div>
-          <div class="mt-1 text-xs text-base-content/60">{{ t("config.chatSettings.pdfReadModeHint") }}</div>
-        </div>
-        <SegmentedControl
-          :model-value="pdfReadMode"
-          :options="pdfReadModeOptions"
-          size="sm"
-          @change="onPdfReadModeChange"
-        />
-      </div>
-    </template>
-
     <template #group-actions-instruction-presets>
       <button class="btn btn-sm btn-ghost shrink-0" @click="addInstructionPreset">
         <Plus class="h-4 w-4" />
@@ -205,11 +190,6 @@ const templateGroups = computed<ConfigTemplateGroup[]>(() => [
     rows: [{ key: "response-style", items: [] }],
   },
   {
-    key: "pdf-read-mode",
-    title: t("config.chatSettings.pdfReadMode"),
-    rows: [{ key: "pdf-read-mode", items: [] }],
-  },
-  {
     key: "instruction-presets",
     title: t("config.chatSettings.instructionPresetsTitle"),
     rows: [{ key: "instruction-presets", items: [] }],
@@ -229,10 +209,6 @@ const responseStyleSegmentOptions = computed(() =>
 const imageGenerationModelOptions = computed(() =>
   deriveImageGenerationModelOptions(props.config.imageProviders || []),
 );
-const pdfReadModeOptions = computed(() => [
-  { value: "text" as const, label: t("config.chatSettings.pdfReadModeText") },
-  { value: "image" as const, label: t("config.chatSettings.pdfReadModeImage") },
-]);
 const emit = defineEmits<{
   (e: "update:responseStyleId", value: string): void;
   (e: "update:pdfReadMode", value: "text" | "image"): void;
@@ -273,13 +249,6 @@ function onResponseStyleChange(value: string) {
   emit("update:responseStyleId", value);
   emit("patchChatSettings", {
     responseStyleId: value,
-  });
-}
-
-function onPdfReadModeChange(value: "text" | "image") {
-  emit("update:pdfReadMode", value);
-  emit("patchChatSettings", {
-    pdfReadMode: value,
   });
 }
 
