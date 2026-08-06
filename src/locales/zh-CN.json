@@ -2580,6 +2580,7 @@
   },
   "simpleSetup": {
     "provider": "供应商",
+    "apiProtocol": "API 协议",
     "models": "模型",
     "modelQuick": "快速",
     "modelExpert": "专家",

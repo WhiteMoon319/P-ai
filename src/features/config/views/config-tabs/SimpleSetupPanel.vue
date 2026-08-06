@@ -77,10 +77,20 @@
               {{ option.label }}
             </button>
           </div>
-          <label v-if="draft.providerId === 'custom'" class="grid gap-1.5">
-            <span class="text-xs font-medium opacity-70">base_url</span>
-            <input v-model.trim="draft.customBaseUrl" class="input input-bordered font-mono" />
-          </label>
+          <template v-if="draft.providerId === 'custom'">
+            <label class="grid gap-1.5">
+              <span class="text-xs font-medium opacity-70">{{ t("simpleSetup.apiProtocol") }}</span>
+              <select v-model="draft.customRequestFormat" class="select select-bordered select-sm font-mono">
+                <option v-for="option in simpleSetupProtocolOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+            <label class="grid gap-1.5">
+              <span class="text-xs font-medium opacity-70">base_url</span>
+              <input v-model.trim="draft.customBaseUrl" class="input input-bordered font-mono" />
+            </label>
+          </template>
           <div class="grid gap-1.5">
             <span class="text-xs font-medium opacity-70">{{ t("quickSetup.fields.apiKey") }}</span>
             <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
@@ -229,7 +239,7 @@ import { Eye, EyeOff, Moon, RefreshCw, Sun } from "@lucide/vue";
 import ApiModelCard from "../../components/ApiModelCard.vue";
 import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
 import { openTransportWindow, hideCurrentTransportWindow } from "../../../../services/tauri-api";
-import { clearSimpleSetupDraft, saveSimpleSetupDraft, simpleProviderOptions, useSimpleSetup } from "../../quick-setup/use-simple-setup";
+import { clearSimpleSetupDraft, saveSimpleSetupDraft, simpleProviderOptions, simpleSetupProtocolOptions, useSimpleSetup } from "../../quick-setup/use-simple-setup";
 import type { SimpleModelCard, SimpleReasoningEffort } from "../../quick-setup/use-simple-setup";
 
 const { t } = useI18n();

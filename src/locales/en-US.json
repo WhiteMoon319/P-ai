@@ -2580,6 +2580,7 @@
   },
   "simpleSetup": {
     "provider": "Provider",
+    "apiProtocol": "API Protocol",
     "models": "Models",
     "modelQuick": "Quick",
     "modelExpert": "Expert",

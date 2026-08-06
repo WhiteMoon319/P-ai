@@ -2576,6 +2576,7 @@
   },
   "simpleSetup": {
     "provider": "供應商",
+    "apiProtocol": "API 協定",
     "models": "模型",
     "modelQuick": "快速",
     "modelExpert": "專家",
