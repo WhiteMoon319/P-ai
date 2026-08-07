@@ -57,8 +57,13 @@ async fn call_openai_stt_transcribe(
         return Err("STT base URL is empty.".to_string());
     }
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(60))
+    let mut client_builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60));
+    #[cfg(target_os = "android")]
+    {
+        client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+    }
+    let client = client_builder
         .build()
         .map_err(|err| format!("Build STT HTTP client failed: {err}"))?;
 
@@ -135,8 +140,13 @@ async fn call_mimo_asr_transcribe(
         return Err("MiMo ASR base URL is empty.".to_string());
     }
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(60))
+    let mut client_builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60));
+    #[cfg(target_os = "android")]
+    {
+        client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+    }
+    let client = client_builder
         .build()
         .map_err(|err| format!("Build MiMo ASR HTTP client failed: {err}"))?;
 
