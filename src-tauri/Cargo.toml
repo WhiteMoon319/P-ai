@@ -27,6 +27,7 @@ directories = "6.0.0"
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = { path = "vendor/tauri-plugin-notification" }
+tauri-plugin-workspace-io = { path = "vendor/tauri-plugin-workspace-io" }
 time = { version = "0.3.53", features = ["local-offset"] }
 rmcp = { version = "3.0.1", features = ["client", "macros", "transport-child-process", "transport-io", "transport-streamable-http-client", "transport-streamable-http-client-reqwest"] }
 tokio = { version = "1.52.1", features = ["rt-multi-thread", "sync", "time"] }

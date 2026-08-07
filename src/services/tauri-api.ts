@@ -232,7 +232,7 @@ export type TransportCapabilities = {
  * Android 上同样是 Tauri WebView（会注入 __TAURI_INTERNALS__），但移动端
  * 没有可操作的最小化/最大化/关闭窗口语义，窗口控制按钮必须隐藏。
  */
-function isAndroidRuntime(): boolean {
+export function isAndroidRuntime(): boolean {
   if (typeof navigator === "undefined") return false;
   return /android/i.test(String(navigator.userAgent || ""));
 }
@@ -402,7 +402,9 @@ function downloadBrowserTransportBase64File(fileName: string, bytesBase64: strin
 export async function pickTransportAttachments<T>(
   options: TransportFileDialogOptions = { multiple: true },
 ): Promise<T[]> {
-  if (isTauriRuntimeAvailable()) {
+  // Android 上 dialog.open() 返回 content:// URI，后端经 workspace-io 原生插件
+  // 流式写入沙盒 downloads（绕开 base64 与 64MB 上限）。桌面走本地路径摄取。
+  if (isTauriRuntimeAvailable() && !isAndroidRuntime()) {
     const selected = await openTransportFileDialog({ ...options, directory: false });
     const paths = (Array.isArray(selected) ? selected : [selected])
       .map((value) => String(value || "").trim())
@@ -412,6 +414,17 @@ export async function pickTransportAttachments<T>(
       receipts.push(await invokeTauri<T>("attachment_ingest_local_path", {
         input: { path },
       }));
+    }
+    return receipts;
+  }
+  if (isAndroidRuntime()) {
+    const selected = await openTransportFileDialog({ ...options, directory: false });
+    const uris = (Array.isArray(selected) ? selected : [selected])
+      .map((value) => String(value || "").trim())
+      .filter((value) => value.startsWith("content://"));
+    const receipts: T[] = [];
+    for (const uri of uris) {
+      receipts.push(await invokeTauri<T>("attachment_ingest_content_uri", { uri }));
     }
     return receipts;
   }
