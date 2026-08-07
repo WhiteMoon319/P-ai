@@ -368,9 +368,10 @@ const chartConfig = computed<Record<string, unknown>>(() => {
       },
     };
   }
-  // 面积图：固定 24 小时坐标轴，按模型堆叠
+  // 面积图：固定 24 小时坐标轴，按模型堆叠。
+  // 凌晨 4 点分界：x 轴按分界日顺序排列（04→23→00→03），tooltip 同步显示实际小时。
   const cells = todayData.value?.hourly || [];
-  const labels = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0"));
+  const labels = Array.from({ length: 24 }, (_, index) => String((index + 4) % 24).padStart(2, "0"));
   const datasets = todayModels.value.map((model, index) => {
     const color = MODEL_COLORS[index % MODEL_COLORS.length] ?? "#94a3b8";
     const data = labels.map((label) => {

@@ -100,13 +100,15 @@ pub(super) fn usage_trail_token_delta_from_usage_value(usage: &Value) -> UsageTr
 }
 
 /// 本地时区小时桶：YYYY-MM-DDTHH:00:00。
+/// 按凌晨 4 点分界：0:00-3:59 的使用归属前一个分界日（日期减一天），小时保持实际小时。
 pub(super) fn usage_trail_hour_bucket(dt: OffsetDateTime) -> String {
     let local = to_local_datetime(dt);
+    let shifted = local - time::Duration::hours(4);
     format!(
         "{:04}-{:02}-{:02}T{:02}:00:00",
-        local.year(),
-        local.month() as u8,
-        local.day(),
+        shifted.year(),
+        shifted.month() as u8,
+        shifted.day(),
         local.hour()
     )
 }

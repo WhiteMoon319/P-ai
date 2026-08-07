@@ -1562,13 +1562,15 @@ struct UsageTrailWallDay {
     conversation_count: usize,
 }
 
-/// 足迹墙 today 起点：本地时区当天 00:00。
+/// 足迹墙 today 起点：凌晨 4 点分界（当前时刻往前推 4 小时所在分界日的 04:00）。
+/// 0:00-3:59 的使用属于前一个分界日，因此分界日由 now-4h 的日期决定。
 fn usage_trail_wall_today_start(now_local: OffsetDateTime) -> String {
+    let shifted = now_local - time::Duration::hours(4);
     format!(
-        "{:04}-{:02}-{:02}T00:00:00",
-        now_local.year(),
-        now_local.month() as u8,
-        now_local.day()
+        "{:04}-{:02}-{:02}T04:00:00",
+        shifted.year(),
+        shifted.month() as u8,
+        shifted.day()
     )
 }
 
