@@ -669,9 +669,9 @@ async function pickAndImportAndroidFile() {
     const uri = String(selected || "").trim();
     if (!uri.startsWith("content://")) return;
     const result = await invokeTauri<AndroidWorkspaceImportResult>("import_android_workspace_file_from_uri", {
-      file_name: "",
+      fileName: "",
       uri,
-      target_path: null,
+      targetPath: null,
     });
     emit("statusChanged", result);
     const fallbackPath = result.fileName ? joinWorkspacePath(currentPath.value, result.fileName) : "";
