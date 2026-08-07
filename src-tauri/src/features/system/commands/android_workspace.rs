@@ -1086,6 +1086,55 @@ fn export_file_from_android_workspace(
     }
 }
 
+/// 通过 Android 系统分享面板导出沙盒工作区文件。
+///
+/// WebView 的 `navigator.share` 在 wry Android 中不可用，改由 Kotlin 原生
+/// ACTION_SEND + FileProvider 唤起系统分享。只传文件绝对路径，绕开 base64，
+/// 因此也消除了旧导出链路的 64MB 上限。
+#[tauri::command]
+fn share_file_from_android_workspace(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<AndroidWorkspaceExportResult, String> {
+    #[cfg(target_os = "android")]
+    {
+        use tauri_plugin_workspace_io::WorkspaceIoExt;
+
+        let target = android_workspace_resolve_file_manager_existing_path(&state, &path, false)?;
+        let root = android_workspace_root(&state)
+            .canonicalize()
+            .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
+        let metadata = fs::metadata(&target)
+            .map_err(|err| format!("读取 Android 工作区导出文件失败 ({}): {err}", target.display()))?;
+        if !metadata.is_file() {
+            return Err("只能导出文件，不能导出目录。".to_string());
+        }
+        let file_name = target
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("workspace-export")
+            .to_string();
+        app.workspace_io()
+            .share_from_device(target.to_string_lossy().to_string())
+            .map_err(|err| format!("Android 工作区分享失败: {err}"))?;
+        Ok(AndroidWorkspaceExportResult {
+            path: android_workspace_relative_display(&root, &target),
+            file_name,
+            mime: android_workspace_mime_from_path(&target),
+            data_base64: String::new(),
+            bytes: metadata.len() as usize,
+        })
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        let _ = state;
+        let _ = path;
+        Err("Android 工作区分享仅在 Android 端可用。".to_string())
+    }
+}
+
 #[tauri::command]
 fn delete_file_from_android_workspace(
     state: State<'_, AppState>,

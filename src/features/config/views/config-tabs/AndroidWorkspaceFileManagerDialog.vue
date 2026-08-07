@@ -694,6 +694,12 @@ async function exportSelectedFile() {
   exporting.value = true;
   setMessage("");
   try {
+    if (isAndroidRuntime()) {
+      // Android WebView 无 navigator.share，走原生 FileProvider + ACTION_SEND
+      const result = await invokeTauri<AndroidWorkspaceExportResult>("share_file_from_android_workspace", { path: selected.path });
+      setMessage(t("config.tools.androidWorkspaceExportDone", { path: result.path }));
+      return;
+    }
     const result = await invokeTauri<AndroidWorkspaceExportResult>("export_file_from_android_workspace", { path: selected.path });
     const blob = base64ToBlob(result.dataBase64, result.mime);
     const file = new File([blob], result.fileName, { type: result.mime || "application/octet-stream" });

@@ -1480,6 +1480,7 @@ pub fn run() {
             import_file_to_android_workspace,
             import_android_workspace_file_from_uri,
             export_file_from_android_workspace,
+            share_file_from_android_workspace,
             delete_file_from_android_workspace,
             terminal_self_check,
             list_terminal_shell_candidates,

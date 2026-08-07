@@ -34,4 +34,15 @@ impl<R: Runtime> WorkspaceIo<R> {
             .map_err(crate::Error::PluginInvoke)?;
         Ok(result)
     }
+
+    /// Share a sandbox file via the Android system share sheet (FileProvider + ACTION_SEND).
+    pub fn share_from_device(&self, path: String) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin::<serde_json::Value>(
+                "shareFromDevice",
+                serde_json::json!({ "path": path }),
+            )
+            .map_err(crate::Error::PluginInvoke)?;
+        Ok(())
+    }
 }

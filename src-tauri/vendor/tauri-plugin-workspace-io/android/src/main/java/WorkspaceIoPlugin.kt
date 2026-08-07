@@ -4,8 +4,10 @@
 package app.tauri.workspace_io
 
 import android.app.Activity
+import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.core.content.FileProvider
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -25,6 +27,11 @@ class ImportStreamArgs {
 @InvokeArg
 class ResolveNameArgs {
   var uri: String? = null
+}
+
+@InvokeArg
+class ShareFileArgs {
+  var path: String? = null
 }
 
 /**
@@ -123,5 +130,47 @@ class WorkspaceIoPlugin(private val activity: Activity) : Plugin(activity) {
       // fallback to lastPathSegment
     }
     invoke.resolveObject(name ?: "")
+  }
+
+  /**
+   * 通过系统分享面板导出沙盒工作区文件。
+   *
+   * WebView 里的 `navigator.share` 在 wry Android WebView 中不可用（前端已证
+   * `share`/`canShare` 均为 false），改用原生 ACTION_SEND + FileProvider
+   * 唤起系统分享面板，绕开 base64 与 Web Share API。
+   */
+  @Command
+  fun shareFromDevice(invoke: Invoke) {
+    val args = invoke.parseArgs(ShareFileArgs::class.java)
+    val pathText = args.path?.trim().orEmpty()
+    if (pathText.isEmpty()) {
+      invoke.reject("缺少文件路径")
+      return
+    }
+    val file = File(pathText)
+    if (!file.isFile) {
+      invoke.reject("文件不存在: $pathText")
+      return
+    }
+    try {
+      val uri = FileProvider.getUriForFile(
+        activity,
+        "${activity.packageName}.workspaceio.fileprovider",
+        file
+      )
+      val mime = activity.contentResolver.getType(uri) ?: "application/octet-stream"
+      val share = Intent(Intent.ACTION_SEND).apply {
+        type = mime
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      }
+      val chooser = Intent.createChooser(share, "分享文件").apply {
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      }
+      activity.startActivity(chooser)
+      invoke.resolveObject("")
+    } catch (e: Exception) {
+      invoke.reject("分享失败: ${e.message}")
+    }
   }
 }
