@@ -32,6 +32,10 @@
 - 远程桥接安全加固：与 iframe 父窗口（手机壳层）的 postMessage 双向通信统一校验约定 origin，转发 targetOrigin 不再使用通配 `*`，防恶意页面伪造密码/会话命令或窃听通知事件；密码消息接收侧额外校验 event.source 必须等于 window.parent，拒绝同 origin 下其他窗口伪造的密码注入
 - 焦点恢复尾部对账改按会话自身 freshness（updatedAt + lastMessageId）指纹判定：不再依赖全局概览水位，避免列表先同步时吞掉视图尚未应用的正式消息收口；同时补充焦点恢复状态机关键路径日志（[焦点恢复] 前缀）便于排查
 - 会话列表聚合位置修复：同一人格聚合块内的简化条目不再被统一排在列表末尾，改为紧跟其完整条目显示，避免与相邻目录的会话错位
+- Android 日志文件输出到外部存储 `/sdcard/Android/data/<包名>/log/backend.log`，可通过 adb 直接查看，不再写入需 root 权限的内部 data 目录。
+- 修复 Android 启动 ClassNotFoundException：workspace-io 插件的 Android 插件标识符从连字符 `app.tauri.workspace-io` 改为下划线 `app.tauri.workspace_io`（与 Kotlin 源码包名一致），避免启动时反射找不到插件类而闪退。
+- 修复 Android 端 STT 语音转写请求失败：`stt_transcribe.rs` 两处裸 `reqwest::Client::builder().build()` 现在注入静态根证书（webpki），避免 HTTPS 证书校验失败导致无法请求语音模型。
+- 全量排查并修复 Android 端其余裸 HTTP 客户端：更新检查/更新日志（`updater_android_stub`）、MCP streamable-http 与 SSE 传输、Codex OAuth 与用量接口、远程 IM 的飞书/钉钉/OneBot/个人微信请求、联网工具与模型列表补充路径，统一注入静态根证书。
 
 ## 发布：v0.55.0
 
