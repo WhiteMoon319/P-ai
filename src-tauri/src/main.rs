@@ -98,6 +98,19 @@ include!("features/delegate.rs");
 
 include!("features/system/commands.rs");
 
+#[cfg(target_os = "windows")]
+fn windows_set_process_app_user_model_id() {
+    use windows_sys::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
+    const AUMID: windows_sys::core::PCWSTR = windows_sys::core::w!("ai.easycall.app");
+    let result = unsafe { SetCurrentProcessExplicitAppUserModelID(AUMID) };
+    if result != 0 {
+        runtime_log_warn(format!(
+            "[通知] 设置进程 AppUserModelID 失败: 0x{:X}",
+            result
+        ));
+    }
+}
+
 fn should_enable_devtools() -> bool {
     if !cfg!(debug_assertions) {
         return false;
@@ -930,6 +943,7 @@ fn graceful_restart_app(app: &AppHandle) {
 }
 
 fn main() {
+    windows_set_process_app_user_model_id();
     init_backend_file_logging();
     install_backend_file_panic_hook();
     unix_extend_process_path_from_login_shell();
