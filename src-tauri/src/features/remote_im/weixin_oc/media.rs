@@ -1,6 +1,11 @@
 fn build_weixin_oc_http_client(timeout_ms: u64) -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_millis(timeout_ms))
+    let mut client_builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(timeout_ms));
+    #[cfg(target_os = "android")]
+    {
+        client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+    }
+    client_builder
         .build()
         .map_err(|err| format!("创建个人微信 HTTP 客户端失败: {err}"))
 }

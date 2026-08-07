@@ -110,6 +110,10 @@ fn build_fetch_client(
             client_builder = client_builder.resolve(host, *addr);
         }
     }
+    #[cfg(target_os = "android")]
+    {
+        client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+    }
     client_builder
         .build()
         .map_err(|err| format!("Build HTTP client failed: {err}"))

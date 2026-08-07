@@ -166,8 +166,13 @@ async fn connect_sse_transport(
         .ok_or_else(|| "SSE MCP url is missing".to_string())?;
     let headers = build_sse_http_headers(parsed)?;
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(MCP_REQUEST_TIMEOUT_SECS))
+    let mut client_builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(MCP_REQUEST_TIMEOUT_SECS));
+    #[cfg(target_os = "android")]
+    {
+        client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+    }
+    let client = client_builder
         .build()
         .map_err(|err| format!("Build MCP SSE HTTP client failed: {err}"))?;
 

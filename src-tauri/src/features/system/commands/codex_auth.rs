@@ -458,8 +458,13 @@ async fn codex_exchange_code_for_tokens(
     code: &str,
     code_verifier: &str,
 ) -> Result<CodexStoredCredential, String> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+    let mut client_builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30));
+    #[cfg(target_os = "android")]
+    {
+        client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+    }
+    let client = client_builder
         .build()
         .map_err(|err| format!("构建 Codex OAuth 客户端失败: {err}"))?;
     let response = client
@@ -493,8 +498,13 @@ async fn codex_refresh_credential(
     if credential.refresh_token.trim().is_empty() {
         return Err("Codex 凭证缺少 refresh_token，无法刷新".to_string());
     }
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+    let mut client_builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30));
+    #[cfg(target_os = "android")]
+    {
+        client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+    }
+    let client = client_builder
         .build()
         .map_err(|err| format!("构建 Codex OAuth 客户端失败: {err}"))?;
     let response = client

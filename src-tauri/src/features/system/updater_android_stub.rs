@@ -52,7 +52,11 @@ fn normalize_android_release_version(raw: &str) -> String {
 
 #[tauri::command]
 async fn fetch_project_changelog_markdown() -> Result<String, String> {
-    let client = reqwest::Client::new();
+    let client_builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15));
+    let client = android_workspace_apply_static_webpki_roots(client_builder)?
+        .build()
+        .map_err(|err| format!("构建更新日志请求客户端失败: {err}"))?;
     let resp = client
         .get(ANDROID_UPDATE_CHANGELOG_RAW)
         .header("User-Agent", "P-ai-Android-Updater")
@@ -108,7 +112,11 @@ async fn check_github_update(
     _respect_cooldown: Option<bool>,
 ) -> Result<GithubUpdateInfo, String> {
     let current_version = env!("CARGO_PKG_VERSION").to_string();
-    let client = reqwest::Client::new();
+    let client_builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15));
+    let client = android_workspace_apply_static_webpki_roots(client_builder)?
+        .build()
+        .map_err(|err| format!("构建更新检查客户端失败: {err}"))?;
     let resp = client
         .get(ANDROID_UPDATE_RELEASE_API)
         .header("User-Agent", "P-ai-Android-Updater")
