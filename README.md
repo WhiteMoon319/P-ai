@@ -9,9 +9,6 @@
 > 本仓库是 **PAI 的 Android 移植版**，基于桌面版 P-AI 二次开发，面向移动端重构。
 > 桌面版原仓库（持续更新、功能最全）：**[kawayiYokami/P-ai](https://github.com/kawayiYokami/P-ai)**
 
-**Languages / 语言**
-[简体中文](README.md) | [English](README.en.md)
-
 ---
 
 > **A self-growing AI work system on Android — agent delegation, long-term memory, tool review, MCP, and sandboxed Linux workspace, all on your phone.**
@@ -32,9 +29,24 @@ PAI 是一个持续进化的 AI 工作系统，不只是聊天客户端。它围
 - **记忆与上下文**：长对话动态压缩归档，低成本全面记忆系统，越用越懂你
 - **Android 沙盒工作区**：内置 proot Linux 运行环境（arm64），支持 Ubuntu Base rootfs 下载/导入，
   在手机上跑 Linux 命令与脚本；`llm-workspace` 直接映射为 Linux `/workspace` 与 `/root/.pai`
-- **移动端细节**：内嵌 WebView 单窗口架构、设置页可滚动、录音权限适配、安全区适配
+- **远程前端模式**：输入电脑 PAI 的地址与端口，手机即成为电脑 PAI 的远程前端，
+  实时同步聊天与设置界面；电脑 PAI 回复时手机仍收到通知
+- **移动端细节**：内嵌 WebView 单窗口架构、设置页可滚动、录音权限适配、安全区适配、
+  系统分享导出沙盒文件、content URI 文件导入
+
+### 下载与安装
+
+APK 发布在 [GitHub Releases](https://github.com/WhiteMoon319/P-ai/releases)：
+
+- 推送 `v*` tag 触发 **Android Release** 构建：release 包 + secrets 签名后发布
+- 推送 `main`/`dev` 分支触发 **Android Build (Debug)** 构建：debug APK 上传到 Actions artifact
+
+安装后在应用内配置 LLM API Key 即可开始使用；如需语音输入、记忆检索等能力，
+可在「设置 → LLM」补充 STT、Embedding、Rerank 等模型。
 
 ### 构建与开发
+
+环境要求：Node.js（pnpm）、Rust 工具链、Android SDK + NDK（建议 r27+）。
 
 ```bash
 # 前端依赖
@@ -49,6 +61,9 @@ pnpm tauri android build --apk --target aarch64 --debug   # debug 包
 pnpm tauri android build --apk --target aarch64           # release 包
 ```
 
+> 注：若全局 Cargo 配置了 `rustc-wrapper=sccache` 或特定镜像源，构建 Android target 时
+> 可能需要用 `--config` 覆盖（见 [docs/android-development-guide.md](docs/android-development-guide.md)）。
+
 CI 构建（GitHub Actions）：
 
 - **Android Build (Debug)**：`main`/`dev` 分支推送或手动触发，构建 debug APK，
@@ -57,6 +72,12 @@ CI 构建（GitHub Actions）：
 - **Android Release**：推送 `v*` tag 或手动触发，release 构建 + secrets 签名
   （`KEYSTORE_BASE64` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD`），
   发布签名 APK 到 GitHub Release
+
+### 文档
+
+- [Android 开发指南](docs/android-development-guide.md)：Android 移植分支的构建、调试与发布说明
+- [更新日志](docs/changelog/)：按版本维护的 changelog（`CHANGELOG.md` 由脚本生成）
+- 桌面版完整文档见上游仓库 [kawayiYokami/P-ai](https://github.com/kawayiYokami/P-ai)
 
 ### 致谢
 
