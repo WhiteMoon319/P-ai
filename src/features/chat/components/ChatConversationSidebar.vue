@@ -270,9 +270,8 @@
                     v-for="simpleItem in (section.simpleFollowers[String(item.conversationId || '').trim()] || [])"
                     :key="`simple-${simpleItem.conversationId}`"
                     type="button"
-                    class="mx-1 flex w-[calc(100%-0.5rem)] items-center rounded-lg py-1 pl-2 pr-2 text-left text-sm transition-colors hover:bg-base-100/70"
+                    class="group mx-1 flex w-[calc(100%-0.5rem)] items-center rounded-lg py-1 pl-2 pr-2 text-left text-sm transition-colors hover:bg-base-100/70"
                     :class="String(simpleItem.conversationId || '').trim() === String(props.activeConversationId || '').trim() ? 'bg-base-300/60' : 'bg-transparent'"
-                    :title="conversationDisplayTitle(simpleItem)"
                     @click="handleConversationCardClick(simpleItem)"
                   >
                     <span class="relative w-10 shrink-0 self-stretch" aria-hidden="true">
@@ -281,8 +280,16 @@
                         :class="simpleItemIndicatorClass(simpleItem)"
                       ></span>
                     </span>
-                    <span class="min-w-0 truncate pl-2 font-medium">{{ conversationDisplayTitle(simpleItem) }}</span>
-                    <span class="ml-auto shrink-0 tabular-nums text-xs text-base-content/45">{{ formatConversationTime(simpleItem.updatedAt) }}</span>
+                    <span class="min-w-0 flex-1 pl-2">
+                      <span class="flex min-w-0 items-center justify-between gap-2">
+                        <span class="min-w-0 truncate font-medium">{{ conversationDisplayTitle(simpleItem) }}</span>
+                        <span class="shrink-0 tabular-nums text-xs text-base-content/45">{{ formatConversationTime(simpleItem.updatedAt) }}</span>
+                      </span>
+                      <span
+                        class="block truncate text-xs transition-all duration-200"
+                        :class="simpleItemSummaryClass(simpleItem)"
+                      >{{ latestPreviewLine(simpleItem) }}</span>
+                    </span>
                   </button>
                 </template>
             </template>
@@ -1176,6 +1183,24 @@ function conversationSourceBadgeLabel(item: ChatConversationOverviewItem): strin
     || workspaceNameFromPath(workspacePath)
     || t("chat.defaultWorkspace"),
   ).trim();
+}
+
+/** 简单条目摘要的默认展开窗口：7 天内有更新的会话 */
+const SIMPLE_ITEM_RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** 未读或 7 天内有更新的简单条目默认展开摘要，其余折叠、hover 展开 */
+function simpleItemSummaryClass(item: ChatConversationOverviewItem): string {
+  if (hasUnreadOrRecentActivity(item)) return "max-h-8 opacity-60";
+  return "max-h-0 opacity-0 group-hover:max-h-8 group-hover:opacity-60";
+}
+
+function hasUnreadOrRecentActivity(item: ChatConversationOverviewItem): boolean {
+  if (Number(item.unreadCount || 0) > 0) return true;
+  const raw = String(item.lastMessageAt || item.updatedAt || "").trim();
+  if (!raw) return false;
+  const time = Date.parse(raw);
+  if (!Number.isFinite(time)) return false;
+  return Date.now() - time <= SIMPLE_ITEM_RECENT_WINDOW_MS;
 }
 
 function simpleItemIndicatorClass(item: ChatConversationOverviewItem): string {
