@@ -1093,9 +1093,23 @@ pub fn run() {
             {
                 let app_root = app.path().app_data_dir()
                     .map_err(|e| format!("获取应用数据目录失败: {e}"))?;
-                set_android_log_root(app_root.clone());
+                // 日志写入外部存储，便于 adb 直接查看：
+                // download_dir = /sdcard/Android/data/<pkg>/files/Download，
+                // 两级父目录即 /sdcard/Android/data/<pkg>，日志落点在 <pkg>/log/。
+                let log_root = match app.path().download_dir() {
+                    Ok(d) => {
+                        let mut r = d.to_path_buf();
+                        // /sdcard/Android/data/<pkg>/files/Download -> <pkg>/ 
+                        r.pop();
+                        r.pop();
+                        r
+                    }
+                    Err(_) => app_root.clone(),
+                };
+                set_android_log_root(log_root.clone());
                 init_backend_file_logging();
                 eprintln!("[P-AI Android] app_data_dir={:?}", app_root);
+                eprintln!("[P-AI Android] log_root={:?}", log_root);
                 let state = AppState::new_with_root(app_root)
                     .map_err(|e| format!("初始化应用状态失败: {e}"))?;
                 eprintln!("[P-AI Android] AppState constructed, config_path={:?}", state.config_path);
