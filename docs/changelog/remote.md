@@ -2,6 +2,18 @@
 
 > 此文件由 `pnpm changelog:build` 自动生成，展示最近版本的完整说明。
 
+## 发布：v0.56.0.1
+
+## 功能
+
+- Android 工作区导出改用原生 FileProvider + ACTION_SEND 系统分享：把沙盒工作区文件通过系统分享面板导出到其他应用，Kotlin shareFromDevice 改用模板 authority `${packageName}.fileprovider`，patch-android-project.sh 向模板 file_paths.xml 追加 root-path 覆盖沙盒根 app_data_dir()。
+
+## 修复
+
+- 工作区 content URI 导入落到当前浏览目录而非默认 imports：导入文件时按当前浏览位置落盘，避免误入默认 imports 目录。
+- 工作区导入命令参数改用 camelCase 键名：前后端参数命名对齐，避免解析失败。
+- 复用模板 FileProvider 解决 manifest merger 冲突：不再手动声明 provider，patch 脚本向模板 file_paths.xml 注入沙盒根，规避与其它插件的 manifest 合并冲突。
+
 ## 发布：v0.56.0
 
 ## 功能
@@ -439,21 +451,3 @@
 - 调整：生图工具参数收敛为“提示词 → 分辨率”，移除无独立意义的宽高比参数，并向 LLM 明确默认分辨率 `512x512`。
 - 优化：默认生图模型与多模态分析模型选择“不配置”时，不再向模型提供 image_generate / read_media 工具。
 - 修复：清理 DaisyUI v4 残留类 form-control / label-text（v5 已移除），修复配置页、委派面板、工作目录选择等多处标签与输入框挤在同一行的布局错乱。
-
-## 发布：v0.37.3
-
-## 图片预览更好用了
-
-- 点击图片预览外的空白区域，或者按键盘的 Esc 键，预览会直接关闭，不用再找关闭按钮。
-
-## 发送消息更快了
-
-- 发送带附件的消息时，去掉了发送前的文件二次核对环节，整体发送速度更快，特别是发送大型文件或批量消息时感受更明显。
-
-## 群聊远程回复更直接
-
-- 群聊中收到超长回复时，默认不会再额外发起二次改写，大段内容也会直接落库发出来，不再被额外打断。
-
-## 群聊入场更稳定
-
-- 修复了群聊中被唤醒时，入场摘要偶尔丢失的问题。

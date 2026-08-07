@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-08-07T06:11:03.320Z",
-  "latestVersion": "v0.56.0",
+  "generatedAt": "2026-08-07T08:46:59.999Z",
+  "latestVersion": "v0.56.0.1",
   "releases": [
+    {
+      "version": "v0.56.0.1",
+      "path": "docs/changelog/releases/v0.56.0.1.md",
+      "summary": "Android 工作区导出改用原生 FileProvider + ACTION_SEND 系统分享：把沙盒工作区文件通过系统分享面板导出到其他应用，Kotlin shareFromDevice 改用模板 authority `${packageName}.fileprovider`，patch-android-project.sh 向模板 file_paths.xml 追加 root-path 覆盖沙盒根 app_data_dir()。"
+    },
     {
       "version": "v0.56.0",
       "path": "docs/changelog/releases/v0.56.0.md",
