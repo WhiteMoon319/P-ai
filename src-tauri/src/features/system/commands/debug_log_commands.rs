@@ -192,7 +192,7 @@ pub fn set_android_log_root(root: PathBuf) {
 #[cfg(target_os = "android")]
 fn resolve_backend_log_path() -> Option<PathBuf> {
     let root = ANDROID_LOG_ROOT.get()?;
-    let log_dir = root.join("log");
+    let log_dir = root.join("logs");
     if fs::create_dir_all(&log_dir).is_err() {
         return None;
     }

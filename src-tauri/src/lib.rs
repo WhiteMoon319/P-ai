@@ -1095,7 +1095,7 @@ pub fn run() {
                     .map_err(|e| format!("获取应用数据目录失败: {e}"))?;
                 // 日志写入外部存储，便于 adb 直接查看：
                 // download_dir = /sdcard/Android/data/<pkg>/files/Download，
-                // 两级父目录即 /sdcard/Android/data/<pkg>，日志落点在 <pkg>/log/。
+                // 两级父目录即 /sdcard/Android/data/<pkg>，日志落点在 <pkg>/logs/。
                 let log_root = match app.path().download_dir() {
                     Ok(d) => {
                         let mut r = d.to_path_buf();
