@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-08-06T03:12:42.181Z",
-  "latestVersion": "v0.55.0",
+  "generatedAt": "2026-08-07T01:59:16.622Z",
+  "latestVersion": "v0.56.0",
   "releases": [
+    {
+      "version": "v0.56.0",
+      "path": "docs/changelog/releases/v0.56.0.md",
+      "summary": "足迹墙按凌晨 4 点分界：凌晨 0:00-3:59 的使用归属前一个分界日（适配通宵工作场景），今日视图、历史日历、年份统计与小时图全部按分界日口径计算；今日小时图 x 轴按分界日顺序排列（04:00 起头，0-3 点收尾）"
+    },
     {
       "version": "v0.55.0",
       "path": "docs/changelog/releases/v0.55.0.md",
