@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-08-07T08:53:57.819Z",
-  "latestVersion": "v0.56.1",
+  "generatedAt": "2026-08-07T09:50:14.747Z",
+  "latestVersion": "v0.56.2",
   "releases": [
+    {
+      "version": "v0.56.2",
+      "path": "docs/changelog/releases/v0.56.2.md",
+      "summary": "修复 i18n 文案缺失：补全三语（zh-CN/zh-TW/en-US）中 welcome 卡片、工具页、远程前端密码等 63 处静态引用缺失的翻译 key，并补齐 zh-TW 热键发送方式的 4 处缺口。"
+    },
     {
       "version": "v0.56.1",
       "path": "docs/changelog/releases/v0.56.1.md",

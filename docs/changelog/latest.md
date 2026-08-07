@@ -1,13 +1,7 @@
 # 变更日志
 
-## 发布：v0.56.1
-
-## 功能
-
-- Android 工作区导出改用原生 FileProvider + ACTION_SEND 系统分享：把沙盒工作区文件通过系统分享面板导出到其他应用，Kotlin shareFromDevice 改用模板 authority `${packageName}.fileprovider`，patch-android-project.sh 向模板 file_paths.xml 追加 root-path 覆盖沙盒根 app_data_dir()。
+## 发布：v0.56.2
 
 ## 修复
 
-- 工作区 content URI 导入落到当前浏览目录而非默认 imports：导入文件时按当前浏览位置落盘，避免误入默认 imports 目录。
-- 工作区导入命令参数改用 camelCase 键名：前后端参数命名对齐，避免解析失败。
-- 复用模板 FileProvider 解决 manifest merger 冲突：不再手动声明 provider，patch 脚本向模板 file_paths.xml 注入沙盒根，规避与其它插件的 manifest 合并冲突。
+- 修复 i18n 文案缺失：补全三语（zh-CN/zh-TW/en-US）中 welcome 卡片、工具页、远程前端密码等 63 处静态引用缺失的翻译 key，并补齐 zh-TW 热键发送方式的 4 处缺口。
