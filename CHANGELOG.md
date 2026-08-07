@@ -5,7 +5,7 @@
 
 ## 最近版本
 
-- [v0.56.0.1](docs/changelog/releases/v0.56.0.1.md) - Android 工作区导出改用原生 FileProvider + ACTION_SEND 系统分享：把沙盒工作区文件通过系统分享面板导出到其他应用，Kotlin shareFromDevice 改用模板 authority `${packageName}.fileprovider`，patch-android-project.sh 向模板 file_paths.xml 追加 root-path 覆盖沙盒根 app_data_dir()。
+- [v0.56.1](docs/changelog/releases/v0.56.1.md) - Android 工作区导出改用原生 FileProvider + ACTION_SEND 系统分享：把沙盒工作区文件通过系统分享面板导出到其他应用，Kotlin shareFromDevice 改用模板 authority `${packageName}.fileprovider`，patch-android-project.sh 向模板 file_paths.xml 追加 root-path 覆盖沙盒根 app_data_dir()。
 - [v0.56.0](docs/changelog/releases/v0.56.0.md) - 足迹墙按凌晨 4 点分界：凌晨 0:00-3:59 的使用归属前一个分界日（适配通宵工作场景），今日视图、历史日历、年份统计与小时图全部按分界日口径计算；今日小时图 x 轴按分界日顺序排列（04:00 起头，0-3 点收尾）
 - [v0.55.0](docs/changelog/releases/v0.55.0.md) - 会话列表分组优化：同目录、同助手的会话自动聚合，最新一条完整展示，其余折叠为单行条目；打开会话不再自动展开所在分组，最近会话的文件夹胶囊可点击展开并定位到分组。
 - [v0.52.0](docs/changelog/releases/v0.52.0.md) - Linux 应用内自动更新（AppImage）：支持自动检查、下载并替换安装新版本，发布流程同步生成 Linux 更新清单与签名；macOS 仍不启用。
