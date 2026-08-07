@@ -57,6 +57,18 @@ fn xcap_list_monitors_infos() -> DesktopToolResult<Vec<XcapMonitorInfo>> {
     Err(desktop_tool_unsupported_error("xcap_list_monitors"))
 }
 
-async fn run_operate_tool(_input: OperateRequest) -> DesktopToolResult<OperateResponse> {
+async fn run_operate_tool(
+    _input: OperateRequest,
+    _screenshots_root: &std::path::Path,
+    _include_base64: bool,
+) -> DesktopToolResult<OperateResponse> {
     Err(desktop_tool_unsupported_error("operate"))
+}
+
+/// Android 无桌面（xcap）截图，operate 截图临时目录恒为空，直接返回未删除。
+fn clear_operate_screenshots_temp(
+    _data_path: &PathBuf,
+    _conversation_id: &str,
+) -> Result<(usize, usize), String> {
+    Ok((0, 0))
 }

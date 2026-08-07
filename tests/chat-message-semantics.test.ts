@@ -10,12 +10,19 @@ import {
   assistantStreamBlocksFromMessageForDisplay,
   inspectUndoablePatchCalls,
   normalizeMessageToolHistoryEvents,
+  normalizeLegacyToolBreakToPlaceholder,
   projectChatActivityForDisplay,
   projectMessageForDisplay,
   projectStreamingChatActivityForDisplay,
   streamBlocksActivitySignature,
   streamBlocksToToolHistoryEvents,
+  TOOL_TEXT_BREAK_PLACEHOLDER,
 } from "../src/utils/chat-message-semantics";
+
+/** 与 UI 渲染/导出一致：占位符是分段边界，展示时转成可见换行 */
+function displayText(text: string): string {
+  return String(text || "").split(TOOL_TEXT_BREAK_PLACEHOLDER).join("\n\n");
+}
 
 function textMessage(id: string, role: ChatMessage["role"], text: string): ChatMessage {
   return {
@@ -59,7 +66,7 @@ describe("chat-message semantics", () => {
 
     const projection = projectMessageForDisplay(message);
 
-    expect(projection.text).toBe("[toolcall:fc_1]\n\n我查好了");
+    expect(displayText(projection.text)).toBe("[toolcall:fc_1]\n\n我查好了");
     expect(projection.activityItems[0]).toMatchObject({ kind: "reasoning", text: "先检查上下文" });
     expect(projection.toolCallCount).toBe(1);
     expect(projection.lastToolName).toBe("remote_im_send");
@@ -314,7 +321,7 @@ describe("chat-message semantics", () => {
       ],
     };
 
-    expect(projectMessageForDisplay(message).text).toBe("先说明第一步 [toolcall:call_1]\n\n再说明第二步 [toolcall:call_2]\n\n最后汇总");
+    expect(displayText(projectMessageForDisplay(message).text)).toBe("先说明第一步 [toolcall:call_1]\n\n再说明第二步 [toolcall:call_2]\n\n最后汇总");
   });
 
   it("does not duplicate assistant history text when final text already contains it", () => {
@@ -773,7 +780,7 @@ describe("chat-message semantics", () => {
     }));
     blocks = appendTextDeltaToStreamBlocks(blocks, "正文2。");
 
-    expect(assistantTextFromStreamBlocks(blocks)).toBe(
+    expect(displayText(assistantTextFromStreamBlocks(blocks))).toBe(
       "正文1。 [toolcall:tool-middle]\n\n正文2。",
     );
   });
@@ -794,8 +801,32 @@ describe("chat-message semantics", () => {
     }));
     blocks = appendTextDeltaToStreamBlocks(blocks, "```ts\nconsole.log(1);\n```");
 
-    expect(assistantTextFromStreamBlocks(blocks)).toBe(
+    expect(displayText(assistantTextFromStreamBlocks(blocks))).toBe(
       "先说明。 [toolcall:tool-before-code]\n\n```ts\nconsole.log(1);\n```",
+    );
+  });
+
+  it("writes a placeholder between blocks when a tool event opens a new block before later text", () => {
+    // 工具事件带 content/reasoning 会 push 新 block；后续正文 delta 追加到新 block。
+    // 跨 block 边界时 join 必须写占位符，否则渲染层无法按工具边界分段。
+    let blocks = appendTextDeltaToStreamBlocks([], "正文1。");
+    blocks = applyAssistantToolEventToStreamBlocks(blocks, JSON.stringify({
+      role: "assistant",
+      content: "工具说明。",
+      tool_calls: [{
+        id: "tool-new-block",
+        type: "function",
+        function: {
+          name: "read",
+          arguments: "{\"path\":\"a.ts\"}",
+        },
+      }],
+    }));
+    blocks = appendTextDeltaToStreamBlocks(blocks, "正文2。");
+
+    expect(blocks.some((block) => block.text.includes("[toolcall:tool-new-block]"))).toBe(true);
+    expect(displayText(assistantTextFromStreamBlocks(blocks))).toBe(
+      "正文1。\n\n工具说明。 [toolcall:tool-new-block]\n\n正文2。",
     );
   });
 
@@ -832,13 +863,13 @@ describe("chat-message semantics", () => {
     }));
     blocks = appendTextDeltaToStreamBlocks(blocks, "下面继续正文。");
 
-    expect(assistantTextFromStreamBlocks(blocks)).toBe(
+    expect(displayText(assistantTextFromStreamBlocks(blocks))).toBe(
       "先说明要并发读取。 [toolcall:tool-a] [toolcall:tool-b]\n\n下面继续正文。",
     );
     expect(blocks).toEqual([{
       reasoning: "",
       reasoningCharCount: 0,
-      text: "先说明要并发读取。 [toolcall:tool-a] [toolcall:tool-b]\n\n下面继续正文。",
+      text: `先说明要并发读取。 [toolcall:tool-a] [toolcall:tool-b]${TOOL_TEXT_BREAK_PLACEHOLDER}下面继续正文。`,
       tools: [{
         toolCallId: "tool-a",
         name: "read",
@@ -876,13 +907,13 @@ describe("chat-message semantics", () => {
     }));
     blocks = appendTextDeltaToStreamBlocks(blocks, "后面才开始正文。");
 
-    expect(assistantTextFromStreamBlocks(blocks)).toBe(
+    expect(displayText(assistantTextFromStreamBlocks(blocks))).toBe(
       "[toolcall:tool-first]\n\n后面才开始正文。",
     );
     expect(blocks).toEqual([{
       reasoning: "",
       reasoningCharCount: 0,
-      text: "[toolcall:tool-first]\n\n后面才开始正文。",
+      text: `[toolcall:tool-first]${TOOL_TEXT_BREAK_PLACEHOLDER}后面才开始正文。`,
       tools: [{
         toolCallId: "tool-first",
         name: "read",
@@ -936,7 +967,7 @@ describe("chat-message semantics", () => {
       ],
     };
 
-    expect(projectMessageForDisplay(message).text).toBe(
+    expect(displayText(projectMessageForDisplay(message).text)).toBe(
       "[toolcall:call_a] [toolcall:call_b]\n\n最后汇总",
     );
   });
@@ -986,5 +1017,29 @@ describe("chat-message semantics", () => {
     expect(projectMessageForDisplay(message).text).toBe(
       "[toolcall:call_a] [toolcall:call_b]\n\n最后汇总",
     );
+  });
+
+  it("normalizes legacy backend tool-break newlines into the segment placeholder", () => {
+    expect(normalizeLegacyToolBreakToPlaceholder(
+      "先说明要并发读取。 [toolcall:call-a] [toolcall:call-b]\n\n下面继续正文。",
+    )).toBe(
+      `先说明要并发读取。 [toolcall:call-a] [toolcall:call-b]${TOOL_TEXT_BREAK_PLACEHOLDER}下面继续正文。`,
+    );
+    // 单工具标记：工具先完成、正文后才开始的场景
+    expect(normalizeLegacyToolBreakToPlaceholder(
+      "[toolcall:tool-first]\n\n后面才开始正文。",
+    )).toBe(
+      `[toolcall:tool-first]${TOOL_TEXT_BREAK_PLACEHOLDER}后面才开始正文。`,
+    );
+  });
+
+  it("keeps legacy normalization idempotent and leaves non-tool breaks untouched", () => {
+    // 已是占位符的文本不得二次转换
+    const alreadyNormalized = `先说明。 [toolcall:done]${TOOL_TEXT_BREAK_PLACEHOLDER}正文。`;
+    expect(normalizeLegacyToolBreakToPlaceholder(alreadyNormalized)).toBe(alreadyNormalized);
+    // 无工具标记的正文换行保持原样
+    expect(normalizeLegacyToolBreakToPlaceholder("普通正文\n\n第二段")).toBe("普通正文\n\n第二段");
+    // 工具标记后无正文（段落结尾）不转换
+    expect(normalizeLegacyToolBreakToPlaceholder("[toolcall:done]\n\n")).toBe("[toolcall:done]\n\n");
   });
 });

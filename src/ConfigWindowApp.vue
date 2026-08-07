@@ -1,6 +1,7 @@
 <template>
   <div class="window-shell text-sm bg-base-200">
     <AppWindowHeader
+      v-if="!hideWindowHeader"
       view-mode="config"
       :current-theme="currentTheme"
       :title-text="t('window.configTitle')"
@@ -142,7 +143,6 @@
         @play-hotkey-record-test="playHotkeyRecordTest"
         @request-microphone-permission="requestMicrophonePermission"
         @capture-hotkey="captureHotkey"
-        @summon-chat-now="summonChatNow"
         @save-agent-avatar="saveAgentAvatar"
         @clear-agent-avatar="clearAgentAvatar"
         @check-update="manualCheckGithubUpdate"
@@ -306,6 +306,16 @@ const tr = (key: string, params?: Record<string, unknown>) => t(key, params as n
 const isMacPlatform = /Mac|iPhone|iPad|iPod/i.test(window.navigator.platform || "");
 const windowControlsVisible = getTransportCapabilities().windowControls;
 
+/** iframe 嵌入且非 VSCode 宿主时隐藏窗口栏：远程前端模式下由宿主壳层提供 header。 */
+const hideWindowHeader = (() => {
+  if (window.self === window.top) return false;
+  const bridgeWindow = window as Window & { acquireVsCodeApi?: unknown };
+  const isVscodeHost =
+    typeof bridgeWindow.acquireVsCodeApi === "function"
+    || window.location.protocol === "vscode-webview:";
+  return !isVscodeHost;
+})();
+
 type ConfigTab =
   | "welcome"
   | "hotkey"
@@ -340,12 +350,13 @@ const config = reactive<AppConfig>({
   githubUpdateMethod: "auto",
   skippedGithubUpdateVersion: "",
   recordHotkey: "CapsLock",
-  recordBackgroundWakeEnabled: true,
+  recordBackgroundWakeEnabled: false,
   minRecordSeconds: 1,
   maxRecordSeconds: 60,
   llmRoundLogCapacity: 3,
   messageNotificationEnabled: true,
   messageNotificationSoundEnabled: false,
+  desktopOperationNoticeEnabled: true,
   selectedApiConfigId: "",
   assistantDepartmentApiConfigId: "",
   visionApiConfigId: undefined,
@@ -372,7 +383,7 @@ const selectedPdfReadMode = ref<"text" | "image">("image");
 const backgroundVoiceScreenshotKeywords = ref("");
 const backgroundVoiceScreenshotMode = ref<"desktop" | "focused_window">("focused_window");
 const instructionPresets = ref<PromptCommandPreset[]>([]);
-const configTab = ref<ConfigTab>("hotkey");
+const configTab = ref<ConfigTab>("welcome");
 const configSearchQuery = ref("");
 
 const status = ref("");
@@ -708,7 +719,7 @@ const {
   },
 });
 
-const { summonChatWindowFromConfig, openGithubRepository } = useWindowActions({
+const { openGithubRepository } = useWindowActions({
   closeWindow,
   minimizeWindow,
   freezeForegroundConversation: () => undefined,
@@ -832,10 +843,6 @@ function openRuntimeLogs() {
   void openTransportWindow("runtimeLogs").catch((error) => {
     console.warn("[运行日志] 打开日志窗口失败", error);
   });
-}
-
-function summonChatNow() {
-  summonChatWindowFromConfig();
 }
 
 async function refreshAllViewData() {

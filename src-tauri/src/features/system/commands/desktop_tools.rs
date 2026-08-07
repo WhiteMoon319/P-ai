@@ -323,6 +323,7 @@ async fn xcap(input: XcapToolInput) -> Result<Value, String> {
                 region: None,
                 save_path: xcap_optional_save_path(&args),
                 webp_quality: xcap_optional_webp_quality(&args),
+                include_base64: true,
             };
             let data = run_capture_window_tool(req, None)
                 .map_err(|err| to_tool_err_string(&err))?;
@@ -340,6 +341,7 @@ async fn xcap(input: XcapToolInput) -> Result<Value, String> {
                 region: None,
                 save_path: xcap_optional_save_path(&args),
                 webp_quality: xcap_optional_webp_quality(&args),
+                include_base64: true,
             };
             let data = run_capture_window_tool(req, Some(window_id))
                 .map_err(|err| to_tool_err_string(&err))?;
@@ -357,6 +359,7 @@ async fn xcap(input: XcapToolInput) -> Result<Value, String> {
                 region: None,
                 save_path: xcap_optional_save_path(&args),
                 webp_quality: xcap_optional_webp_quality(&args),
+                include_base64: true,
             };
             let data = run_screenshot_tool(req)
                 .await
@@ -387,6 +390,7 @@ async fn xcap(input: XcapToolInput) -> Result<Value, String> {
                 }),
                 save_path: xcap_optional_save_path(&args),
                 webp_quality: xcap_optional_webp_quality(&args),
+                include_base64: true,
             };
             let data = run_screenshot_tool(req)
                 .await
@@ -585,6 +589,7 @@ fn winget_package_id_for_host_runtime(kind: &str) -> Result<&'static str, String
     match kind.trim().to_ascii_lowercase().as_str() {
         "git" => Ok("Git.Git"),
         "node" => Ok("OpenJS.NodeJS.LTS"),
+        "rg" | "ripgrep" => Ok("BurntSushi.ripgrep.MSVC"),
         other => Err(format!("不支持的运行时依赖：{other}")),
     }
 }

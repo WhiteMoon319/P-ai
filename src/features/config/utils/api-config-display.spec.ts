@@ -10,6 +10,15 @@ describe("formatApiConfigOptionLabel", () => {
     })).toBe("cpa · gpt-5.5 · 中");
   });
 
+  it("显示名存在时优先用显示名替换模型名本体", () => {
+    expect(formatApiConfigOptionLabel({
+      name: "cpa/gpt-5.5 · 中",
+      model: "gpt-5.5",
+      displayName: "鲸鱼妹",
+      reasoningEffort: "medium",
+    })).toBe("cpa · 鲸鱼妹 · 中");
+  });
+
   it("应仅在聊天显示时把供应商和模型的斜杠改为中点", () => {
     const name = apiConfigDisplayName("惹", "gpt-5.6-terra", "high");
     expect(name).toBe("惹/gpt-5.6-terra · 高");

@@ -5135,6 +5135,70 @@
     }
 
     #[test]
+    fn assistant_delta_broadcast_conversation_title_should_return_title_for_local_chat() {
+        // 钉死：本地普通会话广播 assistantDelta 时附带会话标题（供远程前端通知对齐）。
+        // 标题遵循用户配置的 ui_language：这里设为 en-US，构造无标题且时间解析失败的
+        // 会话，标题应走 "Untitled conversation" 英文兜底，验证标题生成使用用户配置语言。
+        let state = test_chat_runtime_state();
+        let mut config = AppConfig::default();
+        config.ui_language = "en-US".to_string();
+        state_write_config_cached(&state, &config).expect("write config");
+
+        let mut conversation = test_chat_conversation(
+            "title-local-chat",
+            "active",
+            "not-a-valid-rfc3339-time",
+        );
+        conversation.title = String::new();
+        conversation.summary = String::new();
+        conversation.department_id = ASSISTANT_DEPARTMENT_ID.to_string();
+        conversation.agent_id = DEFAULT_AGENT_ID.to_string();
+        state_schedule_conversation_persist(&state, &conversation).expect("persist conversation");
+
+        let title = assistant_delta_broadcast_conversation_title(&state, &conversation.id);
+        assert!(title.is_some(), "本地普通会话应返回会话标题");
+        assert!(
+            title.unwrap().contains("Untitled conversation"),
+            "en-US 配置下无标题会话的标题应走英文兜底文案"
+        );
+    }
+
+    #[test]
+    fn assistant_delta_broadcast_conversation_title_should_return_none_for_non_local_chat() {
+        // 钉死：delegate / remote-IM / system-notification 会话不参与本地通知标题，
+        // 广播不应附带标题。逐一覆盖判定函数列出的全部过滤分支。
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        for (conversation_id, kind) in [
+            ("title-delegate", CONVERSATION_KIND_DELEGATE),
+            ("title-remote-im", CONVERSATION_KIND_REMOTE_IM_CONTACT),
+            ("title-system-notification", CONVERSATION_KIND_SYSTEM_NOTIFICATION),
+        ] {
+            let mut conversation = test_chat_conversation(conversation_id, "active", &now);
+            conversation.title = format!("{conversation_id}-标题");
+            conversation.conversation_kind = kind.to_string();
+            state_schedule_conversation_persist(&state, &conversation).expect("persist conversation");
+
+            let title = assistant_delta_broadcast_conversation_title(&state, &conversation.id);
+            assert!(
+                title.is_none(),
+                "{kind} 会话不应返回本地通知标题，conversation_id={conversation_id}"
+            );
+        }
+    }
+
+    #[test]
+    fn assistant_delta_broadcast_conversation_title_should_return_none_for_missing_conversation() {
+        // 钉死：会话元数据读取失败时广播不附带标题，不能 panic。
+        let state = test_chat_runtime_state();
+        let title = assistant_delta_broadcast_conversation_title(
+            &state,
+            "nonexistent-conversation-id",
+        );
+        assert!(title.is_none(), "读取失败的会话不应返回标题");
+    }
+
+    #[test]
     fn conversation_service_v2_should_read_messages_before_and_after_anchor() {
         let state = test_chat_runtime_state();
         let now = now_iso();
@@ -7279,6 +7343,28 @@
         )
     }
 
+    fn wait_for_session_notification(
+        state: &AppState,
+        conversation_id: &str,
+    ) -> Conversation {
+        let mut last_error = None;
+        for _ in 0..20 {
+            match state_read_conversation_cached(state, conversation_id) {
+                Ok(conversation) if !conversation.messages.is_empty() => return conversation,
+                Ok(_) => last_error = None,
+                Err(err) => last_error = Some(err),
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        match state_read_conversation_cached(state, conversation_id) {
+            Ok(conversation) => conversation,
+            Err(err) => panic!(
+                "read notification target after timeout: {err}; previous_error={:?}",
+                last_error
+            ),
+        }
+    }
+
     #[test]
     fn list_tool_session_targets_should_include_local_and_remote_sessions() {
         let (state, _source_id, _local_target_id, remote_target_id) = seed_session_forward_test_state();
@@ -7309,14 +7395,7 @@
 
         assert_eq!(result.target_kind, "queued");
         assert!(!result.pushed_to_remote);
-        let mut target = state_read_conversation_cached(&state, &target_local_id).expect("read local target");
-        for _ in 0..20 {
-            if !target.messages.is_empty() {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            target = state_read_conversation_cached(&state, &target_local_id).expect("read local target");
-        }
+        let target = wait_for_session_notification(&state, &target_local_id);
         assert_eq!(target.messages.len(), 1);
         assert_eq!(target.messages[0].role, "assistant");
         assert_eq!(
@@ -7341,14 +7420,7 @@
 
         assert_eq!(result.target_kind, "queued");
         assert!(!result.pushed_to_remote);
-        let mut target = state_read_conversation_cached(&state, &remote_target_id).expect("read remote target");
-        for _ in 0..20 {
-            if !target.messages.is_empty() {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            target = state_read_conversation_cached(&state, &remote_target_id).expect("read remote target");
-        }
+        let target = wait_for_session_notification(&state, &remote_target_id);
         assert_eq!(target.messages.len(), 1);
         match &target.messages[0].parts[0] {
             MessagePart::Text { text, .. } => {
@@ -7381,16 +7453,7 @@
             )
             .expect("enqueue auto push remote contact");
 
-        let mut target =
-            state_read_conversation_cached(&state, &remote_target_id).expect("read remote target");
-        for _ in 0..20 {
-            if !target.messages.is_empty() {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            target = state_read_conversation_cached(&state, &remote_target_id)
-                .expect("read remote target");
-        }
+        let target = wait_for_session_notification(&state, &remote_target_id);
         assert_eq!(target.messages.len(), 1);
         match &target.messages[0].parts[0] {
             MessagePart::Text { text, .. } => {
@@ -7421,14 +7484,7 @@
             .expect("forward selection to remote contact");
 
         assert_eq!(result.forwarded_count, 2);
-        let mut target = state_read_conversation_cached(&state, &remote_target_id).expect("read remote target");
-        for _ in 0..20 {
-            if !target.messages.is_empty() {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            target = state_read_conversation_cached(&state, &remote_target_id).expect("read remote target");
-        }
+        let target = wait_for_session_notification(&state, &remote_target_id);
         assert_eq!(target.messages.len(), 1);
         assert_eq!(target.messages[0].role, "assistant");
         assert_eq!(
@@ -12787,4 +12843,3 @@
         assert!(!get_conversation_plan_mode_enabled(&state, "conversation-plan-d").unwrap());
         assert!(!get_conversation_plan_mode_enabled(&state, "conversation-plan-e").unwrap());
     }
-

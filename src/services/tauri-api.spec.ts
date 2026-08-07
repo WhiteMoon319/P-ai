@@ -45,9 +45,12 @@ import {
   exportTransportConfigMigrationPackage,
   getTransportCapabilities,
   invokeTauri,
+  isTauriRuntimeAvailable,
   onTransportNotification,
+  pickBrowserTransportFiles,
   previewTransportConfigMigrationPackage,
   probeTransportConversationStream,
+  requestRemotePasswordFromParent,
   unbindTransportConversationStream,
 } from "./tauri-api";
 
@@ -601,6 +604,252 @@ describe("transport capabilities 平台差异", () => {
       expect(caps.windowControls).toBe(true);
     } finally {
       restore();
+    }
+  });
+});
+
+describe("isTauriRuntimeAvailable", () => {
+  it("iframe 嵌入（self !== top）时即使宿主注入 __TAURI_INTERNALS__ 也视为 Web 宿主", () => {
+    expect(
+      isTauriRuntimeAvailable({
+        self: {},
+        top: {},
+        __TAURI_INTERNALS__: { invoke: (() => undefined) as unknown },
+      }),
+    ).toBe(false);
+  });
+
+  it("桌面独立窗口（self === top）无 __TAURI_INTERNALS__ 时返回 false", () => {
+    const self = {} as unknown;
+    expect(isTauriRuntimeAvailable({ self, top: self })).toBe(false);
+  });
+
+  it("桌面独立窗口存在 __TAURI_INTERNALS__.invoke 时返回 true", () => {
+    const self = {} as unknown;
+    expect(
+      isTauriRuntimeAvailable({
+        self,
+        top: self,
+        __TAURI_INTERNALS__: { invoke: (() => undefined) as unknown },
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("requestRemotePasswordFromParent", () => {
+  const REMOTE_AUTH_SOURCE = "pai-remote-bridge-auth";
+  const ALLOWED_ORIGIN = "https://tauri.localhost";
+
+  function createHostWindowMock() {
+    const parent = { postMessage: vi.fn() } as unknown as Window;
+    const listeners = new Set<(event: MessageEvent) => void>();
+    let timeoutCallback: (() => void) | undefined;
+    const win = {
+      parent,
+      addEventListener: vi.fn(
+        (_type: string, listener: (event: MessageEvent) => void) => {
+          listeners.add(listener);
+        },
+      ),
+      removeEventListener: vi.fn(
+        (_type: string, listener: (event: MessageEvent) => void) => {
+          listeners.delete(listener);
+        },
+      ),
+      setTimeout: vi.fn((callback: () => void) => {
+        timeoutCallback = callback;
+        return 1;
+      }),
+      clearTimeout: vi.fn(),
+    } as unknown as Window;
+    return {
+      win,
+      parent,
+      listeners,
+      runTimeout: () => timeoutCallback?.(),
+    };
+  }
+
+  function makeMessageEvent(
+    source: unknown,
+    origin: string,
+    password: string,
+  ) {
+    return {
+      origin,
+      source,
+      data: {
+        source: REMOTE_AUTH_SOURCE,
+        method: "password",
+        payload: { password },
+      },
+    } as unknown as MessageEvent;
+  }
+
+  it("来源为 window.parent 且 origin 白名单匹配时返回密码", async () => {
+    const { win, parent, listeners } = createHostWindowMock();
+    const promise = requestRemotePasswordFromParent(win);
+    const listener = [...listeners][0];
+    listener(makeMessageEvent(parent, ALLOWED_ORIGIN, "secret"));
+    await expect(promise).resolves.toBe("secret");
+  });
+
+  it("拒绝非 window.parent 来源的密码消息", async () => {
+    const { win, listeners, runTimeout } = createHostWindowMock();
+    const promise = requestRemotePasswordFromParent(win);
+    const listener = [...listeners][0];
+    // 伪造来源：恶意 iframe 以自身作为 event.source，而非 window.parent。
+    listener(makeMessageEvent({} as Window, ALLOWED_ORIGIN, "evil"));
+    // 拒绝路径不 settle，最终由 1500ms 超时兜底返回空串。
+    runTimeout();
+    await expect(promise).resolves.toBe("");
+  });
+
+  it("拒绝非白名单 origin 的密码消息", async () => {
+    const { win, parent, listeners, runTimeout } = createHostWindowMock();
+    const promise = requestRemotePasswordFromParent(win);
+    const listener = [...listeners][0];
+    listener(
+      makeMessageEvent(parent, "https://evil.example.com", "evil"),
+    );
+    runTimeout();
+    await expect(promise).resolves.toBe("");
+  });
+});
+
+describe("pickBrowserTransportFiles 安卓 focus/change 时序", () => {
+  type FakeInput = {
+    type: string;
+    multiple: boolean;
+    style: Record<string, string>;
+    accept: string;
+    files: File[] | null;
+    listeners: Map<string, () => void>;
+    addEventListener: ReturnType<typeof vi.fn>;
+    removeEventListener: ReturnType<typeof vi.fn>;
+    click: ReturnType<typeof vi.fn>;
+    remove: ReturnType<typeof vi.fn>;
+  };
+
+  function createFileDialogHost() {
+    const focusListeners = new Set<() => void>();
+    const input: FakeInput = {
+      type: "",
+      multiple: false,
+      style: {},
+      accept: "",
+      files: null,
+      listeners: new Map(),
+      addEventListener: vi.fn((type: string, listener: () => void) => {
+        input.listeners.set(type, listener);
+      }),
+      removeEventListener: vi.fn(() => undefined),
+      click: vi.fn(() => undefined),
+      remove: vi.fn(() => undefined),
+    };
+    const doc = {
+      createElement: vi.fn((tag: string) => {
+        if (tag !== "input") throw new Error(`unexpected tag ${tag}`);
+        return input;
+      }),
+      body: { appendChild: vi.fn(() => undefined) },
+    };
+    const win = {
+      setTimeout: (cb: () => void, ms?: number) => setTimeout(cb, ms ?? 0),
+      clearTimeout: (id: number) => clearTimeout(id),
+      addEventListener: vi.fn((type: string, listener: () => void) => {
+        if (type === "focus") focusListeners.add(listener);
+      }),
+      removeEventListener: vi.fn((type: string, listener: () => void) => {
+        if (type === "focus") focusListeners.delete(listener);
+      }),
+    };
+    const prevDoc = globalThis.document;
+    const prevWin = globalThis.window;
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      writable: true,
+      value: doc,
+    });
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      writable: true,
+      value: win,
+    });
+    return {
+      input,
+      doc,
+      win,
+      focusListeners,
+      triggerFocus: () => {
+        for (const listener of [...focusListeners]) listener();
+      },
+      triggerChange: () => {
+        input.listeners.get("change")?.();
+      },
+      triggerCancel: () => {
+        input.listeners.get("cancel")?.();
+      },
+      restore: () => {
+        Object.defineProperty(globalThis, "document", {
+          configurable: true,
+          writable: true,
+          value: prevDoc,
+        });
+        Object.defineProperty(globalThis, "window", {
+          configurable: true,
+          writable: true,
+          value: prevWin,
+        });
+      },
+    };
+  }
+
+  it("focus 先于 change 触发时不丢弃已选文件（安卓 Photo Picker 时序）", async () => {
+    const host = createFileDialogHost();
+    try {
+      const file = new File(["a"], "photo.jpg", { type: "image/jpeg" });
+      const promise = pickBrowserTransportFiles({ multiple: true });
+      expect(host.input.click).toHaveBeenCalledTimes(1);
+
+      // 安卓时序：返回页面先触发 window focus，此时 files 尚未填充。
+      host.input.files = null;
+      host.triggerFocus();
+      // focus 兜底定时器未到点，change 随后到达且已带文件。
+      host.input.files = [file];
+      host.triggerChange();
+      await expect(promise).resolves.toEqual([file]);
+    } finally {
+      host.restore();
+    }
+  });
+
+  it("focus 触发后 change 未到且 files 为空时视为取消返回空数组", async () => {
+    vi.useFakeTimers();
+    const host = createFileDialogHost();
+    try {
+      const promise = pickBrowserTransportFiles({ multiple: true });
+      host.input.files = null;
+      host.triggerFocus();
+      // 模拟 focus 兜底 1000ms 到点，仍无 change → 视为取消。
+      await vi.advanceTimersByTimeAsync(1100);
+      await expect(promise).resolves.toEqual([]);
+    } finally {
+      vi.useRealTimers();
+      host.restore();
+    }
+  });
+
+  it("change 正常先触发时直接返回已选文件", async () => {
+    const host = createFileDialogHost();
+    try {
+      const file = new File(["b"], "doc.txt", { type: "text/plain" });
+      const promise = pickBrowserTransportFiles({ multiple: true });
+      host.input.files = [file];
+      host.triggerChange();
+      await expect(promise).resolves.toEqual([file]);
+    } finally {
+      host.restore();
     }
   });
 });

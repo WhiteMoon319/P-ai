@@ -57,23 +57,63 @@ describe("chatForegroundCoordinator", () => {
     expect(values).toEqual(["first", "second"]);
   });
 
-  it("水位游标由各宿主独立维护，且只把当前会话标记为待正式尾部对账", async () => {
-    const requestChanges = vi.fn(async (since: string) => ({
-      changedConversationIds: since ? ["conversation-b"] : ["conversation-a"],
-      serverTime: since ? "watermark-2" : "watermark-1",
+  it("每个视图实例独立维护 freshness 指纹，且只把当前会话标记为待正式尾部对账", async () => {
+    const requestFreshness = vi.fn(async (conversationId: string) => ({
+      lastMessageId: conversationId === "conversation-b" ? "assistant-b" : "assistant-a",
+      updatedAt: "2026-08-07T00:00:00Z",
     }));
-    const app = createForegroundTailWatermarkCoordinator({ requestChanges });
-    const web = createForegroundTailWatermarkCoordinator({ requestChanges });
+    const app = createForegroundTailWatermarkCoordinator({ requestFreshness });
+    const web = createForegroundTailWatermarkCoordinator({ requestFreshness });
 
     await app.observeCurrentConversation("conversation-a");
     await web.observeCurrentConversation("conversation-b");
     await app.observeCurrentConversation("conversation-b");
 
-    expect(requestChanges.mock.calls.map(([since]) => since)).toEqual(["", "", "watermark-1"]);
+    expect(requestFreshness.mock.calls.map(([conversationId]) => conversationId)).toEqual([
+      "conversation-a",
+      "conversation-b",
+      "conversation-b",
+    ]);
     expect(app.shouldReconcileTail("conversation-a")).toBe(false);
     expect(app.shouldReconcileTail("conversation-b")).toBe(true);
-    expect(web.shouldReconcileTail("conversation-b")).toBe(false);
+    // web 实例自己观察过 conversation-b，独立建立指纹并标记待对账
+    expect(web.shouldReconcileTail("conversation-b")).toBe(true);
     app.markTailReconciled("conversation-b");
     expect(app.shouldReconcileTail("conversation-b")).toBe(false);
+    // app 实例清理不影响 web 实例的独立状态
+    expect(web.shouldReconcileTail("conversation-b")).toBe(true);
+  });
+
+  it("同一会话 freshness 未变化时再次观察不会重复标记待对账", async () => {
+    const requestFreshness = vi.fn(async () => ({
+      lastMessageId: "assistant-a",
+      updatedAt: "2026-08-07T00:00:00Z",
+    }));
+    const app = createForegroundTailWatermarkCoordinator({ requestFreshness });
+
+    await app.observeCurrentConversation("conversation-a");
+    expect(app.shouldReconcileTail("conversation-a")).toBe(true);
+    app.markTailReconciled("conversation-a");
+    await app.observeCurrentConversation("conversation-a");
+    expect(app.shouldReconcileTail("conversation-a")).toBe(false);
+  });
+
+  it("会话 updatedAt 变化即使 lastMessageId 相同也会再次标记待对账", async () => {
+    const requestFreshness = vi.fn(async () => ({
+      lastMessageId: "assistant-a",
+      updatedAt: "2026-08-07T00:00:00Z",
+    }));
+    const app = createForegroundTailWatermarkCoordinator({ requestFreshness });
+
+    await app.observeCurrentConversation("conversation-a");
+    expect(app.shouldReconcileTail("conversation-a")).toBe(true);
+    app.markTailReconciled("conversation-a");
+
+    requestFreshness.mockResolvedValueOnce({
+      lastMessageId: "assistant-a",
+      updatedAt: "2026-08-07T00:00:01Z",
+    });
+    await app.observeCurrentConversation("conversation-a");
+    expect(app.shouldReconcileTail("conversation-a")).toBe(true);
   });
 });

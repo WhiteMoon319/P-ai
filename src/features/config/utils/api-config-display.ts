@@ -140,12 +140,12 @@ export function apiConfigDisplayName(
 
 /** 聊天下拉/按钮优先按 reasoningEffort 现算，避免历史 name 偶发缺后缀。 */
 export function formatApiConfigOptionLabel(
-  item: Pick<ApiConfigItem, "name" | "model" | "reasoningEffort"> | null | undefined,
+  item: Pick<ApiConfigItem, "name" | "model" | "displayName" | "reasoningEffort"> | null | undefined,
   t?: TranslateFn,
   options?: ApiConfigDisplayOptions,
 ): string {
   if (!item) return "";
-  const model = String(item.model || "").trim();
+  const model = String(item.displayName || item.model || "").trim();
   const rawName = String(item.name || "").trim();
   const baseFromName = stripReasoningEffortDisplaySuffix(rawName);
   let base = baseFromName;

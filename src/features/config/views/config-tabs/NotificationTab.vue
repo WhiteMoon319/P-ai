@@ -125,11 +125,13 @@ const savedNotificationSnapshot = computed(() => {
     return {
       messageNotificationEnabled: parsed.messageNotificationEnabled !== false,
       messageNotificationSoundEnabled: parsed.messageNotificationSoundEnabled === true,
+      desktopOperationNoticeEnabled: parsed.desktopOperationNoticeEnabled !== false,
     };
   } catch {
     return {
       messageNotificationEnabled: true,
       messageNotificationSoundEnabled: false,
+      desktopOperationNoticeEnabled: true,
     };
   }
 });
@@ -137,6 +139,7 @@ const savedNotificationSnapshot = computed(() => {
 const notificationDirty = computed(() => (
   props.config.messageNotificationEnabled !== savedNotificationSnapshot.value.messageNotificationEnabled
   || props.config.messageNotificationSoundEnabled !== savedNotificationSnapshot.value.messageNotificationSoundEnabled
+  || props.config.desktopOperationNoticeEnabled !== savedNotificationSnapshot.value.desktopOperationNoticeEnabled
 ));
 
 async function handleSaveConfig() {
