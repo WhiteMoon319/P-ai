@@ -605,14 +605,15 @@ export function assistantContentBlocksFromMessage(message: unknown): AssistantSt
 }
 
 export function assistantTextFromStreamBlocks(rawBlocks: unknown): string {
-  return normalizeAssistantStreamBlocks(rawBlocks)
-    .map((block) => {
-      const text = String(block.text || "");
-      if (!text.trim()) return "";
-      return injectMissingDoneToolMarkersIntoStreamText(text, block);
-    })
-    .filter((text) => text.length > 0)
-    .join("\n\n");
+  return joinAssistantHistoryTexts(
+    normalizeAssistantStreamBlocks(rawBlocks)
+      .map((block) => {
+        const text = String(block.text || "");
+        if (!text.trim()) return "";
+        return injectMissingDoneToolMarkersIntoStreamText(text, block);
+      })
+      .filter((text) => text.length > 0),
+  );
 }
 
 export function assistantStreamBlocksFromMessageForDisplay(

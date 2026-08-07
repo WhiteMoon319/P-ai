@@ -806,6 +806,30 @@ describe("chat-message semantics", () => {
     );
   });
 
+  it("writes a placeholder between blocks when a tool event opens a new block before later text", () => {
+    // 工具事件带 content/reasoning 会 push 新 block；后续正文 delta 追加到新 block。
+    // 跨 block 边界时 join 必须写占位符，否则渲染层无法按工具边界分段。
+    let blocks = appendTextDeltaToStreamBlocks([], "正文1。");
+    blocks = applyAssistantToolEventToStreamBlocks(blocks, JSON.stringify({
+      role: "assistant",
+      content: "工具说明。",
+      tool_calls: [{
+        id: "tool-new-block",
+        type: "function",
+        function: {
+          name: "read",
+          arguments: "{\"path\":\"a.ts\"}",
+        },
+      }],
+    }));
+    blocks = appendTextDeltaToStreamBlocks(blocks, "正文2。");
+
+    expect(blocks.some((block) => block.text.includes("[toolcall:tool-new-block]"))).toBe(true);
+    expect(displayText(assistantTextFromStreamBlocks(blocks))).toBe(
+      "正文1。\n\n工具说明。 [toolcall:tool-new-block]\n\n正文2。",
+    );
+  });
+
   it("writes multiple completed tool markers into streaming text and breaks before later text", () => {
     let blocks = appendTextDeltaToStreamBlocks([], "先说明要并发读取。");
     blocks = applyAssistantToolEventToStreamBlocks(blocks, JSON.stringify({
