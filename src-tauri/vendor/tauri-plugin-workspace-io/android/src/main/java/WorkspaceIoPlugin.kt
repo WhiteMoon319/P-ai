@@ -100,7 +100,7 @@ class WorkspaceIoPlugin(private val activity: Activity) : Plugin(activity) {
     val args = invoke.parseArgs(ResolveNameArgs::class.java)
     val uriText = args.uri?.trim().orEmpty()
     if (uriText.isEmpty()) {
-      invoke.resolve("")
+      invoke.resolveObject("")
       return
     }
     val uri = Uri.parse(uriText)
@@ -122,6 +122,6 @@ class WorkspaceIoPlugin(private val activity: Activity) : Plugin(activity) {
     } catch (_: Exception) {
       // fallback to lastPathSegment
     }
-    invoke.resolve(name ?: "")
+    invoke.resolveObject(name ?: "")
   }
 }
