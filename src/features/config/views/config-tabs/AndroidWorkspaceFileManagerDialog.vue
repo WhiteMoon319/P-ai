@@ -671,7 +671,7 @@ async function pickAndImportAndroidFile() {
     const result = await invokeTauri<AndroidWorkspaceImportResult>("import_android_workspace_file_from_uri", {
       fileName: "",
       uri,
-      targetPath: null,
+      targetPath: currentPath.value || "",
     });
     emit("statusChanged", result);
     const fallbackPath = result.fileName ? joinWorkspacePath(currentPath.value, result.fileName) : "";

@@ -973,7 +973,28 @@ fn import_android_workspace_file_from_uri(
         let root = android_workspace_root(&state)
             .canonicalize()
             .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
-        let mut target = android_workspace_resolve_import_target_path(&root, &file_name, target_path.as_deref())?;
+        let safe_name = android_workspace_sanitize_file_name(&file_name);
+        let mut target = match target_path.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+            Some(dir) => {
+                let normalized = normalize_terminal_path_input_for_current_platform(dir);
+                let dir_path = std::path::PathBuf::from(normalized);
+                if dir_path.is_absolute() {
+                    return Err("导入路径必须是 Android 沙盒内的相对路径。".to_string());
+                }
+                let dir_target = root.join(dir_path);
+                if let Some(parent) = dir_target.parent() {
+                    fs::create_dir_all(parent)
+                        .map_err(|err| format!("创建 Android 工作区导入目录失败 ({}): {err}", parent.display()))?;
+                }
+                dir_target.join(&safe_name)
+            }
+            None => {
+                let imports_dir = root.join("imports");
+                fs::create_dir_all(&imports_dir)
+                    .map_err(|err| format!("创建 Android 工作区导入目录失败 ({}): {err}", imports_dir.display()))?;
+                android_workspace_unique_import_path(&imports_dir, &safe_name)
+            }
+        };
         android_workspace_ensure_paths_within_sandbox(&state, &[target.clone()])?;
         android_workspace_ensure_user_file_manager_path(&root, &target, false)?;
         if target.exists() {
