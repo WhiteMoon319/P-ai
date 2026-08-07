@@ -144,7 +144,7 @@ export function buildDepartmentPersonaOptions(
         ownerAgentId: agentId,
         ownerName: agentName,
         providerName: trimText(apiConfig.name || apiConfig.id) || undefined,
-        modelName: trimText(apiConfig.model) || undefined,
+        modelName: trimText(apiConfig.displayName || apiConfig.model) || undefined,
         apiConfigId,
         childDepartmentIds: Array.isArray(department.childDepartmentIds)
           ? department.childDepartmentIds.map(trimText).filter(Boolean)

@@ -975,6 +975,10 @@ async fn mcp_connect_client(state: Option<&AppState>, parsed: &ParsedMcpServerDe
             if !headers.is_empty() {
                 client_builder = client_builder.default_headers(headers);
             }
+            #[cfg(target_os = "android")]
+            {
+                client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+            }
             let custom_client = CustomStreamableHttpClient {
                 client: client_builder
                     .build()

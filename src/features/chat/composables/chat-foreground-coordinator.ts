@@ -33,6 +33,8 @@ export async function runForegroundSnapshotBindingTransaction<TSnapshot extends 
   applySnapshot: (snapshot: TSnapshot) => void;
   bind: () => Promise<void>;
   resume: (snapshot: TSnapshot) => void;
+  /** Web 端打开/切换会话即注册订阅：跳过 snapshotCanBindAssistantStream 门槛，无条件 bind。 */
+  alwaysBind?: boolean;
   onStage?: (stage: ForegroundSnapshotBindingStage) => void;
   onUnbindError?: (error: unknown) => void;
 }): Promise<TSnapshot | null> {
@@ -52,7 +54,7 @@ export async function runForegroundSnapshotBindingTransaction<TSnapshot extends 
   input.applySnapshot(snapshot);
   await unbindPromise;
   if (!input.isCurrent()) return null;
-  if (!snapshotCanBindAssistantStream(snapshot)) return snapshot;
+  if (!input.alwaysBind && !snapshotCanBindAssistantStream(snapshot)) return snapshot;
   input.onStage?.("bind");
   await input.bind();
   if (!input.isCurrent()) return null;
@@ -90,29 +92,42 @@ export function createLatestTaskRunner<T>(task: (input: T) => Promise<void>) {
   return { run, cancel };
 }
 
-/** `conversation.changedSince` 的统一结果；水位只表示是否需要正式尾部对账。 */
-export type ForegroundWatermarkChanges = {
-  changedConversationIds: string[];
-  serverTime: string;
+/** `conversation.freshnessSnapshot` 的统一结果；指纹只表示会话自身是否更新过。 */
+export type ForegroundConversationFreshness = {
+  lastMessageId: string;
+  updatedAt: string;
 };
 
 /**
  * 每个独立聊天视图实例维护自己的读取进度。概览列表的水位不能复用到
  * ChatView，否则列表先同步时会吞掉视图尚未应用的正式消息收口。
+ * 数据源是会话自身的 freshness（updatedAt + lastMessageId），
+ * 不依赖全局概览水位；列表全量同步不会污染本视图的对账判断。
  */
 export function createForegroundTailWatermarkCoordinator(input: {
-  requestChanges: (since: string) => Promise<ForegroundWatermarkChanges>;
+  requestFreshness: (conversationId: string) => Promise<ForegroundConversationFreshness>;
 }) {
-  let lastForegroundMessageWatermark = "";
   let tailReconcilePendingConversationId = "";
+  const knownFreshness = new Map<string, string>();
 
   async function observeCurrentConversation(conversationId: string): Promise<void> {
     const normalizedConversationId = String(conversationId || "").trim();
     if (!normalizedConversationId) return;
-    const result = await input.requestChanges(lastForegroundMessageWatermark);
-    const nextWatermark = String(result?.serverTime || "").trim();
-    if (nextWatermark) lastForegroundMessageWatermark = nextWatermark;
-    if ((result?.changedConversationIds || []).some((id) => String(id || "").trim() === normalizedConversationId)) {
+    const freshness = await input.requestFreshness(normalizedConversationId);
+    const fingerprint = `${freshness.updatedAt}|${freshness.lastMessageId}`;
+    const previousFingerprint = knownFreshness.get(normalizedConversationId);
+    const changed = previousFingerprint !== fingerprint;
+    console.warn("[焦点恢复][水位观察] freshness 指纹对比", {
+      conversationId: normalizedConversationId,
+      updatedAt: freshness.updatedAt,
+      lastMessageId: freshness.lastMessageId,
+      fingerprint,
+      previousFingerprint: previousFingerprint || "(首次观察)",
+      changed,
+      action: changed ? "标记待对账" : "无变化跳过",
+    });
+    if (changed) {
+      knownFreshness.set(normalizedConversationId, fingerprint);
       tailReconcilePendingConversationId = normalizedConversationId;
     }
   }
@@ -129,6 +144,5 @@ export function createForegroundTailWatermarkCoordinator(input: {
     observeCurrentConversation,
     shouldReconcileTail,
     markTailReconciled,
-    get lastForegroundMessageWatermark() { return lastForegroundMessageWatermark; },
   };
 }

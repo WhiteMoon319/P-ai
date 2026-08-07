@@ -19,6 +19,13 @@ import {
 
 type ToolHistoryView = "display" | "prompt";
 
+/**
+ * 「工具后新正文」分段占位符。
+ * 流式累积时（appendTextDeltaToStreamBlocks）遇到 pendingTextBreak 用该占位符代替换行写入文本，
+ * 渲染层按分段开关决定：开启时按占位符切段，关闭时还原为换行。
+ */
+export const TOOL_TEXT_BREAK_PLACEHOLDER = "\uE000TOOLBREAK\uE000";
+
 export type NormalizedToolCall = {
   invocationId: string;
   providerCallId?: string;
@@ -331,8 +338,40 @@ function injectToolInlineMarkersIntoMergedText(text: string, events: NormalizedT
   return output;
 }
 
+/**
+ * 正式/历史消息投影时，把「工具后新正文」边界写成占位符。
+ * 规则：相邻两段中，前一段含工具标记、后一段是含正文的新段时用占位符连接；
+ * 其余情况保持 `\n\n`，与非分段渲染现状一致。
+ */
+function joinAssistantHistoryTexts(texts: string[]): string {
+  const parts: string[] = [];
+  for (let index = 0; index < texts.length; index += 1) {
+    const text = String(texts[index] || "");
+    if (index === 0) {
+      parts.push(text);
+      continue;
+    }
+    const previous = String(texts[index - 1] || "");
+    const previousHasToolMarker = /\[toolcall:[^\]\n]+\]/.test(previous);
+    const currentHasBody = !!stripToolcallMarkers(text);
+    parts.push(previousHasToolMarker && currentHasBody ? TOOL_TEXT_BREAK_PLACEHOLDER : "\n\n");
+    parts.push(text);
+  }
+  return parts.join("");
+}
+
 export function stripToolcallMarkers(text: string): string {
   return String(text || "").replace(/\s*\[toolcall:[^\]\n]+\]/g, "").trim();
+}
+
+/**
+ * 把旧协议（后端 streamCache 快照）里「工具标记后正文边界」的真实换行
+ * 归一化为分段占位符。本地流式追加与正式消息投影已直接写占位符，
+ * 只有刷新恢复路径的 streamBlocks 仍是 `\n\n`，渲染层无法据此分段。
+ */
+export function normalizeLegacyToolBreakToPlaceholder(text: string): string {
+  return String(text || "")
+    .replace(/(\[toolcall:[^\]\n]+\])\n\n(?=\S)/g, `$1${TOOL_TEXT_BREAK_PLACEHOLDER}`);
 }
 
 function chatActivityStats(
@@ -566,14 +605,15 @@ export function assistantContentBlocksFromMessage(message: unknown): AssistantSt
 }
 
 export function assistantTextFromStreamBlocks(rawBlocks: unknown): string {
-  return normalizeAssistantStreamBlocks(rawBlocks)
-    .map((block) => {
-      const text = String(block.text || "");
-      if (!text.trim()) return "";
-      return injectMissingDoneToolMarkersIntoStreamText(text, block);
-    })
-    .filter((text) => text.length > 0)
-    .join("\n\n");
+  return joinAssistantHistoryTexts(
+    normalizeAssistantStreamBlocks(rawBlocks)
+      .map((block) => {
+        const text = String(block.text || "");
+        if (!text.trim()) return "";
+        return injectMissingDoneToolMarkersIntoStreamText(text, block);
+      })
+      .filter((text) => text.length > 0),
+  );
 }
 
 export function assistantStreamBlocksFromMessageForDisplay(
@@ -656,7 +696,7 @@ function mergedAssistantDisplayText(message: ChatMessage, fallbackText: string):
     assistantHistoryTexts.push(pendingMarkerOnlyText);
   }
   if (assistantHistoryTexts.length === 0) return finalText;
-  if (!finalText.trim()) return assistantHistoryTexts.join("\n\n");
+  if (!finalText.trim()) return joinAssistantHistoryTexts(assistantHistoryTexts);
   const assistantHistoryTextsWithoutRawText = assistantHistoryTexts.filter((text) => !stripToolcallMarkers(text));
   if (
     assistantHistoryTextsWithoutRawText.length === assistantHistoryTexts.length
@@ -672,10 +712,10 @@ function mergedAssistantDisplayText(message: ChatMessage, fallbackText: string):
     const missingMarkerOnlyTexts = assistantHistoryTextsWithoutRawText
       .filter((text) => !injected.includes(text));
     return missingMarkerOnlyTexts.length > 0
-      ? [...missingMarkerOnlyTexts, injected].join("\n\n")
+      ? joinAssistantHistoryTexts([...missingMarkerOnlyTexts, injected])
       : injected;
   }
-  return [...assistantHistoryTexts, finalText].join("\n\n");
+  return joinAssistantHistoryTexts([...assistantHistoryTexts, finalText]);
 }
 
 export function streamBlocksToActivityItems(rawBlocks: unknown, running = false): ChatActivityItem[] {
@@ -692,7 +732,7 @@ export function streamBlocksToActivityItems(rawBlocks: unknown, running = false)
       });
     }
     const text = String(block.text || "").trim();
-    if (text) {
+    if (stripToolcallMarkers(text)) {
       items.push({
         kind: "content",
         id: `stream-block-${blockIndex}-content`,
@@ -883,7 +923,7 @@ export function appendTextDeltaToStreamBlocks(rawBlocks: unknown, delta: string)
   if (!text) return blocks;
   const block = ensureAssistantStreamBlock(blocks);
   if (block.pendingTextBreak && String(block.text || "").trim()) {
-    block.text = `${String(block.text || "")}\n\n${text}`;
+    block.text = `${String(block.text || "")}${TOOL_TEXT_BREAK_PLACEHOLDER}${text}`;
   } else {
     block.text = `${String(block.text || "")}${text}`;
   }

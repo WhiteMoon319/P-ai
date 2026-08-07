@@ -332,8 +332,17 @@ async fn codex_fetch_usage_payload(
     url: &str,
     auth: &CodexRuntimeAuth,
 ) -> Result<(CodexUsagePayload, String), CodexUsageRequestError> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+    let mut client_builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30));
+    #[cfg(target_os = "android")]
+    {
+        client_builder = android_workspace_apply_static_webpki_roots(client_builder)
+            .map_err(|err| CodexUsageRequestError {
+                status_code: None,
+                message: err,
+            })?;
+    }
+    let client = client_builder
         .build()
         .map_err(|err| CodexUsageRequestError {
             status_code: None,
@@ -377,8 +386,17 @@ async fn codex_consume_rate_limit_reset_credit_request(
     url: &str,
     auth: &CodexRuntimeAuth,
 ) -> Result<CodexConsumeRateLimitResetCreditResult, CodexUsageRequestError> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+    let mut client_builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30));
+    #[cfg(target_os = "android")]
+    {
+        client_builder = android_workspace_apply_static_webpki_roots(client_builder)
+            .map_err(|err| CodexUsageRequestError {
+                status_code: None,
+                message: err,
+            })?;
+    }
+    let client = client_builder
         .build()
         .map_err(|err| CodexUsageRequestError {
             status_code: None,

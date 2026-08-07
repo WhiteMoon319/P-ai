@@ -4,7 +4,7 @@
       <div class="flex flex-col gap-3">
         <div class="join w-full">
           <button v-for="tab in capabilityTabs" :key="tab.id" class="btn btn-sm join-item flex-1" type="button"
-            :class="activeTopTab === tab.id ? 'btn-primary' : 'btn-ghost'" @click="switchCapabilityTab(tab.id)">
+            :class="activeTopTab === tab.id ? 'btn-primary' : 'bg-base-100'" @click="switchCapabilityTab(tab.id)">
             {{ tab.label }}
           </button>
         </div>
@@ -214,7 +214,7 @@
                 :context-window-max="contextWindowMax(modelCard)"
                 @select="selectModelCard(modelCard.id)"
                 @remove="removeModelGroup(modelCard)"
-                @sync-metadata="void syncModelMetadata(modelCard)"
+                @sync-metadata="handleModelCardSyncMetadata(modelCard)"
                 @select-option="(option: string) => selectModelOption(modelCard, option)"
                 @toggle-max-output="handleCustomMaxOutputTokensToggle(modelCard)"
                 @reasoning-change="(payload: { value: string; checked: boolean }) => setGroupReasoningEffort(modelCard, payload.value, payload.checked)"
@@ -555,7 +555,7 @@ function modelDisplayLabel(
   model: ApiModelConfigItem | null | undefined,
 ): string {
   const providerLabel = String(provider?.name || provider?.id || "").trim();
-  const modelLabel = String(model?.model || "").trim() || t("config.api.unnamedModel");
+  const modelLabel = String(model?.displayName || model?.model || "").trim() || t("config.api.unnamedModel");
   const reasoningValue = String(model?.reasoningEffort || "").trim();
   const reasoningLabel = reasoningEffortDisplayLabel(reasoningValue);
   const base = providerLabel ? `${providerLabel}/${modelLabel}` : modelLabel;
@@ -611,7 +611,8 @@ function modelGroupForCard(modelCard: ApiModelConfigItem): ActiveModelGroup | nu
 
 function modelGroupDisplayLabel(modelCard: ApiModelConfigItem): string {
   const group = modelGroupForCard(modelCard);
-  const modelName = String(modelCard.model || "").trim() || t("config.api.unnamedModel");
+  const displayName = String(modelCard.displayName || "").trim();
+  const modelName = displayName || String(modelCard.model || "").trim() || t("config.api.unnamedModel");
   const sameNameGroups = activeModelGroups.value.filter((candidate) => candidate.primary.model === modelCard.model);
   if (!group || sameNameGroups.length <= 1) return modelName;
   const peers = sameNameGroups.map((candidate) => candidate.primary);
@@ -692,7 +693,6 @@ const providerTemplateValues = computed<Record<string, unknown>>({
     if (typeof values.baseUrl === "string") provider.baseUrl = values.baseUrl;
     if (typeof values.requestFormat === "string" && values.requestFormat !== provider.requestFormat) {
       provider.requestFormat = values.requestFormat as ApiRequestFormat;
-      applyProtocolDefaults(provider);
       if (provider.requestFormat !== "codex") {
         stopCodexAuthPolling();
       } else {
@@ -1122,6 +1122,7 @@ function cloneProvider(provider: ApiProviderConfigItem): ApiProviderConfigItem {
       ? provider.models.map((model) => ({
         id: String(model.id || "").trim(),
         model: String(model.model || "").trim(),
+        displayName: String(model.displayName || "").trim(),
         deprecated: !!model.deprecated,
         enableImage: !!model.enableImage,
         enableAudio: !!model.enableAudio,
@@ -1180,6 +1181,7 @@ function normalizeProviderForCompare(provider: ApiProviderConfigItem) {
       ? provider.models.map((model) => ({
         id: String(model.id || "").trim(),
         model: String(model.model || "").trim(),
+        displayName: String(model.displayName || "").trim(),
         deprecated: !!model.deprecated,
         enableImage: !!model.enableImage,
         enableAudio: !!model.enableAudio,
@@ -1265,7 +1267,7 @@ function normalizeProviderRequestFormats() {
   }
 }
 
-function createModel(seed: string, name = "gpt-4o-mini"): ApiModelConfigItem {
+function createModel(seed: string, name = ""): ApiModelConfigItem {
   return {
     id: `api-model-${seed}`,
     model: name,
@@ -1302,8 +1304,8 @@ function createProvider(seed: string, capability: ApiCapability = selectedCapabi
     codexLocalAuthPath: DEFAULT_CODEX_LOCAL_AUTH_PATH,
     apiKeys: isCodex ? [] : [""],
     keyCursor: 0,
-    cachedModelOptions: isCodex ? ["gpt-5.5"] : ["gpt-4o-mini"],
-    models: [createModel(seed, isCodex ? "gpt-5.5" : "gpt-4o-mini")],
+    cachedModelOptions: [],
+    models: [createModel(seed)],
     failureRetryCount: 0,
   };
 }
@@ -1345,10 +1347,8 @@ function selectModelCard(modelId: string) {
 async function addProvider() {
   const seed = buildProviderSeed();
   const provider = createProvider(seed, selectedCapability.value);
-  applyProtocolDefaults(provider);
   props.config.apiProviders.push(provider);
   props.config.selectedApiConfigId = `${provider.id}::${provider.models[0].id}`;
-  await Promise.resolve(props.saveApiConfigAction());
 }
 
 function firstActiveApiConfigIdExcluding(excludedIds: Set<string>): string {
@@ -1455,10 +1455,8 @@ async function switchCapabilityTab(capability: ApiTopTab) {
   }
   const seed = buildProviderSeed();
   const provider = createProvider(seed, capability);
-  applyProtocolDefaults(provider);
   props.config.apiProviders.push(provider);
   props.config.selectedApiConfigId = `${provider.id}::${provider.models[0].id}`;
-  await Promise.resolve(props.saveApiConfigAction());
 }
 
 function revertUnsavedConfigIfNeeded() {
@@ -1490,7 +1488,6 @@ function addModelCard() {
     model.model = "gpt-5.5";
   }
   provider.models.push(model);
-  applyProtocolDefaults(provider);
   props.config.selectedApiConfigId = `${provider.id}::${model.id}`;
 }
 
@@ -1587,6 +1584,20 @@ function selectModelOption(modelCard: ApiModelConfigItem, option: string) {
   void syncModelMetadata(modelCard);
 }
 
+function handleModelCardSyncMetadata(modelCard: ApiModelConfigItem) {
+  const group = modelGroupForCard(modelCard);
+  if (group) {
+    // 模型卡聚合同一 model 的多个思维等级变体，显示名需同步到组内所有卡片，
+    // 否则只有 primary 生效，树/下拉里其他思维等级仍显示原始模型名。
+    const displayName = String(modelCard.displayName || "").trim();
+    for (const card of group.cards) {
+      if (card === modelCard) continue;
+      card.displayName = displayName;
+    }
+  }
+  void syncModelMetadata(modelCard);
+}
+
 async function syncModelMetadata(modelCard: ApiModelConfigItem) {
   const provider = selectedProvider.value;
   const model = String(modelCard.model || "").trim();
@@ -1645,7 +1656,6 @@ async function syncModelMetadata(modelCard: ApiModelConfigItem) {
 
 function resolveCodexProvider(provider?: ApiProviderConfigItem | null): ApiProviderConfigItem | null {
   if (!provider || provider.requestFormat !== "codex") return null;
-  applyProtocolDefaults(provider);
   return provider;
 }
 
@@ -1773,7 +1783,6 @@ function applyGeneratedBaseUrl(presetId?: string) {
   }
   if (!generatedBaseUrl.value) return;
   selectedProvider.value.requestFormat = linkHelperActiveProtocol.value;
-  applyProtocolDefaults(selectedProvider.value);
   selectedProvider.value.baseUrl = generatedBaseUrl.value;
 }
 
@@ -1789,7 +1798,13 @@ async function openProviderSite(preset: ProviderPreset) {
 async function handleSaveApiConfig() {
   const provider = selectedProvider.value;
   if (provider) {
-    applyProtocolDefaults(provider);
+    const hasEmptyModel = (provider.models || []).some(
+      (model) => !model.deprecated && !String(model.model || "").trim(),
+    );
+    if (hasEmptyModel) {
+      props.setStatusAction(t("config.api.emptyModelNotAllowed"));
+      return;
+    }
     provider.cachedModelOptions = Array.from(new Set(providerModelOptions.value));
   }
   await Promise.resolve(props.saveApiConfigAction());

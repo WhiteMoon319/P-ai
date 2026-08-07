@@ -13,6 +13,14 @@ type WebBridgeConfig = {
 // 远程前端模式：iframe 内电脑 PAI 页面与手机 PAI 壳层之间的密码认证消息源标识。
 const REMOTE_AUTH_BRIDGE_SOURCE = "pai-remote-bridge-auth";
 
+// 远程前端模式：允许 postMessage 桥接的壳层 origin 白名单。
+// Android Tauri WebView asset 协议 origin 为 http://tauri.localhost（注意是 http 非 https，
+// 与桌面壳层约定不同）；接收侧校验 event.origin、转发侧 targetOrigin 均使用此值。
+export const REMOTE_BRIDGE_ALLOWED_ORIGIN = "http://tauri.localhost";
+
+// 远程前端模式：手机 PAI 壳层 → 本页面的会话命令消息源标识（与认证方向相反）。
+const REMOTE_COMMAND_BRIDGE_SOURCE = "pai-remote-bridge-command";
+
 export type TransportHostWorkspace = {
   path: string;
   name: string;
@@ -193,9 +201,24 @@ const WEB_BRIDGE_COMMAND_TIMEOUT_MS: Record<string, number> = {
   test_voice_connection: WEB_BRIDGE_LONG_TIMEOUT_MS,
 };
 
-function isTauriRuntimeAvailable(): boolean {
-  if (typeof window === "undefined") return false;
-  const internals = (window as Window & { __TAURI_INTERNALS__?: { invoke?: unknown } }).__TAURI_INTERNALS__;
+export type TauriRuntimeProbeWindow = {
+  top?: unknown;
+  self: unknown;
+  __TAURI_INTERNALS__?: { invoke?: unknown };
+};
+
+/** 探测当前是否运行在桌面 Tauri 原生环境（用于宿主能力判定）。
+ *  被 iframe 嵌入（远程前端 / VSCode 侧边栏）时视为 Web 宿主：宿主 WebView
+ *  可能注入 __TAURI_INTERNALS__（如手机 Tauri WebView 会注入到跨域 iframe），
+ *  若按原生检测会误判为桌面 Tauri 环境，从而跳过 WS 桥接走 invoke。
+ *  hostWindow 参数仅测试注入用；缺省取全局 window。 */
+export function isTauriRuntimeAvailable(
+  hostWindow?: TauriRuntimeProbeWindow,
+): boolean {
+  const win = hostWindow ?? (typeof window !== "undefined" ? window : undefined);
+  if (!win) return false;
+  if (typeof win.top !== "undefined" && win.self !== win.top) return false;
+  const internals = (win as TauriRuntimeProbeWindow).__TAURI_INTERNALS__;
   return typeof internals?.invoke === "function";
 }
 
@@ -284,7 +307,8 @@ function browserFileAcceptValue(filters: TransportFileDialogOptions["filters"]):
     .join(",");
 }
 
-function pickBrowserTransportFiles(options: TransportFileDialogOptions): Promise<File[]> {
+/** 浏览器 File 选择入口。导出仅为单测可直测安卓 focus/change 时序；生产调用面不变。 */
+export function pickBrowserTransportFiles(options: TransportFileDialogOptions): Promise<File[]> {
   if (typeof document === "undefined") return Promise.resolve([]);
   return new Promise<File[]>((resolve) => {
     const input = document.createElement("input");
@@ -304,10 +328,16 @@ function pickBrowserTransportFiles(options: TransportFileDialogOptions): Promise
       input.remove();
       resolve(files);
     };
+    // 安卓「照片与视频」选择器返回时 focus 先于 change 触发，且 focus 时
+    // input.files 尚未填充；直接在此刻 finish 会把已选文件静默丢弃。
+    // 延迟后先看 change 是否已处理（settled），给 change 让路；
+    // 超时仍未收到 change 时，files 非空视为选中、为空视为用户取消。
+    // 窗口取 1000ms：Photo Picker 多选返回慢，change 可能晚于 focus 数百毫秒才到。
     const handleFocus = () => {
       focusTimer = window.setTimeout(() => {
+        if (settled) return;
         finish(Array.from(input.files || []));
-      }, 0);
+      }, 1000);
     };
     input.addEventListener("change", () => finish(Array.from(input.files || [])), { once: true });
     input.addEventListener("cancel", () => finish([]), { once: true });
@@ -440,7 +470,7 @@ function postTransportHostMessage(message: unknown): boolean {
     return true;
   }
   if (window.parent && window.parent !== window) {
-    window.parent.postMessage(message, "*");
+    window.parent.postMessage(message, REMOTE_BRIDGE_ALLOWED_ORIGIN);
     return true;
   }
   return false;
@@ -457,6 +487,16 @@ export function getTransportCapabilities(): TransportCapabilities {
 
 /** 应用更新仅依赖桌面宿主的原生更新能力，业务层无需自行探测运行时。 */
 export function canUseTransportGithubUpdate(): boolean {
+  return isTauriRuntimeAvailable();
+}
+
+/** 本机依赖检测仅桌面宿主提供；Web/VS Code 无本机环境可查，业务层直接读语义能力。 */
+export function canUseTransportHostRuntimeCheck(): boolean {
+  return isTauriRuntimeAvailable();
+}
+
+/** 按住说话录音仅桌面宿主展示；Web 端不提供该能力，业务层直接读语义能力控制显隐。 */
+export function canUseTransportSpeechRecording(): boolean {
   return isTauriRuntimeAvailable();
 }
 
@@ -875,7 +915,7 @@ export function installTransportHostRuntimePrerequisite<T>(kind: string): Promis
 }
 
 export function updateTransportRecordHotkey<T>(recordHotkey: string): Promise<T> {
-  return invokeRequiredNativeTransport<T>("录音热键注册", "update_record_hotkey", {
+  return invokeRequiredNativeTransport<T>("录音快捷键注册", "update_record_hotkey", {
     input: { recordHotkey: String(recordHotkey || "").trim() },
   });
 }
@@ -1371,6 +1411,7 @@ const TAURI_COMMAND_ALIASES: Record<string, string> = {
   "toolReview.code.submit": "submit_tool_review_code",
   "toolReview.batches.list": "list_tool_review_batches",
   "toolReview.item.detail": "get_tool_review_item_detail",
+  "toolReview.batch.details": "get_tool_review_batch_details",
   "toolReview.item.review": "run_tool_review_for_call",
   "toolReview.batch.review": "run_tool_review_for_batch",
   "toolReview.item.decision": "set_tool_review_item_user_decision",
@@ -1490,6 +1531,7 @@ const TAURI_INPUT_WRAPPED_COMMANDS = new Set([
   "toolReview.code.submit",
   "toolReview.batches.list",
   "toolReview.item.detail",
+  "toolReview.batch.details",
   "toolReview.item.review",
   "toolReview.batch.review",
   "toolReview.item.decision",
@@ -1894,7 +1936,8 @@ function createWebTransportStreamBinding(
     const record = payload && typeof payload === "object"
       ? payload as { conversationId?: unknown; event?: unknown }
       : null;
-    if (String(record?.conversationId || "").trim() !== conversationId) return;
+    const payloadConversationId = String(record?.conversationId || "").trim();
+    if (payloadConversationId !== conversationId) return;
     const event = record?.event;
     const kind = event && typeof event === "object"
       ? String((event as { kind?: unknown }).kind || "").trim()
@@ -1919,7 +1962,15 @@ function createWebTransportStreamBinding(
 /**
  * 统一前台流式绑定。桌面端注册 Tauri Channel；网络端把同一份后端通知
  * 适配成 TransportChannel，聊天状态机不再维护第二套订阅实现。
+ *
+ * 当前传输下聊天流是否需要前端显式发起绑定：
+ * 桌面端 sendChat 的原生 Tauri Channel 已覆盖流式，再 bind 会双通道双写；
+ * Web 端 Channel 无法穿过 JSON-RPC，必须显式 bind 才能收到正文 delta。
  */
+export function chatStreamNeedsFrontendBind(): boolean {
+  return !isTauriRuntimeAvailable();
+}
+
 export async function bindTransportConversationStream<T>(input: {
   bindingId: string;
   conversationId?: string;
@@ -2105,22 +2156,50 @@ async function requestWebBridgePassword(): Promise<string> {
   return password;
 }
 
-/** 向父窗口（手机 PAI 壳层）请求远程访问密码；父窗口未回复或超时返回空串。 */
-function requestRemotePasswordFromParent(): Promise<string> {
+/**
+ * 订阅远程前端壳层的会话命令（toggle-conversation-list / create-conversation）。
+ * 只接受约定壳层 origin 与来源标识的消息，防恶意父页面伪造会话操作。
+ * 返回取消订阅函数；桌面独立窗口（self === top）不注册监听。
+ */
+export function onTransportRemoteChatCommand(handler: (method: string) => void): () => void {
+  if (typeof window === "undefined" || window.self === window.top) return () => {};
+  const listener = (event: MessageEvent) => {
+    if (event.origin !== REMOTE_BRIDGE_ALLOWED_ORIGIN) return;
+    const data = event.data as { source?: unknown; method?: unknown } | null;
+    if (!data || typeof data !== "object") return;
+    if (data.source !== REMOTE_COMMAND_BRIDGE_SOURCE) return;
+    const method = String(data.method || "").trim();
+    if (method) handler(method);
+  };
+  window.addEventListener("message", listener);
+  return () => window.removeEventListener("message", listener);
+}
+
+/** 向父窗口（手机 PAI 壳层）请求远程访问密码；父窗口未回复或超时返回空串。
+ *  HostWindow 由调用方注入，便于在测试中提供可控的父窗口与消息监听。 */
+export async function requestRemotePasswordFromParent(
+  hostWindow?: Window,
+): Promise<string> {
+  const win =
+    hostWindow ?? (typeof window !== "undefined" ? window : undefined);
+  if (!win || typeof win.parent === "undefined") {
+    return "";
+  }
   return new Promise((resolve) => {
-    if (typeof window === "undefined" || typeof window.parent === "undefined") {
-      resolve("");
-      return;
-    }
+
     let settled = false;
     const settle = (password: string) => {
       if (settled) return;
       settled = true;
-      window.removeEventListener("message", listener);
-      window.clearTimeout(timer);
+      win.removeEventListener("message", listener);
+      win.clearTimeout(timer);
       resolve(password);
     };
     const listener = (event: MessageEvent) => {
+      // 只接受约定壳层 origin 与父窗口来源的消息，防恶意页面伪造密码注入。
+      if (event.origin !== REMOTE_BRIDGE_ALLOWED_ORIGIN) return;
+      if (event.source !== win.parent) return;
+
       const data = event.data as { source?: unknown; method?: unknown; payload?: unknown } | null;
       if (!data || typeof data !== "object") return;
       if (data.source !== REMOTE_AUTH_BRIDGE_SOURCE) return;
@@ -2128,12 +2207,13 @@ function requestRemotePasswordFromParent(): Promise<string> {
       const password = String((data.payload as { password?: unknown } | null)?.password || "").trim();
       settle(password);
     };
-    const timer = window.setTimeout(() => settle(""), 1500);
-    window.addEventListener("message", listener);
+    const timer = win.setTimeout(() => settle(""), 1500);
+    win.addEventListener("message", listener);
     try {
-      window.parent.postMessage(
+      win.parent.postMessage(
+
         { source: REMOTE_AUTH_BRIDGE_SOURCE, method: "request-password" },
-        "*",
+        REMOTE_BRIDGE_ALLOWED_ORIGIN,
       );
     } catch {
       settle("");
@@ -2280,17 +2360,20 @@ function isWebBridgeAuthenticationRefreshError(error: unknown): boolean {
 function emitWebBridgeNotification(method: string, payload: unknown) {
   // 远程前端模式：远程 sidebar 被手机 PAI 以 iframe 嵌入时（window.self !== window.top），
   // 把 bridge 通知转发给父窗口（手机 PAI 壳层），由壳层构建 Android 通知。
+
   // 桌面独立窗口 self === top 不触发，既有行为不变。
   if (typeof window !== "undefined" && window.self !== window.top) {
     try {
       window.parent.postMessage(
         { source: "pai-remote-bridge", method, payload },
-        "*",
+        REMOTE_BRIDGE_ALLOWED_ORIGIN,
       );
     } catch {
       // 转发失败不影响本地事件分发
     }
-  }  const handlers = webBridgeNotificationHandlers.get(method);
+  }
+  const handlers = webBridgeNotificationHandlers.get(method);
+
   if (!handlers) return;
   for (const handler of handlers) handler(payload);
 }

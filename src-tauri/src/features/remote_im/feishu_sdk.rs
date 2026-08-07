@@ -26,8 +26,13 @@ impl FeishuSdk {
             );
             return Err(err);
         }
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(12))
+        let mut client_builder = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(12));
+        #[cfg(target_os = "android")]
+        {
+            client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+        }
+        let client = client_builder
             .build()
             .map_err(|err| {
                 let msg = format!("build feishu client failed: {err}");
@@ -300,8 +305,14 @@ impl RemoteImSdk for FeishuSdk {
                     "payload_summary": remote_im_payload_media_summary(payload)
                 }),
             );
-            let client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(12))
+            let mut client_builder = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(12));
+            #[cfg(target_os = "android")]
+            {
+                client_builder = android_workspace_apply_static_webpki_roots(client_builder)
+                    .map_err(RemoteImSdkSendError::definitely_not_sent)?;
+            }
+            let client = client_builder
                 .build()
                 .map_err(|err| {
                     let msg = format!("build feishu client failed: {err}");

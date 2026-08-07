@@ -12,15 +12,13 @@ import { formalizeMessages } from "./use-chat-flow-utils";
  */
 export function useChatForegroundRuntime(bindings: Record<string, any>) {
   const foregroundTailWatermark = createForegroundTailWatermarkCoordinator({
-    requestChanges: async (since) => {
-      const payload = await invokeTauri<{ changed?: Array<{ conversationId?: string }>; serverTime?: string }>("conversation.changedSince", {
-        input: { since: since || null },
+    requestFreshness: async (conversationId) => {
+      const snapshot = await invokeTauri<{ lastMessageId?: string | null; updatedAt?: string | null }>("conversation.freshnessSnapshot", {
+        input: { conversationId, agentId: null },
       });
       return {
-        changedConversationIds: (Array.isArray(payload?.changed) ? payload.changed : [])
-          .map((item) => String(item?.conversationId || "").trim())
-          .filter(Boolean),
-        serverTime: String(payload?.serverTime || "").trim(),
+        lastMessageId: String(snapshot?.lastMessageId || "").trim(),
+        updatedAt: String(snapshot?.updatedAt || "").trim(),
       };
     },
   });
@@ -65,6 +63,7 @@ export function useChatForegroundRuntime(bindings: Record<string, any>) {
   async function reconcileForegroundConversation(reason: string) {
     const conversationId = String(bindings.currentChatConversationId.value || "").trim();
     if (!conversationId) return;
+    console.warn("[焦点恢复][入口] reconcile 开始", { conversationId, reason });
     try {
       await foregroundTailWatermark.observeCurrentConversation(conversationId);
     } catch (error) {
@@ -74,6 +73,10 @@ export function useChatForegroundRuntime(bindings: Record<string, any>) {
     }
     if (String(bindings.currentChatConversationId.value || "").trim() !== conversationId) return;
     const snapshot = await requestRuntimeSnapshot(conversationId);
+    console.warn("[焦点恢复][入口] runtimeSnapshot 读取完成", {
+      conversationId,
+      runtimeState: String(snapshot?.runtimeState || ""),
+    });
     if (String(bindings.currentChatConversationId.value || "").trim() !== conversationId) return;
     const flow = bindings.getChatFlow();
     const frontendStreamCache = flow?.readConversationStreamCache?.(conversationId);

@@ -1105,8 +1105,13 @@ async fn test_voice_connection_inner(input: TestVoiceConnectionInput) -> Result<
             format!("{base}/v1/models")
         }
     };
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
+    let mut client_builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15));
+    #[cfg(target_os = "android")]
+    {
+        client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+    }
+    let client = client_builder
         .build()
         .map_err(|err| format!("Build HTTP client failed: {err}"))?;
     let started = std::time::Instant::now();

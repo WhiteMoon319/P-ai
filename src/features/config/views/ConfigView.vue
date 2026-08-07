@@ -133,7 +133,6 @@
             @play-hotkey-record-test="$emit('playHotkeyRecordTest')"
             @request-microphone-permission="$emit('requestMicrophonePermission')"
             @capture-hotkey="$emit('captureHotkey', $event)"
-            @summon-chat-now="$emit('summonChatNow')"
             @update:record-hotkey="onRecordHotkeyChanged"
             @update:record-background-wake-enabled="onRecordBackgroundWakeChanged"
             @update:min-record-seconds="onMinRecordSecondsChanged"
@@ -165,14 +164,13 @@
             :response-style-id="responseStyleId"
             :pdf-read-mode="pdfReadMode"
             :instruction-presets="instructionPresets"
+            :tool-statuses="toolStatuses"
+            :saving-config="savingConfig"
             @update:response-style-id="$emit('update:responseStyleId', $event)"
             @update:pdf-read-mode="$emit('update:pdfReadMode', $event)"
             @update:instruction-presets="$emit('update:instructionPresets', $event)"
             @patch-conversation-api-settings="$emit('patchConversationApiSettings', $event)"
             @patch-chat-settings="$emit('patchChatSettings', $event)"
-            @open-conversation-list="$emit('openConversationList')"
-            @open-prompt-preview="$emit('openPromptPreview')"
-            @open-system-prompt-preview="$emit('openSystemPromptPreview')"
           />
           <NotificationTab
             v-else-if="props.configTab === 'notification'"
@@ -221,6 +219,9 @@
             v-else-if="props.configTab === 'logs'"
             :config="config"
             :open-runtime-logs="() => $emit('openRuntimeLogs')"
+            :open-conversation-list="() => $emit('openConversationList')"
+            :open-prompt-preview="() => $emit('openPromptPreview')"
+            :open-system-prompt-preview="() => $emit('openSystemPromptPreview')"
           />
 
           <AppearanceTab
@@ -266,7 +267,7 @@
         @mouseleave="navScrollbarRef?.hide()"
       >
         <div ref="navScrollerRef" class="ecall-floating-scroll-target min-h-0 flex-1 overflow-y-auto pr-1">
-          <ul class="menu w-full gap-1 p-0 [&>li>a]:w-full">
+          <ul class="menu w-full gap-1 p-0 pt-2 [&>li>a]:w-full">
             <li v-for="item in visibleConfigNavItems" :key="item.tab">
               <a :class="configNavLinkClass(item.tab)" @click="selectConfigNavTab(item.tab)">
                 <component :is="item.icon" class="h-4 w-4 shrink-0" />
@@ -428,7 +429,7 @@ import {
   onTransportNotification,
 } from "../../../services/tauri-api";
 import { toErrorMessage } from "../../../utils/error";
-import { ArrowLeftRight, Beaker, Bell, Building2, ClipboardList, Code, Cpu, Database, Home, Info, Keyboard, Menu, MessageSquare, Network, Palette, Puzzle, Radio, ScrollText, User, Wifi, Wrench } from "@lucide/vue";
+import { ArrowLeftRight, Beaker, Bell, Building2, ClipboardList, Code, Cpu, Database, Home, Info, Keyboard, Menu, Network, Palette, Puzzle, Radio, ScrollText, Star, User, Wifi, Wrench } from "@lucide/vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 
 type ConfigTab = "welcome" | "hotkey" | "api" | "tools" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "networkAccess" | "remoteIm" | "usage" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
@@ -445,6 +446,7 @@ const SHOW_DEV_DEMO_TAB = import.meta.env.DEV;
 
 const CONFIG_NAV_ITEMS: ConfigNavItem[] = [
   { tab: "welcome", icon: Home, labelKey: "config.tabs.welcome" },
+  { tab: "chatSettings", icon: Star, labelKey: "config.tabs.chatSettings" },
   { tab: "notification", icon: Bell, labelKey: "config.tabs.notification" },
   { tab: "networkAccess", icon: Wifi, labelKey: "config.tabs.networkAccess" },
   { tab: "hotkey", icon: Keyboard, labelKey: "config.tabs.hotkey", desktopOnly: true },
@@ -455,7 +457,6 @@ const CONFIG_NAV_ITEMS: ConfigNavItem[] = [
   { tab: "persona", icon: User, labelKey: "config.tabs.persona" },
   { tab: "department", icon: Building2, labelKey: "config.tabs.department" },
   { tab: "departmentTree", icon: Network, labelKey: "config.tabs.departmentTree" },
-  { tab: "chatSettings", icon: MessageSquare, labelKey: "config.tabs.chatSettings" },
   { tab: "remoteIm", icon: Radio, labelKey: "config.tabs.remoteIm" },
   { tab: "memory", icon: Database, labelKey: "config.tabs.memory" },
   { tab: "task", icon: ClipboardList, labelKey: "config.tabs.task" },
@@ -566,7 +567,6 @@ const emit = defineEmits<{
   (e: "playHotkeyRecordTest"): void;
   (e: "requestMicrophonePermission"): void;
   (e: "captureHotkey", value: string): void;
-  (e: "summonChatNow"): void;
   (e: "saveAgentAvatar", value: { agentId: string; mime: string; bytesBase64: string }): void;
   (e: "clearAgentAvatar", value: { agentId: string }): void;
   (e: "checkUpdate"): void;

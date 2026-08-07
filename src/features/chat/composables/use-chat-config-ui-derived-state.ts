@@ -44,21 +44,21 @@ export function useChatConfigUiDerivedState(options: UseChatConfigUiDerivedState
     if (format === "openai_rerank") return "https://api.openai.com/v1";
     return "https://api.openai.com/v1";
   });
-  const chatInputPlaceholder = computed(() => options.t("chat.placeholder"));
   const defaultCreateConversationDepartmentId = computed(() => "assistant-department");
   const configDirty = computed(() => options.buildConfigSnapshotJson() !== options.lastSavedConfigJson.value);
   const personaDirty = computed(() => buildPersonasSnapshotJsonValue(options.personas.value) !== options.lastSavedPersonasJson.value);
   const responseStyleIds = computed(() => responseStyleOptions.map((item) => item.id));
+  const chatInputPlaceholder = computed(() => options.t("chat.placeholder"));
 
   return {
     selectedModelOptions,
     selectedModelRefreshOk,
     responseStyleOptions,
     baseUrlReference,
-    chatInputPlaceholder,
     defaultCreateConversationDepartmentId,
     configDirty,
     personaDirty,
     responseStyleIds,
+    chatInputPlaceholder,
   };
 }

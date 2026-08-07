@@ -302,6 +302,7 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     options.config.llmRoundLogCapacity = normalizeLlmRoundLogCapacity((cfg as AppConfig).llmRoundLogCapacity);
     options.config.messageNotificationEnabled = (cfg as { messageNotificationEnabled?: unknown }).messageNotificationEnabled !== false;
     options.config.messageNotificationSoundEnabled = (cfg as { messageNotificationSoundEnabled?: unknown }).messageNotificationSoundEnabled === true;
+    options.config.desktopOperationNoticeEnabled = (cfg as { desktopOperationNoticeEnabled?: unknown }).desktopOperationNoticeEnabled !== false;
     options.config.selectedApiConfigId = cfg.selectedApiConfigId;
     options.config.assistantDepartmentApiConfigId = cfg.assistantDepartmentApiConfigId;
     options.config.visionApiConfigId = cfg.visionApiConfigId ?? undefined;
@@ -404,6 +405,7 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
             ? ((provider as { models?: unknown[] }).models || []).map((model) => ({
                 id: String((model as { id?: unknown }).id || "").trim(),
                 model: String((model as { model?: unknown }).model || "").trim(),
+                displayName: String((model as { displayName?: unknown }).displayName || "").trim(),
                 deprecated: !!(model as { deprecated?: unknown }).deprecated,
                 enableImage: !!(model as { enableImage?: unknown }).enableImage,
                 enableAudio: !!(model as { enableAudio?: unknown }).enableAudio,
@@ -540,6 +542,7 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
       options.config.llmRoundLogCapacity = normalizeLlmRoundLogCapacity((saved as AppConfig).llmRoundLogCapacity);
       options.config.messageNotificationEnabled = (saved as { messageNotificationEnabled?: unknown }).messageNotificationEnabled !== false;
       options.config.messageNotificationSoundEnabled = (saved as { messageNotificationSoundEnabled?: unknown }).messageNotificationSoundEnabled === true;
+      options.config.desktopOperationNoticeEnabled = (saved as { desktopOperationNoticeEnabled?: unknown }).desktopOperationNoticeEnabled !== false;
       options.config.selectedApiConfigId = saved.selectedApiConfigId;
       options.config.assistantDepartmentApiConfigId = saved.assistantDepartmentApiConfigId;
       options.config.visionApiConfigId = saved.visionApiConfigId ?? undefined;

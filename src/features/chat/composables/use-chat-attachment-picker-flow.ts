@@ -24,7 +24,9 @@ export function useChatAttachmentPickerFlow(options: UseChatAttachmentPickerFlow
   }
 
   async function pickChatAttachments() {
-    if (options.chatting.value || options.trimming.value) return;
+    // Product rule: 流式回复进行中不锁定输入工具栏（与粘贴/拖拽图片一致），
+    // 仅压缩整理（trimming）期间禁止新增附件。
+    if (options.trimming.value) return;
     try {
       const receipts = await pickTransportAttachments<AttachmentReceipt>({
         multiple: true,

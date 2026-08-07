@@ -17,12 +17,13 @@ function createConfig(): AppConfig {
     githubUpdateMethod: "auto",
     skippedGithubUpdateVersion: "",
     recordHotkey: "CapsLock",
-    recordBackgroundWakeEnabled: true,
+    recordBackgroundWakeEnabled: false,
     minRecordSeconds: 1,
     maxRecordSeconds: 60,
     llmRoundLogCapacity: 3,
     messageNotificationEnabled: true,
     messageNotificationSoundEnabled: false,
+    desktopOperationNoticeEnabled: true,
     selectedApiConfigId: "",
     assistantDepartmentApiConfigId: "",
     visionApiConfigId: undefined,
@@ -56,5 +57,25 @@ describe("useConfigCore image generation", () => {
     expect(payload.imageGenerationModelId).toBe(config.imageGenerationModelId);
     expect(snapshot.imageProviders[0]?.models[0]?.model).toBe("gpt-image-2");
     expect(snapshot.imageGenerationModelId).toBe(config.imageGenerationModelId);
+  });
+});
+
+describe("useConfigCore api provider displayName", () => {
+  it("应在保存载荷与脏检查快照中保留模型显示名", () => {
+    const config = createConfig();
+    const core = useConfigCore({
+      config,
+      textCapableApiConfigs: computed(() => []),
+    });
+
+    const provider = core.createApiProvider("display-name-seed", "gpt-4o-mini");
+    provider.models[0].displayName = "我的显示名";
+    config.apiProviders = [provider];
+
+    const payload = core.buildConfigPayload();
+    const snapshot = JSON.parse(core.buildConfigSnapshotJson()) as AppConfig;
+
+    expect(payload.apiProviders[0]?.models[0]?.displayName).toBe("我的显示名");
+    expect(snapshot.apiProviders[0]?.models[0]?.displayName).toBe("我的显示名");
   });
 });

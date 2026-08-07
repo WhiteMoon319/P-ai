@@ -555,6 +555,9 @@ export default defineComponent({
     const remoteFrameRef = ref<HTMLIFrameElement | null>(null);
     let remoteStartedConversationId = "";
     let remoteLastStartedNotifyAt = 0;
+    // 各会话最近的会话标题缓存：conversation.todosUpdated 事件不带标题，
+    // 刷新 todo 目标通知时复用最近一次 assistantDelta 广播的标题。
+    const remoteTitleByConversationId = new Map<string, string>();
 
     function handleOpenSettings() {
       if (remote.isRemoteMode.value) {
@@ -644,6 +647,28 @@ export default defineComponent({
         return;
       }
       if (data.source !== REMOTE_BRIDGE_SOURCE) return;
+      if (data.method === "conversation.todosUpdated") {
+        // 电脑 PAI 广播 todo 列表变化（新增/进度推进/状态切换）后刷新活体通知：
+        // 通知正文应显示当前目标文本（current_todo），而不是消息 delta。
+        const todoRecord = data.payload as
+          | { conversationId?: unknown; currentTodo?: unknown }
+          | null;
+        if (!todoRecord || typeof todoRecord !== "object") return;
+        const todoConversationId = String(todoRecord.conversationId || "").trim();
+        const currentTodo = String(todoRecord.currentTodo || "").trim();
+        if (!todoConversationId || !currentTodo) return;
+        void invokeTauri("remote_live_update_notify", {
+          payload: {
+            conversationId: todoConversationId,
+            kind: "todo",
+            delta: currentTodo,
+            assistantText: "",
+            reason: "",
+            title: remoteTitleByConversationId.get(todoConversationId) || "",
+          },
+        }).catch(() => undefined);
+        return;
+      }
       if (data.method !== "chat.assistantDelta") return;
       const record = data.payload as
         | { conversationId?: unknown; event?: unknown; conversationTitle?: unknown }
@@ -651,6 +676,9 @@ export default defineComponent({
       if (!record || typeof record !== "object") return;
       const conversationId = String(record.conversationId || "").trim();
       const conversationTitle = String(record.conversationTitle || "").trim();
+      if (conversationId && conversationTitle) {
+        remoteTitleByConversationId.set(conversationId, conversationTitle);
+      }
       const eventPayload = record.event as
         | { kind?: unknown; delta?: unknown; message?: unknown; reason?: unknown }
         | null;

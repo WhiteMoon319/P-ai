@@ -19,16 +19,15 @@ function message(id: string, text: string) {
 describe("useChatForegroundRuntime", () => {
   beforeEach(() => invokeTauriMock.mockReset());
 
-  it("水位推进时以正式单条消息覆盖同 ID 的半截内容", async () => {
+  it("会话 freshness 变化时以正式单条消息覆盖同 ID 的半截内容", async () => {
     const allMessages = ref([message("assistant-b", "半截")]);
     const conversationId = ref("conversation-a");
     const applyRuntime = vi.fn();
     invokeTauriMock.mockImplementation((command: string) => {
-      if (command === "conversation.changedSince") {
-        return Promise.resolve({ changed: [{ conversationId: "conversation-a" }], serverTime: "watermark-1" });
+      if (command === "conversation.freshnessSnapshot") {
+        return Promise.resolve({ lastMessageId: "assistant-b", updatedAt: "2026-08-07T00:00:01Z" });
       }
       if (command === "conversation.runtimeSnapshot") return Promise.resolve({ runtimeState: "idle" });
-      if (command === "conversation.freshnessSnapshot") return Promise.resolve({ lastMessageId: "assistant-b" });
       if (command === "conversation.messageById") return Promise.resolve(message("assistant-b", "完成态"));
       return Promise.resolve({});
     });
@@ -55,9 +54,11 @@ describe("useChatForegroundRuntime", () => {
     });
   });
 
-  it("水位未变化时不会请求 freshness 或正式单条消息", async () => {
+  it("会话 freshness 未变化时不会请求正式单条消息", async () => {
     invokeTauriMock.mockImplementation((command: string) => {
-      if (command === "conversation.changedSince") return Promise.resolve({ changed: [], serverTime: "watermark-1" });
+      if (command === "conversation.freshnessSnapshot") {
+        return Promise.resolve({ lastMessageId: "assistant-a", updatedAt: "2026-08-07T00:00:00Z" });
+      }
       if (command === "conversation.runtimeSnapshot") return Promise.resolve({ runtimeState: "idle" });
       return Promise.resolve({});
     });
@@ -73,9 +74,15 @@ describe("useChatForegroundRuntime", () => {
       switchUnarchivedConversation: vi.fn(async () => {}),
     });
 
+    // 首次恢复：建立基线并完成对账
     await runtime.recoverForegroundConversation("test");
+    expect(invokeTauriMock).toHaveBeenCalledWith("conversation.messageById", {
+      input: { conversationId: "conversation-a", messageId: "assistant-a" },
+    });
+    invokeTauriMock.mockClear();
 
-    expect(invokeTauriMock.mock.calls.some(([command]) => command === "conversation.freshnessSnapshot")).toBe(false);
+    // 再次恢复：指纹未变化，不再请求正式单条消息
+    await runtime.recoverForegroundConversation("test");
     expect(invokeTauriMock.mock.calls.some(([command]) => command === "conversation.messageById")).toBe(false);
   });
 

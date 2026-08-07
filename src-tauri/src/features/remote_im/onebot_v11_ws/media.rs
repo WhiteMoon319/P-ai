@@ -67,8 +67,13 @@ async fn onebot_download_media_by_url(
     url: &str,
     headers: Option<reqwest::header::HeaderMap>,
 ) -> Result<(Vec<u8>, Option<String>), String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(20))
+    let mut client_builder = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20));
+    #[cfg(target_os = "android")]
+    {
+        client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+    }
+    let client = client_builder
         .build()
         .map_err(|err| format!("build onebot media download client failed: {err}"))?;
     let mut request = client.get(url);
