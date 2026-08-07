@@ -49,6 +49,28 @@ describe("buildApiConfigSelectionTree", () => {
     expect(tree[0].models[1].leaves[0].id).toBe("provider-a::model-max");
   });
 
+  it("模型组显示名优先取 displayName，缺失时回退模型名", () => {
+    const tree = buildApiConfigSelectionTree([
+      apiConfig({
+        id: "provider-a::model-named",
+        displayName: "鲸鱼妹",
+        model: "deepseek-v4-flash",
+        name: "Provider A/deepseek-v4-flash · 中",
+        reasoningEffort: "medium",
+      }),
+      apiConfig({
+        id: "provider-a::model-plain",
+        model: "gpt-5.6-terra",
+        name: "Provider A/gpt-5.6-terra · 高",
+        reasoningEffort: "high",
+      }),
+    ]);
+
+    expect(tree[0].models).toHaveLength(2);
+    expect(tree[0].models[0].name).toBe("鲸鱼妹");
+    expect(tree[0].models[1].name).toBe("gpt-5.6-terra");
+  });
+
   it("未知思维等级仍作为可选叶子保留", () => {
     const tree = buildApiConfigSelectionTree([
       apiConfig({ id: "provider-a::model-legacy", reasoningEffort: "legacy" }),

@@ -405,6 +405,7 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
             ? ((provider as { models?: unknown[] }).models || []).map((model) => ({
                 id: String((model as { id?: unknown }).id || "").trim(),
                 model: String((model as { model?: unknown }).model || "").trim(),
+                displayName: String((model as { displayName?: unknown }).displayName || "").trim(),
                 deprecated: !!(model as { deprecated?: unknown }).deprecated,
                 enableImage: !!(model as { enableImage?: unknown }).enableImage,
                 enableAudio: !!(model as { enableAudio?: unknown }).enableAudio,

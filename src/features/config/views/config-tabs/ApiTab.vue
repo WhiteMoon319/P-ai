@@ -214,7 +214,7 @@
                 :context-window-max="contextWindowMax(modelCard)"
                 @select="selectModelCard(modelCard.id)"
                 @remove="removeModelGroup(modelCard)"
-                @sync-metadata="void syncModelMetadata(modelCard)"
+                @sync-metadata="handleModelCardSyncMetadata(modelCard)"
                 @select-option="(option: string) => selectModelOption(modelCard, option)"
                 @toggle-max-output="handleCustomMaxOutputTokensToggle(modelCard)"
                 @reasoning-change="(payload: { value: string; checked: boolean }) => setGroupReasoningEffort(modelCard, payload.value, payload.checked)"
@@ -555,7 +555,7 @@ function modelDisplayLabel(
   model: ApiModelConfigItem | null | undefined,
 ): string {
   const providerLabel = String(provider?.name || provider?.id || "").trim();
-  const modelLabel = String(model?.model || "").trim() || t("config.api.unnamedModel");
+  const modelLabel = String(model?.displayName || model?.model || "").trim() || t("config.api.unnamedModel");
   const reasoningValue = String(model?.reasoningEffort || "").trim();
   const reasoningLabel = reasoningEffortDisplayLabel(reasoningValue);
   const base = providerLabel ? `${providerLabel}/${modelLabel}` : modelLabel;
@@ -1122,6 +1122,7 @@ function cloneProvider(provider: ApiProviderConfigItem): ApiProviderConfigItem {
       ? provider.models.map((model) => ({
         id: String(model.id || "").trim(),
         model: String(model.model || "").trim(),
+        displayName: String(model.displayName || "").trim(),
         deprecated: !!model.deprecated,
         enableImage: !!model.enableImage,
         enableAudio: !!model.enableAudio,
@@ -1180,6 +1181,7 @@ function normalizeProviderForCompare(provider: ApiProviderConfigItem) {
       ? provider.models.map((model) => ({
         id: String(model.id || "").trim(),
         model: String(model.model || "").trim(),
+        displayName: String(model.displayName || "").trim(),
         deprecated: !!model.deprecated,
         enableImage: !!model.enableImage,
         enableAudio: !!model.enableAudio,
@@ -1579,6 +1581,20 @@ function selectModelOption(modelCard: ApiModelConfigItem, option: string) {
     applyProtocolDefaults(provider);
   }
   applyAutoContextWindowTokens(modelCard);
+  void syncModelMetadata(modelCard);
+}
+
+function handleModelCardSyncMetadata(modelCard: ApiModelConfigItem) {
+  const group = modelGroupForCard(modelCard);
+  if (group) {
+    // 模型卡聚合同一 model 的多个思维等级变体，显示名需同步到组内所有卡片，
+    // 否则只有 primary 生效，树/下拉里其他思维等级仍显示原始模型名。
+    const displayName = String(modelCard.displayName || "").trim();
+    for (const card of group.cards) {
+      if (card === modelCard) continue;
+      card.displayName = displayName;
+    }
+  }
   void syncModelMetadata(modelCard);
 }
 

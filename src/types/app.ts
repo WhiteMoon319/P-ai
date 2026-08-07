@@ -109,6 +109,7 @@ export type ApiConfigItem = {
   codexOriginator?: string;
   codexResidencyRequirement?: string;
   model: string;
+  displayName?: string;
   reasoningEffort?: string;
   temperature: number;
   customTemperatureEnabled?: boolean;

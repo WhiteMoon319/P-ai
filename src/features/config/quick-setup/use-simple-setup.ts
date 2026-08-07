@@ -155,6 +155,8 @@ function parseDraft(raw: unknown): SimpleSetupDraft | null {
     const cardRaw = models[card] || {};
     const model = String(cardRaw.model || "");
     if (model) draft.models[card].model = model;
+    const displayName = String(cardRaw.displayName || "");
+    if (displayName) draft.models[card].displayName = displayName;
     const effort = String(cardRaw.reasoningEffort || "");
     if (effort === "low" || effort === "medium" || effort === "high") draft.models[card].reasoningEffort = effort;
     if (typeof cardRaw.enableImage === "boolean") draft.models[card].enableImage = cardRaw.enableImage;
@@ -334,6 +336,9 @@ export function useSimpleSetup() {
       draft.models.quick.model = existing.model || preset.defaultModel;
       draft.models.expert.model = existing.model || preset.defaultModel;
       draft.models.vision.model = existing.model || preset.defaultModel;
+      draft.models.quick.displayName = String(existing.displayName || "").trim();
+      draft.models.expert.displayName = String(existing.displayName || "").trim();
+      draft.models.vision.displayName = String(existing.displayName || "").trim();
     }
     draft.hotkey = String(config.hotkey || "Alt+·").trim() || "Alt+·";
     draft.recordHotkey = String(config.recordHotkey || "CapsLock").trim() || "CapsLock";
@@ -466,6 +471,7 @@ export function useSimpleSetup() {
       {
         id: SIMPLE_SETUP_MODEL_IDS.quick,
         model: draft.models.quick.model.trim(),
+        displayName: String(draft.models.quick.displayName || "").trim() || undefined,
         enableImage: draft.models.quick.enableImage,
         enableAudio: draft.models.quick.enableAudio ?? false,
         enableVideo: draft.models.quick.enableVideo ?? false,
@@ -480,6 +486,7 @@ export function useSimpleSetup() {
       {
         id: SIMPLE_SETUP_MODEL_IDS.expert,
         model: draft.models.expert.model.trim(),
+        displayName: String(draft.models.expert.displayName || "").trim() || undefined,
         enableImage: draft.models.expert.enableImage,
         enableAudio: draft.models.expert.enableAudio ?? false,
         enableVideo: draft.models.expert.enableVideo ?? false,
@@ -494,6 +501,7 @@ export function useSimpleSetup() {
       ...(includeVision ? [{
         id: SIMPLE_SETUP_MODEL_IDS.vision,
         model: draft.models.vision.model.trim(),
+        displayName: String(draft.models.vision.displayName || "").trim() || undefined,
         enableImage: true,
         enableAudio: true,
         enableVideo: true,
@@ -542,6 +550,7 @@ export function useSimpleSetup() {
       codexAuthMode: "read_local",
       codexLocalAuthPath: "~/.codex/auth.json",
       model: model.model,
+      displayName: String(model.displayName || "").trim() || undefined,
       reasoningEffort: model.reasoningEffort,
       temperature: 1,
       customTemperatureEnabled: false,

@@ -119,7 +119,7 @@ export function buildApiConfigSelectionTree(
     if (!group) {
       group = {
         key,
-        name: model,
+        name: String(item.displayName || "").trim() || model,
         summaryFields: [],
         leaves: [],
         representative: item,
