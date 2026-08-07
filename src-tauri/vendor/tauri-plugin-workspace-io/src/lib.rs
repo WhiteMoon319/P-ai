@@ -73,7 +73,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .setup(|app, api| {
             #[cfg(mobile)]
             {
-                let handle = api.register_android_plugin("app.tauri.workspace-io", "WorkspaceIoPlugin")?;
+                let handle = api.register_android_plugin("app.tauri.workspace_io", "WorkspaceIoPlugin")?;
                 app.manage(WorkspaceIo::from_handle(handle));
             }
             #[cfg(desktop)]
