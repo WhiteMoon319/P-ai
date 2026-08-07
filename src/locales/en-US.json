@@ -230,7 +230,8 @@
       "pinApiKeyToTop": "Pin to top",
       "connectionTest": "Connection Test",
       "testFirstKey": "Test First",
-      "testAllKeys": "Test All"
+      "testAllKeys": "Test All",
+      "noModels": "No usable model configured yet"
     },
     "storage": {
       "pageTitle": "Storage",
@@ -434,15 +435,100 @@
           "currentMissingAndroid": "Not installed. Ask PAI to run apt install nodejs in the sandbox terminal."
         },
         "ripgrep": {
-          "title": "ripgrep (rg)"
+          "title": "ripgrep (rg)",
+          "summary": "ripgrep is the underlying tool for fast content search in the sandbox. Installing it improves search experience.",
+          "currentOk": "Installed, no issues.",
+          "currentMissing": "Not installed yet. Click one-click install, or it opens the official site on failure.",
+          "action": "Open Tools"
         },
         "expertModel": {
-          "title": "Expert Model"
+          "title": "Expert Model",
+          "summary": "The expert model handles complex reasoning tasks. Without it, some deep tasks degrade or become unavailable.",
+          "currentOk": "A working expert model was found: {name}",
+          "currentMissing": "No expert model was detected yet.",
+          "action": "Open LLM Setup"
         },
         "quickModel": {
-          "title": "Fast Model"
+          "title": "Fast Model",
+          "summary": "The quick model handles lightweight tasks (tool review, title generation) with faster responses and lower cost.",
+          "currentOk": "A working quick model was found: {name}",
+          "currentMissing": "No quick model was detected yet.",
+          "action": "Open LLM Setup"
+        },
+        "textModel": {
+          "title": "Available Text Model",
+          "summary": "The app needs at least one working text model. A multimodal one is recommended.",
+          "currentOkMultimodal": "A working multimodal text model was found: {name}",
+          "currentOk": "A working text model was found: {name}. It is not multimodal yet.",
+          "currentMissing": "No working text model was detected yet.",
+          "action": "Open LLM Setup"
+        },
+        "rerank": {
+          "title": "Rerank Model",
+          "summary": "A rerank model improves the quality of memory and retrieval ranking for more precise results.",
+          "currentOk": "A rerank model was found: {name}",
+          "currentMissing": "No rerank model was detected yet.",
+          "action": "Open Rerank Setup"
+        },
+        "memory": {
+          "title": "Memory & Retrieval",
+          "summary": "Bind an embedding (and optionally a rerank) model to make memory, retrieval, and recall work well.",
+          "currentMissingBinding": "Models found but not bound to memory retrieval yet. Go to Memory to bind them.",
+          "currentOk": "Memory retrieval models are ready.",
+          "currentMissingModel": "No embedding or rerank model configured yet. Memory and retrieval are unavailable.",
+          "action": "Open Memory Setup"
+        },
+        "persona": {
+          "title": "Personas",
+          "summary": "Personas define how your assistant speaks and behaves. More personas mean more flexibility.",
+          "currentOk": "{count} personas configured",
+          "currentMissing": "Only the default persona exists. Create a few to better match your preference.",
+          "action": "Open Persona Setup"
+        },
+        "embedding": {
+          "title": "Embedding Model",
+          "summary": "If you want stronger memory, retrieval, and recall, you should prepare an embedding model.",
+          "currentOk": "An embedding model was found: {name}",
+          "currentMissing": "No embedding model was detected yet.",
+          "action": "Open Embedding Setup"
+        },
+        "voice": {
+          "title": "Speech Recognition",
+          "summary": "If you want voice input, this is a very worthwhile setup.",
+          "currentOk": "A speech recognition model was found: {name}",
+          "currentMissing": "No speech recognition model was detected yet.",
+          "action": "Open Voice Setup"
+        },
+        "department": {
+          "title": "Departments",
+          "summary": "Departments split the workflow by responsibility. Create your own department to hand off tasks for follow-up.",
+          "currentOk": "{count} custom departments configured",
+          "currentMissing": "No custom department yet. Create one to hand off repetitive tasks.",
+          "action": "Open Department Setup"
+        },
+        "skill": {
+          "title": "Skills",
+          "summary": "Skills are reusable capability packs (document processing, web automation, etc.). Your assistant can call them once installed.",
+          "currentOk": "{count} skills installed",
+          "currentMissing": "No skill installed yet. Install a few to greatly expand what your assistant can do.",
+          "action": "Open Skill Setup"
+        },
+        "mcp": {
+          "title": "MCP",
+          "summary": "MCP connects your assistant to external tools and data sources (databases, browsers, API services).",
+          "currentOk": "{count} MCP servers enabled",
+          "currentMissing": "No MCP enabled yet. Connect external services to greatly extend your assistant.",
+          "action": "Open MCP Setup"
         }
-      }
+      },
+      "title": "First-Setup Welcome",
+      "subtitle": "These cards check whether your key config is ready. Fill the required ones first, then the recommended ones, to get started reliably.",
+      "askLlmHint": "Not sure how to configure? The easiest way is to screenshot the page and let an LLM guide you step by step.",
+      "currentState": "Current state: ",
+      "manualInstall": "Manual install",
+      "requiredBadge": "Required",
+      "stronglyRecommendedBadge": "Strongly recommended",
+      "recommendedBadge": "Recommended"
     },
     "imageGeneration": {
       "title": "Independent image generation",
@@ -678,7 +764,11 @@
       "androidWorkspaceSearchIgnoreCase": "Ignore case",
       "androidWorkspaceSearchRun": "Search",
       "androidWorkspaceSearchEmpty": "No matches",
-      "androidWorkspaceSearchFailed": "Failed to search: {err}"
+      "androidWorkspaceSearchFailed": "Failed to search: {err}",
+      "terminalRuntime": "Terminal runtime",
+      "terminalRuntimeHint": "The terminal PAI uses to run commands. Git Bash is required on Windows.",
+      "gitRequiredHint": "No usable terminal detected. Install Git and use Git Bash first.",
+      "installGit": "Install Git (Git Bash)"
     },
     "persona": {
       "title": "Persona",
@@ -938,7 +1028,8 @@
       "connect": "Connect",
       "disconnect": "Disconnect",
       "connectedTo": "Connected to {target}",
-      "invalidTarget": "Enter a valid address and port"
+      "invalidTarget": "Enter a valid address and port",
+      "password": "Connection password"
     },
     "remoteIm": {
       "title": "Contact Channels",
@@ -1781,7 +1872,7 @@
     "recording": "Recording {seconds}s",
     "transcribing": "Transcribing voice...",
     "holdRecord": "Hold {hotkey} or button to record",
-"holdToRecord": "Hold button to record",
+    "holdToRecord": "Hold button to record",
     "placeholder": "Talk to PAI",
     "placeholderBusyIdle": "Messages you send now will be processed in order by {personaName}",
     "placeholderBusyQueued": "Queued messages can switch to guide mode so {personaName} gets them sooner",
@@ -2078,7 +2169,8 @@
     "codeReviewSubmitFailed": "Failed to submit code review",
     "deleteConversationFailed": "Failed to delete conversation",
     "readCommitFailed": "Failed to read commit",
-    "startCodeReviewFailed": "Failed to start code review"
+    "startCodeReviewFailed": "Failed to start code review",
+    "errorTitleRequest": "Request failed"
   },
   "memory": {
     "title": "Memories",

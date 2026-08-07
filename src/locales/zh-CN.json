@@ -118,7 +118,7 @@
       "enableHint": "关闭后，后台本地会话完成或失败时不再弹出系统通知。",
       "soundLabel": "是否声音",
       "soundHint": "开启后，Windows 原生通知会使用系统默认提示音。",
-"testLabel": "通知测试",
+      "testLabel": "通知测试",
       "testHint": "发送测试通知，验证普通通知与实时通知（岛）是否正常显示。",
       "testNormalLabel": "普通通知",
       "testLiveUpdateLabel": "实时通知",
@@ -230,7 +230,8 @@
       "pinApiKeyToTop": "置顶",
       "connectionTest": "连通性测试",
       "testFirstKey": "测试首个",
-      "testAllKeys": "测试全部"
+      "testAllKeys": "测试全部",
+      "noModels": "还没有配置任何可用模型"
     },
     "storage": {
       "pageTitle": "储存管理",
@@ -416,7 +417,7 @@
       },
       "cards": {
         "git": {
-"title": "Git",
+          "title": "Git",
           "summary": "Git 是 PAI 帮你自动跑命令、安装 Skill 的底层工具。装好之后，很多操作可以直接交给 PAI 代办。",
           "currentOk": "已装好，没问题。",
           "currentMissing": "还没装。点一键安装，失败时会自动打开官网。",
@@ -434,15 +435,100 @@
           "currentMissingAndroid": "还没装。可让 PAI 在沙盒终端里执行 apt install nodejs 安装。"
         },
         "ripgrep": {
-          "title": "ripgrep（rg）"
+          "title": "ripgrep（rg）",
+          "summary": "ripgrep 是 PAI 在沙盒里快速搜索文件内容的底层工具，安装后搜索体验会更好。",
+          "currentOk": "已装好，没问题。",
+          "currentMissing": "还没装。点一键安装，失败时会自动打开官网。",
+          "action": "去看工具"
         },
         "expertModel": {
-          "title": "专家模型"
+          "title": "专家模型",
+          "summary": "专家模型负责复杂推理类任务，没有它时部分深度任务会降级或不可用。",
+          "currentOk": "已找到可用专家模型：{name}",
+          "currentMissing": "还没有检测到专家模型。",
+          "action": "去设置 LLM"
         },
         "quickModel": {
-          "title": "快速模型"
+          "title": "快速模型",
+          "summary": "快速模型负责轻量任务（如工具审查、标题生成），响应更快、成本更低。",
+          "currentOk": "已找到可用快速模型：{name}",
+          "currentMissing": "还没有检测到快速模型。",
+          "action": "去设置 LLM"
+        },
+        "textModel": {
+          "title": "可用文本模型",
+          "summary": "系统至少需要一个可用的文本模型，建议优先准备一个同时支持图片的多模态模型。",
+          "currentOkMultimodal": "已找到可用多模态文本模型：{name}",
+          "currentOk": "已找到可用文本模型：{name}。但暂时还不是多模态。",
+          "currentMissing": "还没有检测到任何可用文本模型。",
+          "action": "去设置 LLM"
+        },
+        "rerank": {
+          "title": "重排模型",
+          "summary": "重排模型用于提升记忆与检索的排序质量，配置后可让召回结果更精准。",
+          "currentOk": "已找到重排模型：{name}",
+          "currentMissing": "还没有检测到重排模型。",
+          "action": "去设置重排"
+        },
+        "memory": {
+          "title": "记忆与检索",
+          "summary": "绑定嵌入（与可选重排）模型后，记忆、检索、知识召回这套能力才能跑顺。",
+          "currentMissingBinding": "已找到模型但还没有绑定到记忆检索，去「记忆」页完成绑定。",
+          "currentOk": "记忆检索模型已就绪，可以正常使用。",
+          "currentMissingModel": "还没有配置嵌入或重排模型，记忆与检索暂时不可用。",
+          "action": "去设置记忆"
+        },
+        "persona": {
+          "title": "人格",
+          "summary": "人格决定助理的说话风格与角色。已有人格越多，切换越灵活；默认人格开箱即用。",
+          "currentOk": "已配置 {count} 个人格",
+          "currentMissing": "目前只有默认人格。可以再建几个，让助理风格更贴合你的偏好。",
+          "action": "去设置人格"
+        },
+        "embedding": {
+          "title": "嵌入模型",
+          "summary": "如果你想把记忆、检索、知识召回这套能力跑顺，最好尽早准备一个嵌入模型。",
+          "currentOk": "已找到嵌入模型：{name}",
+          "currentMissing": "还没有检测到嵌入模型。",
+          "action": "去设置嵌入"
+        },
+        "voice": {
+          "title": "语音识别",
+          "summary": "如果你想直接语音输入，这是非常值得补上的配置。",
+          "currentOk": "已找到语音识别模型：{name}",
+          "currentMissing": "还没有检测到语音识别模型。",
+          "action": "去设置语音"
+        },
+        "department": {
+          "title": "部门",
+          "summary": "部门让助理可以按职责拆分工作流。建一个自己的部门，就能把任务交给它持续跟进。",
+          "currentOk": "已配置 {count} 个自定义部门",
+          "currentMissing": "还没有自定义部门。建一个试试，把重复性任务交给它。",
+          "action": "去设置部门"
+        },
+        "skill": {
+          "title": "Skill",
+          "summary": "Skill 是 PAI 的可复用能力包（如文档处理、网页操作）。安装后助理就能调用它们。",
+          "currentOk": "已安装 {count} 个 Skill",
+          "currentMissing": "还没有安装 Skill。装几个常用技能，助理能做的事会多很多。",
+          "action": "去设置 Skill"
+        },
+        "mcp": {
+          "title": "MCP",
+          "summary": "MCP 让助理接入外部工具与数据源（数据库、浏览器、API 服务等）。",
+          "currentOk": "已启用 {count} 个 MCP 服务",
+          "currentMissing": "还没有启用 MCP。接入外部服务后，助理的能力边界会大幅扩展。",
+          "action": "去设置 MCP"
         }
-      }
+      },
+      "title": "首次设置欢迎页",
+      "subtitle": "下面这些大卡片会直接检查你的关键配置是否完整。先补必须项，再看建议项，就能比较稳定地开始用。",
+      "askLlmHint": "如果你不知道怎么配，最简单的方法就是截图给 LLM，让它一步一步教你设置。",
+      "currentState": "当前状态：",
+      "manualInstall": "手动安装",
+      "requiredBadge": "必须",
+      "stronglyRecommendedBadge": "强烈建议",
+      "recommendedBadge": "建议"
     },
     "imageGeneration": {
       "title": "图像生成",
@@ -678,7 +764,11 @@
       "androidWorkspaceSearchIgnoreCase": "忽略大小写",
       "androidWorkspaceSearchRun": "搜索",
       "androidWorkspaceSearchEmpty": "无匹配结果",
-      "androidWorkspaceSearchFailed": "搜索失败：{err}"
+      "androidWorkspaceSearchFailed": "搜索失败：{err}",
+      "terminalRuntime": "终端运行时",
+      "terminalRuntimeHint": "PAI 执行命令时使用的终端。Windows 下需要 Git Bash 才能正常运行。",
+      "gitRequiredHint": "检测到未安装可用终端。请先安装 Git，并使用 Git Bash。",
+      "installGit": "安装 Git（Git Bash）"
     },
     "persona": {
       "title": "人格",
@@ -938,7 +1028,8 @@
       "connect": "连接",
       "disconnect": "断开连接",
       "connectedTo": "已连接到 {target}",
-      "invalidTarget": "请输入有效的地址和端口"
+      "invalidTarget": "请输入有效的地址和端口",
+      "password": "连接密码"
     },
     "remoteIm": {
       "title": "渠道列表",
@@ -1645,7 +1736,7 @@
     "recording": "录音中 {seconds}s",
     "transcribing": "语音转写中...",
     "holdRecord": "按住{hotkey}或按钮录音",
-"holdToRecord": "按住按钮录音",
+    "holdToRecord": "按住按钮录音",
     "placeholder": "跟PAI说话吧",
     "placeholderBusyIdle": "现在发送的消息，{personaName}将会按顺序处理",
     "placeholderBusyQueued": "排队的消息可以切换为引导，让 {personaName} 尽快收到此消息",
@@ -2078,7 +2169,8 @@
     "codeReviewSubmitFailed": "提交代码审查失败",
     "deleteConversationFailed": "删除会话失败",
     "readCommitFailed": "读取 commit 失败",
-    "startCodeReviewFailed": "发起代码审查失败"
+    "startCodeReviewFailed": "发起代码审查失败",
+    "errorTitleRequest": "请求发生错误"
   },
   "memory": {
     "title": "记忆列表",

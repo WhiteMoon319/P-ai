@@ -107,7 +107,9 @@
       "builtinAltZLineWrapHint": "切換程式碼預覽的自動換行顯示。",
       "builtinShiftWheelConversationSwitch": "切換會話",
       "builtinShiftWheelConversationSwitchHint": "滾動切換最近會話。",
-      "builtinWheelKey": "滾輪"
+      "builtinWheelKey": "滾輪",
+      "sendMode": "傳送快捷鍵",
+      "sendModeHint": "切換聊天輸入框的傳送方式：Enter 或 Ctrl+Enter。"
     },
     "notification": {
       "title": "訊息通知",
@@ -116,7 +118,7 @@
       "enableHint": "關閉後，背景本地會話完成或失敗時不再彈出系統通知。",
       "soundLabel": "是否聲音",
       "soundHint": "開啟後，Windows 原生通知會使用系統預設提示音。",
-"testLabel": "通知測試",
+      "testLabel": "通知測試",
       "testHint": "發送測試通知，驗證普通通知與即時通知（島）是否正常顯示。",
       "testNormalLabel": "普通通知",
       "testLiveUpdateLabel": "即時通知",
@@ -228,7 +230,8 @@
       "pinApiKeyToTop": "置頂",
       "connectionTest": "連通性測試",
       "testFirstKey": "測試首個",
-      "testAllKeys": "測試全部"
+      "testAllKeys": "測試全部",
+      "noModels": "還沒有設定任何可用模型"
     },
     "storage": {
       "pageTitle": "儲存管理",
@@ -414,7 +417,7 @@
       },
       "cards": {
         "git": {
-"title": "Git",
+          "title": "Git",
           "summary": "必須安裝 Git。終端工作流、Git Bash 與很多後續開發協作都會直接依賴它。",
           "currentOk": "已偵測到 Git。",
           "currentMissing": "還沒裝。點一鍵安裝，失敗時會自動開啟官網。",
@@ -432,15 +435,100 @@
           "currentMissingAndroid": "還沒裝。可讓 PAI 在沙盒終端裡執行 apt install nodejs 安裝。"
         },
         "ripgrep": {
-          "title": "ripgrep（rg）"
+          "title": "ripgrep（rg）",
+          "summary": "ripgrep 是 PAI 在沙盒裡快速搜尋檔案內容的底層工具，安裝後搜尋體驗會更好。",
+          "currentOk": "已裝好，沒問題。",
+          "currentMissing": "還沒裝。點一鍵安裝，失敗時會自動開啟官網。",
+          "action": "去看工具"
         },
         "expertModel": {
-          "title": "專家模型"
+          "title": "專家模型",
+          "summary": "專家模型負責複雜推理類任務，沒有它時部分深度任務會降級或不可用。",
+          "currentOk": "已找到可用專家模型：{name}",
+          "currentMissing": "還沒有偵測到專家模型。",
+          "action": "去設定 LLM"
         },
         "quickModel": {
-          "title": "快速模型"
+          "title": "快速模型",
+          "summary": "快速模型負責輕量任務（如工具審查、標題生成），回應更快、成本更低。",
+          "currentOk": "已找到可用快速模型：{name}",
+          "currentMissing": "還沒有偵測到快速模型。",
+          "action": "去設定 LLM"
+        },
+        "textModel": {
+          "title": "可用文字模型",
+          "summary": "系統至少需要一個可用的文字模型，建議優先準備一個同時支援圖片的多模態模型。",
+          "currentOkMultimodal": "已找到可用多模態文字模型：{name}",
+          "currentOk": "已找到可用文字模型：{name}。但暫時還不是多模態。",
+          "currentMissing": "還沒有偵測到任何可用文字模型。",
+          "action": "去設定 LLM"
+        },
+        "rerank": {
+          "title": "重排模型",
+          "summary": "重排模型用於提升記憶與檢索的排序品質，配置後可讓召回結果更精準。",
+          "currentOk": "已找到重排模型：{name}",
+          "currentMissing": "還沒有偵測到重排模型。",
+          "action": "去設定重排"
+        },
+        "memory": {
+          "title": "記憶與檢索",
+          "summary": "綁定嵌入（與可選重排）模型後，記憶、檢索、知識召回這套能力才能跑順。",
+          "currentMissingBinding": "已找到模型但還沒有綁定到記憶檢索，去「記憶」頁完成綁定。",
+          "currentOk": "記憶檢索模型已就緒，可以正常使用。",
+          "currentMissingModel": "還沒有配置嵌入或重排模型，記憶與檢索暫時不可用。",
+          "action": "去設定記憶"
+        },
+        "persona": {
+          "title": "人格",
+          "summary": "人格決定助理的說話風格與角色。已有人格越多，切換越靈活；預設人格開箱即用。",
+          "currentOk": "已配置 {count} 個人格",
+          "currentMissing": "目前只有預設人格。可以再建幾個，讓助理風格更貼合你的偏好。",
+          "action": "去設定人格"
+        },
+        "embedding": {
+          "title": "嵌入模型",
+          "summary": "如果你想把記憶、檢索、知識召回這套能力跑順，最好盡早準備一個嵌入模型。",
+          "currentOk": "已找到嵌入模型：{name}",
+          "currentMissing": "還沒有偵測到嵌入模型。",
+          "action": "去設定嵌入"
+        },
+        "voice": {
+          "title": "語音辨識",
+          "summary": "如果你想直接語音輸入，這是很值得補上的配置。",
+          "currentOk": "已找到語音辨識模型：{name}",
+          "currentMissing": "還沒有偵測到語音辨識模型。",
+          "action": "去設定語音"
+        },
+        "department": {
+          "title": "部門",
+          "summary": "部門讓助理可以按職責拆分工作流。建一個自己的部門，就能把任務交給它持續跟進。",
+          "currentOk": "已配置 {count} 個自訂部門",
+          "currentMissing": "還沒有自訂部門。建一個試試，把重複性任務交給它。",
+          "action": "去設定部門"
+        },
+        "skill": {
+          "title": "Skill",
+          "summary": "Skill 是 PAI 的可重複使用能力包（如文件處理、網頁操作）。安裝後助理就能呼叫它們。",
+          "currentOk": "已安裝 {count} 個 Skill",
+          "currentMissing": "還沒有安裝 Skill。裝幾個常用技能，助理能做的事會多很多。",
+          "action": "去設定 Skill"
+        },
+        "mcp": {
+          "title": "MCP",
+          "summary": "MCP 讓助理接入外部工具與資料源（資料庫、瀏覽器、API 服務等）。",
+          "currentOk": "已啟用 {count} 個 MCP 服務",
+          "currentMissing": "還沒有啟用 MCP。接入外部服務後，助理的能力邊界會大幅擴展。",
+          "action": "去設定 MCP"
         }
-      }
+      },
+      "title": "首次設定歡迎頁",
+      "subtitle": "下面這些大卡片會直接檢查你的關鍵配置是否完整。先補必須項，再看建議項，就能比較穩定地開始用。",
+      "askLlmHint": "如果你不知道怎麼配，最簡單的方法就是截圖給 LLM，讓它一步一步教你設定。",
+      "currentState": "目前狀態：",
+      "manualInstall": "手動安裝",
+      "requiredBadge": "必須",
+      "stronglyRecommendedBadge": "強烈建議",
+      "recommendedBadge": "建議"
     },
     "imageGeneration": {
       "title": "獨立圖像生成",
@@ -676,7 +764,11 @@
       "androidWorkspaceSearchIgnoreCase": "忽略大小寫",
       "androidWorkspaceSearchRun": "搜尋",
       "androidWorkspaceSearchEmpty": "無符合結果",
-      "androidWorkspaceSearchFailed": "搜尋失敗：{err}"
+      "androidWorkspaceSearchFailed": "搜尋失敗：{err}",
+      "terminalRuntime": "終端執行環境",
+      "terminalRuntimeHint": "PAI 執行指令時使用的終端。Windows 下需要 Git Bash 才能正常運作。",
+      "gitRequiredHint": "偵測到未安裝可用終端。請先安裝 Git，並使用 Git Bash。",
+      "installGit": "安裝 Git（Git Bash）"
     },
     "persona": {
       "title": "人格",
@@ -936,7 +1028,8 @@
       "connect": "連線",
       "disconnect": "斷開連線",
       "connectedTo": "已連線到 {target}",
-      "invalidTarget": "請輸入有效的位址與連接埠"
+      "invalidTarget": "請輸入有效的位址與連接埠",
+      "password": "連線密碼"
     },
     "remoteIm": {
       "title": "聯絡人渠道",
@@ -1642,7 +1735,7 @@
     "contextUsageTitle": "目前上下文已使用 {percent}%",
     "recording": "錄音中 {seconds}s",
     "holdRecord": "按住 {hotkey} 或按鈕錄音",
-"holdToRecord": "按住按鈕錄音",
+    "holdToRecord": "按住按鈕錄音",
     "placeholder": "向 PAI 說話吧",
     "placeholderBusyIdle": "現在發送的訊息，{personaName}將會按順序處理",
     "placeholderBusyQueued": "排隊的訊息可以切換為引導，讓 {personaName} 盡快收到此訊息",
@@ -2074,7 +2167,10 @@
     "codeReviewSubmitFailed": "提交程式碼審查失敗",
     "deleteConversationFailed": "刪除會話失敗",
     "readCommitFailed": "讀取 commit 失敗",
-    "startCodeReviewFailed": "發起程式碼審查失敗"
+    "startCodeReviewFailed": "發起程式碼審查失敗",
+    "errorTitleRequest": "請求發生錯誤",
+    "sendModeEnter": "按 Enter 鍵傳送訊息",
+    "sendModeCtrlEnter": "按 Ctrl + Enter 鍵傳送訊息"
   },
   "memory": {
     "title": "记忆列表",
