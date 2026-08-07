@@ -153,9 +153,12 @@ class WorkspaceIoPlugin(private val activity: Activity) : Plugin(activity) {
       return
     }
     try {
+      // 复用主工程（Tauri Android 模板）自带的 FileProvider：authority 为
+      // ${applicationId}.fileprovider，file_paths.xml 由 patch-android-project.sh
+      // 注入 root-path 覆盖沙盒根，无需本插件重复注册 provider。
       val uri = FileProvider.getUriForFile(
         activity,
-        "${activity.packageName}.workspaceio.fileprovider",
+        "${activity.packageName}.fileprovider",
         file
       )
       val mime = activity.contentResolver.getType(uri) ?: "application/octet-stream"
