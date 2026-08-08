@@ -27,12 +27,24 @@ cat > "$ACTIVITY" <<'KOTLIN'
 package ai.easycall.app
 
 import android.os.Bundle
+import android.webkit.WebSettings
+import android.webkit.WebView
 import androidx.core.view.WindowCompat
 
 class MainActivity : TauriActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+    }
+
+    // 远程前端模式：壳层 origin 为 https://tauri.localhost（满足电脑端桥接的 https 校验），
+    // 但嵌入的电脑 PAI iframe 是 http://<电脑IP>:8429/sidebar。https 页面加载 http 子资源
+    // 会触发 Android WebView 的 Mixed Content 默认拦截（MIXED_CONTENT_NEVER_ALLOW），导致
+    // 电脑页面整体加载失败（PC 端显示无连接、设置页打不开）。
+    // 这里放开混合内容，让 http 电脑 iframe 能在 https 壳层内正常加载。
+    override fun onWebViewCreate(webView: WebView) {
+        super.onWebViewCreate(webView)
+        webView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
     }
 }
 KOTLIN
