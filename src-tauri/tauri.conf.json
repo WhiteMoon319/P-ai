@@ -24,7 +24,8 @@
         "resizable": true,
         "visible": false,
         "decorations": false,
-        "shadow": true
+        "shadow": true,
+        "useHttpsScheme": true
       },
       {
         "label": "chat",
@@ -37,7 +38,8 @@
         "resizable": true,
         "visible": false,
         "decorations": false,
-        "shadow": true
+        "shadow": true,
+        "useHttpsScheme": true
       },
       {
         "label": "archives",
@@ -50,7 +52,8 @@
         "resizable": true,
         "visible": false,
         "decorations": false,
-        "shadow": true
+        "shadow": true,
+        "useHttpsScheme": true
       }
     ],
     "security": {

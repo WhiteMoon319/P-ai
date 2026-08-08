@@ -14,9 +14,10 @@ type WebBridgeConfig = {
 const REMOTE_AUTH_BRIDGE_SOURCE = "pai-remote-bridge-auth";
 
 // 远程前端模式：允许 postMessage 桥接的壳层 origin 白名单。
-// Android Tauri WebView asset 协议 origin 为 http://tauri.localhost（注意是 http 非 https，
-// 与桌面壳层约定不同）；接收侧校验 event.origin、转发侧 targetOrigin 均使用此值。
-export const REMOTE_BRIDGE_ALLOWED_ORIGIN = "http://tauri.localhost";
+// Tauri Android WebView 默认 asset 协议 origin 为 https://tauri.localhost，
+// 与电脑端 PAI（含 PR #17 适配）的桥接约定保持一致；接收侧校验 event.origin、
+// 转发侧 targetOrigin 均使用此值。
+export const REMOTE_BRIDGE_ALLOWED_ORIGIN = "https://tauri.localhost";
 
 // 远程前端模式：手机 PAI 壳层 → 本页面的会话命令消息源标识（与认证方向相反）。
 const REMOTE_COMMAND_BRIDGE_SOURCE = "pai-remote-bridge-command";
