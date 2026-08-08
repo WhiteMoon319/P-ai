@@ -169,6 +169,8 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     freezeForegroundConversation: bindings.freezeForegroundConversation,
     clearPendingManualScrollToBottom: bindings.clearPendingManualScrollToBottom,
     triggerConversationScrollToBottom: bindings.triggerConversationScrollToBottom,
+    requestScrollToBottomAfterStreamSettle: bindings.requestScrollToBottomAfterStreamSettle,
+    settleStreamScrollAfterStable: bindings.settleStreamScrollAfterStable,
     getPendingManualScrollToBottomConversationId: bindings.getPendingManualScrollToBottomConversationId,
     getPendingManualScrollToBottomRequestId: bindings.getPendingManualScrollToBottomRequestId,
     createConversationDepartmentOptions: bindings.createConversationDepartmentOptions,

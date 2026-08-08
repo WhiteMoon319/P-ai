@@ -457,6 +457,8 @@ export function useChatWindowApp() {
     triggerConversationScrollToBottom,
     scheduleConversationScrollToBottomFallback,
     setPendingManualScrollState,
+    requestScrollToBottomAfterStreamSettle,
+    settleStreamScrollAfterStable,
     getPendingManualScrollToBottomConversationId,
     getPendingManualScrollToBottomRequestId,
   } = useChatScrollCoordinator({
@@ -643,6 +645,8 @@ export function useChatWindowApp() {
     freezeForegroundConversation,
     clearPendingManualScrollToBottom,
     triggerConversationScrollToBottom,
+    requestScrollToBottomAfterStreamSettle,
+    settleStreamScrollAfterStable,
     getPendingManualScrollToBottomConversationId,
     getPendingManualScrollToBottomRequestId,
     createConversationDepartmentOptions,

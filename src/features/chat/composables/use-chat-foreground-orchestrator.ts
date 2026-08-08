@@ -415,7 +415,14 @@ export function useChatForegroundOrchestrator(bindings: Record<string, any>) {
       bindings.clearConversationBadge(cid);
       bindings.markConversationReadPersisted(cid);
       await nextTick();
-      bindings.triggerConversationScrollToBottom(cid, "switch_snapshot_ready");
+      const switchRuntimeState = String(snapshot?.runtimeState || "").trim();
+      if (switchRuntimeState === "assistant_streaming") {
+        // 流式中切换：等该轮流式稳定（historyFlushed 落库）后再滚到底，
+        // 避免快照瞬间滚动停在旧高度、消息继续增长导致滚不到最下。
+        bindings.requestScrollToBottomAfterStreamSettle(cid);
+      } else {
+        bindings.triggerConversationScrollToBottom(cid, "switch_snapshot_ready");
+      }
       bindings.logForegroundPaintTrace(trace, "前台轻量快照已接管最新消息", {
         conversationId: cid,
         snapshotCount: Array.isArray(snapshot?.messages) ? snapshot.messages.length : 0,
