@@ -1004,6 +1004,7 @@ fn graceful_restart_app(app: &AppHandle) {
 }
 
 fn main() {
+    #[cfg(target_os = "windows")]
     windows_set_process_app_user_model_id();
     init_backend_file_logging();
     install_backend_file_panic_hook();
