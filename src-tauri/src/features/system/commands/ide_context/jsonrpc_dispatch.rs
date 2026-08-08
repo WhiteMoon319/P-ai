@@ -134,7 +134,7 @@ async fn ide_chat_handle_jsonrpc_request(
         ),
         "conversation.streamProbe" => ide_chat_stream_probe(request.params, client_id, opened_conversation_id),
         "conversation.freshnessSnapshot" => ide_chat_conversation_freshness_snapshot(state, request.params).await,
-        "conversation.markRead" => ide_chat_mark_conversation_read(state, request.params),
+        "conversation.markRead" => ide_chat_mark_conversation_read(state, request.params).await,
         "conversation.messageById" => ide_chat_conversation_message_by_id_command(state, request.params),
         "conversation.messagesBefore" => ide_chat_conversation_messages_before_command(state, request.params),
         "conversation.messagesAfterAsync" =>
@@ -536,7 +536,7 @@ async fn ide_chat_handle_jsonrpc_request(
             )
             .and_then(|input| request_conversation_messages_after_async_inner(input, state))
             .and_then(ide_chat_serialize),
-        "mark_conversation_read" => ide_chat_mark_conversation_read_command(state, request.params),
+        "mark_conversation_read" => ide_chat_mark_conversation_read_command(state, request.params).await,
         "set_active_unarchived_conversation" => ide_chat_set_active_conversation_command(state, request.params),
         "rebind_unarchived_conversation_recipient" => ide_chat_rebind_conversation_command(state, request.params),
         "rewind_conversation_from_message" => ide_chat_rewind_conversation_command(state, request.params).await,

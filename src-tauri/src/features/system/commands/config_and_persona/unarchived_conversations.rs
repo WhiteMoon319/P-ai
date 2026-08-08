@@ -303,18 +303,23 @@ struct MarkConversationReadInput {
 }
 
 #[tauri::command]
-fn mark_conversation_read(
+async fn mark_conversation_read(
     input: MarkConversationReadInput,
     state: State<'_, AppState>,
 ) -> Result<bool, String> {
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Ok(false);
-    }
-    Ok(conversation_service_v2()
-        .mark_conversation_read(state.inner(), conversation_id)?
-        .conversation
-        .is_some())
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let conversation_id = input.conversation_id.trim();
+        if conversation_id.is_empty() {
+            return Ok(false);
+        }
+        Ok(conversation_service_v2()
+            .mark_conversation_read(&app_state, conversation_id)?
+            .conversation
+            .is_some())
+    })
+    .await
+    .map_err(|err| format!("标记会话已读任务异常：{err}"))?
 }
 
 #[tauri::command]
