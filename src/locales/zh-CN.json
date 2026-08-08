@@ -1572,6 +1572,7 @@
     "sendModeEnter": "按 Enter 键发送消息",
     "sendModeCtrlEnter": "按 Ctrl + Enter 键发送消息",
     "sendModeMenu": "切换发送快捷键",
+    "sendModeAltS": "Alt + S 始终可发送",
     "newConversation": "新建会话",
     "newTask": "新建任务",
     "conversationList": "会话列表",

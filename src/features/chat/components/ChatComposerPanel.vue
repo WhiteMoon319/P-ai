@@ -378,6 +378,7 @@
                   <span>{{ t("chat.sendModeCtrlEnter") }}</span>
                   <Check v-if="sendMode === 'ctrl_enter'" class="h-4 w-4 shrink-0 text-primary" />
                 </button>
+                <div class="px-2.5 pt-1 pb-0.5 text-xs opacity-50">{{ t("chat.sendModeAltS") }}</div>
               </div>
             </div>
           </div>
@@ -1340,6 +1341,14 @@ function handleChatInputKeydown(event: KeyboardEvent) {
   }
   const ctrlEnterPressed = event.key === "Enter" && event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
   const plainEnterPressed = event.key === "Enter" && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
+  // Alt+S 兜底发送：无论当前发送模式，始终可用（输入法组合中除外）
+  const altSPressed = event.key.toLowerCase() === "s" && event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.isComposing;
+  if (altSPressed) {
+    if (props.frozen) return;
+    event.preventDefault();
+    handleSendChat();
+    return;
+  }
   if (sendMode.value === "ctrl_enter") {
     if (ctrlEnterPressed) {
       if (props.frozen) return;

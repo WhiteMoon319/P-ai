@@ -1445,6 +1445,7 @@
     "sendModeEnter": "Send message with Enter",
     "sendModeCtrlEnter": "Send message with Ctrl + Enter",
     "sendModeMenu": "Switch send shortcut",
+    "sendModeAltS": "Alt + S always sends",
     "newConversation": "New Conversation",
     "newTask": "New Task",
     "conversationList": "Conversation List",
