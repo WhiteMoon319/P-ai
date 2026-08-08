@@ -1,4 +1,4 @@
-export const CHAT_INPUT_COMPOSITION_CONFIRM_WINDOW_MS = 100;
+export const CHAT_INPUT_COMPOSITION_CONFIRM_WINDOW_MS = 10;
 
 export interface ChatInputEnterConfirmsCompositionEvent {
   isComposing: boolean;
