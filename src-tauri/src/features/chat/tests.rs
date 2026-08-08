@@ -12339,6 +12339,45 @@
     }
 
     #[test]
+    fn mark_conversation_read_entries_should_be_async_spawn_blocking() {
+        // Tauri command：unarchived_conversations.rs 中 mark_conversation_read 必须是 async fn + spawn_blocking
+        let command_file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("system")
+            .join("commands")
+            .join("config_and_persona")
+            .join("unarchived_conversations.rs");
+        let command_content = std::fs::read_to_string(&command_file).expect("read unarchived conversations");
+        let command_start = command_content
+            .find("async fn mark_conversation_read")
+            .expect("mark_conversation_read command should be async fn");
+        let command_section = &command_content[command_start..command_start + 600];
+        assert!(
+            command_section.contains("spawn_blocking"),
+            "mark_conversation_read Tauri command 必须使用 spawn_blocking 移出主线程"
+        );
+
+        // IDE JSON-RPC：jsonrpc_dispatch.rs 两个分支都必须 .await
+        let dispatch_file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("system")
+            .join("commands")
+            .join("ide_context")
+            .join("jsonrpc_dispatch.rs");
+        let dispatch_content = std::fs::read_to_string(&dispatch_file).expect("read jsonrpc dispatch");
+        assert!(
+            dispatch_content.contains("conversation.markRead\" => ide_chat_mark_conversation_read(state, request.params).await"),
+            "IDE conversation.markRead 分支必须 .await"
+        );
+        assert!(
+            dispatch_content.contains("\"mark_conversation_read\" => ide_chat_mark_conversation_read_command(state, request.params).await"),
+            "IDE mark_conversation_read 分支必须 .await"
+        );
+    }
+
+    #[test]
     fn foreground_mark_read_should_use_unified_conversation_mutation_entry() {
         let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("src")
