@@ -263,7 +263,7 @@ fn persist_completed_tool_group_result(
         return Ok(());
     };
     let Some(context) = context else {
-        runtime_log_warn(format!(
+        runtime_log_debug(format!(
             "[聊天] 跳过工具结果写历史，任务=append_tool_group_result，reason=context_missing，session={}",
             chat_session_key
         ));
