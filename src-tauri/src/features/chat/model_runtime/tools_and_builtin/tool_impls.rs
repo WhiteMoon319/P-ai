@@ -306,6 +306,21 @@ fn config_tool_split_command(command: &str) -> Vec<String> {
     pai_config_tool::split_command_line(command).unwrap_or_default()
 }
 
+/// 判断 config 命令是否只读查询命令（不产生配置改动副作用）。
+/// 保守策略：只把明确的查询命令（help / ls / get / example）判为只读，其余一律视为写命令，
+/// 宁可多重建缓存，不漏重建。
+fn config_tool_command_is_readonly(command: &str) -> bool {
+    let parts = config_tool_split_command(command);
+    match parts.first().map(String::as_str) {
+        Some("help") | Some("--help") | Some("-h") => true,
+        Some(_) => matches!(
+            parts.get(1).map(String::as_str),
+            Some("ls") | Some("get") | Some("example")
+        ),
+        None => false,
+    }
+}
+
 fn config_tool_resolve_mcp_server_id(state: &AppState, selector: &str) -> String {
     load_workspace_mcp_servers(state)
         .ok()
@@ -565,7 +580,9 @@ impl RuntimeValueTool for BuiltinConfigTool {
                 &args.command,
             )
             .map_err(ToolInvokeError::from)?;
-            invalidate_config_tool_runtime_caches(&self.app_state).map_err(ToolInvokeError::from)?;
+            if !config_tool_command_is_readonly(&args.command) {
+                invalidate_config_tool_runtime_caches(&self.app_state).map_err(ToolInvokeError::from)?;
+            }
             let runtime_effect = apply_config_tool_runtime_effect(&self.app_state, runtime_effect)
                 .await
                 .map_err(ToolInvokeError::from)?;
@@ -1383,5 +1400,29 @@ impl RuntimeValueTool for BuiltinDelegateTool {
         }
         result
         })
+    }
+}
+
+#[cfg(test)]
+mod tool_impls_tests {
+    use super::config_tool_command_is_readonly;
+
+    #[test]
+    fn config_tool_readonly_command_detection() {
+        assert!(config_tool_command_is_readonly("help"));
+        assert!(config_tool_command_is_readonly("--help"));
+        assert!(config_tool_command_is_readonly("-h"));
+        assert!(config_tool_command_is_readonly("agent ls"));
+        assert!(config_tool_command_is_readonly("agent get demo-agent"));
+        assert!(config_tool_command_is_readonly("agent example"));
+        assert!(config_tool_command_is_readonly("department ls"));
+        assert!(config_tool_command_is_readonly("mcp ls"));
+        assert!(config_tool_command_is_readonly("mcp get some-server"));
+        assert!(!config_tool_command_is_readonly("agent new demo-agent"));
+        assert!(!config_tool_command_is_readonly("agent update demo-agent x.json"));
+        assert!(!config_tool_command_is_readonly("department new x"));
+        assert!(!config_tool_command_is_readonly("mcp enable some-server"));
+        assert!(!config_tool_command_is_readonly(""));
+        assert!(!config_tool_command_is_readonly("   "));
     }
 }
