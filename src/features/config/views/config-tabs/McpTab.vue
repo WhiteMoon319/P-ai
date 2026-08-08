@@ -55,6 +55,24 @@
     <div v-if="statusText" class="text-sm" :class="statusError ? 'text-error' : 'opacity-70'">
       {{ statusText }}
     </div>
+
+    <div
+      v-if="nodeMissing && !nodeInstalling"
+      class="card card-border border-warning/40 bg-warning/10 card-sm"
+    >
+      <div class="card-body flex-row flex-wrap items-center gap-2 px-4 py-3">
+        <div class="flex flex-col gap-0.5">
+          <span class="text-sm font-medium">{{ t('config.mcp.nodeRequired') }}</span>
+          <span class="text-xs opacity-70">{{ t('config.mcp.nodeRequiredHint') }}</span>
+        </div>
+        <div class="flex-1" />
+        <span v-if="nodeInstallError" class="text-xs text-error max-w-56 text-right">{{ nodeInstallError }}</span>
+        <button class="btn btn-xs btn-warning" type="button" @click="installNode">
+          {{ t('config.mcp.installNode') }}
+        </button>
+      </div>
+    </div>
+    <div v-if="nodeInstalling" class="text-sm opacity-70">{{ t('config.mcp.installingNode') }}</div>
   </div>
 
   </SettingsStickyLayout>
@@ -64,7 +82,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { FolderOpen, Plus, RefreshCw } from "@lucide/vue";
-import { getTransportCapabilities, invokeTauri, openTransportMcpWorkspaceDirectory } from "../../../../services/tauri-api";
+import { getTransportCapabilities, getTransportHostRuntimePrerequisites, installTransportHostRuntimePrerequisite, invokeTauri, openTransportMcpWorkspaceDirectory } from "../../../../services/tauri-api";
 import type {
   McpDefinitionValidateResult,
   McpFixDefinitionResult,
@@ -92,6 +110,10 @@ const statusError = ref(false);
 const servers = ref<McpServerView[]>([]);
 const selectedServerId = ref("");
 const localFileSystemAvailable = getTransportCapabilities().localFileSystem;
+
+const nodeMissing = ref(false);
+const nodeInstalling = ref(false);
+const nodeInstallError = ref("");
 
 const issueList = ref<string[]>([]);
 
@@ -330,6 +352,34 @@ async function fixDefinition(server: McpServerView) {
   }
 }
 
+async function checkNodeInstalled(): Promise<boolean> {
+  try {
+    const prerequisites = await getTransportHostRuntimePrerequisites<{ nodeInstalled?: boolean }>();
+    nodeMissing.value = prerequisites.nodeInstalled === false;
+    return prerequisites.nodeInstalled === true;
+  } catch {
+    nodeMissing.value = false;
+    return true;
+  }
+}
+
+async function installNode() {
+  if (nodeInstalling.value) return;
+  nodeInstalling.value = true;
+  nodeInstallError.value = "";
+  try {
+    await installTransportHostRuntimePrerequisite<{ installed: boolean; message: string }>("node");
+    await checkNodeInstalled();
+    if (!nodeMissing.value) {
+      setStatus(t('config.mcp.nodeInstalled'));
+    }
+  } catch (error) {
+    nodeInstallError.value = toErrorMessage(error);
+  } finally {
+    nodeInstalling.value = false;
+  }
+}
+
 async function toggleDeploy(server: McpServerView) {
   loading.value = true;
   try {
@@ -436,5 +486,6 @@ async function openMcpDir() {
 
 onMounted(() => {
   void reloadServers();
+  void checkNodeInstalled();
 });
 </script>

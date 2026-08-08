@@ -55,6 +55,15 @@ export function useChatForegroundRuntime(bindings: Record<string, any>) {
     return !!bindings.chatting.value || phase === "queued" || phase === "waiting" || phase === "streaming";
   }
 
+  /** 消息列表里是否有仍在流式投影中的 assistant 消息（providerMeta._streaming）。 */
+  function hasStreamingAssistantMessage(): boolean {
+    const messages = Array.isArray(bindings.allMessages.value) ? bindings.allMessages.value : [];
+    return messages.some((message: any) => {
+      const meta = (message?.providerMeta || {}) as Record<string, unknown>;
+      return String(message?.role || "").trim() === "assistant" && meta._streaming === true;
+    });
+  }
+
   async function markConversationRead(conversationId: string): Promise<void> {
     if (!conversationId) return;
     await invokeTauri("conversation.markRead", { input: { conversationId } });
@@ -64,6 +73,16 @@ export function useChatForegroundRuntime(bindings: Record<string, any>) {
     const conversationId = String(bindings.currentChatConversationId.value || "").trim();
     if (!conversationId) return;
     console.warn("[焦点恢复][入口] reconcile 开始", { conversationId, reason });
+    // 输入面板忙碌（前端认为在流）但没有流式消息 → 流式投影已断，落后，直接 switch 当前会话接回。
+    if (frontendConversationIsStreaming() && !hasStreamingAssistantMessage()) {
+      console.warn("[焦点恢复] 输入面板忙碌但无流式消息，判定落后，switch 当前会话", {
+        conversationId,
+        reason,
+        chatting: bindings.chatting?.value,
+      });
+      await bindings.switchUnarchivedConversation(conversationId);
+      return;
+    }
     try {
       await foregroundTailWatermark.observeCurrentConversation(conversationId);
     } catch (error) {

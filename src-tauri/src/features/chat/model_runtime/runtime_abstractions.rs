@@ -183,10 +183,19 @@ fn provider_tool_output_from_value(tool_name: &str, value: &Value) -> String {
                 (false, true) => stdout.to_string(),
                 (true, false) => stderr.to_string(),
                 (false, false) => format!("{stdout}\n{stderr}"),
-                (true, true) => value.get("message").and_then(Value::as_str)
-                    .or_else(|| value.get("blockedReason").and_then(Value::as_str))
-                    .unwrap_or("(no output)")
-                    .to_string(),
+                (true, true) => {
+                    let mut text = value
+                        .get("message")
+                        .and_then(Value::as_str)
+                        .or_else(|| value.get("blockedReason").and_then(Value::as_str))
+                        .unwrap_or("(no output)")
+                        .to_string();
+                    if let Some(hint) = value.get("commitmentHint").and_then(Value::as_str) {
+                        text.push_str("\n\n");
+                        text.push_str(hint);
+                    }
+                    text
+                }
             }
         }
         "fetch" => value.get("content").and_then(Value::as_str).filter(|text| !text.is_empty())
@@ -443,5 +452,31 @@ mod runtime_tool_result_tests {
         assert_eq!(result.metadata.exit_code, Some(0));
         assert_eq!(result.metadata.wall_time_ms, Some(420));
         assert!(!result.metadata.timed_out);
+    }
+
+    #[test]
+    fn exec_blocked_result_includes_commitment_hint_for_ai() {
+        let result = provider_tool_result_from_value(
+            "exec",
+            serde_json::json!({
+                "ok": false,
+                "approved": false,
+                "blockedReason": "local_rule_blocked",
+                "message": "命令包含 git reset，本地规则已直接拦截。它会改动仓库历史或工作区状态，不进入 AI 评估。 你正在执行高度危险的指令。请向用户确认是否真的要执行，并向用户说明危险性；得到用户明确许可后，重新调用 exec 并在 commitment 参数中填入承诺文案。",
+                "commitmentHint": "用户已经充分理解本命令的危险性并且批准本次执行",
+                "toolReview": { "kind": "local_rule", "allow": false },
+                "command": "git reset --hard HEAD~1"
+            }),
+        );
+        assert!(result.output.contains("本地规则已直接拦截"));
+        assert!(result.output.contains("commitment"));
+        assert!(
+            result
+                .output
+                .contains("用户已经充分理解本命令的危险性并且批准本次执行"),
+            "被拦截时 AI 必须能看到承诺文案，否则无法回填 commitment 参数：{}",
+            result.output
+        );
+        assert!(!result.output.contains("{\""));
     }
 }

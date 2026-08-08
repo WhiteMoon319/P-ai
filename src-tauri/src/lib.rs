@@ -956,8 +956,87 @@ fn graceful_restart_app(app: &AppHandle) {
     }
 }
 
+// Windows 通知品牌身份：进程级 AUMID + HKCU 注册 DisplayName/IconUri，
+// 让未打包/裸 exe 场景下通知中心也按 PAI 品牌名+图标显示（上游 v0.57 迁入）。
+#[cfg(target_os = "windows")]
+fn windows_set_process_app_user_model_id() {
+    use windows_sys::Win32::{
+        Foundation::ERROR_SUCCESS,
+        System::Registry::{
+            RegCloseKey, RegCreateKeyExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER, KEY_SET_VALUE,
+            REG_OPTION_NON_VOLATILE, REG_SZ,
+        },
+        UI::Shell::SetCurrentProcessExplicitAppUserModelID,
+    };
+
+    const AUMID: &str = "ai.easycall.app";
+    const DISPLAY_NAME: &str = "PAI";
+
+    // 1. 进程级 AUMID：让 toast 发送方身份与插件使用的 identifier 一致
+    let aumid_wide: Vec<u16> = AUMID.encode_utf16().chain(std::iter::once(0)).collect();
+    let result = unsafe { SetCurrentProcessExplicitAppUserModelID(aumid_wide.as_ptr()) };
+    if result != 0 {
+        runtime_log_warn(format!(
+            "[通知] 设置进程 AppUserModelID 失败: 0x{:X}",
+            result
+        ));
+    }
+
+    // 2. HKCU 注册 AUMID（DisplayName/IconUri）：未打包应用的标准身份来源，
+    //    无安装器快捷方式时通知中心也按品牌名+图标显示；幂等，每次启动重写
+    let subkey: Vec<u16> = format!(r"Software\Classes\AppUserModelId\{AUMID}")
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut key_handle: HKEY = std::ptr::null_mut();
+    let status = unsafe {
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            subkey.as_ptr(),
+            0,
+            std::ptr::null(),
+            REG_OPTION_NON_VOLATILE,
+            KEY_SET_VALUE,
+            std::ptr::null(),
+            &mut key_handle,
+            std::ptr::null_mut(),
+        )
+    };
+    if status != ERROR_SUCCESS {
+        runtime_log_warn(format!("[通知] 注册 AUMID 键失败: 0x{:X}", status));
+        return;
+    }
+    let set_value = |name: &str, value: &str| {
+        let name_wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+        let value_wide: Vec<u16> = value.encode_utf16().collect();
+        let status = unsafe {
+            RegSetValueExW(
+                key_handle,
+                name_wide.as_ptr(),
+                0,
+                REG_SZ,
+                value_wide.as_ptr() as *const u8,
+                (value_wide.len() * 2) as u32,
+            )
+        };
+        if status != ERROR_SUCCESS {
+            runtime_log_warn(format!("[通知] 写入 AUMID {name} 失败: 0x{:X}", status));
+        }
+    };
+    set_value("DisplayName", DISPLAY_NAME);
+    if let Ok(exe) = std::env::current_exe() {
+        set_value("IconUri", &exe.to_string_lossy());
+    }
+    unsafe {
+        RegCloseKey(key_handle);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "windows")]
+    windows_set_process_app_user_model_id();
+
     init_backend_file_logging();
     install_backend_file_panic_hook();
     unix_extend_process_path_from_login_shell();

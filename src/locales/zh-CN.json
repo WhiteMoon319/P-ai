@@ -415,31 +415,13 @@
         ],
         "chartPolar": "极区图"
       },
+      "runtimeDeps": {
+        "title": "运行时依赖"
+      },
       "cards": {
-        "git": {
-          "title": "Git",
-          "summary": "Git 是 PAI 帮你自动跑命令、安装 Skill 的底层工具。装好之后，很多操作可以直接交给 PAI 代办。",
-          "currentOk": "已装好，没问题。",
-          "currentMissing": "还没装。点一键安装，失败时会自动打开官网。",
-          "action": "去看工具",
-          "install": "安装 Git",
-          "currentMissingAndroid": "还没装。可让 PAI 在沙盒终端里执行 apt install git 安装。"
-        },
-        "node": {
-          "title": "Node.js",
-          "summary": "Node.js 是 Skill 和工具插件的运行环境。没有它，Skill 装不上也用不了。点右边就能装，一两分钟的事。",
-          "currentOk": "已装好，没问题。",
-          "currentMissing": "还没装。点一键安装，失败时会自动打开官网。",
-          "action": "去看工具",
-          "install": "安装 Node.js",
-          "currentMissingAndroid": "还没装。可让 PAI 在沙盒终端里执行 apt install nodejs 安装。"
-        },
         "ripgrep": {
           "title": "ripgrep（rg）",
-          "summary": "ripgrep 是 PAI 在沙盒里快速搜索文件内容的底层工具，安装后搜索体验会更好。",
-          "currentOk": "已装好，没问题。",
-          "currentMissing": "还没装。点一键安装，失败时会自动打开官网。",
-          "action": "去看工具"
+          "hint": "快速的本地搜索工具，可以提高 AI 搜索速度"
         },
         "expertModel": {
           "title": "专家模型",
@@ -1481,6 +1463,11 @@
       "stopped": "已停止",
       "deploySuccess": "部署成功",
       "deployFailed": "部署失败",
+      "nodeRequired": "缺少 Node.js",
+      "nodeRequiredHint": "MCP 服务依赖 Node.js 运行，安装后即可部署",
+      "installNode": "安装 Node.js",
+      "installingNode": "正在安装 Node.js...",
+      "nodeInstalled": "Node.js 已就绪",
       "toolEnabled": "工具已启用",
       "toolDisabled": "工具已禁用",
       "toolSwitchFailed": "工具开关失败",
@@ -1796,6 +1783,7 @@
     "sendModeEnter": "按 Enter 键发送消息",
     "sendModeCtrlEnter": "按 Ctrl + Enter 键发送消息",
     "sendModeMenu": "切换发送快捷键",
+    "sendModeAltS": "Alt + S 始终可发送",
     "newConversation": "新建会话",
     "newTask": "新建任务",
     "conversationList": "会话列表",
