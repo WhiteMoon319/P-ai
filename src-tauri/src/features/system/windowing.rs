@@ -1086,6 +1086,35 @@ fn apply_window_layout_before_show(app: &AppHandle, label: &str) -> Result<(), S
     Ok(())
 }
 
+/// 保存布局前校验可见性：若 x/y 不在任何显示器可见范围内，改写为主屏内兜底坐标，
+/// 避免离屏坐标（如副屏拔除后的残留 -32000,-32000）被持久化。
+fn fallback_visible_position(window: &tauri::WebviewWindow, x: i32, y: i32) -> (i32, i32) {
+    let Ok(monitors) = window.available_monitors() else {
+        return (x, y);
+    };
+    if monitors.is_empty() {
+        return (x, y);
+    }
+    let outer_size = window.outer_size().map_err(|_| ()).unwrap_or_default();
+    if window_rect_is_visible_on_any_monitor(
+        &monitors,
+        x,
+        y,
+        outer_size.width,
+        outer_size.height,
+    ) {
+        return (x, y);
+    }
+    let Some(monitor) = preferred_window_monitor(window) else {
+        return (x, y);
+    };
+    let monitor_x = monitor.position().x;
+    let monitor_y = monitor.position().y;
+    let center_x = monitor_x + (monitor.size().width as i32 - outer_size.width as i32) / 2;
+    let center_y = monitor_y + (monitor.size().height as i32 - outer_size.height as i32) / 2;
+    (center_x.max(monitor_x), center_y.max(monitor_y))
+}
+
 fn persist_window_layout_snapshot_with_reason(
     app: &AppHandle,
     label: &str,
@@ -1119,7 +1148,8 @@ fn persist_window_layout_snapshot_with_reason(
             width = width.saturating_sub(expanded_logical_width).max(1);
             x = x.saturating_add(expansion.left_physical as i32);
         }
-        Some((width, height, x, outer_pos.y))
+        let (x, y) = fallback_visible_position(&window, x, outer_pos.y);
+        Some((width, height, x, y))
     };
 
     upsert_window_layout(label, |entry| {
