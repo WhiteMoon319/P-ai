@@ -10,26 +10,7 @@
           <span class="text-xs opacity-60" v-if="appVersion">v{{ appVersion }}</span>
         </div>
 
-        <!-- 缺失的运行时依赖（已装的不提示） -->
-        <template v-for="dep in missingDeps" :key="dep.kind">
-          <span class="badge badge-error gap-1 font-medium">
-            <span>{{ dep.label }}</span>
-            <span class="opacity-80">{{ t("config.welcome.notInstalled") }}</span>
-          </span>
-          <button
-            class="btn btn-xs btn-primary"
-            type="button"
-            :disabled="installingPrerequisite !== null"
-            @click="installPrerequisite(dep.kind)"
-          >
-            {{ installingPrerequisite === dep.kind ? t("config.welcome.installing") : t("config.welcome.autoInstall") }}
-          </button>
-          <span v-if="runtimeInstallStatusError[dep.kind]" class="text-xs text-error">
-            {{ runtimeInstallStatus[dep.kind] }}
-          </span>
-        </template>
-
-      <!-- 未设置的模型分工（点击跳对话设置页） -->
+        <!-- 未设置的模型分工（点击跳对话设置页） -->
       <button
         v-if="!quickModel"
         class="btn btn-xs btn-outline btn-warning gap-1"
@@ -55,6 +36,45 @@
         <MessageSquare class="h-3.5 w-3.5" />
         {{ t("window.startChat") }}
       </button>
+      </div>
+    </div>
+
+    <!-- 运行时依赖：ripgrep 独立设置项 -->
+    <div
+      v-if="showRuntimeDeps"
+      class="card bg-base-100 card-border border-base-300 from-base-content/5 bg-linear-to-bl to-50% card-sm overflow-hidden"
+    >
+      <div class="card-body gap-3 px-4 py-3">
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-bold">{{ t("config.welcome.runtimeDeps.title") }}</span>
+        </div>
+        <div class="flex flex-col gap-2">
+          <div v-for="dep in runtimeDeps" :key="dep.kind" class="flex flex-wrap items-center gap-2">
+            <div class="flex flex-col w-44 shrink-0">
+              <span class="text-sm font-medium">{{ dep.label }}</span>
+              <span class="text-xs opacity-60">{{ dep.hint }}</span>
+            </div>
+            <span v-if="dep.installed" class="badge badge-success gap-1 font-medium">
+              {{ t("config.welcome.runtimeDeps.ready") }}
+            </span>
+            <span v-else class="badge badge-error gap-1 font-medium">
+              {{ t("config.welcome.notInstalled") }}
+            </span>
+            <div class="flex-1" />
+            <span v-if="runtimeInstallStatusError[dep.kind]" class="text-xs text-error max-w-56 text-right">
+              {{ runtimeInstallStatus[dep.kind] }}
+            </span>
+            <button
+              v-if="!dep.installed"
+              class="btn btn-xs btn-primary"
+              type="button"
+              :disabled="installingPrerequisite !== null"
+              @click="installPrerequisite(dep.kind)"
+            >
+              {{ installingPrerequisite === dep.kind ? t("config.welcome.installing") : t("config.welcome.autoInstall") }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -94,6 +114,8 @@ type HostRuntimePrerequisiteInstallResult = {
 type MissingDep = {
   kind: HostRuntimePrerequisiteKind;
   label: string;
+  hint: string;
+  installed: boolean;
 };
 
 const props = defineProps<{
@@ -106,6 +128,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+// 备用下载兜底：当前前端只有 rg 安装入口，git/node 保留供后续 UI 复用
 const GIT_DOWNLOAD_URL = "https://git-scm.com/downloads";
 const NODE_DOWNLOAD_URL = "https://nodejs.org/en/download";
 const RG_DOWNLOAD_URL = "https://github.com/BurntSushi/ripgrep/releases";
@@ -142,16 +165,23 @@ async function loadAppVersion() {
   }
 }
 
-// 只有后端明确返回某项依赖未安装（=== false）才列出；
-// 未返回字段、返回 true、Web/VS Code 宿主无本机检测，都不应显示"未安装"。
-const missingDeps = computed<MissingDep[]>(() => {
-  if (!canUseTransportHostRuntimeCheck()) return [];
+// 运行时依赖卡片：ripgrep 独立设置项，显示安装状态；
+// 检测无结果（invoke 异常/未返回字段/Web 宿主无本机检测）时整卡隐藏，只有明确未安装才提示。
+const showRuntimeDeps = computed(() => {
+  if (!canUseTransportHostRuntimeCheck()) return false;
+  const installed = hostRuntimePrerequisites.value.rgInstalled;
+  return installed === true || installed === false;
+});
+const runtimeDeps = computed<MissingDep[]>(() => {
   const prerequisites = hostRuntimePrerequisites.value;
-  const items: MissingDep[] = [];
-  if (prerequisites.gitInstalled === false) items.push({ kind: "git", label: t("config.welcome.cards.git.title") });
-  if (prerequisites.nodeInstalled === false) items.push({ kind: "node", label: t("config.welcome.cards.node.title") });
-  if (prerequisites.rgInstalled === false) items.push({ kind: "rg", label: t("config.welcome.cards.ripgrep.title") });
-  return items;
+  return [
+    {
+      kind: "rg",
+      label: t("config.welcome.cards.ripgrep.title"),
+      hint: t("config.welcome.cards.ripgrep.hint"),
+      installed: prerequisites.rgInstalled === true,
+    },
+  ];
 });
 
 const quickModel = computed(() => findModel(props.config.apiConfigs || [], props.config.toolReviewApiConfigId));
@@ -171,6 +201,7 @@ async function installPrerequisite(kind: HostRuntimePrerequisiteKind) {
     const err = toErrorMessage(error);
     runtimeInstallStatus.value[kind] = t("config.welcome.installFailedFallback", { err });
     runtimeInstallStatusError.value[kind] = true;
+    // kind 当前只会是 rg；git/node 分支保留，与上方常量配套，供后续 UI 复用
     const fallbackUrl = kind === "git" ? GIT_DOWNLOAD_URL : kind === "node" ? NODE_DOWNLOAD_URL : RG_DOWNLOAD_URL;
     void openTransportExternalUrl(fallbackUrl);
   } finally {

@@ -409,15 +409,14 @@
         ],
         "chartPolar": "Polar"
       },
+      "runtimeDeps": {
+        "title": "Runtime Dependencies",
+        "ready": "Ready"
+      },
       "cards": {
-        "git": {
-          "title": "Git"
-        },
-        "node": {
-          "title": "Node.js"
-        },
         "ripgrep": {
-          "title": "ripgrep (rg)"
+          "title": "ripgrep (rg)",
+          "hint": "Fast local search that speeds up AI search"
         },
         "expertModel": {
           "title": "Expert Model"
@@ -1257,6 +1256,11 @@
       "stopped": "Stopped",
       "deploySuccess": "Deploy successful",
       "deployFailed": "Deploy failed",
+      "nodeRequired": "Node.js missing",
+      "nodeRequiredHint": "MCP servers run on Node.js; install it to deploy",
+      "installNode": "Install Node.js",
+      "installingNode": "Installing Node.js...",
+      "nodeInstalled": "Node.js is ready",
       "toolEnabled": "Tool enabled",
       "toolDisabled": "Tool disabled",
       "toolSwitchFailed": "Tool switch failed",

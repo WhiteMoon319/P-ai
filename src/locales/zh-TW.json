@@ -407,15 +407,14 @@
         ],
         "chartPolar": "極區圖"
       },
+      "runtimeDeps": {
+        "title": "執行階段依賴",
+        "ready": "已就緒"
+      },
       "cards": {
-        "git": {
-          "title": "Git"
-        },
-        "node": {
-          "title": "Node.js"
-        },
         "ripgrep": {
-          "title": "ripgrep（rg）"
+          "title": "ripgrep（rg）",
+          "hint": "快速的本地搜尋工具，可以提高 AI 搜尋速度"
         },
         "expertModel": {
           "title": "專家模型"
@@ -1255,6 +1254,11 @@
       "stopped": "已停止",
       "deploySuccess": "部署成功",
       "deployFailed": "部署失敗",
+      "nodeRequired": "缺少 Node.js",
+      "nodeRequiredHint": "MCP 服務依賴 Node.js 執行，安裝後即可部署",
+      "installNode": "安裝 Node.js",
+      "installingNode": "正在安裝 Node.js...",
+      "nodeInstalled": "Node.js 已就緒",
       "toolEnabled": "工具已啟用",
       "toolDisabled": "工具已停用",
       "toolSwitchFailed": "工具開關失敗",
