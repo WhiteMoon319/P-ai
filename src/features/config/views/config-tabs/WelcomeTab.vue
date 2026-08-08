@@ -54,10 +54,7 @@
               <span class="text-sm font-medium">{{ dep.label }}</span>
               <span class="text-xs opacity-60">{{ dep.hint }}</span>
             </div>
-            <span v-if="dep.installed" class="badge badge-success gap-1 font-medium">
-              {{ t("config.welcome.runtimeDeps.ready") }}
-            </span>
-            <span v-else class="badge badge-error gap-1 font-medium">
+            <span class="badge badge-error gap-1 font-medium">
               {{ t("config.welcome.notInstalled") }}
             </span>
             <div class="flex-1" />
@@ -65,7 +62,6 @@
               {{ runtimeInstallStatus[dep.kind] }}
             </span>
             <button
-              v-if="!dep.installed"
               class="btn btn-xs btn-primary"
               type="button"
               :disabled="installingPrerequisite !== null"
@@ -115,7 +111,6 @@ type MissingDep = {
   kind: HostRuntimePrerequisiteKind;
   label: string;
   hint: string;
-  installed: boolean;
 };
 
 const props = defineProps<{
@@ -165,21 +160,18 @@ async function loadAppVersion() {
   }
 }
 
-// 运行时依赖卡片：ripgrep 独立设置项，显示安装状态；
-// 检测无结果（invoke 异常/未返回字段/Web 宿主无本机检测）时整卡隐藏，只有明确未安装才提示。
+// 运行时依赖卡片：ripgrep 独立设置项，只在明确未安装时显示；
+// 检测无结果（invoke 异常/未返回字段/Web 宿主无本机检测）或已安装时整卡隐藏。
 const showRuntimeDeps = computed(() => {
   if (!canUseTransportHostRuntimeCheck()) return false;
-  const installed = hostRuntimePrerequisites.value.rgInstalled;
-  return installed === true || installed === false;
+  return hostRuntimePrerequisites.value.rgInstalled === false;
 });
 const runtimeDeps = computed<MissingDep[]>(() => {
-  const prerequisites = hostRuntimePrerequisites.value;
   return [
     {
       kind: "rg",
       label: t("config.welcome.cards.ripgrep.title"),
       hint: t("config.welcome.cards.ripgrep.hint"),
-      installed: prerequisites.rgInstalled === true,
     },
   ];
 });

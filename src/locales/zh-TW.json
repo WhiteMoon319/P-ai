@@ -408,8 +408,7 @@
         "chartPolar": "極區圖"
       },
       "runtimeDeps": {
-        "title": "執行階段依賴",
-        "ready": "已就緒"
+        "title": "執行階段依賴"
       },
       "cards": {
         "ripgrep": {

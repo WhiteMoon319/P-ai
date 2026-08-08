@@ -410,8 +410,7 @@
         "chartPolar": "Polar"
       },
       "runtimeDeps": {
-        "title": "Runtime Dependencies",
-        "ready": "Ready"
+        "title": "Runtime Dependencies"
       },
       "cards": {
         "ripgrep": {

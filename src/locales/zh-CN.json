@@ -410,8 +410,7 @@
         "chartPolar": "极区图"
       },
       "runtimeDeps": {
-        "title": "运行时依赖",
-        "ready": "已就绪"
+        "title": "运行时依赖"
       },
       "cards": {
         "ripgrep": {
