@@ -22,16 +22,18 @@
         </button>
       </div>
 
-      <div v-if="members.length > 0" class="rounded-md border border-base-300 bg-base-100 px-3 py-2 text-xs">
-        <div class="mb-1 flex items-center justify-between">
-          <span class="font-semibold opacity-70">组内成员（{{ members.length }}）</span>
-        </div>
-        <div v-for="m in members" :key="m.name" class="flex items-center justify-between gap-2 py-0.5">
-          <span class="font-mono truncate">{{ m.name }}</span>
-          <span class="flex items-center gap-2 shrink-0">
-            <span v-if="m.toolCount > 0" class="opacity-60">{{ m.toolCount }} 个工具</span>
-            <span class="badge badge-sm badge-ghost">{{ m.transport }}</span>
-          </span>
+      <div v-if="members.length > 0" class="card card-sm card-border border-base-300 bg-base-100">
+        <div class="card-body gap-2 px-4 py-3">
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-semibold">组内成员（{{ members.length }}）</span>
+          </div>
+          <div v-for="m in members" :key="m.name" class="flex items-center justify-between gap-2 py-0.5 text-xs">
+            <span class="font-mono truncate">{{ m.name }}</span>
+            <span class="flex items-center gap-2 shrink-0">
+              <span v-if="m.toolCount > 0" class="opacity-60">{{ m.toolCount }} 个工具</span>
+              <span class="badge badge-sm badge-ghost">{{ m.transport }}</span>
+            </span>
+          </div>
         </div>
       </div>
 
