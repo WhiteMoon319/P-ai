@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.57.0](docs/changelog/releases/v0.57.0.md) - 会话列表的聚合旧会话条目新增摘要预览：未读或 7 天内有更新的条目默认展开显示最近消息摘要，其余条目悬停时展开；移除悬停时的系统默认提示气泡
 - [v0.56.2](docs/changelog/releases/v0.56.2.md) - 修复 i18n 文案缺失：补全三语（zh-CN/zh-TW/en-US）中 welcome 卡片、工具页、远程前端密码等 63 处静态引用缺失的翻译 key，并补齐 zh-TW 热键发送方式的 4 处缺口。
 - [v0.56.1](docs/changelog/releases/v0.56.1.md) - Android 工作区导出改用原生 FileProvider + ACTION_SEND 系统分享：把沙盒工作区文件通过系统分享面板导出到其他应用，Kotlin shareFromDevice 改用模板 authority `${packageName}.fileprovider`，patch-android-project.sh 向模板 file_paths.xml 追加 root-path 覆盖沙盒根 app_data_dir()。
 - [v0.56.0](docs/changelog/releases/v0.56.0.md) - 足迹墙按凌晨 4 点分界：凌晨 0:00-3:59 的使用归属前一个分界日（适配通宵工作场景），今日视图、历史日历、年份统计与小时图全部按分界日口径计算；今日小时图 x 轴按分界日顺序排列（04:00 起头，0-3 点收尾）

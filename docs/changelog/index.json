@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-08-07T09:50:14.747Z",
-  "latestVersion": "v0.56.2",
+  "generatedAt": "2026-08-08T12:28:59.363Z",
+  "latestVersion": "v0.57.0",
   "releases": [
+    {
+      "version": "v0.57.0",
+      "path": "docs/changelog/releases/v0.57.0.md",
+      "summary": "会话列表的聚合旧会话条目新增摘要预览：未读或 7 天内有更新的条目默认展开显示最近消息摘要，其余条目悬停时展开；移除悬停时的系统默认提示气泡"
+    },
     {
       "version": "v0.56.2",
       "path": "docs/changelog/releases/v0.56.2.md",
