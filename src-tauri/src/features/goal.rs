@@ -63,15 +63,6 @@ fn goal_usage_delta(
     }
 }
 
-fn goal_blocked_turn_threshold_met(
-    conversation: &Conversation,
-    goal: &ConversationGoalState,
-) -> bool {
-    goal_continue_turn_for_conversation(conversation, &goal.goal_id)
-        .saturating_sub(1)
-        >= 3
-}
-
 fn goal_output(conversation_id: &str, goal: ConversationGoalState) -> GoalMutationOutput {
     let usage_end = goal
         .usage_end
@@ -203,11 +194,6 @@ fn goal_update_terminal_inner(
                 .clone()
                 .filter(conversation_goal_is_active)
                 .ok_or_else(|| "当前会话没有 active goal。".to_string())?;
-            if normalized_status == GOAL_STATUS_BLOCKED
-                && !goal_blocked_turn_threshold_met(conversation, &goal)
-            {
-                return Err("update_goal blocked requires at least three goal continuation turns for the same active goal".to_string());
-            }
             goal.status = normalized_status.to_string();
             goal.ended_at = Some(now.clone());
             goal.usage_end = Some(conversation.cumulative_usage.clone());
@@ -354,28 +340,6 @@ fn goal_cancel_goal(
 #[cfg(test)]
 mod goal_tests {
     use super::*;
-
-    fn goal_continue_test_message(goal_id: &str, turn: usize) -> ChatMessage {
-        ChatMessage {
-            id: format!("goal-message-{turn}"),
-            role: "user".to_string(),
-            created_at: "2026-06-11T00:00:00Z".to_string(),
-            speaker_agent_id: None,
-            parts: vec![MessagePart::Text {
-                text: "继续推进当前目标。".to_string(),
-                reasoning_content: None,
-            }],
-            extra_text_blocks: Vec::new(),
-            provider_meta: Some(serde_json::json!({
-                "messageKind": "goal_continue",
-                "goalId": goal_id,
-                "goalTurn": turn,
-            })),
-            tool_call: None,
-            mcp_call: None,
-        meme_annotations: None,
-        }
-    }
 
     #[test]
     fn goal_usage_delta_should_saturate() {
@@ -709,38 +673,5 @@ mod goal_tests {
         assert!(!latest_blocks
             .iter()
             .any(|block| block.contains("普通用户隐藏提示不应出现")));
-    }
-
-    #[test]
-    fn goal_blocked_threshold_should_require_three_goal_continue_messages() {
-        let goal = ConversationGoalState {
-            goal_id: "goal-threshold".to_string(),
-            status: GOAL_STATUS_ACTIVE.to_string(),
-            objective: "验证 blocked 门槛".to_string(),
-            started_at: "2026-06-11T00:00:00Z".to_string(),
-            ended_at: None,
-            usage_start: ConversationCumulativeUsage::default(),
-            usage_end: None,
-        };
-        let mut conversation = build_conversation_record(
-            "",
-            DEFAULT_AGENT_ID,
-            ASSISTANT_DEPARTMENT_ID,
-            "blocked 门槛",
-            CONVERSATION_KIND_CHAT,
-            None,
-            None,
-        );
-        conversation.active_goal = Some(goal.clone());
-        conversation.messages = vec![
-            goal_continue_test_message(&goal.goal_id, 1),
-            goal_continue_test_message(&goal.goal_id, 2),
-        ];
-
-        assert!(!goal_blocked_turn_threshold_met(&conversation, &goal));
-        conversation
-            .messages
-            .push(goal_continue_test_message(&goal.goal_id, 3));
-        assert!(goal_blocked_turn_threshold_met(&conversation, &goal));
     }
 }
