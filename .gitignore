@@ -40,3 +40,7 @@ release/windows/*.exe
 *.vsix
 .pnpm-store
 src-tauri/target-tests/
+# 本地诊断临时产物
+_phone/
+apk_download/
+logs_*/
