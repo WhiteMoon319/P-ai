@@ -203,8 +203,8 @@ Tauri 管理 3 个无边框窗口：`main`（配置，900×900）、`chat`（对
 - 提交信息默认使用中文，便于与现有项目历史保持一致。
 - 常用类型：`feat`、`fix`、`perf`、`refactor`、`docs`、`chore`。
 - Changelog 采用“版本明细为源、脚本生成汇总”的方式维护：`docs/changelog/releases/*.md` 是唯一手工维护来源；`CHANGELOG.md`、`docs/changelog/latest.md`、`docs/changelog/remote.md`、`docs/changelog/index.json` 都由 `pnpm changelog:build` 生成，默认不要手改生成文件。
-- 每次 `git commit` 前默认跳过 changelog；只有当本次改动改变用户可见行为、或新增/删除面向用户的能力时，才补“未发布”changelog 条目。纯开发改动（测试修复、重构、内部接口收敛、脚手架、文档、规则调整等）只进 commit，不进 changelog。不要把新变更追加到既有版本号文件；未提升版本号时，禁止执行 `pnpm changelog:build` 或更新生成文件；只有提升版本号、并把“未发布”内容改归到对应的 `docs/changelog/releases/vX.Y.Z.md` 时，才执行 `pnpm changelog:build`。
-- Changelog 文案必须是用户视角的行为变化，禁止搬运 commit 的技术描述（变量名、函数名、机制细节）。commit 是给程序员看的日志，changelog 是给用户看的；同一改动可保留两套表述。
+- 每次 `git commit` 前默认跳过 changelog。`docs/changelog/releases/UNRELEASED.md` 只记录用户可感知的行为变化（新增、改变或修复面向用户的能力）；纯底层改动——重构、内部接口收敛、异步化、性能实现细节、测试修复、脚手架、文档、规则调整——默认不写 UNRELEASED，即使以 `fix`/`perf` 提交也只在 commit 里体现。若底层改动带来了用户可感知的体验变化（如切换会话不再卡顿、界面响应变快），才写 UNRELEASED，且必须写成用户口吻，不得描述实现手段。拿不准一条改动是否值得写时，默认不写。
+- Changelog 文案必须是用户视角的行为变化，禁止搬运 commit 的技术描述（变量名、函数名、机制细节）。commit 是给程序员看的日志，changelog 是给用户看的；同一改动可保留两套表述。不要把新变更追加到既有版本号文件；未提升版本号时，禁止执行 `pnpm changelog:build` 或更新生成文件；只有提升版本号、并把“未发布”内容改归到对应的 `docs/changelog/releases/vX.Y.Z.md` 时，才执行 `pnpm changelog:build`。
 - 每次 `git commit` 前必须先修复并跑通本次改动影响到的全部测试；存在失败项时禁止提交。
 - 不要把测试留到最后一次性再跑；开发过程中应边改边验证，尽早发现并修复失败。
 
