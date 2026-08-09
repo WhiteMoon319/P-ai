@@ -56,6 +56,7 @@ function createBindings(shouldBindStream: boolean, order: string[]) {
       currentChatConversationId.value = snapshot.conversationId;
     }),
     triggerConversationScrollToBottom: vi.fn(),
+    requestScrollToBottomAfterStreamSettle: vi.fn(),
     logForegroundPaintTrace: vi.fn(),
     getChatFlow: () => flow,
   };
@@ -116,5 +117,28 @@ describe("useChatForegroundOrchestrator", () => {
     await switching;
 
     expect(flow.bindActiveConversationStream).not.toHaveBeenCalled();
+  });
+
+  it("快照应用后立即释放切换任务，角标/已读/滚动在后台收尾", async () => {
+    const order: string[] = [];
+    const { bindings, finishUnbind } = createBindings(false, order);
+    const orchestrator = useChatForegroundOrchestrator(bindings);
+
+    const switching = orchestrator.switchUnarchivedConversation("conversation-b");
+    await vi.waitFor(() => {
+      expect(order).toContain("snapshot-apply");
+    });
+    finishUnbind();
+    // 切换任务完成，不等待渲染/滚动收尾
+    await switching;
+    // 收尾操作仍会执行（后台异步补跑，滚动按会话 id 校验）
+    await vi.waitFor(() => {
+      expect(bindings.clearConversationBadge).toHaveBeenCalledWith("conversation-b");
+      expect(bindings.markConversationReadPersisted).toHaveBeenCalledWith("conversation-b");
+      expect(bindings.triggerConversationScrollToBottom).toHaveBeenCalledWith(
+        "conversation-b",
+        "switch_snapshot_ready",
+      );
+    });
   });
 });
