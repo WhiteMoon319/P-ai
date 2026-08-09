@@ -99,7 +99,9 @@ class AppViewModel(
 
     suspend fun sendMessage(text: String) {
         val conversationId = currentConversationId.value ?: return
-        val agent = conversations.value.firstOrNull { it.conversationId == conversationId }?.agentId
+        val conv = conversations.value.firstOrNull { it.conversationId == conversationId }
+        val agent = conv?.agentId
+        val departmentId = conv?.departmentId
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
         // 乐观显示用户消息
@@ -114,7 +116,7 @@ class AppViewModel(
         isStreaming.value = true
         withContext(Dispatchers.IO) {
             try {
-                service.send(conversationId, agent, trimmed)
+                service.send(conversationId, departmentId, agent, trimmed)
             } catch (e: Exception) {
                 error.value = "发送失败: ${e.message}"
                 isStreaming.value = false
@@ -124,10 +126,12 @@ class AppViewModel(
 
     suspend fun stopStreaming() {
         val conversationId = currentConversationId.value ?: return
-        val agent = conversations.value.firstOrNull { it.conversationId == conversationId }?.agentId
+        val conv = conversations.value.firstOrNull { it.conversationId == conversationId }
+        val agent = conv?.agentId
+        val departmentId = conv?.departmentId
         withContext(Dispatchers.IO) {
             try {
-                service.stop(conversationId, agent)
+                service.stop(conversationId, departmentId, agent)
             } catch (_: Exception) {
             }
             finalizeStreaming()

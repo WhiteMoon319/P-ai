@@ -35,17 +35,17 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("conversation.blockPage", input, BlockPageResult::class.java)
     }
 
-    suspend fun send(conversationId: String, agentId: String?, text: String): SubmitChatResult {
+    suspend fun send(conversationId: String, departmentId: String?, agentId: String?, text: String): SubmitChatResult {
         val request = SendChatRequest(
             payload = ai.easycall.app.model.ChatInputPayload(text = text),
-            session = SessionSelector(agentId = agentId ?: "agent", conversationId = conversationId),
+            session = SessionSelector(departmentId = departmentId, agentId = agentId ?: "agent", conversationId = conversationId),
         )
         return client.request("chat.send", request, SubmitChatResult::class.java)
     }
 
-    suspend fun stop(conversationId: String, agentId: String?) {
+    suspend fun stop(conversationId: String, departmentId: String?, agentId: String?) {
         val req = ai.easycall.app.model.StopChatRequest(
-            session = SessionSelector(agentId = agentId ?: "agent", conversationId = conversationId),
+            session = SessionSelector(departmentId = departmentId, agentId = agentId ?: "agent", conversationId = conversationId),
         )
         client.sendOneWay("chat.stop", req)
     }
