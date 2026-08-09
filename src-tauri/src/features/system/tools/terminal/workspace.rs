@@ -988,6 +988,9 @@ fn terminal_prompt_trusted_roots_block(
     let mut lines = Vec::<String>::new();
     lines.push(format!("当前操作系统: {}", std::env::consts::OS));
     lines.push(format!("当前 shell: {}", shell_title));
+    if runtime_shell.kind == "powershell5" {
+        lines.push("检测到当前仅有 Windows PowerShell 5.1（未安装 Git Bash 与 PowerShell 7），该环境兼容性差，不适合作为自动化执行 shell。请主动帮助用户安装 Git for Windows（自带 Git Bash）：优先执行 winget install --id Git.Git --source winget；若因网络问题无法下载 Git，则尝试安装 PowerShell 7：winget install --id Microsoft.PowerShell --source winget。安装完成后，提示用户重启 PAI 使新 shell 生效。".to_string());
+    }
     lines.push("说明: 当前工作目录是用户任务的默认执行目录。".to_string());
     if terminal_conversation_shell_autonomous_mode(conversation) {
         lines.push("当前会话已开启“给予本会话最大权限”：终端与补丁工具可访问任意目录，并跳过目录权限、智能评估与人工审批。".to_string());
@@ -1798,9 +1801,59 @@ mod terminal_workspace_tests {
 
         assert!(block.contains("PowerShell 7"));
         assert!(!block.contains("Git Bash"));
+        assert!(!block.contains("请主动帮助用户安装 PowerShell 7"));
         assert!(block.contains("当前工作目录是用户任务的默认执行目录"));
         assert!(block.contains("助理空间是 PAI 的配置目录与助理个人长期目录"));
         assert!(block.contains("</shell workspace>\n<assistant space>"));
+
+        let _ = std::fs::remove_dir_all(temp_root);
+    }
+
+    #[test]
+    fn terminal_prompt_trusted_roots_block_should_guide_powershell5_install() {
+        let temp_root = std::env::temp_dir().join(format!(
+            "easy-call-ai-terminal-powershell5-prompt-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let llm_workspace_path = temp_root.join("p-ai").join("llm-workspace");
+        std::fs::create_dir_all(&llm_workspace_path).expect("create llm workspace");
+        let mut state = build_test_state(llm_workspace_path.clone());
+        state.terminal_shell_candidates = vec![TerminalShellProfile {
+            kind: "powershell5".to_string(),
+            path: r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe".to_string(),
+            args_prefix: vec!["-NoProfile".to_string(), "-Command".to_string()],
+        }];
+        state.terminal_shell = state.terminal_shell_candidates[0].clone();
+        let mut config = AppConfig::default();
+        config.terminal_shell_kind = "auto".to_string();
+        config.shell_workspaces = vec![ShellWorkspaceConfig {
+            id: "system-workspace".to_string(),
+            name: "系统工作目录".to_string(),
+            path: terminal_path_for_user(&llm_workspace_path),
+            level: SHELL_WORKSPACE_LEVEL_SYSTEM.to_string(),
+            access: SHELL_WORKSPACE_ACCESS_FULL_ACCESS.to_string(),
+            built_in: true,
+        }];
+        state_write_config_cached(&state, &config).expect("write config");
+        let mut api = ApiConfig::default();
+        api.enable_tools = true;
+        api.tools = vec![ApiToolConfig {
+            id: "exec".to_string(),
+            command: String::new(),
+            args: Vec::new(),
+            enabled: true,
+            values: Value::Null,
+        }];
+
+        let block = terminal_prompt_trusted_roots_block(&state, &api, None).expect("terminal block");
+
+        assert!(block.contains("当前 shell: Windows PowerShell 5.1"));
+        assert!(block.contains("请主动帮助用户安装 Git for Windows"));
+        assert!(block.contains("winget install --id Git.Git --source winget"));
+        assert!(block.contains("winget install --id Microsoft.PowerShell --source winget"));
+        assert!(block.contains("提示用户重启 PAI"));
+        assert!(!block.contains("当前 shell: PowerShell 7"));
+        assert!(!block.contains("当前 shell: Git Bash"));
 
         let _ = std::fs::remove_dir_all(temp_root);
     }
