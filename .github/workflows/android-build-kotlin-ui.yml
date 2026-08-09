@@ -96,7 +96,9 @@ jobs:
         run: |
           APK_DIR="src-tauri/gen/android/app/build/outputs/apk/universal/debug"
           ls -la "$APK_DIR"
+          # 分支名可能含 /（如 feat/android-kotlin-ui），替换成 - 避免当路径
           TAG="${GITHUB_REF_NAME:-kotlin-ui}"
+          TAG="${TAG//\//-}"
           for apk in "$APK_DIR"/*.apk; do
             [ -e "$apk" ] || { echo "No APK found in $APK_DIR" >&2; exit 1; }
             mv "$apk" "$APK_DIR/P-ai-${TAG}-aarch64.apk"
