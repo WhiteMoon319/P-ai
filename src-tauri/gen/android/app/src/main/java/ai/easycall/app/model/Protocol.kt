@@ -279,7 +279,8 @@ data class DeltaEvent(
     @SerializedName("requestId") val requestId: String? = null,
     @SerializedName("toolName") val toolName: String? = null,
     @SerializedName("toolStatus") val toolStatus: String? = null,
-    val message: DeltaMessage? = null,
+    /** 后端把 DeltaMessage 整体序列化成 JSON 字符串下发，需二次解析。 */
+    val message: String? = null,
 )
 
 data class DeltaMessage(

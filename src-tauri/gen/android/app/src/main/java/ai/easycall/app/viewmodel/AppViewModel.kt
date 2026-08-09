@@ -153,7 +153,11 @@ class AppViewModel(
                             }
                         }
                         "round_completed" -> {
-                            event.message?.let { m ->
+                            val msgJson = event?.message
+                            val m = msgJson?.let {
+                                runCatching { gson.fromJson(it, ai.easycall.app.model.DeltaMessage::class.java) }.getOrNull()
+                            }
+                            if (m != null) {
                                 val finalText = m.assistantText
                                 if (finalText.isNullOrEmpty()) {
                                     m.assistantMessage?.let { appendAssistantMessage(it) }
@@ -164,7 +168,11 @@ class AppViewModel(
                             finalizeStreaming()
                         }
                         "round_failed" -> {
-                            error.value = event?.message?.assistantText ?: "生成失败"
+                            val msgJson = event?.message
+                            val errText = msgJson?.let {
+                                runCatching { gson.fromJson(it, ai.easycall.app.model.DeltaMessage::class.java) }.getOrNull()?.assistantText
+                            }
+                            error.value = errText ?: "生成失败"
                             finalizeStreaming()
                         }
                     }

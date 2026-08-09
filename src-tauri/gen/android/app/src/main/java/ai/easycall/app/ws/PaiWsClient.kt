@@ -77,11 +77,19 @@ class PaiWsClient(private val scope: CoroutineScope) {
             connectionState.value = ConnectionStatus.Connecting
             val url = "ws://$host:$port/chat"
             val request = Request.Builder().url(url).build()
+            // 保证 continuation 只 resume 一次：okhttp 可能在 onOpen 后仍触发 onFailure（重连/重置），
+            // 导致 Already resumed 崩溃。用 AtomicBoolean 丢弃后续 resume。
+            val resumeOnce = java.util.concurrent.atomic.AtomicBoolean(false)
+            fun complete(value: Boolean) {
+                if (resumeOnce.compareAndSet(false, true)) {
+                    if (!cont.isCancelled) cont.resume(value)
+                }
+            }
             val ws = httpClient.newWebSocket(request, object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     socket = webSocket
                     connectionState.value = ConnectionStatus.Connected
-                    if (!cont.isCancelled) cont.resume(true)
+                    complete(true)
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
@@ -93,7 +101,7 @@ class PaiWsClient(private val scope: CoroutineScope) {
                     if (socket != webSocket) {
                         socket = null
                     }
-                    if (!cont.isCancelled) cont.resume(false)
+                    complete(false)
                 }
 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
