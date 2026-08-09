@@ -241,12 +241,12 @@ fun ChatScreen(
                 }
                 if (reasoning.isNotEmpty()) {
                     item(key = "reasoning") {
-                        ReasoningBlock(reasoning)
+                        ReasoningBlock(reasoning, isStreaming)
                     }
                 }
                 toolEvents.forEachIndexed { index, tool ->
                     item(key = "tool_$index") {
-                        ToolCallPill(tool)
+                        ToolCallPill(tool, isStreaming)
                     }
                 }
                 if (streaming.isNotEmpty()) {
@@ -297,8 +297,12 @@ fun ChatScreen(
 }
 
 @Composable
-private fun ReasoningBlock(text: String) {
-    var expanded by remember { mutableStateOf(false) }
+private fun ReasoningBlock(text: String, streaming: Boolean) {
+    // 默认展开：流式思考实时滚动可见；结束后用户可点击折叠
+    var expanded by remember { mutableStateOf(streaming) }
+    LaunchedEffect(streaming) {
+        if (streaming) expanded = true
+    }
     val color = MaterialTheme.colorScheme.outline
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
@@ -311,7 +315,7 @@ private fun ReasoningBlock(text: String) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    if (expanded) "思考中…" else "思考中（点击展开）",
+                    if (streaming) "思考中…" else if (expanded) "思考（点击折叠）" else "已思考（点击展开）",
                     style = MaterialTheme.typography.labelMedium,
                     color = color,
                 )
@@ -329,18 +333,34 @@ private fun ReasoningBlock(text: String) {
 }
 
 @Composable
-private fun ToolCallPill(text: String) {
+private fun ToolCallPill(text: String, streaming: Boolean) {
+    // 工具调用默认折叠为标题条；展开显示工具名/参数
+    var expanded by remember { mutableStateOf(false) }
     Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
         shape = MaterialTheme.shapes.small,
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp).widthIn(max = 320.dp),
     ) {
-        Text(
-            text,
-            Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-        )
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (streaming) "🛠 调用中…" else if (expanded) "工具（点击收起）" else "工具（点击展开）",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+            if (expanded) {
+                Text(
+                    text,
+                    Modifier.padding(top = 6.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+        }
     }
 }
 
@@ -367,7 +387,7 @@ fun MessageBubble(message: ChatMessage) {
                         .mapNotNull { it.reasoningContent?.takeIf { r -> r.isNotBlank() } }
                         .joinToString("\n")
                     if (reasoning.isNotBlank()) {
-                        ReasoningBlock(reasoning)
+                        ReasoningBlock(reasoning, streaming = false)
                     }
                     if (text.isNotBlank()) {
                         MarkdownText(content = text)

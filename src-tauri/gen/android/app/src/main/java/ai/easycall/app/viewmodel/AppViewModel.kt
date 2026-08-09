@@ -150,8 +150,15 @@ class AppViewModel(
     }
 
     private fun handleNotification(method: String, params: JsonElement?) {
-        // 诊断：确认下行事件是否到达 Kotlin
+        // 诊断：确认下行事件是否到达 Kotlin，及正文/思考/工具各自到达情况
         android.util.Log.d("PaiNotify", "method=$method convId=${params?.asJsonObject?.get("conversationId")} curr=${currentConversationId.value}")
+        if (method == "chat.assistantDelta") {
+            val diagEvent = params?.asJsonObject?.get("event")?.asJsonObject
+            val diagKind = diagEvent?.get("kind")?.takeIf { !it.isJsonNull }?.asString ?: "null"
+            val diagDelta = diagEvent?.get("delta")?.takeIf { !it.isJsonNull }?.asString ?: ""
+            val diagMsg = diagEvent?.get("message")?.takeIf { !it.isJsonNull }?.asString ?: ""
+            android.util.Log.d("PaiNotify", "assistantDelta kind=$diagKind deltaLen=${diagDelta.length} msgLen=${diagMsg.length}")
+        }
         when (method) {
             "chat.assistantDelta" -> {
                 val notif = params?.let { gson.fromJson(it, DeltaNotification::class.java) }
@@ -191,13 +198,19 @@ class AppViewModel(
                             val m = msgJson?.let {
                                 runCatching { gson.fromJson(it, ai.easycall.app.model.DeltaMessage::class.java) }.getOrNull()
                             }
-                            if (m != null) {
+                            // 优先落带完整 parts（含 reasoningContent 的 assistantMessage），
+                            // 避免仅用 assistantText 构造纯文本使思考在重进后丢失。
+                            if (m != null && m.assistantMessage != null) {
+                                commitAssistant("", m.assistantMessage!!)
+                            } else if (m != null) {
                                 val finalText = m.assistantText
                                 if (finalText.isNullOrEmpty()) {
-                                    m.assistantMessage?.let { commitAssistant("", it) }
+                                    finalizeStreaming()
                                 } else {
                                     commitAssistant(finalText, null)
                                 }
+                            } else {
+                                finalizeStreaming()
                             }
                             reasoningText.value = ""
                             toolEvents.value = emptyList()
