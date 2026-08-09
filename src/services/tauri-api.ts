@@ -2,6 +2,7 @@ import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { emit, emitTo, listen, type EventCallback, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import type { AttachmentReceipt } from "./attachment-transfer";
 
 type WebBridgeConfig = {
   chatUrl: string;
@@ -414,6 +415,55 @@ export async function pickTransportAttachments<T>(
     receipts.push(await uploadTransportAttachment<T>(file));
   }
   return receipts;
+}
+
+export type TransportAttachmentSource = {
+  id: string;
+  fileName: string;
+  path?: string;
+  file?: File;
+};
+
+/**
+ * 统一附件选择（只取文件描述，不读取内容）。
+ * 业务层先展示“上传中”占位，再对每个 source 调用 ingestTransportAttachmentSource 读取，
+ * 避免大文件读取期间界面无反馈。
+ */
+export async function pickTransportAttachmentSources(
+  options: TransportFileDialogOptions = { multiple: true },
+): Promise<TransportAttachmentSource[]> {
+  if (isTauriRuntimeAvailable()) {
+    const selected = await openTransportFileDialog({ ...options, directory: false });
+    const paths = (Array.isArray(selected) ? selected : [selected])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    return paths.map((path) => {
+      const normalized = path.replace(/\\/g, "/");
+      const fileName = normalized.split("/").pop() || path;
+      return { id: `local:${path}`, fileName, path };
+    });
+  }
+  const files = await pickBrowserTransportFiles({ ...options, directory: false });
+  return files.map((file, index) => ({
+    id: `web:${file.name}:${file.lastModified}:${index}`,
+    fileName: file.name || "attachment",
+    file,
+  }));
+}
+
+/** 统一读取单个已选附件，返回入库回执。 */
+export async function ingestTransportAttachmentSource(
+  source: TransportAttachmentSource,
+): Promise<AttachmentReceipt> {
+  if (source.path) {
+    return await ingestTransportLocalAttachment<AttachmentReceipt>({
+      path: source.path,
+    });
+  }
+  if (source.file) {
+    return await uploadTransportAttachment<AttachmentReceipt>(source.file);
+  }
+  throw new Error("附件来源缺少读取句柄");
 }
 
 type TransportHostMessage = {

@@ -672,7 +672,7 @@ const props = defineProps<{
   submitPending?: boolean;
   toolStatusText: string; toolStatusState: "running" | "done" | "failed" | "";
   chatErrorText: string; clipboardImages: Array<{ mime: string; bytesBase64: string; previewDataUrl?: string }>;
-  queuedAttachmentNotices: Array<{ id: string; fileName: string; path: string; mime: string }>;
+  queuedAttachmentNotices: Array<{ id: string; fileName: string; path: string; mime: string; pending?: boolean }>;
   chatInput: string; instructionPresets: PromptCommandPreset[];
   canRecord: boolean; recording: boolean; recordingMs: number; transcribing: boolean; recordHotkey: string;
   conversationCallPrimaryApiConfigId: string; preferredChatModelId?: string; toolReviewApiConfigId?: string; toolReviewRefreshTick: number; chatModelOptions: ApiConfigItem[];

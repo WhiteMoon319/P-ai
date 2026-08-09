@@ -603,7 +603,7 @@ const props = defineProps<{
   toolStatusState: "running" | "done" | "failed" | "";
   chatErrorText: string;
   clipboardImages: Array<{ mime: string; bytesBase64: string }>;
-  queuedAttachmentNotices: Array<{ id: string; fileName: string; path: string; mime: string }>;
+  queuedAttachmentNotices: Array<{ id: string; fileName: string; path: string; mime: string; pending?: boolean }>;
   chatInput: string;
   speechRecognitionSupported: boolean;
   recording: boolean;

@@ -80,9 +80,14 @@
         :key="file.id"
         class="badge badge-ghost gap-1 py-3"
       >
-        <FileText class="h-3.5 w-3.5" />
+        <span v-if="file.pending" class="loading loading-spinner loading-xs"></span>
+        <FileText v-else class="h-3.5 w-3.5" />
         <span class="text-xs">{{ file.fileName }}</span>
-        <button class="btn btn-ghost btn-sm btn-square" @click="emit('removeQueuedAttachmentNotice', idx)">
+        <button
+          v-if="!file.pending"
+          class="btn btn-ghost btn-sm btn-square"
+          @click="emit('removeQueuedAttachmentNotice', idx)"
+        >
           <X class="h-3 w-3" />
         </button>
       </div>
@@ -621,7 +626,7 @@ import { isMobileTouchViewport } from "../utils/chat-input-focus";
 import { canUseTransportSpeechRecording } from "../../../services/tauri-api";
 
 type BinaryAttachment = { mime: string; bytesBase64: string; previewDataUrl?: string };
-type QueuedAttachmentNotice = { id: string; fileName: string; path: string; mime: string };
+type QueuedAttachmentNotice = { id: string; fileName: string; path: string; mime: string; pending?: boolean };
 type ConversationDepartmentOption = DepartmentPersonaOption;
 type MentionOptionView = {
   agentId: string;
