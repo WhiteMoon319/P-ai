@@ -74,6 +74,12 @@ jobs:
       - name: Patch Android microphone permissions and safe area
         run: bash scripts/patch-android-project.sh
 
+      # 诊断：打印实际解析的 compose/runtime 库版本，定位 IR inline 失败根因
+      - name: Diagnose resolved Compose versions
+        run: |
+          cd src-tauri/gen/android
+          ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --console=plain 2>/dev/null | grep -iE "compose|runtime:1\.[0-9]|kotlin-stdlib" || true
+
       - name: Build Debug APK (aarch64)
         run: pnpm tauri android build --apk --target aarch64 --debug
 
