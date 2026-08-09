@@ -470,9 +470,7 @@ import {
   conversationLastUsedMs,
 } from "../utils/conversation-aggregation";
 import {
-  buildRecentConversationSection,
-  buildRemoteConversationSections,
-  buildWorkspaceConversationSections,
+  buildConversationSections,
   RECENT_CONVERSATION_SECTION_KEY,
   workspaceNameFromPath,
   type ConversationSection,
@@ -560,44 +558,18 @@ const conversationPreviewCache = computed(() => new Map(
   props.items.map((item) => [String(item.conversationId || "").trim(), Array.isArray(item.previewMessages) ? item.previewMessages : []]),
 ));
 
-const conversationSections = computed<ConversationSection[]>(() => {
-  const visibleItems = props.items.filter((item) => {
-    const kind = String(item.kind || "local_unarchived").trim();
-    return activeConversationTab.value === "contact"
-      ? kind === "remote_im_contact"
-      : kind !== "remote_im_contact";
-  });
-  const pinned = visibleItems.filter((item) => !!item.isPinned || !!item.isSystemNotificationConversation);
-  const others = visibleItems.filter((item) => !item.isPinned && !item.isSystemNotificationConversation);
-  const recentSection = buildRecentConversationSection(visibleItems, t("chat.recentConversations"));
-  const sections: ConversationSection[] = [];
-  if (pinned.length > 0) {
-    sections.push({
-      key: "pinned",
-      title: t("chat.pinnedConversations"),
-      items: pinned,
-    });
-  }
-  if (recentSection) {
-    sections.push(recentSection);
-  }
-  if (activeConversationTab.value === "contact") {
-    return [
-      ...sections,
-      ...buildRemoteConversationSections(others, {
-        fallbackTitle: t("chat.otherConversations"),
-        locale: locale.value,
-      }),
-    ];
-  }
-  return [
-    ...sections,
-    ...buildWorkspaceConversationSections(others, {
-      defaultWorkspaceTitle: t("chat.defaultWorkspace"),
-      locale: locale.value,
-    }),
-  ];
-});
+const conversationSections = computed<ConversationSection[]>(() =>
+  buildConversationSections(props.items, {
+    tab: activeConversationTab.value,
+    titles: {
+      recent: t("chat.recentConversations"),
+      pinned: t("chat.pinnedConversations"),
+      other: t("chat.otherConversations"),
+      defaultWorkspace: t("chat.defaultWorkspace"),
+    },
+    locale: locale.value,
+  }),
+);
 
 const normalizedConversationSearchQuery = computed(() =>
   String(conversationSearchQuery.value || "").trim().toLocaleLowerCase(),

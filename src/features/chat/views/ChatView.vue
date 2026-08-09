@@ -639,6 +639,7 @@ import { useChatMessageActions } from "../composables/use-chat-message-actions";
 import { useChatScrollLayout } from "../composables/use-chat-scroll-layout";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
 import { isAbsoluteLocalPath, isAssistantSpacePath, normalizeLocalLinkHref, parseLocalFileReference } from "../utils/local-link";
+import { buildConversationSections, type ConversationSection } from "../utils/conversation-sections";
 import { type ChatRenderItem, isRightAlignedMessage, canOpenInFileReader, fileExtensionFromPath } from "../utils/chat-render";
 import { clearFileReaderContextCandidates } from "../utils/file-reader-context-tags";
 import { useIdeContext } from "../composables/use-ide-context";
@@ -767,7 +768,7 @@ const emit = defineEmits<{
 
 // ==================== basic state ====================
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const chatReaderPanelRef = ref<InstanceType<typeof FileReaderPanel> | null>(null);
 const chatScrollbarRef = ref<InstanceType<typeof FloatingScrollbar> | null>(null);
 const linkOpenErrorText = ref("");
@@ -1848,16 +1849,30 @@ function handleRebindConversationRecipient() {
   emit("rebindConversationRecipient", { conversationId, departmentId, agentId });
 }
 
+const conversationDisplaySections = computed<ConversationSection[]>(() =>
+  buildConversationSections(props.conversationItems || props.unarchivedConversationItems || [], {
+    tab: props.chatLeftPanelMode,
+    titles: {
+      recent: t("chat.recentConversations"),
+      pinned: t("chat.pinnedConversations"),
+      other: t("chat.otherConversations"),
+      defaultWorkspace: t("chat.defaultWorkspace"),
+    },
+    locale: locale.value,
+  }),
+);
+
 function handleShiftWheel(event: WheelEvent) {
   if (!event.shiftKey) return;
   event.preventDefault();
-  const items = props.conversationItems || props.unarchivedConversationItems;
-  if (!items || items.length === 0) return;
+  const sections = conversationDisplaySections.value;
+  const orderedItems = sections.flatMap((section) => section.items);
+  if (orderedItems.length === 0) return;
   const currentId = String(props.activeConversationId || "").trim();
-  const currentIndex = items.findIndex((item) => String(item.conversationId || "").trim() === currentId);
+  const currentIndex = orderedItems.findIndex((item) => String(item.conversationId || "").trim() === currentId);
   if (currentIndex < 0) return;
   const direction = event.deltaY > 0 ? 1 : -1;
-  const target = items[currentIndex + direction];
+  const target = orderedItems[currentIndex + direction];
   if (!target) return;
   emit("switchConversation", {
     conversationId: String(target.conversationId || "").trim(),

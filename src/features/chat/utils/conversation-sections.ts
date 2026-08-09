@@ -8,6 +8,62 @@ export type ConversationSection = {
   workspaceRootPath?: string;
 };
 
+export type ConversationSidebarTab = "local" | "contact" | "task";
+
+export type ConversationSectionTitles = {
+  recent: string;
+  pinned: string;
+  other: string;
+  defaultWorkspace: string;
+};
+
+export function buildConversationSections(
+  items: ChatConversationOverviewItem[],
+  options: {
+    tab: ConversationSidebarTab;
+    titles: ConversationSectionTitles;
+    locale?: string | string[];
+  },
+): ConversationSection[] {
+  const { tab, titles, locale } = options;
+  const visibleItems = items.filter((item) => {
+    const kind = String(item.kind || "local_unarchived").trim();
+    return tab === "contact"
+      ? kind === "remote_im_contact"
+      : kind !== "remote_im_contact";
+  });
+  const pinned = visibleItems.filter((item) => !!item.isPinned || !!item.isSystemNotificationConversation);
+  const others = visibleItems.filter((item) => !item.isPinned && !item.isSystemNotificationConversation);
+  const recentSection = buildRecentConversationSection(visibleItems, titles.recent);
+  const sections: ConversationSection[] = [];
+  if (pinned.length > 0) {
+    sections.push({
+      key: "pinned",
+      title: titles.pinned,
+      items: pinned,
+    });
+  }
+  if (recentSection) {
+    sections.push(recentSection);
+  }
+  if (tab === "contact") {
+    return [
+      ...sections,
+      ...buildRemoteConversationSections(others, {
+        fallbackTitle: titles.other,
+        locale,
+      }),
+    ];
+  }
+  return [
+    ...sections,
+    ...buildWorkspaceConversationSections(others, {
+      defaultWorkspaceTitle: titles.defaultWorkspace,
+      locale,
+    }),
+  ];
+}
+
 export const RECENT_CONVERSATION_SECTION_KEY = "recent";
 const RECENT_CONVERSATION_LIMIT = 5;
 const RECENT_TIME_EXTRA_WINDOW_MS = 60 * 60 * 1000;
