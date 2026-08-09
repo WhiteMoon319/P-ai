@@ -12486,25 +12486,30 @@
             );
         }
 
-        // 远程 IM 联系人会话块分页：contact_commands.rs 1 个命令
+        // 远程 IM 联系人会话消息读取：contact_commands.rs 2 个命令
         let contact_file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("src")
             .join("features")
             .join("remote_im")
             .join("contact_commands.rs");
         let contact_content = std::fs::read_to_string(&contact_file).expect("read contact commands");
-        let contact_start = contact_content
-            .find("async fn remote_im_get_contact_conversation_block_page(")
-            .expect("remote_im_get_contact_conversation_block_page 应为 async fn");
-        let contact_next_fn = contact_content[contact_start..]
-            .find("\n}\n\n#[tauri::command]")
-            .map(|offset| contact_start + offset + 3)
-            .unwrap_or(contact_content.len());
-        let contact_section = &contact_content[contact_start..contact_next_fn];
-        assert!(
-            contact_section.contains("spawn_blocking"),
-            "remote_im_get_contact_conversation_block_page 必须使用 spawn_blocking 移出主线程"
-        );
+        for name in [
+            "remote_im_get_contact_conversation_messages",
+            "remote_im_get_contact_conversation_block_page",
+        ] {
+            let contact_start = contact_content
+                .find(&format!("async fn {name}("))
+                .unwrap_or_else(|| panic!("{name} 应为 async fn"));
+            let contact_next_fn = contact_content[contact_start..]
+                .find("\n}\n\n#[tauri::command]")
+                .map(|offset| contact_start + offset + 3)
+                .unwrap_or(contact_content.len());
+            let contact_section = &contact_content[contact_start..contact_next_fn];
+            assert!(
+                contact_section.contains("spawn_blocking"),
+                "{name} 必须使用 spawn_blocking 移出主线程"
+            );
+        }
     }
 
     #[test]

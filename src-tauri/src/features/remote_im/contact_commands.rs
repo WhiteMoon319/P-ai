@@ -1213,28 +1213,33 @@ fn remote_im_list_contact_conversations(
 }
 
 #[tauri::command]
-fn remote_im_get_contact_conversation_messages(
+async fn remote_im_get_contact_conversation_messages(
     input: RemoteImContactConversationMessagesInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<ChatMessage>, String> {
-    let contact_id = input.contact_id.trim();
+    let contact_id = input.contact_id.trim().to_string();
     if contact_id.is_empty() {
         return Err("contact_id 为必填项。".to_string());
     }
-    let started_at = std::time::Instant::now();
-    runtime_log_debug(format!(
-        "[远程IM][联系人会话][读取] 开始: contact_id={}",
-        contact_id
-    ));
-    let messages = conversation_service_v2()
-        .get_remote_im_contact_conversation_messages(state.inner(), contact_id)?;
-    runtime_log_debug(format!(
-        "[远程IM][联系人会话][读取] 完成: contact_id={}, message_count={}, elapsed_ms={}",
-        contact_id,
-        messages.len(),
-        started_at.elapsed().as_millis()
-    ));
-    Ok(messages)
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let started_at = std::time::Instant::now();
+        runtime_log_debug(format!(
+            "[远程IM][联系人会话][读取] 开始: contact_id={}",
+            contact_id
+        ));
+        let messages = conversation_service_v2()
+            .get_remote_im_contact_conversation_messages(&app_state, &contact_id)?;
+        runtime_log_debug(format!(
+            "[远程IM][联系人会话][读取] 完成: contact_id={}, message_count={}, elapsed_ms={}",
+            contact_id,
+            messages.len(),
+            started_at.elapsed().as_millis()
+        ));
+        Ok(messages)
+    })
+    .await
+    .map_err(|err| format!("读取远程 IM 联系人会话消息任务异常：{err}"))?
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
