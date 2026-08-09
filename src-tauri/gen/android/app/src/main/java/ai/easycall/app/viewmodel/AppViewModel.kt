@@ -107,7 +107,7 @@ class AppViewModel(
         // 乐观显示用户消息
         messages.value = messages.value.plus(
             ChatMessage(
-                id = "local-${System.currentTimeMillis()}",
+                id = "local-${nextLocalId()}",
                 role = "user",
                 parts = listOf(ai.easycall.app.model.MessagePart(type = "Text", text = trimmed)),
             )
@@ -197,11 +197,14 @@ class AppViewModel(
         }
     }
 
+    private val idSeq = java.util.concurrent.atomic.AtomicLong(0)
+    private fun nextLocalId() = "${System.currentTimeMillis()}-${idSeq.incrementAndGet()}"
+
     private fun appendAssistantText(text: String) {
         val base = messages.value.filterNot { it.id.startsWith("local-") }
         val compiled = base.plus(
             ChatMessage(
-                id = "assistant-${System.currentTimeMillis()}",
+                id = "assistant-${nextLocalId()}",
                 role = "assistant",
                 parts = listOf(ai.easycall.app.model.MessagePart(type = "Text", text = text)),
             )
