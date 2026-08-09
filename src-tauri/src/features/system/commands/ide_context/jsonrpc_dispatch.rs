@@ -185,7 +185,7 @@ async fn ide_chat_handle_jsonrpc_request(
             }),
         "workspace.layout.save" => ide_chat_workspace_layout_save(state, request.params),
         "workspace.list" => ide_chat_workspace_list(state, request.params),
-        "workspace.directory.list" => ide_chat_workspace_directory_list(request.params),
+        "workspace.directory.list" => ide_chat_workspace_directory_list(request.params).await,
         "workspace.gitRootCheck" => ide_chat_workspace_git_root_check(request.params).await,
         // 旧命令保留为兼容别名，但必须落到同一套工作区实现；不再将其视为
         // Web 不可用的 App 专属能力。
@@ -196,9 +196,9 @@ async fn ide_chat_handle_jsonrpc_request(
             .and_then(|input| update_chat_shell_workspace_layout_inner(input, state))
             .and_then(ide_chat_serialize),
         "check_git_workspace_root" => ide_chat_workspace_git_root_check(request.params).await,
-        "fileReader.directory.list" => ide_chat_file_reader_directory_list(request.params),
-        "fileReader.readFile" => ide_chat_file_reader_read(request.params),
-        "fileReader.readFileBlock" => ide_chat_file_reader_read_block(request.params),
+        "fileReader.directory.list" => ide_chat_file_reader_directory_list(request.params).await,
+        "fileReader.readFile" => ide_chat_file_reader_read(request.params).await,
+        "fileReader.readFileBlock" => ide_chat_file_reader_read_block(request.params).await,
         "conversation.delete" => ide_chat_delete_conversation(state, request.params).await,
         "conversation.batchArchive" => ide_chat_batch_archive_conversations(state, request.params).await,
         "conversation.rebindRecipient" => ide_chat_rebind_conversation_recipient(state, request.params),

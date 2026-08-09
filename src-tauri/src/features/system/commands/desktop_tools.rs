@@ -619,11 +619,16 @@ fn list_terminal_shell_candidates(state: State<'_, AppState>) -> Result<Value, S
 }
 
 #[tauri::command]
-fn list_file_reader_directory_open_targets(state: State<'_, AppState>) -> Result<Value, String> {
-    let options = file_reader_directory_open_targets_for_ui(&state);
-    Ok(serde_json::json!({
-        "options": options,
-    }))
+async fn list_file_reader_directory_open_targets(state: State<'_, AppState>) -> Result<Value, String> {
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let options = file_reader_directory_open_targets_for_ui(&app_state);
+        Ok(serde_json::json!({
+            "options": options,
+        }))
+    })
+    .await
+    .map_err(|err| format!("读取目录打开目标任务失败：{err}"))?
 }
 
 #[cfg(target_os = "windows")]
@@ -2332,8 +2337,13 @@ fn file_reader_rope_lines_to_string(
 }
 
 #[tauri::command]
-fn read_file_reader_file(window: tauri::Window, path: String) -> Result<FileReaderFilePayload, String> {
-    read_file_reader_file_inner(path, Some(window.label()))
+async fn read_file_reader_file(window: tauri::Window, path: String) -> Result<FileReaderFilePayload, String> {
+    let window_label = window.label().to_string();
+    tokio::task::spawn_blocking(move || {
+        read_file_reader_file_inner(path, Some(&window_label))
+    })
+    .await
+    .map_err(|err| format!("读取文件任务失败：{err}"))?
 }
 
 fn read_file_reader_file_inner(path: String, window_label: Option<&str>) -> Result<FileReaderFilePayload, String> {
@@ -2401,7 +2411,15 @@ fn read_file_reader_file_inner(path: String, window_label: Option<&str>) -> Resu
 }
 
 #[tauri::command]
-fn read_file_reader_file_block(path: String, start_line: usize, line_count: usize) -> Result<FileReaderFileBlockPayload, String> {
+async fn read_file_reader_file_block(path: String, start_line: usize, line_count: usize) -> Result<FileReaderFileBlockPayload, String> {
+    tokio::task::spawn_blocking(move || {
+        read_file_reader_file_block_inner(path, start_line, line_count)
+    })
+    .await
+    .map_err(|err| format!("读取文件块任务失败：{err}"))?
+}
+
+fn read_file_reader_file_block_inner(path: String, start_line: usize, line_count: usize) -> Result<FileReaderFileBlockPayload, String> {
     let raw_path = path.trim();
     if raw_path.is_empty() {
         return Err("path is required".to_string());
@@ -2464,7 +2482,13 @@ fn read_file_reader_file_block(path: String, start_line: usize, line_count: usiz
 }
 
 #[tauri::command]
-fn list_file_reader_directory(path: String) -> Result<FileReaderDirectoryPayload, String> {
+async fn list_file_reader_directory(path: String) -> Result<FileReaderDirectoryPayload, String> {
+    tokio::task::spawn_blocking(move || list_file_reader_directory_inner(path))
+        .await
+        .map_err(|err| format!("读取目录任务失败：{err}"))?
+}
+
+fn list_file_reader_directory_inner(path: String) -> Result<FileReaderDirectoryPayload, String> {
     let raw_path = path.trim();
     if raw_path.is_empty() {
         return Err("path is required".to_string());

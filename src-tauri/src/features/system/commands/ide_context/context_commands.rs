@@ -161,28 +161,46 @@ async fn ide_chat_workspace_git_root_check(params: Value) -> Result<Value, Strin
     serde_json::to_value(result).map_err(|err| format!("serialize git root check failed: {err}"))
 }
 
-fn ide_chat_workspace_directory_list(params: Value) -> Result<Value, String> {
+async fn ide_chat_workspace_directory_list(params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatWorkspaceDirectoryListInput>(params)?;
-    let payload = list_file_reader_directory(input.path)?;
+    let path = input.path;
+    let payload = tokio::task::spawn_blocking(move || list_file_reader_directory_inner(path))
+        .await
+        .map_err(|err| format!("读取目录任务失败：{err}"))??;
     Ok(serde_json::json!({"path": payload.path, "name": payload.name,
         "directories": payload.entries.into_iter().filter(|e| e.is_directory)
             .map(|e| serde_json::json!({"path": e.path, "name": e.name})).collect::<Vec<_>>() }))
 }
 
-fn ide_chat_file_reader_directory_list(params: Value) -> Result<Value, String> {
+async fn ide_chat_file_reader_directory_list(params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatWorkspaceDirectoryListInput>(params)?;
-    serde_json::to_value(list_file_reader_directory(input.path)?).map_err(|err| format!("serialize file reader directory failed: {err}"))
+    let path = input.path;
+    let payload = tokio::task::spawn_blocking(move || list_file_reader_directory_inner(path))
+        .await
+        .map_err(|err| format!("读取目录任务失败：{err}"))??;
+    serde_json::to_value(payload).map_err(|err| format!("serialize file reader directory failed: {err}"))
 }
 
-fn ide_chat_file_reader_read(params: Value) -> Result<Value, String> {
+async fn ide_chat_file_reader_read(params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatFileReaderReadInput>(params)?;
-    serde_json::to_value(read_file_reader_file_inner(input.path, None)?).map_err(|err| format!("serialize file reader payload failed: {err}"))
+    let path = input.path;
+    let payload = tokio::task::spawn_blocking(move || read_file_reader_file_inner(path, None))
+        .await
+        .map_err(|err| format!("读取文件任务失败：{err}"))??;
+    serde_json::to_value(payload).map_err(|err| format!("serialize file reader payload failed: {err}"))
 }
 
-fn ide_chat_file_reader_read_block(params: Value) -> Result<Value, String> {
+async fn ide_chat_file_reader_read_block(params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatFileReaderReadBlockInput>(params)?;
-    serde_json::to_value(read_file_reader_file_block(input.path, input.start_line, input.line_count)?)
-        .map_err(|err| format!("serialize file reader block failed: {err}"))
+    let path = input.path;
+    let start_line = input.start_line;
+    let line_count = input.line_count;
+    let payload = tokio::task::spawn_blocking(move || {
+        read_file_reader_file_block_inner(path, start_line, line_count)
+    })
+    .await
+    .map_err(|err| format!("读取文件块任务失败：{err}"))??;
+    serde_json::to_value(payload).map_err(|err| format!("serialize file reader block failed: {err}"))
 }
 
 #[tauri::command]
