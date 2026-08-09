@@ -47,8 +47,6 @@ struct RuntimeStateFile {
     #[serde(default)]
     pinned_conversation_ids: Vec<String>,
     #[serde(default)]
-    conversation_section_orders: ConversationSectionOrders,
-    #[serde(default)]
     image_text_cache: Vec<ImageTextCacheEntry>,
     #[serde(default)]
     pdf_text_cache: Vec<PdfTextCacheEntry>,
@@ -75,7 +73,6 @@ impl Default for RuntimeStateFile {
             instruction_presets: Vec::new(),
             main_conversation_id: Some(SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string()),
             pinned_conversation_ids: Vec::new(),
-            conversation_section_orders: ConversationSectionOrders::default(),
             image_text_cache: Vec::new(),
             pdf_text_cache: Vec::new(),
             pdf_image_cache: Vec::new(),
@@ -216,7 +213,6 @@ fn build_runtime_state_file(data: &AppData) -> RuntimeStateFile {
         instruction_presets: data.instruction_presets.clone(),
         main_conversation_id: Some(SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string()),
         pinned_conversation_ids: data.pinned_conversation_ids.clone(),
-        conversation_section_orders: data.conversation_section_orders.clone(),
         image_text_cache: data.image_text_cache.clone(),
         pdf_text_cache: data.pdf_text_cache.clone(),
         pdf_image_cache: data.pdf_image_cache.clone(),
@@ -294,7 +290,6 @@ fn apply_runtime_state_to_app_data(data: &mut AppData, runtime: &RuntimeStateFil
     data.instruction_presets = runtime.instruction_presets.clone();
     data.main_conversation_id = Some(SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string());
     data.pinned_conversation_ids = runtime.pinned_conversation_ids.clone();
-    data.conversation_section_orders = runtime.conversation_section_orders.clone();
     data.image_text_cache = runtime.image_text_cache.clone();
     data.pdf_text_cache = runtime.pdf_text_cache.clone();
     data.pdf_image_cache = runtime.pdf_image_cache.clone();
@@ -763,7 +758,6 @@ fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
         instruction_presets: runtime.instruction_presets,
         main_conversation_id: runtime.main_conversation_id,
         pinned_conversation_ids: runtime.pinned_conversation_ids,
-        conversation_section_orders: runtime.conversation_section_orders,
         conversations,
         image_text_cache: runtime.image_text_cache,
         remote_im_contacts: runtime.remote_im_contacts,
@@ -1207,38 +1201,4 @@ fn write_app_data(path: &PathBuf, data: &AppData) -> Result<(), String> {
         started.elapsed().as_millis()
     ));
     Ok(())
-}
-
-#[cfg(test)]
-mod conversation_section_orders_runtime_tests {
-    use super::*;
-
-    #[test]
-    fn build_runtime_state_file_should_preserve_conversation_section_orders() {
-        let mut data = AppData::default();
-        data.conversation_section_orders = ConversationSectionOrders {
-            local: vec!["pinned".to_string(), "workspace:alpha".to_string()],
-            contact: vec!["recent".to_string(), "channel:demo".to_string()],
-        };
-
-        let runtime = build_runtime_state_file(&data);
-
-        assert_eq!(runtime.conversation_section_orders, data.conversation_section_orders);
-    }
-
-    #[test]
-    fn apply_runtime_state_to_app_data_should_restore_conversation_section_orders() {
-        let mut data = AppData::default();
-        let runtime = RuntimeStateFile {
-            conversation_section_orders: ConversationSectionOrders {
-                local: vec!["workspace:beta".to_string()],
-                contact: vec!["channel:test".to_string()],
-            },
-            ..RuntimeStateFile::default()
-        };
-
-        apply_runtime_state_to_app_data(&mut data, &runtime);
-
-        assert_eq!(data.conversation_section_orders, runtime.conversation_section_orders);
-    }
 }
