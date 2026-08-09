@@ -123,7 +123,7 @@ async fn ide_chat_handle_jsonrpc_request(
         "webview_pong" => Ok(serde_json::json!(true)),
         "conversation.list" => ide_chat_conversation_list(state, &sidebar_viewer_id),
         "conversation.changedSince" => ide_chat_conversation_changed_since(state, request.params).await,
-        "conversation.blockPage" => ide_chat_conversation_block_page(state, request.params),
+        "conversation.blockPage" => ide_chat_conversation_block_page(state, request.params).await,
         "conversation.fastRequestTurns" => ide_chat_conversation_fast_request_turns(state, request.params),
         "conversation.runtimeSnapshot" => ide_chat_conversation_runtime_snapshot(state, request.params),
         "conversation.resumeSubscription" => ide_chat_resume_sidebar_subscription(
@@ -135,8 +135,8 @@ async fn ide_chat_handle_jsonrpc_request(
         "conversation.streamProbe" => ide_chat_stream_probe(request.params, client_id, opened_conversation_id),
         "conversation.freshnessSnapshot" => ide_chat_conversation_freshness_snapshot(state, request.params).await,
         "conversation.markRead" => ide_chat_mark_conversation_read(state, request.params).await,
-        "conversation.messageById" => ide_chat_conversation_message_by_id_command(state, request.params),
-        "conversation.messagesBefore" => ide_chat_conversation_messages_before_command(state, request.params),
+        "conversation.messageById" => ide_chat_conversation_message_by_id_command(state, request.params).await,
+        "conversation.messagesBefore" => ide_chat_conversation_messages_before_command(state, request.params).await,
         "conversation.messagesAfterAsync" =>
             ide_chat_parse_param_field::<RequestConversationMessagesAfterAsyncInput>(
                 request.params,
@@ -526,9 +526,9 @@ async fn ide_chat_handle_jsonrpc_request(
             ide_chat_conversation_light_snapshot_command(state, request.params).await
         }
         "get_foreground_conversation_freshness_snapshot" => ide_chat_conversation_freshness_snapshot_command(state, request.params).await,
-        "get_unarchived_conversation_block_page" => ide_chat_conversation_block_page_command(state, request.params),
-        "get_unarchived_conversation_message_by_id" => ide_chat_conversation_message_by_id_command(state, request.params),
-        "get_active_conversation_messages_before" => ide_chat_conversation_messages_before_command(state, request.params),
+        "get_unarchived_conversation_block_page" => ide_chat_conversation_block_page_command(state, request.params).await,
+        "get_unarchived_conversation_message_by_id" => ide_chat_conversation_message_by_id_command(state, request.params).await,
+        "get_active_conversation_messages_before" => ide_chat_conversation_messages_before_command(state, request.params).await,
         "request_conversation_messages_after_async" =>
             ide_chat_parse_param_field::<RequestConversationMessagesAfterAsyncInput>(
                 request.params,
