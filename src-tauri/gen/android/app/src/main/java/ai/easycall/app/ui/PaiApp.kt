@@ -59,30 +59,45 @@ fun PaiApp(vm: AppViewModel) {
         onDispose { vm.stop() }
     }
 
-    var inChat by remember { mutableStateOf(false) }
-    var title by remember { mutableStateOf("会话") }
+    // 不透明背景盖住底层 Rust WebView，避免透出可交互残留
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.surface,
+    ) {
+        var inChat by remember { mutableStateOf(false) }
+        var title by remember { mutableStateOf("会话") }
+        val scope = rememberCoroutineScope()
 
-    if (inChat) {
-        ChatScreen(
-            vm = vm,
-            title = title,
-            onBack = {
-                inChat = false
-                title = "会话"
-            },
-        )
-    } else {
-        ConversationListScreen(
-            vm = vm,
-            onOpen = { conv ->
-                title = conv.title ?: conv.conversationId
-                inChat = true
-            },
-            onNew = {
-                title = "新会话"
-                inChat = true
-            },
-        )
+        if (inChat) {
+            ChatScreen(
+                vm = vm,
+                title = title,
+                onBack = {
+                    inChat = false
+                    title = "会话"
+                },
+            )
+        } else {
+            ConversationListScreen(
+                vm = vm,
+                onOpen = { conv ->
+                    scope.launch {
+                        vm.openConversation(conv.conversationId)
+                    }
+                    title = conv.title ?: conv.conversationId
+                    inChat = true
+                },
+                onNew = {
+                    scope.launch {
+                        val id = vm.createConversation(title ?: "新会话")
+                        if (id != null) {
+                            title = "新会话"
+                            inChat = true
+                        }
+                    }
+                },
+            )
+        }
     }
 }
 
