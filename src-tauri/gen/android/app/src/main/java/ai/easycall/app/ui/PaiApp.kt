@@ -250,7 +250,7 @@ fun ChatScreen(
                             shape = MaterialTheme.shapes.medium,
                             modifier = Modifier.padding(12.dp),
                         ) {
-                            Markdown(markdown = streaming, modifier = Modifier.padding(10.dp))
+                            Markdown(content = streaming, modifier = Modifier.padding(10.dp))
                         }
                     }
                 }
@@ -308,10 +308,7 @@ fun MessageBubble(message: ChatMessage) {
             if (isUser) {
                 Text(text, Modifier.padding(10.dp))
             } else {
-                Markdown(
-                    markdown = text,
-                    modifier = Modifier.padding(10.dp),
-                )
+                Markdown(content = text, modifier = Modifier.padding(10.dp))
             }
         }
     }
