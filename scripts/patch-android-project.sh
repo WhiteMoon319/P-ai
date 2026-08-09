@@ -23,7 +23,13 @@ else
 fi
 
 mkdir -p "$(dirname "$ACTIVITY")"
-cat > "$ACTIVITY" <<'KOTLIN'
+
+# P-AI 前端已重构为原生 Compose（Gen/android 入库的是 Compose 版 MainActivity，负责
+# 用 ComposeView 覆盖 Rust WebView）。这里仅当 MainActivity 不含 Compose 逻辑（例如
+# init --ci 重新生成了裸 TauriActivity）时才写入原生前端模板；否则保留 Compose 版，
+# 防止覆盖导致 Compose 界面丢失。
+if ! grep -q 'PaiApp' "$ACTIVITY" 2>/dev/null; then
+  cat > "$ACTIVITY" <<'KOTLIN'
 package ai.easycall.app
 
 import android.os.Bundle
@@ -48,6 +54,10 @@ class MainActivity : TauriActivity() {
     }
 }
 KOTLIN
+  echo "Wrote default WebView MainActivity (no Compose found)"
+else
+  echo "MainActivity already contains Compose (PaiApp); keeping it"
+fi
 
 if ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
   sed -i '/<application/i\    <uses-permission android:name="android.permission.INTERNET" />' "$MANIFEST"
