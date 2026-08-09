@@ -80,7 +80,7 @@ jobs:
           echo "===== build.gradle.kts compose 配置（CI 实际状态）====="
           grep -nE "compose|kotlinCompiler|material3|icons|runtime|compilerExtension" src-tauri/gen/android/app/build.gradle.kts || echo "!! 未找到 compose 配置，可能被 init 覆盖 !!"
           echo "===== 实际解析的 compose 依赖版本 ====="
-          (cd src-tauri/gen/android && ./gradlew :app:dependencies --configuration universalReleaseRuntimeClasspath --console=plain) || true
+          (cd src-tauri/gen/android && bash gradlew :app:dependencies --configuration universalReleaseRuntimeClasspath --console=plain) || true
 
       - name: Build Debug APK (aarch64)
         run: pnpm tauri android build --apk --target aarch64 --debug
