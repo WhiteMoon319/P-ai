@@ -390,6 +390,12 @@
         "chartArea": "面积图",
         "yearTotal": "{year} 年用量",
         "activePeriod": "最活跃时段：{period}",
+        "periods": {
+          "dawn": "凌晨",
+          "morning": "上午",
+          "afternoon": "下午",
+          "night": "晚上"
+        },
         "legendLess": "少",
         "legendMore": "多",
         "months": [

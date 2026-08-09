@@ -1819,10 +1819,10 @@ fn usage_trail_wall_active_period(rows: &[message_store::UsageTrailRow]) -> Opti
         return None;
     }
     Some(match max_index {
-        0 => "凌晨".to_string(),
-        1 => "上午".to_string(),
-        2 => "下午".to_string(),
-        _ => "晚上".to_string(),
+        0 => "dawn".to_string(),
+        1 => "morning".to_string(),
+        2 => "afternoon".to_string(),
+        _ => "night".to_string(),
     })
 }
 
@@ -3251,7 +3251,7 @@ mod storage_usage_tests {
         assert_eq!(view.top_conversation_percent, Some(100));
         assert_eq!(
             view.active_period_label.as_deref(),
-            Some("上午"),
+            Some("morning"),
             "09:00 应归为上午时段"
         );
     }

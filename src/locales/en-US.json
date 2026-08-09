@@ -390,6 +390,12 @@
         "chartArea": "Area",
         "yearTotal": "{year} usage",
         "activePeriod": "Most active: {period}",
+        "periods": {
+          "dawn": "dawn",
+          "morning": "morning",
+          "afternoon": "afternoon",
+          "night": "night"
+        },
         "legendLess": "Less",
         "legendMore": "More",
         "months": [
