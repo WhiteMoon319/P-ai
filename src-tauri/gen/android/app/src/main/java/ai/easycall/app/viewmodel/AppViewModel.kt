@@ -33,6 +33,10 @@ class AppViewModel(
     val currentConversationId = MutableStateFlow<String?>(null)
     val messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val streamingText = MutableStateFlow("")
+    /** 流式思考过程（activity_reasoning_delta），UI 折叠展示，非正文。 */
+    val reasoningText = MutableStateFlow("")
+    /** 流式工具调用列表（assistant_tool_event/result 聚合后的显示文本）。 */
+    val toolEvents = MutableStateFlow<List<String>>(emptyList())
     val isStreaming = MutableStateFlow(false)
     val loading = MutableStateFlow(false)
     val error = MutableStateFlow<String?>(null)
@@ -69,6 +73,7 @@ class AppViewModel(
                 val id = result.conversationId
                 if (id != null) {
                     openConversation(id)
+                    refreshConversations()
                 }
                 id
             } catch (e: Exception) {
@@ -89,6 +94,8 @@ class AppViewModel(
                 currentConversationId.value = conversationId
                 messages.value = page.messages
                 streamingText.value = ""
+                reasoningText.value = ""
+                toolEvents.value = emptyList()
                 isStreaming.value = false
             } catch (e: Exception) {
                 error.value = "打开会话失败: ${e.message}"
@@ -115,6 +122,8 @@ class AppViewModel(
         )
         committedAssistantText = null
         streamingText.value = ""
+        reasoningText.value = ""
+        toolEvents.value = emptyList()
         isStreaming.value = true
         withContext(Dispatchers.IO) {
             try {
@@ -150,11 +159,32 @@ class AppViewModel(
                 if (convId != null && convId == currentConversationId.value) {
                     val event = notif.event
                     when (event?.kind) {
-                        null, "", "stream", "activity_reasoning_delta" -> {
+                        null, "", "stream" -> {
                             val delta = event?.delta ?: ""
                             if (delta.isNotEmpty()) {
                                 streamingText.value = streamingText.value + delta
                             }
+                        }
+                        "activity_reasoning_delta" -> {
+                            val r = event?.delta ?: ""
+                            if (r.isNotEmpty()) {
+                                reasoningText.value = reasoningText.value + r
+                            }
+                        }
+                        "assistant_tool_event", "assistant_tool_result", "tool_status" -> {
+                            // 工具调用过程：解析 message 中的工具名/状态，聚合为展示条目
+                            val toolMsg = event?.message ?: ""
+                            val toolName = event?.toolName?.takeIf { it.isNotBlank() }
+                            val status = event?.toolStatus?.takeIf { it.isNotBlank() }
+                            val label = when {
+                                !toolName.isNullOrBlank() && !status.isNullOrBlank() -> "$toolName ($status)"
+                                !toolName.isNullOrBlank() -> toolName
+                                toolMsg.isNotBlank() -> toolMsg
+                                else -> "工具"
+                            }
+                            val list = toolEvents.value.toMutableList()
+                            if (list.lastOrNull() != label) list.add(label)
+                            toolEvents.value = list
                         }
                         "round_completed" -> {
                             val msgJson = event?.message
@@ -169,6 +199,8 @@ class AppViewModel(
                                     commitAssistant(finalText, null)
                                 }
                             }
+                            reasoningText.value = ""
+                            toolEvents.value = emptyList()
                             finalizeStreaming()
                         }
                         "round_failed" -> {

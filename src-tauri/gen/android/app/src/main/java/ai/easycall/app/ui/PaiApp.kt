@@ -90,7 +90,7 @@ fun PaiApp(vm: AppViewModel) {
                 },
                 onNew = {
                     scope.launch {
-                        val id = vm.createConversation(title ?: "新会话")
+                        val id = vm.createConversation(title = null)
                         if (id != null) {
                             title = "新会话"
                             inChat = true
@@ -106,17 +106,11 @@ fun PaiApp(vm: AppViewModel) {
 @Composable
 private fun ConnectionBanner(vm: AppViewModel) {
     val connection by vm.connectionState.collectAsState()
-    val statusText = when (connection) {
-        ConnectionStatus.Connecting -> "连接中…"
-        ConnectionStatus.Connected -> "已连接"
-        ConnectionStatus.Disconnected -> "未连接"
-    }
-    Surface(color = when (connection) {
-        ConnectionStatus.Connected -> MaterialTheme.colorScheme.primaryContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
-    }) {
+    // 本地模式下 ws 稳定连接是常态，无需横幅；仅在出现异常时提示
+    if (connection != ConnectionStatus.Disconnected) return
+    Surface(color = MaterialTheme.colorScheme.errorContainer) {
         Text(
-            text = statusText,
+            text = "后端未连接，会话可能不可用",
             modifier = Modifier.fillMaxWidth().padding(8.dp),
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.labelMedium,
@@ -216,6 +210,8 @@ fun ChatScreen(
     val scope = rememberCoroutineScope()
     val messages by vm.messages.collectAsState()
     val streaming by vm.streamingText.collectAsState()
+    val reasoning by vm.reasoningText.collectAsState()
+    val toolEvents by vm.toolEvents.collectAsState()
     val isStreaming by vm.isStreaming.collectAsState()
     val loading by vm.loading.collectAsState()
     var input by remember { mutableStateOf("") }
@@ -242,6 +238,16 @@ fun ChatScreen(
             ) {
                 items(messages, key = { it.id }) { msg ->
                     MessageBubble(msg)
+                }
+                if (reasoning.isNotEmpty()) {
+                    item(key = "reasoning") {
+                        ReasoningBlock(reasoning)
+                    }
+                }
+                toolEvents.forEachIndexed { index, tool ->
+                    item(key = "tool_$index") {
+                        ToolCallPill(tool)
+                    }
                 }
                 if (streaming.isNotEmpty()) {
                     item(key = "streaming") {
@@ -291,6 +297,54 @@ fun ChatScreen(
 }
 
 @Composable
+private fun ReasoningBlock(text: String) {
+    var expanded by remember { mutableStateOf(false) }
+    val color = MaterialTheme.colorScheme.outline
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).widthIn(max = 320.dp),
+    ) {
+        Column(Modifier.padding(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (expanded) "思考中…" else "思考中（点击展开）",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = color,
+                )
+            }
+            if (expanded) {
+                Text(
+                    text,
+                    Modifier.padding(top = 6.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = color,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToolCallPill(text: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp).widthIn(max = 320.dp),
+    ) {
+        Text(
+            text,
+            Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+        )
+    }
+}
+
+@Composable
 fun MessageBubble(message: ChatMessage) {
     val isUser = message.role == "user"
     Row(
@@ -308,7 +362,17 @@ fun MessageBubble(message: ChatMessage) {
             if (isUser) {
                 Text(text, Modifier.padding(10.dp))
             } else {
-                MarkdownText(content = text, modifier = Modifier.padding(10.dp))
+                Column(Modifier.padding(10.dp)) {
+                    val reasoning = message.parts
+                        .mapNotNull { it.reasoningContent?.takeIf { r -> r.isNotBlank() } }
+                        .joinToString("\n")
+                    if (reasoning.isNotBlank()) {
+                        ReasoningBlock(reasoning)
+                    }
+                    if (text.isNotBlank()) {
+                        MarkdownText(content = text)
+                    }
+                }
             }
         }
     }
