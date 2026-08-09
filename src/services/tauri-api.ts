@@ -480,6 +480,11 @@ export function canUseTransportSpeechRecording(): boolean {
   return isTauriRuntimeAvailable();
 }
 
+/** 是否运行在桌面 Tauri 宿主；Web/VS Code 宿主为 false。业务层用于宿主相关界面形态判定。 */
+export function isDesktopTauriHost(): boolean {
+  return isTauriRuntimeAvailable();
+}
+
 function nativeTransportConnectionState(): TransportConnectionState {
   return {
     configured: true,
