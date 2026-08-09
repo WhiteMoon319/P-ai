@@ -1535,9 +1535,8 @@ const {
   openDelegateArchiveDetail, abortDelegate,
 } = useDelegateStatus({
   activeConversationId: toRef(props, "activeConversationId"),
-  panelOpen: computed(() => effectiveToolReviewPanelOpen.value
-    && props.chatRightPanelMode === "monitor"
-    && props.chatMonitorPanelMode === "delegate"),
+  // 委托状态：打开会话即拉取（工作区 bar 常驻展示活跃委托，不依赖监控面板 delegate tab）
+  panelOpen: computed(() => !!String(props.activeConversationId || "").trim()),
   enabled: computed(() => true),
 });
 
