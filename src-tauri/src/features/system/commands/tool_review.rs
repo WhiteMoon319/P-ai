@@ -1780,11 +1780,16 @@ fn with_tool_review_conversation<T>(
 }
 
 #[tauri::command]
-fn list_tool_review_reports(
+async fn list_tool_review_reports(
     input: ToolReviewConversationInput,
     state: State<'_, AppState>,
 ) -> Result<ListToolReviewReportsOutput, String> {
-    list_tool_review_reports_internal(input, state.inner())
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        list_tool_review_reports_internal(input, &app_state)
+    })
+    .await
+    .map_err(|err| format!("读取工具评审报告列表任务异常：{err}"))?
 }
 
 fn list_tool_review_reports_internal(
@@ -1804,78 +1809,93 @@ fn list_tool_review_reports_internal(
 }
 
 #[tauri::command]
-fn list_tool_review_batches(
+async fn list_tool_review_batches(
     input: ToolReviewConversationInput,
     state: State<'_, AppState>,
 ) -> Result<ListToolReviewBatchesOutput, String> {
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Ok(ListToolReviewBatchesOutput {
-            batches: Vec::new(),
-            current_batch_key: None,
-        });
-    }
-    let (batches, current_batch_key) =
-        with_tool_review_conversation(state.inner(), conversation_id, |conversation| {
-            let batches = collect_tool_review_batches_internal(conversation);
-            let current_batch_key = conversation
-                .messages
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let conversation_id = input.conversation_id.trim();
+        if conversation_id.is_empty() {
+            return Ok(ListToolReviewBatchesOutput {
+                batches: Vec::new(),
+                current_batch_key: None,
+            });
+        }
+        let (batches, current_batch_key) =
+            with_tool_review_conversation(&app_state, conversation_id, |conversation| {
+                let batches = collect_tool_review_batches_internal(conversation);
+                let current_batch_key = conversation
+                    .messages
+                    .iter()
+                    .rev()
+                    .find(|message| message.role.trim().eq_ignore_ascii_case("user"))
+                    .map(|message| message.id.clone());
+                Ok((batches, current_batch_key))
+            })?;
+        Ok(ListToolReviewBatchesOutput {
+            current_batch_key,
+            batches: batches
                 .iter()
-                .rev()
-                .find(|message| message.role.trim().eq_ignore_ascii_case("user"))
-                .map(|message| message.id.clone());
-            Ok((batches, current_batch_key))
-        })?;
-    Ok(ListToolReviewBatchesOutput {
-        current_batch_key,
-        batches: batches
-            .iter()
-            .map(tool_review_batch_summary_from_collected)
-            .collect(),
+                .map(tool_review_batch_summary_from_collected)
+                .collect(),
+        })
     })
+    .await
+    .map_err(|err| format!("读取工具评审批次列表任务异常：{err}"))?
 }
 
 #[tauri::command]
-fn get_tool_review_item_detail(
+async fn get_tool_review_item_detail(
     input: ToolReviewCallInput,
     state: State<'_, AppState>,
 ) -> Result<ToolReviewItemDetail, String> {
-    let conversation_id = input.conversation_id.trim();
-    let call_id = input.call_id.trim();
-    if conversation_id.is_empty() || call_id.is_empty() {
-        return Err("conversationId 和 callId 不能为空。".to_string());
-    }
-    with_tool_review_conversation(state.inner(), conversation_id, |conversation| {
-        let item = tool_review_find_item(conversation, call_id)?;
-        Ok(tool_review_item_detail_from_collected(&item))
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let conversation_id = input.conversation_id.trim();
+        let call_id = input.call_id.trim();
+        if conversation_id.is_empty() || call_id.is_empty() {
+            return Err("conversationId 和 callId 不能为空。".to_string());
+        }
+        with_tool_review_conversation(&app_state, conversation_id, |conversation| {
+            let item = tool_review_find_item(conversation, call_id)?;
+            Ok(tool_review_item_detail_from_collected(&item))
+        })
     })
+    .await
+    .map_err(|err| format!("读取工具评审条目详情任务异常：{err}"))?
 }
 
 #[tauri::command]
-fn get_tool_review_batch_details(
+async fn get_tool_review_batch_details(
     input: ToolReviewBatchActionInput,
     state: State<'_, AppState>,
 ) -> Result<ToolReviewBatchDetailsOutput, String> {
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId 不能为空。".to_string());
-    }
-    with_tool_review_conversation(state.inner(), conversation_id, |conversation| {
-        let (_display_number, batch) = tool_review_find_batch_by_index(conversation, input.batch_index)?;
-        let mut segments = Vec::<ToolReviewSegment>::new();
-        for item in batch.items.iter() {
-            if matches!(
-                item.tool_name.as_str(),
-                "apply_patch" | "write" | "delete" | "update" | "move"
-            ) {
-                segments.extend(tool_review_segments_for_item(item));
-            }
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let conversation_id = input.conversation_id.trim();
+        if conversation_id.is_empty() {
+            return Err("conversationId 不能为空。".to_string());
         }
-        Ok(ToolReviewBatchDetailsOutput {
-            batch_key: batch.batch_key,
-            segments,
+        with_tool_review_conversation(&app_state, conversation_id, |conversation| {
+            let (_display_number, batch) = tool_review_find_batch_by_index(conversation, input.batch_index)?;
+            let mut segments = Vec::<ToolReviewSegment>::new();
+            for item in batch.items.iter() {
+                if matches!(
+                    item.tool_name.as_str(),
+                    "apply_patch" | "write" | "delete" | "update" | "move"
+                ) {
+                    segments.extend(tool_review_segments_for_item(item));
+                }
+            }
+            Ok(ToolReviewBatchDetailsOutput {
+                batch_key: batch.batch_key,
+                segments,
+            })
         })
     })
+    .await
+    .map_err(|err| format!("读取工具评审批次详情任务异常：{err}"))?
 }
 
 #[tauri::command]

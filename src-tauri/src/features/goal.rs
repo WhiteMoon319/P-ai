@@ -323,11 +323,16 @@ fn render_goal_continue_hidden_prompt(goal: &ConversationGoalState, now: &str) -
 }
 
 #[tauri::command]
-fn goal_get_current(
+async fn goal_get_current(
     conversation_id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<ConversationGoalState>, String> {
-    goal_get_current_inner(&state, &conversation_id)
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        goal_get_current_inner(&app_state, &conversation_id)
+    })
+    .await
+    .map_err(|err| format!("读取会话目标任务异常：{err}"))?
 }
 
 #[tauri::command]

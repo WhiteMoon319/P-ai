@@ -198,11 +198,16 @@ fn upsert_ide_context_snapshot(
 }
 
 #[tauri::command]
-fn query_ide_context_references(
+async fn query_ide_context_references(
     input: IdeContextWorkspaceQueryInput,
     ide_context_runtime: State<'_, IdeContextRuntime>,
 ) -> Result<IdeContextQueryResultOutput, String> {
-    query_ide_context_references_internal(input, ide_context_runtime.inner())
+    let runtime = ide_context_runtime.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        query_ide_context_references_internal(input, &runtime)
+    })
+    .await
+    .map_err(|err| format!("查询 IDE 上下文引用任务异常：{err}"))?
 }
 
 #[tauri::command]
