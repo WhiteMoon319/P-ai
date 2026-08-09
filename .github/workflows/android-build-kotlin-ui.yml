@@ -74,11 +74,13 @@ jobs:
       - name: Patch Android microphone permissions and safe area
         run: bash scripts/patch-android-project.sh
 
-      # 诊断：打印实际解析的 compose/runtime 库版本，定位 IR inline 失败根因
+      # 诊断：确认 init 后 build.gradle.kts 的 compose 配置未被覆盖 + 打印实际解析的 compose 版本
       - name: Diagnose resolved Compose versions
         run: |
-          cd src-tauri/gen/android
-          ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --console=plain 2>/dev/null | grep -iE "compose|runtime:1\.[0-9]|kotlin-stdlib" || true
+          echo "===== build.gradle.kts compose 配置（CI 实际状态）====="
+          grep -nE "compose|kotlinCompiler|material3|icons|runtime|compilerExtension" src-tauri/gen/android/app/build.gradle.kts || echo "!! 未找到 compose 配置，可能被 init 覆盖 !!"
+          echo "===== 实际解析的 compose 依赖版本 ====="
+          (cd src-tauri/gen/android && ./gradlew :app:dependencies --configuration universalReleaseRuntimeClasspath --console=plain) || true
 
       - name: Build Debug APK (aarch64)
         run: pnpm tauri android build --apk --target aarch64 --debug
