@@ -130,6 +130,7 @@ data class CreateConversationOptionItem(
     @SerializedName("agentId") val agentId: String? = null,
     @SerializedName("departmentName") val departmentName: String? = null,
     @SerializedName("agentName") val agentName: String? = null,
+    @SerializedName("label") val label: String? = null,
 )
 
 // ---------------- 激活会话 ----------------

@@ -135,8 +135,32 @@ class AppViewModel(
                     departmentId = conv?.departmentId
                     agentId = conv?.agentId
                 }
+                createConversation(title, departmentId, agentId)
+            } catch (e: Exception) {
+                error.value = "新建会话失败: ${e.message}"
+                null
+            }
+        }
+    }
+
+    /** 拉取新建会话可选的部门/人格及默认值，供自选用。失败返回空对象。 */
+    suspend fun fetchCreateOptionsFull(): CreateConversationOptions {
+        return withContext(Dispatchers.IO) {
+            runCatching { service.createConversationOptions() }
+                .getOrDefault(CreateConversationOptions())
+        }
+    }
+
+    /** 用显式指定的部门/人格新建会话（自选入口）；不抛差归并到 [error]。 */
+    suspend fun createConversation(
+        title: String?,
+        departmentId: String?,
+        agentId: String?,
+    ): String? {
+        return withContext(Dispatchers.IO) {
+            try {
                 if (departmentId.isNullOrBlank() || agentId.isNullOrBlank()) {
-                    error.value = "新建会话失败：无法确定默认部门/人格"
+                    error.value = "新建会话失败：未指定部门/人格"
                     return@withContext null
                 }
                 val result = service.createConversation(agentId = agentId, departmentId = departmentId, title = title)

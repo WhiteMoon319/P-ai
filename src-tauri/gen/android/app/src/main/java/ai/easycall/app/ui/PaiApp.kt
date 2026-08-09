@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -29,14 +30,17 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -108,6 +112,10 @@ fun PaiApp(vm: AppViewModel) {
                         }
                     }
                 },
+                onCreated = { id ->
+                    title = "新会话"
+                    inChat = true
+                },
             )
         }
     }
@@ -135,13 +143,53 @@ fun ConversationListScreen(
     vm: AppViewModel,
     onOpen: (ConversationSummary) -> Unit,
     onNew: () -> Unit,
+    onCreated: (String) -> Unit = {},
+) {
+    ConversationListScreenImpl(vm = vm, onOpen = onOpen, onNew = onNew, onCreated = onCreated)
+}
+
+/**
+ * 列表 + 新建选择对话框：点「新建」先拉 createOptions 可选项，用户自选部门/人格后创建。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConversationListScreenImpl(
+    vm: AppViewModel,
+    onOpen: (ConversationSummary) -> Unit,
+    onNew: () -> Unit,
+    onCreated: (String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val conversations by vm.conversations.collectAsState()
     val loading by vm.loading.collectAsState()
+    var showNewDialog by remember { mutableStateOf(false) }
+    var fullOptions by remember { mutableStateOf<ai.easycall.app.model.CreateConversationOptions>(ai.easycall.app.model.CreateConversationOptions()) }
+    var optionsLoading by remember { mutableStateOf(false) }
+    var selectedOption by remember { mutableStateOf<ai.easycall.app.model.CreateConversationOptionItem?>(null) }
 
     LaunchedEffect(Unit) {
         vm.refreshConversations()
+    }
+
+    // 点新建：拉选项并打开选择对话框
+    fun openNewDialog() {
+        scope.launch {
+            optionsLoading = true
+            fullOptions = vm.fetchCreateOptionsFull()
+            optionsLoading = false
+            val list = fullOptions.departments
+            // 有可选项才弹选择框；为空时退回默认创建（保留原行为）
+            if (list.isEmpty()) {
+                onNew()
+            } else {
+                // 预选默认部门/人格（若在列表中）
+                selectedOption = list.firstOrNull {
+                    it.departmentId == fullOptions.defaultDepartmentId &&
+                        it.agentId == fullOptions.defaultAgentId
+                } ?: list.first()
+                showNewDialog = true
+            }
+        }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -154,7 +202,7 @@ fun ConversationListScreen(
                 }
             },
             actions = {
-                IconButton(onClick = onNew) {
+                IconButton(onClick = { openNewDialog() }) {
                     Icon(Icons.Default.Add, contentDescription = "新建")
                 }
             },
@@ -179,6 +227,97 @@ fun ConversationListScreen(
                 }
             }
         }
+    }
+
+    if (showNewDialog) {
+        val list = fullOptions.departments
+        // 按部门分组，保持后端顺序
+        val grouped = list.groupBy { it.departmentName ?: it.departmentId ?: "其他" }
+        AlertDialog(
+            onDismissRequest = { showNewDialog = false },
+            title = { Text("新建会话") },
+            text = {
+                when {
+                    optionsLoading -> Box(
+                        Modifier.fillMaxWidth().height(160.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { CircularProgressIndicator() }
+                    list.isEmpty() -> Text("没有可用的部门/人格，请先在电脑端配置。")
+                    else -> LazyColumn(
+                        Modifier.fillMaxWidth().heightIn(max = 380.dp),
+                    ) {
+                        grouped.forEach { (department, items) ->
+                            item(key = "hdr_$department") {
+                                Text(
+                                    department,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(vertical = 6.dp),
+                                )
+                            }
+                            items.forEach { opt ->
+                                item(key = opt.id ?: opt.agentId ?: opt.departmentId ?: "opt") {
+                                    val selected = selectedOption?.let { s ->
+                                        s.agentId == opt.agentId && s.departmentId == opt.departmentId
+                                    } == true
+                                    Row(
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                selectedOption = opt
+                                            }
+                                            .padding(vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        RadioButton(
+                                            selected = selected,
+                                            onClick = { selectedOption = opt },
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                opt.agentName ?: opt.agentId ?: "人格",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
+                                            if (selected) {
+                                                Spacer(Modifier.height(2.dp))
+                                                Text(
+                                                    "默认方案",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !optionsLoading && selectedOption != null,
+                    onClick = {
+                        val opt = selectedOption
+                        showNewDialog = false
+                        if (opt != null) {
+                            scope.launch {
+                                val id = vm.createConversation(
+                                    title = null,
+                                    departmentId = opt.departmentId,
+                                    agentId = opt.agentId,
+                                )
+                                if (id != null) onCreated(id)
+                            }
+                        }
+                    },
+                ) { Text("创建") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewDialog = false }) { Text("取消") }
+            },
+        )
     }
 }
 
