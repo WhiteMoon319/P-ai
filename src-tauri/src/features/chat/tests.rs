@@ -12402,6 +12402,30 @@
     }
 
     #[test]
+    fn switch_active_conversation_snapshot_should_be_async_spawn_blocking() {
+        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("system")
+            .join("commands")
+            .join("config_and_persona")
+            .join("unarchived_conversations.rs");
+        let content = std::fs::read_to_string(&file).expect("read unarchived conversations");
+        let start = content
+            .find("async fn switch_active_conversation_snapshot(")
+            .expect("switch_active_conversation_snapshot should be async fn");
+        let next_fn_offset = content[start..]
+            .find("\n}\n\n#[tauri::command]")
+            .map(|offset| start + offset + 3)
+            .unwrap_or(content.len());
+        let section = &content[start..next_fn_offset];
+        assert!(
+            section.contains("spawn_blocking"),
+            "switch_active_conversation_snapshot 必须使用 spawn_blocking 移出主线程"
+        );
+    }
+
+    #[test]
     fn foreground_mark_read_should_use_unified_conversation_mutation_entry() {
         let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("src")
