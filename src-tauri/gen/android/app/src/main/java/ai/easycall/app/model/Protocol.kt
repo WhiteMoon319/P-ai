@@ -289,6 +289,65 @@ fun buildActivityStepsFromMessage(message: ChatMessage): List<ActivityStep> = bu
     }
 }
 
+/**
+ * 用例：文本落盘时把当前流式 activitySteps（思考+工具）并入消息，保证思考在正文本体上方。
+ * 把活动步骤恢复成 message 的 parts + toolCall 结构，供 MessageBubble 复用 buildActivityStepsFromMessage。
+ * @param assistantText 正文本体（放入 Text part）
+ * @param steps 活动步骤（思考拼进 reasoningContent，工具还原为 tool history event）
+ */
+fun buildChatMessageFromActivitySteps(
+    id: String,
+    role: String,
+    assistantText: String,
+    steps: List<ActivityStep>,
+): ChatMessage {
+    // 思考全文：所有 Reasoning 步骤 + 工具级思考，拼成 reasoningContent
+    val reasoning = buildList {
+        steps.forEach { step ->
+            when (step) {
+                is ActivityStep.Reasoning -> add(step.text)
+                is ActivityStep.Tool -> step.reasoning?.takeIf { it.isNotBlank() }?.let { add(it) }
+            }
+        }
+    }.joinToString("\n")
+
+    // 工具历史事件还原：每条 assistant 的事件聚合 tool_calls
+    val toolCall = buildList {
+        val toolSteps = steps.filterIsInstance<ActivityStep.Tool>()
+        if (toolSteps.isNotEmpty()) {
+            add(
+                ToolHistoryEvent(
+                    role = "assistant",
+                    toolCalls = toolSteps.map { step ->
+                        ToolCallInfo(
+                            id = step.toolCallId,
+                            function = ToolFunctionInfo(name = step.name, arguments = step.argsText),
+                        )
+                    },
+                    reasoningContent = null,
+                )
+            )
+            // 工具结果：有 resultText 的工具步骤追加 tool role 事件
+            toolSteps.filter { !it.resultText.isNullOrBlank() }.forEach { step ->
+                add(
+                    ToolHistoryEvent(
+                        role = "tool",
+                        toolCallId = step.toolCallId,
+                        content = step.resultText,
+                    )
+                )
+            }
+        }
+    }
+
+    return ChatMessage(
+        id = id,
+        role = role,
+        parts = listOf(MessagePart(type = "Text", text = assistantText, reasoningContent = reasoning)),
+        toolCall = toolCall,
+    )
+}
+
 // ---------------- 发送/停止 ----------------
 
 data class SessionSelector(

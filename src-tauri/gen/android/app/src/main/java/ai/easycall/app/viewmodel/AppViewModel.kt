@@ -2,6 +2,7 @@ package ai.easycall.app.viewmodel
 
 import ai.easycall.app.model.ActivityStep
 import ai.easycall.app.model.ChatMessage
+import ai.easycall.app.model.buildChatMessageFromActivitySteps
 import ai.easycall.app.model.ConversationSummary
 import ai.easycall.app.model.CreateConversationOptions
 import ai.easycall.app.model.DeltaNotification
@@ -248,11 +249,13 @@ class AppViewModel(
                         "assistant_tool_event" -> {
                             // 工具调用开始：解析 message 中的工具名/参数/工具级思考，追加或更新工具步骤
                             val toolMsg = event?.message
+                            android.util.Log.d("PaiNotify", "TOOL_EVENT kind=${event?.kind} msg=$toolMsg")
                             if (toolMsg.isNullOrBlank()) return
                             upsertToolStep(toolMsg, event)
                         }
                         "assistant_tool_result" -> {
                             val toolMsg = event?.message
+                            android.util.Log.d("PaiNotify", "TOOL_RESULT kind=${event?.kind} msg=$toolMsg")
                             if (toolMsg.isNullOrBlank()) return
                             // 工具结果：更新最近一次工具步骤的 resultText
                             updateToolResult(toolMsg, event)
@@ -380,16 +383,19 @@ class AppViewModel(
         val parsed = runCatching { gson.fromJson(toolMsg, ToolHistoryEvent::class.java) }.getOrNull()
         val result = parsed?.content?.takeIf { it.isNotBlank() }
         if (result == null) return
-        var toolCallId: String? = null
-        val calls = parsed?.toolCalls.orEmpty()
-        val first = calls.firstOrNull()
-        if (first != null) {
-            toolCallId = first?.id ?: first?.callId
-        }
+        // result 事件（role=tool）的 id 在顶层 tool_call_id，而非 tool_calls 数组
+        val toolCallId = parsed?.toolCallId?.takeIf { it.isNotBlank() }
         val list = activitySteps.value.toMutableList()
-        var targetIndex = toolCallId?.let { id ->
-            list.indexOfLast { it is ActivityStep.Tool && it.toolCallId == id }
-        } ?: -1
+        var targetIndex = -1
+        if (toolCallId != null) {
+            targetIndex = list.indexOfLast { it is ActivityStep.Tool && it.toolCallId == toolCallId }
+        }
+        if (targetIndex < 0) {
+            // 兜底：匹配最近一个状态不是 done 的工具步骤（正在执行中），避免回复到已完成步骤
+            targetIndex = list.indexOfLast {
+                it is ActivityStep.Tool && it.status != "done"
+            }
+        }
         if (targetIndex < 0) {
             targetIndex = list.indexOfLast { it is ActivityStep.Tool }
         }
@@ -420,26 +426,48 @@ class AppViewModel(
 
     private fun commitAssistant(text: String, message: ChatMessage?) {
         val trimmed = text?.trim().orEmpty()
+        val steps = activitySteps.value
         if (!trimmed.isEmpty()) {
             if (committedAssistantText == trimmed) {
                 // 本回合已落过同意文本，只清理流式缓冲，不再重复落盘
                 streamingText.value = ""
+                activitySteps.value = emptyList()
                 return
             }
             committedAssistantText = trimmed
-            messages.value = messages.value.plus(
+            // 文本落盘时并入当前活动步骤（思考+工具），保证思考在正文本体上方、不残留到列表尾部
+            val built = if (steps.isNotEmpty()) {
+                buildChatMessageFromActivitySteps(
+                    id = "assistant-${nextLocalId()}",
+                    role = "assistant",
+                    assistantText = trimmed,
+                    steps = steps,
+                )
+            } else {
                 ChatMessage(
                     id = "assistant-${nextLocalId()}",
                     role = "assistant",
                     parts = listOf(ai.easycall.app.model.MessagePart(type = "Text", text = trimmed)),
                 )
-            )
+            }
+            messages.value = messages.value.plus(built)
             streamingText.value = ""
+            activitySteps.value = emptyList()
             return
         }
         if (message != null) {
+            // message 分支去重：若本回合已落过相同正文，跳过，避免与文本分支重复
+            val bodyText = message.parts.joinToString("\n") { it.displayText }.trim()
+            if (!bodyText.isEmpty() && committedAssistantText == bodyText) {
+                messages.value = messages.value.plus(message)
+                streamingText.value = ""
+                activitySteps.value = emptyList()
+                return
+            }
+            committedAssistantText = bodyText
             messages.value = messages.value.plus(message)
             streamingText.value = ""
+            activitySteps.value = emptyList()
         }
     }
 
