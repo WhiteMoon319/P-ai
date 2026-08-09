@@ -280,6 +280,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     deleteUnarchivedConversationFromArchives: bindings.deleteUnarchivedConversationFromArchives,
     sendChatFromCurrentWindow: bindings.sendChatFromCurrentWindow,
     setStatusError: bindings.setStatusError,
+    settleStreamScrollAfterStable: bindings.settleStreamScrollAfterStable,
     messageText: bindings.messageText,
     extractMessageImages: bindings.extractMessageImages,
     extractMessageAttachmentFiles: bindings.extractMessageAttachmentFiles,
