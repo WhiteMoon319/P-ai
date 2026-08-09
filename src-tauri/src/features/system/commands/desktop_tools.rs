@@ -1869,7 +1869,7 @@ fn get_chat_shell_workspace_inner(
             &input.agent_id,
             input.conversation_id.as_deref(),
         )?;
-    let conversation = terminal_session_conversation(state, &session_id)?;
+    let conversation = terminal_session_conversation_meta(state, &session_id)?;
     let root = terminal_session_root_canonical(state, &session_id)?;
     Ok(build_chat_shell_workspace_output(
         state,

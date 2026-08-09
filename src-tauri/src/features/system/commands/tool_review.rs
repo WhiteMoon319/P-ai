@@ -1800,11 +1800,9 @@ fn list_tool_review_reports_internal(
     if conversation_id.is_empty() {
         return Ok(ListToolReviewReportsOutput { reports: Vec::new() });
     }
-    with_tool_review_conversation(state, conversation_id, |_conversation| {
-        let _ = tool_review_prune_legacy_batch_report_records(&state.data_path, conversation_id)?;
-        Ok(ListToolReviewReportsOutput {
-            reports: tool_review_list_reports_newest_first(&state.data_path, conversation_id)?,
-        })
+    let _ = tool_review_prune_legacy_batch_report_records(&state.data_path, conversation_id)?;
+    Ok(ListToolReviewReportsOutput {
+        reports: tool_review_list_reports_newest_first(&state.data_path, conversation_id)?,
     })
 }
 
