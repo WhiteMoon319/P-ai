@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.HorizontalDivider
@@ -43,12 +44,15 @@ import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
 
 /**
- * 轻量 Markdown 渲染（复刻 RikkaHub 渲染路径）：
- * JetBrains markdown 解析 -> HTML -> Jsoup DOM -> Compose 逐块渲染。
- * RikkaHub 正是用 org.intellij.markdown + HtmlGenerator 把 markdown 转 HTML，再用
- * HTML 解析逐块渲染到 Compose 上。这里保留其核心方法，去掉其私有依赖(Latex/代码高亮/
- * 图标/表格增强)，用 Material3 默认样式实现常用语法。
- * 支持：标题/段落/粗斜体/删除线/行内代码/代码块/有序+无序列表/引用/表格/链接/分割线。
+ * Markdown 渲染（对齐 PAI 桌面 AppMarkdownRenderer / markdown-content.css 的视觉）。
+ * 技术路径沿用 rikkahub：JetBrains markdown 解析 -> HTML -> jsoup DOM -> Compose 逐块渲染，
+ * 但样式参数对齐桌面端 PAI：
+ *  - 链接：primary + 0.08em 下划线
+ *  - 代码块：圆角 8dp，底色 surfaceVariant 50%
+ *  - 引用：左侧竖条 base-content 24%
+ *  - 表格：表头底色区分，单元格边框 15%
+ *  - 列表符号：content 54% 透明度
+ *  - 分割线：content 18%
  */
 @Composable
 fun MarkdownText(
@@ -160,7 +164,11 @@ private fun renderList(element: Element, ordered: Boolean, level: Int, color: Co
             if (item.tagName().lowercase() == "li") {
                 val bullet = if (ordered) "${idx++}. " else "• "
                 Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(vertical = 1.dp)) {
-                    Text(bullet, color = color.primary, modifier = Modifier.alignByBaseline())
+                    Text(
+                        bullet,
+                        color = color.onSurface.copy(alpha = 0.54f),
+                        modifier = Modifier.alignByBaseline(),
+                    )
                     Column(modifier = Modifier.weight(1f)) {
                         val direct = item.childNodes().filter { node ->
                             !(node is Element && node.tagName().lowercase() in listOf("ul", "ol"))
@@ -194,7 +202,7 @@ private fun renderCodeBlock(element: Element, color: ColorScheme) {
 
     Surface(
         color = color.surfaceVariant.copy(alpha = 0.5f),
-        shape = RoundedCornerShape(6.dp),
+        shape = RoundedCornerShape(8.dp),
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
@@ -215,15 +223,23 @@ private fun renderCodeBlock(element: Element, color: ColorScheme) {
 
 @Composable
 private fun renderBlockquote(element: Element, color: ColorScheme) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .background(color.surfaceVariant.copy(alpha = 0.2f))
-            .border(3.dp, color.onSurfaceVariant.copy(alpha = 0.4f))
-            .padding(8.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
-        element.childNodes().forEach { renderBodyNode(it, 0, color) }
+        // 左侧竖条：content 24% 透明度
+        Box(
+            Modifier
+                .width(3.dp)
+                .padding(top = 2.dp, bottom = 2.dp)
+                .background(color.onSurface.copy(alpha = 0.24f)),
+        )
+        Column(modifier = Modifier.padding(start = 10.dp)) {
+            element.childNodes().forEach { renderBodyNode(it, 0, color) }
+        }
     }
 }
 
@@ -235,34 +251,38 @@ private fun renderTable(element: Element, color: ColorScheme) {
         element.childNodes().forEach { renderBodyNode(it, 0, color) }
         return
     }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .border(0.5.dp, color.onSurfaceVariant.copy(alpha = 0.4f)),
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = Color.Transparent,
+        border = androidx.compose.foundation.BorderStroke(
+            0.5.dp, color.onSurface.copy(alpha = 0.22f),
+        ),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
     ) {
-        if (headers.isNotEmpty()) {
-            Row(modifier = Modifier.fillMaxWidth().background(color.surfaceVariant.copy(alpha = 0.4f))) {
-                headers.forEach { th ->
-                    Text(
-                        buildInline(th.childNodes(), color),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f).padding(6.dp),
-                    )
+        Column {
+            if (headers.isNotEmpty()) {
+                Row(modifier = Modifier.fillMaxWidth().background(color.primary.copy(alpha = 0.08f))) {
+                    headers.forEach { th ->
+                        Text(
+                            buildInline(th.childNodes(), color),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f).padding(6.dp),
+                        )
+                    }
                 }
             }
-        }
-        rows.forEach { tr ->
-            val cells = tr.select("td")
-            if (cells.isNotEmpty()) {
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    cells.forEach { td ->
-                        Text(
-                            buildInline(td.childNodes(), color),
-                            fontSize = 13.sp,
-                            modifier = Modifier.weight(1f).padding(horizontal = 6.dp, vertical = 4.dp),
-                        )
+            rows.forEach { tr ->
+                val cells = tr.select("td")
+                if (cells.isNotEmpty()) {
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        cells.forEach { td ->
+                            Text(
+                                buildInline(td.childNodes(), color),
+                                fontSize = 13.sp,
+                                modifier = Modifier.weight(1f).padding(horizontal = 6.dp, vertical = 4.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -288,6 +308,7 @@ private fun buildInline(nodes: List<Node>, color: ColorScheme): AnnotatedString 
                     val href = n.attr("href")
                     if (href.isNotEmpty()) {
                         withLink(LinkAnnotation.Url(href)) {
+                            // PAI：主色 + 0.08em 下划线
                             withStyle(SpanStyle(color = color.primary, textDecoration = TextDecoration.Underline)) {
                                 n.childNodes().forEach { rec(it) }
                             }
