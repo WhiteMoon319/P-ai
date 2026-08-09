@@ -1849,8 +1849,8 @@ function handleRebindConversationRecipient() {
   emit("rebindConversationRecipient", { conversationId, departmentId, agentId });
 }
 
-const conversationDisplaySections = computed<ConversationSection[]>(() =>
-  buildConversationSections(props.conversationItems || props.unarchivedConversationItems || [], {
+const conversationDisplaySections = computed<ConversationSection[]>(() => {
+  const sections = buildConversationSections(props.conversationItems || props.unarchivedConversationItems || [], {
     tab: props.chatLeftPanelMode,
     titles: {
       recent: t("chat.recentConversations"),
@@ -1859,8 +1859,11 @@ const conversationDisplaySections = computed<ConversationSection[]>(() =>
       defaultWorkspace: t("chat.defaultWorkspace"),
     },
     locale: locale.value,
-  }),
-);
+  });
+  // Shift+滚轮跳过「最近会话」区：其中的会话在工作区/频道区会重复出现，
+  // 滚动时同一会话滚两遍，顺序对不上列表直觉。
+  return sections.filter((section) => section.key !== "recent");
+});
 
 function handleShiftWheel(event: WheelEvent) {
   if (!event.shiftKey) return;
