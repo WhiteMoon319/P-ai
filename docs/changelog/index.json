@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-08-08T03:20:41.430Z",
-  "latestVersion": "v0.57.0",
+  "generatedAt": "2026-08-09T09:14:28.505Z",
+  "latestVersion": "v0.58.0",
   "releases": [
+    {
+      "version": "v0.58.0",
+      "path": "docs/changelog/releases/v0.58.0.md",
+      "summary": "委托状态在打开会话时立即刷新，会话工作区栏的活跃委托展示不再依赖监控面板的委托标签页是否打开。"
+    },
     {
       "version": "v0.57.0",
       "path": "docs/changelog/releases/v0.57.0.md",
