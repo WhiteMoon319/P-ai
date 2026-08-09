@@ -1619,7 +1619,7 @@ fn usage_trail_wall_hourly(
             u64,
             u64,
             std::collections::HashSet<String>,
-            std::collections::BTreeMap<String, (u64, String, String)>,
+            std::collections::BTreeMap<String, (u64, String, String, String)>,
         ),
     >::new();
     for row in rows {
@@ -1634,12 +1634,14 @@ fn usage_trail_wall_hourly(
             .saturating_add(row.tokens.total_tokens);
         entry.1 = entry.1.saturating_add(row.tokens.total_tokens);
         entry.2.insert(row.conversation_id.clone());
-        let model_entry = entry.3.entry(row.model_name.clone()).or_insert_with(|| {
+        // 聚合键含 provider_key，同名模型在不同供应商下分开统计，避免 label 串用
+        let model_key = format!("{}::{}", row.provider_key, row.model_name);
+        let model_entry = entry.3.entry(model_key).or_insert_with(|| {
             let effort = effort_by_config
                 .get(&row.api_config_id)
                 .cloned()
                 .unwrap_or_default();
-            (0, row.provider_label.clone(), effort)
+            (0, row.provider_label.clone(), effort, row.model_name.clone())
         });
         model_entry.0 = model_entry
             .0
@@ -1659,9 +1661,9 @@ fn usage_trail_wall_hourly(
             .map(|item| {
                 item.3
                     .iter()
-                    .map(|(model, (tokens, provider_label, reasoning_effort))| {
+                    .map(|(model_key, (tokens, provider_label, reasoning_effort, _model_name))| {
                         UsageTrailWallModel {
-                            model: model.clone(),
+                            model: model_key.clone(),
                             tokens: *tokens,
                             provider_label: provider_label.clone(),
                             reasoning_effort: reasoning_effort.clone(),
@@ -2804,12 +2806,76 @@ mod storage_usage_tests {
         assert_eq!(view.peak_hour, Some(current_hour as u8), "唯一有量小时应为峰值");
         let hour_models = &view.hourly[current_hour as usize].models;
         assert_eq!(hour_models.len(), 2, "两个模型应各自一条");
-        let model_a = hour_models.iter().find(|m| m.model == "model-a").expect("model-a 存在");
-        let model_b = hour_models.iter().find(|m| m.model == "model-b").expect("model-b 存在");
+        let model_a = hour_models.iter().find(|m| m.model == "provider-a::model-a").expect("model-a 存在");
+        let model_b = hour_models.iter().find(|m| m.model == "provider-a::model-b").expect("model-b 存在");
         assert_eq!(model_a.tokens, 4, "model-a total_tokens = 4");
         assert_eq!(model_b.tokens, 3, "model-b total_tokens = 3");
         assert_eq!(model_a.provider_label, "主供应商", "provider_label 应快照进模型条目");
         assert_eq!(model_b.provider_label, "主供应商", "provider_label 应快照进模型条目");
+    }
+
+    #[test]
+    fn usage_trail_wall_should_split_same_model_name_across_providers() {
+        let state = storage_usage_test_state();
+        let bucket = message_store::usage_trail_hour_bucket(now_utc());
+        let make_delta = |conversation_id: &str, provider_key: &str, provider_label: &str, input: u64| {
+            message_store::UsageTrailDelta {
+                conversation_id: conversation_id.to_string(),
+                agent_id: DEFAULT_AGENT_ID.to_string(),
+                department_id: ASSISTANT_DEPARTMENT_ID.to_string(),
+                conversation_kind: "normal".to_string(),
+                api_config_id: format!("{provider_key}::flash-model"),
+                provider_key: provider_key.to_string(),
+                provider_label: provider_label.to_string(),
+                model_name: "flash-model".to_string(),
+                tokens: message_store::UsageTrailTokenDelta {
+                    input_tokens: input,
+                    output_tokens: 0,
+                    total_tokens: input,
+                    cache_read_tokens: 0,
+                    cache_write_tokens: 0,
+                    reasoning_tokens: 0,
+                },
+            }
+        };
+        // 同一小时、同一模型名，两个不同供应商各记一笔（不同会话）
+        message_store::chat_metadata_store_usage_trail_upsert_delta(
+            &state.data_path,
+            &bucket,
+            &make_delta("conv-x", "provider-x", "供应商X", 100),
+        )
+        .expect("upsert provider-x");
+        message_store::chat_metadata_store_usage_trail_upsert_delta(
+            &state.data_path,
+            &bucket,
+            &make_delta("conv-y", "provider-y", "供应商Y", 200),
+        )
+        .expect("upsert provider-y");
+
+        let view = build_usage_trail_wall(
+            &state,
+            &UsageTrailWallQuery {
+                view: "today".to_string(),
+                year: None,
+            },
+        )
+        .expect("build wall");
+        let now_local = to_local_datetime(now_utc());
+        let current_hour = now_local.hour();
+        let hour_models = &view.hourly[current_hour as usize].models;
+        assert_eq!(hour_models.len(), 2, "同模型名不同供应商应各自一条");
+        let model_x = hour_models
+            .iter()
+            .find(|m| m.model == "provider-x::flash-model")
+            .expect("provider-x 条目存在");
+        let model_y = hour_models
+            .iter()
+            .find(|m| m.model == "provider-y::flash-model")
+            .expect("provider-y 条目存在");
+        assert_eq!(model_x.tokens, 100, "provider-x tokens 独立");
+        assert_eq!(model_y.tokens, 200, "provider-y tokens 独立");
+        assert_eq!(model_x.provider_label, "供应商X", "provider-x label 不被串用");
+        assert_eq!(model_y.provider_label, "供应商Y", "provider-y label 不被串用");
     }
 
     #[test]

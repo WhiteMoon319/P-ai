@@ -307,7 +307,13 @@ const todayModelDetails = computed<UsageTrailWallModel[]>(() => {
 });
 
 function modelDisplayName(m: UsageTrailWallModel): string {
-  return apiConfigDisplayName(m.providerLabel, m.model, m.reasoningEffort, t);
+  return apiConfigDisplayName(m.providerLabel, modelBaseName(m.model), m.reasoningEffort, t);
+}
+
+// 后端聚合键为 provider_key::model_name，显示时拆出纯模型名
+function modelBaseName(key: string): string {
+  const idx = key.lastIndexOf("::");
+  return idx >= 0 ? key.slice(idx + 2) : key;
 }
 
 function modelColor(model: string): string {
@@ -329,10 +335,14 @@ const chartConfig = computed<Record<string, unknown>>(() => {
     const colors = models.map(
       (model, index) => MODEL_COLORS[index % MODEL_COLORS.length] ?? "#94a3b8",
     );
+    const modelDetailByKey = new Map(todayModelDetails.value.map((d) => [d.model, d]));
     return {
       type: "polarArea",
       data: {
-        labels: models,
+        labels: models.map((model) => {
+          const detail = modelDetailByKey.get(model);
+          return detail ? modelDisplayName(detail) : model;
+        }),
         datasets: [
           {
             data: models.map((model) => totalsByModel.get(model) ?? 0),
@@ -372,15 +382,15 @@ const chartConfig = computed<Record<string, unknown>>(() => {
   // 凌晨 4 点分界：x 轴按分界日顺序排列（04→23→00→03），tooltip 同步显示实际小时。
   const cells = todayData.value?.hourly || [];
   const labels = Array.from({ length: 24 }, (_, index) => String((index + 4) % 24).padStart(2, "0"));
-  const datasets = todayModels.value.map((model, index) => {
+  const datasets = todayModelDetails.value.map((m, index) => {
     const color = MODEL_COLORS[index % MODEL_COLORS.length] ?? "#94a3b8";
     const data = labels.map((label) => {
       const cell = cells.find((item) => String(item.hour).padStart(2, "0") === label);
-      const m = (cell?.models || []).find((item) => item.model === model);
-      return m?.tokens ?? 0;
+      const item = (cell?.models || []).find((entry) => entry.model === m.model);
+      return item?.tokens ?? 0;
     });
     return {
-      label: model,
+      label: modelDisplayName(m),
       data,
       borderColor: color,
       backgroundColor: color,
