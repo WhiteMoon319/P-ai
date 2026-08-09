@@ -65,7 +65,7 @@ class AppViewModel(
             client.connectionState
                 .filter { it == ConnectionStatus.Connected }
                 .onEach { refreshConversations() }
-                .collect()
+                .collectLatest { }
         }
     }
 

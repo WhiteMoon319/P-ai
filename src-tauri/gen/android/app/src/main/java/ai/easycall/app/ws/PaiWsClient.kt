@@ -57,8 +57,17 @@ class PaiWsClient(private val scope: CoroutineScope) {
                 val connected = tryOpen(host, port)
                 if (!connected) {
                     connectionState.value = ConnectionStatus.Disconnected
+                    delay(RECONNECT_INTERVAL_MS)
+                } else {
+                    // 连接建立成功即保持该连接，不再继续握手。
+                    // 后续由 onFailure/onClosed 把状态改回 Disconnected，使外层重连。
+                    while (!closedByUser && connectionState.value == ConnectionStatus.Connected) {
+                        delay(RECONNECT_INTERVAL_MS)
+                    }
+                    if (!closedByUser && connectionState.value != ConnectionStatus.Connected) {
+                        delay(RECONNECT_INTERVAL_MS)
+                    }
                 }
-                delay(RECONNECT_INTERVAL_MS)
             }
         }
     }

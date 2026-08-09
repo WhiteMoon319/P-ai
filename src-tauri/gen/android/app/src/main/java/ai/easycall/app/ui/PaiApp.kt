@@ -62,13 +62,10 @@ fun PaiApp(vm: AppViewModel) {
 
     // 错误反馈：一次性 Toast 提示（新建失败/刷新失败等），避免静默无反应
     val errorMsg by vm.error.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(errorMsg) {
         val msg = errorMsg ?: return@LaunchedEffect
-        android.widget.Toast.makeText(
-            androidx.compose.ui.platform.LocalContext.current,
-            msg,
-            android.widget.Toast.LENGTH_SHORT,
-        ).show()
+        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
         vm.consumeError()
     }
 
