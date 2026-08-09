@@ -7,6 +7,7 @@ export interface UseChatToolReviewHandlersOptions {
   currentDepartmentId: Ref<string>;
   departmentOptions: Ref<Array<{ id: string }>>;
   initialPanelOpen?: Ref<boolean>;
+  activeTab?: Ref<string>;
   t: (key: string, params?: Record<string, unknown>) => string;
   syncViewportMetrics: () => void;
   onRefreshMessage: (payload: { conversationId: string; messageId: string }) => void;
@@ -39,6 +40,7 @@ export function useChatToolReviewHandlers(options: UseChatToolReviewHandlersOpti
     activeConversationId: options.activeConversationId,
     refreshTick: options.toolReviewRefreshTick,
     initialPanelOpen: options.initialPanelOpen,
+    activeTab: options.activeTab,
     t,
     onRefreshMessage: options.onRefreshMessage,
   });

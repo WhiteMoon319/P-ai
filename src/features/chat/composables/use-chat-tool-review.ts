@@ -131,6 +131,7 @@ type UseChatToolReviewOptions = {
   activeConversationId: Ref<string>;
   refreshTick: Ref<number>;
   initialPanelOpen?: Ref<boolean>;
+  activeTab?: Ref<string>;
   t: (key: string, params?: Record<string, unknown>) => string;
   onRefreshMessage?: (input: { conversationId: string; messageId: string }) => void | Promise<void>;
 };
@@ -503,6 +504,7 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
     () => options.refreshTick.value,
     () => {
       if (!String(options.activeConversationId.value || "").trim()) return;
+      if (!shouldLoadToolReviewBatches()) return;
       void refreshToolReviewBatches();
     },
   );
@@ -531,12 +533,31 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
       toolReviewCurrentReportId.value = "";
       toolReviewErrorText.value = "";
       toolReviewReportErrorText.value = "";
-      if (conversationId) {
+      if (conversationId && shouldLoadToolReviewBatches()) {
         void refreshToolReviewBatches();
       }
     },
     { immediate: true },
   );
+
+  // 工具评审批列表只在监控面板打开且 tools 标签激活时加载（懒加载），避免切换会话时白读
+  function shouldLoadToolReviewBatches(): boolean {
+    if (!toolReviewPanelOpen.value) return false;
+    if (options.activeTab && options.activeTab.value !== "tools") return false;
+    return true;
+  }
+
+  if (options.activeTab) {
+    watch(
+      () => [toolReviewPanelOpen.value, String(options.activeTab?.value || "").trim()] as const,
+      () => {
+        const conversationId = String(options.activeConversationId.value || "").trim();
+        if (conversationId && shouldLoadToolReviewBatches()) {
+          void refreshToolReviewBatches();
+        }
+      },
+    );
+  }
 
   return {
     toolReviewPanelOpen,

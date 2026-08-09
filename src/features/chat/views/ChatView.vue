@@ -1465,6 +1465,7 @@ const {
   currentDepartmentId: toRef(props, "currentDepartmentId"),
   departmentOptions: toolReviewDepartmentOptions,
   initialPanelOpen: toRef(props, "initialToolReviewPanelOpen"),
+  activeTab: toolReviewSidebarActiveTab,
   t, syncViewportMetrics,
   onRefreshMessage: (payload) => emit("refreshToolReviewMessage", payload),
   onToolReviewPanelOpenChange: (open) => emit("toolReviewPanelOpenChange", open),
