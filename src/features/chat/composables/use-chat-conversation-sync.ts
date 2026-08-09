@@ -480,10 +480,31 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     }
   }
 
+  function conversationOverviewItemSignature(item: Record<string, any>): string {
+    return [
+      String(item.conversationId || "").trim(),
+      String(item.updatedAt || "").trim(),
+      String(item.lastMessageAt || "").trim(),
+      String(item.runtimeState || "").trim(),
+      String(item.title || "").trim(),
+      String(item.summary || "").trim(),
+      String(item.currentTodo || "").trim(),
+      Math.max(0, Number(item.unreadCount || 0)),
+      !!item.isPinned,
+      !!item.isSystemNotificationConversation,
+    ].join("|");
+  }
+
   function applyConversationOverviewItemUpdated(payload?: Record<string, any> | null) {
     const conversation = payload?.conversation;
     const conversationId = String(conversation?.conversationId || "").trim();
     if (!conversationId) return;
+    const existing = bindings.unarchivedConversations.value.find(
+      (item: any) => String(item?.conversationId || "").trim() === conversationId,
+    );
+    if (existing && conversationOverviewItemSignature(existing) === conversationOverviewItemSignature(conversation)) {
+      return;
+    }
     let replaced = false;
     const nextItems = bindings.unarchivedConversations.value.map((item: any) => {
       if (String(item.conversationId || "").trim() !== conversationId) {
