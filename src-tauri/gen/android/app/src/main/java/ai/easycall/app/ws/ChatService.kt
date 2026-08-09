@@ -30,6 +30,14 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("conversation.setActive", mapOf("input" to input), SetActiveResult::class.java)
     }
 
+    /** 登记为当前会话的 sidebar 订阅者，使后端把流式 delta / 思考 / 工具事件广播到此连接。 */
+    suspend fun resumeSubscription(conversationId: String) {
+        client.sendOneWay(
+            "conversation.resumeSubscription",
+            mapOf("conversationId" to conversationId),
+        )
+    }
+
     suspend fun blockPage(conversationId: String, blockId: Int? = null): BlockPageResult {
         val input = BlockPageInput(conversationId = conversationId, blockId = blockId)
         return client.request("conversation.blockPage", input, BlockPageResult::class.java)
