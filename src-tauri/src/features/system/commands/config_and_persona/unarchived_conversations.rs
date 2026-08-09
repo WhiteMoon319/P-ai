@@ -73,46 +73,51 @@ fn repair_conversation_preferred_model_for_snapshot_meta(
 }
 
 #[tauri::command]
-fn switch_active_conversation_snapshot(
+async fn switch_active_conversation_snapshot(
     input: SwitchActiveConversationSnapshotInput,
     state: State<'_, AppState>,
 ) -> Result<SwitchActiveConversationSnapshotOutput, String> {
-    let started_at = std::time::Instant::now();
-    let result =
-        conversation_service_v2().switch_active_conversation_snapshot(state.inner(), &input)?;
-    let mut snapshot = result.snapshot;
-    if let Ok(conversation_meta) = conversation_service_v2()
-        .get_conversation_meta(state.inner(), &snapshot.conversation_id)
-    {
-        snapshot.preferred_api_config_id =
-            repair_conversation_preferred_model_for_snapshot_meta(
-                state.inner(),
-                &conversation_meta.id,
-                &conversation_meta.department_id,
-                conversation_meta.preferred_api_config_id.as_deref(),
-            )?;
-    }
-    let unarchived_conversations = result.unarchived_conversations;
-    runtime_log_debug(format!(
-        "[前台重型快照] 完成，conversation_id={}，message_count={}，has_more_history={}，summary_count={}，duration_ms={}",
-        snapshot.conversation_id,
-        snapshot.messages.len(),
-        snapshot.has_more_history,
-        unarchived_conversations.len(),
-        started_at.elapsed().as_millis()
-    ));
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let started_at = std::time::Instant::now();
+        let result =
+            conversation_service_v2().switch_active_conversation_snapshot(&app_state, &input)?;
+        let mut snapshot = result.snapshot;
+        if let Ok(conversation_meta) = conversation_service_v2()
+            .get_conversation_meta(&app_state, &snapshot.conversation_id)
+        {
+            snapshot.preferred_api_config_id =
+                repair_conversation_preferred_model_for_snapshot_meta(
+                    &app_state,
+                    &conversation_meta.id,
+                    &conversation_meta.department_id,
+                    conversation_meta.preferred_api_config_id.as_deref(),
+                )?;
+        }
+        let unarchived_conversations = result.unarchived_conversations;
+        runtime_log_debug(format!(
+            "[前台重型快照] 完成，conversation_id={}，message_count={}，has_more_history={}，summary_count={}，duration_ms={}",
+            snapshot.conversation_id,
+            snapshot.messages.len(),
+            snapshot.has_more_history,
+            unarchived_conversations.len(),
+            started_at.elapsed().as_millis()
+        ));
 
-    Ok(SwitchActiveConversationSnapshotOutput {
-        conversation_id: snapshot.conversation_id,
-        messages: snapshot.messages,
-        has_more_history: snapshot.has_more_history,
-        runtime_state: snapshot.runtime_state,
-        current_todo: snapshot.current_todo,
-        current_todos: snapshot.current_todos,
-        preferred_api_config_id: snapshot.preferred_api_config_id,
-        active_goal: snapshot.active_goal,
-        unarchived_conversations,
+        Ok(SwitchActiveConversationSnapshotOutput {
+            conversation_id: snapshot.conversation_id,
+            messages: snapshot.messages,
+            has_more_history: snapshot.has_more_history,
+            runtime_state: snapshot.runtime_state,
+            current_todo: snapshot.current_todo,
+            current_todos: snapshot.current_todos,
+            preferred_api_config_id: snapshot.preferred_api_config_id,
+            active_goal: snapshot.active_goal,
+            unarchived_conversations,
+        })
     })
+    .await
+    .map_err(|err| format!("切换会话快照任务异常：{err}"))?
 }
 
 #[tauri::command]
