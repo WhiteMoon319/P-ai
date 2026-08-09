@@ -112,6 +112,7 @@ class AppViewModel(
                 parts = listOf(ai.easycall.app.model.MessagePart(type = "Text", text = trimmed)),
             )
         )
+        committedAssistantText = null
         streamingText.value = ""
         isStreaming.value = true
         withContext(Dispatchers.IO) {
@@ -162,9 +163,9 @@ class AppViewModel(
                             if (m != null) {
                                 val finalText = m.assistantText
                                 if (finalText.isNullOrEmpty()) {
-                                    m.assistantMessage?.let { appendAssistantMessage(it) }
+                                    m.assistantMessage?.let { commitAssistant("", it) }
                                 } else {
-                                    appendAssistantText(finalText)
+                                    commitAssistant(finalText, null)
                                 }
                             }
                             finalizeStreaming()
@@ -181,16 +182,16 @@ class AppViewModel(
                 }
             }
             "chat.roundFinished" -> {
-                // params 顶层平铺 assistantText / assistantMessage
+                // params 顶层平铺 assistantText / assistantMessage；用 commitAssistant 去重
                 val text = params?.asJsonObject?.get("assistantText")?.takeIf { !it.isJsonNull }?.asString
                 if (!text.isNullOrEmpty()) {
-                    appendAssistantText(text)
+                    commitAssistant(text, null)
                 } else {
                     val msg = params?.asJsonObject?.get("assistantMessage")?.takeIf { !it.isJsonNull }
-                    msg?.let {
-                        runCatching { gson.fromJson(it, ChatMessage::class.java) }
-                            .getOrNull()?.let { appendAssistantMessage(it) }
+                    val parsed = msg?.let {
+                        runCatching { gson.fromJson(it, ChatMessage::class.java) }.getOrNull()
                     }
+                    if (parsed != null) commitAssistant("", parsed)
                 }
                 finalizeStreaming()
             }
@@ -200,30 +201,39 @@ class AppViewModel(
     private val idSeq = java.util.concurrent.atomic.AtomicLong(0)
     private fun nextLocalId() = "${System.currentTimeMillis()}-${idSeq.incrementAndGet()}"
 
-    private fun appendAssistantText(text: String) {
-        val base = messages.value.filterNot { it.id.startsWith("local-") }
-        val compiled = base.plus(
-            ChatMessage(
-                id = "assistant-${nextLocalId()}",
-                role = "assistant",
-                parts = listOf(ai.easycall.app.model.MessagePart(type = "Text", text = text)),
-            )
-        )
-        messages.value = compiled
-        streamingText.value = ""
-    }
+    /** 记录当前回合已落地的 assistant 文本，避免 round_completed 与 roundFinished 重复落盘。 */
+    private var committedAssistantText: String? = null
 
-    private fun appendAssistantMessage(message: ChatMessage) {
-        val base = messages.value.filterNot { it.id.startsWith("local-") }
-        messages.value = base.plus(message)
-        streamingText.value = ""
+    private fun commitAssistant(text: String, message: ChatMessage?) {
+        val trimmed = text?.trim().orEmpty()
+        if (!trimmed.isEmpty()) {
+            if (committedAssistantText == trimmed) {
+                // 本回合已落过同意文本，只清理流式缓冲，不再重复落盘
+                streamingText.value = ""
+                return
+            }
+            committedAssistantText = trimmed
+            messages.value = messages.value.plus(
+                ChatMessage(
+                    id = "assistant-${nextLocalId()}",
+                    role = "assistant",
+                    parts = listOf(ai.easycall.app.model.MessagePart(type = "Text", text = trimmed)),
+                )
+            )
+            streamingText.value = ""
+            return
+        }
+        if (message != null) {
+            messages.value = messages.value.plus(message)
+            streamingText.value = ""
+        }
     }
 
     private fun finalizeStreaming() {
-        // commit 正在流式输出的文本为正式消息
+        // commit 正在流式输出的文本为正式消息（走统一去重 commit）
         val pendingText = streamingText.value
         if (pendingText.isNotEmpty()) {
-            appendAssistantText(pendingText)
+            commitAssistant(pendingText, null)
         }
         streamingText.value = ""
         isStreaming.value = false
