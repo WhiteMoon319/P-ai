@@ -495,6 +495,15 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     ].join("|");
   }
 
+  function conversationOverviewOrderKey(item: Record<string, any>): string {
+    return [
+      !!item.isSystemNotificationConversation,
+      !!item.isPinned,
+      Number.isFinite(Number(item.pinIndex)) ? Number(item.pinIndex) : Number.MAX_SAFE_INTEGER,
+      String(item.lastMessageAt || item.updatedAt || "").trim(),
+    ].join("|");
+  }
+
   function applyConversationOverviewItemUpdated(payload?: Record<string, any> | null) {
     const conversation = payload?.conversation;
     const conversationId = String(conversation?.conversationId || "").trim();
@@ -516,7 +525,12 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     if (!replaced) {
       nextItems.push(conversation);
     }
-    bindings.unarchivedConversations.value = sortUnarchivedConversationOverviewItems(nextItems);
+    // 排序键（置顶/最近活动时间）没变时保持原位替换，避免切换会话等场景全量重排整个列表
+    const orderChanged = !existing
+      || conversationOverviewOrderKey(existing) !== conversationOverviewOrderKey(conversation);
+    bindings.unarchivedConversations.value = orderChanged
+      ? sortUnarchivedConversationOverviewItems(nextItems)
+      : nextItems;
     const serverTime = String(payload?.serverTime || "").trim();
     if (serverTime && bindings.lastOverviewSyncAt) {
       bindings.lastOverviewSyncAt.value = serverTime;
