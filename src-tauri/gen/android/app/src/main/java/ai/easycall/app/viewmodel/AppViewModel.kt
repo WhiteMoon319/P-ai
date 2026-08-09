@@ -139,6 +139,8 @@ class AppViewModel(
     }
 
     private fun handleNotification(method: String, params: JsonElement?) {
+        // 诊断：确认下行事件是否到达 Kotlin
+        android.util.Log.d("PaiNotify", "method=$method convId=${params?.asJsonObject?.get("conversationId")} curr=${currentConversationId.value}")
         when (method) {
             "chat.assistantDelta" -> {
                 val notif = params?.let { gson.fromJson(it, DeltaNotification::class.java) }
@@ -179,6 +181,17 @@ class AppViewModel(
                 }
             }
             "chat.roundFinished" -> {
+                // params 顶层平铺 assistantText / assistantMessage
+                val text = params?.asJsonObject?.get("assistantText")?.takeIf { !it.isJsonNull }?.asString
+                if (!text.isNullOrEmpty()) {
+                    appendAssistantText(text)
+                } else {
+                    val msg = params?.asJsonObject?.get("assistantMessage")?.takeIf { !it.isJsonNull }
+                    msg?.let {
+                        runCatching { gson.fromJson(it, ChatMessage::class.java) }
+                            .getOrNull()?.let { appendAssistantMessage(it) }
+                    }
+                }
                 finalizeStreaming()
             }
         }
