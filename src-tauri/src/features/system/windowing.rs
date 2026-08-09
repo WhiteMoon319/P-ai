@@ -1088,20 +1088,28 @@ fn apply_window_layout_before_show(app: &AppHandle, label: &str) -> Result<(), S
 
 /// 保存布局前校验可见性：若 x/y 不在任何显示器可见范围内，改写为主屏内兜底坐标，
 /// 避免离屏坐标（如副屏拔除后的残留 -32000,-32000）被持久化。
-fn fallback_visible_position(window: &tauri::WebviewWindow, x: i32, y: i32) -> (i32, i32) {
+/// 可见性校验与居中均使用待持久化尺寸对应的物理尺寸（width_physical/height_physical），
+/// 与 apply_window_layout_before_show 恢复路径的尺寸转换规则保持一致；
+/// 不能内部读 window.outer_size()——它包含 expansion，与待持久化的基础布局不一致。
+fn fallback_visible_position(
+    window: &tauri::WebviewWindow,
+    x: i32,
+    y: i32,
+    width_physical: u32,
+    height_physical: u32,
+) -> (i32, i32) {
     let Ok(monitors) = window.available_monitors() else {
         return (x, y);
     };
     if monitors.is_empty() {
         return (x, y);
     }
-    let outer_size = window.outer_size().map_err(|_| ()).unwrap_or_default();
     if window_rect_is_visible_on_any_monitor(
         &monitors,
         x,
         y,
-        outer_size.width,
-        outer_size.height,
+        width_physical,
+        height_physical,
     ) {
         return (x, y);
     }
@@ -1110,8 +1118,8 @@ fn fallback_visible_position(window: &tauri::WebviewWindow, x: i32, y: i32) -> (
     };
     let monitor_x = monitor.position().x;
     let monitor_y = monitor.position().y;
-    let center_x = monitor_x + (monitor.size().width as i32 - outer_size.width as i32) / 2;
-    let center_y = monitor_y + (monitor.size().height as i32 - outer_size.height as i32) / 2;
+    let center_x = monitor_x + (monitor.size().width as i32 - width_physical as i32) / 2;
+    let center_y = monitor_y + (monitor.size().height as i32 - height_physical as i32) / 2;
     (center_x.max(monitor_x), center_y.max(monitor_y))
 }
 
@@ -1133,13 +1141,13 @@ fn persist_window_layout_snapshot_with_reason(
         let outer_pos = window
             .outer_position()
             .map_err(|err| format!("Read window outer position failed: {err}"))?;
+        let scale_factor = window
+            .scale_factor()
+            .map_err(|err| format!("Read window scale factor failed: {err}"))?
+            .max(0.1);
         let mut x = outer_pos.x;
         if label == "chat" {
             let expansion = read_chat_window_side_expansion()?;
-            let scale_factor = window
-                .scale_factor()
-                .map_err(|err| format!("Read window scale factor failed: {err}"))?
-                .max(0.1);
             let expanded_logical_width = (((expansion.left_physical as u64
                 + expansion.right_physical as u64) as f64)
                 / scale_factor)
@@ -1148,7 +1156,12 @@ fn persist_window_layout_snapshot_with_reason(
             width = width.saturating_sub(expanded_logical_width).max(1);
             x = x.saturating_add(expansion.left_physical as i32);
         }
-        let (x, y) = fallback_visible_position(&window, x, outer_pos.y);
+        // 用待持久化的 width/height（已扣除 expansion）转物理尺寸做可见性校验，
+        // 与 apply_window_layout_before_show 恢复路径的尺寸口径一致。
+        let width_physical = logical_to_physical_px(width, scale_factor) as u32;
+        let height_physical = logical_to_physical_px(height, scale_factor) as u32;
+        let (x, y) =
+            fallback_visible_position(&window, x, outer_pos.y, width_physical, height_physical);
         Some((width, height, x, y))
     };
 
