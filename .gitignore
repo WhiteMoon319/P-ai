@@ -28,7 +28,7 @@ Thumbs.db
 
 # Tauri / Rust build outputs
 src-tauri/target/
-src-tauri/gen/
+src-tauri/gen/schemas/
 src-tauri/memory/
 target/
 
