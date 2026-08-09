@@ -12375,6 +12375,30 @@
             dispatch_content.contains("\"mark_conversation_read\" => ide_chat_mark_conversation_read_command(state, request.params).await"),
             "IDE mark_conversation_read 分支必须 .await"
         );
+
+        // IDE handler 本体：chat_methods.rs 中 ide_chat_mark_conversation_read 必须是 async fn + spawn_blocking，
+        // 防止回退为同步服务调用
+        let methods_file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("system")
+            .join("commands")
+            .join("ide_context")
+            .join("chat_methods.rs");
+        let methods_content = std::fs::read_to_string(&methods_file).expect("read IDE chat methods");
+        let mark_read_start = methods_content
+            .find("async fn ide_chat_mark_conversation_read(")
+            .expect("IDE mark conversation read should be async fn");
+        // 截取到下一个函数定义边界，避免硬截断落在多字节字符中间
+        let next_fn_offset = methods_content[mark_read_start..]
+            .find("\n}\n\nasync fn ")
+            .map(|offset| mark_read_start + offset + 3)
+            .unwrap_or(methods_content.len());
+        let mark_read_section = &methods_content[mark_read_start..next_fn_offset];
+        assert!(
+            mark_read_section.contains("spawn_blocking"),
+            "IDE mark conversation read 必须使用 spawn_blocking 移出主线程"
+        );
     }
 
     #[test]
