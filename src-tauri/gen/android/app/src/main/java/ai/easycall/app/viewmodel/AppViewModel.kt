@@ -6,8 +6,10 @@ import ai.easycall.app.model.DeltaNotification
 import ai.easycall.app.ws.ChatService
 import ai.easycall.app.ws.ConnectionStatus
 import ai.easycall.app.ws.PaiWsClient
+import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.JsonElement
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -16,17 +18,26 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.onEach
 
 /**
  * 应用级 ViewModel：连接管理、会话列表、消息流式接收。
  */
 class AppViewModel(
+    context: Context,
     private val scope: CoroutineScope,
 ) {
+    private val prefs = context.getSharedPreferences("pai_chat_cache", Context.MODE_PRIVATE)
     private val client = PaiWsClient(scope)
     private val service = ChatService(client)
     private val gson = Gson()
+    private val conversationListType = object : TypeToken<List<ConversationSummary>>() {}.type
     private var notificationJob: Job? = null
+    private var connectJob: Job? = null
+    private companion object {
+        const val KEY_CONVERSATIONS = "conversations"
+    }
 
     val connectionState: StateFlow<ConnectionStatus> = client.connectionState
     val conversations = MutableStateFlow<List<ConversationSummary>>(emptyList())
@@ -42,17 +53,30 @@ class AppViewModel(
     val error = MutableStateFlow<String?>(null)
 
     fun start() {
+        loadCachedConversations()
         client.connect()
         notificationJob = scope.launch(Dispatchers.IO) {
             client.notifications.collectLatest { (method, params) ->
                 handleNotification(method, params)
             }
         }
+        // 后端连接建立后自动加载本地会话列表，避免用户手动刷新才看到对话
+        connectJob = scope.launch(Dispatchers.IO) {
+            client.connectionState
+                .filter { it == ConnectionStatus.Connected }
+                .onEach { refreshConversations() }
+                .collect()
+        }
     }
 
     fun stop() {
         notificationJob?.cancel()
+        connectJob?.cancel()
         client.disconnect()
+    }
+
+    fun consumeError() {
+        error.value = null
     }
 
     suspend fun refreshConversations() {
@@ -60,9 +84,26 @@ class AppViewModel(
             try {
                 val result = service.listConversations()
                 conversations.value = result.conversations
+                saveConversationCache()
             } catch (e: Exception) {
-                error.value = "刷新会话失败: ${e.message}"
+                // 连接未就绪或后端未启动时不打断，保留本地缓存；提示仅用于用户主动刷新失败
+                if (connectionState.value == ConnectionStatus.Connected) {
+                    error.value = "刷新会话失败: ${e.message}"
+                }
             }
+        }
+    }
+
+    private fun loadCachedConversations() {
+        val raw = prefs.getString(KEY_CONVERSATIONS, null) ?: return
+        runCatching {
+            gson.fromJson<MutableList<ConversationSummary>>(raw, conversationListType)
+        }.getOrNull()?.let { conversations.value = it }
+    }
+
+    private fun saveConversationCache() {
+        runCatching {
+            prefs.edit().putString(KEY_CONVERSATIONS, gson.toJson(conversations.value)).apply()
         }
     }
 

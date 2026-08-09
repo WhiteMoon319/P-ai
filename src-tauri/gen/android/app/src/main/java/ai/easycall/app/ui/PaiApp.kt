@@ -60,6 +60,18 @@ fun PaiApp(vm: AppViewModel) {
         onDispose { vm.stop() }
     }
 
+    // 错误反馈：一次性 Toast 提示（新建失败/刷新失败等），避免静默无反应
+    val errorMsg by vm.error.collectAsState()
+    LaunchedEffect(errorMsg) {
+        val msg = errorMsg ?: return@LaunchedEffect
+        android.widget.Toast.makeText(
+            androidx.compose.ui.platform.LocalContext.current,
+            msg,
+            android.widget.Toast.LENGTH_SHORT,
+        ).show()
+        vm.consumeError()
+    }
+
     // 不透明背景盖住底层 Rust WebView，避免透出可交互残留
     Surface(
         modifier = Modifier.fillMaxSize(),

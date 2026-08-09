@@ -12,7 +12,7 @@ import kotlinx.coroutines.SupervisorJob
  */
 class PaiApplication : Application() {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    val viewModel by lazy { AppViewModel(appScope) }
+    val viewModel by lazy { AppViewModel(this, appScope) }
 
     override fun onCreate() {
         super.onCreate()
