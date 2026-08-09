@@ -1268,11 +1268,16 @@ struct RemoteImContactConversationBlockPageOutput {
 }
 
 #[tauri::command]
-fn remote_im_get_contact_conversation_block_page(
+async fn remote_im_get_contact_conversation_block_page(
     input: RemoteImContactConversationBlockPageInput,
     state: State<'_, AppState>,
 ) -> Result<RemoteImContactConversationBlockPageOutput, String> {
-    remote_im_get_contact_conversation_block_page_inner(input, state.inner())
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        remote_im_get_contact_conversation_block_page_inner(input, &app_state)
+    })
+    .await
+    .map_err(|err| format!("读取远程 IM 联系人会话块分页任务异常：{err}"))?
 }
 
 fn remote_im_get_contact_conversation_block_page_inner(

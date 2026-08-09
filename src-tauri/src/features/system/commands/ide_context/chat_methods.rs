@@ -392,14 +392,24 @@ fn ide_chat_list_archives_command(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(list_archives_inner(state)?)
 }
 
-fn ide_chat_archive_block_page_command(state: &AppState, params: Value) -> Result<Value, String> {
+async fn ide_chat_archive_block_page_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<GetArchiveBlockPageInput>(params, "input")?;
-    ide_chat_serialize(get_archive_block_page_inner(input, state)?)
+    let app_state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        ide_chat_serialize(get_archive_block_page_inner(input, &app_state)?)
+    })
+    .await
+    .map_err(|err| format!("读取归档块分页任务异常：{err}"))?
 }
 
-fn ide_chat_archive_summary_command(state: &AppState, params: Value) -> Result<Value, String> {
+async fn ide_chat_archive_summary_command(state: &AppState, params: Value) -> Result<Value, String> {
     let archive_id = ide_chat_parse_param_field::<String>(params, "archiveId")?;
-    ide_chat_serialize(get_archive_summary_inner(state, &archive_id)?)
+    let app_state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        ide_chat_serialize(get_archive_summary_inner(&app_state, &archive_id)?)
+    })
+    .await
+    .map_err(|err| format!("读取归档摘要任务异常：{err}"))?
 }
 
 fn ide_chat_delete_archive_command(state: &AppState, params: Value) -> Result<Value, String> {
@@ -485,9 +495,14 @@ fn ide_chat_import_agent_memories_command(state: &AppState, params: Value) -> Re
     ide_chat_serialize(import_agent_memories_inner(input, state)?)
 }
 
-fn ide_chat_remote_im_block_page_command(state: &AppState, params: Value) -> Result<Value, String> {
+async fn ide_chat_remote_im_block_page_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<RemoteImContactConversationBlockPageInput>(params, "input")?;
-    ide_chat_serialize(remote_im_get_contact_conversation_block_page_inner(input, state)?)
+    let app_state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        ide_chat_serialize(remote_im_get_contact_conversation_block_page_inner(input, &app_state)?)
+    })
+    .await
+    .map_err(|err| format!("读取远程 IM 联系人会话块分页任务异常：{err}"))?
 }
 
 fn ide_chat_remote_im_clear_conversation_command(

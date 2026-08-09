@@ -12426,6 +12426,88 @@
     }
 
     #[test]
+    fn message_read_command_family_should_be_async_spawn_blocking() {
+        // 会话消息读取命令族（主会话 + 委托 + 归档 + 远程 IM）：unarchived_conversations.rs 10 个命令
+        let unarchived_file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("system")
+            .join("commands")
+            .join("config_and_persona")
+            .join("unarchived_conversations.rs");
+        let unarchived_content =
+            std::fs::read_to_string(&unarchived_file).expect("read unarchived conversations");
+        for name in [
+            "get_unarchived_conversation_messages",
+            "get_unarchived_conversation_recent_block_messages",
+            "get_unarchived_conversation_block_page",
+            "get_unarchived_conversation_recent_messages",
+            "get_unarchived_conversation_message_by_id",
+            "get_delegate_conversation_messages",
+            "get_delegate_conversation_block_page",
+            "get_active_conversation_messages",
+            "get_active_conversation_messages_before",
+            "get_active_conversation_messages_after",
+        ] {
+            let start = unarchived_content
+                .find(&format!("async fn {name}("))
+                .unwrap_or_else(|| panic!("{name} 应为 async fn"));
+            let next_fn_offset = unarchived_content[start..]
+                .find("\n}\n\n#[tauri::command]")
+                .map(|offset| start + offset + 3)
+                .unwrap_or(unarchived_content.len());
+            let section = &unarchived_content[start..next_fn_offset];
+            assert!(
+                section.contains("spawn_blocking"),
+                "{name} 必须使用 spawn_blocking 移出主线程"
+            );
+        }
+
+        // 归档消息读取：archive_commands.rs 3 个命令
+        let archive_file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("system")
+            .join("commands")
+            .join("archive_commands.rs");
+        let archive_content = std::fs::read_to_string(&archive_file).expect("read archive commands");
+        for name in ["get_archive_messages", "get_archive_block_page", "get_archive_summary"] {
+            let start = archive_content
+                .find(&format!("async fn {name}("))
+                .unwrap_or_else(|| panic!("{name} 应为 async fn"));
+            let next_fn_offset = archive_content[start..]
+                .find("\n}\n\n#[tauri::command]")
+                .map(|offset| start + offset + 3)
+                .unwrap_or(archive_content.len());
+            let section = &archive_content[start..next_fn_offset];
+            assert!(
+                section.contains("spawn_blocking"),
+                "{name} 必须使用 spawn_blocking 移出主线程"
+            );
+        }
+
+        // 远程 IM 联系人会话块分页：contact_commands.rs 1 个命令
+        let contact_file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("features")
+            .join("remote_im")
+            .join("contact_commands.rs");
+        let contact_content = std::fs::read_to_string(&contact_file).expect("read contact commands");
+        let contact_start = contact_content
+            .find("async fn remote_im_get_contact_conversation_block_page(")
+            .expect("remote_im_get_contact_conversation_block_page 应为 async fn");
+        let contact_next_fn = contact_content[contact_start..]
+            .find("\n}\n\n#[tauri::command]")
+            .map(|offset| contact_start + offset + 3)
+            .unwrap_or(contact_content.len());
+        let contact_section = &contact_content[contact_start..contact_next_fn];
+        assert!(
+            contact_section.contains("spawn_blocking"),
+            "remote_im_get_contact_conversation_block_page 必须使用 spawn_blocking 移出主线程"
+        );
+    }
+
+    #[test]
     fn foreground_mark_read_should_use_unified_conversation_mutation_entry() {
         let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("src")
