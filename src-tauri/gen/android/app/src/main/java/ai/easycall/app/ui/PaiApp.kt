@@ -49,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.mikepenz.markdown.m3.Markdown
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -243,7 +244,15 @@ fun ChatScreen(
                     MessageBubble(msg)
                 }
                 if (streaming.isNotEmpty()) {
-                    item(key = "streaming") { Text(streaming, Modifier.padding(12.dp)) }
+                    item(key = "streaming") {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.padding(12.dp),
+                        ) {
+                            Markdown(markdown = streaming, modifier = Modifier.padding(10.dp))
+                        }
+                    }
                 }
             }
             Row(
@@ -296,7 +305,14 @@ fun MessageBubble(message: ChatMessage) {
             modifier = Modifier.widthIn(max = 320.dp),
         ) {
             val text = message.parts.joinToString("\n") { it.displayText }
-            Text(text, Modifier.padding(10.dp))
+            if (isUser) {
+                Text(text, Modifier.padding(10.dp))
+            } else {
+                Markdown(
+                    markdown = text,
+                    modifier = Modifier.padding(10.dp),
+                )
+            }
         }
     }
 }
