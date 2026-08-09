@@ -1,0 +1,96 @@
+name: Android Build - Kotlin Compose (feat/android-kotlin-ui)
+
+# 专门验证 feat/android-kotlin-ui 分支的原生 Kotlin + Compose 前端能否编译出 APK。
+# gen/android 已入库（含自定义 Kotlin 源码与 build.gradle 依赖），本 workflow 复刻
+# dev 的 android-build 主链路并聚焦验证该分支工程可编译，供 CI 返回编译结果。
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feat/android-kotlin-ui
+
+jobs:
+  build-android-kotlin-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Export Android NDK path
+        run: |
+          echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
+
+      # gen/android 已入库。init --ci 为增量补全，补生成被 gitignore 的 tauri 动态构建
+      # 文件（tauri.settings.gradle / tauri.build.gradle.kts），不会覆盖已入库的自定义
+      # Kotlin 源码与 app/build.gradle.kts（Compose 依赖配置）。
+      - name: Initialize Android project (incremental)
+        run: pnpm tauri android init --ci
+
+      - name: Enable cleartext traffic for WebView WebSocket
+        run: |
+          GRADLE="src-tauri/gen/android/app/build.gradle.kts"
+          sed -i 's/manifestPlaceholders\["usesCleartextTraffic"\] = "false"/manifestPlaceholders["usesCleartextTraffic"] = "true"/g' "$GRADLE"
+          echo "Updated $GRADLE:"
+          grep -n 'usesCleartextTraffic' "$GRADLE" || true
+
+      - name: Inject git-based version
+        run: bash scripts/patch-android-version.sh
+
+      - name: Patch Android microphone permissions and safe area
+        run: bash scripts/patch-android-project.sh
+
+      - name: Build Debug APK (aarch64)
+        run: pnpm tauri android build --apk --target aarch64 --debug
+
+      - name: Rename debug APK
+        run: |
+          APK_DIR="src-tauri/gen/android/app/build/outputs/apk/universal/debug"
+          ls -la "$APK_DIR"
+          TAG="${GITHUB_REF_NAME:-kotlin-ui}"
+          for apk in "$APK_DIR"/*.apk; do
+            [ -e "$apk" ] || { echo "No APK found in $APK_DIR" >&2; exit 1; }
+            mv "$apk" "$APK_DIR/P-ai-${TAG}-aarch64.apk"
+            echo "Renamed to P-ai-${TAG}-aarch64.apk"
+          done
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: p-ai-android-kotlin-ui
+          path: src-tauri/gen/android/app/build/outputs/apk/universal/debug/*.apk
+          if-no-files-found: error
