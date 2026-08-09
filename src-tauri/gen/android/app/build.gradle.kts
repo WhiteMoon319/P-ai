@@ -80,8 +80,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
-    implementation("com.mikepenz:multiplatform-markdown-renderer-android:0.26.0")
-    implementation("com.mikepenz:multiplatform-markdown-renderer-m3-android:0.26.0")
+    implementation("org.jetbrains:markdown:0.7.2")
+    implementation("org.jsoup:jsoup:1.22.2")
 
     // WebSocket 客户端
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

@@ -49,7 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.mikepenz.markdown.m3.Markdown
+import ai.easycall.app.ui.richtext.MarkdownText
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -250,7 +250,7 @@ fun ChatScreen(
                             shape = MaterialTheme.shapes.medium,
                             modifier = Modifier.padding(12.dp),
                         ) {
-                            Markdown(content = streaming, modifier = Modifier.padding(10.dp))
+                            MarkdownText(content = streaming, modifier = Modifier.padding(10.dp))
                         }
                     }
                 }
@@ -308,7 +308,7 @@ fun MessageBubble(message: ChatMessage) {
             if (isUser) {
                 Text(text, Modifier.padding(10.dp))
             } else {
-                Markdown(content = text, modifier = Modifier.padding(10.dp))
+                MarkdownText(content = text, modifier = Modifier.padding(10.dp))
             }
         }
     }
