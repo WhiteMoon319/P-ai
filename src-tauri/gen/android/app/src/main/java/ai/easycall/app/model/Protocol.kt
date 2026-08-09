@@ -117,6 +117,21 @@ data class CreateConversationResult(
     @SerializedName("conversationId") val conversationId: String? = null,
 )
 
+/** conversation.createOptions 返回的部门/人格可选项。 */
+data class CreateConversationOptions(
+    val departments: List<CreateConversationOptionItem> = emptyList(),
+    @SerializedName("defaultDepartmentId") val defaultDepartmentId: String? = null,
+    @SerializedName("defaultAgentId") val defaultAgentId: String? = null,
+)
+
+data class CreateConversationOptionItem(
+    val id: String? = null,
+    @SerializedName("departmentId") val departmentId: String? = null,
+    @SerializedName("agentId") val agentId: String? = null,
+    @SerializedName("departmentName") val departmentName: String? = null,
+    @SerializedName("agentName") val agentName: String? = null,
+)
+
 // ---------------- 激活会话 ----------------
 
 data class SetActiveInput(
@@ -163,6 +178,8 @@ data class ChatMessage(
     val parts: List<MessagePart> = emptyList(),
     @SerializedName("extraTextBlocks") val extraTextBlocks: List<String> = emptyList(),
     @SerializedName("providerMeta") val providerMeta: JsonElement? = null,
+    /** 落盘 assistant 消息的工具历史事件数组（role=tool/assistant 的 tool_calls）。 */
+    @SerializedName("toolCall") val toolCall: List<ToolHistoryEvent>? = null,
 )
 
 /** 判别联合 MessagePart，顶层带 type 字段：Text/Image/Audio/Attachment。 */
@@ -181,6 +198,95 @@ data class MessagePart(
             "Text" -> text.orEmpty()
             else -> text?.takeIf { it.isNotBlank() } ?: "[$type]"
         }
+}
+
+/**
+ * 落盘工具历史事件（后端 tool_call 数组项，含 assistant 的 tool_calls 与 tool 的结果）。
+ * 与流式 assistant_tool_event/result 的 message JSON 同构，可复用同一解析。
+ */
+data class ToolHistoryEvent(
+    val role: String? = null,
+    val content: String? = null,
+    @SerializedName("tool_call_id") val toolCallId: String? = null,
+    @SerializedName("tool_calls") val toolCalls: List<ToolCallInfo>? = null,
+    @SerializedName("reasoning_content") val reasoningContent: String? = null,
+)
+
+data class ToolCallInfo(
+    val id: String? = null,
+    @SerializedName("call_id") val callId: String? = null,
+    val function: ToolFunctionInfo? = null,
+    val type: String? = null,
+)
+
+data class ToolFunctionInfo(
+    val name: String? = null,
+    val arguments: String? = null,
+)
+
+/**
+ * UI 层一条可折叠的活动步骤：思考（reasoning）或工具（tool）。
+ * 思考与工具同属一个 "thinking" 大类，大类与单个步骤都支持折叠。
+ */
+sealed class ActivityStep {
+    /** 一段思考过程文本。 */
+    data class Reasoning(val text: String) : ActivityStep()
+
+    /** 一次工具调用（可能带工具级思考与结果）。 */
+    data class Tool(
+        val toolCallId: String?,
+        val name: String?,
+        val argsText: String?,
+        val resultText: String?,
+        val status: String?,
+        /** 工具级思考，展开时为思考块，折叠时并入 tool 头部。 */
+        val reasoning: String?,
+    ) : ActivityStep()
+}
+
+/** 从一条 assistant 消息的 parts + toolCall 构建有序活动步骤（思考/工具交错，保持到达顺序）。 */
+fun buildActivityStepsFromMessage(message: ChatMessage): List<ActivityStep> = buildList {
+    // parts 里的 reasoning_content 是整轮思考的累计文本，作为独立思考块
+    val reasoning = message.parts
+        .mapNotNull { it.reasoningContent?.takeIf { r -> r.isNotBlank() } }
+        .joinToString("\n")
+    if (reasoning.isNotBlank()) {
+        add(ActivityStep.Reasoning(reasoning))
+    }
+    // toolCall 数组里每条带有 tool_calls 的 assistant 事件拆成多个工具步骤
+    message.toolCall.orEmpty().forEach { event ->
+        if (event.role.orEmpty().trim().equals("assistant", ignoreCase = true)) {
+            val eventReasoning = event.reasoningContent?.takeIf { it.isNotBlank() }
+            val calls = event.toolCalls.orEmpty()
+            calls.forEachIndexed { index, call ->
+                val name = call.function?.name?.takeIf { it.isNotBlank() }
+                val args = call.function?.arguments?.takeIf { it.isNotBlank() }
+                // 工具级思考挂到该事件的第一个工具调用
+                val toolReasoning = if (index == 0) eventReasoning else null
+                add(
+                    ActivityStep.Tool(
+                        toolCallId = call.id ?: call.callId,
+                        name = name,
+                        argsText = args,
+                        resultText = null,
+                        status = "done",
+                        reasoning = toolReasoning,
+                    )
+                )
+            }
+        } else if (event.role.orEmpty().trim().equals("tool", ignoreCase = true)) {
+            // 工具结果追加到最近一个未闭合的工具步骤
+            val result = event.content?.takeIf { it.isNotBlank() }
+            if (result != null) {
+                val steps = this
+                val lastTool = steps.indexOfLast { it is ActivityStep.Tool }
+                if (lastTool >= 0) {
+                    val prev = steps[lastTool] as ActivityStep.Tool
+                    steps[lastTool] = prev.copy(resultText = result)
+                }
+            }
+        }
+    }
 }
 
 // ---------------- 发送/停止 ----------------

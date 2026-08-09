@@ -1,7 +1,9 @@
 package ai.easycall.app.ui
 
+import ai.easycall.app.model.ActivityStep
 import ai.easycall.app.model.ChatMessage
 import ai.easycall.app.model.ConversationSummary
+import ai.easycall.app.model.buildActivityStepsFromMessage
 import ai.easycall.app.viewmodel.AppViewModel
 import ai.easycall.app.ws.ConnectionStatus
 import androidx.compose.foundation.clickable
@@ -219,8 +221,7 @@ fun ChatScreen(
     val scope = rememberCoroutineScope()
     val messages by vm.messages.collectAsState()
     val streaming by vm.streamingText.collectAsState()
-    val reasoning by vm.reasoningText.collectAsState()
-    val toolEvents by vm.toolEvents.collectAsState()
+    val activitySteps by vm.activitySteps.collectAsState()
     val isStreaming by vm.isStreaming.collectAsState()
     val loading by vm.loading.collectAsState()
     var input by remember { mutableStateOf("") }
@@ -248,14 +249,9 @@ fun ChatScreen(
                 items(messages, key = { it.id }) { msg ->
                     MessageBubble(msg)
                 }
-                if (reasoning.isNotEmpty()) {
-                    item(key = "reasoning") {
-                        ReasoningBlock(reasoning, isStreaming)
-                    }
-                }
-                toolEvents.forEachIndexed { index, tool ->
-                    item(key = "tool_$index") {
-                        ToolCallPill(tool, isStreaming)
+                if (activitySteps.isNotEmpty()) {
+                    item(key = "thinking") {
+                        ThinkingBlock(steps = activitySteps, streaming = isStreaming)
                     }
                 }
                 if (streaming.isNotEmpty()) {
@@ -305,72 +301,140 @@ fun ChatScreen(
     }
 }
 
+/**
+ * 「思维活动」大类容器：承载一段回合内交错出现的思考与工具调用。
+ * 两层折叠——大类可整体折叠/展开；大类内每个 step 又各自展开/折叠。
+ * 语义参考 rikkahub 的 groupMessageParts（thinking 大类 → steps[]）。
+ */
 @Composable
-private fun ReasoningBlock(text: String, streaming: Boolean) {
-    // 默认展开：流式思考实时滚动可见；结束后用户可点击折叠
-    var expanded by remember { mutableStateOf(streaming) }
-    LaunchedEffect(streaming) {
-        if (streaming) expanded = true
+private fun ThinkingBlock(steps: List<ActivityStep>, streaming: Boolean) {
+    // 大类默认展开：流式中思考实时可见；结束后用户可整体折叠。
+    val hasLoadingReasoning = streaming && steps.any { it is ActivityStep.Reasoning }
+    var groupExpanded by remember { mutableStateOf(true) }
+    LaunchedEffect(streaming, steps) {
+        if (hasLoadingReasoning) groupExpanded = true
     }
     val color = MaterialTheme.colorScheme.outline
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp).widthIn(max = 320.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
     ) {
         Column(Modifier.padding(8.dp)) {
+            // 大类头部：显示思考/工具计数，点击整体折叠
+            val reasoningCount = steps.count { it is ActivityStep.Reasoning }
+            val toolCount = steps.count { it is ActivityStep.Tool }
+            val title = when {
+                streaming && hasLoadingReasoning -> "思考与工具 · 进行中"
+                else -> "思考与工具 · ${reasoningCount}思考 ${toolCount}工具"
+            }
             Row(
-                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+                modifier = Modifier.fillMaxWidth().clickable { groupExpanded = !groupExpanded },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    if (streaming) "思考中…" else if (expanded) "思考（点击折叠）" else "已思考（点击展开）",
+                    if (groupExpanded) "▾ $title（点击收起）" else "▸ $title（点击展开）",
                     style = MaterialTheme.typography.labelMedium,
                     color = color,
                 )
             }
-            if (expanded) {
-                Text(
-                    text,
-                    Modifier.padding(top = 6.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = color,
-                )
+            if (groupExpanded) {
+                steps.forEachIndexed { index, step ->
+                    ActivityStepRow(step)
+                    if (index != steps.lastIndex) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 大类内单个步骤：思考或工具，各自可展开/折叠。 */
+@Composable
+private fun ActivityStepRow(step: ActivityStep) {
+    var expanded by remember { mutableStateOf<Boolean?>(null) } // null=跟随默认
+    val color = MaterialTheme.colorScheme.outline
+    when (step) {
+        is ActivityStep.Reasoning -> {
+            val isOpen = expanded ?: (step.text.length < 400)
+            Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { expanded = !isOpen },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        if (isOpen) "▾ 思考" else "▸ 思考",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = color,
+                    )
+                }
+                if (isOpen) {
+                    Text(
+                        step.text,
+                        Modifier.padding(start = 12.dp, top = 4.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = color,
+                    )
+                }
+            }
+        }
+        is ActivityStep.Tool -> {
+            val title = "${step.name ?: "工具"}" +
+                (if (step.argsText.isNullOrBlank()) "" else "\n参数：${step.argsText}")
+            val isOpen = expanded ?: step.name.isNullOrBlank() // 无工具名时默认展开看上下文
+            val statusText = when (step.status) {
+                "done" -> "✓ 完成"
+                "failed" -> "✗ 失败"
+                "running" -> "⚙ 执行中"
+                else -> "工具"
+            }
+            Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { expanded = !isOpen },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "${if (isOpen) "▾" else "▸"} ${statusText} ${step.name ?: "工具"}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
+                if (isOpen) {
+                    if (!step.reasoning.isNullOrBlank()) {
+                        Text(
+                            step.reasoning,
+                            Modifier.padding(start = 12.dp, top = 4.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = color,
+                        )
+                    }
+                    if (!step.argsText.isNullOrBlank()) {
+                        Text(
+                            step.argsText,
+                            Modifier.padding(start = 12.dp, top = 4.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                    if (!step.resultText.isNullOrBlank()) {
+                        Text(
+                            step.resultText,
+                            Modifier.padding(start = 12.dp, top = 4.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = color,
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ToolCallPill(text: String, streaming: Boolean) {
-    // 工具调用默认折叠为标题条；展开显示工具名/参数
-    var expanded by remember { mutableStateOf(false) }
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-        shape = MaterialTheme.shapes.small,
-        modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp).widthIn(max = 320.dp),
-    ) {
-        Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    if (streaming) "🛠 调用中…" else if (expanded) "工具（点击收起）" else "工具（点击展开）",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            }
-            if (expanded) {
-                Text(
-                    text,
-                    Modifier.padding(top = 6.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            }
-        }
-    }
+private fun ThinkingSectionMessage(steps: List<ActivityStep>) {
+    if (steps.isEmpty()) return
+    ThinkingBlock(steps = steps, streaming = false)
 }
 
 @Composable
@@ -392,11 +456,10 @@ fun MessageBubble(message: ChatMessage) {
                 Text(text, Modifier.padding(10.dp))
             } else {
                 Column(Modifier.padding(10.dp)) {
-                    val reasoning = message.parts
-                        .mapNotNull { it.reasoningContent?.takeIf { r -> r.isNotBlank() } }
-                        .joinToString("\n")
-                    if (reasoning.isNotBlank()) {
-                        ReasoningBlock(reasoning, streaming = false)
+                    // 落盘消息的思考+工具统一聚合为 thinking 大类（两级折叠），与流式一致
+                    val steps = buildActivityStepsFromMessage(message)
+                    if (steps.isNotEmpty()) {
+                        ThinkingSectionMessage(steps)
                     }
                     if (text.isNotBlank()) {
                         MarkdownText(content = text)

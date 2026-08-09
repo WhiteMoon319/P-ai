@@ -1,8 +1,12 @@
 package ai.easycall.app.viewmodel
 
+import ai.easycall.app.model.ActivityStep
 import ai.easycall.app.model.ChatMessage
 import ai.easycall.app.model.ConversationSummary
+import ai.easycall.app.model.CreateConversationOptions
 import ai.easycall.app.model.DeltaNotification
+import ai.easycall.app.model.ToolHistoryEvent
+import ai.easycall.app.model.DeltaEvent
 import ai.easycall.app.ws.ChatService
 import ai.easycall.app.ws.ConnectionStatus
 import ai.easycall.app.ws.PaiWsClient
@@ -44,10 +48,11 @@ class AppViewModel(
     val currentConversationId = MutableStateFlow<String?>(null)
     val messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val streamingText = MutableStateFlow("")
-    /** 流式思考过程（activity_reasoning_delta），UI 折叠展示，非正文。 */
-    val reasoningText = MutableStateFlow("")
-    /** 流式工具调用列表（assistant_tool_event/result 聚合后的显示文本）。 */
-    val toolEvents = MutableStateFlow<List<String>>(emptyList())
+    /**
+     * 流式活动步骤（思考与工具交错的有序列表），UI 按 rikkahub 语义：同一大类可分
+     * 别折叠，但思考/工具各自又是一个可独立展开的步骤。正文仍在 [streamingText]。
+     */
+    val activitySteps = MutableStateFlow<List<ActivityStep>>(emptyList())
     val isStreaming = MutableStateFlow(false)
     val loading = MutableStateFlow(false)
     val error = MutableStateFlow<String?>(null)
@@ -110,7 +115,30 @@ class AppViewModel(
     suspend fun createConversation(title: String? = null): String? {
         return withContext(Dispatchers.IO) {
             try {
-                val result = service.createConversation(agentId = null, departmentId = null, title = title)
+                // 后端强制要求 departmentId+agentId（不含会报"新建会话必须选择部门/人格"）。
+                // 先取 createOptions 的默认值兜底，保证点了新建有反馈、不静默失败。
+                var agentId: String? = null
+                var departmentId: String? = null
+                runCatching {
+                    val options = service.createConversationOptions()
+                    departmentId = options.defaultDepartmentId?.takeIf { it.isNotBlank() }
+                        ?: options.departments.firstOrNull()?.departmentId
+                    agentId = options.defaultAgentId?.takeIf { it.isNotBlank() }
+                        ?: options.departments.firstOrNull()?.agentId
+                }
+                if (departmentId.isNullOrBlank() || agentId.isNullOrBlank()) {
+                    // createOptions 不可用时，退回到最近一个有部门/人格的会话
+                    val conv = conversations.value.lastOrNull {
+                        !it.departmentId.isNullOrBlank() && !it.agentId.isNullOrBlank()
+                    }
+                    departmentId = conv?.departmentId
+                    agentId = conv?.agentId
+                }
+                if (departmentId.isNullOrBlank() || agentId.isNullOrBlank()) {
+                    error.value = "新建会话失败：无法确定默认部门/人格"
+                    return@withContext null
+                }
+                val result = service.createConversation(agentId = agentId, departmentId = departmentId, title = title)
                 val id = result.conversationId
                 if (id != null) {
                     openConversation(id)
@@ -135,8 +163,7 @@ class AppViewModel(
                 currentConversationId.value = conversationId
                 messages.value = page.messages
                 streamingText.value = ""
-                reasoningText.value = ""
-                toolEvents.value = emptyList()
+                activitySteps.value = emptyList()
                 isStreaming.value = false
             } catch (e: Exception) {
                 error.value = "打开会话失败: ${e.message}"
@@ -163,8 +190,7 @@ class AppViewModel(
         )
         committedAssistantText = null
         streamingText.value = ""
-        reasoningText.value = ""
-        toolEvents.value = emptyList()
+        activitySteps.value = emptyList()
         isStreaming.value = true
         withContext(Dispatchers.IO) {
             try {
@@ -216,23 +242,28 @@ class AppViewModel(
                         "activity_reasoning_delta" -> {
                             val r = event?.delta ?: ""
                             if (r.isNotEmpty()) {
-                                reasoningText.value = reasoningText.value + r
+                                appendReasoningDelta(r)
                             }
                         }
-                        "assistant_tool_event", "assistant_tool_result", "tool_status" -> {
-                            // 工具调用过程：解析 message 中的工具名/状态，聚合为展示条目
-                            val toolMsg = event?.message ?: ""
+                        "assistant_tool_event" -> {
+                            // 工具调用开始：解析 message 中的工具名/参数/工具级思考，追加或更新工具步骤
+                            val toolMsg = event?.message
+                            if (toolMsg.isNullOrBlank()) return
+                            upsertToolStep(toolMsg, event)
+                        }
+                        "assistant_tool_result" -> {
+                            val toolMsg = event?.message
+                            if (toolMsg.isNullOrBlank()) return
+                            // 工具结果：更新最近一次工具步骤的 resultText
+                            updateToolResult(toolMsg, event)
+                        }
+                        "tool_status" -> {
+                            // 阶段提示（正在准备调度/处理附件/进入模型请求）无具体工具名，不在前台气泡展示。
+                            // 仅当带 tool_name 的真实工具状态出现时才落到工具步骤上。
                             val toolName = event?.toolName?.takeIf { it.isNotBlank() }
-                            val status = event?.toolStatus?.takeIf { it.isNotBlank() }
-                            val label = when {
-                                !toolName.isNullOrBlank() && !status.isNullOrBlank() -> "$toolName ($status)"
-                                !toolName.isNullOrBlank() -> toolName
-                                toolMsg.isNotBlank() -> toolMsg
-                                else -> "工具"
+                            if (!toolName.isNullOrBlank()) {
+                                upsertToolStep("", event, fallbackName = toolName)
                             }
-                            val list = toolEvents.value.toMutableList()
-                            if (list.lastOrNull() != label) list.add(label)
-                            toolEvents.value = list
                         }
                         "round_completed" -> {
                             val msgJson = event?.message
@@ -253,8 +284,7 @@ class AppViewModel(
                             } else {
                                 finalizeStreaming()
                             }
-                            reasoningText.value = ""
-                            toolEvents.value = emptyList()
+                            activitySteps.value = emptyList()
                             finalizeStreaming()
                         }
                         "round_failed" -> {
@@ -283,6 +313,103 @@ class AppViewModel(
                 finalizeStreaming()
             }
         }
+    }
+
+    // ---------------- 流式活动步骤累积 ----------------
+
+    /** 追加一段思考过程：若上一步是 Reasoning 则续接，否则新建一个 Reasoning 步骤。 */
+    private fun appendReasoningDelta(delta: String) {
+        val list = activitySteps.value.toMutableList()
+        val last = list.lastOrNull()
+        if (last is ActivityStep.Reasoning) {
+            list[list.size - 1] = last.copy(text = last.text + delta)
+        } else {
+            list.add(ActivityStep.Reasoning(delta))
+        }
+        activitySteps.value = list
+    }
+
+    /**
+     * 追加或更新一个工具步骤。解析 message（与落盘 tool history event 同构）
+     * 中的工具名/参数/工具级思考；已存在的同一 tool_call_id 只更新状态与结果。
+     */
+    private fun upsertToolStep(toolMsg: String, event: DeltaEvent?, fallbackName: String? = null) {
+        var name = fallbackName
+        var args: String? = null
+        var toolCallId: String? = null
+        var toolReasoning: String? = null
+        if (toolMsg.isNotBlank()) {
+            val parsed = runCatching { gson.fromJson(toolMsg, ToolHistoryEvent::class.java) }.getOrNull()
+            val calls = parsed?.toolCalls.orEmpty()
+            val first = calls.firstOrNull()
+            if (calls.isNotEmpty()) {
+                name = first?.function?.name?.takeIf { it.isNotBlank() } ?: name
+                args = first?.function?.arguments?.takeIf { it.isNotBlank() }
+                toolCallId = first?.id ?: first?.callId
+            }
+            // 工具级思考挂在事件上，仅首个工具调用持有
+            toolReasoning = parsed?.reasoningContent?.takeIf { it.isNotBlank() }
+        }
+        val status = event?.toolStatus?.takeIf { it.isNotBlank() } ?: "doing"
+        val list = activitySteps.value.toMutableList()
+        // 同一 tool_call_id 的工具步骤存在则更新状态（结果的更新走 updateToolResult）
+        val existingIndex = toolCallId?.let { id ->
+            list.indexOfFirst { it is ActivityStep.Tool && it.toolCallId == id }
+        }
+        if (existingIndex != null && existingIndex >= 0) {
+            val prev = list[existingIndex] as ActivityStep.Tool
+            list[existingIndex] = prev.copy(name = name ?: prev.name, status = status)
+        } else {
+            // 新工具步骤：追加到最后一个工具步骤之后（保持与思考交错顺序）
+            list.add(
+                ActivityStep.Tool(
+                    toolCallId = toolCallId,
+                    name = name ?: "工具",
+                    argsText = args,
+                    resultText = null,
+                    status = status,
+                    reasoning = toolReasoning,
+                )
+            )
+        }
+        activitySteps.value = list
+    }
+
+    /** 工具结果：把 result 追加到最近一次工具步骤的 resultText。 */
+    private fun updateToolResult(toolMsg: String, event: DeltaEvent?) {
+        val parsed = runCatching { gson.fromJson(toolMsg, ToolHistoryEvent::class.java) }.getOrNull()
+        val result = parsed?.content?.takeIf { it.isNotBlank() }
+        if (result == null) return
+        var toolCallId: String? = null
+        val calls = parsed?.toolCalls.orEmpty()
+        val first = calls.firstOrNull()
+        if (first != null) {
+            toolCallId = first?.id ?: first?.callId
+        }
+        val list = activitySteps.value.toMutableList()
+        var targetIndex = toolCallId?.let { id ->
+            list.indexOfLast { it is ActivityStep.Tool && it.toolCallId == id }
+        } ?: -1
+        if (targetIndex < 0) {
+            targetIndex = list.indexOfLast { it is ActivityStep.Tool }
+        }
+        if (targetIndex >= 0) {
+            val prev = list[targetIndex] as ActivityStep.Tool
+            list[targetIndex] = prev.copy(resultText = result, status = "done")
+        } else {
+            val name = event?.toolName?.takeIf { it.isNotBlank() } ?: "工具"
+            list.add(
+                ActivityStep.Tool(
+                    toolCallId = toolCallId,
+                    name = name,
+                    argsText = null,
+                    resultText = result,
+                    status = "done",
+                    reasoning = null,
+                )
+            )
+        }
+        activitySteps.value = list
     }
 
     private val idSeq = java.util.concurrent.atomic.AtomicLong(0)

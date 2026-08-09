@@ -4,6 +4,7 @@ import ai.easycall.app.model.BlockPageInput
 import ai.easycall.app.model.BlockPageResult
 import ai.easycall.app.model.ConversationListResult
 import ai.easycall.app.model.CreateConversationInput
+import ai.easycall.app.model.CreateConversationOptions
 import ai.easycall.app.model.CreateConversationResult
 import ai.easycall.app.model.SendChatRequest
 import ai.easycall.app.model.SessionSelector
@@ -24,6 +25,10 @@ class ChatService(private val client: PaiWsClient) {
         val input = CreateConversationInput(agentId = agentId, departmentId = departmentId, title = title)
         return client.request("conversation.create", input, CreateConversationResult::class.java)
     }
+
+    /** 取新建会话可选的部门/人格与默认值。 */
+    suspend fun createConversationOptions(): CreateConversationOptions =
+        client.request("conversation.createOptions", emptyMap<String, Any?>(), CreateConversationOptions::class.java)
 
     suspend fun setActive(conversationId: String, agentId: String?): SetActiveResult {
         val input = SetActiveInput(conversationId = conversationId, agentId = agentId)
