@@ -14,17 +14,6 @@ use rmcp::{schemars, ServiceExt};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[cfg(not(target_os = "android"))]
-use tauri::{
-    menu::{Menu, MenuItem},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-};
-#[cfg(not(target_os = "android"))]
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, Position, State};
-#[cfg(not(target_os = "android"))]
-use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
-#[cfg(not(target_os = "android"))]
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
 use uuid::Uuid;
 

@@ -400,8 +400,6 @@ fn logical_to_physical_px(value: u32, scale_factor: f64) -> i32 {
 
 
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
 
 
 
