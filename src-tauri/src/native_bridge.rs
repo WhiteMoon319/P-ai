@@ -220,11 +220,6 @@ async fn native_dispatch(
     // 需要 NativeAppHandle 的方法（写配置/事件推送等）本轮返回暂不支持，后续轮次迁移。
         // 尚未接入原生通道的方法（工作区初始化/迁移等，后续轮次迁移）。
     let app_dependent = [
-        "init_android_workspace",
-        "repair_android_workspace_runtime",
-        "reset_android_workspace_runtime",
-        "reset_android_workspace_state",
-        "import_android_workspace_rootfs_archive",
         "frontend_ready_start_remote_im_services",
         "run_message_store_migration",
         "check_message_store_migration",
@@ -303,6 +298,17 @@ async fn native_dispatch(
         "check_tools_status" => ide_chat_check_tools_status_for_web_settings(state, params),
         "app.bootstrapSnapshot" => ide_chat_load_app_bootstrap_snapshot_for_web_settings(state),
         "get_android_workspace_status" => ide_chat_serialize(get_android_workspace_status_ws_inner(state)?),
+        "init_android_workspace" => ide_chat_serialize(init_android_workspace_ws_inner(state, Some(&native_app)).await?),
+        "repair_android_workspace_runtime" => ide_chat_serialize(repair_android_workspace_runtime_ws_inner(state, Some(&native_app))?),
+        "reset_android_workspace_runtime" => ide_chat_serialize(reset_android_workspace_runtime_ws_inner(
+            state, Some(&native_app), &android_workspace_root(state))?),
+        "reset_android_workspace_state" => ide_chat_serialize(reset_android_workspace_state_ws_inner(state, Some(&native_app))?),
+        "import_android_workspace_rootfs_archive" => ide_chat_serialize(import_android_workspace_rootfs_archive_ws_inner(
+            state,
+            Some(&native_app),
+            params.get("fileName").and_then(Value::as_str).unwrap_or_default().to_string(),
+            params.get("dataBase64").and_then(Value::as_str).unwrap_or_default().to_string(),
+        ).await?),
         "android_workspace.list" => ide_chat_serialize(list_android_workspace_files_ws_inner(
             state,
             params.get("path").and_then(Value::as_str).map(str::to_string),

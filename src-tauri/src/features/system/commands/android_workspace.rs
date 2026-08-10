@@ -762,3 +762,139 @@ fn delete_file_from_android_workspace_ws_inner(
         Ok(AndroidWorkspaceDeleteResult { deleted_path })
     }
 }
+
+pub(crate) async fn init_android_workspace_ws_inner(
+    state: &AppState,
+    app: Option<&NativeAppHandle>,
+) -> Result<AndroidWorkspaceStatus, String> {
+
+        let root = android_workspace_root(&state);
+        let mut downloading = normalize_android_workspace_status(state);
+        downloading.state = AndroidWorkspaceStateKind::Downloading;
+        downloading.last_error = None;
+        downloading.runtime_version = None;
+        downloading.download_bytes = Some(0);
+        downloading.download_total_bytes = Some(ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH);
+        downloading.download_stage = Some("preparing".to_string());
+        android_workspace_set_status(state, app, downloading)?;
+        match ensure_android_workspace_layout(&root) {
+            Ok(()) => {
+                if let Err(err) = ensure_android_workspace_rootfs(state, app.unwrap_or(&NativeAppHandle::noop()), &root).await {
+                    let mut failed = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
+                    failed.last_error = Some(err.clone());
+                    let _ = android_workspace_set_status(state, app, failed);
+                    return Err(err);
+                }
+                android_workspace_set_status(state, app, android_workspace_ready_status(&root))
+            }
+            Err(err) => {
+                let mut failed = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
+                failed.last_error = Some(err.clone());
+                let _ = android_workspace_set_status(state, app, failed);
+                Err(err)
+            }
+        }
+}
+
+pub(crate) async fn import_android_workspace_rootfs_archive_ws_inner(
+    state: &AppState,
+    app: Option<&NativeAppHandle>,
+    file_name: String,
+    data_base64: String,
+) -> Result<AndroidWorkspaceStatus, String> {
+
+        let root = android_workspace_root(&state);
+        let safe_name = android_workspace_sanitize_file_name(&file_name);
+        if !safe_name.ends_with(".tar.gz") && safe_name != ANDROID_WORKSPACE_ROOTFS_FILE_NAME {
+            runtime_log_warn(format!(
+                "[Android 工作区] 导入 Linux 运行环境压缩包文件名不匹配，继续按内容校验，file_name={}",
+                safe_name
+            ));
+        }
+        let mut importing = normalize_android_workspace_status(state);
+        importing.state = AndroidWorkspaceStateKind::Downloading;
+        importing.last_error = None;
+        importing.runtime_version = None;
+        importing.download_bytes = Some(0);
+        importing.download_total_bytes = Some(ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH);
+        importing.download_stage = Some("importing".to_string());
+        android_workspace_set_status(state, app, importing)?;
+        match ensure_android_workspace_layout(&root) {
+            Ok(()) => {
+                let bytes = match B64.decode(data_base64.trim()) {
+                    Ok(bytes) => bytes,
+                    Err(err) => {
+                        let error = format!("解析 Android Linux 运行环境压缩包失败: {err}");
+                        let mut failed = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
+                        failed.last_error = Some(error.clone());
+                        let _ = android_workspace_set_status(state, app, failed);
+                        return Err(error);
+                    }
+                };
+                android_workspace_update_download_progress(state, app.unwrap_or(&NativeAppHandle::noop()), &root, bytes.len() as u64, "importing")?;
+                if let Err(err) = import_android_workspace_rootfs_from_archive(state, app.unwrap_or(&NativeAppHandle::noop()), &root, bytes).await {
+                    let mut failed = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
+                    failed.last_error = Some(err.clone());
+                    let _ = android_workspace_set_status(state, app, failed);
+                    return Err(err);
+                }
+                android_workspace_set_status(state, app, android_workspace_ready_status(&root))
+            }
+            Err(err) => {
+                let mut failed = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
+                failed.last_error = Some(err.clone());
+                let _ = android_workspace_set_status(state, app, failed);
+                Err(err)
+            }
+        }
+}
+
+pub(crate) fn reset_android_workspace_state_ws_inner(
+    state: &AppState,
+    app: Option<&NativeAppHandle>,
+) -> Result<AndroidWorkspaceStatus, String> {
+
+        let status = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &android_workspace_root(&state));
+        android_workspace_set_status(state, app, status)
+}
+
+pub(crate) fn repair_android_workspace_runtime_ws_inner(
+    state: &AppState,
+    app: Option<&NativeAppHandle>,
+) -> Result<AndroidWorkspaceStatus, String> {
+
+        let root = android_workspace_root(&state);
+        let runtime_root = android_workspace_runtime_root(&root);
+        let result = (|| {
+            ensure_android_workspace_layout(&root)?;
+            if !runtime_root.join("usr").join("bin").join("dash").is_file() {
+                return Err("Android Linux 运行环境缺少 usr/bin/dash，请重置沙盒后重新初始化。".to_string());
+            }
+            let temp_dir = android_workspace_proot_temp_root(&state);
+            let temp_dir = if let Ok(canonical) = temp_dir.canonicalize() { canonical } else { temp_dir };
+            fs::create_dir_all(&temp_dir)
+                .map_err(|err| format!("创建 Android proot 临时目录失败 ({}): {err}", temp_dir.display()))?;
+            let (native_dir, _, _) = android_proot_binary_paths()?;
+            let _ = android_proot_ensure_libs_dir(&native_dir, &temp_dir)?;
+            android_proot_ensure_host_pai_layout(&root)?;
+            android_proot_patch_rootfs(&runtime_root)?;
+            write_android_workspace_rootfs_marker(&runtime_root)?;
+            if !android_workspace_runtime_ready(&root) {
+                return Err("Android Linux 运行环境修复后仍未通过就绪检查。".to_string());
+            }
+            Ok(())
+        })();
+        match result {
+            Ok(()) => {
+                runtime_log_info("[Android 工作区] 修复 Linux 沙盒完成".to_string());
+                android_workspace_set_status(state, app, android_workspace_ready_status(&root))
+            }
+            Err(err) => {
+                runtime_log_error(format!("[Android 工作区] 修复 Linux 沙盒失败 err={err:?}"));
+                let mut status = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
+                status.last_error = Some(err.clone());
+                let _ = android_workspace_set_status(state, app, status);
+                Err(err)
+            }
+        }
+}
