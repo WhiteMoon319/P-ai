@@ -83,7 +83,6 @@ include!("features/remote_im_adapters.rs");
 
 // ==================== 系统窗口与命令 ====================
 include!("features/system/windowing.rs");
-include!("features/system/windows_job.rs");
 include!("features/system/sandbox.rs");
 include!("features/system/local_port_service.rs");
 include!("features/system/tools.rs");

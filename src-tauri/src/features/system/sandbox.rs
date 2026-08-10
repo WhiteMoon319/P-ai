@@ -14,7 +14,4 @@ mod android_rootfs_patcher {
 use android_rootfs_runner::*;
 #[cfg(target_os = "android")]
 use android_rootfs_patcher::*;
-include!("sandbox/backend_windows.rs");
-include!("sandbox/backend_linux.rs");
-include!("sandbox/backend_macos.rs");
 include!("sandbox/manager.rs");
