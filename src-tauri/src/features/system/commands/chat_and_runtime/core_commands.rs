@@ -471,6 +471,7 @@ async fn confirm_plan_and_continue_inner(
     Ok(true)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn confirm_plan_and_continue(
     input: ConfirmPlanAndContinueInput,
@@ -479,6 +480,7 @@ async fn confirm_plan_and_continue(
     confirm_plan_and_continue_inner(state.inner(), &input).await
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn read_plan_file_content(
     conversation_id: String,
@@ -1737,6 +1739,7 @@ async fn submit_chat_message_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn submit_chat_message(
     input: SendChatRequest,
@@ -1746,6 +1749,7 @@ async fn submit_chat_message(
     submit_chat_message_inner(input, state.inner(), Some(on_delta)).await
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn send_chat_message(
     input: SendChatRequest,
@@ -2192,6 +2196,7 @@ async fn send_user_mention_message_inner(
     Ok(send_result)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn send_user_mention_message(
     input: SendChatRequest,
@@ -2201,6 +2206,7 @@ async fn send_user_mention_message(
     send_user_mention_message_inner(input, state.inner(), &on_delta).await
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn submit_user_async_delegate(
     input: SubmitUserAsyncDelegateInput,
@@ -2261,6 +2267,7 @@ struct ProbeActiveChatViewStreamInput {
     probe_id: String,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn bind_active_chat_view_stream(
     input: BindActiveChatViewStreamInput,
@@ -2305,6 +2312,7 @@ async fn bind_active_chat_view_stream(
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn unbind_active_chat_view_stream(
     input: Option<UnbindActiveChatViewStreamInput>,
@@ -2322,6 +2330,7 @@ async fn unbind_active_chat_view_stream(
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn clear_window_chat_view_stream_bindings_command(
     state: State<'_, AppState>,
@@ -2331,6 +2340,7 @@ async fn clear_window_chat_view_stream_bindings_command(
     clear_window_chat_view_stream_bindings(state.inner(), &window_label)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn probe_active_chat_view_stream(
     input: ProbeActiveChatViewStreamInput,
@@ -2387,6 +2397,7 @@ async fn probe_active_chat_view_stream(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn stop_chat_message(
     input: StopChatRequest,
@@ -2470,6 +2481,7 @@ fn stop_chat_message_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn get_chat_queue_snapshot(
     state: State<'_, AppState>,
@@ -2483,6 +2495,7 @@ struct GetConversationFastRequestTurnsInput {
     conversation_id: String,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_conversation_fast_request_turns(
     input: GetConversationFastRequestTurnsInput,
@@ -2492,6 +2505,7 @@ fn get_conversation_fast_request_turns(
         .get_conversation_fast_request_turns(state.inner(), &input.conversation_id)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn recall_chat_queue_event(
     event_id: String,
@@ -2522,6 +2536,7 @@ fn recall_chat_queue_event_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn mark_chat_queue_event_guided(
     event_id: String,
@@ -2546,6 +2561,7 @@ struct InterruptConversationRuntimeResult {
     cleared_queue_count: usize,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn interrupt_conversation_runtime(
     session: SessionSelector,
@@ -2624,6 +2640,7 @@ async fn interrupt_conversation_runtime(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn get_main_session_state_snapshot(
     state: State<'_, AppState>,
@@ -2708,6 +2725,7 @@ mod stop_stream_block_tool_history_tests {
 
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn get_conversation_runtime_snapshot(
     conversation_id: String,

@@ -255,6 +255,7 @@ mod android_workspace_file_system {
 #[cfg(target_os = "android")]
 use android_workspace_file_system::*;
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn list_android_workspace_files(
     state: State<'_, AppState>,
@@ -315,6 +316,7 @@ fn list_android_workspace_files_ws_inner(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn read_android_workspace_text(
     state: State<'_, AppState>,
@@ -362,6 +364,7 @@ fn read_android_workspace_text_ws_inner(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn write_android_workspace_text(
     state: State<'_, AppState>,
@@ -424,6 +427,7 @@ fn write_android_workspace_text_ws_inner(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn move_android_workspace_file(
     state: State<'_, AppState>,
@@ -494,6 +498,7 @@ fn move_android_workspace_file_ws_inner(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn glob_android_workspace_files(
     state: State<'_, AppState>,
@@ -545,6 +550,7 @@ fn glob_android_workspace_files_ws_inner(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn grep_android_workspace_files(
     state: State<'_, AppState>,
@@ -664,6 +670,7 @@ fn grep_android_workspace_files_ws_inner(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_android_workspace_status(state: State<'_, AppState>) -> Result<AndroidWorkspaceStatus, String> {
     get_android_workspace_status_ws_inner(state.inner())
@@ -696,6 +703,7 @@ fn get_android_workspace_status_ws_inner(state: &AppState) -> Result<AndroidWork
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn init_android_workspace(
     app: AppHandle,
@@ -752,6 +760,7 @@ async fn init_android_workspace(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn import_android_workspace_rootfs_archive(
     app: AppHandle,
@@ -816,6 +825,7 @@ async fn import_android_workspace_rootfs_archive(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn reset_android_workspace_state(
     app: AppHandle,
@@ -864,6 +874,7 @@ fn android_workspace_remove_path_if_exists(path: &std::path::Path, context: &str
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn repair_android_workspace_runtime(
     app: AppHandle,
@@ -914,6 +925,7 @@ fn repair_android_workspace_runtime(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn reset_android_workspace_runtime(
     app: AppHandle,
@@ -973,6 +985,7 @@ pub(crate) fn android_workspace_ws_fake_ready(root: &std::path::Path) -> Android
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn import_file_to_android_workspace(
     state: State<'_, AppState>,
@@ -1050,6 +1063,7 @@ fn import_file_to_android_workspace_ws_inner(
 ///
 /// WebView 只传 URI 字符串，字节流由 Kotlin 侧 ContentResolver 写入沙盒
 /// 目标路径（绝对路径，已在 Rust 侧完成沙盒与用户可见性校验）。
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn import_android_workspace_file_from_uri(
     app: tauri::AppHandle,
@@ -1140,6 +1154,7 @@ fn import_android_workspace_file_from_uri(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn export_file_from_android_workspace(
     state: State<'_, AppState>,
@@ -1199,6 +1214,7 @@ fn export_file_from_android_workspace_ws_inner(
 /// WebView 的 `navigator.share` 在 wry Android 中不可用，改由 Kotlin 原生
 /// ACTION_SEND + FileProvider 唤起系统分享。只传文件绝对路径，绕开 base64，
 /// 因此也消除了旧导出链路的 64MB 上限。
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn share_file_from_android_workspace(
     app: tauri::AppHandle,
@@ -1243,6 +1259,7 @@ fn share_file_from_android_workspace(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn delete_file_from_android_workspace(
     state: State<'_, AppState>,
