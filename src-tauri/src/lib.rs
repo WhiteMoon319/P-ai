@@ -1052,6 +1052,12 @@ pub fn run() {
         }
     }
 
+    // ========== 桌面 Tauri 启动段 ==========
+    // Android 原生模式不编译任何 tauri::Builder / generate_context 代码。
+    // build.rs 已空壳化，tauri.conf.json 的 ACL metadata 不再生成，
+    // 若 Android 编译期仍解析 generate_context!() 会报 UnknownManifest 错，故整段 cfg 隔离。
+    #[cfg(not(target_os = "android"))]
+    {
     #[cfg(target_os = "windows")]
     windows_set_process_app_user_model_id();
 
@@ -1129,6 +1135,9 @@ pub fn run() {
         }
     }
 
+    // 桌面专用：Tauri Builder 启动段。Android 原生模式在 run() 顶部已 park 兜底，
+    // 永不进入此段；整个桌面 Tauri 启动链路随 build.rs 空壳一起 cfg 隔离，
+    // Android 目标编译不再解析 builder/generate_context，避免 ACL manifest 报错。
     let builder = tauri::Builder::default();
     #[cfg(not(target_os = "android"))]
     let builder = if cfg!(debug_assertions) {
@@ -1640,6 +1649,7 @@ pub fn run() {
         .unwrap_or_else(|err| {
             runtime_log_error(format!("[启动] 运行 Tauri 应用失败: {err}"));
         });
+    } // 桌面 Tauri Builder 段 cfg(not android) 结束
 }
 
 #[path = "features/config/pai_config_tool.rs"]
