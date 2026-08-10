@@ -305,6 +305,7 @@ fn build_archive_markdown(archive: &ConversationArchive) -> String {
     blocks.join("\n")
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn export_archive_to_file(
     input: ExportArchiveToFileInput,
@@ -368,6 +369,7 @@ fn export_archive_to_file(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn import_archives_from_json(
     input: ImportArchivesFromJsonInput,

@@ -323,6 +323,7 @@ fn render_goal_continue_hidden_prompt(goal: &ConversationGoalState, now: &str) -
     lines.join("\n")
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn goal_get_current(
     conversation_id: String,
@@ -331,6 +332,7 @@ fn goal_get_current(
     goal_get_current_inner(&state, &conversation_id)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn goal_create_goal(
     input: GoalCreateInput,
@@ -339,6 +341,7 @@ fn goal_create_goal(
     goal_create_goal_inner(&state, &input.conversation_id, &input.objective)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn goal_cancel_goal(
     input: GoalCancelInput,

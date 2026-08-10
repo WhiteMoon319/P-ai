@@ -888,6 +888,7 @@ fn export_config_migration_package_for_web(
     Ok(result)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn export_config_migration_package(
     input: ExportConfigMigrationPackageInput,
@@ -967,6 +968,7 @@ fn preview_import_config_migration_package_for_web(
     result
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn preview_import_config_migration_package(
     input: PreviewImportConfigMigrationPackageInput,
@@ -1042,6 +1044,7 @@ fn apply_import_config_migration_package_inner(
     Ok(result)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn apply_import_config_migration_package(
     input: ApplyImportConfigMigrationPackageInput,

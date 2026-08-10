@@ -362,6 +362,7 @@ fn record_discarded_message_store_migration_item(
     );
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn check_message_store_migration(
     state: State<'_, AppState>,
@@ -405,6 +406,7 @@ fn refresh_message_store_migration_caches(state: &AppState) -> Result<(), String
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn run_message_store_migration(
     app: AppHandle,

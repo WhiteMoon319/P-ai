@@ -36,6 +36,7 @@ fn ensure_share_export_parent_dir(path: &PathBuf) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn write_utf8_text_file_to_path(input: WriteUtf8TextFileInput) -> Result<(), String> {
     let path = normalize_export_path(&input.path)?;
@@ -58,6 +59,7 @@ async fn write_utf8_text_file_to_path(input: WriteUtf8TextFileInput) -> Result<(
     .map_err(|err| format!("写入文本导出文件任务失败: {err}"))?
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn write_base64_file_to_path(input: WriteBase64FileInput) -> Result<(), String> {
     let path = normalize_export_path(&input.path)?;

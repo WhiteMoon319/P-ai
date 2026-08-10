@@ -1,3 +1,4 @@
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn check_tools_status(
     input: CheckToolsStatusInput,
@@ -177,6 +178,7 @@ fn check_tools_status_inner(
     Ok(statuses)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_image_text_cache_stats(state: State<'_, AppState>) -> Result<ImageTextCacheStats, String> {
     get_image_text_cache_stats_inner(&state)
@@ -204,6 +206,7 @@ fn get_image_text_cache_stats_inner(state: &AppState) -> Result<ImageTextCacheSt
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn clear_image_text_cache(state: State<'_, AppState>) -> Result<ImageTextCacheStats, String> {
     clear_image_text_cache_inner(&state)

@@ -404,6 +404,7 @@ pub(crate) async fn weixin_oc_send_message_items(
     Ok(client_id)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn remote_im_weixin_oc_start_login(
     input: WeixinOcLoginStartInput,
@@ -412,6 +413,7 @@ async fn remote_im_weixin_oc_start_login(
     weixin_oc_manager().start_login(state.inner(), input).await
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn remote_im_weixin_oc_get_login_status(
     input: WeixinOcLoginStatusInput,
@@ -422,6 +424,7 @@ async fn remote_im_weixin_oc_get_login_status(
         .await
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn remote_im_weixin_oc_logout(
     input: WeixinOcLoginStatusInput,
@@ -465,6 +468,7 @@ fn remote_im_weixin_oc_sync_contacts_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn remote_im_weixin_oc_sync_contacts(
     input: WeixinOcLoginStatusInput,

@@ -1,3 +1,4 @@
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn get_chat_snapshot(
     input: SessionSelector,
@@ -781,6 +782,7 @@ fn ensure_unarchived_conversation_not_organizing(
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn list_unarchived_conversations(
     state: State<'_, AppState>,
@@ -1055,6 +1057,7 @@ fn overview_updated_payload_with_server_time(
     value
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn list_unarchived_conversations_changed_since(
     input: ListUnarchivedConversationsChangedSinceInput,
@@ -1604,6 +1607,7 @@ fn emit_unarchived_conversation_overview_updated_from_state(state: &AppState) ->
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn set_active_unarchived_conversation(
     input: SetActiveUnarchivedConversationInput,

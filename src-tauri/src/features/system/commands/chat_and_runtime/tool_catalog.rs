@@ -208,6 +208,7 @@ fn sorted_unique_catalog_items(
     out
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn list_tool_catalog(state: State<'_, AppState>) -> Result<Vec<FrontendToolDefinition>, String> {
     list_tool_catalog_inner(&state).await
@@ -217,6 +218,7 @@ async fn list_tool_catalog_inner(state: &AppState) -> Result<Vec<FrontendToolDef
     Ok(builtin_tool_definitions_for_frontend(state).await)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn list_department_permission_catalog(
     state: State<'_, AppState>,

@@ -35,6 +35,7 @@ struct BatchArchiveConversationsOutput {
     active_conversation_id: Option<String>,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn archive_conversation(
     input: ConversationIdOnlyInput,
@@ -161,6 +162,7 @@ async fn archive_conversation_inner(
     Ok(ConversationCommandStatus { success: true })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn batch_archive_conversations(
     input: BatchArchiveConversationsInput,

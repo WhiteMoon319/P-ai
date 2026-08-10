@@ -185,6 +185,7 @@ fn ide_chat_file_reader_read_block(params: Value) -> Result<Value, String> {
         .map_err(|err| format!("serialize file reader block failed: {err}"))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn upsert_ide_context_snapshot(
     input: UpsertIdeContextSnapshotInput,
@@ -197,6 +198,7 @@ fn upsert_ide_context_snapshot(
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn query_ide_context_references(
     input: IdeContextWorkspaceQueryInput,
@@ -205,6 +207,7 @@ fn query_ide_context_references(
     query_ide_context_references_internal(input, ide_context_runtime.inner())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn get_web_access_info(
     app: AppHandle,
