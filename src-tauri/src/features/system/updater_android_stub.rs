@@ -76,6 +76,7 @@ fn sync_update_state_from_skip_version(_app: &AppHandle, _version: &str) {}
 /// 最近一次 Android 更新检查结果（内存态，供 get_github_update_state 读取）。
 static ANDROID_LAST_CHECK: std::sync::OnceLock<GithubUpdateInfo> = std::sync::OnceLock::new();
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_github_update_state(_app: AppHandle) -> Result<GithubUpdateState, String> {
     let current_version = env!("CARGO_PKG_VERSION").to_string();
@@ -105,6 +106,7 @@ fn get_github_update_state(_app: AppHandle) -> Result<GithubUpdateState, String>
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn check_github_update(
     _app: AppHandle,
@@ -199,6 +201,7 @@ fn cleanup_portable_update_temp_artifacts_for_current_runtime() -> Result<(), St
 
 fn start_github_auto_update_worker(_app: AppHandle) {}
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn start_github_update(
     _app: AppHandle,
@@ -208,11 +211,13 @@ async fn start_github_update(
     Err(ANDROID_UPDATE_UNSUPPORTED.to_string())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn cancel_github_update() -> Result<(), String> {
     Err(ANDROID_UPDATE_UNSUPPORTED.to_string())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn apply_prepared_github_update(_app: AppHandle) -> Result<(), String> {
     Err(ANDROID_UPDATE_UNSUPPORTED.to_string())
