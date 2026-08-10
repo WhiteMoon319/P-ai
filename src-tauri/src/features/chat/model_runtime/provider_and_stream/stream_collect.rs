@@ -1,5 +1,5 @@
 fn send_reasoning_delta_event(
-    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: &DeltaChannel,
     reasoning: &str,
 ) {
     if reasoning.is_empty() {
@@ -42,7 +42,7 @@ where
 
 async fn collect_streaming_model_reply_genai<S>(
     mut stream: S,
-    on_delta: Option<&tauri::ipc::Channel<AssistantDeltaEvent>>,
+    on_delta: Option<&DeltaChannel>,
     app_state: Option<&AppState>,
     usage_conversation_id: Option<&str>,
     usage_provider_key: Option<&str>,

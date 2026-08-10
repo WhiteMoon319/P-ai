@@ -10,7 +10,7 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
     context: Option<&ToolLoopAutoCompactionContext>,
     selected_api: &ApiConfig,
     resolved_api: &ResolvedApiConfig,
-    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: &DeltaChannel,
     transient_tool_history: &[Value],
     partial_assistant_text: &str,
     partial_activity_reasoning_text: &str,
@@ -158,7 +158,7 @@ struct ToolLoopCompactionCheckpoint {
 fn persist_tool_loop_compaction_checkpoint(
     state: &AppState,
     context: &ToolLoopAutoCompactionContext,
-    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: &DeltaChannel,
     transient_tool_history: &[Value],
     partial_assistant_text: &str,
     partial_activity_reasoning_text: &str,

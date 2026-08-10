@@ -1,7 +1,7 @@
 pub(crate) fn register_chat_event_delta_channel(
     state: &AppState,
     event_id: &str,
-    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: DeltaChannel,
 ) -> Result<(), String> {
     state
         .pending_chat_delta_channels
@@ -14,7 +14,7 @@ pub(crate) fn register_chat_event_delta_channel(
 pub(crate) fn register_chat_event_runtime(
     state: &AppState,
     event_id: &str,
-    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: DeltaChannel,
     sender: tokio::sync::oneshot::Sender<Result<SendChatResult, String>>,
 ) -> Result<(), String> {
     register_chat_event_delta_channel(state, event_id, on_delta)?;
@@ -31,7 +31,7 @@ pub(crate) fn set_active_chat_view_stream_binding(
     window_label: &str,
     binding_id: &str,
     conversation_id: Option<&str>,
-    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: DeltaChannel,
 ) -> Result<(), String> {
     let mut bindings = state
         .active_chat_view_bindings
@@ -83,7 +83,7 @@ fn active_chat_view_binding_key(window_label: &str, binding_id: &str) -> String 
 fn collect_active_chat_view_delta_channels(
     state: &AppState,
     conversation_id: &str,
-) -> Result<Vec<(String, tauri::ipc::Channel<AssistantDeltaEvent>)>, String> {
+) -> Result<Vec<(String, DeltaChannel)>, String> {
     let bindings = state
         .active_chat_view_bindings
         .lock()

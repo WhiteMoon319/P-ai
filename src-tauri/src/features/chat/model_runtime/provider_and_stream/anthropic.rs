@@ -4,7 +4,7 @@ async fn call_model_anthropic_with_tools(
     model_name: &str,
     prepared: PreparedPrompt,
     tool_assembly: RuntimeToolAssembly,
-    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: &DeltaChannel,
     max_tool_iterations: usize,
     tool_abort_state: Option<&AppState>,
     auto_compaction_context: Option<&ToolLoopAutoCompactionContext>,

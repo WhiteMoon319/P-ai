@@ -122,7 +122,7 @@ pub(crate) struct ChatPendingEvent {
 #[derive(Clone)]
 struct QueuedChatActivation {
     event_id: String,
-    delta_channel: Option<tauri::ipc::Channel<AssistantDeltaEvent>>,
+    delta_channel: Option<DeltaChannel>,
 }
 
 #[derive(Debug, Clone)]
@@ -1508,7 +1508,8 @@ async fn activate_main_assistant(
     let activation_delta_channel_for_emit = activation_delta_channel.clone();
     let stream_start_rebind_emitted = std::sync::Arc::new(std::sync::Mutex::new(false));
     let stream_start_rebind_emitted_for_channel = stream_start_rebind_emitted.clone();
-    let active_channel: tauri::ipc::Channel<AssistantDeltaEvent> = tauri::ipc::Channel::new(
+    #[cfg(not(target_os = "android"))]
+    let active_channel: DeltaChannel = tauri::ipc::Channel::new(
         move |body| {
             let parsed_event = match body {
                 tauri::ipc::InvokeResponseBody::Json(json) => {
@@ -1583,6 +1584,8 @@ async fn activate_main_assistant(
             Ok(())
         },
     );
+    #[cfg(target_os = "android")]
+    let active_channel: DeltaChannel = DeltaChannel::noop();
 
     // 调用 send_chat_message_inner
     let result = send_chat_message_inner(request, state, &active_channel).await;

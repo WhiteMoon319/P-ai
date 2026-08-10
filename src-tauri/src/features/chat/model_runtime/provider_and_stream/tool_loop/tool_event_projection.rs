@@ -1,5 +1,5 @@
 fn send_text_delta_event(
-    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: &DeltaChannel,
     text: &str,
 ) {
     if text.is_empty() {
@@ -93,7 +93,7 @@ fn insert_before_trailing_user_messages(
 }
 
 fn send_assistant_tool_event(
-    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: &DeltaChannel,
     assistant_tool_event: &Value,
 ) {
     let _ = on_delta.send(AssistantDeltaEvent {
@@ -113,7 +113,7 @@ fn send_assistant_tool_event(
 }
 
 fn send_assistant_tool_result_event(
-    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: &DeltaChannel,
     tool_result_event: &Value,
 ) {
     let _ = on_delta.send(AssistantDeltaEvent {

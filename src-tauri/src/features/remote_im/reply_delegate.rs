@@ -767,8 +767,7 @@ fn spawn_remote_im_reply_delegate(
             drop(permit);
             return;
         }
-        let channel: tauri::ipc::Channel<AssistantDeltaEvent> =
-            tauri::ipc::Channel::new(|_| Ok(()));
+        let channel: DeltaChannel = DeltaChannel::noop();
         let mut terminal_status = DELEGATE_STATUS_COMPLETED;
         let mut terminal_reason = "远程应答完成";
         loop {

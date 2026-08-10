@@ -210,7 +210,7 @@ fn split_prepared_tool_calls_into_execution_batches(
 
 async fn execute_prepared_tool_call(
     tools: &[Box<dyn RuntimeToolDyn>],
-    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: &DeltaChannel,
     call: PreparedToolCall,
 ) -> Result<ExecutedToolCall, String> {
     let tool_result = match call_runtime_tool_by_name(tools, &call.tool_name, &call.tool_args).await {
@@ -256,7 +256,7 @@ async fn execute_prepared_tool_call(
 
 async fn execute_prepared_tool_call_group_inner(
     tools: &[Box<dyn RuntimeToolDyn>],
-    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: &DeltaChannel,
     calls: Vec<PreparedToolCall>,
 ) -> Result<Vec<ExecutedToolCall>, String> {
     let futures = calls
@@ -274,7 +274,7 @@ async fn execute_prepared_tool_call_group(
     tool_abort_state: Option<&AppState>,
     chat_session_key: &str,
     tools: &[Box<dyn RuntimeToolDyn>],
-    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: &DeltaChannel,
     request_id: Option<&str>,
     calls: Vec<PreparedToolCall>,
 ) -> Result<Vec<ExecutedToolCall>, String> {

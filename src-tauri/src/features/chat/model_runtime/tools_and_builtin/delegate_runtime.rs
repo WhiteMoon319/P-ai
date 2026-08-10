@@ -289,7 +289,7 @@ async fn delegate_execute_agent_prompt(
         }),
         trigger_only: false,
     };
-    let noop_channel = tauri::ipc::Channel::new(|_| Ok(()));
+    let noop_channel = DeltaChannel::noop();
     let _guard = NoApprovalDialogGuard::enter(app_state, delegate_conversation_id.to_string());
     send_chat_message_inner(request, app_state, &noop_channel).await
 }

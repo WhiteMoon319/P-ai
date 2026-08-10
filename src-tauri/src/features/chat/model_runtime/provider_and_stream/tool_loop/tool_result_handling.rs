@@ -45,7 +45,7 @@ async fn apply_compaction_preserved_gate_after_tool_round(
     context: Option<&ToolLoopAutoCompactionContext>,
     selected_api: &ApiConfig,
     resolved_api: &ResolvedApiConfig,
-    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: &DeltaChannel,
     chat_session_key: &str,
     pending_tool_group_result_persists: &mut Vec<tokio::task::JoinHandle<Result<(), String>>>,
     trusted_input_tokens: Option<u64>,

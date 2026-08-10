@@ -360,7 +360,7 @@ fn legacy_attachment_relative_paths_for_prompt(
 async fn send_chat_message_inner(
     input: SendChatRequest,
     state: &AppState,
-    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: &DeltaChannel,
 ) -> Result<SendChatResult, String> {
     const FIXED_MODEL_RETRY_COUNT: usize = 3;
     const FIXED_MODEL_RETRY_WAIT_SECONDS: u64 = 5;

@@ -571,6 +571,49 @@ struct AssistantDeltaEvent {
     stream_cache: Option<ConversationStreamRuntimeCacheSnapshot>,
 }
 
+/// 流式 delta 通道抽象：桌面端包装 tauri::ipc::Channel 回显给前端窗口；
+/// Android 原生模式流式已走 NATIVE_DELTA_QUEUE 旁路（pollEvents 轮询），此处为 noop 占位，
+/// 保证编译期与调用链不依赖 tauri crate。
+#[derive(Clone, Default)]
+pub(crate) struct DeltaChannel {
+    #[cfg(not(target_os = "android"))]
+    inner: Option<DeltaChannel>,
+    #[cfg(target_os = "android")]
+    _android: std::marker::PhantomData<()>,
+}
+
+impl DeltaChannel {
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn from_tauri(channel: DeltaChannel) -> Self {
+        Self {
+            inner: Some(channel),
+        }
+    }
+
+    #[cfg(target_os = "android")]
+    pub(crate) fn noop() -> Self {
+        Self {
+            _android: std::marker::PhantomData,
+        }
+    }
+
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn send(&self, event: AssistantDeltaEvent) -> Result<(), String> {
+        if let Some(channel) = &self.inner {
+            channel
+                .send(event)
+                .map_err(|err| format!("发送流式 delta 失败: {err}"))
+        } else {
+            Ok(())
+        }
+    }
+
+    #[cfg(target_os = "android")]
+    pub(crate) fn send(&self, _event: AssistantDeltaEvent) -> Result<(), String> {
+        Ok(())
+    }
+}
+
 fn round_completed_delta_event(
     conversation_id: &str,
     request_id: Option<&str>,
@@ -611,7 +654,7 @@ struct ActiveChatViewBinding {
     window_label: String,
     binding_id: String,
     conversation_id: String,
-    delta_channel: tauri::ipc::Channel<AssistantDeltaEvent>,
+    delta_channel: DeltaChannel,
 }
 
 #[derive(Debug, Clone)]

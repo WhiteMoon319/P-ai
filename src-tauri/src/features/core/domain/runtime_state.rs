@@ -95,7 +95,7 @@ struct AppState {
         >,
     >,
     pending_chat_delta_channels:
-        Arc<Mutex<std::collections::HashMap<String, tauri::ipc::Channel<AssistantDeltaEvent>>>>,
+        Arc<Mutex<std::collections::HashMap<String, DeltaChannel>>>,
     accepted_submit_trace_ids: Arc<Mutex<std::collections::VecDeque<String>>>,
     active_chat_view_bindings:
         Arc<Mutex<std::collections::HashMap<String, ActiveChatViewBinding>>>,

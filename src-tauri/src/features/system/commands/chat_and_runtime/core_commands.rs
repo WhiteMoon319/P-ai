@@ -1478,7 +1478,7 @@ fn release_submit_trace_id(state: &AppState, trace_id: &str) {
 async fn submit_chat_message_inner(
     input: SendChatRequest,
     state: &AppState,
-    on_delta: Option<tauri::ipc::Channel<AssistantDeltaEvent>>,
+    on_delta: Option<DeltaChannel>,
 ) -> Result<SubmitChatResult, String> {
     if input.trigger_only {
         return Err("submit_chat_message 不支持 trigger_only".to_string());
@@ -1744,7 +1744,7 @@ async fn submit_chat_message_inner(
 async fn submit_chat_message(
     input: SendChatRequest,
     state: State<'_, AppState>,
-    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: DeltaChannel,
 ) -> Result<SubmitChatResult, String> {
     submit_chat_message_inner(input, state.inner(), Some(on_delta)).await
 }
@@ -1754,7 +1754,7 @@ async fn submit_chat_message(
 async fn send_chat_message(
     input: SendChatRequest,
     state: State<'_, AppState>,
-    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: DeltaChannel,
 ) -> Result<SendChatResult, String> {
     if input
         .payload
@@ -1984,7 +1984,7 @@ async fn send_chat_message(
 async fn send_user_mention_message_inner(
     input: SendChatRequest,
     state: &AppState,
-    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: &DeltaChannel,
 ) -> Result<SendChatResult, String> {
     let mention_count = input
         .payload
@@ -2201,7 +2201,7 @@ async fn send_user_mention_message_inner(
 async fn send_user_mention_message(
     input: SendChatRequest,
     state: State<'_, AppState>,
-    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: DeltaChannel,
 ) -> Result<SendChatResult, String> {
     send_user_mention_message_inner(input, state.inner(), &on_delta).await
 }
@@ -2273,7 +2273,7 @@ async fn bind_active_chat_view_stream(
     input: BindActiveChatViewStreamInput,
     state: State<'_, AppState>,
     window: tauri::Window,
-    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: DeltaChannel,
 ) -> Result<(), String> {
     let window_label = window.label().to_string();
     let conversation_id = input

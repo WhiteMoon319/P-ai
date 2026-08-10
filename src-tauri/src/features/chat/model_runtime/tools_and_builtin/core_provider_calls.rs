@@ -744,7 +744,7 @@ async fn call_model_genai_stream_internal(
     model_name: &str,
     prepared: PreparedPrompt,
     kind: OpenAiApiKind,
-    on_delta: Option<&tauri::ipc::Channel<AssistantDeltaEvent>>,
+    on_delta: Option<&DeltaChannel>,
     app_state: Option<&AppState>,
     usage_conversation_id: Option<&str>,
     tool_definitions: Option<&[ProviderToolDefinition]>,
@@ -941,7 +941,7 @@ async fn call_model_openai_responses(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
-    on_delta: Option<&tauri::ipc::Channel<AssistantDeltaEvent>>,
+    on_delta: Option<&DeltaChannel>,
     app_state: Option<&AppState>,
     usage_conversation_id: Option<&str>,
 ) -> Result<ModelReply, String> {

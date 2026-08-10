@@ -9,7 +9,7 @@ fn debug_value_snippet(value: &Value, max_chars: usize) -> String {
 }
 
 fn send_tool_status_event(
-    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: &DeltaChannel,
     tool_name: &str,
     tool_status: &str,
     tool_args: Option<&str>,
@@ -49,7 +49,7 @@ fn send_tool_status_event(
 }
 
 fn send_stream_rebind_required_event(
-    on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
+    on_delta: &DeltaChannel,
     request_id: Option<&str>,
     reason: &str,
 ) {
