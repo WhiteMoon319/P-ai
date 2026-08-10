@@ -689,6 +689,7 @@ fn install_host_runtime_prerequisite_sync(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn install_host_runtime_prerequisite(
     kind: String,
@@ -709,6 +710,7 @@ async fn install_host_runtime_prerequisite(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn terminal_self_check(state: State<'_, AppState>) -> Result<Value, String> {
     let session_id = normalize_terminal_tool_session_id("ui-terminal-self-check");
@@ -791,6 +793,7 @@ async fn terminal_self_check(state: State<'_, AppState>) -> Result<Value, String
     }))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn list_terminal_shell_candidates(state: State<'_, AppState>) -> Result<Value, String> {
     let (preferred_kind, current, options) = terminal_shell_candidates_for_ui(&state);
@@ -802,6 +805,7 @@ fn list_terminal_shell_candidates(state: State<'_, AppState>) -> Result<Value, S
     }))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn list_file_reader_directory_open_targets(state: State<'_, AppState>) -> Result<Value, String> {
     let options = file_reader_directory_open_targets_for_ui(&state);
@@ -2148,6 +2152,7 @@ fn approve_terminal_approval_for_workspace(
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn open_file_reader_window_command(app: AppHandle, path: String) -> Result<String, String> {
     open_file_reader_window(&app, path)
@@ -2384,6 +2389,7 @@ fn start_file_reader_watch_polling(app: AppHandle) {
     });
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn update_file_reader_watch_targets(
     app: AppHandle,
@@ -2524,6 +2530,7 @@ fn file_reader_rope_lines_to_string(
     output
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn read_file_reader_file(window: tauri::Window, path: String) -> Result<FileReaderFilePayload, String> {
     read_file_reader_file_inner(path, Some(window.label()))
@@ -2710,6 +2717,7 @@ fn list_file_reader_directory(path: String) -> Result<FileReaderDirectoryPayload
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn open_file_reader_directory_target(input: OpenFileReaderDirectoryTargetInput, state: State<'_, AppState>) -> Result<(), String> {
     let raw_path = input.path.trim();
@@ -2728,6 +2736,7 @@ fn open_file_reader_directory_target(input: OpenFileReaderDirectoryTargetInput, 
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn open_file_reader_directory_shell(input: OpenFileReaderDirectoryShellInput, state: State<'_, AppState>) -> Result<(), String> {
     let raw_path = input.path.trim();
@@ -2737,6 +2746,7 @@ fn open_file_reader_directory_shell(input: OpenFileReaderDirectoryShellInput, st
     open_shell_terminal_at_path(&state, &PathBuf::from(raw_path), input.preferred_kind.as_deref())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn open_local_file_directory(path: String) -> Result<(), String> {
     let raw_path = path.trim();
@@ -2785,6 +2795,7 @@ fn open_local_file_directory(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn open_file_with_default_program(path: String) -> Result<(), String> {
     let raw_path = path.trim();

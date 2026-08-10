@@ -11,6 +11,7 @@ fn load_agents_inner(state: &AppState) -> Result<Vec<AgentProfile>, String> {
         .map(|snapshot| snapshot.agents)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn save_agents(
     input: SaveAgentsInput,
@@ -26,6 +27,7 @@ struct ConvertPrivateAgentToMainInput {
     agent_id: String,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn convert_private_agent_to_main(
     input: ConvertPrivateAgentToMainInput,
@@ -558,6 +560,7 @@ fn get_agent_private_memory_count(
     get_agent_private_memory_count_inner(input, state.inner())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn set_agent_memory_recall_mode(
     input: SetAgentMemoryRecallModeInput,
@@ -566,6 +569,7 @@ fn set_agent_memory_recall_mode(
     set_agent_memory_recall_mode_inner(input, state.inner())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn set_agent_private_memory_enabled(
     input: SetAgentPrivateMemoryEnabledInput,
@@ -634,6 +638,7 @@ fn import_agent_memories_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn load_chat_settings(state: State<'_, AppState>) -> Result<ChatSettings, String> {
     load_chat_settings_inner(&state)
@@ -807,6 +812,7 @@ fn apply_chat_settings_patch(
     build_chat_settings_payload(state, &data, config)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn save_chat_settings(
     input: ChatSettings,
@@ -828,6 +834,7 @@ fn save_chat_settings(
     )
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn patch_chat_settings(
     input: ChatSettingsPatch,
@@ -1278,6 +1285,7 @@ fn apply_conversation_api_settings_patch(config: &mut AppConfig, input: Conversa
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn save_conversation_api_settings(
     input: ConversationApiSettings,
@@ -1297,6 +1305,7 @@ fn save_conversation_api_settings(
     )
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn patch_conversation_api_settings(
     input: ConversationApiSettingsPatch,
@@ -1324,6 +1333,7 @@ fn patch_conversation_api_settings_inner(
     Ok(payload)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn set_department_primary_api_config(
     input: SetDepartmentPrimaryApiConfigInput,

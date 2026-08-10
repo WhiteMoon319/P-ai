@@ -91,6 +91,7 @@ fn chat_view_foreground_active() -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn set_chat_window_active(active: bool) {
     static CHAT_WINDOW_INACTIVE_LOGGED_ONCE: std::sync::atomic::AtomicBool =
@@ -104,6 +105,7 @@ fn set_chat_window_active(active: bool) {
     set_record_hotkey_probe_chat_window_active(active);
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
@@ -331,11 +333,13 @@ async fn probe_release_source_once(state: &AppState) {
     set_preferred_release_source(state, "github");
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_project_repository_url(_state: State<'_, AppState>) -> String {
     GITHUB_REPO_PAGE.to_string()
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn set_github_update_method(
     update_method: String,
@@ -364,6 +368,7 @@ fn set_github_update_method_inner(
     Ok(runtime_config)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn set_skipped_github_update_version(
     version: String,
@@ -401,6 +406,7 @@ fn normalize_ui_language(value: &str) -> String {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn set_ui_language(
     ui_language: String,
@@ -429,11 +435,13 @@ fn set_ui_language_inner(
     Ok(runtime_config)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn load_config(state: State<'_, AppState>) -> Result<AppConfig, String> {
     load_config_inner(&state)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_department_default_draft(
     state: State<'_, AppState>,
@@ -518,16 +526,19 @@ fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstrapSnapshot,
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn load_app_bootstrap_snapshot(state: State<'_, AppState>) -> Result<AppBootstrapSnapshot, String> {
     read_app_bootstrap_snapshot(&state)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn is_backend_ready(state: State<'_, AppState>) -> bool {
     state.backend_ready.load(std::sync::atomic::Ordering::Acquire)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn webview_pong(window: tauri::Window) {
     webview_record_pong(window.label());
@@ -650,6 +661,7 @@ fn update_record_background_wake(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn save_config(
     config: AppConfig,

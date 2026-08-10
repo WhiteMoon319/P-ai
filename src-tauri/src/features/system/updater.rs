@@ -704,6 +704,7 @@ struct CachedChangelogMarkdown {
     markdown: String,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn fetch_project_changelog_markdown() -> Result<String, String> {
     // 1 小时内已成功拉取过则直接返回缓存，避免反复请求 GitHub
@@ -897,6 +898,7 @@ fn build_skipped_auto_update_result(runtime_kind: UpdateRuntimeKind) -> GithubUp
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_github_update_state(app: AppHandle) -> Result<GithubUpdateState, String> {
     let runtime = detect_update_runtime_paths()?;
@@ -917,6 +919,7 @@ fn get_github_update_state(app: AppHandle) -> Result<GithubUpdateState, String> 
     Ok(snapshot_github_update_state())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn check_github_update(
     app: AppHandle,
@@ -1898,6 +1901,7 @@ fn start_github_auto_update_worker(app: AppHandle) {
     });
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn start_github_update(
     app: AppHandle,
@@ -1944,6 +1948,7 @@ async fn start_github_update(
     result
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn cancel_github_update() -> Result<(), String> {
     if !UPDATE_IN_PROGRESS.load(Ordering::SeqCst) {
@@ -1953,6 +1958,7 @@ async fn cancel_github_update() -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn apply_prepared_github_update(app: AppHandle) -> Result<(), String> {
     let _guard = UpdateInProgressGuard::acquire()?;
