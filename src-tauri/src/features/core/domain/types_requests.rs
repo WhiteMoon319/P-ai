@@ -574,20 +574,25 @@ struct AssistantDeltaEvent {
 /// 流式 delta 通道抽象：桌面端包装 tauri::ipc::Channel 回显给前端窗口；
 /// Android 原生模式流式已走 NATIVE_DELTA_QUEUE 旁路（pollEvents 轮询），此处为 noop 占位，
 /// 保证编译期与调用链不依赖 tauri crate。
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub(crate) struct DeltaChannel {
     #[cfg(not(target_os = "android"))]
-    inner: Option<DeltaChannel>,
+    inner: Option<tauri::ipc::Channel<AssistantDeltaEvent>>,
     #[cfg(target_os = "android")]
     _android: std::marker::PhantomData<()>,
 }
 
 impl DeltaChannel {
     #[cfg(not(target_os = "android"))]
-    pub(crate) fn from_tauri(channel: DeltaChannel) -> Self {
+    pub(crate) fn from_tauri(channel: tauri::ipc::Channel<AssistantDeltaEvent>) -> Self {
         Self {
             inner: Some(channel),
         }
+    }
+
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn noop() -> Self {
+        Self { inner: None }
     }
 
     #[cfg(target_os = "android")]

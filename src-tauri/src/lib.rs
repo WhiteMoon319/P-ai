@@ -1279,7 +1279,7 @@ pub fn run() {
             let app_handle = app.handle().clone();
             match app_handle.state::<AppState>().app_handle.lock() {
                 Ok(mut handle_slot) => {
-                    *handle_slot = Some(app_handle.clone());
+                    *handle_slot = Some(NativeAppHandle::from_tauri(app_handle.clone()));
                 }
                 Err(e) => {
                     runtime_log_error(format!("[启动] 写入应用句柄槽位失败: {e}"));

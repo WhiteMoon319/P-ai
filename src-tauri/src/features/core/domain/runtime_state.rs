@@ -31,9 +31,78 @@ struct RecentLlmRoundLogs {
     other_logs: std::collections::VecDeque<LlmRoundLogEntry>,
 }
 
+/// 非 tauri 应用句柄抽象：桌面端包装 tauri::AppHandle（事件广播/路径解析），
+/// Android 原生模式不依赖 tauri crate（事件走 pollEvents 队列旁路）。
+/// 这是 tauri 剥离的最后一道抽象层：所有共享代码只依赖本类型而非 tauri::AppHandle。
+#[derive(Clone, Default)]
+pub(crate) struct NativeAppHandle {
+    #[cfg(not(target_os = "android"))]
+    pub(crate) inner: Option<tauri::AppHandle>,
+    #[cfg(target_os = "android")]
+    _android: std::marker::PhantomData<()>,
+}
+
+impl NativeAppHandle {
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn from_tauri(app: tauri::AppHandle) -> Self {
+        Self {
+            inner: Some(app),
+        }
+    }
+
+    #[cfg(target_os = "android")]
+    pub(crate) fn noop() -> Self {
+        Self {
+            _android: std::marker::PhantomData,
+        }
+    }
+
+    /// 事件广播：桌面端转发 tauri AppHandle.emit，Android 原生模式为空操作
+    /// （事件统一由 dispatch_assistant_delta_to_active_view 旁路 push 原生队列）。
+    pub(crate) fn emit<S: serde::Serialize + Clone>(
+        &self,
+        event: &str,
+        payload: S,
+    ) -> Result<(), String> {
+        #[cfg(not(target_os = "android"))]
+        {
+            if let Some(app) = &self.inner {
+                return app
+                    .emit(event, payload)
+                    .map_err(|err| format!("事件广播失败: {err}"));
+            }
+            return Ok(());
+        }
+        #[cfg(target_os = "android")]
+        {
+            let _ = (event, payload);
+            Ok(())
+        }
+    }
+
+    /// 访问 tauri 通知插件（仅桌面端有效；Android 通知走 pollEvents 原生队列）。
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn notification(&self) -> Result<&tauri::AppHandle, String> {
+        self.inner
+            .as_ref()
+            .ok_or_else(|| "应用句柄未初始化".to_string())
+    }
+
+    /// 按 label 查找 Webview 窗口（仅桌面端；Android 无窗口概念）。
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn get_webview_window(
+        &self,
+        label: &str,
+    ) -> Option<tauri::WebviewWindow> {
+        self.inner
+            .as_ref()
+            .and_then(|app| app.get_webview_window(label))
+    }
+}
+
 #[derive(Clone)]
 struct AppState {
-    app_handle: Arc<Mutex<Option<AppHandle>>>,
+    app_handle: Arc<Mutex<Option<NativeAppHandle>>>,
     config_path: PathBuf,
     data_path: PathBuf,
     llm_workspace_path: PathBuf,

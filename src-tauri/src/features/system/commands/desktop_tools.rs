@@ -34,7 +34,7 @@ fn native_notification_text_excerpt(raw: &str, max_chars: usize) -> String {
 
 #[cfg(not(target_os = "android"))]
 fn send_native_notification(
-    app: &AppHandle,
+    app: &NativeAppHandle,
     title: &str,
     body: &str,
     play_sound: bool,
@@ -50,7 +50,12 @@ fn send_native_notification(
         return Err("通知正文不能为空".to_string());
     }
 
-    let notifications = app.notification();
+    let notifications = match &app.inner {
+        Some(app) => {
+            app.notification()
+        }
+        None => return Err("应用句柄未初始化".to_string()),
+    };
     let permission_before = notifications
         .permission_state()
         .map_err(|err| format!("读取通知权限失败：{err}"))?;
@@ -84,7 +89,7 @@ fn send_native_notification(
 
 #[cfg(target_os = "android")]
 fn send_native_notification(
-    _app: &AppHandle,
+    _app: &NativeAppHandle,
     _title: &str,
     _body: &str,
     _play_sound: bool,
@@ -116,7 +121,7 @@ fn demo_send_native_notification(app: AppHandle) -> Result<NativeNotificationDem
         .notification()
         .permission_state()
         .map_err(|err| format!("读取通知权限失败：{err}"))?;
-    send_native_notification(&app, &title, &body, true)?;
+    send_native_notification(&NativeAppHandle::from_tauri(app.clone()), &title, &body, true)?;
     let permission_after = app
         .notification()
         .permission_state()
@@ -172,7 +177,7 @@ async fn demo_test_notification(
         "normal" => {
             let title = "PAI 通知测试".to_string();
             let body = format!("这是一条普通通知测试。时间：{sent_at}");
-            send_native_notification(&app, &title, &body, true)?;
+            send_native_notification(&NativeAppHandle::from_tauri(app.clone()), &title, &body, true)?;
             runtime_log_info(format!(
                 "[通知测试] 完成，kind=normal，sent_at={}",
                 sent_at
@@ -249,7 +254,7 @@ async fn demo_test_notification(
             {
                 let title = "PAI 实时通知测试".to_string();
                 let body = format!("当前平台（非 Android）不支持实时通知（岛），已发送普通通知代替。时间：{sent_at}");
-                send_native_notification(&app, &title, &body, true)?;
+                send_native_notification(&NativeAppHandle::from_tauri(app.clone()), &title, &body, true)?;
                 runtime_log_info(format!(
                     "[通知测试] 完成，kind=live_update（降级为普通通知），sent_at={}",
                     sent_at

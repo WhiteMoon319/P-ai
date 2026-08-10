@@ -1744,18 +1744,20 @@ async fn submit_chat_message_inner(
 async fn submit_chat_message(
     input: SendChatRequest,
     state: State<'_, AppState>,
-    on_delta: DeltaChannel,
+    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
 ) -> Result<SubmitChatResult, String> {
-    submit_chat_message_inner(input, state.inner(), Some(on_delta)).await
+    submit_chat_message_inner(input, state.inner(), Some(DeltaChannel::from_tauri(on_delta))).await
 }
 
+#[cfg(not(target_os = "android"))]
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn send_chat_message(
     input: SendChatRequest,
     state: State<'_, AppState>,
-    on_delta: DeltaChannel,
+    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
 ) -> Result<SendChatResult, String> {
+    let on_delta_ref = DeltaChannel::from_tauri(on_delta);
     if input
         .payload
         .mentions
@@ -1763,12 +1765,12 @@ async fn send_chat_message(
         .map(|items| !items.is_empty())
         .unwrap_or(false)
     {
-        return send_user_mention_message_inner(input, state.inner(), &on_delta).await;
+        return send_user_mention_message_inner(input, state.inner(), &on_delta_ref).await;
     }
 
     // 如果是 trigger_only 模式（由调度器调用），直接执行
     if input.trigger_only {
-        return send_chat_message_inner(input, state.inner(), &on_delta).await;
+        return send_chat_message_inner(input, state.inner(), &on_delta_ref).await;
     }
 
     // 用户发言：构造消息并入队
@@ -1945,7 +1947,12 @@ async fn send_chat_message(
     };
 
     let (result_tx, result_rx) = tokio::sync::oneshot::channel();
-    register_chat_event_runtime(state.inner(), &event_id, on_delta.clone(), result_tx)?;
+    register_chat_event_runtime(
+        state.inner(),
+        &event_id,
+        on_delta_ref.clone(),
+        result_tx,
+    )?;
 
     // 入队前先做阻塞判定：空闲且无排队则直写历史；否则入队。
     let ingress = match ingress_chat_event(state.inner(), event) {
@@ -2201,9 +2208,9 @@ async fn send_user_mention_message_inner(
 async fn send_user_mention_message(
     input: SendChatRequest,
     state: State<'_, AppState>,
-    on_delta: DeltaChannel,
+    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
 ) -> Result<SendChatResult, String> {
-    send_user_mention_message_inner(input, state.inner(), &on_delta).await
+    send_user_mention_message_inner(input, state.inner(), &DeltaChannel::from_tauri(on_delta)).await
 }
 
 #[cfg(not(target_os = "android"))]
@@ -2273,7 +2280,7 @@ async fn bind_active_chat_view_stream(
     input: BindActiveChatViewStreamInput,
     state: State<'_, AppState>,
     window: tauri::Window,
-    on_delta: DeltaChannel,
+    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
 ) -> Result<(), String> {
     let window_label = window.label().to_string();
     let conversation_id = input
@@ -2287,7 +2294,7 @@ async fn bind_active_chat_view_stream(
             &window_label,
             &input.binding_id,
             Some(conversation_id),
-            on_delta.clone(),
+            DeltaChannel::from_tauri(on_delta.clone()),
         )?;
         runtime_log_debug(format!(
             "[聊天] 已绑定活动聊天流: window={}, binding_id={}, conversation_id={}",
@@ -2301,7 +2308,7 @@ async fn bind_active_chat_view_stream(
             &window_label,
             &input.binding_id,
             None,
-            on_delta,
+            DeltaChannel::from_tauri(on_delta),
         )?;
         runtime_log_debug(format!(
             "[聊天] 已取消活动聊天流绑定: window={}, binding_id={}",

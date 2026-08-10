@@ -1509,7 +1509,7 @@ async fn activate_main_assistant(
     let stream_start_rebind_emitted = std::sync::Arc::new(std::sync::Mutex::new(false));
     let stream_start_rebind_emitted_for_channel = stream_start_rebind_emitted.clone();
     #[cfg(not(target_os = "android"))]
-    let active_channel: DeltaChannel = tauri::ipc::Channel::new(
+    let active_channel: DeltaChannel = DeltaChannel::from_tauri(tauri::ipc::Channel::new(
         move |body| {
             let parsed_event = match body {
                 tauri::ipc::InvokeResponseBody::Json(json) => {
@@ -1583,7 +1583,7 @@ async fn activate_main_assistant(
             }
             Ok(())
         },
-    );
+    ));
     #[cfg(target_os = "android")]
     let active_channel: DeltaChannel = DeltaChannel::noop();
 
