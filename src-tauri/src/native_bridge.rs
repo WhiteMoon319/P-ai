@@ -77,6 +77,18 @@ fn init_native_runtime(app_root: std::path::PathBuf) -> Result<(), String> {
     // 天然使用本 runtime 的 handle；不再需要 tauri::async_runtime::set 安装全局 handle。
     let state = AppState::new_with_root(app_root)?;
     let ide_context_runtime = IdeContextRuntime::new();
+    // Android 原生模式：启动数据持久化 worker（配置/会话/记忆落盘）。
+    // worker 内部用 tokio::spawn，需在 runtime context 内启动，故用 handle.spawn 包裹。
+    let worker_state = state.clone();
+    let worker_runtime = runtime.handle().clone();
+    worker_runtime.spawn(async move {
+        if let Err(err) = start_app_data_persist_worker(&worker_state) {
+            runtime_log_error(format!("[启动] 应用数据持久化 worker 启动失败: {err}"));
+        }
+        if let Err(err) = start_conversation_persist_worker(&worker_state) {
+            runtime_log_error(format!("[启动] 会话持久化 worker 启动失败: {err}"));
+        }
+    });
     NATIVE_RUNTIME
         .set(Ok(Arc::new(NativeRuntime {
             runtime,
