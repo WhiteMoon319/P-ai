@@ -200,6 +200,7 @@ fn window_layouts_path(data_path: &PathBuf) -> PathBuf {
     app_layout_state_dir(data_path).join(WINDOW_LAYOUTS_FILE_NAME)
 }
 
+#[cfg(not(target_os = "android"))]
 fn append_window_diagnostic_log(app: &AppHandle, message: String) {
     runtime_log_info(message.clone());
 
@@ -295,6 +296,7 @@ fn run_window_layout_save_worker(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn initialize_window_layout_store(app: &AppHandle) {
     if WINDOW_LAYOUT_STORE.get().is_some() {
         return;
@@ -429,6 +431,7 @@ fn unregister_detached_chat_window_by_label(label: &str) -> Option<String> {
     Some(conversation_id)
 }
 
+#[cfg(not(target_os = "android"))]
 fn focus_file_reader_window(app: &AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window(FILE_READER_WINDOW_LABEL)
@@ -442,6 +445,7 @@ fn focus_file_reader_window(app: &AppHandle) -> Result<(), String> {
         .map_err(|err| format!("聚焦文件阅读窗口失败：{err}"))
 }
 
+#[cfg(not(target_os = "android"))]
 fn emit_file_reader_open_path(app: &AppHandle, path: &str) -> Result<(), String> {
     app.emit_to(
         FILE_READER_WINDOW_LABEL,
@@ -451,6 +455,7 @@ fn emit_file_reader_open_path(app: &AppHandle, path: &str) -> Result<(), String>
     .map_err(|err| format!("投递文件阅读请求失败：{err}"))
 }
 
+#[cfg(not(target_os = "android"))]
 fn open_file_reader_window(app: &AppHandle, path: String) -> Result<String, String> {
     let normalized_path = path.trim().to_string();
     if normalized_path.is_empty() {
@@ -467,6 +472,7 @@ fn open_file_reader_window(app: &AppHandle, path: String) -> Result<String, Stri
     Ok(FILE_READER_WINDOW_LABEL.to_string())
 }
 
+#[cfg(not(target_os = "android"))]
 fn show_file_reader_window(app: &AppHandle) -> Result<String, String> {
     if app.get_webview_window(FILE_READER_WINDOW_LABEL).is_some() {
         focus_file_reader_window(app)?;
@@ -477,6 +483,7 @@ fn show_file_reader_window(app: &AppHandle) -> Result<String, String> {
     Ok(FILE_READER_WINDOW_LABEL.to_string())
 }
 
+#[cfg(not(target_os = "android"))]
 fn schedule_file_reader_window_creation(app: &AppHandle, path: String) -> Result<(), String> {
     let app_handle = app.clone();
     std::thread::Builder::new()
@@ -542,12 +549,14 @@ fn schedule_file_reader_window_creation(app: &AppHandle, path: String) -> Result
         .map_err(|err| format!("调度创建文件阅读窗口失败：{err}"))
 }
 
+#[cfg(not(target_os = "android"))]
 fn monitor_logical_size(monitor: &tauri::Monitor) -> tauri::LogicalSize<f64> {
     monitor
         .size()
         .to_logical::<f64>(monitor.scale_factor().max(0.1))
 }
 
+#[cfg(not(target_os = "android"))]
 fn default_window_size_for_monitor(label: &str, monitor: &tauri::Monitor) -> (u32, u32) {
     let fallback = default_window_size(label);
     if matches!(label, "chat") {
@@ -566,6 +575,7 @@ fn logical_to_physical_px(value: u32, scale_factor: f64) -> i32 {
     ((value as f64) * scale_factor.max(0.1)).round() as i32
 }
 
+#[cfg(not(target_os = "android"))]
 fn preferred_window_monitor(window: &tauri::WebviewWindow) -> Option<tauri::Monitor> {
     if let Ok(Some(monitor)) = window.primary_monitor() {
         return Some(monitor);
@@ -580,6 +590,7 @@ fn preferred_window_monitor(window: &tauri::WebviewWindow) -> Option<tauri::Moni
     window.current_monitor().ok().flatten()
 }
 
+#[cfg(not(target_os = "android"))]
 fn resolved_window_size_for_monitor(
     label: &str,
     monitor: &tauri::Monitor,
@@ -606,6 +617,7 @@ fn resolved_window_size_for_monitor(
     )
 }
 
+#[cfg(not(target_os = "android"))]
 fn window_size_is_near_fullscreen(width: u32, height: u32, monitor: &tauri::Monitor) -> bool {
     let monitor_logical = monitor_logical_size(monitor);
     if !monitor_logical.width.is_finite() || !monitor_logical.height.is_finite() {
@@ -619,6 +631,7 @@ fn window_size_is_near_fullscreen(width: u32, height: u32, monitor: &tauri::Moni
     width_ratio >= NEAR_FULLSCREEN_RESTORE_RATIO && height_ratio >= NEAR_FULLSCREEN_RESTORE_RATIO
 }
 
+#[cfg(not(target_os = "android"))]
 fn saved_window_layout_is_near_fullscreen(
     label: &str,
     monitor: &tauri::Monitor,
@@ -635,6 +648,7 @@ fn saved_window_layout_is_near_fullscreen(
     window_size_is_near_fullscreen(width, height, monitor)
 }
 
+#[cfg(not(target_os = "android"))]
 fn webview_window_inner_size_logical(
     window: &tauri::WebviewWindow,
 ) -> Result<(u32, u32), String> {
@@ -651,6 +665,7 @@ fn webview_window_inner_size_logical(
     ))
 }
 
+#[cfg(not(target_os = "android"))]
 fn apply_physical_window_rect(
     window: &tauri::WebviewWindow,
     current: PhysicalWindowRect,
@@ -716,6 +731,7 @@ fn apply_physical_window_rect(
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 fn current_physical_window_rect(
     window: &tauri::WebviewWindow,
 ) -> Result<PhysicalWindowRect, String> {
@@ -733,6 +749,7 @@ fn current_physical_window_rect(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 fn current_monitor_bounds(window: &tauri::WebviewWindow) -> Result<PhysicalWindowRect, String> {
     let monitor = window
         .current_monitor()
@@ -748,6 +765,7 @@ fn current_monitor_bounds(window: &tauri::WebviewWindow) -> Result<PhysicalWindo
 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
+#[cfg(not(target_os = "android"))]
 fn set_chat_window_side_expanded(
     app: AppHandle,
     window: tauri::Window,
@@ -827,6 +845,7 @@ fn set_chat_window_side_expanded(
     Ok(true)
 }
 
+#[cfg(not(target_os = "android"))]
 fn current_window_size_is_near_fullscreen(
     window: &tauri::WebviewWindow,
     monitor: &tauri::Monitor,
@@ -836,6 +855,7 @@ fn current_window_size_is_near_fullscreen(
         .unwrap_or(false)
 }
 
+#[cfg(not(target_os = "android"))]
 fn window_rect_is_visible_on_any_monitor(
     monitors: &[tauri::Monitor],
     x: i32,
@@ -856,6 +876,7 @@ fn window_rect_is_visible_on_any_monitor(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 fn position_window_on_monitor(
     window: &tauri::WebviewWindow,
     label: &str,
@@ -922,6 +943,7 @@ fn restore_window_to_default_drag_size(
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 fn log_offscreen_layout_reset(
     app: &AppHandle,
     label: &str,
@@ -949,6 +971,7 @@ fn log_offscreen_layout_reset(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn ensure_window_visible_after_show(app: &AppHandle, label: &str, reason: &str) {
     let Some(window) = app.get_webview_window(label) else {
         return;
@@ -990,6 +1013,7 @@ fn ensure_window_visible_after_show(app: &AppHandle, label: &str, reason: &str) 
     position_window_on_monitor(&window, label, &monitor, None, None);
 }
 
+#[cfg(not(target_os = "android"))]
 fn apply_window_layout_before_show(app: &AppHandle, label: &str) -> Result<(), String> {
     let window = app
         .get_webview_window(label)
@@ -1090,6 +1114,7 @@ fn apply_window_layout_before_show(app: &AppHandle, label: &str) -> Result<(), S
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 fn persist_window_layout_snapshot_with_reason(
     app: &AppHandle,
     label: &str,
@@ -1137,6 +1162,7 @@ fn persist_window_layout_snapshot_with_reason(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 fn attach_window_layout_persistence(app: &AppHandle) {
     for label in ["main", "chat", "archives"] {
         let Some(window) = app.get_webview_window(label) else {
@@ -1212,6 +1238,7 @@ fn sync_default_tray_icon(_app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 fn show_window(app: &AppHandle, label: &str) -> Result<(), String> {
     let chat_side_expanded = label == "chat"
         && read_chat_window_side_expansion()
@@ -1330,6 +1357,7 @@ fn start_window_drag_with_default_restore(_app: &AppHandle, _label: &str) -> Res
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 fn toggle_window(app: &AppHandle, label: &str) -> Result<(), String> {
     let window = app
         .get_webview_window(label)
@@ -1428,6 +1456,7 @@ fn ensure_hotkey_config_normalized(config: &mut AppConfig) {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn show_chat_entry_window(app: &AppHandle) -> Result<(), String> {
     let target = match state_read_config_cached(app.state::<AppState>().inner()) {
         Ok(mut config) => {
@@ -1442,6 +1471,7 @@ fn show_chat_entry_window(app: &AppHandle) -> Result<(), String> {
     show_window(app, target)
 }
 
+#[cfg(not(target_os = "android"))]
 fn run_tray_action(app: &AppHandle, action: &str) -> Result<(), String> {
     match action {
         "config" => show_window(app, "main"),
@@ -1456,6 +1486,7 @@ fn run_tray_action(app: &AppHandle, action: &str) -> Result<(), String> {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn dispatch_tray_action(app: &AppHandle, source: &'static str, action: &'static str) {
     let app_handle = app.clone();
     let thread_name = format!("tray-action-{action}");
@@ -1487,6 +1518,7 @@ fn dispatch_tray_action(app: &AppHandle, source: &'static str, action: &'static 
 
 const RUNTIME_LOGS_WINDOW_LABEL: &str = "runtime-logs";
 
+#[cfg(not(target_os = "android"))]
 fn show_runtime_logs_window(app: &AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(RUNTIME_LOGS_WINDOW_LABEL) {
         append_window_diagnostic_log(
@@ -1761,6 +1793,7 @@ fn webview_window_url_for_label(label: &str) -> &'static str {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn rebuild_crashed_window(app: &AppHandle, label: &str) {
     runtime_log_error(format!("[WebView心跳] 窗口崩溃恢复开始: label={label}"));
     // 尝试关闭旧窗口
@@ -1813,6 +1846,7 @@ fn rebuild_crashed_window(app: &AppHandle, label: &str) {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn start_webview_heartbeat_monitor(app: &AppHandle) {
     // 初始化所有监控窗口的 pong 时间戳
     for label in WEBVIEW_MONITORED_LABELS {
