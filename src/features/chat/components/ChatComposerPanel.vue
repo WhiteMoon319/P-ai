@@ -751,9 +751,12 @@ const teleportTheme = computed(() => {
 
 function openCreateConversationDialog() {
   if (typeof window === "undefined") {
-    const defaultOption = props.createConversationDepartmentOptions.find((option) =>
+    const options = props.createConversationDepartmentOptions.filter(
+      (option) => !option.personaMissing && !!String(option.agentId || "").trim(),
+    );
+    const defaultOption = options.find((option) =>
       String(option.departmentId || "").trim() === String(props.defaultCreateConversationDepartmentId || "").trim()
-    ) || props.createConversationDepartmentOptions[0];
+    ) || options[0];
     emit("createConversation", {
       departmentId: String(defaultOption?.departmentId || props.defaultCreateConversationDepartmentId || "").trim(),
       agentId: String(defaultOption?.agentId || "").trim() || undefined,
@@ -1227,15 +1230,21 @@ function selectMentionByIndex(index: number) {
   const list = filteredMentionOptions.value;
   if (list.length === 0) return;
   const nextIndex = Math.max(0, Math.min(list.length - 1, index));
+  const target = list[nextIndex];
+  if (!target.mentionable) return;
   mentionFocusIndex.value = nextIndex;
-  applyMention(list[nextIndex]);
+  applyMention(target);
 }
 
 function moveMentionFocus(delta: number) {
   const list = filteredMentionOptions.value;
   if (list.length === 0) return;
-  const next = mentionFocusIndex.value + delta;
-  mentionFocusIndex.value = Math.max(0, Math.min(list.length - 1, next));
+  let next = mentionFocusIndex.value + delta;
+  while (next >= 0 && next < list.length && !list[next].mentionable) {
+    next += delta;
+  }
+  if (next < 0 || next >= list.length) return;
+  mentionFocusIndex.value = next;
   scrollMentionFocusIntoView();
 }
 
@@ -1268,7 +1277,8 @@ function updateMentionState() {
   mentionRange.value = { start: atStart, end: cursor };
   refreshMentionPanelPosition();
   mentionPanelOpen.value = true;
-  mentionFocusIndex.value = 0;
+  const firstMentionable = filteredMentionOptions.value.findIndex((item) => item.mentionable);
+  mentionFocusIndex.value = firstMentionable >= 0 ? firstMentionable : 0;
 }
 
 const modelDropdownOpen = ref(false);

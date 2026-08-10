@@ -99,11 +99,11 @@
                       <span class="max-w-full truncate text-center text-xs leading-tight">
                         {{ option.agentName }}
                       </span>
-                      <span v-if="option.modelMissing" class="text-caption leading-none text-warning">
-                        {{ t("chat.personaModelNotConfigured") }}
-                      </span>
-                      <span v-else-if="option.personaMissing" class="text-caption leading-none text-warning">
+                      <span v-if="option.personaMissing" class="text-caption leading-none text-warning">
                         {{ t("chat.personaRemoved") }}
+                      </span>
+                      <span v-else-if="option.modelMissing" class="text-caption leading-none text-warning">
+                        {{ t("chat.personaModelNotConfigured") }}
                       </span>
                       <span v-else-if="option.unavailable" class="text-caption leading-none text-warning">
                         {{ t("chat.personaRemoved") }}
@@ -398,10 +398,12 @@ watch(
   () => {
     if (!props.autoSelectFirst) return;
     if (selectedValue.value || normalizedOptions.value.length === 0) return;
-    const firstAvailable = normalizedOptions.value.find((option) => !option.unavailable && !option.personaMissing)
-      || normalizedOptions.value[0];
-    emitSelection(firstAvailable || null);
-    const configId = String(firstAvailable?.apiConfigId || "").trim();
+    const firstAvailable = normalizedOptions.value.find(
+      (option) => !option.unavailable && !option.personaMissing && !!String(option.agentId || "").trim(),
+    );
+    if (!firstAvailable) return;
+    emitSelection(firstAvailable);
+    const configId = String(firstAvailable.apiConfigId || "").trim();
     if (configId) {
       emit("update:apiConfigId", configId);
     }

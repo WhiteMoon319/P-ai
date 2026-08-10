@@ -237,6 +237,7 @@ const canSubmitSelectionDelegate = computed(() =>
   delegateDepartmentOptions.value.some((department) =>
     department.departmentId === String(selectionDelegateDepartmentId.value || "").trim()
     && department.agentId === String(selectionDelegateAgentId.value || "").trim()
+    && !department.personaMissing
   )
   && !!String(selectionDelegateGoal.value || "").trim(),
 );
