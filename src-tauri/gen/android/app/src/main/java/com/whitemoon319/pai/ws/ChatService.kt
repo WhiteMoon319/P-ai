@@ -35,6 +35,19 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("conversation.setActive", mapOf("input" to input), SetActiveResult::class.java)
     }
 
+    /** 切换会话首选模型（供应商）。 */
+    suspend fun setConversationPreferredModel(conversationId: String, preferredApiConfigId: String?): Map<String, Any?> {
+        val input = mapOf(
+            "conversationId" to conversationId,
+            "preferredApiConfigId" to preferredApiConfigId,
+        )
+        return client.request(
+            "conversation.setPreferredModel",
+            mapOf("input" to input),
+            object : com.google.gson.reflect.TypeToken<Map<String, Any?>>() {}.type,
+        )
+    }
+
     /** 登记为当前会话的 sidebar 订阅者，使后端把流式 delta / 思考 / 工具事件广播到此连接。 */
     suspend fun resumeSubscription(conversationId: String) {
         client.sendOneWay(

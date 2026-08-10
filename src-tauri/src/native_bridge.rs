@@ -265,6 +265,7 @@ async fn native_dispatch(
         "conversation.messageById" => ide_chat_conversation_message_by_id_command(state, params),
         "conversation.messagesBefore" => ide_chat_conversation_messages_before_command(state, params),
         "conversation.markRead" => ide_chat_mark_conversation_read(state, params),
+        "conversation.setPreferredModel" => ide_chat_set_preferred_model_command(state, params),
         "conversation.runtimeSnapshot" => ide_chat_conversation_runtime_snapshot(state, params),
         "conversation.fastRequestTurns" => ide_chat_conversation_fast_request_turns(state, params),
         "conversation.freshnessSnapshot" => ide_chat_conversation_freshness_snapshot(state, params).await,

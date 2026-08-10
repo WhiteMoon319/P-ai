@@ -722,6 +722,19 @@ class AppViewModel(
         }
     }
 
+    /** 切换当前会话的首选模型（供应商）。 */
+    suspend fun setConversationPreferredModel(conversationId: String, preferredApiConfigId: String?): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                service.setConversationPreferredModel(conversationId, preferredApiConfigId)
+                true
+            } catch (e: Exception) {
+                error.value = "切换模型失败: ${e.message}"
+                false
+            }
+        }
+    }
+
     /** 连接测试：发一条极短请求验证供应商连通性，返回回复文本或错误。 */
     suspend fun testApiConfigConnection(config: com.whitemoon319.pai.model.ApiConfig): String? {
         return withContext(Dispatchers.IO) {
