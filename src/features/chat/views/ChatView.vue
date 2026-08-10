@@ -308,17 +308,26 @@
           />
           <div
             v-else-if="activeConversationRecipientMissing"
-            class="rounded-box border border-warning/30 bg-warning/10 p-3 text-sm"
+            class="rounded-box border border-warning/30 bg-warning/10 p-4 text-sm"
           >
-            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div class="min-w-0">
-                <div class="font-medium">{{ t("chat.recipientMissingTitle") }}</div>
-                <div class="mt-1 text-xs opacity-70">
-                  {{ t("chat.recipientMissingHint") }}
+            <div class="flex flex-col gap-4">
+              <!-- 信息区：图标锚点 + 标题 + 说明，独立成块不被操作区挤压 -->
+              <div class="flex items-start gap-3">
+                <div
+                  class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning"
+                >
+                  <CircleAlert class="h-5 w-5" />
+                </div>
+                <div class="min-w-0">
+                  <div class="font-semibold">{{ t("chat.recipientMissingTitle") }}</div>
+                  <div class="mt-1 text-xs leading-relaxed opacity-70">
+                    {{ t("chat.recipientMissingHint") }}
+                  </div>
                 </div>
               </div>
-              <div class="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
-                <div class="w-full min-w-64 sm:w-72">
+              <!-- 操作区：选择器占剩余宽度，按钮组固定 -->
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div class="min-w-0 flex-1">
                   <DepartmentPersonaSelect
                     v-model:department-id="repairRecipientDepartmentId"
                     v-model:agent-id="repairRecipientAgentId"
@@ -329,24 +338,26 @@
                     :preserve-current="false"
                   />
                 </div>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-primary gap-2"
-                  :disabled="conversationInteractionBusy || !repairRecipientSelectedOption"
-                  @click="handleRebindConversationRecipient"
-                >
-                  <Check class="h-3.5 w-3.5" />
-                  <span>{{ t("chat.recipientMissingApply") }}</span>
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-error gap-2"
-                  :disabled="conversationInteractionBusy"
-                  @click="handleConversationDelete(activeConversationId)"
-                >
-                  <Trash2 class="h-3.5 w-3.5" />
-                  <span>{{ t("common.delete") }}</span>
-                </button>
+                <div class="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-primary gap-2"
+                    :disabled="conversationInteractionBusy || !repairRecipientSelectedOption"
+                    @click="handleRebindConversationRecipient"
+                  >
+                    <Check class="h-3.5 w-3.5" />
+                    <span>{{ t("chat.recipientMissingApply") }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-error btn-outline gap-2"
+                    :disabled="conversationInteractionBusy"
+                    @click="handleConversationDelete(activeConversationId)"
+                  >
+                    <Trash2 class="h-3.5 w-3.5" />
+                    <span>{{ t("common.delete") }}</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -602,7 +613,7 @@ import {
   useChatComposerAppearance,
   visibleChatComposerContextGroups,
 } from "../../shell/composables/use-chat-composer-appearance";
-import { ArrowDownToLine, Check, ChevronsDown, ChevronsUp, Copy, History, Inbox, ListTodo, Network, Trash2, Undo2, Wrench, X } from "@lucide/vue";
+import { ArrowDownToLine, Check, ChevronsDown, ChevronsUp, CircleAlert, Copy, History, Inbox, ListTodo, Network, Trash2, Undo2, Wrench, X } from "@lucide/vue";
 import {
   copyTransportChatImageToClipboard,
   invokeTauri,
