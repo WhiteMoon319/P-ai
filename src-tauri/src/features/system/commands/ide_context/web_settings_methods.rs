@@ -436,3 +436,156 @@ async fn test_text_connection_inner(
 }
 
 include!("remote_im_methods.rs");
+
+fn ide_chat_save_chat_settings_for_web_settings(
+    state: &AppState,
+    app: &NativeAppHandle,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ChatSettings>(params, "input")?;
+    let patch = ChatSettingsPatch {
+        assistant_department_agent_id: Some(input.assistant_department_agent_id),
+        user_alias: Some(input.user_alias),
+        response_style_id: Some(input.response_style_id),
+        pdf_read_mode: Some(input.pdf_read_mode),
+        background_voice_screenshot_keywords: Some(input.background_voice_screenshot_keywords),
+        background_voice_screenshot_mode: Some(input.background_voice_screenshot_mode),
+        instruction_presets: Some(input.instruction_presets),
+    };
+    ide_chat_serialize(patch_chat_settings_inner(patch, app, state)?)
+}
+
+fn ide_chat_save_conversation_api_settings_for_web_settings(
+    state: &AppState,
+    app: &NativeAppHandle,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ConversationApiSettings>(params, "input")?;
+    let patch = ConversationApiSettingsPatch {
+        assistant_department_api_config_id: Some(input.assistant_department_api_config_id),
+        vision_api_config_id: Some(input.vision_api_config_id),
+        tool_review_api_config_id: Some(input.tool_review_api_config_id),
+        stt_api_config_id: Some(input.stt_api_config_id),
+        stt_auto_send: Some(input.stt_auto_send),
+    };
+    ide_chat_serialize(patch_conversation_api_settings_inner(patch, app, state)?)
+}
+
+fn ide_chat_set_github_update_method_for_web_settings(
+    state: &AppState,
+    app: &NativeAppHandle,
+    params: Value,
+) -> Result<Value, String> {
+    let update_method = match params {
+        Value::Object(mut map) => map
+            .remove("updateMethod")
+            .or_else(|| map.remove("update_method"))
+            .and_then(|value| value.as_str().map(ToOwned::to_owned))
+            .unwrap_or_default(),
+        _ => String::new(),
+    };
+    ide_chat_serialize(set_github_update_method_inner(update_method, app, state)?)
+}
+
+fn ide_chat_set_skipped_github_update_version_for_web_settings(
+    state: &AppState,
+    app: &NativeAppHandle,
+    params: Value,
+) -> Result<Value, String> {
+    let version = match params {
+        Value::Object(mut map) => map
+            .remove("version")
+            .and_then(|value| value.as_str().map(ToOwned::to_owned))
+            .unwrap_or_default(),
+        _ => String::new(),
+    };
+    ide_chat_serialize(set_skipped_github_update_version_inner(version, app, state)?)
+}
+
+fn ide_chat_convert_private_agent_to_main_for_web_settings(
+    state: &AppState,
+    app: &NativeAppHandle,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ConvertPrivateAgentToMainInput>(params, "input")?;
+    ide_chat_serialize(convert_private_agent_to_main_inner(input, app, state)?)
+}
+
+fn api_config_create_inner(
+    input: ApiConfig,
+    app: &NativeAppHandle,
+    state: &AppState,
+    ide_context_runtime: &IdeContextRuntime,
+) -> Result<AppConfig, String> {
+    let id = input.id.trim().to_string();
+    if id.is_empty() {
+        return Err("API config ID is required.".to_string());
+    }
+    let mut config = load_config_inner(state)?;
+    if config.api_configs.iter().any(|item| item.id == id) {
+        return Err(format!("API config '{id}' already exists."));
+    }
+    config.api_configs.push(input);
+    save_config_inner(config, app, state, ide_context_runtime)
+}
+
+fn api_config_update_inner(
+    input: ApiConfig,
+    app: &NativeAppHandle,
+    state: &AppState,
+    ide_context_runtime: &IdeContextRuntime,
+) -> Result<AppConfig, String> {
+    let id = input.id.trim().to_string();
+    if id.is_empty() {
+        return Err("API config ID is required.".to_string());
+    }
+    let mut config = load_config_inner(state)?;
+    let idx = config
+        .api_configs
+        .iter()
+        .position(|item| item.id == id)
+        .ok_or_else(|| format!("API config '{id}' not found."))?;
+    config.api_configs[idx] = input;
+    save_config_inner(config, app, state, ide_context_runtime)
+}
+
+fn api_config_delete_inner(
+    input: ApiConfigDeleteInput,
+    app: &NativeAppHandle,
+    state: &AppState,
+    ide_context_runtime: &IdeContextRuntime,
+) -> Result<AppConfig, String> {
+    let id = input.id.trim().to_string();
+    if id.is_empty() {
+        return Err("API config ID is required.".to_string());
+    }
+    let mut config = load_config_inner(state)?;
+    let before = config.api_configs.len();
+    config.api_configs.retain(|item| item.id != id);
+    if config.api_configs.len() == before {
+        return Err(format!("API config '{id}' not found."));
+    }
+    if config.assistant_department_api_config_id == id {
+        config.assistant_department_api_config_id = String::new();
+    }
+    if config.selected_api_config_id == id {
+        config.selected_api_config_id = String::new();
+    }
+    if config.vision_api_config_id.as_deref() == Some(id.as_str()) {
+        config.vision_api_config_id = None;
+    }
+    if config.tool_review_api_config_id.as_deref() == Some(id.as_str()) {
+        config.tool_review_api_config_id = None;
+    }
+    if config.stt_api_config_id.as_deref() == Some(id.as_str()) {
+        config.stt_api_config_id = None;
+        config.stt_auto_send = false;
+    }
+    for department in &mut config.departments {
+        department.api_config_ids.retain(|item| item != &id);
+        if department.api_config_id == id {
+            department.api_config_id = department.api_config_ids.first().cloned().unwrap_or_default();
+        }
+    }
+    save_config_inner(config, app, state, ide_context_runtime)
+}

@@ -536,3 +536,28 @@ fn save_config_inner(
     stop_removed_remote_im_channel_runtimes(state.clone(), removed_remote_im_channels);
     Ok(runtime_config)
 }
+
+fn set_skipped_github_update_version_inner(
+    version: String,
+    app: &NativeAppHandle,
+    state: &AppState,
+) -> Result<AppConfig, String> {
+    let normalized = normalize_skipped_github_update_version(&version);
+    let mut config = state_read_config_cached(state)?;
+    normalize_app_config(&mut config);
+    if config.skipped_github_update_version != normalized {
+        config.skipped_github_update_version = normalized.clone();
+        state_write_config_cached(state, &config)?;
+        runtime_log_warn(format!("[自动更新] 已保存跳过版本：version={normalized}"));
+    }
+    #[cfg(not(target_os = "android"))]
+    if let Some(inner) = &app.inner {
+        sync_update_state_from_skip_version(inner, &normalized);
+    }
+    #[cfg(target_os = "android")]
+    sync_update_state_from_skip_version(app, &normalized);
+    let data = state_read_agents_runtime_snapshot(state)?;
+    let runtime_config = runtime_config_with_private_organization(state, &config, &data)?;
+    let _ = app.emit("easy-call:config-updated", &runtime_config);
+    Ok(runtime_config)
+}
