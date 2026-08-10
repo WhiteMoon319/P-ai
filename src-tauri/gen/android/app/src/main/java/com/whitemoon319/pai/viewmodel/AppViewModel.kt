@@ -36,6 +36,7 @@ class AppViewModel(
     context: Context,
     private val scope: CoroutineScope,
 ) {
+    private val appContext: Context = context.applicationContext
     private val prefs = context.getSharedPreferences("pai_chat_cache", Context.MODE_PRIVATE)
     private val client = PaiWsClient(scope)
     private val service = ChatService(client)
@@ -354,6 +355,77 @@ class AppViewModel(
                 }
                 finalizeStreaming()
             }
+            "app.notification" -> {
+                handleNativeNotification(params)
+            }
+            "app.notification.clear" -> {
+                handleNativeNotificationClear(params)
+            }
+            "app.keepAlive" -> {
+                handleNativeKeepAlive(params)
+            }
+        }
+    }
+
+    // ---------------- 原生通知（Rust live_update 事件队列） ----------------
+
+    private fun handleNativeNotification(params: JsonElement?) {
+        try {
+            val obj = params?.asJsonObject ?: return
+            val id = obj.get("id")?.takeIf { !it.isJsonNull }?.asInt ?: return
+            val title = obj.get("title")?.takeIf { !it.isJsonNull }?.asString ?: return
+            val body = obj.get("body")?.takeIf { !it.isJsonNull }?.asString ?: return
+            val ongoing = obj.get("ongoing")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
+            val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            val channelId = "pai_live_updates"
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                val channel = android.app.NotificationChannel(
+                    channelId,
+                    "PAI 实时更新",
+                    android.app.NotificationManager.IMPORTANCE_DEFAULT
+                ).apply { description = "会话回复与目标进度通知" }
+                manager.createNotificationChannel(channel)
+            }
+            val builder = android.app.Notification.Builder(appContext, channelId)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setOngoing(ongoing)
+                .setAutoCancel(!ongoing)
+            val shortText = obj.get("shortText")?.takeIf { !it.isJsonNull }?.asString
+            if (!shortText.isNullOrEmpty()) {
+                builder.setSubText(shortText)
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                builder.setColor(0xFF4C6FFF.toInt())
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                builder.setChannelId(channelId)
+            }
+            manager.notify(id, builder.build())
+        } catch (e: Exception) {
+            android.util.Log.w("PaiNotify", "原生通知发送失败: ${e.message}")
+        }
+    }
+
+    private fun handleNativeNotificationClear(params: JsonElement?) {
+        try {
+            val obj = params?.asJsonObject ?: return
+            val id = obj.get("id")?.takeIf { !it.isJsonNull }?.asInt ?: return
+            val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            manager.cancel(id)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun handleNativeKeepAlive(params: JsonElement?) {
+        // 保活通知：维持/移除前台服务感知的常驻通知。
+        // 当前实现与普通通知共用通道；active=false 时由前端自行决定是否清空常驻通知。
+        try {
+            val obj = params?.asJsonObject ?: return
+            val active = obj.get("active")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
+            android.util.Log.d("PaiNotify", "keepAlive active=$active")
+        } catch (_: Exception) {
         }
     }
 
