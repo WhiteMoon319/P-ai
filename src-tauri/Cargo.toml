@@ -15,6 +15,8 @@ name = "easy_call_ai_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
+
+[target.'cfg(not(target_os = "android"))'.build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
@@ -24,10 +26,6 @@ chardetng = "1.0.0"
 encoding_rs = "0.8"
 toml = "1.1.2"
 directories = "6.0.0"
-tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
-tauri-plugin-dialog = "2"
-tauri-plugin-notification = { path = "vendor/tauri-plugin-notification" }
-tauri-plugin-workspace-io = { path = "vendor/tauri-plugin-workspace-io" }
 time = { version = "0.3.53", features = ["local-offset"] }
 rmcp = { version = "3.0.1", features = ["client", "macros", "transport-child-process", "transport-io", "transport-streamable-http-client", "transport-streamable-http-client-reqwest"] }
 tokio = { version = "1.52.1", features = ["rt-multi-thread", "sync", "time"] }
@@ -82,6 +80,10 @@ reqwest = { version = "0.13.4", default-features = false, features = ["hickory-d
 # dingtalk-stream 依赖 tokio-tungstenite 0.28（默认 native-tls），会拉入 openssl-sys；
 # Android 交叉编译无法链接 OpenSSL，且 lib.rs 已用 dingtalk_stream_android_stub 提供同接口空实现。
 dingtalk-stream = "0.1.5"
+tauri = { version = "2", features = ["protocol-asset", "tray-icon"], optional = true }
+tauri-plugin-dialog = "2"
+tauri-plugin-notification = { path = "vendor/tauri-plugin-notification" }
+tauri-plugin-workspace-io = { path = "vendor/tauri-plugin-workspace-io" }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
@@ -93,7 +95,7 @@ webbrowser = "1.0"
 
 [features]
 default = ["custom-protocol"]
-custom-protocol = ["tauri/custom-protocol"]
+custom-protocol = ["dep:tauri"]
 
 [profile.dev]
 debug = 1
