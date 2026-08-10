@@ -48,6 +48,21 @@ class ChatService(private val client: PaiWsClient) {
         )
     }
 
+    /** 语音转文字（STT）。 */
+    suspend fun sttTranscribe(mime: String, bytesBase64: String, sttApiConfigId: String? = null): String? {
+        val input = mapOf(
+            "mime" to mime,
+            "bytesBase64" to bytesBase64,
+            "sttApiConfigId" to sttApiConfigId,
+        )
+        val result: Map<String, Any?> = client.request(
+            "stt_transcribe",
+            input,
+            object : com.google.gson.reflect.TypeToken<Map<String, Any?>>() {}.type,
+        )
+        return result["text"]?.toString()
+    }
+
     /** 登记为当前会话的 sidebar 订阅者，使后端把流式 delta / 思考 / 工具事件广播到此连接。 */
     suspend fun resumeSubscription(conversationId: String) {
         client.sendOneWay(

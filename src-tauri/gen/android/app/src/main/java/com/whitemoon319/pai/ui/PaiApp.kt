@@ -32,6 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -66,6 +67,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -505,7 +507,44 @@ fun ChatScreen(
                     placeholder = { Text("输入消息…") },
                     maxLines = 4,
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(4.dp))
+                // 语音输入：麦克风按钮（按住录音/点击切换），识别结果回填输入框
+                val isRecording by vm.isRecording.collectAsState()
+                val recognized by vm.recognizedText.collectAsState()
+                LaunchedEffect(recognized) {
+                    if (!recognized.isNullOrBlank()) {
+                        input = input + recognized!!
+                        vm.recognizedText.value = null
+                    }
+                }
+                val audioPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+                ) { granted ->
+                    if (granted) vm.startRecording()
+                    else vm.error.value = "需要录音权限才能使用语音输入"
+                }
+                val ctx = LocalContext.current
+                IconButton(onClick = {
+                    if (isRecording) {
+                        vm.stopAndTranscribe()
+                    } else {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M &&
+                            ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                            != android.content.pm.PackageManager.PERMISSION_GRANTED
+                        ) {
+                            audioPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                        } else {
+                            vm.startRecording()
+                        }
+                    }
+                }) {
+                    Icon(
+                        if (isRecording) Icons.Default.Clear else Icons.Default.Mic,
+                        contentDescription = if (isRecording) "停止录音" else "语音输入",
+                        tint = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
                 if (isStreaming) {
                     IconButton(onClick = { scope.launch { vm.stopStreaming() } }) {
                         Icon(Icons.Default.Clear, contentDescription = "停止")

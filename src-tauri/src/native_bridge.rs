@@ -309,6 +309,7 @@ async fn native_dispatch(
         "api_config.delete" => ide_chat_serialize(api_config_delete_inner(
             ide_chat_parse_param_field::<ApiConfigDeleteInput>(params, "input")?, &native_app, state, ide_context_runtime)?),
         "check_tools_status" => ide_chat_check_tools_status_for_web_settings(state, params),
+        "stt_transcribe" => ide_chat_stt_transcribe_for_web_settings(state, params).await,
         "app.bootstrapSnapshot" => ide_chat_load_app_bootstrap_snapshot_for_web_settings(state),
         "get_android_workspace_status" => ide_chat_serialize(get_android_workspace_status_ws_inner(state)?),
         "init_android_workspace" => ide_chat_serialize(init_android_workspace_ws_inner(state, Some(&native_app)).await?),

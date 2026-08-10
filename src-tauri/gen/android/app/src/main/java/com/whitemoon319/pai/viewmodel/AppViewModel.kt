@@ -59,6 +59,8 @@ class AppViewModel(
      */
     val activitySteps = MutableStateFlow<List<ActivityStep>>(emptyList())
     val isStreaming = MutableStateFlow(false)
+    val isRecording = MutableStateFlow(false)
+    val recognizedText = MutableStateFlow<String?>(null)
     val loading = MutableStateFlow(false)
     val error = MutableStateFlow<String?>(null)
 
@@ -731,6 +733,68 @@ class AppViewModel(
             } catch (e: Exception) {
                 error.value = "切换模型失败: ${e.message}"
                 false
+            }
+        }
+    }
+
+    // ---------------- 语音输入 ----------------
+
+    private var audioRecorder: android.media.MediaRecorder? = null
+    private var audioFile: java.io.File? = null
+
+    /** 开始录音（需先在 UI 层申请 RECORD_AUDIO 权限）。 */
+    fun startRecording() {
+        if (isRecording.value) return
+        try {
+            val dir = java.io.File(appContext.cacheDir, "stt").apply { mkdirs() }
+            val file = java.io.File(dir, "rec_${System.currentTimeMillis()}.m4a")
+            val recorder = android.media.MediaRecorder()
+            recorder.setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
+            recorder.setOutputFormat(android.media.MediaRecorder.OutputFormat.MPEG_4)
+            recorder.setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC)
+            recorder.setAudioSamplingRate(16000)
+            recorder.setAudioEncodingBitRate(64000)
+            recorder.setOutputFile(file.absolutePath)
+            recorder.prepare()
+            recorder.start()
+            audioRecorder = recorder
+            audioFile = file
+            isRecording.value = true
+        } catch (e: Exception) {
+            error.value = "录音启动失败: ${e.message}"
+        }
+    }
+
+    /** 停止录音并转文字，成功后把文本写入 error 状态供 UI 回填。 */
+    fun stopAndTranscribe() {
+        val recorder = audioRecorder ?: return
+        val file = audioFile
+        try {
+            recorder.stop()
+            recorder.release()
+        } catch (e: Exception) {
+            // MediaRecorder.stop 可能因时长过短抛异常，忽略
+            error.value = "录音过短或失败: ${e.message}"
+        } finally {
+            audioRecorder = null
+            audioFile = null
+            isRecording.value = false
+        }
+        if (file == null || !file.exists() || file.length() == 0L) return
+        scope.launch(Dispatchers.IO) {
+            try {
+                val bytes = file.readBytes()
+                val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                val text = service.sttTranscribe("audio/mp4", b64, null)
+                if (!text.isNullOrBlank()) {
+                    withContext(Dispatchers.Main) { recognizedText.value = text }
+                } else {
+                    error.value = "语音识别无结果"
+                }
+            } catch (e: Exception) {
+                error.value = "语音识别失败: ${e.message}"
+            } finally {
+                file.delete()
             }
         }
     }
