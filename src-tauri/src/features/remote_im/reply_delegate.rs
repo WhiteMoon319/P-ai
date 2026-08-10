@@ -741,7 +741,7 @@ fn spawn_remote_im_reply_delegate(
     let trigger_message_id = trigger_message.id.clone();
     let session_info = session_info.clone();
     let contact_id_for_task = contact_id.to_string();
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         let permit = match state_clone
             .remote_im_reply_delegate_semaphore
             .clone()

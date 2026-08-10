@@ -42,7 +42,7 @@ async fn write_utf8_text_file_to_path(input: WriteUtf8TextFileInput) -> Result<(
     let path = normalize_export_path(&input.path)?;
     let text = input.text;
     let byte_len = text.as_bytes().len();
-    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
         let started_at = std::time::Instant::now();
         ensure_share_export_parent_dir(&path)?;
         std::fs::write(&path, text.as_bytes())
@@ -73,7 +73,7 @@ async fn write_base64_file_to_path(input: WriteBase64FileInput) -> Result<(), St
         bytes.len()
     ));
     let write_path = path.clone();
-    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
         let started_at = std::time::Instant::now();
         ensure_share_export_parent_dir(&write_path)?;
         std::fs::write(&write_path, bytes)

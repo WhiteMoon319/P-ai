@@ -365,7 +365,7 @@ fn attachment_transfer_session_should_expire(session: &AttachmentTransferSession
 }
 
 fn attachment_transfer_schedule_expiration(transfer_id: String) {
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(
                 ATTACHMENT_TRANSFER_IDLE_TIMEOUT_SECS,

@@ -78,7 +78,7 @@ impl dingtalk_stream::AsyncChatbotHandler for EasyCallDingtalkAsyncHandler {
     fn pre_start(&self) {
         let manager = self.manager.clone();
         let channel_id = self.channel.id.clone();
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             manager
                 .add_log(
                     &channel_id,
@@ -108,7 +108,7 @@ impl dingtalk_stream::AsyncChatbotHandler for EasyCallDingtalkAsyncHandler {
             .unwrap_or_default();
         let raw = callback_message.data.clone();
 
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             manager
                 .add_log(
                     &channel.id,

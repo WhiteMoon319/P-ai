@@ -15,7 +15,7 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
     partial_assistant_text: &str,
     partial_activity_reasoning_text: &str,
     chat_session_key: &str,
-    pending_tool_group_result_persists: &mut Vec<tauri::async_runtime::JoinHandle<Result<(), String>>>,
+    pending_tool_group_result_persists: &mut Vec<tokio::task::JoinHandle<Result<(), String>>>,
 ) -> Result<bool, String> {
     let Some(state) = state else {
         return Ok(false);

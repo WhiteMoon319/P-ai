@@ -98,7 +98,7 @@ static IDE_CONTEXT_BRIDGE_SHUTDOWN: OnceLock<
     Arc<Mutex<Option<tokio_util::sync::CancellationToken>>>,
 > = OnceLock::new();
 static IDE_CONTEXT_BRIDGE_SERVER_TASK: OnceLock<
-    Arc<Mutex<Option<tauri::async_runtime::JoinHandle<()>>>>,
+    Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
 > = OnceLock::new();
 static IDE_CONTEXT_PORT_SERVICE_CORE: OnceLock<Arc<LocalPortServiceCore>> = OnceLock::new();
 static IDE_CONTEXT_CHAT_CLIENTS: OnceLock<
@@ -968,7 +968,7 @@ mod ide_context_tests {
         IDE_CONTEXT_BRIDGE_STARTED.store(true, Ordering::SeqCst);
 
         let shutdown_token = ide_context_bridge_create_shutdown_token();
-        let task = tauri::async_runtime::spawn(async move {
+        let task = tokio::spawn(async move {
             shutdown_token.cancelled().await;
         });
         ide_context_bridge_set_server_task(task);

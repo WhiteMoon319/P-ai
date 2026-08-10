@@ -331,7 +331,7 @@ impl WeixinOcManager {
         let keepalive_credentials = credentials;
         let keepalive_key = key;
         let typing_states = self.typing_states.clone();
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             let mut interval = tokio::time::interval_at(
                 tokio::time::Instant::now() + std::time::Duration::from_secs(30),
                 std::time::Duration::from_secs(30),
@@ -548,7 +548,7 @@ impl WeixinOcManager {
             .insert(channel_id.clone(), stop_tx);
         let manager = weixin_oc_manager();
         let task_channel_id = channel_id.clone();
-        let handle = tauri::async_runtime::spawn(async move {
+        let handle = tokio::spawn(async move {
             manager
                 .add_log(&task_channel_id, "info", "[个人微信] 轮询任务开始")
                 .await;

@@ -177,7 +177,7 @@ fn remote_im_append_channel_log(channel_id: &str, level: &str, message: String) 
     if channel_id.is_empty() || level.is_empty() || message.is_empty() {
         return;
     }
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         onebot_v11_ws_manager()
             .add_log(&channel_id, &level, &message)
             .await;
@@ -203,7 +203,7 @@ fn remote_im_append_contact_log(contact: &RemoteImContact, level: &str, message:
         return;
     }
     let platform = contact.platform.clone();
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         match platform {
             RemoteImPlatform::Dingtalk => {
                 dingtalk_stream_manager()

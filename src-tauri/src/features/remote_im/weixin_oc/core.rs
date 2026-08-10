@@ -301,7 +301,7 @@ pub struct WeixinOcManager {
     >,
     tasks: std::sync::Arc<
         tokio::sync::RwLock<
-            std::collections::HashMap<String, tauri::async_runtime::JoinHandle<()>>,
+            std::collections::HashMap<String, tokio::task::JoinHandle<()>>,
         >,
     >,
     context_tokens: std::sync::Arc<

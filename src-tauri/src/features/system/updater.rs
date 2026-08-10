@@ -1886,7 +1886,7 @@ fn start_github_auto_update_worker(app: AppHandle) {
     if GITHUB_AUTO_UPDATE_WORKER_STARTED.swap(true, Ordering::SeqCst) {
         return;
     }
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         tokio::time::sleep(tokio::time::Duration::from_secs(
             GITHUB_AUTO_UPDATE_STARTUP_DELAY_SECONDS,
         ))

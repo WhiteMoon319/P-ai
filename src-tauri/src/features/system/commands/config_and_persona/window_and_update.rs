@@ -696,7 +696,7 @@ fn stop_removed_remote_im_channel_runtimes(
     if channels.is_empty() {
         return;
     }
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         for channel in channels {
             let channel_id = channel.id.trim().to_string();
             if channel_id.is_empty() {
@@ -800,7 +800,7 @@ fn save_config_inner(
             "[网络访问] 配置已关闭，停止 Web 访问服务: port={}",
             base_config.web_access_port
         ));
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             shutdown_web_access_server().await;
         });
     } else if main_config.web_access_enabled
@@ -819,7 +819,7 @@ fn save_config_inner(
         let app = app.clone();
         let state = state.clone();
         let ide_context_runtime = ide_context_runtime.clone();
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             restart_web_access_server(
                 app,
                 state,

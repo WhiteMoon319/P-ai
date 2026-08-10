@@ -332,7 +332,7 @@ async fn frontend_ready_start_remote_im_services(app: AppHandle) -> Result<bool,
     let startup_state = app.state::<AppState>().inner().clone();
     refresh_conversation_meta_after_migration(startup_state.clone()).await;
     runtime_log_info(format!("[启动] 迁移门闩已完成，开始异步启动后台服务"));
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         start_background_services_after_frontend_ready(app, startup_state).await;
     });
     Ok(true)
@@ -399,7 +399,7 @@ async fn run_deferred_setup(app_handle: AppHandle) {
         runtime_log_error(format!("[启动-延迟] 启动会话后台持久化服务失败: {err}"));
     }
     let recovery_state = app_state.inner().clone();
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         for attempt in 0..6u8 {
             match remote_im_recover_all_group_reply_delivery_markers(&recovery_state) {
                 Ok((recovered, 0)) => {
@@ -468,7 +468,7 @@ async fn run_deferred_setup(app_handle: AppHandle) {
     // (补未向量化的记忆、清孤儿 chunk)。异步执行, 不阻塞启动; 失败由日志记录,
     // 因记忆增删也会触发增量, 下次启动会再次兜底。
     let sync_data_path = app_state.data_path.clone();
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         let started = std::time::Instant::now();
         let result = tokio::task::spawn_blocking(move || {
             memory_sync_vectors_on_startup(&sync_data_path)
@@ -548,7 +548,7 @@ async fn start_background_services_after_frontend_ready(
     startup_state: AppState,
 ) {
     start_task_scheduler(startup_state.clone());
-    tauri::async_runtime::spawn({
+    tokio::spawn({
         let probe_state = startup_state.clone();
         async move {
             probe_release_source_once(&probe_state).await;
@@ -664,7 +664,7 @@ async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
     for channel in dingtalk_channels {
         let state_clone = event_state.clone();
         let manager = dingtalk_stream_manager();
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             let channel_id = channel.id.clone();
             manager
                 .add_log(&channel_id, "info", "[启动] 前端就绪，准备启动钉钉 Stream 渠道")
@@ -711,7 +711,7 @@ async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
         .collect();
     for channel in weixin_channels {
         let state_clone = event_state.clone();
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             weixin_oc_manager()
                 .add_log(&channel.id, "info", "[启动] 前端就绪，准备启动个人微信渠道")
                 .await;
@@ -1329,7 +1329,7 @@ pub fn run() {
 
             // ========== 阶段 2：异步完成剩余初始化 ==========
             let deferred_handle = app_handle.clone();
-            tauri::async_runtime::spawn(async move {
+            tokio::spawn(async move {
                 run_deferred_setup(deferred_handle).await;
             });
 

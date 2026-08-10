@@ -372,7 +372,7 @@ async fn ide_context_chat_ws_handle_connection(
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
     let (outbound_tx, mut outbound_rx) = tokio::sync::mpsc::unbounded_channel::<serde_json::Value>();
     let writer_client_id = client_id.clone();
-    let writer = tauri::async_runtime::spawn(async move {
+    let writer = tokio::spawn(async move {
         while let Some(message) = outbound_rx.recv().await {
             if ws_sender
                 .send(tokio_tungstenite::tungstenite::Message::Text(message.to_string().into()))

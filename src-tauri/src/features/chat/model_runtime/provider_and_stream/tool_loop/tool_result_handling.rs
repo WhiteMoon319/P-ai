@@ -47,7 +47,7 @@ async fn apply_compaction_preserved_gate_after_tool_round(
     resolved_api: &ResolvedApiConfig,
     on_delta: &tauri::ipc::Channel<AssistantDeltaEvent>,
     chat_session_key: &str,
-    pending_tool_group_result_persists: &mut Vec<tauri::async_runtime::JoinHandle<Result<(), String>>>,
+    pending_tool_group_result_persists: &mut Vec<tokio::task::JoinHandle<Result<(), String>>>,
     trusted_input_tokens: Option<u64>,
     turn_text: &str,
     turn_reasoning: &str,
@@ -373,7 +373,7 @@ fn persist_completed_tool_group_result(
 }
 
 async fn await_pending_tool_group_result_persists(
-    pending_tool_group_result_persists: &mut Vec<tauri::async_runtime::JoinHandle<Result<(), String>>>,
+    pending_tool_group_result_persists: &mut Vec<tokio::task::JoinHandle<Result<(), String>>>,
     chat_session_key: &str,
     reason: &str,
 ) -> Result<(), String> {

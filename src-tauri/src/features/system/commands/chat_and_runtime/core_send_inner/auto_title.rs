@@ -167,7 +167,7 @@ fn spawn_conversation_auto_title_generation(
     conversation_id: String,
     user_message: String,
 ) {
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         let started_at = std::time::Instant::now();
         let conversation_id = conversation_id.trim().to_string();
         if conversation_id.is_empty() {

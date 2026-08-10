@@ -28,7 +28,7 @@ pub struct DingtalkStreamManager {
         tokio::sync::RwLock<std::collections::HashMap<String, tokio::sync::watch::Sender<bool>>>,
     >,
     tasks: std::sync::Arc<
-        tokio::sync::RwLock<std::collections::HashMap<String, tauri::async_runtime::JoinHandle<()>>>,
+        tokio::sync::RwLock<std::collections::HashMap<String, tokio::task::JoinHandle<()>>>,
     >,
     port_service: std::sync::Arc<LocalPortServiceCore>,
 }
@@ -173,7 +173,7 @@ impl DingtalkStreamManager {
 
         let task_channel_id = channel_id.clone();
         let manager = dingtalk_stream_manager();
-        let handle = tauri::async_runtime::spawn(async move {
+        let handle = tokio::spawn(async move {
             manager
                 .add_log(
                     &task_channel_id,

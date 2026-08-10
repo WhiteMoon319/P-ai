@@ -413,7 +413,7 @@ fn schedule_remote_im_persisted_event_observe_retry(
     }
     let delay_seconds = 5u64.saturating_mul(1u64 << attempt.min(3));
     let state = state.clone();
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(delay_seconds)).await;
         let Some(sender) = event.sender_info.as_ref() else {
             return;

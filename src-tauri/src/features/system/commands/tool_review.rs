@@ -2164,7 +2164,7 @@ async fn submit_tool_review_code_internal(
     let source_department_id_owned = source_department_id.clone();
     let target_department_id_owned = target_department_id.clone();
     let target_agent_id_owned = target_agent_id.clone();
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         runtime_log_info(format!(
             "[工具审查][后端] 开始代码审查子任务 conversation_id={} scope={} report_id={} target={}",
             conversation_id_owned,

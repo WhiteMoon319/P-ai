@@ -210,7 +210,7 @@ fn mcp_status_from_runtime_error(error: &str) -> &'static str {
 
 fn mcp_start_supervisor_probe_for_server(state: AppState, server: McpServerConfig, trigger: &'static str) {
     let semaphore = mcp_supervisor_semaphore_for_server(&server);
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         let permit = match semaphore.acquire_owned().await {
             Ok(permit) => permit,
             Err(err) => {

@@ -2039,7 +2039,7 @@ fn start_app_data_persist_worker(state: &AppState) -> Result<(), String> {
         return Ok(());
     }
     let state_clone = state.clone();
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         loop {
             state_clone.app_data_persist_notify.notified().await;
             tokio::time::sleep(std::time::Duration::from_millis(120)).await;
@@ -2135,7 +2135,7 @@ fn start_conversation_persist_worker(state: &AppState) -> Result<(), String> {
         return Ok(());
     }
     let state_clone = state.clone();
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         loop {
             state_clone.conversation_persist_notify.notified().await;
             tokio::time::sleep(std::time::Duration::from_millis(120)).await;

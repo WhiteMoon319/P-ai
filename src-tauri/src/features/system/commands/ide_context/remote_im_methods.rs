@@ -97,7 +97,7 @@ async fn remote_im_restart_channel_inner(
         let state_clone = state.clone();
         let manager = dingtalk_stream_manager();
         let channel_clone = remote_im_channel_with_effective_credentials(&state_clone, &channel)?;
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             if let Err(err) = manager
                 .reconcile_channel_runtime(&channel_clone, state_clone)
                 .await

@@ -703,7 +703,7 @@ fn maybe_enqueue_overdue_task_after_idle(
         candidate.task.task_id,
         conversation_id
     ));
-    tauri::async_runtime::spawn({
+    tokio::spawn({
         let state = state.clone();
         async move {
             if let Err(err) = task_dispatch_due_task(&state, &candidate.task, &candidate.session).await {
@@ -783,7 +783,7 @@ async fn task_scheduler_wait(state: &AppState) -> Result<(), String> {
 }
 
 fn start_task_scheduler(state: AppState) {
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         loop {
             let tick_started_at = std::time::Instant::now();
             if let Err(err) = task_scheduler_tick(&state).await {

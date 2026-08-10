@@ -1214,7 +1214,7 @@ fn notify_desktop_operation_started(state: &AppState, script: &str) {
         .count();
     let body = format!("模型即将模拟鼠标/键盘操作你的电脑（脚本共 {action_count} 步），请注意不要与它同时操作。");
     // 异步发送，不等待通知提交，不阻塞工具执行；发送失败仅记录日志。
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         if let Err(err) = send_native_notification(&app_handle, "PAI 正在操作你的电脑", &body, false)
         {
             runtime_log_warn(format!("[桌面操作提醒] 通知发送失败：{err}"));

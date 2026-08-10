@@ -216,7 +216,7 @@ include!("scheduler/queue_management.rs");
 include!("scheduler/stream_runtime.rs");
 include!("scheduler/live_update.rs");pub(crate) fn trigger_chat_queue_processing(state: &AppState) {
     let state_clone = state.clone();
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         if let Err(err) = process_chat_queue(&state_clone).await {
             runtime_log_error(format!("[聊天调度] process_chat_queue 失败: {}", err));
         }
@@ -265,7 +265,7 @@ pub(crate) async fn process_chat_event_after_ingress(state: &AppState, ingress: 
 
 pub(crate) fn trigger_chat_event_after_ingress(state: &AppState, ingress: ChatEventIngress) {
     let state_clone = state.clone();
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         process_chat_event_after_ingress(&state_clone, ingress).await;
     });
 }
@@ -276,7 +276,7 @@ pub(crate) fn trigger_chat_event_after_ingress_with_delay(
     delay: std::time::Duration,
 ) {
     let state_clone = state.clone();
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         tokio::time::sleep(delay).await;
         process_chat_event_after_ingress(&state_clone, ingress).await;
     });
@@ -502,7 +502,7 @@ pub(crate) async fn process_chat_queue(state: &AppState) -> Result<(), String> {
     emit_chat_queue_snapshot(state);
     for (conversation_id, events) in claimed_batches {
         let state_clone = state.clone();
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             if let Err(err) =
                 process_claimed_conversation_batch(&state_clone, &conversation_id, events).await
             {

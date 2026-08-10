@@ -63,7 +63,7 @@ async fn git_run_output(
     let args_for_error = args.clone();
     let join = tokio::time::timeout(
         Duration::from_secs(GIT_GHOST_SNAPSHOT_TIMEOUT_SECS),
-        tauri::async_runtime::spawn_blocking(move || {
+        tokio::task::spawn_blocking(move || {
             let mut cmd = std::process::Command::new("git");
             cmd.current_dir(&cwd);
             cmd.args(&args);

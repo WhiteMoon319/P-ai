@@ -259,7 +259,7 @@ async fn process_guided_queue_when_idle(
 pub(crate) fn trigger_guided_queue_processing(state: &AppState, conversation_id: &str) {
     let state_clone = state.clone();
     let conversation_id = conversation_id.to_string();
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         if let Err(err) = process_guided_queue_when_idle(&state_clone, &conversation_id).await {
             runtime_log_warn(format!(
                 "[引导投送] 失败，任务=trigger_guided_queue_processing，conversation_id={}，error={}",

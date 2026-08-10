@@ -3106,7 +3106,7 @@ fn request_conversation_messages_after_async_inner(
         after_message_id.as_deref().unwrap_or(""),
         fallback_limit
     ));
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         let payload = match resolve_unarchived_conversation_messages_after(
             &state_clone,
             &conversation_id,

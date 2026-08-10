@@ -48,7 +48,7 @@ fn remote_im_request_24h_maintenance(state: AppState) {
     if !should_spawn {
         return;
     }
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         let worker_state = state.clone();
         let join = tokio::task::spawn_blocking(move || remote_im_run_24h_maintenance(&worker_state)).await;
         match join {

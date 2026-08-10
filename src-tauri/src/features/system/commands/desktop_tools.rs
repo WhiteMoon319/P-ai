@@ -696,7 +696,7 @@ async fn install_host_runtime_prerequisite(
 ) -> Result<HostRuntimePrerequisiteInstallResult, String> {
     #[cfg(target_os = "windows")]
     {
-        tauri::async_runtime::spawn_blocking(move || install_host_runtime_prerequisite_sync(kind))
+        tokio::task::spawn_blocking(move || install_host_runtime_prerequisite_sync(kind))
             .await
             .map_err(|err| format!("安装任务执行失败：{err}"))?
     }
@@ -1879,7 +1879,7 @@ async fn migrate_shell_workspace_directory(
     }
     let task_id = input.task_id.trim().to_string();
     let app_handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         let old_root = old_root
             .canonicalize()
             .map_err(|err| format!("解析旧工作区失败 ({}): {err}", old_root.display()))?;

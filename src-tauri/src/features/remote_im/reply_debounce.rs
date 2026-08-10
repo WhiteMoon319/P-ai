@@ -172,7 +172,7 @@ fn remote_im_group_reply_schedule_action(
         return;
     }
     let state = state.clone();
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         tokio::time::sleep(action.delay).await;
         remote_im_group_reply_handle_timer(&state, action).await;
     });
@@ -329,7 +329,7 @@ fn remote_im_group_reply_advance_after_settlement(
             ));
             let state = state.clone();
             let contact = contact.clone();
-            tauri::async_runtime::spawn(async move {
+            tokio::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                 remote_im_group_reply_advance_after_settlement(
                     &state,
@@ -519,7 +519,7 @@ fn remote_im_group_reply_retry_after_dispatch_failure(
                     let state = state.clone();
                     let contact_id = contact_id.to_string();
                     let reason = reason.to_string();
-                    tauri::async_runtime::spawn(async move {
+                    tokio::spawn(async move {
                         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                         remote_im_group_reply_retry_after_dispatch_failure(
                             &state,
@@ -907,7 +907,7 @@ async fn remote_im_group_reply_handle_timer(
             let state = state.clone();
             let contact_id = contact.id.clone();
             let generation = action.generation;
-            tauri::async_runtime::spawn(async move {
+            tokio::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_secs(180)).await;
                 if remote_im_group_reply_generation_is_current(&state, &contact_id, generation) {
                     remote_im_group_reply_retry_after_dispatch_failure(

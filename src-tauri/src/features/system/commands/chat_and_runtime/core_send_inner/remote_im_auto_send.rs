@@ -945,7 +945,7 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
     assistant_message_id: Option<String>,
     group_dispatch: Option<(String, RemoteImGroupReplyDispatchPolicy)>,
 ) {
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         let group_policy = group_dispatch.as_ref().map(|(_, policy)| *policy);
         let started = std::time::Instant::now();
         let (channel_label, contact_label) = remote_im_auto_send_log_labels(&state, &activation_source);

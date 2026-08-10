@@ -1097,7 +1097,7 @@ fn append_delegate_result_message_and_emit(
 
     if continue_main_assistant {
         let session_info = session_info.ok_or_else(|| "缺少 session_info，无法继续主助理".to_string())?;
-        tauri::async_runtime::spawn({
+        tokio::spawn({
             let state = app_state.clone();
             let conversation_id = conversation_id.to_string();
             async move {

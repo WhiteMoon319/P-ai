@@ -329,7 +329,7 @@ async fn ide_chat_get_usage_trail_for_web_settings(
     };
     let query = UsageTrailWallQuery { view, year };
     let state = state.clone();
-    let result = tauri::async_runtime::spawn_blocking(move || build_usage_trail_wall(&state, &query))
+    let result = tokio::task::spawn_blocking(move || build_usage_trail_wall(&state, &query))
         .await
         .map_err(|err| format!("计算足迹墙失败：{err}"))?
         .map_err(|err| err.to_string())?;

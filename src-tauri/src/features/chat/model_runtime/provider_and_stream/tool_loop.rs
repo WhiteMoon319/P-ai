@@ -370,7 +370,7 @@ async fn run_genai_tool_loop(
     let mut full_activity_reasoning_text = String::new();
     let mut tool_history_events = Vec::<Value>::new();
     let mut pending_tool_group_result_persists =
-        Vec::<tauri::async_runtime::JoinHandle<Result<(), String>>>::new();
+        Vec::<tokio::task::JoinHandle<Result<(), String>>>::new();
     let mut trusted_input_tokens: Option<u64> = None;
     let mut latest_usage = None::<Value>;
     let (system_prompt, mut messages) = build_genai_message_state(&prepared)?;
@@ -1016,7 +1016,7 @@ async fn run_genai_tool_loop_non_stream(
     let mut full_activity_reasoning_text = String::new();
     let mut tool_history_events = Vec::<Value>::new();
     let mut pending_tool_group_result_persists =
-        Vec::<tauri::async_runtime::JoinHandle<Result<(), String>>>::new();
+        Vec::<tokio::task::JoinHandle<Result<(), String>>>::new();
     let mut trusted_input_tokens: Option<u64> = None;
     let mut latest_usage = None::<Value>;
     let (system_prompt, mut messages) = build_genai_message_state(&prepared)?;

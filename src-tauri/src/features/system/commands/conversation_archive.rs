@@ -105,7 +105,7 @@ async fn archive_conversation_inner(
         let source_conversation_id = source.id.clone();
         let effective_agent_id_cloned = effective_agent_id.clone();
         let active_conversation_id_for_background = active_conversation_id.clone();
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             let panic_safe_task = std::panic::AssertUnwindSafe(async {
                 let source_cloned = match conversation_service_v2()
                     .read_archive_pipeline_source_conversation(
@@ -477,7 +477,7 @@ fn spawn_batch_archive_pipeline(
     if accepted.is_empty() {
         return;
     }
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         let total_count = accepted.len();
         let panic_safe_task = std::panic::AssertUnwindSafe(async {
             runtime_log_info(format!(

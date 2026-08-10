@@ -273,7 +273,7 @@ fn remote_im_start_contact_dashboard_push_worker(state: &AppState) {
         return;
     }
     let state = state.clone();
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(
                 REMOTE_IM_CONTACT_DASHBOARD_PUSH_INTERVAL_SECONDS,

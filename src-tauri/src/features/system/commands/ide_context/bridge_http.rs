@@ -36,13 +36,13 @@ fn ide_context_bridge_create_shutdown_token() -> tokio_util::sync::CancellationT
     token
 }
 
-fn ide_context_bridge_server_task_slot() -> Arc<Mutex<Option<tauri::async_runtime::JoinHandle<()>>>> {
+fn ide_context_bridge_server_task_slot() -> Arc<Mutex<Option<tokio::task::JoinHandle<()>>>> {
     IDE_CONTEXT_BRIDGE_SERVER_TASK
         .get_or_init(|| Arc::new(Mutex::new(None)))
         .clone()
 }
 
-fn ide_context_bridge_set_server_task(handle: tauri::async_runtime::JoinHandle<()>) {
+fn ide_context_bridge_set_server_task(handle: tokio::task::JoinHandle<()>) {
     if let Ok(mut slot) = ide_context_bridge_server_task_slot().lock() {
         *slot = Some(handle);
     }
@@ -58,7 +58,7 @@ fn ide_context_bridge_server_task_is_running() -> bool {
     IDE_CONTEXT_BRIDGE_STARTED.load(Ordering::SeqCst)
 }
 
-fn ide_context_bridge_take_server_task() -> Option<tauri::async_runtime::JoinHandle<()>> {
+fn ide_context_bridge_take_server_task() -> Option<tokio::task::JoinHandle<()>> {
     ide_context_bridge_server_task_slot()
         .lock()
         .ok()
@@ -227,7 +227,7 @@ fn spawn_ide_context_bridge_server_task(
     port: u16,
     bridge_url: String,
 ) {
-    let server_task = tauri::async_runtime::spawn(async move {
+    let server_task = tokio::spawn(async move {
         loop {
             let (stream, peer_addr) = tokio::select! {
                 _ = shutdown_token.cancelled() => {
@@ -257,7 +257,7 @@ fn spawn_ide_context_bridge_server_task(
             let state_clone = state.clone();
             let app_clone = app.clone();
             let ide_context_runtime_clone = ide_context_runtime.clone();
-            tauri::async_runtime::spawn(async move {
+            tokio::spawn(async move {
                 ide_context_ws_handle_connection(
                     stream,
                     peer_addr,

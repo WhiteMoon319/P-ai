@@ -904,8 +904,8 @@ async fn start_storage_overview_refresh_if_needed(
     runtime.running = true;
     runtime.last_error = None;
     let snapshot = overview_snapshot(&runtime);
-    tauri::async_runtime::spawn(async move {
-        let result = tauri::async_runtime::spawn_blocking(move || build_storage_usage_overview(&state))
+    tokio::spawn(async move {
+        let result = tokio::task::spawn_blocking(move || build_storage_usage_overview(&state))
             .await
             .map_err(|err| format!("计算存储用量概览任务失败：{err}"))
             .and_then(|result| result);
@@ -1463,8 +1463,8 @@ async fn start_usage_overview_refresh_if_needed(
     runtime.running = true;
     runtime.last_error = None;
     let snapshot = overview_snapshot(&runtime);
-    tauri::async_runtime::spawn(async move {
-        let result = tauri::async_runtime::spawn_blocking(move || build_usage_overview(&state))
+    tokio::spawn(async move {
+        let result = tokio::task::spawn_blocking(move || build_usage_overview(&state))
             .await
             .map_err(|err| format!("计算用量概览任务失败：{err}"))
             .and_then(|result| result);
@@ -1912,7 +1912,7 @@ async fn get_usage_trail(
     input: UsageTrailWallQuery,
 ) -> Result<UsageTrailWallView, String> {
     let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || build_usage_trail_wall(&state, &input))
+    tokio::task::spawn_blocking(move || build_usage_trail_wall(&state, &input))
         .await
         .map_err(|err| format!("计算足迹墙失败：{err}"))
         .and_then(|result| result)

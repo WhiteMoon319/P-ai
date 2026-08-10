@@ -110,7 +110,7 @@ fn remote_im_schedule_presence_timeout(
         .unwrap_or_else(now_iso);
     let state_clone = state.clone();
     let contact_id = contact_id.to_string();
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(patience_seconds)).await;
         match remote_im_reply_delegate_active_ids_for_contact(&state_clone, &contact_id) {
             Ok(active_delegate_ids) if !active_delegate_ids.is_empty() => {
@@ -272,7 +272,7 @@ fn spawn_remote_im_departure_reflection_delegate(
         .lock()
         .map_err(|_| "无法获取离场反思取消句柄锁".to_string())?
         .insert(chat_key.clone(), abort_handle);
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         let delegate_id = delegate_for_task.delegate_id.clone();
         let result = futures_util::future::Abortable::new(
             run_remote_im_departure_reflection(
