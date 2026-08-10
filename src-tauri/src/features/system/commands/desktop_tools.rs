@@ -1,3 +1,4 @@
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn desktop_screenshot(input: ScreenshotRequest) -> Result<ScreenshotResponse, String> {
     run_screenshot_tool(input)
@@ -90,6 +91,7 @@ struct NativeNotificationDemoResult {
     sent_at: String,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn demo_send_native_notification(app: AppHandle) -> Result<NativeNotificationDemoResult, String> {
     use tauri_plugin_notification::NotificationExt;
@@ -145,6 +147,7 @@ struct DemoTestNotificationResult {
 #[cfg(target_os = "android")]
 const DEMO_LIVE_UPDATE_NOTIFICATION_ID: i32 = 0x50414903;
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn demo_test_notification(
     app: AppHandle,
@@ -230,7 +233,6 @@ async fn demo_test_notification(
                     body: "实时通知测试完成。".to_string(),
                 })
             }
-            #[cfg(not(target_os = "android"))]
             {
                 let title = "PAI 实时通知测试".to_string();
                 let body = format!("当前平台（非 Android）不支持实时通知（岛），已发送普通通知代替。时间：{sent_at}");
@@ -295,6 +297,7 @@ fn xcap_optional_save_path(args: &Value) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn xcap(input: XcapToolInput) -> Result<Value, String> {
     let method = input.method.trim().to_string();
@@ -522,6 +525,7 @@ fn host_runtime_prerequisite_installed(kind: &str) -> Result<bool, String> {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn get_host_runtime_prerequisites(
     state: State<'_, AppState>,
@@ -559,7 +563,6 @@ async fn get_host_runtime_prerequisites(
             rg_installed,
         })
     }
-    #[cfg(not(target_os = "android"))]
     {
         let _ = state;
         Ok(HostRuntimePrerequisites {
@@ -1802,6 +1805,7 @@ fn remove_workspace_entry_recursive(
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn open_chat_shell_workspace_dir(
     input: Option<ShellWorkspacePathInput>,
@@ -1834,6 +1838,7 @@ fn shell_workspace_display_path(path: &Path) -> String {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn reset_chat_shell_workspace(
     input: Option<ShellWorkspacePathInput>,
@@ -1850,12 +1855,14 @@ fn reset_chat_shell_workspace(
     Ok(shell_workspace_display_path(&root))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_default_chat_shell_workspace_path(state: State<'_, AppState>) -> Result<String, String> {
     let root = terminal_default_session_root_canonical(&state)?;
     Ok(shell_workspace_display_path(&root))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn migrate_shell_workspace_directory(
     input: MigrateWorkspaceDirectoryInput,
@@ -2031,6 +2038,7 @@ async fn check_git_workspace_root(
     Ok(result)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_chat_shell_workspace(
     input: ChatShellWorkspaceInput,
@@ -2060,6 +2068,7 @@ fn get_chat_shell_workspace_inner(
     ))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn update_chat_shell_workspace_layout(
     input: SaveChatShellWorkspacesInput,
@@ -2109,6 +2118,7 @@ fn update_chat_shell_workspace_layout_inner(
     ))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn resolve_terminal_approval(
     input: ResolveTerminalApprovalInput,
@@ -2118,6 +2128,7 @@ fn resolve_terminal_approval(
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn approve_terminal_approval_for_session(
     input: TerminalApprovalRequestIdInput,
@@ -2127,6 +2138,7 @@ fn approve_terminal_approval_for_session(
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn approve_terminal_approval_for_workspace(
     input: TerminalApprovalRequestIdInput,
