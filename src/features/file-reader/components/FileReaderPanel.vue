@@ -279,7 +279,18 @@
               {{ t('fileReader.loadingFile') }}
             </div>
             <div v-else-if="activeTab.error" class="m-4 rounded-box border border-error/30 bg-error/10 p-4 text-sm text-error">
-              {{ activeTab.error }}
+              <div>{{ activeTab.error }}</div>
+              <div v-if="localFileSystemAvailable" class="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  class="btn btn-sm"
+                  :title="directoryFromPath(activeTab.path)"
+                  @click.stop="openDirectoryInFileManager(directoryFromPath(activeTab.path))"
+                >
+                  <Folders class="h-3.5 w-3.5" />
+                  {{ t('fileReader.openContainingFolder') }}
+                </button>
+              </div>
             </div>
             <div
               v-else-if="isPreviewMediaTab(activeTab) && !activeMediaSourceUrl"
