@@ -392,6 +392,25 @@ data class AttachmentMeta(
     val mime: String? = null,
 )
 
+/** 附件本地路径摄取输入（attachment.ingestLocalPath）。 */
+data class AttachmentIngestLocalPathInput(
+    val path: String,
+    @SerializedName("fileName") val fileName: String? = null,
+    val mime: String? = null,
+)
+
+/** 附件摄取结果（AttachmentReceipt）。 */
+data class AttachmentReceipt(
+    val id: String,
+    @SerializedName("fileName") val fileName: String,
+    val mime: String,
+    val size: Long,
+    val path: String,
+    @SerializedName("attachAsMedia") val attachAsMedia: Boolean = false,
+    @SerializedName("textNotice") val textNotice: String? = null,
+    @SerializedName("previewDataUrl") val previewDataUrl: String? = null,
+)
+
 data class Mention(
     @SerializedName("agentId") val agentId: String? = null,
     @SerializedName("agentName") val agentName: String? = null,

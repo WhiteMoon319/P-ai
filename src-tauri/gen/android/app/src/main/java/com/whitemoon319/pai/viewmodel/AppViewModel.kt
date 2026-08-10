@@ -61,6 +61,9 @@ class AppViewModel(
     val isStreaming = MutableStateFlow(false)
     val isRecording = MutableStateFlow(false)
     val recognizedText = MutableStateFlow<String?>(null)
+    /** 当前待发送的附件（摄取后的 receipt）。 */
+    val pendingAttachment = MutableStateFlow<com.whitemoon319.pai.model.AttachmentReceipt?>(null)
+    val attaching = MutableStateFlow(false)
     val loading = MutableStateFlow(false)
     val error = MutableStateFlow<String?>(null)
 
@@ -222,13 +225,25 @@ class AppViewModel(
         val agent = conv?.agentId
         val departmentId = conv?.departmentId
         val trimmed = text.trim()
-        if (trimmed.isEmpty()) return
+        val attachment = pendingAttachment.value
+        if (trimmed.isEmpty() && attachment == null) return
         // 乐观显示用户消息
+        val textPart = if (trimmed.isNotEmpty()) listOf(com.whitemoon319.pai.model.MessagePart(type = "Text", text = trimmed)) else emptyList()
+        val attachPart = attachment?.let {
+            listOf(
+                com.whitemoon319.pai.model.MessagePart(
+                    type = "Attachment",
+                    text = it.fileName,
+                    path = it.path,
+                    mime = it.mime,
+                )
+            )
+        } ?: emptyList()
         messages.value = messages.value.plus(
             ChatMessage(
                 id = "local-${nextLocalId()}",
                 role = "user",
-                parts = listOf(com.whitemoon319.pai.model.MessagePart(type = "Text", text = trimmed)),
+                parts = textPart + attachPart,
             )
         )
         committedAssistantText = null
@@ -237,12 +252,43 @@ class AppViewModel(
         isStreaming.value = true
         withContext(Dispatchers.IO) {
             try {
-                service.send(conversationId, departmentId, agent, trimmed)
+                if (attachment != null) {
+                    service.sendWithAttachments(
+                        conversationId, departmentId, agent, trimmed,
+                        listOf(com.whitemoon319.pai.model.AttachmentMeta(
+                            fileName = attachment.fileName,
+                            path = attachment.path,
+                            mime = attachment.mime,
+                        )),
+                    )
+                } else {
+                    service.send(conversationId, departmentId, agent, trimmed)
+                }
             } catch (e: Exception) {
                 error.value = "发送失败: ${e.message}"
                 isStreaming.value = false
             }
         }
+        pendingAttachment.value = null
+    }
+
+    /** 把复制到沙盒的附件文件摄取进后端，成功后存为待发送附件。 */
+    suspend fun attachLocalFile(path: String, fileName: String?, mime: String?) {
+        attaching.value = true
+        try {
+            val receipt = withContext(Dispatchers.IO) {
+                service.ingestAttachment(path, fileName, mime)
+            }
+            pendingAttachment.value = receipt
+        } catch (e: Exception) {
+            error.value = "添加附件失败: ${e.message}"
+        } finally {
+            attaching.value = false
+        }
+    }
+
+    fun clearPendingAttachment() {
+        pendingAttachment.value = null
     }
 
     suspend fun stopStreaming() {

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -30,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Mic
@@ -71,9 +73,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.whitemoon319.pai.ui.richtext.MarkdownText
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -493,6 +498,49 @@ fun ChatScreen(
                     }
                 }
             }
+            // 已选附件条：显示待发送附件，可移除
+            val pendingAttachment by vm.pendingAttachment.collectAsState()
+            if (pendingAttachment != null) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = MaterialTheme.shapes.small,
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Default.AttachFile,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = pendingAttachment!!.fileName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        IconButton(
+                            onClick = { vm.clearPendingAttachment() },
+                            modifier = Modifier.size(24.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Clear,
+                                contentDescription = "移除附件",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            )
+                        }
+                    }
+                }
+            }
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -507,6 +555,49 @@ fun ChatScreen(
                     placeholder = { Text("输入消息…") },
                     maxLines = 4,
                 )
+                Spacer(Modifier.width(4.dp))
+                // 附件：文件选择 → 复制到沙盒 → 摄取 → 随消息发送
+                val ctx = LocalContext.current
+                val attaching by vm.attaching.collectAsState()
+                val pendingAttachment by vm.pendingAttachment.collectAsState()
+                val attachLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+                ) { uri ->
+                    if (uri != null) {
+                        scope.launch {
+                            try {
+                                val sandboxDir = java.io.File(ctx.filesDir, "attachments").apply { mkdirs() }
+                                val displayName = ctx.contentResolver.query(
+                                    uri, null, null, null, null
+                                )?.use { c ->
+                                    val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                                    if (idx >= 0) c.getString(idx) else null
+                                } ?: "attachment"
+                                val mime = ctx.contentResolver.getType(uri) ?: ""
+                                val dest = java.io.File(sandboxDir, displayName)
+                                withContext(Dispatchers.IO) {
+                                    ctx.contentResolver.openInputStream(uri)?.use { input ->
+                                        dest.outputStream().use { output -> input.copyTo(output) }
+                                    }
+                                }
+                                vm.attachLocalFile(dest.absolutePath, displayName, mime)
+                            } catch (e: Exception) {
+                                vm.error.value = "读取附件失败: ${e.message}"
+                            }
+                        }
+                    }
+                }
+                IconButton(
+                    onClick = { attachLauncher.launch(arrayOf("*/*")) },
+                    enabled = !attaching && !isStreaming,
+                ) {
+                    Icon(
+                        if (attaching) Icons.Default.Refresh else Icons.Default.AttachFile,
+                        contentDescription = if (attaching) "添加附件中" else "添加附件",
+                        tint = if (pendingAttachment != null) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
                 Spacer(Modifier.width(4.dp))
                 // 语音输入：麦克风按钮（按住录音/点击切换），识别结果回填输入框
                 val isRecording by vm.isRecording.collectAsState()
@@ -523,7 +614,6 @@ fun ChatScreen(
                     if (granted) vm.startRecording()
                     else vm.error.value = "需要录音权限才能使用语音输入"
                 }
-                val ctx = LocalContext.current
                 IconButton(onClick = {
                     if (isRecording) {
                         vm.stopAndTranscribe()
@@ -552,7 +642,8 @@ fun ChatScreen(
                 } else {
                     IconButton(onClick = {
                         val text = input
-                        if (text.isNotBlank()) {
+                        val hasAttachment = pendingAttachment != null
+                        if (text.isNotBlank() || hasAttachment) {
                             input = ""
                             scope.launch { vm.sendMessage(text) }
                         }

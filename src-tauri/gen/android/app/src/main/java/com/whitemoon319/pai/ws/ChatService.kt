@@ -84,6 +84,42 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("chat.send", request, SubmitChatResult::class.java)
     }
 
+    /** 发送消息并携带已摄取的附件（path 为 attachment.ingestLocalPath 返回的 savedPath）。 */
+    suspend fun sendWithAttachments(
+        conversationId: String,
+        departmentId: String?,
+        agentId: String?,
+        text: String,
+        attachments: List<com.whitemoon319.pai.model.AttachmentMeta>,
+    ): SubmitChatResult {
+        val request = SendChatRequest(
+            payload = com.whitemoon319.pai.model.ChatInputPayload(
+                text = text,
+                attachments = attachments,
+            ),
+            session = SessionSelector(departmentId = departmentId, agentId = agentId ?: "agent", conversationId = conversationId),
+        )
+        return client.request("chat.send", request, SubmitChatResult::class.java)
+    }
+
+    /** 摄取本地附件（content URI 复制到沙盒后的绝对路径）→ 返回 AttachmentReceipt（含 savedPath）。 */
+    suspend fun ingestAttachment(
+        path: String,
+        fileName: String?,
+        mime: String?,
+    ): com.whitemoon319.pai.model.AttachmentReceipt {
+        val input = com.whitemoon319.pai.model.AttachmentIngestLocalPathInput(
+            path = path,
+            fileName = fileName,
+            mime = mime,
+        )
+        return client.request(
+            "attachment.ingestLocalPath",
+            mapOf("input" to input),
+            com.whitemoon319.pai.model.AttachmentReceipt::class.java,
+        )
+    }
+
     suspend fun stop(conversationId: String, departmentId: String?, agentId: String?) {
         val req = com.whitemoon319.pai.model.StopChatRequest(
             session = SessionSelector(departmentId = departmentId, agentId = agentId ?: "agent", conversationId = conversationId),
