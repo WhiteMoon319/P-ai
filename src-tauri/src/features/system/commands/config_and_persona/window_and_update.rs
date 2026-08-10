@@ -400,22 +400,6 @@ fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstrapSnapshot,
 
 
 
-fn validate_record_hotkey_available(config: &AppConfig) -> Result<String, String> {
-    let normalized = normalize_record_hotkey_label(&config.record_hotkey)?;
-    if normalized.is_empty() {
-        return Ok(normalized);
-    }
-    let record_signature = record_hotkey_signature(&normalized)
-        .ok_or_else(|| format!("录音热键格式无效：{}", normalized))?;
-    let summon_signature = record_hotkey_signature(&config.hotkey);
-    if summon_signature.as_deref() == Some(record_signature.as_str()) {
-        return Err(format!(
-            "录音热键 {} 不能与呼唤热键 {} 相同。",
-            normalized, config.hotkey
-        ));
-    }
-    Ok(normalized)
-}
 
 
 
@@ -492,6 +476,7 @@ fn save_config_inner(
     normalize_app_config(&mut config);
     remote_im_migrate_channel_private_states(&state, &mut config)?;
     let _ = ensure_default_shell_workspace_in_config(&mut config, &state);
+    #[cfg(not(target_os = "android"))]
     set_record_hotkey_probe_background_wake_enabled(config.record_background_wake_enabled);
 
     let mut data = state_read_agents_runtime_snapshot(&state)?;
