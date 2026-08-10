@@ -3,6 +3,7 @@ fn remote_im_list_channels_inner(state: &AppState) -> Result<Vec<RemoteImChannel
     Ok(config.remote_im_channels)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_list_channels(state: State<'_, AppState>) -> Result<Vec<RemoteImChannelConfig>, String> {
     remote_im_list_channels_inner(state.inner())
@@ -299,6 +300,7 @@ fn remote_im_start_contact_dashboard_push_worker(state: &AppState) {
     });
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn remote_im_subscribe_contact_dashboard(
     input: RemoteImContactDashboardInput,
@@ -320,6 +322,7 @@ async fn remote_im_subscribe_contact_dashboard(
     Ok(snapshot)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn remote_im_sync_contact_dashboard(
     input: RemoteImContactDashboardInput,
@@ -333,6 +336,7 @@ async fn remote_im_sync_contact_dashboard(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn remote_im_unsubscribe_contact_dashboard(
     input: RemoteImContactDashboardInput,
@@ -681,11 +685,13 @@ fn remote_im_resolve_contact_session_target_fail_soft(
     ))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_list_contacts(state: State<'_, AppState>) -> Result<Vec<RemoteImContact>, String> {
     remote_im_list_contacts_inner(state.inner())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_get_default_group_response_guidance() -> String {
     default_remote_im_contact_response_guidance()
@@ -702,6 +708,7 @@ fn remote_im_update_contact_allow_send_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_update_contact_allow_send(
     input: RemoteImContactAllowSendUpdateInput,
@@ -720,6 +727,7 @@ fn remote_im_update_contact_allow_send_files_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_update_contact_allow_send_files(
     input: RemoteImContactAllowSendFilesUpdateInput,
@@ -740,6 +748,7 @@ fn remote_im_update_contact_blocked_message_prefixes_inner(
     remote_im_get_contact_by_id(state, &input.contact_id)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_update_contact_blocked_message_prefixes(
     input: RemoteImContactBlockedMessagePrefixesUpdateInput,
@@ -760,6 +769,7 @@ fn remote_im_update_contact_behavior_inner(
     remote_im_get_contact_by_id(state, &contact_id)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_update_contact_behavior(
     input: RemoteImContactBehaviorUpdateInput,
@@ -830,6 +840,7 @@ fn remote_im_reconfigure_channel_behavior_inner(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_reconfigure_channel_behavior(
     channel_id: String,
@@ -965,6 +976,7 @@ fn remote_im_patch_contact_settings_inner(
     Ok(output)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_patch_contact_settings(
     input: RemoteImContactSettingsPatchInput,
@@ -973,6 +985,7 @@ fn remote_im_patch_contact_settings(
     remote_im_patch_contact_settings_inner(state.inner(), input)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_update_contact_allow_receive(
     input: RemoteImContactAllowReceiveUpdateInput,
@@ -1003,6 +1016,7 @@ fn remote_im_update_contact_activation_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_update_contact_activation(
     input: RemoteImContactActivationUpdateInput,
@@ -1011,6 +1025,7 @@ fn remote_im_update_contact_activation(
     remote_im_update_contact_activation_inner(state.inner(), input)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_update_contact_remark(
     input: RemoteImContactRemarkUpdateInput,
@@ -1022,6 +1037,7 @@ fn remote_im_update_contact_remark(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_update_contact_route_mode(
     input: RemoteImContactRouteModeUpdateInput,
@@ -1144,6 +1160,7 @@ fn remote_im_update_contact_department_binding_inner(
     Ok(resolved)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_update_contact_department_binding(
     input: RemoteImContactDepartmentBindingUpdateInput,
@@ -1162,6 +1179,7 @@ fn remote_im_update_contact_processing_mode_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_update_contact_processing_mode(
     input: RemoteImContactProcessingModeUpdateInput,
@@ -1189,6 +1207,7 @@ fn remote_im_update_contact_workspace_inner(
     Ok(output)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_update_contact_workspace(
     input: RemoteImContactWorkspaceUpdateInput,
@@ -1197,6 +1216,7 @@ fn remote_im_update_contact_workspace(
     remote_im_update_contact_workspace_inner(state.inner(), input)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_list_contact_conversations(
     state: State<'_, AppState>,
@@ -1212,6 +1232,7 @@ fn remote_im_list_contact_conversations(
     Ok(items)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_get_contact_conversation_messages(
     input: RemoteImContactConversationMessagesInput,
@@ -1267,6 +1288,7 @@ struct RemoteImContactConversationBlockPageOutput {
     has_next_block: bool,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_get_contact_conversation_block_page(
     input: RemoteImContactConversationBlockPageInput,
@@ -1366,6 +1388,7 @@ fn remote_im_delete_contact_inner(
     Ok(removed)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_delete_contact(
     input: RemoteImContactDeleteInput,
@@ -1374,6 +1397,7 @@ fn remote_im_delete_contact(
     remote_im_delete_contact_inner(state.inner(), input)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_clear_contact_conversation(
     input: RemoteImContactDeleteInput,
@@ -1405,6 +1429,7 @@ fn remote_im_clear_contact_conversation_inner(
     Ok(cleared)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_im_enqueue_message(
     input: RemoteImEnqueueInput,

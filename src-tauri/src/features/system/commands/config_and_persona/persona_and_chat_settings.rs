@@ -1,3 +1,4 @@
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn load_agents(state: State<'_, AppState>) -> Result<Vec<AgentProfile>, String> {
     load_agents_inner(&state)
@@ -548,6 +549,7 @@ fn disable_agent_private_memory_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_agent_private_memory_count(
     input: AgentPrivateMemoryCountInput,
@@ -572,6 +574,7 @@ fn set_agent_private_memory_enabled(
     set_agent_private_memory_enabled_inner(input, state.inner())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn export_agent_private_memories(
     input: ExportAgentPrivateMemoriesInput,
@@ -580,6 +583,7 @@ fn export_agent_private_memories(
     export_agent_private_memories_inner(input, state.inner())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn disable_agent_private_memory(
     input: DisableAgentPrivateMemoryInput,
@@ -588,6 +592,7 @@ fn disable_agent_private_memory(
     disable_agent_private_memory_inner(input, state.inner())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn import_agent_memories(
     input: ImportAgentMemoriesInput,
@@ -922,6 +927,7 @@ fn normalize_avatar_bytes_to_webp(raw: &[u8]) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn save_agent_avatar(
     input: SaveAgentAvatarInput,
@@ -994,6 +1000,7 @@ fn save_agent_avatar_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn clear_agent_avatar(
     input: ClearAgentAvatarInput,
@@ -1050,6 +1057,7 @@ fn clear_agent_avatar_inner(
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn read_avatar_data_url(
     input: AvatarDataPathInput,
@@ -1119,6 +1127,7 @@ struct ChatImageDataUrlOutput {
     data_url: String,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn read_chat_image_data_url(
     input: ChatImageDataUrlInput,
@@ -1150,6 +1159,7 @@ fn read_chat_image_data_url_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn sync_tray_icon(
     _input: SyncTrayIconInput,
