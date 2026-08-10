@@ -128,44 +128,6 @@ fn conversation_has_focused_chat_view(state: &AppState, conversation_id: &str) -
         };
         has_binding && chat_view_foreground_active()
     }
-    #[cfg(not(target_os = "android"))]
-    {
-        let app_handle = match state.app_handle.lock() {
-            Ok(guard) => guard.as_ref().cloned(),
-            Err(_) => None,
-        };
-        let Some(app_handle) = app_handle else {
-            return false;
-        };
-        let focused_window_labels = match state.active_chat_view_bindings.lock() {
-            Ok(bindings) => bindings
-                .values()
-                .filter_map(|binding| {
-                    if binding.conversation_id.trim() != conversation_id.trim() {
-                        return None;
-                    }
-                    Some(binding.window_label.clone())
-                })
-                .collect::<Vec<_>>(),
-            Err(_) => return false,
-        };
-        if focused_window_labels.is_empty() {
-            return false;
-        }
-        if focused_window_labels.iter().any(|window_label| {
-            let Some(window) = app_handle.get_webview_window(window_label) else {
-                return false;
-            };
-            let is_visible = window.is_visible().unwrap_or(false);
-            let is_focused = window.is_focused().unwrap_or(false);
-            is_visible && is_focused
-        }) {
-            return true;
-        }
-        // VS Code 侧边栏通过 WebSocket 连接，不在 active_chat_view_bindings 中，
-        // 但会注册到 detached_chat_windows；只要会话已打开就应跳过通知。
-        detached_chat_window_for_conversation(conversation_id).is_some()
-    }
 }
 
 fn emit_assistant_delta_app_event(

@@ -583,17 +583,7 @@ pub(crate) struct DeltaChannel {
 }
 
 impl DeltaChannel {
-    #[cfg(not(target_os = "android"))]
-    pub(crate) fn from_tauri(channel: tauri::ipc::Channel<AssistantDeltaEvent>) -> Self {
-        Self {
-            inner: Some(channel),
-        }
-    }
 
-    #[cfg(not(target_os = "android"))]
-    pub(crate) fn noop() -> Self {
-        Self { inner: None }
-    }
 
     #[cfg(target_os = "android")]
     pub(crate) fn noop() -> Self {
@@ -602,16 +592,6 @@ impl DeltaChannel {
         }
     }
 
-    #[cfg(not(target_os = "android"))]
-    pub(crate) fn send(&self, event: AssistantDeltaEvent) -> Result<(), String> {
-        if let Some(channel) = &self.inner {
-            channel
-                .send(event)
-                .map_err(|err| format!("发送流式 delta 失败: {err}"))
-        } else {
-            Ok(())
-        }
-    }
 
     #[cfg(target_os = "android")]
     pub(crate) fn send(&self, _event: AssistantDeltaEvent) -> Result<(), String> {

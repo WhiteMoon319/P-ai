@@ -478,10 +478,6 @@ fn ide_chat_remote_im_clear_conversation_command(
     ide_chat_serialize(remote_im_clear_contact_conversation_inner(input, state)?)
 }
 
-#[cfg(not(target_os = "android"))]
-async fn ide_chat_frontend_ready_remote_im_command(app: &tauri::AppHandle) -> Result<Value, String> {
-    ide_chat_serialize(frontend_ready_start_remote_im_services(app.clone()).await?)
-}
 
 fn ide_chat_forward_selection_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<ForwardUnarchivedConversationSelectionInput>(params, "input")?;
@@ -508,25 +504,7 @@ fn ide_chat_set_auto_push_command(state: &AppState, params: Value) -> Result<Val
     ide_chat_serialize(set_conversation_auto_push_remote_contact_inner(input, state)?)
 }
 
-#[cfg(not(target_os = "android"))]
-fn ide_chat_set_department_primary_api_command(
-    state: &AppState,
-    app: &NativeAppHandle,
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<SetDepartmentPrimaryApiConfigInput>(params, "input")?;
-    ide_chat_serialize(set_department_primary_api_config_inner(input, app, state)?)
-}
 
-#[cfg(not(target_os = "android"))]
-fn ide_chat_set_ui_language_command(
-    state: &AppState,
-    app: &NativeAppHandle,
-    params: Value,
-) -> Result<Value, String> {
-    let ui_language = ide_chat_parse_param_field::<String>(params, "uiLanguage")?;
-    ide_chat_serialize(set_ui_language_inner(ui_language, app, state)?)
-}
 
 fn ide_chat_dump_memory_cache_stats_command(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(dump_memory_cache_stats_inner(state)?)
@@ -809,22 +787,6 @@ fn ide_chat_model_list(state: &AppState, params: Value) -> Result<Value, String>
     ide_chat_model_payload_for_conversation(state, &conversation)
 }
 
-#[cfg(not(target_os = "android"))]
-fn ide_chat_select_model(state: &AppState, _app: &NativeAppHandle, params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatSelectModelInput>(params)?;
-    let conversation_id = input.conversation_id.trim().to_string();
-    set_conversation_preferred_model_inner(
-        SetConversationPreferredModelInput {
-            conversation_id: conversation_id.clone(),
-            preferred_api_config_id: (!input.api_config_id.trim().is_empty())
-                .then(|| input.api_config_id.trim().to_string()),
-        },
-        state,
-    )?;
-    let updated_conversation = conversation_service_v2().get_conversation_meta(state, &conversation_id)?;
-    let updated_conversation = ide_chat_conversation_from_meta_view(&updated_conversation);
-    ide_chat_model_payload_for_conversation(state, &updated_conversation)
-}
 
 fn ide_chat_resolve_terminal_approval(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatResolveTerminalApprovalInput>(params)?;

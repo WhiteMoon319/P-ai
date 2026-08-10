@@ -221,11 +221,6 @@ fn is_android_workspace_ready(state: &AppState) -> bool {
         matches!(status.state, AndroidWorkspaceStateKind::Ready)
             && android_workspace_layout_ready(&android_workspace_root(state))
     }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = state;
-        true
-    }
 }
 
 fn android_workspace_gate_error_for_tool(tool_name: &str, is_mcp_tool: bool) -> Option<String> {
@@ -234,11 +229,6 @@ fn android_workspace_gate_error_for_tool(tool_name: &str, is_mcp_tool: bool) -> 
         if android_workspace_tool_requires_linux_runtime(tool_name, is_mcp_tool) {
             return Some(ANDROID_WORKSPACE_NOT_READY_MESSAGE.to_string());
         }
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = tool_name;
-        let _ = is_mcp_tool;
     }
     None
 }
@@ -301,11 +291,6 @@ fn list_android_workspace_files_ws_inner(
             entries,
         })
     }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = path;
-        Err("Android 工作区文件管理仅在 Android 端可用。".to_string())
-    }
 }
 
 
@@ -339,12 +324,6 @@ fn read_android_workspace_text_ws_inner(
             bytes: text.len(),
             text,
         })
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = state;
-        let _ = path;
-        Err("Android 工作区文本读取仅在 Android 端可用。".to_string())
     }
 }
 
@@ -390,14 +369,6 @@ fn write_android_workspace_text_ws_inner(
         let entry = android_workspace_file_entry(&root, target)
             .ok_or_else(|| "写入后无法读取 Android 工作区文件元数据。".to_string())?;
         Ok(AndroidWorkspaceWriteResult { entry })
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = state;
-        let _ = path;
-        let _ = text;
-        let _ = overwrite;
-        Err("Android 工作区文本写入仅在 Android 端可用。".to_string())
     }
 }
 
@@ -452,14 +423,6 @@ fn move_android_workspace_file_ws_inner(
             entry,
         })
     }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = state;
-        let _ = source;
-        let _ = target;
-        let _ = overwrite;
-        Err("Android 工作区移动仅在 Android 端可用。".to_string())
-    }
 }
 
 
@@ -495,13 +458,6 @@ fn glob_android_workspace_files_ws_inner(
             }
         }
         Ok(AndroidWorkspaceGlobResult { entries })
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = state;
-        let _ = pattern;
-        let _ = path;
-        Err("Android 工作区 glob 仅在 Android 端可用。".to_string())
     }
 }
 
@@ -601,16 +557,6 @@ fn grep_android_workspace_files_ws_inner(
         }
         Ok(AndroidWorkspaceGrepResult { matches })
     }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = state;
-        let _ = query;
-        let _ = path;
-        let _ = regex;
-        let _ = ignore_case;
-        let _ = include_glob;
-        Err("Android 工作区 grep 仅在 Android 端可用。".to_string())
-    }
 }
 
 
@@ -619,25 +565,6 @@ fn get_android_workspace_status_ws_inner(state: &AppState) -> Result<AndroidWork
     #[cfg(target_os = "android")]
     {
         Ok(normalize_android_workspace_status(state))
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        let root = android_workspace_root(state);
-        let (llm_workspace_root, runtime_root) = android_workspace_status_paths(&root);
-        Ok(AndroidWorkspaceStatus {
-            state: AndroidWorkspaceStateKind::Ready,
-            root_path: llm_workspace_root.clone(),
-            llm_workspace_root,
-            runtime_root,
-            initialized_at: None,
-            updated_at: Some(now_iso()),
-            last_error: None,
-            version: ANDROID_WORKSPACE_STATUS_VERSION,
-            runtime_version: Some(ANDROID_WORKSPACE_ROOTFS_VERSION.to_string()),
-            download_bytes: Some(ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH),
-            download_total_bytes: Some(ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH),
-            download_stage: None,
-        })
     }
 }
 
@@ -684,13 +611,6 @@ pub(crate) fn reset_android_workspace_runtime_ws_inner(
         runtime_log_info("[Android 工作区] 重置 Linux 沙盒完成，用户工作区与 Skill 数据保留".to_string());
         let status = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, root);
         android_workspace_set_status(state, app, status)
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = state;
-        let _ = app;
-        let _ = root;
-        Err("Android Linux 沙盒重置仅在 Android 端可用。".to_string())
     }
 }
 
@@ -765,15 +685,6 @@ fn import_file_to_android_workspace_ws_inner(
             bytes: bytes.len(),
         })
     }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = state;
-        let _ = file_name;
-        let _ = mime;
-        let _ = data_base64;
-        let _ = target_path;
-        Err("Android 工作区导入仅在 Android 端可用。".to_string())
-    }
 }
 
 /// 通过 Android `content://` URI 直接把文件流式导入沙盒工作区。
@@ -820,12 +731,6 @@ fn export_file_from_android_workspace_ws_inner(
             bytes: bytes.len(),
         })
     }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = state;
-        let _ = path;
-        Err("Android 工作区导出仅在 Android 端可用。".to_string())
-    }
 }
 
 /// 通过 Android 系统分享面板导出沙盒工作区文件。
@@ -855,10 +760,5 @@ fn delete_file_from_android_workspace_ws_inner(
         fs::remove_file(&target)
             .map_err(|err| format!("删除 Android 工作区文件失败 ({}): {err}", target.display()))?;
         Ok(AndroidWorkspaceDeleteResult { deleted_path })
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = path;
-        Err("Android 工作区删除仅在 Android 端可用。".to_string())
     }
 }

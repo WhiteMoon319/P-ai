@@ -48,25 +48,6 @@ fn private_workspace_root_from_config(data_path: &PathBuf, config: &AppConfig) -
         let _ = config;
         return app_root_from_data_path(data_path).join("llm-workspace");
     }
-    #[cfg(not(target_os = "android"))]
-    {
-        config
-            .shell_workspaces
-            .iter()
-            .find_map(|workspace| {
-                let path = normalize_terminal_path_input_for_current_platform(workspace.path.trim());
-                if workspace.name.trim().is_empty() || path.is_empty() {
-                    return None;
-                }
-                let candidate = PathBuf::from(&path);
-                if candidate.is_absolute() {
-                    Some(candidate)
-                } else {
-                    Some(app_root_from_data_path(data_path).join("llm-workspace").join(candidate))
-                }
-            })
-            .unwrap_or_else(|| app_root_from_data_path(data_path).join("llm-workspace"))
-    }
 }
 
 fn private_organization_root_from_config(data_path: &PathBuf, config: &AppConfig) -> PathBuf {

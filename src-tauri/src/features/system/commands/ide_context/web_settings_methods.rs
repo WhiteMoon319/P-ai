@@ -14,16 +14,6 @@ fn ide_chat_load_app_bootstrap_snapshot_for_web_settings(state: &AppState) -> Re
     ide_chat_serialize(read_app_bootstrap_snapshot(state)?)
 }
 
-#[cfg(not(target_os = "android"))]
-fn ide_chat_save_config_for_web_settings(
-    state: &AppState,
-    app: &NativeAppHandle,
-    ide_context_runtime: &IdeContextRuntime,
-    params: Value,
-) -> Result<Value, String> {
-    let config = ide_chat_parse_param_field::<AppConfig>(params, "config")?;
-    ide_chat_serialize(save_config_inner(config, app, state, ide_context_runtime)?)
-}
 
 fn ide_chat_load_agents_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(load_agents_inner(state)?)
@@ -80,75 +70,14 @@ async fn ide_chat_get_system_prompt_preview_for_web_settings(
     })?)
 }
 
-#[cfg(not(target_os = "android"))]
-fn ide_chat_save_agents_for_web_settings(
-    state: &AppState,
-    app: &NativeAppHandle,
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<SaveAgentsInput>(params, "input")?;
-    ide_chat_serialize(save_agents_inner(input, app, state)?)
-}
 
 fn ide_chat_load_chat_settings_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(load_chat_settings_inner(state)?)
 }
 
-#[cfg(not(target_os = "android"))]
-fn ide_chat_save_chat_settings_for_web_settings(
-    state: &AppState,
-    app: &NativeAppHandle,
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<ChatSettings>(params, "input")?;
-    let patch = ChatSettingsPatch {
-        assistant_department_agent_id: Some(input.assistant_department_agent_id),
-        user_alias: Some(input.user_alias),
-        response_style_id: Some(input.response_style_id),
-        pdf_read_mode: Some(input.pdf_read_mode),
-        background_voice_screenshot_keywords: Some(input.background_voice_screenshot_keywords),
-        background_voice_screenshot_mode: Some(input.background_voice_screenshot_mode),
-        instruction_presets: Some(input.instruction_presets),
-    };
-    ide_chat_serialize(patch_chat_settings_inner(patch, app, state)?)
-}
 
-#[cfg(not(target_os = "android"))]
-fn ide_chat_patch_chat_settings_for_web_settings(
-    state: &AppState,
-    app: &NativeAppHandle,
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<ChatSettingsPatch>(params, "input")?;
-    ide_chat_serialize(patch_chat_settings_inner(input, app, state)?)
-}
 
-#[cfg(not(target_os = "android"))]
-fn ide_chat_patch_conversation_api_settings_for_web_settings(
-    state: &AppState,
-    app: &NativeAppHandle,
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<ConversationApiSettingsPatch>(params, "input")?;
-    ide_chat_serialize(patch_conversation_api_settings_inner(input, app, state)?)
-}
 
-#[cfg(not(target_os = "android"))]
-fn ide_chat_save_conversation_api_settings_for_web_settings(
-    state: &AppState,
-    app: &NativeAppHandle,
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<ConversationApiSettings>(params, "input")?;
-    let patch = ConversationApiSettingsPatch {
-        assistant_department_api_config_id: Some(input.assistant_department_api_config_id),
-        vision_api_config_id: Some(input.vision_api_config_id),
-        tool_review_api_config_id: Some(input.tool_review_api_config_id),
-        stt_api_config_id: Some(input.stt_api_config_id),
-        stt_auto_send: Some(input.stt_auto_send),
-    };
-    ide_chat_serialize(patch_conversation_api_settings_inner(patch, app, state)?)
-}
 
 async fn ide_chat_refresh_models_for_web_settings(
     state: &AppState,
@@ -236,14 +165,6 @@ async fn ide_chat_list_department_permission_catalog_for_web_settings(
     ide_chat_serialize(list_department_permission_catalog_inner(state).await?)
 }
 
-#[cfg(not(target_os = "android"))]
-async fn ide_chat_web_access_info_for_web_settings(
-    app: &NativeAppHandle,
-    state: &AppState,
-    ide_context_runtime: &IdeContextRuntime,
-) -> Result<Value, String> {
-    ide_chat_serialize(get_web_access_info_inner(app, state, ide_context_runtime, false).await?)
-}
 
 include!("memory_methods.rs");
 
@@ -376,38 +297,7 @@ fn ide_chat_clear_recent_llm_round_logs_for_web_settings(
     ide_chat_serialize(clear_recent_llm_round_logs_inner(state)?)
 }
 
-#[cfg(not(target_os = "android"))]
-fn ide_chat_set_github_update_method_for_web_settings(
-    state: &AppState,
-    app: &NativeAppHandle,
-    params: Value,
-) -> Result<Value, String> {
-    let update_method = match params {
-        Value::Object(mut map) => map
-            .remove("updateMethod")
-            .or_else(|| map.remove("update_method"))
-            .and_then(|value| value.as_str().map(ToOwned::to_owned))
-            .unwrap_or_default(),
-        _ => String::new(),
-    };
-    ide_chat_serialize(set_github_update_method_inner(update_method, app, state)?)
-}
 
-#[cfg(not(target_os = "android"))]
-fn ide_chat_set_skipped_github_update_version_for_web_settings(
-    state: &AppState,
-    app: &NativeAppHandle,
-    params: Value,
-) -> Result<Value, String> {
-    let version = match params {
-        Value::Object(mut map) => map
-            .remove("version")
-            .and_then(|value| value.as_str().map(ToOwned::to_owned))
-            .unwrap_or_default(),
-        _ => String::new(),
-    };
-    ide_chat_serialize(set_skipped_github_update_version_inner(version, app, state)?)
-}
 
 fn ide_chat_set_agent_private_memory_enabled_for_web_settings(
     state: &AppState,
@@ -434,15 +324,6 @@ fn ide_chat_clear_agent_avatar_for_web_settings(
     Ok(Value::Null)
 }
 
-#[cfg(not(target_os = "android"))]
-fn ide_chat_convert_private_agent_to_main_for_web_settings(
-    state: &AppState,
-    app: &NativeAppHandle,
-    params: Value,
-) -> Result<Value, String> {
-    let input = ide_chat_parse_param_field::<ConvertPrivateAgentToMainInput>(params, "input")?;
-    ide_chat_serialize(convert_private_agent_to_main_inner(input, app, state)?)
-}
 
 fn ide_chat_check_tools_status_for_web_settings(
     state: &AppState,
@@ -551,89 +432,10 @@ struct ApiConfigDeleteInput {
 }
 
 /// 新增供应商：校验 id 唯一后 push 到 config.api_configs 并全量保存（基于当前配置增量修改，不覆盖其他字段）。
-#[cfg(not(target_os = "android"))]
-fn api_config_create_inner(
-    input: ApiConfig,
-    app: &NativeAppHandle,
-    state: &AppState,
-    ide_context_runtime: &IdeContextRuntime,
-) -> Result<AppConfig, String> {
-    let id = input.id.trim().to_string();
-    if id.is_empty() {
-        return Err("API config ID is required.".to_string());
-    }
-    let mut config = load_config_inner(state)?;
-    if config.api_configs.iter().any(|item| item.id == id) {
-        return Err(format!("API config '{id}' already exists."));
-    }
-    config.api_configs.push(input);
-    save_config_inner(config, app, state, ide_context_runtime)
-}
 
 /// 更新供应商：按 id 替换 api_configs 中对应项；不存在则报错。
-#[cfg(not(target_os = "android"))]
-fn api_config_update_inner(
-    input: ApiConfig,
-    app: &NativeAppHandle,
-    state: &AppState,
-    ide_context_runtime: &IdeContextRuntime,
-) -> Result<AppConfig, String> {
-    let id = input.id.trim().to_string();
-    if id.is_empty() {
-        return Err("API config ID is required.".to_string());
-    }
-    let mut config = load_config_inner(state)?;
-    let idx = config
-        .api_configs
-        .iter()
-        .position(|item| item.id == id)
-        .ok_or_else(|| format!("API config '{id}' not found."))?;
-    config.api_configs[idx] = input;
-    save_config_inner(config, app, state, ide_context_runtime)
-}
 
 /// 删除供应商：按 id 移除并清理 departments/会话中对该 id 的引用（复用 save_config_inner 的引用清理）。
-#[cfg(not(target_os = "android"))]
-fn api_config_delete_inner(
-    input: ApiConfigDeleteInput,
-    app: &NativeAppHandle,
-    state: &AppState,
-    ide_context_runtime: &IdeContextRuntime,
-) -> Result<AppConfig, String> {
-    let id = input.id.trim().to_string();
-    if id.is_empty() {
-        return Err("API config ID is required.".to_string());
-    }
-    let mut config = load_config_inner(state)?;
-    let before = config.api_configs.len();
-    config.api_configs.retain(|item| item.id != id);
-    if config.api_configs.len() == before {
-        return Err(format!("API config '{id}' not found."));
-    }
-    if config.assistant_department_api_config_id == id {
-        config.assistant_department_api_config_id = String::new();
-    }
-    if config.selected_api_config_id == id {
-        config.selected_api_config_id = String::new();
-    }
-    if config.vision_api_config_id.as_deref() == Some(id.as_str()) {
-        config.vision_api_config_id = None;
-    }
-    if config.tool_review_api_config_id.as_deref() == Some(id.as_str()) {
-        config.tool_review_api_config_id = None;
-    }
-    if config.stt_api_config_id.as_deref() == Some(id.as_str()) {
-        config.stt_api_config_id = None;
-        config.stt_auto_send = false;
-    }
-    for department in &mut config.departments {
-        department.api_config_ids.retain(|item| item != &id);
-        if department.api_config_id == id {
-            department.api_config_id = department.api_config_ids.first().cloned().unwrap_or_default();
-        }
-    }
-    save_config_inner(config, app, state, ide_context_runtime)
-}
 
 /// 文本连接测试：用 ApiConfig 字段直接发一条极短聊天请求验证连通性。
 async fn test_text_connection_inner(

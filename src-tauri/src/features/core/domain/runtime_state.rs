@@ -43,12 +43,6 @@ pub(crate) struct NativeAppHandle {
 }
 
 impl NativeAppHandle {
-    #[cfg(not(target_os = "android"))]
-    pub(crate) fn from_tauri(app: tauri::AppHandle) -> Self {
-        Self {
-            inner: Some(app),
-        }
-    }
 
     #[cfg(target_os = "android")]
     pub(crate) fn noop() -> Self {
@@ -64,15 +58,6 @@ impl NativeAppHandle {
         event: &str,
         payload: S,
     ) -> Result<(), String> {
-        #[cfg(not(target_os = "android"))]
-        {
-            if let Some(app) = &self.inner {
-                return app
-                    .emit(event, payload)
-                    .map_err(|err| format!("事件广播失败: {err}"));
-            }
-            return Ok(());
-        }
         #[cfg(target_os = "android")]
         {
             let _ = (event, payload);
@@ -81,34 +66,10 @@ impl NativeAppHandle {
     }
 
     /// 访问 tauri 通知插件（仅桌面端有效；Android 通知走 pollEvents 原生队列）。
-    #[cfg(not(target_os = "android"))]
-    pub(crate) fn notification(&self) -> Result<&tauri::AppHandle, String> {
-        self.inner
-            .as_ref()
-            .ok_or_else(|| "应用句柄未初始化".to_string())
-    }
 
     /// 按 label 查找 Webview 窗口（仅桌面端；Android 无窗口概念）。
-    #[cfg(not(target_os = "android"))]
-    pub(crate) fn get_webview_window(
-        &self,
-        label: &str,
-    ) -> Option<tauri::WebviewWindow> {
-        self.inner
-            .as_ref()
-            .and_then(|app| app.get_webview_window(label))
-    }
 
     /// 访问 tauri asset resolver（桌面 Web 侧边栏静态资源服务）。
-    #[cfg(not(target_os = "android"))]
-    pub(crate) fn asset_resolver(
-        &self,
-    ) -> Result<tauri::AssetResolver<tauri::Wry>, String> {
-        self.inner
-            .as_ref()
-            .map(|app| app.asset_resolver())
-            .ok_or_else(|| "应用句柄未初始化".to_string())
-    }
 
     /// Android 占位：无 asset resolver（桌面 Web 侧边栏静态资源在 Android 不可用）。
     #[cfg(target_os = "android")]

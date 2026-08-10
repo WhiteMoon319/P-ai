@@ -443,28 +443,9 @@ fn live_update_todos_changed(state: &AppState, conversation_id: &str) {
     );
 }
 
-#[cfg(not(target_os = "android"))]
-fn live_update_chat_started(_state: &AppState, _conversation_id: &str) {}
 
-#[cfg(not(target_os = "android"))]
-fn live_update_chat_finished(
-    _state: &AppState,
-    _conversation_id: &str,
-    _failed: bool,
-    _text: &str,
-) {
-}
 
-#[cfg(not(target_os = "android"))]
-fn live_update_goal_changed(
-    _state: &AppState,
-    _conversation_id: &str,
-    _goal: Option<&ConversationGoalState>,
-) {
-}
 
-#[cfg(not(target_os = "android"))]
-fn live_update_todos_changed(_state: &AppState, _conversation_id: &str) {}
 
 // ==================== 远程前端模式通知 ====================
 // 远程模式下手机 PAI 壳层把 iframe 转发的电脑 PAI 聊天事件转成 Android 通知。
@@ -598,12 +579,6 @@ pub(crate) fn remote_live_update_notify_android(
     }
 }
 
-#[cfg(not(target_os = "android"))]
-pub(crate) fn remote_live_update_notify_android(
-    _state: &AppState,
-    _payload: &RemoteLiveUpdatePayload,
-) {
-}
 
 #[cfg(target_os = "android")]
 fn remote_live_update_title(payload: &RemoteLiveUpdatePayload, failed: bool) -> String {

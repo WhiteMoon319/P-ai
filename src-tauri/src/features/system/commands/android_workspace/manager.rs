@@ -40,11 +40,6 @@ pub(crate) fn android_workspace_canonical_root(state: &AppState) -> Result<Optio
             .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
         return Ok(Some(root));
     }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = state;
-        Ok(None)
-    }
 }
 
 pub(crate) fn android_workspace_canonical_root_if_ready(state: &AppState) -> Result<Option<PathBuf>, String> {
