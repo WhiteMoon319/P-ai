@@ -8,6 +8,7 @@
       <div
         role="tablist"
         class="flex w-full min-w-0 items-center gap-0"
+        :class="fileVariant ? 'gap-1' : 'gap-0'"
         :aria-label="ariaLabel"
       >
         <div
@@ -17,6 +18,9 @@
           :class="[
             tab.disabled ? 'pointer-events-none opacity-45' : 'cursor-pointer',
             tabBorderClass(tab.key, tabIndex),
+            fileVariant ? 'rounded-field' : '',
+            fileVariant && tab.key === activeKey ? 'bg-base-100 shadow-sm' : '',
+            fileVariant && tab.key !== activeKey ? 'hover:bg-base-300/60' : '',
           ]"
           :title="tab.title || tab.label"
           @contextmenu="handleTabContextMenu(tab, $event)"
@@ -30,7 +34,9 @@
             role="tab"
             class="btn btn-ghost btn-sm min-w-0 w-full flex-nowrap overflow-hidden"
             :class="[
-              tab.key === activeKey ? 'bg-base-100/60' : '',
+              !fileVariant && tab.key === activeKey ? 'bg-base-100/60' : '',
+              fileVariant && tab.key === activeKey ? 'text-base-content' : '',
+              fileVariant && tab.key !== activeKey ? 'text-base-content/65 hover:text-base-content' : '',
               tab.iconSrc || tab.icon ? 'gap-1.5' : '',
               shouldReserveCloseSpace(tab) ? 'justify-start pr-8' : 'justify-center',
             ]"
@@ -49,7 +55,7 @@
               class="size-4 shrink-0"
               aria-hidden="true"
             />
-            <span class="min-w-0 truncate font-medium">{{ tab.label }}</span>
+            <span class="min-w-0 overflow-hidden whitespace-nowrap font-medium" :class="fileVariant ? 'file-tab-label-fade' : 'truncate'">{{ tab.label }}</span>
           </button>
           <button
             v-if="tab.closeable && shouldShowCloseButton(tab)"
@@ -160,6 +166,7 @@ const props = withDefaults(defineProps<{
   closeOthersTitle?: string;
   contextMenuItems?: PanelTabStripContextMenuItem[];
   showTabBorders?: boolean;
+  variant?: "default" | "file";
 }>(), {
   activeKey: "",
   ariaLabel: "",
@@ -169,6 +176,7 @@ const props = withDefaults(defineProps<{
   closeOthersTitle: "",
   contextMenuItems: () => [],
   showTabBorders: true,
+  variant: "default",
 });
 
 const emit = defineEmits<{
@@ -186,6 +194,8 @@ let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 let longPressStart: { key: string; x: number; y: number } | null = null;
 let suppressNextSelectKey = "";
 let hostResizeObserver: ResizeObserver | null = null;
+
+const fileVariant = computed(() => props.variant === "file");
 
 const estimatedTabWidth = computed(() => {
   const tabCount = Math.max(props.tabs.length, 1);
@@ -207,6 +217,7 @@ function shouldReserveCloseSpace(tab: PanelTabStripItem) {
 }
 
 function tabBorderClass(tabKey: string, tabIndex: number) {
+  if (fileVariant.value) return "";
   if (!props.showTabBorders || tabIndex <= 0) return "";
   const prevTab = props.tabs[tabIndex - 1];
   if (!prevTab) return "";
@@ -416,5 +427,13 @@ onBeforeUnmount(() => {
   filter:
     drop-shadow(0 0 0.35px rgb(255 255 255 / 0.45))
     drop-shadow(0 0 0.45px rgb(15 23 42 / 0.22));
+}
+
+.file-tab-label-fade {
+  flex: 1 1 0%;
+  white-space: nowrap;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 1rem), transparent 100%);
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 1rem), transparent 100%);
 }
 </style>
