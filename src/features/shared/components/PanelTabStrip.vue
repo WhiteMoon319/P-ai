@@ -23,6 +23,7 @@
             fileVariant && tab.key !== activeKey ? 'hover:bg-base-300/60' : '',
           ]"
           :title="tab.title || tab.label"
+          @auxclick="handleTabAuxClick(tab, $event)"
           @contextmenu="handleTabContextMenu(tab, $event)"
           @pointerdown="startLongPress(tab, $event)"
           @pointermove="trackLongPressMove"
@@ -239,6 +240,12 @@ function closeTab(tab: PanelTabStripItem) {
   if (tab.disabled || !tab.closeable) return;
   closeMenu.value = null;
   emit("closeTab", tab.key);
+}
+
+function handleTabAuxClick(tab: PanelTabStripItem, event: MouseEvent) {
+  if (event.button !== 1) return;
+  event.preventDefault();
+  closeTab(tab);
 }
 
 function runContextMenuItem(item: PanelTabStripContextMenuItem) {
