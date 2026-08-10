@@ -55,6 +55,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
@@ -821,17 +822,33 @@ fun MessageBubble(message: ChatMessage) {
 
 // ==================== 设置 ====================
 
-/** 设置一级页条目。 */
+/** 设置一级页条目（顺序对齐 Vue ConfigView 导航）。 */
 private enum class SettingsEntry(
     val title: String,
     val subtitle: String,
+    val group: String? = null,
 ) {
-    Api("模型与供应商", "供应商增删改、连接测试、启用切换"),
-    Chat("聊天设置", "用户别名、回复风格、默认配置"),
-    Network("网络访问", "远程连接开关、端口、访问密码"),
-    Tools("工具", "Android 沙盒工作区、工具状态"),
-    About("关于", "版本、检查更新、仓库"),
+    Welcome("欢迎", "快速上手与常用入口", group = "通用"),
+    Chat("聊天设置", "用户别名、回复风格、指令预设", group = "通用"),
+    Notification("通知", "消息通知、声音、桌面操作提醒", group = "通用"),
+    Network("网络访问", "远程连接开关、端口、访问密码", group = "通用"),
+    Appearance("外观", "界面语言、字号", group = "通用"),
+    Api("模型与供应商", "供应商增删改、连接测试、语音识别", group = "模型"),
+    Tools("工具", "Android 沙盒工作区、工具状态", group = "模型"),
+    Mcp("MCP", "MCP 服务器与技能", group = "模型"),
+    Persona("人设", "人设与代理管理", group = "组织"),
+    Department("部门", "部门结构", group = "组织"),
+    Memory("记忆", "记忆管理", group = "数据"),
+    Task("任务", "定时任务与运行日志", group = "数据"),
+    Logs("日志", "运行日志", group = "数据"),
+    Storage("存储", "存储用量与清理", group = "数据"),
+    RemoteIm("远程IM", "通道、联系人、转发设置", group = "连接"),
+    Usage("用量", "Token 用量统计", group = "数据"),
+    About("关于", "版本、检查更新、仓库", group = "通用"),
 }
+
+/** 设置页分组顺序。 */
+private val settingsGroups = listOf("通用", "模型", "组织", "数据", "连接")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -878,35 +895,64 @@ fun SettingsScreen(
         )
         when (entry) {
             null -> {
-                // 一级：设置项列表
+                // 一级：设置项列表（按组）
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                    SettingsEntry.entries.forEach { item ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
-                                .clickable { current = item },
-                        ) {
-                            Row(
-                                Modifier.padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically,
+                    settingsGroups.forEach { group ->
+                        Text(
+                            group,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
+                        )
+                        SettingsEntry.entries.filter { it.group == group }.forEach { item ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
+                                    .clickable { current = item },
                             ) {
-                                Column(Modifier.weight(1f)) {
-                                    Text(item.title, style = MaterialTheme.typography.titleSmall)
-                                    Text(
-                                        item.subtitle,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
+                                Row(
+                                    Modifier.padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(item.title, style = MaterialTheme.typography.titleSmall)
+                                        Text(
+                                            item.subtitle,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Text("›", style = MaterialTheme.typography.titleMedium)
                                 }
-                                Text("›", style = MaterialTheme.typography.titleMedium)
                             }
                         }
                     }
                 }
             }
-            SettingsEntry.Api -> ApiSettingsTab(appConfig = appConfig, vm = vm)
+            SettingsEntry.Welcome -> Text(
+                "欢迎使用 P-AI\n\n常用入口：\n· 新建会话：会话列表右下角 + 按钮\n· 语音输入：聊天输入框麦克风\n· 添加附件：聊天输入框回形针\n· 远程连接：设置 → 网络访问",
+                modifier = Modifier.padding(20.dp),
+            )
             SettingsEntry.Chat -> ChatSettingsTab(settings = chatSettings, vm = vm)
+            SettingsEntry.Notification -> NotificationSettingsTab(vm = vm)
             SettingsEntry.Network -> NetworkSettingsTab(vm = vm)
+            SettingsEntry.Appearance -> AppearanceSettingsTab(vm = vm)
+            SettingsEntry.Api -> ApiSettingsTab(appConfig = appConfig, vm = vm)
             SettingsEntry.Tools -> ToolsSettingsTab(vm = vm, toolStatus = toolStatus)
+            SettingsEntry.Mcp -> McpSettingsTab(vm = vm)
+            SettingsEntry.Persona -> Text(
+                "人设管理：请在「模型与供应商」页配置（当前版本仅支持主 Agent）。",
+                modifier = Modifier.padding(20.dp),
+            )
+            SettingsEntry.Department -> Text(
+                "部门管理：当前版本使用默认部门，暂不支持编辑。",
+                modifier = Modifier.padding(20.dp),
+            )
+            SettingsEntry.Memory -> MemorySettingsTab(vm = vm)
+            SettingsEntry.Task -> TaskSettingsTab(vm = vm)
+            SettingsEntry.Logs -> LogsSettingsTab(vm = vm)
+            SettingsEntry.Storage -> StorageSettingsTab(vm = vm)
+            SettingsEntry.RemoteIm -> RemoteImSettingsTab(vm = vm)
+            SettingsEntry.Usage -> UsageSettingsTab(vm = vm)
             SettingsEntry.About -> AboutSettingsTab(bootstrap = bootstrap, vm = vm)
         }
     }
@@ -1014,6 +1060,65 @@ private fun ApiSettingsTab(appConfig: com.whitemoon319.pai.model.AppConfig?, vm:
                 }
             }
         }
+        // 语音识别（STT）供应商选择
+        Spacer(Modifier.height(16.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(12.dp))
+        Text("语音识别供应商", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "语音输入使用的识别服务；需先新增协议为 openai_stt 或 mimo_asr 的供应商。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+        val sttId = appConfig?.sttApiConfigId
+        val sttCandidates = appConfig?.apiConfigs.orEmpty().filter { api ->
+            val fmt = api.requestFormat.orEmpty()
+            fmt == "openai_stt" || fmt == "mimo_asr" || fmt == "stt"
+        }
+        if (sttCandidates.isEmpty()) {
+            Text(
+                "暂无语音识别供应商，请在「新增」中把协议设为 openai_stt 或 mimo_asr。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        } else {
+            sttCandidates.forEach { api ->
+                val isSttCurrent = sttId == api.id
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(api.name ?: "未命名", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "协议：${api.requestFormat} · 模型：${api.model ?: "—"}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (isSttCurrent) {
+                                Text(
+                                    "语音识别使用中",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                        if (!isSttCurrent) {
+                            TextButton(
+                                enabled = !saving,
+                                onClick = {
+                                    scope.launch { vm.saveSttApiConfig(api.id) }
+                                },
+                            ) { Text("设为语音识别") }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // 新增/编辑表单对话框
@@ -1074,6 +1179,7 @@ private fun ApiConfigEditorDialog(
         "fireworks", "together", "groq", "mimo", "minimax", "moonshot", "nebius", "xai",
         "zai", "bigmodel", "aliyun", "baidu", "cohere", "ollama", "ollama_cloud", "vertex",
         "github_copilot", "opencode_go", "bedrock_api",
+        "openai_stt", "mimo_asr",
     )
 
     AlertDialog(
@@ -1413,12 +1519,457 @@ private fun NetworkSettingsTab(vm: AppViewModel) {
     }
 }
 
+/** 通知设置（对齐 Vue NotificationTab）。 */
+@Composable
+private fun NotificationSettingsTab(vm: AppViewModel) {
+    val scope = rememberCoroutineScope()
+    val appConfig by vm.appConfig.collectAsState()
+    val saving by vm.settingsSaving.collectAsState()
+    var notifEnabled by remember { mutableStateOf(appConfig?.messageNotificationEnabled ?: true) }
+    var soundEnabled by remember { mutableStateOf(appConfig?.messageNotificationSoundEnabled ?: true) }
+    var desktopNotice by remember { mutableStateOf(appConfig?.desktopOperationNoticeEnabled ?: false) }
+    var saved by remember { mutableStateOf(false) }
+
+    LaunchedEffect(appConfig) {
+        notifEnabled = appConfig?.messageNotificationEnabled ?: true
+        soundEnabled = appConfig?.messageNotificationSoundEnabled ?: true
+        desktopNotice = appConfig?.desktopOperationNoticeEnabled ?: false
+    }
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Text("通知设置", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "控制收到新消息时的提醒方式。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("消息通知", style = MaterialTheme.typography.bodyLarge)
+                Text("收到新消息时弹出提醒", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(checked = notifEnabled, onCheckedChange = { notifEnabled = it })
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("通知声音", style = MaterialTheme.typography.bodyLarge)
+                Text("通知时播放提示音", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(checked = soundEnabled, onCheckedChange = { soundEnabled = it })
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("桌面操作提醒", style = MaterialTheme.typography.bodyLarge)
+                Text("桌面操作完成时通知", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(checked = desktopNotice, onCheckedChange = { desktopNotice = it })
+        }
+        Spacer(Modifier.height(16.dp))
+        OutlinedButton(
+            onClick = {
+                scope.launch {
+                    saved = vm.saveNotificationAndAppearance(
+                        messageNotificationEnabled = notifEnabled,
+                        messageNotificationSoundEnabled = soundEnabled,
+                        desktopOperationNoticeEnabled = desktopNotice,
+                    )
+                }
+            },
+            enabled = !saving,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(if (saving) "保存中…" else "保存设置") }
+        if (saved) {
+            Spacer(Modifier.height(8.dp))
+            Text("已保存", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
+/** 外观设置（对齐 Vue AppearanceTab：语言 + 字号）。 */
+@Composable
+private fun AppearanceSettingsTab(vm: AppViewModel) {
+    val scope = rememberCoroutineScope()
+    val appConfig by vm.appConfig.collectAsState()
+    val saving by vm.settingsSaving.collectAsState()
+    var language by remember { mutableStateOf(appConfig?.uiLanguage ?: "zh-CN") }
+    var sizeScale by remember { mutableStateOf(appConfig?.uiSizeScale ?: 100) }
+    var saved by remember { mutableStateOf(false) }
+
+    LaunchedEffect(appConfig) {
+        language = appConfig?.uiLanguage ?: "zh-CN"
+        sizeScale = appConfig?.uiSizeScale ?: 100
+    }
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Text("外观设置", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "界面语言与显示字号。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        Text("界面语言", style = MaterialTheme.typography.bodyLarge)
+        val languages = listOf("zh-CN" to "简体中文", "en-US" to "English", "zh-TW" to "繁體中文")
+        languages.forEach { (code, label) ->
+            Row(
+                Modifier.fillMaxWidth().clickable { language = code }.padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                if (language == code) Text("✓", color = MaterialTheme.colorScheme.primary)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Text("界面字号", style = MaterialTheme.typography.bodyLarge)
+        Text(
+            "当前 $sizeScale%",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(vertical = 4.dp),
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("小", style = MaterialTheme.typography.bodySmall)
+            Slider(
+                value = sizeScale.toFloat(),
+                onValueChange = { sizeScale = it.toInt() },
+                valueRange = 80f..130f,
+                steps = 4,
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            )
+            Text("大", style = MaterialTheme.typography.bodySmall)
+        }
+        Spacer(Modifier.height(16.dp))
+        OutlinedButton(
+            onClick = {
+                scope.launch {
+                    saved = vm.saveNotificationAndAppearance(uiLanguage = language, uiSizeScale = sizeScale)
+                }
+            },
+            enabled = !saving,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(if (saving) "保存中…" else "保存设置") }
+        if (saved) {
+            Spacer(Modifier.height(8.dp))
+            Text("已保存", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
+/** 记忆设置（对齐 Vue MemoryTab：列表 + 删除）。 */
+@Composable
+private fun MemorySettingsTab(vm: AppViewModel) {
+    val scope = rememberCoroutineScope()
+    val memories by vm.memories.collectAsState()
+    val loading by vm.memoryLoading.collectAsState()
+    var pendingDelete by remember { mutableStateOf<Map<String, Any?>?>(null) }
+
+    LaunchedEffect(Unit) { vm.loadMemories() }
+
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("记忆管理", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { scope.launch { vm.loadMemories() } }, enabled = !loading) { Text(if (loading) "加载中…" else "刷新") }
+        }
+        if (memories.isNullOrEmpty()) {
+            Text(
+                if (loading) "加载中…" else "暂无记忆",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp),
+            )
+        } else {
+            LazyColumn(Modifier.weight(1f)) {
+                items(memories!!.size) { index ->
+                    val item = memories!![index]
+                    val content = item["content"] as? String ?: item["judgment"] as? String ?: ""
+                    val id = (item["id"] as? String) ?: ""
+                    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                content.take(80),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(onClick = { pendingDelete = item }) { Text("删除") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    pendingDelete?.let { item ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("删除记忆") },
+            text = { Text("确定删除这条记忆吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        val id = (item["id"] as? String) ?: ""
+                        vm.deleteMemory(id)
+                        pendingDelete = null
+                    }
+                }) { Text("删除") }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("取消") } },
+        )
+    }
+}
+
+/** 日志设置（对齐 Vue LogsTab：运行日志）。 */
+@Composable
+private fun LogsSettingsTab(vm: AppViewModel) {
+    val scope = rememberCoroutineScope()
+    val logs by vm.runtimeLogs.collectAsState()
+    val loading by vm.runtimeLogsLoading.collectAsState()
+
+    LaunchedEffect(Unit) { vm.loadRuntimeLogs() }
+
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("运行日志", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { scope.launch { vm.loadRuntimeLogs() } }, enabled = !loading) { Text(if (loading) "加载中…" else "刷新") }
+        }
+        if (logs.isNullOrEmpty()) {
+            Text(
+                if (loading) "加载中…" else "暂无日志",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp),
+            )
+        } else {
+            LazyColumn(Modifier.weight(1f)) {
+                items(logs!!.size) { index ->
+                    val log = logs!![index]
+                    val level = log["level"] as? String ?: "info"
+                    val message = log["message"] as? String ?: ""
+                    val time = log["createdAt"] as? String ?: ""
+                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                        Text(
+                            level.take(5).uppercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = when (level) {
+                                "error" -> MaterialTheme.colorScheme.error
+                                "warn" -> MaterialTheme.colorScheme.tertiary
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            modifier = Modifier.width(52.dp),
+                        )
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            time.takeLast(12),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 存储设置（对齐 Vue StorageTab）。 */
+@Composable
+private fun StorageSettingsTab(vm: AppViewModel) {
+    val scope = rememberCoroutineScope()
+    val overview by vm.storageOverview.collectAsState()
+    val loading by vm.storageLoading.collectAsState()
+
+    LaunchedEffect(Unit) { vm.loadStorageOverview() }
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("存储用量", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { scope.launch { vm.loadStorageOverview(refresh = true) } }, enabled = !loading) {
+                Text(if (loading) "刷新中…" else "刷新")
+            }
+        }
+        if (overview == null) {
+            Text(if (loading) "加载中…" else "暂无数据", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(8.dp))
+        } else {
+            overview!!.forEach { (key, value) ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Text(key, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Text(value?.toString() ?: "—", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+/** 用量设置（对齐 Vue UsageTab）。 */
+@Composable
+private fun UsageSettingsTab(vm: AppViewModel) {
+    val scope = rememberCoroutineScope()
+    val overview by vm.usageOverview.collectAsState()
+    val loading by vm.usageLoading.collectAsState()
+
+    LaunchedEffect(Unit) { vm.loadUsageOverview() }
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("用量统计", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { scope.launch { vm.loadUsageOverview() } }, enabled = !loading) { Text(if (loading) "加载中…" else "刷新") }
+        }
+        if (overview == null) {
+            Text(if (loading) "加载中…" else "暂无数据", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(8.dp))
+        } else {
+            overview!!.forEach { (key, value) ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Text(key, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Text(value?.toString() ?: "—", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+/** MCP 设置（对齐 Vue McpTab：服务器列表）。 */
+@Composable
+private fun McpSettingsTab(vm: AppViewModel) {
+    val scope = rememberCoroutineScope()
+    val servers by vm.mcpServers.collectAsState()
+    val loading by vm.mcpLoading.collectAsState()
+
+    LaunchedEffect(Unit) { vm.loadMcpServers() }
+
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("MCP 服务器", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { scope.launch { vm.loadMcpServers() } }, enabled = !loading) { Text(if (loading) "加载中…" else "刷新") }
+        }
+        if (servers.isNullOrEmpty()) {
+            Text(
+                if (loading) "加载中…" else "暂无 MCP 服务器",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp),
+            )
+        } else {
+            LazyColumn(Modifier.weight(1f)) {
+                items(servers!!.size) { index ->
+                    val server = servers!![index]
+                    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(
+                                server["name"] as? String ?: "未命名",
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            val command = server["command"] as? String ?: ""
+                            val url = server["url"] as? String ?: ""
+                            Text(
+                                if (command.isNotBlank()) command else if (url.isNotBlank()) url else "—",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 任务设置（对齐 Vue TaskTab）。 */
+@Composable
+private fun TaskSettingsTab(vm: AppViewModel) {
+    val scope = rememberCoroutineScope()
+    val tasks by vm.tasks.collectAsState()
+    val loading by vm.tasksLoading.collectAsState()
+
+    LaunchedEffect(Unit) { vm.loadTasks() }
+
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("定时任务", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { scope.launch { vm.loadTasks() } }, enabled = !loading) { Text(if (loading) "加载中…" else "刷新") }
+        }
+        if (tasks.isNullOrEmpty()) {
+            Text(
+                if (loading) "加载中…" else "暂无任务",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp),
+            )
+        } else {
+            LazyColumn(Modifier.weight(1f)) {
+                items(tasks!!.size) { index ->
+                    val task = tasks!![index]
+                    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(task["title"] as? String ?: "未命名", style = MaterialTheme.typography.titleSmall)
+                            val next = task["nextRunAt"] as? String ?: ""
+                            Text(
+                                if (next.isNotBlank()) "下次：$next" else "—",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 远程 IM 设置（对齐 Vue RemoteImTab：通道列表）。 */
+@Composable
+private fun RemoteImSettingsTab(vm: AppViewModel) {
+    val scope = rememberCoroutineScope()
+    val channels by vm.remoteImChannels.collectAsState()
+    val loading by vm.remoteImLoading.collectAsState()
+
+    LaunchedEffect(Unit) { vm.loadRemoteImChannels() }
+
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("远程 IM", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { scope.launch { vm.loadRemoteImChannels() } }, enabled = !loading) { Text(if (loading) "加载中…" else "刷新") }
+        }
+        if (channels.isNullOrEmpty()) {
+            Text(
+                if (loading) "加载中…" else "暂无远程 IM 通道",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp),
+            )
+        } else {
+            LazyColumn(Modifier.weight(1f)) {
+                items(channels!!.size) { index ->
+                    val channel = channels!![index]
+                    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(
+                                channel["name"] as? String ?: channel["platform"] as? String ?: "未命名",
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            val platform = channel["platform"] as? String ?: ""
+                            val enabled = channel["enabled"] as? Boolean ?: false
+                            Text(
+                                "$platform · ${if (enabled) "已启用" else "未启用"}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ToolsSettingsTab(
     vm: AppViewModel,
     toolStatus: List<com.whitemoon319.pai.model.ToolLoadStatus>,
-) {
-    val scope = rememberCoroutineScope()
+) {    val scope = rememberCoroutineScope()
     val workspace by vm.workspaceStatus.collectAsState()
     val busy by vm.workspaceBusy.collectAsState()
     var showFiles by remember { mutableStateOf(false) }

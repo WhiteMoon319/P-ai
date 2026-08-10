@@ -688,6 +688,185 @@ class AppViewModel(
         }
     }
 
+    /** 保存语音识别（STT）供应商选择。 */
+    suspend fun saveSttApiConfig(sttApiConfigId: String?): Boolean {
+        return withContext(Dispatchers.IO) {
+            settingsSaving.value = true
+            try {
+                val current = appConfig.value ?: service.loadConfig()
+                val updated = current.copy(sttApiConfigId = sttApiConfigId)
+                appConfig.value = service.saveConfig(updated)
+                true
+            } catch (e: Exception) {
+                error.value = "保存语音供应商失败: ${e.message}"
+                false
+            } finally {
+                settingsSaving.value = false
+            }
+        }
+    }
+
+    // ---------------- Vue 设置页对齐：通知 / 外观 ----------------
+
+    /** 保存通知与外观设置（patch 语义：仅覆盖可编辑字段，避免全量保存丢字段）。 */
+    suspend fun saveNotificationAndAppearance(
+        messageNotificationEnabled: Boolean? = null,
+        messageNotificationSoundEnabled: Boolean? = null,
+        desktopOperationNoticeEnabled: Boolean? = null,
+        uiLanguage: String? = null,
+        uiSizeScale: Int? = null,
+    ): Boolean {
+        return withContext(Dispatchers.IO) {
+            settingsSaving.value = true
+            try {
+                val current = appConfig.value ?: service.loadConfig()
+                val updated = current.copy(
+                    messageNotificationEnabled = messageNotificationEnabled ?: current.messageNotificationEnabled,
+                    messageNotificationSoundEnabled = messageNotificationSoundEnabled ?: current.messageNotificationSoundEnabled,
+                    desktopOperationNoticeEnabled = desktopOperationNoticeEnabled ?: current.desktopOperationNoticeEnabled,
+                    uiLanguage = uiLanguage ?: current.uiLanguage,
+                    uiSizeScale = uiSizeScale ?: current.uiSizeScale,
+                )
+                appConfig.value = service.saveConfig(updated)
+                true
+            } catch (e: Exception) {
+                error.value = "保存设置失败: ${e.message}"
+                false
+            } finally {
+                settingsSaving.value = false
+            }
+        }
+    }
+
+    // ---------------- Vue 设置页对齐：记忆 / 日志 / 存储 / 用量 / MCP / 任务 / 远程IM ----------------
+
+    val memories = MutableStateFlow<List<Map<String, Any?>>?>(null)
+    val memoryLoading = MutableStateFlow(false)
+
+    suspend fun loadMemories() {
+        withContext(Dispatchers.IO) {
+            memoryLoading.value = true
+            try {
+                val result = service.listMemories()
+                @Suppress("UNCHECKED_CAST")
+                memories.value = (result["memories"] as? List<Map<String, Any?>>) ?: emptyList()
+            } catch (e: Exception) {
+                error.value = "读取记忆失败: ${e.message}"
+            } finally {
+                memoryLoading.value = false
+            }
+        }
+    }
+
+    suspend fun deleteMemory(memoryId: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val ok = service.deleteMemory(memoryId)
+                if (ok) loadMemories()
+                ok
+            } catch (e: Exception) {
+                error.value = "删除记忆失败: ${e.message}"
+                false
+            }
+        }
+    }
+
+    val runtimeLogs = MutableStateFlow<List<Map<String, Any?>>?>(null)
+    val runtimeLogsLoading = MutableStateFlow(false)
+
+    suspend fun loadRuntimeLogs() {
+        withContext(Dispatchers.IO) {
+            runtimeLogsLoading.value = true
+            try {
+                runtimeLogs.value = service.listRecentRuntimeLogs()
+            } catch (e: Exception) {
+                error.value = "读取日志失败: ${e.message}"
+            } finally {
+                runtimeLogsLoading.value = false
+            }
+        }
+    }
+
+    val storageOverview = MutableStateFlow<Map<String, Any?>?>(null)
+    val storageLoading = MutableStateFlow(false)
+
+    suspend fun loadStorageOverview(refresh: Boolean = false) {
+        withContext(Dispatchers.IO) {
+            storageLoading.value = true
+            try {
+                storageOverview.value = if (refresh) service.refreshStorageUsageOverview() else service.getStorageUsageOverview()
+            } catch (e: Exception) {
+                error.value = "读取存储用量失败: ${e.message}"
+            } finally {
+                storageLoading.value = false
+            }
+        }
+    }
+
+    val usageOverview = MutableStateFlow<Map<String, Any?>?>(null)
+    val usageLoading = MutableStateFlow(false)
+
+    suspend fun loadUsageOverview() {
+        withContext(Dispatchers.IO) {
+            usageLoading.value = true
+            try {
+                usageOverview.value = service.getUsageOverview()
+            } catch (e: Exception) {
+                error.value = "读取用量失败: ${e.message}"
+            } finally {
+                usageLoading.value = false
+            }
+        }
+    }
+
+    val mcpServers = MutableStateFlow<List<Map<String, Any?>>?>(null)
+    val mcpLoading = MutableStateFlow(false)
+
+    suspend fun loadMcpServers() {
+        withContext(Dispatchers.IO) {
+            mcpLoading.value = true
+            try {
+                mcpServers.value = service.mcpListServers()
+            } catch (e: Exception) {
+                error.value = "读取 MCP 服务器失败: ${e.message}"
+            } finally {
+                mcpLoading.value = false
+            }
+        }
+    }
+
+    val tasks = MutableStateFlow<List<Map<String, Any?>>?>(null)
+    val tasksLoading = MutableStateFlow(false)
+
+    suspend fun loadTasks() {
+        withContext(Dispatchers.IO) {
+            tasksLoading.value = true
+            try {
+                tasks.value = service.taskListTasks()
+            } catch (e: Exception) {
+                error.value = "读取任务失败: ${e.message}"
+            } finally {
+                tasksLoading.value = false
+            }
+        }
+    }
+
+    val remoteImChannels = MutableStateFlow<List<Map<String, Any?>>?>(null)
+    val remoteImLoading = MutableStateFlow(false)
+
+    suspend fun loadRemoteImChannels() {
+        withContext(Dispatchers.IO) {
+            remoteImLoading.value = true
+            try {
+                remoteImChannels.value = service.remoteImListChannels()
+            } catch (e: Exception) {
+                error.value = "读取远程 IM 通道失败: ${e.message}"
+            } finally {
+                remoteImLoading.value = false
+            }
+        }
+    }
+
     /** 加载设置页全部数据（配置/聊天设置/工具状态/关于）。agentId 用于工具状态。 */
     suspend fun loadSettings(agentId: String?) {
         withContext(Dispatchers.IO) {

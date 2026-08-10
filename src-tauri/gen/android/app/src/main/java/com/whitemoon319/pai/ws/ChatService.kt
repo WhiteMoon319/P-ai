@@ -143,6 +143,53 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("get_web_access_info", mapOf("input" to input), Map::class.java) as Map<String, Any?>
     }
 
+    // ---------------- Vue 设置页对齐：记忆 / 存储 / 用量 / 日志 / MCP / 任务 ----------------
+
+    suspend fun listMemories(): Map<String, Any?> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("list_memories", emptyMap<String, Any?>(), Map::class.java) as Map<String, Any?>
+    }
+
+    suspend fun deleteMemory(memoryId: String): Boolean {
+        val input = mapOf("memoryId" to memoryId)
+        return client.request("delete_memory", mapOf("input" to input), Boolean::class.java)
+    }
+
+    suspend fun getStorageUsageOverview(): Map<String, Any?> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("get_storage_usage_overview", emptyMap<String, Any?>(), Map::class.java) as Map<String, Any?>
+    }
+
+    suspend fun refreshStorageUsageOverview(): Map<String, Any?> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("refresh_storage_usage_overview", emptyMap<String, Any?>(), Map::class.java) as Map<String, Any?>
+    }
+
+    suspend fun getUsageOverview(): Map<String, Any?> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("get_usage_overview", emptyMap<String, Any?>(), Map::class.java) as Map<String, Any?>
+    }
+
+    suspend fun listRecentRuntimeLogs(): List<Map<String, Any?>> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("list_recent_runtime_logs", emptyMap<String, Any?>(), List::class.java) as List<Map<String, Any?>>
+    }
+
+    suspend fun mcpListServers(): List<Map<String, Any?>> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("mcp_list_servers", emptyMap<String, Any?>(), List::class.java) as List<Map<String, Any?>>
+    }
+
+    suspend fun taskListTasks(): List<Map<String, Any?>> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("task_list_tasks", emptyMap<String, Any?>(), List::class.java) as List<Map<String, Any?>>
+    }
+
+    suspend fun remoteImListChannels(): List<Map<String, Any?>> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("remote_im_list_channels", emptyMap<String, Any?>(), List::class.java) as List<Map<String, Any?>>
+    }
+
     suspend fun setDepartmentPrimaryApiConfig(departmentId: String, apiConfigId: String): com.whitemoon319.pai.model.AppConfig {
         val input = com.whitemoon319.pai.model.SetDepartmentPrimaryApiConfigInput(departmentId = departmentId, apiConfigId = apiConfigId)
         return client.request("set_department_primary_api_config", mapOf("input" to input), com.whitemoon319.pai.model.AppConfig::class.java)

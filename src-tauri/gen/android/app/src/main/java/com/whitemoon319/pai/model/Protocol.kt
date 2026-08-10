@@ -487,6 +487,23 @@ data class AppConfig(
     @SerializedName("webAccessEnabled") val webAccessEnabled: Boolean? = null,
     @SerializedName("webAccessPort") val webAccessPort: Int? = null,
     @SerializedName("webAccessPassword") val webAccessPassword: String? = null,
+    @SerializedName("sttApiConfigId") val sttApiConfigId: String? = null,
+    @SerializedName("sttAutoSend") val sttAutoSend: Boolean? = null,
+    @SerializedName("messageNotificationEnabled") val messageNotificationEnabled: Boolean? = null,
+    @SerializedName("messageNotificationSoundEnabled") val messageNotificationSoundEnabled: Boolean? = null,
+    @SerializedName("desktopOperationNoticeEnabled") val desktopOperationNoticeEnabled: Boolean? = null,
+    @SerializedName("uiLanguage") val uiLanguage: String? = null,
+    @SerializedName("uiSizeScale") val uiSizeScale: Int? = null,
+)
+
+/** 会话级 API 设置（含 STT/视觉/工具审查供应商），save_conversation_api_settings 用。 */
+data class ConversationApiSettings(
+    @SerializedName("assistantDepartmentApiConfigId", alternate = ["chatApiConfigId"])
+    val assistantDepartmentApiConfigId: String? = null,
+    @SerializedName("visionApiConfigId") val visionApiConfigId: String? = null,
+    @SerializedName("toolReviewApiConfigId") val toolReviewApiConfigId: String? = null,
+    @SerializedName("sttApiConfigId") val sttApiConfigId: String? = null,
+    @SerializedName("sttAutoSend") val sttAutoSend: Boolean = false,
 )
 
 /** 单个 API 配置（供应商）。 */
