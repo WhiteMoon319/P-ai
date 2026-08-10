@@ -13,4 +13,3 @@ include!("image_generation/edit.rs");
 include!("image_generation/comfyui.rs");
 include!("image_generation/codex.rs");
 include!("image_generation/service.rs");
-include!("image_generation/commands.rs");
