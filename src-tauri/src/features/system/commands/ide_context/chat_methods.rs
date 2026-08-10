@@ -647,6 +647,28 @@ async fn ide_chat_delete_conversation(state: &AppState, params: Value) -> Result
     ide_chat_serialize(delete_unarchived_conversation_inner(input, state).await?)
 }
 
+/// 切换会话首选模型（model.select），复用 set_conversation_preferred_model_inner。
+fn ide_chat_select_model(
+    state: &AppState,
+    _app: &NativeAppHandle,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_params::<IdeChatSelectModelInput>(params)?;
+    let conversation_id = input.conversation_id.trim().to_string();
+    set_conversation_preferred_model_inner(
+        SetConversationPreferredModelInput {
+            conversation_id: conversation_id.clone(),
+            preferred_api_config_id: (!input.api_config_id.trim().is_empty())
+                .then(|| input.api_config_id.trim().to_string()),
+        },
+        state,
+    )?;
+    let updated_conversation =
+        conversation_service_v2().get_conversation_meta(state, &conversation_id)?;
+    let updated_conversation = ide_chat_conversation_from_meta_view(&updated_conversation);
+    ide_chat_model_payload_for_conversation(state, &updated_conversation)
+}
+
 async fn ide_chat_batch_archive_conversations(
     state: &AppState,
     params: Value,

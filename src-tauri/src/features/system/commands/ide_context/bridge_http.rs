@@ -101,8 +101,196 @@ fn clear_ide_context_bridge_discovery() {
     }
 }
 
+async fn prepare_ide_context_bridge_server_start(
+    state: &AppState,
+    ide_context_runtime: &IdeContextRuntime,
+    port_service: &Arc<LocalPortServiceCore>,
+) -> Option<(tokio::net::TcpListener, u16, String)> {
+    eprintln!("[P-AI Android] prepare_ide_context_bridge_server_start: entered");
+    let config = match state_read_config_cached(state) {
+        Ok(config) => config,
+        Err(err) => {
+            eprintln!("[P-AI Android] prepare: config read failed: {}", err);
+            runtime_log_error(format!(
+                "[网络访问] 读取配置失败，使用默认端口: {}",
+                err
+            ));
+            AppConfig::default()
+        }
+    };
+    if !config.web_access_enabled {
+        eprintln!("[P-AI Android] prepare: web_access_enabled=false, skipping");
+        IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
+        ide_context_set_current_port(ide_context_runtime, None);
+        clear_ide_context_bridge_discovery();
+        port_service
+            .set_status_text(WEB_ACCESS_SERVICE_ID, Some("disabled".to_string()))
+            .await;
+        port_service
+            .set_listen_addr(WEB_ACCESS_SERVICE_ID, None)
+            .await;
+        runtime_log_warn(format!("[网络访问] 跳过启动：网络访问已关闭"));
+        return None;
+    }
+    port_service
+        .set_status_text(WEB_ACCESS_SERVICE_ID, Some("binding".to_string()))
+        .await;
+    port_service.set_last_error(WEB_ACCESS_SERVICE_ID, None).await;
+    let preferred_port = normalize_web_access_port(config.web_access_port);
+    eprintln!("[P-AI Android] prepare: binding to port {}", preferred_port);
+    let (listener, port) = match bind_ide_context_bridge_listener(preferred_port).await {
+        Ok(result) => {
+            eprintln!("[P-AI Android] prepare: bind OK, port={}", result.1);
+            result
+        }
+        Err(err) => {
+            eprintln!("[P-AI Android] prepare: bind FAILED: {}", err);
+            IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
+            ide_context_set_current_port(ide_context_runtime, None);
+            // 端口被占用说明可能有另一个实例正在监听并维护 discovery 文件，
+            // 此处不能清掉它，否则 VSCode 侧边栏会丢失后端发现信息。
+            port_service
+                .set_status_text(WEB_ACCESS_SERVICE_ID, Some("bind_failed".to_string()))
+                .await;
+            port_service
+                .set_last_error(WEB_ACCESS_SERVICE_ID, Some(err.clone()))
+                .await;
+            runtime_log_error(format!("[网络访问] 监听失败: {}", err));
+            return None;
+        }
+    };
+    ide_context_set_current_port(ide_context_runtime, Some(port));
+    let bridge_url = ide_context_bridge_url(port);
+    port_service
+        .set_listen_addr(WEB_ACCESS_SERVICE_ID, Some(format!("{}:{}", IDE_CONTEXT_BRIDGE_BIND_HOST, port)))
+        .await;
+    let remote_password = match ide_context_effective_remote_password(state, ide_context_runtime) {
+        Ok(password) => password,
+        Err(err) => {
+            IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
+            ide_context_set_current_port(ide_context_runtime, None);
+            clear_ide_context_bridge_discovery();
+            port_service
+                .set_listen_addr(WEB_ACCESS_SERVICE_ID, None)
+                .await;
+            port_service
+                .set_status_text(WEB_ACCESS_SERVICE_ID, Some("error".to_string()))
+                .await;
+            port_service
+                .set_last_error(WEB_ACCESS_SERVICE_ID, Some(err.clone()))
+                .await;
+            runtime_log_error(format!("[网络访问] 初始化远程访问密码失败，error={}", err));
+            eprintln!("[P-AI Android] prepare: remote password FAILED: {}", err);
+            return None;
+        }
+    };
+    if let Err(err) = publish_ide_context_bridge_discovery(port, &remote_password) {
+        IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
+        ide_context_set_current_port(ide_context_runtime, None);
+        clear_ide_context_bridge_discovery();
+        port_service
+            .set_listen_addr(WEB_ACCESS_SERVICE_ID, None)
+            .await;
+        port_service
+            .set_status_text(WEB_ACCESS_SERVICE_ID, Some("error".to_string()))
+            .await;
+        port_service
+            .set_last_error(WEB_ACCESS_SERVICE_ID, Some(err.clone()))
+            .await;
+        runtime_log_error(format!("[网络访问] 写入发现文件失败，error={}", err));
+        eprintln!("[P-AI Android] prepare: discovery write FAILED: {}", err);
+        return None;
+    }
+    port_service
+        .set_status_text(WEB_ACCESS_SERVICE_ID, Some("listening".to_string()))
+        .await;
+    port_service.set_last_error(WEB_ACCESS_SERVICE_ID, None).await;
+    port_service
+        .add_log(
+            WEB_ACCESS_SERVICE_ID,
+            "info",
+            &format!("服务启动，监听 {}", bridge_url),
+        )
+        .await;
+    runtime_log_info(format!("[网络访问] 已监听 {}", bridge_url));
+    eprintln!("[P-AI Android] prepare: SUCCESS, returning listener on port {}", port);
+    Some((listener, port, bridge_url))
+}
 
+fn spawn_ide_context_bridge_server_task(
+    app: NativeAppHandle,
+    state: AppState,
+    ide_context_runtime: IdeContextRuntime,
+    port_service: Arc<LocalPortServiceCore>,
+    shutdown_token: tokio_util::sync::CancellationToken,
+    listener: tokio::net::TcpListener,
+    port: u16,
+    bridge_url: String,
+) {
+    let server_task = tokio::spawn(async move {
+        loop {
+            let (stream, peer_addr) = tokio::select! {
+                _ = shutdown_token.cancelled() => {
+                    clear_ide_context_bridge_discovery();
+                    IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
+                    ide_context_set_current_port(&ide_context_runtime, None);
+                    port_service
+                        .set_status_text(WEB_ACCESS_SERVICE_ID, Some("stopped".to_string()))
+                        .await;
+                    port_service
+                        .set_listen_addr(WEB_ACCESS_SERVICE_ID, None)
+                        .await;
+                    if let Ok(mut slot) = ide_context_bridge_shutdown_slot().lock() {
+                        slot.take();
+                    }
+                    runtime_log_info(format!("[网络访问] 收到停机信号，停止监听 {}", bridge_url));
+                    break;
+                }
+                result = listener.accept() => match result {
+                    Ok(result) => result,
+                    Err(err) => {
+                        runtime_log_error(format!("[网络访问] 接收连接失败: {}", err));
+                        continue;
+                    }
+                },
+            };
+            let state_clone = state.clone();
+            let app_clone = app.clone();
+            let ide_context_runtime_clone = ide_context_runtime.clone();
+            tokio::spawn(async move {
+                ide_context_ws_handle_connection(
+                    stream,
+                    peer_addr,
+                    port,
+                    app_clone,
+                    state_clone,
+                    ide_context_runtime_clone,
+                )
+                .await;
+            });
+        }
+    });
+    ide_context_bridge_set_server_task(server_task);
+}
 
+async fn bind_ide_context_bridge_listener(
+    preferred_port: u16,
+) -> Result<(tokio::net::TcpListener, u16), String> {
+    let port = normalize_web_access_port(preferred_port);
+    let addr = format!("{}:{}", IDE_CONTEXT_BRIDGE_BIND_HOST, port);
+    match tokio::net::TcpListener::bind(&addr).await {
+        Ok(listener) => Ok((listener, port)),
+        Err(err) => {
+            if err.kind() == std::io::ErrorKind::AddrInUse {
+                runtime_log_info(format!("[网络访问] 固定端口已占用，无法启动: {}", addr));
+                Err(format!("固定端口 {} 已被占用，请释放后重试", port))
+            } else {
+                runtime_log_error(format!("[网络访问] 固定端口监听失败 {}: {}", addr, err));
+                Err(format!("固定端口 {} 监听失败: {}", port, err))
+            }
+        }
+    }
+}
 
 async fn ide_context_stream_is_websocket(stream: &tokio::net::TcpStream) -> bool {
     let mut buffer = [0_u8; 1024];
@@ -191,4 +379,124 @@ fn ide_context_web_html_with_bridge(asset_bytes: &[u8], host: &str) -> Vec<u8> {
     }
 }
 
+async fn ide_context_http_write_response(
+    stream: &mut tokio::net::TcpStream,
+    status: u16,
+    content_type: &str,
+    body: Vec<u8>,
+) {
+    use tokio::io::AsyncWriteExt;
 
+    let headers = format!(
+        "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n",
+        status,
+        ide_context_http_status_text(status),
+        content_type,
+        body.len()
+    );
+    let _ = stream.write_all(headers.as_bytes()).await;
+    let _ = stream.write_all(&body).await;
+    let _ = stream.shutdown().await;
+}
+
+async fn ide_context_http_handle_connection(
+    mut stream: tokio::net::TcpStream,
+    app: NativeAppHandle,
+) {
+    use tokio::io::AsyncReadExt;
+
+    let mut buffer = vec![0_u8; 8192];
+    let count = match tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        stream.read(&mut buffer),
+    )
+    .await
+    {
+        Ok(Ok(count)) => count,
+        _ => 0,
+    };
+    let headers = String::from_utf8_lossy(&buffer[..count]);
+    let (method, path) = ide_context_http_path_from_request(&headers);
+    if method != "GET" {
+        ide_context_http_write_response(
+            &mut stream,
+            405,
+            "text/plain; charset=utf-8",
+            b"Method Not Allowed".to_vec(),
+        )
+        .await;
+        return;
+    }
+    if path == IDE_CONTEXT_BRIDGE_PATH || path == IDE_CONTEXT_CHAT_BRIDGE_PATH {
+        ide_context_http_write_response(
+            &mut stream,
+            426,
+            "text/plain; charset=utf-8",
+            b"WebSocket upgrade required".to_vec(),
+        )
+        .await;
+        return;
+    }
+    if let Some(icon) = ide_context_web_icon_bytes(path) {
+        ide_context_http_write_response(
+            &mut stream,
+            200,
+            "image/png",
+            icon.to_vec(),
+        )
+        .await;
+        return;
+    }
+    let Some(asset_path) = ide_context_web_asset_path(path) else {
+        ide_context_http_write_response(
+            &mut stream,
+            404,
+            "text/plain; charset=utf-8",
+            b"Not Found".to_vec(),
+        )
+        .await;
+        return;
+    };
+    // Android 原生模式无 web 静态资源（asset_resolver 返回 Err），HTTP 页面降级 404；
+    // WS 桥（VSCode 侧边栏/浏览器远程连接）不依赖静态页面，功能不受影响。
+    #[cfg(target_os = "android")]
+    {
+        ide_context_http_write_response(
+            &mut stream,
+            404,
+            "text/plain; charset=utf-8",
+            b"Asset Not Found".to_vec(),
+        )
+        .await;
+        return;
+    }
+    #[cfg(not(target_os = "android"))]
+    let Some(asset) = app.asset_resolver().get(asset_path.clone()) else {
+        ide_context_http_write_response(
+            &mut stream,
+            404,
+            "text/plain; charset=utf-8",
+            b"Asset Not Found".to_vec(),
+        )
+        .await;
+        return;
+    };
+    #[cfg(not(target_os = "android"))]
+    {
+        let host = ide_context_http_header_value(&headers, "host")
+            .filter(|value| !value.is_empty())
+            .unwrap_or("127.0.0.1");
+        let body = if asset_path == "sidebar.html" || asset_path == "settings.html" {
+            ide_context_web_html_with_bridge(asset.bytes(), host)
+        } else {
+            asset.bytes().to_vec()
+        };
+        ide_context_http_write_response(
+            &mut stream,
+            200,
+            asset.mime_type(),
+            body,
+        )
+        .await;
+    }
+}

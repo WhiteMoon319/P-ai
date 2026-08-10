@@ -435,6 +435,14 @@ async fn test_text_connection_inner(
     .await
 }
 
+async fn ide_chat_web_access_info_for_web_settings(
+    app: &NativeAppHandle,
+    state: &AppState,
+    ide_context_runtime: &IdeContextRuntime,
+) -> Result<Value, String> {
+    ide_chat_serialize(get_web_access_info_inner(app, state, ide_context_runtime, false).await?)
+}
+
 include!("remote_im_methods.rs");
 
 fn ide_chat_save_chat_settings_for_web_settings(

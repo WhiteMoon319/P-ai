@@ -89,6 +89,15 @@ fn init_native_runtime(app_root: std::path::PathBuf) -> Result<(), String> {
             runtime_log_error(format!("[启动] 会话持久化 worker 启动失败: {err}"));
         }
     });
+    // Android 原生模式：按配置拉起 Web 访问服务（远程连接）。
+    // 等价桌面 run_deferred_setup 的 start_web_access_server；配置关闭时服务自动跳过。
+    let native_app = NativeAppHandle::noop();
+    let start_state = state.clone();
+    let start_ide_context_runtime = ide_context_runtime.clone();
+    let handle = runtime.handle().clone();
+    handle.spawn(async move {
+        start_web_access_server(native_app, start_state, start_ide_context_runtime).await;
+    });
     NATIVE_RUNTIME
         .set(Ok(Arc::new(NativeRuntime {
             runtime,
@@ -312,6 +321,8 @@ async fn native_dispatch(
         "stt_transcribe" => ide_chat_stt_transcribe_for_web_settings(state, params).await,
         "attachment.ingestLocalPath" => ide_chat_serialize(attachment_ingest_local_path_inner(
             ide_chat_parse_param_field::<AttachmentIngestLocalPathInput>(params, "input")?, state).await?),
+        "get_web_access_info" => ide_chat_web_access_info_for_web_settings(&native_app, state, ide_context_runtime).await,
+        "transport.accessInfo" => ide_chat_web_access_info_for_web_settings(&native_app, state, ide_context_runtime).await,
         "app.bootstrapSnapshot" => ide_chat_load_app_bootstrap_snapshot_for_web_settings(state),
         "get_android_workspace_status" => ide_chat_serialize(get_android_workspace_status_ws_inner(state)?),
         "init_android_workspace" => ide_chat_serialize(init_android_workspace_ws_inner(state, Some(&native_app)).await?),

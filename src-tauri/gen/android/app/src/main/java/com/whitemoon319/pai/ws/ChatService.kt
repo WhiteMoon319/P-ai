@@ -132,6 +132,17 @@ class ChatService(private val client: PaiWsClient) {
     suspend fun loadConfig(): com.whitemoon319.pai.model.AppConfig =
         client.request("load_config", emptyMap<String, Any?>(), com.whitemoon319.pai.model.AppConfig::class.java)
 
+    /** 保存全局配置（patch 语义：传入的字段覆盖，未传保留）。 */
+    suspend fun saveConfig(config: com.whitemoon319.pai.model.AppConfig): com.whitemoon319.pai.model.AppConfig =
+        client.request("save_config", mapOf("config" to config), com.whitemoon319.pai.model.AppConfig::class.java)
+
+    /** 查询 Web 访问（远程连接）状态：running/enabled/port/urls/password/connections。 */
+    suspend fun getWebAccessInfo(forceRefresh: Boolean = false): Map<String, Any?> {
+        val input = mapOf("forceRefresh" to forceRefresh)
+        @Suppress("UNCHECKED_CAST")
+        return client.request("get_web_access_info", mapOf("input" to input), Map::class.java) as Map<String, Any?>
+    }
+
     suspend fun setDepartmentPrimaryApiConfig(departmentId: String, apiConfigId: String): com.whitemoon319.pai.model.AppConfig {
         val input = com.whitemoon319.pai.model.SetDepartmentPrimaryApiConfigInput(departmentId = departmentId, apiConfigId = apiConfigId)
         return client.request("set_department_primary_api_config", mapOf("input" to input), com.whitemoon319.pai.model.AppConfig::class.java)

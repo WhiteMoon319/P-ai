@@ -50,6 +50,26 @@ fn normalize_android_release_version(raw: &str) -> String {
         .to_string()
 }
 
+/// 拉取 GitHub 上的最新 changelog（供前端「关于」页展示版本更新说明）。
+async fn fetch_project_changelog_markdown() -> Result<String, String> {
+    let client_builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15));
+    let client = android_workspace_apply_static_webpki_roots(client_builder)?
+        .build()
+        .map_err(|err| format!("构建更新日志请求客户端失败: {err}"))?;
+    let resp = client
+        .get(ANDROID_UPDATE_CHANGELOG_RAW)
+        .header("User-Agent", "P-ai-Android-Updater")
+        .send()
+        .await
+        .map_err(|err| format!("请求更新日志失败: {err}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("更新日志请求失败: HTTP {}", resp.status()));
+    }
+    resp.text()
+        .await
+        .map_err(|err| format!("读取更新日志失败: {err}"))
+}
 
 fn sync_update_state_from_skip_version(_app: &NativeAppHandle, _version: &str) {}
 

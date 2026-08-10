@@ -1408,6 +1408,52 @@ fn clear_recent_llm_round_logs_inner(state: &AppState) -> Result<bool, String> {
 
 
 
+fn list_recent_runtime_logs() -> Result<Vec<RuntimeLogEntry>, String> {
+    let logs = runtime_log_buffer()
+        .lock()
+        .map_err(|_| "Failed to lock runtime logs".to_string())?;
+    Ok(logs.entries.iter().cloned().collect::<Vec<_>>())
+}
+
+fn list_runtime_logs_since(since_created_at: Option<String>) -> Result<Vec<RuntimeLogEntry>, String> {
+    let logs = runtime_log_buffer()
+        .lock()
+        .map_err(|_| "Failed to lock runtime logs".to_string())?;
+    let anchor = since_created_at
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .unwrap_or("");
+    if anchor.is_empty() {
+        return Ok(logs.entries.iter().cloned().collect());
+    }
+    Ok(logs
+        .entries
+        .iter()
+        .filter(|entry| entry.created_at.as_str() > anchor)
+        .cloned()
+        .collect())
+}
+
+fn clear_recent_runtime_logs() -> Result<bool, String> {
+    let mut logs = runtime_log_buffer()
+        .lock()
+        .map_err(|_| "Failed to lock runtime logs".to_string())?;
+    logs.entries.clear();
+    logs.total_bytes = 0;
+    Ok(true)
+}
+
+fn append_runtime_log_probe(message: Option<String>) -> Result<bool, String> {
+    let msg = message
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("运行日志窗口已打开");
+    runtime_log_info(format!("[运行日志] {}", msg));
+    Ok(true)
+}
+
 fn estimate_json_bytes<T: Serialize>(value: &T) -> usize {
     serde_json::to_vec(value).map(|raw| raw.len()).unwrap_or(0)
 }

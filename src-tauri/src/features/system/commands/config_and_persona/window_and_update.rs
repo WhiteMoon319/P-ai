@@ -534,6 +534,35 @@ fn save_config_inner(
         broadcast_sidebar_provider_changed();
     }
     stop_removed_remote_im_channel_runtimes(state.clone(), removed_remote_im_channels);
+    // Web 访问（远程连接）配置变更联动：关闭时停服务，启用/改端口或密码时重启。
+    if !main_config.web_access_enabled && IDE_CONTEXT_BRIDGE_STARTED.load(Ordering::SeqCst) {
+        runtime_log_info(format!(
+            "[网络访问] 配置已关闭，停止 Web 访问服务: port={}",
+            base_config.web_access_port
+        ));
+        tokio::spawn(async move {
+            shutdown_web_access_server().await;
+        });
+    } else if main_config.web_access_enabled
+        && (!base_config.web_access_enabled
+            || ((base_config.web_access_port != main_config.web_access_port
+                || base_config.web_access_password != main_config.web_access_password)
+                && IDE_CONTEXT_BRIDGE_STARTED.load(Ordering::SeqCst)))
+    {
+        runtime_log_info(format!(
+            "[网络访问] 配置已启用、端口或密码已变更，重启 Web 访问服务: old_enabled={}, new_enabled={}, old_port={}, new_port={}",
+            base_config.web_access_enabled,
+            main_config.web_access_enabled,
+            base_config.web_access_port,
+            main_config.web_access_port
+        ));
+        let app = app.clone();
+        let state = state.clone();
+        let ide_context_runtime = ide_context_runtime.clone();
+        tokio::spawn(async move {
+            restart_web_access_server(app, state, ide_context_runtime).await;
+        });
+    }
     Ok(runtime_config)
 }
 

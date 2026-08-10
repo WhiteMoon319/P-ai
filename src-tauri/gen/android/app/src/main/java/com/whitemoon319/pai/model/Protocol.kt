@@ -484,6 +484,9 @@ data class AppConfig(
     @SerializedName("apiConfigs") val apiConfigs: List<ApiConfig> = emptyList(),
     @SerializedName("assistantDepartmentApiConfigId") val assistantDepartmentApiConfigId: String? = null,
     @SerializedName("selectedApiConfigId") val selectedApiConfigId: String? = null,
+    @SerializedName("webAccessEnabled") val webAccessEnabled: Boolean? = null,
+    @SerializedName("webAccessPort") val webAccessPort: Int? = null,
+    @SerializedName("webAccessPassword") val webAccessPassword: String? = null,
 )
 
 /** 单个 API 配置（供应商）。 */

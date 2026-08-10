@@ -602,6 +602,8 @@ include!("ide_context/jsonrpc_methods.rs");
 
 include!("ide_context/jsonrpc_dispatch.rs");
 
+include!("ide_context/bridge_server.rs");
+
 #[cfg(test)]
 mod ide_context_tests {
     use super::*;

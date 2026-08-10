@@ -156,6 +156,74 @@ struct IdeChatWorkspaceGitRootCheckInput {
 
 
 
+/// 查询 Web 访问（远程连接）状态；启用且未运行时自动拉起服务。
+async fn get_web_access_info_inner(
+    app: &NativeAppHandle,
+    state: &AppState,
+    ide_context_runtime: &IdeContextRuntime,
+    force_refresh: bool,
+) -> Result<WebAccessInfoOutput, String> {
+    let status_snapshot = ide_context_port_service_core()
+        .status_snapshot(WEB_ACCESS_SERVICE_ID)
+        .await;
+    let config = state_read_config_cached(state)?;
+    let configured_port = normalize_web_access_port(config.web_access_port);
+    if !config.web_access_enabled {
+        return Ok(WebAccessInfoOutput {
+            running: false,
+            enabled: false,
+            configured_port,
+            port: configured_port,
+            listen_addr: status_snapshot.listen_addr,
+            status_text: status_snapshot.status_text,
+            last_error: status_snapshot.last_error,
+            local_url: String::new(),
+            remote_urls: Vec::new(),
+            remote_password: String::new(),
+            active_connections: Vec::new(),
+        });
+    }
+    if !IDE_CONTEXT_BRIDGE_STARTED.load(Ordering::SeqCst)
+        && !ide_context_bridge_server_task_is_running()
+    {
+        start_web_access_server(
+            app.clone(),
+            state.clone(),
+            ide_context_runtime.clone(),
+        )
+        .await;
+    }
+    let status_snapshot = ide_context_port_service_core()
+        .status_snapshot(WEB_ACCESS_SERVICE_ID)
+        .await;
+    let running = IDE_CONTEXT_BRIDGE_STARTED.load(Ordering::SeqCst);
+    let actual_port = ide_context_current_port(ide_context_runtime);
+    let port = actual_port.unwrap_or(configured_port);
+    let (local_url, remote_urls) = match actual_port {
+        Some(actual_port) => (
+            ide_context_sidebar_url_for_host(IDE_CONTEXT_BRIDGE_HOST, actual_port),
+            ide_context_get_cached_lan_hosts(ide_context_runtime, force_refresh)?
+                .into_iter()
+                .map(|host| ide_context_sidebar_url_for_host(&host, actual_port))
+                .collect::<Vec<_>>(),
+        ),
+        None => (String::new(), Vec::new()),
+    };
+    Ok(WebAccessInfoOutput {
+        running,
+        enabled: true,
+        configured_port,
+        port,
+        listen_addr: status_snapshot.listen_addr,
+        status_text: status_snapshot.status_text,
+        last_error: status_snapshot.last_error,
+        local_url,
+        remote_urls,
+        remote_password: ide_context_effective_remote_password(state, ide_context_runtime)?,
+        active_connections: web_access_connection_summaries(),
+    })
+}
+
 fn ide_context_get_cached_lan_hosts(
     ide_context_runtime: &IdeContextRuntime,
     force_refresh: bool,

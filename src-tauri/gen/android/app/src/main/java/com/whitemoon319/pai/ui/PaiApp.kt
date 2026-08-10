@@ -56,6 +56,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -827,6 +828,7 @@ private enum class SettingsEntry(
 ) {
     Api("模型与供应商", "供应商增删改、连接测试、启用切换"),
     Chat("聊天设置", "用户别名、回复风格、默认配置"),
+    Network("网络访问", "远程连接开关、端口、访问密码"),
     Tools("工具", "Android 沙盒工作区、工具状态"),
     About("关于", "版本、检查更新、仓库"),
 }
@@ -903,6 +905,7 @@ fun SettingsScreen(
             }
             SettingsEntry.Api -> ApiSettingsTab(appConfig = appConfig, vm = vm)
             SettingsEntry.Chat -> ChatSettingsTab(settings = chatSettings, vm = vm)
+            SettingsEntry.Network -> NetworkSettingsTab(vm = vm)
             SettingsEntry.Tools -> ToolsSettingsTab(vm = vm, toolStatus = toolStatus)
             SettingsEntry.About -> AboutSettingsTab(bootstrap = bootstrap, vm = vm)
         }
@@ -1258,6 +1261,158 @@ private fun ChatSettingsTab(settings: com.whitemoon319.pai.model.ChatSettings?, 
 }
 
 @OptIn(ExperimentalLayoutApi::class)
+/** 网络访问（远程连接）设置：开关 + 端口 + 密码 + 状态展示。 */
+@Composable
+private fun NetworkSettingsTab(vm: AppViewModel) {
+    val scope = rememberCoroutineScope()
+    val appConfig by vm.appConfig.collectAsState()
+    val webAccessInfo by vm.webAccessInfo.collectAsState()
+    val loading by vm.webAccessLoading.collectAsState()
+    val saving by vm.settingsSaving.collectAsState()
+    var enabled by remember { mutableStateOf(appConfig?.webAccessEnabled ?: true) }
+    var port by remember { mutableStateOf((appConfig?.webAccessPort ?: 8429).toString()) }
+    var password by remember { mutableStateOf(appConfig?.webAccessPassword ?: "") }
+    var saved by remember { mutableStateOf(false) }
+
+    LaunchedEffect(appConfig) {
+        enabled = appConfig?.webAccessEnabled ?: true
+        port = (appConfig?.webAccessPort ?: 8429).toString()
+        password = appConfig?.webAccessPassword ?: ""
+    }
+    LaunchedEffect(Unit) {
+        vm.refreshWebAccessInfo()
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+    ) {
+        Text("远程连接", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "允许局域网内其他设备（电脑浏览器 / VSCode 侧边栏）通过 WebSocket 连接本机的 PAI 服务。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+
+        // 状态卡
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = MaterialTheme.shapes.medium,
+        ) {
+            Column(Modifier.padding(12.dp)) {
+                val running = webAccessInfo?.get("running") as? Boolean ?: false
+                val enabledFlag = webAccessInfo?.get("enabled") as? Boolean ?: enabled
+                Text(
+                    buildString {
+                        append("服务状态：")
+                        append(
+                            when {
+                                !enabledFlag -> "已关闭"
+                                running -> "运行中"
+                                else -> "未启动"
+                            }
+                        )
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                val localUrl = webAccessInfo?.get("localUrl") as? String
+                if (!localUrl.isNullOrEmpty()) {
+                    Text(
+                        "本机地址：$localUrl",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                @Suppress("UNCHECKED_CAST")
+                val remoteUrls = webAccessInfo?.get("remoteUrls") as? List<String> ?: emptyList()
+                remoteUrls.take(3).forEach { url ->
+                    Text(
+                        "局域网：$url",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                if (running) {
+                    Text(
+                        "端口：${webAccessInfo?.get("port")}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+
+        // 开关
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("启用网络访问", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "关闭后其他设备无法远程连接",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = enabled, onCheckedChange = { enabled = it })
+        }
+        Spacer(Modifier.height(12.dp))
+
+        // 端口
+        OutlinedTextField(
+            value = port,
+            onValueChange = { port = it.filter(Char::isDigit).take(5) },
+            label = { Text("端口") },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled,
+            singleLine = true,
+        )
+        Spacer(Modifier.height(12.dp))
+
+        // 密码
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            label = { Text("访问密码") },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled,
+            singleLine = true,
+        )
+        Spacer(Modifier.height(16.dp))
+
+        OutlinedButton(
+            onClick = {
+                scope.launch {
+                    val portValue = port.toIntOrNull() ?: 8429
+                    saved = vm.saveWebAccess(enabled, portValue, password.trim())
+                }
+            },
+            enabled = !saving,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(if (saving) "保存中…" else "保存设置")
+        }
+        if (saved) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "已保存，服务已按新配置重启",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        if (loading) {
+            Spacer(Modifier.height(8.dp))
+            Text("刷新状态中…", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
 @Composable
 private fun ToolsSettingsTab(
     vm: AppViewModel,

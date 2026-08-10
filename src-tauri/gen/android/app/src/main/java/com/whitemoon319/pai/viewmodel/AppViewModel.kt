@@ -647,6 +647,46 @@ class AppViewModel(
     val bootstrap = MutableStateFlow<com.whitemoon319.pai.model.BootstrapSnapshot?>(null)
     val settingsLoading = MutableStateFlow(false)
     val settingsSaving = MutableStateFlow(false)
+    /** Web 访问（远程连接）状态快照。 */
+    val webAccessInfo = MutableStateFlow<Map<String, Any?>?>(null)
+    val webAccessLoading = MutableStateFlow(false)
+
+    /** 刷新 Web 访问状态（远程连接）。 */
+    suspend fun refreshWebAccessInfo(forceRefresh: Boolean = false) {
+        withContext(Dispatchers.IO) {
+            webAccessLoading.value = true
+            try {
+                webAccessInfo.value = service.getWebAccessInfo(forceRefresh)
+            } catch (e: Exception) {
+                error.value = "读取远程连接状态失败: ${e.message}"
+            } finally {
+                webAccessLoading.value = false
+            }
+        }
+    }
+
+    /** 保存 Web 访问配置（开关/端口/密码），保存后自动重启服务。 */
+    suspend fun saveWebAccess(enabled: Boolean, port: Int, password: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            settingsSaving.value = true
+            try {
+                val current = appConfig.value ?: service.loadConfig()
+                val updated = current.copy(
+                    webAccessEnabled = enabled,
+                    webAccessPort = port,
+                    webAccessPassword = password,
+                )
+                appConfig.value = service.saveConfig(updated)
+                refreshWebAccessInfo(forceRefresh = true)
+                true
+            } catch (e: Exception) {
+                error.value = "保存远程连接设置失败: ${e.message}"
+                false
+            } finally {
+                settingsSaving.value = false
+            }
+        }
+    }
 
     /** 加载设置页全部数据（配置/聊天设置/工具状态/关于）。agentId 用于工具状态。 */
     suspend fun loadSettings(agentId: String?) {
