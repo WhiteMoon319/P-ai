@@ -7,6 +7,7 @@ import com.whitemoon319.pai.model.buildActivityStepsFromMessage
 import com.whitemoon319.pai.viewmodel.AppViewModel
 import com.whitemoon319.pai.ws.ConnectionStatus
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -262,7 +263,22 @@ private fun ConversationListScreenImpl(
             else -> {
                 LazyColumn(Modifier.fillMaxSize()) {
                     items(conversations, key = { it.conversationId }) { conv ->
-                        ConversationRow(conv, onClick = { onOpen(conv) })
+                        ConversationRow(
+                            conv = conv,
+                            onClick = { onOpen(conv) },
+                            onRename = { title ->
+                                scope.launch { vm.renameConversation(conv.conversationId, title) }
+                            },
+                            onTogglePin = { pinned ->
+                                scope.launch { vm.toggleConversationPin(conv.conversationId, pinned) }
+                            },
+                            onArchive = {
+                                scope.launch { vm.archiveConversation(conv.conversationId) }
+                            },
+                            onDelete = {
+                                scope.launch { vm.deleteConversation(conv.conversationId) }
+                            },
+                        )
                         HorizontalDivider()
                     }
                 }
@@ -363,14 +379,38 @@ private fun ConversationListScreenImpl(
 }
 
 @Composable
-fun ConversationRow(conv: ConversationSummary, onClick: () -> Unit) {
+fun ConversationRow(
+    conv: ConversationSummary,
+    onClick: () -> Unit,
+    onRename: (String) -> Unit,
+    onTogglePin: (Boolean) -> Unit,
+    onArchive: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    var showRename by remember { mutableStateOf(false) }
+    var showDelete by remember { mutableStateOf(false) }
+    var renameText by remember { mutableStateOf(conv.title ?: "") }
+
     Column(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = { menuExpanded = true },
+            )
             .padding(12.dp)
     ) {
-        Text(conv.title ?: "无标题", style = MaterialTheme.typography.titleMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                conv.title ?: "无标题",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = { menuExpanded = true }) {
+                Icon(Icons.Default.MoreVert, contentDescription = "会话操作")
+            }
+        }
         val preview = conv.previewMessages?.lastOrNull()?.textPreview
         if (!preview.isNullOrBlank()) {
             Spacer(Modifier.height(2.dp))
@@ -388,6 +428,74 @@ fun ConversationRow(conv: ConversationSummary, onClick: () -> Unit) {
                 color = MaterialTheme.colorScheme.primary,
             )
         }
+    }
+
+    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+        DropdownMenuItem(
+            text = { Text("重命名") },
+            onClick = {
+                menuExpanded = false
+                renameText = conv.title ?: ""
+                showRename = true
+            },
+        )
+        DropdownMenuItem(
+            text = { Text(if (conv.isPinned == true) "取消固定" else "固定") },
+            onClick = {
+                menuExpanded = false
+                onTogglePin(conv.isPinned != true)
+            },
+        )
+        DropdownMenuItem(
+            text = { Text("归档") },
+            onClick = {
+                menuExpanded = false
+                onArchive()
+            },
+        )
+        DropdownMenuItem(
+            text = { Text("删除") },
+            onClick = {
+                menuExpanded = false
+                showDelete = true
+            },
+        )
+    }
+
+    if (showRename) {
+        AlertDialog(
+            onDismissRequest = { showRename = false },
+            title = { Text("重命名会话") },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRename = false
+                    if (renameText.isNotBlank()) onRename(renameText)
+                }) { Text("保存") }
+            },
+            dismissButton = { TextButton(onClick = { showRename = false }) { Text("取消") } },
+        )
+    }
+
+    if (showDelete) {
+        AlertDialog(
+            onDismissRequest = { showDelete = false },
+            title = { Text("删除会话") },
+            text = { Text("确定删除「${conv.title ?: "无标题"}」吗？此操作不可恢复。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDelete = false
+                    onDelete()
+                }) { Text("删除") }
+            },
+            dismissButton = { TextButton(onClick = { showDelete = false }) { Text("取消") } },
+        )
     }
 }
 

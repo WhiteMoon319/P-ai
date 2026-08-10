@@ -305,6 +305,78 @@ class AppViewModel(
         }
     }
 
+    /** 重命名会话。 */
+    suspend fun renameConversation(conversationId: String, title: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val ok = service.renameConversation(conversationId, title.trim())
+                if (ok) refreshConversations()
+                ok
+            } catch (e: Exception) {
+                error.value = "重命名失败: ${e.message}"
+                false
+            }
+        }
+    }
+
+    /** 固定/取消固定会话。 */
+    suspend fun toggleConversationPin(conversationId: String, pinned: Boolean): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val ok = service.toggleConversationPin(conversationId, pinned)
+                if (ok) refreshConversations()
+                ok
+            } catch (e: Exception) {
+                error.value = "操作失败: ${e.message}"
+                false
+            }
+        }
+    }
+
+    /** 删除会话。 */
+    suspend fun deleteConversation(conversationId: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val ok = service.deleteConversation(conversationId)
+                if (ok) {
+                    if (currentConversationId.value == conversationId) {
+                        currentConversationId.value = null
+                        messages.value = emptyList()
+                        streamingText.value = ""
+                        isStreaming.value = false
+                    }
+                    refreshConversations()
+                }
+                ok
+            } catch (e: Exception) {
+                error.value = "删除失败: ${e.message}"
+                false
+            }
+        }
+    }
+
+    /** 归档会话。 */
+    suspend fun archiveConversation(conversationId: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val ok = service.batchArchiveConversations(listOf(conversationId))
+                if (ok) {
+                    if (currentConversationId.value == conversationId) {
+                        currentConversationId.value = null
+                        messages.value = emptyList()
+                        streamingText.value = ""
+                        isStreaming.value = false
+                    }
+                    refreshConversations()
+                }
+                ok
+            } catch (e: Exception) {
+                error.value = "归档失败: ${e.message}"
+                false
+            }
+        }
+    }
+
     private fun handleNotification(method: String, params: JsonElement?) {
         // 诊断：确认下行事件是否到达 Kotlin，及正文/思考/工具各自到达情况
         android.util.Log.d("PaiNotify", "method=$method convId=${params?.asJsonObject?.get("conversationId")} curr=${currentConversationId.value}")

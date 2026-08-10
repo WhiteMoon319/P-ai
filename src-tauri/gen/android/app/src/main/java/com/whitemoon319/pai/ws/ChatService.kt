@@ -127,6 +127,28 @@ class ChatService(private val client: PaiWsClient) {
         client.sendOneWay("chat.stop", req)
     }
 
+    // ---------------- 会话管理（对齐 Vue 侧边栏操作） ----------------
+
+    suspend fun renameConversation(conversationId: String, title: String): Boolean {
+        val input = mapOf("conversationId" to conversationId, "title" to title)
+        return client.request("conversation.rename", mapOf("input" to input), Boolean::class.java)
+    }
+
+    suspend fun toggleConversationPin(conversationId: String, pinned: Boolean): Boolean {
+        val input = mapOf("conversationId" to conversationId, "pinned" to pinned)
+        return client.request("conversation.pin", mapOf("input" to input), Boolean::class.java)
+    }
+
+    suspend fun deleteConversation(conversationId: String): Boolean {
+        val input = mapOf("conversationId" to conversationId)
+        return client.request("conversation.delete", mapOf("input" to input), Boolean::class.java)
+    }
+
+    suspend fun batchArchiveConversations(conversationIds: List<String>): Boolean {
+        val input = mapOf("conversationIds" to conversationIds)
+        return client.request("conversation.batchArchive", mapOf("input" to input), Boolean::class.java)
+    }
+
     // ---------------- 设置 ----------------
 
     suspend fun loadConfig(): com.whitemoon319.pai.model.AppConfig =
