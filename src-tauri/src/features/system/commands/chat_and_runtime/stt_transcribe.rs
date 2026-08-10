@@ -237,6 +237,7 @@ async fn call_mimo_asr_transcribe(
     ))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn stt_transcribe(
     input: SttTranscribeInput,

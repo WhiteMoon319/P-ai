@@ -1,3 +1,4 @@
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn compact_conversation(
     input: ConversationIdOnlyInput,

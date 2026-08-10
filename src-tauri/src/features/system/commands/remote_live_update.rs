@@ -5,6 +5,7 @@
 // 注意：命令函数保持私有（不加 pub），避免 tauri::command 宏为 pub 函数生成
 // #[macro_export] 宏，在 include! 文本展开场景下与其他命令的宏命名冲突。
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn remote_live_update_notify(
     state: tauri::State<'_, AppState>,

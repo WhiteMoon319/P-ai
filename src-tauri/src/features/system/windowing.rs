@@ -746,6 +746,7 @@ fn current_monitor_bounds(window: &tauri::WebviewWindow) -> Result<PhysicalWindo
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn set_chat_window_side_expanded(
     app: AppHandle,

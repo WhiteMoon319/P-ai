@@ -1,3 +1,4 @@
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn generate_image(
     request: ImageGenerationRequest,
