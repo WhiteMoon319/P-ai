@@ -152,39 +152,6 @@ struct IdeChatWorkspaceGitRootCheckInput {
     workspace_path: String,
 }
 
-async fn ide_chat_workspace_git_root_check(params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_workspace_params::<IdeChatWorkspaceGitRootCheckInput>(params)?;
-    let result = check_git_workspace_root(ShellWorkspacePathInput {
-        workspace_path: Some(input.workspace_path),
-    })
-    .await?;
-    serde_json::to_value(result).map_err(|err| format!("serialize git root check failed: {err}"))
-}
-
-fn ide_chat_workspace_directory_list(params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatWorkspaceDirectoryListInput>(params)?;
-    let payload = list_file_reader_directory(input.path)?;
-    Ok(serde_json::json!({"path": payload.path, "name": payload.name,
-        "directories": payload.entries.into_iter().filter(|e| e.is_directory)
-            .map(|e| serde_json::json!({"path": e.path, "name": e.name})).collect::<Vec<_>>() }))
-}
-
-fn ide_chat_file_reader_directory_list(params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatWorkspaceDirectoryListInput>(params)?;
-    serde_json::to_value(list_file_reader_directory(input.path)?).map_err(|err| format!("serialize file reader directory failed: {err}"))
-}
-
-fn ide_chat_file_reader_read(params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatFileReaderReadInput>(params)?;
-    serde_json::to_value(read_file_reader_file_inner(input.path, None)?).map_err(|err| format!("serialize file reader payload failed: {err}"))
-}
-
-fn ide_chat_file_reader_read_block(params: Value) -> Result<Value, String> {
-    let input = ide_chat_parse_params::<IdeChatFileReaderReadBlockInput>(params)?;
-    serde_json::to_value(read_file_reader_file_block(input.path, input.start_line, input.line_count)?)
-        .map_err(|err| format!("serialize file reader block failed: {err}"))
-}
-
 
 
 
