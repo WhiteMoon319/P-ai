@@ -993,11 +993,16 @@ private fun ChatSettingsTab(settings: com.whitemoon319.pai.model.ChatSettings?, 
     val saving by vm.settingsSaving.collectAsState()
     var alias by remember { mutableStateOf(settings?.userAlias ?: "") }
     var styleId by remember { mutableStateOf(settings?.responseStyleId ?: "") }
+    var pdfMode by remember { mutableStateOf(settings?.pdfReadMode ?: "text") }
+    var presets by remember { mutableStateOf(settings?.instructionPresets ?: emptyList()) }
+    var pdfMenuExpanded by remember { mutableStateOf(false) }
     // settings 异步到达后回填（首次进入时可能为 null）
     LaunchedEffect(settings) {
         if (settings != null) {
             alias = settings.userAlias ?: ""
             styleId = settings.responseStyleId ?: ""
+            pdfMode = settings.pdfReadMode ?: "text"
+            presets = settings.instructionPresets ?: emptyList()
         }
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
@@ -1016,22 +1021,78 @@ private fun ChatSettingsTab(settings: com.whitemoon319.pai.model.ChatSettings?, 
             label = { Text("回复风格 ID") },
             modifier = Modifier.fillMaxWidth(),
         )
+        Spacer(Modifier.height(12.dp))
+        // PDF 阅读模式
+        Text("PDF 阅读模式", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(4.dp))
+        Box {
+            OutlinedButton(
+                onClick = { pdfMenuExpanded = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (pdfMode == "image") "图片模式（逐页截图）" else "文本模式（提取文字）")
+            }
+            DropdownMenu(expanded = pdfMenuExpanded, onDismissRequest = { pdfMenuExpanded = false }) {
+                DropdownMenuItem(
+                    text = { Text("文本模式（提取文字）") },
+                    onClick = { pdfMode = "text"; pdfMenuExpanded = false },
+                )
+                DropdownMenuItem(
+                    text = { Text("图片模式（逐页截图）") },
+                    onClick = { pdfMode = "image"; pdfMenuExpanded = false },
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        // 指令预设
+        Text("指令预设", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(4.dp))
+        presets.forEachIndexed { index, preset ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                OutlinedTextField(
+                    value = preset.name ?: "",
+                    onValueChange = { name ->
+                        presets = presets.toMutableList().also {
+                            it[index] = it[index].copy(name = name)
+                        }
+                    },
+                    label = { Text("名称") },
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(6.dp))
+                OutlinedTextField(
+                    value = preset.prompt ?: "",
+                    onValueChange = { prompt ->
+                        presets = presets.toMutableList().also {
+                            it[index] = it[index].copy(prompt = prompt)
+                        }
+                    },
+                    label = { Text("指令内容") },
+                    modifier = Modifier.weight(2f),
+                )
+                TextButton(onClick = {
+                    presets = presets.toMutableList().also { it.removeAt(index) }
+                }) { Text("删除") }
+            }
+        }
+        TextButton(onClick = {
+            presets = presets + com.whitemoon319.pai.model.PromptCommandPreset(name = "", prompt = "")
+        }) { Text("+ 添加指令预设") }
         Spacer(Modifier.height(16.dp))
         Button(
             enabled = !saving,
             onClick = {
                 scope.launch {
-                    vm.saveChatSettings(alias = alias, responseStyleId = styleId)
+                    vm.saveChatSettings(
+                        alias = alias,
+                        responseStyleId = styleId,
+                        pdfReadMode = pdfMode,
+                        instructionPresets = presets.ifEmpty { null },
+                    )
                 }
             },
             modifier = Modifier.fillMaxWidth(),
         ) { Text(if (saving) "保存中…" else "保存") }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "指令预设等高级设置在电脑端编辑。",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 

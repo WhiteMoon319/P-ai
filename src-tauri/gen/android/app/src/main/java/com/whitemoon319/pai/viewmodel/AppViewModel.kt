@@ -638,7 +638,12 @@ class AppViewModel(
     }
 
     /** 保存聊天设置（patch 语义，只回传用户可改字段）。 */
-    suspend fun saveChatSettings(alias: String?, responseStyleId: String?): Boolean {
+    suspend fun saveChatSettings(
+        alias: String?,
+        responseStyleId: String?,
+        pdfReadMode: String? = null,
+        instructionPresets: List<com.whitemoon319.pai.model.PromptCommandPreset>? = null,
+    ): Boolean {
         return withContext(Dispatchers.IO) {
             settingsSaving.value = true
             try {
@@ -646,6 +651,8 @@ class AppViewModel(
                     com.whitemoon319.pai.model.ChatSettings(
                         userAlias = alias?.takeIf { it.isNotBlank() },
                         responseStyleId = responseStyleId?.takeIf { it.isNotBlank() },
+                        pdfReadMode = pdfReadMode?.takeIf { it.isNotBlank() },
+                        instructionPresets = instructionPresets ?: emptyList(),
                     )
                 )
                 chatSettings.value = updated
