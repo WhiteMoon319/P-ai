@@ -72,6 +72,7 @@ fn repair_conversation_preferred_model_for_snapshot_meta(
     Ok(repaired)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn switch_active_conversation_snapshot(
     input: SwitchActiveConversationSnapshotInput,
@@ -115,6 +116,7 @@ fn switch_active_conversation_snapshot(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn get_foreground_conversation_light_snapshot(
     input: ForegroundConversationLightSnapshotInput,
@@ -128,6 +130,7 @@ async fn get_foreground_conversation_light_snapshot(
     .map_err(|err| format!("读取前台轻量快照任务异常：{err}"))?
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn get_foreground_conversation_freshness_snapshot(
     input: ForegroundConversationFreshnessInput,
@@ -302,6 +305,7 @@ struct MarkConversationReadInput {
     conversation_id: String,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn mark_conversation_read(
     input: MarkConversationReadInput,
@@ -317,6 +321,7 @@ fn mark_conversation_read(
         .is_some())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn set_conversation_plan_mode(
     input: SetConversationPlanModeInput,
@@ -357,6 +362,7 @@ fn set_conversation_plan_mode_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn set_conversation_preferred_model(
     input: SetConversationPreferredModelInput,
@@ -427,6 +433,7 @@ fn set_conversation_preferred_model_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn set_conversation_auto_push_remote_contact(
     input: SetConversationAutoPushRemoteContactInput,
@@ -541,6 +548,7 @@ struct CreateSideChatConversationOutput {
     title: String,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn create_side_chat_conversation(
     input: CreateSideChatConversationInput,
@@ -1149,6 +1157,7 @@ fn latest_compaction_message_for_branch(source: &Conversation) -> Option<ChatMes
         .cloned()
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn create_unarchived_conversation(
     input: CreateUnarchivedConversationInput,
@@ -1216,6 +1225,7 @@ fn create_unarchived_conversation_blocking(
     ))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn export_conversation_share_json(
     input: ExportConversationShareInput,
@@ -1268,6 +1278,7 @@ fn export_conversation_share_json_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn import_conversation_share_from_file(
     input: ImportConversationShareFromFileInput,
@@ -1371,6 +1382,7 @@ fn import_conversation_share_from_file(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn branch_unarchived_conversation_from_selection(
     input: BranchUnarchivedConversationFromSelectionInput,
@@ -1379,6 +1391,7 @@ async fn branch_unarchived_conversation_from_selection(
     branch_unarchived_conversation_from_selection_internal(input, state.inner()).await
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn create_conversation_branch_from_message(
     input: CreateConversationBranchFromMessageInput,
@@ -1545,6 +1558,7 @@ async fn branch_unarchived_conversation_from_selection_internal(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn forward_unarchived_conversation_selection(
     input: ForwardUnarchivedConversationSelectionInput,
@@ -1599,6 +1613,7 @@ fn forward_unarchived_conversation_selection_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn forward_selection_to_remote_im_contact(
     input: ForwardSelectionToRemoteImContactInput,
@@ -1660,6 +1675,7 @@ fn forward_selection_to_remote_im_contact_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn rename_unarchived_conversation(
     input: RenameUnarchivedConversationInput,
@@ -1769,6 +1785,7 @@ fn rebind_unarchived_conversation_recipient_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn rebind_unarchived_conversation_recipient(
     input: RebindUnarchivedConversationRecipientInput,
@@ -1777,6 +1794,7 @@ fn rebind_unarchived_conversation_recipient(
     rebind_unarchived_conversation_recipient_inner(input, state.inner())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn toggle_unarchived_conversation_pin(
     input: ToggleUnarchivedConversationPinInput,
@@ -1812,6 +1830,7 @@ fn toggle_unarchived_conversation_pin_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_conversation_section_orders(
     state: State<'_, AppState>,
@@ -1829,6 +1848,7 @@ fn get_conversation_section_orders_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn save_conversation_section_order(
     input: SaveConversationSectionOrderInput,
@@ -1861,6 +1881,7 @@ fn save_conversation_section_order_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn list_delegate_conversations(
     state: State<'_, AppState>,
@@ -2332,6 +2353,7 @@ fn conversation_delegate_summary_from_snapshot(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn list_conversation_delegate_statuses(
     input: ListConversationDelegateStatusesInput,
@@ -2442,6 +2464,7 @@ struct AbortDelegateConversationResult {
     aborted: bool,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn abort_delegate_conversation(
     input: AbortDelegateConversationInput,
@@ -2488,6 +2511,7 @@ fn default_recent_unarchived_message_limit() -> usize {
     5
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_unarchived_conversation_messages(
     input: GetUnarchivedConversationMessagesInput,
@@ -2560,6 +2584,7 @@ fn conversation_block_page_output_from_message_store_page(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_unarchived_conversation_recent_block_messages(
     input: GetUnarchivedConversationRecentBlockMessagesInput,
@@ -2572,6 +2597,7 @@ fn get_unarchived_conversation_recent_block_messages(
     conversation_service_v2().get_recent_block_messages(state.inner(), conversation_id)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_unarchived_conversation_block_page(
     input: GetConversationBlockPageInput,
@@ -2607,6 +2633,7 @@ fn get_unarchived_conversation_block_page(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_unarchived_conversation_recent_messages(
     input: GetUnarchivedConversationRecentMessagesInput,
@@ -2623,6 +2650,7 @@ fn get_unarchived_conversation_recent_messages(
     )
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_unarchived_conversation_message_by_id(
     input: GetUnarchivedConversationMessageByIdInput,
@@ -2662,6 +2690,7 @@ struct DeleteDelegateConversationOutput {
     deleted: bool,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_delegate_conversation_messages(
     input: GetDelegateConversationMessagesInput,
@@ -2688,6 +2717,7 @@ fn remote_im_delegate_message_is_internal(message: &ChatMessage) -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_delegate_conversation_block_page(
     input: GetConversationBlockPageInput,
@@ -2716,6 +2746,7 @@ fn get_delegate_conversation_block_page_inner(
     Ok(conversation_block_page_output_from_message_store_page(page))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn delete_delegate_conversation(
     input: DeleteDelegateConversationInput,
@@ -2757,6 +2788,7 @@ struct DeleteUnarchivedConversationOutput {
     unarchived_conversations: Vec<UnarchivedConversationSummary>,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn delete_unarchived_conversation(
     input: DeleteUnarchivedConversationInput,
@@ -2858,6 +2890,7 @@ fn delete_unarchived_conversation_blocking(
     ))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_active_conversation_messages(
     input: SessionSelector,
@@ -2978,6 +3011,7 @@ fn resolve_unarchived_conversation_messages_after(
     )
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_active_conversation_messages_before(
     input: GetActiveConversationMessagesBeforeInput,
@@ -3012,6 +3046,7 @@ fn get_active_conversation_messages_before(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_active_conversation_messages_after(
     input: GetActiveConversationMessagesAfterInput,
@@ -3143,6 +3178,7 @@ fn request_conversation_messages_after_async_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn request_conversation_messages_after_async(
     input: RequestConversationMessagesAfterAsyncInput,
@@ -3280,6 +3316,7 @@ fn restore_conversation_todos_after_rewind(conversation: &mut Conversation) -> R
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn preview_rewind_conversation_from_message(
     input: RewindConversationInput,
@@ -3316,6 +3353,7 @@ async fn preview_rewind_conversation_from_message_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn rewind_conversation_from_message(
     input: RewindConversationInput,
