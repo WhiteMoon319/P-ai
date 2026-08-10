@@ -74,17 +74,7 @@ fn live_update_owner_set(
 }
 
 #[cfg(target_os = "android")]
-fn live_update_app_handle(state: &AppState) -> Option<tauri::AppHandle> {
-    match state.app_handle.lock() {
-        Ok(guard) => guard.as_ref().cloned(),
-        Err(_) => None,
-    }
-}
-
-#[cfg(target_os = "android")]
-fn live_update_keep_alive_changed(app: &tauri::AppHandle) {
-    use tauri_plugin_notification::NotificationExt;
-
+fn live_update_keep_alive_changed() {
     let chat_active = match CHAT_KEEP_ALIVE
         .get_or_init(|| std::sync::Mutex::new(Default::default()))
         .lock()
@@ -104,25 +94,16 @@ fn live_update_keep_alive_changed(app: &tauri::AppHandle) {
     if previous == active {
         return;
     }
-    let notifications = app.notification();
-    let result = if active {
-        notifications.keep_alive_start()
-    } else {
-        notifications.keep_alive_stop()
-    };
-    if let Err(err) = result {
-        runtime_log_warn(format!(
-            "[Live更新] 保活命令失败，active={}，error={}",
-            active, err
-        ));
-    }
+    // Android 保活通知：push 事件由 Kotlin 前端维持常驻通知（服务运行状态）。
+    let keep_alive_event = serde_json::json!({
+        "method": "app.keepAlive",
+        "params": { "active": active },
+    });
+    crate::push_native_delta_event(keep_alive_event);
 }
 
 #[cfg(target_os = "android")]
 fn live_update_keep_alive_chat(state: &AppState, conversation_id: &str, active: bool) {
-    let Some(app) = live_update_app_handle(state) else {
-        return;
-    };
     let mut guard = match CHAT_KEEP_ALIVE
         .get_or_init(|| std::sync::Mutex::new(Default::default()))
         .lock()
@@ -136,14 +117,11 @@ fn live_update_keep_alive_chat(state: &AppState, conversation_id: &str, active: 
         guard.remove(conversation_id.trim());
     }
     drop(guard);
-    live_update_keep_alive_changed(&app);
+    live_update_keep_alive_changed();
 }
 
 #[cfg(target_os = "android")]
 fn live_update_keep_alive_goal(state: &AppState, conversation_id: &str, active: bool) {
-    let Some(app) = live_update_app_handle(state) else {
-        return;
-    };
     let mut guard = match GOAL_KEEP_ALIVE
         .get_or_init(|| std::sync::Mutex::new(Default::default()))
         .lock()
@@ -157,12 +135,11 @@ fn live_update_keep_alive_goal(state: &AppState, conversation_id: &str, active: 
         guard.remove(conversation_id.trim());
     }
     drop(guard);
-    live_update_keep_alive_changed(&app);
+    live_update_keep_alive_changed();
 }
 
 #[cfg(target_os = "android")]
 fn live_update_send(
-    app: &tauri::AppHandle,
     id: i32,
     title: &str,
     body: &str,
@@ -170,71 +147,26 @@ fn live_update_send(
     ongoing: bool,
     promoted: bool,
 ) {
-    use tauri_plugin_notification::{NotificationExt, PermissionState};
-
+    // Android 原生通知：通过原生事件队列把通知请求发给 Kotlin 前端，
+    // 由 AppViewModel 调用 NotificationManager 呈现（见 pollEvents 消费端）。
+    // 不直接依赖 tauri_plugin_notification。
     let normalized_title = title.trim();
     let normalized_body = body.trim();
     if normalized_title.is_empty() || normalized_body.is_empty() {
         return;
     }
-    let notifications = app.notification();
-    let permission = match notifications.permission_state() {
-        Ok(permission) => permission,
-        Err(err) => {
-            runtime_log_warn(format!(
-                "[Live更新] 跳过，任务=读取通知权限，notification_id={}，error={}",
-                id, err
-            ));
-            return;
-        }
-    };
-    let permission = match permission {
-        PermissionState::Prompt | PermissionState::PromptWithRationale => {
-            match notifications.request_permission() {
-                Ok(permission) => permission,
-                Err(err) => {
-                    runtime_log_warn(format!(
-                        "[Live更新] 跳过，任务=请求通知权限，notification_id={}，error={}",
-                        id, err
-                    ));
-                    return;
-                }
-            }
-        }
-        state => state,
-    };
-    if permission == PermissionState::Denied {
-        return;
-    }
-    let mut builder = notifications
-        .builder()
-        .id(id)
-        .title(normalized_title)
-        .body(normalized_body)
-        .icon("ic_stat_pai");
-    if let Some(short) = short_text {
-        let normalized_short = short.trim();
-        if !normalized_short.is_empty() {
-            builder = builder.short_text(normalized_short);
-        }
-    }
-    if ongoing {
-        builder = builder.ongoing();
-        if promoted {
-            // 官方 live updates：标准样式（BigTextStyle + 进度）+ ongoing +
-            // 请求系统提升（API 35+ 生效，低版本 no-op）。
-            builder = builder
-                .request_promoted_ongoing()
-                .large_body(normalized_body)
-                .progress(0, 0, true);
-        }
-    }
-    if let Err(err) = builder.show() {
-        runtime_log_warn(format!(
-            "[Live更新] 失败，任务=发送通知，notification_id={}，error={}",
-            id, err
-        ));
-    }
+    let notification_event = serde_json::json!({
+        "method": "app.notification",
+        "params": {
+            "id": id,
+            "title": normalized_title,
+            "body": normalized_body,
+            "shortText": short_text.map(str::trim),
+            "ongoing": ongoing,
+            "promoted": promoted,
+        },
+    });
+    crate::push_native_delta_event(notification_event);
 }
 
 #[cfg(target_os = "android")]
@@ -299,9 +231,6 @@ fn live_update_chat_meta_title(
 
 #[cfg(target_os = "android")]
 fn live_update_chat_started(state: &AppState, conversation_id: &str) {
-    let Some(app) = live_update_app_handle(state) else {
-        return;
-    };
     live_update_keep_alive_chat(state, conversation_id, true);
     let settings = local_chat_notification_settings(state, conversation_id);
     let Some(title) =
@@ -322,7 +251,6 @@ fn live_update_chat_started(state: &AppState, conversation_id: &str) {
     let short = todo_text.unwrap_or_else(|| title.clone());
     live_update_owner_set(&CHAT_LIVE_UPDATE_OWNER, conversation_id);
     live_update_send(
-        &app,
         CHAT_LIVE_UPDATE_NOTIFICATION_ID,
         &title,
         &body,
@@ -346,9 +274,6 @@ fn live_update_chat_finished(
         return;
     }
     live_update_owner_take(&CHAT_LIVE_UPDATE_OWNER);
-    let Some(app) = live_update_app_handle(state) else {
-        return;
-    };
     let settings = local_chat_notification_settings(state, conversation_id);
     let Some(title) =
         live_update_chat_meta_title(state, conversation_id, settings.ui_language, failed)
@@ -383,7 +308,6 @@ fn live_update_chat_finished(
     };
     // 终态通知非 ongoing，用户可手动划掉；不重复弹完成/失败通知。
     live_update_send(
-        &app,
         CHAT_LIVE_UPDATE_NOTIFICATION_ID,
         &title,
         &body,
@@ -399,9 +323,6 @@ fn live_update_goal_changed(
     conversation_id: &str,
     goal: Option<&ConversationGoalState>,
 ) {
-    let Some(app) = live_update_app_handle(state) else {
-        return;
-    };
     let settings = local_chat_notification_settings(state, conversation_id);
     let Some(title) =
         live_update_chat_meta_title(state, conversation_id, settings.ui_language, false)
@@ -423,7 +344,6 @@ fn live_update_goal_changed(
             "Goal finished.",
         );
         live_update_send(
-            &app,
             GOAL_LIVE_UPDATE_NOTIFICATION_ID,
             &title,
             &body,
@@ -447,7 +367,6 @@ fn live_update_goal_changed(
             "Goal finished.",
         );
         live_update_send(
-            &app,
             GOAL_LIVE_UPDATE_NOTIFICATION_ID,
             &title,
             &body,
@@ -480,7 +399,6 @@ fn live_update_goal_changed(
     // 岛/锁屏短文本：有 todo 显示当前步骤，无 todo 显示对话标题。
     let short = todo_text.unwrap_or_else(|| title.clone());
     live_update_send(
-        &app,
         GOAL_LIVE_UPDATE_NOTIFICATION_ID,
         &title,
         &body,
@@ -498,9 +416,6 @@ fn live_update_todos_changed(state: &AppState, conversation_id: &str) {
     if !live_update_owner_matches(&CHAT_LIVE_UPDATE_OWNER, conversation_id) {
         return;
     }
-    let Some(app) = live_update_app_handle(state) else {
-        return;
-    };
     let settings = local_chat_notification_settings(state, conversation_id);
     let Some(title) =
         live_update_chat_meta_title(state, conversation_id, settings.ui_language, false)
@@ -519,7 +434,6 @@ fn live_update_todos_changed(state: &AppState, conversation_id: &str) {
     // 岛/锁屏短文本：有 todo 显示当前步骤，无 todo 显示对话标题。
     let short = todo_text.unwrap_or_else(|| title.clone());
     live_update_send(
-        &app,
         CHAT_LIVE_UPDATE_NOTIFICATION_ID,
         &title,
         &body,
@@ -590,17 +504,15 @@ pub(crate) fn remote_live_update_notify_android(
     state: &AppState,
     payload: &RemoteLiveUpdatePayload,
 ) {
-    let Some(app) = live_update_app_handle(state) else {
-        return;
-    };
-    use tauri_plugin_notification::NotificationExt;
     let kind = payload.kind.trim();
     let conversation_id = payload.conversation_id.trim();
     match kind {
         "clear" => {
-            let _ = app
-                .notification()
-                .remove_active(vec![REMOTE_LIVE_UPDATE_NOTIFICATION_ID]);
+            let clear_event = serde_json::json!({
+                "method": "app.notification.clear",
+                "params": { "id": REMOTE_LIVE_UPDATE_NOTIFICATION_ID },
+            });
+            crate::push_native_delta_event(clear_event);
             runtime_log_info(format!(
                 "[远程通知] 完成，任务=清理远程通知，conversation_id={}",
                 conversation_id
@@ -628,7 +540,6 @@ pub(crate) fn remote_live_update_notify_android(
                 }
             };
             live_update_send(
-                &app,
                 REMOTE_LIVE_UPDATE_NOTIFICATION_ID,
                 &title,
                 &body,
@@ -653,7 +564,6 @@ pub(crate) fn remote_live_update_notify_android(
                 todo_text
             };
             live_update_send(
-                &app,
                 REMOTE_LIVE_UPDATE_NOTIFICATION_ID,
                 &title,
                 &body,
@@ -677,7 +587,6 @@ pub(crate) fn remote_live_update_notify_android(
                 delta
             };
             live_update_send(
-                &app,
                 REMOTE_LIVE_UPDATE_NOTIFICATION_ID,
                 &title,
                 &body,
