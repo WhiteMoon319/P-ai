@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-08-09T09:14:28.505Z",
-  "latestVersion": "v0.58.0",
+  "generatedAt": "2026-08-10T13:56:03.267Z",
+  "latestVersion": "v0.59.0",
   "releases": [
+    {
+      "version": "v0.59.0",
+      "path": "docs/changelog/releases/v0.59.0.md",
+      "summary": "文件阅读器新增 Git 面板：可在「文件/Git」之间切换，查看工作区与暂存区改动、查看 diff、暂存与取消暂存、丢弃改动、提交、储藏、切换/新建/删除分支、抓取/拉取/推送/同步，以及浏览提交历史与提交图；点击历史提交可直接查看该次提交的改动。"
+    },
     {
       "version": "v0.58.0",
       "path": "docs/changelog/releases/v0.58.0.md",
