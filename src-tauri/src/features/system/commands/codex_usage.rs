@@ -428,7 +428,7 @@ async fn codex_consume_rate_limit_reset_credit_request(
     })
 }
 
-#[tauri::command]
+#[cfg_attr(not(target_os = "android"), tauri::command)]
 async fn codex_get_rate_limits(
     input: CodexGetRateLimitsInput,
 ) -> Result<CodexRateLimitQueryResult, String> {
@@ -529,7 +529,7 @@ async fn codex_get_rate_limits(
     })
 }
 
-#[tauri::command]
+#[cfg_attr(not(target_os = "android"), tauri::command)]
 async fn codex_consume_rate_limit_reset_credit(
     input: CodexGetRateLimitsInput,
 ) -> Result<CodexConsumeRateLimitResetCreditResult, String> {

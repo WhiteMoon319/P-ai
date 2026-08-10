@@ -1116,7 +1116,7 @@ fn codex_start_listener_thread(provider_id: String, code_verifier: String, state
     });
 }
 
-#[tauri::command]
+#[cfg_attr(not(target_os = "android"), tauri::command)]
 async fn codex_get_auth_status(input: CodexAuthStatusInput) -> Result<CodexAuthStatus, String> {
     let auth_mode = normalize_codex_auth_mode(&input.auth_mode);
     let managed_auth_path = managed_codex_auth_path(&input.provider_id)?
@@ -1153,7 +1153,7 @@ async fn codex_get_auth_status(input: CodexAuthStatusInput) -> Result<CodexAuthS
     Ok(status)
 }
 
-#[tauri::command]
+#[cfg_attr(not(target_os = "android"), tauri::command)]
 async fn codex_start_oauth_login(input: CodexStartOAuthLoginInput) -> Result<CodexAuthStatus, String> {
     let provider_id = input.provider_id.trim();
     if provider_id.is_empty() {
@@ -1194,7 +1194,7 @@ async fn codex_start_oauth_login(input: CodexStartOAuthLoginInput) -> Result<Cod
     })
 }
 
-#[tauri::command]
+#[cfg_attr(not(target_os = "android"), tauri::command)]
 fn codex_logout(input: CodexLogoutInput) -> Result<bool, String> {
     let provider_id = input.provider_id.trim();
     if provider_id.is_empty() {

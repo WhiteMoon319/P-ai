@@ -1443,7 +1443,7 @@ fn clear_recent_llm_round_logs_inner(state: &AppState) -> Result<bool, String> {
     Ok(true)
 }
 
-#[tauri::command]
+#[cfg_attr(not(target_os = "android"), tauri::command)]
 fn list_recent_runtime_logs() -> Result<Vec<RuntimeLogEntry>, String> {
     let logs = runtime_log_buffer()
         .lock()
@@ -1451,7 +1451,7 @@ fn list_recent_runtime_logs() -> Result<Vec<RuntimeLogEntry>, String> {
     Ok(logs.entries.iter().cloned().collect::<Vec<_>>())
 }
 
-#[tauri::command]
+#[cfg_attr(not(target_os = "android"), tauri::command)]
 fn list_runtime_logs_since(since_created_at: Option<String>) -> Result<Vec<RuntimeLogEntry>, String> {
     let logs = runtime_log_buffer()
         .lock()
@@ -1472,7 +1472,7 @@ fn list_runtime_logs_since(since_created_at: Option<String>) -> Result<Vec<Runti
         .collect())
 }
 
-#[tauri::command]
+#[cfg_attr(not(target_os = "android"), tauri::command)]
 fn clear_recent_runtime_logs() -> Result<bool, String> {
     let mut logs = runtime_log_buffer()
         .lock()
@@ -1482,7 +1482,7 @@ fn clear_recent_runtime_logs() -> Result<bool, String> {
     Ok(true)
 }
 
-#[tauri::command]
+#[cfg_attr(not(target_os = "android"), tauri::command)]
 fn append_runtime_log_probe(message: Option<String>) -> Result<bool, String> {
     let msg = message
         .as_deref()

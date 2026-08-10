@@ -50,7 +50,7 @@ fn normalize_android_release_version(raw: &str) -> String {
         .to_string()
 }
 
-#[tauri::command]
+#[cfg_attr(not(target_os = "android"), tauri::command)]
 async fn fetch_project_changelog_markdown() -> Result<String, String> {
     let client_builder = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15));

@@ -1983,7 +1983,7 @@ async fn migrate_shell_workspace_directory(
     })
 }
 
-#[tauri::command]
+#[cfg_attr(not(target_os = "android"), tauri::command)]
 async fn check_git_workspace_root(
     input: ShellWorkspacePathInput,
 ) -> Result<GitWorkspaceRootCheckOutput, String> {
@@ -2600,7 +2600,7 @@ fn read_file_reader_file_inner(path: String, window_label: Option<&str>) -> Resu
     })
 }
 
-#[tauri::command]
+#[cfg_attr(not(target_os = "android"), tauri::command)]
 fn read_file_reader_file_block(path: String, start_line: usize, line_count: usize) -> Result<FileReaderFileBlockPayload, String> {
     let raw_path = path.trim();
     if raw_path.is_empty() {
@@ -2663,7 +2663,7 @@ fn read_file_reader_file_block(path: String, start_line: usize, line_count: usiz
     })
 }
 
-#[tauri::command]
+#[cfg_attr(not(target_os = "android"), tauri::command)]
 fn list_file_reader_directory(path: String) -> Result<FileReaderDirectoryPayload, String> {
     let raw_path = path.trim();
     if raw_path.is_empty() {
