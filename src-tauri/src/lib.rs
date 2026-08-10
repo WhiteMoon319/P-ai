@@ -85,8 +85,6 @@ include!("features/chat/scheduler.rs");
 include!("features/remote_im/channel_store.rs");
 include!("features/remote_im/markdown_filter.rs");
 include!("features/remote_im/onebot_v11_ws.rs");
-#[cfg(not(target_os = "android"))]
-include!("features/remote_im/dingtalk_stream.rs");
 #[cfg(target_os = "android")]
 include!("features/remote_im/dingtalk_stream_android_stub.rs");
 include!("features/remote_im/weixin_oc.rs");
@@ -101,8 +99,6 @@ include!("features/system/windows_job.rs");
 include!("features/system/sandbox.rs");
 include!("features/system/local_port_service.rs");
 include!("features/system/tools.rs");
-#[cfg(not(target_os = "android"))]
-include!("features/system/updater.rs");
 #[cfg(target_os = "android")]
 include!("features/system/updater_android_stub.rs");
 
