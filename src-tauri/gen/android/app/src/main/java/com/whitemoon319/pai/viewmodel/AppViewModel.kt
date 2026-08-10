@@ -1,16 +1,16 @@
-package ai.easycall.app.viewmodel
+package com.whitemoon319.pai.viewmodel
 
-import ai.easycall.app.model.ActivityStep
-import ai.easycall.app.model.ChatMessage
-import ai.easycall.app.model.buildChatMessageFromActivitySteps
-import ai.easycall.app.model.ConversationSummary
-import ai.easycall.app.model.CreateConversationOptions
-import ai.easycall.app.model.DeltaNotification
-import ai.easycall.app.model.ToolHistoryEvent
-import ai.easycall.app.model.DeltaEvent
-import ai.easycall.app.ws.ChatService
-import ai.easycall.app.ws.ConnectionStatus
-import ai.easycall.app.ws.PaiWsClient
+import com.whitemoon319.pai.model.ActivityStep
+import com.whitemoon319.pai.model.ChatMessage
+import com.whitemoon319.pai.model.buildChatMessageFromActivitySteps
+import com.whitemoon319.pai.model.ConversationSummary
+import com.whitemoon319.pai.model.CreateConversationOptions
+import com.whitemoon319.pai.model.DeltaNotification
+import com.whitemoon319.pai.model.ToolHistoryEvent
+import com.whitemoon319.pai.model.DeltaEvent
+import com.whitemoon319.pai.ws.ChatService
+import com.whitemoon319.pai.ws.ConnectionStatus
+import com.whitemoon319.pai.ws.PaiWsClient
 import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.JsonElement
@@ -25,6 +25,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.onEach
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
 /**
  * 应用级 ViewModel：连接管理、会话列表、消息流式接收。
@@ -66,12 +69,15 @@ class AppViewModel(
                 handleNotification(method, params)
             }
         }
-        // 后端连接建立后自动加载本地会话列表，避免用户手动刷新才看到对话
+        // 后端连接建立后自动加载本地会话列表、补刷工具/工作区状态
+        // （冷启动直接进工具页时 ws 未连，工具页进入时的拉取会失败，需连接后重试）
         connectJob = scope.launch(Dispatchers.IO) {
             client.connectionState
                 .filter { it == ConnectionStatus.Connected }
-                .onEach { refreshConversations() }
-                .collectLatest { }
+                .collect {
+                    withContext(Dispatchers.IO) { refreshConversations() }
+                    refreshConnectedState()
+                }
         }
     }
 
@@ -83,6 +89,15 @@ class AppViewModel(
 
     fun consumeError() {
         error.value = null
+    }
+
+    /** 连接建立后补刷：工具状态 + 工作区状态（冷启动直接进工具页时 ws 未连，需连接后重试）。 */
+    private suspend fun refreshConnectedState() {
+        val agentId = currentConversationId.value?.let { id ->
+            conversations.value.firstOrNull { it.conversationId == id }?.agentId
+        }
+        runCatching { toolStatus.value = service.checkToolsStatus(agentId) }
+        runCatching { workspaceStatus.value = service.getAndroidWorkspaceStatus() }
     }
 
     suspend fun refreshConversations() {
@@ -210,7 +225,7 @@ class AppViewModel(
             ChatMessage(
                 id = "local-${nextLocalId()}",
                 role = "user",
-                parts = listOf(ai.easycall.app.model.MessagePart(type = "Text", text = trimmed)),
+                parts = listOf(com.whitemoon319.pai.model.MessagePart(type = "Text", text = trimmed)),
             )
         )
         committedAssistantText = null
@@ -295,7 +310,7 @@ class AppViewModel(
                         "round_completed" -> {
                             val msgJson = event?.message
                             val m = msgJson?.let {
-                                runCatching { gson.fromJson(it, ai.easycall.app.model.DeltaMessage::class.java) }.getOrNull()
+                                runCatching { gson.fromJson(it, com.whitemoon319.pai.model.DeltaMessage::class.java) }.getOrNull()
                             }
                             // 优先落带完整 parts（含 reasoningContent 的 assistantMessage），
                             // 避免仅用 assistantText 构造纯文本使思考在重进后丢失。
@@ -317,7 +332,7 @@ class AppViewModel(
                         "round_failed" -> {
                             val msgJson = event?.message
                             val errText = msgJson?.let {
-                                runCatching { gson.fromJson(it, ai.easycall.app.model.DeltaMessage::class.java) }.getOrNull()?.assistantText
+                                runCatching { gson.fromJson(it, com.whitemoon319.pai.model.DeltaMessage::class.java) }.getOrNull()?.assistantText
                             }
                             error.value = errText ?: "生成失败"
                             finalizeStreaming()
@@ -471,7 +486,7 @@ class AppViewModel(
                 ChatMessage(
                     id = "assistant-${nextLocalId()}",
                     role = "assistant",
-                    parts = listOf(ai.easycall.app.model.MessagePart(type = "Text", text = trimmed)),
+                    parts = listOf(com.whitemoon319.pai.model.MessagePart(type = "Text", text = trimmed)),
                 )
             }
             messages.value = messages.value.plus(built)
@@ -480,10 +495,9 @@ class AppViewModel(
             return
         }
         if (message != null) {
-            // message 分支去重：若本回合已落过相同正文，跳过，避免与文本分支重复
+            // message 分支去重：若本回合已落过相同正文（文本分支先到），直接跳过不再落盘
             val bodyText = message.parts.joinToString("\n") { it.displayText }.trim()
             if (!bodyText.isEmpty() && committedAssistantText == bodyText) {
-                messages.value = messages.value.plus(message)
                 streamingText.value = ""
                 activitySteps.value = emptyList()
                 return
@@ -503,5 +517,292 @@ class AppViewModel(
         }
         streamingText.value = ""
         isStreaming.value = false
+    }
+
+    // ==================== 设置 ====================
+
+    val appConfig = MutableStateFlow<com.whitemoon319.pai.model.AppConfig?>(null)
+    val chatSettings = MutableStateFlow<com.whitemoon319.pai.model.ChatSettings?>(null)
+    val toolStatus = MutableStateFlow<List<com.whitemoon319.pai.model.ToolLoadStatus>>(emptyList())
+    val bootstrap = MutableStateFlow<com.whitemoon319.pai.model.BootstrapSnapshot?>(null)
+    val settingsLoading = MutableStateFlow(false)
+    val settingsSaving = MutableStateFlow(false)
+
+    /** 加载设置页全部数据（配置/聊天设置/工具状态/关于）。agentId 用于工具状态。 */
+    suspend fun loadSettings(agentId: String?) {
+        withContext(Dispatchers.IO) {
+            settingsLoading.value = true
+            try {
+                runCatching { appConfig.value = service.loadConfig() }
+                runCatching { chatSettings.value = service.loadChatSettings() }
+                runCatching { toolStatus.value = service.checkToolsStatus(agentId) }
+                runCatching { bootstrap.value = service.bootstrapSnapshot() }
+            } finally {
+                settingsLoading.value = false
+            }
+        }
+    }
+
+    /** 切换部门主 API 配置（全局生效，不动其他配置）。 */
+    suspend fun switchPrimaryApiConfig(apiConfigId: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            settingsSaving.value = true
+            try {
+                val departmentId = defaultDepartmentId()
+                    ?: run {
+                        error.value = "切换失败：无法确定部门"
+                        return@withContext false
+                    }
+                val updated = service.setDepartmentPrimaryApiConfig(departmentId, apiConfigId)
+                appConfig.value = updated
+                true
+            } catch (e: Exception) {
+                error.value = "切换供应商失败: ${e.message}"
+                false
+            } finally {
+                settingsSaving.value = false
+            }
+        }
+    }
+
+    /** 保存聊天设置（patch 语义，只回传用户可改字段）。 */
+    suspend fun saveChatSettings(alias: String?, responseStyleId: String?): Boolean {
+        return withContext(Dispatchers.IO) {
+            settingsSaving.value = true
+            try {
+                val updated = service.saveChatSettings(
+                    com.whitemoon319.pai.model.ChatSettings(
+                        userAlias = alias?.takeIf { it.isNotBlank() },
+                        responseStyleId = responseStyleId?.takeIf { it.isNotBlank() },
+                    )
+                )
+                chatSettings.value = updated
+                true
+            } catch (e: Exception) {
+                error.value = "保存聊天设置失败: ${e.message}"
+                false
+            } finally {
+                settingsSaving.value = false
+            }
+        }
+    }
+
+    private suspend fun defaultDepartmentId(): String? {
+        return runCatching {
+            service.createConversationOptions().defaultDepartmentId?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+
+    // ==================== 设置：供应商 CRUD / 工作区 / 关于 ====================
+
+    /** 新增供应商并刷新配置。 */
+    suspend fun createApiConfig(config: com.whitemoon319.pai.model.ApiConfig): Boolean {
+        return withContext(Dispatchers.IO) {
+            settingsSaving.value = true
+            try {
+                appConfig.value = service.createApiConfig(config)
+                true
+            } catch (e: Exception) {
+                error.value = "新增供应商失败: ${e.message}"
+                false
+            } finally {
+                settingsSaving.value = false
+            }
+        }
+    }
+
+    /** 更新供应商并刷新配置。 */
+    suspend fun updateApiConfig(config: com.whitemoon319.pai.model.ApiConfig): Boolean {
+        return withContext(Dispatchers.IO) {
+            settingsSaving.value = true
+            try {
+                appConfig.value = service.updateApiConfig(config)
+                true
+            } catch (e: Exception) {
+                error.value = "更新供应商失败: ${e.message}"
+                false
+            } finally {
+                settingsSaving.value = false
+            }
+        }
+    }
+
+    /** 删除供应商并刷新配置。 */
+    suspend fun deleteApiConfig(id: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            settingsSaving.value = true
+            try {
+                appConfig.value = service.deleteApiConfig(id)
+                true
+            } catch (e: Exception) {
+                error.value = "删除供应商失败: ${e.message}"
+                false
+            } finally {
+                settingsSaving.value = false
+            }
+        }
+    }
+
+    /** 连接测试：发一条极短请求验证供应商连通性，返回回复文本或错误。 */
+    suspend fun testApiConfigConnection(config: com.whitemoon319.pai.model.ApiConfig): String? {
+        return withContext(Dispatchers.IO) {
+            try {
+                service.testTextConnection(config)
+            } catch (e: Exception) {
+                error.value = "连接测试失败: ${e.message}"
+                null
+            }
+        }
+    }
+
+    val workspaceStatus = MutableStateFlow<com.whitemoon319.pai.model.AndroidWorkspaceStatus?>(null)
+    val workspaceBusy = MutableStateFlow(false)
+    val workspaceFiles = MutableStateFlow<com.whitemoon319.pai.model.WorkspaceFileListResult?>(null)
+    val workspaceDir = MutableStateFlow<String?>(null)
+
+    suspend fun refreshWorkspaceStatus() {
+        withContext(Dispatchers.IO) {
+            runCatching { workspaceStatus.value = service.getAndroidWorkspaceStatus() }
+                .onFailure { e ->
+                    // 暴露真实错误便于排障（连接未就绪或后端方法失败）
+                    error.value = "刷新工作区状态失败: ${e.message}"
+                    android.util.Log.e("WS", "getAndroidWorkspaceStatus failed", e)
+                }
+        }
+    }
+
+    /** 列出工作区目录（path 为相对路径，null 表示根）。 */
+    suspend fun listWorkspaceDir(path: String?) {
+        withContext(Dispatchers.IO) {
+            try {
+                workspaceFiles.value = service.listWorkspaceFiles(path)
+                workspaceDir.value = path
+            } catch (e: Exception) {
+                error.value = "读取工作区失败: ${e.message}"
+            }
+        }
+    }
+
+    suspend fun readWorkspaceFile(path: String): com.whitemoon319.pai.model.WorkspaceTextResult? {
+        return withContext(Dispatchers.IO) {
+            try {
+                service.readWorkspaceText(path)
+            } catch (e: Exception) {
+                error.value = "读取文件失败: ${e.message}"
+                null
+            }
+        }
+    }
+
+    suspend fun writeWorkspaceFile(path: String, text: String, overwrite: Boolean): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                service.writeWorkspaceText(path, text, overwrite)
+                true
+            } catch (e: Exception) {
+                error.value = "写入文件失败: ${e.message}"
+                false
+            }
+        }
+    }
+
+    suspend fun deleteWorkspaceFile(path: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                service.deleteWorkspaceFile(path)
+                true
+            } catch (e: Exception) {
+                error.value = "删除文件失败: ${e.message}"
+                false
+            }
+        }
+    }
+
+    suspend fun moveWorkspaceFile(source: String, target: String, overwrite: Boolean): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                service.moveWorkspaceFile(source, target, overwrite)
+                true
+            } catch (e: Exception) {
+                error.value = "移动/重命名失败: ${e.message}"
+                false
+            }
+        }
+    }
+
+    suspend fun importWorkspaceFile(fileName: String, dataBase64: String, targetPath: String?): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                service.importWorkspaceFile(fileName, null, dataBase64, targetPath)
+                true
+            } catch (e: Exception) {
+                error.value = "导入失败: ${e.message}"
+                false
+            }
+        }
+    }
+
+    suspend fun exportWorkspaceFile(path: String): com.whitemoon319.pai.model.WorkspaceExportResult? {
+        return withContext(Dispatchers.IO) {
+            try {
+                service.exportWorkspaceFile(path)
+            } catch (e: Exception) {
+                error.value = "导出失败: ${e.message}"
+                null
+            }
+        }
+    }
+
+    suspend fun serviceGrep(query: String, path: String?): List<com.whitemoon319.pai.model.WorkspaceSearchMatch> {
+        return withContext(Dispatchers.IO) {
+            try {
+                service.grepWorkspaceFiles(query, path, regex = false, ignoreCase = true, includeGlob = null).matches
+            } catch (e: Exception) {
+                error.value = "搜索失败: ${e.message}"
+                emptyList()
+            }
+        }
+    }
+
+    private suspend fun runWorkspaceAction(
+        action: suspend () -> com.whitemoon319.pai.model.AndroidWorkspaceStatus,
+    ) {
+        withContext(Dispatchers.IO) {
+            workspaceBusy.value = true
+            try {
+                workspaceStatus.value = action()
+            } catch (e: Exception) {
+                error.value = "工作区操作失败: ${e.message}"
+            } finally {
+                workspaceBusy.value = false
+            }
+        }
+    }
+
+    suspend fun initWorkspace() = runWorkspaceAction { service.initAndroidWorkspace() }
+    suspend fun repairWorkspace() = runWorkspaceAction { service.repairAndroidWorkspaceRuntime() }
+    suspend fun resetWorkspaceRuntime() = runWorkspaceAction { service.resetAndroidWorkspaceRuntime() }
+    suspend fun resetWorkspaceState() = runWorkspaceAction { service.resetAndroidWorkspaceState() }
+
+    val appVersion = MutableStateFlow<String?>(null)
+    val repoUrl = MutableStateFlow<String?>(null)
+    val updateResult = MutableStateFlow<String?>(null)
+
+    suspend fun loadAboutInfo() {
+        withContext(Dispatchers.IO) {
+            runCatching { appVersion.value = service.getAppVersion() }
+            runCatching { repoUrl.value = service.getProjectRepositoryUrl() }
+        }
+    }
+
+    suspend fun checkUpdate() {
+        withContext(Dispatchers.IO) {
+            updateResult.value = try {
+                val info = service.checkGithubUpdate()
+                info["message"]?.toString() ?: info.toString()
+            } catch (e: Exception) {
+                "检查更新失败: ${e.message}"
+            }
+        }
     }
 }

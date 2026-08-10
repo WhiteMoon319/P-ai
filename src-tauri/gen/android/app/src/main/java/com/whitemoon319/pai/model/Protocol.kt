@@ -1,4 +1,4 @@
-package ai.easycall.app.model
+package com.whitemoon319.pai.model
 
 import com.google.gson.JsonElement
 import com.google.gson.annotations.SerializedName
@@ -187,7 +187,7 @@ data class ChatMessage(
 data class MessagePart(
     val type: String,
     val text: String? = null,
-    @SerializedName("reasoningContent") val reasoningContent: String? = null,
+    @SerializedName(value = "reasoningContent", alternate = ["reasoning_content"]) val reasoningContent: String? = null,
     val mime: String? = null,
     @SerializedName("bytesBase64") val bytesBase64: String? = null,
     val name: String? = null,
@@ -456,4 +456,168 @@ data class DeltaMessage(
     @SerializedName("assistantText") val assistantText: String? = null,
     @SerializedName("archivedBeforeSend") val archivedBeforeSend: Boolean = false,
     @SerializedName("assistantMessage") val assistantMessage: ChatMessage? = null,
+)
+
+// ---------------- 设置（模型与供应商 / 聊天设置 / 工具 / 关于） ----------------
+
+/** load_config 返回的 AppConfig（只解析 Android 设置页所需子集）。 */
+data class AppConfig(
+    @SerializedName("apiConfigs") val apiConfigs: List<ApiConfig> = emptyList(),
+    @SerializedName("assistantDepartmentApiConfigId") val assistantDepartmentApiConfigId: String? = null,
+    @SerializedName("selectedApiConfigId") val selectedApiConfigId: String? = null,
+)
+
+/** 单个 API 配置（供应商）。 */
+data class ApiConfig(
+    val id: String? = null,
+    val name: String? = null,
+    @SerializedName("requestFormat") val requestFormat: String? = null,
+    @SerializedName("allowConcurrentRequests") val allowConcurrentRequests: Boolean = true,
+    @SerializedName("maxConcurrentRequests") val maxConcurrentRequests: Int? = null,
+    @SerializedName("enableText") val enableText: Boolean = true,
+    @SerializedName("enableImage") val enableImage: Boolean = false,
+    @SerializedName("enableAudio") val enableAudio: Boolean = false,
+    @SerializedName("enableVideo") val enableVideo: Boolean = false,
+    @SerializedName("enableTools") val enableTools: Boolean = true,
+    @SerializedName("baseUrl") val baseUrl: String? = null,
+    @SerializedName("apiKey") val apiKey: String? = null,
+    val model: String? = null,
+    @SerializedName("reasoningEffort") val reasoningEffort: String? = null,
+    val temperature: Double = 0.7,
+    @SerializedName("customTemperatureEnabled") val customTemperatureEnabled: Boolean = false,
+    @SerializedName("contextWindowTokens") val contextWindowTokens: Int = 128000,
+    @SerializedName("maxOutputTokens") val maxOutputTokens: Int = 8192,
+    @SerializedName("customMaxOutputTokensEnabled") val customMaxOutputTokensEnabled: Boolean = false,
+    @SerializedName("failureRetryCount") val failureRetryCount: Int = 0,
+)
+
+/** load_chat_settings / save_chat_settings 的 ChatSettings。 */
+data class ChatSettings(
+    @SerializedName("assistantDepartmentAgentId") val assistantDepartmentAgentId: String? = null,
+    @SerializedName("userAlias") val userAlias: String? = null,
+    @SerializedName("responseStyleId") val responseStyleId: String? = null,
+    @SerializedName("pdfReadMode") val pdfReadMode: String? = null,
+    @SerializedName("instructionPresets") val instructionPresets: List<PromptCommandPreset> = emptyList(),
+)
+
+data class PromptCommandPreset(
+    val id: String? = null,
+    val name: String? = null,
+    val prompt: String? = null,
+)
+
+/** check_tools_status 的请求 input。 */
+data class CheckToolsStatusInput(
+    @SerializedName("agentId") val agentId: String? = null,
+    @SerializedName("apiConfigId") val apiConfigId: String? = null,
+)
+
+/** check_tools_status 返回的单条工具状态。 */
+data class ToolLoadStatus(
+    val id: String? = null,
+    val status: String? = null,
+    val detail: String? = null,
+)
+
+/** set_department_primary_api_config 的请求 input。 */
+data class SetDepartmentPrimaryApiConfigInput(
+    @SerializedName("departmentId") val departmentId: String? = null,
+    @SerializedName("apiConfigId") val apiConfigId: String? = null,
+)
+
+/** app.bootstrapSnapshot 返回（只取设置页需要的部分）。 */
+data class BootstrapSnapshot(
+    val config: AppConfig? = null,
+    val chatSettings: ChatSettings? = null,
+)
+
+/** Android 沙盒工作区状态。 */
+data class AndroidWorkspaceStatus(
+    val state: String? = null,
+    @SerializedName("rootPath") val rootPath: String? = null,
+    @SerializedName("llmWorkspaceRoot") val llmWorkspaceRoot: String? = null,
+    @SerializedName("runtimeRoot") val runtimeRoot: String? = null,
+    @SerializedName("initializedAt") val initializedAt: String? = null,
+    @SerializedName("updatedAt") val updatedAt: String? = null,
+    @SerializedName("lastError") val lastError: String? = null,
+    val version: Int = 0,
+    @SerializedName("runtimeVersion") val runtimeVersion: String? = null,
+    @SerializedName("downloadBytes") val downloadBytes: Long? = null,
+    @SerializedName("downloadTotalBytes") val downloadTotalBytes: Long? = null,
+    @SerializedName("downloadStage") val downloadStage: String? = null,
+) {
+    // 后端枚举 AndroidWorkspaceStateKind 序列化为 snake_case（ready/downloading/not_downloaded）
+    val isReady: Boolean get() = state == "ready" || state == "Ready"
+    val isDownloading: Boolean get() = state == "downloading" || state == "Downloading"
+    val isNotDownloaded: Boolean get() = state == "not_downloaded" || state == "NotDownloaded"
+}
+
+/** api_config.delete 的请求 input。 */
+data class ApiConfigDeleteInput(
+    val id: String? = null,
+)
+
+// ---------------- Android 工作区文件管理 ----------------
+
+data class WorkspaceFileEntry(
+    val name: String? = null,
+    val path: String? = null,
+    val kind: String? = null,
+    val bytes: Long? = null,
+) {
+    val isDirectory: Boolean get() = kind == "directory"
+}
+
+data class WorkspaceFileListResult(
+    @SerializedName("currentPath") val currentPath: String? = null,
+    @SerializedName("parentPath") val parentPath: String? = null,
+    val entries: List<WorkspaceFileEntry> = emptyList(),
+)
+
+data class WorkspaceTextResult(
+    val path: String? = null,
+    val text: String? = null,
+    val bytes: Long = 0,
+)
+
+data class WorkspaceWriteResult(
+    val entry: WorkspaceFileEntry? = null,
+)
+
+data class WorkspaceMoveResult(
+    @SerializedName("sourcePath") val sourcePath: String? = null,
+    val entry: WorkspaceFileEntry? = null,
+)
+
+data class WorkspaceGlobResult(
+    val entries: List<WorkspaceFileEntry> = emptyList(),
+)
+
+data class WorkspaceSearchMatch(
+    val path: String? = null,
+    val line: Long = 0,
+    val text: String? = null,
+)
+
+data class WorkspaceGrepResult(
+    val matches: List<WorkspaceSearchMatch> = emptyList(),
+)
+
+data class WorkspaceDeleteResult(
+    @SerializedName("deletedPath") val deletedPath: String? = null,
+)
+
+data class WorkspaceImportResult(
+    val status: AndroidWorkspaceStatus? = null,
+    @SerializedName("importedPath") val importedPath: String? = null,
+    @SerializedName("fileName") val fileName: String? = null,
+    val bytes: Long = 0,
+)
+
+data class WorkspaceExportResult(
+    val path: String? = null,
+    @SerializedName("fileName") val fileName: String? = null,
+    val mime: String? = null,
+    @SerializedName("dataBase64") val dataBase64: String? = null,
+    val bytes: Long = 0,
 )

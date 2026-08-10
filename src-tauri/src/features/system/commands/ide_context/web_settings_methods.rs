@@ -532,4 +532,114 @@ fn ide_chat_remote_im_reconfigure_channel_behavior_for_web_settings(
     ide_chat_serialize(remote_im_reconfigure_channel_behavior_inner(state, channel_id))
 }
 
+// ==================== Android 设置页：供应商 CRUD ====================
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApiConfigDeleteInput {
+    id: String,
+}
+
+/// 新增供应商：校验 id 唯一后 push 到 config.api_configs 并全量保存（基于当前配置增量修改，不覆盖其他字段）。
+fn api_config_create_inner(
+    input: ApiConfig,
+    app: &AppHandle,
+    state: &AppState,
+    ide_context_runtime: &IdeContextRuntime,
+) -> Result<AppConfig, String> {
+    let id = input.id.trim().to_string();
+    if id.is_empty() {
+        return Err("API config ID is required.".to_string());
+    }
+    let mut config = load_config_inner(state)?;
+    if config.api_configs.iter().any(|item| item.id == id) {
+        return Err(format!("API config '{id}' already exists."));
+    }
+    config.api_configs.push(input);
+    save_config_inner(config, app, state, ide_context_runtime)
+}
+
+/// 更新供应商：按 id 替换 api_configs 中对应项；不存在则报错。
+fn api_config_update_inner(
+    input: ApiConfig,
+    app: &AppHandle,
+    state: &AppState,
+    ide_context_runtime: &IdeContextRuntime,
+) -> Result<AppConfig, String> {
+    let id = input.id.trim().to_string();
+    if id.is_empty() {
+        return Err("API config ID is required.".to_string());
+    }
+    let mut config = load_config_inner(state)?;
+    let idx = config
+        .api_configs
+        .iter()
+        .position(|item| item.id == id)
+        .ok_or_else(|| format!("API config '{id}' not found."))?;
+    config.api_configs[idx] = input;
+    save_config_inner(config, app, state, ide_context_runtime)
+}
+
+/// 删除供应商：按 id 移除并清理 departments/会话中对该 id 的引用（复用 save_config_inner 的引用清理）。
+fn api_config_delete_inner(
+    input: ApiConfigDeleteInput,
+    app: &AppHandle,
+    state: &AppState,
+    ide_context_runtime: &IdeContextRuntime,
+) -> Result<AppConfig, String> {
+    let id = input.id.trim().to_string();
+    if id.is_empty() {
+        return Err("API config ID is required.".to_string());
+    }
+    let mut config = load_config_inner(state)?;
+    let before = config.api_configs.len();
+    config.api_configs.retain(|item| item.id != id);
+    if config.api_configs.len() == before {
+        return Err(format!("API config '{id}' not found."));
+    }
+    if config.assistant_department_api_config_id == id {
+        config.assistant_department_api_config_id = String::new();
+    }
+    if config.selected_api_config_id == id {
+        config.selected_api_config_id = String::new();
+    }
+    if config.vision_api_config_id.as_deref() == Some(id.as_str()) {
+        config.vision_api_config_id = None;
+    }
+    if config.tool_review_api_config_id.as_deref() == Some(id.as_str()) {
+        config.tool_review_api_config_id = None;
+    }
+    if config.stt_api_config_id.as_deref() == Some(id.as_str()) {
+        config.stt_api_config_id = None;
+        config.stt_auto_send = false;
+    }
+    for department in &mut config.departments {
+        department.api_config_ids.retain(|item| item != &id);
+        if department.api_config_id == id {
+            department.api_config_id = department.api_config_ids.first().cloned().unwrap_or_default();
+        }
+    }
+    save_config_inner(config, app, state, ide_context_runtime)
+}
+
+/// 文本连接测试：用 ApiConfig 字段直接发一条极短聊天请求验证连通性。
+async fn test_text_connection_inner(
+    input: ApiConfig,
+    state: &AppState,
+) -> Result<String, String> {
+    let prompt = "回复 ok".to_string();
+    quick_genai_chat_inner(
+        state,
+        QuickGenaiChatInput {
+            base_url: input.base_url.clone(),
+            api_key: input.api_key.clone(),
+            model: input.model.clone(),
+            prompt,
+            request_format: input.request_format.clone(),
+            provider_id: Some(input.id.clone()),
+        },
+    )
+    .await
+}
+
 include!("remote_im_methods.rs");

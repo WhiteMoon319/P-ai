@@ -119,6 +119,9 @@ include!("features/delegate.rs");
 
 include!("features/system/commands.rs");
 
+#[cfg(target_os = "android")]
+include!("native_bridge.rs");
+
 fn should_enable_devtools() -> bool {
     if !cfg!(debug_assertions) {
         return false;
@@ -1034,6 +1037,21 @@ fn windows_set_process_app_user_model_id() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // ========== Android 原生模式 ==========
+    // 彻底拔掉 Tauri 运行时：Kotlin 不再继承 TauriActivity，后端由 PaiNative.init 通过
+    // JNI 自建 Tokio runtime + AppState 驱动（见 native_bridge.rs）。此处仅兜底：若被
+    // 误调用（如旧版 activity 生命周期残留），绝不允许再走 tauri::Builder 拉起 WebView。
+    #[cfg(target_os = "android")]
+    {
+        init_backend_file_logging();
+        install_backend_file_panic_hook();
+        runtime_log_warn("[启动] Android 原生模式：tauri::Builder 已被移除，run() 不应被调用".to_string());
+        // 阻塞挂起，避免 main 线程退出；真正的初始化由 JNI 入口完成。
+        loop {
+            std::thread::park();
+        }
+    }
+
     #[cfg(target_os = "windows")]
     windows_set_process_app_user_model_id();
 

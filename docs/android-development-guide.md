@@ -149,3 +149,26 @@ let state = match AppState::new() {
 - [ ] 新增/修改的 Rust 代码不引用 mobile 上不存在的窗口 API
 - [ ] capabilities 未把桌面插件权限泄漏进跨平台文件
 - [ ] 推送后确认 CI（android-build.yml）全绿，Artifacts 产出 APK
+
+### 7.4 本地交叉编译 Rust 后端（Windows）
+
+Windows 本地 rustc 链接大 crate（easy_call_ai_lib）时可能崩溃（`0xc0000409 STATUS_STACK_BUFFER_OVERRUN`）。
+绕过方法：**codegen-units=1 + 关闭增量编译**（用环境变量覆盖 config.toml 的 codegen-units=16）：
+
+```bash
+cd src-tauri
+export NDK="$HOME/AppData/Local/Android/Sdk/ndk/27.2.12479018"
+export CC_aarch64_linux_android="$NDK/toolchains/llvm/prebuilt/windows-x86_64/bin/aarch64-linux-android21-clang.cmd"
+export AR_aarch64_linux_android="$NDK/toolchains/llvm/prebuilt/windows-x86_64/bin/llvm-ar"
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CC_aarch64_linux_android"
+export RUSTC_WRAPPER=""
+export CARGO_BUILD_RUSTC_WRAPPER=""
+export CARGO_PROFILE_DEV_CODEGEN_UNITS=1
+export CARGO_PROFILE_DEV_INCREMENTAL=false
+cargo build --target aarch64-linux-android
+# 产物：target/aarch64-linux-android/debug/libeasy_call_ai_lib.so
+```
+
+编译验证（不链接，快）用 `cargo check --target aarch64-linux-android`（同样需要上面 NDK 环境变量）。
+打包 APK：把新 .so 复制到 `gen/android/app/src/main/jniLibs/arm64-v8a/`（与 proot 库同目录），
+再 `cd gen/android && ./gradlew :app:assembleDebug -x rustBuildArmDebug -x rustBuildArm64Debug -x rustBuildX86Debug -x rustBuildX86_64Debug`。

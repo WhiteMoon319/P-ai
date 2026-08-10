@@ -1,29 +1,19 @@
-import java.util.Properties
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("rust")
-}
-
-val tauriProperties = Properties().apply {
-    val propFile = file("tauri.properties")
-    if (propFile.exists()) {
-        propFile.inputStream().use { load(it) }
-    }
 }
 
 android {
     compileSdk = 36
-    namespace = "ai.easycall.app"
+    namespace = "com.whitemoon319.pai"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "ai.easycall.app"
+        applicationId = "com.whitemoon319.pai"
         minSdk = 24
         targetSdk = 36
-        versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
-        versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+        versionCode = 1
+        versionName = "0.57.0"
     }
     buildTypes {
         getByName("debug") {
@@ -31,10 +21,15 @@ android {
             isDebuggable = true
             isJniDebuggable = true
             isMinifyEnabled = false
-            packaging {                jniLibs.keepDebugSymbols.add("*/arm64-v8a/*.so")
+            packaging {
+                jniLibs.keepDebugSymbols.add("*/arm64-v8a/*.so")
                 jniLibs.keepDebugSymbols.add("*/armeabi-v7a/*.so")
                 jniLibs.keepDebugSymbols.add("*/x86/*.so")
                 jniLibs.keepDebugSymbols.add("*/x86_64/*.so")
+                // proot 库需以文件形式被 Rust 后端扫描（/proc/self/maps + 文件系统），
+                // 必须解压到 nativeLibraryDir；AGP 默认 extractNativeLibs=false 会导致
+                // so 留在 base.apk 内无法访问，exec 报"未找到 libproot_exec.so"。
+                jniLibs.useLegacyPackaging = true
             }
         }
         getByName("release") {
@@ -56,16 +51,18 @@ android {
     packagingOptions {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
-}
-
-rust {
-    rootDirRel = "../../../"
+    // 原生 Rust .so 由 cargo 交叉编译后手工放入 jniLibs（不再走 tauri rust 插件）。
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDirs("src/main/jniLibs")
+        }
+    }
 }
 
 dependencies {
-    implementation("androidx.webkit:webkit:1.14.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.activity:activity-ktx:1.10.1")
+    implementation("androidx.documentfile:documentfile:1.0.0")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.lifecycle:lifecycle-process:2.10.0")
 
@@ -83,8 +80,7 @@ dependencies {
     implementation("org.jetbrains:markdown:0.7.2")
     implementation("org.jsoup:jsoup:1.22.2")
 
-    // WebSocket 客户端
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // 原生桥 JSON-RPC（JNI 调用，不再需要 WS 客户端依赖）
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("com.google.code.gson:gson:2.11.0")
 
@@ -95,5 +91,3 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
-
-apply(from = "tauri.build.gradle.kts")

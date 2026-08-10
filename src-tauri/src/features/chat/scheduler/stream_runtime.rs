@@ -1081,6 +1081,31 @@ fn dispatch_assistant_delta_to_active_view(
     conversation_id: &str,
     event: &AssistantDeltaEvent,
 ) -> bool {
+    // ==================== Android 原生旁路 ====================
+    // 原生模式（Kotlin 侧 ChatViewModel/AppViewModel）不通过 tauri::ipc::Channel 收流式，
+    // 而是轮询 native_bridge 的 pollEvents 事件队列。这里把所有 delta 事件包装成前端
+    // PaiWsClient 契约的 JSON-RPC notification（method=chat.assistantDelta，
+    // params={conversationId, event:{delta,kind,requestId,toolName,toolStatus,message}}）
+    // push 进原生事件队列，Kotlin 轮询 consume 后实时回显正文/思考/工具，round_completed 落盘。
+    #[cfg(target_os = "android")]
+    {
+        let delta_event = serde_json::json!({
+            "delta": event.delta,
+            "kind": event.kind,
+            "requestId": event.request_id,
+            "toolName": event.tool_name,
+            "toolStatus": event.tool_status,
+            "message": event.message,
+        });
+        let notification = serde_json::json!({
+            "method": "chat.assistantDelta",
+            "params": {
+                "conversationId": conversation_id.trim(),
+                "event": delta_event,
+            },
+        });
+        crate::push_native_delta_event(notification);
+    }
     if should_emit_assistant_delta_via_app_event_only(event) {
         let broadcast_event = assistant_delta_broadcast_event(event);
         emit_assistant_delta_app_event(state, conversation_id, &broadcast_event);

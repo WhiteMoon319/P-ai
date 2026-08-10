@@ -1,0 +1,351 @@
+// ========== Android 原生桥（JNI） ==========
+// 彻底拔掉 Tauri 运行时后，Kotlin 通过 System.loadLibrary 加载本 .so，
+// 直接调用 Java_com_whitemoon319_pai_* 方法完成初始化与 JSON-RPC 调用。
+//
+// 设计：
+// - 全局 NativeRuntime 单例：自建 Tokio runtime + AppState + IdeContextRuntime
+// - nativeInit(appRoot)：用应用数据目录初始化后端（等价原 tauri setup 的 AppState::new_with_root）
+// - nativeCall(requestJson)：同步执行 JSON-RPC（block_on dispatch），返回响应 JSON
+// - 事件下发（流式 token/通知）暂走事件队列，后续轮次补齐
+
+use jni::objects::{JClass, JString};
+use jni::sys::{jstring};
+use jni::JNIEnv;
+
+/// 全局原生运行时：Tokio runtime + 业务状态 + IDE 上下文运行时。
+struct NativeRuntime {
+    runtime: tokio::runtime::Runtime,
+    state: AppState,
+    ide_context_runtime: IdeContextRuntime,
+}
+
+static NATIVE_RUNTIME: OnceLock<Result<Arc<NativeRuntime>, String>> = OnceLock::new();
+
+/// 原生流式事件队列：Kotlin 通过 pollEvents 轮询弹出。
+/// dispatch_assistant_delta_to_active_view 在 Android 分支把所有 delta 事件 push 进来，
+/// AppViewModel/前端轮询 Java_com_whitemoon319_pai_native_PaiNative_pollEvents 取出。
+static NATIVE_DELTA_QUEUE: OnceLock<std::sync::Mutex<Vec<serde_json::Value>>> = OnceLock::new();
+
+pub(crate) fn native_delta_queue() -> &'static std::sync::Mutex<Vec<serde_json::Value>> {
+    NATIVE_DELTA_QUEUE.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+
+/// 把一条流式事件追加进原生事件队列（Android 分支专用）。
+pub(crate) fn push_native_delta_event(event: serde_json::Value) {
+    if let Ok(mut guard) = native_delta_queue().lock() {
+        guard.push(event);
+        // 队列只作短暂缓冲，Kotlin 高频轮询清空，不会无限增长。
+        if guard.len() > 4096 {
+            let len = guard.len();
+            let overflow = guard.split_off(len - 2048);
+            *guard = overflow;
+        }
+    }
+}
+
+/// 弹出并清空当前事件队列，返回 JSON 数组字符串。
+fn drain_native_delta_events() -> String {
+    let mut events = Vec::new();
+    if let Ok(mut guard) = native_delta_queue().lock() {
+        std::mem::swap(&mut events, &mut guard);
+    }
+    match serde_json::to_string(&events) {
+        Ok(json) => json,
+        Err(_) => "[]".to_string(),
+    }
+}
+
+fn native_runtime() -> Result<&'static Arc<NativeRuntime>, String> {
+    NATIVE_RUNTIME
+        .get()
+        .ok_or_else(|| "原生运行时尚未初始化（未调用 nativeInit）".to_string())
+        .and_then(|entry| match entry {
+            Ok(runtime) => Ok(runtime),
+            Err(err) => Err(err.clone()),
+        })
+}
+
+/// 初始化原生后端：自建 Tokio runtime + AppState + IdeContextRuntime。
+fn init_native_runtime(app_root: std::path::PathBuf) -> Result<(), String> {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_stack_size(8 * 1024 * 1024)
+        .build()
+        .map_err(|err| format!("创建原生 Tokio 运行时失败: {err}"))?;
+    // 关键：把自建 8MB 栈 runtime 安装为 tauri 全局异步运行时。
+    // chat.send 深层链（模型请求/工具/委托）内部大量使用 tauri::async_runtime::spawn，
+    // 而原 tauri 的 install_tauri_async_runtime 只在 run() 的桌面分支执行，Android 原生兜底路径不走它。
+    // 若不 set，这里 tauri 会懒初始化一个默认 2MB 栈 runtime，模型 API 的 TLS 深递归在其 worker 上栈溢出（SIGSEGV）。
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        tauri::async_runtime::set(runtime.handle().clone());
+    }))
+    .map_err(|panic_payload| {
+        let panic_text = panic_payload
+            .downcast_ref::<&str>()
+            .map(|value| (*value).to_string())
+            .or_else(|| panic_payload.downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "未知 panic".to_string());
+        format!("设置 Tauri 异步运行时失败: {panic_text}")
+    })?;
+    let state = AppState::new_with_root(app_root)?;
+    let ide_context_runtime = IdeContextRuntime::new();
+    NATIVE_RUNTIME
+        .set(Ok(Arc::new(NativeRuntime {
+            runtime,
+            state,
+            ide_context_runtime,
+        })))
+        .map_err(|_| "原生运行时重复初始化".to_string())
+}
+
+/// 提取 Android 应用数据目录（Kotlin 传入的 filesDir 等）。
+unsafe fn app_root_from_env(env: &mut JNIEnv, input: JString) -> Result<std::path::PathBuf, String> {
+    let raw: String = env
+        .get_string(&input)
+        .map_err(|err| format!("读取 appRoot 失败: {err}"))?
+        .into();
+    let root = std::path::PathBuf::from(raw);
+    if root.as_os_str().is_empty() {
+        return Err("appRoot 为空".to_string());
+    }
+    Ok(root)
+}
+
+// ========== JNI 导出 ==========
+
+/// Java_com_whitemoon319_pai_native_PaiNative_init(String appRoot) -> String
+/// 返回 "ok" 或错误信息（便于 Kotlin 侧直接弹错）。
+#[no_mangle]
+pub extern "system" fn Java_com_whitemoon319_pai_native_PaiNative_init(
+    mut env: JNIEnv,
+    _class: JClass,
+    app_root: JString,
+) -> jstring {
+    let result = unsafe { app_root_from_env(&mut env, app_root) }
+        .and_then(init_native_runtime)
+        .map(|()| "ok".to_string())
+        .unwrap_or_else(|err| format!("nativeInit 失败: {err}"));
+    match env.new_string(result) {
+        Ok(js) => js.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Java_com_whitemoon319_pai_native_PaiNative_call(String requestJson) -> String
+/// 同步执行 JSON-RPC 并返回响应 JSON；失败时返回 JSON-RPC error 结构。
+#[no_mangle]
+pub extern "system" fn Java_com_whitemoon319_pai_native_PaiNative_call(
+    mut env: JNIEnv,
+    _class: JClass,
+    request_json: JString,
+) -> jstring {
+    let response = native_call_inner(&mut env, &request_json);
+    match env.new_string(response) {
+        Ok(js) => js.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Java_com_whitemoon319_pai_native_PaiNative_pollEvents() -> String
+/// 拉取并清空待下发事件（流式 delta / 工具事件等），返回 JSON 数组。
+#[no_mangle]
+pub extern "system" fn Java_com_whitemoon319_pai_native_PaiNative_pollEvents(
+    mut env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    let events = drain_native_delta_events();
+    match env.new_string(events) {
+        Ok(js) => js.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+fn native_call_inner(env: &mut JNIEnv, request_json: &JString) -> String {
+    let request_text: String = match env.get_string(request_json) {
+        Ok(s) => s.into(),
+        Err(err) => {
+            return ide_chat_jsonrpc_error(
+                None,
+                -32600,
+                format!("读取请求失败: {err}"),
+            )
+            .to_string();
+        }
+    };
+
+    let request: Value = match serde_json::from_str(&request_text) {
+        Ok(value) => value,
+        Err(err) => {
+            return ide_chat_jsonrpc_error(None, -32700, format!("invalid json: {err}")).to_string();
+        }
+    };
+    let id = request.get("id").cloned();
+    let method = request
+        .get("method")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let params = request.get("params").cloned().unwrap_or(Value::Null);
+
+    if method.trim().is_empty() {
+        return ide_chat_jsonrpc_error(id, -32600, "missing method").to_string();
+    }
+
+    let runtime = match native_runtime() {
+        Ok(runtime) => runtime.clone(),
+        Err(err) => {
+            return ide_chat_jsonrpc_error(id, -32000, err).to_string();
+        }
+    };
+
+    // 同步边界：把 dispatch 提交到原生 Tokio worker（8MB 栈）执行，JNI 线程只等待结果。
+    // 直接 block_on 会在 Kotlin IO 线程（栈 ~1MB）驱动 chat.send 等深递归 future 导致栈溢出。
+    let join = runtime
+        .runtime
+        .spawn(native_dispatch(runtime.clone(), method, params, id.clone()));
+    let result = runtime.runtime.block_on(join).unwrap_or_else(|err| {
+        Err(format!("原生 dispatch 任务异常: {err}"))
+    });
+    match result {
+        Ok(value) => ide_chat_jsonrpc_success(id, value).to_string(),
+        Err(err) => ide_chat_jsonrpc_error(id, -32000, err).to_string(),
+    }
+}
+
+/// 原生精简 dispatch：复用现有 `*_ws_inner` / `*_for_web_settings` 等只依赖 `&AppState` 的实现。
+async fn native_dispatch(
+    runtime: Arc<NativeRuntime>,
+    method: String,
+    params: Value,
+    _id: Option<Value>,
+) -> Result<Value, String> {
+    let state = &runtime.state;
+    // sidebar 语义在原生端固定一个 viewer id，避免 ws 侧 client_id 概念。
+    let viewer_id = "android-native";
+    // 原生桥单会话模式：resumeSubscription 登记到固定 client_id，流式事件后续走事件队列。
+    let mut opened_conversation_id: Option<String> = None;
+
+    // 需要 AppHandle 的方法（写配置/事件推送等）本轮返回暂不支持，后续轮次迁移。
+    let app_dependent = [
+        "save_config",
+        "save_agents",
+        "save_chat_settings",
+        "patch_chat_settings",
+        "save_conversation_api_settings",
+        "patch_conversation_api_settings",
+        "set_ui_language",
+        "app.language.set",
+        "set_department_primary_api_config",
+        "department.primaryApi.set",
+        "set_github_update_method",
+        "set_skipped_github_update_version",
+        "convert_private_agent_to_main",
+        "set_agent_private_memory_enabled",
+        "set_agent_memory_recall_mode",
+        "api_config.create",
+        "api_config.update",
+        "api_config.delete",
+        "init_android_workspace",
+        "repair_android_workspace_runtime",
+        "reset_android_workspace_runtime",
+        "reset_android_workspace_state",
+        "import_android_workspace_rootfs_archive",
+        "frontend_ready_start_remote_im_services",
+        "run_message_store_migration",
+        "check_message_store_migration",
+    ];
+    if app_dependent.contains(&method.as_str()) {
+        return Err(format!(
+            "原生桥暂不支持需要原生事件通道的方法: {method}（后续轮次迁移）"
+        ));
+    }
+
+    match method.as_str() {
+        "bridge.ping" => Ok(serde_json::json!({
+            "ok": true,
+            "ts": chrono::Utc::now().to_rfc3339(),
+        })),
+        "webview.ping" => Ok(serde_json::json!(true)),
+        "webview_pong" => Ok(serde_json::json!(true)),
+        "conversation.list" => ide_chat_conversation_list(state, viewer_id),
+        "conversation.setActive" => ide_chat_set_active_conversation_command(state, params),
+        "conversation.resumeSubscription" => ide_chat_resume_sidebar_subscription(
+            state,
+            params,
+            viewer_id,
+            &mut opened_conversation_id,
+        ),
+        "conversation.create" => ide_chat_create_conversation(state, params)
+            .await
+            .and_then(|result| Ok(result)),
+        "conversation.createOptions" => ide_chat_create_conversation_options(state),
+        "conversation.blockPage" => ide_chat_conversation_block_page(state, params),
+        "conversation.messageById" => ide_chat_conversation_message_by_id_command(state, params),
+        "conversation.messagesBefore" => ide_chat_conversation_messages_before_command(state, params),
+        "conversation.markRead" => ide_chat_mark_conversation_read(state, params),
+        "conversation.runtimeSnapshot" => ide_chat_conversation_runtime_snapshot(state, params),
+        "conversation.fastRequestTurns" => ide_chat_conversation_fast_request_turns(state, params),
+        "conversation.freshnessSnapshot" => ide_chat_conversation_freshness_snapshot(state, params).await,
+        "chat.send" => ide_chat_send_message(state, params).await,
+        "chat.stop" => ide_chat_stop_conversation(state, params),
+        "load_config" => ide_chat_load_config_for_web_settings(state),
+        "load_chat_settings" => ide_chat_load_chat_settings_for_web_settings(state),
+        "check_tools_status" => ide_chat_check_tools_status_for_web_settings(state, params),
+        "app.bootstrapSnapshot" => ide_chat_load_app_bootstrap_snapshot_for_web_settings(state),
+        "get_android_workspace_status" => ide_chat_serialize(get_android_workspace_status_ws_inner(state)?),
+        "android_workspace.list" => ide_chat_serialize(list_android_workspace_files_ws_inner(
+            state,
+            params.get("path").and_then(Value::as_str).map(str::to_string),
+        )?),
+        "android_workspace.readText" => ide_chat_serialize(read_android_workspace_text_ws_inner(
+            state,
+            params.get("path").and_then(Value::as_str).unwrap_or_default().to_string(),
+        )?),
+        "android_workspace.writeText" => ide_chat_serialize(write_android_workspace_text_ws_inner(
+            state,
+            params.get("path").and_then(Value::as_str).unwrap_or_default().to_string(),
+            params.get("text").and_then(Value::as_str).unwrap_or_default().to_string(),
+            params.get("overwrite").and_then(Value::as_bool),
+        )?),
+        "android_workspace.move" => ide_chat_serialize(move_android_workspace_file_ws_inner(
+            state,
+            params.get("source").and_then(Value::as_str).unwrap_or_default().to_string(),
+            params.get("target").and_then(Value::as_str).unwrap_or_default().to_string(),
+            params.get("overwrite").and_then(Value::as_bool),
+        )?),
+        "android_workspace.glob" => ide_chat_serialize(glob_android_workspace_files_ws_inner(
+            state,
+            params.get("pattern").and_then(Value::as_str).unwrap_or_default().to_string(),
+            params.get("path").and_then(Value::as_str).map(str::to_string),
+        )?),
+        "android_workspace.grep" => ide_chat_serialize(grep_android_workspace_files_ws_inner(
+            state,
+            params.get("query").and_then(Value::as_str).unwrap_or_default().to_string(),
+            params.get("path").and_then(Value::as_str).map(str::to_string),
+            params.get("regex").and_then(Value::as_bool),
+            params.get("ignoreCase").and_then(Value::as_bool),
+            params.get("includeGlob").and_then(Value::as_str).map(str::to_string),
+        )?),
+        "android_workspace.delete" => ide_chat_serialize(delete_file_from_android_workspace_ws_inner(
+            state,
+            params.get("path").and_then(Value::as_str).unwrap_or_default().to_string(),
+        )?),
+        "android_workspace.import" => ide_chat_serialize(import_file_to_android_workspace_ws_inner(
+            state,
+            params.get("fileName").and_then(Value::as_str).unwrap_or_default().to_string(),
+            params.get("mime").and_then(Value::as_str).map(str::to_string),
+            params.get("dataBase64").and_then(Value::as_str).unwrap_or_default().to_string(),
+            params.get("targetPath").and_then(Value::as_str).map(str::to_string),
+        )?),
+        "android_workspace.export" => ide_chat_serialize(export_file_from_android_workspace_ws_inner(
+            state,
+            params.get("path").and_then(Value::as_str).unwrap_or_default().to_string(),
+        )?),
+        "get_app_version" => Ok(serde_json::json!(env!("CARGO_PKG_VERSION").to_string())),
+        "get_project_repository_url" => Ok(serde_json::json!(GITHUB_REPO_PAGE.to_string())),
+        "list_terminal_shell_candidates" => ide_chat_list_terminal_shell_candidates_for_web_settings(state),
+        "list_tool_catalog" => ide_chat_list_tool_catalog_for_web_settings(state).await,
+        "list_department_permission_catalog" => ide_chat_list_department_permission_catalog_for_web_settings(state).await,
+        _ => Err(format!("原生桥 method not found: {method}")),
+    }
+}

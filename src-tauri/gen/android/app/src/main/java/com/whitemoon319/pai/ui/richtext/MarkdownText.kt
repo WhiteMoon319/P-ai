@@ -1,4 +1,4 @@
-package ai.easycall.app.ui.richtext
+package com.whitemoon319.pai.ui.richtext
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border

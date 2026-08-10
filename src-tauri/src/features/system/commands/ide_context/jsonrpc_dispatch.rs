@@ -296,6 +296,22 @@ async fn ide_chat_handle_jsonrpc_request(
             .and_then(|input| run_message_store_migration_inner(app, state, input))
             .and_then(ide_chat_serialize),
         "save_config" => ide_chat_save_config_for_web_settings(state, app, ide_context_runtime, request.params),
+        "api_config.create" => (|| -> Result<Value, String> {
+            let input = ide_chat_parse_param_field::<ApiConfig>(request.params, "input")?;
+            ide_chat_serialize(api_config_create_inner(input, app, state, ide_context_runtime)?)
+        })(),
+        "api_config.update" => (|| -> Result<Value, String> {
+            let input = ide_chat_parse_param_field::<ApiConfig>(request.params, "input")?;
+            ide_chat_serialize(api_config_update_inner(input, app, state, ide_context_runtime)?)
+        })(),
+        "api_config.delete" => (|| -> Result<Value, String> {
+            let input = ide_chat_parse_param_field::<ApiConfigDeleteInput>(request.params, "input")?;
+            ide_chat_serialize(api_config_delete_inner(input, app, state, ide_context_runtime)?)
+        })(),
+        "test_text_connection" => (|| async {
+            let input = ide_chat_parse_param_field::<ApiConfig>(request.params, "input")?;
+            ide_chat_serialize(test_text_connection_inner(input, state).await?)
+        })().await,
         "load_agents" => ide_chat_load_agents_for_web_settings(state),
         "convert_private_agent_to_main" => {
             ide_chat_convert_private_agent_to_main_for_web_settings(state, app, request.params)
@@ -339,6 +355,219 @@ async fn ide_chat_handle_jsonrpc_request(
         "get_image_text_cache_stats" => ide_chat_get_image_text_cache_stats_for_web_settings(state),
         "clear_image_text_cache" => ide_chat_clear_image_text_cache_for_web_settings(state),
         "check_tools_status" => ide_chat_check_tools_status_for_web_settings(state, request.params),
+        "get_android_workspace_status" => {
+            ide_chat_serialize(get_android_workspace_status_ws_inner(state))
+        }
+        "init_android_workspace" => (|| async {
+            let root = android_workspace_root(state);
+            #[cfg(target_os = "android")]
+            {
+                let mut downloading = normalize_android_workspace_status(state);
+                downloading.state = AndroidWorkspaceStateKind::Downloading;
+                downloading.last_error = None;
+                downloading.runtime_version = None;
+                downloading.download_bytes = Some(0);
+                downloading.download_total_bytes = Some(ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH);
+                downloading.download_stage = Some("preparing".to_string());
+                android_workspace_set_status(state, Some(app), downloading)?;
+                match ensure_android_workspace_layout(&root) {
+                    Ok(()) => {
+                        if let Err(err) = ensure_android_workspace_rootfs(state, app, &root).await {
+                            let mut failed = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
+                            failed.last_error = Some(err.clone());
+                            let _ = android_workspace_set_status(state, Some(app), failed);
+                            return Err(err);
+                        }
+                        android_workspace_set_status(state, Some(app), android_workspace_ready_status(&root))
+                    }
+                    Err(err) => {
+                        let mut failed = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
+                        failed.last_error = Some(err.clone());
+                        let _ = android_workspace_set_status(state, Some(app), failed);
+                        Err(err)
+                    }
+                }
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                Ok(android_workspace_ws_fake_ready(&root))
+            }
+        })().await.and_then(ide_chat_serialize),
+        "repair_android_workspace_runtime" => (|| {
+            let root = android_workspace_root(state);
+            #[cfg(target_os = "android")]
+            {
+                let runtime_root = android_workspace_runtime_root(&root);
+                let result = (|| {
+                    ensure_android_workspace_layout(&root)?;
+                    if !runtime_root.join("usr").join("bin").join("dash").is_file() {
+                        return Err("Android Linux 运行环境缺少 usr/bin/dash，请重置沙盒后重新初始化。".to_string());
+                    }
+                    let temp_dir = android_workspace_proot_temp_root(state);
+                    let temp_dir = if let Ok(canonical) = temp_dir.canonicalize() { canonical } else { temp_dir };
+                    fs::create_dir_all(&temp_dir)
+                        .map_err(|err| format!("创建 Android proot 临时目录失败 ({}): {err}", temp_dir.display()))?;
+                    let (native_dir, _, _) = android_proot_binary_paths()?;
+                    let _ = android_proot_ensure_libs_dir(&native_dir, &temp_dir)?;
+                    android_proot_ensure_host_pai_layout(&root)?;
+                    android_proot_patch_rootfs(&runtime_root)?;
+                    write_android_workspace_rootfs_marker(&runtime_root)?;
+                    if !android_workspace_runtime_ready(&root) {
+                        return Err("Android Linux 运行环境修复后仍未通过就绪检查。".to_string());
+                    }
+                    Ok(())
+                })();
+                match result {
+                    Ok(()) => {
+                        runtime_log_info("[Android 工作区] 修复 Linux 沙盒完成".to_string());
+                        android_workspace_set_status(state, Some(app), android_workspace_ready_status(&root))
+                    }
+                    Err(err) => {
+                        runtime_log_error(format!("[Android 工作区] 修复 Linux 沙盒失败 err={err:?}"));
+                        let mut status = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
+                        status.last_error = Some(err.clone());
+                        let _ = android_workspace_set_status(state, Some(app), status);
+                        Err(err)
+                    }
+                }
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                Ok(android_workspace_ws_fake_ready(&root))
+            }
+        })().and_then(ide_chat_serialize),
+        "reset_android_workspace_runtime" => (|| {
+            let root = android_workspace_root(state);
+            reset_android_workspace_runtime_ws_inner(state, Some(app), &root)
+        })().and_then(ide_chat_serialize),
+        "reset_android_workspace_state" => (|| {
+            let root = android_workspace_root(state);
+            #[cfg(target_os = "android")]
+            {
+                let status = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
+                android_workspace_set_status(state, Some(app), status)
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                Ok(android_workspace_ws_fake_ready(&root))
+            }
+        })().and_then(ide_chat_serialize),
+        "import_android_workspace_rootfs_archive" => (|| async {
+            let file_name = request
+                .params
+                .get("fileName")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            let data_base64 = request
+                .params
+                .get("dataBase64")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            let root = android_workspace_root(state);
+            #[cfg(target_os = "android")]
+            {
+                let safe_name = android_workspace_sanitize_file_name(&file_name);
+                if !safe_name.ends_with(".tar.gz") && safe_name != ANDROID_WORKSPACE_ROOTFS_FILE_NAME {
+                    runtime_log_warn(format!(
+                        "[Android 工作区] 导入 Linux 运行环境压缩包文件名不匹配，继续按内容校验，file_name={}",
+                        safe_name
+                    ));
+                }
+                let mut importing = normalize_android_workspace_status(state);
+                importing.state = AndroidWorkspaceStateKind::Downloading;
+                importing.last_error = None;
+                importing.runtime_version = None;
+                importing.download_bytes = Some(0);
+                importing.download_total_bytes = Some(ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH);
+                importing.download_stage = Some("importing".to_string());
+                android_workspace_set_status(state, Some(app), importing)?;
+                match ensure_android_workspace_layout(&root) {
+                    Ok(()) => {
+                        let bytes = match B64.decode(data_base64.trim()) {
+                            Ok(bytes) => bytes,
+                            Err(err) => {
+                                let error = format!("解析 Android Linux 运行环境压缩包失败: {err}");
+                                let mut failed = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
+                                failed.last_error = Some(error.clone());
+                                let _ = android_workspace_set_status(state, Some(app), failed);
+                                return Err(error);
+                            }
+                        };
+                android_workspace_update_download_progress(state, app, &root, bytes.len() as u64, "importing")?;
+                match import_android_workspace_rootfs_from_archive(state, app, &root, bytes).await {
+                    Ok(()) => android_workspace_set_status(state, Some(app), android_workspace_ready_status(&root)),
+                    Err(err) => {
+                        let mut failed = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
+                        failed.last_error = Some(err.clone());
+                        let _ = android_workspace_set_status(state, Some(app), failed);
+                        Err(err)
+                    }
+                }
+                    }
+                    Err(err) => {
+                        let mut failed = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
+                        failed.last_error = Some(err.clone());
+                        let _ = android_workspace_set_status(state, Some(app), failed);
+                        Err(err)
+                    }
+                }
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                let _ = (&file_name, &data_base64);
+                Ok(android_workspace_ws_fake_ready(&root))
+            }
+        })().await.and_then(ide_chat_serialize),
+        "android_workspace.list" => (|| -> Result<Value, String> {
+            let path = request.params.get("path").and_then(serde_json::Value::as_str).map(str::to_string);
+            ide_chat_serialize(list_android_workspace_files_ws_inner(state, path)?)
+        })(),
+        "android_workspace.readText" => (|| -> Result<Value, String> {
+            let path = request.params.get("path").and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
+            ide_chat_serialize(read_android_workspace_text_ws_inner(state, path)?)
+        })(),
+        "android_workspace.writeText" => (|| -> Result<Value, String> {
+            let path = request.params.get("path").and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
+            let text = request.params.get("text").and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
+            let overwrite = request.params.get("overwrite").and_then(serde_json::Value::as_bool);
+            ide_chat_serialize(write_android_workspace_text_ws_inner(state, path, text, overwrite)?)
+        })(),
+        "android_workspace.move" => (|| -> Result<Value, String> {
+            let source = request.params.get("source").and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
+            let target = request.params.get("target").and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
+            let overwrite = request.params.get("overwrite").and_then(serde_json::Value::as_bool);
+            ide_chat_serialize(move_android_workspace_file_ws_inner(state, source, target, overwrite)?)
+        })(),
+        "android_workspace.glob" => (|| -> Result<Value, String> {
+            let pattern = request.params.get("pattern").and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
+            let path = request.params.get("path").and_then(serde_json::Value::as_str).map(str::to_string);
+            ide_chat_serialize(glob_android_workspace_files_ws_inner(state, pattern, path)?)
+        })(),
+        "android_workspace.grep" => (|| -> Result<Value, String> {
+            let query = request.params.get("query").and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
+            let path = request.params.get("path").and_then(serde_json::Value::as_str).map(str::to_string);
+            let regex = request.params.get("regex").and_then(serde_json::Value::as_bool);
+            let ignore_case = request.params.get("ignoreCase").and_then(serde_json::Value::as_bool);
+            let include_glob = request.params.get("includeGlob").and_then(serde_json::Value::as_str).map(str::to_string);
+            ide_chat_serialize(grep_android_workspace_files_ws_inner(state, query, path, regex, ignore_case, include_glob)?)
+        })(),
+        "android_workspace.delete" => (|| -> Result<Value, String> {
+            let path = request.params.get("path").and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
+            ide_chat_serialize(delete_file_from_android_workspace_ws_inner(state, path)?)
+        })(),
+        "android_workspace.import" => (|| -> Result<Value, String> {
+            let file_name = request.params.get("fileName").and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
+            let mime = request.params.get("mime").and_then(serde_json::Value::as_str).map(str::to_string);
+            let data_base64 = request.params.get("dataBase64").and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
+            let target_path = request.params.get("targetPath").and_then(serde_json::Value::as_str).map(str::to_string);
+            ide_chat_serialize(import_file_to_android_workspace_ws_inner(state, file_name, mime, data_base64, target_path)?)
+        })(),
+        "android_workspace.export" => (|| -> Result<Value, String> {
+            let path = request.params.get("path").and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
+            ide_chat_serialize(export_file_from_android_workspace_ws_inner(state, path)?)
+        })(),
         "list_terminal_shell_candidates" => {
             ide_chat_list_terminal_shell_candidates_for_web_settings(state)
         }

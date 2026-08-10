@@ -44,3 +44,9 @@ src-tauri/target-tests/
 _phone/
 apk_download/
 logs_*/
+
+# 本地诊断临时产物（本会话产生的截图/抓包/中间文件）
+.pai-tmp/
+.tmp_pai_shot*.png
+_dbg_*.png
+_ws_test.py

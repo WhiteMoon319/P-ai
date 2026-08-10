@@ -1869,6 +1869,7 @@ dependencies = [
  "httpmock",
  "image",
  "infer",
+ "jni 0.21.1",
  "litchi",
  "md5",
  "once_cell",

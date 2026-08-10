@@ -260,16 +260,24 @@ fn list_android_workspace_files(
     state: State<'_, AppState>,
     path: Option<String>,
 ) -> Result<AndroidWorkspaceFileListResult, String> {
+    list_android_workspace_files_ws_inner(state.inner(), path)
+}
+
+/// ws 端调用版。
+fn list_android_workspace_files_ws_inner(
+    state: &AppState,
+    path: Option<String>,
+) -> Result<AndroidWorkspaceFileListResult, String> {
     #[cfg(target_os = "android")]
     {
         let raw_path = path.unwrap_or_default();
-        let target = android_workspace_resolve_file_manager_existing_path(&state, &raw_path, true)?;
+        let target = android_workspace_resolve_file_manager_existing_path(state, &raw_path, true)?;
         let metadata = fs::metadata(&target)
             .map_err(|err| format!("读取 Android 工作区文件夹失败 ({}): {err}", target.display()))?;
         if !metadata.is_dir() {
             return Err("文件管理路径必须是目录。".to_string());
         }
-        let root = android_workspace_root(&state)
+        let root = android_workspace_root(state)
             .canonicalize()
             .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
         let current_path = android_workspace_relative_display(&root, &target);
@@ -302,7 +310,6 @@ fn list_android_workspace_files(
     }
     #[cfg(not(target_os = "android"))]
     {
-        let _ = state;
         let _ = path;
         Err("Android 工作区文件管理仅在 Android 端可用。".to_string())
     }
@@ -313,10 +320,18 @@ fn read_android_workspace_text(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<AndroidWorkspaceTextResult, String> {
+    read_android_workspace_text_ws_inner(state.inner(), path)
+}
+
+/// ws 端调用版。
+fn read_android_workspace_text_ws_inner(
+    state: &AppState,
+    path: String,
+) -> Result<AndroidWorkspaceTextResult, String> {
     #[cfg(target_os = "android")]
     {
-        let target = android_workspace_resolve_file_manager_existing_path(&state, &path, false)?;
-        let root = android_workspace_root(&state)
+        let target = android_workspace_resolve_file_manager_existing_path(state, &path, false)?;
+        let root = android_workspace_root(state)
             .canonicalize()
             .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
         let metadata = fs::metadata(&target)
@@ -354,9 +369,19 @@ fn write_android_workspace_text(
     text: String,
     overwrite: Option<bool>,
 ) -> Result<AndroidWorkspaceWriteResult, String> {
+    write_android_workspace_text_ws_inner(state.inner(), path, text, overwrite)
+}
+
+/// ws 端调用版。
+fn write_android_workspace_text_ws_inner(
+    state: &AppState,
+    path: String,
+    text: String,
+    overwrite: Option<bool>,
+) -> Result<AndroidWorkspaceWriteResult, String> {
     #[cfg(target_os = "android")]
     {
-        let target = android_workspace_resolve_file_manager_target_path(&state, &path, false)?;
+        let target = android_workspace_resolve_file_manager_target_path(state, &path, false)?;
         let bytes = text.as_bytes();
         if bytes.len() > ANDROID_WORKSPACE_TEXT_WRITE_MAX_BYTES {
             return Err(format!(
@@ -382,7 +407,7 @@ fn write_android_workspace_text(
         }
         fs::write(&target, text)
             .map_err(|err| format!("写入 Android 工作区文本文件失败 ({}): {err}", target.display()))?;
-        let root = android_workspace_root(&state)
+        let root = android_workspace_root(state)
             .canonicalize()
             .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
         let entry = android_workspace_file_entry(&root, target)
@@ -406,16 +431,26 @@ fn move_android_workspace_file(
     target: String,
     overwrite: Option<bool>,
 ) -> Result<AndroidWorkspaceMoveResult, String> {
+    move_android_workspace_file_ws_inner(state.inner(), source, target, overwrite)
+}
+
+/// ws 端调用版。
+fn move_android_workspace_file_ws_inner(
+    state: &AppState,
+    source: String,
+    target: String,
+    overwrite: Option<bool>,
+) -> Result<AndroidWorkspaceMoveResult, String> {
     #[cfg(target_os = "android")]
     {
-        let source_path = android_workspace_resolve_file_manager_existing_path(&state, &source, false)?;
-        let target_path = android_workspace_resolve_file_manager_target_path(&state, &target, false)?;
+        let source_path = android_workspace_resolve_file_manager_existing_path(state, &source, false)?;
+        let target_path = android_workspace_resolve_file_manager_target_path(state, &target, false)?;
         let source_metadata = fs::symlink_metadata(&source_path)
             .map_err(|err| format!("读取 Android 工作区移动源失败 ({}): {err}", source_path.display()))?;
         if source_metadata.file_type().is_symlink() {
             return Err("不允许移动符号链接。".to_string());
         }
-        let root = android_workspace_root(&state)
+        let root = android_workspace_root(state)
             .canonicalize()
             .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
         let source_display = android_workspace_relative_display(&root, &source_path);
@@ -465,16 +500,25 @@ fn glob_android_workspace_files(
     pattern: String,
     path: Option<String>,
 ) -> Result<AndroidWorkspaceGlobResult, String> {
+    glob_android_workspace_files_ws_inner(state.inner(), pattern, path)
+}
+
+/// ws 端调用版。
+fn glob_android_workspace_files_ws_inner(
+    state: &AppState,
+    pattern: String,
+    path: Option<String>,
+) -> Result<AndroidWorkspaceGlobResult, String> {
     #[cfg(target_os = "android")]
     {
         let matcher = android_workspace_glob_to_regex(&pattern)?;
-        let start = android_workspace_resolve_file_manager_existing_path(&state, path.as_deref().unwrap_or_default(), true)?;
+        let start = android_workspace_resolve_file_manager_existing_path(state, path.as_deref().unwrap_or_default(), true)?;
         let metadata = fs::metadata(&start)
             .map_err(|err| format!("读取 Android 工作区 glob 起点失败 ({}): {err}", start.display()))?;
         if !metadata.is_dir() {
             return Err("glob 起点必须是目录。".to_string());
         }
-        let root = android_workspace_root(&state)
+        let root = android_workspace_root(state)
             .canonicalize()
             .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
         let mut entries = Vec::new();
@@ -510,6 +554,18 @@ fn grep_android_workspace_files(
     ignore_case: Option<bool>,
     include_glob: Option<String>,
 ) -> Result<AndroidWorkspaceGrepResult, String> {
+    grep_android_workspace_files_ws_inner(state.inner(), query, path, regex, ignore_case, include_glob)
+}
+
+/// ws 端调用版。
+fn grep_android_workspace_files_ws_inner(
+    state: &AppState,
+    query: String,
+    path: Option<String>,
+    regex: Option<bool>,
+    ignore_case: Option<bool>,
+    include_glob: Option<String>,
+) -> Result<AndroidWorkspaceGrepResult, String> {
     #[cfg(target_os = "android")]
     {
         if query.trim().is_empty() {
@@ -526,8 +582,8 @@ fn grep_android_workspace_files(
             .filter(|value| !value.is_empty())
             .map(android_workspace_glob_to_regex)
             .transpose()?;
-        let start = android_workspace_resolve_file_manager_existing_path(&state, path.as_deref().unwrap_or_default(), true)?;
-        let root = android_workspace_root(&state)
+        let start = android_workspace_resolve_file_manager_existing_path(state, path.as_deref().unwrap_or_default(), true)?;
+        let root = android_workspace_root(state)
             .canonicalize()
             .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
         let mut files = Vec::<(PathBuf, String)>::new();
@@ -610,13 +666,18 @@ fn grep_android_workspace_files(
 
 #[tauri::command]
 fn get_android_workspace_status(state: State<'_, AppState>) -> Result<AndroidWorkspaceStatus, String> {
+    get_android_workspace_status_ws_inner(state.inner())
+}
+
+/// ws 端调用版：接受 &AppState（dispatch 无法注入 State）。
+fn get_android_workspace_status_ws_inner(state: &AppState) -> Result<AndroidWorkspaceStatus, String> {
     #[cfg(target_os = "android")]
     {
-        Ok(normalize_android_workspace_status(&state))
+        Ok(normalize_android_workspace_status(state))
     }
     #[cfg(not(target_os = "android"))]
     {
-        let root = android_workspace_root(&state);
+        let root = android_workspace_root(state);
         let (llm_workspace_root, runtime_root) = android_workspace_status_paths(&root);
         Ok(AndroidWorkspaceStatus {
             state: AndroidWorkspaceStateKind::Ready,
@@ -858,29 +919,57 @@ fn reset_android_workspace_runtime(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AndroidWorkspaceStatus, String> {
+    reset_android_workspace_runtime_ws_inner(state.inner(), Some(&app), &android_workspace_root(state.inner()))
+}
+
+/// ws 端调用版：重置 Linux 沙盒运行时（保留用户工作区与 Skill 数据）。
+pub(crate) fn reset_android_workspace_runtime_ws_inner(
+    state: &AppState,
+    app: Option<&AppHandle>,
+    root: &std::path::Path,
+) -> Result<AndroidWorkspaceStatus, String> {
     #[cfg(target_os = "android")]
     {
-        let root = android_workspace_root(&state);
         for (path, context) in [
-            (android_workspace_runtime_root(&root), "Linux rootfs"),
-            (android_workspace_rootfs_staging_root(&root), "rootfs staging"),
-            (android_workspace_proot_temp_root(&state), "proot 临时目录"),
+            (android_workspace_runtime_root(root), "Linux rootfs"),
+            (android_workspace_rootfs_staging_root(root), "rootfs staging"),
+            (android_workspace_proot_temp_root(state), "proot 临时目录"),
             (root.join("runtime"), "旧版 llm-workspace 内 runtime"),
             (root.join("tmp").join("proot"), "旧版 proot 临时目录"),
             (root.join("tmp").join(ANDROID_WORKSPACE_ROOTFS_FILE_NAME), "旧版 rootfs 下载缓存"),
-            (android_workspace_rootfs_archive_path(&root), "rootfs 下载缓存"),
+            (android_workspace_rootfs_archive_path(root), "rootfs 下载缓存"),
         ] {
             android_workspace_remove_path_if_exists(&path, context)?;
         }
         runtime_log_info("[Android 工作区] 重置 Linux 沙盒完成，用户工作区与 Skill 数据保留".to_string());
-        let status = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
-        android_workspace_set_status(&state, Some(&app), status)
+        let status = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, root);
+        android_workspace_set_status(state, app, status)
     }
     #[cfg(not(target_os = "android"))]
     {
-        let _ = app;
         let _ = state;
+        let _ = app;
+        let _ = root;
         Err("Android Linux 沙盒重置仅在 Android 端可用。".to_string())
+    }
+}
+
+/// 非 Android 环境（Windows 开发机）返回的占位就绪状态，供 ws 调试链路走通。
+pub(crate) fn android_workspace_ws_fake_ready(root: &std::path::Path) -> AndroidWorkspaceStatus {
+    let (llm_workspace_root, runtime_root) = android_workspace_status_paths(root);
+    AndroidWorkspaceStatus {
+        state: AndroidWorkspaceStateKind::Ready,
+        root_path: llm_workspace_root.clone(),
+        llm_workspace_root,
+        runtime_root,
+        initialized_at: None,
+        updated_at: Some(now_iso()),
+        last_error: None,
+        version: ANDROID_WORKSPACE_STATUS_VERSION,
+        runtime_version: Some(ANDROID_WORKSPACE_ROOTFS_VERSION.to_string()),
+        download_bytes: Some(ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH),
+        download_total_bytes: Some(ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH),
+        download_stage: None,
     }
 }
 
@@ -892,18 +981,29 @@ fn import_file_to_android_workspace(
     data_base64: String,
     target_path: Option<String>,
 ) -> Result<AndroidWorkspaceImportResult, String> {
+    import_file_to_android_workspace_ws_inner(state.inner(), file_name, mime, data_base64, target_path)
+}
+
+/// ws 端调用版。
+fn import_file_to_android_workspace_ws_inner(
+    state: &AppState,
+    file_name: String,
+    mime: Option<String>,
+    data_base64: String,
+    target_path: Option<String>,
+) -> Result<AndroidWorkspaceImportResult, String> {
     #[cfg(target_os = "android")]
     {
         let _ = mime;
-        let root = android_workspace_root(&state)
+        let root = android_workspace_root(state)
             .canonicalize()
             .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
         let mut target = android_workspace_resolve_import_target_path(&root, &file_name, target_path.as_deref())?;
-        android_workspace_ensure_paths_within_sandbox(&state, &[target.clone()])?;
+        android_workspace_ensure_paths_within_sandbox(state, &[target.clone()])?;
         android_workspace_ensure_user_file_manager_path(&root, &target, false)?;
         if target.exists() {
             target = android_workspace_unique_sibling_path(&target);
-            android_workspace_ensure_paths_within_sandbox(&state, &[target.clone()])?;
+            android_workspace_ensure_paths_within_sandbox(state, &[target.clone()])?;
             android_workspace_ensure_user_file_manager_path(&root, &target, false)?;
         }
         if let Some(parent) = target.parent() {
@@ -923,7 +1023,7 @@ fn import_file_to_android_workspace(
         }
         fs::write(&target, &bytes)
             .map_err(|err| format!("写入 Android 工作区导入文件失败 ({}): {err}", target.display()))?;
-        let status = normalize_android_workspace_status(&state);
+        let status = normalize_android_workspace_status(state);
         Ok(AndroidWorkspaceImportResult {
             status,
             imported_path: android_workspace_relative_display(&root, &target),
@@ -1045,10 +1145,18 @@ fn export_file_from_android_workspace(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<AndroidWorkspaceExportResult, String> {
+    export_file_from_android_workspace_ws_inner(state.inner(), path)
+}
+
+/// ws 端调用版。
+fn export_file_from_android_workspace_ws_inner(
+    state: &AppState,
+    path: String,
+) -> Result<AndroidWorkspaceExportResult, String> {
     #[cfg(target_os = "android")]
     {
-        let target = android_workspace_resolve_file_manager_existing_path(&state, &path, false)?;
-        let root = android_workspace_root(&state)
+        let target = android_workspace_resolve_file_manager_existing_path(state, &path, false)?;
+        let root = android_workspace_root(state)
             .canonicalize()
             .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
         let metadata = fs::metadata(&target)
@@ -1140,10 +1248,18 @@ fn delete_file_from_android_workspace(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<AndroidWorkspaceDeleteResult, String> {
+    delete_file_from_android_workspace_ws_inner(state.inner(), path)
+}
+
+/// ws 端调用版。
+fn delete_file_from_android_workspace_ws_inner(
+    state: &AppState,
+    path: String,
+) -> Result<AndroidWorkspaceDeleteResult, String> {
     #[cfg(target_os = "android")]
     {
-        let target = android_workspace_resolve_file_manager_existing_path(&state, &path, false)?;
-        let root = android_workspace_root(&state)
+        let target = android_workspace_resolve_file_manager_existing_path(state, &path, false)?;
+        let root = android_workspace_root(state)
             .canonicalize()
             .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
         let metadata = fs::symlink_metadata(&target)
@@ -1158,7 +1274,6 @@ fn delete_file_from_android_workspace(
     }
     #[cfg(not(target_os = "android"))]
     {
-        let _ = state;
         let _ = path;
         Err("Android 工作区删除仅在 Android 端可用。".to_string())
     }
