@@ -1,43 +1,52 @@
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn show_main_window(app: AppHandle) -> Result<(), String> {
     show_window(&app, "main")
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn show_chat_window(app: AppHandle) -> Result<(), String> {
     show_window(&app, "chat")
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn show_archives_window(app: AppHandle) -> Result<(), String> {
     show_window(&app, "archives")
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn show_quick_setup_window(app: AppHandle) -> Result<(), String> {
     show_window(&app, "quick-setup")
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn open_runtime_logs_window(app: AppHandle) -> Result<(), String> {
     show_runtime_logs_window(&app)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn hide_current_window(window: tauri::Window) -> Result<(), String> {
     window.hide().map_err(|err| format!("隐藏当前窗口失败：{err}"))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn toggle_current_window_maximize(window: tauri::Window, app: AppHandle) -> Result<bool, String> {
     toggle_window_maximize_with_default_restore(&app, window.label())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn start_current_window_drag(window: tauri::Window, app: AppHandle) -> Result<(), String> {
     start_window_drag_with_default_restore(&app, window.label())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn complete_quick_setup_and_open_chat(app: AppHandle) -> Result<(), String> {
     show_window(&app, "chat")?;
@@ -524,12 +533,14 @@ fn webview_pong(window: tauri::Window) {
     webview_record_pong(window.label());
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn debug_crash_webview(webview: tauri::Webview) -> Result<(), String> {
     webview.eval("(function(){const a=[];while(true){a.push(new Array(1000000).fill('x'));}})();")
         .map_err(|err| format!("注入崩溃脚本失败：{err}"))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn list_system_fonts() -> Result<Vec<String>, String> {
     #[cfg(target_os = "android")]
@@ -564,6 +575,7 @@ fn validate_record_hotkey_available(config: &AppConfig) -> Result<String, String
     Ok(normalized)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn update_record_hotkey(
     input: UpdateRecordHotkeyInput,
@@ -608,6 +620,7 @@ fn update_record_hotkey(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn update_record_background_wake(
     input: UpdateRecordBackgroundWakeInput,
