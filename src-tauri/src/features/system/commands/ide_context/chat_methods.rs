@@ -479,7 +479,14 @@ fn ide_chat_remote_im_clear_conversation_command(
 }
 
 async fn ide_chat_frontend_ready_remote_im_command(app: &AppHandle) -> Result<Value, String> {
-    ide_chat_serialize(frontend_ready_start_remote_im_services(app.clone()).await?)
+    #[cfg(not(target_os = "android"))]
+    {
+        return ide_chat_serialize(frontend_ready_start_remote_im_services(app.clone()).await?);
+    }
+    #[cfg(target_os = "android")]
+    {
+        Ok(serde_json::json!({ "started": false, "skipped": true }))
+    }
 }
 
 fn ide_chat_forward_selection_command(state: &AppState, params: Value) -> Result<Value, String> {

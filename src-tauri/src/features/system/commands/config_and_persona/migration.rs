@@ -1031,7 +1031,9 @@ fn apply_import_config_migration_package_inner(
         backup_dir: backup_dir.to_string_lossy().to_string(),
     };
 
+    #[cfg(not(target_os = "android"))]
     let app_handle = (*app).clone();
+    #[cfg(not(target_os = "android"))]
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(300));
         graceful_restart_app(&app_handle);

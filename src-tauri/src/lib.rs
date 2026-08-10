@@ -264,6 +264,7 @@ fn install_tauri_async_runtime() -> Result<tokio::runtime::Runtime, String> {
     Ok(runtime)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn demo_restart_app(app: AppHandle) -> Result<(), String> {
     std::thread::spawn(move || {
@@ -274,6 +275,7 @@ fn demo_restart_app(app: AppHandle) -> Result<(), String> {
 }
 
 // Remote IM 命令包装
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn remote_im_get_channel_status(
     channel_id: String,
@@ -282,6 +284,7 @@ async fn remote_im_get_channel_status(
     remote_im_get_channel_status_inner(state.inner(), channel_id).await
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn remote_im_get_channel_logs(
     channel_id: String,
@@ -290,6 +293,7 @@ async fn remote_im_get_channel_logs(
     get_remote_im_channel_logs(state.inner(), channel_id).await
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn remote_im_get_contact_logs(
     input: RemoteImContactLogsInput,
@@ -298,6 +302,7 @@ async fn remote_im_get_contact_logs(
     remote_im_get_contact_logs_inner(state.inner(), input).await
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn remote_im_restart_channel(
     channel_id: String,
@@ -306,6 +311,7 @@ async fn remote_im_restart_channel(
     remote_im_restart_channel_inner(channel_id, state.inner()).await
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn frontend_ready_start_remote_im_services(app: AppHandle) -> Result<bool, String> {
     static BACKGROUND_SERVICES_START_REQUESTED: std::sync::atomic::AtomicBool =
@@ -365,7 +371,12 @@ async fn refresh_conversation_meta_after_migration(state: AppState) {
     }
 }
 
+// ==================== 桌面启动/关闭链路（Android 原生模式不走此段） ====================
+// Android 由 native_bridge 的 JNI 初始化驱动，不经过 run_deferred_setup / 优雅退出 /
+// 托盘 / 窗口等桌面启动逻辑；以下函数逐个 cfg 到非 Android，消除 Android 目标对
+// AppHandle / state / emit / tauri::async_runtime 的编译期引用。
 /// 阶段 2 延迟初始化：在 backend_ready 之后异步执行，避免阻塞前端首屏渲染。
+#[cfg(not(target_os = "android"))]
 async fn run_deferred_setup(app_handle: AppHandle) {
     #[cfg(target_os = "android")]
     eprintln!("[P-AI Android] run_deferred_setup: started");
@@ -531,6 +542,7 @@ async fn run_deferred_setup(app_handle: AppHandle) {
     runtime_log_info(format!("[启动-延迟] 阶段 2 初始化完成"));
 }
 
+#[cfg(not(target_os = "android"))]
 async fn start_background_services_after_frontend_ready(
     app_handle: AppHandle,
     startup_state: AppState,
@@ -549,6 +561,7 @@ async fn start_background_services_after_frontend_ready(
     start_remote_im_services_after_frontend_ready(app_handle.clone()).await;
 }
 
+#[cfg(not(target_os = "android"))]
 async fn start_remote_im_services_after_frontend_ready(app_handle: AppHandle) {
     let app_state = app_handle.state::<AppState>();
     let config = match state_read_config_cached(&app_state) {
@@ -730,6 +743,7 @@ const BACKGROUND_SHUTDOWN_TIMEOUT_SECS: u64 = 60;
 static APP_SHUTDOWN_STATE: std::sync::atomic::AtomicU8 =
     std::sync::atomic::AtomicU8::new(APP_SHUTDOWN_STATE_IDLE);
 
+#[cfg(not(target_os = "android"))]
 fn show_background_shutdown_timeout_dialog(app: &AppHandle) {
     let message = "自动关闭失败，请手动关闭应用重启";
     runtime_log_info(format!("[退出] {message}"));
@@ -740,6 +754,7 @@ fn show_background_shutdown_timeout_dialog(app: &AppHandle) {
         .show(|_| {});
 }
 
+#[cfg(not(target_os = "android"))]
 fn show_background_shutdown_timeout_dialog_then_exit(app: &AppHandle, code: i32) {
     let message = "自动关闭失败，请手动关闭应用重启";
     runtime_log_info(format!("[退出] {message}"));
@@ -753,6 +768,7 @@ fn show_background_shutdown_timeout_dialog_then_exit(app: &AppHandle, code: i32)
         });
 }
 
+#[cfg(not(target_os = "android"))]
 async fn graceful_shutdown_background_services(app: &AppHandle) {
     let shutdown_started = APP_SHUTDOWN_STATE.compare_exchange(
         APP_SHUTDOWN_STATE_IDLE,
@@ -920,6 +936,7 @@ async fn graceful_shutdown_background_services(app: &AppHandle) {
     APP_SHUTDOWN_STATE.store(APP_SHUTDOWN_STATE_DONE, std::sync::atomic::Ordering::SeqCst);
 }
 
+#[cfg(not(target_os = "android"))]
 async fn graceful_shutdown_background_services_with_timeout(app: &AppHandle) -> bool {
     match tokio::time::timeout(
         std::time::Duration::from_secs(BACKGROUND_SHUTDOWN_TIMEOUT_SECS),
@@ -939,10 +956,12 @@ async fn graceful_shutdown_background_services_with_timeout(app: &AppHandle) -> 
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn graceful_shutdown_background_services_blocking(app: &AppHandle) -> bool {
     tauri::async_runtime::block_on(graceful_shutdown_background_services_with_timeout(app))
 }
 
+#[cfg(not(target_os = "android"))]
 fn graceful_exit_app(app: &AppHandle, code: i32) {
     if graceful_shutdown_background_services_blocking(app) {
         app.exit(code);
@@ -951,6 +970,7 @@ fn graceful_exit_app(app: &AppHandle, code: i32) {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn graceful_restart_app(app: &AppHandle) {
     if graceful_shutdown_background_services_blocking(app) {
         app.restart();

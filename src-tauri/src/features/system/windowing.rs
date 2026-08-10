@@ -1698,6 +1698,7 @@ fn build_tray(_app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 fn hide_on_close(app: &AppHandle) {
     #[cfg(target_os = "windows")]
     {
