@@ -1175,9 +1175,6 @@ async fn codex_start_oauth_login(input: CodexStartOAuthLoginInput) -> Result<Cod
         },
     );
     codex_start_listener_thread(provider_id.to_string(), code_verifier, state);
-    #[cfg(not(target_os = "android"))]
-    webbrowser::open(&auth_url).map_err(|err| format!("打开 Codex OAuth 登录页失败: {err}"))?;
-    #[cfg(target_os = "android")]
     let _ = &auth_url;
     Ok(CodexAuthStatus {
         provider_id: provider_id.to_string(),

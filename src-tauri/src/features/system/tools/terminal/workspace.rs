@@ -248,11 +248,8 @@ struct TerminalWorkspaceResolved {
 }
 
 fn android_terminal_workspace_resolved(state: &AppState) -> Result<TerminalWorkspaceResolved, String> {
-    #[cfg(target_os = "android")]
     let root = android_workspace_canonical_root_if_ready(state)?
         .ok_or_else(|| ANDROID_WORKSPACE_NOT_READY_MESSAGE.to_string())?;
-    #[cfg(not(target_os = "android"))]
-    let root = ensure_workspace_root_ready(&android_workspace_root(state))?;
     Ok(TerminalWorkspaceResolved {
         id: "android-sandbox-workspace".to_string(),
         name: "Android 沙盒工作区".to_string(),

@@ -531,63 +531,7 @@ fn save_config_inner(
         }
     }
     if base_config.hotkey != main_config.hotkey {
-        #[cfg(not(target_os = "android"))]
-        if let Some(inner) = &app.inner {
-            if let Err(err) = register_hotkey_from_config(inner, &main_config) {
-                runtime_log_error(format!(
-                    "[热键] 召唤热键运行时注册失败，配置已保存但该热键暂不可用：hotkey={}, err={}",
-                    main_config.hotkey,
-                    err
-                ));
-                return Err(format!(
-                    "Register hotkey failed: {}, config saved but hotkey inactive. err={}",
-                    main_config.hotkey, err
-                ));
-            }
-        }
-        #[cfg(target_os = "android")]
-        {
-            let _ = (&app, &main_config);
-        }
-    }
-    #[cfg(not(target_os = "android"))]
-    if !main_config.web_access_enabled && IDE_CONTEXT_BRIDGE_STARTED.load(Ordering::SeqCst) {
-        runtime_log_info(format!(
-            "[网络访问] 配置已关闭，停止 Web 访问服务: port={}",
-            base_config.web_access_port
-        ));
-        tokio::spawn(async move {
-            shutdown_web_access_server().await;
-        });
-    }
-    #[cfg(not(target_os = "android"))]
-    if main_config.web_access_enabled
-        && (!base_config.web_access_enabled
-            || ((base_config.web_access_port != main_config.web_access_port
-                || base_config.web_access_password != main_config.web_access_password)
-                && IDE_CONTEXT_BRIDGE_STARTED.load(Ordering::SeqCst)))
-    {
-        runtime_log_info(format!(
-            "[网络访问] 配置已启用、端口或密码已变更，重启 Web 访问服务: old_enabled={}, new_enabled={}, old_port={}, new_port={}",
-            base_config.web_access_enabled,
-            main_config.web_access_enabled,
-            base_config.web_access_port,
-            main_config.web_access_port
-        ));
-        let app = app.clone();
-        let state = state.clone();
-        let ide_context_runtime = ide_context_runtime.clone();
-        if let Some(inner) = &app.inner {
-            let inner = inner.clone();
-            tokio::spawn(async move {
-                restart_web_access_server(
-                    inner,
-                    state,
-                    ide_context_runtime,
-                )
-                .await;
-            });
-        }
+        // Android 无窗口热键，跳过热键注册
     }
     let runtime_config = runtime_config_with_private_organization(&state, &main_config, &data)
         .map_err(|err| format!("配置已保存，但运行时配置刷新失败：{err}"))?;
