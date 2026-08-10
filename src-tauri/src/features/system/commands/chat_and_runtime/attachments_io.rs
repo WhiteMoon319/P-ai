@@ -454,6 +454,7 @@ fn provider_meta_attachment_relative_paths(meta: &Value) -> Vec<String> {
     out
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn read_local_binary_file(
     input: ReadLocalBinaryFileInput,
@@ -484,6 +485,7 @@ async fn read_local_binary_file(
     .map_err(|err| format!("读取本地二进制文件任务异常：{err}"))?
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn queue_local_file_attachment(
     input: QueueLocalFileAttachmentInput,
@@ -513,6 +515,7 @@ async fn queue_local_file_attachment(
     .map_err(|err| format!("本地附件兼容摄取任务异常：{err}"))?
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn queue_inline_file_attachment(
     input: QueueInlineFileAttachmentInput,
@@ -621,6 +624,7 @@ fn resolve_local_chat_image_path(state: &AppState, path: &str) -> Result<PathBuf
     Ok(canonical_target)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn read_local_chat_image_thumbnail(
     input: ReadLocalChatImageThumbnailInput,
@@ -652,6 +656,7 @@ async fn read_local_chat_image_thumbnail_inner(
     .map_err(|err| format!("读取本地图片缩略图任务异常：{err}"))?
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn read_local_chat_image_original(
     input: ReadLocalChatImageThumbnailInput,
@@ -680,6 +685,7 @@ async fn read_local_chat_image_original_inner(
     .map_err(|err| format!("读取本地图片原图任务异常：{err}"))?
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn copy_local_chat_image_to_clipboard(
     input: ReadLocalChatImageThumbnailInput,
@@ -724,6 +730,7 @@ async fn copy_local_chat_image_to_clipboard(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn save_local_chat_image_as(
     input: ReadLocalChatImageThumbnailInput,

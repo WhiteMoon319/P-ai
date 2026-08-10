@@ -598,6 +598,7 @@ fn merge_model_metadata_candidates(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn fetch_model_metadata(
     state: State<'_, AppState>,
@@ -723,6 +724,7 @@ async fn fetch_model_metadata_inner(
     Ok(merged)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn refresh_models(
     state: State<'_, AppState>,
@@ -784,6 +786,7 @@ async fn refresh_models_inner(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn quick_genai_chat(
     state: State<'_, AppState>,
@@ -899,6 +902,7 @@ fn resolve_model_adapter_kind_label(
     .to_string()
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn resolve_model_adapter_kind(
     model_name: String,
@@ -937,6 +941,7 @@ mod model_adapter_kind_tests {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn test_embedding_connection(
     _state: State<'_, AppState>,
@@ -1000,6 +1005,7 @@ async fn test_embedding_connection_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn test_rerank_connection(
     _state: State<'_, AppState>,
@@ -1067,6 +1073,7 @@ async fn test_rerank_connection_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn test_voice_connection(input: TestVoiceConnectionInput) -> Result<TestVoiceConnectionResult, String> {
     test_voice_connection_inner(input).await

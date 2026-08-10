@@ -802,6 +802,7 @@ async fn attachment_ingest_local_path_inner(
 ///
 /// 前端只传 URI 字符串，字节流由 Kotlin 侧 ContentResolver 分块写入暂存文件，
 /// 再复用现有暂存/落盘/receipt 链路生成附件回执，绕开 base64 全量内存。
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn attachment_ingest_content_uri(
     app: tauri::AppHandle,
@@ -907,6 +908,7 @@ fn attachment_transfer_parse_header(
         })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn attachment_transfer_begin(
     input: AttachmentTransferBeginInput,
@@ -916,6 +918,7 @@ async fn attachment_transfer_begin(
         .await
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn attachment_transfer_chunk(
     request: tauri::ipc::Request<'_>,
@@ -947,6 +950,7 @@ async fn attachment_transfer_chunk(
     .await
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn attachment_transfer_complete(
     input: AttachmentTransferIdInput,
@@ -960,11 +964,13 @@ async fn attachment_transfer_complete(
     .await
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn attachment_transfer_abort(input: AttachmentTransferIdInput) -> Result<Value, String> {
     attachment_transfer_abort_inner(&input.transfer_id, ATTACHMENT_TRANSFER_TAURI_OWNER).await
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn attachment_ingest_local_path(
     input: AttachmentIngestLocalPathInput,

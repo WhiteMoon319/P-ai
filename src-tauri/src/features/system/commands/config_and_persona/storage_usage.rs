@@ -928,6 +928,7 @@ async fn start_storage_overview_refresh_if_needed(
     snapshot
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn get_storage_usage_overview(
     state: State<'_, AppState>,
@@ -935,6 +936,7 @@ async fn get_storage_usage_overview(
     Ok(start_storage_overview_refresh_if_needed(state.inner().clone(), false).await)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn refresh_storage_usage_overview(
     state: State<'_, AppState>,
@@ -1485,6 +1487,7 @@ async fn start_usage_overview_refresh_if_needed(
     snapshot
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn get_usage_overview(
     state: State<'_, AppState>,
@@ -1492,6 +1495,7 @@ async fn get_usage_overview(
     Ok(start_usage_overview_refresh_if_needed(state.inner().clone(), false).await)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn refresh_usage_overview(
     state: State<'_, AppState>,
@@ -1901,6 +1905,7 @@ fn build_usage_trail_wall(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn get_usage_trail(
     state: State<'_, AppState>,
@@ -1932,6 +1937,7 @@ fn storage_existing_directory_for_open(path: &PathBuf) -> Result<PathBuf, String
     Err(format!("目标目录不存在，path={}", path.display()))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn open_storage_usage_item_directory(
     state: State<'_, AppState>,
@@ -2026,6 +2032,7 @@ fn cleanup_storage_image_text_cache(state: &AppState) -> Result<StorageCleanupRe
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn cleanup_storage_legacy_items(
     state: State<'_, AppState>,
