@@ -107,18 +107,7 @@ include!("features/system/commands.rs");
 #[cfg(target_os = "android")]
 include!("native_bridge.rs");
 
-fn should_enable_devtools() -> bool {
-    if !cfg!(debug_assertions) {
-        return false;
-    }
-    matches!(
-        std::env::var("EASYCALL_DEVTOOLS")
-            .ok()
-            .map(|v| v.trim().to_ascii_lowercase())
-            .as_deref(),
-        Some("1") | Some("true") | Some("yes") | Some("on")
-    )
-}
+
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn unix_extend_process_path_from_login_shell() {
@@ -277,13 +266,7 @@ async fn refresh_conversation_meta_after_migration(state: AppState) {
 
 
 
-const APP_SHUTDOWN_STATE_IDLE: u8 = 0;
-const APP_SHUTDOWN_STATE_RUNNING: u8 = 1;
-const APP_SHUTDOWN_STATE_DONE: u8 = 2;
-const BACKGROUND_SHUTDOWN_TIMEOUT_SECS: u64 = 60;
 
-static APP_SHUTDOWN_STATE: std::sync::atomic::AtomicU8 =
-    std::sync::atomic::AtomicU8::new(APP_SHUTDOWN_STATE_IDLE);
 
 
 
