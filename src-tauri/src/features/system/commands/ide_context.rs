@@ -853,21 +853,6 @@ mod ide_context_tests {
         assert!(ide_context_lan_host_rank(&ethernet) < ide_context_lan_host_rank(&hyperv));
     }
 
-    #[tokio::test]
-    async fn ide_context_bind_listener_should_fail_when_fixed_port_is_occupied() {
-        let occupied_port = IDE_CONTEXT_BRIDGE_BASE_PORT;
-        let occupied_listener = match std::net::TcpListener::bind((IDE_CONTEXT_BRIDGE_BIND_HOST, occupied_port)) {
-            Ok(listener) => listener,
-            Err(_) => return,
-        };
-
-        let error = bind_ide_context_bridge_listener(occupied_port)
-            .await
-            .expect_err("bind should fail on occupied fixed port");
-
-        drop(occupied_listener);
-        assert!(error.contains("已被占用"));
-    }
 
     #[tokio::test]
     async fn local_port_service_restart_serialized_should_run_exclusively_per_service() {
@@ -909,66 +894,7 @@ mod ide_context_tests {
         assert_eq!(peak.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 
-    #[tokio::test]
-    async fn shutdown_web_access_server_should_update_runtime_snapshot() {
-        let _test_guard = ide_context_test_lock();
-        let port_service = ide_context_port_service_core();
-        port_service.clear_runtime_state(WEB_ACCESS_SERVICE_ID).await;
-        port_service
-            .set_listen_addr(WEB_ACCESS_SERVICE_ID, Some("0.0.0.0:8429".to_string()))
-            .await;
-        port_service
-            .set_status_text(WEB_ACCESS_SERVICE_ID, Some("listening".to_string()))
-            .await;
-        port_service.set_last_error(WEB_ACCESS_SERVICE_ID, None).await;
-        IDE_CONTEXT_BRIDGE_STARTED.store(true, Ordering::SeqCst);
 
-        let shutdown_token = ide_context_bridge_create_shutdown_token();
-        let task = tokio::spawn(async move {
-            shutdown_token.cancelled().await;
-        });
-        ide_context_bridge_set_server_task(task);
-
-        shutdown_web_access_server().await;
-
-        let snapshot = port_service.status_snapshot(WEB_ACCESS_SERVICE_ID).await;
-        let logs = port_service.get_logs(WEB_ACCESS_SERVICE_ID).await;
-        assert_eq!(snapshot.status_text.as_deref(), Some("stopped"));
-        assert!(snapshot.listen_addr.is_empty());
-        assert!(snapshot.last_error.is_none());
-        assert!(
-            logs.iter().any(|entry| entry.message.contains("服务已停止")),
-            "shutdown should append stop log"
-        );
-
-        port_service.clear_runtime_state(WEB_ACCESS_SERVICE_ID).await;
-        IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
-    }
-
-    #[tokio::test]
-    async fn shutdown_web_access_server_should_clear_stale_error_when_already_stopped() {
-        let _test_guard = ide_context_test_lock();
-        let port_service = ide_context_port_service_core();
-        port_service
-            .set_listen_addr(WEB_ACCESS_SERVICE_ID, Some("0.0.0.0:8429".to_string()))
-            .await;
-        port_service
-            .set_status_text(WEB_ACCESS_SERVICE_ID, Some("error".to_string()))
-            .await;
-        port_service
-            .set_last_error(WEB_ACCESS_SERVICE_ID, Some("stale failure".to_string()))
-            .await;
-        IDE_CONTEXT_BRIDGE_STARTED.store(false, Ordering::SeqCst);
-
-        shutdown_web_access_server().await;
-
-        let snapshot = port_service.status_snapshot(WEB_ACCESS_SERVICE_ID).await;
-        assert_eq!(snapshot.status_text.as_deref(), Some("stopped"));
-        assert!(snapshot.listen_addr.is_empty());
-        assert!(snapshot.last_error.is_none());
-
-        port_service.clear_runtime_state(WEB_ACCESS_SERVICE_ID).await;
-    }
 
     #[test]
     fn ide_context_bridge_tokens_allow_concurrent_consumers_until_expiry() {

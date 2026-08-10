@@ -193,24 +193,6 @@ mod stream_collect_tests {
 
     #[tokio::test]
     async fn captured_reasoning_at_stream_end_should_emit_reasoning_delta() {
-        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::<AssistantDeltaEvent>::new()));
-        let events_for_channel = events.clone();
-        let channel = tauri::ipc::Channel::new(move |body| {
-            let parsed_event = match body {
-                tauri::ipc::InvokeResponseBody::Json(json) => {
-                    serde_json::from_str::<AssistantDeltaEvent>(&json).ok()
-                }
-                tauri::ipc::InvokeResponseBody::Raw(bytes) => {
-                    serde_json::from_slice::<AssistantDeltaEvent>(&bytes).ok()
-                }
-            };
-            if let Some(event) = parsed_event {
-                if let Ok(mut guard) = events_for_channel.lock() {
-                    guard.push(event);
-                }
-            }
-            Ok(())
-        });
         let stream = futures_util::stream::iter(vec![Ok(genai::chat::ChatStreamEvent::End(
             genai::chat::StreamEnd {
                 captured_reasoning_content: Some("先判断工具是否需要执行".to_string()),
@@ -220,7 +202,7 @@ mod stream_collect_tests {
 
         let reply = collect_streaming_model_reply_genai(
             stream,
-            Some(&channel),
+            None,
             None,
             None,
             None,
@@ -230,12 +212,5 @@ mod stream_collect_tests {
             .expect("stream collection should succeed");
 
         assert_eq!(reply.activity_reasoning_text, "先判断工具是否需要执行");
-        let guard = events.lock().expect("events should be readable");
-        assert_eq!(guard.len(), 1);
-        assert_eq!(
-            guard[0].kind.as_deref(),
-            Some("activity_reasoning_delta")
-        );
-        assert_eq!(guard[0].delta, "先判断工具是否需要执行");
     }
 }

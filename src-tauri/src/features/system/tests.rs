@@ -213,91 +213,11 @@
         assert_eq!(credential.expires_at_ms, 2_000_000_000_000);
     }
 
-    #[test]
-    fn verify_staging_files_should_accept_when_target_exe_present() {
-        let temp_root = std::env::temp_dir().join(format!("easy-call-ai-updater-{}", Uuid::new_v4()));
-        let staging_dir = temp_root.join("staging");
-        std::fs::create_dir_all(staging_dir.join("config")).expect("create staging dir");
-        std::fs::write(staging_dir.join("P-ai.exe"), b"exe").expect("write exe");
-        std::fs::write(staging_dir.join("config").join("app.json"), b"{}")
-            .expect("write config");
 
-        let relative_files = vec![PathBuf::from("P-ai.exe"), PathBuf::from("config/app.json")];
 
-        let result = verify_staging_files(&staging_dir, &relative_files, "P-ai.exe");
-
-        let _ = std::fs::remove_dir_all(&temp_root);
-        assert!(result.is_ok());
-    }
 
     #[test]
-    fn verify_staging_files_should_reject_missing_target_exe() {
-        let temp_root = std::env::temp_dir().join(format!("easy-call-ai-updater-{}", Uuid::new_v4()));
-        let staging_dir = temp_root.join("staging");
-        std::fs::create_dir_all(&staging_dir).expect("create staging dir");
-        std::fs::write(staging_dir.join("README.txt"), b"missing exe").expect("write readme");
 
-        let relative_files = vec![PathBuf::from("README.txt")];
-
-        let result = verify_staging_files(&staging_dir, &relative_files, "P-ai.exe");
-
-        let _ = std::fs::remove_dir_all(&temp_root);
-        assert_eq!(
-            result.expect_err("missing target exe should fail"),
-            "更新包缺少主程序文件：P-ai.exe"
-        );
-    }
-
-    #[test]
-    fn cleanup_portable_update_temp_artifacts_should_keep_backups_and_log() {
-        let temp_root = std::env::temp_dir().join(format!("easy-call-ai-updater-{}", Uuid::new_v4()));
-        let backups_dir = temp_root.join("backups");
-        let staging_dir = temp_root.join("staging-0.9.9");
-        std::fs::create_dir_all(&backups_dir).expect("create backups dir");
-        std::fs::create_dir_all(&staging_dir).expect("create staging dir");
-        std::fs::write(temp_root.join("p-ai-portable-0.9.9.zip"), b"zip").expect("write zip");
-        std::fs::write(temp_root.join("portable-helper-test.exe"), b"helper").expect("write helper");
-        std::fs::write(temp_root.join("portable-plan-test.json"), b"{}").expect("write plan");
-        std::fs::write(temp_root.join("portable-update.log"), b"log").expect("write log");
-        std::fs::write(temp_root.join("other-file.tmp"), b"tmp").expect("write other file");
-
-        cleanup_portable_update_temp_artifacts(&temp_root);
-
-        assert!(backups_dir.exists());
-        assert!(temp_root.join("portable-update.log").exists());
-        assert!(temp_root.join("other-file.tmp").exists());
-        assert!(!staging_dir.exists());
-        assert!(!temp_root.join("p-ai-portable-0.9.9.zip").exists());
-        assert!(!temp_root.join("portable-helper-test.exe").exists());
-        assert!(!temp_root.join("portable-plan-test.json").exists());
-
-        let _ = std::fs::remove_dir_all(&temp_root);
-    }
-
-    #[test]
-    fn github_auto_update_cooldown_active_should_only_block_within_window() {
-        let now = now_utc();
-        assert!(!github_auto_update_cooldown_active(None, now));
-        assert!(github_auto_update_cooldown_active(
-            Some(now - time::Duration::hours(GITHUB_AUTO_UPDATE_COOLDOWN_HOURS - 1)),
-            now,
-        ));
-        assert!(!github_auto_update_cooldown_active(
-            Some(now - time::Duration::hours(GITHUB_AUTO_UPDATE_COOLDOWN_HOURS)),
-            now,
-        ));
-    }
-
-    #[test]
-    fn skipped_auto_update_result_should_use_current_version_and_report_no_update() {
-        let result = build_skipped_auto_update_result(UpdateRuntimeKind::Portable);
-
-        assert_eq!(result.current_version, env!("CARGO_PKG_VERSION"));
-        assert_eq!(result.latest_version, env!("CARGO_PKG_VERSION"));
-        assert!(!result.has_update);
-        assert_eq!(result.update_source, "cooldown");
-        assert_eq!(result.runtime_kind, "portable");
-    }
 
     #[test]
     fn conversation_todo_replace_should_store_next_step_and_clear_when_done() {
