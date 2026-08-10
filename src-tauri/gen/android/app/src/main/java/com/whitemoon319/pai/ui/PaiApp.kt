@@ -543,37 +543,6 @@ fun ChatScreen(
                 }
             },
             actions = {
-                // 模型切换：下拉选择供应商作为会话首选模型
-                val apiConfigs = vm.appConfig.collectAsState().value?.apiConfigs ?: emptyList()
-                var modelMenuExpanded by remember { mutableStateOf(false) }
-                Box {
-                    TextButton(onClick = { modelMenuExpanded = true }) {
-                        Text("模型", style = MaterialTheme.typography.labelLarge)
-                    }
-                    DropdownMenu(expanded = modelMenuExpanded, onDismissRequest = { modelMenuExpanded = false }) {
-                        if (apiConfigs.isEmpty()) {
-                            DropdownMenuItem(
-                                text = { Text("暂无供应商，请先到设置添加") },
-                                onClick = { modelMenuExpanded = false },
-                            )
-                        } else {
-                            apiConfigs.forEach { api ->
-                                DropdownMenuItem(
-                                    text = { Text("${api.name ?: api.id ?: "未命名"} · ${api.model ?: "—"}") },
-                                    onClick = {
-                                        modelMenuExpanded = false
-                                        val convId = vm.currentConversationId.value
-                                        if (convId != null) {
-                                            scope.launch {
-                                                vm.setConversationPreferredModel(convId, api.id)
-                                            }
-                                        }
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
                 IconButton(onClick = onSettings) {
                     Icon(Icons.Default.Settings, contentDescription = "设置")
                 }
@@ -658,6 +627,37 @@ fun ChatScreen(
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                // 模型切换（对齐 Vue：输入区左侧下拉）
+                val apiConfigs = vm.appConfig.collectAsState().value?.apiConfigs ?: emptyList()
+                var modelMenuExpanded by remember { mutableStateOf(false) }
+                Box {
+                    TextButton(onClick = { modelMenuExpanded = true }) {
+                        Text("模型", style = MaterialTheme.typography.labelLarge)
+                    }
+                    DropdownMenu(expanded = modelMenuExpanded, onDismissRequest = { modelMenuExpanded = false }) {
+                        if (apiConfigs.isEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text("暂无供应商，请先到设置添加") },
+                                onClick = { modelMenuExpanded = false },
+                            )
+                        } else {
+                            apiConfigs.forEach { api ->
+                                DropdownMenuItem(
+                                    text = { Text("${api.name ?: api.id ?: "未命名"} · ${api.model ?: "—"}") },
+                                    onClick = {
+                                        modelMenuExpanded = false
+                                        val convId = vm.currentConversationId.value
+                                        if (convId != null) {
+                                            scope.launch {
+                                                vm.setConversationPreferredModel(convId, api.id)
+                                            }
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
                 OutlinedTextField(
                     value = input,
                     onValueChange = { input = it },
