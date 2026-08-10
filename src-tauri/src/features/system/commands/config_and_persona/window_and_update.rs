@@ -783,6 +783,7 @@ fn save_config_inner(
         }
     }
     if base_config.hotkey != main_config.hotkey {
+        #[cfg(not(target_os = "android"))]
         if let Err(err) = register_hotkey_from_config(&app, &main_config) {
             runtime_log_error(format!(
                 "[热键] 召唤热键运行时注册失败，配置已保存但该热键暂不可用：hotkey={}, err={}",
@@ -793,6 +794,10 @@ fn save_config_inner(
                 "Register hotkey failed: {}, config saved but hotkey inactive. err={}",
                 main_config.hotkey, err
             ));
+        }
+        #[cfg(target_os = "android")]
+        {
+            let _ = (&app, &main_config);
         }
     }
     if !main_config.web_access_enabled && IDE_CONTEXT_BRIDGE_STARTED.load(Ordering::SeqCst) {

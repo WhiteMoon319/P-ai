@@ -1233,7 +1233,7 @@ fn sync_default_tray_icon(app: &AppHandle) -> Result<(), String> {
         .map_err(|err| format!("Set tray icon failed: {err}"))
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux", target_os = "android")))]
 fn sync_default_tray_icon(_app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
@@ -1402,7 +1402,7 @@ fn register_default_hotkey(app: &AppHandle) -> Result<(), String> {
     register_hotkeys_from_config(app, &config)
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux", target_os = "android")))]
 fn register_default_hotkey(_app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
@@ -1412,7 +1412,7 @@ fn register_hotkey_from_config(app: &AppHandle, config: &AppConfig) -> Result<()
     register_hotkeys_from_config(app, config)
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux", target_os = "android")))]
 fn register_hotkey_from_config(_app: &AppHandle, _config: &AppConfig) -> Result<(), String> {
     Ok(())
 }
@@ -1726,7 +1726,7 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux", target_os = "android")))]
 fn build_tray(_app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
