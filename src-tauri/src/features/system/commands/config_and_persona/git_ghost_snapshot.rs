@@ -608,7 +608,7 @@ mod tests {
         let root =
             std::env::temp_dir().join(format!("easy-call-ai-git-skip-{}", Uuid::new_v4()));
         fs::create_dir_all(&root).expect("create temp workspace");
-        let record = tauri::async_runtime::block_on(create_git_ghost_snapshot_record_for_workspace(
+        let record = tokio::runtime::Handle::current().block_on(create_git_ghost_snapshot_record_for_workspace(
             "conv-a",
             "user-a",
             &root,
@@ -658,7 +658,7 @@ mod tests {
             ],
         );
 
-        let record = tauri::async_runtime::block_on(create_git_ghost_snapshot_record_for_workspace(
+        let record = tokio::runtime::Handle::current().block_on(create_git_ghost_snapshot_record_for_workspace(
             "conv-a",
             "user-a",
             &root,
@@ -674,7 +674,7 @@ mod tests {
         fs::write(root.join("new-untracked.txt"), "remove me\n")
             .expect("write new untracked");
 
-        tauri::async_runtime::block_on(restore_main_workspace_from_git_ghost_snapshot(&record))
+        tokio::runtime::Handle::current().block_on(restore_main_workspace_from_git_ghost_snapshot(&record))
             .expect("restore snapshot");
 
         if GIT_GHOST_SNAPSHOT_ENABLED {

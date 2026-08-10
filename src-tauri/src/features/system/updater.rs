@@ -485,7 +485,7 @@ fn shutdown_background_services_before_windows_updater_exit(app: AppHandle) {
     runtime_log_info(format!("[自动更新] Windows 安装器退出前开始优雅停机后台服务"));
     let cleanup_app = app.clone();
     let handle = thread::spawn(move || {
-        tauri::async_runtime::block_on(graceful_shutdown_background_services_with_timeout(&app))
+        tokio::runtime::Handle::current().block_on(graceful_shutdown_background_services_with_timeout(&app))
     });
     match handle.join() {
         Ok(true) => {

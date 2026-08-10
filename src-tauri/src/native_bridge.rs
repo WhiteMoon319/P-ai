@@ -72,21 +72,9 @@ fn init_native_runtime(app_root: std::path::PathBuf) -> Result<(), String> {
         .thread_stack_size(8 * 1024 * 1024)
         .build()
         .map_err(|err| format!("创建原生 Tokio 运行时失败: {err}"))?;
-    // 关键：把自建 8MB 栈 runtime 安装为 tauri 全局异步运行时。
-    // chat.send 深层链（模型请求/工具/委托）内部大量使用 tokio::spawn，
-    // 而原 tauri 的 install_tauri_async_runtime 只在 run() 的桌面分支执行，Android 原生兜底路径不走它。
-    // 若不 set，这里 tauri 会懒初始化一个默认 2MB 栈 runtime，模型 API 的 TLS 深递归在其 worker 上栈溢出（SIGSEGV）。
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        tauri::async_runtime::set(runtime.handle().clone());
-    }))
-    .map_err(|panic_payload| {
-        let panic_text = panic_payload
-            .downcast_ref::<&str>()
-            .map(|value| (*value).to_string())
-            .or_else(|| panic_payload.downcast_ref::<String>().cloned())
-            .unwrap_or_else(|| "未知 panic".to_string());
-        format!("设置 Tauri 异步运行时失败: {panic_text}")
-    })?;
+    // 自建 8MB 栈 Tokio runtime。chat.send 深层链（模型请求/工具/委托）内部使用
+    // tokio::spawn 提交任务，这些调用点都在本 runtime 的 worker 上下文中执行，
+    // 天然使用本 runtime 的 handle；不再需要 tauri::async_runtime::set 安装全局 handle。
     let state = AppState::new_with_root(app_root)?;
     let ide_context_runtime = IdeContextRuntime::new();
     NATIVE_RUNTIME

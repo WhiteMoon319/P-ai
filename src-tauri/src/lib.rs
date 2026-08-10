@@ -20,6 +20,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, Position, State};
+#[cfg(not(target_os = "android"))]
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 #[cfg(not(target_os = "android"))]
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
@@ -243,6 +244,7 @@ fn unix_extend_process_path_from_login_shell() {
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn unix_extend_process_path_from_login_shell() {}
 
+#[cfg(not(target_os = "android"))]
 fn install_tauri_async_runtime() -> Result<tokio::runtime::Runtime, String> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -958,7 +960,7 @@ async fn graceful_shutdown_background_services_with_timeout(app: &AppHandle) -> 
 
 #[cfg(not(target_os = "android"))]
 fn graceful_shutdown_background_services_blocking(app: &AppHandle) -> bool {
-    tauri::async_runtime::block_on(graceful_shutdown_background_services_with_timeout(app))
+    tokio::runtime::Handle::current().block_on(graceful_shutdown_background_services_with_timeout(app))
 }
 
 #[cfg(not(target_os = "android"))]

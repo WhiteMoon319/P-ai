@@ -32,6 +32,7 @@ fn native_notification_text_excerpt(raw: &str, max_chars: usize) -> String {
     out
 }
 
+#[cfg(not(target_os = "android"))]
 fn send_native_notification(
     app: &AppHandle,
     title: &str,
@@ -79,6 +80,18 @@ fn send_native_notification(
     builder
         .show()
         .map_err(|err| format!("发送原生通知失败：{err}"))
+}
+
+#[cfg(target_os = "android")]
+fn send_native_notification(
+    _app: &AppHandle,
+    _title: &str,
+    _body: &str,
+    _play_sound: bool,
+) -> Result<(), String> {
+    // Android 通知由 live_update.rs 的原生通道实现（tauri_plugin_notification Android 端）。
+    // 桌面操作提醒/回合完成通知在 Android 端由前端轮询事件队列呈现，此处为空操作占位。
+    Ok(())
 }
 
 #[derive(Debug, Clone, Serialize)]

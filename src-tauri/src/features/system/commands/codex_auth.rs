@@ -905,7 +905,7 @@ fn process_oauth_code_exchange(
     code_verifier: &str,
 ) -> Result<CodexStoredCredential, String> {
     let credential =
-        tauri::async_runtime::block_on(codex_exchange_code_for_tokens(code, code_verifier))?;
+        tokio::runtime::Handle::current().block_on(codex_exchange_code_for_tokens(code, code_verifier))?;
     write_managed_codex_auth(provider_id, &credential)?;
     Ok(credential)
 }

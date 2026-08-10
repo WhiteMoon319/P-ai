@@ -164,6 +164,7 @@ fn migration_backup_dir(state: &AppState) -> PathBuf {
         .join(now_iso().replace(':', "-"))
 }
 
+#[cfg(not(target_os = "android"))]
 async fn migration_save_path(app: &AppHandle) -> Result<PathBuf, String> {
     let (tx, rx) = tokio::sync::oneshot::channel::<Option<PathBuf>>();
     app.dialog()
@@ -178,6 +179,7 @@ async fn migration_save_path(app: &AppHandle) -> Result<PathBuf, String> {
         .ok_or_else(|| "导出已取消".to_string())
 }
 
+#[cfg(not(target_os = "android"))]
 async fn migration_import_path(app: &AppHandle) -> Result<PathBuf, String> {
     let (tx, rx) = tokio::sync::oneshot::channel::<Option<PathBuf>>();
     app.dialog()
@@ -192,6 +194,7 @@ async fn migration_import_path(app: &AppHandle) -> Result<PathBuf, String> {
         .ok_or_else(|| "导入已取消".to_string())
 }
 
+#[cfg(not(target_os = "android"))]
 async fn resolve_migration_import_path(
     app: &AppHandle,
     input: &PreviewImportConfigMigrationPackageInput,

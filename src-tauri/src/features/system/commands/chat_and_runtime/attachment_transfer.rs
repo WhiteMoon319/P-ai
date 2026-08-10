@@ -892,6 +892,7 @@ async fn attachment_ingest_content_uri(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn attachment_transfer_parse_header(
     request: &tauri::ipc::Request<'_>,
     name: &str,

@@ -1611,7 +1611,7 @@ async fn send_chat_message_inner(
             let git_ghost_snapshot_record = if snapshot.is_runtime_conversation {
                 None
             } else {
-                tauri::async_runtime::block_on(
+                tokio::runtime::Handle::current().block_on(
                     git_ghost_snapshot::create_main_workspace_git_ghost_snapshot_record(
                         &state,
                         &snapshot.storage_conversation_before,
