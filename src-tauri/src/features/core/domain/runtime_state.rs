@@ -57,7 +57,7 @@ impl NativeAppHandle {
         }
     }
 
-    /// 事件广播：桌面端转发 tauri AppHandle.emit，Android 原生模式为空操作
+    /// 事件广播：桌面端转发 tauri NativeAppHandle.emit，Android 原生模式为空操作
     /// （事件统一由 dispatch_assistant_delta_to_active_view 旁路 push 原生队列）。
     pub(crate) fn emit<S: serde::Serialize + Clone>(
         &self,
@@ -97,6 +97,23 @@ impl NativeAppHandle {
         self.inner
             .as_ref()
             .and_then(|app| app.get_webview_window(label))
+    }
+
+    /// 访问 tauri asset resolver（桌面 Web 侧边栏静态资源服务）。
+    #[cfg(not(target_os = "android"))]
+    pub(crate) fn asset_resolver(
+        &self,
+    ) -> Result<tauri::AssetResolver<tauri::Wry>, String> {
+        self.inner
+            .as_ref()
+            .map(|app| app.asset_resolver())
+            .ok_or_else(|| "应用句柄未初始化".to_string())
+    }
+
+    /// Android 占位：无 asset resolver（桌面 Web 侧边栏静态资源在 Android 不可用）。
+    #[cfg(target_os = "android")]
+    pub(crate) fn asset_resolver(&self) -> Result<(), String> {
+        Err("Android 原生模式不支持 asset resolver".to_string())
     }
 }
 

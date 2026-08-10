@@ -15,10 +15,10 @@ fn load_agents_inner(state: &AppState) -> Result<Vec<AgentProfile>, String> {
 #[tauri::command]
 fn save_agents(
     input: SaveAgentsInput,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Vec<AgentProfile>, String> {
-    save_agents_inner(input, &app, &state)
+    save_agents_inner(input, &NativeAppHandle::from_tauri(app.clone()), &state)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,15 +31,15 @@ struct ConvertPrivateAgentToMainInput {
 #[tauri::command]
 fn convert_private_agent_to_main(
     input: ConvertPrivateAgentToMainInput,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Vec<AgentProfile>, String> {
-    convert_private_agent_to_main_inner(input, &app, state.inner())
+    convert_private_agent_to_main_inner(input, &NativeAppHandle::from_tauri(app.clone()), state.inner())
 }
 
 fn convert_private_agent_to_main_inner(
     input: ConvertPrivateAgentToMainInput,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     state: &AppState,
 ) -> Result<Vec<AgentProfile>, String> {
     let agent_id = input.agent_id.trim();
@@ -71,7 +71,7 @@ fn convert_private_agent_to_main_inner(
 
 fn save_agents_inner(
     input: SaveAgentsInput,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     state: &AppState,
 ) -> Result<Vec<AgentProfile>, String> {
     if input.agents.is_empty() {
@@ -816,7 +816,7 @@ fn apply_chat_settings_patch(
 #[tauri::command]
 fn save_chat_settings(
     input: ChatSettings,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ChatSettings, String> {
     patch_chat_settings_inner(
@@ -829,7 +829,7 @@ fn save_chat_settings(
             background_voice_screenshot_mode: Some(input.background_voice_screenshot_mode),
             instruction_presets: Some(input.instruction_presets),
         },
-        &app,
+        &NativeAppHandle::from_tauri(app.clone()),
         &state,
     )
 }
@@ -838,15 +838,15 @@ fn save_chat_settings(
 #[tauri::command]
 fn patch_chat_settings(
     input: ChatSettingsPatch,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ChatSettings, String> {
-    patch_chat_settings_inner(input, &app, &state)
+    patch_chat_settings_inner(input, &NativeAppHandle::from_tauri(app.clone()), &state)
 }
 
 fn patch_chat_settings_inner(
     input: ChatSettingsPatch,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     state: &AppState,
 ) -> Result<ChatSettings, String> {
     let mut data = state_read_agents_runtime_snapshot(&state)?;
@@ -1170,7 +1170,7 @@ fn read_chat_image_data_url_inner(
 #[tauri::command]
 fn sync_tray_icon(
     _input: SyncTrayIconInput,
-    app: AppHandle,
+    app: tauri::AppHandle,
     _state: State<'_, AppState>,
 ) -> Result<(), String> {
     sync_default_tray_icon(&app)
@@ -1289,7 +1289,7 @@ fn apply_conversation_api_settings_patch(config: &mut AppConfig, input: Conversa
 #[tauri::command]
 fn save_conversation_api_settings(
     input: ConversationApiSettings,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ConversationApiSettings, String> {
     patch_conversation_api_settings_inner(
@@ -1300,7 +1300,7 @@ fn save_conversation_api_settings(
             stt_api_config_id: Some(input.stt_api_config_id),
             stt_auto_send: Some(input.stt_auto_send),
         },
-        &app,
+        &NativeAppHandle::from_tauri(app.clone()),
         &state,
     )
 }
@@ -1309,15 +1309,15 @@ fn save_conversation_api_settings(
 #[tauri::command]
 fn patch_conversation_api_settings(
     input: ConversationApiSettingsPatch,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ConversationApiSettings, String> {
-    patch_conversation_api_settings_inner(input, &app, &state)
+    patch_conversation_api_settings_inner(input, &NativeAppHandle::from_tauri(app.clone()), &state)
 }
 
 fn patch_conversation_api_settings_inner(
     input: ConversationApiSettingsPatch,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     state: &AppState,
 ) -> Result<ConversationApiSettings, String> {
     let mut config = state_read_config_cached(&state)?;
@@ -1337,15 +1337,15 @@ fn patch_conversation_api_settings_inner(
 #[tauri::command]
 fn set_department_primary_api_config(
     input: SetDepartmentPrimaryApiConfigInput,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AppConfig, String> {
-    set_department_primary_api_config_inner(input, &app, state.inner())
+    set_department_primary_api_config_inner(input, &NativeAppHandle::from_tauri(app.clone()), state.inner())
 }
 
 fn set_department_primary_api_config_inner(
     input: SetDepartmentPrimaryApiConfigInput,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     state: &AppState,
 ) -> Result<AppConfig, String> {
     let department_id = input.department_id.trim();

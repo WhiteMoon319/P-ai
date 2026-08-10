@@ -309,7 +309,7 @@ fn build_archive_markdown(archive: &ConversationArchive) -> String {
 #[tauri::command]
 fn export_archive_to_file(
     input: ExportArchiveToFileInput,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ExportArchiveFileResult, String> {
     if input.archive_id.trim().is_empty() {

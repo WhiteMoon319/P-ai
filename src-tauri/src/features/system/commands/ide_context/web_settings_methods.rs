@@ -14,9 +14,10 @@ fn ide_chat_load_app_bootstrap_snapshot_for_web_settings(state: &AppState) -> Re
     ide_chat_serialize(read_app_bootstrap_snapshot(state)?)
 }
 
+#[cfg(not(target_os = "android"))]
 fn ide_chat_save_config_for_web_settings(
     state: &AppState,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     ide_context_runtime: &IdeContextRuntime,
     params: Value,
 ) -> Result<Value, String> {
@@ -79,9 +80,10 @@ async fn ide_chat_get_system_prompt_preview_for_web_settings(
     })?)
 }
 
+#[cfg(not(target_os = "android"))]
 fn ide_chat_save_agents_for_web_settings(
     state: &AppState,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<SaveAgentsInput>(params, "input")?;
@@ -92,9 +94,10 @@ fn ide_chat_load_chat_settings_for_web_settings(state: &AppState) -> Result<Valu
     ide_chat_serialize(load_chat_settings_inner(state)?)
 }
 
+#[cfg(not(target_os = "android"))]
 fn ide_chat_save_chat_settings_for_web_settings(
     state: &AppState,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<ChatSettings>(params, "input")?;
@@ -110,27 +113,30 @@ fn ide_chat_save_chat_settings_for_web_settings(
     ide_chat_serialize(patch_chat_settings_inner(patch, app, state)?)
 }
 
+#[cfg(not(target_os = "android"))]
 fn ide_chat_patch_chat_settings_for_web_settings(
     state: &AppState,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<ChatSettingsPatch>(params, "input")?;
     ide_chat_serialize(patch_chat_settings_inner(input, app, state)?)
 }
 
+#[cfg(not(target_os = "android"))]
 fn ide_chat_patch_conversation_api_settings_for_web_settings(
     state: &AppState,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<ConversationApiSettingsPatch>(params, "input")?;
     ide_chat_serialize(patch_conversation_api_settings_inner(input, app, state)?)
 }
 
+#[cfg(not(target_os = "android"))]
 fn ide_chat_save_conversation_api_settings_for_web_settings(
     state: &AppState,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<ConversationApiSettings>(params, "input")?;
@@ -230,8 +236,9 @@ async fn ide_chat_list_department_permission_catalog_for_web_settings(
     ide_chat_serialize(list_department_permission_catalog_inner(state).await?)
 }
 
+#[cfg(not(target_os = "android"))]
 async fn ide_chat_web_access_info_for_web_settings(
-    app: &AppHandle,
+    app: &NativeAppHandle,
     state: &AppState,
     ide_context_runtime: &IdeContextRuntime,
 ) -> Result<Value, String> {
@@ -369,9 +376,10 @@ fn ide_chat_clear_recent_llm_round_logs_for_web_settings(
     ide_chat_serialize(clear_recent_llm_round_logs_inner(state)?)
 }
 
+#[cfg(not(target_os = "android"))]
 fn ide_chat_set_github_update_method_for_web_settings(
     state: &AppState,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     params: Value,
 ) -> Result<Value, String> {
     let update_method = match params {
@@ -385,9 +393,10 @@ fn ide_chat_set_github_update_method_for_web_settings(
     ide_chat_serialize(set_github_update_method_inner(update_method, app, state)?)
 }
 
+#[cfg(not(target_os = "android"))]
 fn ide_chat_set_skipped_github_update_version_for_web_settings(
     state: &AppState,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     params: Value,
 ) -> Result<Value, String> {
     let version = match params {
@@ -425,9 +434,10 @@ fn ide_chat_clear_agent_avatar_for_web_settings(
     Ok(Value::Null)
 }
 
+#[cfg(not(target_os = "android"))]
 fn ide_chat_convert_private_agent_to_main_for_web_settings(
     state: &AppState,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<ConvertPrivateAgentToMainInput>(params, "input")?;
@@ -541,9 +551,10 @@ struct ApiConfigDeleteInput {
 }
 
 /// 新增供应商：校验 id 唯一后 push 到 config.api_configs 并全量保存（基于当前配置增量修改，不覆盖其他字段）。
+#[cfg(not(target_os = "android"))]
 fn api_config_create_inner(
     input: ApiConfig,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     state: &AppState,
     ide_context_runtime: &IdeContextRuntime,
 ) -> Result<AppConfig, String> {
@@ -560,9 +571,10 @@ fn api_config_create_inner(
 }
 
 /// 更新供应商：按 id 替换 api_configs 中对应项；不存在则报错。
+#[cfg(not(target_os = "android"))]
 fn api_config_update_inner(
     input: ApiConfig,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     state: &AppState,
     ide_context_runtime: &IdeContextRuntime,
 ) -> Result<AppConfig, String> {
@@ -581,9 +593,10 @@ fn api_config_update_inner(
 }
 
 /// 删除供应商：按 id 移除并清理 departments/会话中对该 id 的引用（复用 save_config_inner 的引用清理）。
+#[cfg(not(target_os = "android"))]
 fn api_config_delete_inner(
     input: ApiConfigDeleteInput,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     state: &AppState,
     ide_context_runtime: &IdeContextRuntime,
 ) -> Result<AppConfig, String> {

@@ -71,14 +71,14 @@ async fn fetch_project_changelog_markdown() -> Result<String, String> {
         .map_err(|err| format!("读取更新日志失败: {err}"))
 }
 
-fn sync_update_state_from_skip_version(_app: &AppHandle, _version: &str) {}
+fn sync_update_state_from_skip_version(_app: &NativeAppHandle, _version: &str) {}
 
 /// 最近一次 Android 更新检查结果（内存态，供 get_github_update_state 读取）。
 static ANDROID_LAST_CHECK: std::sync::OnceLock<GithubUpdateInfo> = std::sync::OnceLock::new();
 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-fn get_github_update_state(_app: AppHandle) -> Result<GithubUpdateState, String> {
+fn get_github_update_state(_app: tauri::AppHandle) -> Result<GithubUpdateState, String> {
     let current_version = env!("CARGO_PKG_VERSION").to_string();
     let last = ANDROID_LAST_CHECK.get();
     let has_update = last.as_ref().map(|r| r.has_update).unwrap_or(false);
@@ -109,7 +109,7 @@ fn get_github_update_state(_app: AppHandle) -> Result<GithubUpdateState, String>
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn check_github_update(
-    _app: AppHandle,
+    _app: tauri::AppHandle,
     _update_method: Option<String>,
     _respect_cooldown: Option<bool>,
 ) -> Result<GithubUpdateInfo, String> {
@@ -199,12 +199,12 @@ fn cleanup_portable_update_temp_artifacts_for_current_runtime() -> Result<(), St
     Ok(())
 }
 
-fn start_github_auto_update_worker(_app: AppHandle) {}
+fn start_github_auto_update_worker(_app: NativeAppHandle) {}
 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn start_github_update(
-    _app: AppHandle,
+    _app: tauri::AppHandle,
     _force: bool,
     _update_method: Option<String>,
 ) -> Result<(), String> {
@@ -219,7 +219,7 @@ async fn cancel_github_update() -> Result<(), String> {
 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-async fn apply_prepared_github_update(_app: AppHandle) -> Result<(), String> {
+async fn apply_prepared_github_update(_app: tauri::AppHandle) -> Result<(), String> {
     Err(ANDROID_UPDATE_UNSUPPORTED.to_string())
 }
 

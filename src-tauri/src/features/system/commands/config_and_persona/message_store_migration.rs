@@ -63,7 +63,7 @@ struct MessageStoreMigrationProgressPayload {
 }
 
 fn emit_message_store_migration_progress(
-    app: &AppHandle,
+    app: &NativeAppHandle,
     payload: MessageStoreMigrationProgressPayload,
 ) {
     if let Err(err) = app.emit(MESSAGE_STORE_MIGRATION_PROGRESS_EVENT, payload) {
@@ -336,7 +336,7 @@ fn message_store_migration_error_is_system_failure(error: &str) -> bool {
 }
 
 fn record_discarded_message_store_migration_item(
-    app: &AppHandle,
+    app: &NativeAppHandle,
     report: &mut MessageStoreMigrationRunReport,
     current: usize,
     total: usize,
@@ -409,15 +409,15 @@ fn refresh_message_store_migration_caches(state: &AppState) -> Result<(), String
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn run_message_store_migration(
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: RunMessageStoreMigrationInput,
 ) -> Result<MessageStoreMigrationRunReport, String> {
-    run_message_store_migration_inner(&app, &state, input)
+    run_message_store_migration_inner(&NativeAppHandle::from_tauri(app.clone()), &state, input)
 }
 
 fn run_message_store_migration_inner(
-    app: &AppHandle,
+    app: &NativeAppHandle,
     state: &AppState,
     _input: RunMessageStoreMigrationInput,
 ) -> Result<MessageStoreMigrationRunReport, String> {

@@ -1091,7 +1091,7 @@ fn preview_export_memories(state: State<'_, AppState>) -> Result<PreviewExportMe
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn export_memories_to_file(
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     input: ExportMemoriesToPathInput,
 ) -> Result<ExportMemoriesFileResult, String> {

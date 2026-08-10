@@ -213,7 +213,7 @@ async fn native_dispatch(
     // 原生桥单会话模式：resumeSubscription 登记到固定 client_id，流式事件后续走事件队列。
     let mut opened_conversation_id: Option<String> = None;
 
-    // 需要 AppHandle 的方法（写配置/事件推送等）本轮返回暂不支持，后续轮次迁移。
+    // 需要 NativeAppHandle 的方法（写配置/事件推送等）本轮返回暂不支持，后续轮次迁移。
     let app_dependent = [
         "save_config",
         "save_agents",

@@ -201,7 +201,7 @@ fn window_layouts_path(data_path: &PathBuf) -> PathBuf {
 }
 
 #[cfg(not(target_os = "android"))]
-fn append_window_diagnostic_log(app: &AppHandle, message: String) {
+fn append_window_diagnostic_log(app: &tauri::AppHandle, message: String) {
     runtime_log_info(message.clone());
 
     let state = app.state::<AppState>();
@@ -297,7 +297,7 @@ fn run_window_layout_save_worker(
 }
 
 #[cfg(not(target_os = "android"))]
-fn initialize_window_layout_store(app: &AppHandle) {
+fn initialize_window_layout_store(app: &tauri::AppHandle) {
     if WINDOW_LAYOUT_STORE.get().is_some() {
         return;
     }
@@ -432,7 +432,7 @@ fn unregister_detached_chat_window_by_label(label: &str) -> Option<String> {
 }
 
 #[cfg(not(target_os = "android"))]
-fn focus_file_reader_window(app: &AppHandle) -> Result<(), String> {
+fn focus_file_reader_window(app: &tauri::AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window(FILE_READER_WINDOW_LABEL)
         .ok_or_else(|| "文件阅读窗口不存在".to_string())?;
@@ -446,7 +446,7 @@ fn focus_file_reader_window(app: &AppHandle) -> Result<(), String> {
 }
 
 #[cfg(not(target_os = "android"))]
-fn emit_file_reader_open_path(app: &AppHandle, path: &str) -> Result<(), String> {
+fn emit_file_reader_open_path(app: &tauri::AppHandle, path: &str) -> Result<(), String> {
     app.emit_to(
         FILE_READER_WINDOW_LABEL,
         "file-reader-open-path",
@@ -456,7 +456,7 @@ fn emit_file_reader_open_path(app: &AppHandle, path: &str) -> Result<(), String>
 }
 
 #[cfg(not(target_os = "android"))]
-fn open_file_reader_window(app: &AppHandle, path: String) -> Result<String, String> {
+fn open_file_reader_window(app: &tauri::AppHandle, path: String) -> Result<String, String> {
     let normalized_path = path.trim().to_string();
     if normalized_path.is_empty() {
         return Err("path 不能为空".to_string());
@@ -473,7 +473,7 @@ fn open_file_reader_window(app: &AppHandle, path: String) -> Result<String, Stri
 }
 
 #[cfg(not(target_os = "android"))]
-fn show_file_reader_window(app: &AppHandle) -> Result<String, String> {
+fn show_file_reader_window(app: &tauri::AppHandle) -> Result<String, String> {
     if app.get_webview_window(FILE_READER_WINDOW_LABEL).is_some() {
         focus_file_reader_window(app)?;
         return Ok(FILE_READER_WINDOW_LABEL.to_string());
@@ -484,7 +484,7 @@ fn show_file_reader_window(app: &AppHandle) -> Result<String, String> {
 }
 
 #[cfg(not(target_os = "android"))]
-fn schedule_file_reader_window_creation(app: &AppHandle, path: String) -> Result<(), String> {
+fn schedule_file_reader_window_creation(app: &tauri::AppHandle, path: String) -> Result<(), String> {
     let app_handle = app.clone();
     std::thread::Builder::new()
         .name("file-reader-window-create".to_string())
@@ -767,7 +767,7 @@ fn current_monitor_bounds(window: &tauri::WebviewWindow) -> Result<PhysicalWindo
 #[tauri::command]
 #[cfg(not(target_os = "android"))]
 fn set_chat_window_side_expanded(
-    app: AppHandle,
+    app: tauri::AppHandle,
     window: tauri::Window,
     side: String,
     expanded: bool,
@@ -945,7 +945,7 @@ fn restore_window_to_default_drag_size(
 
 #[cfg(not(target_os = "android"))]
 fn log_offscreen_layout_reset(
-    app: &AppHandle,
+    app: &tauri::AppHandle,
     label: &str,
     reason: &str,
     x: i32,
@@ -972,7 +972,7 @@ fn log_offscreen_layout_reset(
 }
 
 #[cfg(not(target_os = "android"))]
-fn ensure_window_visible_after_show(app: &AppHandle, label: &str, reason: &str) {
+fn ensure_window_visible_after_show(app: &tauri::AppHandle, label: &str, reason: &str) {
     let Some(window) = app.get_webview_window(label) else {
         return;
     };
@@ -1014,7 +1014,7 @@ fn ensure_window_visible_after_show(app: &AppHandle, label: &str, reason: &str) 
 }
 
 #[cfg(not(target_os = "android"))]
-fn apply_window_layout_before_show(app: &AppHandle, label: &str) -> Result<(), String> {
+fn apply_window_layout_before_show(app: &tauri::AppHandle, label: &str) -> Result<(), String> {
     let window = app
         .get_webview_window(label)
         .ok_or_else(|| format!("Window '{label}' not found"))?;
@@ -1116,7 +1116,7 @@ fn apply_window_layout_before_show(app: &AppHandle, label: &str) -> Result<(), S
 
 #[cfg(not(target_os = "android"))]
 fn persist_window_layout_snapshot_with_reason(
-    app: &AppHandle,
+    app: &tauri::AppHandle,
     label: &str,
     _reason: &str,
 ) -> Result<(), String> {
@@ -1163,7 +1163,7 @@ fn persist_window_layout_snapshot_with_reason(
 }
 
 #[cfg(not(target_os = "android"))]
-fn attach_window_layout_persistence(app: &AppHandle) {
+fn attach_window_layout_persistence(app: &tauri::AppHandle) {
     for label in ["main", "chat", "archives"] {
         let Some(window) = app.get_webview_window(label) else {
             continue;
@@ -1223,7 +1223,7 @@ fn attach_window_layout_persistence(app: &AppHandle) {
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-fn sync_default_tray_icon(app: &AppHandle) -> Result<(), String> {
+fn sync_default_tray_icon(app: &tauri::AppHandle) -> Result<(), String> {
     let tray = app
         .tray_by_id(MAIN_TRAY_ID)
         .ok_or_else(|| "Tray icon not found".to_string())?;
@@ -1234,12 +1234,12 @@ fn sync_default_tray_icon(app: &AppHandle) -> Result<(), String> {
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux", target_os = "android")))]
-fn sync_default_tray_icon(_app: &AppHandle) -> Result<(), String> {
+fn sync_default_tray_icon(_app: &NativeAppHandle) -> Result<(), String> {
     Ok(())
 }
 
 #[cfg(not(target_os = "android"))]
-fn show_window(app: &AppHandle, label: &str) -> Result<(), String> {
+fn show_window(app: &tauri::AppHandle, label: &str) -> Result<(), String> {
     let chat_side_expanded = label == "chat"
         && read_chat_window_side_expansion()
             .map(|state| state.left_physical > 0 || state.right_physical > 0)
@@ -1261,7 +1261,7 @@ fn show_window(app: &AppHandle, label: &str) -> Result<(), String> {
 
 #[cfg(not(target_os = "android"))]
 fn toggle_window_maximize_with_default_restore(
-    app: &AppHandle,
+    app: &tauri::AppHandle,
     label: &str,
 ) -> Result<bool, String> {
     let window = app
@@ -1310,14 +1310,14 @@ fn toggle_window_maximize_with_default_restore(
 
 #[cfg(target_os = "android")]
 fn toggle_window_maximize_with_default_restore(
-    _app: &AppHandle,
+    _app: &NativeAppHandle,
     _label: &str,
 ) -> Result<bool, String> {
     Ok(false)
 }
 
 #[cfg(not(target_os = "android"))]
-fn start_window_drag_with_default_restore(app: &AppHandle, label: &str) -> Result<(), String> {
+fn start_window_drag_with_default_restore(app: &tauri::AppHandle, label: &str) -> Result<(), String> {
     let window = app
         .get_webview_window(label)
         .ok_or_else(|| format!("Window '{label}' not found"))?;
@@ -1353,12 +1353,12 @@ fn start_window_drag_with_default_restore(app: &AppHandle, label: &str) -> Resul
 }
 
 #[cfg(target_os = "android")]
-fn start_window_drag_with_default_restore(_app: &AppHandle, _label: &str) -> Result<(), String> {
+fn start_window_drag_with_default_restore(_app: &NativeAppHandle, _label: &str) -> Result<(), String> {
     Ok(())
 }
 
 #[cfg(not(target_os = "android"))]
-fn toggle_window(app: &AppHandle, label: &str) -> Result<(), String> {
+fn toggle_window(app: &tauri::AppHandle, label: &str) -> Result<(), String> {
     let window = app
         .get_webview_window(label)
         .ok_or_else(|| format!("Window '{label}' not found"))?;
@@ -1396,29 +1396,29 @@ fn parse_hotkey(raw: &str) -> Result<Shortcut, String> {
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-fn register_default_hotkey(app: &AppHandle) -> Result<(), String> {
+fn register_default_hotkey(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     let config = read_config(&state.config_path).unwrap_or_default();
     register_hotkeys_from_config(app, &config)
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux", target_os = "android")))]
-fn register_default_hotkey(_app: &AppHandle) -> Result<(), String> {
+fn register_default_hotkey(_app: &NativeAppHandle) -> Result<(), String> {
     Ok(())
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-fn register_hotkey_from_config(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
+fn register_hotkey_from_config(app: &tauri::AppHandle, config: &AppConfig) -> Result<(), String> {
     register_hotkeys_from_config(app, config)
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux", target_os = "android")))]
-fn register_hotkey_from_config(_app: &AppHandle, _config: &AppConfig) -> Result<(), String> {
+fn register_hotkey_from_config(_app: &NativeAppHandle, _config: &AppConfig) -> Result<(), String> {
     Ok(())
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-fn register_hotkeys_from_config(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
+fn register_hotkeys_from_config(app: &tauri::AppHandle, config: &AppConfig) -> Result<(), String> {
     let summon_shortcut = parse_hotkey(&config.hotkey)?;
     let manager = app.global_shortcut();
     manager
@@ -1457,7 +1457,7 @@ fn ensure_hotkey_config_normalized(config: &mut AppConfig) {
 }
 
 #[cfg(not(target_os = "android"))]
-fn show_chat_entry_window(app: &AppHandle) -> Result<(), String> {
+fn show_chat_entry_window(app: &tauri::AppHandle) -> Result<(), String> {
     let target = match state_read_config_cached(app.state::<AppState>().inner()) {
         Ok(mut config) => {
             normalize_app_config(&mut config);
@@ -1472,7 +1472,7 @@ fn show_chat_entry_window(app: &AppHandle) -> Result<(), String> {
 }
 
 #[cfg(not(target_os = "android"))]
-fn run_tray_action(app: &AppHandle, action: &str) -> Result<(), String> {
+fn run_tray_action(app: &tauri::AppHandle, action: &str) -> Result<(), String> {
     match action {
         "config" => show_window(app, "main"),
         "chat" => show_chat_entry_window(app),
@@ -1487,7 +1487,7 @@ fn run_tray_action(app: &AppHandle, action: &str) -> Result<(), String> {
 }
 
 #[cfg(not(target_os = "android"))]
-fn dispatch_tray_action(app: &AppHandle, source: &'static str, action: &'static str) {
+fn dispatch_tray_action(app: &tauri::AppHandle, source: &'static str, action: &'static str) {
     let app_handle = app.clone();
     let thread_name = format!("tray-action-{action}");
     if let Err(err) = std::thread::Builder::new()
@@ -1519,7 +1519,7 @@ fn dispatch_tray_action(app: &AppHandle, source: &'static str, action: &'static 
 const RUNTIME_LOGS_WINDOW_LABEL: &str = "runtime-logs";
 
 #[cfg(not(target_os = "android"))]
-fn show_runtime_logs_window(app: &AppHandle) -> Result<(), String> {
+fn show_runtime_logs_window(app: &tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(RUNTIME_LOGS_WINDOW_LABEL) {
         append_window_diagnostic_log(
             app,
@@ -1669,7 +1669,7 @@ fn show_runtime_logs_window(app: &AppHandle) -> Result<(), String> {
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-fn build_tray(app: &AppHandle) -> Result<(), String> {
+fn build_tray(app: &tauri::AppHandle) -> Result<(), String> {
     let config = MenuItem::with_id(app, "config", "配置", true, None::<&str>)
         .map_err(|err| format!("Create tray menu item failed: {err}"))?;
     let chat = MenuItem::with_id(app, "chat", "对话", true, None::<&str>)
@@ -1727,12 +1727,12 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux", target_os = "android")))]
-fn build_tray(_app: &AppHandle) -> Result<(), String> {
+fn build_tray(_app: &NativeAppHandle) -> Result<(), String> {
     Ok(())
 }
 
 #[cfg(not(target_os = "android"))]
-fn hide_on_close(app: &AppHandle) {
+fn hide_on_close(app: &tauri::AppHandle) {
     #[cfg(target_os = "windows")]
     {
         for label in ["main", "chat", "archives"] {
@@ -1794,7 +1794,7 @@ fn webview_window_url_for_label(label: &str) -> &'static str {
 }
 
 #[cfg(not(target_os = "android"))]
-fn rebuild_crashed_window(app: &AppHandle, label: &str) {
+fn rebuild_crashed_window(app: &tauri::AppHandle, label: &str) {
     runtime_log_error(format!("[WebView心跳] 窗口崩溃恢复开始: label={label}"));
     // 尝试关闭旧窗口
     if let Some(window) = app.get_webview_window(label) {
@@ -1847,7 +1847,7 @@ fn rebuild_crashed_window(app: &AppHandle, label: &str) {
 }
 
 #[cfg(not(target_os = "android"))]
-fn start_webview_heartbeat_monitor(app: &AppHandle) {
+fn start_webview_heartbeat_monitor(app: &tauri::AppHandle) {
     // 初始化所有监控窗口的 pong 时间戳
     for label in WEBVIEW_MONITORED_LABELS {
         webview_record_pong(label);

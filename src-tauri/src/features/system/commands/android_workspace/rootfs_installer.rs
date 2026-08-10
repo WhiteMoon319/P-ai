@@ -26,7 +26,7 @@ pub(crate) fn android_workspace_apply_static_webpki_roots(
 
 pub(crate) fn android_workspace_update_download_progress(
     state: &AppState,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     root: &std::path::Path,
     bytes: u64,
     stage: &str,
@@ -51,7 +51,7 @@ pub(crate) fn android_workspace_update_download_progress(
 
 pub(crate) async fn download_android_workspace_rootfs(
     state: &AppState,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     root: &std::path::Path,
 ) -> Result<PathBuf, String> {
     let archive_path = android_workspace_rootfs_archive_path(root);
@@ -343,7 +343,7 @@ pub(crate) fn install_android_workspace_rootfs_archive(
 
 pub(crate) async fn ensure_android_workspace_rootfs(
     state: &AppState,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     root: &std::path::Path,
 ) -> Result<(), String> {
     if android_workspace_runtime_ready(root) {
@@ -364,7 +364,7 @@ pub(crate) async fn ensure_android_workspace_rootfs(
 
 pub(crate) async fn import_android_workspace_rootfs_from_archive(
     state: &AppState,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     root: &std::path::Path,
     archive_bytes: Vec<u8>,
 ) -> Result<(), String> {

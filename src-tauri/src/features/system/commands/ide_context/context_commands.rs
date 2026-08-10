@@ -210,13 +210,13 @@ fn query_ide_context_references(
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn get_web_access_info(
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     ide_context_runtime: State<'_, IdeContextRuntime>,
     input: Option<GetWebAccessInfoInput>,
 ) -> Result<WebAccessInfoOutput, String> {
     get_web_access_info_inner(
-        &app,
+        &NativeAppHandle::from_tauri(app.clone()),
         &state,
         &ide_context_runtime,
         input.unwrap_or_default().force_refresh,
@@ -224,8 +224,9 @@ async fn get_web_access_info(
     .await
 }
 
+#[cfg(not(target_os = "android"))]
 async fn get_web_access_info_inner(
-    app: &AppHandle,
+    app: &NativeAppHandle,
     state: &AppState,
     ide_context_runtime: &IdeContextRuntime,
     force_refresh: bool,
@@ -253,12 +254,14 @@ async fn get_web_access_info_inner(
     if !IDE_CONTEXT_BRIDGE_STARTED.load(Ordering::SeqCst)
         && !ide_context_bridge_server_task_is_running()
     {
-        start_web_access_server(
-            app.clone(),
-            state.clone(),
-            ide_context_runtime.clone(),
-        )
-        .await;
+        if let Some(inner) = app.inner.as_ref() {
+            start_web_access_server(
+                inner.clone(),
+                state.clone(),
+                ide_context_runtime.clone(),
+            )
+            .await;
+        }
     }
     let status_snapshot = ide_context_port_service_core()
         .status_snapshot(WEB_ACCESS_SERVICE_ID)

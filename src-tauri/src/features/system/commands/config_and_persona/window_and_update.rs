@@ -1,30 +1,30 @@
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-fn show_main_window(app: AppHandle) -> Result<(), String> {
+fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
     show_window(&app, "main")
 }
 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-fn show_chat_window(app: AppHandle) -> Result<(), String> {
+fn show_chat_window(app: tauri::AppHandle) -> Result<(), String> {
     show_window(&app, "chat")
 }
 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-fn show_archives_window(app: AppHandle) -> Result<(), String> {
+fn show_archives_window(app: tauri::AppHandle) -> Result<(), String> {
     show_window(&app, "archives")
 }
 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-fn show_quick_setup_window(app: AppHandle) -> Result<(), String> {
+fn show_quick_setup_window(app: tauri::AppHandle) -> Result<(), String> {
     show_window(&app, "quick-setup")
 }
 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-fn open_runtime_logs_window(app: AppHandle) -> Result<(), String> {
+fn open_runtime_logs_window(app: tauri::AppHandle) -> Result<(), String> {
     show_runtime_logs_window(&app)
 }
 
@@ -36,19 +36,19 @@ fn hide_current_window(window: tauri::Window) -> Result<(), String> {
 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-fn toggle_current_window_maximize(window: tauri::Window, app: AppHandle) -> Result<bool, String> {
+fn toggle_current_window_maximize(window: tauri::Window, app: tauri::AppHandle) -> Result<bool, String> {
     toggle_window_maximize_with_default_restore(&app, window.label())
 }
 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-fn start_current_window_drag(window: tauri::Window, app: AppHandle) -> Result<(), String> {
+fn start_current_window_drag(window: tauri::Window, app: tauri::AppHandle) -> Result<(), String> {
     start_window_drag_with_default_restore(&app, window.label())
 }
 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-fn complete_quick_setup_and_open_chat(app: AppHandle) -> Result<(), String> {
+fn complete_quick_setup_and_open_chat(app: tauri::AppHandle) -> Result<(), String> {
     show_window(&app, "chat")?;
     if let Some(window) = app.get_webview_window("quick-setup") {
         let _ = window.hide();
@@ -343,15 +343,15 @@ fn get_project_repository_url(_state: State<'_, AppState>) -> String {
 #[tauri::command]
 fn set_github_update_method(
     update_method: String,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AppConfig, String> {
-    set_github_update_method_inner(update_method, &app, state.inner())
+    set_github_update_method_inner(update_method, &NativeAppHandle::from_tauri(app.clone()), state.inner())
 }
 
 fn set_github_update_method_inner(
     update_method: String,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     state: &AppState,
 ) -> Result<AppConfig, String> {
     let normalized = normalize_github_update_method(&update_method);
@@ -372,15 +372,16 @@ fn set_github_update_method_inner(
 #[tauri::command]
 fn set_skipped_github_update_version(
     version: String,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AppConfig, String> {
-    set_skipped_github_update_version_inner(version, &app, state.inner())
+    set_skipped_github_update_version_inner(version, &NativeAppHandle::from_tauri(app.clone()), state.inner())
 }
 
+#[cfg(not(target_os = "android"))]
 fn set_skipped_github_update_version_inner(
     version: String,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     state: &AppState,
 ) -> Result<AppConfig, String> {
     let normalized = normalize_skipped_github_update_version(&version);
@@ -391,7 +392,9 @@ fn set_skipped_github_update_version_inner(
         state_write_config_cached(state, &config)?;
         runtime_log_warn(format!("[自动更新] 已保存跳过版本：version={normalized}"));
     }
-    sync_update_state_from_skip_version(app, &normalized);
+    if let Some(inner) = &app.inner {
+        sync_update_state_from_skip_version(inner, &normalized);
+    }
     let data = state_read_agents_runtime_snapshot(state)?;
     let runtime_config = runtime_config_with_private_organization(state, &config, &data)?;
     let _ = app.emit("easy-call:config-updated", &runtime_config);
@@ -410,15 +413,15 @@ fn normalize_ui_language(value: &str) -> String {
 #[tauri::command]
 fn set_ui_language(
     ui_language: String,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AppConfig, String> {
-    set_ui_language_inner(ui_language, &app, state.inner())
+    set_ui_language_inner(ui_language, &NativeAppHandle::from_tauri(app.clone()), state.inner())
 }
 
 fn set_ui_language_inner(
     ui_language: String,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     state: &AppState,
 ) -> Result<AppConfig, String> {
     let normalized = normalize_ui_language(&ui_language);
@@ -590,7 +593,7 @@ fn validate_record_hotkey_available(config: &AppConfig) -> Result<String, String
 #[tauri::command]
 fn update_record_hotkey(
     input: UpdateRecordHotkeyInput,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<RecordHotkeyUpdateResult, String> {
     let mut config = state_read_config_cached(&state)?;
@@ -635,7 +638,7 @@ fn update_record_hotkey(
 #[tauri::command]
 fn update_record_background_wake(
     input: UpdateRecordBackgroundWakeInput,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<RecordHotkeyUpdateResult, String> {
     let mut config = state_read_config_cached(&state)?;
@@ -665,11 +668,11 @@ fn update_record_background_wake(
 #[tauri::command]
 fn save_config(
     config: AppConfig,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     ide_context_runtime: State<'_, IdeContextRuntime>,
 ) -> Result<AppConfig, String> {
-    save_config_inner(config, &app, &state, &ide_context_runtime)
+    save_config_inner(config, &NativeAppHandle::from_tauri(app.clone()), &state, &ide_context_runtime)
 }
 
 fn removed_remote_im_channels(
@@ -733,7 +736,7 @@ fn stop_removed_remote_im_channel_runtimes(
 
 fn save_config_inner(
     config: AppConfig,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     state: &AppState,
     ide_context_runtime: &IdeContextRuntime,
 ) -> Result<AppConfig, String> {
@@ -784,22 +787,25 @@ fn save_config_inner(
     }
     if base_config.hotkey != main_config.hotkey {
         #[cfg(not(target_os = "android"))]
-        if let Err(err) = register_hotkey_from_config(&app, &main_config) {
-            runtime_log_error(format!(
-                "[热键] 召唤热键运行时注册失败，配置已保存但该热键暂不可用：hotkey={}, err={}",
-                main_config.hotkey,
-                err
-            ));
-            return Err(format!(
-                "Register hotkey failed: {}, config saved but hotkey inactive. err={}",
-                main_config.hotkey, err
-            ));
+        if let Some(inner) = &app.inner {
+            if let Err(err) = register_hotkey_from_config(inner, &main_config) {
+                runtime_log_error(format!(
+                    "[热键] 召唤热键运行时注册失败，配置已保存但该热键暂不可用：hotkey={}, err={}",
+                    main_config.hotkey,
+                    err
+                ));
+                return Err(format!(
+                    "Register hotkey failed: {}, config saved but hotkey inactive. err={}",
+                    main_config.hotkey, err
+                ));
+            }
         }
         #[cfg(target_os = "android")]
         {
             let _ = (&app, &main_config);
         }
     }
+    #[cfg(not(target_os = "android"))]
     if !main_config.web_access_enabled && IDE_CONTEXT_BRIDGE_STARTED.load(Ordering::SeqCst) {
         runtime_log_info(format!(
             "[网络访问] 配置已关闭，停止 Web 访问服务: port={}",
@@ -808,7 +814,9 @@ fn save_config_inner(
         tokio::spawn(async move {
             shutdown_web_access_server().await;
         });
-    } else if main_config.web_access_enabled
+    }
+    #[cfg(not(target_os = "android"))]
+    if main_config.web_access_enabled
         && (!base_config.web_access_enabled
             || ((base_config.web_access_port != main_config.web_access_port
                 || base_config.web_access_password != main_config.web_access_password)
@@ -824,14 +832,17 @@ fn save_config_inner(
         let app = app.clone();
         let state = state.clone();
         let ide_context_runtime = ide_context_runtime.clone();
-        tokio::spawn(async move {
-            restart_web_access_server(
-                app,
-                state,
-                ide_context_runtime,
-            )
-            .await;
-        });
+        if let Some(inner) = &app.inner {
+            let inner = inner.clone();
+            tokio::spawn(async move {
+                restart_web_access_server(
+                    inner,
+                    state,
+                    ide_context_runtime,
+                )
+                .await;
+            });
+        }
     }
     let runtime_config = runtime_config_with_private_organization(&state, &main_config, &data)
         .map_err(|err| format!("配置已保存，但运行时配置刷新失败：{err}"))?;

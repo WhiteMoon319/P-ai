@@ -734,7 +734,7 @@ async fn copy_local_chat_image_to_clipboard(
 #[tauri::command]
 async fn save_local_chat_image_as(
     input: ReadLocalChatImageThumbnailInput,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
     let source_path = resolve_local_chat_image_path(state.inner(), &input.path)?;

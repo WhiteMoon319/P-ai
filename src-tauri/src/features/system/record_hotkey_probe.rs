@@ -27,7 +27,7 @@ static RECORD_HOTKEY_PROBE_PARSED: std::sync::OnceLock<
 > = std::sync::OnceLock::new();
 
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-fn handle_global_shortcut_probe(app: &AppHandle, shortcut: &Shortcut, state: ShortcutState) {
+fn handle_global_shortcut_probe(app: &tauri::AppHandle, shortcut: &Shortcut, state: ShortcutState) {
     if state != ShortcutState::Pressed {
         return;
     }
@@ -281,7 +281,7 @@ fn should_stop_on_release(parsed: &ParsedRecordHotkey, released_token: &str) -> 
 
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn handle_record_hotkey_probe_key(
-    app: &AppHandle,
+    app: &tauri::AppHandle,
     state_arc: &std::sync::Arc<std::sync::Mutex<RecordHotkeyProbeState>>,
     parsed_state: &std::sync::Arc<std::sync::Mutex<Option<ParsedRecordHotkey>>>,
     token: String,
@@ -329,7 +329,7 @@ struct RecordHotkeyProbeEventPayload {
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-fn emit_record_hotkey_probe_event(app: &AppHandle, state: &'static str) {
+fn emit_record_hotkey_probe_event(app: &tauri::AppHandle, state: &'static str) {
     let seq_counter = RECORD_HOTKEY_PROBE_EVENT_SEQ
         .get_or_init(|| std::sync::atomic::AtomicU64::new(0));
     let seq = seq_counter.fetch_add(1, std::sync::atomic::Ordering::AcqRel) + 1;
@@ -416,7 +416,7 @@ fn is_record_hotkey_probe_chat_window_active() -> bool {
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]
-fn start_record_hotkey_probe(app: AppHandle, config_path: std::path::PathBuf) -> Result<(), String> {
+fn start_record_hotkey_probe(app: tauri::AppHandle, config_path: std::path::PathBuf) -> Result<(), String> {
     let started = RECORD_HOTKEY_PROBE_STARTED
         .get_or_init(|| std::sync::atomic::AtomicBool::new(false));
     let swapped = started.compare_exchange(
@@ -469,7 +469,7 @@ fn start_record_hotkey_probe(app: AppHandle, config_path: std::path::PathBuf) ->
 }
 
 #[cfg(target_os = "macos")]
-fn start_record_hotkey_probe(app: AppHandle, config_path: std::path::PathBuf) -> Result<(), String> {
+fn start_record_hotkey_probe(app: NativeAppHandle, config_path: std::path::PathBuf) -> Result<(), String> {
     use core_foundation::runloop::CFRunLoop;
     use core_graphics::event::{
         CallbackResult, CGEventTap, CGEventTapLocation, CGEventTapOptions,
@@ -518,7 +518,7 @@ fn start_record_hotkey_probe(app: AppHandle, config_path: std::path::PathBuf) ->
 
 #[cfg(target_os = "macos")]
 fn handle_macos_record_hotkey_modifier_flags(
-    app: &AppHandle,
+    app: &NativeAppHandle,
     state_arc: &std::sync::Arc<std::sync::Mutex<RecordHotkeyProbeState>>,
     parsed_state: &std::sync::Arc<std::sync::Mutex<Option<ParsedRecordHotkey>>>,
     flags: core_graphics::event::CGEventFlags,
@@ -630,7 +630,7 @@ fn macos_key_token(keycode: u16) -> Option<String> {
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-fn start_record_hotkey_probe(_app: AppHandle, _config_path: std::path::PathBuf) -> Result<(), String> {
+fn start_record_hotkey_probe(_app: NativeAppHandle, _config_path: std::path::PathBuf) -> Result<(), String> {
     Ok(())
 }
 

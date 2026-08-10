@@ -101,6 +101,7 @@ fn clear_ide_context_bridge_discovery() {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 async fn prepare_ide_context_bridge_server_start(
     state: &AppState,
     ide_context_runtime: &IdeContextRuntime,
@@ -217,8 +218,9 @@ async fn prepare_ide_context_bridge_server_start(
     Some((listener, port, bridge_url))
 }
 
+#[cfg(not(target_os = "android"))]
 fn spawn_ide_context_bridge_server_task(
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: AppState,
     ide_context_runtime: IdeContextRuntime,
     port_service: Arc<LocalPortServiceCore>,
@@ -273,6 +275,7 @@ fn spawn_ide_context_bridge_server_task(
     ide_context_bridge_set_server_task(server_task);
 }
 
+#[cfg(not(target_os = "android"))]
 async fn bind_ide_context_bridge_listener(
     preferred_port: u16,
 ) -> Result<(tokio::net::TcpListener, u16), String> {
@@ -379,6 +382,7 @@ fn ide_context_web_html_with_bridge(asset_bytes: &[u8], host: &str) -> Vec<u8> {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 async fn ide_context_http_write_response(
     stream: &mut tokio::net::TcpStream,
     status: u16,
@@ -399,9 +403,10 @@ async fn ide_context_http_write_response(
     let _ = stream.shutdown().await;
 }
 
+#[cfg(not(target_os = "android"))]
 async fn ide_context_http_handle_connection(
     mut stream: tokio::net::TcpStream,
-    app: AppHandle,
+    app: tauri::AppHandle,
 ) {
     use tokio::io::AsyncReadExt;
 
@@ -457,7 +462,8 @@ async fn ide_context_http_handle_connection(
         .await;
         return;
     };
-    let Some(asset) = app.asset_resolver().get(asset_path.clone()) else {
+    let asset = app.asset_resolver();
+    let Some(asset) = asset.get(asset_path.clone()) else {
         ide_context_http_write_response(
             &mut stream,
             404,

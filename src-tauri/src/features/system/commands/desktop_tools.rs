@@ -50,12 +50,10 @@ fn send_native_notification(
         return Err("通知正文不能为空".to_string());
     }
 
-    let notifications = match &app.inner {
-        Some(app) => {
-            app.notification()
-        }
-        None => return Err("应用句柄未初始化".to_string()),
+    let Some(inner) = &app.inner else {
+        return Err("应用句柄未初始化".to_string());
     };
+    let notifications = inner.notification();
     let permission_before = notifications
         .permission_state()
         .map_err(|err| format!("读取通知权限失败：{err}"))?;
@@ -111,7 +109,7 @@ struct NativeNotificationDemoResult {
 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-fn demo_send_native_notification(app: AppHandle) -> Result<NativeNotificationDemoResult, String> {
+fn demo_send_native_notification(app: tauri::AppHandle) -> Result<NativeNotificationDemoResult, String> {
     use tauri_plugin_notification::NotificationExt;
 
     let sent_at = now_local_rfc3339();
@@ -168,7 +166,7 @@ const DEMO_LIVE_UPDATE_NOTIFICATION_ID: i32 = 0x50414903;
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn demo_test_notification(
-    app: AppHandle,
+    app: tauri::AppHandle,
     input: DemoTestNotificationInput,
 ) -> Result<DemoTestNotificationResult, String> {
     let sent_at = now_local_rfc3339();
@@ -1688,8 +1686,9 @@ fn resolve_requested_shell_workspace_root(
 
 const WORKSPACE_MIGRATION_EVENT: &str = "easy-call:workspace-migration-progress";
 
+#[cfg(not(target_os = "android"))]
 fn emit_workspace_migration_progress(
-    app: &AppHandle,
+    app: &tauri::AppHandle,
     payload: &WorkspaceMigrationProgressPayload,
 ) {
     let _ = app.emit(WORKSPACE_MIGRATION_EVENT, payload);
@@ -1709,10 +1708,11 @@ fn collect_workspace_entries(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), 
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 fn copy_workspace_entry_recursive(
     from: &Path,
     to: &Path,
-    app: &AppHandle,
+    app: &tauri::AppHandle,
     task_id: &str,
     processed: &mut usize,
     total: usize,
@@ -1788,9 +1788,10 @@ fn copy_workspace_entry_recursive(
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 fn remove_workspace_entry_recursive(
     path: &Path,
-    app: &AppHandle,
+    app: &tauri::AppHandle,
     task_id: &str,
     processed: &mut usize,
     total: usize,
@@ -1888,7 +1889,7 @@ fn get_default_chat_shell_workspace_path(state: State<'_, AppState>) -> Result<S
 #[tauri::command]
 async fn migrate_shell_workspace_directory(
     input: MigrateWorkspaceDirectoryInput,
-    app: AppHandle,
+    app: tauri::AppHandle,
 ) -> Result<String, String> {
     let old_root = PathBuf::from(normalize_terminal_path_input_for_current_platform(&input.old_path));
     let new_root = PathBuf::from(normalize_terminal_path_input_for_current_platform(&input.new_path));
@@ -2172,7 +2173,7 @@ fn approve_terminal_approval_for_workspace(
 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-fn open_file_reader_window_command(app: AppHandle, path: String) -> Result<String, String> {
+fn open_file_reader_window_command(app: tauri::AppHandle, path: String) -> Result<String, String> {
     open_file_reader_window(&app, path)
 }
 
@@ -2375,7 +2376,8 @@ fn file_reader_watch_directory_signature(path: &PathBuf) -> String {
     entries.join("\n")
 }
 
-fn start_file_reader_watch_polling(app: AppHandle) {
+#[cfg(not(target_os = "android"))]
+fn start_file_reader_watch_polling(app: tauri::AppHandle) {
     let _ = FILE_READER_WATCH_THREAD_STARTED.get_or_init(|| {
         std::thread::spawn(move || loop {
             std::thread::sleep(std::time::Duration::from_millis(FILE_READER_WATCH_POLL_MS));
@@ -2410,7 +2412,7 @@ fn start_file_reader_watch_polling(app: AppHandle) {
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn update_file_reader_watch_targets(
-    app: AppHandle,
+    app: tauri::AppHandle,
     input: FileReaderWatchTargetsInput,
 ) -> Result<(), String> {
     let session_id = input.session_id.trim().to_string();

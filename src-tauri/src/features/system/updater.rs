@@ -479,7 +479,7 @@ fn updater_public_key() -> Result<&'static str, String> {
 }
 
 #[cfg(target_os = "windows")]
-fn shutdown_background_services_before_windows_updater_exit(app: AppHandle) {
+fn shutdown_background_services_before_windows_updater_exit(app: tauri::AppHandle) {
     // tauri-plugin-updater 在 Windows 安装版会启动安装器后直接 std::process::exit(0)，
     // 必须挂到 on_before_exit，并保留默认 cleanup_before_exit，才能在硬退出前收干净运行态。
     runtime_log_info(format!("[自动更新] Windows 安装器退出前开始优雅停机后台服务"));
@@ -557,7 +557,7 @@ fn current_portable_target() -> String {
     format!("{}{}", current_installer_target(), PORTABLE_UPDATE_TARGET_SUFFIX)
 }
 
-fn emit_update_progress(app: &AppHandle, payload: UpdateProgressPayload) {
+fn emit_update_progress(app: &tauri::AppHandle, payload: UpdateProgressPayload) {
     sync_update_state_from_progress(app, &payload);
     let _ = app.emit(PORTABLE_UPDATE_EVENT_NAME, payload.clone());
     match serde_json::to_value(payload) {
@@ -770,7 +770,7 @@ fn read_last_auto_update_checked_at_rfc3339() -> Option<String> {
         .map(format_offset_datetime_to_local_rfc3339)
 }
 
-fn current_skipped_update_version(app: &AppHandle) -> String {
+fn current_skipped_update_version(app: &tauri::AppHandle) -> String {
     let state = app.state::<AppState>();
     state_read_config_cached(state.inner())
         .map(|mut config| {
@@ -804,7 +804,7 @@ fn refresh_update_visibility(state: &mut GithubUpdateState) {
         && (skipped_version.is_empty() || latest_version != skipped_version);
 }
 
-fn sync_update_state_from_check_result(app: &AppHandle, result: &GithubUpdateInfo) {
+fn sync_update_state_from_check_result(app: &tauri::AppHandle, result: &GithubUpdateInfo) {
     let skipped_version = current_skipped_update_version(app);
     update_github_update_state(|state| {
         let previously_prepared = state.has_prepared_update
@@ -832,7 +832,7 @@ fn sync_update_state_from_check_result(app: &AppHandle, result: &GithubUpdateInf
     });
 }
 
-fn sync_update_state_from_progress(app: &AppHandle, payload: &UpdateProgressPayload) {
+fn sync_update_state_from_progress(app: &tauri::AppHandle, payload: &UpdateProgressPayload) {
     let skipped_version = current_skipped_update_version(app);
     update_github_update_state(|state| {
         state.stage = payload.stage.clone();
@@ -875,7 +875,7 @@ fn sync_update_state_from_progress(app: &AppHandle, payload: &UpdateProgressPayl
     });
 }
 
-fn sync_update_state_from_skip_version(_app: &AppHandle, version: &str) {
+fn sync_update_state_from_skip_version(_app: &tauri::AppHandle, version: &str) {
     update_github_update_state(|state| {
         state.skipped_version = version.trim().to_string();
         refresh_update_visibility(state);
@@ -900,7 +900,7 @@ fn build_skipped_auto_update_result(runtime_kind: UpdateRuntimeKind) -> GithubUp
 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-fn get_github_update_state(app: AppHandle) -> Result<GithubUpdateState, String> {
+fn get_github_update_state(app: tauri::AppHandle) -> Result<GithubUpdateState, String> {
     let runtime = detect_update_runtime_paths()?;
     let skipped_version = current_skipped_update_version(&app);
     update_github_update_state(|state| {
@@ -922,7 +922,7 @@ fn get_github_update_state(app: AppHandle) -> Result<GithubUpdateState, String> 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn check_github_update(
-    app: AppHandle,
+    app: tauri::AppHandle,
     update_method: Option<String>,
     respect_cooldown: Option<bool>,
 ) -> Result<GithubUpdateInfo, String> {
@@ -1256,7 +1256,7 @@ fn spawn_detached_hidden(exe: &StdPath, args: &[OsString]) -> Result<(), String>
 }
 
 fn emit_update_checking_progress(
-    app: &AppHandle,
+    app: &tauri::AppHandle,
     runtime_kind: UpdateRuntimeKind,
     current_version: &str,
     message: String,
@@ -1278,7 +1278,7 @@ fn emit_update_checking_progress(
 }
 
 fn build_manifest_updater(
-    app: &AppHandle,
+    app: &tauri::AppHandle,
     runtime_kind: UpdateRuntimeKind,
     target: Option<&str>,
     endpoint: &str,
@@ -1336,7 +1336,7 @@ async fn run_manifest_update_check(
 }
 
 async fn check_updater_with_manifest_fallbacks(
-    app: &AppHandle,
+    app: &tauri::AppHandle,
     runtime_kind: UpdateRuntimeKind,
     target: Option<String>,
     manifest_origin: &str,
@@ -1534,7 +1534,7 @@ where
 }
 
 async fn prepare_installer_update(
-    app: &AppHandle,
+    app: &tauri::AppHandle,
     runtime: &UpdateRuntimePaths,
     force: bool,
     method: GithubUpdateMethod,
@@ -1651,7 +1651,7 @@ async fn prepare_installer_update(
 }
 
 async fn prepare_portable_update(
-    app: &AppHandle,
+    app: &tauri::AppHandle,
     runtime: &UpdateRuntimePaths,
     force: bool,
     method: GithubUpdateMethod,
@@ -1830,7 +1830,7 @@ async fn prepare_portable_update(
     Ok(())
 }
 
-async fn run_auto_update_cycle(app: AppHandle) {
+async fn run_auto_update_cycle(app: tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     {
         let _ = app;
@@ -1877,7 +1877,7 @@ async fn run_auto_update_cycle(app: AppHandle) {
     }
 }
 
-fn start_github_auto_update_worker(app: AppHandle) {
+fn start_github_auto_update_worker(app: tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     {
         let _ = app;
@@ -1904,7 +1904,7 @@ fn start_github_auto_update_worker(app: AppHandle) {
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn start_github_update(
-    app: AppHandle,
+    app: tauri::AppHandle,
     force: bool,
     update_method: Option<String>,
 ) -> Result<(), String> {
@@ -1960,7 +1960,7 @@ async fn cancel_github_update() -> Result<(), String> {
 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-async fn apply_prepared_github_update(app: AppHandle) -> Result<(), String> {
+async fn apply_prepared_github_update(app: tauri::AppHandle) -> Result<(), String> {
     let _guard = UpdateInProgressGuard::acquire()?;
     let prepared = take_prepared_github_update()?;
     match prepared {

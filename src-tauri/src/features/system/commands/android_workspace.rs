@@ -157,7 +157,7 @@ fn normalize_android_workspace_status(state: &AppState) -> AndroidWorkspaceStatu
     status
 }
 
-fn emit_android_workspace_status(app: Option<&AppHandle>, status: &AndroidWorkspaceStatus) {
+fn emit_android_workspace_status(app: Option<&NativeAppHandle>, status: &AndroidWorkspaceStatus) {
     if let Some(app) = app {
         let _ = app.emit(ANDROID_WORKSPACE_STATUS_EVENT, status);
     }
@@ -165,7 +165,7 @@ fn emit_android_workspace_status(app: Option<&AppHandle>, status: &AndroidWorksp
 
 fn android_workspace_set_status(
     state: &AppState,
-    app: Option<&AppHandle>,
+    app: Option<&NativeAppHandle>,
     mut status: AndroidWorkspaceStatus,
 ) -> Result<AndroidWorkspaceStatus, String> {
     let root = android_workspace_root(state);
@@ -706,7 +706,7 @@ fn get_android_workspace_status_ws_inner(state: &AppState) -> Result<AndroidWork
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn init_android_workspace(
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AndroidWorkspaceStatus, String> {
     #[cfg(target_os = "android")]
@@ -763,7 +763,7 @@ async fn init_android_workspace(
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn import_android_workspace_rootfs_archive(
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     file_name: String,
     data_base64: String,
@@ -828,7 +828,7 @@ async fn import_android_workspace_rootfs_archive(
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn reset_android_workspace_state(
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AndroidWorkspaceStatus, String> {
     #[cfg(target_os = "android")]
@@ -877,7 +877,7 @@ fn android_workspace_remove_path_if_exists(path: &std::path::Path, context: &str
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn repair_android_workspace_runtime(
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AndroidWorkspaceStatus, String> {
     #[cfg(target_os = "android")]
@@ -928,16 +928,16 @@ fn repair_android_workspace_runtime(
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn reset_android_workspace_runtime(
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<AndroidWorkspaceStatus, String> {
-    reset_android_workspace_runtime_ws_inner(state.inner(), Some(&app), &android_workspace_root(state.inner()))
+    reset_android_workspace_runtime_ws_inner(state.inner(), Some(&NativeAppHandle::from_tauri(app.clone())), &android_workspace_root(state.inner()))
 }
 
 /// ws 端调用版：重置 Linux 沙盒运行时（保留用户工作区与 Skill 数据）。
 pub(crate) fn reset_android_workspace_runtime_ws_inner(
     state: &AppState,
-    app: Option<&AppHandle>,
+    app: Option<&NativeAppHandle>,
     root: &std::path::Path,
 ) -> Result<AndroidWorkspaceStatus, String> {
     #[cfg(target_os = "android")]

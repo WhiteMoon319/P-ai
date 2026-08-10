@@ -1,5 +1,6 @@
+#[cfg(not(target_os = "android"))]
 async fn start_ide_context_bridge_server_inner(
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: AppState,
     ide_context_runtime: IdeContextRuntime,
 ) {
@@ -34,8 +35,9 @@ async fn start_ide_context_bridge_server_inner(
     );
 }
 
+#[cfg(not(target_os = "android"))]
 async fn start_web_access_server(
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: AppState,
     ide_context_runtime: IdeContextRuntime,
 ) {
@@ -64,6 +66,7 @@ async fn start_web_access_server(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 async fn shutdown_ide_context_bridge_server_inner() {
     let port_service = ide_context_port_service_core();
     if !IDE_CONTEXT_BRIDGE_STARTED.load(Ordering::SeqCst) {
@@ -137,6 +140,7 @@ async fn shutdown_ide_context_bridge_server_inner() {
         .await;
 }
 
+#[cfg(not(target_os = "android"))]
 pub(crate) async fn shutdown_web_access_server() {
     if let Err(err) = ide_context_port_service_core()
         .stop_serialized(WEB_ACCESS_SERVICE_ID, || async {
@@ -149,8 +153,9 @@ pub(crate) async fn shutdown_web_access_server() {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 async fn restart_web_access_server(
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: AppState,
     ide_context_runtime: IdeContextRuntime,
 ) {
@@ -167,11 +172,12 @@ async fn restart_web_access_server(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 async fn ide_context_ws_handle_connection(
     stream: tokio::net::TcpStream,
     peer_addr: std::net::SocketAddr,
     port: u16,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: AppState,
     ide_context_runtime: IdeContextRuntime,
 ) {
@@ -352,10 +358,11 @@ async fn ide_context_ws_handle_connection(
     runtime_log_info(format!("[IDE 上下文桥] 客户端已断开: {}", peer_addr));
 }
 
+#[cfg(not(target_os = "android"))]
 async fn ide_context_chat_ws_handle_connection(
     ws_stream: tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>,
     peer_addr: std::net::SocketAddr,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: AppState,
     ide_context_runtime: IdeContextRuntime,
 ) {
@@ -496,7 +503,7 @@ async fn ide_context_chat_ws_handle_connection(
                                         ide_chat_handle_jsonrpc_request(
                                             request,
                                             &state,
-                                            &app,
+                                            &NativeAppHandle::from_tauri(app.clone()),
                                             &ide_context_runtime,
                                             &client_id,
                                             &mut opened_conversation_id,
@@ -528,7 +535,7 @@ async fn ide_context_chat_ws_handle_connection(
                             ide_chat_handle_jsonrpc_request(
                                 request,
                                 &state,
-                                &app,
+                                &NativeAppHandle::from_tauri(app.clone()),
                                 &ide_context_runtime,
                                 &client_id,
                                 &mut opened_conversation_id,

@@ -165,7 +165,7 @@ fn migration_backup_dir(state: &AppState) -> PathBuf {
 }
 
 #[cfg(not(target_os = "android"))]
-async fn migration_save_path(app: &AppHandle) -> Result<PathBuf, String> {
+async fn migration_save_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let (tx, rx) = tokio::sync::oneshot::channel::<Option<PathBuf>>();
     app.dialog()
         .file()
@@ -180,7 +180,7 @@ async fn migration_save_path(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 #[cfg(not(target_os = "android"))]
-async fn migration_import_path(app: &AppHandle) -> Result<PathBuf, String> {
+async fn migration_import_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let (tx, rx) = tokio::sync::oneshot::channel::<Option<PathBuf>>();
     app.dialog()
         .file()
@@ -196,7 +196,7 @@ async fn migration_import_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 #[cfg(not(target_os = "android"))]
 async fn resolve_migration_import_path(
-    app: &AppHandle,
+    app: &tauri::AppHandle,
     input: &PreviewImportConfigMigrationPackageInput,
 ) -> Result<PathBuf, String> {
     let provided = input.package_path.as_deref().unwrap_or("").trim();
@@ -895,7 +895,7 @@ fn export_config_migration_package_for_web(
 #[tauri::command]
 async fn export_config_migration_package(
     input: ExportConfigMigrationPackageInput,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ExportConfigMigrationPackageResult, MigrationCommandError> {
     let path = migration_save_path(&app).await?;
@@ -975,16 +975,17 @@ fn preview_import_config_migration_package_for_web(
 #[tauri::command]
 async fn preview_import_config_migration_package(
     input: PreviewImportConfigMigrationPackageInput,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<PreviewImportConfigMigrationPackageResult, MigrationCommandError> {
     let package_path = resolve_migration_import_path(&app, &input).await?;
     preview_import_config_migration_package_from_path(&input, state.inner(), &package_path)
 }
 
+#[cfg(not(target_os = "android"))]
 fn apply_import_config_migration_package_inner(
     input: ApplyImportConfigMigrationPackageInput,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     state: &AppState,
 ) -> Result<ApplyImportConfigMigrationPackageResult, MigrationCommandError> {
     let preview_dir = state
@@ -1037,12 +1038,14 @@ fn apply_import_config_migration_package_inner(
     };
 
     #[cfg(not(target_os = "android"))]
-    let app_handle = (*app).clone();
     #[cfg(not(target_os = "android"))]
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(300));
-        graceful_restart_app(&app_handle);
-    });
+    if let Some(inner) = &app.inner {
+        let app_handle = inner.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            graceful_restart_app(&app_handle);
+        });
+    }
 
     Ok(result)
 }
@@ -1051,8 +1054,8 @@ fn apply_import_config_migration_package_inner(
 #[tauri::command]
 fn apply_import_config_migration_package(
     input: ApplyImportConfigMigrationPackageInput,
-    app: AppHandle,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ApplyImportConfigMigrationPackageResult, MigrationCommandError> {
-    apply_import_config_migration_package_inner(input, &app, state.inner())
+    apply_import_config_migration_package_inner(input, &NativeAppHandle::from_tauri(app.clone()), state.inner())
 }

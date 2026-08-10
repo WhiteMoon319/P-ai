@@ -478,15 +478,9 @@ fn ide_chat_remote_im_clear_conversation_command(
     ide_chat_serialize(remote_im_clear_contact_conversation_inner(input, state)?)
 }
 
-async fn ide_chat_frontend_ready_remote_im_command(app: &AppHandle) -> Result<Value, String> {
-    #[cfg(not(target_os = "android"))]
-    {
-        return ide_chat_serialize(frontend_ready_start_remote_im_services(app.clone()).await?);
-    }
-    #[cfg(target_os = "android")]
-    {
-        Ok(serde_json::json!({ "started": false, "skipped": true }))
-    }
+#[cfg(not(target_os = "android"))]
+async fn ide_chat_frontend_ready_remote_im_command(app: &tauri::AppHandle) -> Result<Value, String> {
+    ide_chat_serialize(frontend_ready_start_remote_im_services(app.clone()).await?)
 }
 
 fn ide_chat_forward_selection_command(state: &AppState, params: Value) -> Result<Value, String> {
@@ -514,18 +508,20 @@ fn ide_chat_set_auto_push_command(state: &AppState, params: Value) -> Result<Val
     ide_chat_serialize(set_conversation_auto_push_remote_contact_inner(input, state)?)
 }
 
+#[cfg(not(target_os = "android"))]
 fn ide_chat_set_department_primary_api_command(
     state: &AppState,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<SetDepartmentPrimaryApiConfigInput>(params, "input")?;
     ide_chat_serialize(set_department_primary_api_config_inner(input, app, state)?)
 }
 
+#[cfg(not(target_os = "android"))]
 fn ide_chat_set_ui_language_command(
     state: &AppState,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     params: Value,
 ) -> Result<Value, String> {
     let ui_language = ide_chat_parse_param_field::<String>(params, "uiLanguage")?;
@@ -813,7 +809,8 @@ fn ide_chat_model_list(state: &AppState, params: Value) -> Result<Value, String>
     ide_chat_model_payload_for_conversation(state, &conversation)
 }
 
-fn ide_chat_select_model(state: &AppState, _app: &AppHandle, params: Value) -> Result<Value, String> {
+#[cfg(not(target_os = "android"))]
+fn ide_chat_select_model(state: &AppState, _app: &NativeAppHandle, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatSelectModelInput>(params)?;
     let conversation_id = input.conversation_id.trim().to_string();
     set_conversation_preferred_model_inner(

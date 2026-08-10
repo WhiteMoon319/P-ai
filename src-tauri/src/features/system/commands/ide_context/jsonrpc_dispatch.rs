@@ -79,6 +79,7 @@ fn ide_chat_web_native_only_error(method: &str) -> String {
     )
 }
 
+#[cfg(not(target_os = "android"))]
 fn ide_chat_upsert_ide_context_command(
     state: &AppState,
     params: Value,
@@ -94,10 +95,11 @@ fn ide_chat_upsert_ide_context_command(
     }))
 }
 
+#[cfg(not(target_os = "android"))]
 async fn ide_chat_handle_jsonrpc_request(
     request: IdeChatJsonRpcRequest,
     state: &AppState,
-    app: &AppHandle,
+    app: &NativeAppHandle,
     ide_context_runtime: &IdeContextRuntime,
     client_id: &str,
     opened_conversation_id: &mut Option<String>,
@@ -813,8 +815,18 @@ async fn ide_chat_handle_jsonrpc_request(
         "remoteIm.conversation.blockPage" => ide_chat_remote_im_block_page_command(state, request.params),
         "remote_im_clear_contact_conversation" => ide_chat_remote_im_clear_conversation_command(state, request.params),
         "remoteIm.conversation.clear" => ide_chat_remote_im_clear_conversation_command(state, request.params),
-        "frontend_ready_start_remote_im_services" => ide_chat_frontend_ready_remote_im_command(app).await,
-        "remoteIm.services.start" => ide_chat_frontend_ready_remote_im_command(app).await,
+        "frontend_ready_start_remote_im_services" => {
+            match app.inner.as_ref() {
+                Some(inner) => ide_chat_frontend_ready_remote_im_command(inner).await,
+                None => Err("应用句柄未初始化".to_string()),
+            }
+        }
+        "remoteIm.services.start" => {
+            match app.inner.as_ref() {
+                Some(inner) => ide_chat_frontend_ready_remote_im_command(inner).await,
+                None => Err("应用句柄未初始化".to_string()),
+            }
+        }
         "forward_unarchived_conversation_selection" => ide_chat_forward_selection_command(state, request.params),
         "forward_selection_to_remote_im_contact" => ide_chat_forward_remote_contact_command(state, request.params),
         "rename_unarchived_conversation" => ide_chat_rename_conversation_command(state, request.params),
