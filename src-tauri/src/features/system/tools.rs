@@ -5,6 +5,7 @@ include!("tools/operate_parser.rs");
 include!("tools/operate_actions.rs");
 include!("tools/operate_runner.rs");
 include!("tools/screenshot_mcp.rs");
+include!("tools/macos_tcc.rs");
 include!("tools/terminal.rs");
 include!("tools/text_codec.rs");
 include!("tools/patch.rs");

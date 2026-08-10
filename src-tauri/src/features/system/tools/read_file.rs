@@ -251,10 +251,15 @@ fn ensure_absolute_file_path(request: &ReadFileRequest) -> Result<std::path::Pat
     if !path.is_absolute() {
         return Err("path 必须是绝对路径".to_string());
     }
-    if !path.exists() {
-        return Err(format!("文件不存在：{}", path.display()));
-    }
-    let metadata = std::fs::metadata(&path).map_err(|err| format!("读取文件信息失败: {err}"))?;
+    // 不用 Path::exists()：TCC 拒绝时它会把访问错误吞成 false，误报"文件不存在"。
+    // 直接 metadata，NotFound 报不存在，其他错误（如 EPERM）保留原始 I/O 错误文本。
+    let metadata = match std::fs::metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(format!("文件不存在：{}", path.display()));
+        }
+        Err(err) => return Err(format!("读取文件信息失败: {err}")),
+    };
     if !metadata.is_file() {
         return Err(format!("目标不是文件：{}", path.display()));
     }
@@ -1737,7 +1742,20 @@ async fn builtin_read_file(
     request: ReadFileRequest,
 ) -> Result<Value, String> {
     let started = std::time::Instant::now();
-    let path = ensure_absolute_file_path(&request)?;
+    let ui_language = state_read_config_cached(&state)
+        .map(|config| config.ui_language)
+        .unwrap_or_else(|_| "zh-CN".to_string());
+    let path = match ensure_absolute_file_path(&request) {
+        Ok(path) => path,
+        Err(err) => {
+            // 前置校验（metadata）也可能被 TCC 拦截，失败时同样附加授权建议
+            let hint_path = std::path::Path::new(request.path.trim());
+            return match macos_tcc_permission_hint(&ui_language, &err, Some(hint_path)) {
+                Some(hint) => Err(format!("{err}\n\n{hint}")),
+                None => Err(err),
+            };
+        }
+    };
     let detected = detect_read_file_type(&path);
     runtime_log_info(format!(
         "[read] 开始，任务=read，session_id={}，api_config_id={}，{}，detected_type={}",
@@ -1814,6 +1832,15 @@ async fn builtin_read_file(
             err
         )),
     }
+    let result = match result {
+        Ok(value) => Ok(value),
+        Err(err) => {
+            match macos_tcc_permission_hint(&ui_language, &err, Some(&path)) {
+                Some(hint) => Err(format!("{err}\n\n{hint}")),
+                None => Err(err),
+            }
+        }
+    };
     result
 }
 
