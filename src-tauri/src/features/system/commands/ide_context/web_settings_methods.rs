@@ -589,3 +589,40 @@ fn api_config_delete_inner(
     }
     save_config_inner(config, app, state, ide_context_runtime)
 }
+
+fn ide_chat_save_config_for_web_settings(
+    state: &AppState,
+    app: &NativeAppHandle,
+    ide_context_runtime: &IdeContextRuntime,
+    params: Value,
+) -> Result<Value, String> {
+    let config = ide_chat_parse_param_field::<AppConfig>(params, "config")?;
+    ide_chat_serialize(save_config_inner(config, app, state, ide_context_runtime)?)
+}
+
+fn ide_chat_save_agents_for_web_settings(
+    state: &AppState,
+    app: &NativeAppHandle,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<SaveAgentsInput>(params, "input")?;
+    ide_chat_serialize(save_agents_inner(input, app, state)?)
+}
+
+fn ide_chat_patch_chat_settings_for_web_settings(
+    state: &AppState,
+    app: &NativeAppHandle,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ChatSettingsPatch>(params, "input")?;
+    ide_chat_serialize(patch_chat_settings_inner(input, app, state)?)
+}
+
+fn ide_chat_patch_conversation_api_settings_for_web_settings(
+    state: &AppState,
+    app: &NativeAppHandle,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<ConversationApiSettingsPatch>(params, "input")?;
+    ide_chat_serialize(patch_conversation_api_settings_inner(input, app, state)?)
+}

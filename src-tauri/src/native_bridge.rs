@@ -208,31 +208,18 @@ async fn native_dispatch(
     _id: Option<Value>,
 ) -> Result<Value, String> {
     let state = &runtime.state;
+    // Android 原生模式：无真实 AppHandle（emit/path 走 pollEvents 旁路），用 noop 占位；
+    // 写配置类方法（save_config/save_agents/api_config 等）通过 web_settings 包装调用共享 inner。
+    let native_app = NativeAppHandle::noop();
+    let ide_context_runtime = &runtime.ide_context_runtime;
     // sidebar 语义在原生端固定一个 viewer id，避免 ws 侧 client_id 概念。
     let viewer_id = "android-native";
     // 原生桥单会话模式：resumeSubscription 登记到固定 client_id，流式事件后续走事件队列。
     let mut opened_conversation_id: Option<String> = None;
 
     // 需要 NativeAppHandle 的方法（写配置/事件推送等）本轮返回暂不支持，后续轮次迁移。
+        // 尚未接入原生通道的方法（工作区初始化/迁移等，后续轮次迁移）。
     let app_dependent = [
-        "save_config",
-        "save_agents",
-        "save_chat_settings",
-        "patch_chat_settings",
-        "save_conversation_api_settings",
-        "patch_conversation_api_settings",
-        "set_ui_language",
-        "app.language.set",
-        "set_department_primary_api_config",
-        "department.primaryApi.set",
-        "set_github_update_method",
-        "set_skipped_github_update_version",
-        "convert_private_agent_to_main",
-        "set_agent_private_memory_enabled",
-        "set_agent_memory_recall_mode",
-        "api_config.create",
-        "api_config.update",
-        "api_config.delete",
         "init_android_workspace",
         "repair_android_workspace_runtime",
         "reset_android_workspace_runtime",
@@ -278,6 +265,27 @@ async fn native_dispatch(
         "chat.stop" => ide_chat_stop_conversation(state, params),
         "load_config" => ide_chat_load_config_for_web_settings(state),
         "load_chat_settings" => ide_chat_load_chat_settings_for_web_settings(state),
+        "save_config" => ide_chat_save_config_for_web_settings(state, &native_app, ide_context_runtime, params),
+        "save_agents" => ide_chat_save_agents_for_web_settings(state, &native_app, params),
+        "save_chat_settings" => ide_chat_save_chat_settings_for_web_settings(state, &native_app, params),
+        "patch_chat_settings" => ide_chat_patch_chat_settings_for_web_settings(state, &native_app, params),
+        "save_conversation_api_settings" => ide_chat_save_conversation_api_settings_for_web_settings(state, &native_app, params),
+        "patch_conversation_api_settings" => ide_chat_patch_conversation_api_settings_for_web_settings(state, &native_app, params),
+        "set_ui_language" => ide_chat_set_ui_language_command(state, &native_app, params),
+        "app.language.set" => ide_chat_set_ui_language_command(state, &native_app, params),
+        "set_department_primary_api_config" => ide_chat_set_department_primary_api_command(state, &native_app, params),
+        "department.primaryApi.set" => ide_chat_set_department_primary_api_command(state, &native_app, params),
+        "set_github_update_method" => ide_chat_set_github_update_method_for_web_settings(state, &native_app, params),
+        "set_skipped_github_update_version" => ide_chat_set_skipped_github_update_version_for_web_settings(state, &native_app, params),
+        "convert_private_agent_to_main" => ide_chat_convert_private_agent_to_main_for_web_settings(state, &native_app, params),
+        "set_agent_private_memory_enabled" => ide_chat_set_agent_private_memory_enabled_for_web_settings(state, params),
+        "set_agent_memory_recall_mode" => ide_chat_set_agent_memory_recall_mode_for_web_settings(state, params),
+        "api_config.create" => ide_chat_serialize(api_config_create_inner(
+            ide_chat_parse_param_field::<ApiConfig>(params, "input")?, &native_app, state, ide_context_runtime)?),
+        "api_config.update" => ide_chat_serialize(api_config_update_inner(
+            ide_chat_parse_param_field::<ApiConfig>(params, "input")?, &native_app, state, ide_context_runtime)?),
+        "api_config.delete" => ide_chat_serialize(api_config_delete_inner(
+            ide_chat_parse_param_field::<ApiConfigDeleteInput>(params, "input")?, &native_app, state, ide_context_runtime)?),
         "check_tools_status" => ide_chat_check_tools_status_for_web_settings(state, params),
         "app.bootstrapSnapshot" => ide_chat_load_app_bootstrap_snapshot_for_web_settings(state),
         "get_android_workspace_status" => ide_chat_serialize(get_android_workspace_status_ws_inner(state)?),

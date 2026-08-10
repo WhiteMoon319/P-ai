@@ -1028,3 +1028,21 @@ fn ide_chat_goal_cancel(state: &AppState, params: Value) -> Result<Value, String
     serde_json::to_value(goal_cancel_goal_inner(state, &input.conversation_id)?)
         .map_err(|err| format!("Serialize goal cancel result failed: {err}"))
 }
+
+fn ide_chat_set_department_primary_api_command(
+    state: &AppState,
+    app: &NativeAppHandle,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<SetDepartmentPrimaryApiConfigInput>(params, "input")?;
+    ide_chat_serialize(set_department_primary_api_config_inner(input, app, state)?)
+}
+
+fn ide_chat_set_ui_language_command(
+    state: &AppState,
+    app: &NativeAppHandle,
+    params: Value,
+) -> Result<Value, String> {
+    let ui_language = ide_chat_parse_param_field::<String>(params, "uiLanguage")?;
+    ide_chat_serialize(set_ui_language_inner(ui_language, app, state)?)
+}
