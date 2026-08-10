@@ -72,6 +72,7 @@ regex = "1.12.4"
 zip = { version = "8.5.1", default-features = false, features = ["deflate", "aes-crypto"] }
 ropey = "1.6.1"
 unicode-segmentation = "1.13.3"
+http = "1"
 
 # 桌面专属依赖（Android 构建时排除）
 [target.'cfg(not(target_os = "android"))'.dependencies]

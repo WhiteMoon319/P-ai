@@ -568,7 +568,7 @@ struct CustomStreamableHttpClient {
 
 fn custom_streamable_http_apply_headers(
     mut request_builder: reqwest::RequestBuilder,
-    custom_headers: std::collections::HashMap<tauri::http::HeaderName, tauri::http::HeaderValue>,
+    custom_headers: std::collections::HashMap<http::HeaderName, http::HeaderValue>,
 ) -> reqwest::RequestBuilder {
     for (name, value) in custom_headers {
         request_builder = request_builder.header(name, value);
@@ -585,7 +585,7 @@ impl rmcp::transport::streamable_http_client::StreamableHttpClient for CustomStr
         session_id: Option<std::sync::Arc<str>>,
         last_event_id: Option<String>,
         auth_header: Option<String>,
-        custom_headers: std::collections::HashMap<tauri::http::HeaderName, tauri::http::HeaderValue>,
+        custom_headers: std::collections::HashMap<http::HeaderName, http::HeaderValue>,
     ) -> Result<
         futures_util::stream::BoxStream<'static, Result<sse_stream::Sse, sse_stream::Error>>,
         rmcp::transport::streamable_http_client::StreamableHttpError<Self::Error>,
@@ -668,7 +668,7 @@ impl rmcp::transport::streamable_http_client::StreamableHttpClient for CustomStr
         uri: std::sync::Arc<str>,
         session_id: std::sync::Arc<str>,
         auth_header: Option<String>,
-        custom_headers: std::collections::HashMap<tauri::http::HeaderName, tauri::http::HeaderValue>,
+        custom_headers: std::collections::HashMap<http::HeaderName, http::HeaderValue>,
     ) -> Result<(), rmcp::transport::streamable_http_client::StreamableHttpError<Self::Error>>
     {
         let mut request_builder = self.client.delete(uri.as_ref()).header(
@@ -698,7 +698,7 @@ impl rmcp::transport::streamable_http_client::StreamableHttpClient for CustomStr
         message: rmcp::model::ClientJsonRpcMessage,
         session_id: Option<std::sync::Arc<str>>,
         auth_header: Option<String>,
-        headers: std::collections::HashMap<tauri::http::HeaderName, tauri::http::HeaderValue>,
+        headers: std::collections::HashMap<http::HeaderName, http::HeaderValue>,
     ) -> Result<
         rmcp::transport::streamable_http_client::StreamableHttpPostResponse,
         rmcp::transport::streamable_http_client::StreamableHttpError<Self::Error>,
