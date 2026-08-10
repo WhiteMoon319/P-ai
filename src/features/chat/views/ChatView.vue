@@ -931,6 +931,7 @@ function findRecipientOption(departmentId: string, agentId: string): DepartmentP
   return repairRecipientOptions.value.find((option) =>
     String(option.departmentId || "").trim() === normalizedDepartmentId
     && String(option.agentId || "").trim() === normalizedAgentId
+    && !option.personaMissing
   ) || null;
 }
 
@@ -951,9 +952,12 @@ const repairRecipientSelectedOption = computed(() =>
 
 function defaultRepairRecipientOption(): DepartmentPersonaOption | null {
   const defaultDepartmentId = String(props.defaultCreateConversationDepartmentId || "").trim();
+  const hasValidPersona = (option: DepartmentPersonaOption) => !option.personaMissing;
   return repairRecipientOptions.value.find((option) =>
-    defaultDepartmentId && String(option.departmentId || "").trim() === defaultDepartmentId
-  ) || repairRecipientOptions.value[0] || null;
+    hasValidPersona(option)
+    && defaultDepartmentId && String(option.departmentId || "").trim() === defaultDepartmentId
+  ) || repairRecipientOptions.value.find(hasValidPersona)
+    || repairRecipientOptions.value[0] || null;
 }
 
 watch(

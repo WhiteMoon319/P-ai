@@ -171,16 +171,18 @@ export function useChatPersonaConversationDerivedState(bindings: Record<string, 
         );
 
       if (boundDepartments.length === 0) {
+        const isUserPersona = agentId === "user-persona" || persona.isBuiltInUser;
         items.push({
           agentId,
           agentName,
           avatarUrl,
-          departmentName: agentId === "user-persona" ? "用户" : "未归属部门",
+          departmentName: isUserPersona ? "用户" : "未归属部门",
           departmentNames: [],
           isFrontSpeaking: false,
           hasBackgroundTask: backgroundTaskCount > 0,
           mentionable: false,
-          unavailableReason: agentId === "user-persona"
+          hidden: isUserPersona,
+          unavailableReason: isUserPersona
             ? bindings.t("chat.mentionUnavailableUserPersona")
             : bindings.t("chat.mentionUnavailableUnassigned"),
         });
@@ -195,14 +197,17 @@ export function useChatPersonaConversationDerivedState(bindings: Record<string, 
         });
         let mentionable = true;
         let unavailableReason = "";
+        let hidden = false;
         if (agentId === "user-persona" || persona.isBuiltInUser) {
           mentionable = false;
+          hidden = true;
           unavailableReason = bindings.t("chat.mentionUnavailableUserPersona");
         } else if (!department.departmentId) {
           mentionable = false;
           unavailableReason = bindings.t("chat.mentionUnavailableUnassigned");
         } else if (isCurrentRuntimeAgent) {
           mentionable = false;
+          hidden = true;
           unavailableReason = bindings.t("chat.mentionUnavailableSelf");
         } else if (!currentDepartmentId) {
           mentionable = false;
@@ -221,6 +226,7 @@ export function useChatPersonaConversationDerivedState(bindings: Record<string, 
           isFrontSpeaking: isCurrentRuntimeAgent,
           hasBackgroundTask: backgroundTaskCount > 0,
           mentionable,
+          hidden,
           unavailableReason: unavailableReason || undefined,
         });
       }

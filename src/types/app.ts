@@ -903,6 +903,8 @@ export type ChatMentionEntry = {
   isFrontSpeaking: boolean;
   hasBackgroundTask: boolean;
   mentionable: boolean;
+  /** 完全隐藏：不进入候选面板（如 @自己、用户人格），区别于灰显的 mentionable=false */
+  hidden?: boolean;
   /** @deprecated 改用 selectedChatMentionKeys */
   unavailableReason?: string;
   selected?: boolean;

@@ -14,6 +14,8 @@ export type DepartmentPersonaOption = {
   providerName?: string;
   modelName?: string;
   apiConfigId?: string;
+  modelMissing?: boolean;
+  personaMissing?: boolean;
   childDepartmentIds?: string[];
   unavailable?: boolean;
 };
@@ -78,13 +80,34 @@ export function buildDepartmentPersonaOptions(
     if (!departmentId) continue;
     const apiConfigId = departmentConversationApiConfigId(department, input);
     const apiConfig = apiConfigId ? apiConfigs.get(apiConfigId) : null;
-    if (!apiConfig) continue;
     const departmentName = trimText(department.name) || departmentId;
     const agentIds = Array.from(new Set((department.agentIds || []).map(trimText).filter(Boolean)));
+    if (agentIds.length === 0) {
+      // 部门未配置任何人格：仍生成占位选项，让部门在列表中可见
+      options.push({
+        id: departmentPersonaOptionId(departmentId, ""),
+        departmentId,
+        agentId: "",
+        departmentName,
+        agentName: "",
+        label: departmentName,
+        name: departmentName,
+        ownerAgentId: "",
+        ownerName: "",
+        apiConfigId: apiConfigId || undefined,
+        modelMissing: !apiConfig,
+        personaMissing: true,
+        unavailable: true,
+        childDepartmentIds: Array.isArray(department.childDepartmentIds)
+          ? department.childDepartmentIds.map(trimText).filter(Boolean)
+          : [],
+      });
+      continue;
+    }
     for (const agentId of agentIds) {
       const persona = personas.get(agentId);
-      if (!persona) continue;
-      const agentName = trimText(persona.name) || agentId;
+      const personaMissing = !persona;
+      const agentName = persona ? trimText(persona.name) || agentId : agentId;
       options.push({
         id: departmentPersonaOptionId(departmentId, agentId),
         departmentId,
@@ -95,9 +118,11 @@ export function buildDepartmentPersonaOptions(
         name: departmentName,
         ownerAgentId: agentId,
         ownerName: agentName,
-        providerName: trimText(apiConfig.name || apiConfig.id) || undefined,
-        modelName: trimText(apiConfig.displayName || apiConfig.model) || undefined,
-        apiConfigId,
+        providerName: apiConfig ? trimText(apiConfig.name || apiConfig.id) || undefined : undefined,
+        modelName: apiConfig ? trimText(apiConfig.displayName || apiConfig.model) || undefined : undefined,
+        apiConfigId: apiConfigId || undefined,
+        modelMissing: !apiConfig,
+        personaMissing,
         childDepartmentIds: Array.isArray(department.childDepartmentIds)
           ? department.childDepartmentIds.map(trimText).filter(Boolean)
           : [],

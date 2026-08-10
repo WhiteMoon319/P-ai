@@ -635,6 +635,7 @@ type MentionOptionView = {
   departmentName: string;
   avatarUrl?: string;
   mentionable: boolean;
+  hidden?: boolean;
   unavailableReason?: string;
 };
 
@@ -1048,9 +1049,10 @@ const filteredMentionOptions = computed<MentionOptionView[]>(() => {
       departmentName: String(item?.departmentName || "").trim(),
       avatarUrl: String(item?.avatarUrl || "").trim() || undefined,
       mentionable: !!item?.mentionable,
+      hidden: !!item?.hidden,
       unavailableReason: String(item?.unavailableReason || "").trim() || undefined,
     }))
-    .filter((item) => !!item.agentId && !!item.agentName && !!item.mentionable)
+    .filter((item) => !!item.agentId && !!item.agentName && !item.hidden)
     .filter((item) => {
       if (!query) return true;
       if (item.agentName.toLowerCase().includes(query)) return true;

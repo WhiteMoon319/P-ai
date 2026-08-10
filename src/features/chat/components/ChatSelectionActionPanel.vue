@@ -224,6 +224,9 @@ const delegateDepartmentOptions = computed(() =>
       providerName: String(item.providerName || "").trim() || undefined,
       modelName: String(item.modelName || "").trim() || undefined,
       apiConfigId: String(item.apiConfigId || "").trim() || undefined,
+      modelMissing: !!item.modelMissing,
+      personaMissing: !!item.personaMissing,
+      unavailable: !!item.unavailable,
       childDepartmentIds: Array.isArray(item.childDepartmentIds) ? item.childDepartmentIds : [],
     }))
     .filter((item) => !!item.id && !!item.departmentId && !!item.agentId),
