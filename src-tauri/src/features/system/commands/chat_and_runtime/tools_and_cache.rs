@@ -1,11 +1,3 @@
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn check_tools_status(
-    input: CheckToolsStatusInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<ToolLoadStatus>, String> {
-    check_tools_status_inner(input, &state)
-}
 
 fn check_tools_status_inner(
     input: CheckToolsStatusInput,
@@ -178,11 +170,6 @@ fn check_tools_status_inner(
     Ok(statuses)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_image_text_cache_stats(state: State<'_, AppState>) -> Result<ImageTextCacheStats, String> {
-    get_image_text_cache_stats_inner(&state)
-}
 
 fn get_image_text_cache_stats_inner(state: &AppState) -> Result<ImageTextCacheStats, String> {
     let runtime = state_read_runtime_state_cached(&state)?;
@@ -206,11 +193,6 @@ fn get_image_text_cache_stats_inner(state: &AppState) -> Result<ImageTextCacheSt
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn clear_image_text_cache(state: State<'_, AppState>) -> Result<ImageTextCacheStats, String> {
-    clear_image_text_cache_inner(&state)
-}
 
 fn clear_image_text_cache_inner(state: &AppState) -> Result<ImageTextCacheStats, String> {
     let mut runtime = state_read_runtime_state_cached(&state)?;

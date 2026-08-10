@@ -290,53 +290,11 @@ struct IdeChatConversationInput {
 // Sidebar/Web 使用的协议方法也必须有同一份 Tauri 入口；协议差异只能由
 // tauri-api.ts 适配器处理，不能让前端维护“Web 专用方法”。
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn list_transport_conversations(state: State<'_, AppState>) -> Result<Value, String> {
-    ide_chat_conversation_list(state.inner(), "desktop")
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn list_conversation_create_options(state: State<'_, AppState>) -> Result<Value, String> {
-    ide_chat_create_conversation_options(state.inner())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_conversation_workspace_permission(
-    input: Value,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
-    ide_chat_workspace_permission(state.inner(), input)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn select_conversation_workspace_permission(
-    input: Value,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
-    ide_chat_select_workspace_permission(state.inner(), input)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn save_conversation_workspace_layout(
-    input: Value,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
-    ide_chat_workspace_layout_save(state.inner(), input)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn list_conversation_workspaces(
-    input: Value,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
-    ide_chat_workspace_list(state.inner(), input)
-}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]

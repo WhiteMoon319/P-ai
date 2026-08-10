@@ -38,15 +38,6 @@ fn resolve_chat_prompt_preview_api_config(
     .ok_or_else(|| "No API config available".to_string())
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn get_prompt_preview(
-    input: SessionSelector,
-    preview_mode: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<PromptPreview, String> {
-    get_prompt_preview_inner(input, preview_mode, state.inner()).await
-}
 
 async fn get_prompt_preview_inner(
     input: SessionSelector,
@@ -261,17 +252,6 @@ async fn get_prompt_preview_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn get_system_prompt_preview(
-    input: SessionSelector,
-    state: State<'_, AppState>,
-) -> Result<SystemPromptPreview, String> {
-    let preview = get_prompt_preview_inner(input, None, state.inner()).await?;
-    Ok(SystemPromptPreview {
-        system_prompt: preview.preamble,
-    })
-}
 
 fn archive_time_label(raw: &str) -> String {
     let s = raw.trim();
@@ -325,27 +305,11 @@ fn archive_to_conversation(archive: ConversationArchive) -> Conversation {
     conversation
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn list_archives(state: State<'_, AppState>) -> Result<Vec<ArchiveSummary>, String> {
-    let app_state = state.inner().clone();
-    tokio::task::spawn_blocking(move || list_archives_inner(&app_state))
-        .await
-        .map_err(|err| format!("读取归档列表任务异常：{err}"))?
-}
 
 fn list_archives_inner(state: &AppState) -> Result<Vec<ArchiveSummary>, String> {
     conversation_service_v2().list_archives(state)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_archive_messages(
-    archive_id: String,
-    state: State<'_, AppState>,
-) -> Result<Vec<ChatMessage>, String> {
-    conversation_service_v2().get_archive_messages(state.inner(), &archive_id)
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -379,14 +343,6 @@ struct ArchiveBlockPageOutput {
     has_next_block: bool,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_archive_block_page(
-    input: GetArchiveBlockPageInput,
-    state: State<'_, AppState>,
-) -> Result<ArchiveBlockPageOutput, String> {
-    get_archive_block_page_inner(input, state.inner())
-}
 
 fn get_archive_block_page_inner(
     input: GetArchiveBlockPageInput,
@@ -422,31 +378,16 @@ fn get_archive_block_page_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_archive_summary(archive_id: String, state: State<'_, AppState>) -> Result<String, String> {
-    get_archive_summary_inner(state.inner(), &archive_id)
-}
 
 fn get_archive_summary_inner(state: &AppState, archive_id: &str) -> Result<String, String> {
     conversation_service_v2().get_archive_summary(state, archive_id)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn delete_archive(archive_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    delete_archive_inner(state.inner(), &archive_id)
-}
 
 fn delete_archive_inner(state: &AppState, archive_id: &str) -> Result<(), String> {
     conversation_service_v2().delete_archive(state, archive_id)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn unarchive_archive(archive_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    unarchive_archive_inner(state.inner(), &archive_id)
-}
 
 fn unarchive_archive_inner(state: &AppState, archive_id: &str) -> Result<(), String> {
     conversation_service_v2().unarchive_archive(state, archive_id)?;

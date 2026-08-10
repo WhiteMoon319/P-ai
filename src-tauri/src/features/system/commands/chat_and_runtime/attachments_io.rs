@@ -454,78 +454,8 @@ fn provider_meta_attachment_relative_paths(meta: &Value) -> Vec<String> {
     out
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn read_local_binary_file(
-    input: ReadLocalBinaryFileInput,
-) -> Result<ReadLocalBinaryFileOutput, String> {
-    tokio::task::spawn_blocking(move || {
-        let path_text = input.path.trim();
-        if path_text.is_empty() {
-            return Err("File path is empty.".to_string());
-        }
-        let path = std::path::PathBuf::from(path_text);
-        let mime = media_mime_from_path(&path)
-            .ok_or_else(|| format!("Unsupported file type: '{}'.", path_text))?
-            .to_string();
-        let raw = fs::read(&path).map_err(|err| format!("Read file failed: {err}"))?;
-        if raw.len() > MAX_MULTIMODAL_BYTES {
-            return Err(format!(
-                "File is too large ({} bytes). Max allowed is {} bytes.",
-                raw.len(),
-                MAX_MULTIMODAL_BYTES
-            ));
-        }
-        Ok(ReadLocalBinaryFileOutput {
-            mime,
-            bytes_base64: B64.encode(raw),
-        })
-    })
-    .await
-    .map_err(|err| format!("读取本地二进制文件任务异常：{err}"))?
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn queue_local_file_attachment(
-    input: QueueLocalFileAttachmentInput,
-    state: State<'_, AppState>,
-) -> Result<QueueLocalFileAttachmentOutput, String> {
-    let app_state = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        let path_text = input.path.trim();
-        if path_text.is_empty() {
-            return Err("File path is empty.".to_string());
-        }
-        let path = std::path::PathBuf::from(path_text);
-        let file_name = path
-            .file_name()
-            .and_then(|v| v.to_str())
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .unwrap_or("attachment")
-            .to_string();
-        let raw = fs::read(&path).map_err(|err| format!("Read file failed: {err}"))?;
-        let mime = media_mime_from_path(&path)
-            .unwrap_or("application/octet-stream")
-            .to_string();
-        queue_attachment_from_raw(&app_state, &file_name, &mime, &raw)
-    })
-    .await
-    .map_err(|err| format!("本地附件兼容摄取任务异常：{err}"))?
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn queue_inline_file_attachment(
-    input: QueueInlineFileAttachmentInput,
-    state: State<'_, AppState>,
-) -> Result<QueueLocalFileAttachmentOutput, String> {
-    let app_state = state.inner().clone();
-    tokio::task::spawn_blocking(move || queue_inline_file_attachment_inner(input, &app_state))
-        .await
-        .map_err(|err| format!("内联附件兼容摄取任务异常：{err}"))?
-}
 
 fn queue_inline_file_attachment_inner(
     input: QueueInlineFileAttachmentInput,
@@ -624,14 +554,6 @@ fn resolve_local_chat_image_path(state: &AppState, path: &str) -> Result<PathBuf
     Ok(canonical_target)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn read_local_chat_image_thumbnail(
-    input: ReadLocalChatImageThumbnailInput,
-    state: State<'_, AppState>,
-) -> Result<ReadLocalChatImageThumbnailOutput, String> {
-    read_local_chat_image_thumbnail_inner(input, state.inner()).await
-}
 
 async fn read_local_chat_image_thumbnail_inner(
     input: ReadLocalChatImageThumbnailInput,
@@ -656,14 +578,6 @@ async fn read_local_chat_image_thumbnail_inner(
     .map_err(|err| format!("读取本地图片缩略图任务异常：{err}"))?
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn read_local_chat_image_original(
-    input: ReadLocalChatImageThumbnailInput,
-    state: State<'_, AppState>,
-) -> Result<ReadLocalChatImageOutput, String> {
-    read_local_chat_image_original_inner(input, state.inner()).await
-}
 
 async fn read_local_chat_image_original_inner(
     input: ReadLocalChatImageThumbnailInput,
@@ -685,85 +599,7 @@ async fn read_local_chat_image_original_inner(
     .map_err(|err| format!("读取本地图片原图任务异常：{err}"))?
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn copy_local_chat_image_to_clipboard(
-    input: ReadLocalChatImageThumbnailInput,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
-    #[cfg(target_os = "android")]
-    {
-        let _ = (input, state);
-        Err("当前平台不支持复制图片到剪贴板".to_string())
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-    let app_state = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        let path = resolve_local_chat_image_path(&app_state, &input.path)?;
-        let raw = local_image_read_raw(&path)?;
-        let (_, mime) = local_image_detect_format(&raw, &path)?;
-        let mut clipboard = arboard::Clipboard::new()
-            .map_err(|err| format!("初始化剪贴板失败: {err}"))?;
 
-        if matches!(mime.as_str(), "image/gif" | "image/webp") {
-            clipboard
-                .set()
-                .file_list(&[path.as_path()])
-                .map_err(|err| format!("复制图片文件到剪贴板失败: {err}"))?;
-            return Ok(serde_json::json!({ "ok": true, "mode": "file" }));
-        }
-
-        let (dynamic, _) = local_image_decode_dynamic(&raw, &path)?;
-        let rgba = dynamic.to_rgba8();
-        let image_data = arboard::ImageData {
-            width: rgba.width() as usize,
-            height: rgba.height() as usize,
-            bytes: rgba.as_raw().clone().into(),
-        };
-        clipboard.set_image(image_data)
-            .map_err(|err| format!("复制图片到剪贴板失败: {err}"))?;
-        Ok(serde_json::json!({ "ok": true, "mode": "bitmap" }))
-    })
-    .await
-    .map_err(|err| format!("复制本地图片任务异常：{err}"))?
-    }
-}
-
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn save_local_chat_image_as(
-    input: ReadLocalChatImageThumbnailInput,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<Value, String> {
-    let source_path = resolve_local_chat_image_path(state.inner(), &input.path)?;
-    if !source_path.exists() {
-        return Err(format!("源文件不存在: {}", source_path.to_string_lossy()));
-    }
-    let file_name = source_path
-        .file_name()
-        .and_then(|v| v.to_str())
-        .unwrap_or("image.webp");
-    let (dialog_tx, dialog_rx) = tokio::sync::oneshot::channel();
-    app.dialog()
-        .file()
-        .set_file_name(file_name)
-        .save_file(move |file| {
-            let _ = dialog_tx.send(file);
-        });
-    let dest = dialog_rx
-        .await
-        .map_err(|err| format!("等待保存对话框结果失败：{err}"))?;
-    let dest_path = dest
-        .and_then(|fp| fp.as_path().map(ToOwned::to_owned))
-        .ok_or_else(|| "用户取消了保存".to_string())?;
-    tokio::task::spawn_blocking(move || std::fs::copy(&source_path, &dest_path))
-        .await
-        .map_err(|err| format!("复制图片文件任务异常：{err}"))?
-        .map_err(|err| format!("复制文件失败: {err}"))?;
-    Ok(serde_json::json!({ "ok": true }))
-}
 
 #[cfg(test)]
 mod assistant_space_image_path_tests {

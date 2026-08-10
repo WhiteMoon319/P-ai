@@ -404,37 +404,8 @@ pub(crate) async fn weixin_oc_send_message_items(
     Ok(client_id)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn remote_im_weixin_oc_start_login(
-    input: WeixinOcLoginStartInput,
-    state: State<'_, AppState>,
-) -> Result<WeixinOcLoginStartResult, String> {
-    weixin_oc_manager().start_login(state.inner(), input).await
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn remote_im_weixin_oc_get_login_status(
-    input: WeixinOcLoginStatusInput,
-    state: State<'_, AppState>,
-) -> Result<WeixinOcLoginStatusResult, String> {
-    weixin_oc_manager()
-        .poll_login_status(state.inner(), input)
-        .await
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn remote_im_weixin_oc_logout(
-    input: WeixinOcLoginStatusInput,
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
-    weixin_oc_manager()
-        .logout(state.inner(), input.channel_id.as_str())
-        .await?;
-    Ok(true)
-}
 
 fn remote_im_weixin_oc_sync_contacts_inner(
     state: &AppState,
@@ -468,11 +439,3 @@ fn remote_im_weixin_oc_sync_contacts_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn remote_im_weixin_oc_sync_contacts(
-    input: WeixinOcLoginStatusInput,
-    state: State<'_, AppState>,
-) -> Result<WeixinOcSyncContactsResult, String> {
-    remote_im_weixin_oc_sync_contacts_inner(state.inner(), input)
-}

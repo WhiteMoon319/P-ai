@@ -471,24 +471,7 @@ async fn confirm_plan_and_continue_inner(
     Ok(true)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn confirm_plan_and_continue(
-    input: ConfirmPlanAndContinueInput,
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
-    confirm_plan_and_continue_inner(state.inner(), &input).await
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn read_plan_file_content(
-    conversation_id: String,
-    path: String,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
-    read_plan_file_content_inner(&conversation_id, &path, state.inner())
-}
 
 fn read_plan_file_content_inner(
     conversation_id: &str,
@@ -1739,254 +1722,8 @@ async fn submit_chat_message_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn submit_chat_message(
-    input: SendChatRequest,
-    state: State<'_, AppState>,
-    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
-) -> Result<SubmitChatResult, String> {
-    submit_chat_message_inner(input, state.inner(), Some(DeltaChannel::from_tauri(on_delta))).await
-}
 
 #[cfg(not(target_os = "android"))]
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn send_chat_message(
-    input: SendChatRequest,
-    state: State<'_, AppState>,
-    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
-) -> Result<SendChatResult, String> {
-    let on_delta_ref = DeltaChannel::from_tauri(on_delta);
-    if input
-        .payload
-        .mentions
-        .as_ref()
-        .map(|items| !items.is_empty())
-        .unwrap_or(false)
-    {
-        return send_user_mention_message_inner(input, state.inner(), &on_delta_ref).await;
-    }
-
-    // 如果是 trigger_only 模式（由调度器调用），直接执行
-    if input.trigger_only {
-        return send_chat_message_inner(input, state.inner(), &on_delta_ref).await;
-    }
-
-    // 用户发言：构造消息并入队
-    let images = input.payload.images.as_ref().map(|v| v.as_slice()).unwrap_or(&[]);
-    let attachments = input
-        .payload
-        .attachments
-        .as_ref()
-        .map(|v| v.as_slice())
-        .unwrap_or(&[]);
-
-    if !chat_input_payload_has_content(&input.payload) {
-        return Err("消息内容为空".to_string());
-    }
-
-    let display_text = build_attachment_only_display_text(
-        input.payload.display_text.as_deref(),
-        input.payload.text.as_deref(),
-        images,
-        attachments,
-    );
-    let normalized_mentions = normalize_payload_mentions(input.payload.mentions.as_ref());
-
-    let (message_parts, attachment_warnings) =
-        normalize_chat_input_payload_to_message_parts(state.inner(), &input.payload, None);
-    for warning in attachment_warnings {
-        runtime_log_warn(format!("[附件入站] 发送消息降级继续：{warning}"));
-    }
-    // 先确定 requestId，再写入用户消息 provider_meta，保证重复发送可按已落地消息幂等识别。
-    let request_id = runtime_context_request_id_or_new(None, input.trace_id.as_deref(), "chat");
-    let user_message = ChatMessage {
-        id: Uuid::new_v4().to_string(),
-        role: "user".to_string(),
-        created_at: now_iso(),
-        speaker_agent_id: None,
-        parts: message_parts,
-        extra_text_blocks: input.payload.extra_text_blocks.clone().unwrap_or_default(),
-        provider_meta: {
-            let attachment_entries = collect_payload_attachment_meta_entries(&input.payload);
-            build_user_message_provider_meta(
-                input.payload.provider_meta.clone(),
-                &attachment_entries,
-                &normalized_mentions,
-                Some(request_id.as_str()),
-            )
-        },
-        tool_call: None,
-        mcp_call: None,
-        meme_annotations: None,
-    };
-
-    // 获取会话信息
-    let session = input.session.as_ref().ok_or_else(|| "缺少会话信息".to_string())?;
-    let requested_department_id = session
-        .department_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| {
-            runtime_log_warn(format!("[聊天发送] 缺少 department_id，拒绝发送用户消息"));
-            "缺少 department_id".to_string()
-        })?;
-    let conversation_id = session
-        .conversation_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| {
-            runtime_log_warn(format!("[聊天发送] 缺少 conversation_id，拒绝发送用户消息"));
-            "缺少 conversation_id".to_string()
-        })?;
-
-    let prepare_started_at = std::time::Instant::now();
-    let (department_id, agent_id, model_config_id, mention_plans, mention_failures) = {
-        let config_started_at = std::time::Instant::now();
-        let runtime_org = load_runtime_organization_snapshot(&state)?;
-        let app_config = runtime_org.config.clone();
-        let config_elapsed_ms = config_started_at.elapsed().as_millis();
-        let agents = runtime_org.agents.clone();
-        let app_data_elapsed_ms = 0u128;
-        let department_started_at = std::time::Instant::now();
-        let department = runtime_department_by_id(&runtime_org, requested_department_id.as_str())
-            .ok_or_else(|| format!("部门已经消失：{}", requested_department_id))?;
-        let agent_id = session.agent_id.trim().to_string();
-        if agent_id.is_empty() {
-            return Err("缺少执行人格：session.agentId 为空".to_string());
-        }
-        if !agents
-            .iter()
-            .any(|agent| agent.id == agent_id && !agent.is_built_in_user)
-        {
-            return Err(format!("执行人格不存在或不可用: agentId={agent_id}"));
-        }
-        let department_elapsed_ms = department_started_at.elapsed().as_millis();
-        let api_config_id = department_primary_chat_api_config_id(&app_config, department)
-            .ok_or_else(|| format!("部门模型未配置或不可用于聊天: {}", department.id))?;
-
-        let conversation_started_at = std::time::Instant::now();
-        let conversation_meta =
-            conversation_service_v2().get_conversation_meta(&state, &conversation_id)?;
-        let mention_background = read_user_mention_context_snapshot(
-            &state,
-            &conversation_meta,
-            &agents,
-            &display_text,
-        )?;
-        let conversation_elapsed_ms = conversation_started_at.elapsed().as_millis();
-        let (mention_plans, mention_failures) = build_user_mention_dispatch_plans(
-            &app_config,
-            &conversation_meta.id,
-            &mention_background,
-            &agents,
-            &department.id,
-            &agent_id,
-            &display_text,
-            input.payload.mentions.as_ref(),
-        )?;
-
-        runtime_log_info(format!(
-            "[聊天发送] 发送前准备耗时：总计={}ms，读取配置={}ms，读取应用数据={}ms，解析部门={}ms，会话解析={}ms，conversation_id={}，department_id={}，agent_id={}",
-            prepare_started_at.elapsed().as_millis(),
-            config_elapsed_ms,
-            app_data_elapsed_ms,
-            department_elapsed_ms,
-            conversation_elapsed_ms,
-            conversation_id,
-            department.id,
-            agent_id
-        ));
-
-        (
-            department.id.clone(),
-            agent_id,
-            api_config_id,
-            mention_plans,
-            mention_failures,
-        )
-    };
-
-    // 构造队列事件
-    let event_id = Uuid::new_v4().to_string();
-    let has_user_mentions = input
-        .payload
-        .mentions
-        .as_ref()
-        .map(|items| !items.is_empty())
-        .unwrap_or(false);
-    let mut runtime_context = runtime_context_new("user_message", "user_send");
-    runtime_context.request_id = Some(request_id.clone());
-    runtime_context.dispatch_id = Some(event_id.clone());
-    runtime_context.origin_conversation_id = Some(conversation_id.clone());
-    runtime_context.target_conversation_id = Some(conversation_id.clone());
-    runtime_context.root_conversation_id = Some(conversation_id.clone());
-    runtime_context.executor_agent_id = Some(agent_id.clone());
-    runtime_context.executor_department_id = Some(department_id.clone());
-    runtime_context.model_config_id = Some(model_config_id.clone());
-    let event = ChatPendingEvent {
-        id: event_id.clone(),
-        conversation_id: conversation_id.clone(),
-        created_at: now_iso(),
-        source: ChatEventSource::User,
-        queue_mode: ChatQueueMode::Normal,
-        messages: vec![user_message],
-        activate_assistant: !has_user_mentions,
-        assistant_message_id: None,
-        session_info: ChatSessionInfo {
-            department_id: department_id.clone(),
-            agent_id: agent_id.clone(),
-        },
-        runtime_context: Some(runtime_context.clone()),
-        sender_info: None,
-    };
-
-    let (result_tx, result_rx) = tokio::sync::oneshot::channel();
-    register_chat_event_runtime(
-        state.inner(),
-        &event_id,
-        on_delta_ref.clone(),
-        result_tx,
-    )?;
-
-    // 入队前先做阻塞判定：空闲且无排队则直写历史；否则入队。
-    let ingress = match ingress_chat_event(state.inner(), event) {
-        Ok(value) => value,
-        Err(err) => {
-            let _ = state
-                .pending_chat_delta_channels
-                .lock()
-                .map(|mut map| map.remove(&event_id));
-            let _ = state
-                .pending_chat_result_senders
-                .lock()
-                .map(|mut map| map.remove(&event_id));
-            return Err(err);
-        }
-    };
-
-    // 根据 ingress 结果执行：直写或排队；排队仅在事件仍滞留时才通知前端。
-    trigger_chat_event_after_ingress(state.inner(), ingress);
-
-    let send_result = result_rx
-        .await
-        .map_err(|_| "聊天请求已取消或调度结果丢失".to_string())?;
-    let send_result = send_result?;
-
-    for failure in mention_failures {
-        spawn_user_mention_failure_message(state.inner().clone(), failure);
-    }
-    for plan in mention_plans {
-        spawn_user_mention_delegate(state.inner().clone(), plan);
-    }
-
-    Ok(send_result)
-}
 
 async fn send_user_mention_message_inner(
     input: SendChatRequest,
@@ -2203,24 +1940,7 @@ async fn send_user_mention_message_inner(
     Ok(send_result)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn send_user_mention_message(
-    input: SendChatRequest,
-    state: State<'_, AppState>,
-    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
-) -> Result<SendChatResult, String> {
-    send_user_mention_message_inner(input, state.inner(), &DeltaChannel::from_tauri(on_delta)).await
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn submit_user_async_delegate(
-    input: SubmitUserAsyncDelegateInput,
-    state: State<'_, AppState>,
-) -> Result<SubmitUserAsyncDelegateOutput, String> {
-    submit_user_async_delegate_internal(input, state.inner()).await
-}
 
 async fn submit_user_async_delegate_internal(
     input: SubmitUserAsyncDelegateInput,
@@ -2274,144 +1994,10 @@ struct ProbeActiveChatViewStreamInput {
     probe_id: String,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn bind_active_chat_view_stream(
-    input: BindActiveChatViewStreamInput,
-    state: State<'_, AppState>,
-    window: tauri::Window,
-    on_delta: tauri::ipc::Channel<AssistantDeltaEvent>,
-) -> Result<(), String> {
-    let window_label = window.label().to_string();
-    let conversation_id = input
-        .conversation_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    if let Some(conversation_id) = conversation_id {
-        set_active_chat_view_stream_binding(
-            state.inner(),
-            &window_label,
-            &input.binding_id,
-            Some(conversation_id),
-            DeltaChannel::from_tauri(on_delta.clone()),
-        )?;
-        runtime_log_debug(format!(
-            "[聊天] 已绑定活动聊天流: window={}, binding_id={}, conversation_id={}",
-            window_label,
-            normalize_active_chat_view_binding_id(&input.binding_id),
-            conversation_id,
-        ));
-    } else {
-        set_active_chat_view_stream_binding(
-            state.inner(),
-            &window_label,
-            &input.binding_id,
-            None,
-            DeltaChannel::from_tauri(on_delta),
-        )?;
-        runtime_log_debug(format!(
-            "[聊天] 已取消活动聊天流绑定: window={}, binding_id={}",
-            window_label,
-            normalize_active_chat_view_binding_id(&input.binding_id),
-        ));
-    }
-    Ok(())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn unbind_active_chat_view_stream(
-    input: Option<UnbindActiveChatViewStreamInput>,
-    state: State<'_, AppState>,
-    window: tauri::Window,
-) -> Result<(), String> {
-    let window_label = window.label().to_string();
-    let binding_id = input.unwrap_or_default().binding_id;
-    clear_active_chat_view_stream_binding(state.inner(), &window_label, &binding_id)?;
-    runtime_log_debug(format!(
-        "[聊天] 已取消活动聊天流订阅: window={}, binding_id={}",
-        window_label,
-        normalize_active_chat_view_binding_id(&binding_id),
-    ));
-    Ok(())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn clear_window_chat_view_stream_bindings_command(
-    state: State<'_, AppState>,
-    window: tauri::Window,
-) -> Result<(), String> {
-    let window_label = window.label().to_string();
-    clear_window_chat_view_stream_bindings(state.inner(), &window_label)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn probe_active_chat_view_stream(
-    input: ProbeActiveChatViewStreamInput,
-    state: State<'_, AppState>,
-    window: tauri::Window,
-) -> Result<bool, String> {
-    let window_label = window.label().to_string();
-    let conversation_id = input
-        .conversation_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("");
-    let probe_id = input.probe_id.trim();
-    if conversation_id.is_empty() || probe_id.is_empty() {
-        return Ok(false);
-    }
-    let binding_key = active_chat_view_binding_key(&window_label, &input.binding_id);
-    let binding = state
-        .active_chat_view_bindings
-        .lock()
-        .map_err(|_| "Failed to lock active chat view bindings".to_string())?
-        .get(&binding_key)
-        .cloned();
-    let Some(binding) = binding else {
-        return Ok(false);
-    };
-    if binding.conversation_id.trim() != conversation_id {
-        return Ok(false);
-    }
-    let event = AssistantDeltaEvent {
-        delta: String::new(),
-        kind: Some("stream_probe".to_string()),
-        request_id: None,
-        activation_id: None,
-        phase_id: None,
-        reason: None,
-        tool_name: None,
-        tool_call_id: None,
-        tool_status: None,
-        tool_args: None,
-        message: Some(probe_id.to_string()),
-        stream_cache: None,
-    };
-    match binding.delta_channel.send(event) {
-        Ok(_) => Ok(true),
-        Err(_) => {
-            let _ = state
-                .active_chat_view_bindings
-                .lock()
-                .map(|mut bindings| bindings.remove(&binding_key));
-            Ok(false)
-        }
-    }
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn stop_chat_message(
-    input: StopChatRequest,
-    state: State<'_, AppState>,
-) -> Result<StopChatResult, String> {
-    stop_chat_message_inner(input, state.inner())
-}
 
 fn stop_chat_message_inner(
     input: StopChatRequest,
@@ -2488,13 +2074,6 @@ fn stop_chat_message_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn get_chat_queue_snapshot(
-    state: State<'_, AppState>,
-) -> Result<Vec<ChatQueueEventSummary>, String> {
-    get_queue_snapshot(state.inner())
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -2502,24 +2081,7 @@ struct GetConversationFastRequestTurnsInput {
     conversation_id: String,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_conversation_fast_request_turns(
-    input: GetConversationFastRequestTurnsInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<FastRequestTurn>, String> {
-    conversation_service_v2()
-        .get_conversation_fast_request_turns(state.inner(), &input.conversation_id)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn recall_chat_queue_event(
-    event_id: String,
-    state: State<'_, AppState>,
-) -> Result<ChatQueueRecallResult, String> {
-    recall_chat_queue_event_inner(&event_id, state.inner())
-}
 
 fn recall_chat_queue_event_inner(
     event_id: &str,
@@ -2543,14 +2105,6 @@ fn recall_chat_queue_event_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn mark_chat_queue_event_guided(
-    event_id: String,
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
-    mark_chat_queue_event_guided_inner(&event_id, state.inner())
-}
 
 fn mark_chat_queue_event_guided_inner(event_id: &str, state: &AppState) -> Result<bool, String> {
     let conversation_id = mark_queue_event_guided(state, event_id)?;
@@ -2568,92 +2122,7 @@ struct InterruptConversationRuntimeResult {
     cleared_queue_count: usize,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn interrupt_conversation_runtime(
-    session: SessionSelector,
-    state: State<'_, AppState>,
-) -> Result<InterruptConversationRuntimeResult, String> {
-    let conversation_id = session
-        .conversation_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| "Missing session.conversationId".to_string())?;
-    let requested_department_id = session
-        .department_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
-    let (department_id, _) = resolve_runtime_control_department_and_agent(
-        state.inner(),
-        requested_department_id,
-        Some(session.agent_id.as_str()),
-        Some(&conversation_id),
-    )?;
 
-    let chat_key = inflight_chat_key(&department_id, Some(&conversation_id));
-    let aborted_chat = {
-        let mut inflight = state
-            .inflight_chat_abort_handles
-            .lock()
-            .map_err(|_| "Failed to lock inflight chat abort handles".to_string())?;
-        if let Some(handle) = inflight.remove(&chat_key) {
-            handle.abort();
-            true
-        } else {
-            false
-        }
-    };
-    let aborted_tool = abort_inflight_tool_abort_handle(state.inner(), &chat_key)?;
-    let aborted_delegate_children =
-        abort_delegate_runtime_descendants_by_parent_context(
-            state.inner(),
-            &chat_key,
-            Some(&conversation_id),
-        )?;
-    let cleared_queue_count = clear_conversation_queue(
-        state.inner(),
-        &conversation_id,
-        "消息已因会话撤回被清出队列",
-    )?;
-    let _ = release_conversation_processing_claim(state.inner(), &conversation_id);
-    let _ = set_conversation_runtime_state_and_emit(
-        state.inner(),
-        &conversation_id,
-        MainSessionState::Idle,
-    );
-    let _ = set_conversation_remote_im_activation_sources(state.inner(), &conversation_id, Vec::new());
-
-    let aborted = aborted_chat || aborted_tool || aborted_delegate_children > 0;
-    if aborted || cleared_queue_count > 0 {
-        mark_goal_continue_suppressed_by_user_interrupt(
-            state.inner(),
-            &conversation_id,
-            "interrupt_conversation_runtime",
-        )?;
-    }
-    runtime_log_info(format!(
-        "[聊天调度] 会话运行已中断: conversation_id={}, aborted={}, cleared_queue_count={}, child_abort_count={}",
-        conversation_id,
-        aborted,
-        cleared_queue_count,
-        aborted_delegate_children
-    ));
-    Ok(InterruptConversationRuntimeResult {
-        aborted,
-        cleared_queue_count,
-    })
-}
-
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn get_main_session_state_snapshot(
-    state: State<'_, AppState>,
-) -> Result<MainSessionState, String> {
-    get_main_session_state(state.inner())
-}
 
 fn assistant_text_from_stream_blocks(blocks: &[AssistantStreamBlock]) -> String {
     blocks
@@ -2732,26 +2201,3 @@ mod stop_stream_block_tool_history_tests {
 
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn get_conversation_runtime_snapshot(
-    conversation_id: String,
-    state: State<'_, AppState>,
-) -> Result<ConversationRuntimeSnapshot, String> {
-    let normalized_conversation_id = conversation_id.trim();
-    if normalized_conversation_id.is_empty() {
-        return Err("conversationId 不能为空".to_string());
-    }
-    let snapshot = read_conversation_runtime_snapshot(state.inner(), normalized_conversation_id)?;
-    runtime_log_debug(format!(
-        "[聊天运行态恢复] 完成，任务=读取会话运行态快照，conversation_id={}，runtime_state={:?}，is_processing={}，pending_queue_count={}，has_visible_progress={}，assistant_text_len={}，stream_block_count={}",
-        snapshot.conversation_id,
-        snapshot.runtime_state,
-        snapshot.is_processing,
-        snapshot.pending_queue_count,
-        snapshot.stream_cache.has_visible_progress,
-        snapshot.stream_cache.assistant_text.chars().count(),
-        snapshot.stream_cache.stream_blocks.len()
-    ));
-    Ok(snapshot)
-}

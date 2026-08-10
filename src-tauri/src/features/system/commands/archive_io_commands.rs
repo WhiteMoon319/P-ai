@@ -305,78 +305,7 @@ fn build_archive_markdown(archive: &ConversationArchive) -> String {
     blocks.join("\n")
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn export_archive_to_file(
-    input: ExportArchiveToFileInput,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<ExportArchiveFileResult, String> {
-    if input.archive_id.trim().is_empty() {
-        return Err("archiveId is required".to_string());
-    }
-    let export_format = match input.format.trim().to_ascii_lowercase().as_str() {
-        "json" => "json",
-        "markdown" | "md" => "markdown",
-        _ => return Err("Unsupported export format. Use 'json' or 'markdown'.".to_string()),
-    };
 
-    let archive = conversation_service_v2()
-        .get_conversation_snapshot(state.inner(), input.archive_id.trim())
-        .map_err(|err| format!("读取归档会话失败，archive_id={}，error={}", input.archive_id.trim(), err))?;
-    let mut archive = conversation_to_archive(&archive);
-    if export_format == "json" {
-        materialize_chat_message_parts_from_media_refs(
-            &mut archive.source_conversation.messages,
-            &state.data_path,
-        );
-    }
-
-    let selected = if export_format == "json" {
-        app.dialog()
-            .file()
-            .add_filter("JSON", &["json"])
-            .blocking_save_file()
-    } else {
-        app.dialog()
-            .file()
-            .add_filter("Markdown", &["md", "markdown"])
-            .blocking_save_file()
-    };
-
-    let file_path = selected
-        .and_then(|fp| fp.as_path().map(ToOwned::to_owned))
-        .ok_or_else(|| "Export cancelled".to_string())?;
-
-    let body = if export_format == "json" {
-        let payload = ArchiveExportPayload {
-            version: 1,
-            exported_at: now_iso(),
-            archive: archive.clone(),
-        };
-        serde_json::to_string_pretty(&payload)
-            .map_err(|err| format!("Serialize archive export failed: {err}"))?
-    } else {
-        build_archive_markdown(&archive)
-    };
-
-    fs::write(&file_path, body).map_err(|err| format!("Write export file failed: {err}"))?;
-
-    Ok(ExportArchiveFileResult {
-        path: file_path.to_string_lossy().to_string(),
-        archive_id: archive.archive_id,
-        format: export_format.to_string(),
-    })
-}
-
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn import_archives_from_json(
-    input: ImportArchivesFromJsonInput,
-    state: State<'_, AppState>,
-) -> Result<ImportArchivesResult, String> {
-    import_archives_from_json_inner(input, state.inner())
-}
 
 fn import_archives_from_json_inner(
     input: ImportArchivesFromJsonInput,

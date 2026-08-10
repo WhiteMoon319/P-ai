@@ -35,14 +35,6 @@ struct BatchArchiveConversationsOutput {
     active_conversation_id: Option<String>,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn archive_conversation(
-    input: ConversationIdOnlyInput,
-    state: State<'_, AppState>,
-) -> Result<ConversationCommandStatus, String> {
-    archive_conversation_inner(input, state.inner()).await
-}
 
 async fn archive_conversation_inner(
     input: ConversationIdOnlyInput,
@@ -162,14 +154,6 @@ async fn archive_conversation_inner(
     Ok(ConversationCommandStatus { success: true })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn batch_archive_conversations(
-    input: BatchArchiveConversationsInput,
-    state: State<'_, AppState>,
-) -> Result<BatchArchiveConversationsOutput, String> {
-    batch_archive_conversations_inner(state.inner(), input).await
-}
 
 pub(crate) async fn batch_archive_conversations_inner(
     state: &AppState,

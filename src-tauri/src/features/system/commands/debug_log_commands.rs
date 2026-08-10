@@ -164,11 +164,6 @@ fn backend_log_write_lock() -> &'static Mutex<()> {
     BACKEND_LOG_WRITE_LOCK.get_or_init(|| Mutex::new(()))
 }
 
-#[cfg(not(target_os = "android"))]
-fn backend_log_path() -> Option<PathBuf> {
-    static BACKEND_LOG_PATH: OnceLock<Option<PathBuf>> = OnceLock::new();
-    BACKEND_LOG_PATH.get_or_init(resolve_backend_log_path).clone()
-}
 
 #[cfg(target_os = "android")]
 fn backend_log_path() -> Option<PathBuf> {
@@ -199,21 +194,6 @@ fn resolve_backend_log_path() -> Option<PathBuf> {
     Some(log_dir.join(BACKEND_LOG_FILE_NAME))
 }
 
-#[cfg(not(target_os = "android"))]
-fn resolve_backend_log_path() -> Option<PathBuf> {
-    let log_dir = detect_portable_runtime_root()
-        .or_else(|| {
-            ProjectDirs::from("ai", "easycall", "p-ai")
-                .map(|dirs| dirs.config_dir().to_path_buf())
-        })
-        .or_else(|| current_exe_dir())
-        .unwrap_or_else(std::env::temp_dir)
-        .join("logs");
-    if fs::create_dir_all(&log_dir).is_err() {
-        return None;
-    }
-    Some(log_dir.join(BACKEND_LOG_FILE_NAME))
-}
 
 fn backend_log_archive_path(path: &PathBuf) -> PathBuf {
     let ts = now_utc().unix_timestamp();
@@ -1275,11 +1255,6 @@ fn latest_chat_round_headers_and_tools(
     )
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn list_recent_llm_round_logs(state: State<'_, AppState>) -> Result<Vec<LlmRoundLogEntry>, String> {
-    list_recent_llm_round_logs_inner(state.inner())
-}
 
 fn list_recent_llm_round_logs_inner(state: &AppState) -> Result<Vec<LlmRoundLogEntry>, String> {
     let capacity = llm_round_log_capacity_for_state(state);
@@ -1388,15 +1363,6 @@ fn llm_round_log_section_value(entry: &LlmRoundLogEntry, section: &str) -> Optio
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_recent_llm_round_log_section(
-    state: State<'_, AppState>,
-    id: String,
-    section: String,
-) -> Result<Option<Value>, String> {
-    get_recent_llm_round_log_section_inner(state.inner(), id, section)
-}
 
 fn get_recent_llm_round_log_section_inner(
     state: &AppState,
@@ -1422,11 +1388,6 @@ fn get_recent_llm_round_log_section_inner(
         }))
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn clear_recent_llm_round_logs(state: State<'_, AppState>) -> Result<bool, String> {
-    clear_recent_llm_round_logs_inner(state.inner())
-}
 
 fn clear_recent_llm_round_logs_inner(state: &AppState) -> Result<bool, String> {
     let mut logs = state
@@ -1541,11 +1502,6 @@ where
     stats
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn dump_memory_cache_stats(state: State<'_, AppState>) -> Result<MemoryCacheStats, String> {
-    dump_memory_cache_stats_inner(state.inner())
-}
 
 fn dump_memory_cache_stats_inner(state: &AppState) -> Result<MemoryCacheStats, String> {
     let cached_conversations_count = 0;

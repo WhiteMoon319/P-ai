@@ -1,10 +1,3 @@
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn desktop_screenshot(input: ScreenshotRequest) -> Result<ScreenshotResponse, String> {
-    run_screenshot_tool(input)
-        .await
-        .map_err(|err| to_tool_err_string(&err))
-}
 
 const NATIVE_NOTIFICATION_BODY_MAX_CHARS: usize = 180;
 #[cfg(target_os = "windows")]
@@ -32,58 +25,6 @@ fn native_notification_text_excerpt(raw: &str, max_chars: usize) -> String {
     out
 }
 
-#[cfg(not(target_os = "android"))]
-fn send_native_notification(
-    app: &NativeAppHandle,
-    title: &str,
-    body: &str,
-    play_sound: bool,
-) -> Result<(), String> {
-    use tauri_plugin_notification::{NotificationExt, PermissionState};
-
-    let normalized_title = title.trim();
-    let normalized_body = body.trim();
-    if normalized_title.is_empty() {
-        return Err("通知标题不能为空".to_string());
-    }
-    if normalized_body.is_empty() {
-        return Err("通知正文不能为空".to_string());
-    }
-
-    let Some(inner) = &app.inner else {
-        return Err("应用句柄未初始化".to_string());
-    };
-    let notifications = inner.notification();
-    let permission_before = notifications
-        .permission_state()
-        .map_err(|err| format!("读取通知权限失败：{err}"))?;
-    let permission_after = match permission_before {
-        PermissionState::Prompt | PermissionState::PromptWithRationale => notifications
-            .request_permission()
-            .map_err(|err| format!("请求通知权限失败：{err}"))?,
-        state => state,
-    };
-
-    if permission_after == PermissionState::Denied {
-        return Err("系统通知权限已被拒绝，请先在系统设置里允许通知。".to_string());
-    }
-
-    let mut builder = notifications
-        .builder()
-        .title(normalized_title)
-        .body(normalized_body);
-
-    #[cfg(target_os = "windows")]
-    {
-        if play_sound {
-            builder = builder.sound(NATIVE_NOTIFICATION_SOUND_DEFAULT);
-        }
-    }
-
-    builder
-        .show()
-        .map_err(|err| format!("发送原生通知失败：{err}"))
-}
 
 #[cfg(target_os = "android")]
 fn send_native_notification(
@@ -107,39 +48,6 @@ struct NativeNotificationDemoResult {
     sent_at: String,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn demo_send_native_notification(app: tauri::AppHandle) -> Result<NativeNotificationDemoResult, String> {
-    use tauri_plugin_notification::NotificationExt;
-
-    let sent_at = now_local_rfc3339();
-    let title = "PAI Demo 原生通知".to_string();
-    let body = format!("这是从 Demo 页发出的测试通知。时间：{sent_at}");
-    let permission_before = app
-        .notification()
-        .permission_state()
-        .map_err(|err| format!("读取通知权限失败：{err}"))?;
-    send_native_notification(&NativeAppHandle::from_tauri(app.clone()), &title, &body, true)?;
-    let permission_after = app
-        .notification()
-        .permission_state()
-        .map_err(|err| format!("读取通知权限失败：{err}"))?;
-
-    runtime_log_info(format!(
-        "[通知Demo] 完成，permission_before={}，permission_after={}，sent_at={}",
-        permission_before,
-        permission_after,
-        sent_at
-    ));
-
-    Ok(NativeNotificationDemoResult {
-        permission_before: permission_before.to_string(),
-        permission_after: permission_after.to_string(),
-        title,
-        body,
-        sent_at,
-    })
-}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -163,111 +71,6 @@ struct DemoTestNotificationResult {
 #[cfg(target_os = "android")]
 const DEMO_LIVE_UPDATE_NOTIFICATION_ID: i32 = 0x50414903;
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn demo_test_notification(
-    app: tauri::AppHandle,
-    input: DemoTestNotificationInput,
-) -> Result<DemoTestNotificationResult, String> {
-    let sent_at = now_local_rfc3339();
-    let kind = input.kind.trim().to_string();
-    match kind.as_str() {
-        "normal" => {
-            let title = "PAI 通知测试".to_string();
-            let body = format!("这是一条普通通知测试。时间：{sent_at}");
-            send_native_notification(&NativeAppHandle::from_tauri(app.clone()), &title, &body, true)?;
-            runtime_log_info(format!(
-                "[通知测试] 完成，kind=normal，sent_at={}",
-                sent_at
-            ));
-            Ok(DemoTestNotificationResult {
-                kind,
-                sent_at,
-                title,
-                body,
-            })
-        }
-        "live_update" => {
-            #[cfg(target_os = "android")]
-            {
-                use tauri_plugin_notification::{NotificationExt, PermissionState};
-
-                let notifications = app.notification();
-                let permission = match notifications.permission_state() {
-                    Ok(permission) => permission,
-                    Err(err) => {
-                        return Err(format!("读取通知权限失败：{err}"));
-                    }
-                };
-                let permission = match permission {
-                    PermissionState::Prompt | PermissionState::PromptWithRationale => {
-                        notifications
-                            .request_permission()
-                            .map_err(|err| format!("请求通知权限失败：{err}"))?
-                    }
-                    state => state,
-                };
-                if permission == PermissionState::Denied {
-                    return Err("系统通知权限已被拒绝，请先在系统设置里允许通知。".to_string());
-                }
-
-                let title = "PAI 实时通知测试";
-                let send_live = |step_title: &str, step_short: &str, ongoing: bool, promoted: bool| {
-                    let mut builder = notifications
-                        .builder()
-                        .id(DEMO_LIVE_UPDATE_NOTIFICATION_ID)
-                        .title(title)
-                        .body(step_title)
-                        .short_text(step_short)
-                        .icon("ic_stat_pai");
-                    if ongoing {
-                        builder = builder
-                            .ongoing()
-                            .request_promoted_ongoing()
-                            .large_body(step_title)
-                            .progress(0, 0, true);
-                    }
-                    builder.show().map_err(|err| format!("发送实时通知失败：{err}"))
-                };
-
-                // 1/2：ongoing + promoted，模拟“正在执行第 1 步”
-                send_live("第 1/2 步：模拟任务执行中…", "第 1/2 步：模拟任务", true, true)?;
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                // 2/2：同 id 刷新为第 2 步
-                send_live("第 2/2 步：模拟任务即将完成…", "第 2/2 步：模拟任务", true, true)?;
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                // 终态：转普通通知，可手动划掉
-                send_live("实时通知测试完成。", "实时通知测试完成", false, false)?;
-                runtime_log_info(format!(
-                    "[通知测试] 完成，kind=live_update，sent_at={}",
-                    sent_at
-                ));
-                Ok(DemoTestNotificationResult {
-                    kind,
-                    sent_at,
-                    title: title.to_string(),
-                    body: "实时通知测试完成。".to_string(),
-                })
-            }
-            {
-                let title = "PAI 实时通知测试".to_string();
-                let body = format!("当前平台（非 Android）不支持实时通知（岛），已发送普通通知代替。时间：{sent_at}");
-                send_native_notification(&NativeAppHandle::from_tauri(app.clone()), &title, &body, true)?;
-                runtime_log_info(format!(
-                    "[通知测试] 完成，kind=live_update（降级为普通通知），sent_at={}",
-                    sent_at
-                ));
-                Ok(DemoTestNotificationResult {
-                    kind,
-                    sent_at,
-                    title,
-                    body,
-                })
-            }
-        }
-        other => Err(format!("未知的通知测试类型：{other}")),
-    }
-}
 
 
 #[derive(Debug, Clone, Deserialize)]
@@ -313,121 +116,6 @@ fn xcap_optional_save_path(args: &Value) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn xcap(input: XcapToolInput) -> Result<Value, String> {
-    let method = input.method.trim().to_string();
-    let args = input.args;
-    let out = match method.as_str() {
-        "list_windows" => {
-            let data = xcap_list_windows_infos().map_err(|err| to_tool_err_string(&err))?;
-            serde_json::json!({
-                "ok": true,
-                "method": method,
-                "data": data
-            })
-        }
-        "list_monitors" => {
-            let data = xcap_list_monitors_infos().map_err(|err| to_tool_err_string(&err))?;
-            serde_json::json!({
-                "ok": true,
-                "method": method,
-                "data": data
-            })
-        }
-        "capture_focused_window" => {
-            let req = ScreenshotRequest {
-                mode: ScreenshotMode::Desktop,
-                monitor_id: None,
-                region: None,
-                save_path: xcap_optional_save_path(&args),
-                webp_quality: xcap_optional_webp_quality(&args),
-                include_base64: true,
-            };
-            let data = run_capture_window_tool(req, None)
-                .map_err(|err| to_tool_err_string(&err))?;
-            serde_json::json!({
-                "ok": true,
-                "method": method,
-                "data": data
-            })
-        }
-        "capture_window" => {
-            let window_id = xcap_arg_u32(&args, "windowId")?;
-            let req = ScreenshotRequest {
-                mode: ScreenshotMode::Desktop,
-                monitor_id: None,
-                region: None,
-                save_path: xcap_optional_save_path(&args),
-                webp_quality: xcap_optional_webp_quality(&args),
-                include_base64: true,
-            };
-            let data = run_capture_window_tool(req, Some(window_id))
-                .map_err(|err| to_tool_err_string(&err))?;
-            serde_json::json!({
-                "ok": true,
-                "method": method,
-                "data": data
-            })
-        }
-        "capture_monitor" => {
-            let monitor_id = xcap_arg_u32(&args, "monitorId")?;
-            let req = ScreenshotRequest {
-                mode: ScreenshotMode::Monitor,
-                monitor_id: Some(monitor_id),
-                region: None,
-                save_path: xcap_optional_save_path(&args),
-                webp_quality: xcap_optional_webp_quality(&args),
-                include_base64: true,
-            };
-            let data = run_screenshot_tool(req)
-                .await
-                .map_err(|err| to_tool_err_string(&err))?;
-            serde_json::json!({
-                "ok": true,
-                "method": method,
-                "data": data
-            })
-        }
-        "capture_region" => {
-            let x = xcap_arg_i32(&args, "x")?;
-            let y = xcap_arg_i32(&args, "y")?;
-            let width = xcap_arg_u32(&args, "width")?;
-            let height = xcap_arg_u32(&args, "height")?;
-            let monitor_id = args
-                .get("monitorId")
-                .and_then(Value::as_u64)
-                .and_then(|v| u32::try_from(v).ok());
-            let req = ScreenshotRequest {
-                mode: ScreenshotMode::Region,
-                monitor_id,
-                region: Some(ScreenBounds {
-                    x,
-                    y,
-                    width,
-                    height,
-                }),
-                save_path: xcap_optional_save_path(&args),
-                webp_quality: xcap_optional_webp_quality(&args),
-                include_base64: true,
-            };
-            let data = run_screenshot_tool(req)
-                .await
-                .map_err(|err| to_tool_err_string(&err))?;
-            serde_json::json!({
-                "ok": true,
-                "method": method,
-                "data": data
-            })
-        }
-        _ => {
-            return Err(to_tool_err_string(&DesktopToolError::invalid_params(
-                "unsupported xcap method",
-            )));
-        }
-    };
-    Ok(out)
-}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -541,53 +229,6 @@ fn host_runtime_prerequisite_installed(kind: &str) -> Result<bool, String> {
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn get_host_runtime_prerequisites(
-    state: State<'_, AppState>,
-) -> Result<HostRuntimePrerequisites, String> {
-    #[cfg(target_os = "android")]
-    {
-        // Android 宿主没有 git/node/rg，实际运行环境是沙盒 Linux（proot）。
-        // 沙盒未就绪时视为未安装；就绪后在沙盒内检测命令是否存在。
-        if !is_android_workspace_ready(&state) {
-            return Ok(HostRuntimePrerequisites {
-                git_installed: false,
-                node_installed: false,
-                rg_installed: false,
-            });
-        }
-        let session_id = normalize_terminal_tool_session_id("ui-welcome-runtime-check");
-        let cwd = match resolve_terminal_cwd(&state, &session_id, None) {
-            Ok(cwd) => cwd,
-            Err(_) => {
-                return Ok(HostRuntimePrerequisites {
-                    git_installed: false,
-                    node_installed: false,
-                    rg_installed: false,
-                });
-            }
-        };
-        let git_installed =
-            android_sandbox_command_exists(&state, &session_id, &cwd, "git").await;
-        let node_installed =
-            android_sandbox_command_exists(&state, &session_id, &cwd, "node").await;
-        let rg_installed = android_sandbox_command_exists(&state, &session_id, &cwd, "rg").await;
-        Ok(HostRuntimePrerequisites {
-            git_installed,
-            node_installed,
-            rg_installed,
-        })
-    }
-    {
-        let _ = state;
-        Ok(HostRuntimePrerequisites {
-            git_installed: host_runtime_prerequisite_installed("git").unwrap_or(false),
-            node_installed: host_runtime_prerequisite_installed("node").unwrap_or(false),
-            rg_installed: host_runtime_prerequisite_installed("rg").unwrap_or(false),
-        })
-    }
-}
 
 #[cfg(target_os = "android")]
 async fn android_sandbox_command_exists(
@@ -705,130 +346,9 @@ fn install_host_runtime_prerequisite_sync(
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn install_host_runtime_prerequisite(
-    kind: String,
-) -> Result<HostRuntimePrerequisiteInstallResult, String> {
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(move || install_host_runtime_prerequisite_sync(kind))
-            .await
-            .map_err(|err| format!("安装任务执行失败：{err}"))?
-    }
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        let normalized = kind.trim().to_ascii_lowercase();
-        Err(format!(
-            "{normalized} 暂不支持一键安装，请使用系统包管理器或官方下载页安装。"
-        ))
-    }
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn terminal_self_check(state: State<'_, AppState>) -> Result<Value, String> {
-    let session_id = normalize_terminal_tool_session_id("ui-terminal-self-check");
-    let runtime_shell = terminal_shell_for_state(&state);
-    #[cfg(target_os = "windows")]
-    if runtime_shell.kind == "missing-terminal-shell" {
-        return Ok(serde_json::json!({
-            "ok": false,
-            "blockedReason": "missing_terminal_shell",
-            "message": "No supported shell was detected on Windows. Install Git and use Git Bash: https://git-scm.com/downloads",
-            "shellKind": runtime_shell.kind,
-            "shellPath": runtime_shell.path,
-            "steps": []
-        }));
-    }
 
-    let root_path = terminal_session_root_canonical(&state, &session_id)?;
-    let cwd = resolve_terminal_cwd(&state, &session_id, None)?;
-    let allowed_project_roots = terminal_allowed_project_roots_canonical(&state)?
-        .iter()
-        .map(|v| v.to_string_lossy().to_string())
-        .collect::<Vec<_>>();
-
-    let steps = if runtime_shell.kind.starts_with("powershell") {
-        vec![
-            "Get-Location",
-            "$PSVersionTable.PSVersion.ToString()",
-            "Get-Command git -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source",
-            "Get-Command pwsh -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source",
-        ]
-    } else {
-        vec![
-            "pwd",
-            "echo $0",
-            "git --version",
-            "bash --version",
-            "command -v git",
-            "command -v bash",
-        ]
-    };
-
-    let mut results = Vec::<TerminalSelfCheckStepResult>::new();
-    for step in steps {
-        match sandbox_execute_command(&state, &session_id, step, &cwd, 15_000, false, None, None).await {
-            Ok(execution) => {
-                let (stdout, _) = truncate_terminal_output(&execution.stdout);
-                let (stderr, _) = truncate_terminal_output(&execution.stderr);
-                results.push(TerminalSelfCheckStepResult {
-                    name: step.to_string(),
-                    ok: execution.ok,
-                    exit_code: execution.exit_code,
-                    stdout,
-                    stderr,
-                    duration_ms: execution.duration_ms,
-                });
-            }
-            Err(err) => {
-                results.push(TerminalSelfCheckStepResult {
-                    name: step.to_string(),
-                    ok: false,
-                    exit_code: -1,
-                    stdout: String::new(),
-                    stderr: err,
-                    duration_ms: 0,
-                });
-                break;
-            }
-        }
-    }
-
-    let ok = results.iter().all(|item| item.ok);
-    Ok(serde_json::json!({
-        "ok": ok,
-        "rootPath": root_path.to_string_lossy().to_string(),
-        "cwd": cwd.to_string_lossy().to_string(),
-        "shellKind": runtime_shell.kind,
-        "shellPath": runtime_shell.path,
-        "allowedProjectRoots": allowed_project_roots,
-        "steps": results,
-    }))
-}
-
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn list_terminal_shell_candidates(state: State<'_, AppState>) -> Result<Value, String> {
-    let (preferred_kind, current, options) = terminal_shell_candidates_for_ui(&state);
-    Ok(serde_json::json!({
-        "preferredKind": preferred_kind,
-        "currentKind": current.kind,
-        "currentPath": current.path,
-        "options": options,
-    }))
-}
-
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn list_file_reader_directory_open_targets(state: State<'_, AppState>) -> Result<Value, String> {
-    let options = file_reader_directory_open_targets_for_ui(&state);
-    Ok(serde_json::json!({
-        "options": options,
-    }))
-}
 
 #[cfg(target_os = "windows")]
 fn file_reader_target_icon_data_url(path: &str) -> Option<String> {
@@ -1686,13 +1206,6 @@ fn resolve_requested_shell_workspace_root(
 
 const WORKSPACE_MIGRATION_EVENT: &str = "easy-call:workspace-migration-progress";
 
-#[cfg(not(target_os = "android"))]
-fn emit_workspace_migration_progress(
-    app: &tauri::AppHandle,
-    payload: &WorkspaceMigrationProgressPayload,
-) {
-    let _ = app.emit(WORKSPACE_MIGRATION_EVENT, payload);
-}
 
 fn collect_workspace_entries(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
     for entry in fs::read_dir(path)
@@ -1708,140 +1221,8 @@ fn collect_workspace_entries(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), 
     Ok(())
 }
 
-#[cfg(not(target_os = "android"))]
-fn copy_workspace_entry_recursive(
-    from: &Path,
-    to: &Path,
-    app: &tauri::AppHandle,
-    task_id: &str,
-    processed: &mut usize,
-    total: usize,
-) -> Result<(), String> {
-    let metadata = fs::symlink_metadata(from)
-        .map_err(|err| format!("读取路径信息失败 ({}): {err}", from.display()))?;
-    if metadata.file_type().is_symlink() {
-        return Err(format!("暂不支持迁移符号链接：{}", from.display()));
-    }
-    if metadata.is_dir() {
-        if to.exists() && !to.is_dir() {
-            return Err(format!("迁移失败，目标路径已存在同名文件：{}", to.display()));
-        }
-        fs::create_dir_all(to)
-            .map_err(|err| format!("创建目录失败 ({}): {err}", to.display()))?;
-        *processed += 1;
-        emit_workspace_migration_progress(
-            app,
-            &WorkspaceMigrationProgressPayload {
-                task_id: task_id.to_string(),
-                stage: "copying".to_string(),
-                processed: *processed,
-                total,
-                current_path: Some(to.to_string_lossy().to_string()),
-                message: "正在复制目录".to_string(),
-                done: false,
-                error: None,
-            },
-        );
-        for entry in fs::read_dir(from)
-            .map_err(|err| format!("读取目录失败 ({}): {err}", from.display()))?
-        {
-            let entry = entry.map_err(|err| format!("读取目录项失败 ({}): {err}", from.display()))?;
-            let child_from = entry.path();
-            let child_to = to.join(entry.file_name());
-            copy_workspace_entry_recursive(&child_from, &child_to, app, task_id, processed, total)?;
-        }
-        return Ok(());
-    }
-    if let Some(parent) = to.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| format!("创建目标目录失败 ({}): {err}", parent.display()))?;
-    }
-    if to.exists() {
-        return Err(format!("迁移失败，目标路径已存在同名文件：{}", to.display()));
-    }
-    fs::copy(from, to).map_err(|err| {
-        format!(
-            "复制文件失败 ({} -> {}): {err}",
-            from.display(),
-            to.display()
-        )
-    })?;
-    let target_meta = fs::metadata(to)
-        .map_err(|err| format!("读取复制后文件失败 ({}): {err}", to.display()))?;
-    if target_meta.len() != metadata.len() {
-        return Err(format!("复制校验失败，文件大小不一致：{}", to.display()));
-    }
-    *processed += 1;
-    emit_workspace_migration_progress(
-        app,
-        &WorkspaceMigrationProgressPayload {
-            task_id: task_id.to_string(),
-            stage: "copying".to_string(),
-            processed: *processed,
-            total,
-            current_path: Some(to.to_string_lossy().to_string()),
-            message: "正在复制文件".to_string(),
-            done: false,
-            error: None,
-        },
-    );
-    Ok(())
-}
 
-#[cfg(not(target_os = "android"))]
-fn remove_workspace_entry_recursive(
-    path: &Path,
-    app: &tauri::AppHandle,
-    task_id: &str,
-    processed: &mut usize,
-    total: usize,
-) -> Result<(), String> {
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|err| format!("读取路径信息失败 ({}): {err}", path.display()))?;
-    if metadata.is_dir() {
-        for entry in fs::read_dir(path)
-            .map_err(|err| format!("读取目录失败 ({}): {err}", path.display()))?
-        {
-            let entry = entry.map_err(|err| format!("读取目录项失败 ({}): {err}", path.display()))?;
-            remove_workspace_entry_recursive(&entry.path(), app, task_id, processed, total)?;
-        }
-        fs::remove_dir(path)
-            .map_err(|err| format!("删除目录失败 ({}): {err}", path.display()))?;
-    } else {
-        fs::remove_file(path)
-            .map_err(|err| format!("删除文件失败 ({}): {err}", path.display()))?;
-    }
-    *processed += 1;
-    emit_workspace_migration_progress(
-        app,
-        &WorkspaceMigrationProgressPayload {
-            task_id: task_id.to_string(),
-            stage: "deleting".to_string(),
-            processed: *processed,
-            total,
-            current_path: Some(path.to_string_lossy().to_string()),
-            message: "正在清理旧目录".to_string(),
-            done: false,
-            error: None,
-        },
-    );
-    Ok(())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn open_chat_shell_workspace_dir(
-    input: Option<ShellWorkspacePathInput>,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
-    let root = resolve_requested_shell_workspace_root(
-        &state,
-        input.as_ref().and_then(|value| value.workspace_path.as_deref()),
-        true,
-    )?;
-    open_shell_path_in_file_manager(&root)?;
-    Ok(shell_workspace_display_path(&root))
-}
 
 fn shell_workspace_display_path(path: &Path) -> String {
     #[cfg(target_os = "windows")]
@@ -1861,146 +1242,8 @@ fn shell_workspace_display_path(path: &Path) -> String {
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn reset_chat_shell_workspace(
-    input: Option<ShellWorkspacePathInput>,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
-    let root = resolve_requested_shell_workspace_root(
-        &state,
-        input.as_ref().and_then(|value| value.workspace_path.as_deref()),
-        true,
-    )?;
-    ensure_workspace_mcp_layout_at_root(&root)?;
-    ensure_workspace_skills_layout_at_root(&root)?;
-    ensure_workspace_private_organization_layout_at_root(&root)?;
-    Ok(shell_workspace_display_path(&root))
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_default_chat_shell_workspace_path(state: State<'_, AppState>) -> Result<String, String> {
-    let root = terminal_default_session_root_canonical(&state)?;
-    Ok(shell_workspace_display_path(&root))
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn migrate_shell_workspace_directory(
-    input: MigrateWorkspaceDirectoryInput,
-    app: tauri::AppHandle,
-) -> Result<String, String> {
-    let old_root = PathBuf::from(normalize_terminal_path_input_for_current_platform(&input.old_path));
-    let new_root = PathBuf::from(normalize_terminal_path_input_for_current_platform(&input.new_path));
-    if input.old_path.trim().is_empty() || input.new_path.trim().is_empty() {
-        return Err("工作区迁移路径不能为空".to_string());
-    }
-    let task_id = input.task_id.trim().to_string();
-    let app_handle = app.clone();
-    tokio::task::spawn_blocking(move || {
-        let old_root = old_root
-            .canonicalize()
-            .map_err(|err| format!("解析旧工作区失败 ({}): {err}", old_root.display()))?;
-        let new_root = ensure_workspace_root_ready(&new_root)?;
-        emit_workspace_migration_progress(
-            &app_handle,
-            &WorkspaceMigrationProgressPayload {
-                task_id: task_id.clone(),
-                stage: "scanning".to_string(),
-                processed: 0,
-                total: 0,
-                current_path: Some(old_root.to_string_lossy().to_string()),
-                message: "正在扫描旧工作区".to_string(),
-                done: false,
-                error: None,
-            },
-        );
-        let mut entries = Vec::<PathBuf>::new();
-        collect_workspace_entries(&old_root, &mut entries)?;
-        let total = entries.len();
-        emit_workspace_migration_progress(
-            &app_handle,
-            &WorkspaceMigrationProgressPayload {
-                task_id: task_id.clone(),
-                stage: "copying".to_string(),
-                processed: 0,
-                total,
-                current_path: Some(old_root.to_string_lossy().to_string()),
-                message: "开始复制工作区内容".to_string(),
-                done: false,
-                error: None,
-            },
-        );
-        let mut copy_processed = 0usize;
-        for entry in fs::read_dir(&old_root)
-            .map_err(|err| format!("读取旧工作区失败 ({}): {err}", old_root.display()))?
-        {
-            let entry = entry.map_err(|err| format!("读取旧工作区目录项失败 ({}): {err}", old_root.display()))?;
-            let from = entry.path();
-            let to = new_root.join(entry.file_name());
-            copy_workspace_entry_recursive(&from, &to, &app_handle, &task_id, &mut copy_processed, total)?;
-        }
-        emit_workspace_migration_progress(
-            &app_handle,
-            &WorkspaceMigrationProgressPayload {
-                task_id: task_id.clone(),
-                stage: "deleting".to_string(),
-                processed: 0,
-                total,
-                current_path: Some(old_root.to_string_lossy().to_string()),
-                message: "开始清理旧工作区".to_string(),
-                done: false,
-                error: None,
-            },
-        );
-        let mut delete_processed = 0usize;
-        for entry in fs::read_dir(&old_root)
-            .map_err(|err| format!("读取旧工作区失败 ({}): {err}", old_root.display()))?
-        {
-            let entry = entry.map_err(|err| format!("读取旧工作区目录项失败 ({}): {err}", old_root.display()))?;
-            remove_workspace_entry_recursive(&entry.path(), &app_handle, &task_id, &mut delete_processed, total)?;
-        }
-        runtime_log_info(format!(
-            "[工作区迁移] 完成: old='{}', new='{}', moved_entries={}",
-            old_root.display(),
-            new_root.display(),
-            total
-        ));
-        emit_workspace_migration_progress(
-            &app_handle,
-            &WorkspaceMigrationProgressPayload {
-                task_id: task_id.clone(),
-                stage: "completed".to_string(),
-                processed: total,
-                total,
-                current_path: Some(new_root.to_string_lossy().to_string()),
-                message: "工作区迁移完成".to_string(),
-                done: true,
-                error: None,
-            },
-        );
-        Ok(shell_workspace_display_path(&new_root))
-    })
-    .await
-    .map_err(|err| format!("工作区迁移任务执行失败: {err}"))?
-    .map_err(|err: String| {
-        emit_workspace_migration_progress(
-            &app,
-            &WorkspaceMigrationProgressPayload {
-                task_id: input.task_id.trim().to_string(),
-                stage: "failed".to_string(),
-                processed: 0,
-                total: 0,
-                current_path: None,
-                message: "工作区迁移失败".to_string(),
-                done: true,
-                error: Some(err.clone()),
-            },
-        );
-        err
-    })
-}
 
 #[cfg_attr(not(target_os = "android"), tauri::command)]
 async fn check_git_workspace_root(
@@ -2061,14 +1304,6 @@ async fn check_git_workspace_root(
     Ok(result)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_chat_shell_workspace(
-    input: ChatShellWorkspaceInput,
-    state: State<'_, AppState>,
-) -> Result<ChatShellWorkspaceOutput, String> {
-    get_chat_shell_workspace_inner(input, &state)
-}
 
 fn get_chat_shell_workspace_inner(
     input: ChatShellWorkspaceInput,
@@ -2091,14 +1326,6 @@ fn get_chat_shell_workspace_inner(
     ))
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn update_chat_shell_workspace_layout(
-    input: SaveChatShellWorkspacesInput,
-    state: State<'_, AppState>,
-) -> Result<ChatShellWorkspaceOutput, String> {
-    update_chat_shell_workspace_layout_inner(input, &state)
-}
 
 fn update_chat_shell_workspace_layout_inner(
     input: SaveChatShellWorkspacesInput,
@@ -2141,41 +1368,9 @@ fn update_chat_shell_workspace_layout_inner(
     ))
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn resolve_terminal_approval(
-    input: ResolveTerminalApprovalInput,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let _ = resolve_terminal_approval_request(&state, &input.request_id, input.approved)?;
-    Ok(())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn approve_terminal_approval_for_session(
-    input: TerminalApprovalRequestIdInput,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let _ = approve_terminal_approval_for_session_request(&state, &input.request_id)?;
-    Ok(())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn approve_terminal_approval_for_workspace(
-    input: TerminalApprovalRequestIdInput,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let _ = approve_terminal_approval_for_workspace_request(&state, &input.request_id)?;
-    Ok(())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn open_file_reader_window_command(app: tauri::AppHandle, path: String) -> Result<String, String> {
-    open_file_reader_window(&app, path)
-}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -2376,85 +1571,7 @@ fn file_reader_watch_directory_signature(path: &PathBuf) -> String {
     entries.join("\n")
 }
 
-#[cfg(not(target_os = "android"))]
-fn start_file_reader_watch_polling(app: tauri::AppHandle) {
-    let _ = FILE_READER_WATCH_THREAD_STARTED.get_or_init(|| {
-        std::thread::spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_millis(FILE_READER_WATCH_POLL_MS));
-            let events = {
-                let store = file_reader_watch_targets_store();
-                let mut targets_by_session =
-                    store.lock().unwrap_or_else(|poison| poison.into_inner());
-                let mut events = Vec::new();
-                for (session_id, targets) in targets_by_session.iter_mut() {
-                    for target in targets.iter_mut() {
-                        let next = file_reader_watch_fingerprint(&target.path);
-                        if next == target.fingerprint {
-                            continue;
-                        }
-                        target.fingerprint = next;
-                        events.push(FileReaderWatchEventPayload {
-                            session_id: session_id.clone(),
-                            path: target.path.clone(),
-                            kind: target.kind.clone(),
-                        });
-                    }
-                }
-                events
-            };
-            for payload in events {
-                let _ = app.emit("easy-call:file-reader-watch-changed", payload);
-            }
-        });
-    });
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn update_file_reader_watch_targets(
-    app: tauri::AppHandle,
-    input: FileReaderWatchTargetsInput,
-) -> Result<(), String> {
-    let session_id = input.session_id.trim().to_string();
-    if session_id.is_empty() {
-        return Err("sessionId is required".to_string());
-    }
-    start_file_reader_watch_polling(app);
-    let mut seen = std::collections::HashSet::new();
-    let mut targets = Vec::new();
-    for target in input.targets.into_iter().take(FILE_READER_WATCH_MAX_TARGETS) {
-        let raw_path = target.path.trim();
-        if raw_path.is_empty() {
-            continue;
-        }
-        let normalized_path = PathBuf::from(raw_path)
-            .canonicalize()
-            .unwrap_or_else(|_| PathBuf::from(raw_path))
-            .to_string_lossy()
-            .replace('\\', "/");
-        if !seen.insert(normalized_path.clone()) {
-            continue;
-        }
-        let kind = match target.kind.trim() {
-            "directory" => "directory",
-            _ => "file",
-        }
-        .to_string();
-        targets.push(FileReaderWatchTrackedTarget {
-            fingerprint: file_reader_watch_fingerprint(&normalized_path),
-            path: normalized_path,
-            kind,
-        });
-    }
-    let store = file_reader_watch_targets_store();
-    let mut targets_by_session = store.lock().map_err(|_| "文件阅读器监听状态锁定失败".to_string())?;
-    if targets.is_empty() {
-        targets_by_session.remove(&session_id);
-    } else {
-        targets_by_session.insert(session_id, targets);
-    }
-    Ok(())
-}
 
 fn log_file_reader_read_burst(window_label: &str, path: &str) {
     let now = std::time::Instant::now();
@@ -2550,11 +1667,6 @@ fn file_reader_rope_lines_to_string(
     output
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn read_file_reader_file(window: tauri::Window, path: String) -> Result<FileReaderFilePayload, String> {
-    read_file_reader_file_inner(path, Some(window.label()))
-}
 
 fn read_file_reader_file_inner(path: String, window_label: Option<&str>) -> Result<FileReaderFilePayload, String> {
     let raw_path = path.trim();
@@ -2737,126 +1849,6 @@ fn list_file_reader_directory(path: String) -> Result<FileReaderDirectoryPayload
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn open_file_reader_directory_target(input: OpenFileReaderDirectoryTargetInput, state: State<'_, AppState>) -> Result<(), String> {
-    let raw_path = input.path.trim();
-    if raw_path.is_empty() {
-        return Err("path is required".to_string());
-    }
-    let target_kind = input.target_kind.trim();
-    let path = PathBuf::from(raw_path);
-    if let Some(shell_kind) = target_kind.strip_prefix("shell:") {
-        return open_shell_terminal_at_path(&state, &path, Some(shell_kind));
-    }
-    match target_kind {
-        "vscode" => open_directory_in_vscode(&path),
-        "explorer" | "file-manager" => open_local_file_directory(raw_path.to_string()),
-        _ => Err(format!("Unsupported open target: {target_kind}")),
-    }
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn open_file_reader_directory_shell(input: OpenFileReaderDirectoryShellInput, state: State<'_, AppState>) -> Result<(), String> {
-    let raw_path = input.path.trim();
-    if raw_path.is_empty() {
-        return Err("path is required".to_string());
-    }
-    open_shell_terminal_at_path(&state, &PathBuf::from(raw_path), input.preferred_kind.as_deref())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn open_local_file_directory(path: String) -> Result<(), String> {
-    let raw_path = path.trim();
-    if raw_path.is_empty() {
-        return Err("path is required".to_string());
-    }
-    let file_path = PathBuf::from(raw_path);
 
-    if file_path.is_file() {
-        #[cfg(target_os = "windows")]
-        {
-            let resolved_path = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
-            let explorer_target = resolved_path.to_string_lossy().replace('/', "\\");
-            std::process::Command::new("explorer")
-                .args(["/select,", explorer_target.as_str()])
-                .status()
-                .map_err(|err| format!("Failed to open explorer: {err}"))?;
-            return Ok(());
-        }
-        #[cfg(target_os = "macos")]
-        {
-            std::process::Command::new("open")
-                .args(["-R", raw_path])
-                .status()
-                .map_err(|err| format!("Failed to open Finder: {err}"))?;
-            return Ok(());
-        }
-        #[cfg(all(unix, not(target_os = "macos")))]
-        {
-            if let Some(parent) = file_path.parent() {
-                std::process::Command::new("xdg-open")
-                    .arg(parent)
-                    .status()
-                    .map_err(|err| format!("Failed to open file manager: {err}"))?;
-            } else {
-                std::process::Command::new("xdg-open")
-                    .arg(&file_path)
-                    .status()
-                    .map_err(|err| format!("Failed to open file manager: {err}"))?;
-            }
-            return Ok(());
-        }
-    }
-
-    open_shell_path_in_file_manager(&file_path)?;
-    Ok(())
-}
-
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn open_file_with_default_program(path: String) -> Result<(), String> {
-    let raw_path = path.trim();
-    if raw_path.is_empty() {
-        return Err("path is required".to_string());
-    }
-    let file_path = PathBuf::from(raw_path);
-    if !file_path.exists() {
-        return Err(format!("File not found: {raw_path}"));
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let mut command = std::process::Command::new("cmd");
-        command.args(["/C", "start", "", raw_path]);
-        // cmd 只是启动器，自身不能弹多余控制台；文件由默认程序正常打开。
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt as _;
-            command.creation_flags(0x08000000); // CREATE_NO_WINDOW
-        }
-        command
-            .status()
-            .map_err(|err| format!("Failed to open file: {err}"))?;
-        return Ok(());
-    }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(raw_path)
-            .status()
-            .map_err(|err| format!("Failed to open file: {err}"))?;
-        return Ok(());
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(raw_path)
-            .status()
-            .map_err(|err| format!("Failed to open file: {err}"))?;
-        return Ok(());
-    }
-    #[allow(unreachable_code)]
-    Err("Open file is not supported on this platform".to_string())
-}

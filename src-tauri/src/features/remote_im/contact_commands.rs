@@ -3,11 +3,6 @@ fn remote_im_list_channels_inner(state: &AppState) -> Result<Vec<RemoteImChannel
     Ok(config.remote_im_channels)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_list_channels(state: State<'_, AppState>) -> Result<Vec<RemoteImChannelConfig>, String> {
-    remote_im_list_channels_inner(state.inner())
-}
 
 fn remote_im_list_contacts_inner(state: &AppState) -> Result<Vec<RemoteImContact>, String> {
     let runtime = state_read_runtime_state_cached(state)?;
@@ -300,62 +295,8 @@ fn remote_im_start_contact_dashboard_push_worker(state: &AppState) {
     });
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn remote_im_subscribe_contact_dashboard(
-    input: RemoteImContactDashboardInput,
-    state: State<'_, AppState>,
-    window: tauri::Window,
-) -> Result<RemoteImContactDashboardSnapshot, String> {
-    let contact_id = input.contact_id.trim().to_string();
-    let snapshot = remote_im_contact_dashboard_snapshot_inner(state.inner(), &contact_id)?;
-    let window_label = window.label().to_string();
-    {
-        let mut subscriptions = remote_im_contact_dashboard_subscriptions()
-            .lock()
-            .map_err(|_| "远程联系人仪表盘订阅锁不可用".to_string())?;
-        subscriptions
-            .contact_ids_by_window
-            .insert(window_label, contact_id);
-    }
-    remote_im_start_contact_dashboard_push_worker(state.inner());
-    Ok(snapshot)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn remote_im_sync_contact_dashboard(
-    input: RemoteImContactDashboardInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImContactDashboardSyncResult, String> {
-    let snapshot = remote_im_contact_dashboard_snapshot_inner(state.inner(), &input.contact_id)?;
-    let known = input.known_watermark.as_deref().unwrap_or("");
-    Ok(RemoteImContactDashboardSyncResult {
-        changed: known != snapshot.watermark,
-        snapshot,
-    })
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn remote_im_unsubscribe_contact_dashboard(
-    input: RemoteImContactDashboardInput,
-    window: tauri::Window,
-) -> Result<(), String> {
-    let contact_id = input.contact_id.trim();
-    let window_label = window.label().to_string();
-    let mut subscriptions = remote_im_contact_dashboard_subscriptions()
-        .lock()
-        .map_err(|_| "远程联系人仪表盘订阅锁不可用".to_string())?;
-    if subscriptions
-        .contact_ids_by_window
-        .get(&window_label)
-        .is_some_and(|current| current == contact_id)
-    {
-        subscriptions.contact_ids_by_window.remove(&window_label);
-    }
-    Ok(())
-}
 
 fn remote_im_subscribe_contact_dashboard_for_web(
     state: &AppState,
@@ -685,17 +626,7 @@ fn remote_im_resolve_contact_session_target_fail_soft(
     ))
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_list_contacts(state: State<'_, AppState>) -> Result<Vec<RemoteImContact>, String> {
-    remote_im_list_contacts_inner(state.inner())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_get_default_group_response_guidance() -> String {
-    default_remote_im_contact_response_guidance()
-}
 
 fn remote_im_update_contact_allow_send_inner(
     state: &AppState,
@@ -708,14 +639,6 @@ fn remote_im_update_contact_allow_send_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_update_contact_allow_send(
-    input: RemoteImContactAllowSendUpdateInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImContact, String> {
-    remote_im_update_contact_allow_send_inner(state.inner(), input)
-}
 
 fn remote_im_update_contact_allow_send_files_inner(
     state: &AppState,
@@ -727,14 +650,6 @@ fn remote_im_update_contact_allow_send_files_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_update_contact_allow_send_files(
-    input: RemoteImContactAllowSendFilesUpdateInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImContact, String> {
-    remote_im_update_contact_allow_send_files_inner(state.inner(), input)
-}
 
 fn remote_im_update_contact_blocked_message_prefixes_inner(
     state: &AppState,
@@ -748,14 +663,6 @@ fn remote_im_update_contact_blocked_message_prefixes_inner(
     remote_im_get_contact_by_id(state, &input.contact_id)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_update_contact_blocked_message_prefixes(
-    input: RemoteImContactBlockedMessagePrefixesUpdateInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImContact, String> {
-    remote_im_update_contact_blocked_message_prefixes_inner(state.inner(), input)
-}
 
 fn remote_im_update_contact_behavior_inner(
     state: &AppState,
@@ -769,14 +676,6 @@ fn remote_im_update_contact_behavior_inner(
     remote_im_get_contact_by_id(state, &contact_id)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_update_contact_behavior(
-    input: RemoteImContactBehaviorUpdateInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImContact, String> {
-    remote_im_update_contact_behavior_inner(state.inner(), input)
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -840,14 +739,6 @@ fn remote_im_reconfigure_channel_behavior_inner(
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_reconfigure_channel_behavior(
-    channel_id: String,
-    state: State<'_, AppState>,
-) -> RemoteImChannelBehaviorReconfigureResult {
-    remote_im_reconfigure_channel_behavior_inner(state.inner(), &channel_id)
-}
 
 fn remote_im_patch_contact_settings_inner(
     state: &AppState,
@@ -976,27 +867,7 @@ fn remote_im_patch_contact_settings_inner(
     Ok(output)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_patch_contact_settings(
-    input: RemoteImContactSettingsPatchInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImContact, String> {
-    remote_im_patch_contact_settings_inner(state.inner(), input)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_update_contact_allow_receive(
-    input: RemoteImContactAllowReceiveUpdateInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImContact, String> {
-    remote_im_mutate_contact(state.inner(), &input.contact_id, |contact| {
-        contact.allow_receive = input.allow_receive;
-        contact.allow_send = input.allow_receive;
-        Ok(contact.clone())
-    })
-}
 
 fn remote_im_update_contact_activation_inner(
     state: &AppState,
@@ -1016,47 +887,8 @@ fn remote_im_update_contact_activation_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_update_contact_activation(
-    input: RemoteImContactActivationUpdateInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImContact, String> {
-    remote_im_update_contact_activation_inner(state.inner(), input)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_update_contact_remark(
-    input: RemoteImContactRemarkUpdateInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImContact, String> {
-    remote_im_mutate_contact(state.inner(), &input.contact_id, |contact| {
-        contact.remark_name = input.remark_name.trim().to_string();
-        Ok(contact.clone())
-    })
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_update_contact_route_mode(
-    input: RemoteImContactRouteModeUpdateInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImContact, String> {
-    let config = state_read_config_cached(&state)?;
-    remote_im_mutate_contact(state.inner(), &input.contact_id, |contact| {
-        let requested_mode = normalize_contact_route_mode(&input.route_mode);
-        let final_mode = remote_im_resolve_effective_route_mode(&config, contact);
-        if requested_mode != final_mode {
-            runtime_log_info(format!(
-                "[远程IM] 联系人路由模式已被约束修正: contact_id={}, requested={}, final={}",
-                contact.id, requested_mode, final_mode
-            ));
-        }
-        contact.route_mode = final_mode;
-        Ok(contact.clone())
-    })
-}
 
 fn remote_im_update_contact_department_binding_inner(
     state: &AppState,
@@ -1160,14 +992,6 @@ fn remote_im_update_contact_department_binding_inner(
     Ok(resolved)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_update_contact_department_binding(
-    input: RemoteImContactDepartmentBindingUpdateInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImContact, String> {
-    remote_im_update_contact_department_binding_inner(state.inner(), input)
-}
 
 fn remote_im_update_contact_processing_mode_inner(
     state: &AppState,
@@ -1179,14 +1003,6 @@ fn remote_im_update_contact_processing_mode_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_update_contact_processing_mode(
-    input: RemoteImContactProcessingModeUpdateInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImContact, String> {
-    remote_im_update_contact_processing_mode_inner(state.inner(), input)
-}
 
 fn remote_im_update_contact_workspace_inner(
     state: &AppState,
@@ -1207,56 +1023,8 @@ fn remote_im_update_contact_workspace_inner(
     Ok(output)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_update_contact_workspace(
-    input: RemoteImContactWorkspaceUpdateInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImContact, String> {
-    remote_im_update_contact_workspace_inner(state.inner(), input)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_list_contact_conversations(
-    state: State<'_, AppState>,
-) -> Result<Vec<RemoteImContactConversationSummary>, String> {
-    let started_at = std::time::Instant::now();
-    runtime_log_debug("[远程IM][联系人会话][列表] 开始".to_string());
-    let items = conversation_service_v2().list_remote_im_contact_conversations(state.inner())?;
-    runtime_log_debug(format!(
-        "[远程IM][联系人会话][列表] 完成: contact_count={}, elapsed_ms={}",
-        items.len(),
-        started_at.elapsed().as_millis()
-    ));
-    Ok(items)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_get_contact_conversation_messages(
-    input: RemoteImContactConversationMessagesInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<ChatMessage>, String> {
-    let contact_id = input.contact_id.trim();
-    if contact_id.is_empty() {
-        return Err("contact_id 为必填项。".to_string());
-    }
-    let started_at = std::time::Instant::now();
-    runtime_log_debug(format!(
-        "[远程IM][联系人会话][读取] 开始: contact_id={}",
-        contact_id
-    ));
-    let messages = conversation_service_v2()
-        .get_remote_im_contact_conversation_messages(state.inner(), contact_id)?;
-    runtime_log_debug(format!(
-        "[远程IM][联系人会话][读取] 完成: contact_id={}, message_count={}, elapsed_ms={}",
-        contact_id,
-        messages.len(),
-        started_at.elapsed().as_millis()
-    ));
-    Ok(messages)
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1288,14 +1056,6 @@ struct RemoteImContactConversationBlockPageOutput {
     has_next_block: bool,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_get_contact_conversation_block_page(
-    input: RemoteImContactConversationBlockPageInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImContactConversationBlockPageOutput, String> {
-    remote_im_get_contact_conversation_block_page_inner(input, state.inner())
-}
 
 fn remote_im_get_contact_conversation_block_page_inner(
     input: RemoteImContactConversationBlockPageInput,
@@ -1388,23 +1148,7 @@ fn remote_im_delete_contact_inner(
     Ok(removed)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_delete_contact(
-    input: RemoteImContactDeleteInput,
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
-    remote_im_delete_contact_inner(state.inner(), input)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_clear_contact_conversation(
-    input: RemoteImContactDeleteInput,
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
-    remote_im_clear_contact_conversation_inner(input, state.inner())
-}
 
 fn remote_im_clear_contact_conversation_inner(
     input: RemoteImContactDeleteInput,
@@ -1429,14 +1173,6 @@ fn remote_im_clear_contact_conversation_inner(
     Ok(cleared)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn remote_im_enqueue_message(
-    input: RemoteImEnqueueInput,
-    state: State<'_, AppState>,
-) -> Result<RemoteImEnqueueResult, String> {
-    remote_im_enqueue_message_internal(input, state.inner())
-}
 
 fn remote_im_stale_cached_config_best_effort(state: &AppState) -> Option<AppConfig> {
     match state.cached_config.lock() {

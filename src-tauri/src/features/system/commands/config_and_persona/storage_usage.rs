@@ -928,21 +928,7 @@ async fn start_storage_overview_refresh_if_needed(
     snapshot
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn get_storage_usage_overview(
-    state: State<'_, AppState>,
-) -> Result<OverviewSnapshot<StorageUsageOverview>, String> {
-    Ok(start_storage_overview_refresh_if_needed(state.inner().clone(), false).await)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn refresh_storage_usage_overview(
-    state: State<'_, AppState>,
-) -> Result<OverviewSnapshot<StorageUsageOverview>, String> {
-    Ok(start_storage_overview_refresh_if_needed(state.inner().clone(), true).await)
-}
 
 fn usage_resolve_api_config_id(conversation: &Conversation, config: &AppConfig) -> String {
     let preferred = conversation
@@ -1487,21 +1473,7 @@ async fn start_usage_overview_refresh_if_needed(
     snapshot
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn get_usage_overview(
-    state: State<'_, AppState>,
-) -> Result<OverviewSnapshot<UsageOverview>, String> {
-    Ok(start_usage_overview_refresh_if_needed(state.inner().clone(), false).await)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn refresh_usage_overview(
-    state: State<'_, AppState>,
-) -> Result<OverviewSnapshot<UsageOverview>, String> {
-    Ok(start_usage_overview_refresh_if_needed(state.inner().clone(), true).await)
-}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1905,18 +1877,6 @@ fn build_usage_trail_wall(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn get_usage_trail(
-    state: State<'_, AppState>,
-    input: UsageTrailWallQuery,
-) -> Result<UsageTrailWallView, String> {
-    let state = state.inner().clone();
-    tokio::task::spawn_blocking(move || build_usage_trail_wall(&state, &input))
-        .await
-        .map_err(|err| format!("计算足迹墙失败：{err}"))
-        .and_then(|result| result)
-}
 
 fn storage_existing_directory_for_open(path: &PathBuf) -> Result<PathBuf, String> {
     if path.exists() {
@@ -1937,27 +1897,6 @@ fn storage_existing_directory_for_open(path: &PathBuf) -> Result<PathBuf, String
     Err(format!("目标目录不存在，path={}", path.display()))
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn open_storage_usage_item_directory(
-    state: State<'_, AppState>,
-    input: OpenStorageUsageItemDirectoryInput,
-) -> Result<(), String> {
-    let item_id = input.item_id.trim();
-    let target = storage_usage_target_path(&state, item_id)
-        .ok_or_else(|| format!("未知存储分类：{item_id}"))?;
-    let app_root = app_root_from_data_path(&state.data_path);
-    let open_dir = storage_existing_directory_for_open(&target)?;
-    let canonical_root = app_root.canonicalize().unwrap_or(app_root);
-    let canonical_open_dir = open_dir.canonicalize().unwrap_or(open_dir.clone());
-    if !canonical_open_dir.starts_with(&canonical_root) {
-        return Err(format!(
-            "拒绝打开应用私有目录之外的路径，path={}",
-            canonical_open_dir.display()
-        ));
-    }
-    open_shell_path_in_file_manager(&canonical_open_dir)
-}
 
 fn cleanup_storage_legacy_scope(
     state: &AppState,
@@ -2032,14 +1971,6 @@ fn cleanup_storage_image_text_cache(state: &AppState) -> Result<StorageCleanupRe
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn cleanup_storage_legacy_items(
-    state: State<'_, AppState>,
-    input: CleanupStorageLegacyItemsInput,
-) -> Result<StorageCleanupResult, String> {
-    cleanup_storage_legacy_items_inner(state.inner(), input)
-}
 
 fn cleanup_storage_legacy_items_inner(
     state: &AppState,

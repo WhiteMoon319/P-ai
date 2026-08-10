@@ -164,47 +164,8 @@ fn migration_backup_dir(state: &AppState) -> PathBuf {
         .join(now_iso().replace(':', "-"))
 }
 
-#[cfg(not(target_os = "android"))]
-async fn migration_save_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let (tx, rx) = tokio::sync::oneshot::channel::<Option<PathBuf>>();
-    app.dialog()
-        .file()
-        .add_filter("P-AI Migration", &["zip"])
-        .save_file(move |file| {
-            let path = file.and_then(|item| item.as_path().map(ToOwned::to_owned));
-            let _ = tx.send(path);
-        });
-    rx.await
-        .map_err(|err| format!("等待导出文件选择结果失败: {err}"))?
-        .ok_or_else(|| "导出已取消".to_string())
-}
 
-#[cfg(not(target_os = "android"))]
-async fn migration_import_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let (tx, rx) = tokio::sync::oneshot::channel::<Option<PathBuf>>();
-    app.dialog()
-        .file()
-        .add_filter("P-AI Migration", &["zip"])
-        .pick_file(move |file| {
-            let path = file.and_then(|item| item.as_path().map(ToOwned::to_owned));
-            let _ = tx.send(path);
-        });
-    rx.await
-        .map_err(|err| format!("等待导入文件选择结果失败: {err}"))?
-        .ok_or_else(|| "导入已取消".to_string())
-}
 
-#[cfg(not(target_os = "android"))]
-async fn resolve_migration_import_path(
-    app: &tauri::AppHandle,
-    input: &PreviewImportConfigMigrationPackageInput,
-) -> Result<PathBuf, String> {
-    let provided = input.package_path.as_deref().unwrap_or("").trim();
-    if !provided.is_empty() {
-        return Ok(PathBuf::from(provided));
-    }
-    migration_import_path(app).await
-}
 
 fn zip_error_requires_password(err: &zip::result::ZipError) -> bool {
     let text = err.to_string().to_ascii_lowercase();
@@ -891,16 +852,6 @@ fn export_config_migration_package_for_web(
     Ok(result)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn export_config_migration_package(
-    input: ExportConfigMigrationPackageInput,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<ExportConfigMigrationPackageResult, MigrationCommandError> {
-    let path = migration_save_path(&app).await?;
-    export_config_migration_package_to_path(&input, state.inner(), &path, "桌面命令")
-}
 
 fn preview_import_config_migration_package_from_path(
     input: &PreviewImportConfigMigrationPackageInput,
@@ -971,91 +922,5 @@ fn preview_import_config_migration_package_for_web(
     result
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn preview_import_config_migration_package(
-    input: PreviewImportConfigMigrationPackageInput,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<PreviewImportConfigMigrationPackageResult, MigrationCommandError> {
-    let package_path = resolve_migration_import_path(&app, &input).await?;
-    preview_import_config_migration_package_from_path(&input, state.inner(), &package_path)
-}
 
-#[cfg(not(target_os = "android"))]
-fn apply_import_config_migration_package_inner(
-    input: ApplyImportConfigMigrationPackageInput,
-    app: &NativeAppHandle,
-    state: &AppState,
-) -> Result<ApplyImportConfigMigrationPackageResult, MigrationCommandError> {
-    let preview_dir = state
-        .migration_preview_dirs
-        .lock()
-        .map_err(|err| format!("锁定迁移预检目录失败: {err}"))?
-        .remove(input.preview_id.trim())
-        .ok_or_else(|| "迁移预检已失效，请重新选择迁移包。".to_string())?;
-    let preview_dir = PathBuf::from(preview_dir);
 
-    let (manifest, payload) = read_preview_payload(&preview_dir)?;
-    assert_manifest_version(&manifest, &payload)?;
-
-    let backup_dir = backup_current_migration_targets(state)?;
-    let current_config = state_read_config_cached(state)?;
-    let current_data = state_read_agents_runtime_snapshot(state)?;
-    let (
-        final_config,
-        provider_added_count,
-        provider_updated_count,
-        api_config_added_count,
-        api_config_updated_count,
-    ) = build_imported_config(&current_config, &payload.config);
-    let avatar_path_map = write_avatar_files(state, &payload.avatar_files)?;
-    write_oauth_files(&final_config, &payload.oauth_files)?;
-    let final_data = build_imported_runtime(&current_data, &payload.runtime_data, &avatar_path_map);
-    let memory_stats = memory_store_import_memories(&state.data_path, &payload.memories)?;
-
-    state_write_config_cached(state, &final_config)?;
-    state_write_agents_cached(state, &final_data.agents)?;
-    state_write_runtime_state_cached(state, &build_runtime_state_file(&final_data))?;
-
-    if let Err(err) = std::fs::remove_dir_all(&preview_dir) {
-        runtime_log_warn(format!(
-            "[迁移包导入] 失败，阶段=清理预检目录，路径={}，异常={:?}",
-            preview_dir.display(),
-            err
-        ));
-    }
-
-    let result = ApplyImportConfigMigrationPackageResult {
-        imported_memory_count: memory_stats.imported_count,
-        created_memory_count: memory_stats.created_count,
-        merged_memory_count: memory_stats.merged_count,
-        provider_added_count,
-        provider_updated_count,
-        api_config_added_count,
-        api_config_updated_count,
-        backup_dir: backup_dir.to_string_lossy().to_string(),
-    };
-
-    #[cfg(not(target_os = "android"))]
-    #[cfg(not(target_os = "android"))]
-    if let Some(inner) = &app.inner {
-        let app_handle = inner.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(300));
-            graceful_restart_app(&app_handle);
-        });
-    }
-
-    Ok(result)
-}
-
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn apply_import_config_migration_package(
-    input: ApplyImportConfigMigrationPackageInput,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<ApplyImportConfigMigrationPackageResult, MigrationCommandError> {
-    apply_import_config_migration_package_inner(input, &NativeAppHandle::from_tauri(app.clone()), state.inner())
-}

@@ -21,14 +21,6 @@ fn tool_review_delegate_background(scope: &str, target: Option<&str>) -> String 
     lines.join("\n")
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn list_tool_review_commit_options(
-    input: ToolReviewCommitPageInput,
-    state: State<'_, AppState>,
-) -> Result<ListToolReviewCommitOptionsOutput, String> {
-    list_tool_review_commit_options_internal_command(input, state.inner()).await
-}
 
 async fn list_tool_review_commit_options_internal_command(
     input: ToolReviewCommitPageInput,
@@ -565,14 +557,6 @@ fn tool_review_normalize_review_value(raw: Option<Value>) -> Option<Value> {
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn delete_tool_review_report(
-    input: DeleteToolReviewReportInput,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    delete_tool_review_report_internal(input, state.inner())
-}
 
 fn delete_tool_review_report_internal(
     input: DeleteToolReviewReportInput,
@@ -1798,14 +1782,6 @@ fn with_tool_review_conversation<T>(
     )
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn list_tool_review_reports(
-    input: ToolReviewConversationInput,
-    state: State<'_, AppState>,
-) -> Result<ListToolReviewReportsOutput, String> {
-    list_tool_review_reports_internal(input, state.inner())
-}
 
 fn list_tool_review_reports_internal(
     input: ToolReviewConversationInput,
@@ -1823,97 +1799,9 @@ fn list_tool_review_reports_internal(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn list_tool_review_batches(
-    input: ToolReviewConversationInput,
-    state: State<'_, AppState>,
-) -> Result<ListToolReviewBatchesOutput, String> {
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Ok(ListToolReviewBatchesOutput {
-            batches: Vec::new(),
-            current_batch_key: None,
-        });
-    }
-    let (batches, current_batch_key) =
-        with_tool_review_conversation(state.inner(), conversation_id, |conversation| {
-            let batches = collect_tool_review_batches_internal(conversation);
-            let current_batch_key = conversation
-                .messages
-                .iter()
-                .rev()
-                .find(|message| message.role.trim().eq_ignore_ascii_case("user"))
-                .map(|message| message.id.clone());
-            Ok((batches, current_batch_key))
-        })?;
-    Ok(ListToolReviewBatchesOutput {
-        current_batch_key,
-        batches: batches
-            .iter()
-            .map(tool_review_batch_summary_from_collected)
-            .collect(),
-    })
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_tool_review_item_detail(
-    input: ToolReviewCallInput,
-    state: State<'_, AppState>,
-) -> Result<ToolReviewItemDetail, String> {
-    let conversation_id = input.conversation_id.trim();
-    let call_id = input.call_id.trim();
-    if conversation_id.is_empty() || call_id.is_empty() {
-        return Err("conversationId 和 callId 不能为空。".to_string());
-    }
-    with_tool_review_conversation(state.inner(), conversation_id, |conversation| {
-        let item = tool_review_find_item(conversation, call_id)?;
-        Ok(tool_review_item_detail_from_collected(&item))
-    })
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_tool_review_batch_details(
-    input: ToolReviewBatchActionInput,
-    state: State<'_, AppState>,
-) -> Result<ToolReviewBatchDetailsOutput, String> {
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId 不能为空。".to_string());
-    }
-    with_tool_review_conversation(state.inner(), conversation_id, |conversation| {
-        let (_display_number, batch) = tool_review_find_batch_by_index(conversation, input.batch_index)?;
-        let mut segments = Vec::<ToolReviewSegment>::new();
-        for item in batch.items.iter() {
-            if matches!(
-                item.tool_name.as_str(),
-                "apply_patch" | "write" | "delete" | "update" | "move"
-            ) {
-                segments.extend(tool_review_segments_for_item(item));
-            }
-        }
-        Ok(ToolReviewBatchDetailsOutput {
-            batch_key: batch.batch_key,
-            segments,
-        })
-    })
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn run_tool_review_for_call(
-    input: ToolReviewCallInput,
-    state: State<'_, AppState>,
-) -> Result<ToolReviewItemDetail, String> {
-    let conversation_id = input.conversation_id.trim();
-    let call_id = input.call_id.trim();
-    if conversation_id.is_empty() || call_id.is_empty() {
-        return Err("conversationId 和 callId 不能为空。".to_string());
-    }
-    tool_review_run_for_call_internal(state.inner(), conversation_id, call_id).await
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1925,38 +1813,6 @@ struct ToolReviewSetUserDecisionInput {
     opinion: String,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn set_tool_review_item_user_decision(
-    input: ToolReviewSetUserDecisionInput,
-    state: State<'_, AppState>,
-) -> Result<ToolReviewItemDetail, String> {
-    let conversation_id = input.conversation_id.trim().to_string();
-    let call_id = input.call_id.trim().to_string();
-    if conversation_id.is_empty() || call_id.is_empty() {
-        return Err("conversationId 和 callId 不能为空。".to_string());
-    }
-    let opinion = input.opinion.trim().to_string();
-    let user_decision_review = serde_json::json!({
-        "kind": "user_decision",
-        "allow": input.allow,
-        "reviewOpinion": if opinion.is_empty() {
-            if input.allow { "用户已批准本次工具执行" } else { "用户已否决本次工具执行" }
-        } else {
-            opinion.as_str()
-        },
-        "userOpinion": opinion,
-    });
-    conversation_service_v2().update_unarchived_conversation_by_id(
-        state.inner(),
-        &conversation_id,
-        |conversation| {
-            tool_review_write_call_review(conversation, &call_id, &user_decision_review)?;
-            let refreshed = tool_review_find_item(conversation, &call_id)?;
-            Ok(tool_review_item_detail_from_collected(&refreshed))
-        },
-    )
-}
 
 async fn tool_review_run_missing_reviews_for_batch(
     state: &AppState,
@@ -1971,36 +1827,7 @@ async fn tool_review_run_missing_reviews_for_batch(
     Ok(reviewed_call_ids)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn run_tool_review_for_batch(
-    input: ToolReviewBatchActionInput,
-    state: State<'_, AppState>,
-) -> Result<RunToolReviewBatchOutput, String> {
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId 不能为空。".to_string());
-    }
-    let conversation = with_tool_review_conversation(state.inner(), conversation_id, |conversation| {
-        Ok(conversation.clone())
-    })?;
-    let (_batch_number, batch) = tool_review_find_batch_by_index(&conversation, input.batch_index)?;
-    let reviewed_call_ids =
-        tool_review_run_missing_reviews_for_batch(state.inner(), conversation_id, &batch).await?;
-    Ok(RunToolReviewBatchOutput {
-        batch_key: batch.batch_key,
-        reviewed_call_ids,
-    })
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn submit_tool_review_code(
-    input: ToolReviewCodeReviewInput,
-    state: State<'_, AppState>,
-) -> Result<SubmitToolReviewCodeOutput, String> {
-    submit_tool_review_code_internal(input, state.inner()).await
-}
 
 async fn submit_tool_review_code_internal(
     input: ToolReviewCodeReviewInput,

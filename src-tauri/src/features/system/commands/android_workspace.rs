@@ -255,14 +255,6 @@ mod android_workspace_file_system {
 #[cfg(target_os = "android")]
 use android_workspace_file_system::*;
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn list_android_workspace_files(
-    state: State<'_, AppState>,
-    path: Option<String>,
-) -> Result<AndroidWorkspaceFileListResult, String> {
-    list_android_workspace_files_ws_inner(state.inner(), path)
-}
 
 /// ws 端调用版。
 fn list_android_workspace_files_ws_inner(
@@ -316,14 +308,6 @@ fn list_android_workspace_files_ws_inner(
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn read_android_workspace_text(
-    state: State<'_, AppState>,
-    path: String,
-) -> Result<AndroidWorkspaceTextResult, String> {
-    read_android_workspace_text_ws_inner(state.inner(), path)
-}
 
 /// ws 端调用版。
 fn read_android_workspace_text_ws_inner(
@@ -364,16 +348,6 @@ fn read_android_workspace_text_ws_inner(
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn write_android_workspace_text(
-    state: State<'_, AppState>,
-    path: String,
-    text: String,
-    overwrite: Option<bool>,
-) -> Result<AndroidWorkspaceWriteResult, String> {
-    write_android_workspace_text_ws_inner(state.inner(), path, text, overwrite)
-}
 
 /// ws 端调用版。
 fn write_android_workspace_text_ws_inner(
@@ -427,16 +401,6 @@ fn write_android_workspace_text_ws_inner(
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn move_android_workspace_file(
-    state: State<'_, AppState>,
-    source: String,
-    target: String,
-    overwrite: Option<bool>,
-) -> Result<AndroidWorkspaceMoveResult, String> {
-    move_android_workspace_file_ws_inner(state.inner(), source, target, overwrite)
-}
 
 /// ws 端调用版。
 fn move_android_workspace_file_ws_inner(
@@ -498,15 +462,6 @@ fn move_android_workspace_file_ws_inner(
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn glob_android_workspace_files(
-    state: State<'_, AppState>,
-    pattern: String,
-    path: Option<String>,
-) -> Result<AndroidWorkspaceGlobResult, String> {
-    glob_android_workspace_files_ws_inner(state.inner(), pattern, path)
-}
 
 /// ws 端调用版。
 fn glob_android_workspace_files_ws_inner(
@@ -550,18 +505,6 @@ fn glob_android_workspace_files_ws_inner(
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn grep_android_workspace_files(
-    state: State<'_, AppState>,
-    query: String,
-    path: Option<String>,
-    regex: Option<bool>,
-    ignore_case: Option<bool>,
-    include_glob: Option<String>,
-) -> Result<AndroidWorkspaceGrepResult, String> {
-    grep_android_workspace_files_ws_inner(state.inner(), query, path, regex, ignore_case, include_glob)
-}
 
 /// ws 端调用版。
 fn grep_android_workspace_files_ws_inner(
@@ -670,11 +613,6 @@ fn grep_android_workspace_files_ws_inner(
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_android_workspace_status(state: State<'_, AppState>) -> Result<AndroidWorkspaceStatus, String> {
-    get_android_workspace_status_ws_inner(state.inner())
-}
 
 /// ws 端调用版：接受 &AppState（dispatch 无法注入 State）。
 fn get_android_workspace_status_ws_inner(state: &AppState) -> Result<AndroidWorkspaceStatus, String> {
@@ -703,160 +641,8 @@ fn get_android_workspace_status_ws_inner(state: &AppState) -> Result<AndroidWork
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn init_android_workspace(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<AndroidWorkspaceStatus, String> {
-    #[cfg(target_os = "android")]
-    {
-        let root = android_workspace_root(&state);
-        let mut downloading = normalize_android_workspace_status(&state);
-        downloading.state = AndroidWorkspaceStateKind::Downloading;
-        downloading.last_error = None;
-        downloading.runtime_version = None;
-        downloading.download_bytes = Some(0);
-        downloading.download_total_bytes = Some(ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH);
-        downloading.download_stage = Some("preparing".to_string());
-        android_workspace_set_status(&state, Some(&app), downloading)?;
-        match ensure_android_workspace_layout(&root) {
-            Ok(()) => {
-                if let Err(err) = ensure_android_workspace_rootfs(&state, &app, &root).await {
-                    let mut failed = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
-                    failed.last_error = Some(err.clone());
-                    let _ = android_workspace_set_status(&state, Some(&app), failed);
-                    return Err(err);
-                }
-                android_workspace_set_status(&state, Some(&app), android_workspace_ready_status(&root))
-            }
-            Err(err) => {
-                let mut failed = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
-                failed.last_error = Some(err.clone());
-                let _ = android_workspace_set_status(&state, Some(&app), failed);
-                Err(err)
-            }
-        }
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = app;
-        let root = android_workspace_root(&state);
-        let (llm_workspace_root, runtime_root) = android_workspace_status_paths(&root);
-        Ok(AndroidWorkspaceStatus {
-            state: AndroidWorkspaceStateKind::Ready,
-            root_path: llm_workspace_root.clone(),
-            llm_workspace_root,
-            runtime_root,
-            initialized_at: None,
-            updated_at: Some(now_iso()),
-            last_error: None,
-            version: ANDROID_WORKSPACE_STATUS_VERSION,
-            runtime_version: Some(ANDROID_WORKSPACE_ROOTFS_VERSION.to_string()),
-            download_bytes: Some(ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH),
-            download_total_bytes: Some(ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH),
-            download_stage: None,
-        })
-    }
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn import_android_workspace_rootfs_archive(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    file_name: String,
-    data_base64: String,
-) -> Result<AndroidWorkspaceStatus, String> {
-    #[cfg(target_os = "android")]
-    {
-        let root = android_workspace_root(&state);
-        let safe_name = android_workspace_sanitize_file_name(&file_name);
-        if !safe_name.ends_with(".tar.gz") && safe_name != ANDROID_WORKSPACE_ROOTFS_FILE_NAME {
-            runtime_log_warn(format!(
-                "[Android 工作区] 导入 Linux 运行环境压缩包文件名不匹配，继续按内容校验，file_name={}",
-                safe_name
-            ));
-        }
-        let mut importing = normalize_android_workspace_status(&state);
-        importing.state = AndroidWorkspaceStateKind::Downloading;
-        importing.last_error = None;
-        importing.runtime_version = None;
-        importing.download_bytes = Some(0);
-        importing.download_total_bytes = Some(ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH);
-        importing.download_stage = Some("importing".to_string());
-        android_workspace_set_status(&state, Some(&app), importing)?;
-        match ensure_android_workspace_layout(&root) {
-            Ok(()) => {
-                let bytes = match B64.decode(data_base64.trim()) {
-                    Ok(bytes) => bytes,
-                    Err(err) => {
-                        let error = format!("解析 Android Linux 运行环境压缩包失败: {err}");
-                        let mut failed = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
-                        failed.last_error = Some(error.clone());
-                        let _ = android_workspace_set_status(&state, Some(&app), failed);
-                        return Err(error);
-                    }
-                };
-                android_workspace_update_download_progress(&state, &app, &root, bytes.len() as u64, "importing")?;
-                if let Err(err) = import_android_workspace_rootfs_from_archive(&state, &app, &root, bytes).await {
-                    let mut failed = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
-                    failed.last_error = Some(err.clone());
-                    let _ = android_workspace_set_status(&state, Some(&app), failed);
-                    return Err(err);
-                }
-                android_workspace_set_status(&state, Some(&app), android_workspace_ready_status(&root))
-            }
-            Err(err) => {
-                let mut failed = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
-                failed.last_error = Some(err.clone());
-                let _ = android_workspace_set_status(&state, Some(&app), failed);
-                Err(err)
-            }
-        }
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = app;
-        let _ = state;
-        let _ = file_name;
-        let _ = data_base64;
-        Err("Android Linux 运行环境压缩包导入仅在 Android 端可用。".to_string())
-    }
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn reset_android_workspace_state(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<AndroidWorkspaceStatus, String> {
-    #[cfg(target_os = "android")]
-    {
-        let status = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &android_workspace_root(&state));
-        android_workspace_set_status(&state, Some(&app), status)
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = app;
-        let root = android_workspace_root(&state);
-        let (llm_workspace_root, runtime_root) = android_workspace_status_paths(&root);
-        Ok(AndroidWorkspaceStatus {
-            state: AndroidWorkspaceStateKind::Ready,
-            root_path: llm_workspace_root.clone(),
-            llm_workspace_root,
-            runtime_root,
-            initialized_at: None,
-            updated_at: Some(now_iso()),
-            last_error: None,
-            version: ANDROID_WORKSPACE_STATUS_VERSION,
-            runtime_version: Some(ANDROID_WORKSPACE_ROOTFS_VERSION.to_string()),
-            download_bytes: Some(ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH),
-            download_total_bytes: Some(ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH),
-            download_stage: None,
-        })
-    }
-}
 
 #[cfg(target_os = "android")]
 fn android_workspace_remove_path_if_exists(path: &std::path::Path, context: &str) -> Result<(), String> {
@@ -874,65 +660,7 @@ fn android_workspace_remove_path_if_exists(path: &std::path::Path, context: &str
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn repair_android_workspace_runtime(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<AndroidWorkspaceStatus, String> {
-    #[cfg(target_os = "android")]
-    {
-        let root = android_workspace_root(&state);
-        let runtime_root = android_workspace_runtime_root(&root);
-        let result = (|| {
-            ensure_android_workspace_layout(&root)?;
-            if !runtime_root.join("usr").join("bin").join("dash").is_file() {
-                return Err("Android Linux 运行环境缺少 usr/bin/dash，请重置沙盒后重新初始化。".to_string());
-            }
-            let temp_dir = android_workspace_proot_temp_root(&state);
-            let temp_dir = if let Ok(canonical) = temp_dir.canonicalize() { canonical } else { temp_dir };
-            fs::create_dir_all(&temp_dir)
-                .map_err(|err| format!("创建 Android proot 临时目录失败 ({}): {err}", temp_dir.display()))?;
-            let (native_dir, _, _) = android_proot_binary_paths()?;
-            let _ = android_proot_ensure_libs_dir(&native_dir, &temp_dir)?;
-            android_proot_ensure_host_pai_layout(&root)?;
-            android_proot_patch_rootfs(&runtime_root)?;
-            write_android_workspace_rootfs_marker(&runtime_root)?;
-            if !android_workspace_runtime_ready(&root) {
-                return Err("Android Linux 运行环境修复后仍未通过就绪检查。".to_string());
-            }
-            Ok(())
-        })();
-        match result {
-            Ok(()) => {
-                runtime_log_info("[Android 工作区] 修复 Linux 沙盒完成".to_string());
-                android_workspace_set_status(&state, Some(&app), android_workspace_ready_status(&root))
-            }
-            Err(err) => {
-                runtime_log_error(format!("[Android 工作区] 修复 Linux 沙盒失败 err={err:?}"));
-                let mut status = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
-                status.last_error = Some(err.clone());
-                let _ = android_workspace_set_status(&state, Some(&app), status);
-                Err(err)
-            }
-        }
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = app;
-        let _ = state;
-        Err("Android Linux 沙盒修复仅在 Android 端可用。".to_string())
-    }
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn reset_android_workspace_runtime(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<AndroidWorkspaceStatus, String> {
-    reset_android_workspace_runtime_ws_inner(state.inner(), Some(&NativeAppHandle::from_tauri(app.clone())), &android_workspace_root(state.inner()))
-}
 
 /// ws 端调用版：重置 Linux 沙盒运行时（保留用户工作区与 Skill 数据）。
 pub(crate) fn reset_android_workspace_runtime_ws_inner(
@@ -985,17 +713,6 @@ pub(crate) fn android_workspace_ws_fake_ready(root: &std::path::Path) -> Android
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn import_file_to_android_workspace(
-    state: State<'_, AppState>,
-    file_name: String,
-    mime: Option<String>,
-    data_base64: String,
-    target_path: Option<String>,
-) -> Result<AndroidWorkspaceImportResult, String> {
-    import_file_to_android_workspace_ws_inner(state.inner(), file_name, mime, data_base64, target_path)
-}
 
 /// ws 端调用版。
 fn import_file_to_android_workspace_ws_inner(
@@ -1063,105 +780,7 @@ fn import_file_to_android_workspace_ws_inner(
 ///
 /// WebView 只传 URI 字符串，字节流由 Kotlin 侧 ContentResolver 写入沙盒
 /// 目标路径（绝对路径，已在 Rust 侧完成沙盒与用户可见性校验）。
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn import_android_workspace_file_from_uri(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    file_name: String,
-    uri: String,
-    target_path: Option<String>,
-) -> Result<AndroidWorkspaceImportResult, String> {
-    #[cfg(target_os = "android")]
-    {
-        use tauri_plugin_workspace_io::WorkspaceIoExt;
 
-        let file_name = if file_name.trim().is_empty() {
-            app.workspace_io()
-                .resolve_display_name(uri.clone())
-                .unwrap_or_default()
-        } else {
-            file_name
-        };
-
-        let root = android_workspace_root(&state)
-            .canonicalize()
-            .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
-        let safe_name = android_workspace_sanitize_file_name(&file_name);
-        let mut target = match target_path.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
-            Some(dir) => {
-                let normalized = normalize_terminal_path_input_for_current_platform(dir);
-                let dir_path = std::path::PathBuf::from(normalized);
-                if dir_path.is_absolute() {
-                    return Err("导入路径必须是 Android 沙盒内的相对路径。".to_string());
-                }
-                let dir_target = root.join(dir_path);
-                if let Some(parent) = dir_target.parent() {
-                    fs::create_dir_all(parent)
-                        .map_err(|err| format!("创建 Android 工作区导入目录失败 ({}): {err}", parent.display()))?;
-                }
-                dir_target.join(&safe_name)
-            }
-            None => {
-                let imports_dir = root.join("imports");
-                fs::create_dir_all(&imports_dir)
-                    .map_err(|err| format!("创建 Android 工作区导入目录失败 ({}): {err}", imports_dir.display()))?;
-                android_workspace_unique_import_path(&imports_dir, &safe_name)
-            }
-        };
-        android_workspace_ensure_paths_within_sandbox(&state, &[target.clone()])?;
-        android_workspace_ensure_user_file_manager_path(&root, &target, false)?;
-        if target.exists() {
-            target = android_workspace_unique_sibling_path(&target);
-            android_workspace_ensure_paths_within_sandbox(&state, &[target.clone()])?;
-            android_workspace_ensure_user_file_manager_path(&root, &target, false)?;
-        }
-        if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|err| format!("创建 Android 工作区导入目录失败 ({}): {err}", parent.display()))?;
-        }
-        let safe_name = android_workspace_sanitize_file_name(&file_name);
-        let result = app
-            .workspace_io()
-            .import_stream(tauri_plugin_workspace_io::ImportStreamRequest {
-                uri,
-                target_path: target.to_string_lossy().to_string(),
-            })
-            .map_err(|err| format!("Android 工作区 URI 导入失败: {err}"))?;
-        if result.bytes == 0 {
-            return Err("Android 工作区导入文件为空。".to_string());
-        }
-        let status = normalize_android_workspace_status(&state);
-        Ok(AndroidWorkspaceImportResult {
-            status,
-            imported_path: android_workspace_relative_display(&root, &target),
-            file_name: target
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or(&safe_name)
-                .to_string(),
-            bytes: result.bytes as usize,
-        })
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = app;
-        let _ = state;
-        let _ = file_name;
-        let _ = uri;
-        let _ = target_path;
-        Err("Android 工作区导入仅在 Android 端可用。".to_string())
-    }
-}
-
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn export_file_from_android_workspace(
-    state: State<'_, AppState>,
-    path: String,
-) -> Result<AndroidWorkspaceExportResult, String> {
-    export_file_from_android_workspace_ws_inner(state.inner(), path)
-}
 
 /// ws 端调用版。
 fn export_file_from_android_workspace_ws_inner(
@@ -1214,59 +833,7 @@ fn export_file_from_android_workspace_ws_inner(
 /// WebView 的 `navigator.share` 在 wry Android 中不可用，改由 Kotlin 原生
 /// ACTION_SEND + FileProvider 唤起系统分享。只传文件绝对路径，绕开 base64，
 /// 因此也消除了旧导出链路的 64MB 上限。
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn share_file_from_android_workspace(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    path: String,
-) -> Result<AndroidWorkspaceExportResult, String> {
-    #[cfg(target_os = "android")]
-    {
-        use tauri_plugin_workspace_io::WorkspaceIoExt;
 
-        let target = android_workspace_resolve_file_manager_existing_path(&state, &path, false)?;
-        let root = android_workspace_root(&state)
-            .canonicalize()
-            .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
-        let metadata = fs::metadata(&target)
-            .map_err(|err| format!("读取 Android 工作区导出文件失败 ({}): {err}", target.display()))?;
-        if !metadata.is_file() {
-            return Err("只能导出文件，不能导出目录。".to_string());
-        }
-        let file_name = target
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or("workspace-export")
-            .to_string();
-        app.workspace_io()
-            .share_from_device(target.to_string_lossy().to_string())
-            .map_err(|err| format!("Android 工作区分享失败: {err}"))?;
-        Ok(AndroidWorkspaceExportResult {
-            path: android_workspace_relative_display(&root, &target),
-            file_name,
-            mime: android_workspace_mime_from_path(&target),
-            data_base64: String::new(),
-            bytes: metadata.len() as usize,
-        })
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-        let _ = app;
-        let _ = state;
-        let _ = path;
-        Err("Android 工作区分享仅在 Android 端可用。".to_string())
-    }
-}
-
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn delete_file_from_android_workspace(
-    state: State<'_, AppState>,
-    path: String,
-) -> Result<AndroidWorkspaceDeleteResult, String> {
-    delete_file_from_android_workspace_ws_inner(state.inner(), path)
-}
 
 /// ws 端调用版。
 fn delete_file_from_android_workspace_ws_inner(

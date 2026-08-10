@@ -1,60 +1,11 @@
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn show_main_window(app: tauri::AppHandle) -> Result<(), String> {
-    show_window(&app, "main")
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn show_chat_window(app: tauri::AppHandle) -> Result<(), String> {
-    show_window(&app, "chat")
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn show_archives_window(app: tauri::AppHandle) -> Result<(), String> {
-    show_window(&app, "archives")
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn show_quick_setup_window(app: tauri::AppHandle) -> Result<(), String> {
-    show_window(&app, "quick-setup")
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn open_runtime_logs_window(app: tauri::AppHandle) -> Result<(), String> {
-    show_runtime_logs_window(&app)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn hide_current_window(window: tauri::Window) -> Result<(), String> {
-    window.hide().map_err(|err| format!("隐藏当前窗口失败：{err}"))
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn toggle_current_window_maximize(window: tauri::Window, app: tauri::AppHandle) -> Result<bool, String> {
-    toggle_window_maximize_with_default_restore(&app, window.label())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn start_current_window_drag(window: tauri::Window, app: tauri::AppHandle) -> Result<(), String> {
-    start_window_drag_with_default_restore(&app, window.label())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn complete_quick_setup_and_open_chat(app: tauri::AppHandle) -> Result<(), String> {
-    show_window(&app, "chat")?;
-    if let Some(window) = app.get_webview_window("quick-setup") {
-        let _ = window.hide();
-    }
-    Ok(())
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -91,25 +42,7 @@ fn chat_view_foreground_active() -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn set_chat_window_active(active: bool) {
-    static CHAT_WINDOW_INACTIVE_LOGGED_ONCE: std::sync::atomic::AtomicBool =
-        std::sync::atomic::AtomicBool::new(false);
-    if !active && !CHAT_WINDOW_INACTIVE_LOGGED_ONCE.swap(true, std::sync::atomic::Ordering::Relaxed) {
-        runtime_log_warn(format!("[系统] 聊天窗口激活状态变更：跳过"));
-    }
-    let flag = CHAT_VIEW_FOREGROUND_ACTIVE
-        .get_or_init(|| std::sync::atomic::AtomicBool::new(active));
-    flag.store(active, std::sync::atomic::Ordering::Relaxed);
-    set_record_hotkey_probe_chat_window_active(active);
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_app_version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
-}
 
 fn parse_version_parts(input: &str) -> Vec<u64> {
     let cleaned = input
@@ -333,21 +266,7 @@ async fn probe_release_source_once(state: &AppState) {
     set_preferred_release_source(state, "github");
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_project_repository_url(_state: State<'_, AppState>) -> String {
-    GITHUB_REPO_PAGE.to_string()
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn set_github_update_method(
-    update_method: String,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<AppConfig, String> {
-    set_github_update_method_inner(update_method, &NativeAppHandle::from_tauri(app.clone()), state.inner())
-}
 
 fn set_github_update_method_inner(
     update_method: String,
@@ -368,38 +287,7 @@ fn set_github_update_method_inner(
     Ok(runtime_config)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn set_skipped_github_update_version(
-    version: String,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<AppConfig, String> {
-    set_skipped_github_update_version_inner(version, &NativeAppHandle::from_tauri(app.clone()), state.inner())
-}
 
-#[cfg(not(target_os = "android"))]
-fn set_skipped_github_update_version_inner(
-    version: String,
-    app: &NativeAppHandle,
-    state: &AppState,
-) -> Result<AppConfig, String> {
-    let normalized = normalize_skipped_github_update_version(&version);
-    let mut config = state_read_config_cached(state)?;
-    normalize_app_config(&mut config);
-    if config.skipped_github_update_version != normalized {
-        config.skipped_github_update_version = normalized.clone();
-        state_write_config_cached(state, &config)?;
-        runtime_log_warn(format!("[自动更新] 已保存跳过版本：version={normalized}"));
-    }
-    if let Some(inner) = &app.inner {
-        sync_update_state_from_skip_version(inner, &normalized);
-    }
-    let data = state_read_agents_runtime_snapshot(state)?;
-    let runtime_config = runtime_config_with_private_organization(state, &config, &data)?;
-    let _ = app.emit("easy-call:config-updated", &runtime_config);
-    Ok(runtime_config)
-}
 
 fn normalize_ui_language(value: &str) -> String {
     match value.trim() {
@@ -409,15 +297,6 @@ fn normalize_ui_language(value: &str) -> String {
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn set_ui_language(
-    ui_language: String,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<AppConfig, String> {
-    set_ui_language_inner(ui_language, &NativeAppHandle::from_tauri(app.clone()), state.inner())
-}
 
 fn set_ui_language_inner(
     ui_language: String,
@@ -438,20 +317,7 @@ fn set_ui_language_inner(
     Ok(runtime_config)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn load_config(state: State<'_, AppState>) -> Result<AppConfig, String> {
-    load_config_inner(&state)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_department_default_draft(
-    state: State<'_, AppState>,
-    department_id: String,
-) -> Result<DepartmentConfig, String> {
-    get_department_default_draft_inner(&state, &department_id)
-}
 
 fn get_department_default_draft_inner(
     state: &AppState,
@@ -529,48 +395,10 @@ fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstrapSnapshot,
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn load_app_bootstrap_snapshot(state: State<'_, AppState>) -> Result<AppBootstrapSnapshot, String> {
-    read_app_bootstrap_snapshot(&state)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn is_backend_ready(state: State<'_, AppState>) -> bool {
-    state.backend_ready.load(std::sync::atomic::Ordering::Acquire)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn webview_pong(window: tauri::Window) {
-    webview_record_pong(window.label());
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn debug_crash_webview(webview: tauri::Webview) -> Result<(), String> {
-    webview.eval("(function(){const a=[];while(true){a.push(new Array(1000000).fill('x'));}})();")
-        .map_err(|err| format!("注入崩溃脚本失败：{err}"))
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn list_system_fonts() -> Result<Vec<String>, String> {
-    #[cfg(target_os = "android")]
-    {
-        Ok(Vec::new())
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-    let mut families = font_kit::source::SystemSource::new()
-        .all_families()
-        .map_err(|err| format!("列出系统字体失败：{err}"))?;
-    families.sort_by_key(|name| name.to_ascii_lowercase());
-    families.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
-    Ok(families)
-    }
-}
 
 fn validate_record_hotkey_available(config: &AppConfig) -> Result<String, String> {
     let normalized = normalize_record_hotkey_label(&config.record_hotkey)?;
@@ -589,91 +417,8 @@ fn validate_record_hotkey_available(config: &AppConfig) -> Result<String, String
     Ok(normalized)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn update_record_hotkey(
-    input: UpdateRecordHotkeyInput,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<RecordHotkeyUpdateResult, String> {
-    let mut config = state_read_config_cached(&state)?;
-    normalize_app_config(&mut config);
-    let candidate = input.record_hotkey.trim();
-    if config.record_hotkey.trim() == candidate {
-        let normalized = normalize_record_hotkey_label(&config.record_hotkey)?;
-        if normalized != config.record_hotkey {
-            config.record_hotkey = normalized.clone();
-            state_write_config_cached(&state, &config)?;
-            let data = state_read_agents_runtime_snapshot(&state)?;
-            let runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
-            let _ = app.emit("easy-call:config-updated", &runtime_config);
-        }
-        return Ok(RecordHotkeyUpdateResult {
-            record_hotkey: config.record_hotkey.clone(),
-            record_background_wake_enabled: config.record_background_wake_enabled,
-            min_record_seconds: config.min_record_seconds,
-            max_record_seconds: config.max_record_seconds,
-        });
-    }
-    let normalized = {
-        let mut next = config.clone();
-        next.record_hotkey = candidate.to_string();
-        validate_record_hotkey_available(&next)?
-    };
-    config.record_hotkey = normalized.clone();
-    state_write_config_cached(&state, &config)?;
-    set_record_hotkey_probe_hotkey(&normalized)?;
-    let data = state_read_agents_runtime_snapshot(&state)?;
-    let runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
-    let _ = app.emit("easy-call:config-updated", &runtime_config);
-    Ok(RecordHotkeyUpdateResult {
-        record_hotkey: normalized,
-        record_background_wake_enabled: config.record_background_wake_enabled,
-        min_record_seconds: config.min_record_seconds,
-        max_record_seconds: config.max_record_seconds,
-    })
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn update_record_background_wake(
-    input: UpdateRecordBackgroundWakeInput,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<RecordHotkeyUpdateResult, String> {
-    let mut config = state_read_config_cached(&state)?;
-    normalize_app_config(&mut config);
-    let next_enabled = input.enabled;
-    if config.record_background_wake_enabled != next_enabled {
-        config.record_background_wake_enabled = next_enabled;
-        state_write_config_cached(&state, &config)?;
-    }
-    set_record_hotkey_probe_background_wake_enabled(config.record_background_wake_enabled);
-    runtime_log_info(format!(
-        "[录音热键] 完成，任务=后台唤醒切换，enabled={}",
-        config.record_background_wake_enabled
-    ));
-    let data = state_read_agents_runtime_snapshot(&state)?;
-    let runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
-    let _ = app.emit("easy-call:config-updated", &runtime_config);
-    Ok(RecordHotkeyUpdateResult {
-        record_hotkey: config.record_hotkey.clone(),
-        record_background_wake_enabled: config.record_background_wake_enabled,
-        min_record_seconds: config.min_record_seconds,
-        max_record_seconds: config.max_record_seconds,
-    })
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn save_config(
-    config: AppConfig,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    ide_context_runtime: State<'_, IdeContextRuntime>,
-) -> Result<AppConfig, String> {
-    save_config_inner(config, &NativeAppHandle::from_tauri(app.clone()), &state, &ide_context_runtime)
-}
 
 fn removed_remote_im_channels(
     previous: &AppConfig,

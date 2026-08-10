@@ -1,11 +1,3 @@
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn compact_conversation(
-    input: ConversationIdOnlyInput,
-    state: State<'_, AppState>,
-) -> Result<ConversationCommandStatus, String> {
-    compact_conversation_inner(input, state.inner()).await
-}
 
 fn compact_conversation_preview_inner(
     input: &ConversationIdOnlyInput,

@@ -1,8 +1,3 @@
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn list_memories(state: State<'_, AppState>) -> Result<Vec<MemoryEntry>, String> {
-    list_memories_inner(state.inner())
-}
 
 fn list_memories_inner(state: &AppState) -> Result<Vec<MemoryEntry>, String> {
     memory_store_list_memories(&state.data_path)
@@ -884,14 +879,6 @@ struct DeleteMemoryResult {
     status: String,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn delete_memory(
-    input: DeleteMemoryInput,
-    state: State<'_, AppState>,
-) -> Result<DeleteMemoryResult, String> {
-    delete_memory_inner(state.inner(), input)
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1076,116 +1063,13 @@ fn search_memories_mixed_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn export_memories(state: State<'_, AppState>) -> Result<AngelMemoryExportPayload, String> {
-    export_memories_inner(state.inner(), None)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn preview_export_memories(state: State<'_, AppState>) -> Result<PreviewExportMemoriesResult, String> {
-    preview_export_memories_inner(state.inner())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn export_memories_to_file(
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    input: ExportMemoriesToPathInput,
-) -> Result<ExportMemoriesFileResult, String> {
-    let selected_scopes = normalize_selected_export_scopes(&input.scopes)?;
-    let owner_scope_by_agent = load_importable_agent_scope_labels(state.inner())?;
-    let payload = build_memory_exchange_payload(
-        &state.data_path,
-        &owner_scope_by_agent,
-        Some(&selected_scopes),
-    )?;
-    let selected = app
-        .dialog()
-        .file()
-        .add_filter("JSON", &["json"])
-        .blocking_save_file();
-    let file_path = selected
-        .and_then(|fp| fp.as_path().map(ToOwned::to_owned))
-        .ok_or_else(|| "已取消导出".to_string())?;
-    let body = serde_json::to_string_pretty(&payload)
-        .map_err(|err| format!("序列化导出记忆备份失败: {err}"))?;
-    fs::write(&file_path, body).map_err(|err| format!("写入导出记忆备份失败: {err}"))?;
 
-    Ok(ExportMemoriesFileResult {
-        path: file_path.to_string_lossy().to_string(),
-        count: payload.records.len(),
-    })
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn export_memories_to_path(
-    input: ExportMemoriesToPathInput,
-    state: State<'_, AppState>,
-) -> Result<ExportMemoriesFileResult, String> {
-    let target = PathBuf::from(input.path.trim());
-    if input.path.trim().is_empty() {
-        return Err("导出路径不能为空".to_string());
-    }
-    let parent = target
-        .parent()
-        .ok_or_else(|| "导出路径缺少父目录".to_string())?;
-    fs::create_dir_all(parent).map_err(|err| format!("创建导出目录失败: {err}"))?;
 
-    let selected_scopes = normalize_selected_export_scopes(&input.scopes)?;
-    let owner_scope_by_agent = load_importable_agent_scope_labels(state.inner())?;
-    let payload = build_memory_exchange_payload(
-        &state.data_path,
-        &owner_scope_by_agent,
-        Some(&selected_scopes),
-    )?;
-    let body = serde_json::to_string_pretty(&payload)
-        .map_err(|err| format!("序列化导出记忆备份失败: {err}"))?;
-    fs::write(&target, body).map_err(|err| format!("写入导出记忆备份失败: {err}"))?;
 
-    Ok(ExportMemoriesFileResult {
-        path: target.to_string_lossy().to_string(),
-        count: payload.records.len(),
-    })
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn import_memories(
-    input: ImportMemoriesInput,
-    state: State<'_, AppState>,
-) -> Result<ImportMemoriesResult, String> {
-    import_memories_inner(state.inner(), input)
-}
-
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn preview_import_angel_memories(
-    input: PreviewImportAngelMemoriesInput,
-) -> Result<PreviewImportAngelMemoriesResult, String> {
-    preview_import_angel_memories_inner(input)
-}
-
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn import_angel_memories(
-    input: ImportAngelMemoriesInput,
-    state: State<'_, AppState>,
-) -> Result<ImportMemoriesResult, String> {
-    import_angel_memories_inner(state.inner(), input)
-}
-
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn search_memories_mixed(
-    input: SearchMemoriesMixedInput,
-    state: State<'_, AppState>,
-) -> Result<SearchMemoriesMixedResult, String> {
-    search_memories_mixed_inner(state.inner(), input)
-}
 
 // ==================== 召回诊断（工具召回 / RAG 召换双模式） ====================
 
@@ -1220,14 +1104,6 @@ struct SearchMemoriesRecallResult {
     limit: usize,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn search_memories_recall(
-    input: SearchMemoriesRecallInput,
-    state: State<'_, AppState>,
-) -> Result<SearchMemoriesRecallResult, String> {
-    search_memories_recall_inner(input, state.inner())
-}
 
 fn search_memories_recall_inner(
     input: SearchMemoriesRecallInput,
@@ -1387,82 +1263,8 @@ fn search_memories_recall_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn search_chat_history_slices(
-    input: ChatHistorySearchInput,
-    state: State<'_, AppState>,
-) -> Result<ChatHistorySearchResult, String> {
-    chat_history_search_for_agent(state.inner(), &input)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn open_external_url(url: String) -> Result<(), String> {
-    let trimmed = url.trim();
-    if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
-        return Err("Only http/https URLs are allowed.".to_string());
-    }
-    #[cfg(target_os = "android")]
-    {
-        Err(format!("当前平台暂不支持打开外部浏览器：{trimmed}"))
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-    webbrowser::open(trimmed).map_err(|err| format!("Open browser failed: {err}"))?;
-    Ok(())
-    }
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn open_workspace_file(relative_path: String, state: State<'_, AppState>) -> Result<(), String> {
-    let trimmed = relative_path.trim().replace('\\', "/");
-    if trimmed.is_empty() {
-        return Err("文件路径不能为空".to_string());
-    }
-    let workspace_root = configured_workspace_root_path(&state)?;
-    let target = workspace_root.join(&trimmed);
-    let canonical = target
-        .canonicalize()
-        .map_err(|err| format!("解析文件路径失败: {err}"))?;
-    let workspace = workspace_root
-        .canonicalize()
-        .map_err(|err| format!("解析工作区路径失败: {err}"))?;
-    if !canonical.starts_with(&workspace) {
-        return Err("仅允许打开工作区内的文件".to_string());
-    }
-    if !canonical.is_file() {
-        return Err("目标文件不存在".to_string());
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("explorer")
-            .arg(canonical.as_os_str())
-            .spawn()
-            .map_err(|err| format!("打开文件失败: {err}"))?;
-        return Ok(());
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(canonical.as_os_str())
-            .spawn()
-            .map_err(|err| format!("打开文件失败: {err}"))?;
-        return Ok(());
-    }
-
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(canonical.as_os_str())
-            .spawn()
-            .map_err(|err| format!("打开文件失败: {err}"))?;
-        return Ok(());
-    }
-}
 
 #[cfg(test)]
 mod memory_exchange_tests {

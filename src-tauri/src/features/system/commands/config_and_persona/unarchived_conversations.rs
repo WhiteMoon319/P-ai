@@ -72,77 +72,8 @@ fn repair_conversation_preferred_model_for_snapshot_meta(
     Ok(repaired)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn switch_active_conversation_snapshot(
-    input: SwitchActiveConversationSnapshotInput,
-    state: State<'_, AppState>,
-) -> Result<SwitchActiveConversationSnapshotOutput, String> {
-    let started_at = std::time::Instant::now();
-    let result =
-        conversation_service_v2().switch_active_conversation_snapshot(state.inner(), &input)?;
-    let mut snapshot = result.snapshot;
-    if let Ok(conversation_meta) = conversation_service_v2()
-        .get_conversation_meta(state.inner(), &snapshot.conversation_id)
-    {
-        snapshot.preferred_api_config_id =
-            repair_conversation_preferred_model_for_snapshot_meta(
-                state.inner(),
-                &conversation_meta.id,
-                &conversation_meta.department_id,
-                conversation_meta.preferred_api_config_id.as_deref(),
-            )?;
-    }
-    let unarchived_conversations = result.unarchived_conversations;
-    runtime_log_debug(format!(
-        "[前台重型快照] 完成，conversation_id={}，message_count={}，has_more_history={}，summary_count={}，duration_ms={}",
-        snapshot.conversation_id,
-        snapshot.messages.len(),
-        snapshot.has_more_history,
-        unarchived_conversations.len(),
-        started_at.elapsed().as_millis()
-    ));
 
-    Ok(SwitchActiveConversationSnapshotOutput {
-        conversation_id: snapshot.conversation_id,
-        messages: snapshot.messages,
-        has_more_history: snapshot.has_more_history,
-        runtime_state: snapshot.runtime_state,
-        current_todo: snapshot.current_todo,
-        current_todos: snapshot.current_todos,
-        preferred_api_config_id: snapshot.preferred_api_config_id,
-        active_goal: snapshot.active_goal,
-        unarchived_conversations,
-    })
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn get_foreground_conversation_light_snapshot(
-    input: ForegroundConversationLightSnapshotInput,
-    state: State<'_, AppState>,
-) -> Result<ForegroundConversationLightSnapshotOutput, String> {
-    let app_state = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        get_foreground_conversation_light_snapshot_blocking(input, &app_state)
-    })
-    .await
-    .map_err(|err| format!("读取前台轻量快照任务异常：{err}"))?
-}
-
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn get_foreground_conversation_freshness_snapshot(
-    input: ForegroundConversationFreshnessInput,
-    state: State<'_, AppState>,
-) -> Result<ForegroundConversationFreshnessOutput, String> {
-    let app_state = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        get_foreground_conversation_freshness_snapshot_blocking(input, &app_state)
-    })
-    .await
-    .map_err(|err| format!("读取前台 freshness 快照任务异常：{err}"))?
-}
 
 fn get_foreground_conversation_freshness_snapshot_blocking(
     input: ForegroundConversationFreshnessInput,
@@ -305,30 +236,7 @@ struct MarkConversationReadInput {
     conversation_id: String,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn mark_conversation_read(
-    input: MarkConversationReadInput,
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Ok(false);
-    }
-    Ok(conversation_service_v2()
-        .mark_conversation_read(state.inner(), conversation_id)?
-        .conversation
-        .is_some())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn set_conversation_plan_mode(
-    input: SetConversationPlanModeInput,
-    state: State<'_, AppState>,
-) -> Result<SetConversationPlanModeOutput, String> {
-    set_conversation_plan_mode_inner(input, state.inner())
-}
 
 fn set_conversation_plan_mode_inner(
     input: SetConversationPlanModeInput,
@@ -362,14 +270,6 @@ fn set_conversation_plan_mode_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn set_conversation_preferred_model(
-    input: SetConversationPreferredModelInput,
-    state: State<'_, AppState>,
-) -> Result<SetConversationPreferredModelOutput, String> {
-    set_conversation_preferred_model_inner(input, state.inner())
-}
 
 fn set_conversation_preferred_model_inner(
     input: SetConversationPreferredModelInput,
@@ -433,14 +333,6 @@ fn set_conversation_preferred_model_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn set_conversation_auto_push_remote_contact(
-    input: SetConversationAutoPushRemoteContactInput,
-    state: State<'_, AppState>,
-) -> Result<SetConversationAutoPushRemoteContactOutput, String> {
-    set_conversation_auto_push_remote_contact_inner(input, state.inner())
-}
 
 fn set_conversation_auto_push_remote_contact_inner(
     input: SetConversationAutoPushRemoteContactInput,
@@ -548,19 +440,6 @@ struct CreateSideChatConversationOutput {
     title: String,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn create_side_chat_conversation(
-    input: CreateSideChatConversationInput,
-    state: State<'_, AppState>,
-) -> Result<CreateSideChatConversationOutput, String> {
-    let app_state = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        create_side_chat_conversation_blocking(input, &app_state)
-    })
-    .await
-    .map_err(|err| format!("创建追问会话任务异常：{err}"))?
-}
 
 fn create_side_chat_conversation_blocking(
     input: CreateSideChatConversationInput,
@@ -1157,14 +1036,6 @@ fn latest_compaction_message_for_branch(source: &Conversation) -> Option<ChatMes
         .cloned()
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn create_unarchived_conversation(
-    input: CreateUnarchivedConversationInput,
-    state: State<'_, AppState>,
-) -> Result<CreateUnarchivedConversationOutput, String> {
-    create_unarchived_conversation_inner(input, state.inner()).await
-}
 
 async fn create_unarchived_conversation_inner(
     input: CreateUnarchivedConversationInput,
@@ -1225,14 +1096,6 @@ fn create_unarchived_conversation_blocking(
     ))
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn export_conversation_share_json(
-    input: ExportConversationShareInput,
-    state: State<'_, AppState>,
-) -> Result<ExportConversationShareOutput, String> {
-    export_conversation_share_json_inner(input, state.inner())
-}
 
 fn export_conversation_share_json_inner(
     input: ExportConversationShareInput,
@@ -1278,127 +1141,8 @@ fn export_conversation_share_json_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn import_conversation_share_from_file(
-    input: ImportConversationShareFromFileInput,
-    state: State<'_, AppState>,
-) -> Result<CreateUnarchivedConversationOutput, String> {
-    let path = input.path.trim();
-    if path.is_empty() {
-        return Err("path 不能为空".to_string());
-    }
-    let payload_json = fs::read_to_string(PathBuf::from(path))
-        .map_err(|err| format!("读取会话分享文件失败: {err}"))?;
-    let payload: ConversationSharePayload = serde_json::from_str(&payload_json)
-        .map_err(|err| format!("解析会话分享 JSON 失败: {err}"))?;
-    if payload.payload_type.trim() != "easy_call_conversation_share" {
-        return Err("不是有效的 PAI 会话分享文件".to_string());
-    }
-    if payload.messages.is_empty() {
-        return Err("会话分享文件没有可导入的消息".to_string());
-    }
 
-    let requested_title = input
-        .title
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .or_else(|| {
-            let title = payload.title.trim();
-            if title.is_empty() {
-                None
-            } else {
-                Some(title.to_string())
-            }
-        });
-    let create_input = CreateUnarchivedConversationInput {
-        api_config_id: None,
-        agent_id: input.agent_id.clone(),
-        department_id: input.department_id.clone(),
-        title: requested_title,
-        copy_source_conversation_id: None,
-        shell_workspaces: input.shell_workspaces.clone(),
-        shell_work_mode: input.shell_work_mode.clone(),
-        shell_autonomous_mode: input.shell_autonomous_mode,
-    };
-    let result = conversation_service_v2().create_conversation(state.inner(), &create_input)?;
-    let conversation_id = result.conversation_id.clone();
-    let mut conversation = conversation_service_v2()
-        .get_conversation_snapshot(state.inner(), &conversation_id)
-        .map_err(|_| "新建导入会话后读取失败".to_string())?;
-    let target_agent_id = conversation.agent_id.clone();
-    conversation.messages = payload
-        .messages
-        .iter()
-        .map(|message| normalize_imported_conversation_share_message(message, &target_agent_id))
-        .collect();
-    conversation.current_todos = payload.current_todos;
-    conversation.plan_mode_enabled = payload.plan_mode_enabled;
-    conversation.fork_message_cursor = conversation.messages.last().map(|message| message.id.clone());
-    if let Some(last_message) = conversation.messages.last() {
-        conversation.updated_at = last_message.created_at.clone();
-    }
-    conversation.last_user_at = conversation
-        .messages
-        .iter()
-        .rev()
-        .find(|message| message.role.trim() == "user")
-        .map(|message| message.created_at.clone());
-    conversation.last_assistant_at = conversation
-        .messages
-        .iter()
-        .rev()
-        .find(|message| message.role.trim() == "assistant")
-        .map(|message| message.created_at.clone());
-    let import_job_id = format!("conversation-share-import-{conversation_id}");
-    let import_reason = format!("从会话分享文件导入，path={path}");
-    conversation_service_v2().import_conversation_snapshot(
-        state.inner(),
-        &import_job_id,
-        "conversation_share_import",
-        &import_reason,
-        &conversation,
-    )?;
 
-    let overview_payload = UnarchivedConversationOverviewUpdatedPayload {
-        preferred_conversation_id: Some(conversation_id.clone()),
-        unarchived_conversations: conversation_service_v2()
-            .list_unarchived_conversation_summaries(state.inner())?
-            .summaries,
-    };
-    emit_unarchived_conversation_overview_updated_payload(state.inner(), &overview_payload);
-    runtime_log_info(format!(
-        "[会话分享] 完成，任务=导入会话，conversation_id={}，department_id={}，agent_id={}，message_count={}",
-        conversation.id,
-        conversation.department_id,
-        conversation.agent_id,
-        conversation.messages.len()
-    ));
-    Ok(CreateUnarchivedConversationOutput {
-        conversation_id,
-        unarchived_conversations: overview_payload.unarchived_conversations,
-    })
-}
-
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn branch_unarchived_conversation_from_selection(
-    input: BranchUnarchivedConversationFromSelectionInput,
-    state: State<'_, AppState>,
-) -> Result<BranchUnarchivedConversationFromSelectionOutput, String> {
-    branch_unarchived_conversation_from_selection_internal(input, state.inner()).await
-}
-
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn create_conversation_branch_from_message(
-    input: CreateConversationBranchFromMessageInput,
-    state: State<'_, AppState>,
-) -> Result<BranchUnarchivedConversationFromSelectionOutput, String> {
-    create_conversation_branch_from_message_internal(input, state.inner()).await
-}
 
 async fn create_conversation_branch_from_message_internal(
     input: CreateConversationBranchFromMessageInput,
@@ -1558,14 +1302,6 @@ async fn branch_unarchived_conversation_from_selection_internal(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn forward_unarchived_conversation_selection(
-    input: ForwardUnarchivedConversationSelectionInput,
-    state: State<'_, AppState>,
-) -> Result<ForwardUnarchivedConversationSelectionOutput, String> {
-    forward_unarchived_conversation_selection_inner(input, state.inner())
-}
 
 fn forward_unarchived_conversation_selection_inner(
     input: ForwardUnarchivedConversationSelectionInput,
@@ -1613,14 +1349,6 @@ fn forward_unarchived_conversation_selection_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn forward_selection_to_remote_im_contact(
-    input: ForwardSelectionToRemoteImContactInput,
-    state: State<'_, AppState>,
-) -> Result<ForwardSelectionToRemoteImContactOutput, String> {
-    forward_selection_to_remote_im_contact_inner(input, state.inner())
-}
 
 fn forward_selection_to_remote_im_contact_inner(
     input: ForwardSelectionToRemoteImContactInput,
@@ -1675,14 +1403,6 @@ fn forward_selection_to_remote_im_contact_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn rename_unarchived_conversation(
-    input: RenameUnarchivedConversationInput,
-    state: State<'_, AppState>,
-) -> Result<RenameUnarchivedConversationOutput, String> {
-    rename_unarchived_conversation_inner(input, state.inner())
-}
 
 fn rename_unarchived_conversation_inner(
     input: RenameUnarchivedConversationInput,
@@ -1785,23 +1505,7 @@ fn rebind_unarchived_conversation_recipient_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn rebind_unarchived_conversation_recipient(
-    input: RebindUnarchivedConversationRecipientInput,
-    state: State<'_, AppState>,
-) -> Result<RebindUnarchivedConversationRecipientOutput, String> {
-    rebind_unarchived_conversation_recipient_inner(input, state.inner())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn toggle_unarchived_conversation_pin(
-    input: ToggleUnarchivedConversationPinInput,
-    state: State<'_, AppState>,
-) -> Result<ToggleUnarchivedConversationPinOutput, String> {
-    toggle_unarchived_conversation_pin_inner(input, state.inner())
-}
 
 fn toggle_unarchived_conversation_pin_inner(
     input: ToggleUnarchivedConversationPinInput,
@@ -1830,13 +1534,6 @@ fn toggle_unarchived_conversation_pin_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_conversation_section_orders(
-    state: State<'_, AppState>,
-) -> Result<ConversationSectionOrdersOutput, String> {
-    get_conversation_section_orders_inner(state.inner())
-}
 
 fn get_conversation_section_orders_inner(
     state: &AppState,
@@ -1848,14 +1545,6 @@ fn get_conversation_section_orders_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn save_conversation_section_order(
-    input: SaveConversationSectionOrderInput,
-    state: State<'_, AppState>,
-) -> Result<SaveConversationSectionOrderOutput, String> {
-    save_conversation_section_order_inner(input, state.inner())
-}
 
 fn save_conversation_section_order_inner(
     input: SaveConversationSectionOrderInput,
@@ -1881,13 +1570,6 @@ fn save_conversation_section_order_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn list_delegate_conversations(
-    state: State<'_, AppState>,
-) -> Result<Vec<DelegateConversationSummary>, String> {
-    list_delegate_conversations_inner(state.inner())
-}
 
 fn list_delegate_conversations_inner(
     state: &AppState,
@@ -2353,14 +2035,6 @@ fn conversation_delegate_summary_from_snapshot(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn list_conversation_delegate_statuses(
-    input: ListConversationDelegateStatusesInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<ConversationDelegateStatusSummary>, String> {
-    list_conversation_delegate_statuses_inner(input, state.inner())
-}
 
 fn list_conversation_delegate_statuses_inner(
     input: ListConversationDelegateStatusesInput,
@@ -2464,14 +2138,6 @@ struct AbortDelegateConversationResult {
     aborted: bool,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn abort_delegate_conversation(
-    input: AbortDelegateConversationInput,
-    state: State<'_, AppState>,
-) -> Result<AbortDelegateConversationResult, String> {
-    abort_delegate_conversation_inner(input, state.inner())
-}
 
 fn abort_delegate_conversation_inner(
     input: AbortDelegateConversationInput,
@@ -2511,18 +2177,6 @@ fn default_recent_unarchived_message_limit() -> usize {
     5
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_unarchived_conversation_messages(
-    input: GetUnarchivedConversationMessagesInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<ChatMessage>, String> {
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId is required.".to_string());
-    }
-    conversation_service_v2().get_all_messages(state.inner(), conversation_id)
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -2584,92 +2238,9 @@ fn conversation_block_page_output_from_message_store_page(
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_unarchived_conversation_recent_block_messages(
-    input: GetUnarchivedConversationRecentBlockMessagesInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<ChatMessage>, String> {
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId is required.".to_string());
-    }
-    conversation_service_v2().get_recent_block_messages(state.inner(), conversation_id)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_unarchived_conversation_block_page(
-    input: GetConversationBlockPageInput,
-    state: State<'_, AppState>,
-) -> Result<ConversationBlockPageOutput, String> {
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId is required.".to_string());
-    }
-    let page = if let Some(block_id) = input.block_id {
-        conversation_service_v2().get_conversation_block(state.inner(), conversation_id, block_id)?
-    } else {
-        conversation_service_v2().get_conversation_last_block(state.inner(), conversation_id)?
-    };
-    Ok(ConversationBlockPageOutput {
-        blocks: page
-            .blocks
-            .into_iter()
-            .map(|item| ConversationBlockSummaryOutput {
-                block_id: item.block_id,
-                message_count: item.message_count,
-                first_message_id: item.first_message_id,
-                last_message_id: item.last_message_id,
-                first_created_at: item.first_created_at,
-                last_created_at: item.last_created_at,
-                is_latest: item.is_latest,
-            })
-            .collect(),
-        selected_block_id: page.selected_block_id,
-        messages: page.messages,
-        has_prev_block: page.has_prev_block,
-        has_next_block: page.has_next_block,
-    })
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_unarchived_conversation_recent_messages(
-    input: GetUnarchivedConversationRecentMessagesInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<ChatMessage>, String> {
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId is required.".to_string());
-    }
-    conversation_service_v2().get_recent_messages_for_frontend_display_only(
-        state.inner(),
-        conversation_id,
-        input.limit,
-    )
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_unarchived_conversation_message_by_id(
-    input: GetUnarchivedConversationMessageByIdInput,
-    state: State<'_, AppState>,
-) -> Result<ChatMessage, String> {
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId is required.".to_string());
-    }
-    let message_id = input.message_id.trim();
-    if message_id.is_empty() {
-        return Err("messageId is required.".to_string());
-    }
-    conversation_service_v2().get_message_by_id_for_frontend_display_only(
-        state.inner(),
-        conversation_id,
-        message_id,
-    )
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -2690,23 +2261,6 @@ struct DeleteDelegateConversationOutput {
     deleted: bool,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_delegate_conversation_messages(
-    input: GetDelegateConversationMessagesInput,
-    state: State<'_, AppState>,
-) -> Result<Vec<ChatMessage>, String> {
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Err("conversationId is required.".to_string());
-    }
-    let mut messages = delegate_runtime_thread_conversation_get_any(state.inner(), conversation_id)?
-        .map(|conversation| conversation.messages.clone())
-        .ok_or_else(|| "Delegate conversation not found.".to_string())?;
-    materialize_chat_message_parts_from_media_refs(&mut messages, &state.data_path);
-    messages.retain(|message| !remote_im_delegate_message_is_internal(message));
-    Ok(project_messages_for_frontend_display_only(messages))
-}
 
 fn remote_im_delegate_message_is_internal(message: &ChatMessage) -> bool {
     message
@@ -2717,14 +2271,6 @@ fn remote_im_delegate_message_is_internal(message: &ChatMessage) -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_delegate_conversation_block_page(
-    input: GetConversationBlockPageInput,
-    state: State<'_, AppState>,
-) -> Result<ConversationBlockPageOutput, String> {
-    get_delegate_conversation_block_page_inner(input, state.inner())
-}
 
 fn get_delegate_conversation_block_page_inner(
     input: GetConversationBlockPageInput,
@@ -2746,14 +2292,6 @@ fn get_delegate_conversation_block_page_inner(
     Ok(conversation_block_page_output_from_message_store_page(page))
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn delete_delegate_conversation(
-    input: DeleteDelegateConversationInput,
-    state: State<'_, AppState>,
-) -> Result<DeleteDelegateConversationOutput, String> {
-    delete_delegate_conversation_inner(input, state.inner())
-}
 
 fn delete_delegate_conversation_inner(
     input: DeleteDelegateConversationInput,
@@ -2788,14 +2326,6 @@ struct DeleteUnarchivedConversationOutput {
     unarchived_conversations: Vec<UnarchivedConversationSummary>,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn delete_unarchived_conversation(
-    input: DeleteUnarchivedConversationInput,
-    state: State<'_, AppState>,
-) -> Result<DeleteUnarchivedConversationOutput, String> {
-    delete_unarchived_conversation_inner(input, state.inner()).await
-}
 
 async fn delete_unarchived_conversation_inner(
     input: DeleteUnarchivedConversationInput,
@@ -2890,14 +2420,6 @@ fn delete_unarchived_conversation_blocking(
     ))
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_active_conversation_messages(
-    input: SessionSelector,
-    state: State<'_, AppState>,
-) -> Result<Vec<ChatMessage>, String> {
-    conversation_service_v2().get_active_conversation_messages(state.inner(), &input)
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -3011,74 +2533,7 @@ fn resolve_unarchived_conversation_messages_after(
     )
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_active_conversation_messages_before(
-    input: GetActiveConversationMessagesBeforeInput,
-    state: State<'_, AppState>,
-) -> Result<GetActiveConversationMessagesBeforeOutput, String> {
-    let before_message_id = input.before_message_id.trim();
-    if before_message_id.is_empty() {
-        return Err("beforeMessageId is required.".to_string());
-    }
-    let limit = input.limit.clamp(1, 100);
-    let conversation_id = input
-        .conversation_id
-        .as_deref()
-        .or_else(|| {
-            input
-                .session
-                .as_ref()
-                .and_then(|session| session.conversation_id.as_deref())
-        })
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| "conversationId is required.".to_string())?;
-    let page = conversation_service_v2().get_messages_before(
-        state.inner(),
-        conversation_id,
-        before_message_id,
-        limit,
-    )?;
-    Ok(GetActiveConversationMessagesBeforeOutput {
-        messages: page.messages,
-        has_more: page.has_more,
-    })
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_active_conversation_messages_after(
-    input: GetActiveConversationMessagesAfterInput,
-    state: State<'_, AppState>,
-) -> Result<GetActiveConversationMessagesAfterOutput, String> {
-    let after_message_id = input.after_message_id.trim();
-    if after_message_id.is_empty() {
-        return Err("afterMessageId is required.".to_string());
-    }
-    let limit = input.limit.clamp(1, 200);
-    let conversation_id = input
-        .conversation_id
-        .as_deref()
-        .or_else(|| {
-            input
-                .session
-                .as_ref()
-                .and_then(|session| session.conversation_id.as_deref())
-        })
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| "conversationId is required.".to_string())?;
-    let page = conversation_service_v2().get_messages_after(
-        state.inner(),
-        conversation_id,
-        after_message_id,
-        limit,
-    )?;
-    Ok(GetActiveConversationMessagesAfterOutput {
-        messages: page.messages,
-    })
-}
 
 
 fn request_conversation_messages_after_async_inner(
@@ -3178,14 +2633,6 @@ fn request_conversation_messages_after_async_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn request_conversation_messages_after_async(
-    input: RequestConversationMessagesAfterAsyncInput,
-    state: State<'_, AppState>,
-) -> Result<RequestConversationMessagesAfterAsyncOutput, String> {
-    request_conversation_messages_after_async_inner(input, state.inner())
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -3316,14 +2763,6 @@ fn restore_conversation_todos_after_rewind(conversation: &mut Conversation) -> R
     Ok(())
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn preview_rewind_conversation_from_message(
-    input: RewindConversationInput,
-    state: State<'_, AppState>,
-) -> Result<RewindConversationPreviewResultPayload, String> {
-    preview_rewind_conversation_from_message_inner(input, state.inner()).await
-}
 
 async fn preview_rewind_conversation_from_message_inner(
     input: RewindConversationInput,
@@ -3353,14 +2792,6 @@ async fn preview_rewind_conversation_from_message_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn rewind_conversation_from_message(
-    input: RewindConversationInput,
-    state: State<'_, AppState>,
-) -> Result<RewindConversationResult, String> {
-    rewind_conversation_from_message_inner(input, state.inner()).await
-}
 
 async fn rewind_conversation_from_message_inner(
     input: RewindConversationInput,

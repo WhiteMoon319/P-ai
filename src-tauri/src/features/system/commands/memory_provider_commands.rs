@@ -119,97 +119,6 @@ struct MemoryRestoreInput {
     path: String,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn sync_memory_embedding_provider(
-    input: SyncMemoryEmbeddingProviderInput,
-    state: State<'_, AppState>,
-) -> Result<MemoryStoreProviderSyncReport, String> {
-    let provider_id = input.provider_id.trim();
-    if provider_id.is_empty() {
-        return Err("providerId is required".to_string());
-    }
-    let model_name = input
-        .model_name
-        .as_deref()
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .unwrap_or("");
-    let batch_size = input.batch_size.unwrap_or(64).max(1);
-    let provider_kind = memory_provider_kind_from_id(provider_id);
-
-    if matches!(provider_kind, MemoryProviderKind::DeterministicLocal) {
-        let deterministic_model = if model_name.is_empty() {
-            "deterministic-local-embedder"
-        } else {
-            model_name
-        };
-        return memory_store_sync_provider_index(
-            &state.data_path,
-            provider_id,
-            deterministic_model,
-            batch_size,
-            false,
-            |texts| {
-                let mut out = Vec::<Vec<f32>>::new();
-                for text in texts {
-                    let mut hasher = Sha256::new();
-                    hasher.update(provider_id.as_bytes());
-                    hasher.update(b"|");
-                    hasher.update(text.as_bytes());
-                    let digest = hasher.finalize();
-                    let mut vec = Vec::<f32>::new();
-                    for chunk in digest.chunks(4) {
-                        let mut bytes = [0u8; 4];
-                        for (idx, b) in chunk.iter().enumerate() {
-                            bytes[idx] = *b;
-                        }
-                        let value = u32::from_le_bytes(bytes) as f32 / u32::MAX as f32;
-                        vec.push(value);
-                    }
-                    out.push(vec);
-                }
-                Ok(out)
-            },
-        );
-    }
-
-    let app_config = read_config(&state.config_path)?;
-    let provider_cfg = memory_resolve_provider_api_config(
-        &app_config,
-        provider_kind,
-        input.api_config_id.as_deref(),
-        provider_id,
-    )
-    .ok_or_else(|| {
-        format!(
-            "No API config matches provider kind '{provider_kind:?}'. Please set apiConfigId."
-        )
-    })?;
-    let embedding_provider = memory_create_embedding_provider(
-        provider_kind,
-        &provider_cfg,
-        if model_name.is_empty() {
-            None
-        } else {
-            Some(model_name)
-        },
-    )?;
-    let model_for_report = if model_name.is_empty() {
-        provider_cfg.model.as_str()
-    } else {
-        model_name
-    };
-
-    memory_store_sync_provider_index(
-        &state.data_path,
-        provider_id,
-        model_for_report,
-        batch_size,
-        false,
-        |texts| embedding_provider.embed_batch(texts),
-    )
-}
 
 fn test_memory_embedding_provider_inner(
     input: TestMemoryEmbeddingProviderInput,
@@ -479,95 +388,12 @@ fn save_memory_rerank_binding_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn test_memory_embedding_provider(
-    input: TestMemoryEmbeddingProviderInput,
-    state: State<'_, AppState>,
-) -> Result<TestMemoryEmbeddingProviderResult, String> {
-    test_memory_embedding_provider_inner(input, state.inner())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn test_memory_rerank_provider(
-    input: TestMemoryRerankProviderInput,
-    state: State<'_, AppState>,
-) -> Result<TestMemoryRerankProviderResult, String> {
-    test_memory_rerank_provider_inner(input, state.inner())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_memory_provider_bindings(
-    state: State<'_, AppState>,
-) -> Result<MemoryProviderBindings, String> {
-    get_memory_provider_bindings_inner(state.inner())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_memory_embedding_sync_progress(
-    state: State<'_, AppState>,
-) -> Result<MemoryEmbeddingSyncProgress, String> {
-    get_memory_embedding_sync_progress_inner(state.inner())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn save_memory_embedding_binding(
-    input: SaveMemoryEmbeddingBindingInput,
-    state: State<'_, AppState>,
-) -> Result<MemoryStoreProviderSyncReport, String> {
-    save_memory_embedding_binding_inner(input, state.inner())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn save_memory_rerank_binding(
-    input: SaveMemoryRerankBindingInput,
-    state: State<'_, AppState>,
-) -> Result<SaveMemoryRerankBindingResult, String> {
-    save_memory_rerank_binding_inner(input, state.inner())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn memory_rebuild_indexes(state: State<'_, AppState>) -> Result<MemoryStoreRebuildReport, String> {
-    memory_store_rebuild_indexes(&state.data_path)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn memory_health_check(
-    input: MemoryHealthCheckInput,
-    state: State<'_, AppState>,
-) -> Result<MemoryStoreHealthReport, String> {
-    memory_store_health_check(&state.data_path, input.auto_repair)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn memory_backup_db(
-    input: MemoryBackupInput,
-    state: State<'_, AppState>,
-) -> Result<MemoryStoreBackupResult, String> {
-    let path = PathBuf::from(input.path.trim());
-    if input.path.trim().is_empty() {
-        return Err("backup path is empty".to_string());
-    }
-    memory_store_backup_db(&state.data_path, &path)
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn memory_restore_db(
-    input: MemoryRestoreInput,
-    state: State<'_, AppState>,
-) -> Result<MemoryStoreBackupResult, String> {
-    let path = PathBuf::from(input.path.trim());
-    if input.path.trim().is_empty() {
-        return Err("restore path is empty".to_string());
-    }
-    memory_store_restore_db(&state.data_path, &path)
-}

@@ -598,14 +598,6 @@ fn merge_model_metadata_candidates(
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn fetch_model_metadata(
-    state: State<'_, AppState>,
-    input: FetchModelMetadataInput,
-) -> Result<FetchModelMetadataOutput, String> {
-    fetch_model_metadata_inner(&state, input).await
-}
 
 async fn fetch_model_metadata_inner(
     state: &AppState,
@@ -724,14 +716,6 @@ async fn fetch_model_metadata_inner(
     Ok(merged)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn refresh_models(
-    state: State<'_, AppState>,
-    input: RefreshModelsInput,
-) -> Result<Vec<String>, String> {
-    refresh_models_inner(&state, input).await
-}
 
 async fn refresh_models_inner(
     state: &AppState,
@@ -786,14 +770,6 @@ async fn refresh_models_inner(
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn quick_genai_chat(
-    state: State<'_, AppState>,
-    input: QuickGenaiChatInput,
-) -> Result<String, String> {
-    quick_genai_chat_inner(&state, input).await
-}
 
 async fn quick_genai_chat_inner(
     state: &AppState,
@@ -902,19 +878,6 @@ fn resolve_model_adapter_kind_label(
     .to_string()
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn resolve_model_adapter_kind(
-    model_name: String,
-    base_url: Option<String>,
-    request_format: Option<RequestFormat>,
-) -> Result<String, String> {
-    Ok(resolve_model_adapter_kind_label(
-        request_format.unwrap_or(RequestFormat::Auto),
-        base_url.as_deref().unwrap_or_default(),
-        &model_name,
-    ))
-}
 
 #[cfg(test)]
 mod model_adapter_kind_tests {
@@ -941,14 +904,6 @@ mod model_adapter_kind_tests {
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn test_embedding_connection(
-    _state: State<'_, AppState>,
-    input: TestEmbeddingConnectionInput,
-) -> Result<TestEmbeddingConnectionResult, String> {
-    test_embedding_connection_inner(input).await
-}
 
 async fn test_embedding_connection_inner(
     input: TestEmbeddingConnectionInput,
@@ -1005,14 +960,6 @@ async fn test_embedding_connection_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn test_rerank_connection(
-    _state: State<'_, AppState>,
-    input: TestRerankConnectionInput,
-) -> Result<TestRerankConnectionResult, String> {
-    test_rerank_connection_inner(input).await
-}
 
 async fn test_rerank_connection_inner(
     input: TestRerankConnectionInput,
@@ -1073,11 +1020,6 @@ async fn test_rerank_connection_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn test_voice_connection(input: TestVoiceConnectionInput) -> Result<TestVoiceConnectionResult, String> {
-    test_voice_connection_inner(input).await
-}
 
 async fn test_voice_connection_inner(input: TestVoiceConnectionInput) -> Result<TestVoiceConnectionResult, String> {
     let base_url = input.base_url.trim();

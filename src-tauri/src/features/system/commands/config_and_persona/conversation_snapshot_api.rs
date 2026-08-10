@@ -1,16 +1,3 @@
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn get_chat_snapshot(
-    input: SessionSelector,
-    state: State<'_, AppState>,
-) -> Result<ChatSnapshot, String> {
-    let app_state = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        conversation_service_v2().get_chat_snapshot(&app_state, &input)
-    })
-    .await
-    .map_err(|err| format!("读取聊天快照任务异常：{err}"))?
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -782,16 +769,6 @@ fn ensure_unarchived_conversation_not_organizing(
     Ok(())
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn list_unarchived_conversations(
-    state: State<'_, AppState>,
-) -> Result<Vec<UnarchivedConversationSummary>, String> {
-    let app_state = state.inner().clone();
-    tokio::task::spawn_blocking(move || list_unarchived_conversations_blocking(&app_state))
-        .await
-        .map_err(|err| format!("读取未归档会话列表任务异常：{err}"))?
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1057,19 +1034,6 @@ fn overview_updated_payload_with_server_time(
     value
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn list_unarchived_conversations_changed_since(
-    input: ListUnarchivedConversationsChangedSinceInput,
-    state: State<'_, AppState>,
-) -> Result<ListUnarchivedConversationsChangedSinceOutput, String> {
-    let app_state = state.inner().clone();
-    tokio::task::spawn_blocking(move || {
-        list_unarchived_conversations_changed_since_blocking(&app_state, &input)
-    })
-    .await
-    .map_err(|err| format!("读取未归档会话列表差量任务异常：{err}"))?
-}
 
 fn list_unarchived_conversations_changed_since_blocking(
     state: &AppState,
@@ -1607,16 +1571,6 @@ fn emit_unarchived_conversation_overview_updated_from_state(state: &AppState) ->
     Ok(())
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn set_active_unarchived_conversation(
-    input: SetActiveUnarchivedConversationInput,
-    state: State<'_, AppState>,
-) -> Result<SetActiveUnarchivedConversationOutput, String> {
-    let conversation_id =
-        conversation_service_v2().set_active_conversation(state.inner(), &input)?;
-    Ok(SetActiveUnarchivedConversationOutput { conversation_id })
-}
 
 #[cfg(test)]
 mod conversation_snapshot_api_tests {

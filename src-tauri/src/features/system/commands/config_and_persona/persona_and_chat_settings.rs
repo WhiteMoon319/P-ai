@@ -1,8 +1,3 @@
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn load_agents(state: State<'_, AppState>) -> Result<Vec<AgentProfile>, String> {
-    load_agents_inner(&state)
-}
 
 fn load_agents_inner(state: &AppState) -> Result<Vec<AgentProfile>, String> {
     let config = state_read_config_cached(&state)?;
@@ -11,15 +6,6 @@ fn load_agents_inner(state: &AppState) -> Result<Vec<AgentProfile>, String> {
         .map(|snapshot| snapshot.agents)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn save_agents(
-    input: SaveAgentsInput,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<Vec<AgentProfile>, String> {
-    save_agents_inner(input, &NativeAppHandle::from_tauri(app.clone()), &state)
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,15 +13,6 @@ struct ConvertPrivateAgentToMainInput {
     agent_id: String,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn convert_private_agent_to_main(
-    input: ConvertPrivateAgentToMainInput,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<Vec<AgentProfile>, String> {
-    convert_private_agent_to_main_inner(input, &NativeAppHandle::from_tauri(app.clone()), state.inner())
-}
 
 fn convert_private_agent_to_main_inner(
     input: ConvertPrivateAgentToMainInput,
@@ -551,59 +528,11 @@ fn disable_agent_private_memory_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn get_agent_private_memory_count(
-    input: AgentPrivateMemoryCountInput,
-    state: State<'_, AppState>,
-) -> Result<AgentPrivateMemoryCountResult, String> {
-    get_agent_private_memory_count_inner(input, state.inner())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn set_agent_memory_recall_mode(
-    input: SetAgentMemoryRecallModeInput,
-    state: State<'_, AppState>,
-) -> Result<SetAgentMemoryRecallModeResult, String> {
-    set_agent_memory_recall_mode_inner(input, state.inner())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn set_agent_private_memory_enabled(
-    input: SetAgentPrivateMemoryEnabledInput,
-    state: State<'_, AppState>,
-) -> Result<SetAgentPrivateMemoryEnabledResult, String> {
-    set_agent_private_memory_enabled_inner(input, state.inner())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn export_agent_private_memories(
-    input: ExportAgentPrivateMemoriesInput,
-    state: State<'_, AppState>,
-) -> Result<ExportAgentPrivateMemoriesResult, String> {
-    export_agent_private_memories_inner(input, state.inner())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn disable_agent_private_memory(
-    input: DisableAgentPrivateMemoryInput,
-    state: State<'_, AppState>,
-) -> Result<DisableAgentPrivateMemoryResult, String> {
-    disable_agent_private_memory_inner(input, state.inner())
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn import_agent_memories(
-    input: ImportAgentMemoriesInput,
-    state: State<'_, AppState>,
-) -> Result<ImportAgentMemoriesResult, String> {
-    import_agent_memories_inner(input, state.inner())
-}
 
 fn import_agent_memories_inner(
     input: ImportAgentMemoriesInput,
@@ -638,11 +567,6 @@ fn import_agent_memories_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn load_chat_settings(state: State<'_, AppState>) -> Result<ChatSettings, String> {
-    load_chat_settings_inner(&state)
-}
 
 fn load_chat_settings_inner(state: &AppState) -> Result<ChatSettings, String> {
     let config = read_config(&state.config_path)?;
@@ -812,37 +736,7 @@ fn apply_chat_settings_patch(
     build_chat_settings_payload(state, &data, config)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn save_chat_settings(
-    input: ChatSettings,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<ChatSettings, String> {
-    patch_chat_settings_inner(
-        ChatSettingsPatch {
-            assistant_department_agent_id: Some(input.assistant_department_agent_id),
-            user_alias: Some(input.user_alias),
-            response_style_id: Some(input.response_style_id),
-            pdf_read_mode: Some(input.pdf_read_mode),
-            background_voice_screenshot_keywords: Some(input.background_voice_screenshot_keywords),
-            background_voice_screenshot_mode: Some(input.background_voice_screenshot_mode),
-            instruction_presets: Some(input.instruction_presets),
-        },
-        &NativeAppHandle::from_tauri(app.clone()),
-        &state,
-    )
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn patch_chat_settings(
-    input: ChatSettingsPatch,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<ChatSettings, String> {
-    patch_chat_settings_inner(input, &NativeAppHandle::from_tauri(app.clone()), &state)
-}
 
 fn patch_chat_settings_inner(
     input: ChatSettingsPatch,
@@ -934,14 +828,6 @@ fn normalize_avatar_bytes_to_webp(raw: &[u8]) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn save_agent_avatar(
-    input: SaveAgentAvatarInput,
-    state: State<'_, AppState>,
-) -> Result<AvatarMeta, String> {
-    save_agent_avatar_inner(input, &state)
-}
 
 fn save_agent_avatar_inner(
     input: SaveAgentAvatarInput,
@@ -1007,14 +893,6 @@ fn save_agent_avatar_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn clear_agent_avatar(
-    input: ClearAgentAvatarInput,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    clear_agent_avatar_inner(input, &state)
-}
 
 fn clear_agent_avatar_inner(
     input: ClearAgentAvatarInput,
@@ -1064,14 +942,6 @@ fn clear_agent_avatar_inner(
     Ok(())
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn read_avatar_data_url(
-    input: AvatarDataPathInput,
-    state: State<'_, AppState>,
-) -> Result<AvatarDataUrlOutput, String> {
-    read_avatar_data_url_inner(input, &state)
-}
 
 fn read_avatar_data_url_inner(
     input: AvatarDataPathInput,
@@ -1134,14 +1004,6 @@ struct ChatImageDataUrlOutput {
     data_url: String,
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn read_chat_image_data_url(
-    input: ChatImageDataUrlInput,
-    state: State<'_, AppState>,
-) -> Result<ChatImageDataUrlOutput, String> {
-    read_chat_image_data_url_inner(input, &state)
-}
 
 fn read_chat_image_data_url_inner(
     input: ChatImageDataUrlInput,
@@ -1166,15 +1028,6 @@ fn read_chat_image_data_url_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn sync_tray_icon(
-    _input: SyncTrayIconInput,
-    app: tauri::AppHandle,
-    _state: State<'_, AppState>,
-) -> Result<(), String> {
-    sync_default_tray_icon(&app)
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -1285,35 +1138,7 @@ fn apply_conversation_api_settings_patch(config: &mut AppConfig, input: Conversa
     }
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn save_conversation_api_settings(
-    input: ConversationApiSettings,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<ConversationApiSettings, String> {
-    patch_conversation_api_settings_inner(
-        ConversationApiSettingsPatch {
-            assistant_department_api_config_id: Some(input.assistant_department_api_config_id),
-            vision_api_config_id: Some(input.vision_api_config_id),
-            tool_review_api_config_id: Some(input.tool_review_api_config_id),
-            stt_api_config_id: Some(input.stt_api_config_id),
-            stt_auto_send: Some(input.stt_auto_send),
-        },
-        &NativeAppHandle::from_tauri(app.clone()),
-        &state,
-    )
-}
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn patch_conversation_api_settings(
-    input: ConversationApiSettingsPatch,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<ConversationApiSettings, String> {
-    patch_conversation_api_settings_inner(input, &NativeAppHandle::from_tauri(app.clone()), &state)
-}
 
 fn patch_conversation_api_settings_inner(
     input: ConversationApiSettingsPatch,
@@ -1333,15 +1158,6 @@ fn patch_conversation_api_settings_inner(
     Ok(payload)
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-fn set_department_primary_api_config(
-    input: SetDepartmentPrimaryApiConfigInput,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<AppConfig, String> {
-    set_department_primary_api_config_inner(input, &NativeAppHandle::from_tauri(app.clone()), state.inner())
-}
 
 fn set_department_primary_api_config_inner(
     input: SetDepartmentPrimaryApiConfigInput,

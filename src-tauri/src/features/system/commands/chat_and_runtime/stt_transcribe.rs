@@ -237,14 +237,6 @@ async fn call_mimo_asr_transcribe(
     ))
 }
 
-#[cfg(not(target_os = "android"))]
-#[tauri::command]
-async fn stt_transcribe(
-    input: SttTranscribeInput,
-    state: State<'_, AppState>,
-) -> Result<SttTranscribeOutput, String> {
-    stt_transcribe_inner(input, state.inner()).await
-}
 
 async fn stt_transcribe_inner(
     input: SttTranscribeInput,
