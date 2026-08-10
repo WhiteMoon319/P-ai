@@ -339,6 +339,7 @@ async fn mcp_probe_server_tools_background(
     ));
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn mcp_list_servers(state: State<'_, AppState>) -> Result<Vec<McpServerConfig>, String> {
     mcp_list_servers_inner(state.inner())
@@ -352,6 +353,7 @@ fn mcp_list_servers_inner(state: &AppState) -> Result<Vec<McpServerConfig>, Stri
     Ok(out)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn mcp_validate_definition(
     input: McpDefinitionValidateInput,
@@ -420,6 +422,7 @@ fn mcp_validate_definition_inner(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn mcp_save_server(
     input: McpServerInput,
@@ -442,6 +445,7 @@ fn mcp_save_server_inner(
     Ok(saved)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn mcp_remove_server(
     input: McpServerIdInput,
@@ -466,6 +470,7 @@ async fn mcp_remove_server_inner(
     Ok(removed)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn mcp_list_server_tools(
     input: McpServerIdInput,
@@ -526,6 +531,7 @@ async fn mcp_list_server_tools_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn mcp_list_server_tools_cached(
     input: McpServerIdInput,
@@ -558,6 +564,7 @@ fn mcp_list_server_tools_cached_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn mcp_deploy_server(
     input: McpServerIdInput,
@@ -610,6 +617,7 @@ async fn mcp_deploy_server_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn mcp_undeploy_server(
     input: McpServerIdInput,
@@ -638,6 +646,7 @@ async fn mcp_undeploy_server_inner(
     Ok(out)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn mcp_set_tool_enabled(
     input: McpSetToolEnabledInput,
@@ -683,6 +692,7 @@ fn mcp_set_tool_enabled_inner(
     Ok(server)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn mcp_open_workspace_dir(state: State<'_, AppState>) -> Result<String, String> {
     open_mcp_workspace_dir(&state)
@@ -767,6 +777,7 @@ fn build_mcp_fix_prompt(definition_json: &str, issues: &[McpValidationIssue]) ->
     )
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn mcp_fix_definition(
     input: McpFixDefinitionInput,

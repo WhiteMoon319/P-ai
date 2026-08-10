@@ -21,6 +21,7 @@ fn tool_review_delegate_background(scope: &str, target: Option<&str>) -> String 
     lines.join("\n")
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn list_tool_review_commit_options(
     input: ToolReviewCommitPageInput,
@@ -564,6 +565,7 @@ fn tool_review_normalize_review_value(raw: Option<Value>) -> Option<Value> {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn delete_tool_review_report(
     input: DeleteToolReviewReportInput,
@@ -1796,6 +1798,7 @@ fn with_tool_review_conversation<T>(
     )
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn list_tool_review_reports(
     input: ToolReviewConversationInput,
@@ -1820,6 +1823,7 @@ fn list_tool_review_reports_internal(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn list_tool_review_batches(
     input: ToolReviewConversationInput,
@@ -1852,6 +1856,7 @@ fn list_tool_review_batches(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_tool_review_item_detail(
     input: ToolReviewCallInput,
@@ -1868,6 +1873,7 @@ fn get_tool_review_item_detail(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_tool_review_batch_details(
     input: ToolReviewBatchActionInput,
@@ -1895,6 +1901,7 @@ fn get_tool_review_batch_details(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn run_tool_review_for_call(
     input: ToolReviewCallInput,
@@ -1918,6 +1925,7 @@ struct ToolReviewSetUserDecisionInput {
     opinion: String,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn set_tool_review_item_user_decision(
     input: ToolReviewSetUserDecisionInput,
@@ -1963,6 +1971,7 @@ async fn tool_review_run_missing_reviews_for_batch(
     Ok(reviewed_call_ids)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn run_tool_review_for_batch(
     input: ToolReviewBatchActionInput,
@@ -1984,6 +1993,7 @@ async fn run_tool_review_for_batch(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn submit_tool_review_code(
     input: ToolReviewCodeReviewInput,

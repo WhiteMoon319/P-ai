@@ -38,6 +38,7 @@ fn resolve_chat_prompt_preview_api_config(
     .ok_or_else(|| "No API config available".to_string())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn get_prompt_preview(
     input: SessionSelector,
@@ -260,6 +261,7 @@ async fn get_prompt_preview_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn get_system_prompt_preview(
     input: SessionSelector,
@@ -323,6 +325,7 @@ fn archive_to_conversation(archive: ConversationArchive) -> Conversation {
     conversation
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn list_archives(state: State<'_, AppState>) -> Result<Vec<ArchiveSummary>, String> {
     let app_state = state.inner().clone();
@@ -335,6 +338,7 @@ fn list_archives_inner(state: &AppState) -> Result<Vec<ArchiveSummary>, String> 
     conversation_service_v2().list_archives(state)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_archive_messages(
     archive_id: String,
@@ -375,6 +379,7 @@ struct ArchiveBlockPageOutput {
     has_next_block: bool,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_archive_block_page(
     input: GetArchiveBlockPageInput,
@@ -417,6 +422,7 @@ fn get_archive_block_page_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_archive_summary(archive_id: String, state: State<'_, AppState>) -> Result<String, String> {
     get_archive_summary_inner(state.inner(), &archive_id)
@@ -426,6 +432,7 @@ fn get_archive_summary_inner(state: &AppState, archive_id: &str) -> Result<Strin
     conversation_service_v2().get_archive_summary(state, archive_id)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn delete_archive(archive_id: String, state: State<'_, AppState>) -> Result<(), String> {
     delete_archive_inner(state.inner(), &archive_id)
@@ -435,6 +442,7 @@ fn delete_archive_inner(state: &AppState, archive_id: &str) -> Result<(), String
     conversation_service_v2().delete_archive(state, archive_id)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn unarchive_archive(archive_id: String, state: State<'_, AppState>) -> Result<(), String> {
     unarchive_archive_inner(state.inner(), &archive_id)

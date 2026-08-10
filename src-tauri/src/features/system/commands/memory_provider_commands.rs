@@ -119,6 +119,7 @@ struct MemoryRestoreInput {
     path: String,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn sync_memory_embedding_provider(
     input: SyncMemoryEmbeddingProviderInput,
@@ -478,6 +479,7 @@ fn save_memory_rerank_binding_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn test_memory_embedding_provider(
     input: TestMemoryEmbeddingProviderInput,
@@ -486,6 +488,7 @@ fn test_memory_embedding_provider(
     test_memory_embedding_provider_inner(input, state.inner())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn test_memory_rerank_provider(
     input: TestMemoryRerankProviderInput,
@@ -494,6 +497,7 @@ fn test_memory_rerank_provider(
     test_memory_rerank_provider_inner(input, state.inner())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_memory_provider_bindings(
     state: State<'_, AppState>,
@@ -501,6 +505,7 @@ fn get_memory_provider_bindings(
     get_memory_provider_bindings_inner(state.inner())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_memory_embedding_sync_progress(
     state: State<'_, AppState>,
@@ -508,6 +513,7 @@ fn get_memory_embedding_sync_progress(
     get_memory_embedding_sync_progress_inner(state.inner())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn save_memory_embedding_binding(
     input: SaveMemoryEmbeddingBindingInput,
@@ -516,6 +522,7 @@ fn save_memory_embedding_binding(
     save_memory_embedding_binding_inner(input, state.inner())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn save_memory_rerank_binding(
     input: SaveMemoryRerankBindingInput,
@@ -524,11 +531,13 @@ fn save_memory_rerank_binding(
     save_memory_rerank_binding_inner(input, state.inner())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn memory_rebuild_indexes(state: State<'_, AppState>) -> Result<MemoryStoreRebuildReport, String> {
     memory_store_rebuild_indexes(&state.data_path)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn memory_health_check(
     input: MemoryHealthCheckInput,
@@ -537,6 +546,7 @@ fn memory_health_check(
     memory_store_health_check(&state.data_path, input.auto_repair)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn memory_backup_db(
     input: MemoryBackupInput,
@@ -549,6 +559,7 @@ fn memory_backup_db(
     memory_store_backup_db(&state.data_path, &path)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn memory_restore_db(
     input: MemoryRestoreInput,

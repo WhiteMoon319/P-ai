@@ -1,3 +1,4 @@
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn task_list_tasks(state: State<'_, AppState>) -> Result<Vec<TaskEntry>, String> {
     task_list_tasks_inner(state.inner())
@@ -494,6 +495,7 @@ fn task_optimize_end_at(value: Option<&str>, fallback: &str, run_at: &str) -> St
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn task_get_task(input: TaskGetInput, state: State<'_, AppState>) -> Result<TaskEntry, String> {
     task_get_task_inner(input, state.inner())
@@ -503,6 +505,7 @@ fn task_get_task_inner(input: TaskGetInput, state: &AppState) -> Result<TaskEntr
     task_store_get_task(&state.data_path, input.task_id.trim())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn task_optimize_draft(
     input: TaskOptimizeDraftInput,
@@ -609,6 +612,7 @@ async fn task_optimize_draft_internal(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn task_create_task(input: TaskCreateInput, state: State<'_, AppState>) -> Result<TaskEntry, String> {
     task_create_task_inner(input, state.inner())
@@ -621,6 +625,7 @@ fn task_create_task_inner(input: TaskCreateInput, state: &AppState) -> Result<Ta
     Ok(task)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 async fn task_dispatch_task_now(input: TaskDispatchNowInput, state: State<'_, AppState>) -> Result<bool, String> {
     task_dispatch_task_now_inner(input, state.inner()).await
@@ -639,6 +644,7 @@ async fn task_dispatch_task_now_inner(
     Ok(true)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn task_update_task(input: TaskUpdateInput, state: State<'_, AppState>) -> Result<TaskEntry, String> {
     task_update_task_inner(input, state.inner())
@@ -651,6 +657,7 @@ fn task_update_task_inner(input: TaskUpdateInput, state: &AppState) -> Result<Ta
     Ok(task)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn task_complete_task(input: TaskCompleteInput, state: State<'_, AppState>) -> Result<TaskEntry, String> {
     task_complete_task_inner(input, state.inner())
@@ -662,6 +669,7 @@ fn task_complete_task_inner(input: TaskCompleteInput, state: &AppState) -> Resul
     Ok(task)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn task_delete_task(input: TaskDeleteInput, state: State<'_, AppState>) -> Result<(), String> {
     task_delete_task_inner(input, state.inner())
@@ -673,6 +681,7 @@ fn task_delete_task_inner(input: TaskDeleteInput, state: &AppState) -> Result<()
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn task_list_run_logs(
     input: Option<TaskRunLogListInput>,

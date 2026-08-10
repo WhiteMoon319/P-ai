@@ -1,3 +1,4 @@
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn list_memories(state: State<'_, AppState>) -> Result<Vec<MemoryEntry>, String> {
     list_memories_inner(state.inner())
@@ -883,6 +884,7 @@ struct DeleteMemoryResult {
     status: String,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn delete_memory(
     input: DeleteMemoryInput,
@@ -1074,16 +1076,19 @@ fn search_memories_mixed_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn export_memories(state: State<'_, AppState>) -> Result<AngelMemoryExportPayload, String> {
     export_memories_inner(state.inner(), None)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn preview_export_memories(state: State<'_, AppState>) -> Result<PreviewExportMemoriesResult, String> {
     preview_export_memories_inner(state.inner())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn export_memories_to_file(
     app: AppHandle,
@@ -1115,6 +1120,7 @@ fn export_memories_to_file(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn export_memories_to_path(
     input: ExportMemoriesToPathInput,
@@ -1146,6 +1152,7 @@ fn export_memories_to_path(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn import_memories(
     input: ImportMemoriesInput,
@@ -1154,6 +1161,7 @@ fn import_memories(
     import_memories_inner(state.inner(), input)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn preview_import_angel_memories(
     input: PreviewImportAngelMemoriesInput,
@@ -1161,6 +1169,7 @@ fn preview_import_angel_memories(
     preview_import_angel_memories_inner(input)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn import_angel_memories(
     input: ImportAngelMemoriesInput,
@@ -1169,6 +1178,7 @@ fn import_angel_memories(
     import_angel_memories_inner(state.inner(), input)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn search_memories_mixed(
     input: SearchMemoriesMixedInput,
@@ -1210,6 +1220,7 @@ struct SearchMemoriesRecallResult {
     limit: usize,
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn search_memories_recall(
     input: SearchMemoriesRecallInput,
@@ -1376,6 +1387,7 @@ fn search_memories_recall_inner(
     })
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn search_chat_history_slices(
     input: ChatHistorySearchInput,
@@ -1384,6 +1396,7 @@ fn search_chat_history_slices(
     chat_history_search_for_agent(state.inner(), &input)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn open_external_url(url: String) -> Result<(), String> {
     let trimmed = url.trim();
@@ -1401,6 +1414,7 @@ fn open_external_url(url: String) -> Result<(), String> {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn open_workspace_file(relative_path: String, state: State<'_, AppState>) -> Result<(), String> {
     let trimmed = relative_path.trim().replace('\\', "/");

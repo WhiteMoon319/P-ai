@@ -1275,6 +1275,7 @@ fn latest_chat_round_headers_and_tools(
     )
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn list_recent_llm_round_logs(state: State<'_, AppState>) -> Result<Vec<LlmRoundLogEntry>, String> {
     list_recent_llm_round_logs_inner(state.inner())
@@ -1387,6 +1388,7 @@ fn llm_round_log_section_value(entry: &LlmRoundLogEntry, section: &str) -> Optio
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn get_recent_llm_round_log_section(
     state: State<'_, AppState>,
@@ -1420,6 +1422,7 @@ fn get_recent_llm_round_log_section_inner(
         }))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn clear_recent_llm_round_logs(state: State<'_, AppState>) -> Result<bool, String> {
     clear_recent_llm_round_logs_inner(state.inner())
@@ -1538,6 +1541,7 @@ where
     stats
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn dump_memory_cache_stats(state: State<'_, AppState>) -> Result<MemoryCacheStats, String> {
     dump_memory_cache_stats_inner(state.inner())
