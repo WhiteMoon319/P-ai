@@ -584,6 +584,17 @@ class AppViewModel(
         }
     }
 
+    /** 读取聊天图片 data URL（供消息气泡渲染缩略图）。 */
+    suspend fun readChatImageDataUrl(mediaRef: String, mime: String): String? {
+        return withContext(Dispatchers.IO) {
+            try {
+                service.readChatImageDataUrl(mediaRef, mime)
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
     /** 当前会话提示词预览：返回 (标题, 内容)。 */
     suspend fun promptPreviewForCurrent(): Pair<String, String>? {
         val conversationId = currentConversationId.value ?: return null

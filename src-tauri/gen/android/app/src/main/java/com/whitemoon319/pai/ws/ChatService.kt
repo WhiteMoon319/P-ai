@@ -269,6 +269,14 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("get_prompt_preview", params, Map::class.java) as Map<String, Any?>
     }
 
+    /** 读取聊天图片为 data URL（read_chat_image_data_url）。 */
+    suspend fun readChatImageDataUrl(mediaRef: String, mime: String): String? {
+        val input = mapOf("mediaRef" to mediaRef, "mime" to mime)
+        @Suppress("UNCHECKED_CAST")
+        val result = client.request("read_chat_image_data_url", mapOf("input" to input), Map::class.java) as Map<String, Any?>
+        return result["dataUrl"] as? String
+    }
+
     /** 会话可用模型列表（model.list，Vue 模型切换语义）。 */
     suspend fun modelList(conversationId: String): List<Map<String, Any?>> {
         @Suppress("UNCHECKED_CAST")

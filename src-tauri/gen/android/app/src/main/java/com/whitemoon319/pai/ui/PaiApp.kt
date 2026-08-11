@@ -8,6 +8,7 @@ import com.whitemoon319.pai.viewmodel.AppViewModel
 import com.whitemoon319.pai.ws.ConnectionStatus
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -82,6 +83,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -1108,6 +1111,7 @@ fun ChatScreen(
                         ?.firstOrNull { it.id == msg.speakerAgentId }
                         ?.name
                     MessageBubble(
+                        vm = vm,
                         msg,
                         agentName = agentName,
                         onRegenerate = { messageId ->
@@ -1495,6 +1499,72 @@ fun ChatScreen(
 }
 
 /**
+ * 消息内图片渲染：通过后端 read_chat_image_data_url 读取 data URL，原生解码显示。
+ */
+@Composable
+private fun ChatImagePart(
+    vm: AppViewModel,
+    part: com.whitemoon319.pai.model.MessagePart,
+    onClick: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var bitmap by remember(part.path, part.text) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var failed by remember(part.path, part.text) { mutableStateOf(false) }
+
+    LaunchedEffect(part.path, part.text) {
+        val mediaRef = part.path?.takeIf { it.isNotBlank() }
+            ?: part.text?.takeIf { it.isNotBlank() }
+        if (mediaRef == null) {
+            failed = true
+            return@LaunchedEffect
+        }
+        val mime = part.mime?.takeIf { it.isNotBlank() } ?: "image/png"
+        val dataUrl = vm.readChatImageDataUrl(mediaRef, mime)
+        if (dataUrl == null) {
+            failed = true
+            return@LaunchedEffect
+        }
+        val base64 = dataUrl.substringAfter("base64,", "")
+        runCatching {
+            val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        }.getOrNull()?.let { bitmap = it } ?: run { failed = true }
+    }
+
+    when {
+        bitmap != null -> {
+            Image(
+                bitmap = bitmap!!.asImageBitmap(),
+                contentDescription = part.name ?: "图片",
+                modifier = Modifier
+                    .padding(vertical = 4.dp)
+                    .widthIn(max = 280.dp)
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable(onClick = onClick),
+            )
+        }
+        failed -> {
+            Text(
+                "🖼 ${part.name?.takeIf { it.isNotBlank() } ?: "图片"}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        else -> {
+            Box(
+                Modifier
+                    .padding(vertical = 4.dp)
+                    .width(160.dp)
+                    .height(120.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+            }
+        }
+    }
+}
+
+/**
  * 「思维活动」大类容器：承载一段回合内交错出现的思考与工具调用。
  * 两层折叠——大类可整体折叠/展开；大类内每个 step 又各自展开/折叠。
  * 语义参考 rikkahub 的 groupMessageParts（thinking 大类 → steps[]）。
@@ -1626,6 +1696,7 @@ private fun ThinkingSectionMessage(steps: List<ActivityStep>) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MessageBubble(
+    vm: AppViewModel,
     message: ChatMessage,
     agentName: String? = null,
     onRegenerate: ((String) -> Unit)? = null,
@@ -1666,7 +1737,18 @@ fun MessageBubble(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(2.dp))
-                    Text(textContent)
+                    message.parts.forEach { part ->
+                        if (part.type == "Image") {
+                            ChatImagePart(
+                                vm = vm,
+                                part = part,
+                                onClick = { showMenu = true },
+                            )
+                        }
+                    }
+                    if (textContent.isNotBlank()) {
+                        Text(textContent)
+                    }
                 }
             } else {
                 Column(Modifier.padding(10.dp)) {
@@ -1682,6 +1764,15 @@ fun MessageBubble(
                     val steps = buildActivityStepsFromMessage(message)
                     if (steps.isNotEmpty()) {
                         ThinkingSectionMessage(steps)
+                    }
+                    message.parts.forEach { part ->
+                        if (part.type == "Image") {
+                            ChatImagePart(
+                                vm = vm,
+                                part = part,
+                                onClick = { showMenu = true },
+                            )
+                        }
                     }
                     if (textContent.isNotBlank()) {
                         MarkdownText(content = textContent)

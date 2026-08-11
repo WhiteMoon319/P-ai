@@ -283,6 +283,14 @@ async fn native_dispatch(
         "conversation.compact" => ide_chat_compact_conversation(state, params).await,
         "conversation.compactPreview" => ide_chat_compact_preview(state, params),
         "conversation.autoPush" => ide_chat_set_auto_push_command(state, params),
+        "read_chat_image_data_url" => {
+            let input = ide_chat_parse_param_field::<ChatImageDataUrlInput>(params, "input")?;
+            ide_chat_serialize(read_chat_image_data_url_inner(input, state)?)
+        }
+        "read_avatar_data_url" => {
+            let input = ide_chat_parse_param_field::<AvatarDataPathInput>(params, "input")?;
+            ide_chat_serialize(read_avatar_data_url_inner(input, state)?)
+        }
         // ---- 长期目标（goal）----
         "goal.current" => ide_chat_goal_current(state, params),
         "goal.create" => ide_chat_goal_create(state, params),
