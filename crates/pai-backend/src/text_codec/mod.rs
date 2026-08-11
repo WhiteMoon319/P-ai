@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum TextFileBom {
+pub enum TextFileBom {
     None,
     Utf8,
     Utf16Le,
@@ -7,19 +7,19 @@ pub(crate) enum TextFileBom {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct DecodedTextFile {
-    pub(crate) text: String,
-    pub(crate) encoding: &'static encoding_rs::Encoding,
-    pub(crate) bom: TextFileBom,
+pub struct DecodedTextFile {
+    pub text: String,
+    pub encoding: &'static encoding_rs::Encoding,
+    pub bom: TextFileBom,
 }
 
 impl DecodedTextFile {
-    pub(crate) fn encode_like_original(&self, text: &str) -> Result<Vec<u8>, String> {
+    pub fn encode_like_original(&self, text: &str) -> Result<Vec<u8>, String> {
         encode_text_with_detected_encoding(text, self.encoding, self.bom)
     }
 }
 
-pub(crate) fn decode_text_file_bytes(bytes: &[u8]) -> Result<DecodedTextFile, String> {
+pub fn decode_text_file_bytes(bytes: &[u8]) -> Result<DecodedTextFile, String> {
     if bytes.is_empty() {
         return Ok(DecodedTextFile {
             text: String::new(),
@@ -61,7 +61,12 @@ pub(crate) fn decode_text_file_bytes(bytes: &[u8]) -> Result<DecodedTextFile, St
     Err("无法识别文本编码，已拒绝按有损方式读取".to_string())
 }
 
-pub(crate) fn decode_text_file_from_path(path: &std::path::Path) -> Result<DecodedTextFile, String> {
+/// 用户可读路径（简化版，原 src-tauri terminal_path_for_user 迁入）。
+fn terminal_path_for_user(path: &std::path::Path) -> String {
+    path.display().to_string()
+}
+
+pub fn decode_text_file_from_path(path: &std::path::Path) -> Result<DecodedTextFile, String> {
     let bytes =
         std::fs::read(path).map_err(|err| format!("读取文件失败（{}）：{err}", terminal_path_for_user(path)))?;
     decode_text_file_bytes(&bytes).map_err(|err| {
@@ -73,7 +78,7 @@ pub(crate) fn decode_text_file_from_path(path: &std::path::Path) -> Result<Decod
     })
 }
 
-pub(crate) fn decode_with_encoding(
+pub fn decode_with_encoding(
     bytes: &[u8],
     encoding: &'static encoding_rs::Encoding,
     bom: TextFileBom,
@@ -89,7 +94,7 @@ pub(crate) fn decode_with_encoding(
     })
 }
 
-pub(crate) fn encode_text_with_detected_encoding(
+pub fn encode_text_with_detected_encoding(
     text: &str,
     encoding: &'static encoding_rs::Encoding,
     bom: TextFileBom,
@@ -150,7 +155,7 @@ pub(crate) fn encode_text_with_detected_encoding(
 }
 
 #[cfg(test)]
-pub(crate) mod text_codec_tests {
+pub mod text_codec_tests {
     use super::*;
 
     #[test]

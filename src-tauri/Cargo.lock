@@ -3512,8 +3512,12 @@ dependencies = [
 name = "pai-backend"
 version = "0.57.0"
 dependencies = [
+ "chardetng",
+ "encoding_rs",
  "genai",
  "pai-protocol",
+ "rmcp",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "time",

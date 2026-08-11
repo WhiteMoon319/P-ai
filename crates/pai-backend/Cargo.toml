@@ -6,7 +6,11 @@ description = "P-AI 平台无关业务后端（会话/消息/记忆/任务/远�
 
 [dependencies]
 pai-protocol = { path = "../pai-protocol" }
+chardetng = "1.0.0"
+encoding_rs = "0.8"
 genai = { git = "https://github.com/jeremychone/rust-genai.git", rev = "cf3396e3ac9c6bf74be5a9ed4c2400ff920f29e7" }
+rmcp = { version = "3.0.1", features = ["macros"] }
+schemars = "1.2.1"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

@@ -23,15 +23,17 @@ use uuid::Uuid;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use super::*;
-include!("tools/types.rs");
+// tools/types.rs 与 tools/operate_parser.rs 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::desktop_tools::operate_parser::*;
+pub(crate) use pai_backend::desktop_tools::types::*;
 include!("tools/image_normalizer_for_llm_request.rs");
-include!("tools/operate_parser.rs");
 #[cfg(target_os = "android")]
 include!("tools/desktop_only_android_stub.rs");
 include!("tools/operate_mcp.rs");
 include!("tools/screenshot_mcp.rs");
 include!("tools/terminal.rs");
-include!("tools/text_codec.rs");
+// text_codec 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::text_codec::*;
 include!("tools/patch.rs");
 include!("tools/patch_rewind.rs");
 include!("tools/read_file.rs");

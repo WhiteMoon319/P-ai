@@ -11,10 +11,12 @@ use std::sync::{Mutex, OnceLock};
 
 pub mod core;
 pub mod delegate;
+pub mod desktop_tools;
 pub mod image_generation;
 pub mod mcp;
 pub mod skill;
 pub mod task;
+pub mod text_codec;
 pub mod version_compare;
 
 /// 原生流式事件队列：Kotlin 通过 pollEvents 轮询弹出。
