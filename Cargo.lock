@@ -1649,6 +1649,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pai-android-platform"
+version = "0.57.0"
+dependencies = [
+ "pai-backend",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "pai-backend"
 version = "0.57.0"
 dependencies = [

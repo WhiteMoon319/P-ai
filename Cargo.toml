@@ -6,9 +6,9 @@ resolver = "2"
 members = [
     "crates/pai-protocol",
     "crates/pai-backend",
-    # 阶段 5-6 依次加入：
+    "crates/pai-android-platform",
+    # 阶段 6 加入：
     # "crates/pai-android-bridge",
-    # "crates/pai-android-platform",
 ]
 exclude = ["src-tauri"]
 

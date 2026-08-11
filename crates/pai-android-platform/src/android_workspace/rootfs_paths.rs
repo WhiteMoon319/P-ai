@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-pub(crate) fn android_workspace_rootfs_resolve_entry_path(
+pub fn android_workspace_rootfs_resolve_entry_path(
     root: &Path,
     path: &Path,
 ) -> Result<PathBuf, String> {
@@ -24,7 +24,7 @@ pub(crate) fn android_workspace_rootfs_resolve_entry_path(
     Ok(target)
 }
 
-pub(crate) fn android_workspace_rootfs_normalize_path(path: &Path) -> PathBuf {
+pub fn android_workspace_rootfs_normalize_path(path: &Path) -> PathBuf {
     let mut normalized = PathBuf::new();
     for component in path.components() {
         match component {
@@ -40,7 +40,7 @@ pub(crate) fn android_workspace_rootfs_normalize_path(path: &Path) -> PathBuf {
     normalized
 }
 
-pub(crate) fn android_workspace_rootfs_resolve_symlink_target(
+pub fn android_workspace_rootfs_resolve_symlink_target(
     root: &Path,
     link_path: &Path,
     link_target: &Path,
@@ -67,7 +67,7 @@ pub(crate) fn android_workspace_rootfs_resolve_symlink_target(
     resolved.starts_with(&root).then_some(resolved)
 }
 
-pub(crate) fn android_workspace_rootfs_relative_symlink_target(
+pub fn android_workspace_rootfs_relative_symlink_target(
     root: &Path,
     link_path: &Path,
     link_target: &Path,
@@ -102,4 +102,42 @@ pub(crate) fn android_workspace_rootfs_relative_symlink_target(
     }
     relative.extend(to_parts.into_iter().skip(common));
     Some(if relative.is_empty() { ".".to_string() } else { relative.join("/") })
+}
+
+/// 用户可读路径（从 src-tauri desktop_tools.rs 迁入）。
+pub fn shell_workspace_display_path(path: &Path) -> String {
+    #[cfg(target_os = "windows")]
+    {
+        let raw = path.to_string_lossy();
+        if let Some(rest) = raw.strip_prefix(r"\\?\UNC\") {
+            return format!(r"\\{rest}");
+        }
+        if let Some(rest) = raw.strip_prefix(r"\\?\") {
+            return rest.to_string();
+        }
+        raw.to_string()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        path.display().to_string()
+    }
+}
+
+/// 工作区状态路径（从 src-tauri android_workspace.rs 迁入）。
+pub fn android_workspace_status_paths(root: &Path) -> (String, String) {
+    (
+        shell_workspace_display_path(root),
+        shell_workspace_display_path(&android_workspace_runtime_root(root)),
+    )
+}
+
+/// Android 工作区运行时根（与 src-tauri android_workspace_paths.rs 同源）。
+pub(crate) fn android_workspace_runtime_root(root: &Path) -> PathBuf {
+    root.parent()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| root.to_path_buf())
+        .join("runtime")
+        .join("android-workspace")
+        .join("default")
+        .join("linux")
 }

@@ -10,10 +10,9 @@ pub(crate) const ANDROID_WORKSPACE_ROOTFS_CHUNK_TIMEOUT_SECS: u64 = 60;
 pub(crate) const ANDROID_WORKSPACE_ROOTFS_MARKER_FILE: &str = ".pai-rootfs-installed";
 pub(crate) const ANDROID_WORKSPACE_FILE_TRANSFER_MAX_BYTES: u64 = 64 * 1024 * 1024;
 
-pub(crate) mod android_workspace_types {
-    include!("android_workspace/types.rs");
-}
-use android_workspace_types::*;
+// types 与 rootfs_paths 已迁至 crates/pai-android-platform（阶段 5）。
+pub(crate) use pai_android_platform::android_workspace::types::*;
+pub(crate) use pai_android_platform::android_workspace::rootfs_paths::*;
 
 #[cfg(target_os = "android")]
 pub(crate) mod android_workspace_rootfs_installer {
@@ -31,12 +30,8 @@ pub(crate) fn android_workspace_state_path(state: &AppState) -> PathBuf {
     android_workspace_runtime_base(&root).join(ANDROID_WORKSPACE_STATE_FILE)
 }
 
-pub(crate) fn android_workspace_status_paths(root: &std::path::Path) -> (String, String) {
-    (
-        shell_workspace_display_path(root),
-        shell_workspace_display_path(&android_workspace_runtime_root(root)),
-    )
-}
+// android_workspace_status_paths / android_workspace_runtime_root / shell_workspace_display_path
+// 已迁至 crates/pai-android-platform（阶段 5），通过顶部 bridge 生效。
 
 pub(crate) fn android_workspace_required_dirs(root: &std::path::Path) -> [PathBuf; 4] {
     [

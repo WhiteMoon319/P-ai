@@ -1,0 +1,10 @@
+[package]
+name = "pai-android-platform"
+version.workspace = true
+edition.workspace = true
+description = "P-AI Android 平台能力（workspace/rootfs/proot/TLS/沙盒）"
+
+[dependencies]
+pai-backend = { path = "../pai-backend" }
+serde = { workspace = true }
+serde_json = { workspace = true }

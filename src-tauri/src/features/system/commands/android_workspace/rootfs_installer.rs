@@ -163,10 +163,8 @@ pub(crate) fn verify_android_workspace_rootfs_archive(path: &std::path::Path) ->
     Ok(())
 }
 
-mod android_workspace_rootfs_paths {
-    include!("rootfs_paths.rs");
-}
-use android_workspace_rootfs_paths::*;
+// rootfs_paths 已迁至 crates/pai-android-platform（阶段 5）。
+use pai_android_platform::android_workspace::rootfs_paths::*;
 
 pub(crate) fn android_workspace_unpack_rootfs_symlink<R: std::io::Read>(
     entry: &mut tar::Entry<'_, R>,
