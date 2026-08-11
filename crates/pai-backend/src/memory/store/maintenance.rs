@@ -1,4 +1,16 @@
-pub(crate) fn memory_store_rebuild_indexes(data_path: &PathBuf) -> Result<MemoryStoreRebuildReport, String> {
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+use std::time::Duration;
+use time::OffsetDateTime;
+use uuid::Uuid;
+
+use crate::core::domain::types_storage::MemoryEntry;
+use crate::logging::{runtime_log_error, runtime_log_info, runtime_log_warn};
+use super::*;
+
+pub fn memory_store_rebuild_indexes(data_path: &PathBuf) -> Result<MemoryStoreRebuildReport, String> {
     let mut conn = memory_store_open(data_path)?;
     let tx = conn
         .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -62,7 +74,7 @@ pub(crate) fn memory_store_rebuild_indexes(data_path: &PathBuf) -> Result<Memory
     })
 }
 
-pub(crate) fn memory_store_health_check(
+pub fn memory_store_health_check(
     data_path: &PathBuf,
     auto_repair: bool,
 ) -> Result<MemoryStoreHealthReport, String> {
@@ -178,7 +190,7 @@ pub(crate) fn memory_store_health_check(
     })
 }
 
-pub(crate) fn memory_store_backup_db(data_path: &PathBuf, target_path: &PathBuf) -> Result<MemoryStoreBackupResult, String> {
+pub fn memory_store_backup_db(data_path: &PathBuf, target_path: &PathBuf) -> Result<MemoryStoreBackupResult, String> {
     if let Some(parent) = target_path.parent() {
         fs::create_dir_all(parent)
             .map_err(|err| format!("Create backup dir failed ({}): {err}", parent.display()))?;
@@ -196,7 +208,7 @@ pub(crate) fn memory_store_backup_db(data_path: &PathBuf, target_path: &PathBuf)
     })
 }
 
-pub(crate) fn memory_store_restore_db(data_path: &PathBuf, source_path: &PathBuf) -> Result<MemoryStoreBackupResult, String> {
+pub fn memory_store_restore_db(data_path: &PathBuf, source_path: &PathBuf) -> Result<MemoryStoreBackupResult, String> {
     if !source_path.exists() {
         return Err(format!("Restore source not found: {}", source_path.display()));
     }

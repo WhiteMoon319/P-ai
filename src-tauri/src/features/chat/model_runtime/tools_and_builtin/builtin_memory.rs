@@ -1,43 +1,5 @@
-pub(crate) fn normalize_memory_keywords(raw: &[String]) -> Vec<String> {
-    let mut out = Vec::<String>::new();
-    for item in raw {
-        let trimmed = item.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let v = trimmed.to_string();
-        if !out.iter().any(|x| x == &v) {
-            out.push(v);
-        }
-    }
-    out
-}
-
-pub(crate) fn memory_contains_sensitive(content: &str, keywords: &[String]) -> bool {
-    let mut full = content.to_lowercase();
-    if !keywords.is_empty() {
-        full.push('\n');
-        full.push_str(&keywords.join(" ").to_lowercase());
-    }
-    let danger_tokens = [
-        "password",
-        "passwd",
-        "api key",
-        "apikey",
-        "token",
-        "secret",
-        "private key",
-        "sk-",
-        "ssh-rsa",
-        "验证码",
-        "密码",
-        "密钥",
-        "身份证",
-        "银行卡",
-        "cvv",
-    ];
-    danger_tokens.iter().any(|token| full.contains(token))
-}
+// normalize_memory_keywords / memory_contains_sensitive 已迁至
+// crates/pai-backend memory::store（阶段 4），通过 crate 根重导出生效。
 
 #[derive(Debug, Clone)]
 pub(crate) struct MemorySaveDraft {
@@ -47,18 +9,8 @@ pub(crate) struct MemorySaveDraft {
     pub(crate) tags: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct MemorySaveUpsertItemResult {
-    pub(crate) saved: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) tags: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) updated_at: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) reason: Option<String>,
-}
+// MemorySaveUpsertItemResult 已迁至 crates/pai-backend memory::store（阶段 4），
+// 通过 crate 根重导出生效。
 
 pub(crate) fn parse_memory_save_draft(
     memory_type_raw: &str,

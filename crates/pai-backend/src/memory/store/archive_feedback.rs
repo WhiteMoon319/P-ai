@@ -1,23 +1,34 @@
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-pub(crate) const MEMORY_DECAY_TIER0_THRESHOLD: f64 = 3.0;
-pub(crate) const MEMORY_DECAY_TIER1_THRESHOLD: f64 = 10.0;
-pub(crate) const MEMORY_DECAY_CONSOLIDATE_SPEED: f64 = 2.5;
-pub(crate) const MEMORY_DECAY_USEFUL_BOOST: i64 = 1;
-pub(crate) const MEMORY_DECAY_CYCLE_TIER0_DAYS: i64 = 3;
+use std::fs;
+use std::path::PathBuf;
+use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
+
+use crate::core::time_semantics::now_iso;
+use crate::logging::{runtime_log_info, runtime_log_warn};
+use super::*;
+
+pub const MEMORY_DECAY_TIER0_THRESHOLD: f64 = 3.0;
+pub const MEMORY_DECAY_TIER1_THRESHOLD: f64 = 10.0;
+pub const MEMORY_DECAY_CONSOLIDATE_SPEED: f64 = 2.5;
+pub const MEMORY_DECAY_USEFUL_BOOST: i64 = 1;
+pub const MEMORY_DECAY_CYCLE_TIER0_DAYS: i64 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct MemoryArchiveFeedbackReport {
-    pub(crate) recalled_count: usize,
-    pub(crate) useful_requested_count: usize,
-    pub(crate) useful_accepted_count: usize,
-    pub(crate) useful_rejected_count: usize,
-    pub(crate) boosted_count: usize,
-    pub(crate) penalized_count: usize,
-    pub(crate) natural_decay_count: usize,
+pub struct MemoryArchiveFeedbackReport {
+    pub recalled_count: usize,
+    pub useful_requested_count: usize,
+    pub useful_accepted_count: usize,
+    pub useful_rejected_count: usize,
+    pub boosted_count: usize,
+    pub penalized_count: usize,
+    pub natural_decay_count: usize,
 }
 
-pub(crate) fn memory_decay_tier_of(useful_score: f64) -> i32 {
+pub fn memory_decay_tier_of(useful_score: f64) -> i32 {
     if useful_score >= MEMORY_DECAY_TIER1_THRESHOLD {
         2
     } else if useful_score >= MEMORY_DECAY_TIER0_THRESHOLD {
@@ -27,7 +38,7 @@ pub(crate) fn memory_decay_tier_of(useful_score: f64) -> i32 {
     }
 }
 
-pub(crate) fn memory_decay_parse_time_or_epoch(raw: Option<&str>) -> OffsetDateTime {
+pub fn memory_decay_parse_time_or_epoch(raw: Option<&str>) -> OffsetDateTime {
     let text = raw.unwrap_or("").trim();
     if text.is_empty() {
         return OffsetDateTime::UNIX_EPOCH;
@@ -36,7 +47,7 @@ pub(crate) fn memory_decay_parse_time_or_epoch(raw: Option<&str>) -> OffsetDateT
 }
 
 // ========== apply_useful_boost ==========
-pub(crate) fn apply_useful_boost(
+pub fn apply_useful_boost(
     tx: &rusqlite::Transaction,
     useful_accepted: &[String],
     now: &str,
@@ -68,7 +79,7 @@ pub(crate) fn apply_useful_boost(
 }
 
 // ========== apply_useless_penalty ==========
-pub(crate) fn apply_useless_penalty(
+pub fn apply_useless_penalty(
     tx: &rusqlite::Transaction,
     recalled_existing: &[String],
     useful_accepted_set: &HashSet<String>,
@@ -108,7 +119,7 @@ pub(crate) fn apply_useless_penalty(
 }
 
 // ========== apply_natural_decay ==========
-pub(crate) fn apply_natural_decay(
+pub fn apply_natural_decay(
     tx: &rusqlite::Transaction,
     decay_candidates: &[String],
     useful_accepted_set: &HashSet<String>,
@@ -181,7 +192,7 @@ pub(crate) fn apply_natural_decay(
 }
 
 // ========== main flow ==========
-pub(crate) fn memory_store_apply_archive_feedback(
+pub fn memory_store_apply_archive_feedback(
     data_path: &PathBuf,
     recalled_ids: &[String],
     useful_ids: &[String],

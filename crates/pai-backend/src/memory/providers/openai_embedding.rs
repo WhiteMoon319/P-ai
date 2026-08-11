@@ -1,4 +1,5 @@
 use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use std::path::PathBuf;
 
 use crate::memory::providers::http_client::memory_http_client;
 use crate::memory::providers::types::{

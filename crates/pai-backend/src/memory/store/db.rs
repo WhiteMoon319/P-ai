@@ -1,10 +1,38 @@
-pub(crate) fn memory_store_db_path(data_path: &PathBuf) -> PathBuf {
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use std::fs;
+use std::path::PathBuf;
+use time::format_description::well_known::Rfc3339;
+
+use crate::core::time_semantics::now_iso;
+use crate::logging::runtime_log_info;
+use super::*;
+
+/// 从数据目录解析应用根（从 src-tauri runtime_state 迁入的纯路径逻辑）。
+pub fn app_root_from_data_path(data_path: &PathBuf) -> PathBuf {
+    let parent = data_path
+        .parent()
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let is_config_dir = parent
+        .file_name()
+        .and_then(|v| v.to_str())
+        .map(|v| v.eq_ignore_ascii_case("config"))
+        .unwrap_or(false);
+    if is_config_dir {
+        if let Some(root) = parent.parent() {
+            return root.to_path_buf();
+        }
+    }
+    parent
+}
+
+pub fn memory_store_db_path(data_path: &PathBuf) -> PathBuf {
     app_root_from_data_path(data_path)
         .join("memory")
         .join(MEMORY_DB_FILE_NAME)
 }
 
-pub(crate) fn memory_store_open(data_path: &PathBuf) -> Result<Connection, String> {
+pub fn memory_store_open(data_path: &PathBuf) -> Result<Connection, String> {
     let db_path = memory_store_db_path(data_path);
     if !db_path.exists() {
         let legacy_parent = data_path
@@ -41,7 +69,7 @@ pub(crate) fn memory_store_open(data_path: &PathBuf) -> Result<Connection, Strin
     Ok(conn)
 }
 
-pub(crate) fn memory_store_normalize_memory_type(raw: &str) -> Result<String, String> {
+pub fn memory_store_normalize_memory_type(raw: &str) -> Result<String, String> {
     let normalized = raw.trim().to_ascii_lowercase();
     match normalized.as_str() {
         "knowledge" | "skill" | "emotion" | "event" => Ok(normalized),
@@ -54,7 +82,7 @@ pub(crate) fn memory_store_normalize_memory_type(raw: &str) -> Result<String, St
 }
 
 // ========== apply_pragmas_and_create_schema ==========
-pub(crate) fn apply_pragmas_and_create_schema(conn: &Connection) -> Result<(), String> {
+pub fn apply_pragmas_and_create_schema(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
         "PRAGMA journal_mode=WAL;
          PRAGMA synchronous=NORMAL;
@@ -164,7 +192,7 @@ pub(crate) fn apply_pragmas_and_create_schema(conn: &Connection) -> Result<(), S
     Ok(())
 }
 
-pub(crate) fn migrate_memory_short_id(conn: &Connection) -> Result<(), String> {
+pub fn migrate_memory_short_id(conn: &Connection) -> Result<(), String> {
     let has_memory_no_col: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM pragma_table_info('memory_record') WHERE name='memory_no'",
@@ -223,7 +251,7 @@ pub(crate) fn migrate_memory_short_id(conn: &Connection) -> Result<(), String> {
 }
 
 // ========== migrate_owner_agent_col ==========
-pub(crate) fn migrate_owner_agent_col(conn: &Connection) -> Result<(), String> {
+pub fn migrate_owner_agent_col(conn: &Connection) -> Result<(), String> {
     let has_owner_agent_col: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM pragma_table_info('memory_record') WHERE name='owner_agent_id'",
@@ -245,7 +273,7 @@ pub(crate) fn migrate_owner_agent_col(conn: &Connection) -> Result<(), String> {
 }
 
 // ========== migrate_memory_fts ==========
-pub(crate) fn migrate_memory_fts(conn: &Connection) -> Result<(), String> {
+pub fn migrate_memory_fts(conn: &Connection) -> Result<(), String> {
     // Migrate memory_fts: drop the old 2-column (tags+judgment) FTS table and recreate
     // as single-column. The judgment column stores concatenated "judgment + tags" text for BM25.
     let col_count: i64 = conn
@@ -283,7 +311,7 @@ pub(crate) fn migrate_memory_fts(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) fn migrate_profile_memory_link(conn: &Connection) -> Result<(), String> {
+pub fn migrate_profile_memory_link(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS profile_memory_link (
             id TEXT PRIMARY KEY,
@@ -300,7 +328,7 @@ pub(crate) fn migrate_profile_memory_link(conn: &Connection) -> Result<(), Strin
 }
 
 // ========== repopulate_fts_if_needed ==========
-pub(crate) fn repopulate_fts_if_needed(conn: &Connection) -> Result<(), String> {
+pub fn repopulate_fts_if_needed(conn: &Connection) -> Result<(), String> {
     // If memory_fts is empty but memory_record has data, repopulate.
     let fts_count: i64 = conn
         .query_row("SELECT COUNT(1) FROM memory_fts", [], |row| row.get(0))
@@ -329,7 +357,7 @@ pub(crate) fn repopulate_fts_if_needed(conn: &Connection) -> Result<(), String> 
     Ok(())
 }
 
-pub(crate) fn memory_store_init_schema(conn: &Connection) -> Result<(), String> {
+pub fn memory_store_init_schema(conn: &Connection) -> Result<(), String> {
     apply_pragmas_and_create_schema(conn)?;
     migrate_memory_short_id(conn)?;
     migrate_owner_agent_col(conn)?;
@@ -340,7 +368,7 @@ pub(crate) fn memory_store_init_schema(conn: &Connection) -> Result<(), String> 
     Ok(())
 }
 
-pub(crate) fn memory_store_set_runtime_state(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
+pub fn memory_store_set_runtime_state(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
     conn.execute(
         "INSERT INTO kb_runtime_state(key, value) VALUES (?1, ?2)
          ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -350,7 +378,7 @@ pub(crate) fn memory_store_set_runtime_state(conn: &Connection, key: &str, value
     Ok(())
 }
 
-pub(crate) fn memory_store_get_runtime_state(conn: &Connection, key: &str) -> Result<Option<String>, String> {
+pub fn memory_store_get_runtime_state(conn: &Connection, key: &str) -> Result<Option<String>, String> {
     conn.query_row(
         "SELECT value FROM kb_runtime_state WHERE key=?1",
         params![key],
@@ -360,7 +388,7 @@ pub(crate) fn memory_store_get_runtime_state(conn: &Connection, key: &str) -> Re
     .map_err(|err| format!("Get runtime state failed for '{key}': {err}"))
 }
 
-pub(crate) fn memory_store_provider_model_name(
+pub fn memory_store_provider_model_name(
     conn: &Connection,
     provider_id: &str,
 ) -> Result<Option<String>, String> {

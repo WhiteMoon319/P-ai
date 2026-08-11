@@ -3518,11 +3518,13 @@ dependencies = [
  "pai-protocol",
  "reqwest",
  "rmcp",
+ "rusqlite",
  "schemars 1.2.1",
  "serde",
  "serde_json",
  "time",
  "tokio",
+ "toml 1.1.2+spec-1.1.0",
  "uuid",
  "webpki-root-certs",
 ]

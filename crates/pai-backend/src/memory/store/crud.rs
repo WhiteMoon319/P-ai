@@ -1,4 +1,20 @@
-pub(crate) fn memory_store_tag_id_by_name(conn: &Connection, tag: &str) -> Result<String, String> {
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+use std::time::Duration;
+use time::OffsetDateTime;
+use uuid::Uuid;
+
+use crate::core::domain::types_storage::MemoryEntry;
+use crate::core::time_semantics::now_iso;
+use crate::logging::{runtime_log_error, runtime_log_info, runtime_log_warn};
+use crate::memory::providers::factory::{
+    memory_sync_vectors_after_delete, memory_sync_vectors_after_upsert,
+};
+use super::*;
+
+pub fn memory_store_tag_id_by_name(conn: &Connection, tag: &str) -> Result<String, String> {
     let found = conn
         .query_row(
             "SELECT id FROM global_tag WHERE name=?1",
@@ -19,7 +35,7 @@ pub(crate) fn memory_store_tag_id_by_name(conn: &Connection, tag: &str) -> Resul
     Ok(id)
 }
 
-pub(crate) fn memory_store_sync_tags(conn: &Connection, memory_id: &str, tags: &[String]) -> Result<(), String> {
+pub fn memory_store_sync_tags(conn: &Connection, memory_id: &str, tags: &[String]) -> Result<(), String> {
     conn.execute(
         "DELETE FROM memory_tag_rel WHERE memory_id=?1",
         params![memory_id],
@@ -37,7 +53,7 @@ pub(crate) fn memory_store_sync_tags(conn: &Connection, memory_id: &str, tags: &
     Ok(())
 }
 
-pub(crate) fn memory_store_sync_memory_fts(conn: &Connection, memory_id: &str) -> Result<(), String> {
+pub fn memory_store_sync_memory_fts(conn: &Connection, memory_id: &str) -> Result<(), String> {
     let judgment = conn
         .query_row(
             "SELECT judgment FROM memory_record WHERE id=?1",
@@ -68,7 +84,7 @@ pub(crate) fn memory_store_sync_memory_fts(conn: &Connection, memory_id: &str) -
         .trim()
         .to_string();
     // Keep FTS indexing tokenization aligned with query tokenization (CJK 1/2-gram).
-    let fts_doc = memory_tokenize_terms(&raw_fts_text, false).join(" ");
+    let fts_doc = memory_tokenize_terms_simple(&raw_fts_text, false).join(" ");
 
     conn.execute("DELETE FROM memory_fts WHERE item_id=?1", params![memory_id])
         .map_err(|err| format!("Delete memory_fts row failed: {err}"))?;
@@ -81,8 +97,23 @@ pub(crate) fn memory_store_sync_memory_fts(conn: &Connection, memory_id: &str) -
     Ok(())
 }
 
+/// 查询分词（从 src-tauri matcher.rs 迁入，基于 memory_tokenize_terms_simple）。
+fn memory_tokenize_query_terms_local(text: &str) -> Vec<String> {
+    let mut terms = memory_tokenize_terms_simple(text, true);
+    let compact = text
+        .trim()
+        .to_lowercase()
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .collect::<String>();
+    if compact.chars().count() >= 2 && !terms.iter().any(|t| t == &compact) {
+        terms.push(compact);
+    }
+    terms
+}
+
 #[cfg(test)]
-pub(crate) fn memory_store_search_fts_bm25(
+pub fn memory_store_search_fts_bm25(
     data_path: &PathBuf,
     query_text: &str,
     limit: usize,
@@ -91,8 +122,7 @@ pub(crate) fn memory_store_search_fts_bm25(
         return Ok(Vec::new());
     }
 
-    let terms = memory_tokenize_query_terms(query_text);
-    if terms.is_empty() {
+    let terms = memory_tokenize_query_terms_local(query_text);    if terms.is_empty() {
         return Ok(Vec::new());
     }
     let fts_query = terms
@@ -128,7 +158,7 @@ pub(crate) fn memory_store_search_fts_bm25(
     Ok(out)
 }
 
-pub(crate) fn memory_store_upsert_drafts(
+pub fn memory_store_upsert_drafts(
     data_path: &PathBuf,
     drafts: &[MemoryDraftInput],
 ) -> Result<(Vec<MemorySaveUpsertItemResult>, usize), String> {
@@ -247,7 +277,7 @@ pub(crate) fn memory_store_upsert_drafts(
 
     tx.commit()
         .map_err(|err| format!("Commit memory upsert transaction failed: {err}"))?;
-    invalidate_memory_matcher_cache();
+    invalidate_memory_matcher_cache_internal();
 
     // 记忆已落库, 增量补向量。失败只记日志不影响记忆写入 (下次启动差集同步兜底)。
     let upserted_ids = results
@@ -266,7 +296,7 @@ pub(crate) fn memory_store_upsert_drafts(
     Ok((results, total))
 }
 
-pub(crate) fn memory_store_count(data_path: &PathBuf) -> Result<usize, String> {
+pub fn memory_store_count(data_path: &PathBuf) -> Result<usize, String> {
     let conn = memory_store_open(data_path)?;
     let count = conn
         .query_row("SELECT COUNT(1) FROM memory_record", [], |row| row.get::<_, i64>(0))
@@ -274,7 +304,7 @@ pub(crate) fn memory_store_count(data_path: &PathBuf) -> Result<usize, String> {
     Ok(count.max(0) as usize)
 }
 
-pub(crate) fn memory_store_list_memories(data_path: &PathBuf) -> Result<Vec<MemoryEntry>, String> {
+pub fn memory_store_list_memories(data_path: &PathBuf) -> Result<Vec<MemoryEntry>, String> {
     let conn = memory_store_open(data_path)?;
 
     let mut stmt = conn
@@ -337,7 +367,7 @@ pub(crate) fn memory_store_list_memories(data_path: &PathBuf) -> Result<Vec<Memo
     Ok(out)
 }
 
-pub(crate) fn memory_store_list_memories_by_ids(
+pub fn memory_store_list_memories_by_ids(
     data_path: &PathBuf,
     memory_ids: &[String],
 ) -> Result<Vec<MemoryEntry>, String> {
@@ -418,7 +448,7 @@ pub(crate) fn memory_store_list_memories_by_ids(
     Ok(out)
 }
 
-pub(crate) fn memory_store_delete_memory(data_path: &PathBuf, memory_id: &str) -> Result<(), String> {
+pub fn memory_store_delete_memory(data_path: &PathBuf, memory_id: &str) -> Result<(), String> {
     let target_id = memory_id.trim();
     if target_id.is_empty() {
         return Err("memory_id is required".to_string());
@@ -445,7 +475,7 @@ pub(crate) fn memory_store_delete_memory(data_path: &PathBuf, memory_id: &str) -
         "[记忆存储] 完成，任务=memory_store_delete_memory，memory_id={}",
         target_id
     ));
-    invalidate_memory_matcher_cache();
+    invalidate_memory_matcher_cache_internal();
     // 记忆已落库, 向量删除失败不影响记忆本身 (下次启动差集同步兜底)。
     let _ = memory_sync_vectors_after_delete(data_path, &[target_id.to_string()]);
     Ok(())

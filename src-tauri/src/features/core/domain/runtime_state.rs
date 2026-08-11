@@ -449,23 +449,8 @@ impl AppState {
     }
 }
 
-pub(crate) fn app_root_from_data_path(data_path: &PathBuf) -> PathBuf {
-    let parent = data_path
-        .parent()
-        .map(ToOwned::to_owned)
-        .unwrap_or_else(|| PathBuf::from("."));
-    let is_config_dir = parent
-        .file_name()
-        .and_then(|v| v.to_str())
-        .map(|v| v.eq_ignore_ascii_case("config"))
-        .unwrap_or(false);
-    if is_config_dir {
-        if let Some(root) = parent.parent() {
-            return root.to_path_buf();
-        }
-    }
-    parent
-}
+// app_root_from_data_path 已迁至 crates/pai-backend memory::store（阶段 4），
+// 通过 src-tauri lib.rs 的 pub(crate) use pai_backend::memory::store::* 生效。
 
 // now_utc / now_iso / parse_iso 已迁移至 crates/pai-backend 的 time_semantics（阶段 4），
 // 通过 src-tauri lib.rs 的 pub(crate) use pai_backend::core::time_semantics::* 生效。

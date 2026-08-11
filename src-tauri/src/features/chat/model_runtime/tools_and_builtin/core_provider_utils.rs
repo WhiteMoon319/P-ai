@@ -95,10 +95,6 @@ impl From<String> for ToolInvokeError {
     }
 }
 
-pub(crate) fn clean_text(input: &str) -> String {
-    input.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
 pub(crate) fn is_image_unsupported_error(err: &str) -> bool {
     let lower = err.to_ascii_lowercase();
     lower.contains("unknown variant `image_url`")

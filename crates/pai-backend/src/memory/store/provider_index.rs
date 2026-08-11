@@ -1,4 +1,18 @@
-pub(crate) fn memory_store_collect_doc_texts(conn: &Connection) -> Result<StdHashMap<String, String>, String> {
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap as StdHashMap, HashSet as StdHashSet};
+use std::fs;
+use std::path::PathBuf;
+use std::time::Duration;
+use time::OffsetDateTime;
+use uuid::Uuid;
+
+use crate::core::domain::types_storage::MemoryEntry;
+use crate::core::time_semantics::now_iso;
+use crate::logging::{runtime_log_error, runtime_log_info, runtime_log_warn};
+use super::*;
+
+pub fn memory_store_collect_doc_texts(conn: &Connection) -> Result<StdHashMap<String, String>, String> {
     let mut stmt = conn
         .prepare("SELECT id, judgment FROM memory_record")
         .map_err(|err| format!("Prepare collect doc texts failed: {err}"))?;
@@ -13,7 +27,7 @@ pub(crate) fn memory_store_collect_doc_texts(conn: &Connection) -> Result<StdHas
     Ok(out)
 }
 
-pub(crate) fn memory_store_normalize_model_id(raw: &str) -> Result<String, String> {
+pub fn memory_store_normalize_model_id(raw: &str) -> Result<String, String> {
     let mut out = String::new();
     for ch in raw.trim().chars() {
         if ch.is_ascii_alphanumeric() {
@@ -32,14 +46,14 @@ pub(crate) fn memory_store_normalize_model_id(raw: &str) -> Result<String, Strin
     Ok(out)
 }
 
-pub(crate) fn memory_store_model_store_db_path(data_path: &PathBuf, model_name: &str) -> Result<PathBuf, String> {
+pub fn memory_store_model_store_db_path(data_path: &PathBuf, model_name: &str) -> Result<PathBuf, String> {
     let norm = memory_store_normalize_model_id(model_name)?;
     Ok(app_root_from_data_path(data_path)
         .join("memory")
         .join(format!("{norm}_embedding_store.db")))
 }
 
-pub(crate) fn memory_store_validate_table_name(table: &str) -> Result<&str, String> {
+pub fn memory_store_validate_table_name(table: &str) -> Result<&str, String> {
     let trimmed = table.trim();
     if trimmed.is_empty()
         || !trimmed
@@ -51,7 +65,7 @@ pub(crate) fn memory_store_validate_table_name(table: &str) -> Result<&str, Stri
     Ok(trimmed)
 }
 
-pub(crate) fn memory_store_provider_table(_provider_id: &str) -> Result<String, String> {
+pub fn memory_store_provider_table(_provider_id: &str) -> Result<String, String> {
     let table = "memory_vector";
     debug_assert!(
         table
@@ -61,7 +75,7 @@ pub(crate) fn memory_store_provider_table(_provider_id: &str) -> Result<String, 
     Ok(table.to_string())
 }
 
-pub(crate) fn memory_store_open_provider_vector_db(
+pub fn memory_store_open_provider_vector_db(
     data_path: &PathBuf,
     provider_id: &str,
 ) -> Result<Connection, String> {
@@ -71,7 +85,7 @@ pub(crate) fn memory_store_open_provider_vector_db(
     memory_store_open_provider_vector_db_with_model(data_path, &model)
 }
 
-pub(crate) fn memory_store_open_provider_vector_db_with_model(
+pub fn memory_store_open_provider_vector_db_with_model(
     data_path: &PathBuf,
     model_name: &str,
 ) -> Result<Connection, String> {
@@ -96,7 +110,7 @@ pub(crate) fn memory_store_open_provider_vector_db_with_model(
     Ok(conn)
 }
 
-pub(crate) fn memory_store_provider_index_ids(conn: &Connection, table: &str) -> Result<StdHashSet<String>, String> {
+pub fn memory_store_provider_index_ids(conn: &Connection, table: &str) -> Result<StdHashSet<String>, String> {
     let table = memory_store_validate_table_name(table)?;
     let mut stmt = conn
         .prepare(&format!("SELECT chunk_id FROM {table}"))
@@ -111,7 +125,7 @@ pub(crate) fn memory_store_provider_index_ids(conn: &Connection, table: &str) ->
     Ok(out)
 }
 
-pub(crate) fn memory_store_delete_provider_entries(
+pub fn memory_store_delete_provider_entries(
     vector_tx: &rusqlite::Transaction,
     table: &str,
     to_delete: &[String],
@@ -127,7 +141,7 @@ pub(crate) fn memory_store_delete_provider_entries(
     Ok(deleted)
 }
 
-pub(crate) fn memory_store_batch_embed_and_insert<F>(
+pub fn memory_store_batch_embed_and_insert<F>(
     vector_tx: &rusqlite::Transaction,
     table: &str,
     doc_map: &StdHashMap<String, String>,
@@ -188,7 +202,7 @@ where
     Ok((added, batch_count, dimension))
 }
 
-pub(crate) fn memory_store_update_provider_metadata(
+pub fn memory_store_update_provider_metadata(
     tx: &rusqlite::Transaction,
     new_provider_id: &str,
     model_name: &str,
@@ -213,7 +227,7 @@ pub(crate) fn memory_store_update_provider_metadata(
     Ok(())
 }
 
-pub(crate) fn memory_store_sync_provider_index<F>(
+pub fn memory_store_sync_provider_index<F>(
     data_path: &PathBuf,
     new_provider_id: &str,
     model_name: &str,
@@ -341,5 +355,45 @@ where
     }
 
     sync_result
+}
+
+/// 是否已配置向量索引绑定（从 src-tauri matcher.rs 迁入）。
+pub fn memory_has_embedding_binding(data_path: &std::path::PathBuf) -> bool {
+    let Ok(conn) = memory_store_open(data_path) else {
+        return false;
+    };
+    let active = memory_store_get_runtime_state(&conn, KB_STATE_ACTIVE_INDEX_PROVIDER_ID)
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    let embedding_api = memory_store_get_runtime_state(&conn, KB_STATE_EMBEDDING_API_CONFIG_ID)
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    !active.trim().is_empty() && !embedding_api.trim().is_empty()
+}
+
+/// 当前激活的向量索引 provider（从 src-tauri matcher.rs 迁入）。
+pub fn memory_store_active_embedding_provider_id(conn: &Connection) -> Result<Option<String>, String> {
+    memory_store_get_runtime_state(conn, KB_STATE_ACTIVE_INDEX_PROVIDER_ID)
+}
+
+/// 绑定向量索引的 API 配置 id（从 src-tauri matcher.rs 迁入）。
+pub fn memory_store_embedding_binding_api_id(conn: &Connection) -> Result<Option<String>, String> {
+    memory_store_get_runtime_state(conn, KB_STATE_EMBEDDING_API_CONFIG_ID)
+}
+
+/// provider 对应的嵌入模型名（从 src-tauri matcher.rs 迁入）。
+pub fn memory_store_embedding_provider_model_name(
+    conn: &Connection,
+    provider_id: &str,
+) -> Result<Option<String>, String> {
+    conn.query_row(
+        "SELECT model_name FROM embedding_provider WHERE provider_id=?1",
+        params![provider_id],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+    .map_err(|err| format!("Query embedding provider model name failed: {err}"))
 }
 

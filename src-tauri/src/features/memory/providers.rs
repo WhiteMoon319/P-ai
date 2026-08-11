@@ -24,4 +24,3 @@ use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use super::*;
 // providers 域已迁至 crates/pai-backend（阶段 4）。
 pub(crate) use pai_backend::memory::providers::*;
-include!("providers/factory.rs");
