@@ -2502,12 +2502,32 @@ private fun ChatSettingsTab(settings: com.whitemoon319.pai.model.ChatSettings?, 
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = styleId,
-            onValueChange = { styleId = it },
-            label = { Text("回复风格 ID") },
-            modifier = Modifier.fillMaxWidth(),
+        // 回复风格下拉选择（对齐 Vue responseStyleSegmentOptions）
+        Text("回复风格", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(4.dp))
+        var styleMenuExpanded by remember { mutableStateOf(false) }
+        val styleOptions = listOf(
+            "none" to "无要求",
+            "concise" to "简洁",
+            "academic" to "学术",
+            "teaching" to "教学",
         )
+        Box {
+            OutlinedButton(
+                onClick = { styleMenuExpanded = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(styleOptions.firstOrNull { it.first == styleId }?.second ?: if (styleId.isBlank()) "无要求" else styleId)
+            }
+            DropdownMenu(expanded = styleMenuExpanded, onDismissRequest = { styleMenuExpanded = false }) {
+                styleOptions.forEach { (id, label) ->
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        onClick = { styleId = id; styleMenuExpanded = false },
+                    )
+                }
+            }
+        }
         Spacer(Modifier.height(12.dp))
         // PDF 阅读模式
         Text("PDF 阅读模式", style = MaterialTheme.typography.titleSmall)
