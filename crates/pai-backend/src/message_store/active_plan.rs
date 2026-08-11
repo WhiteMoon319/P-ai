@@ -1,28 +1,186 @@
-pub(crate) const ACTIVE_PLAN_STATUS_IN_PROGRESS: &str = "in_progress";
-pub(crate) const ACTIVE_PLAN_STATUS_COMPLETED: &str = "completed";
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
+use uuid::Uuid;
+
+use crate::core::time_semantics::now_iso;
+use super::*;
+
+/// 会话变更互斥（简化版：全局 key→锁，从 runtime_lock.rs 迁入）。
+fn with_conversation_mutation_for_data_path<T, F>(
+    data_path: &PathBuf,
+    conversation_id: &str,
+    _task_name: &str,
+    f: F,
+) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String>,
+{
+    static GATES: OnceLock<Mutex<std::collections::HashMap<String, std::sync::Arc<Mutex<()>>>>> =
+        OnceLock::new();
+    let key = format!("{}:{}", data_path.display(), conversation_id.trim());
+    let gate = {
+        let mut gates = GATES
+            .get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        gates
+            .entry(key)
+            .or_insert_with(|| std::sync::Arc::new(Mutex::new(())))
+            .clone()
+    };
+    let _guard = gate.lock().unwrap_or_else(|poison| poison.into_inner());
+    f()
+}
+
+/// 打开聊天元数据 DB（精简版：仅确保 active_plan_records 表存在，
+/// 完整 schema 由 src-tauri sqlite.rs 建立；此处只补充缺失表）。
+fn chat_metadata_store_open(data_path: &PathBuf) -> Result<rusqlite::Connection, String> {
+    let db_path = chat_metadata_store_db_path(data_path);
+    if let Some(parent) = db_path.parent() {
+        fs::create_dir_all(parent).map_err(|err| {
+            format!("创建聊天元数据数据库目录失败，path={}，error={err}", parent.display())
+        })?;
+    }
+    let conn = rusqlite::Connection::open(&db_path)
+        .map_err(|err| format!("打开聊天元数据数据库失败，path={}，error={err}", db_path.display()))?;
+    conn.execute_batch(
+        "PRAGMA journal_mode=WAL;
+         PRAGMA synchronous=NORMAL;
+         PRAGMA foreign_keys=ON;
+         PRAGMA busy_timeout=10000;
+         CREATE TABLE IF NOT EXISTS active_plan_records (
+           id INTEGER PRIMARY KEY AUTOINCREMENT,
+           conversation_id TEXT NOT NULL,
+           plan_id TEXT NOT NULL,
+           record_json TEXT NOT NULL,
+           created_at TEXT NOT NULL DEFAULT ''
+         );",
+    )
+    .map_err(|err| format!("初始化聊天元数据数据库失败: {err}"))?;
+    Ok(conn)
+}
+
+/// 读取活跃计划（SQLite 版，从 src-tauri sqlite.rs 迁入）。
+fn chat_metadata_store_read_active_plans(
+    data_path: &PathBuf,
+    conversation_id: &str,
+) -> Result<Option<Vec<ActivePlanRecord>>, String> {
+    if !chat_metadata_store_db_path(data_path).exists() {
+        return Ok(None);
+    }
+    let conn = chat_metadata_store_open(data_path)?;
+    let mut stmt = conn.prepare(
+        "SELECT record_json FROM active_plan_records WHERE conversation_id=?1 ORDER BY rowid DESC",
+    ).map_err(|err| format!("准备读取 SQLite 活动计划失败: {err}"))?;
+    let rows = stmt.query_map([conversation_id], |row| row.get::<_, String>(0))
+        .map_err(|err| format!("读取 SQLite 活动计划失败: {err}"))?;
+    let mut out = Vec::new();
+    for row in rows {
+        let raw = row.map_err(|err| format!("读取 SQLite 活动计划记录失败: {err}"))?;
+        out.push(serde_json::from_str(&raw).map_err(|err| format!("解析 SQLite 活动计划记录失败: {err}"))?);
+    }
+    Ok(Some(out))
+}
+
+/// 追加活跃计划（SQLite 版，从 src-tauri sqlite.rs 迁入）。
+fn chat_metadata_store_append_active_plan(
+    paths: &MessageStorePaths,
+    record: &ActivePlanRecord,
+) -> Result<(), String> {
+    let conn = chat_metadata_store_open(&paths.data_path)?;
+    let raw = serde_json::to_string(record)
+        .map_err(|err| format!("序列化 SQLite 活动计划失败: {err}"))?;
+    conn.execute(
+        "INSERT INTO active_plan_records(conversation_id, plan_id, record_json) VALUES (?1, ?2, ?3)",
+        rusqlite::params![paths.conversation_id, record.plan_id, raw],
+    )
+    .map_err(|err| format!("写入 SQLite 活动计划失败: {err}"))?;
+    Ok(())
+}
+
+/// 按路径完成活跃计划（SQLite 版，从 src-tauri sqlite.rs 迁入）。
+fn chat_metadata_store_complete_active_plan_by_path(
+    paths: &MessageStorePaths,
+    normalized_path: &str,
+    completion_text: Option<&str>,
+) -> Result<bool, String> {
+    let conn = chat_metadata_store_open(&paths.data_path)?;
+    let matched = {
+        let mut stmt = conn
+            .prepare(
+                "SELECT rowid, record_json FROM active_plan_records
+                 WHERE conversation_id=?1 ORDER BY rowid DESC",
+            )
+            .map_err(|err| format!("准备读取 SQLite 活动计划失败: {err}"))?;
+        let rows = stmt
+            .query_map([&paths.conversation_id], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|err| format!("读取 SQLite 活动计划失败: {err}"))?;
+        let mut matched = None;
+        for row in rows {
+            let (rowid, raw) = row.map_err(|err| format!("读取 SQLite 活动计划记录失败: {err}"))?;
+            let record = serde_json::from_str::<ActivePlanRecord>(&raw)
+                .map_err(|err| format!("解析 SQLite 活动计划记录失败: {err}"))?;
+            if record.status.trim() == ACTIVE_PLAN_STATUS_IN_PROGRESS
+                && record.path.trim().eq_ignore_ascii_case(normalized_path)
+            {
+                matched = Some((rowid, record));
+                break;
+            }
+        }
+        matched
+    };
+    let Some((rowid, mut record)) = matched else {
+        return Ok(false);
+    };
+    record.status = ACTIVE_PLAN_STATUS_COMPLETED.to_string();
+    record.completed_at = Some(now_iso());
+    record.completion_text = completion_text
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let raw = serde_json::to_string(&record)
+        .map_err(|err| format!("序列化 SQLite 活动计划失败: {err}"))?;
+    let updated = conn
+        .execute(
+            "UPDATE active_plan_records SET record_json=?1 WHERE rowid=?2",
+            rusqlite::params![raw, rowid],
+        )
+        .map_err(|err| format!("更新 SQLite 活动计划失败: {err}"))?;
+    if updated != 1 {
+        return Err(format!("更新 SQLite 活动计划失败：记录不存在，rowid={rowid}"));
+    }
+    Ok(true)
+}
+
+pub const ACTIVE_PLAN_STATUS_IN_PROGRESS: &str = "in_progress";
+pub const ACTIVE_PLAN_STATUS_COMPLETED: &str = "completed";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ActivePlanRecord {
-    pub(crate) plan_id: String,
-    pub(crate) source_message_id: String,
-    pub(crate) status: String,
+pub struct ActivePlanRecord {
+    pub plan_id: String,
+    pub source_message_id: String,
+    pub status: String,
     #[serde(default)]
-    pub(crate) path: String,
-    pub(crate) created_at: String,
+    pub path: String,
+    pub created_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) completed_at: Option<String>,
+    pub completed_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) completion_text: Option<String>,
+    pub completion_text: Option<String>,
 }
 
-pub(crate) fn encode_active_plan_record(record: &ActivePlanRecord) -> Result<String, String> {
+pub fn encode_active_plan_record(record: &ActivePlanRecord) -> Result<String, String> {
     serde_json::to_string(record)
         .map(|value| format!("{value}\n"))
         .map_err(|err| format!("序列化执行中计划失败: {err}"))
 }
 
-pub(crate) fn read_active_plan_records(path: &PathBuf) -> Result<Vec<ActivePlanRecord>, String> {
+pub fn read_active_plan_records(path: &PathBuf) -> Result<Vec<ActivePlanRecord>, String> {
     if !path.exists() {
         return Ok(Vec::new());
     }
@@ -53,7 +211,7 @@ pub(crate) fn read_active_plan_records(path: &PathBuf) -> Result<Vec<ActivePlanR
     Ok(records)
 }
 
-pub(crate) fn write_active_plan_records(path: &PathBuf, records: &[ActivePlanRecord]) -> Result<(), String> {
+pub fn write_active_plan_records(path: &PathBuf, records: &[ActivePlanRecord]) -> Result<(), String> {
     let mut content = String::new();
     for record in records {
         content.push_str(&encode_active_plan_record(record)?);
@@ -61,7 +219,7 @@ pub(crate) fn write_active_plan_records(path: &PathBuf, records: &[ActivePlanRec
     write_message_store_text_atomic(path, "jsonl.tmp", &content, "执行中计划")
 }
 
-pub(crate) fn append_active_plan_record(path: &PathBuf, record: &ActivePlanRecord) -> Result<(), String> {
+pub fn append_active_plan_record(path: &PathBuf, record: &ActivePlanRecord) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| {
             format!(
@@ -90,7 +248,7 @@ pub(crate) fn append_active_plan_record(path: &PathBuf, record: &ActivePlanRecor
     })
 }
 
-pub(crate) fn active_plan_records_in_progress(
+pub fn active_plan_records_in_progress(
     data_path: &PathBuf,
     conversation_id: &str,
 ) -> Result<Vec<ActivePlanRecord>, String> {
@@ -109,7 +267,7 @@ pub(crate) fn active_plan_records_in_progress(
         .collect())
 }
 
-pub(crate) fn active_plan_append_in_progress(
+pub fn active_plan_append_in_progress(
     data_path: &PathBuf,
     conversation_id: &str,
     source_message_id: &str,
@@ -145,7 +303,7 @@ pub(crate) fn active_plan_append_in_progress(
     )
 }
 
-pub(crate) fn active_plan_complete_by_path(
+pub fn active_plan_complete_by_path(
     data_path: &PathBuf,
     conversation_id: &str,
     path: &str,
@@ -192,7 +350,7 @@ pub(crate) fn active_plan_complete_by_path(
 
 #[cfg(test)]
 #[test]
-pub(crate) fn read_active_plan_records_should_skip_legacy_record_without_path() {
+pub fn read_active_plan_records_should_skip_legacy_record_without_path() {
     let root = std::env::temp_dir().join(format!("eca-active-plan-{}", Uuid::new_v4()));
     fs::create_dir_all(&root).expect("create temp dir");
     let file = root.join("active_plans.jsonl");
@@ -215,7 +373,7 @@ pub(crate) fn read_active_plan_records_should_skip_legacy_record_without_path() 
 
 #[cfg(test)]
 #[test]
-pub(crate) fn active_plan_records_in_progress_should_return_newest_first() {
+pub fn active_plan_records_in_progress_should_return_newest_first() {
     let root = std::env::temp_dir().join(format!("eca-active-plan-order-{}", Uuid::new_v4()));
     let conversation_id = "conv-active-plan-order";
     let paths = message_store_paths(&root, conversation_id).expect("message store paths");
