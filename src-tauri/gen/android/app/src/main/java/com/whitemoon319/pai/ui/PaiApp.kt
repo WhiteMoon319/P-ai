@@ -92,6 +92,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.whitemoon319.pai.ui.richtext.MarkdownText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -1550,6 +1551,7 @@ private fun ChatImagePart(
     val scope = rememberCoroutineScope()
     var bitmap by remember(part.path, part.text) { mutableStateOf<android.graphics.Bitmap?>(null) }
     var failed by remember(part.path, part.text) { mutableStateOf(false) }
+    var showPreview by remember { mutableStateOf(false) }
 
     LaunchedEffect(part.path, part.text) {
         val mediaRef = part.path?.takeIf { it.isNotBlank() }
@@ -1580,8 +1582,26 @@ private fun ChatImagePart(
                     .padding(vertical = 4.dp)
                     .widthIn(max = 280.dp)
                     .clip(MaterialTheme.shapes.small)
-                    .clickable(onClick = onClick),
+                    .clickable { showPreview = true }
+                    .combinedClickable(
+                        onClick = { showPreview = true },
+                        onLongClick = onClick,
+                    ),
             )
+            if (showPreview) {
+                Dialog(onDismissRequest = { showPreview = false }) {
+                    Box(
+                        Modifier.fillMaxSize().clickable { showPreview = false },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Image(
+                            bitmap = bitmap!!.asImageBitmap(),
+                            contentDescription = part.name ?: "图片",
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        )
+                    }
+                }
+            }
         }
         failed -> {
             Text(
