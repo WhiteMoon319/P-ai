@@ -30,8 +30,10 @@ use super::*;
 // 5) edit: 图像编辑输入解析与编辑 payload 适配
 // 6) service/commands: 稳定服务入口与 Tauri 命令
 
-include!("image_generation/config.rs");
-include!("image_generation/types.rs");
+// config/types 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::image_generation::config::*;
+pub(crate) use pai_backend::image_generation::types::*;
+
 include!("image_generation/storage.rs");
 include!("image_generation/providers.rs");
 include!("image_generation/edit.rs");

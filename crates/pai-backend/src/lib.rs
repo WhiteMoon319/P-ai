@@ -11,6 +11,7 @@ use std::sync::{Mutex, OnceLock};
 
 pub mod core;
 pub mod delegate;
+pub mod image_generation;
 pub mod mcp;
 pub mod skill;
 pub mod task;
