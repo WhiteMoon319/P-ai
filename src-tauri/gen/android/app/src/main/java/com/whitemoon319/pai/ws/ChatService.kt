@@ -144,6 +144,21 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("conversation.delete", mapOf("input" to input), Boolean::class.java)
     }
 
+    /** 回退到指定消息（rewind）：删除其后消息，可重新生成。 */
+    suspend fun rewindConversation(conversationId: String, departmentId: String?, agentId: String?, messageId: String): Map<String, Any?> {
+        val input = mapOf(
+            "session" to mapOf(
+                "departmentId" to departmentId,
+                "agentId" to (agentId ?: "agent"),
+                "conversationId" to conversationId,
+            ),
+            "messageId" to messageId,
+            "undoApplyPatch" to false,
+        )
+        @Suppress("UNCHECKED_CAST")
+        return client.request("conversation.rewind", mapOf("input" to input), Map::class.java) as Map<String, Any?>
+    }
+
     suspend fun batchArchiveConversations(conversationIds: List<String>): Boolean {
         val input = mapOf("conversationIds" to conversationIds)
         return client.request("conversation.batchArchive", mapOf("input" to input), Boolean::class.java)

@@ -355,6 +355,46 @@ class AppViewModel(
         }
     }
 
+    /** 回退到指定消息并重新生成（rewind → 清空其后续消息）。 */
+    suspend fun rewindToMessage(messageId: String): Boolean {
+        val conversationId = currentConversationId.value ?: return false
+        val conv = conversations.value.firstOrNull { it.conversationId == conversationId }
+        return withContext(Dispatchers.IO) {
+            try {
+                val result = service.rewindConversation(conversationId, conv?.departmentId, conv?.agentId, messageId)
+                // 回退后刷新消息：移除 messageId 之后的所有消息
+                val msgs = messages.value
+                val targetIndex = msgs.indexOfFirst { it.id == messageId }
+                if (targetIndex >= 0) {
+                    messages.value = msgs.take(targetIndex + 1)
+                } else {
+                    refreshMessages()
+                }
+                streamingText.value = ""
+                activitySteps.value = emptyList()
+                committedAssistantText = null
+                isStreaming.value = false
+                true
+            } catch (e: Exception) {
+                error.value = "重新生成失败: ${e.message}"
+                false
+            }
+        }
+    }
+
+    /** 重新加载当前会话消息（blockPage 最新页）。 */
+    suspend fun refreshMessages() {
+        val conversationId = currentConversationId.value ?: return
+        withContext(Dispatchers.IO) {
+            try {
+                val page = service.blockPage(conversationId)
+                messages.value = page.messages
+            } catch (e: Exception) {
+                error.value = "刷新消息失败: ${e.message}"
+            }
+        }
+    }
+
     /** 归档会话。 */
     suspend fun archiveConversation(conversationId: String): Boolean {
         return withContext(Dispatchers.IO) {

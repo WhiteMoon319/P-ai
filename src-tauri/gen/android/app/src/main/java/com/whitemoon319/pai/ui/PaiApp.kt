@@ -677,7 +677,13 @@ fun ChatScreen(
                     val agentName = vm.agents.collectAsState().value
                         ?.firstOrNull { it.id == msg.speakerAgentId }
                         ?.name
-                    MessageBubble(msg, agentName = agentName)
+                    MessageBubble(
+                        msg,
+                        agentName = agentName,
+                        onRegenerate = { messageId ->
+                            scope.launch { vm.rewindToMessage(messageId) }
+                        },
+                    )
                 }
                 if (activitySteps.isNotEmpty()) {
                     item(key = "thinking") {
@@ -1015,9 +1021,14 @@ private fun ThinkingSectionMessage(steps: List<ActivityStep>) {
 }
 
 @Composable
-fun MessageBubble(message: ChatMessage, agentName: String? = null) {
+fun MessageBubble(
+    message: ChatMessage,
+    agentName: String? = null,
+    onRegenerate: ((String) -> Unit)? = null,
+) {
     val isUser = message.role == "user"
     val context = LocalContext.current
+    var showMenu by remember { mutableStateOf(false) }
     val textContent = message.parts.joinToString("\n") { part ->
         when (part.type) {
             "Attachment" -> "📎 ${part.name?.takeIf { it.isNotBlank() } ?: part.text?.takeIf { it.isNotBlank() } ?: "附件"}"
@@ -1026,28 +1037,23 @@ fun MessageBubble(message: ChatMessage, agentName: String? = null) {
             else -> part.displayText
         }
     }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp),
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
-    ) {
-        Surface(
-            color = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-            shape = MaterialTheme.shapes.medium,
-            modifier = Modifier
-                .widthIn(max = 320.dp)
-                .combinedClickable(
-                    onClick = {},
-                    onLongClick = {
-                        if (textContent.isNotBlank()) {
-                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("PAI 消息", textContent))
-                            android.widget.Toast.makeText(context, "已复制", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                ),
+    Box {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
         ) {
+            Surface(
+                color = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier
+                    .widthIn(max = 320.dp)
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = { showMenu = true },
+                    ),
+            ) {
             if (isUser) {
                 Column(Modifier.padding(10.dp)) {
                     Text(
@@ -1077,6 +1083,30 @@ fun MessageBubble(message: ChatMessage, agentName: String? = null) {
                         MarkdownText(content = textContent)
                     }
                 }
+            }
+        }
+    }
+        // 消息操作菜单：复制 / 重新生成（assistant 消息）
+        DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+            DropdownMenuItem(
+                text = { Text("复制") },
+                onClick = {
+                    showMenu = false
+                    if (textContent.isNotBlank()) {
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("PAI 消息", textContent))
+                        android.widget.Toast.makeText(context, "已复制", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                },
+            )
+            if (!isUser && onRegenerate != null) {
+                DropdownMenuItem(
+                    text = { Text("重新生成") },
+                    onClick = {
+                        showMenu = false
+                        onRegenerate(message.id)
+                    },
+                )
             }
         }
     }

@@ -275,6 +275,8 @@ async fn native_dispatch(
         "conversation.messagesBefore" => ide_chat_conversation_messages_before_command(state, params),
         "conversation.markRead" => ide_chat_mark_conversation_read(state, params),
         "conversation.setPreferredModel" => ide_chat_set_preferred_model_command(state, params),
+        "conversation.rewind" => ide_chat_rewind_conversation_command(state, params).await,
+        "conversation.rewindPreview" => ide_chat_preview_rewind_conversation(state, params).await,
         "conversation.rename" => ide_chat_rename_conversation_command(state, params),
         "conversation.pin" => ide_chat_toggle_pin_command(state, params),
         "conversation.delete" => ide_chat_delete_conversation(state, params).await,
