@@ -1179,10 +1179,7 @@ fun SettingsScreen(
                     }
                 }
             }
-            SettingsEntry.Welcome -> Text(
-                "欢迎使用 P-AI\n\n常用入口：\n· 新建会话：会话列表右下角 + 按钮\n· 语音输入：聊天输入框麦克风\n· 添加附件：聊天输入框回形针\n· 远程连接：设置 → 网络访问",
-                modifier = Modifier.padding(20.dp),
-            )
+            SettingsEntry.Welcome -> WelcomeSettingsTab(vm = vm)
             SettingsEntry.Chat -> ChatSettingsTab(settings = chatSettings, vm = vm)
             SettingsEntry.Notification -> NotificationSettingsTab(vm = vm)
             SettingsEntry.Network -> NetworkSettingsTab(vm = vm)
@@ -1761,6 +1758,134 @@ private fun NetworkSettingsTab(vm: AppViewModel) {
         if (loading) {
             Spacer(Modifier.height(8.dp))
             Text("刷新状态中…", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/** 欢迎页（对齐 Vue WelcomeTab：状态摘要卡）。 */
+@Composable
+private fun WelcomeSettingsTab(vm: AppViewModel) {
+    val appConfig by vm.appConfig.collectAsState()
+    val toolStatus by vm.toolStatus.collectAsState()
+    val workspace by vm.workspaceStatus.collectAsState()
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Text("欢迎使用 P-AI", style = MaterialTheme.typography.headlineSmall)
+        Text(
+            "Android 原生版 · 功能与桌面端对齐",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(16.dp))
+
+        // 模型供应商状态卡
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp)) {
+                Text("模型与供应商", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(6.dp))
+                val configs = appConfig?.apiConfigs.orEmpty()
+                if (configs.isEmpty()) {
+                    Text(
+                        "未配置供应商，请到「模型与供应商」添加",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                } else {
+                    Text(
+                        "已配置 ${configs.size} 个供应商",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    val primaryId = appConfig?.assistantDepartmentApiConfigId ?: appConfig?.selectedApiConfigId
+                    configs.firstOrNull { it.id == primaryId }?.let { primary ->
+                        Text(
+                            "当前生效：${primary.name ?: primary.id ?: "—"} · ${primary.model ?: "—"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    val sttId = appConfig?.sttApiConfigId
+                    val sttName = configs.firstOrNull { it.id == sttId }?.name
+                    Text(
+                        "语音识别：${sttName ?: "未设置"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (sttId.isNullOrBlank()) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+
+        // 工具状态卡
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp)) {
+                Text("工具状态", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(6.dp))
+                if (toolStatus.isEmpty()) {
+                    Text(
+                        "暂无工具状态信息",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    toolStatus.take(5).forEach { tool ->
+                        val loaded = tool.status == "ready" || tool.status == "Ready" || tool.status == "enabled"
+                        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                            Text(
+                                tool.id ?: "工具",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                if (loaded) "✓ 已启用" else "✗ 未启用",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (loaded) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+
+        // 工作区状态卡
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp)) {
+                Text("Android 工作区", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(6.dp))
+                val state = workspace?.state
+                Text(
+                    when (state) {
+                        "ready", "Ready" -> "✓ 就绪"
+                        "downloading", "Downloading" -> "⚙ 下载/导入中"
+                        "not_downloaded", "NotDownloaded" -> "未初始化（到「工具」页初始化）"
+                        else -> state ?: "未知"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = when (state) {
+                        "ready", "Ready" -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+
+        // 常用入口提示
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp)) {
+                Text("常用入口", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(6.dp))
+                listOf(
+                    "新建会话：会话列表右上角 +",
+                    "语音输入：聊天输入框麦克风",
+                    "添加附件：聊天输入框回形针",
+                    "远程连接：设置 → 网络访问",
+                ).forEach { hint ->
+                    Text("· $hint", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
     }
 }
