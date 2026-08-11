@@ -6,7 +6,7 @@ pub struct ProviderToolDefinition {
 }
 
 impl ProviderToolDefinition {
-    fn new(
+    pub(crate) fn new(
         name: impl Into<String>,
         description: impl Into<String>,
         parameters: Value,
@@ -20,18 +20,18 @@ impl ProviderToolDefinition {
 }
 
 #[allow(dead_code)]
-trait RuntimeToolMetadata {
+pub(crate) trait RuntimeToolMetadata {
     fn provider_tool_definition(&self) -> ProviderToolDefinition;
 }
 
-type RuntimeToolCallFuture<'a> = std::pin::Pin<
+pub(crate) type RuntimeToolCallFuture<'a> = std::pin::Pin<
     Box<dyn std::future::Future<Output = Result<ProviderToolResult, String>> + Send + 'a>,
 >;
-type RuntimeToolValueFuture<'a, E> = std::pin::Pin<
+pub(crate) type RuntimeToolValueFuture<'a, E> = std::pin::Pin<
     Box<dyn std::future::Future<Output = Result<Value, E>> + Send + 'a>,
 >;
 
-trait RuntimeToolDyn: Send + Sync {
+pub(crate) trait RuntimeToolDyn: Send + Sync {
     fn name(&self) -> String;
     fn timeout_override(&self, _args_json: &str) -> Option<std::time::Duration> {
         None
@@ -42,7 +42,7 @@ trait RuntimeToolDyn: Send + Sync {
     fn call_json(&self, args_json: String) -> RuntimeToolCallFuture<'_>;
 }
 
-trait RuntimeValueTool: RuntimeToolMetadata + Send + Sync {
+pub(crate) trait RuntimeValueTool: RuntimeToolMetadata + Send + Sync {
     const NAME: &'static str;
     type Args: for<'de> Deserialize<'de> + Send;
     type Error: std::fmt::Display + Send;
@@ -54,7 +54,7 @@ trait RuntimeValueTool: RuntimeToolMetadata + Send + Sync {
     fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error>;
 }
 
-fn tool_value_scalar_text(value: &Value) -> String {
+pub(crate) fn tool_value_scalar_text(value: &Value) -> String {
     match value {
         Value::Null => "null".to_string(),
         Value::Bool(value) => value.to_string(),
@@ -64,7 +64,7 @@ fn tool_value_scalar_text(value: &Value) -> String {
     }
 }
 
-fn push_tool_value_lines(value: &Value, indent: usize, lines: &mut Vec<String>) {
+pub(crate) fn push_tool_value_lines(value: &Value, indent: usize, lines: &mut Vec<String>) {
     let prefix = "  ".repeat(indent);
     match value {
         Value::Array(items) => {
@@ -108,7 +108,7 @@ fn push_tool_value_lines(value: &Value, indent: usize, lines: &mut Vec<String>) 
     }
 }
 
-fn tool_value_readable_text(value: &Value) -> String {
+pub(crate) fn tool_value_readable_text(value: &Value) -> String {
     if let Value::String(text) = value {
         return text.clone();
     }
@@ -117,11 +117,11 @@ fn tool_value_readable_text(value: &Value) -> String {
     lines.join("\n")
 }
 
-fn value_string(value: &Value, key: &str) -> Option<String> {
+pub(crate) fn value_string(value: &Value, key: &str) -> Option<String> {
     value.get(key).and_then(Value::as_str).map(str::trim).filter(|text| !text.is_empty()).map(ToOwned::to_owned)
 }
 
-fn provider_tool_metadata_from_value(tool_name: &str, value: &Value) -> ProviderToolMetadata {
+pub(crate) fn provider_tool_metadata_from_value(tool_name: &str, value: &Value) -> ProviderToolMetadata {
     let mut metadata = ProviderToolMetadata {
         backup_record_id: value_string(value, "backupRecordId"),
         ..ProviderToolMetadata::default()
@@ -168,7 +168,7 @@ fn provider_tool_metadata_from_value(tool_name: &str, value: &Value) -> Provider
     metadata
 }
 
-fn provider_tool_output_from_value(tool_name: &str, value: &Value) -> String {
+pub(crate) fn provider_tool_output_from_value(tool_name: &str, value: &Value) -> String {
     match tool_name {
         "exec" => {
             if let Some(aggregated_output) = value
@@ -217,7 +217,7 @@ fn provider_tool_output_from_value(tool_name: &str, value: &Value) -> String {
     }
 }
 
-fn provider_tool_result_from_value(tool_name: &str, mut value: Value) -> ProviderToolResult {
+pub(crate) fn provider_tool_result_from_value(tool_name: &str, mut value: Value) -> ProviderToolResult {
     let metadata = provider_tool_metadata_from_value(tool_name, &value);
     let images = if tool_name == "operate" {
         let payload = value.get("data").unwrap_or(&value);
@@ -245,7 +245,7 @@ fn provider_tool_result_from_value(tool_name: &str, mut value: Value) -> Provide
     }
 }
 
-fn remove_top_level_internal_tool_fields(value: &mut Value) {
+pub(crate) fn remove_top_level_internal_tool_fields(value: &mut Value) {
     let Value::Object(map) = value else {
         return;
     };
@@ -270,7 +270,7 @@ fn remove_top_level_internal_tool_fields(value: &mut Value) {
     }
 }
 
-fn parse_runtime_tool_args<T>(args_json: &str) -> Result<T, String>
+pub(crate) fn parse_runtime_tool_args<T>(args_json: &str) -> Result<T, String>
 where
     T: for<'de> Deserialize<'de>,
 {
@@ -309,16 +309,16 @@ where
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-struct ProviderToolCallRequest {
-    invocation_id: String,
-    provider_call_id: Option<String>,
-    tool_name: String,
-    arguments: Value,
+pub(crate) struct ProviderToolCallRequest {
+    pub(crate) invocation_id: String,
+    pub(crate) provider_call_id: Option<String>,
+    pub(crate) tool_name: String,
+    pub(crate) arguments: Value,
 }
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-enum ProviderToolResultPart {
+pub(crate) enum ProviderToolResultPart {
     Text {
         text: String,
     },
@@ -341,43 +341,43 @@ enum ProviderToolResultPart {
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-struct ProviderToolResult {
-    output: String,
-    metadata: ProviderToolMetadata,
-    parts: Vec<ProviderToolResultPart>,
-    is_error: bool,
+pub(crate) struct ProviderToolResult {
+    pub(crate) output: String,
+    pub(crate) metadata: ProviderToolMetadata,
+    pub(crate) parts: Vec<ProviderToolResultPart>,
+    pub(crate) is_error: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-struct ProviderToolMetadata {
+pub(crate) struct ProviderToolMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
-    exit_code: Option<i64>,
+    pub(crate) exit_code: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    wall_time_ms: Option<u64>,
+    pub(crate) wall_time_ms: Option<u64>,
     #[serde(skip_serializing_if = "bool_is_false")]
-    timed_out: bool,
+    pub(crate) timed_out: bool,
     #[serde(skip_serializing_if = "bool_is_false")]
-    truncated: bool,
+    pub(crate) truncated: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    output_paths: Vec<String>,
+    pub(crate) output_paths: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    total_output_lines: Option<usize>,
+    pub(crate) total_output_lines: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    backup_record_id: Option<String>,
+    pub(crate) backup_record_id: Option<String>,
     #[serde(skip_serializing_if = "provider_tool_control_is_none")]
-    control: ProviderToolControl,
+    pub(crate) control: ProviderToolControl,
 }
 
-fn bool_is_false(value: &bool) -> bool {
+pub(crate) fn bool_is_false(value: &bool) -> bool {
     !*value
 }
 
-fn provider_tool_control_is_none(control: &ProviderToolControl) -> bool {
+pub(crate) fn provider_tool_control_is_none(control: &ProviderToolControl) -> bool {
     matches!(control, ProviderToolControl::None)
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-enum ProviderToolControl {
+pub(crate) enum ProviderToolControl {
     #[default]
     None,
     Contact { stop: bool },
@@ -387,7 +387,7 @@ enum ProviderToolControl {
 
 #[allow(dead_code)]
 impl ProviderToolResult {
-    fn text(text: impl Into<String>) -> Self {
+    pub(crate) fn text(text: impl Into<String>) -> Self {
         let text = text.into();
         Self {
             output: text.clone(),
@@ -397,7 +397,7 @@ impl ProviderToolResult {
         }
     }
 
-    fn error(text: impl Into<String>) -> Self {
+    pub(crate) fn error(text: impl Into<String>) -> Self {
         let text = text.into();
         Self {
             output: text.clone(),

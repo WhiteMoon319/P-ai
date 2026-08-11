@@ -1,4 +1,4 @@
-fn json_string_field(value: &Value, keys: &[&str]) -> Option<String> {
+pub(crate) fn json_string_field(value: &Value, keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|key| {
         value.get(*key)
             .and_then(Value::as_str)
@@ -9,19 +9,19 @@ fn json_string_field(value: &Value, keys: &[&str]) -> Option<String> {
 }
 
 #[derive(Debug, Clone)]
-struct TerminalToolResultMessage {
-    assistant_text: String,
-    provider_meta: Option<Value>,
+pub(crate) struct TerminalToolResultMessage {
+    pub(crate) assistant_text: String,
+    pub(crate) provider_meta: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct PlanToolResultState {
-    action: String,
-    path: String,
-    stop_tool_loop: bool,
+pub(crate) struct PlanToolResultState {
+    pub(crate) action: String,
+    pub(crate) path: String,
+    pub(crate) stop_tool_loop: bool,
 }
 
-fn current_prompt_tokens_for_preserved_gate(
+pub(crate) fn current_prompt_tokens_for_preserved_gate(
     context: Option<&ToolLoopAutoCompactionContext>,
     trusted_input_tokens: Option<u64>,
 ) -> u64 {
@@ -40,7 +40,7 @@ fn current_prompt_tokens_for_preserved_gate(
 }
 
 /// 工具整轮执行完立刻判定。判定前不得写正式历史，也不得写临时账本。
-async fn apply_compaction_preserved_gate_after_tool_round(
+pub(crate) async fn apply_compaction_preserved_gate_after_tool_round(
     state: Option<&AppState>,
     context: Option<&ToolLoopAutoCompactionContext>,
     selected_api: &ApiConfig,
@@ -159,7 +159,7 @@ async fn apply_compaction_preserved_gate_after_tool_round(
     }
 }
 
-fn plan_tool_result_state(
+pub(crate) fn plan_tool_result_state(
     tool_name: &str,
     tool_args: &str,
     tool_result: &ProviderToolResult,
@@ -193,7 +193,7 @@ fn plan_tool_result_state(
     })
 }
 
-fn terminal_plan_present_result(
+pub(crate) fn terminal_plan_present_result(
     tool_name: &str,
     tool_args: &str,
     tool_result: &ProviderToolResult,
@@ -217,7 +217,7 @@ fn terminal_plan_present_result(
     })
 }
 
-fn sync_completed_tool_history_cache(
+pub(crate) fn sync_completed_tool_history_cache(
     state: Option<&AppState>,
     chat_session_key: &str,
     events: &[Value],
@@ -246,7 +246,7 @@ fn sync_completed_tool_history_cache(
     }
 }
 
-fn persist_completed_tool_group_result(
+pub(crate) fn persist_completed_tool_group_result(
     state: Option<&AppState>,
     context: Option<&ToolLoopAutoCompactionContext>,
     selected_api: &ApiConfig,
@@ -372,7 +372,7 @@ fn persist_completed_tool_group_result(
     }
 }
 
-async fn await_pending_tool_group_result_persists(
+pub(crate) async fn await_pending_tool_group_result_persists(
     pending_tool_group_result_persists: &mut Vec<tokio::task::JoinHandle<Result<(), String>>>,
     chat_session_key: &str,
     reason: &str,
@@ -395,7 +395,7 @@ async fn await_pending_tool_group_result_persists(
     Ok(())
 }
 
-fn tool_result_provider_meta_patch(
+pub(crate) fn tool_result_provider_meta_patch(
     trusted_input_tokens: Option<u64>,
     context_window_tokens: u32,
 ) -> Option<Value> {

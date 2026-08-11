@@ -1,4 +1,4 @@
-async fn call_model_openai_with_tools(
+pub(crate) async fn call_model_openai_with_tools(
     api_config: &ResolvedApiConfig,
     selected_api: &ApiConfig,
     model_name: &str,
@@ -30,7 +30,7 @@ async fn call_model_openai_with_tools(
     .await
 }
 
-fn openai_style_adapter_kind_for_deepseek_kimi(
+pub(crate) fn openai_style_adapter_kind_for_deepseek_kimi(
     api_config: &ResolvedApiConfig,
     model_name: &str,
 ) -> genai::adapter::AdapterKind {
@@ -47,7 +47,7 @@ fn openai_style_adapter_kind_for_deepseek_kimi(
     }
 }
 
-async fn call_model_openai_responses_with_tools(
+pub(crate) async fn call_model_openai_responses_with_tools(
     api_config: &ResolvedApiConfig,
     selected_api: &ApiConfig,
     model_name: &str,
@@ -79,7 +79,7 @@ async fn call_model_openai_responses_with_tools(
     .await
 }
 
-async fn call_model_deepseek_kimi_with_tools(
+pub(crate) async fn call_model_deepseek_kimi_with_tools(
     api_config: &ResolvedApiConfig,
     selected_api: &ApiConfig,
     model_name: &str,
@@ -115,7 +115,7 @@ async fn call_model_deepseek_kimi_with_tools(
     .await
 }
 
-async fn call_model_openai_non_stream_with_tools(
+pub(crate) async fn call_model_openai_non_stream_with_tools(
     api_config: &ResolvedApiConfig,
     selected_api: &ApiConfig,
     model_name: &str,
@@ -147,7 +147,7 @@ async fn call_model_openai_non_stream_with_tools(
     .await
 }
 
-async fn call_model_deepseek_kimi_non_stream_with_tools(
+pub(crate) async fn call_model_deepseek_kimi_non_stream_with_tools(
     api_config: &ResolvedApiConfig,
     selected_api: &ApiConfig,
     model_name: &str,

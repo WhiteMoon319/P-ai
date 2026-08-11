@@ -1,5 +1,5 @@
 impl ConversationServiceV2 {
-    fn commit_scheduler_history_flush(
+    pub(crate) fn commit_scheduler_history_flush(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -107,7 +107,7 @@ impl ConversationServiceV2 {
         }
     }
 
-    fn write_scheduler_persisted_message_batch_v2(
+    pub(crate) fn write_scheduler_persisted_message_batch_v2(
         &self,
         conversation_id: &str,
         events: &[ChatPendingEvent],
@@ -148,7 +148,7 @@ impl ConversationServiceV2 {
         persisted_batch_messages
     }
 
-    fn append_scheduler_prepared_messages_to_conversation_v2(
+    pub(crate) fn append_scheduler_prepared_messages_to_conversation_v2(
         &self,
         state: &AppState,
         conversation: &mut Conversation,
@@ -196,7 +196,7 @@ impl ConversationServiceV2 {
         }
     }
 
-    fn handle_scheduler_remote_im_activations_v2(
+    pub(crate) fn handle_scheduler_remote_im_activations_v2(
         &self,
         state: &AppState,
         contacts: &[RemoteImContact],
@@ -226,7 +226,7 @@ impl ConversationServiceV2 {
         Ok((event_activate_flags, activated_contacts_in_batch))
     }
 
-    fn persist_scheduler_flush_appended_messages_v2(
+    pub(crate) fn persist_scheduler_flush_appended_messages_v2(
         &self,
         state: &AppState,
         conversation_meta: &message_store::ConversationShardMeta,

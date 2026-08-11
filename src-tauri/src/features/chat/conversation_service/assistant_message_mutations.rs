@@ -1,5 +1,5 @@
 impl ConversationServiceV2 {
-    fn append_tool_event_to_assistant_message(
+    pub(crate) fn append_tool_event_to_assistant_message(
         &self,
         state: &AppState,
         input: &AssistantMessageToolAppendInput,
@@ -104,7 +104,7 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn append_final_text_to_assistant_message(
+    pub(crate) fn append_final_text_to_assistant_message(
         &self,
         state: &AppState,
         input: &AssistantMessageFinalTextAppendInput,
@@ -222,7 +222,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn bootstrap_streaming_assistant_message(
+    pub(crate) fn bootstrap_streaming_assistant_message(
         &self,
         state: &AppState,
         input: &AssistantMessageBootstrapInput,
@@ -331,7 +331,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn patch_provider_meta_on_assistant_message(
+    pub(crate) fn patch_provider_meta_on_assistant_message(
         &self,
         state: &AppState,
         input: &AssistantMessageProviderMetaPatchInput,
@@ -370,7 +370,7 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn patch_message_provider_meta_batch(
+    pub(crate) fn patch_message_provider_meta_batch(
         &self,
         state: &AppState,
         input: &MessageProviderMetaBatchPatchInput,
@@ -440,7 +440,7 @@ impl ConversationServiceV2 {
             Ok(())
         })
     }
-    fn persist_stop_chat_partial_message(
+    pub(crate) fn persist_stop_chat_partial_message(
         &self,
         state: &AppState,
         requested_conversation_id: Option<&str>,

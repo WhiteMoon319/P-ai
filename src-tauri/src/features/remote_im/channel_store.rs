@@ -1,39 +1,63 @@
+use std::{
+    fs,
+    io::Cursor,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+};
+
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use directories::ProjectDirs;
+use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
+use image::ImageFormat;
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use rmcp::{schemars, ServiceExt};
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
+use uuid::Uuid;
+
+// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
+
+use super::*;
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImChannelPrivateState {
+
+pub(crate) struct RemoteImChannelPrivateState {
     #[serde(default = "remote_im_channel_private_state_schema_version")]
-    schema_version: u32,
+    pub(crate) schema_version: u32,
     #[serde(default)]
-    channel_id: String,
+    pub(crate) channel_id: String,
     #[serde(default)]
-    platform: String,
+    pub(crate) platform: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    token: String,
+    pub(crate) token: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    base_url: String,
+    pub(crate) base_url: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    account_id: String,
+    pub(crate) account_id: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    user_id: String,
+    pub(crate) user_id: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    sync_buf: String,
+    pub(crate) sync_buf: String,
     #[serde(default, skip_serializing_if = "remote_im_string_map_is_empty")]
-    context_tokens: std::collections::HashMap<String, String>,
+    pub(crate) context_tokens: std::collections::HashMap<String, String>,
     #[serde(default)]
-    updated_at: String,
+    pub(crate) updated_at: String,
 }
 
-fn remote_im_channel_private_state_schema_version() -> u32 {
+pub(crate) fn remote_im_channel_private_state_schema_version() -> u32 {
     1
 }
 
-fn remote_im_string_map_is_empty(
+pub(crate) fn remote_im_string_map_is_empty(
     value: &std::collections::HashMap<String, String>,
 ) -> bool {
     value.is_empty()
 }
 
-fn remote_im_platform_store_key(platform: &RemoteImPlatform) -> &'static str {
+pub(crate) fn remote_im_platform_store_key(platform: &RemoteImPlatform) -> &'static str {
     match platform {
         RemoteImPlatform::Feishu => "feishu",
         RemoteImPlatform::Dingtalk => "dingtalk",
@@ -42,9 +66,11 @@ fn remote_im_platform_store_key(platform: &RemoteImPlatform) -> &'static str {
     }
 }
 
-fn remote_im_channel_state_file_stem(platform: &RemoteImPlatform, channel_id: &str) -> String {
+pub(crate) fn remote_im_channel_state_file_stem(platform: &RemoteImPlatform, channel_id: &str) -> String {
     use sha2::{Digest, Sha256};
 
+
+use super::*;
     let mut hasher = Sha256::new();
     hasher.update(remote_im_platform_store_key(platform).as_bytes());
     hasher.update(b"\n");
@@ -52,7 +78,7 @@ fn remote_im_channel_state_file_stem(platform: &RemoteImPlatform, channel_id: &s
     bytes_to_lower_hex(hasher.finalize())
 }
 
-fn remote_im_channel_state_path(
+pub(crate) fn remote_im_channel_state_path(
     state: &AppState,
     platform: &RemoteImPlatform,
     channel_id: &str,
@@ -67,7 +93,7 @@ fn remote_im_channel_state_path(
         ))
 }
 
-fn remote_im_channel_state_lock_key(platform: &RemoteImPlatform, channel_id: &str) -> String {
+pub(crate) fn remote_im_channel_state_lock_key(platform: &RemoteImPlatform, channel_id: &str) -> String {
     format!(
         "{}:{}",
         remote_im_platform_store_key(platform),
@@ -75,7 +101,7 @@ fn remote_im_channel_state_lock_key(platform: &RemoteImPlatform, channel_id: &st
     )
 }
 
-fn remote_im_channel_state_write_lock(
+pub(crate) fn remote_im_channel_state_write_lock(
     state: &AppState,
     platform: &RemoteImPlatform,
     channel_id: &str,
@@ -91,7 +117,7 @@ fn remote_im_channel_state_write_lock(
         .clone())
 }
 
-fn remote_im_read_channel_private_state(
+pub(crate) fn remote_im_read_channel_private_state(
     state: &AppState,
     platform: &RemoteImPlatform,
     channel_id: &str,
@@ -129,7 +155,7 @@ fn remote_im_read_channel_private_state(
     Ok(out)
 }
 
-fn remote_im_write_channel_private_state(
+pub(crate) fn remote_im_write_channel_private_state(
     state: &AppState,
     platform: &RemoteImPlatform,
     channel_id: &str,
@@ -208,7 +234,7 @@ fn remote_im_write_channel_private_state(
     Ok(())
 }
 
-fn remote_im_patch_channel_private_state<F>(
+pub(crate) fn remote_im_patch_channel_private_state<F>(
     state: &AppState,
     platform: &RemoteImPlatform,
     channel_id: &str,
@@ -223,7 +249,7 @@ where
     Ok(current)
 }
 
-fn remote_im_delete_channel_private_state(
+pub(crate) fn remote_im_delete_channel_private_state(
     state: &AppState,
     platform: &RemoteImPlatform,
     channel_id: &str,
@@ -247,13 +273,13 @@ fn remote_im_delete_channel_private_state(
     })
 }
 
-fn remote_im_take_string_field(obj: &mut serde_json::Map<String, Value>, key: &str) -> String {
+pub(crate) fn remote_im_take_string_field(obj: &mut serde_json::Map<String, Value>, key: &str) -> String {
     obj.remove(key)
         .and_then(|value| value.as_str().map(str::trim).map(ToString::to_string))
         .unwrap_or_default()
 }
 
-fn remote_im_merge_non_empty(target: &mut String, value: String) -> bool {
+pub(crate) fn remote_im_merge_non_empty(target: &mut String, value: String) -> bool {
     let value = value.trim();
     if value.is_empty() || !target.trim().is_empty() {
         return false;
@@ -262,7 +288,7 @@ fn remote_im_merge_non_empty(target: &mut String, value: String) -> bool {
     true
 }
 
-fn remote_im_channel_private_state_from_legacy_credentials(
+pub(crate) fn remote_im_channel_private_state_from_legacy_credentials(
     platform: &RemoteImPlatform,
     credentials: &mut Value,
 ) -> Option<RemoteImChannelPrivateState> {
@@ -283,7 +309,7 @@ fn remote_im_channel_private_state_from_legacy_credentials(
     changed.then_some(out)
 }
 
-fn remote_im_merge_private_state(
+pub(crate) fn remote_im_merge_private_state(
     current: &mut RemoteImChannelPrivateState,
     legacy: RemoteImChannelPrivateState,
 ) {
@@ -305,7 +331,7 @@ fn remote_im_merge_private_state(
     }
 }
 
-fn remote_im_migrate_channel_private_states(
+pub(crate) fn remote_im_migrate_channel_private_states(
     state: &AppState,
     config: &mut AppConfig,
 ) -> Result<bool, String> {
@@ -325,7 +351,7 @@ fn remote_im_migrate_channel_private_states(
     Ok(changed)
 }
 
-fn remote_im_effective_credentials(
+pub(crate) fn remote_im_effective_credentials(
     state: &AppState,
     channel: &RemoteImChannelConfig,
 ) -> Result<Value, String> {
@@ -355,7 +381,7 @@ fn remote_im_effective_credentials(
     Ok(out)
 }
 
-fn remote_im_channel_with_effective_credentials(
+pub(crate) fn remote_im_channel_with_effective_credentials(
     state: &AppState,
     channel: &RemoteImChannelConfig,
 ) -> Result<RemoteImChannelConfig, String> {
@@ -366,7 +392,6 @@ fn remote_im_channel_with_effective_credentials(
 
 #[cfg(test)]
 mod remote_im_channel_store_tests {
-    use super::*;
 
     #[test]
     fn weixin_legacy_migration_strips_private_fields_only() {

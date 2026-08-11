@@ -1,8 +1,33 @@
+use std::{
+    fs,
+    io::Cursor,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+};
+
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use directories::ProjectDirs;
+use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
+use image::ImageFormat;
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use rmcp::{schemars, ServiceExt};
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
+use uuid::Uuid;
+
+
+use super::*;
+// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
+
 // ========== 时间语义统一 ==========
 // 当地时间（local）：用户/LLM/UI 可见时间。
 // 真实时间（UTC）：数据层存储、调度比较、跨时区稳定时间。
 
-fn now_utc_rfc3339() -> String {
+
+
+pub(crate) fn now_utc_rfc3339() -> String {
     now_utc()
         .replace_nanosecond(0)
         .ok()
@@ -10,11 +35,11 @@ fn now_utc_rfc3339() -> String {
         .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string())
 }
 
-fn parse_rfc3339_time(value: &str) -> Option<OffsetDateTime> {
+pub(crate) fn parse_rfc3339_time(value: &str) -> Option<OffsetDateTime> {
     OffsetDateTime::parse(value.trim(), &Rfc3339).ok()
 }
 
-fn normalize_time_for_utc_storage(dt: OffsetDateTime) -> Result<String, String> {
+pub(crate) fn normalize_time_for_utc_storage(dt: OffsetDateTime) -> Result<String, String> {
     dt.to_offset(UtcOffset::UTC)
         .replace_nanosecond(0)
         .map_err(|err| format!("Normalize UTC time failed: {err}"))?
@@ -22,7 +47,7 @@ fn normalize_time_for_utc_storage(dt: OffsetDateTime) -> Result<String, String> 
         .map_err(|err| format!("Format UTC time failed: {err}"))
 }
 
-fn normalize_rfc3339_to_utc_storage(field_name: &str, value: &str) -> Result<String, String> {
+pub(crate) fn normalize_rfc3339_to_utc_storage(field_name: &str, value: &str) -> Result<String, String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return Err(format!("{field_name} must not be empty"));
@@ -35,7 +60,7 @@ fn normalize_rfc3339_to_utc_storage(field_name: &str, value: &str) -> Result<Str
     normalize_time_for_utc_storage(parsed)
 }
 
-fn local_utc_offset() -> Option<UtcOffset> {
+pub(crate) fn local_utc_offset() -> Option<UtcOffset> {
     match UtcOffset::current_local_offset() {
         Ok(offset) => Some(offset),
         Err(err) => {
@@ -47,7 +72,7 @@ fn local_utc_offset() -> Option<UtcOffset> {
     }
 }
 
-fn to_local_datetime(dt: OffsetDateTime) -> OffsetDateTime {
+pub(crate) fn to_local_datetime(dt: OffsetDateTime) -> OffsetDateTime {
     if let Some(offset) = local_utc_offset() {
         dt.to_offset(offset)
     } else {
@@ -55,7 +80,7 @@ fn to_local_datetime(dt: OffsetDateTime) -> OffsetDateTime {
     }
 }
 
-fn format_offset_datetime_to_local_text(dt: OffsetDateTime) -> String {
+pub(crate) fn format_offset_datetime_to_local_text(dt: OffsetDateTime) -> String {
     let local = to_local_datetime(dt);
     format!(
         "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
@@ -68,7 +93,7 @@ fn format_offset_datetime_to_local_text(dt: OffsetDateTime) -> String {
     )
 }
 
-fn format_offset_datetime_to_local_rfc3339(dt: OffsetDateTime) -> String {
+pub(crate) fn format_offset_datetime_to_local_rfc3339(dt: OffsetDateTime) -> String {
     to_local_datetime(dt)
         .replace_nanosecond(0)
         .ok()
@@ -76,11 +101,11 @@ fn format_offset_datetime_to_local_rfc3339(dt: OffsetDateTime) -> String {
         .unwrap_or_else(|| format_offset_datetime_to_local_text(dt))
 }
 
-fn now_local_rfc3339() -> String {
+pub(crate) fn now_local_rfc3339() -> String {
     format_offset_datetime_to_local_rfc3339(now_utc())
 }
 
-fn format_utc_storage_time_to_local_rfc3339(raw: &str) -> String {
+pub(crate) fn format_utc_storage_time_to_local_rfc3339(raw: &str) -> String {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return String::new();
@@ -91,7 +116,7 @@ fn format_utc_storage_time_to_local_rfc3339(raw: &str) -> String {
     trimmed.to_string()
 }
 
-fn format_utc_storage_time_to_local_text(raw: &str) -> String {
+pub(crate) fn format_utc_storage_time_to_local_text(raw: &str) -> String {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return String::new();
@@ -114,7 +139,7 @@ fn format_utc_storage_time_to_local_text(raw: &str) -> String {
 }
 
 // 与前端 ChatView 的时间分隔标签规则保持一致。
-fn format_offset_datetime_to_local_relative_label(dt: OffsetDateTime) -> String {
+pub(crate) fn format_offset_datetime_to_local_relative_label(dt: OffsetDateTime) -> String {
     let now = now_utc();
     let local = to_local_datetime(dt);
     let now_local = to_local_datetime(now);
@@ -140,7 +165,7 @@ fn format_offset_datetime_to_local_relative_label(dt: OffsetDateTime) -> String 
     format!("{:04}-{month_day} {clock}", local.year())
 }
 
-fn format_utc_storage_time_to_local_relative_label(raw: &str) -> String {
+pub(crate) fn format_utc_storage_time_to_local_relative_label(raw: &str) -> String {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return String::new();

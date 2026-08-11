@@ -1,8 +1,8 @@
-pub(super) const CONVERSATION_META_SCHEMA_VERSION: u32 = 1;
+pub(crate) const CONVERSATION_META_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct ConversationPersistMeta {
+pub(crate) struct ConversationPersistMeta {
     meta_schema_version: u32,
     id: String,
     title: String,
@@ -49,13 +49,13 @@ pub(super) struct ConversationPersistMeta {
 }
 
 impl ConversationPersistMeta {
-    pub(super) fn from_conversation(conversation: &Conversation) -> Self {
+    pub(crate) fn from_conversation(conversation: &Conversation) -> Self {
         ConversationShardMeta::from_conversation(conversation).to_persist_meta()
     }
 
     /// 基于 metadata 快照写局部 splice 时，不能用空 `Conversation.messages`
     /// 重算消息派生字段；只按实际替换的消息更新这些字段。
-    pub(super) fn from_conversation_with_spliced_messages(
+    pub(crate) fn from_conversation_with_spliced_messages(
         conversation: &Conversation,
         source: &ConversationShardMeta,
         removed_messages: &[ChatMessage],
@@ -77,11 +77,11 @@ impl ConversationPersistMeta {
         meta.to_persist_meta()
     }
 
-    fn conversation_id(&self) -> &str {
+    pub(crate) fn conversation_id(&self) -> &str {
         self.id.as_str()
     }
 
-    fn apply_to_conversation(&self, target: &mut Conversation) -> Result<(), String> {
+    pub(crate) fn apply_to_conversation(&self, target: &mut Conversation) -> Result<(), String> {
         let raw = serde_json::to_value(self)
             .map_err(|err| format!("序列化会话持久化 metadata 失败: {err}"))?;
         let meta = serde_json::from_value::<ConversationShardMeta>(raw)
@@ -92,12 +92,12 @@ impl ConversationPersistMeta {
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct ConversationPersistMessagesSnapshot {
+pub(crate) struct ConversationPersistMessagesSnapshot {
     messages: Vec<ChatMessage>,
 }
 
 impl ConversationPersistMessagesSnapshot {
-    pub(super) fn from_conversation(conversation: &Conversation) -> Self {
+    pub(crate) fn from_conversation(conversation: &Conversation) -> Self {
         Self {
             messages: conversation.messages.clone(),
         }
@@ -106,28 +106,28 @@ impl ConversationPersistMessagesSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct ConversationShardPreviewMessage {
-    pub(super) message_id: String,
-    pub(super) role: String,
+pub(crate) struct ConversationShardPreviewMessage {
+    pub(crate) message_id: String,
+    pub(crate) role: String,
     #[serde(default)]
-    pub(super) speaker_agent_id: Option<String>,
+    pub(crate) speaker_agent_id: Option<String>,
     #[serde(default)]
-    pub(super) created_at: Option<String>,
+    pub(crate) created_at: Option<String>,
     #[serde(default)]
-    pub(super) text_preview: String,
+    pub(crate) text_preview: String,
     #[serde(default)]
-    pub(super) has_image: bool,
+    pub(crate) has_image: bool,
     #[serde(default)]
-    pub(super) has_pdf: bool,
+    pub(crate) has_pdf: bool,
     #[serde(default)]
-    pub(super) has_audio: bool,
+    pub(crate) has_audio: bool,
     #[serde(default)]
-    pub(super) has_attachment: bool,
+    pub(crate) has_attachment: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct ConversationShardMeta {
+pub(crate) struct ConversationShardMeta {
     #[serde(default)]
     meta_schema_version: u32,
     id: String,
@@ -209,7 +209,7 @@ pub(super) struct ConversationShardMeta {
 }
 
 impl ConversationShardMeta {
-    fn preview_message_from_chat_message(
+    pub(crate) fn preview_message_from_chat_message(
         message: &ChatMessage,
     ) -> Option<ConversationShardPreviewMessage> {
         if !matches!(
@@ -224,7 +224,7 @@ impl ConversationShardMeta {
             speaker_agent_id: message.speaker_agent_id.clone(),
             created_at: Some(message.created_at.clone())
                 .filter(|value| !value.trim().is_empty()),
-            text_preview: super::build_conversation_preview_text(message),
+            text_preview: crate::build_conversation_preview_text(message),
             has_image: message.parts.iter().any(|part| {
                 matches!(part, MessagePart::Image { mime, .. } if !mime.trim().eq_ignore_ascii_case("application/pdf"))
                     || matches!(part, MessagePart::Attachment { mime, .. } if message_attachment_kind(mime) == "image")
@@ -240,7 +240,7 @@ impl ConversationShardMeta {
                     matches!(part, MessagePart::Audio { .. })
                         || matches!(part, MessagePart::Attachment { mime, .. } if message_attachment_kind(mime) == "audio")
                 }),
-            has_attachment: super::conversation_message_has_attachment(message),
+            has_attachment: crate::conversation_message_has_attachment(message),
         };
         if preview.text_preview.trim().is_empty()
             && !preview.has_image
@@ -253,7 +253,7 @@ impl ConversationShardMeta {
         Some(preview)
     }
 
-    fn body_text_length_for_message(message: &ChatMessage) -> usize {
+    pub(crate) fn body_text_length_for_message(message: &ChatMessage) -> usize {
         if !matches!(
             message.role.trim().to_ascii_lowercase().as_str(),
             "user" | "assistant"
@@ -270,190 +270,190 @@ impl ConversationShardMeta {
             .sum()
     }
 
-    pub(super) fn schema_version(&self) -> u32 {
+    pub(crate) fn schema_version(&self) -> u32 {
         self.meta_schema_version
     }
 
-    pub(super) fn id(&self) -> &str {
+    pub(crate) fn id(&self) -> &str {
         self.id.as_str()
     }
 
-    pub(super) fn title(&self) -> &str {
+    pub(crate) fn title(&self) -> &str {
         self.title.as_str()
     }
 
-    pub(super) fn agent_id(&self) -> &str {
+    pub(crate) fn agent_id(&self) -> &str {
         self.agent_id.as_str()
     }
 
-    pub(super) fn department_id(&self) -> &str {
+    pub(crate) fn department_id(&self) -> &str {
         self.department_id.as_str()
     }
 
-    pub(super) fn conversation_kind(&self) -> &str {
+    pub(crate) fn conversation_kind(&self) -> &str {
         self.conversation_kind.as_str()
     }
 
-    pub(super) fn root_conversation_id(&self) -> Option<&str> {
+    pub(crate) fn root_conversation_id(&self) -> Option<&str> {
         self.root_conversation_id.as_deref()
     }
 
-    pub(super) fn delegate_id(&self) -> Option<&str> {
+    pub(crate) fn delegate_id(&self) -> Option<&str> {
         self.delegate_id.as_deref()
     }
 
-    pub(super) fn updated_at(&self) -> &str {
+    pub(crate) fn updated_at(&self) -> &str {
         self.updated_at.as_str()
     }
 
-    pub(super) fn last_user_at(&self) -> Option<&str> {
+    pub(crate) fn last_user_at(&self) -> Option<&str> {
         self.last_user_at.as_deref()
     }
 
-    pub(super) fn last_assistant_at(&self) -> Option<&str> {
+    pub(crate) fn last_assistant_at(&self) -> Option<&str> {
         self.last_assistant_at.as_deref()
     }
 
-    pub(super) fn archived_at(&self) -> Option<&str> {
+    pub(crate) fn archived_at(&self) -> Option<&str> {
         self.archived_at.as_deref()
     }
 
-    pub(super) fn preferred_api_config_id(&self) -> Option<&str> {
+    pub(crate) fn preferred_api_config_id(&self) -> Option<&str> {
         self.preferred_api_config_id.as_deref()
     }
 
-    pub(super) fn summary(&self) -> &str {
+    pub(crate) fn summary(&self) -> &str {
         self.summary.as_str()
     }
 
-    pub(super) fn auto_push_remote_contact_id(&self) -> Option<&str> {
+    pub(crate) fn auto_push_remote_contact_id(&self) -> Option<&str> {
         self.auto_push_remote_contact_id.as_deref()
     }
 
-    pub(super) fn user_profile_snapshot(&self) -> &str {
+    pub(crate) fn user_profile_snapshot(&self) -> &str {
         self.user_profile_snapshot.as_str()
     }
 
-    pub(super) fn status(&self) -> &str {
+    pub(crate) fn status(&self) -> &str {
         self.status.as_str()
     }
 
-    pub(super) fn unread_count(&self) -> usize {
+    pub(crate) fn unread_count(&self) -> usize {
         self.unread_count
     }
 
-    pub(super) fn root_conversation_id_text(&self) -> Option<&str> {
+    pub(crate) fn root_conversation_id_text(&self) -> Option<&str> {
         self.root_conversation_id
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
     }
 
-    pub(super) fn message_count(&self) -> usize {
+    pub(crate) fn message_count(&self) -> usize {
         self.message_count
     }
 
-    pub(super) fn body_message_count(&self) -> usize {
+    pub(crate) fn body_message_count(&self) -> usize {
         self.body_message_count
     }
 
-    pub(super) fn body_text_length(&self) -> usize {
+    pub(crate) fn body_text_length(&self) -> usize {
         self.body_text_length
     }
 
-    pub(super) fn has_assistant_reply(&self) -> bool {
+    pub(crate) fn has_assistant_reply(&self) -> bool {
         self.has_assistant_reply
     }
 
-    pub(super) fn has_context_compaction_message(&self) -> bool {
+    pub(crate) fn has_context_compaction_message(&self) -> bool {
         self.has_context_compaction_message
     }
 
-    pub(super) fn last_message_id(&self) -> Option<&str> {
+    pub(crate) fn last_message_id(&self) -> Option<&str> {
         self.last_message_id.as_deref()
     }
 
-    pub(super) fn latest_summary_title(&self) -> Option<&str> {
+    pub(crate) fn latest_summary_title(&self) -> Option<&str> {
         self.latest_summary_title.as_deref()
     }
 
-    pub(super) fn last_message_at(&self) -> Option<&str> {
+    pub(crate) fn last_message_at(&self) -> Option<&str> {
         self.last_message_at.as_deref()
     }
 
-    pub(super) fn created_at(&self) -> &str {
+    pub(crate) fn created_at(&self) -> &str {
         self.created_at.as_str()
     }
 
-    pub(super) fn current_todos(&self) -> &[ConversationTodoItem] {
+    pub(crate) fn current_todos(&self) -> &[ConversationTodoItem] {
         self.current_todos.as_slice()
     }
 
-    pub(super) fn parent_conversation_id(&self) -> Option<&str> {
+    pub(crate) fn parent_conversation_id(&self) -> Option<&str> {
         self.parent_conversation_id.as_deref()
     }
 
-    pub(super) fn child_conversation_ids(&self) -> &[String] {
+    pub(crate) fn child_conversation_ids(&self) -> &[String] {
         self.child_conversation_ids.as_slice()
     }
 
-    pub(super) fn fork_message_cursor(&self) -> Option<&str> {
+    pub(crate) fn fork_message_cursor(&self) -> Option<&str> {
         self.fork_message_cursor.as_deref()
     }
 
-    pub(super) fn shell_workspace_path(&self) -> Option<&str> {
+    pub(crate) fn shell_workspace_path(&self) -> Option<&str> {
         self.shell_workspace_path.as_deref()
     }
 
-    pub(super) fn shell_workspaces(&self) -> &[ShellWorkspaceConfig] {
+    pub(crate) fn shell_workspaces(&self) -> &[ShellWorkspaceConfig] {
         self.shell_workspaces.as_slice()
     }
 
-    pub(super) fn shell_autonomous_mode(&self) -> bool {
+    pub(crate) fn shell_autonomous_mode(&self) -> bool {
         self.shell_autonomous_mode
     }
 
-    pub(super) fn shell_work_mode(&self) -> &str {
+    pub(crate) fn shell_work_mode(&self) -> &str {
         self.shell_work_mode.as_str()
     }
 
-    pub(super) fn plan_mode_enabled(&self) -> bool {
+    pub(crate) fn plan_mode_enabled(&self) -> bool {
         self.plan_mode_enabled
     }
 
-    pub(super) fn active_goal(&self) -> Option<&ConversationGoalState> {
+    pub(crate) fn active_goal(&self) -> Option<&ConversationGoalState> {
         self.active_goal.as_ref()
     }
 
-    pub(super) fn fast_request_turns(&self) -> &[FastRequestTurn] {
+    pub(crate) fn fast_request_turns(&self) -> &[FastRequestTurn] {
         self.fast_request_turns.as_slice()
     }
 
-    pub(super) fn push_fast_request_turn(&mut self, turn: FastRequestTurn) {
+    pub(crate) fn push_fast_request_turn(&mut self, turn: FastRequestTurn) {
         self.fast_request_turns.push(turn);
     }
 
-    pub(super) fn retain_fast_request_turns(
+    pub(crate) fn retain_fast_request_turns(
         &mut self,
         keep: impl FnMut(&FastRequestTurn) -> bool,
     ) {
         self.fast_request_turns.retain(keep);
     }
 
-    pub(super) fn cumulative_usage(&self) -> &ConversationCumulativeUsage {
+    pub(crate) fn cumulative_usage(&self) -> &ConversationCumulativeUsage {
         &self.cumulative_usage
     }
 
-    pub(super) fn normalized_legacy_usage_totals(mut self) -> Self {
+    pub(crate) fn normalized_legacy_usage_totals(mut self) -> Self {
         self.cumulative_usage = self.cumulative_usage.clone().normalized_legacy_totals();
         self
     }
 
-    pub(super) fn preview_messages(&self) -> &[ConversationShardPreviewMessage] {
+    pub(crate) fn preview_messages(&self) -> &[ConversationShardPreviewMessage] {
         self.preview_messages.as_slice()
     }
 
-    pub(super) fn apply_to_conversation(&self, target: &mut Conversation) {
+    pub(crate) fn apply_to_conversation(&self, target: &mut Conversation) {
         target.title = self.title.clone();
         target.agent_id = self.agent_id.clone();
         target.department_id = self.department_id.clone();
@@ -487,7 +487,7 @@ impl ConversationShardMeta {
         target.fast_request_turns = self.fast_request_turns.clone();
     }
 
-    pub(super) fn apply_metadata_fields_from_conversation(&mut self, source: &Conversation) {
+    pub(crate) fn apply_metadata_fields_from_conversation(&mut self, source: &Conversation) {
         self.title = source.title.clone();
         self.agent_id = source.agent_id.clone();
         self.department_id = source.department_id.clone();
@@ -521,7 +521,7 @@ impl ConversationShardMeta {
         self.fast_request_turns = source.fast_request_turns.clone();
     }
 
-    pub(super) fn apply_metadata_fields_from_meta(&mut self, source: &ConversationShardMeta) {
+    pub(crate) fn apply_metadata_fields_from_meta(&mut self, source: &ConversationShardMeta) {
         self.title = source.title.clone();
         self.agent_id = source.agent_id.clone();
         self.department_id = source.department_id.clone();
@@ -554,7 +554,7 @@ impl ConversationShardMeta {
         self.active_goal = source.active_goal.clone();
     }
 
-    pub(super) fn apply_metadata_fields_from_meta_view(&mut self, source: &ConversationMetaView) {
+    pub(crate) fn apply_metadata_fields_from_meta_view(&mut self, source: &ConversationMetaView) {
         self.title = source.title.clone();
         self.agent_id = source.agent_id.clone();
         self.department_id = source.department_id.clone();
@@ -585,7 +585,7 @@ impl ConversationShardMeta {
         self.active_goal = source.active_goal.clone();
     }
 
-    pub(super) fn preserve_message_derived_fields_from(&mut self, source: &ConversationShardMeta) {
+    pub(crate) fn preserve_message_derived_fields_from(&mut self, source: &ConversationShardMeta) {
         self.last_message_id = source.last_message_id.clone();
         self.last_message_at = source.last_message_at.clone();
         self.message_count = source.message_count;
@@ -597,7 +597,7 @@ impl ConversationShardMeta {
         self.preview_messages = source.preview_messages.clone();
     }
 
-    pub(super) fn apply_appended_messages(&mut self, messages: &[ChatMessage]) {
+    pub(crate) fn apply_appended_messages(&mut self, messages: &[ChatMessage]) {
         if messages.is_empty() {
             return;
         }
@@ -630,14 +630,14 @@ impl ConversationShardMeta {
             self.has_assistant_reply = true;
         }
         if messages.iter().any(|message| {
-            super::is_context_compaction_message(message, message.role.trim())
+            crate::is_context_compaction_message(message, message.role.trim())
         }) {
             self.has_context_compaction_message = true;
         }
         if let Some(last_title) = messages
             .iter()
             .rev()
-            .find_map(super::summary_context_message_title)
+            .find_map(crate::summary_context_message_title)
         {
             self.latest_summary_title = Some(last_title);
         }
@@ -662,7 +662,7 @@ impl ConversationShardMeta {
     /// 当任何一对被替换消息的摘要标题状态发生变化（新增/删除/改写标题）时，
     /// 调用 `recompute_latest_summary_title` 取得替换后的最新摘要标题并写回；
     /// 该闭包由调用方按自身掌握的消息范围提供（全量会话重算或轻量摘要读取）。
-    pub(super) fn apply_replaced_messages(
+    pub(crate) fn apply_replaced_messages(
         &mut self,
         previous_messages: &[ChatMessage],
         updated_messages: &[ChatMessage],
@@ -676,8 +676,8 @@ impl ConversationShardMeta {
             .iter()
             .zip(updated_messages.iter())
             .any(|(previous, updated)| {
-                super::summary_context_message_title(previous)
-                    != super::summary_context_message_title(updated)
+                crate::summary_context_message_title(previous)
+                    != crate::summary_context_message_title(updated)
             });
         if summary_title_touched {
             self.latest_summary_title = recompute_latest_summary_title()?;
@@ -685,7 +685,7 @@ impl ConversationShardMeta {
         Ok(())
     }
 
-    pub(super) fn apply_replaced_message(
+    pub(crate) fn apply_replaced_message(
         &mut self,
         previous_message: &ChatMessage,
         updated_message: &ChatMessage,
@@ -728,7 +728,7 @@ impl ConversationShardMeta {
         }
     }
 
-    fn apply_spliced_messages(
+    pub(crate) fn apply_spliced_messages(
         &mut self,
         removed_messages: &[ChatMessage],
         inserted_messages: &[ChatMessage],
@@ -778,20 +778,20 @@ impl ConversationShardMeta {
                 .sum::<usize>(),
         );
         if inserted_messages.iter().any(|message| {
-            super::is_context_compaction_message(message, message.role.trim())
+            crate::is_context_compaction_message(message, message.role.trim())
         }) {
             self.has_context_compaction_message = true;
         }
         if let Some(last_title) = inserted_messages
             .iter()
             .rev()
-            .find_map(super::summary_context_message_title)
+            .find_map(crate::summary_context_message_title)
         {
             self.latest_summary_title = Some(last_title);
         }
     }
 
-    pub(super) fn apply_truncated_rewind_state(
+    pub(crate) fn apply_truncated_rewind_state(
         &mut self,
         keep_count: usize,
         current_todos: Vec<ConversationTodoItem>,
@@ -822,7 +822,7 @@ impl ConversationShardMeta {
         self.preview_messages = preview_messages;
     }
 
-    pub(super) fn from_conversation(conversation: &Conversation) -> Self {
+    pub(crate) fn from_conversation(conversation: &Conversation) -> Self {
         Self {
             meta_schema_version: CONVERSATION_META_SCHEMA_VERSION,
             id: conversation.id.clone(),
@@ -860,8 +860,8 @@ impl ConversationShardMeta {
             last_message_id: conversation.messages.last().map(|message| message.id.clone()),
             last_message_at: conversation.messages.last().map(|message| message.created_at.clone()),
             message_count: conversation.messages.len(),
-            body_message_count: super::conversation_body_message_count(conversation),
-            body_text_length: super::conversation_body_text_length(conversation),
+            body_message_count: crate::conversation_body_message_count(conversation),
+            body_text_length: crate::conversation_body_text_length(conversation),
             has_assistant_reply: conversation
                 .messages
                 .iter()
@@ -869,8 +869,8 @@ impl ConversationShardMeta {
             has_context_compaction_message: conversation
                 .messages
                 .iter()
-                .any(|message| super::is_context_compaction_message(message, message.role.trim())),
-            latest_summary_title: super::conversation_latest_summary_title(conversation),
+                .any(|message| crate::is_context_compaction_message(message, message.role.trim())),
+            latest_summary_title: crate::conversation_latest_summary_title(conversation),
             preview_messages: conversation
                 .messages
                 .iter()
@@ -892,7 +892,7 @@ impl ConversationShardMeta {
                     speaker_agent_id: message.speaker_agent_id.clone(),
                     created_at: Some(message.created_at.clone())
                         .filter(|value| !value.trim().is_empty()),
-                    text_preview: super::build_conversation_preview_text(&message),
+                    text_preview: crate::build_conversation_preview_text(&message),
                     has_image: message.parts.iter().any(|part| {
                         matches!(part, MessagePart::Image { mime, .. } if !mime.trim().eq_ignore_ascii_case("application/pdf"))
                             || matches!(part, MessagePart::Attachment { mime, .. } if message_attachment_kind(mime) == "image")
@@ -908,13 +908,13 @@ impl ConversationShardMeta {
                             matches!(part, MessagePart::Audio { .. })
                                 || matches!(part, MessagePart::Attachment { mime, .. } if message_attachment_kind(mime) == "audio")
                         }),
-                    has_attachment: super::conversation_message_has_attachment(&message),
+                    has_attachment: crate::conversation_message_has_attachment(&message),
                 })
                 .collect(),
         }
     }
 
-    fn from_persist_meta(meta: &ConversationPersistMeta) -> Self {
+    pub(crate) fn from_persist_meta(meta: &ConversationPersistMeta) -> Self {
         Self {
             meta_schema_version: if meta.meta_schema_version == 0 {
                 CONVERSATION_META_SCHEMA_VERSION
@@ -965,7 +965,7 @@ impl ConversationShardMeta {
         }
     }
 
-    pub(super) fn to_persist_meta(&self) -> ConversationPersistMeta {
+    pub(crate) fn to_persist_meta(&self) -> ConversationPersistMeta {
         ConversationPersistMeta {
             meta_schema_version: self.meta_schema_version,
             id: self.id.clone(),
@@ -1012,7 +1012,7 @@ impl ConversationShardMeta {
         }
     }
 
-    fn into_conversation(self, messages: Vec<ChatMessage>) -> Conversation {
+    pub(crate) fn into_conversation(self, messages: Vec<ChatMessage>) -> Conversation {
         Conversation {
             id: self.id,
             title: self.title,
@@ -1051,7 +1051,7 @@ impl ConversationShardMeta {
     }
 }
 
-fn write_conversation_shard_meta_atomic(
+pub(crate) fn write_conversation_shard_meta_atomic(
     path: &PathBuf,
     meta: &ConversationShardMeta,
 ) -> Result<(), String> {
@@ -1064,7 +1064,7 @@ fn write_conversation_shard_meta_atomic(
     write_message_store_text_atomic(path, "json.tmp", &raw, "会话元数据")
 }
 
-fn read_conversation_shard_meta(path: &PathBuf) -> Result<ConversationShardMeta, String> {
+pub(crate) fn read_conversation_shard_meta(path: &PathBuf) -> Result<ConversationShardMeta, String> {
     let raw = fs::read_to_string(path)
         .map_err(|err| format!("读取会话元数据失败，path={}，error={err}", path.display()))?;
     serde_json::from_str(&raw)

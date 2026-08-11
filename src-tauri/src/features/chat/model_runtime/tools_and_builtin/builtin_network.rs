@@ -1,11 +1,11 @@
-const FETCH_BROWSER_UA: &str =
+pub(crate) const FETCH_BROWSER_UA: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
-const EXA_MCP_URL: &str = "https://mcp.exa.ai/mcp";
-const EXA_ACCEPT_HEADER: &str = "application/json, text/event-stream";
-const EXA_TOOL_NAME_WEB_SEARCH: &str = "web_search_exa";
-const EXA_TOOL_NAME_WEB_FETCH: &str = "web_fetch_exa";
+pub(crate) const EXA_MCP_URL: &str = "https://mcp.exa.ai/mcp";
+pub(crate) const EXA_ACCEPT_HEADER: &str = "application/json, text/event-stream";
+pub(crate) const EXA_TOOL_NAME_WEB_SEARCH: &str = "web_search_exa";
+pub(crate) const EXA_TOOL_NAME_WEB_FETCH: &str = "web_fetch_exa";
 
-fn is_forbidden_fetch_ip(ip: std::net::IpAddr) -> bool {
+pub(crate) fn is_forbidden_fetch_ip(ip: std::net::IpAddr) -> bool {
     match ip {
         std::net::IpAddr::V4(v4) => {
             v4.is_loopback()
@@ -35,13 +35,13 @@ fn is_forbidden_fetch_ip(ip: std::net::IpAddr) -> bool {
     }
 }
 
-struct ValidatedFetchTarget {
-    url: reqwest::Url,
-    resolve_host: Option<String>,
-    resolved_addrs: Vec<std::net::SocketAddr>,
+pub(crate) struct ValidatedFetchTarget {
+    pub(crate) url: reqwest::Url,
+    pub(crate) resolve_host: Option<String>,
+    pub(crate) resolved_addrs: Vec<std::net::SocketAddr>,
 }
 
-async fn validate_builtin_fetch_url(raw: &str) -> Result<ValidatedFetchTarget, String> {
+pub(crate) async fn validate_builtin_fetch_url(raw: &str) -> Result<ValidatedFetchTarget, String> {
     let parsed = reqwest::Url::parse(raw).map_err(|err| format!("Invalid fetch url: {err}"))?;
     let scheme = parsed.scheme().to_ascii_lowercase();
     if scheme != "http" && scheme != "https" {
@@ -93,7 +93,7 @@ async fn validate_builtin_fetch_url(raw: &str) -> Result<ValidatedFetchTarget, S
     })
 }
 
-fn build_fetch_client(
+pub(crate) fn build_fetch_client(
     state: &AppState,
     validated: &ValidatedFetchTarget,
 ) -> Result<reqwest::Client, String> {
@@ -119,7 +119,7 @@ fn build_fetch_client(
         .map_err(|err| format!("Build HTTP client failed: {err}"))
 }
 
-fn exa_result_texts(result: &Value) -> Vec<String> {
+pub(crate) fn exa_result_texts(result: &Value) -> Vec<String> {
     result
         .get("content")
         .and_then(Value::as_array)
@@ -136,11 +136,11 @@ fn exa_result_texts(result: &Value) -> Vec<String> {
         .collect()
 }
 
-fn exa_result_has_content(result: &Value) -> bool {
+pub(crate) fn exa_result_has_content(result: &Value) -> bool {
     !exa_result_texts(result).is_empty()
 }
 
-fn parse_exa_sse_result(body: &str) -> Result<Value, String> {
+pub(crate) fn parse_exa_sse_result(body: &str) -> Result<Value, String> {
     let mut data_lines = Vec::<String>::new();
     for line in body.lines() {
         let trimmed = line.trim_end();
@@ -173,7 +173,7 @@ fn parse_exa_sse_result(body: &str) -> Result<Value, String> {
     Err(last_error.unwrap_or_else(|| "Exa SSE response missing JSON-RPC result.".to_string()))
 }
 
-async fn call_exa_mcp_tool(
+pub(crate) async fn call_exa_mcp_tool(
     state: &AppState,
     tool_name: &str,
     arguments: Value,
@@ -207,7 +207,7 @@ async fn call_exa_mcp_tool(
     parse_exa_sse_result(&body)
 }
 
-fn map_exa_fetch_result(url: &str, max_length: usize, result: &Value) -> Result<Value, String> {
+pub(crate) fn map_exa_fetch_result(url: &str, max_length: usize, result: &Value) -> Result<Value, String> {
     let texts = exa_result_texts(result);
     if texts.is_empty() {
         return Err("Exa fetch returned empty content.".to_string());
@@ -222,7 +222,7 @@ fn map_exa_fetch_result(url: &str, max_length: usize, result: &Value) -> Result<
     }))
 }
 
-fn map_exa_search_result(query: &str, result: &Value) -> Result<Value, String> {
+pub(crate) fn map_exa_search_result(query: &str, result: &Value) -> Result<Value, String> {
     let texts = exa_result_texts(result);
     if texts.is_empty() {
         return Err("Exa search returned empty content.".to_string());
@@ -235,7 +235,7 @@ fn map_exa_search_result(query: &str, result: &Value) -> Result<Value, String> {
     }))
 }
 
-async fn builtin_fetch_fallback(state: &AppState, url: &str, max_length: usize) -> Result<Value, String> {
+pub(crate) async fn builtin_fetch_fallback(state: &AppState, url: &str, max_length: usize) -> Result<Value, String> {
     let normalized_url = url.trim();
     if normalized_url.is_empty() {
         return Ok(serde_json::json!({
@@ -367,7 +367,7 @@ async fn builtin_fetch_fallback(state: &AppState, url: &str, max_length: usize) 
     }))
 }
 
-async fn builtin_fetch(state: &AppState, url: &str, max_length: usize) -> Result<Value, String> {
+pub(crate) async fn builtin_fetch(state: &AppState, url: &str, max_length: usize) -> Result<Value, String> {
     match call_exa_mcp_tool(
         state,
         EXA_TOOL_NAME_WEB_FETCH,
@@ -385,7 +385,7 @@ async fn builtin_fetch(state: &AppState, url: &str, max_length: usize) -> Result
 
 // ========== bing search ==========
 
-fn contains_cjk(text: &str) -> bool {
+pub(crate) fn contains_cjk(text: &str) -> bool {
     text.chars().any(|ch| {
         ('\u{4E00}'..='\u{9FFF}').contains(&ch)
             || ('\u{3400}'..='\u{4DBF}').contains(&ch)
@@ -394,7 +394,7 @@ fn contains_cjk(text: &str) -> bool {
     })
 }
 
-fn decode_b64_relaxed(input: &str) -> Option<String> {
+pub(crate) fn decode_b64_relaxed(input: &str) -> Option<String> {
     let mut candidates = Vec::new();
     candidates.push(input.trim().to_string());
     candidates.push(input.trim().replace('-', "+").replace('_', "/"));
@@ -415,7 +415,7 @@ fn decode_b64_relaxed(input: &str) -> Option<String> {
     None
 }
 
-fn normalize_bing_result_url(raw: &str) -> String {
+pub(crate) fn normalize_bing_result_url(raw: &str) -> String {
     let input = raw.trim();
     if input.is_empty() {
         return String::new();
@@ -456,7 +456,7 @@ fn normalize_bing_result_url(raw: &str) -> String {
     input.to_string()
 }
 
-fn canonical_url_key(raw: &str) -> String {
+pub(crate) fn canonical_url_key(raw: &str) -> String {
     let normalized = normalize_bing_result_url(raw);
     if normalized.is_empty() {
         return String::new();
@@ -470,7 +470,7 @@ fn canonical_url_key(raw: &str) -> String {
     key
 }
 
-async fn builtin_bing_search_fallback(state: &AppState, query: &str) -> Result<Value, String> {
+pub(crate) async fn builtin_bing_search_fallback(state: &AppState, query: &str) -> Result<Value, String> {
     let client = state.shared_http_client.clone();
     let limit = 10usize;
     let raw_query = query.trim();
@@ -572,7 +572,7 @@ async fn builtin_bing_search_fallback(state: &AppState, query: &str) -> Result<V
     ))
 }
 
-async fn builtin_bing_search(state: &AppState, query: &str) -> Result<Value, String> {
+pub(crate) async fn builtin_bing_search(state: &AppState, query: &str) -> Result<Value, String> {
     match call_exa_mcp_tool(
         state,
         EXA_TOOL_NAME_WEB_SEARCH,

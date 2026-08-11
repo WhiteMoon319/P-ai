@@ -1,4 +1,4 @@
-fn lock_conversation_runtime_slots(
+pub(crate) fn lock_conversation_runtime_slots(
     state: &AppState,
 ) -> Result<
     std::sync::MutexGuard<'_, std::collections::HashMap<String, ConversationRuntimeSlot>>,
@@ -13,7 +13,7 @@ fn lock_conversation_runtime_slots(
     }
 }
 
-fn lock_conversation_processing_claims(
+pub(crate) fn lock_conversation_processing_claims(
     state: &AppState,
 ) -> Result<std::sync::MutexGuard<'_, std::collections::HashSet<String>>, String> {
     match state.conversation_processing_claims.lock() {
@@ -27,7 +27,7 @@ fn lock_conversation_processing_claims(
     }
 }
 
-fn conversation_slot_mut<'a>(
+pub(crate) fn conversation_slot_mut<'a>(
     slots: &'a mut std::collections::HashMap<String, ConversationRuntimeSlot>,
     conversation_id: &str,
 ) -> &'a mut ConversationRuntimeSlot {
@@ -38,14 +38,14 @@ fn conversation_slot_mut<'a>(
     })
 }
 
-fn conversation_running_slot_count(
+pub(crate) fn conversation_running_slot_count(
     claims: &std::collections::HashSet<String>,
     conversation_id: &str,
 ) -> usize {
     usize::from(claims.contains(conversation_id))
 }
 
-fn chat_pending_event_request_id(event: &ChatPendingEvent) -> Option<&str> {
+pub(crate) fn chat_pending_event_request_id(event: &ChatPendingEvent) -> Option<&str> {
     event
         .runtime_context
         .as_ref()
@@ -54,7 +54,7 @@ fn chat_pending_event_request_id(event: &ChatPendingEvent) -> Option<&str> {
         .filter(|value| !value.is_empty())
 }
 
-fn chat_pending_event_duplicates_existing_message(
+pub(crate) fn chat_pending_event_duplicates_existing_message(
     state: &AppState,
     event: &ChatPendingEvent,
 ) -> Result<bool, String> {
@@ -92,7 +92,7 @@ fn chat_pending_event_duplicates_existing_message(
     }))
 }
 
-fn pending_queue_has_same_request_id(
+pub(crate) fn pending_queue_has_same_request_id(
     slot: &ConversationRuntimeSlot,
     event: &ChatPendingEvent,
 ) -> bool {
@@ -298,7 +298,7 @@ pub(crate) fn clear_conversation_queue(
     Ok(removed_count)
 }
 
-fn claim_guided_queue_events_for_conversation(
+pub(crate) fn claim_guided_queue_events_for_conversation(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<Vec<ChatPendingEvent>, String> {
@@ -352,7 +352,7 @@ fn claim_guided_queue_events_for_conversation(
     Ok(guided_events)
 }
 
-fn remove_queue_events_by_ids(
+pub(crate) fn remove_queue_events_by_ids(
     state: &AppState,
     conversation_id: &str,
     event_ids: &[String],
@@ -378,7 +378,7 @@ fn remove_queue_events_by_ids(
     Ok(removed)
 }
 
-fn conversation_has_guided_queue_events(
+pub(crate) fn conversation_has_guided_queue_events(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<bool, String> {
@@ -393,7 +393,7 @@ fn conversation_has_guided_queue_events(
         .unwrap_or(false))
 }
 
-fn conversation_has_pending_queue_events(
+pub(crate) fn conversation_has_pending_queue_events(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<bool, String> {
@@ -404,7 +404,7 @@ fn conversation_has_pending_queue_events(
         .unwrap_or(false))
 }
 
-fn conversation_is_idle_for_goal_fallback(
+pub(crate) fn conversation_is_idle_for_goal_fallback(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<bool, String> {
@@ -420,7 +420,7 @@ fn conversation_is_idle_for_goal_fallback(
         .unwrap_or(true))
 }
 
-fn message_is_goal_continue(message: &ChatMessage) -> bool {
+pub(crate) fn message_is_goal_continue(message: &ChatMessage) -> bool {
     let role = message.role.trim();
     let speaker_id = message
         .speaker_agent_id
@@ -438,11 +438,11 @@ fn message_is_goal_continue(message: &ChatMessage) -> bool {
         && message_kind == Some("goal_continue")
 }
 
-fn event_is_goal_continue(event: &ChatPendingEvent) -> bool {
+pub(crate) fn event_is_goal_continue(event: &ChatPendingEvent) -> bool {
     event.messages.iter().any(message_is_goal_continue)
 }
 
-fn goal_continue_is_suppressed(state: &AppState, conversation_id: &str) -> Result<bool, String> {
+pub(crate) fn goal_continue_is_suppressed(state: &AppState, conversation_id: &str) -> Result<bool, String> {
     let conversation_id = conversation_id.trim();
     if conversation_id.is_empty() {
         return Ok(false);
@@ -502,7 +502,7 @@ pub(crate) fn clear_goal_continue_suppression(
     Ok(())
 }
 
-fn tool_loop_should_close_for_guided_queue(
+pub(crate) fn tool_loop_should_close_for_guided_queue(
     state: Option<&AppState>,
     context: Option<&ToolLoopAutoCompactionContext>,
 ) -> bool {

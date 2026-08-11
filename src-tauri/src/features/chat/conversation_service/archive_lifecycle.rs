@@ -1,17 +1,17 @@
-const REMOTE_IM_WAKE_COMPACTION_MIN_BLOCK_MESSAGE_COUNT: usize = 14;
+pub(crate) const REMOTE_IM_WAKE_COMPACTION_MIN_BLOCK_MESSAGE_COUNT: usize = 14;
 
 #[derive(Debug, Clone)]
-enum RemoteImDynamicWakeCompactionOutcome {
+pub(crate) enum RemoteImDynamicWakeCompactionOutcome {
     Applied,
     SkippedLowFrequency { block_message_count: usize },
 }
 
-fn remote_im_wake_compaction_should_skip_for_low_frequency(block_message_count: usize) -> bool {
+pub(crate) fn remote_im_wake_compaction_should_skip_for_low_frequency(block_message_count: usize) -> bool {
     block_message_count < REMOTE_IM_WAKE_COMPACTION_MIN_BLOCK_MESSAGE_COUNT
 }
 
 impl ConversationServiceV2 {
-    fn list_archives(
+    pub(crate) fn list_archives(
         &self,
         state: &AppState,
     ) -> Result<Vec<ArchiveSummary>, String> {
@@ -30,7 +30,7 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn list_archives_with_resolvers<LoadMeta, ResolveTitle>(
+    pub(crate) fn list_archives_with_resolvers<LoadMeta, ResolveTitle>(
         &self,
         state: &AppState,
         load_meta: LoadMeta,
@@ -111,7 +111,7 @@ impl ConversationServiceV2 {
         Ok(summaries)
     }
 
-    fn get_archive_messages(
+    pub(crate) fn get_archive_messages(
         &self,
         state: &AppState,
         archive_id: &str,
@@ -137,7 +137,7 @@ impl ConversationServiceV2 {
         Ok(messages)
     }
 
-    fn get_archive_block_page(
+    pub(crate) fn get_archive_block_page(
         &self,
         state: &AppState,
         archive_id: &str,
@@ -200,7 +200,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn get_archive_summary(
+    pub(crate) fn get_archive_summary(
         &self,
         state: &AppState,
         archive_id: &str,
@@ -224,7 +224,7 @@ impl ConversationServiceV2 {
         Ok(summary)
     }
 
-    fn delete_archive(
+    pub(crate) fn delete_archive(
         &self,
         state: &AppState,
         archive_id: &str,
@@ -245,7 +245,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn unarchive_archive(
+    pub(crate) fn unarchive_archive(
         &self,
         state: &AppState,
         archive_id: &str,
@@ -285,7 +285,7 @@ impl ConversationServiceV2 {
         Ok(())
     }
 
-    fn resolve_archive_request_conversation_by_id(
+    pub(crate) fn resolve_archive_request_conversation_by_id(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -362,7 +362,7 @@ impl ConversationServiceV2 {
         Ok((selected_api, resolved_api, source, effective_agent_id))
     }
 
-    fn delete_main_conversation_and_activate_latest(
+    pub(crate) fn delete_main_conversation_and_activate_latest(
         &self,
         state: &AppState,
         selected_api: &ApiConfig,
@@ -445,7 +445,7 @@ impl ConversationServiceV2 {
         Ok(active_conversation_id)
     }
 
-    fn remote_im_apply_dynamic_wake_compaction(
+    pub(crate) fn remote_im_apply_dynamic_wake_compaction(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -574,7 +574,7 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn persist_compaction_message(
+    pub(crate) fn persist_compaction_message(
         &self,
         state: &AppState,
         source: &Conversation,
@@ -685,7 +685,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn import_archives(
+    pub(crate) fn import_archives(
         &self,
         state: &AppState,
         incoming_archives: &mut Vec<ConversationArchive>,
@@ -748,7 +748,7 @@ impl ConversationServiceV2 {
             selected_archive_id,
         })
     }
-    fn archive_conversation(
+    pub(crate) fn archive_conversation(
         &self,
         state: &AppState,
         selected_api: &ApiConfig,

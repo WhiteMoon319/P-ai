@@ -1,9 +1,9 @@
-const IMAGE_GENERATION_MAX_IMAGE_BYTES: usize = 64 * 1024 * 1024;
-const IMAGE_GENERATION_MAX_JSON_BYTES: usize = 96 * 1024 * 1024;
-const IMAGE_GENERATION_MAX_ERROR_BYTES: usize = 8 * 1024;
-const IMAGE_GENERATION_MAX_PIXELS: u64 = 100_000_000;
+pub(crate) const IMAGE_GENERATION_MAX_IMAGE_BYTES: usize = 64 * 1024 * 1024;
+pub(crate) const IMAGE_GENERATION_MAX_JSON_BYTES: usize = 96 * 1024 * 1024;
+pub(crate) const IMAGE_GENERATION_MAX_ERROR_BYTES: usize = 8 * 1024;
+pub(crate) const IMAGE_GENERATION_MAX_PIXELS: u64 = 100_000_000;
 
-async fn read_limited_response_bytes(
+pub(crate) async fn read_limited_response_bytes(
     response: reqwest::Response,
     max_bytes: usize,
 ) -> Result<Vec<u8>, String> {
@@ -19,12 +19,12 @@ async fn read_limited_response_bytes(
     Ok(bytes)
 }
 
-fn truncate_image_generation_error_body(bytes: &[u8]) -> String {
+pub(crate) fn truncate_image_generation_error_body(bytes: &[u8]) -> String {
     let limit = bytes.len().min(IMAGE_GENERATION_MAX_ERROR_BYTES);
     String::from_utf8_lossy(&bytes[..limit]).trim().to_string()
 }
 
-async fn parse_image_generation_json_response(
+pub(crate) async fn parse_image_generation_json_response(
     response: reqwest::Response,
     provider_name: &str,
 ) -> Result<Value, String> {
@@ -42,7 +42,7 @@ async fn parse_image_generation_json_response(
         .map_err(|err| format!("{provider_name} 响应不是有效 JSON：{err}"))
 }
 
-fn decode_generated_image_base64(value: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn decode_generated_image_base64(value: &str) -> Result<Vec<u8>, String> {
     let encoded = value
         .split_once(',')
         .filter(|(prefix, _)| prefix.trim_start().starts_with("data:"))
@@ -64,7 +64,7 @@ fn decode_generated_image_base64(value: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-fn generated_image_format_info(
+pub(crate) fn generated_image_format_info(
     bytes: &[u8],
 ) -> Result<(ImageFormat, &'static str, &'static str, u32, u32), String> {
     if bytes.is_empty() {
@@ -93,7 +93,7 @@ fn generated_image_format_info(
     Ok((format, mime, extension, width, height))
 }
 
-fn same_origin_url(base_url: &str, target_url: &str) -> bool {
+pub(crate) fn same_origin_url(base_url: &str, target_url: &str) -> bool {
     let Ok(base) = reqwest::Url::parse(base_url) else {
         return false;
     };
@@ -105,7 +105,7 @@ fn same_origin_url(base_url: &str, target_url: &str) -> bool {
         && base.port_or_known_default() == target.port_or_known_default()
 }
 
-async fn download_generated_image(
+pub(crate) async fn download_generated_image(
     state: &AppState,
     provider: &ImageGenerationProviderConfig,
     api_key: &str,
@@ -146,7 +146,7 @@ async fn download_generated_image(
     Ok((bytes, mime_hint))
 }
 
-async fn persist_generated_image_bytes(
+pub(crate) async fn persist_generated_image_bytes(
     state: &AppState,
     bytes: Vec<u8>,
     remote_url: Option<String>,
@@ -192,7 +192,7 @@ async fn persist_generated_image_bytes(
     })
 }
 
-async fn materialize_pending_generated_image(
+pub(crate) async fn materialize_pending_generated_image(
     state: &AppState,
     provider: &ImageGenerationProviderConfig,
     api_key: &str,

@@ -1,3 +1,26 @@
+use std::{
+    fs,
+    io::Cursor,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+};
+
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use directories::ProjectDirs;
+use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
+use image::ImageFormat;
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use rmcp::{schemars, ServiceExt};
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
+use uuid::Uuid;
+
+
+use super::*;
+// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
+
 // ==================== 群聊消息调度与主助理串行系统 ====================
 //
 // 这是当前项目最核心、也最容易被误改的业务边界之一。
@@ -42,6 +65,8 @@
 /// 主会话状态机
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+
+
 pub(crate) enum MainSessionState {
     /// 空闲，可以出队
     Idle,
@@ -75,7 +100,7 @@ pub(crate) enum ChatQueueMode {
     Guided,
 }
 
-fn default_chat_queue_mode() -> ChatQueueMode {
+pub(crate) fn default_chat_queue_mode() -> ChatQueueMode {
     ChatQueueMode::Normal
 }
 
@@ -120,16 +145,16 @@ pub(crate) struct ChatPendingEvent {
 }
 
 #[derive(Clone)]
-struct QueuedChatActivation {
-    event_id: String,
-    delta_channel: Option<DeltaChannel>,
+pub(crate) struct QueuedChatActivation {
+    pub(crate) event_id: String,
+    pub(crate) delta_channel: Option<DeltaChannel>,
 }
 
 #[derive(Debug, Clone)]
-struct ActivatedAssistantResult {
-    result: SendChatResult,
-    activation_id: String,
-    request_id: String,
+pub(crate) struct ActivatedAssistantResult {
+    pub(crate) result: SendChatResult,
+    pub(crate) activation_id: String,
+    pub(crate) request_id: String,
 }
 
 pub(crate) enum ChatEventIngress {
@@ -162,9 +187,9 @@ pub(crate) struct ChatQueueRecallResult {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatQueueSnapshotPush {
-    queue_events: Vec<ChatQueueEventSummary>,
-    session_state: MainSessionState,
+pub(crate) struct ChatQueueSnapshotPush {
+    pub(crate) queue_events: Vec<ChatQueueEventSummary>,
+    pub(crate) session_state: MainSessionState,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -200,17 +225,17 @@ pub(crate) struct ConversationStreamRuntimeCacheSnapshot {
     pub context_window_tokens: u32,
 }
 
-const CHAT_QUEUE_SNAPSHOT_EVENT: &str = "easy-call:chat-queue-snapshot";
-const CHAT_HISTORY_FLUSHED_EVENT: &str = "easy-call:history-flushed";
-const CHAT_ROUND_STARTED_EVENT: &str = "easy-call:round-started";
-const CHAT_ROUND_COMPLETED_EVENT: &str = "easy-call:round-completed";
-const CHAT_ROUND_FAILED_EVENT: &str = "easy-call:round-failed";
-const CHAT_ASSISTANT_DELTA_EVENT: &str = "easy-call:assistant-delta";
-const CHAT_STREAM_REBIND_REQUIRED_EVENT: &str = "easy-call:stream-rebind-required";
-const CHAT_CONVERSATION_MESSAGE_APPENDED_EVENT: &str = "easy-call:conversation-message-appended";
-const CHAT_CONVERSATION_OVERVIEW_UPDATED_EVENT: &str = "easy-call:conversation-overview-updated";
-const CHAT_CONCURRENCY_LIMIT: usize = 8;
-const GOAL_CONTINUE_DISPLAY_TEXT: &str = "继续完成目标";
+pub(crate) const CHAT_QUEUE_SNAPSHOT_EVENT: &str = "easy-call:chat-queue-snapshot";
+pub(crate) const CHAT_HISTORY_FLUSHED_EVENT: &str = "easy-call:history-flushed";
+pub(crate) const CHAT_ROUND_STARTED_EVENT: &str = "easy-call:round-started";
+pub(crate) const CHAT_ROUND_COMPLETED_EVENT: &str = "easy-call:round-completed";
+pub(crate) const CHAT_ROUND_FAILED_EVENT: &str = "easy-call:round-failed";
+pub(crate) const CHAT_ASSISTANT_DELTA_EVENT: &str = "easy-call:assistant-delta";
+pub(crate) const CHAT_STREAM_REBIND_REQUIRED_EVENT: &str = "easy-call:stream-rebind-required";
+pub(crate) const CHAT_CONVERSATION_MESSAGE_APPENDED_EVENT: &str = "easy-call:conversation-message-appended";
+pub(crate) const CHAT_CONVERSATION_OVERVIEW_UPDATED_EVENT: &str = "easy-call:conversation-overview-updated";
+pub(crate) const CHAT_CONCURRENCY_LIMIT: usize = 8;
+pub(crate) const GOAL_CONTINUE_DISPLAY_TEXT: &str = "继续完成目标";
 
 include!("scheduler/queue_management.rs");
 include!("scheduler/stream_runtime.rs");
@@ -351,7 +376,7 @@ pub(crate) fn read_conversation_runtime_snapshot(
 }
 
 /// 设置会话状态并记录日志
-fn set_conversation_runtime_state(
+pub(crate) fn set_conversation_runtime_state(
     state: &AppState,
     conversation_id: &str,
     new_state: MainSessionState,
@@ -426,7 +451,7 @@ pub(crate) fn get_conversation_plan_mode_enabled(
         .unwrap_or(false))
 }
 
-fn release_conversation_processing_claim(
+pub(crate) fn release_conversation_processing_claim(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<(), String> {
@@ -435,7 +460,7 @@ fn release_conversation_processing_claim(
     Ok(())
 }
 
-fn claim_queued_conversation_batches(
+pub(crate) fn claim_queued_conversation_batches(
     state: &AppState,
 ) -> Result<Vec<(String, Vec<ChatPendingEvent>)>, String> {
     let _dequeue_guard = state
@@ -521,7 +546,7 @@ pub(crate) async fn process_chat_queue(state: &AppState) -> Result<(), String> {
 /// 3. 然后再判断 should_activate：
 ///    - false：只更新历史，不开启流式；
 ///    - true：先通知前端历史已落地，再开启新的主助理轮次。
-async fn process_conversation_batch(
+pub(crate) async fn process_conversation_batch(
     state: &AppState,
     conversation_id: &str,
     events: Vec<ChatPendingEvent>,
@@ -1300,7 +1325,7 @@ async fn process_conversation_batch(
 ///
 /// 注意：这里只负责启动“下一轮主助理”，不负责把新消息写进历史。
 /// 新消息进入历史的动作已经在 process_conversation_batch 中完成。
-async fn activate_main_assistant(
+pub(crate) async fn activate_main_assistant(
     state: &AppState,
     session_info: &ChatSessionInfo,
     conversation_id: &str,
@@ -1680,7 +1705,7 @@ async fn activate_main_assistant(
 }
 
 include!("scheduler/round_events.rs");
-fn collect_active_chat_view_activations(
+pub(crate) fn collect_active_chat_view_activations(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<Vec<QueuedChatActivation>, String> {
@@ -1731,7 +1756,7 @@ fn collect_active_chat_view_activations(
     Ok(Vec::new())
 }
 
-fn take_queued_chat_activations(
+pub(crate) fn take_queued_chat_activations(
     state: &AppState,
     event_ids: &[String],
 ) -> Result<Vec<QueuedChatActivation>, String> {
@@ -1751,7 +1776,7 @@ fn take_queued_chat_activations(
     Ok(activations)
 }
 
-fn complete_pending_chat_events_with_result(
+pub(crate) fn complete_pending_chat_events_with_result(
     state: &AppState,
     event_ids: &[String],
     result: SendChatResult,
@@ -1773,7 +1798,7 @@ fn complete_pending_chat_events_with_result(
     Ok(())
 }
 
-fn complete_pending_chat_events_with_error(
+pub(crate) fn complete_pending_chat_events_with_error(
     state: &AppState,
     event_ids: &[String],
     error: &str,

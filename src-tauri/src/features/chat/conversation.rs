@@ -1,4 +1,28 @@
-fn latest_active_conversation_index(
+use std::{
+    fs,
+    io::Cursor,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+};
+
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use directories::ProjectDirs;
+use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
+use image::ImageFormat;
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use rmcp::{schemars, ServiceExt};
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
+use uuid::Uuid;
+
+
+use super::*;
+// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
+
+
+pub(crate) fn latest_active_conversation_index(
     data: &AppData,
     _api_config_id: &str,
     _agent_id: &str,
@@ -22,7 +46,7 @@ fn latest_active_conversation_index(
         .map(|(idx, _)| idx)
 }
 
-fn latest_main_conversation_index(data: &AppData, _agent_id: &str) -> Option<usize> {
+pub(crate) fn latest_main_conversation_index(data: &AppData, _agent_id: &str) -> Option<usize> {
     data.conversations
         .iter()
         .enumerate()
@@ -42,11 +66,11 @@ fn latest_main_conversation_index(data: &AppData, _agent_id: &str) -> Option<usi
         .map(|(idx, _)| idx)
 }
 
-fn system_notification_conversation_title() -> String {
+pub(crate) fn system_notification_conversation_title() -> String {
     "P-ai系统".to_string()
 }
 
-fn normalize_system_notification_conversation(conversation: &mut Conversation) -> bool {
+pub(crate) fn normalize_system_notification_conversation(conversation: &mut Conversation) -> bool {
     let mut changed = false;
     if conversation.id.trim() != SYSTEM_NOTIFICATION_CONVERSATION_ID {
         conversation.id = SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string();
@@ -72,12 +96,12 @@ fn normalize_system_notification_conversation(conversation: &mut Conversation) -
     changed
 }
 
-fn conversation_is_system_notification(conversation: &Conversation) -> bool {
+pub(crate) fn conversation_is_system_notification(conversation: &Conversation) -> bool {
     conversation.id.trim() == SYSTEM_NOTIFICATION_CONVERSATION_ID
         || conversation.conversation_kind.trim() == CONVERSATION_KIND_SYSTEM_NOTIFICATION
 }
 
-fn available_non_user_agent<'a>(
+pub(crate) fn available_non_user_agent<'a>(
     agents: &'a [AgentProfile],
     agent_id: &str,
 ) -> Option<&'a AgentProfile> {
@@ -90,7 +114,7 @@ fn available_non_user_agent<'a>(
         .find(|agent| agent.id == agent_id && !agent.is_built_in_user)
 }
 
-fn first_available_department_agent<'a>(
+pub(crate) fn first_available_department_agent<'a>(
     department: &DepartmentConfig,
     agents: &'a [AgentProfile],
 ) -> Option<&'a AgentProfile> {
@@ -101,7 +125,7 @@ fn first_available_department_agent<'a>(
         .find_map(|agent_id| available_non_user_agent(agents, agent_id))
 }
 
-fn resolve_conversation_bound_agent<'a>(
+pub(crate) fn resolve_conversation_bound_agent<'a>(
     conversation: &Conversation,
     agents: &'a [AgentProfile],
     departments: &[DepartmentConfig],
@@ -148,7 +172,7 @@ fn resolve_conversation_bound_agent<'a>(
     ))
 }
 
-fn main_conversation_index(data: &AppData, _agent_id: &str) -> Option<usize> {
+pub(crate) fn main_conversation_index(data: &AppData, _agent_id: &str) -> Option<usize> {
     let target_id = data
         .main_conversation_id
         .as_deref()
@@ -161,7 +185,7 @@ fn main_conversation_index(data: &AppData, _agent_id: &str) -> Option<usize> {
     })
 }
 
-fn normalize_main_conversation_marker(data: &mut AppData, _agent_id: &str) -> bool {
+pub(crate) fn normalize_main_conversation_marker(data: &mut AppData, _agent_id: &str) -> bool {
     let fixed_id = SYSTEM_NOTIFICATION_CONVERSATION_ID;
     if let Some(idx) = data.conversations.iter().position(|conversation| {
         conversation.id.trim() == fixed_id
@@ -192,7 +216,7 @@ fn normalize_main_conversation_marker(data: &mut AppData, _agent_id: &str) -> bo
     true
 }
 
-fn normalize_single_active_main_conversation(data: &mut AppData) -> bool {
+pub(crate) fn normalize_single_active_main_conversation(data: &mut AppData) -> bool {
     let Some(keep_idx) = latest_active_conversation_index(data, "", "")
         .or_else(|| latest_main_conversation_index(data, ""))
     else {
@@ -224,26 +248,26 @@ fn normalize_single_active_main_conversation(data: &mut AppData) -> bool {
     changed
 }
 
-fn conversation_is_delegate(conversation: &Conversation) -> bool {
+pub(crate) fn conversation_is_delegate(conversation: &Conversation) -> bool {
     conversation.conversation_kind.trim() == CONVERSATION_KIND_DELEGATE
 }
 
-fn conversation_is_remote_im_contact(conversation: &Conversation) -> bool {
+pub(crate) fn conversation_is_remote_im_contact(conversation: &Conversation) -> bool {
     conversation.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT
 }
 
-fn conversation_is_side_chat(conversation: &Conversation) -> bool {
+pub(crate) fn conversation_is_side_chat(conversation: &Conversation) -> bool {
     conversation.conversation_kind.trim() == CONVERSATION_KIND_SIDE_CHAT
 }
 
-fn increment_conversation_unread_count(conversation: &mut Conversation, count: usize) {
+pub(crate) fn increment_conversation_unread_count(conversation: &mut Conversation, count: usize) {
     if count == 0 || conversation_is_remote_im_contact(conversation) {
         return;
     }
     conversation.unread_count = conversation.unread_count.saturating_add(count);
 }
 
-fn clear_conversation_unread_count(conversation: &mut Conversation) -> bool {
+pub(crate) fn clear_conversation_unread_count(conversation: &mut Conversation) -> bool {
     if conversation.unread_count == 0 {
         return false;
     }
@@ -251,18 +275,18 @@ fn clear_conversation_unread_count(conversation: &mut Conversation) -> bool {
     true
 }
 
-fn conversation_visible_in_foreground_lists(conversation: &Conversation) -> bool {
+pub(crate) fn conversation_visible_in_foreground_lists(conversation: &Conversation) -> bool {
     // side_chat 仍由普通 Conversation runtime 处理，但只挂在父会话的追问视图中。
     !conversation_is_delegate(conversation)
         && !conversation_is_remote_im_contact(conversation)
         && !conversation_is_side_chat(conversation)
 }
 
-fn conversation_is_unarchived(conversation: &Conversation) -> bool {
+pub(crate) fn conversation_is_unarchived(conversation: &Conversation) -> bool {
     !conversation_is_archived(conversation)
 }
 
-fn conversation_is_archived(conversation: &Conversation) -> bool {
+pub(crate) fn conversation_is_archived(conversation: &Conversation) -> bool {
     if conversation.status.trim() == "archived" {
         return true;
     }
@@ -274,11 +298,11 @@ fn conversation_is_archived(conversation: &Conversation) -> bool {
         .is_some()
 }
 
-const SUMMARY_CONTEXT_MESSAGE_SCHEMA_VERSION: u64 = 2;
-const SUMMARY_CONTEXT_TITLE_MAX_CHARS: usize = 20;
-const SUMMARY_CONTEXT_TITLE_SOURCE_BRANCH: &str = "branch_source";
+pub(crate) const SUMMARY_CONTEXT_MESSAGE_SCHEMA_VERSION: u64 = 2;
+pub(crate) const SUMMARY_CONTEXT_TITLE_MAX_CHARS: usize = 20;
+pub(crate) const SUMMARY_CONTEXT_TITLE_SOURCE_BRANCH: &str = "branch_source";
 
-fn conversation_is_local_normal_chat(conversation: &Conversation) -> bool {
+pub(crate) fn conversation_is_local_normal_chat(conversation: &Conversation) -> bool {
     matches!(
         conversation.conversation_kind.trim(),
         CONVERSATION_KIND_CHAT | CONVERSATION_KIND_SIDE_CHAT
@@ -288,7 +312,7 @@ fn conversation_is_local_normal_chat(conversation: &Conversation) -> bool {
         && !conversation_is_remote_im_contact(conversation)
 }
 
-fn summary_context_message_kind(message: &ChatMessage) -> Option<&str> {
+pub(crate) fn summary_context_message_kind(message: &ChatMessage) -> Option<&str> {
     let meta = message.provider_meta.as_ref()?;
     meta.get("message_meta")
         .and_then(|value| value.get("kind"))
@@ -310,11 +334,11 @@ fn summary_context_message_kind(message: &ChatMessage) -> Option<&str> {
         })
 }
 
-fn is_summary_context_message_kind(kind: &str) -> bool {
+pub(crate) fn is_summary_context_message_kind(kind: &str) -> bool {
     matches!(kind.trim(), "context_compaction" | "summary_context_seed")
 }
 
-fn normalize_summary_context_title(raw: &str) -> Option<String> {
+pub(crate) fn normalize_summary_context_title(raw: &str) -> Option<String> {
     let first_line = raw
         .lines()
         .map(str::trim)
@@ -352,7 +376,7 @@ fn normalize_summary_context_title(raw: &str) -> Option<String> {
     )
 }
 
-fn summary_context_message_title(message: &ChatMessage) -> Option<String> {
+pub(crate) fn summary_context_message_title(message: &ChatMessage) -> Option<String> {
     let kind = summary_context_message_kind(message)?;
     if !is_summary_context_message_kind(kind) {
         return None;
@@ -370,7 +394,7 @@ fn summary_context_message_title(message: &ChatMessage) -> Option<String> {
         })
 }
 
-fn summary_context_message_title_source(message: &ChatMessage) -> Option<&str> {
+pub(crate) fn summary_context_message_title_source(message: &ChatMessage) -> Option<&str> {
     let kind = summary_context_message_kind(message)?;
     if !is_summary_context_message_kind(kind) {
         return None;
@@ -400,7 +424,7 @@ fn summary_context_message_title_source(message: &ChatMessage) -> Option<&str> {
         })
 }
 
-fn summary_context_message_title_blocks_auto_title(message: &ChatMessage) -> bool {
+pub(crate) fn summary_context_message_title_blocks_auto_title(message: &ChatMessage) -> bool {
     if summary_context_message_title(message).is_none() {
         return false;
     }
@@ -410,7 +434,7 @@ fn summary_context_message_title_blocks_auto_title(message: &ChatMessage) -> boo
     )
 }
 
-fn conversation_has_auto_title_blocking_summary_title(conversation: &Conversation) -> bool {
+pub(crate) fn conversation_has_auto_title_blocking_summary_title(conversation: &Conversation) -> bool {
     conversation
         .messages
         .iter()
@@ -422,7 +446,7 @@ fn conversation_has_auto_title_blocking_summary_title(conversation: &Conversatio
         .unwrap_or(false)
 }
 
-fn ensure_summary_context_message_meta_object_mut(
+pub(crate) fn ensure_summary_context_message_meta_object_mut(
     message: &mut ChatMessage,
 ) -> Option<&mut serde_json::Map<String, Value>> {
     let provider_meta = message
@@ -443,14 +467,14 @@ fn ensure_summary_context_message_meta_object_mut(
     message_meta.as_object_mut()
 }
 
-fn conversation_update_latest_summary_title(
+pub(crate) fn conversation_update_latest_summary_title(
     conversation: &mut Conversation,
     next_title: Option<&str>,
 ) -> bool {
     conversation_update_latest_summary_title_with_source(conversation, next_title, None)
 }
 
-fn conversation_update_latest_summary_title_with_source(
+pub(crate) fn conversation_update_latest_summary_title_with_source(
     conversation: &mut Conversation,
     next_title: Option<&str>,
     title_source: Option<&str>,
@@ -547,7 +571,7 @@ fn conversation_update_latest_summary_title_with_source(
     changed
 }
 
-fn conversation_latest_summary_title(conversation: &Conversation) -> Option<String> {
+pub(crate) fn conversation_latest_summary_title(conversation: &Conversation) -> Option<String> {
     conversation
         .messages
         .iter()
@@ -555,7 +579,7 @@ fn conversation_latest_summary_title(conversation: &Conversation) -> Option<Stri
         .find_map(summary_context_message_title)
 }
 
-fn cleanup_legacy_summary_context_messages(conversation: &mut Conversation) -> bool {
+pub(crate) fn cleanup_legacy_summary_context_messages(conversation: &mut Conversation) -> bool {
     let mut changed = false;
     for message in conversation.messages.iter_mut() {
         let Some(kind) = summary_context_message_kind(message) else {
@@ -590,7 +614,7 @@ fn cleanup_legacy_summary_context_messages(conversation: &mut Conversation) -> b
     changed
 }
 
-fn conversation_real_user_messages<'a>(conversation: &'a Conversation) -> Vec<&'a ChatMessage> {
+pub(crate) fn conversation_real_user_messages<'a>(conversation: &'a Conversation) -> Vec<&'a ChatMessage> {
     conversation
         .messages
         .iter()
@@ -607,7 +631,7 @@ fn conversation_real_user_messages<'a>(conversation: &'a Conversation) -> Vec<&'
         .collect::<Vec<_>>()
 }
 
-fn conversation_real_user_message_texts(conversation: &Conversation) -> Vec<String> {
+pub(crate) fn conversation_real_user_message_texts(conversation: &Conversation) -> Vec<String> {
     conversation_real_user_messages(conversation)
         .into_iter()
         .map(render_message_content_for_model)
@@ -618,7 +642,6 @@ fn conversation_real_user_message_texts(conversation: &Conversation) -> Vec<Stri
 
 #[cfg(test)]
 mod summary_context_title_tests {
-    use super::*;
 
     fn test_chat_message(
         id: &str,
@@ -861,7 +884,7 @@ mod summary_context_title_tests {
 
 }
 
-fn sanitize_tool_history_events(events: &[Value]) -> Vec<Value> {
+pub(crate) fn sanitize_tool_history_events(events: &[Value]) -> Vec<Value> {
     fn assistant_tool_call_ids(event: &Value) -> Vec<String> {
         event
             .get("tool_calls")
@@ -912,11 +935,11 @@ fn sanitize_tool_history_events(events: &[Value]) -> Vec<Value> {
 
     #[derive(Debug, Clone)]
     struct PendingAssistant {
-        event: Value,
-        allowed_ids: Vec<String>,
-        matched_ids: Vec<String>,
-        output_index: Option<usize>,
-        legacy_without_ids: bool,
+        pub(crate) event: Value,
+        pub(crate) allowed_ids: Vec<String>,
+        pub(crate) matched_ids: Vec<String>,
+        pub(crate) output_index: Option<usize>,
+        pub(crate) legacy_without_ids: bool,
     }
 
     let mut sanitized = Vec::<Value>::new();
@@ -998,7 +1021,7 @@ fn sanitize_tool_history_events(events: &[Value]) -> Vec<Value> {
     sanitized
 }
 
-fn build_conversation_record(
+pub(crate) fn build_conversation_record(
     _api_config_id: &str,
     agent_id: &str,
     department_id: &str,
@@ -1045,7 +1068,7 @@ fn build_conversation_record(
     }
 }
 
-fn build_system_notification_conversation_record() -> Conversation {
+pub(crate) fn build_system_notification_conversation_record() -> Conversation {
     let mut conversation = build_conversation_record(
         "",
         DEFAULT_AGENT_ID,
@@ -1063,7 +1086,7 @@ fn build_system_notification_conversation_record() -> Conversation {
 }
 
 #[cfg(test)]
-fn ensure_active_conversation_index(
+pub(crate) fn ensure_active_conversation_index(
     data: &mut AppData,
     api_config_id: &str,
     agent_id: &str,
@@ -1106,7 +1129,7 @@ fn ensure_active_conversation_index(
 }
 
 #[cfg(test)]
-fn ensure_main_conversation_index(
+pub(crate) fn ensure_main_conversation_index(
     data: &mut AppData,
     _api_config_id: &str,
     agent_id: &str,
@@ -1127,7 +1150,7 @@ fn ensure_main_conversation_index(
     data.conversations.len() - 1
 }
 
-fn ensure_active_foreground_conversation_index_atomic(
+pub(crate) fn ensure_active_foreground_conversation_index_atomic(
     data: &mut AppData,
     _data_path: &PathBuf,
     _api_config_id: &str,
@@ -1167,7 +1190,7 @@ fn ensure_active_foreground_conversation_index_atomic(
     data.conversations.len() - 1
 }
 
-fn active_foreground_conversation_index_read_only(
+pub(crate) fn active_foreground_conversation_index_read_only(
     data: &AppData,
     agent_id: &str,
 ) -> Option<usize> {
@@ -1177,21 +1200,21 @@ fn active_foreground_conversation_index_read_only(
 }
 
 #[derive(Debug, Clone)]
-struct ArchiveDecision {
-    should_archive: bool,
-    forced: bool,
-    reason: String,
-    usage_ratio: f64,
+pub(crate) struct ArchiveDecision {
+    pub(crate) should_archive: bool,
+    pub(crate) forced: bool,
+    pub(crate) reason: String,
+    pub(crate) usage_ratio: f64,
 }
 
-fn cached_text_token_bpe() -> Option<&'static tiktoken_rs::CoreBPE> {
+pub(crate) fn cached_text_token_bpe() -> Option<&'static tiktoken_rs::CoreBPE> {
     static TOKEN_BPE: std::sync::OnceLock<Option<tiktoken_rs::CoreBPE>> = std::sync::OnceLock::new();
     TOKEN_BPE
         .get_or_init(|| tiktoken_rs::cl100k_base().ok())
         .as_ref()
 }
 
-fn estimated_tokens_for_text(text: &str) -> f64 {
+pub(crate) fn estimated_tokens_for_text(text: &str) -> f64 {
     if let Some(bpe) = cached_text_token_bpe() {
         return bpe.encode_with_special_tokens(text).len() as f64;
     }
@@ -1215,7 +1238,7 @@ fn estimated_tokens_for_text(text: &str) -> f64 {
     zh_chars as f64 * 0.6 + other_chars as f64 * 0.3
 }
 
-fn truncate_text_to_token_limit(text: &str, token_limit: usize) -> String {
+pub(crate) fn truncate_text_to_token_limit(text: &str, token_limit: usize) -> String {
     if text.is_empty() || token_limit == 0 {
         return String::new();
     }
@@ -1240,7 +1263,7 @@ fn truncate_text_to_token_limit(text: &str, token_limit: usize) -> String {
     text[..end].to_string()
 }
 
-fn build_archive_decision_from_usage_ratio(
+pub(crate) fn build_archive_decision_from_usage_ratio(
     usage_ratio: f64,
     _last_user_at: Option<&str>,
     has_assistant_reply: bool,
@@ -1270,7 +1293,7 @@ fn build_archive_decision_from_usage_ratio(
     }
 }
 
-fn build_archive_decision_from_estimated_usage_ratio(
+pub(crate) fn build_archive_decision_from_estimated_usage_ratio(
     usage_ratio: f64,
     _last_user_at: Option<&str>,
     has_assistant_reply: bool,
@@ -1301,7 +1324,7 @@ fn build_archive_decision_from_estimated_usage_ratio(
 }
 
 #[cfg(test)]
-fn decide_archive_before_model_request(
+pub(crate) fn decide_archive_before_model_request(
     estimated_prompt_tokens: u64,
     context_window_tokens: u32,
     last_user_at: Option<&str>,
@@ -1313,7 +1336,7 @@ fn decide_archive_before_model_request(
 }
 
 #[cfg(test)]
-fn decide_archive_before_send_with_fallback(
+pub(crate) fn decide_archive_before_send_with_fallback(
     cached_effective_prompt_tokens: u64,
     cached_usage_ratio: f64,
     estimated_prompt_tokens: Option<u64>,
@@ -1354,7 +1377,7 @@ fn decide_archive_before_send_with_fallback(
     )
 }
 
-fn decide_archive_before_send_from_usage(
+pub(crate) fn decide_archive_before_send_from_usage(
     usage: &PromptUsageResolution,
     last_user_at: Option<&str>,
     has_assistant_reply: bool,
@@ -1393,7 +1416,7 @@ fn decide_archive_before_send_from_usage(
 }
 
 #[cfg(test)]
-fn archive_conversation_now(
+pub(crate) fn archive_conversation_now(
     data: &mut AppData,
     conversation_id: &str,
     reason: &str,
@@ -1423,11 +1446,11 @@ fn archive_conversation_now(
 }
 
 #[cfg(test)]
-fn normalize_image_for_chat_upload(bytes: &[u8]) -> Result<LlmRequestNormalizedImage, String> {
+pub(crate) fn normalize_image_for_chat_upload(bytes: &[u8]) -> Result<LlmRequestNormalizedImage, String> {
     normalize_image_bytes_for_llm_request(bytes, None)
 }
 
-fn normalize_image_base64_for_llm_request(
+pub(crate) fn normalize_image_base64_for_llm_request(
     mime: &str,
     bytes_base64: &str,
 ) -> Result<(String, String), String> {
@@ -1438,7 +1461,7 @@ fn normalize_image_base64_for_llm_request(
     Ok((normalized.mime, B64.encode(normalized.bytes)))
 }
 
-fn prepared_image_payload_for_llm_request(
+pub(crate) fn prepared_image_payload_for_llm_request(
     mime: String,
     bytes_base64: String,
     saved_path: Option<String>,
@@ -1472,7 +1495,7 @@ fn prepared_image_payload_for_llm_request(
     }
 }
 
-fn build_user_parts(
+pub(crate) fn build_user_parts(
     state: &AppState,
     payload: &ChatInputPayload,
     api_config: &ApiConfig,
@@ -1501,7 +1524,7 @@ fn build_user_parts(
     Ok(parts)
 }
 
-fn build_prepared_binary_payloads_from_message_parts(
+pub(crate) fn build_prepared_binary_payloads_from_message_parts(
     parts: &[MessagePart],
     image_saved_paths: &[Option<String>],
     audio_saved_paths: &[Option<String>],
@@ -1602,7 +1625,7 @@ fn build_prepared_binary_payloads_from_message_parts(
     (images, audios)
 }
 
-fn build_effective_prompt_media_from_prepared(
+pub(crate) fn build_effective_prompt_media_from_prepared(
     payload: &ChatInputPayload,
     api_config: &ApiConfig,
     prepared_images: &[PreparedBinaryPayload],
@@ -1708,7 +1731,7 @@ fn build_effective_prompt_media_from_prepared(
     Ok((chunks.join("\n"), images, audios))
 }
 
-fn render_message_content_for_model(message: &ChatMessage) -> String {
+pub(crate) fn render_message_content_for_model(message: &ChatMessage) -> String {
     let mut chunks = Vec::<String>::new();
     for part in &message.parts {
         match part {
@@ -1813,7 +1836,7 @@ fn render_message_content_for_model(message: &ChatMessage) -> String {
     chunks.join(" | ")
 }
 
-fn sanitize_memory_block_xml(raw: &str) -> String {
+pub(crate) fn sanitize_memory_block_xml(raw: &str) -> String {
     if !raw.contains("<memory_board")
         && !raw.contains("[MemoryBoard]")
         && !raw.contains("<memory_context>")
@@ -1832,7 +1855,7 @@ fn sanitize_memory_block_xml(raw: &str) -> String {
         .join("\n")
 }
 
-fn xml_escape_prompt(input: &str) -> String {
+pub(crate) fn xml_escape_prompt(input: &str) -> String {
     input
         .replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -1841,7 +1864,7 @@ fn xml_escape_prompt(input: &str) -> String {
         .replace('\'', "&apos;")
 }
 
-fn prompt_role_for_message(message: &ChatMessage, current_agent_id: &str) -> Option<String> {
+pub(crate) fn prompt_role_for_message(message: &ChatMessage, current_agent_id: &str) -> Option<String> {
     let raw_role = message.role.trim().to_lowercase();
     let speaker_id = message
         .speaker_agent_id
@@ -1869,7 +1892,7 @@ fn prompt_role_for_message(message: &ChatMessage, current_agent_id: &str) -> Opt
     Some("user".to_string())
 }
 
-fn prompt_speaker_label(
+pub(crate) fn prompt_speaker_label(
     message: &ChatMessage,
     agents: &[AgentProfile],
     user_name: &str,
@@ -1916,7 +1939,7 @@ fn prompt_speaker_label(
         .unwrap_or_else(|| speaker_id.to_string())
 }
 
-fn remote_im_sender_display_name(message: &ChatMessage) -> Option<String> {
+pub(crate) fn remote_im_sender_display_name(message: &ChatMessage) -> Option<String> {
     let origin = remote_im_origin_from_message(message)?;
     let is_group = remote_im_origin_string(origin, "contact_type")
         .unwrap_or("")
@@ -1940,7 +1963,7 @@ fn remote_im_sender_display_name(message: &ChatMessage) -> Option<String> {
     None
 }
 
-fn build_prompt_speaker_block(
+pub(crate) fn build_prompt_speaker_block(
     message: &ChatMessage,
     agents: &[AgentProfile],
     user_name: &str,
@@ -1972,7 +1995,7 @@ fn build_prompt_speaker_block(
     format!("[{}]", speaker_name)
 }
 
-fn build_prompt_user_meta_text(
+pub(crate) fn build_prompt_user_meta_text(
     message: &ChatMessage,
     agents: &[AgentProfile],
     user_name: &str,
@@ -2031,7 +2054,7 @@ fn build_prompt_user_meta_text(
     }
 }
 
-fn format_message_time_rfc3339_local_to_minute(raw: &str) -> String {
+pub(crate) fn format_message_time_rfc3339_local_to_minute(raw: &str) -> String {
     let full = format_message_time_rfc3339_local(raw);
     let trimmed = full.trim();
     if trimmed.is_empty() {
@@ -2058,7 +2081,7 @@ fn format_message_time_rfc3339_local_to_minute(raw: &str) -> String {
     trimmed.to_string()
 }
 
-fn prompt_current_date_timezone_line(_ui_language: &str) -> String {
+pub(crate) fn prompt_current_date_timezone_line(_ui_language: &str) -> String {
     let tz = local_utc_offset()
         .map(|offset| {
             let seconds = offset.whole_seconds();
@@ -2072,7 +2095,7 @@ fn prompt_current_date_timezone_line(_ui_language: &str) -> String {
     format!("- 时区：{}", tz)
 }
 
-fn render_prompt_message_text(message: &ChatMessage) -> String {
+pub(crate) fn render_prompt_message_text(message: &ChatMessage) -> String {
     // 注意：这里是“通用消息渲染”层，只负责把一条消息已有内容转换成模型可读文本。
     // 不要在这里注入 latest user 专属策略，也不要在这里拼接用户 @ mention 前缀。
     //
@@ -2090,7 +2113,7 @@ fn render_prompt_message_text(message: &ChatMessage) -> String {
     render_message_content_for_model(message)
 }
 
-fn render_prompt_message_reasoning(message: &ChatMessage) -> Option<String> {
+pub(crate) fn render_prompt_message_reasoning(message: &ChatMessage) -> Option<String> {
     let reasoning = message
         .parts
         .iter()
@@ -2112,7 +2135,7 @@ fn render_prompt_message_reasoning(message: &ChatMessage) -> Option<String> {
     }
 }
 
-fn render_prompt_user_text_only(message: &ChatMessage) -> String {
+pub(crate) fn render_prompt_user_text_only(message: &ChatMessage) -> String {
     let outcome = project_message_attachments(
         message,
         &MessageProjectionContext {
@@ -2132,7 +2155,7 @@ fn render_prompt_user_text_only(message: &ChatMessage) -> String {
     render_prompt_message_abstract_user_text(&outcome.message)
 }
 
-fn render_prompt_user_mention_prefix(message: &ChatMessage) -> String {
+pub(crate) fn render_prompt_user_mention_prefix(message: &ChatMessage) -> String {
     message
         .provider_meta
         .as_ref()
@@ -2157,7 +2180,7 @@ fn render_prompt_user_mention_prefix(message: &ChatMessage) -> String {
         .unwrap_or_default()
 }
 
-fn remote_im_origin_from_message(message: &ChatMessage) -> Option<&Value> {
+pub(crate) fn remote_im_origin_from_message(message: &ChatMessage) -> Option<&Value> {
     let meta = message.provider_meta.as_ref()?;
     let origin = meta.get("origin")?;
     if origin.get("kind").and_then(Value::as_str) != Some("remote_im") {
@@ -2166,7 +2189,7 @@ fn remote_im_origin_from_message(message: &ChatMessage) -> Option<&Value> {
     Some(origin)
 }
 
-fn remote_im_origin_string<'a>(origin: &'a Value, key: &str) -> Option<&'a str> {
+pub(crate) fn remote_im_origin_string<'a>(origin: &'a Value, key: &str) -> Option<&'a str> {
     origin
         .get(key)?
         .as_str()
@@ -2174,17 +2197,17 @@ fn remote_im_origin_string<'a>(origin: &'a Value, key: &str) -> Option<&'a str> 
         .filter(|value| !value.is_empty())
 }
 
-fn remote_im_origin_canonical_user_id<'a>(origin: &'a Value) -> Option<&'a str> {
+pub(crate) fn remote_im_origin_canonical_user_id<'a>(origin: &'a Value) -> Option<&'a str> {
     remote_im_origin_string(origin, "sender_id")
         .or_else(|| remote_im_origin_string(origin, "contact_id"))
 }
 
-fn remote_im_message_canonical_user_id(message: &ChatMessage) -> Option<String> {
+pub(crate) fn remote_im_message_canonical_user_id(message: &ChatMessage) -> Option<String> {
     let origin = remote_im_origin_from_message(message)?;
     remote_im_origin_canonical_user_id(origin).map(ToOwned::to_owned)
 }
 
-fn remote_im_contact_key_from_message(message: &ChatMessage) -> Option<String> {
+pub(crate) fn remote_im_contact_key_from_message(message: &ChatMessage) -> Option<String> {
     let origin = remote_im_origin_from_message(message)?;
     let channel_id = remote_im_origin_string(origin, "channel_id").unwrap_or("");
     let contact_id = remote_im_origin_string(origin, "contact_id").unwrap_or("");
@@ -2194,7 +2217,7 @@ fn remote_im_contact_key_from_message(message: &ChatMessage) -> Option<String> {
     Some(format!("{}::{}", channel_id, contact_id))
 }
 
-fn prompt_retrieved_memory_ids_from_message(message: &ChatMessage) -> Vec<String> {
+pub(crate) fn prompt_retrieved_memory_ids_from_message(message: &ChatMessage) -> Vec<String> {
     let Some(meta) = message.provider_meta.as_ref() else {
         return Vec::new();
     };
@@ -2221,7 +2244,7 @@ fn prompt_retrieved_memory_ids_from_message(message: &ChatMessage) -> Vec<String
         .collect::<Vec<_>>()
 }
 
-fn collect_prompt_retrieved_memory_ids(messages: &[ChatMessage]) -> Vec<String> {
+pub(crate) fn collect_prompt_retrieved_memory_ids(messages: &[ChatMessage]) -> Vec<String> {
     let mut seen = HashSet::<String>::new();
     let mut collected = Vec::<String>::new();
     for message in messages {
@@ -2234,7 +2257,7 @@ fn collect_prompt_retrieved_memory_ids(messages: &[ChatMessage]) -> Vec<String> 
     collected
 }
 
-fn prompt_recall_memory_block_for_message(
+pub(crate) fn prompt_recall_memory_block_for_message(
     message: &ChatMessage,
     recall_memories: Option<&[MemoryEntry]>,
     seen_memory_ids: &mut HashSet<String>,
@@ -2253,7 +2276,7 @@ fn prompt_recall_memory_block_for_message(
     build_memory_board_xml_from_recall_ids(memories, &inject_ids, false)
 }
 
-fn prompt_attachment_notice_text(
+pub(crate) fn prompt_attachment_notice_text(
     _state: Option<&AppState>,
     index: usize,
     relative_path: &str,
@@ -2265,7 +2288,7 @@ fn prompt_attachment_notice_text(
     build_attachment_notice_text(index, &normalized_relative_path)
 }
 
-fn prompt_user_extra_blocks_for_message(
+pub(crate) fn prompt_user_extra_blocks_for_message(
     state: Option<&AppState>,
     _conversation: Option<&Conversation>,
     message: &ChatMessage,
@@ -2325,7 +2348,6 @@ fn prompt_user_extra_blocks_for_message(
 
 #[cfg(test)]
 mod prompt_user_extra_attachment_tests {
-    use super::*;
 
     #[test]
     fn prompt_user_extra_blocks_should_include_all_attachment_notices() {
@@ -2414,7 +2436,7 @@ mod prompt_user_extra_attachment_tests {
     }
 }
 
-fn provider_meta_message_kind(message: &ChatMessage) -> Option<String> {
+pub(crate) fn provider_meta_message_kind(message: &ChatMessage) -> Option<String> {
     message
         .provider_meta
         .as_ref()?
@@ -2428,7 +2450,7 @@ fn provider_meta_message_kind(message: &ChatMessage) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn is_context_compaction_message(message: &ChatMessage, role: &str) -> bool {
+pub(crate) fn is_context_compaction_message(message: &ChatMessage, role: &str) -> bool {
     if role != "user" {
         return false;
     }
@@ -2438,14 +2460,14 @@ fn is_context_compaction_message(message: &ChatMessage, role: &str) -> bool {
     )
 }
 
-fn is_tool_review_report_message(message: &ChatMessage) -> bool {
+pub(crate) fn is_tool_review_report_message(message: &ChatMessage) -> bool {
     matches!(
         provider_meta_message_kind(message).as_deref(),
         Some("tool_review_report")
     )
 }
 
-fn message_attachment_paths_by_mime(
+pub(crate) fn message_attachment_paths_by_mime(
     message: &ChatMessage,
     prefix: &str,
 ) -> std::collections::HashMap<String, std::collections::VecDeque<String>> {
@@ -2485,7 +2507,7 @@ fn message_attachment_paths_by_mime(
     out
 }
 
-fn resolve_media_from_message(
+pub(crate) fn resolve_media_from_message(
     message: &ChatMessage,
     data_path: Option<&PathBuf>,
     log_prefix: &str,
@@ -2629,7 +2651,7 @@ fn resolve_media_from_message(
     (images, audios)
 }
 
-fn prompt_path_from_stored_binary_marker(
+pub(crate) fn prompt_path_from_stored_binary_marker(
     value: &str,
     data_path: Option<&PathBuf>,
 ) -> Option<String> {
@@ -2648,7 +2670,6 @@ fn prompt_path_from_stored_binary_marker(
 
 #[cfg(test)]
 mod prompt_media_path_tests {
-    use super::*;
 
     fn test_png_base64() -> String {
         let image = image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
@@ -2773,7 +2794,7 @@ mod prompt_media_path_tests {
     }
 }
 
-fn collect_prompt_media_parts(
+pub(crate) fn collect_prompt_media_parts(
     message: &ChatMessage,
     data_path: Option<&PathBuf>,
 ) -> (Vec<PreparedBinaryPayload>, Vec<PreparedBinaryPayload>) {
@@ -2781,30 +2802,30 @@ fn collect_prompt_media_parts(
 }
 
 #[derive(Debug, Clone)]
-struct PromptDepartmentCard {
-    id: String,
-    name: String,
-    summary: String,
+pub(crate) struct PromptDepartmentCard {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) summary: String,
 }
 
 #[derive(Debug, Clone)]
-struct PromptDepartmentContext {
-    current: PromptDepartmentCard,
-    available: Vec<PromptDepartmentCard>,
+pub(crate) struct PromptDepartmentContext {
+    pub(crate) current: PromptDepartmentCard,
+    pub(crate) available: Vec<PromptDepartmentCard>,
 }
 
-struct DepartmentPromptLabels {
-    current_name_label: &'static str,
-    current_guide_label: &'static str,
-    available_title: &'static str,
-    available_empty: &'static str,
-    available_id_label: &'static str,
-    available_summary_label: &'static str,
-    empty_summary: &'static str,
-    empty_guide: &'static str,
+pub(crate) struct DepartmentPromptLabels {
+    pub(crate) current_name_label: &'static str,
+    pub(crate) current_guide_label: &'static str,
+    pub(crate) available_title: &'static str,
+    pub(crate) available_empty: &'static str,
+    pub(crate) available_id_label: &'static str,
+    pub(crate) available_summary_label: &'static str,
+    pub(crate) empty_summary: &'static str,
+    pub(crate) empty_guide: &'static str,
 }
 
-fn department_prompt_labels(_ui_language: &str) -> DepartmentPromptLabels {
+pub(crate) fn department_prompt_labels(_ui_language: &str) -> DepartmentPromptLabels {
     DepartmentPromptLabels {
         current_name_label: "部门",
         current_guide_label: "部门办事指南",
@@ -2817,7 +2838,7 @@ fn department_prompt_labels(_ui_language: &str) -> DepartmentPromptLabels {
     }
 }
 
-fn prompt_department_card_from_config(
+pub(crate) fn prompt_department_card_from_config(
     department: &DepartmentConfig,
     empty_summary: &str,
 ) -> PromptDepartmentCard {
@@ -2832,7 +2853,7 @@ fn prompt_department_card_from_config(
     }
 }
 
-fn departments_only_config(departments: &[DepartmentConfig]) -> AppConfig {
+pub(crate) fn departments_only_config(departments: &[DepartmentConfig]) -> AppConfig {
     AppConfig {
         hotkey: String::new(),
         ui_language: String::new(),
@@ -2872,7 +2893,7 @@ fn departments_only_config(departments: &[DepartmentConfig]) -> AppConfig {
     }
 }
 
-fn build_departments_prompt_block(
+pub(crate) fn build_departments_prompt_block(
     _conversation: &Conversation,
     current_department_id: &str,
     departments: &[DepartmentConfig],
@@ -2924,7 +2945,7 @@ fn build_departments_prompt_block(
     prompt_xml_block("department context", lines.join("\n"))
 }
 
-fn build_memory_rag_rule_block() -> String {
+pub(crate) fn build_memory_rag_rule_block() -> String {
     prompt_xml_block(
         "memory rag rule",
         "## 定位\n\
@@ -2938,17 +2959,17 @@ fn build_memory_rag_rule_block() -> String {
     )
 }
 
-fn build_builtin_tool_general_rule_block() -> String {
+pub(crate) fn build_builtin_tool_general_rule_block() -> String {
     prompt_xml_block(
         "builtin tool general rule",
         "仅在系统工具能真正帮助完成用户任务时才使用，不要为了显得主动而滥用工具。",
     )
 }
 
-const EXEC_TOOL_RULE_SHELL_MD: &str = include_str!("../../../resources/prompts/exec-tool-rule-shell.md");
-const EXEC_TOOL_RULE_RG_MD: &str = include_str!("../../../resources/prompts/exec-tool-rule-rg.md");
+pub(crate) const EXEC_TOOL_RULE_SHELL_MD: &str = include_str!("../../../resources/prompts/exec-tool-rule-shell.md");
+pub(crate) const EXEC_TOOL_RULE_RG_MD: &str = include_str!("../../../resources/prompts/exec-tool-rule-rg.md");
 
-fn build_builtin_tool_rule_block(tool_id: &str, rg_installed: bool) -> Option<String> {
+pub(crate) fn build_builtin_tool_rule_block(tool_id: &str, rg_installed: bool) -> Option<String> {
     let (block_name, body) = match tool_id.trim() {
         "exec" => {
             let mut body = String::from(EXEC_TOOL_RULE_SHELL_MD.trim());
@@ -3048,7 +3069,7 @@ fn build_builtin_tool_rule_block(tool_id: &str, rg_installed: bool) -> Option<St
     Some(prompt_xml_block(block_name, body))
 }
 
-fn department_builtin_tool_enabled(
+pub(crate) fn department_builtin_tool_enabled(
     department_config: &AppConfig,
     current_department: Option<&DepartmentConfig>,
     id: &str,
@@ -3075,7 +3096,7 @@ fn department_builtin_tool_enabled(
     true
 }
 
-fn build_system_tools_rule_blocks(
+pub(crate) fn build_system_tools_rule_blocks(
     current_department_id: &str,
     departments: &[DepartmentConfig],
     rg_installed: bool,
@@ -3103,7 +3124,7 @@ fn build_system_tools_rule_blocks(
     blocks
 }
 
-fn build_question_and_planning_rule_block(
+pub(crate) fn build_question_and_planning_rule_block(
     state: Option<&AppState>,
     conversation: &Conversation,
     plan_tool_enabled: bool,
@@ -3173,7 +3194,7 @@ fn build_question_and_planning_rule_block(
 }
 
 #[allow(dead_code)]
-fn build_prompt(
+pub(crate) fn build_prompt(
     conversation: &Conversation,
     agent: &AgentProfile,
     agents: &[AgentProfile],
@@ -3203,7 +3224,7 @@ fn build_prompt(
     .expect("build prompt")
 }
 
-fn build_prompt_with_stage_logger(
+pub(crate) fn build_prompt_with_stage_logger(
     conversation: &Conversation,
     agent: &AgentProfile,
     agents: &[AgentProfile],
@@ -3233,7 +3254,7 @@ fn build_prompt_with_stage_logger(
 }
 
 #[allow(dead_code)]
-fn build_delegate_prompt(
+pub(crate) fn build_delegate_prompt(
     conversation: &Conversation,
     agent: &AgentProfile,
     agents: &[AgentProfile],
@@ -3259,7 +3280,7 @@ fn build_delegate_prompt(
     .expect("build delegate prompt")
 }
 
-fn build_delegate_prompt_with_stage_logger(
+pub(crate) fn build_delegate_prompt_with_stage_logger(
     conversation: &Conversation,
     agent: &AgentProfile,
     agents: &[AgentProfile],
@@ -3286,7 +3307,7 @@ fn build_delegate_prompt_with_stage_logger(
     )
 }
 
-fn find_last_context_compaction_index(
+pub(crate) fn find_last_context_compaction_index(
     messages: &[ChatMessage],
     agent_id: &str,
 ) -> Option<usize> {
@@ -3304,7 +3325,7 @@ fn find_last_context_compaction_index(
         .last()
 }
 
-fn merge_optional_text_block(current: &mut Option<String>, next: Option<String>) {
+pub(crate) fn merge_optional_text_block(current: &mut Option<String>, next: Option<String>) {
     let Some(next_text) = next.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()) else {
         return;
     };
@@ -3319,7 +3340,7 @@ fn merge_optional_text_block(current: &mut Option<String>, next: Option<String>)
     }
 }
 
-fn merge_history_message_text(current: &mut String, next: String) {
+pub(crate) fn merge_history_message_text(current: &mut String, next: String) {
     if current.trim().is_empty() {
         *current = next;
         return;
@@ -3331,7 +3352,7 @@ fn merge_history_message_text(current: &mut String, next: String) {
     current.push_str(&next);
 }
 
-fn merge_adjacent_assistant_history_messages(
+pub(crate) fn merge_adjacent_assistant_history_messages(
     messages: Vec<PreparedHistoryMessage>,
 ) -> Vec<PreparedHistoryMessage> {
     let mut merged = Vec::<PreparedHistoryMessage>::new();
@@ -3374,18 +3395,18 @@ fn merge_adjacent_assistant_history_messages(
     merged
 }
 
-fn normalized_prepared_history_messages(
+pub(crate) fn normalized_prepared_history_messages(
     messages: &[PreparedHistoryMessage],
 ) -> Vec<PreparedHistoryMessage> {
     merge_adjacent_assistant_history_messages(messages.to_vec())
 }
 
-fn normalize_prepared_history_messages_in_place(prepared: &mut PreparedPrompt) {
+pub(crate) fn normalize_prepared_history_messages_in_place(prepared: &mut PreparedPrompt) {
     prepared.history_messages =
         merge_adjacent_assistant_history_messages(std::mem::take(&mut prepared.history_messages));
 }
 
-fn build_conversation_prompt_payload(
+pub(crate) fn build_conversation_prompt_payload(
     enriched_conversation: &Conversation,
     source_conversation: &Conversation,
     agent: &AgentProfile,
@@ -3560,7 +3581,7 @@ fn build_conversation_prompt_payload(
     }
 }
 
-fn build_prompt_with_mode(
+pub(crate) fn build_prompt_with_mode(
     conversation: &Conversation,
     _agent: &AgentProfile,
     agents: &[AgentProfile],

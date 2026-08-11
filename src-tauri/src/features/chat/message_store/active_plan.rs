@@ -1,28 +1,28 @@
-const ACTIVE_PLAN_STATUS_IN_PROGRESS: &str = "in_progress";
-const ACTIVE_PLAN_STATUS_COMPLETED: &str = "completed";
+pub(crate) const ACTIVE_PLAN_STATUS_IN_PROGRESS: &str = "in_progress";
+pub(crate) const ACTIVE_PLAN_STATUS_COMPLETED: &str = "completed";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ActivePlanRecord {
-    plan_id: String,
-    source_message_id: String,
-    status: String,
+pub(crate) struct ActivePlanRecord {
+    pub(crate) plan_id: String,
+    pub(crate) source_message_id: String,
+    pub(crate) status: String,
     #[serde(default)]
-    path: String,
-    created_at: String,
+    pub(crate) path: String,
+    pub(crate) created_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    completed_at: Option<String>,
+    pub(crate) completed_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    completion_text: Option<String>,
+    pub(crate) completion_text: Option<String>,
 }
 
-fn encode_active_plan_record(record: &ActivePlanRecord) -> Result<String, String> {
+pub(crate) fn encode_active_plan_record(record: &ActivePlanRecord) -> Result<String, String> {
     serde_json::to_string(record)
         .map(|value| format!("{value}\n"))
         .map_err(|err| format!("序列化执行中计划失败: {err}"))
 }
 
-fn read_active_plan_records(path: &PathBuf) -> Result<Vec<ActivePlanRecord>, String> {
+pub(crate) fn read_active_plan_records(path: &PathBuf) -> Result<Vec<ActivePlanRecord>, String> {
     if !path.exists() {
         return Ok(Vec::new());
     }
@@ -53,7 +53,7 @@ fn read_active_plan_records(path: &PathBuf) -> Result<Vec<ActivePlanRecord>, Str
     Ok(records)
 }
 
-fn write_active_plan_records(path: &PathBuf, records: &[ActivePlanRecord]) -> Result<(), String> {
+pub(crate) fn write_active_plan_records(path: &PathBuf, records: &[ActivePlanRecord]) -> Result<(), String> {
     let mut content = String::new();
     for record in records {
         content.push_str(&encode_active_plan_record(record)?);
@@ -61,7 +61,7 @@ fn write_active_plan_records(path: &PathBuf, records: &[ActivePlanRecord]) -> Re
     write_message_store_text_atomic(path, "jsonl.tmp", &content, "执行中计划")
 }
 
-fn append_active_plan_record(path: &PathBuf, record: &ActivePlanRecord) -> Result<(), String> {
+pub(crate) fn append_active_plan_record(path: &PathBuf, record: &ActivePlanRecord) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| {
             format!(
@@ -90,7 +90,7 @@ fn append_active_plan_record(path: &PathBuf, record: &ActivePlanRecord) -> Resul
     })
 }
 
-fn active_plan_records_in_progress(
+pub(crate) fn active_plan_records_in_progress(
     data_path: &PathBuf,
     conversation_id: &str,
 ) -> Result<Vec<ActivePlanRecord>, String> {
@@ -109,7 +109,7 @@ fn active_plan_records_in_progress(
         .collect())
 }
 
-pub(super) fn active_plan_append_in_progress(
+pub(crate) fn active_plan_append_in_progress(
     data_path: &PathBuf,
     conversation_id: &str,
     source_message_id: &str,
@@ -145,7 +145,7 @@ pub(super) fn active_plan_append_in_progress(
     )
 }
 
-pub(super) fn active_plan_complete_by_path(
+pub(crate) fn active_plan_complete_by_path(
     data_path: &PathBuf,
     conversation_id: &str,
     path: &str,
@@ -192,7 +192,7 @@ pub(super) fn active_plan_complete_by_path(
 
 #[cfg(test)]
 #[test]
-fn read_active_plan_records_should_skip_legacy_record_without_path() {
+pub(crate) fn read_active_plan_records_should_skip_legacy_record_without_path() {
     let root = std::env::temp_dir().join(format!("eca-active-plan-{}", Uuid::new_v4()));
     fs::create_dir_all(&root).expect("create temp dir");
     let file = root.join("active_plans.jsonl");
@@ -215,7 +215,7 @@ fn read_active_plan_records_should_skip_legacy_record_without_path() {
 
 #[cfg(test)]
 #[test]
-fn active_plan_records_in_progress_should_return_newest_first() {
+pub(crate) fn active_plan_records_in_progress_should_return_newest_first() {
     let root = std::env::temp_dir().join(format!("eca-active-plan-order-{}", Uuid::new_v4()));
     let conversation_id = "conv-active-plan-order";
     let paths = message_store_paths(&root, conversation_id).expect("message store paths");

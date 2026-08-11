@@ -14,6 +14,9 @@ thread_local! {
     static OUTPUT_BUFFER: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
+
+use super::*;
+
 const MODEL_ROLE_EXPERT_API_CONFIG_ID: &str = "role:expert";
 const MODEL_ROLE_QUICK_API_CONFIG_ID: &str = "role:quick";
 const ASSISTANT_DEPARTMENT_ID: &str = "assistant-department";
@@ -2419,9 +2422,10 @@ fn default_permission_mode() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use uuid::Uuid;
 
+
+use super::*;
     fn test_root() -> PathBuf {
         let root = std::env::temp_dir().join(format!("pai-config-module-test-{}", Uuid::new_v4()));
         fs::create_dir_all(root.join("config")).expect("create config dir");

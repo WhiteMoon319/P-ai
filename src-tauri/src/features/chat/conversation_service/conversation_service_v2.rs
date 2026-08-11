@@ -1,6 +1,6 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-enum ConversationServiceV2ErrorCode {
+pub(crate) enum ConversationServiceV2ErrorCode {
     ConversationNotFound,
     ConversationBusy,
     ConversationReadOnly,
@@ -16,7 +16,7 @@ enum ConversationServiceV2ErrorCode {
 }
 
 impl ConversationServiceV2ErrorCode {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::ConversationNotFound => "CONV_NOT_FOUND",
             Self::ConversationBusy => "CONV_BUSY",
@@ -35,34 +35,34 @@ impl ConversationServiceV2ErrorCode {
 }
 
 #[derive(Debug, Clone)]
-struct ConversationServiceV2Error {
-    code: ConversationServiceV2ErrorCode,
-    message: String,
+pub(crate) struct ConversationServiceV2Error {
+    pub(crate) code: ConversationServiceV2ErrorCode,
+    pub(crate) message: String,
 }
 
 impl ConversationServiceV2Error {
-    fn new(code: ConversationServiceV2ErrorCode, message: impl Into<String>) -> Self {
+    pub(crate) fn new(code: ConversationServiceV2ErrorCode, message: impl Into<String>) -> Self {
         Self {
             code,
             message: message.into(),
         }
     }
 
-    fn into_string(self) -> String {
+    pub(crate) fn into_string(self) -> String {
         format!("{}: {}", self.code.as_str(), self.message)
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-enum ConversationOverwriteSource {
+pub(crate) enum ConversationOverwriteSource {
     Import,
     ExportSync,
     MigrationRecovery,
 }
 
 impl ConversationOverwriteSource {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Import => "import",
             Self::ExportSync => "export_sync",
@@ -73,185 +73,185 @@ impl ConversationOverwriteSource {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationOverwriteAudit {
-    job_id: String,
-    source: ConversationOverwriteSource,
-    operator: String,
-    reason: String,
+pub(crate) struct ConversationOverwriteAudit {
+    pub(crate) job_id: String,
+    pub(crate) source: ConversationOverwriteSource,
+    pub(crate) operator: String,
+    pub(crate) reason: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationMetaView {
-    id: String,
-    title: String,
-    latest_summary_title: Option<String>,
-    status: String,
-    summary: String,
-    conversation_kind: String,
-    visible_in_foreground_lists: bool,
-    is_remote_im_contact: bool,
-    is_delegate: bool,
-    agent_id: String,
-    delegate_id: Option<String>,
-    department_id: String,
-    root_conversation_id: Option<String>,
-    unread_count: usize,
-    updated_at: String,
-    created_at: String,
-    archived_at: Option<String>,
-    last_user_at: Option<String>,
-    last_assistant_at: Option<String>,
-    message_count: usize,
-    body_message_count: usize,
-    body_text_length: usize,
-    has_assistant_reply: bool,
-    has_context_compaction_message: bool,
-    last_message_at: Option<String>,
-    parent_conversation_id: Option<String>,
-    child_conversation_ids: Vec<String>,
-    fork_message_cursor: Option<String>,
-    user_profile_snapshot: String,
-    preferred_api_config_id: Option<String>,
-    auto_push_remote_contact_id: Option<String>,
-    cumulative_usage: ConversationCumulativeUsage,
-    plan_mode_enabled: bool,
-    shell_workspace_path: Option<String>,
-    shell_workspaces: Vec<ShellWorkspaceConfig>,
-    shell_autonomous_mode: bool,
-    shell_work_mode: String,
-    current_todos: Vec<ConversationTodoItem>,
-    active_goal: Option<ConversationGoalState>,
-    fast_request_turns: Vec<FastRequestTurn>,
-    last_message_id: Option<String>,
-    preview_messages: Vec<ConversationMetaPreviewMessage>,
+pub(crate) struct ConversationMetaView {
+    pub(crate) id: String,
+    pub(crate) title: String,
+    pub(crate) latest_summary_title: Option<String>,
+    pub(crate) status: String,
+    pub(crate) summary: String,
+    pub(crate) conversation_kind: String,
+    pub(crate) visible_in_foreground_lists: bool,
+    pub(crate) is_remote_im_contact: bool,
+    pub(crate) is_delegate: bool,
+    pub(crate) agent_id: String,
+    pub(crate) delegate_id: Option<String>,
+    pub(crate) department_id: String,
+    pub(crate) root_conversation_id: Option<String>,
+    pub(crate) unread_count: usize,
+    pub(crate) updated_at: String,
+    pub(crate) created_at: String,
+    pub(crate) archived_at: Option<String>,
+    pub(crate) last_user_at: Option<String>,
+    pub(crate) last_assistant_at: Option<String>,
+    pub(crate) message_count: usize,
+    pub(crate) body_message_count: usize,
+    pub(crate) body_text_length: usize,
+    pub(crate) has_assistant_reply: bool,
+    pub(crate) has_context_compaction_message: bool,
+    pub(crate) last_message_at: Option<String>,
+    pub(crate) parent_conversation_id: Option<String>,
+    pub(crate) child_conversation_ids: Vec<String>,
+    pub(crate) fork_message_cursor: Option<String>,
+    pub(crate) user_profile_snapshot: String,
+    pub(crate) preferred_api_config_id: Option<String>,
+    pub(crate) auto_push_remote_contact_id: Option<String>,
+    pub(crate) cumulative_usage: ConversationCumulativeUsage,
+    pub(crate) plan_mode_enabled: bool,
+    pub(crate) shell_workspace_path: Option<String>,
+    pub(crate) shell_workspaces: Vec<ShellWorkspaceConfig>,
+    pub(crate) shell_autonomous_mode: bool,
+    pub(crate) shell_work_mode: String,
+    pub(crate) current_todos: Vec<ConversationTodoItem>,
+    pub(crate) active_goal: Option<ConversationGoalState>,
+    pub(crate) fast_request_turns: Vec<FastRequestTurn>,
+    pub(crate) last_message_id: Option<String>,
+    pub(crate) preview_messages: Vec<ConversationMetaPreviewMessage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationMetaPreviewMessage {
-    message_id: String,
-    role: String,
-    speaker_agent_id: Option<String>,
-    created_at: Option<String>,
-    text_preview: String,
-    has_image: bool,
-    has_pdf: bool,
-    has_audio: bool,
-    has_attachment: bool,
+pub(crate) struct ConversationMetaPreviewMessage {
+    pub(crate) message_id: String,
+    pub(crate) role: String,
+    pub(crate) speaker_agent_id: Option<String>,
+    pub(crate) created_at: Option<String>,
+    pub(crate) text_preview: String,
+    pub(crate) has_image: bool,
+    pub(crate) has_pdf: bool,
+    pub(crate) has_audio: bool,
+    pub(crate) has_attachment: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationMessagePageView {
-    messages: Vec<ChatMessage>,
-    has_more: bool,
-    has_more_before: bool,
-    has_more_after: bool,
-    first_message_id: Option<String>,
-    last_message_id: Option<String>,
+pub(crate) struct ConversationMessagePageView {
+    pub(crate) messages: Vec<ChatMessage>,
+    pub(crate) has_more: bool,
+    pub(crate) has_more_before: bool,
+    pub(crate) has_more_after: bool,
+    pub(crate) first_message_id: Option<String>,
+    pub(crate) last_message_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AssistantMessageToolAppendInput {
-    conversation_id: String,
-    assistant_message_id: String,
-    assistant_tool_event: Value,
-    tool_result_event: Value,
-    provider_meta_patch: Option<Value>,
+pub(crate) struct AssistantMessageToolAppendInput {
+    pub(crate) conversation_id: String,
+    pub(crate) assistant_message_id: String,
+    pub(crate) assistant_tool_event: Value,
+    pub(crate) tool_result_event: Value,
+    pub(crate) provider_meta_patch: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AssistantMessageToolAppendResult {
-    conversation_id: String,
-    assistant_message_id: String,
-    tool_event_count: usize,
-    tool_append_closed: bool,
+pub(crate) struct AssistantMessageToolAppendResult {
+    pub(crate) conversation_id: String,
+    pub(crate) assistant_message_id: String,
+    pub(crate) tool_event_count: usize,
+    pub(crate) tool_append_closed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AssistantMessageFinalTextAppendInput {
-    conversation_id: String,
-    assistant_message_id: String,
-    final_text: String,
-    reasoning_text: Option<String>,
-    provider_meta_patch: Option<Value>,
-    meme_annotations: Option<Vec<MemeAnnotation>>,
+pub(crate) struct AssistantMessageFinalTextAppendInput {
+    pub(crate) conversation_id: String,
+    pub(crate) assistant_message_id: String,
+    pub(crate) final_text: String,
+    pub(crate) reasoning_text: Option<String>,
+    pub(crate) provider_meta_patch: Option<Value>,
+    pub(crate) meme_annotations: Option<Vec<MemeAnnotation>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AssistantMessageFinalTextAppendResult {
-    conversation_id: String,
-    assistant_message_id: String,
-    final_text_committed: bool,
-    tool_append_closed: bool,
+pub(crate) struct AssistantMessageFinalTextAppendResult {
+    pub(crate) conversation_id: String,
+    pub(crate) assistant_message_id: String,
+    pub(crate) final_text_committed: bool,
+    pub(crate) tool_append_closed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AssistantMessageBootstrapInput {
-    conversation_id: String,
-    assistant_message_id: String,
-    speaker_agent_id: String,
-    created_at: Option<String>,
-    provider_meta_patch: Option<Value>,
+pub(crate) struct AssistantMessageBootstrapInput {
+    pub(crate) conversation_id: String,
+    pub(crate) assistant_message_id: String,
+    pub(crate) speaker_agent_id: String,
+    pub(crate) created_at: Option<String>,
+    pub(crate) provider_meta_patch: Option<Value>,
     /// 调度启动时若携带压缩保留消息，bootstrap 只恢复工具历史；final 正文保持空。
     #[serde(skip)]
-    compaction_preserved_messages: Option<CompactionPreservedMessages>,
+    pub(crate) compaction_preserved_messages: Option<CompactionPreservedMessages>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AssistantMessageBootstrapResult {
-    conversation_id: String,
-    assistant_message_id: String,
-    created: bool,
+pub(crate) struct AssistantMessageBootstrapResult {
+    pub(crate) conversation_id: String,
+    pub(crate) assistant_message_id: String,
+    pub(crate) created: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AssistantMessageProviderMetaPatchInput {
-    conversation_id: String,
-    assistant_message_id: String,
-    provider_meta_patch: Value,
+pub(crate) struct AssistantMessageProviderMetaPatchInput {
+    pub(crate) conversation_id: String,
+    pub(crate) assistant_message_id: String,
+    pub(crate) provider_meta_patch: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AssistantMessageProviderMetaPatchResult {
-    conversation_id: String,
-    assistant_message_id: String,
+pub(crate) struct AssistantMessageProviderMetaPatchResult {
+    pub(crate) conversation_id: String,
+    pub(crate) assistant_message_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct UserMessageAppendInput {
-    conversation_id: String,
-    message: ChatMessage,
+pub(crate) struct UserMessageAppendInput {
+    pub(crate) conversation_id: String,
+    pub(crate) message: ChatMessage,
     #[serde(default)]
-    memory_recall_ids: Vec<String>,
+    pub(crate) memory_recall_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MessageProviderMetaPatchItem {
-    message_id: String,
-    provider_meta: Option<Value>,
+pub(crate) struct MessageProviderMetaPatchItem {
+    pub(crate) message_id: String,
+    pub(crate) provider_meta: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MessageProviderMetaBatchPatchInput {
-    conversation_id: String,
-    items: Vec<MessageProviderMetaPatchItem>,
+pub(crate) struct MessageProviderMetaBatchPatchInput {
+    pub(crate) conversation_id: String,
+    pub(crate) items: Vec<MessageProviderMetaPatchItem>,
 }
 
 impl ConversationMetaView {
-    fn from_meta(meta: &message_store::ConversationShardMeta) -> Self {
+    pub(crate) fn from_meta(meta: &message_store::ConversationShardMeta) -> Self {
         let preview_messages = meta
             .preview_messages()
             .iter()
@@ -317,12 +317,12 @@ impl ConversationMetaView {
     }
 }
 
-const FRONTEND_MESSAGE_DISPLAY_TOOL_RESULT_PLACEHOLDER_TEXT: &str = "工具已执行，结果已省略。";
+pub(crate) const FRONTEND_MESSAGE_DISPLAY_TOOL_RESULT_PLACEHOLDER_TEXT: &str = "工具已执行，结果已省略。";
 
 // 前端消息展示专用：这里会把 tool result 正文替换成占位文案。
 // 禁止任何写路径、撤回路径、持久化路径复用本函数或其返回值，
 // 否则会把原始 tool metadata（如 backup_record_id）污染掉。
-fn project_tool_history_event_for_frontend_message_display_only(event: &Value) -> Value {
+pub(crate) fn project_tool_history_event_for_frontend_message_display_only(event: &Value) -> Value {
     let Some(object) = event.as_object() else {
         return event.clone();
     };
@@ -357,7 +357,7 @@ fn project_tool_history_event_for_frontend_message_display_only(event: &Value) -
 
 // 前端消息展示专用：只用于返回给前端渲染层的消息投影。
 // 禁止把本函数返回的消息再写回仓库；需要写回时必须使用原始消息读取函数。
-fn project_message_for_frontend_display_only(mut message: ChatMessage) -> ChatMessage {
+pub(crate) fn project_message_for_frontend_display_only(mut message: ChatMessage) -> ChatMessage {
     if let Some(events) = message.tool_call.take() {
         let projected = events
             .into_iter()
@@ -373,14 +373,14 @@ fn project_message_for_frontend_display_only(mut message: ChatMessage) -> ChatMe
 }
 
 // 前端消息展示专用：批量消息投影，语义同 `project_message_for_frontend_display_only`。
-fn project_messages_for_frontend_display_only(messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
+pub(crate) fn project_messages_for_frontend_display_only(messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
     messages
         .into_iter()
         .map(project_message_for_frontend_display_only)
         .collect()
 }
 
-fn assistant_message_has_final_text(message: &ChatMessage) -> bool {
+pub(crate) fn assistant_message_has_final_text(message: &ChatMessage) -> bool {
     message.parts.iter().any(|part| match part {
         MessagePart::Text { text, .. } => !text.trim().is_empty(),
         _ => false,
@@ -390,7 +390,7 @@ fn assistant_message_has_final_text(message: &ChatMessage) -> bool {
         .any(|block| !block.trim().is_empty())
 }
 
-fn build_message_page_view_v2(
+pub(crate) fn build_message_page_view_v2(
     messages: Vec<ChatMessage>,
     has_more_before: bool,
     has_more_after: bool,
@@ -413,7 +413,7 @@ fn build_message_page_view_v2(
     }
 }
 
-fn dedup_memory_recall_ids_v2(ids: &[String]) -> Vec<String> {
+pub(crate) fn dedup_memory_recall_ids_v2(ids: &[String]) -> Vec<String> {
     let mut seen = std::collections::HashSet::<String>::new();
     ids.iter()
         .map(|item| item.trim().to_string())
@@ -422,7 +422,7 @@ fn dedup_memory_recall_ids_v2(ids: &[String]) -> Vec<String> {
         .collect()
 }
 
-fn assistant_message_tool_append_closed(message: &ChatMessage) -> bool {
+pub(crate) fn assistant_message_tool_append_closed(message: &ChatMessage) -> bool {
     assistant_message_has_final_text(message)
         || message
             .provider_meta
@@ -432,7 +432,7 @@ fn assistant_message_tool_append_closed(message: &ChatMessage) -> bool {
             .unwrap_or(false)
 }
 
-fn merge_optional_text_block_v2(current: &mut Option<String>, next: Option<String>) {
+pub(crate) fn merge_optional_text_block_v2(current: &mut Option<String>, next: Option<String>) {
     let Some(next) = next else {
         return;
     };
@@ -447,7 +447,7 @@ fn merge_optional_text_block_v2(current: &mut Option<String>, next: Option<Strin
     }
 }
 
-fn merge_provider_meta_patch_v2(target: &mut Option<Value>, patch: Option<Value>) {
+pub(crate) fn merge_provider_meta_patch_v2(target: &mut Option<Value>, patch: Option<Value>) {
     let Some(patch) = patch else {
         return;
     };
@@ -471,7 +471,7 @@ fn merge_provider_meta_patch_v2(target: &mut Option<Value>, patch: Option<Value>
     *target = Some(current);
 }
 
-fn mark_stream_final_committed_v2(target: &mut Option<Value>) {
+pub(crate) fn mark_stream_final_committed_v2(target: &mut Option<Value>) {
     let mut current = target.take().unwrap_or_else(|| serde_json::json!({}));
     if !current.is_object() {
         current = serde_json::json!({
@@ -484,7 +484,7 @@ fn mark_stream_final_committed_v2(target: &mut Option<Value>) {
     *target = Some(current);
 }
 
-fn tool_call_ids_from_assistant_tool_event_v2(event: &Value) -> Vec<String> {
+pub(crate) fn tool_call_ids_from_assistant_tool_event_v2(event: &Value) -> Vec<String> {
     event
         .get("tool_calls")
         .and_then(Value::as_array)
@@ -501,7 +501,7 @@ fn tool_call_ids_from_assistant_tool_event_v2(event: &Value) -> Vec<String> {
         .collect()
 }
 
-fn tool_history_contains_assistant_tool_group_v2(
+pub(crate) fn tool_history_contains_assistant_tool_group_v2(
     events: &[Value],
     group_call_ids: &[String],
 ) -> bool {
@@ -528,7 +528,7 @@ fn tool_history_contains_assistant_tool_group_v2(
     })
 }
 
-fn tool_history_contains_tool_result_id_v2(events: &[Value], tool_call_id: &str) -> bool {
+pub(crate) fn tool_history_contains_tool_result_id_v2(events: &[Value], tool_call_id: &str) -> bool {
     events.iter().any(|event| {
         event
             .get("role")
@@ -542,7 +542,7 @@ fn tool_history_contains_tool_result_id_v2(events: &[Value], tool_call_id: &str)
     })
 }
 
-fn validate_tool_group_result_append_v2(
+pub(crate) fn validate_tool_group_result_append_v2(
     assistant_tool_call_event: &Value,
     tool_result_event: &Value,
 ) -> Result<String, String> {
@@ -583,42 +583,42 @@ fn validate_tool_group_result_append_v2(
 }
 
 #[derive(Debug, Default)]
-struct ConversationServiceV2;
+pub(crate) struct ConversationServiceV2;
 
 #[derive(Debug, Default, Clone)]
-struct ConversationExternalMetadataPatch {
-    title: Option<String>,
-    unread_count: Option<usize>,
-    preferred_api_config_id: Option<Option<String>>,
-    auto_push_remote_contact_id: Option<Option<String>>,
-    current_todos: Option<Vec<ConversationTodoItem>>,
-    plan_mode_enabled: Option<bool>,
-    shell_workspace_path: Option<Option<String>>,
-    shell_workspaces: Option<Vec<ShellWorkspaceConfig>>,
-    shell_autonomous_mode: Option<bool>,
-    shell_work_mode: Option<String>,
-    lifecycle_status: Option<String>,
-    lifecycle_summary: Option<String>,
-    lifecycle_archived_at: Option<Option<String>>,
-    lifecycle_updated_at: Option<String>,
-    routing_department_id: Option<String>,
-    routing_agent_id: Option<String>,
-    routing_root_conversation_id: Option<Option<String>>,
-    routing_conversation_kind: Option<String>,
+pub(crate) struct ConversationExternalMetadataPatch {
+    pub(crate) title: Option<String>,
+    pub(crate) unread_count: Option<usize>,
+    pub(crate) preferred_api_config_id: Option<Option<String>>,
+    pub(crate) auto_push_remote_contact_id: Option<Option<String>>,
+    pub(crate) current_todos: Option<Vec<ConversationTodoItem>>,
+    pub(crate) plan_mode_enabled: Option<bool>,
+    pub(crate) shell_workspace_path: Option<Option<String>>,
+    pub(crate) shell_workspaces: Option<Vec<ShellWorkspaceConfig>>,
+    pub(crate) shell_autonomous_mode: Option<bool>,
+    pub(crate) shell_work_mode: Option<String>,
+    pub(crate) lifecycle_status: Option<String>,
+    pub(crate) lifecycle_summary: Option<String>,
+    pub(crate) lifecycle_archived_at: Option<Option<String>>,
+    pub(crate) lifecycle_updated_at: Option<String>,
+    pub(crate) routing_department_id: Option<String>,
+    pub(crate) routing_agent_id: Option<String>,
+    pub(crate) routing_root_conversation_id: Option<Option<String>>,
+    pub(crate) routing_conversation_kind: Option<String>,
 }
 
-fn conversation_service_v2() -> &'static ConversationServiceV2 {
+pub(crate) fn conversation_service_v2() -> &'static ConversationServiceV2 {
     static SERVICE: OnceLock<ConversationServiceV2> = OnceLock::new();
     SERVICE.get_or_init(ConversationServiceV2::default)
 }
 
 #[cfg(test)]
-fn conversation_service() -> &'static ConversationServiceV2 {
+pub(crate) fn conversation_service() -> &'static ConversationServiceV2 {
     conversation_service_v2()
 }
 
 impl ConversationServiceV2 {
-    fn ensure_appendable_ready_message_store(
+    pub(crate) fn ensure_appendable_ready_message_store(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -642,7 +642,7 @@ impl ConversationServiceV2 {
             })
     }
 
-    fn fill_summary_preview_messages_fallback(
+    pub(crate) fn fill_summary_preview_messages_fallback(
         &self,
         state: &AppState,
         conversation_meta: &ConversationMetaView,
@@ -708,7 +708,7 @@ impl ConversationServiceV2 {
         hydrated
     }
 
-    fn validate_overwrite_audit(
+    pub(crate) fn validate_overwrite_audit(
         &self,
         audit: &ConversationOverwriteAudit,
     ) -> Result<(), String> {
@@ -728,7 +728,7 @@ impl ConversationServiceV2 {
     // 除导入/迁移这类“向空会话灌入外部快照”的过渡场景外，项目内一律禁止调用。
     // 普通聊天、补写、恢复、自愈、同步都必须使用原子增量接口，不能复用这个方法。
     // 后续目标：彻底移除此能力，连导入也改为按消息/按 block 增量写入。
-    fn apply_privileged_snapshot_overwrite(
+    pub(crate) fn apply_privileged_snapshot_overwrite(
         &self,
         state: &AppState,
         audit: &ConversationOverwriteAudit,
@@ -744,7 +744,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn apply_privileged_snapshot_overwrite_inner(
+    pub(crate) fn apply_privileged_snapshot_overwrite_inner(
         &self,
         state: &AppState,
         audit: &ConversationOverwriteAudit,
@@ -781,7 +781,7 @@ impl ConversationServiceV2 {
         Ok(())
     }
 
-    fn read_current_writable_assistant_message(
+    pub(crate) fn read_current_writable_assistant_message(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -804,7 +804,7 @@ impl ConversationServiceV2 {
         Ok(target_message)
     }
 
-    fn get_raw_recent_messages(
+    pub(crate) fn get_raw_recent_messages(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -830,7 +830,7 @@ impl ConversationServiceV2 {
         Ok(messages)
     }
 
-    fn get_raw_message_by_id(
+    pub(crate) fn get_raw_message_by_id(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -861,7 +861,7 @@ impl ConversationServiceV2 {
         Ok(message)
     }
 
-    fn conversation_has_active_chat_view(
+    pub(crate) fn conversation_has_active_chat_view(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -882,7 +882,7 @@ impl ConversationServiceV2 {
             .unwrap_or(false)
     }
 
-    fn mark_conversation_metadata_cached_persisted(
+    pub(crate) fn mark_conversation_metadata_cached_persisted(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -890,7 +890,7 @@ impl ConversationServiceV2 {
         state_mark_conversation_metadata_cached_persisted_unlocked(state, conversation_id)
     }
 
-    fn increment_conversation_unread_count_if_background(
+    pub(crate) fn increment_conversation_unread_count_if_background(
         &self,
         state: &AppState,
         conversation: &mut Conversation,
@@ -929,7 +929,7 @@ impl ConversationServiceV2 {
         }
     }
 
-    fn persist_replaced_ready_message_locked(
+    pub(crate) fn persist_replaced_ready_message_locked(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -988,7 +988,7 @@ impl ConversationServiceV2 {
         Ok(())
     }
 
-    fn resolve_latest_foreground_conversation_id(
+    pub(crate) fn resolve_latest_foreground_conversation_id(
         &self,
         state: &AppState,
         agent_id: &str,
@@ -1018,7 +1018,7 @@ impl ConversationServiceV2 {
             }))
     }
 
-    fn with_unarchived_conversation_by_id_fast<T>(
+    pub(crate) fn with_unarchived_conversation_by_id_fast<T>(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1039,7 +1039,7 @@ impl ConversationServiceV2 {
         Ok(result)
     }
 
-    fn apply_external_metadata_patch(
+    pub(crate) fn apply_external_metadata_patch(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1131,7 +1131,7 @@ impl ConversationServiceV2 {
         Ok(conversation)
     }
 
-    fn get_conversation_meta(
+    pub(crate) fn get_conversation_meta(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1160,7 +1160,7 @@ impl ConversationServiceV2 {
         Ok(ConversationMetaView::from_meta(&meta))
     }
 
-    fn get_conversation_metadata_record(
+    pub(crate) fn get_conversation_metadata_record(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1169,7 +1169,7 @@ impl ConversationServiceV2 {
         Ok(self.build_conversation_record_from_meta_view(&conversation_meta))
     }
 
-    fn ensure_system_notification_conversation(
+    pub(crate) fn ensure_system_notification_conversation(
         &self,
         state: &AppState,
     ) -> Result<(), String> {
@@ -1189,14 +1189,14 @@ impl ConversationServiceV2 {
         Ok(())
     }
 
-    fn conversation_meta_is_delegate(
+    pub(crate) fn conversation_meta_is_delegate(
         &self,
         conversation_meta: &message_store::ConversationShardMeta,
     ) -> bool {
         conversation_meta.conversation_kind().trim() == CONVERSATION_KIND_DELEGATE
     }
 
-    fn conversation_meta_is_system_notification_meta_view(
+    pub(crate) fn conversation_meta_is_system_notification_meta_view(
         &self,
         conversation_meta: &ConversationMetaView,
     ) -> bool {
@@ -1205,7 +1205,7 @@ impl ConversationServiceV2 {
                 == CONVERSATION_KIND_SYSTEM_NOTIFICATION
     }
 
-    fn conversation_meta_is_unarchived_meta_view(
+    pub(crate) fn conversation_meta_is_unarchived_meta_view(
         &self,
         conversation_meta: &ConversationMetaView,
     ) -> bool {
@@ -1218,7 +1218,7 @@ impl ConversationServiceV2 {
                 .is_none()
     }
 
-    fn conversation_meta_visible_in_foreground_lists(
+    pub(crate) fn conversation_meta_visible_in_foreground_lists(
         &self,
         conversation_meta: &message_store::ConversationShardMeta,
     ) -> bool {
@@ -1227,14 +1227,14 @@ impl ConversationServiceV2 {
             && conversation_meta.conversation_kind().trim() != CONVERSATION_KIND_SIDE_CHAT
     }
 
-    fn conversation_meta_is_remote_im_contact(
+    pub(crate) fn conversation_meta_is_remote_im_contact(
         &self,
         conversation_meta: &message_store::ConversationShardMeta,
     ) -> bool {
         conversation_meta.conversation_kind().trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT
     }
 
-    fn conversation_meta_is_local_normal_chat_meta_view(
+    pub(crate) fn conversation_meta_is_local_normal_chat_meta_view(
         &self,
         conversation_meta: &ConversationMetaView,
     ) -> bool {
@@ -1245,7 +1245,7 @@ impl ConversationServiceV2 {
                 != CONVERSATION_KIND_SYSTEM_NOTIFICATION
     }
 
-    fn conversation_meta_is_local_conversation_runtime_meta_view(
+    pub(crate) fn conversation_meta_is_local_conversation_runtime_meta_view(
         &self,
         conversation_meta: &ConversationMetaView,
     ) -> bool {
@@ -1257,7 +1257,7 @@ impl ConversationServiceV2 {
             )
     }
 
-    fn build_conversation_snapshot_from_meta(
+    pub(crate) fn build_conversation_snapshot_from_meta(
         &self,
         conversation_meta: &message_store::ConversationShardMeta,
         messages: Vec<ChatMessage>,
@@ -1269,7 +1269,7 @@ impl ConversationServiceV2 {
         conversation
     }
 
-    fn build_conversation_record_from_meta_view(
+    pub(crate) fn build_conversation_record_from_meta_view(
         &self,
         conversation_meta: &ConversationMetaView,
     ) -> Conversation {
@@ -1308,7 +1308,7 @@ impl ConversationServiceV2 {
         conversation
     }
 
-    fn set_conversation_unread_count_metadata(
+    pub(crate) fn set_conversation_unread_count_metadata(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1325,7 +1325,7 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn append_message(
+    pub(crate) fn append_message(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1346,7 +1346,7 @@ impl ConversationServiceV2 {
         Ok(())
     }
 
-    fn append_message_locked(
+    pub(crate) fn append_message_locked(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1415,7 +1415,7 @@ impl ConversationServiceV2 {
         Ok(())
     }
 
-    fn append_messages(
+    pub(crate) fn append_messages(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1507,7 +1507,7 @@ impl ConversationServiceV2 {
         Ok(())
     }
 
-    fn build_forward_selection_notification_message(
+    pub(crate) fn build_forward_selection_notification_message(
         &self,
         state: &AppState,
         source_conversation_id: &str,
@@ -1518,7 +1518,7 @@ impl ConversationServiceV2 {
         Ok(build_session_notification_message(&body))
     }
 
-    fn append_user_message(
+    pub(crate) fn append_user_message(
         &self,
         state: &AppState,
         input: &UserMessageAppendInput,
@@ -1597,7 +1597,7 @@ impl ConversationServiceV2 {
     }
 
     /// 远程入站专用追加：只负责把远程消息正式写入会话历史。
-    fn append_remote_im_user_message(
+    pub(crate) fn append_remote_im_user_message(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1665,7 +1665,7 @@ impl ConversationServiceV2 {
         Ok(message.clone())
     }
 
-    fn increment_unread_count_if_background(
+    pub(crate) fn increment_unread_count_if_background(
         &self,
         state: &AppState,
         conversation: &mut Conversation,
@@ -1679,7 +1679,7 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn enqueue_delegate_completion_notification(
+    pub(crate) fn enqueue_delegate_completion_notification(
         &self,
         state: &AppState,
         root_conversation_id: &str,
@@ -1708,7 +1708,7 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn enqueue_auto_push_remote_contact_message(
+    pub(crate) fn enqueue_auto_push_remote_contact_message(
         &self,
         state: &AppState,
         source_conversation_id: &str,
@@ -1770,7 +1770,7 @@ impl ConversationServiceV2 {
         Ok(())
     }
 
-    fn import_conversation_snapshot(
+    pub(crate) fn import_conversation_snapshot(
         &self,
         state: &AppState,
         job_id: &str,
@@ -1791,7 +1791,7 @@ impl ConversationServiceV2 {
     }
 
     #[cfg(test)]
-    fn sync_replace_conversation_snapshot(
+    pub(crate) fn sync_replace_conversation_snapshot(
         &self,
         state: &AppState,
         job_id: &str,
@@ -1811,7 +1811,7 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn recover_conversation_snapshot(
+    pub(crate) fn recover_conversation_snapshot(
         &self,
         state: &AppState,
         job_id: &str,
@@ -1832,7 +1832,7 @@ impl ConversationServiceV2 {
     }
 
     #[cfg(test)]
-    fn set_conversation_preferred_api_config_id(
+    pub(crate) fn set_conversation_preferred_api_config_id(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1842,7 +1842,7 @@ impl ConversationServiceV2 {
     }
 
     #[cfg(test)]
-    fn set_conversation_auto_push_remote_contact_id(
+    pub(crate) fn set_conversation_auto_push_remote_contact_id(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1852,7 +1852,7 @@ impl ConversationServiceV2 {
     }
 
     #[cfg(test)]
-    fn read_foreground_snapshot(
+    pub(crate) fn read_foreground_snapshot(
         &self,
         state: &AppState,
         conversation_id: Option<&str>,
@@ -1863,7 +1863,7 @@ impl ConversationServiceV2 {
     }
 
     #[cfg(test)]
-    fn set_conversation_title_metadata(
+    pub(crate) fn set_conversation_title_metadata(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1873,7 +1873,7 @@ impl ConversationServiceV2 {
     }
 
     #[cfg(test)]
-    fn set_conversation_shell_workspace_metadata(
+    pub(crate) fn set_conversation_shell_workspace_metadata(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1893,7 +1893,7 @@ impl ConversationServiceV2 {
     }
 
     #[cfg(test)]
-    fn set_conversation_lifecycle_metadata(
+    pub(crate) fn set_conversation_lifecycle_metadata(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1917,7 +1917,7 @@ impl ConversationServiceV2 {
     }
 
     #[cfg(test)]
-    fn set_conversation_current_todos_metadata(
+    pub(crate) fn set_conversation_current_todos_metadata(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1927,7 +1927,7 @@ impl ConversationServiceV2 {
     }
 
     #[cfg(test)]
-    fn append_message_to_unarchived_conversation(
+    pub(crate) fn append_message_to_unarchived_conversation(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1937,7 +1937,7 @@ impl ConversationServiceV2 {
     }
 
     #[cfg(test)]
-    fn read_message_by_id(
+    pub(crate) fn read_message_by_id(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1947,7 +1947,7 @@ impl ConversationServiceV2 {
     }
 
     #[cfg(test)]
-    fn read_archive_block_page(
+    pub(crate) fn read_archive_block_page(
         &self,
         state: &AppState,
         archive_id: &str,
@@ -1957,7 +1957,7 @@ impl ConversationServiceV2 {
     }
 
     #[cfg(test)]
-    fn read_unarchived_messages(
+    pub(crate) fn read_unarchived_messages(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1966,7 +1966,7 @@ impl ConversationServiceV2 {
     }
 
     #[cfg(test)]
-    fn rewind_conversation_from_message(
+    pub(crate) fn rewind_conversation_from_message(
         &self,
         state: &AppState,
         input: &RewindConversationInput,

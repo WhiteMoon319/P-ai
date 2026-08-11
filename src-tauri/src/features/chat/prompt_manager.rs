@@ -1,57 +1,82 @@
+use std::{
+    fs,
+    io::Cursor,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+};
+
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use directories::ProjectDirs;
+use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
+use image::ImageFormat;
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use rmcp::{schemars, ServiceExt};
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
+use uuid::Uuid;
+
+
+use super::*;
+// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
+
 #[derive(Debug, Clone)]
-struct PreparedConversationPromptPayload {
-    history_messages: Vec<PreparedHistoryMessage>,
-    latest_user_text: String,
-    latest_user_meta_text: String,
-    latest_user_extra_blocks: Vec<String>,
-    latest_images: Vec<PreparedBinaryPayload>,
-    latest_audios: Vec<PreparedBinaryPayload>,
+
+
+pub(crate) struct PreparedConversationPromptPayload {
+    pub(crate) history_messages: Vec<PreparedHistoryMessage>,
+    pub(crate) latest_user_text: String,
+    pub(crate) latest_user_meta_text: String,
+    pub(crate) latest_user_extra_blocks: Vec<String>,
+    pub(crate) latest_images: Vec<PreparedBinaryPayload>,
+    pub(crate) latest_audios: Vec<PreparedBinaryPayload>,
 }
 
 #[derive(Debug, Clone)]
-struct DepartmentSystemPromptSnapshot {
-    department_prompt_block: String,
-    department_tool_rule_blocks: Vec<String>,
+pub(crate) struct DepartmentSystemPromptSnapshot {
+    pub(crate) department_prompt_block: String,
+    pub(crate) department_tool_rule_blocks: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
-struct DepartmentSystemPromptCacheEntry {
-    agent_id: String,
-    department_id: String,
-    snapshot: DepartmentSystemPromptSnapshot,
-    dirty_reason: Option<PromptCacheDirtyKind>,
+pub(crate) struct DepartmentSystemPromptCacheEntry {
+    pub(crate) agent_id: String,
+    pub(crate) department_id: String,
+    pub(crate) snapshot: DepartmentSystemPromptSnapshot,
+    pub(crate) dirty_reason: Option<PromptCacheDirtyKind>,
 }
 
 #[derive(Debug, Clone)]
-struct ConversationEnvironmentPromptSnapshot {
-    runtime_blocks: Vec<String>,
-    im_rule_blocks: Vec<String>,
+pub(crate) struct ConversationEnvironmentPromptSnapshot {
+    pub(crate) runtime_blocks: Vec<String>,
+    pub(crate) im_rule_blocks: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
-struct ConversationEnvironmentPromptCacheEntry {
-    conversation_id: String,
-    snapshot: ConversationEnvironmentPromptSnapshot,
-    dirty_reason: Option<PromptCacheDirtyKind>,
+pub(crate) struct ConversationEnvironmentPromptCacheEntry {
+    pub(crate) conversation_id: String,
+    pub(crate) snapshot: ConversationEnvironmentPromptSnapshot,
+    pub(crate) dirty_reason: Option<PromptCacheDirtyKind>,
 }
 
 #[derive(Debug, Clone)]
-struct FinalSystemPromptCacheEntry {
-    conversation_id: String,
-    agent_id: String,
-    department_id: String,
-    text: String,
-    dirty_state: FinalSystemPromptDirtyState,
+pub(crate) struct FinalSystemPromptCacheEntry {
+    pub(crate) conversation_id: String,
+    pub(crate) agent_id: String,
+    pub(crate) department_id: String,
+    pub(crate) text: String,
+    pub(crate) dirty_state: FinalSystemPromptDirtyState,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PromptCacheDirtyKind {
+pub(crate) enum PromptCacheDirtyKind {
     SystemSource,
     SystemEnvironment,
 }
 
 impl PromptCacheDirtyKind {
-    fn as_log_reason(self) -> &'static str {
+    pub(crate) fn as_log_reason(self) -> &'static str {
         match self {
             Self::SystemSource => "dirty_system_source",
             Self::SystemEnvironment => "dirty_system_environment",
@@ -60,17 +85,17 @@ impl PromptCacheDirtyKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-struct FinalSystemPromptDirtyState {
-    system_source: bool,
-    system_environment: bool,
+pub(crate) struct FinalSystemPromptDirtyState {
+    pub(crate) system_source: bool,
+    pub(crate) system_environment: bool,
 }
 
 impl FinalSystemPromptDirtyState {
-    fn is_clean(self) -> bool {
+    pub(crate) fn is_clean(self) -> bool {
         !self.system_source && !self.system_environment
     }
 
-    fn mark(self, kind: PromptCacheDirtyKind) -> Self {
+    pub(crate) fn mark(self, kind: PromptCacheDirtyKind) -> Self {
         let mut next = self;
         match kind {
             PromptCacheDirtyKind::SystemSource => next.system_source = true,
@@ -79,7 +104,7 @@ impl FinalSystemPromptDirtyState {
         next
     }
 
-    fn rebuild_reason(self) -> &'static str {
+    pub(crate) fn rebuild_reason(self) -> &'static str {
         match (self.system_source, self.system_environment) {
             (true, true) => "dirty_system_source_and_environment",
             (true, false) => "dirty_system_source",
@@ -89,14 +114,14 @@ impl FinalSystemPromptDirtyState {
     }
 }
 
-fn system_prompt_text_cache(
+pub(crate) fn system_prompt_text_cache(
 ) -> &'static Mutex<std::collections::HashMap<String, FinalSystemPromptCacheEntry>> {
     static CACHE: OnceLock<Mutex<std::collections::HashMap<String, FinalSystemPromptCacheEntry>>> =
         OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
-fn department_system_prompt_cache(
+pub(crate) fn department_system_prompt_cache(
 ) -> &'static Mutex<std::collections::HashMap<String, DepartmentSystemPromptCacheEntry>> {
     static CACHE: OnceLock<
         Mutex<std::collections::HashMap<String, DepartmentSystemPromptCacheEntry>>,
@@ -104,7 +129,7 @@ fn department_system_prompt_cache(
     CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
-fn conversation_environment_prompt_cache(
+pub(crate) fn conversation_environment_prompt_cache(
 ) -> &'static Mutex<std::collections::HashMap<String, ConversationEnvironmentPromptCacheEntry>> {
     static CACHE: OnceLock<
         Mutex<std::collections::HashMap<String, ConversationEnvironmentPromptCacheEntry>>,
@@ -112,7 +137,7 @@ fn conversation_environment_prompt_cache(
     CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
-fn cache_lock_recover<'a, T>(
+pub(crate) fn cache_lock_recover<'a, T>(
     label: &str,
     mutex: &'a Mutex<T>,
 ) -> std::sync::MutexGuard<'a, T> {
@@ -128,13 +153,13 @@ fn cache_lock_recover<'a, T>(
     }
 }
 
-fn prompt_cache_scope_key(state: Option<&AppState>) -> String {
+pub(crate) fn prompt_cache_scope_key(state: Option<&AppState>) -> String {
     state
         .map(|value| value.data_path.display().to_string())
         .unwrap_or_else(|| "<global>".to_string())
 }
 
-fn normalize_executor_department_id(departments: &[DepartmentConfig], department_id: &str) -> String {
+pub(crate) fn normalize_executor_department_id(departments: &[DepartmentConfig], department_id: &str) -> String {
     let trimmed = department_id.trim();
     if trimmed.is_empty() {
         return String::new();
@@ -144,11 +169,11 @@ fn normalize_executor_department_id(departments: &[DepartmentConfig], department
         .unwrap_or_default()
 }
 
-fn prompt_runtime_rg_installed() -> bool {
+pub(crate) fn prompt_runtime_rg_installed() -> bool {
     host_runtime_prerequisite_installed("rg").unwrap_or(false)
 }
 
-fn build_department_system_prompt_cache_key(
+pub(crate) fn build_department_system_prompt_cache_key(
     state: Option<&AppState>,
     agent: &AgentProfile,
     executor_department_id: &str,
@@ -163,7 +188,7 @@ fn build_department_system_prompt_cache_key(
     )
 }
 
-fn build_department_system_prompt_snapshot_uncached(
+pub(crate) fn build_department_system_prompt_snapshot_uncached(
     _state: Option<&AppState>,
     conversation: &Conversation,
     _agent: &AgentProfile,
@@ -188,7 +213,7 @@ fn build_department_system_prompt_snapshot_uncached(
     }
 }
 
-fn get_or_build_department_system_prompt_snapshot(
+pub(crate) fn get_or_build_department_system_prompt_snapshot(
     state: Option<&AppState>,
     conversation: &Conversation,
     agent: &AgentProfile,
@@ -244,7 +269,7 @@ fn get_or_build_department_system_prompt_snapshot(
     snapshot
 }
 
-fn split_system_preamble_blocks(
+pub(crate) fn split_system_preamble_blocks(
     system_preamble_blocks: &[String],
 ) -> (Vec<String>, Vec<String>, Vec<String>) {
     let mut tool_rule_blocks = Vec::<String>::new();
@@ -264,7 +289,7 @@ fn split_system_preamble_blocks(
     (tool_rule_blocks, runtime_blocks, im_rule_blocks)
 }
 
-fn build_conversation_environment_prompt_cache_key(
+pub(crate) fn build_conversation_environment_prompt_cache_key(
     state: Option<&AppState>,
     conversation: &Conversation,
     _mode_label: &str,
@@ -276,7 +301,7 @@ fn build_conversation_environment_prompt_cache_key(
     )
 }
 
-fn build_conversation_environment_prompt_snapshot_uncached(
+pub(crate) fn build_conversation_environment_prompt_snapshot_uncached(
     conversation: &Conversation,
     terminal_block: Option<&str>,
     runtime_extra_blocks: &[String],
@@ -316,7 +341,7 @@ fn build_conversation_environment_prompt_snapshot_uncached(
     }
 }
 
-fn get_or_build_conversation_environment_prompt_snapshot(
+pub(crate) fn get_or_build_conversation_environment_prompt_snapshot(
     state: Option<&AppState>,
     conversation: &Conversation,
     mode_label: &str,
@@ -371,7 +396,7 @@ fn get_or_build_conversation_environment_prompt_snapshot(
     snapshot
 }
 
-fn append_system_prompt_block(target: &mut String, block: Option<&str>) {
+pub(crate) fn append_system_prompt_block(target: &mut String, block: Option<&str>) {
     let Some(trimmed) = block.map(str::trim).filter(|value| !value.is_empty()) else {
         return;
     };
@@ -385,15 +410,15 @@ fn append_system_prompt_block(target: &mut String, block: Option<&str>) {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SystemPromptExtraBlockGroup {
+pub(crate) enum SystemPromptExtraBlockGroup {
     ToolRules,
     Runtime,
     ImRules,
 }
 
-const REMOTE_CONVERSATION_IDENTITY_FALLBACK_MESSAGE_LIMIT: usize = 32;
+pub(crate) const REMOTE_CONVERSATION_IDENTITY_FALLBACK_MESSAGE_LIMIT: usize = 32;
 
-fn classify_system_prompt_extra_block(block: &str) -> SystemPromptExtraBlockGroup {
+pub(crate) fn classify_system_prompt_extra_block(block: &str) -> SystemPromptExtraBlockGroup {
     let trimmed = block.trim();
     if trimmed.contains("<remote im runtime activation>")
         || trimmed.contains("<remote im contact downloads>")
@@ -410,18 +435,18 @@ fn classify_system_prompt_extra_block(block: &str) -> SystemPromptExtraBlockGrou
 }
 
 #[derive(Debug, Clone)]
-struct RemoteConversationPromptIdentity {
-    conversation_type_label: &'static str,
-    name_label: &'static str,
-    id_label: &'static str,
-    channel_id: String,
-    display_name: String,
-    id: String,
-    latest_sender_name: String,
-    latest_sender_id: String,
+pub(crate) struct RemoteConversationPromptIdentity {
+    pub(crate) conversation_type_label: &'static str,
+    pub(crate) name_label: &'static str,
+    pub(crate) id_label: &'static str,
+    pub(crate) channel_id: String,
+    pub(crate) display_name: String,
+    pub(crate) id: String,
+    pub(crate) latest_sender_name: String,
+    pub(crate) latest_sender_id: String,
 }
 
-fn remote_conversation_type_label(contact_type: &str) -> &'static str {
+pub(crate) fn remote_conversation_type_label(contact_type: &str) -> &'static str {
     match contact_type.trim().to_ascii_lowercase().as_str() {
         "group" => "群聊",
         "private" => "私聊",
@@ -429,7 +454,7 @@ fn remote_conversation_type_label(contact_type: &str) -> &'static str {
     }
 }
 
-fn remote_conversation_name_label(contact_type: &str) -> &'static str {
+pub(crate) fn remote_conversation_name_label(contact_type: &str) -> &'static str {
     match contact_type.trim().to_ascii_lowercase().as_str() {
         "group" => "群名",
         "private" => "用户名",
@@ -437,7 +462,7 @@ fn remote_conversation_name_label(contact_type: &str) -> &'static str {
     }
 }
 
-fn remote_conversation_id_label(contact_type: &str) -> &'static str {
+pub(crate) fn remote_conversation_id_label(contact_type: &str) -> &'static str {
     match contact_type.trim().to_ascii_lowercase().as_str() {
         "group" => "群ID",
         "private" => "用户ID",
@@ -445,7 +470,7 @@ fn remote_conversation_id_label(contact_type: &str) -> &'static str {
     }
 }
 
-fn remote_conversation_identity_from_contact(
+pub(crate) fn remote_conversation_identity_from_contact(
     contact: &RemoteImContact,
 ) -> RemoteConversationPromptIdentity {
     RemoteConversationPromptIdentity {
@@ -460,7 +485,7 @@ fn remote_conversation_identity_from_contact(
     }
 }
 
-fn remote_conversation_identity_from_message_origin(
+pub(crate) fn remote_conversation_identity_from_message_origin(
     origin: &Value,
 ) -> Option<RemoteConversationPromptIdentity> {
     let contact_type = remote_im_origin_string(origin, "contact_type").unwrap_or("");
@@ -501,7 +526,7 @@ fn remote_conversation_identity_from_message_origin(
     })
 }
 
-fn remote_conversation_identity_from_messages(
+pub(crate) fn remote_conversation_identity_from_messages(
     conversation: &Conversation,
 ) -> Option<RemoteConversationPromptIdentity> {
     conversation
@@ -513,7 +538,7 @@ fn remote_conversation_identity_from_messages(
         .find_map(remote_conversation_identity_from_message_origin)
 }
 
-fn remote_conversation_identity_from_state(
+pub(crate) fn remote_conversation_identity_from_state(
     state: Option<&AppState>,
     conversation: &Conversation,
 ) -> Option<RemoteConversationPromptIdentity> {
@@ -542,7 +567,7 @@ fn remote_conversation_identity_from_state(
         .map(remote_conversation_identity_from_contact)
 }
 
-fn remote_conversation_settings_body(
+pub(crate) fn remote_conversation_settings_body(
     state: Option<&AppState>,
     conversation: &Conversation,
 ) -> String {
@@ -589,7 +614,7 @@ fn remote_conversation_settings_body(
     lines.join("\n")
 }
 
-fn selected_api_prompt_model_name(selected_api: Option<&ApiConfig>) -> Option<String> {
+pub(crate) fn selected_api_prompt_model_name(selected_api: Option<&ApiConfig>) -> Option<String> {
     let raw = selected_api?.model.trim();
     if raw.is_empty() {
         return None;
@@ -606,7 +631,7 @@ fn selected_api_prompt_model_name(selected_api: Option<&ApiConfig>) -> Option<St
     }
 }
 
-fn driving_model_prompt_block(selected_api: Option<&ApiConfig>) -> Option<String> {
+pub(crate) fn driving_model_prompt_block(selected_api: Option<&ApiConfig>) -> Option<String> {
     let model = selected_api_prompt_model_name(selected_api)?;
     Some(prompt_xml_block(
         "model settings",
@@ -614,7 +639,7 @@ fn driving_model_prompt_block(selected_api: Option<&ApiConfig>) -> Option<String
     ))
 }
 
-fn build_core_system_prompt_text(
+pub(crate) fn build_core_system_prompt_text(
     conversation: &Conversation,
     agent: &AgentProfile,
     _departments: &[DepartmentConfig],
@@ -724,7 +749,7 @@ fn build_core_system_prompt_text(
     }
 }
 
-fn build_system_prompt_text_uncached(ordered_blocks: &[String]) -> String {
+pub(crate) fn build_system_prompt_text_uncached(ordered_blocks: &[String]) -> String {
     let mut prompt = String::new();
     for block in ordered_blocks {
         append_system_prompt_block(&mut prompt, Some(block));
@@ -733,7 +758,7 @@ fn build_system_prompt_text_uncached(ordered_blocks: &[String]) -> String {
 }
 
 #[cfg(test)]
-fn finalize_system_prompt_with_manager(
+pub(crate) fn finalize_system_prompt_with_manager(
     state: Option<&AppState>,
     mode_label: &str,
     conversation: &Conversation,
@@ -772,7 +797,7 @@ fn finalize_system_prompt_with_manager(
     )
 }
 
-fn mark_prompt_cache_rebuild_internal(
+pub(crate) fn mark_prompt_cache_rebuild_internal(
     state: &AppState,
     department_ids: &[String],
     agent_ids: &[String],
@@ -870,7 +895,7 @@ fn mark_prompt_cache_rebuild_internal(
     ));
 }
 
-fn mark_prompt_cache_rebuild_for_system_sources_by_departments(
+pub(crate) fn mark_prompt_cache_rebuild_for_system_sources_by_departments(
     state: &AppState,
     department_ids: &[String],
 ) {
@@ -886,7 +911,7 @@ fn mark_prompt_cache_rebuild_for_system_sources_by_departments(
     );
 }
 
-fn mark_prompt_cache_rebuild_for_system_sources_by_agents(
+pub(crate) fn mark_prompt_cache_rebuild_for_system_sources_by_agents(
     state: &AppState,
     agent_ids: &[String],
 ) {
@@ -902,7 +927,7 @@ fn mark_prompt_cache_rebuild_for_system_sources_by_agents(
     );
 }
 
-fn mark_prompt_cache_rebuild_for_system_environment_by_conversation(
+pub(crate) fn mark_prompt_cache_rebuild_for_system_environment_by_conversation(
     state: &AppState,
     conversation_id: &str,
 ) {
@@ -918,7 +943,7 @@ fn mark_prompt_cache_rebuild_for_system_environment_by_conversation(
     );
 }
 
-fn mark_prompt_cache_rebuild_for_all_system_environments(state: &AppState) {
+pub(crate) fn mark_prompt_cache_rebuild_for_all_system_environments(state: &AppState) {
     mark_prompt_cache_rebuild_internal(
         state,
         &[],
@@ -931,7 +956,7 @@ fn mark_prompt_cache_rebuild_for_all_system_environments(state: &AppState) {
     );
 }
 
-fn mark_prompt_cache_rebuild_for_all_final_system_sources(state: &AppState) {
+pub(crate) fn mark_prompt_cache_rebuild_for_all_final_system_sources(state: &AppState) {
     mark_prompt_cache_rebuild_internal(
         state,
         &[],

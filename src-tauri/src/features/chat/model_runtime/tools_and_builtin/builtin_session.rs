@@ -1,9 +1,9 @@
-fn session_tool_source_conversation_id(session_id: &str) -> Result<String, String> {
+pub(crate) fn session_tool_source_conversation_id(session_id: &str) -> Result<String, String> {
     delegate_session_conversation_id(session_id)
         .ok_or_else(|| "固定会话工具缺少 conversation_id".to_string())
 }
 
-fn builtin_get_session(
+pub(crate) fn builtin_get_session(
     state: &AppState,
     _session_id: &str,
     args: GetSessionToolArgs,
@@ -15,7 +15,7 @@ fn builtin_get_session(
     serde_json::to_value(items).map_err(|err| format!("序列化会话列表失败：{err}"))
 }
 
-fn builtin_inform_session(
+pub(crate) fn builtin_inform_session(
     state: &AppState,
     session_id: &str,
     args: InformSessionToolArgs,
@@ -40,7 +40,7 @@ fn builtin_inform_session(
     }))
 }
 
-fn message_text_content(message: &ChatMessage) -> String {
+pub(crate) fn message_text_content(message: &ChatMessage) -> String {
     message
         .parts
         .iter()

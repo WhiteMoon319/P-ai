@@ -1,10 +1,10 @@
 #[derive(Debug, Clone)]
-struct BuiltinContactSendFilesTool {
-    app_state: AppState,
-    session_id: String,
+pub(crate) struct BuiltinContactSendFilesTool {
+    pub(crate) app_state: AppState,
+    pub(crate) session_id: String,
 }
 
-const REMOTE_IM_URL_ATTACHMENT_MAX_BYTES: u64 = 100 * 1024 * 1024;
+pub(crate) const REMOTE_IM_URL_ATTACHMENT_MAX_BYTES: u64 = 100 * 1024 * 1024;
 
 impl RuntimeToolMetadata for BuiltinContactSendFilesTool {
     fn provider_tool_definition(&self) -> ProviderToolDefinition {
@@ -54,7 +54,7 @@ impl RuntimeValueTool for BuiltinContactSendFilesTool {
     }
 }
 
-async fn remote_im_resolve_file_path(state: &AppState, raw: &str) -> Result<PathBuf, String> {
+pub(crate) async fn remote_im_resolve_file_path(state: &AppState, raw: &str) -> Result<PathBuf, String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err("file_paths 包含空路径".to_string());
@@ -76,14 +76,14 @@ async fn remote_im_resolve_file_path(state: &AppState, raw: &str) -> Result<Path
     Ok(candidate)
 }
 
-fn remote_im_is_http_url(raw: &str) -> bool {
+pub(crate) fn remote_im_is_http_url(raw: &str) -> bool {
     reqwest::Url::parse(raw.trim())
         .ok()
         .map(|url| matches!(url.scheme(), "http" | "https"))
         .unwrap_or(false)
 }
 
-fn remote_im_content_disposition_file_name(raw: &str) -> Option<String> {
+pub(crate) fn remote_im_content_disposition_file_name(raw: &str) -> Option<String> {
     raw.split(';').find_map(|part| {
         let trimmed = part.trim();
         let value = trimmed
@@ -102,7 +102,7 @@ fn remote_im_content_disposition_file_name(raw: &str) -> Option<String> {
     })
 }
 
-fn remote_im_file_name_from_url(url: &reqwest::Url, content_disposition: Option<&str>) -> String {
+pub(crate) fn remote_im_file_name_from_url(url: &reqwest::Url, content_disposition: Option<&str>) -> String {
     if let Some(name) = content_disposition.and_then(remote_im_content_disposition_file_name) {
         return name;
     }
@@ -116,7 +116,7 @@ fn remote_im_file_name_from_url(url: &reqwest::Url, content_disposition: Option<
         .unwrap_or_else(|| "attachment.bin".to_string())
 }
 
-fn remote_im_mime_from_name_or_bytes(file_name: &str, raw: &[u8], header_mime: Option<&str>) -> String {
+pub(crate) fn remote_im_mime_from_name_or_bytes(file_name: &str, raw: &[u8], header_mime: Option<&str>) -> String {
     if let Some(mime) = image_mime_from_bytes(raw) {
         return mime.to_string();
     }
@@ -129,7 +129,7 @@ fn remote_im_mime_from_name_or_bytes(file_name: &str, raw: &[u8], header_mime: O
         .unwrap_or_else(|| "application/octet-stream".to_string())
 }
 
-fn remote_im_image_content_item_from_bytes(
+pub(crate) fn remote_im_image_content_item_from_bytes(
     file_name: &str,
     mime: &str,
     raw: &[u8],
@@ -145,7 +145,7 @@ fn remote_im_image_content_item_from_bytes(
     }))
 }
 
-async fn remote_im_download_url_content_item(state: &AppState, raw: &str) -> Result<Value, String> {
+pub(crate) async fn remote_im_download_url_content_item(state: &AppState, raw: &str) -> Result<Value, String> {
     let url = reqwest::Url::parse(raw.trim()).map_err(|err| format!("附件 URL 无效: {err}"))?;
     if !matches!(url.scheme(), "http" | "https") {
         return Err(format!("附件 URL 协议不支持: {}", url.scheme()));
@@ -204,7 +204,7 @@ async fn remote_im_download_url_content_item(state: &AppState, raw: &str) -> Res
     }))
 }
 
-async fn remote_im_build_file_content_items(
+pub(crate) async fn remote_im_build_file_content_items(
     state: &AppState,
     file_paths: &[String],
 ) -> Result<Vec<Value>, String> {
@@ -245,7 +245,7 @@ async fn remote_im_build_file_content_items(
     Ok(out)
 }
 
-fn remote_im_content_contains_file(content: &[Value]) -> bool {
+pub(crate) fn remote_im_content_contains_file(content: &[Value]) -> bool {
     content.iter().any(|item| {
         item.get("type")
             .and_then(Value::as_str)
@@ -254,7 +254,7 @@ fn remote_im_content_contains_file(content: &[Value]) -> bool {
     })
 }
 
-fn remote_im_local_image_send_name(file_name: &str, mime: &str) -> String {
+pub(crate) fn remote_im_local_image_send_name(file_name: &str, mime: &str) -> String {
     let trimmed = file_name.trim();
     if mime.trim().eq_ignore_ascii_case("image/webp")
         && !trimmed.to_ascii_lowercase().ends_with(".webp")
@@ -274,7 +274,7 @@ fn remote_im_local_image_send_name(file_name: &str, mime: &str) -> String {
     }
 }
 
-fn remote_im_is_generated_image_source_text(text: &str) -> bool {
+pub(crate) fn remote_im_is_generated_image_source_text(text: &str) -> bool {
     let trimmed = text.trim();
     let file_name = ["来源：", "来源:"]
         .iter()
@@ -284,7 +284,7 @@ fn remote_im_is_generated_image_source_text(text: &str) -> bool {
     file_name.len() >= 3 && file_name.starts_with('`') && file_name.ends_with('`')
 }
 
-async fn inline_segments_to_remote_im_content_items(
+pub(crate) async fn inline_segments_to_remote_im_content_items(
     segments: &[PersistedInlineMessageSegment],
 ) -> Result<Vec<Value>, String> {
     let mut out = Vec::<Value>::new();
@@ -339,7 +339,7 @@ async fn inline_segments_to_remote_im_content_items(
     Ok(out)
 }
 
-async fn remote_im_build_text_content_items(
+pub(crate) async fn remote_im_build_text_content_items(
     state: &AppState,
     text: &str,
     seed_source: &str,
@@ -360,18 +360,18 @@ async fn remote_im_build_text_content_items(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RemoteImSendContentErrorStage {
+pub(crate) enum RemoteImSendContentErrorStage {
     Preflight,
     DeliveryAttempted,
 }
 
 #[derive(Debug, Clone)]
-struct RemoteImSendContentError {
-    stage: RemoteImSendContentErrorStage,
-    message: String,
+pub(crate) struct RemoteImSendContentError {
+    pub(crate) stage: RemoteImSendContentErrorStage,
+    pub(crate) message: String,
 }
 
-async fn remote_im_send_content_payload_with_stage(
+pub(crate) async fn remote_im_send_content_payload_with_stage(
     state: &AppState,
     channel: &RemoteImChannelConfig,
     contact: &RemoteImContact,
@@ -487,7 +487,7 @@ async fn remote_im_send_content_payload_with_stage(
 }
 
 
-async fn remote_im_send_content_payload(
+pub(crate) async fn remote_im_send_content_payload(
     state: &AppState,
     channel: &RemoteImChannelConfig,
     contact: &RemoteImContact,
@@ -507,12 +507,12 @@ async fn remote_im_send_content_payload(
     .map_err(|err| err.message)
 }
 
-fn contact_tool_target_conversation_id(session_id: &str) -> Result<String, String> {
+pub(crate) fn contact_tool_target_conversation_id(session_id: &str) -> Result<String, String> {
     delegate_session_conversation_id(session_id)
         .ok_or_else(|| "联系人专用工具缺少 conversation_id，无法定位当前联系人".to_string())
 }
 
-fn remote_im_bound_contact_context_from_runtime(
+pub(crate) fn remote_im_bound_contact_context_from_runtime(
     state: &AppState,
     session_id: &str,
 ) -> Result<(RemoteImChannelConfig, RemoteImContact), String> {
@@ -557,7 +557,7 @@ fn remote_im_bound_contact_context_from_runtime(
     Ok((channel, contact))
 }
 
-async fn builtin_contact_send_files(
+pub(crate) async fn builtin_contact_send_files(
     state: &AppState,
     session_id: &str,
     args: ContactSendFilesToolArgs,

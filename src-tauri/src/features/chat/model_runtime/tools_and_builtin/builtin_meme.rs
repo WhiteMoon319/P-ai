@@ -1,18 +1,18 @@
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct MemeToolArgs {
-    emotion: String,
-    path: String,
+pub(crate) struct MemeToolArgs {
+    pub(crate) emotion: String,
+    pub(crate) path: String,
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinMemeTool {
-    app_state: AppState,
+pub(crate) struct BuiltinMemeTool {
+    pub(crate) app_state: AppState,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
-enum PersistedMemeSegment {
+pub(crate) enum PersistedMemeSegment {
     Text {
         text: String,
     },
@@ -28,57 +28,57 @@ enum PersistedMemeSegment {
 }
 
 #[derive(Debug, Clone)]
-struct MemeAssetCandidate {
-    name: String,
-    mime: String,
-    absolute_path: PathBuf,
-    relative_path: String,
+pub(crate) struct MemeAssetCandidate {
+    pub(crate) name: String,
+    pub(crate) mime: String,
+    pub(crate) absolute_path: PathBuf,
+    pub(crate) relative_path: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct MemeDHashDuplicateMatch {
-    name: String,
-    category: String,
-    relative_path: String,
-    distance: u32,
+pub(crate) struct MemeDHashDuplicateMatch {
+    pub(crate) name: String,
+    pub(crate) category: String,
+    pub(crate) relative_path: String,
+    pub(crate) distance: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct MemeDetectedImageFormat {
-    mime: String,
-    ext: String,
-    source: &'static str,
+pub(crate) struct MemeDetectedImageFormat {
+    pub(crate) mime: String,
+    pub(crate) ext: String,
+    pub(crate) source: &'static str,
 }
 
-const MEME_DHASH_INDEX_FILE_NAME: &str = "image_dhash_index.json";
-const MEME_DHASH_DISTANCE_THRESHOLD: u32 = 8;
-const MEME_NORMALIZED_MAX_EDGE: u32 = 300;
-const MEME_NORMALIZED_WEBP_QUALITY: f32 = 85.0;
-const MEME_NORMALIZED_MIME: &str = "image/webp";
-const MEME_NORMALIZED_EXT: &str = "webp";
+pub(crate) const MEME_DHASH_INDEX_FILE_NAME: &str = "image_dhash_index.json";
+pub(crate) const MEME_DHASH_DISTANCE_THRESHOLD: u32 = 8;
+pub(crate) const MEME_NORMALIZED_MAX_EDGE: u32 = 300;
+pub(crate) const MEME_NORMALIZED_WEBP_QUALITY: f32 = 85.0;
+pub(crate) const MEME_NORMALIZED_MIME: &str = "image/webp";
+pub(crate) const MEME_NORMALIZED_EXT: &str = "webp";
 /// GIF 原样保留入库时的体积上限，超过则拒绝收编
-const MEME_GIF_MAX_BYTES: u64 = 5 * 1024 * 1024;
+pub(crate) const MEME_GIF_MAX_BYTES: u64 = 5 * 1024 * 1024;
 
-struct MemeNormalizedImage {
-    bytes: Vec<u8>,
-    frame_count: usize,
-    width: u32,
-    height: u32,
-    ext: String,
-    mime: String,
+pub(crate) struct MemeNormalizedImage {
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) frame_count: usize,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) ext: String,
+    pub(crate) mime: String,
 }
 
-fn meme_workspace_root(state: &AppState) -> PathBuf {
+pub(crate) fn meme_workspace_root(state: &AppState) -> PathBuf {
     configured_workspace_root_path(state)
         .unwrap_or_else(|_| state.llm_workspace_path.clone())
         .join(".meme")
 }
 
-fn meme_dhash_index_path(state: &AppState) -> PathBuf {
+pub(crate) fn meme_dhash_index_path(state: &AppState) -> PathBuf {
     meme_workspace_root(state).join(MEME_DHASH_INDEX_FILE_NAME)
 }
 
-fn meme_label_is_valid(raw: &str) -> bool {
+pub(crate) fn meme_label_is_valid(raw: &str) -> bool {
     let trimmed = raw.trim();
     !trimmed.is_empty()
         && !trimmed.starts_with('.')
@@ -92,7 +92,7 @@ fn meme_label_is_valid(raw: &str) -> bool {
         && !trimmed.chars().any(char::is_control)
 }
 
-fn ensure_valid_meme_name(raw: &str) -> Result<String, String> {
+pub(crate) fn ensure_valid_meme_name(raw: &str) -> Result<String, String> {
     let trimmed = raw.trim();
     if meme_label_is_valid(trimmed) {
         Ok(trimmed.to_string())
@@ -104,7 +104,7 @@ fn ensure_valid_meme_name(raw: &str) -> Result<String, String> {
     }
 }
 
-fn meme_asset_name_from_path(path: &Path) -> String {
+pub(crate) fn meme_asset_name_from_path(path: &Path) -> String {
     let stem = path
         .file_stem()
         .and_then(|value| value.to_str())
@@ -119,7 +119,7 @@ fn meme_asset_name_from_path(path: &Path) -> String {
         .to_string()
 }
 
-fn meme_relative_path_parts(relative_path: &str) -> (String, String) {
+pub(crate) fn meme_relative_path_parts(relative_path: &str) -> (String, String) {
     let normalized = relative_path.replace('\\', "/");
     let without_root = normalized
         .strip_prefix(".meme/")
@@ -138,14 +138,14 @@ fn meme_relative_path_parts(relative_path: &str) -> (String, String) {
     (name, category)
 }
 
-fn meme_is_dhash_index_file(path: &Path) -> bool {
+pub(crate) fn meme_is_dhash_index_file(path: &Path) -> bool {
     path.file_name()
         .and_then(|value| value.to_str())
         .map(|value| value.eq_ignore_ascii_case(MEME_DHASH_INDEX_FILE_NAME))
         .unwrap_or(false)
 }
 
-fn meme_push_asset_candidate(
+pub(crate) fn meme_push_asset_candidate(
     state: &AppState,
     grouped: &mut std::collections::BTreeMap<String, Vec<MemeAssetCandidate>>,
     meme_name: &str,
@@ -174,7 +174,7 @@ fn meme_push_asset_candidate(
     Ok(())
 }
 
-fn meme_available_assets(
+pub(crate) fn meme_available_assets(
     state: &AppState,
 ) -> Result<std::collections::BTreeMap<String, Vec<MemeAssetCandidate>>, String> {
     let root = meme_workspace_root(state);
@@ -270,13 +270,13 @@ fn meme_available_assets(
     Ok(grouped)
 }
 
-fn meme_available_names(state: &AppState) -> Result<Vec<String>, String> {
+pub(crate) fn meme_available_names(state: &AppState) -> Result<Vec<String>, String> {
     Ok(meme_available_assets(state)?
         .into_keys()
         .collect::<Vec<_>>())
 }
 
-fn meme_names_summary_text(state: &AppState) -> String {
+pub(crate) fn meme_names_summary_text(state: &AppState) -> String {
     match meme_available_names(state) {
         Ok(names) if !names.is_empty() => names.join("、"),
         Ok(_) => "（当前没有可用表情）".to_string(),
@@ -284,7 +284,7 @@ fn meme_names_summary_text(state: &AppState) -> String {
     }
 }
 
-fn meme_magic_detect_image_format(raw: &[u8]) -> Option<MemeDetectedImageFormat> {
+pub(crate) fn meme_magic_detect_image_format(raw: &[u8]) -> Option<MemeDetectedImageFormat> {
     if raw.len() >= 4 && raw[..4] == [0x89, b'P', b'N', b'G'] {
         return Some(MemeDetectedImageFormat {
             mime: "image/png".to_string(),
@@ -316,7 +316,7 @@ fn meme_magic_detect_image_format(raw: &[u8]) -> Option<MemeDetectedImageFormat>
     None
 }
 
-fn meme_guess_detect_image_format(raw: &[u8]) -> Option<MemeDetectedImageFormat> {
+pub(crate) fn meme_guess_detect_image_format(raw: &[u8]) -> Option<MemeDetectedImageFormat> {
     match image::guess_format(raw).ok()? {
         image::ImageFormat::Png => Some(MemeDetectedImageFormat {
             mime: "image/png".to_string(),
@@ -342,18 +342,18 @@ fn meme_guess_detect_image_format(raw: &[u8]) -> Option<MemeDetectedImageFormat>
     }
 }
 
-fn meme_detect_image_format_from_bytes(raw: &[u8]) -> Option<MemeDetectedImageFormat> {
+pub(crate) fn meme_detect_image_format_from_bytes(raw: &[u8]) -> Option<MemeDetectedImageFormat> {
     meme_magic_detect_image_format(raw).or_else(|| meme_guess_detect_image_format(raw))
 }
 
-fn meme_detect_image_format_from_path(path: &Path) -> Result<MemeDetectedImageFormat, String> {
+pub(crate) fn meme_detect_image_format_from_path(path: &Path) -> Result<MemeDetectedImageFormat, String> {
     let raw = std::fs::read(path)
         .map_err(|err| format!("读取表情源文件失败: path={}, err={err}", path.display()))?;
     meme_detect_image_format_from_bytes(&raw)
         .ok_or_else(|| format!("无法识别图片真实格式: {}", path.display()))
 }
 
-fn meme_resized_dimensions(width: u32, height: u32, max_edge: u32) -> (u32, u32) {
+pub(crate) fn meme_resized_dimensions(width: u32, height: u32, max_edge: u32) -> (u32, u32) {
     let longest = width.max(height);
     if longest <= max_edge || longest == 0 {
         return (width.max(1), height.max(1));
@@ -365,7 +365,7 @@ fn meme_resized_dimensions(width: u32, height: u32, max_edge: u32) -> (u32, u32)
     (new_width, new_height)
 }
 
-fn meme_resize_rgba_frame(image: image::RgbaImage) -> image::RgbaImage {
+pub(crate) fn meme_resize_rgba_frame(image: image::RgbaImage) -> image::RgbaImage {
     let (width, height) = image.dimensions();
     let (new_width, new_height) =
         meme_resized_dimensions(width, height, MEME_NORMALIZED_MAX_EDGE);
@@ -381,7 +381,7 @@ fn meme_resize_rgba_frame(image: image::RgbaImage) -> image::RgbaImage {
     }
 }
 
-fn meme_encode_static_webp(image: image::RgbaImage) -> Result<MemeNormalizedImage, String> {
+pub(crate) fn meme_encode_static_webp(image: image::RgbaImage) -> Result<MemeNormalizedImage, String> {
     let width = image.width();
     let height = image.height();
     let encoded = webp::Encoder::from_rgba(image.as_raw(), width, height)
@@ -397,7 +397,7 @@ fn meme_encode_static_webp(image: image::RgbaImage) -> Result<MemeNormalizedImag
     })
 }
 
-fn meme_encode_animated_webp(
+pub(crate) fn meme_encode_animated_webp(
     frames: Vec<(image::RgbaImage, u32)>,
 ) -> Result<MemeNormalizedImage, String> {
     let Some((first, _)) = frames.first() else {
@@ -436,7 +436,7 @@ fn meme_encode_animated_webp(
     })
 }
 
-fn meme_decode_animation_frames(
+pub(crate) fn meme_decode_animation_frames(
     raw: &[u8],
     detected: &MemeDetectedImageFormat,
 ) -> Result<Option<Vec<(image::RgbaImage, u32)>>, String> {
@@ -481,7 +481,7 @@ fn meme_decode_animation_frames(
 }
 
 /// 解析 GIF 的尺寸与帧数，不修改原始字节（用于原样保留入库时的元数据）
-fn meme_inspect_gif_frames(raw: &[u8]) -> Result<(u32, u32, usize), String> {
+pub(crate) fn meme_inspect_gif_frames(raw: &[u8]) -> Result<(u32, u32, usize), String> {
     use image::AnimationDecoder;
     let cursor = std::io::Cursor::new(raw);
     let decoder = image::codecs::gif::GifDecoder::new(cursor)
@@ -498,7 +498,7 @@ fn meme_inspect_gif_frames(raw: &[u8]) -> Result<(u32, u32, usize), String> {
 }
 
 /// 判断 GIF 源文件是否超过体积上限
-fn meme_check_gif_size_limit(detected_ext: &str, source_path: &Path) -> Result<(), String> {
+pub(crate) fn meme_check_gif_size_limit(detected_ext: &str, source_path: &Path) -> Result<(), String> {
     if detected_ext != "gif" {
         return Ok(());
     }
@@ -512,7 +512,7 @@ fn meme_check_gif_size_limit(detected_ext: &str, source_path: &Path) -> Result<(
 }
 
 /// 准备入库素材：GIF 原样保留（动画与帧时序不丢失），其余格式归一化为 WebP
-fn meme_prepare_image_asset(path: &Path) -> Result<MemeNormalizedImage, String> {
+pub(crate) fn meme_prepare_image_asset(path: &Path) -> Result<MemeNormalizedImage, String> {
     let raw = std::fs::read(path)
         .map_err(|err| format!("读取表情源文件失败: path={}, err={err}", path.display()))?;
     let detected = meme_detect_image_format_from_bytes(&raw)
@@ -557,7 +557,7 @@ fn meme_prepare_image_asset(path: &Path) -> Result<MemeNormalizedImage, String> 
     meme_encode_static_webp(meme_resize_rgba_frame(image.to_rgba8()))
 }
 
-fn meme_decode_dynamic_image_from_path(path: &Path) -> Result<image::DynamicImage, String> {
+pub(crate) fn meme_decode_dynamic_image_from_path(path: &Path) -> Result<image::DynamicImage, String> {
     let raw = std::fs::read(path)
         .map_err(|err| format!("读取表情图文件失败: path={}, err={err}", path.display()))?;
     let Some(detected) = meme_detect_image_format_from_bytes(&raw) else {
@@ -585,7 +585,7 @@ fn meme_decode_dynamic_image_from_path(path: &Path) -> Result<image::DynamicImag
     })
 }
 
-fn compute_meme_dhash_hex(image_path: &Path) -> Result<String, String> {
+pub(crate) fn compute_meme_dhash_hex(image_path: &Path) -> Result<String, String> {
     let image = meme_decode_dynamic_image_from_path(image_path)?;
     let grayscale = image.to_luma8();
     let resized = image::imageops::resize(
@@ -609,13 +609,13 @@ fn compute_meme_dhash_hex(image_path: &Path) -> Result<String, String> {
     Ok(format!("{hash:016x}"))
 }
 
-fn meme_hamming_distance(left: &str, right: &str) -> Option<u32> {
+pub(crate) fn meme_hamming_distance(left: &str, right: &str) -> Option<u32> {
     let left = u64::from_str_radix(left, 16).ok()?;
     let right = u64::from_str_radix(right, 16).ok()?;
     Some((left ^ right).count_ones())
 }
 
-fn meme_load_dhash_index(state: &AppState) -> std::collections::BTreeMap<String, String> {
+pub(crate) fn meme_load_dhash_index(state: &AppState) -> std::collections::BTreeMap<String, String> {
     let index_path = meme_dhash_index_path(state);
     if !index_path.exists() {
         return std::collections::BTreeMap::new();
@@ -641,7 +641,7 @@ fn meme_load_dhash_index(state: &AppState) -> std::collections::BTreeMap<String,
     }
 }
 
-fn meme_persist_dhash_index(
+pub(crate) fn meme_persist_dhash_index(
     state: &AppState,
     index: &std::collections::BTreeMap<String, String>,
 ) -> Result<(), String> {
@@ -665,7 +665,7 @@ fn meme_persist_dhash_index(
     .map_err(|err| format!("写入表情哈希索引失败: path={}, err={err}", index_path.display()))
 }
 
-fn meme_sync_dhash_index(
+pub(crate) fn meme_sync_dhash_index(
     state: &AppState,
     grouped: &std::collections::BTreeMap<String, Vec<MemeAssetCandidate>>,
 ) -> std::collections::BTreeMap<String, String> {
@@ -708,7 +708,7 @@ fn meme_sync_dhash_index(
     index
 }
 
-fn meme_find_duplicate_in_assets(
+pub(crate) fn meme_find_duplicate_in_assets(
     source_hash: &str,
     grouped: &std::collections::BTreeMap<String, Vec<MemeAssetCandidate>>,
     dhash_index: &std::collections::BTreeMap<String, String>,
@@ -759,7 +759,7 @@ fn meme_find_duplicate_in_assets(
     best_match
 }
 
-fn meme_prompt_rule_block(state: Option<&AppState>) -> Option<String> {
+pub(crate) fn meme_prompt_rule_block(state: Option<&AppState>) -> Option<String> {
     let state = state?;
     let names = meme_available_names(state).ok()?;
     if names.is_empty() {
@@ -785,7 +785,7 @@ fn meme_prompt_rule_block(state: Option<&AppState>) -> Option<String> {
     ))
 }
 
-fn choose_meme_variant_index(seed_source: &str, meme_category: &str, token_index: usize, count: usize) -> usize {
+pub(crate) fn choose_meme_variant_index(seed_source: &str, meme_category: &str, token_index: usize, count: usize) -> usize {
     use std::hash::{Hash, Hasher};
 
     if count <= 1 {
@@ -798,7 +798,7 @@ fn choose_meme_variant_index(seed_source: &str, meme_category: &str, token_index
     (hasher.finish() as usize) % count
 }
 
-fn meme_token_is_valid(category: &str) -> bool {
+pub(crate) fn meme_token_is_valid(category: &str) -> bool {
     let trimmed = category.trim();
     !trimmed.is_empty()
         && !trimmed.chars().any(char::is_whitespace)
@@ -806,7 +806,7 @@ fn meme_token_is_valid(category: &str) -> bool {
         && !trimmed.chars().any(char::is_control)
 }
 
-fn resolve_text_to_persisted_meme_segments(
+pub(crate) fn resolve_text_to_persisted_meme_segments(
     state: &AppState,
     text: &str,
     seed_source: &str,
@@ -880,7 +880,7 @@ fn resolve_text_to_persisted_meme_segments(
     Ok(Some(segments))
 }
 
-fn build_meme_annotations(
+pub(crate) fn build_meme_annotations(
     state: &AppState,
     text: &str,
     seed_source: &str,
@@ -928,7 +928,7 @@ fn build_meme_annotations(
     Ok(annotations)
 }
 
-fn meme_resolve_source_path(state: &AppState, raw: &str) -> Result<PathBuf, String> {
+pub(crate) fn meme_resolve_source_path(state: &AppState, raw: &str) -> Result<PathBuf, String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err("path 不能为空".to_string());
@@ -949,11 +949,11 @@ fn meme_resolve_source_path(state: &AppState, raw: &str) -> Result<PathBuf, Stri
     Ok(candidate)
 }
 
-fn meme_root_file_path(state: &AppState, emotion: &str, ext: &str) -> PathBuf {
+pub(crate) fn meme_root_file_path(state: &AppState, emotion: &str, ext: &str) -> PathBuf {
     meme_workspace_root(state).join(format!("{emotion}.{ext}"))
 }
 
-fn meme_variant_file_name(emotion: &str, index: usize, ext: &str) -> String {
+pub(crate) fn meme_variant_file_name(emotion: &str, index: usize, ext: &str) -> String {
     if index <= 1 {
         format!("{emotion}.{ext}")
     } else {
@@ -961,7 +961,7 @@ fn meme_variant_file_name(emotion: &str, index: usize, ext: &str) -> String {
     }
 }
 
-fn meme_next_variant_path(dir: &Path, emotion: &str, ext: &str) -> PathBuf {
+pub(crate) fn meme_next_variant_path(dir: &Path, emotion: &str, ext: &str) -> PathBuf {
     let mut index = 1usize;
     loop {
         let candidate = dir.join(meme_variant_file_name(emotion, index, ext));
@@ -973,7 +973,7 @@ fn meme_next_variant_path(dir: &Path, emotion: &str, ext: &str) -> PathBuf {
 }
 
 /// 扫描根目录下与表情名同名的图片根文件（任意支持的后缀，如 .webp/.gif）
-fn meme_find_root_asset_file(state: &AppState, emotion: &str) -> Option<PathBuf> {
+pub(crate) fn meme_find_root_asset_file(state: &AppState, emotion: &str) -> Option<PathBuf> {
     let root = meme_workspace_root(state);
     let entries = std::fs::read_dir(&root).ok()?;
     for entry in entries.flatten() {
@@ -991,7 +991,7 @@ fn meme_find_root_asset_file(state: &AppState, emotion: &str) -> Option<PathBuf>
     None
 }
 
-fn meme_move_root_asset_into_folder(
+pub(crate) fn meme_move_root_asset_into_folder(
     state: &AppState,
     emotion: &str,
     dhash_index: &mut std::collections::BTreeMap<String, String>,
@@ -1031,7 +1031,7 @@ fn meme_move_root_asset_into_folder(
     Ok(())
 }
 
-fn meme_target_path_for_new_asset(
+pub(crate) fn meme_target_path_for_new_asset(
     state: &AppState,
     emotion: &str,
     ext: &str,

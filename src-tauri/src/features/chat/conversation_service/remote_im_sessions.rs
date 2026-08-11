@@ -1,5 +1,5 @@
 impl ConversationServiceV2 {
-    fn list_tool_session_targets(
+    pub(crate) fn list_tool_session_targets(
         &self,
         state: &AppState,
         keyword: Option<&str>,
@@ -119,7 +119,7 @@ impl ConversationServiceV2 {
         Ok(items)
     }
 
-    fn list_remote_im_contact_conversations(
+    pub(crate) fn list_remote_im_contact_conversations(
         &self,
         state: &AppState,
     ) -> Result<Vec<RemoteImContactConversationSummary>, String> {
@@ -364,7 +364,7 @@ impl ConversationServiceV2 {
         Ok(items)
     }
 
-    fn get_remote_im_contact_conversation_messages(
+    pub(crate) fn get_remote_im_contact_conversation_messages(
         &self,
         state: &AppState,
         contact_id: &str,
@@ -428,7 +428,7 @@ impl ConversationServiceV2 {
         Ok(project_messages_for_frontend_display_only(messages))
     }
 
-    fn get_remote_im_contact_conversation_block_page(
+    pub(crate) fn get_remote_im_contact_conversation_block_page(
         &self,
         state: &AppState,
         contact_id: &str,
@@ -535,7 +535,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn clear_remote_im_contact_conversation(
+    pub(crate) fn clear_remote_im_contact_conversation(
         &self,
         state: &AppState,
         contact_id: &str,
@@ -635,7 +635,7 @@ impl ConversationServiceV2 {
         Ok(true)
     }
 
-    fn inform_session(
+    pub(crate) fn inform_session(
         &self,
         state: &AppState,
         source_conversation_id: &str,
@@ -664,7 +664,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn update_unarchived_conversation_by_id<T>(
+    pub(crate) fn update_unarchived_conversation_by_id<T>(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -756,7 +756,7 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn append_fast_request_turn_if_unarchived_exists(
+    pub(crate) fn append_fast_request_turn_if_unarchived_exists(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -787,7 +787,7 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn get_conversation_fast_request_turns(
+    pub(crate) fn get_conversation_fast_request_turns(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -812,7 +812,7 @@ impl ConversationServiceV2 {
         }
     }
 
-    fn prune_expired_remote_im_fast_request_turns(
+    pub(crate) fn prune_expired_remote_im_fast_request_turns(
         &self,
         state: &AppState,
         cutoff: OffsetDateTime,
@@ -856,7 +856,7 @@ impl ConversationServiceV2 {
         Ok((removed, errors))
     }
 
-    fn get_active_goal(
+    pub(crate) fn get_active_goal(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -882,7 +882,7 @@ impl ConversationServiceV2 {
             .cloned())
     }
 
-    fn update_goal_conversation<T>(
+    pub(crate) fn update_goal_conversation<T>(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -923,7 +923,7 @@ impl ConversationServiceV2 {
         Ok((conversation, result))
     }
 
-    fn remote_im_runtime_state_should_cache_blocks(
+    pub(crate) fn remote_im_runtime_state_should_cache_blocks(
         &self,
         runtime_state: &RemoteImContactRuntimeState,
     ) -> bool {
@@ -932,7 +932,7 @@ impl ConversationServiceV2 {
             || runtime_state.has_pending
     }
 
-    fn collect_block_cache_whitelist_conversation_ids(
+    pub(crate) fn collect_block_cache_whitelist_conversation_ids(
         &self,
         state: &AppState,
     ) -> Result<std::collections::HashSet<String>, String> {
@@ -1027,7 +1027,7 @@ impl ConversationServiceV2 {
         Ok(ids)
     }
 
-    fn retain_message_store_block_cache_whitelist(
+    pub(crate) fn retain_message_store_block_cache_whitelist(
         &self,
         state: &AppState,
     ) -> Result<(), String> {
@@ -1045,7 +1045,7 @@ impl ConversationServiceV2 {
         Ok(())
     }
 
-    fn read_remote_im_contact_preview_messages(
+    pub(crate) fn read_remote_im_contact_preview_messages(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1066,7 +1066,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn resolve_remote_im_contact_conversation_id_for_notification(
+    pub(crate) fn resolve_remote_im_contact_conversation_id_for_notification(
         &self,
         state: &AppState,
         remote_contact_id: &str,
@@ -1114,7 +1114,7 @@ impl ConversationServiceV2 {
         Ok(conversation_id)
     }
 
-    async fn deliver_session_notification(
+    pub(crate) async fn deliver_session_notification(
         &self,
         state: &AppState,
         target_session_id: &str,

@@ -1,4 +1,4 @@
-fn build_archive_replacement_conversation(
+pub(crate) fn build_archive_replacement_conversation(
     state: &AppState,
     agents: &[AgentProfile],
     assistant_department_agent_id: &str,
@@ -39,7 +39,7 @@ fn build_archive_replacement_conversation(
     Ok(conversation)
 }
 
-fn ensure_archive_ready_message_store_from_legacy(
+pub(crate) fn ensure_archive_ready_message_store_from_legacy(
     state: &AppState,
     archive_id: &str,
     store_paths: &message_store::MessageStorePaths,

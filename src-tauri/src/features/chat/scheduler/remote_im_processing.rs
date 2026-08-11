@@ -1,4 +1,4 @@
-fn remote_im_activation_source_key(source: &RemoteImActivationSource) -> String {
+pub(crate) fn remote_im_activation_source_key(source: &RemoteImActivationSource) -> String {
     format!(
         "{}::{}::{}",
         source.channel_id.trim(),
@@ -7,7 +7,7 @@ fn remote_im_activation_source_key(source: &RemoteImActivationSource) -> String 
     )
 }
 
-fn remote_im_activation_source_from_sender(
+pub(crate) fn remote_im_activation_source_from_sender(
     sender: &RemoteImMessageSource,
 ) -> RemoteImActivationSource {
     RemoteImActivationSource {
@@ -82,7 +82,7 @@ pub(crate) fn get_conversation_remote_im_assistant_context(
         .and_then(|slot| slot.active_remote_im_assistant_context.clone()))
 }
 
-fn collect_activated_remote_im_sources(
+pub(crate) fn collect_activated_remote_im_sources(
     events: &[ChatPendingEvent],
     event_activate_flags: &[bool],
 ) -> Vec<RemoteImActivationSource> {
@@ -104,7 +104,7 @@ fn collect_activated_remote_im_sources(
     activated_remote_im_sources
 }
 
-fn remote_im_event_requires_reply_delegate(event: &ChatPendingEvent) -> bool {
+pub(crate) fn remote_im_event_requires_reply_delegate(event: &ChatPendingEvent) -> bool {
     matches!(event.source, ChatEventSource::RemoteIm)
         && event
             .sender_info
@@ -113,7 +113,7 @@ fn remote_im_event_requires_reply_delegate(event: &ChatPendingEvent) -> bool {
         .unwrap_or(false)
 }
 
-fn remote_im_event_should_observe_after_persistence(
+pub(crate) fn remote_im_event_should_observe_after_persistence(
     event: &ChatPendingEvent,
     should_activate: bool,
 ) -> bool {
@@ -123,7 +123,7 @@ fn remote_im_event_should_observe_after_persistence(
 /// 远程消息已经先统一落库，但不能把同一批的多条消息合并成一次秘书判断。
 /// 每条事件只看它之前已落库的轻量历史和本事件自身，避免较晚消息倒灌到较早
 /// 消息的判断里，也让秘书可以把后续消息准确投递给刚刚启动的委托。
-async fn process_persisted_remote_im_events_individually_now(
+pub(crate) async fn process_persisted_remote_im_events_individually_now(
     state: &AppState,
     conversation_id: &str,
     events: &[ChatPendingEvent],
@@ -393,12 +393,12 @@ async fn process_persisted_remote_im_events_individually_now(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RemoteImReplyDispatchOutcome {
+pub(crate) enum RemoteImReplyDispatchOutcome {
     NoReply,
     DispatchStarted,
 }
 
-fn schedule_remote_im_persisted_event_observe_retry(
+pub(crate) fn schedule_remote_im_persisted_event_observe_retry(
     state: &AppState,
     event: ChatPendingEvent,
     attempt: u8,
@@ -442,7 +442,7 @@ fn schedule_remote_im_persisted_event_observe_retry(
     });
 }
 
-async fn process_persisted_remote_im_events_individually(
+pub(crate) async fn process_persisted_remote_im_events_individually(
     state: &AppState,
     _conversation_id: &str,
     events: &[ChatPendingEvent],
@@ -475,7 +475,7 @@ async fn process_persisted_remote_im_events_individually(
     }
 }
 
-async fn process_remote_im_reply_debounce(
+pub(crate) async fn process_remote_im_reply_debounce(
     state: &AppState,
     entry: RemoteImReplyDebounceReady,
 ) -> Result<RemoteImReplyDispatchOutcome, String> {
@@ -535,7 +535,7 @@ async fn process_remote_im_reply_debounce(
     .await
 }
 
-fn read_remote_im_debounce_secretary_messages(
+pub(crate) fn read_remote_im_debounce_secretary_messages(
     state: &AppState,
     conversation_id: &str,
     start_message_id: &str,
@@ -588,7 +588,7 @@ fn read_remote_im_debounce_secretary_messages(
     }
 }
 
-fn remote_im_source_has_pending_queue_event(
+pub(crate) fn remote_im_source_has_pending_queue_event(
     state: &AppState,
     conversation_id: &str,
     source: &RemoteImActivationSource,
@@ -613,7 +613,7 @@ fn remote_im_source_has_pending_queue_event(
     })
 }
 
-fn filter_remote_im_follow_up_sources_for_pending_queue(
+pub(crate) fn filter_remote_im_follow_up_sources_for_pending_queue(
     state: &AppState,
     conversation_id: &str,
     sources: Vec<RemoteImActivationSource>,

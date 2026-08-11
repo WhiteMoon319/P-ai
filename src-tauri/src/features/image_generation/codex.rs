@@ -1,11 +1,11 @@
-struct CodexImageAuth {
-    access_token: String,
-    base_url: String,
+pub(crate) struct CodexImageAuth {
+    pub(crate) access_token: String,
+    pub(crate) base_url: String,
 }
 
-const CODEX_IMAGE_TOOL_OUTPUT_FORMAT: &str = "png";
+pub(crate) const CODEX_IMAGE_TOOL_OUTPUT_FORMAT: &str = "png";
 
-async fn resolve_codex_image_auth(
+pub(crate) async fn resolve_codex_image_auth(
     state: &AppState,
     provider: &ImageGenerationProviderConfig,
 ) -> Result<CodexImageAuth, String> {
@@ -77,7 +77,7 @@ async fn resolve_codex_image_auth(
     })
 }
 
-fn codex_image_generation_payload(
+pub(crate) fn codex_image_generation_payload(
     request: &ImageGenerationRequest,
     model: &ImageGenerationModelConfig,
     edit_inputs: &ImageEditInputs,
@@ -125,7 +125,7 @@ fn codex_image_generation_payload(
     })
 }
 
-fn codex_image_output_mime(output_format: Option<&str>) -> &'static str {
+pub(crate) fn codex_image_output_mime(output_format: Option<&str>) -> &'static str {
     match output_format
         .unwrap_or(CODEX_IMAGE_TOOL_OUTPUT_FORMAT)
         .trim()
@@ -138,7 +138,7 @@ fn codex_image_output_mime(output_format: Option<&str>) -> &'static str {
     }
 }
 
-fn collect_codex_image_value(
+pub(crate) fn collect_codex_image_value(
     value: &Value,
     final_images: &mut Vec<PendingGeneratedImage>,
     partial_images: &mut Vec<PendingGeneratedImage>,
@@ -212,7 +212,7 @@ fn collect_codex_image_value(
     Ok(())
 }
 
-fn parse_codex_image_generation_response(data: &[u8]) -> Result<ProviderImageGenerationOutput, String> {
+pub(crate) fn parse_codex_image_generation_response(data: &[u8]) -> Result<ProviderImageGenerationOutput, String> {
     let mut final_images = Vec::new();
     let mut partial_images = Vec::new();
     let mut final_seen = std::collections::HashSet::new();
@@ -271,7 +271,7 @@ fn parse_codex_image_generation_response(data: &[u8]) -> Result<ProviderImageGen
     })
 }
 
-async fn generate_codex_image_once(
+pub(crate) async fn generate_codex_image_once(
     state: &AppState,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,

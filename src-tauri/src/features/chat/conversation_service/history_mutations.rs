@@ -1,17 +1,17 @@
 impl ConversationServiceV2 {
-    fn delete_conversation(
+    pub(crate) fn delete_conversation(
         &self,
         state: &AppState,
         conversation_id: &str,
     ) -> Result<DeleteUnarchivedConversationMutationResult, String> {
         struct DeleteConversationPreparation {
-            app_config: AppConfig,
-            runtime: RuntimeStateFile,
-            child_conversation_ids: Vec<String>,
-            active_conversation_id: String,
-            should_create_system_notification: bool,
-            should_set_main_to_system_notification: bool,
-            parent_conversation_id: Option<String>,
+            pub(crate) app_config: AppConfig,
+            pub(crate) runtime: RuntimeStateFile,
+            pub(crate) child_conversation_ids: Vec<String>,
+            pub(crate) active_conversation_id: String,
+            pub(crate) should_create_system_notification: bool,
+            pub(crate) should_set_main_to_system_notification: bool,
+            pub(crate) parent_conversation_id: Option<String>,
         }
 
         let normalized_conversation_id = conversation_id.trim();
@@ -181,7 +181,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn rewind_conversation(
+    pub(crate) fn rewind_conversation(
         &self,
         state: &AppState,
         input: &RewindConversationInput,
@@ -289,7 +289,7 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn is_first_context_compaction_message_in_store(
+    pub(crate) fn is_first_context_compaction_message_in_store(
         store_paths: &message_store::MessageStorePaths,
         message_id: &str,
     ) -> Result<bool, String> {
@@ -325,7 +325,7 @@ impl ConversationServiceV2 {
         Ok(true)
     }
 
-    fn preview_rewind_conversation(
+    pub(crate) fn preview_rewind_conversation(
         &self,
         state: &AppState,
         input: &RewindConversationInput,
@@ -396,7 +396,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn branch_conversation_from_selection(
+    pub(crate) fn branch_conversation_from_selection(
         &self,
         state: &AppState,
         source_conversation_id: &str,
@@ -467,7 +467,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn forward_conversation_selection(
+    pub(crate) fn forward_conversation_selection(
         &self,
         state: &AppState,
         source_conversation_id: &str,
@@ -539,7 +539,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn forward_selection_to_remote_im_contact(
+    pub(crate) fn forward_selection_to_remote_im_contact(
         &self,
         state: &AppState,
         source_conversation_id: &str,

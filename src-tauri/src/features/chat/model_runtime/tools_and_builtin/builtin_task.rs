@@ -1,4 +1,4 @@
-async fn run_task_store_io<T, F>(work: F) -> Result<T, String>
+pub(crate) async fn run_task_store_io<T, F>(work: F) -> Result<T, String>
 where
     T: Send + 'static,
     F: FnOnce() -> Result<T, String> + Send + 'static,
@@ -8,7 +8,7 @@ where
         .map_err(|err| format!("task store worker join failed: {err}"))?
 }
 
-fn task_tool_target_scope_from_conversation(
+pub(crate) fn task_tool_target_scope_from_conversation(
     app_state: &AppState,
     conversation_id: Option<&str>,
 ) -> Option<String> {
@@ -45,7 +45,7 @@ fn task_tool_target_scope_from_conversation(
         })
 }
 
-fn task_tool_goal_from_args(args: &TaskToolArgsWire) -> Option<String> {
+pub(crate) fn task_tool_goal_from_args(args: &TaskToolArgsWire) -> Option<String> {
     args.goal
         .as_deref()
         .map(str::trim)
@@ -60,7 +60,7 @@ fn task_tool_goal_from_args(args: &TaskToolArgsWire) -> Option<String> {
         })
 }
 
-fn task_tool_why_from_args(args: &TaskToolArgsWire) -> Option<String> {
+pub(crate) fn task_tool_why_from_args(args: &TaskToolArgsWire) -> Option<String> {
     args.why
         .as_deref()
         .map(str::trim)
@@ -119,7 +119,7 @@ fn task_tool_why_from_args(args: &TaskToolArgsWire) -> Option<String> {
         })
 }
 
-fn task_tool_todo_from_args(args: &TaskToolArgsWire) -> Option<String> {
+pub(crate) fn task_tool_todo_from_args(args: &TaskToolArgsWire) -> Option<String> {
     args.todo
         .as_deref()
         .map(str::trim)
@@ -172,7 +172,7 @@ fn task_tool_todo_from_args(args: &TaskToolArgsWire) -> Option<String> {
         })
 }
 
-async fn builtin_task(
+pub(crate) async fn builtin_task(
     app_state: &AppState,
     session_id: &str,
     model_config_id: &str,

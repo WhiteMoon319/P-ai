@@ -1,5 +1,5 @@
 impl ConversationServiceV2 {
-    fn resolve_prompt_prepare_conversation_read_only(
+    pub(crate) fn resolve_prompt_prepare_conversation_read_only(
         &self,
         data: &AppData,
         data_path: &PathBuf,
@@ -22,7 +22,7 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn resolve_prompt_prepare_conversation_core_v2(
+    pub(crate) fn resolve_prompt_prepare_conversation_core_v2(
         &self,
         data: &mut AppData,
         data_path: &PathBuf,
@@ -90,7 +90,7 @@ impl ConversationServiceV2 {
         )))
     }
 
-    fn build_prompt_prepare_resolution_v2(
+    pub(crate) fn build_prompt_prepare_resolution_v2(
         &self,
         data: &AppData,
         conversation_before: &Conversation,
@@ -120,7 +120,7 @@ impl ConversationServiceV2 {
         }
     }
 
-    fn build_prompt_prepare_conversation_before_v2(
+    pub(crate) fn build_prompt_prepare_conversation_before_v2(
         &self,
         conversation_before: &Conversation,
         is_remote_im_contact_conversation: bool,
@@ -139,7 +139,7 @@ impl ConversationServiceV2 {
         conversation_before.clone()
     }
 
-    fn find_remote_im_contact_by_conversation_in_data<'a>(
+    pub(crate) fn find_remote_im_contact_by_conversation_in_data<'a>(
         &self,
         data: &'a AppData,
         conversation_id: &str,
@@ -169,7 +169,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn find_remote_im_contact_by_conversation_in_runtime<'a>(
+    pub(crate) fn find_remote_im_contact_by_conversation_in_runtime<'a>(
         &self,
         runtime: &'a RuntimeStateFile,
         conversation_id: &str,
@@ -184,7 +184,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn try_get_conversation_snapshot_fast(
+    pub(crate) fn try_get_conversation_snapshot_fast(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -192,7 +192,7 @@ impl ConversationServiceV2 {
         self.try_read_persisted_conversation(state, conversation_id)
     }
 
-    fn try_read_unarchived_conversation(
+    pub(crate) fn try_read_unarchived_conversation(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -202,7 +202,7 @@ impl ConversationServiceV2 {
             .filter(conversation_is_unarchived))
     }
 
-    fn resolve_effective_agent_id_for_read(
+    pub(crate) fn resolve_effective_agent_id_for_read(
         &self,
         state: &AppState,
         app_config: &mut AppConfig,

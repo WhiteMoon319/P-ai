@@ -18,7 +18,7 @@ pub async fn runtime_tool_definitions_for_genai(
     Ok(out)
 }
 
-async fn call_runtime_tool_by_name(
+pub(crate) async fn call_runtime_tool_by_name(
     tools: &[Box<dyn RuntimeToolDyn>],
     tool_name: &str,
     tool_args: &str,
@@ -56,11 +56,11 @@ async fn call_runtime_tool_by_name(
     }
 }
 
-fn normalize_runtime_tool_name(name: &str) -> String {
+pub(crate) fn normalize_runtime_tool_name(name: &str) -> String {
     name.trim().to_ascii_lowercase()
 }
 
-fn runtime_tool_by_name<'a>(
+pub(crate) fn runtime_tool_by_name<'a>(
     tools: &'a [Box<dyn RuntimeToolDyn>],
     tool_name: &str,
 ) -> Option<&'a Box<dyn RuntimeToolDyn>> {
@@ -70,7 +70,7 @@ fn runtime_tool_by_name<'a>(
     })
 }
 
-fn runtime_tool_definition_by_name<'a>(
+pub(crate) fn runtime_tool_definition_by_name<'a>(
     definitions: &'a [ProviderToolDefinition],
     tool_name: &str,
 ) -> Option<&'a ProviderToolDefinition> {
@@ -79,7 +79,7 @@ fn runtime_tool_definition_by_name<'a>(
     })
 }
 
-fn text_contains_runtime_tool_keyword(text: &str, keyword: &str) -> bool {
+pub(crate) fn text_contains_runtime_tool_keyword(text: &str, keyword: &str) -> bool {
     let keyword = keyword.trim().to_ascii_lowercase();
     if keyword.is_empty() {
         return false;
@@ -107,7 +107,7 @@ fn text_contains_runtime_tool_keyword(text: &str, keyword: &str) -> bool {
     false
 }
 
-fn mcp_tool_definition_looks_mutating(definition: Option<&ProviderToolDefinition>, tool_name: &str) -> bool {
+pub(crate) fn mcp_tool_definition_looks_mutating(definition: Option<&ProviderToolDefinition>, tool_name: &str) -> bool {
     let mut haystacks = vec![tool_name.to_string()];
     if let Some(definition) = definition {
         haystacks.push(definition.description.clone());
@@ -124,7 +124,7 @@ fn mcp_tool_definition_looks_mutating(definition: Option<&ProviderToolDefinition
         .any(|keyword| text_contains_runtime_tool_keyword(&text, keyword))
 }
 
-fn runtime_tool_call_requires_serial_execution(
+pub(crate) fn runtime_tool_call_requires_serial_execution(
     tools: &[Box<dyn RuntimeToolDyn>],
     definitions: &[ProviderToolDefinition],
     tool_name: &str,
@@ -160,7 +160,7 @@ fn runtime_tool_call_requires_serial_execution(
     mcp_tool_definition_looks_mutating(definition, tool_name)
 }
 
-fn prepared_tool_call_from_genai(tool_call: genai::chat::ToolCall) -> PreparedToolCall {
+pub(crate) fn prepared_tool_call_from_genai(tool_call: genai::chat::ToolCall) -> PreparedToolCall {
     let genai::chat::ToolCall {
         call_id,
         fn_name,
@@ -178,7 +178,7 @@ fn prepared_tool_call_from_genai(tool_call: genai::chat::ToolCall) -> PreparedTo
     }
 }
 
-fn split_prepared_tool_calls_into_execution_batches(
+pub(crate) fn split_prepared_tool_calls_into_execution_batches(
     tools: &[Box<dyn RuntimeToolDyn>],
     definitions: &[ProviderToolDefinition],
     tool_calls: Vec<PreparedToolCall>,
@@ -208,7 +208,7 @@ fn split_prepared_tool_calls_into_execution_batches(
     batches
 }
 
-async fn execute_prepared_tool_call(
+pub(crate) async fn execute_prepared_tool_call(
     tools: &[Box<dyn RuntimeToolDyn>],
     on_delta: &DeltaChannel,
     call: PreparedToolCall,
@@ -254,7 +254,7 @@ async fn execute_prepared_tool_call(
     })
 }
 
-async fn execute_prepared_tool_call_group_inner(
+pub(crate) async fn execute_prepared_tool_call_group_inner(
     tools: &[Box<dyn RuntimeToolDyn>],
     on_delta: &DeltaChannel,
     calls: Vec<PreparedToolCall>,
@@ -270,7 +270,7 @@ async fn execute_prepared_tool_call_group_inner(
     Ok(output)
 }
 
-async fn execute_prepared_tool_call_group(
+pub(crate) async fn execute_prepared_tool_call_group(
     tool_abort_state: Option<&AppState>,
     chat_session_key: &str,
     tools: &[Box<dyn RuntimeToolDyn>],
@@ -318,7 +318,7 @@ async fn execute_prepared_tool_call_group(
     }
 }
 
-fn runtime_tool_result_followup_message(
+pub(crate) fn runtime_tool_result_followup_message(
     tool_name: &str,
     tool_result: &ProviderToolResult,
     include_images: bool,

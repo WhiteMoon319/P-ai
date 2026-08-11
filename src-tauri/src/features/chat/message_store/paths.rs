@@ -1,16 +1,16 @@
-pub(super) const MESSAGE_STORE_MANIFEST_FILE_NAME: &str = "manifest.json";
-pub(super) const MESSAGE_STORE_META_FILE_NAME: &str = "meta.json";
-pub(super) const MESSAGE_STORE_MESSAGES_FILE_NAME: &str = "messages.jsonl";
-pub(super) const MESSAGE_STORE_ACTIVE_PLANS_FILE_NAME: &str = "active_plans.jsonl";
-pub(super) const MESSAGE_STORE_INDEX_FILE_NAME: &str = "messages.idx.json";
-pub(super) const MESSAGE_STORE_BLOCKS_DIR_NAME: &str = "blocks";
-const MESSAGE_STORE_BLOBS_DIR_NAME: &str = "blobs";
+pub(crate) const MESSAGE_STORE_MANIFEST_FILE_NAME: &str = "manifest.json";
+pub(crate) const MESSAGE_STORE_META_FILE_NAME: &str = "meta.json";
+pub(crate) const MESSAGE_STORE_MESSAGES_FILE_NAME: &str = "messages.jsonl";
+pub(crate) const MESSAGE_STORE_ACTIVE_PLANS_FILE_NAME: &str = "active_plans.jsonl";
+pub(crate) const MESSAGE_STORE_INDEX_FILE_NAME: &str = "messages.idx.json";
+pub(crate) const MESSAGE_STORE_BLOCKS_DIR_NAME: &str = "blocks";
+pub(crate) const MESSAGE_STORE_BLOBS_DIR_NAME: &str = "blobs";
 
 #[cfg(target_os = "windows")]
 use std::os::windows::ffi::OsStrExt as _;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct MessageStorePaths {
+pub(crate) struct MessageStorePaths {
     data_path: PathBuf,
     conversation_id: String,
     legacy_conversation_file: PathBuf,
@@ -25,20 +25,20 @@ pub(super) struct MessageStorePaths {
 }
 
 impl MessageStorePaths {
-    fn is_local_chat_conversation(&self) -> bool {
+    pub(crate) fn is_local_chat_conversation(&self) -> bool {
         self.shard_dir.parent() == Some(app_layout_chat_conversations_dir(&self.data_path).as_path())
     }
 
-    fn is_v3_ready(&self) -> Result<bool, String> {
+    pub(crate) fn is_v3_ready(&self) -> Result<bool, String> {
         Ok(self.is_local_chat_conversation() && chat_metadata_store_is_ready(&self.data_path)?)
     }
 }
 
-pub(super) fn message_store_is_v3_ready(paths: &MessageStorePaths) -> Result<bool, String> {
+pub(crate) fn message_store_is_v3_ready(paths: &MessageStorePaths) -> Result<bool, String> {
     paths.is_v3_ready()
 }
 
-pub(super) fn message_store_paths(
+pub(crate) fn message_store_paths(
     data_path: &PathBuf,
     conversation_id: &str,
 ) -> Result<MessageStorePaths, String> {
@@ -60,7 +60,7 @@ pub(super) fn message_store_paths(
     )
 }
 
-pub(super) fn message_store_paths_for_shard_dir(
+pub(crate) fn message_store_paths_for_shard_dir(
     data_path: &PathBuf,
     conversation_id: &str,
     shard_dir: PathBuf,
@@ -90,7 +90,7 @@ pub(super) fn message_store_paths_for_shard_dir(
     })
 }
 
-fn validate_message_store_conversation_id(conversation_id: &str) -> Result<(), String> {
+pub(crate) fn validate_message_store_conversation_id(conversation_id: &str) -> Result<(), String> {
     if conversation_id.contains('/') || conversation_id.contains('\\') {
         return Err(format!(
             "会话 ID 不能包含路径分隔符，conversation_id={conversation_id}"
@@ -137,11 +137,11 @@ fn validate_message_store_conversation_id(conversation_id: &str) -> Result<(), S
     Ok(())
 }
 
-fn path_modified_time(path: &PathBuf) -> Option<std::time::SystemTime> {
+pub(crate) fn path_modified_time(path: &PathBuf) -> Option<std::time::SystemTime> {
     fs::metadata(path).and_then(|metadata| metadata.modified()).ok()
 }
 
-fn directory_children_modified_time(path: &PathBuf) -> Option<std::time::SystemTime> {
+pub(crate) fn directory_children_modified_time(path: &PathBuf) -> Option<std::time::SystemTime> {
     let Ok(entries) = fs::read_dir(path) else {
         return None;
     };
@@ -152,7 +152,7 @@ fn directory_children_modified_time(path: &PathBuf) -> Option<std::time::SystemT
         .max()
 }
 
-pub(super) fn message_store_shard_modified_time(
+pub(crate) fn message_store_shard_modified_time(
     paths: &MessageStorePaths,
 ) -> Option<std::time::SystemTime> {
     if paths.is_v3_ready().unwrap_or(false) {
@@ -171,7 +171,7 @@ pub(super) fn message_store_shard_modified_time(
     .max()
 }
 
-pub(super) fn write_message_store_text_atomic(
+pub(crate) fn write_message_store_text_atomic(
     path: &PathBuf,
     tmp_extension: &str,
     content: &str,
@@ -195,7 +195,7 @@ pub(super) fn write_message_store_text_atomic(
     replace_message_store_file_atomic(&tmp_path, path, label)
 }
 
-pub(super) fn replace_message_store_file_atomic(
+pub(crate) fn replace_message_store_file_atomic(
     tmp_path: &PathBuf,
     path: &PathBuf,
     label: &str,
@@ -220,7 +220,7 @@ pub(super) fn replace_message_store_file_atomic(
 }
 
 #[cfg(target_os = "windows")]
-fn replace_message_store_file_atomic_inner(
+pub(crate) fn replace_message_store_file_atomic_inner(
     tmp_path: &PathBuf,
     path: &PathBuf,
 ) -> Result<(), std::io::Error> {
@@ -243,7 +243,7 @@ fn replace_message_store_file_atomic_inner(
 }
 
 #[cfg(not(target_os = "windows"))]
-fn replace_message_store_file_atomic_inner(
+pub(crate) fn replace_message_store_file_atomic_inner(
     tmp_path: &PathBuf,
     path: &PathBuf,
 ) -> Result<(), std::io::Error> {
@@ -251,7 +251,7 @@ fn replace_message_store_file_atomic_inner(
 }
 
 #[cfg(target_os = "windows")]
-fn path_to_windows_wide_null(path: &Path) -> Vec<u16> {
+pub(crate) fn path_to_windows_wide_null(path: &Path) -> Vec<u16> {
     path.as_os_str()
         .encode_wide()
         .chain(std::iter::once(0))

@@ -63,7 +63,7 @@ pub(crate) fn set_active_chat_view_stream_binding(
     Ok(())
 }
 
-fn normalize_active_chat_view_binding_id(binding_id: &str) -> String {
+pub(crate) fn normalize_active_chat_view_binding_id(binding_id: &str) -> String {
     let normalized = binding_id.trim();
     if normalized.is_empty() {
         "default".to_string()
@@ -72,7 +72,7 @@ fn normalize_active_chat_view_binding_id(binding_id: &str) -> String {
     }
 }
 
-fn active_chat_view_binding_key(window_label: &str, binding_id: &str) -> String {
+pub(crate) fn active_chat_view_binding_key(window_label: &str, binding_id: &str) -> String {
     format!(
         "{}::{}",
         window_label.trim(),
@@ -80,7 +80,7 @@ fn active_chat_view_binding_key(window_label: &str, binding_id: &str) -> String 
     )
 }
 
-fn collect_active_chat_view_delta_channels(
+pub(crate) fn collect_active_chat_view_delta_channels(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<Vec<(String, DeltaChannel)>, String> {
@@ -101,7 +101,7 @@ fn collect_active_chat_view_delta_channels(
         .collect::<Vec<_>>())
 }
 
-fn prune_failed_active_chat_view_bindings(state: &AppState, binding_keys: &[String]) {
+pub(crate) fn prune_failed_active_chat_view_bindings(state: &AppState, binding_keys: &[String]) {
     if binding_keys.is_empty() {
         return;
     }
@@ -112,7 +112,7 @@ fn prune_failed_active_chat_view_bindings(state: &AppState, binding_keys: &[Stri
     }
 }
 
-fn conversation_has_focused_chat_view(state: &AppState, conversation_id: &str) -> bool {
+pub(crate) fn conversation_has_focused_chat_view(state: &AppState, conversation_id: &str) -> bool {
     #[cfg(target_os = "android")]
     {
         // Android 是单 WebView，没有桌面式窗口焦点语义：wry 的 android 端
@@ -130,7 +130,7 @@ fn conversation_has_focused_chat_view(state: &AppState, conversation_id: &str) -
     }
 }
 
-fn emit_assistant_delta_app_event(
+pub(crate) fn emit_assistant_delta_app_event(
     state: &AppState,
     conversation_id: &str,
     event: &AssistantDeltaEvent,
@@ -156,14 +156,14 @@ fn emit_assistant_delta_app_event(
     let _ = app_handle.emit(CHAT_ASSISTANT_DELTA_EVENT, payload);
 }
 
-fn should_emit_assistant_delta_via_app_event_only(event: &AssistantDeltaEvent) -> bool {
+pub(crate) fn should_emit_assistant_delta_via_app_event_only(event: &AssistantDeltaEvent) -> bool {
     matches!(
         event.kind.as_deref(),
         Some("tool_status") | Some("context_usage_update")
     )
 }
 
-fn assistant_delta_broadcast_event(event: &AssistantDeltaEvent) -> AssistantDeltaEvent {
+pub(crate) fn assistant_delta_broadcast_event(event: &AssistantDeltaEvent) -> AssistantDeltaEvent {
     let mut next = event.clone();
     next.delta.clear();
     next.stream_cache = None;
@@ -172,7 +172,7 @@ fn assistant_delta_broadcast_event(event: &AssistantDeltaEvent) -> AssistantDelt
 
 /// 广播 chat.assistantDelta 时附加会话标题，供远程前端（手机壳层）通知对齐本地标题。
 /// 标题来源与本地 live update 通知一致：会话 meta 标题 + 部门名 + 失败标记。
-fn assistant_delta_broadcast_conversation_title(
+pub(crate) fn assistant_delta_broadcast_conversation_title(
     state: &AppState,
     conversation_id: &str,
 ) -> Option<String> {
@@ -193,14 +193,14 @@ fn assistant_delta_broadcast_conversation_title(
 
 /// 是否存在已映射会话的 sidebar 客户端（IDE 侧边栏 / 远程前端订阅者）。
 /// 无订阅者时广播不附带会话标题，避免高频流式路径白付元数据查询与标题拼接开销。
-fn has_sidebar_conversation_subscriber() -> bool {
+pub(crate) fn has_sidebar_conversation_subscriber() -> bool {
     ide_context_chat_client_conversations()
         .lock()
         .map(|conversations| !conversations.is_empty())
         .unwrap_or(false)
 }
 
-fn is_assistant_delta_stream_channel_event(event: &AssistantDeltaEvent) -> bool {
+pub(crate) fn is_assistant_delta_stream_channel_event(event: &AssistantDeltaEvent) -> bool {
     if is_visible_stream_progress_event(event) {
         return true;
     }
@@ -210,7 +210,7 @@ fn is_assistant_delta_stream_channel_event(event: &AssistantDeltaEvent) -> bool 
     )
 }
 
-fn emit_assistant_delta_to_open_sidebar(
+pub(crate) fn emit_assistant_delta_to_open_sidebar(
     state: &AppState,
     conversation_id: &str,
     event: &AssistantDeltaEvent,
@@ -232,7 +232,7 @@ fn emit_assistant_delta_to_open_sidebar(
     ) > 0
 }
 
-fn is_visible_stream_progress_event(event: &AssistantDeltaEvent) -> bool {
+pub(crate) fn is_visible_stream_progress_event(event: &AssistantDeltaEvent) -> bool {
     if !event.delta.is_empty() {
         return true;
     }
@@ -242,14 +242,14 @@ fn is_visible_stream_progress_event(event: &AssistantDeltaEvent) -> bool {
     )
 }
 
-fn stream_cache_has_visible_progress(cache: &ConversationStreamRuntimeCache) -> bool {
+pub(crate) fn stream_cache_has_visible_progress(cache: &ConversationStreamRuntimeCache) -> bool {
     !cache.assistant_text.trim().is_empty()
         || !cache.tool_status_text.trim().is_empty()
         || !cache.tool_status_state.trim().is_empty()
         || !cache.stream_blocks.is_empty()
 }
 
-fn stream_blocks_debug_counts(blocks: &[AssistantStreamBlock]) -> (usize, usize, usize, usize) {
+pub(crate) fn stream_blocks_debug_counts(blocks: &[AssistantStreamBlock]) -> (usize, usize, usize, usize) {
     let reasoning_len = blocks
         .iter()
         .map(|block| block.reasoning.chars().count())
@@ -265,7 +265,7 @@ fn stream_blocks_debug_counts(blocks: &[AssistantStreamBlock]) -> (usize, usize,
     (blocks.len(), reasoning_len, text_len, tool_count)
 }
 
-fn now_unix_ms() -> u64 {
+pub(crate) fn now_unix_ms() -> u64 {
     let millis = now_utc().unix_timestamp_nanos() / 1_000_000;
     if millis <= 0 {
         0
@@ -274,7 +274,7 @@ fn now_unix_ms() -> u64 {
     }
 }
 
-fn stream_cache_current_block_mut(cache: &mut ConversationStreamRuntimeCache) -> &mut AssistantStreamBlock {
+pub(crate) fn stream_cache_current_block_mut(cache: &mut ConversationStreamRuntimeCache) -> &mut AssistantStreamBlock {
     if cache.stream_blocks.is_empty() {
         cache.stream_blocks.push(AssistantStreamBlock::default());
     }
@@ -282,11 +282,11 @@ fn stream_cache_current_block_mut(cache: &mut ConversationStreamRuntimeCache) ->
     &mut cache.stream_blocks[index]
 }
 
-fn stream_block_has_inline_tool_marker(text: &str, tool_call_id: &str) -> bool {
+pub(crate) fn stream_block_has_inline_tool_marker(text: &str, tool_call_id: &str) -> bool {
     !tool_call_id.trim().is_empty() && text.contains(&format!("[toolcall:{}]", tool_call_id.trim()))
 }
 
-fn append_stream_text_block(cache: &mut ConversationStreamRuntimeCache, delta: &str) {
+pub(crate) fn append_stream_text_block(cache: &mut ConversationStreamRuntimeCache, delta: &str) {
     if delta.is_empty() {
         return;
     }
@@ -298,7 +298,7 @@ fn append_stream_text_block(cache: &mut ConversationStreamRuntimeCache, delta: &
     block.pending_text_break = false;
 }
 
-fn append_stream_reasoning_block(cache: &mut ConversationStreamRuntimeCache, delta: &str) {
+pub(crate) fn append_stream_reasoning_block(cache: &mut ConversationStreamRuntimeCache, delta: &str) {
     if delta.is_empty() {
         return;
     }
@@ -313,7 +313,7 @@ fn append_stream_reasoning_block(cache: &mut ConversationStreamRuntimeCache, del
     block.reasoning.push_str(delta);
 }
 
-fn apply_tool_result_to_stream_blocks(
+pub(crate) fn apply_tool_result_to_stream_blocks(
     cache: &mut ConversationStreamRuntimeCache,
     message: &str,
 ) {
@@ -381,7 +381,7 @@ fn apply_tool_result_to_stream_blocks(
     }
 }
 
-fn assistant_tool_event_calls(event: &Value) -> Vec<AssistantStreamToolBlock> {
+pub(crate) fn assistant_tool_event_calls(event: &Value) -> Vec<AssistantStreamToolBlock> {
     event
         .get("tool_calls")
         .and_then(Value::as_array)
@@ -419,7 +419,7 @@ fn assistant_tool_event_calls(event: &Value) -> Vec<AssistantStreamToolBlock> {
         .unwrap_or_default()
 }
 
-fn apply_assistant_tool_event_to_stream_blocks(
+pub(crate) fn apply_assistant_tool_event_to_stream_blocks(
     cache: &mut ConversationStreamRuntimeCache,
     message: &str,
 ) {
@@ -810,7 +810,7 @@ mod scheduler_stream_block_tests {
     }
 }
 
-fn reset_conversation_stream_runtime_cache(
+pub(crate) fn reset_conversation_stream_runtime_cache(
     state: &AppState,
     conversation_id: &str,
     activation_id: &str,
@@ -837,7 +837,7 @@ fn reset_conversation_stream_runtime_cache(
     Ok(())
 }
 
-fn set_stream_cache_persisted_assistant_message_id(
+pub(crate) fn set_stream_cache_persisted_assistant_message_id(
     state: &AppState,
     conversation_id: &str,
     assistant_message_id: &str,
@@ -857,7 +857,7 @@ fn set_stream_cache_persisted_assistant_message_id(
     slot.stream_cache.persisted_assistant_message_id = assistant_message_id.trim().to_string();
 }
 
-fn clear_conversation_stream_runtime_cache(
+pub(crate) fn clear_conversation_stream_runtime_cache(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<(), String> {
@@ -868,7 +868,7 @@ fn clear_conversation_stream_runtime_cache(
     Ok(())
 }
 
-fn conversation_stream_runtime_cache_snapshot(
+pub(crate) fn conversation_stream_runtime_cache_snapshot(
     stream_cache: ConversationStreamRuntimeCache,
 ) -> ConversationStreamRuntimeCacheSnapshot {
     let has_visible_progress = stream_cache_has_visible_progress(&stream_cache);
@@ -899,11 +899,11 @@ fn conversation_stream_runtime_cache_snapshot(
 /// 覆盖路径（只要 streamCache 存在就走 reduceStreamSnapshot），轻量快照
 /// 的 assistantText 为空会把正文覆盖成空白。低频关键事件（工具三兄弟）
 /// 仍带完整快照做权威校正。
-fn should_use_slim_stream_cache_snapshot(kind: Option<&str>) -> bool {
+pub(crate) fn should_use_slim_stream_cache_snapshot(kind: Option<&str>) -> bool {
     matches!(kind, None | Some("activity_reasoning_delta"))
 }
 
-fn set_stream_cache_context_usage(
+pub(crate) fn set_stream_cache_context_usage(
     state: &AppState,
     conversation_id: &str,
     effective_prompt_tokens: u64,
@@ -936,7 +936,7 @@ fn set_stream_cache_context_usage(
         .clamp(0.0, 100.0) as u32;
 }
 
-fn update_conversation_stream_runtime_cache(
+pub(crate) fn update_conversation_stream_runtime_cache(
     state: &AppState,
     conversation_id: &str,
     event: &AssistantDeltaEvent,
@@ -1038,7 +1038,7 @@ fn update_conversation_stream_runtime_cache(
     Ok(Some(snapshot))
 }
 
-fn dispatch_assistant_delta_to_active_view(
+pub(crate) fn dispatch_assistant_delta_to_active_view(
     state: &AppState,
     conversation_id: &str,
     event: &AssistantDeltaEvent,
@@ -1144,14 +1144,14 @@ fn dispatch_assistant_delta_to_active_view(
     delivered
 }
 
-fn should_use_activation_delta_fallback(
+pub(crate) fn should_use_activation_delta_fallback(
     active_view_delivered: bool,
     has_activation_channel: bool,
 ) -> bool {
     !active_view_delivered && has_activation_channel
 }
 
-fn emit_stream_rebind_required_event(
+pub(crate) fn emit_stream_rebind_required_event(
     state: &AppState,
     conversation_id: &str,
     request_id: Option<&str>,

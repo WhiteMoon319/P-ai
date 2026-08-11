@@ -1,4 +1,4 @@
-fn normalize_memory_keywords(raw: &[String]) -> Vec<String> {
+pub(crate) fn normalize_memory_keywords(raw: &[String]) -> Vec<String> {
     let mut out = Vec::<String>::new();
     for item in raw {
         let trimmed = item.trim();
@@ -13,7 +13,7 @@ fn normalize_memory_keywords(raw: &[String]) -> Vec<String> {
     out
 }
 
-fn memory_contains_sensitive(content: &str, keywords: &[String]) -> bool {
+pub(crate) fn memory_contains_sensitive(content: &str, keywords: &[String]) -> bool {
     let mut full = content.to_lowercase();
     if !keywords.is_empty() {
         full.push('\n');
@@ -40,27 +40,27 @@ fn memory_contains_sensitive(content: &str, keywords: &[String]) -> bool {
 }
 
 #[derive(Debug, Clone)]
-struct MemorySaveDraft {
-    memory_type: String,
-    judgment: String,
-    reasoning: String,
-    tags: Vec<String>,
+pub(crate) struct MemorySaveDraft {
+    pub(crate) memory_type: String,
+    pub(crate) judgment: String,
+    pub(crate) reasoning: String,
+    pub(crate) tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct MemorySaveUpsertItemResult {
-    saved: bool,
+pub(crate) struct MemorySaveUpsertItemResult {
+    pub(crate) saved: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    id: Option<String>,
+    pub(crate) id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tags: Option<Vec<String>>,
+    pub(crate) tags: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    updated_at: Option<String>,
+    pub(crate) updated_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    reason: Option<String>,
+    pub(crate) reason: Option<String>,
 }
 
-fn parse_memory_save_draft(
+pub(crate) fn parse_memory_save_draft(
     memory_type_raw: &str,
     judgment: &str,
     reasoning: &str,
@@ -254,14 +254,14 @@ mod builtin_memory_tests {
 }
 
 #[derive(Debug, Clone)]
-struct MemoryAgentContext {
-    owner_agent_id: Option<String>,
-    effective_agent_id: String,
-    private_memory_enabled: bool,
-    recall_enabled: bool,
+pub(crate) struct MemoryAgentContext {
+    pub(crate) owner_agent_id: Option<String>,
+    pub(crate) effective_agent_id: String,
+    pub(crate) private_memory_enabled: bool,
+    pub(crate) recall_enabled: bool,
 }
 
-fn build_memory_agent_context(
+pub(crate) fn build_memory_agent_context(
     agent_id: &str,
     private_memory_enabled: bool,
     recall_enabled: bool,
@@ -278,7 +278,7 @@ fn build_memory_agent_context(
     })
 }
 
-fn memory_agent_context_from_agent(agent: &AgentProfile) -> Result<MemoryAgentContext, String> {
+pub(crate) fn memory_agent_context_from_agent(agent: &AgentProfile) -> Result<MemoryAgentContext, String> {
     if agent.is_built_in_user {
         return Err(format!("当前人格不支持读写记忆：agent_id={}", agent.id));
     }
@@ -289,7 +289,7 @@ fn memory_agent_context_from_agent(agent: &AgentProfile) -> Result<MemoryAgentCo
     )
 }
 
-fn upsert_memories(
+pub(crate) fn upsert_memories(
     app_state: &AppState,
     memory_context: &MemoryAgentContext,
     drafts: &[MemorySaveDraft],
@@ -331,7 +331,7 @@ fn upsert_memories(
     Ok((results, total_memories))
 }
 
-fn memory_save_action(args: &Value) -> Result<String, String> {
+pub(crate) fn memory_save_action(args: &Value) -> Result<String, String> {
     let action = args
         .get("action")
         .and_then(Value::as_str)
@@ -348,13 +348,13 @@ fn memory_save_action(args: &Value) -> Result<String, String> {
     }
 }
 
-fn memory_save_payload(args: &Value) -> Result<&Value, String> {
+pub(crate) fn memory_save_payload(args: &Value) -> Result<&Value, String> {
     args.get("memory")
         .filter(|value| value.is_object())
         .ok_or_else(|| "remember.memory is required".to_string())
 }
 
-fn memory_save_source_ids(args: &Value) -> Vec<String> {
+pub(crate) fn memory_save_source_ids(args: &Value) -> Vec<String> {
     args.get("sourceMemoryIds")
         .or_else(|| args.get("source_memory_ids"))
         .and_then(Value::as_array)
@@ -375,7 +375,7 @@ fn memory_save_source_ids(args: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn resolve_memory_source_ids(
+pub(crate) fn resolve_memory_source_ids(
     app_state: &AppState,
     memory_context: &MemoryAgentContext,
     raw_ids: &[String],
@@ -391,7 +391,7 @@ fn resolve_memory_source_ids(
     resolve_memory_source_ids_from_memories(&memories, raw_ids)
 }
 
-fn resolve_memory_source_ids_from_memories(
+pub(crate) fn resolve_memory_source_ids_from_memories(
     memories: &[MemoryEntry],
     raw_ids: &[String],
 ) -> Result<Vec<String>, String> {
@@ -414,7 +414,7 @@ fn resolve_memory_source_ids_from_memories(
     Ok(resolved)
 }
 
-fn memory_save_validate_action_sources(action: &str, source_ids: &[String]) -> Result<(), String> {
+pub(crate) fn memory_save_validate_action_sources(action: &str, source_ids: &[String]) -> Result<(), String> {
     match action {
         "create" if source_ids.is_empty() => Ok(()),
         "create" => Err("remember.action=create must not include sourceMemoryIds".to_string()),
@@ -426,7 +426,7 @@ fn memory_save_validate_action_sources(action: &str, source_ids: &[String]) -> R
     }
 }
 
-fn delete_replaced_memory_sources(
+pub(crate) fn delete_replaced_memory_sources(
     app_state: &AppState,
     source_ids: &[String],
     retained_ids: &[String],
@@ -449,7 +449,7 @@ fn delete_replaced_memory_sources(
     (deleted, failed)
 }
 
-fn memory_display_id_for_raw_id(
+pub(crate) fn memory_display_id_for_raw_id(
     app_state: &AppState,
     memory_context: &MemoryAgentContext,
     raw_id: Option<&str>,
@@ -468,7 +468,7 @@ fn memory_display_id_for_raw_id(
         .map(MemoryEntry::display_id))
 }
 
-fn memory_display_ids_for_raw_ids(
+pub(crate) fn memory_display_ids_for_raw_ids(
     app_state: &AppState,
     memory_context: &MemoryAgentContext,
     raw_ids: &[String],
@@ -489,7 +489,7 @@ fn memory_display_ids_for_raw_ids(
         .collect())
 }
 
-fn normalize_recall_time_filter(raw: Option<&str>) -> Result<Option<String>, String> {
+pub(crate) fn normalize_recall_time_filter(raw: Option<&str>) -> Result<Option<String>, String> {
     let value = raw.map(str::trim).filter(|value| !value.is_empty());
     let Some(value) = value else {
         return Ok(None);
@@ -523,7 +523,7 @@ fn normalize_recall_time_filter(raw: Option<&str>) -> Result<Option<String>, Str
     Ok(Some(value.to_string()))
 }
 
-fn memory_matches_time_filter(memory: &MemoryEntry, time_prefix: Option<&str>) -> bool {
+pub(crate) fn memory_matches_time_filter(memory: &MemoryEntry, time_prefix: Option<&str>) -> bool {
     let Some(prefix) = time_prefix else {
         return true;
     };
@@ -532,7 +532,7 @@ fn memory_matches_time_filter(memory: &MemoryEntry, time_prefix: Option<&str>) -
     updated.starts_with(prefix) || created.starts_with(prefix)
 }
 
-fn order_recall_memory_ids(
+pub(crate) fn order_recall_memory_ids(
     memories: &[MemoryEntry],
     candidate_ids: &[String],
     time_prefix: Option<&str>,
@@ -563,7 +563,7 @@ fn order_recall_memory_ids(
         .collect()
 }
 
-fn builtin_memory_save(
+pub(crate) fn builtin_memory_save(
     app_state: &AppState,
     memory_context: &MemoryAgentContext,
     args: Value,
@@ -673,7 +673,7 @@ fn builtin_memory_save(
     }))
 }
 
-fn builtin_recall(
+pub(crate) fn builtin_recall(
     app_state: &AppState,
     memory_context: &MemoryAgentContext,
     query: &str,

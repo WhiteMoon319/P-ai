@@ -1,4 +1,4 @@
-fn comfyui_candidate_roots(base_url: &str) -> Vec<String> {
+pub(crate) fn comfyui_candidate_roots(base_url: &str) -> Vec<String> {
     let base = base_url.trim().trim_end_matches('/').to_string();
     let mut roots = if base.to_ascii_lowercase().ends_with("/api") {
         vec![base.clone(), base[..base.len().saturating_sub(4)].to_string()]
@@ -10,7 +10,7 @@ fn comfyui_candidate_roots(base_url: &str) -> Vec<String> {
     roots
 }
 
-fn comfyui_workflow_from_json(raw: &str) -> Result<Value, String> {
+pub(crate) fn comfyui_workflow_from_json(raw: &str) -> Result<Value, String> {
     let parsed = serde_json::from_str::<Value>(raw)
         .map_err(|err| format!("ComfyUI workflow JSON 无效：{err}"))?;
     let workflow = match parsed.get("workflow") {
@@ -25,7 +25,7 @@ fn comfyui_workflow_from_json(raw: &str) -> Result<Value, String> {
     Ok(workflow)
 }
 
-fn inject_comfyui_mapping_value(
+pub(crate) fn inject_comfyui_mapping_value(
     workflow: &mut Value,
     mapping: &ComfyUiNodeInputMapping,
     value: Value,
@@ -56,7 +56,7 @@ fn inject_comfyui_mapping_value(
     Ok(())
 }
 
-fn comfyui_dimensions_from_aspect_ratio(value: &str) -> Option<(u32, u32)> {
+pub(crate) fn comfyui_dimensions_from_aspect_ratio(value: &str) -> Option<(u32, u32)> {
     let (ratio_width, ratio_height) = parse_aspect_ratio(value)?;
     let round_to_64 = |value: f64| -> u32 {
         (((value / 64.0).round() as u32).max(1) * 64).clamp(64, 4096)
@@ -68,7 +68,7 @@ fn comfyui_dimensions_from_aspect_ratio(value: &str) -> Option<(u32, u32)> {
     }
 }
 
-fn comfyui_effective_dimensions(
+pub(crate) fn comfyui_effective_dimensions(
     request: &ImageGenerationRequest,
     model: &ImageGenerationModelConfig,
 ) -> Option<(u32, u32)> {
@@ -92,7 +92,7 @@ fn comfyui_effective_dimensions(
         })
 }
 
-fn build_comfyui_workflow(
+pub(crate) fn build_comfyui_workflow(
     provider: &ImageGenerationProviderConfig,
     model: &ImageGenerationModelConfig,
     request: &ImageGenerationRequest,
@@ -168,7 +168,7 @@ fn build_comfyui_workflow(
     Ok(workflow)
 }
 
-fn comfyui_request_with_auth(
+pub(crate) fn comfyui_request_with_auth(
     request: reqwest::RequestBuilder,
     api_key: &str,
 ) -> reqwest::RequestBuilder {
@@ -179,7 +179,7 @@ fn comfyui_request_with_auth(
     }
 }
 
-async fn queue_comfyui_workflow(
+pub(crate) async fn queue_comfyui_workflow(
     state: &AppState,
     provider: &ImageGenerationProviderConfig,
     api_key: &str,
@@ -228,7 +228,7 @@ async fn queue_comfyui_workflow(
     ))
 }
 
-fn comfyui_history_record<'a>(value: &'a Value, prompt_id: &str) -> Option<&'a Value> {
+pub(crate) fn comfyui_history_record<'a>(value: &'a Value, prompt_id: &str) -> Option<&'a Value> {
     value.get(prompt_id).or_else(|| {
         value
             .get("prompt_id")
@@ -238,7 +238,7 @@ fn comfyui_history_record<'a>(value: &'a Value, prompt_id: &str) -> Option<&'a V
     })
 }
 
-fn comfyui_history_completed(record: &Value) -> bool {
+pub(crate) fn comfyui_history_completed(record: &Value) -> bool {
     record
         .get("status")
         .and_then(|status| status.get("completed"))
@@ -250,7 +250,7 @@ fn comfyui_history_completed(record: &Value) -> bool {
             .is_some_and(|value| value.eq_ignore_ascii_case("success"))
 }
 
-fn comfyui_history_error(record: &Value) -> Option<String> {
+pub(crate) fn comfyui_history_error(record: &Value) -> Option<String> {
     let status = record.get("status")?;
     let status_text = image_generation_value_string(status, &["status_str", "statusStr"])?;
     if status_text.eq_ignore_ascii_case("error") {
@@ -265,7 +265,7 @@ fn comfyui_history_error(record: &Value) -> Option<String> {
     }
 }
 
-fn comfyui_view_url(root: &str, image: &Value) -> Result<String, String> {
+pub(crate) fn comfyui_view_url(root: &str, image: &Value) -> Result<String, String> {
     let filename = image
         .get("filename")
         .and_then(Value::as_str)
@@ -290,7 +290,7 @@ fn comfyui_view_url(root: &str, image: &Value) -> Result<String, String> {
     Ok(url.to_string())
 }
 
-fn extract_comfyui_history_images(
+pub(crate) fn extract_comfyui_history_images(
     record: &Value,
     root: &str,
     output_node_ids: &[String],
@@ -324,7 +324,7 @@ fn extract_comfyui_history_images(
     Ok(images)
 }
 
-async fn wait_for_comfyui_images(
+pub(crate) async fn wait_for_comfyui_images(
     state: &AppState,
     provider: &ImageGenerationProviderConfig,
     api_key: &str,
@@ -370,7 +370,7 @@ async fn wait_for_comfyui_images(
     }
 }
 
-async fn generate_comfyui_image_once(
+pub(crate) async fn generate_comfyui_image_once(
     state: &AppState,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
@@ -380,7 +380,7 @@ async fn generate_comfyui_image_once(
     queue_and_wait_comfyui_workflow(state, resolved, api_key, workflow).await
 }
 
-async fn queue_and_wait_comfyui_workflow(
+pub(crate) async fn queue_and_wait_comfyui_workflow(
     state: &AppState,
     resolved: &ResolvedImageGenerationModel,
     api_key: &str,
@@ -406,7 +406,7 @@ async fn queue_and_wait_comfyui_workflow(
 
 // ==================== ComfyUI 图像编辑（上传输入图 + 节点注入） ====================
 
-async fn upload_comfyui_input_image(
+pub(crate) async fn upload_comfyui_input_image(
     state: &AppState,
     provider: &ImageGenerationProviderConfig,
     api_key: &str,
@@ -464,7 +464,7 @@ async fn upload_comfyui_input_image(
 }
 
 // 每个 LoadImage 类节点只承载一张图片，按映射顺序一一注入上传后的文件名。
-fn inject_comfyui_input_images(
+pub(crate) fn inject_comfyui_input_images(
     workflow: &mut Value,
     mapping: &ComfyUiNodeInputMapping,
     field_name: &str,
@@ -499,7 +499,7 @@ fn inject_comfyui_input_images(
     Ok(())
 }
 
-async fn edit_comfyui_image_once(
+pub(crate) async fn edit_comfyui_image_once(
     state: &AppState,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,

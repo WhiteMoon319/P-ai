@@ -1,5 +1,5 @@
 #[cfg(test)]
-fn resolve_unarchived_conversation_index_with_fallback(
+pub(crate) fn resolve_unarchived_conversation_index_with_fallback(
     data: &mut AppData,
     app_config: &AppConfig,
     effective_agent_id: &str,
@@ -42,7 +42,7 @@ fn resolve_unarchived_conversation_index_with_fallback(
     ))
 }
 
-fn ensure_ready_message_store_from_legacy_conversation(
+pub(crate) fn ensure_ready_message_store_from_legacy_conversation(
     state: &AppState,
     conversation_id: &str,
     store_paths: &message_store::MessageStorePaths,
@@ -95,14 +95,14 @@ fn ensure_ready_message_store_from_legacy_conversation(
 // 这里是普通业务路径之外的唯一旧快照白名单读取口：
 // 当 ready message store 尚未建立时，只能先读取历史 conversation 分片快照，
 // 再立即通过 V2 特权恢复入口补建 store。其他业务代码禁止复用这条路径。
-fn read_legacy_conversation_snapshot_for_ready_store_recovery(
+pub(crate) fn read_legacy_conversation_snapshot_for_ready_store_recovery(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<Conversation, String> {
     state_read_conversation_cached(state, conversation_id)
 }
 
-fn build_foreground_conversation_snapshot_from_conversation(
+pub(crate) fn build_foreground_conversation_snapshot_from_conversation(
     state: &AppState,
     conversation: &Conversation,
     recent_limit: usize,
@@ -125,7 +125,7 @@ fn build_foreground_conversation_snapshot_from_conversation(
     })
 }
 
-fn build_foreground_conversation_snapshot_from_meta_view(
+pub(crate) fn build_foreground_conversation_snapshot_from_meta_view(
     state: &AppState,
     conversation_meta: &ConversationMetaView,
     recent_limit: usize,
@@ -166,7 +166,7 @@ fn build_foreground_conversation_snapshot_from_meta_view(
     })
 }
 
-fn build_foreground_snapshot_recent_messages(
+pub(crate) fn build_foreground_snapshot_recent_messages(
     state: &AppState,
     conversation: &Conversation,
     recent_limit: usize,
@@ -188,7 +188,7 @@ fn build_foreground_snapshot_recent_messages(
     Ok((conversation.messages[start..].to_vec(), start > 0))
 }
 
-fn provider_usage_prompt_tokens(usage: &Value) -> u64 {
+pub(crate) fn provider_usage_prompt_tokens(usage: &Value) -> u64 {
     usage
         .get("promptTokens")
         .or_else(|| usage.get("prompt_tokens"))
@@ -200,7 +200,7 @@ fn provider_usage_prompt_tokens(usage: &Value) -> u64 {
         .unwrap_or(0)
 }
 
-fn emit_provider_context_usage_update_from_conversation(
+pub(crate) fn emit_provider_context_usage_update_from_conversation(
     state: &AppState,
     conversation: &Conversation,
     usage: &Value,

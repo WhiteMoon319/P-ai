@@ -1,11 +1,11 @@
-fn normalized_session_search_keyword(keyword: Option<&str>) -> Option<String> {
+pub(crate) fn normalized_session_search_keyword(keyword: Option<&str>) -> Option<String> {
     keyword
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(|value| value.to_lowercase())
 }
 
-fn session_search_hit(haystacks: &[String], keyword: Option<&str>) -> bool {
+pub(crate) fn session_search_hit(haystacks: &[String], keyword: Option<&str>) -> bool {
     let Some(keyword) = normalized_session_search_keyword(keyword) else {
         return true;
     };
@@ -15,7 +15,7 @@ fn session_search_hit(haystacks: &[String], keyword: Option<&str>) -> bool {
     })
 }
 
-fn session_notification_source_label(
+pub(crate) fn session_notification_source_label(
     title: &str,
     department_name: Option<&str>,
     persona_name: Option<&str>,
@@ -29,7 +29,7 @@ fn session_notification_source_label(
     format!("[{}·{}·{}]", left, middle, right)
 }
 
-fn delegate_completion_notification_label(
+pub(crate) fn delegate_completion_notification_label(
     department_name: Option<&str>,
     persona_name: Option<&str>,
 ) -> String {
@@ -40,7 +40,7 @@ fn delegate_completion_notification_label(
     format!("{}·{}", left, right)
 }
 
-fn build_delegate_completion_notification_body(
+pub(crate) fn build_delegate_completion_notification_body(
     state: &AppState,
     target_department_id: &str,
     target_agent_id: &str,
@@ -76,7 +76,7 @@ fn build_delegate_completion_notification_body(
     ))
 }
 
-fn build_session_notification_body(
+pub(crate) fn build_session_notification_body(
     state: &AppState,
     source_conversation_id: &str,
     content: &str,
@@ -114,7 +114,7 @@ fn build_session_notification_body(
     Ok(format!("{label}:{normalized_content}"))
 }
 
-fn build_session_notification_message(text: &str) -> ChatMessage {
+pub(crate) fn build_session_notification_message(text: &str) -> ChatMessage {
     ChatMessage {
         id: Uuid::new_v4().to_string(),
         role: "assistant".to_string(),
@@ -135,7 +135,7 @@ fn build_session_notification_message(text: &str) -> ChatMessage {
     }
 }
 
-fn selected_messages_notification_content(selected_messages: &[ChatMessage]) -> String {
+pub(crate) fn selected_messages_notification_content(selected_messages: &[ChatMessage]) -> String {
     selected_messages
         .iter()
         .map(|message| {
@@ -167,15 +167,15 @@ fn selected_messages_notification_content(selected_messages: &[ChatMessage]) -> 
 }
 
 #[derive(Debug, Clone)]
-struct SessionNotificationDispatchRequest {
-    state: AppState,
-    target_conversation_id: String,
-    body: String,
-    message: ChatMessage,
-    action: String,
+pub(crate) struct SessionNotificationDispatchRequest {
+    pub(crate) state: AppState,
+    pub(crate) target_conversation_id: String,
+    pub(crate) body: String,
+    pub(crate) message: ChatMessage,
+    pub(crate) action: String,
 }
 
-fn session_notification_body_preview(body: &str) -> String {
+pub(crate) fn session_notification_body_preview(body: &str) -> String {
     let preview = body.trim().chars().take(60).collect::<String>();
     if preview.is_empty() {
         "[空正文]".to_string()
@@ -184,7 +184,7 @@ fn session_notification_body_preview(body: &str) -> String {
     }
 }
 
-fn session_notification_dispatch_sender(
+pub(crate) fn session_notification_dispatch_sender(
 ) -> Result<&'static std::sync::mpsc::Sender<SessionNotificationDispatchRequest>, String> {
     static SENDER: OnceLock<std::sync::mpsc::Sender<SessionNotificationDispatchRequest>> =
         OnceLock::new();
@@ -237,7 +237,7 @@ fn session_notification_dispatch_sender(
         .ok_or_else(|| "会话通知 worker 启动后未注册 sender".to_string())
 }
 
-fn enqueue_session_notification_dispatch(
+pub(crate) fn enqueue_session_notification_dispatch(
     state: &AppState,
     target_conversation_id: &str,
     body: &str,
@@ -271,7 +271,7 @@ fn enqueue_session_notification_dispatch(
     Ok(())
 }
 
-fn session_notification_wait_reason(state: MainSessionState) -> Option<&'static str> {
+pub(crate) fn session_notification_wait_reason(state: MainSessionState) -> Option<&'static str> {
     match state {
         MainSessionState::AssistantStreaming => Some("目标会话正在流式输出"),
         MainSessionState::OrganizingContext => Some("目标会话正在整理上下文"),
@@ -279,7 +279,7 @@ fn session_notification_wait_reason(state: MainSessionState) -> Option<&'static 
     }
 }
 
-async fn process_session_notification_dispatch_request(
+pub(crate) async fn process_session_notification_dispatch_request(
     request: SessionNotificationDispatchRequest,
 ) -> Result<(), String> {
     const RETRY_DELAY_MS: u64 = 350;

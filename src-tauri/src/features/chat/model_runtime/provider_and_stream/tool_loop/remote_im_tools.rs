@@ -1,4 +1,4 @@
-fn should_stop_after_contact_tool(tool_name: &str, tool_result: &ProviderToolResult) -> bool {
+pub(crate) fn should_stop_after_contact_tool(tool_name: &str, tool_result: &ProviderToolResult) -> bool {
     if tool_name != "contact_send_files" {
         return false;
     }
@@ -8,7 +8,7 @@ fn should_stop_after_contact_tool(tool_name: &str, tool_result: &ProviderToolRes
     )
 }
 
-fn contact_tool_should_run_last(tool_name: &str, tool_args: &str) -> bool {
+pub(crate) fn contact_tool_should_run_last(tool_name: &str, tool_args: &str) -> bool {
     if tool_name != "remote_im_send" {
         return false;
     }
@@ -21,7 +21,7 @@ fn contact_tool_should_run_last(tool_name: &str, tool_args: &str) -> bool {
     status.trim().eq_ignore_ascii_case("done")
 }
 
-fn reorder_turn_tool_calls_for_contact_tail(
+pub(crate) fn reorder_turn_tool_calls_for_contact_tail(
     tool_calls: Vec<genai::chat::ToolCall>,
 ) -> Vec<genai::chat::ToolCall> {
     let mut normal = Vec::<genai::chat::ToolCall>::new();
@@ -49,7 +49,7 @@ fn reorder_turn_tool_calls_for_contact_tail(
     normal
 }
 
-fn finalize_remote_im_stop_model_reply(
+pub(crate) fn finalize_remote_im_stop_model_reply(
     full_assistant_text: &str,
     full_activity_reasoning_text: String,
     final_assistant_provider_meta_override: Option<Value>,
@@ -76,7 +76,7 @@ fn finalize_remote_im_stop_model_reply(
     }
 }
 
-fn tool_loop_assistant_tool_event_text(event: &Value) -> String {
+pub(crate) fn tool_loop_assistant_tool_event_text(event: &Value) -> String {
     match event.get("content") {
         Some(Value::String(text)) => text.trim().to_string(),
         Some(Value::Null) | None => String::new(),
@@ -84,7 +84,7 @@ fn tool_loop_assistant_tool_event_text(event: &Value) -> String {
     }
 }
 
-fn tool_loop_first_assistant_tool_call_id(event: &Value) -> Option<String> {
+pub(crate) fn tool_loop_first_assistant_tool_call_id(event: &Value) -> Option<String> {
     event
         .get("tool_calls")
         .and_then(Value::as_array)
@@ -96,7 +96,7 @@ fn tool_loop_first_assistant_tool_call_id(event: &Value) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn tool_loop_tool_result_call_id(event: &Value) -> Option<String> {
+pub(crate) fn tool_loop_tool_result_call_id(event: &Value) -> Option<String> {
     event
         .get("tool_call_id")
         .and_then(Value::as_str)
@@ -105,7 +105,7 @@ fn tool_loop_tool_result_call_id(event: &Value) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn tool_loop_is_first_tool_result_in_group(
+pub(crate) fn tool_loop_is_first_tool_result_in_group(
     assistant_tool_call_event: &Value,
     tool_result_event: &Value,
 ) -> bool {
@@ -117,7 +117,7 @@ fn tool_loop_is_first_tool_result_in_group(
         .unwrap_or(false)
 }
 
-fn maybe_spawn_remote_im_tool_persist_auto_send(
+pub(crate) fn maybe_spawn_remote_im_tool_persist_auto_send(
     state: &AppState,
     context: &ToolLoopAutoCompactionContext,
     assistant_message_id: &str,

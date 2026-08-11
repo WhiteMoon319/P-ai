@@ -1,24 +1,24 @@
 #[derive(Debug, Clone)]
-struct ModelReply {
-    assistant_text: String,
-    final_response_text: String,
-    activity_reasoning_text: String,
-    assistant_provider_meta: Option<Value>,
-    tool_history_events: Vec<Value>,
-    suppress_assistant_message: bool,
-    trusted_input_tokens: Option<u64>,
-    usage: Option<Value>,
-    round_logs_recorded_internally: bool,
+pub(crate) struct ModelReply {
+    pub(crate) assistant_text: String,
+    pub(crate) final_response_text: String,
+    pub(crate) activity_reasoning_text: String,
+    pub(crate) assistant_provider_meta: Option<Value>,
+    pub(crate) tool_history_events: Vec<Value>,
+    pub(crate) suppress_assistant_message: bool,
+    pub(crate) trusted_input_tokens: Option<u64>,
+    pub(crate) usage: Option<Value>,
+    pub(crate) round_logs_recorded_internally: bool,
 }
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
-enum OpenAiApiKind {
+pub(crate) enum OpenAiApiKind {
     ChatCompletions,
     Responses,
 }
 
-fn genai_usage_to_log_value(usage: &genai::chat::Usage) -> Option<Value> {
+pub(crate) fn genai_usage_to_log_value(usage: &genai::chat::Usage) -> Option<Value> {
     let prompt_details = usage.prompt_tokens_details.as_ref();
     let completion_details = usage.completion_tokens_details.as_ref();
     let cache_creation_details =
@@ -46,7 +46,7 @@ fn genai_usage_to_log_value(usage: &genai::chat::Usage) -> Option<Value> {
     }))
 }
 
-fn genai_response_id_provider_meta(response_id: Option<&str>) -> Option<Value> {
+pub(crate) fn genai_response_id_provider_meta(response_id: Option<&str>) -> Option<Value> {
     response_id
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -59,7 +59,7 @@ fn genai_response_id_provider_meta(response_id: Option<&str>) -> Option<Value> {
         })
 }
 
-fn merge_assistant_provider_meta_patch(target: &mut Option<Value>, patch: Option<Value>) {
+pub(crate) fn merge_assistant_provider_meta_patch(target: &mut Option<Value>, patch: Option<Value>) {
     let Some(patch) = patch else {
         return;
     };
@@ -86,7 +86,7 @@ fn merge_assistant_provider_meta_patch(target: &mut Option<Value>, patch: Option
     }
 }
 
-fn add_provider_usage_delta_to_conversation(
+pub(crate) fn add_provider_usage_delta_to_conversation(
     app_state: Option<&AppState>,
     conversation_id: Option<&str>,
     provider_key: Option<&str>,
@@ -152,7 +152,7 @@ fn add_provider_usage_delta_to_conversation(
     }
 }
 
-fn usage_provider_key_from_api_config(api_config: &ResolvedApiConfig) -> String {
+pub(crate) fn usage_provider_key_from_api_config(api_config: &ResolvedApiConfig) -> String {
     api_config
         .provider_id
         .as_deref()
@@ -162,7 +162,7 @@ fn usage_provider_key_from_api_config(api_config: &ResolvedApiConfig) -> String 
         .unwrap_or_else(|| api_config.request_format.as_str().to_string())
 }
 
-fn normalize_openai_genai_base_url(raw: &str) -> String {
+pub(crate) fn normalize_openai_genai_base_url(raw: &str) -> String {
     let trimmed = raw.trim().trim_end_matches('/');
     if trimmed.is_empty() {
         "https://api.openai.com/v1/".to_string()
@@ -171,7 +171,7 @@ fn normalize_openai_genai_base_url(raw: &str) -> String {
     }
 }
 
-fn provider_openai_chat_adapter_kind(
+pub(crate) fn provider_openai_chat_adapter_kind(
     api_config: &ResolvedApiConfig,
     model_name: &str,
 ) -> genai::adapter::AdapterKind {
@@ -188,7 +188,7 @@ fn provider_openai_chat_adapter_kind(
     }
 }
 
-fn genai_content_parts_from_text_and_binary(
+pub(crate) fn genai_content_parts_from_text_and_binary(
     text_blocks: &[String],
     images: &[PreparedBinaryPayload],
     audios: &[PreparedBinaryPayload],
@@ -230,7 +230,7 @@ fn genai_content_parts_from_text_and_binary(
     parts
 }
 
-fn genai_tool_call_id_for_history(call: &NormalizedToolCallRecord) -> Option<String> {
+pub(crate) fn genai_tool_call_id_for_history(call: &NormalizedToolCallRecord) -> Option<String> {
     call.provider_call_id
         .as_deref()
         .map(str::trim)
@@ -238,7 +238,7 @@ fn genai_tool_call_id_for_history(call: &NormalizedToolCallRecord) -> Option<Str
         .map(ToOwned::to_owned)
 }
 
-fn legacy_tool_call_text_for_history(call: &NormalizedToolCallRecord) -> Option<String> {
+pub(crate) fn legacy_tool_call_text_for_history(call: &NormalizedToolCallRecord) -> Option<String> {
     let tool_name = call.tool_name.as_deref()?.trim();
     if tool_name.is_empty() {
         return None;
@@ -251,7 +251,7 @@ fn legacy_tool_call_text_for_history(call: &NormalizedToolCallRecord) -> Option<
     }
 }
 
-fn legacy_tool_result_text_for_history(tool_call_id: Option<&str>, text: &str) -> String {
+pub(crate) fn legacy_tool_result_text_for_history(tool_call_id: Option<&str>, text: &str) -> String {
     let trimmed = text.trim();
     let content = if trimmed.is_empty() { "(no output)" } else { text };
     match tool_call_id.map(str::trim).filter(|value| !value.is_empty()) {
@@ -260,7 +260,7 @@ fn legacy_tool_result_text_for_history(tool_call_id: Option<&str>, text: &str) -
     }
 }
 
-fn prepared_history_to_genai_messages(
+pub(crate) fn prepared_history_to_genai_messages(
     prepared: &PreparedPrompt,
 ) -> Result<Vec<genai::chat::ChatMessage>, String> {
     let mut chat_history = Vec::<genai::chat::ChatMessage>::new();
@@ -375,7 +375,7 @@ fn prepared_history_to_genai_messages(
     Ok(chat_history)
 }
 
-fn genai_assistant_message_has_provider_content(message: &genai::chat::ChatMessage) -> bool {
+pub(crate) fn genai_assistant_message_has_provider_content(message: &genai::chat::ChatMessage) -> bool {
     if !matches!(message.role, genai::chat::ChatRole::Assistant) {
         return true;
     }
@@ -405,7 +405,7 @@ fn genai_assistant_message_has_provider_content(message: &genai::chat::ChatMessa
         .any(|call| !call.call_id.trim().is_empty() && !call.fn_name.trim().is_empty())
 }
 
-fn sanitize_genai_messages_before_request(
+pub(crate) fn sanitize_genai_messages_before_request(
     messages: Vec<genai::chat::ChatMessage>,
     scene: &str,
 ) -> Vec<genai::chat::ChatMessage> {
@@ -429,7 +429,7 @@ fn sanitize_genai_messages_before_request(
     sanitized
 }
 
-fn build_genai_chat_request(prepared: &PreparedPrompt) -> Result<genai::chat::ChatRequest, String> {
+pub(crate) fn build_genai_chat_request(prepared: &PreparedPrompt) -> Result<genai::chat::ChatRequest, String> {
     let history_messages = prepared_history_to_genai_messages(prepared)?;
     let latest_parts = genai_content_parts_from_text_and_binary(
         &prepared_prompt_latest_user_text_blocks(prepared),
@@ -452,13 +452,13 @@ fn build_genai_chat_request(prepared: &PreparedPrompt) -> Result<genai::chat::Ch
     Ok(request)
 }
 
-fn build_provider_genai_request(
+pub(crate) fn build_provider_genai_request(
     prepared: &PreparedPrompt,
 ) -> Result<genai::chat::ChatRequest, String> {
     build_genai_chat_request(prepared)
 }
 
-fn normalize_gemini_genai_base_url(raw: &str) -> String {
+pub(crate) fn normalize_gemini_genai_base_url(raw: &str) -> String {
     let trimmed = raw.trim().trim_end_matches('/');
     if trimmed.is_empty() {
         return "https://generativelanguage.googleapis.com/v1beta/".to_string();
@@ -473,7 +473,7 @@ fn normalize_gemini_genai_base_url(raw: &str) -> String {
     format!("{with_version}/")
 }
 
-fn normalize_anthropic_genai_base_url(raw: &str) -> String {
+pub(crate) fn normalize_anthropic_genai_base_url(raw: &str) -> String {
     let trimmed = raw.trim().trim_end_matches('/');
     if trimmed.is_empty() {
         "https://api.anthropic.com/v1/".to_string()
@@ -487,7 +487,7 @@ fn normalize_anthropic_genai_base_url(raw: &str) -> String {
     }
 }
 
-fn normalize_minimax_genai_base_url(raw: &str) -> String {
+pub(crate) fn normalize_minimax_genai_base_url(raw: &str) -> String {
     let trimmed = raw.trim().trim_end_matches('/');
     if trimmed.is_empty() {
         return "https://api.minimax.io/anthropic/v1/".to_string();
@@ -501,7 +501,7 @@ fn normalize_minimax_genai_base_url(raw: &str) -> String {
     format!("{with_version}/")
 }
 
-fn normalize_provider_genai_base_url(
+pub(crate) fn normalize_provider_genai_base_url(
     adapter_kind: genai::adapter::AdapterKind,
     raw: &str,
 ) -> String {
@@ -525,7 +525,7 @@ fn normalize_provider_genai_base_url(
     }
 }
 
-fn provider_genai_headers(api_config: &ResolvedApiConfig) -> genai::Headers {
+pub(crate) fn provider_genai_headers(api_config: &ResolvedApiConfig) -> genai::Headers {
     match api_config.request_format {
         RequestFormat::Codex => {
             let mut headers = app_identity_genai_headers();
@@ -540,7 +540,7 @@ fn provider_genai_headers(api_config: &ResolvedApiConfig) -> genai::Headers {
     }
 }
 
-fn provider_genai_reasoning_effort(
+pub(crate) fn provider_genai_reasoning_effort(
     api_config: &ResolvedApiConfig,
 ) -> Option<genai::chat::ReasoningEffort> {
     if provider_genai_model_disables_reasoning(&api_config.model) {
@@ -557,18 +557,18 @@ fn provider_genai_reasoning_effort(
         .and_then(|value| value.parse::<genai::chat::ReasoningEffort>().ok())
 }
 
-fn provider_genai_reasoning_disabled_raw(api_config: &ResolvedApiConfig) -> bool {
+pub(crate) fn provider_genai_reasoning_disabled_raw(api_config: &ResolvedApiConfig) -> bool {
     matches!(
         api_config.reasoning_effort.as_deref().map(str::trim),
         Some(value) if value.eq_ignore_ascii_case("none")
     )
 }
 
-fn provider_genai_reasoning_explicitly_disabled(api_config: &ResolvedApiConfig) -> bool {
+pub(crate) fn provider_genai_reasoning_explicitly_disabled(api_config: &ResolvedApiConfig) -> bool {
     provider_genai_reasoning_disabled_raw(api_config)
 }
 
-fn provider_genai_requires_deepseek_thinking_disabled(api_config: &ResolvedApiConfig) -> bool {
+pub(crate) fn provider_genai_requires_deepseek_thinking_disabled(api_config: &ResolvedApiConfig) -> bool {
     if !provider_genai_reasoning_disabled_raw(api_config) {
         return false;
     }
@@ -584,13 +584,13 @@ fn provider_genai_requires_deepseek_thinking_disabled(api_config: &ResolvedApiCo
         || model_name.contains("doubao")
 }
 
-fn provider_genai_model_disables_reasoning(model_name: &str) -> bool {
+pub(crate) fn provider_genai_model_disables_reasoning(model_name: &str) -> bool {
     let normalized = model_name.trim().to_ascii_lowercase();
     normalized.starts_with("gpt-5.3-codex-spark")
         || normalized.contains("-codex-spark")
 }
 
-fn build_provider_genai_service_target(
+pub(crate) fn build_provider_genai_service_target(
     api_config: &ResolvedApiConfig,
     adapter_kind: genai::adapter::AdapterKind,
     model_name: &str,
@@ -606,7 +606,7 @@ fn build_provider_genai_service_target(
     }
 }
 
-fn resolve_provider_genai_adapter_kind(
+pub(crate) fn resolve_provider_genai_adapter_kind(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     fallback_adapter_kind: genai::adapter::AdapterKind,
@@ -620,7 +620,7 @@ fn resolve_provider_genai_adapter_kind(
     .adapter_kind
 }
 
-fn build_provider_genai_client_and_model_spec_from_target(
+pub(crate) fn build_provider_genai_client_and_model_spec_from_target(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     request_api_key: String,
@@ -663,7 +663,7 @@ fn build_provider_genai_client_and_model_spec_from_target(
     }
 }
 
-fn build_provider_genai_chat_options(
+pub(crate) fn build_provider_genai_chat_options(
     api_config: &ResolvedApiConfig,
     capture_reasoning_content: bool,
     capture_tool_calls: bool,
@@ -715,7 +715,7 @@ fn build_provider_genai_chat_options(
     options
 }
 
-async fn resolve_request_api_config(
+pub(crate) async fn resolve_request_api_config(
     api_config: &ResolvedApiConfig,
 ) -> Result<ResolvedApiConfig, String> {
     // 如果是自定义URL模式，直接使用自定义API Key
@@ -739,7 +739,7 @@ async fn resolve_request_api_config(
     Ok(next)
 }
 
-async fn call_model_genai_stream_internal(
+pub(crate) async fn call_model_genai_stream_internal(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
@@ -805,7 +805,7 @@ async fn call_model_genai_stream_internal(
     .await
 }
 
-async fn call_model_genai_stream(
+pub(crate) async fn call_model_genai_stream(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
@@ -825,7 +825,7 @@ async fn call_model_genai_stream(
     .await
 }
 
-async fn call_model_genai_stream_with_tools(
+pub(crate) async fn call_model_genai_stream_with_tools(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
@@ -846,7 +846,7 @@ async fn call_model_genai_stream_with_tools(
     .await
 }
 
-async fn call_model_genai_non_stream(
+pub(crate) async fn call_model_genai_non_stream(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
@@ -864,7 +864,7 @@ async fn call_model_genai_non_stream(
     .await
 }
 
-async fn call_model_genai_non_stream_with_definitions(
+pub(crate) async fn call_model_genai_non_stream_with_definitions(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
@@ -937,7 +937,7 @@ async fn call_model_genai_non_stream_with_definitions(
     })
 }
 
-async fn call_model_openai_responses(
+pub(crate) async fn call_model_openai_responses(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
@@ -985,7 +985,7 @@ async fn call_model_openai_responses(
     .await
 }
 
-async fn call_model_gemini(
+pub(crate) async fn call_model_gemini(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
@@ -1050,7 +1050,7 @@ async fn call_model_gemini(
     })
 }
 
-async fn call_model_anthropic(
+pub(crate) async fn call_model_anthropic(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,

@@ -1,8 +1,8 @@
-fn image_generation_endpoint_id(provider_id: &str, model_id: &str) -> String {
+pub(crate) fn image_generation_endpoint_id(provider_id: &str, model_id: &str) -> String {
     format!("{}::{}", provider_id.trim(), model_id.trim())
 }
 
-fn parse_image_generation_endpoint_id(value: &str) -> Option<(String, String)> {
+pub(crate) fn parse_image_generation_endpoint_id(value: &str) -> Option<(String, String)> {
     let (provider_id, model_id) = value.trim().split_once("::")?;
     let provider_id = provider_id.trim();
     let model_id = model_id.trim();
@@ -12,7 +12,7 @@ fn parse_image_generation_endpoint_id(value: &str) -> Option<(String, String)> {
     Some((provider_id.to_string(), model_id.to_string()))
 }
 
-fn default_image_generation_provider_name(kind: ImageGenerationProviderKind) -> &'static str {
+pub(crate) fn default_image_generation_provider_name(kind: ImageGenerationProviderKind) -> &'static str {
     match kind {
         ImageGenerationProviderKind::Comfyui => "Local ComfyUI",
         ImageGenerationProviderKind::Codex => "OpenAI Codex Image Generation",
@@ -23,7 +23,7 @@ fn default_image_generation_provider_name(kind: ImageGenerationProviderKind) -> 
     }
 }
 
-fn default_image_generation_base_url(kind: ImageGenerationProviderKind) -> &'static str {
+pub(crate) fn default_image_generation_base_url(kind: ImageGenerationProviderKind) -> &'static str {
     match kind {
         ImageGenerationProviderKind::Comfyui => "http://127.0.0.1:8188",
         ImageGenerationProviderKind::Codex => "https://chatgpt.com/backend-api/codex",
@@ -36,14 +36,14 @@ fn default_image_generation_base_url(kind: ImageGenerationProviderKind) -> &'sta
     }
 }
 
-fn normalize_image_generation_optional_text(value: &mut Option<String>) {
+pub(crate) fn normalize_image_generation_optional_text(value: &mut Option<String>) {
     *value = value
         .as_ref()
         .map(|item| item.trim().to_string())
         .filter(|item| !item.is_empty());
 }
 
-fn normalize_comfyui_node_mapping(
+pub(crate) fn normalize_comfyui_node_mapping(
     mapping: &mut ComfyUiNodeInputMapping,
     default_input_key: &str,
 ) {
@@ -61,7 +61,7 @@ fn normalize_comfyui_node_mapping(
     }
 }
 
-fn normalize_comfyui_workflow_mapping(mapping: &mut ComfyUiWorkflowMapping) {
+pub(crate) fn normalize_comfyui_workflow_mapping(mapping: &mut ComfyUiWorkflowMapping) {
     normalize_comfyui_node_mapping(&mut mapping.prompt, "text");
     normalize_comfyui_node_mapping(&mut mapping.negative_prompt, "text");
     normalize_comfyui_node_mapping(&mut mapping.model, "ckpt_name");
@@ -79,7 +79,7 @@ fn normalize_comfyui_workflow_mapping(mapping: &mut ComfyUiWorkflowMapping) {
         .collect();
 }
 
-fn normalize_image_generation_models(provider: &mut ImageGenerationProviderConfig) {
+pub(crate) fn normalize_image_generation_models(provider: &mut ImageGenerationProviderConfig) {
     let mut seen = std::collections::HashSet::<String>::new();
     provider.models.retain_mut(|model| {
         model.id = model.id.trim().to_string();
@@ -116,7 +116,7 @@ fn normalize_image_generation_models(provider: &mut ImageGenerationProviderConfi
     });
 }
 
-fn normalize_image_generation_provider(provider: &mut ImageGenerationProviderConfig) {
+pub(crate) fn normalize_image_generation_provider(provider: &mut ImageGenerationProviderConfig) {
     provider.id = provider.id.trim().to_string();
     provider.name = provider.name.trim().to_string();
     if provider.name.is_empty() {
@@ -150,7 +150,7 @@ fn normalize_image_generation_provider(provider: &mut ImageGenerationProviderCon
     normalize_image_generation_models(provider);
 }
 
-fn image_generation_model_exists(config: &AppConfig, endpoint_id: &str) -> bool {
+pub(crate) fn image_generation_model_exists(config: &AppConfig, endpoint_id: &str) -> bool {
     let Some((provider_id, model_id)) = parse_image_generation_endpoint_id(endpoint_id) else {
         return false;
     };
@@ -164,7 +164,7 @@ fn image_generation_model_exists(config: &AppConfig, endpoint_id: &str) -> bool 
     })
 }
 
-fn normalize_image_generation_config(config: &mut AppConfig) {
+pub(crate) fn normalize_image_generation_config(config: &mut AppConfig) {
     let mut seen = std::collections::HashSet::<String>::new();
     config.image_providers.retain_mut(|provider| {
         normalize_image_generation_provider(provider);

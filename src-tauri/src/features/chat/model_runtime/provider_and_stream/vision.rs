@@ -1,4 +1,4 @@
-async fn describe_image_with_vision_api(
+pub(crate) async fn describe_image_with_vision_api(
     state: &AppState,
     vision_resolved: &ResolvedApiConfig,
     vision_api: &ApiConfig,

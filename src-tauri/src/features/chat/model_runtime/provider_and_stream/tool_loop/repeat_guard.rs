@@ -1,11 +1,11 @@
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-struct ToolRepeatGuard {
-    last_tool_name: String,
-    last_args_signature: String,
-    same_call_streak: usize,
+pub(crate) struct ToolRepeatGuard {
+    pub(crate) last_tool_name: String,
+    pub(crate) last_args_signature: String,
+    pub(crate) same_call_streak: usize,
 }
 
-fn canonical_json_signature(value: &Value) -> String {
+pub(crate) fn canonical_json_signature(value: &Value) -> String {
     match value {
         Value::Null => "null".to_string(),
         Value::Bool(flag) => flag.to_string(),
@@ -40,7 +40,7 @@ fn canonical_json_signature(value: &Value) -> String {
     }
 }
 
-fn normalized_tool_args_signature(tool_args: &str) -> String {
+pub(crate) fn normalized_tool_args_signature(tool_args: &str) -> String {
     let trimmed = tool_args.trim();
     if trimmed.is_empty() {
         return String::new();
@@ -51,7 +51,7 @@ fn normalized_tool_args_signature(tool_args: &str) -> String {
     }
 }
 
-fn tool_args_effectively_empty(tool_args: &str) -> bool {
+pub(crate) fn tool_args_effectively_empty(tool_args: &str) -> bool {
     let trimmed = tool_args.trim();
     if trimmed.is_empty() {
         return true;
@@ -65,7 +65,7 @@ fn tool_args_effectively_empty(tool_args: &str) -> bool {
     }
 }
 
-fn repeated_tool_call_block_message(tool_name: &str, tool_args: &str, repeat_streak: usize) -> String {
+pub(crate) fn repeated_tool_call_block_message(tool_name: &str, tool_args: &str, repeat_streak: usize) -> String {
     if tool_args_effectively_empty(tool_args) {
         format!(
             "工具调用已被系统停止：{} 连续 {} 次使用空参数调用。请直接向用户说明缺少必要参数，不要继续调用该工具。",
@@ -79,7 +79,7 @@ fn repeated_tool_call_block_message(tool_name: &str, tool_args: &str, repeat_str
     }
 }
 
-fn register_tool_repeat_attempt(
+pub(crate) fn register_tool_repeat_attempt(
     guard: &mut ToolRepeatGuard,
     tool_name: &str,
     tool_args: &str,
@@ -95,7 +95,7 @@ fn register_tool_repeat_attempt(
     guard.same_call_streak
 }
 
-fn register_tool_repeat_attempt_once_per_batch(
+pub(crate) fn register_tool_repeat_attempt_once_per_batch(
     guard: &mut ToolRepeatGuard,
     batch_registered_signatures: &mut std::collections::HashSet<(String, String)>,
     tool_name: &str,
@@ -109,7 +109,7 @@ fn register_tool_repeat_attempt_once_per_batch(
     register_tool_repeat_attempt(guard, tool_name, tool_args)
 }
 
-fn repeated_tool_call_block_reply(
+pub(crate) fn repeated_tool_call_block_reply(
     full_activity_reasoning_text: String,
     tool_history_events: Vec<Value>,
     trusted_input_tokens: Option<u64>,

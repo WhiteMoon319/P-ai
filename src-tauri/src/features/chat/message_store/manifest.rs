@@ -1,8 +1,8 @@
-const MESSAGE_STORE_MANIFEST_VERSION: u32 = 1;
+pub(crate) const MESSAGE_STORE_MANIFEST_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-enum MessageStoreKind {
+pub(crate) enum MessageStoreKind {
     ConversationJson,
     JsonlSnapshot,
     JsonlEventLog,
@@ -10,7 +10,7 @@ enum MessageStoreKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-enum MessageStoreMigrationState {
+pub(crate) enum MessageStoreMigrationState {
     None,
     Building,
     Ready,
@@ -20,7 +20,7 @@ enum MessageStoreMigrationState {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct MessageStoreManifest {
+pub(crate) struct MessageStoreManifest {
     version: u32,
     message_store_kind: MessageStoreKind,
     migration_state: MessageStoreMigrationState,
@@ -39,7 +39,7 @@ pub(super) struct MessageStoreManifest {
 }
 
 impl MessageStoreManifest {
-    fn conversation_json_now(conversation: &Conversation) -> Self {
+    pub(crate) fn conversation_json_now(conversation: &Conversation) -> Self {
         Self {
             version: MESSAGE_STORE_MANIFEST_VERSION,
             message_store_kind: MessageStoreKind::ConversationJson,
@@ -57,7 +57,7 @@ impl MessageStoreManifest {
         }
     }
 
-    pub(super) fn jsonl_snapshot_building(conversation: &Conversation) -> Self {
+    pub(crate) fn jsonl_snapshot_building(conversation: &Conversation) -> Self {
         Self {
             message_store_kind: MessageStoreKind::JsonlSnapshot,
             migration_state: MessageStoreMigrationState::Building,
@@ -65,7 +65,7 @@ impl MessageStoreManifest {
         }
     }
 
-    fn jsonl_snapshot_ready(
+    pub(crate) fn jsonl_snapshot_ready(
         mut self,
         messages_jsonl_bytes: u64,
         messages_index_revision: u64,
@@ -78,7 +78,7 @@ impl MessageStoreManifest {
         self
     }
 
-    fn jsonl_snapshot_ready_for_messages(
+    pub(crate) fn jsonl_snapshot_ready_for_messages(
         source_message_count: usize,
         last_message_id: String,
         messages_jsonl_bytes: u64,
@@ -97,7 +97,7 @@ impl MessageStoreManifest {
         }
     }
 
-    pub(super) fn should_read_jsonl(&self) -> bool {
+    pub(crate) fn should_read_jsonl(&self) -> bool {
         matches!(
             (self.message_store_kind, self.migration_state),
             (
@@ -107,7 +107,7 @@ impl MessageStoreManifest {
         )
     }
 
-    pub(super) fn is_ready_directory_store(&self) -> bool {
+    pub(crate) fn is_ready_directory_store(&self) -> bool {
         matches!(
             (self.message_store_kind, self.migration_state),
             (
@@ -117,7 +117,7 @@ impl MessageStoreManifest {
         )
     }
 
-    fn should_write_jsonl_snapshot(&self) -> bool {
+    pub(crate) fn should_write_jsonl_snapshot(&self) -> bool {
         matches!(
             (self.message_store_kind, self.migration_state),
             (
@@ -127,7 +127,7 @@ impl MessageStoreManifest {
         )
     }
 
-    pub(super) fn store_kind_label(&self) -> &'static str {
+    pub(crate) fn store_kind_label(&self) -> &'static str {
         match self.message_store_kind {
             MessageStoreKind::ConversationJson => "conversationJson",
             MessageStoreKind::JsonlSnapshot => "jsonlSnapshot",
@@ -135,7 +135,7 @@ impl MessageStoreManifest {
         }
     }
 
-    pub(super) fn migration_state_label(&self) -> &'static str {
+    pub(crate) fn migration_state_label(&self) -> &'static str {
         match self.migration_state {
             MessageStoreMigrationState::None => "none",
             MessageStoreMigrationState::Building => "building",
@@ -145,23 +145,23 @@ impl MessageStoreManifest {
         }
     }
 
-    pub(super) fn source_message_count(&self) -> usize {
+    pub(crate) fn source_message_count(&self) -> usize {
         self.source_message_count
     }
 
-    pub(super) fn last_message_id(&self) -> &str {
+    pub(crate) fn last_message_id(&self) -> &str {
         &self.last_message_id
     }
 
-    pub(super) fn messages_jsonl_bytes(&self) -> u64 {
+    pub(crate) fn messages_jsonl_bytes(&self) -> u64 {
         self.messages_jsonl_bytes
     }
 
-    pub(super) fn updated_at(&self) -> &str {
+    pub(crate) fn updated_at(&self) -> &str {
         &self.updated_at
     }
 
-    fn stale_jsonl_reason(&self) -> Option<String> {
+    pub(crate) fn stale_jsonl_reason(&self) -> Option<String> {
         if self.should_read_jsonl() {
             return None;
         }
@@ -177,7 +177,7 @@ impl MessageStoreManifest {
         ))
     }
 
-    fn validate_version(&self, path: &PathBuf) -> Result<(), String> {
+    pub(crate) fn validate_version(&self, path: &PathBuf) -> Result<(), String> {
         if self.version != MESSAGE_STORE_MANIFEST_VERSION {
             return Err(format!(
                 "消息存储 manifest 版本不支持，path={}，expected={}，actual={}",
@@ -190,7 +190,7 @@ impl MessageStoreManifest {
     }
 }
 
-pub(super) fn read_message_store_manifest(path: &PathBuf) -> Result<Option<MessageStoreManifest>, String> {
+pub(crate) fn read_message_store_manifest(path: &PathBuf) -> Result<Option<MessageStoreManifest>, String> {
     if !path.exists() {
         return Ok(None);
     }
@@ -202,13 +202,13 @@ pub(super) fn read_message_store_manifest(path: &PathBuf) -> Result<Option<Messa
     Ok(Some(manifest))
 }
 
-pub(super) fn read_message_store_manifest_for_paths(
+pub(crate) fn read_message_store_manifest_for_paths(
     paths: &MessageStorePaths,
 ) -> Result<Option<MessageStoreManifest>, String> {
     read_message_store_manifest(&paths.manifest_file)
 }
 
-pub(super) fn write_message_store_manifest_atomic(
+pub(crate) fn write_message_store_manifest_atomic(
     path: &PathBuf,
     manifest: &MessageStoreManifest,
 ) -> Result<(), String> {

@@ -1,11 +1,11 @@
-fn build_genai_message_state(
+pub(crate) fn build_genai_message_state(
     prepared: &PreparedPrompt,
 ) -> Result<(Option<String>, Vec<genai::chat::ChatMessage>), String> {
     let request = build_genai_chat_request(prepared)?;
     Ok((request.system, request.messages))
 }
 
-async fn maybe_apply_auto_compaction_before_tool_continue_genai(
+pub(crate) async fn maybe_apply_auto_compaction_before_tool_continue_genai(
     state: Option<&AppState>,
     context: Option<&ToolLoopAutoCompactionContext>,
     selected_api: &ApiConfig,
@@ -150,12 +150,12 @@ async fn maybe_apply_auto_compaction_before_tool_continue_genai(
     Err(CHAT_DISPATCH_RESTART_AFTER_COMPACTION.to_string())
 }
 
-struct ToolLoopCompactionCheckpoint {
-    refreshed_source: Conversation,
-    boundary_messages: Vec<ChatMessage>,
+pub(crate) struct ToolLoopCompactionCheckpoint {
+    pub(crate) refreshed_source: Conversation,
+    pub(crate) boundary_messages: Vec<ChatMessage>,
 }
 
-fn persist_tool_loop_compaction_checkpoint(
+pub(crate) fn persist_tool_loop_compaction_checkpoint(
     state: &AppState,
     context: &ToolLoopAutoCompactionContext,
     on_delta: &DeltaChannel,

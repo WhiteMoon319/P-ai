@@ -1,5 +1,5 @@
 impl ConversationServiceV2 {
-    fn resolve_delegate_context(
+    pub(crate) fn resolve_delegate_context(
         &self,
         app_state: &AppState,
         source_agent_id: &str,
@@ -123,7 +123,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn resolve_delegate_result_target_conversation(
+    pub(crate) fn resolve_delegate_result_target_conversation(
         &self,
         state: &AppState,
         root_conversation_id: &str,

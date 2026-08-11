@@ -1,39 +1,39 @@
-const PRESERVED_DIALOGUE_READ_PAGE_SIZE: usize = 32;
-const ACTIVE_COMPACTION_PRESERVED_DIALOGUE_BUDGET: PreservedDialogueBudget =
+pub(crate) const PRESERVED_DIALOGUE_READ_PAGE_SIZE: usize = 32;
+pub(crate) const ACTIVE_COMPACTION_PRESERVED_DIALOGUE_BUDGET: PreservedDialogueBudget =
     PreservedDialogueBudget::Kib(26);
 #[allow(dead_code)]
-const EVALUATION_COMPACTION_PRESERVED_DIALOGUE_BUDGET: PreservedDialogueBudget =
+pub(crate) const EVALUATION_COMPACTION_PRESERVED_DIALOGUE_BUDGET: PreservedDialogueBudget =
     PreservedDialogueBudget::Tokens(10_000);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PreservedDialogueBudget {
+pub(crate) enum PreservedDialogueBudget {
     Tokens(usize),
     Kib(usize),
 }
 
 impl PreservedDialogueBudget {
-    fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Tokens(_) => "tokens",
             Self::Kib(_) => "kib",
         }
     }
 
-    fn limit(self) -> usize {
+    pub(crate) fn limit(self) -> usize {
         match self {
             Self::Tokens(tokens) => tokens,
             Self::Kib(kib) => kib.saturating_mul(1024),
         }
     }
 
-    fn measure(self, text: &str) -> usize {
+    pub(crate) fn measure(self, text: &str) -> usize {
         match self {
             Self::Tokens(_) => estimated_tokens_for_text(text).ceil() as usize,
             Self::Kib(_) => text.len(),
         }
     }
 
-    fn truncate(self, text: &str, remaining: usize) -> String {
+    pub(crate) fn truncate(self, text: &str, remaining: usize) -> String {
         match self {
             Self::Tokens(_) => truncate_text_to_token_limit(text, remaining),
             Self::Kib(_) => truncate_text_to_utf8_byte_limit(text, remaining),
@@ -41,7 +41,7 @@ impl PreservedDialogueBudget {
     }
 }
 
-fn truncate_text_to_utf8_byte_limit(text: &str, byte_limit: usize) -> String {
+pub(crate) fn truncate_text_to_utf8_byte_limit(text: &str, byte_limit: usize) -> String {
     if text.len() <= byte_limit {
         return text.to_string();
     }
@@ -52,14 +52,14 @@ fn truncate_text_to_utf8_byte_limit(text: &str, byte_limit: usize) -> String {
     text[..end].to_string()
 }
 
-struct PreservedDialogueAccumulator {
-    budget: PreservedDialogueBudget,
-    consumed: usize,
-    newest_first: Vec<String>,
+pub(crate) struct PreservedDialogueAccumulator {
+    pub(crate) budget: PreservedDialogueBudget,
+    pub(crate) consumed: usize,
+    pub(crate) newest_first: Vec<String>,
 }
 
 impl PreservedDialogueAccumulator {
-    fn new(budget: PreservedDialogueBudget) -> Self {
+    pub(crate) fn new(budget: PreservedDialogueBudget) -> Self {
         Self {
             budget,
             consumed: 0,
@@ -67,12 +67,12 @@ impl PreservedDialogueAccumulator {
         }
     }
 
-    fn is_full(&self) -> bool {
+    pub(crate) fn is_full(&self) -> bool {
         self.consumed >= self.budget.limit()
     }
 
     /// 按“最新到更早”的顺序加入一项。返回 true 表示预算已满，不应继续向前读取。
-    fn push(&mut self, text: &str) -> bool {
+    pub(crate) fn push(&mut self, text: &str) -> bool {
         let text = text.trim();
         if text.is_empty() || self.is_full() {
             return self.is_full();
@@ -110,13 +110,13 @@ impl PreservedDialogueAccumulator {
         true
     }
 
-    fn finish(mut self) -> String {
+    pub(crate) fn finish(mut self) -> String {
         self.newest_first.reverse();
         self.newest_first.join("\n")
     }
 }
 
-fn compaction_preserved_dialogue_section(message: &ChatMessage) -> Option<String> {
+pub(crate) fn compaction_preserved_dialogue_section(message: &ChatMessage) -> Option<String> {
     if !is_context_compaction_message(message, message.role.trim()) {
         return None;
     }
@@ -138,7 +138,7 @@ fn compaction_preserved_dialogue_section(message: &ChatMessage) -> Option<String
     None
 }
 
-fn preserved_dialogue_message_line(
+pub(crate) fn preserved_dialogue_message_line(
     message: &ChatMessage,
     user_alias: &str,
     assistant_name: &str,
@@ -175,7 +175,7 @@ fn preserved_dialogue_message_line(
 }
 
 #[cfg(test)]
-fn collect_block_preserved_dialogue(
+pub(crate) fn collect_block_preserved_dialogue(
     messages: &[ChatMessage],
     user_alias: &str,
     assistant_name: &str,
@@ -205,7 +205,7 @@ fn collect_block_preserved_dialogue(
 }
 
 impl ConversationServiceV2 {
-    fn read_block_preserved_dialogue(
+    pub(crate) fn read_block_preserved_dialogue(
         &self,
         state: &AppState,
         conversation_id: &str,

@@ -1,23 +1,23 @@
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ScreenshotForwardImagePayload {
-    mime: String,
-    base64: String,
-    width: u32,
-    height: u32,
+pub(crate) struct ScreenshotForwardImagePayload {
+    pub(crate) mime: String,
+    pub(crate) base64: String,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ScreenshotForwardPayload {
-    images: Vec<ScreenshotForwardImagePayload>,
+pub(crate) struct ScreenshotForwardPayload {
+    pub(crate) images: Vec<ScreenshotForwardImagePayload>,
 }
 
 #[derive(Debug, Clone)]
-struct ScreenshotArtifactEntry {
-    images: Vec<ScreenshotForwardImagePayload>,
-    created_seq: u64,
+pub(crate) struct ScreenshotArtifactEntry {
+    pub(crate) images: Vec<ScreenshotForwardImagePayload>,
+    pub(crate) created_seq: u64,
 }
 
-const SCREENSHOT_ARTIFACT_MAX_ITEMS: usize = 24;
+pub(crate) const SCREENSHOT_ARTIFACT_MAX_ITEMS: usize = 24;
 
 pub struct RuntimeToolAssembly {
     tools: Vec<Box<dyn RuntimeToolDyn>>,

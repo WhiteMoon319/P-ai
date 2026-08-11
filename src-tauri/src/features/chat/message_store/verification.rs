@@ -1,13 +1,13 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct MessageStoreVerificationReport {
-    message_count: usize,
-    last_message_id: String,
-    compaction_count: usize,
-    index: MessageStoreIndexFile,
-    last_valid_offset: u64,
+pub(crate) struct MessageStoreVerificationReport {
+    pub(crate) message_count: usize,
+    pub(crate) last_message_id: String,
+    pub(crate) compaction_count: usize,
+    pub(crate) index: MessageStoreIndexFile,
+    pub(crate) last_valid_offset: u64,
 }
 
-fn verify_jsonl_snapshot_content(
+pub(crate) fn verify_jsonl_snapshot_content(
     content: &str,
     expected_message_count: usize,
     expected_last_message_id: &str,
@@ -63,7 +63,7 @@ fn verify_jsonl_snapshot_content(
     })
 }
 
-fn verify_jsonl_snapshot_file(
+pub(crate) fn verify_jsonl_snapshot_file(
     path: &PathBuf,
     expected_message_count: usize,
     expected_last_message_id: &str,
@@ -73,7 +73,7 @@ fn verify_jsonl_snapshot_file(
     verify_jsonl_snapshot_content(&content, expected_message_count, expected_last_message_id)
 }
 
-fn repair_jsonl_snapshot_file(
+pub(crate) fn repair_jsonl_snapshot_file(
     path: &PathBuf,
     seen_message_ids: &mut std::collections::HashSet<String>,
 ) -> Result<(MessageStoreVerificationReport, usize, usize), String> {
@@ -114,7 +114,7 @@ fn repair_jsonl_snapshot_file(
     Ok((report, discarded, duplicate))
 }
 
-fn rebuild_jsonl_snapshot_index_from_file(path: &PathBuf) -> Result<MessageStoreIndexFile, String> {
+pub(crate) fn rebuild_jsonl_snapshot_index_from_file(path: &PathBuf) -> Result<MessageStoreIndexFile, String> {
     let report = verify_jsonl_snapshot_file(path, usize::MAX, "")?;
     Ok(report.index)
 }

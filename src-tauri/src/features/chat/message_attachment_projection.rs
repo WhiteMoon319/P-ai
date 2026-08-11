@@ -1,18 +1,42 @@
-const PROMPT_MESSAGE_ABSTRACT_SCHEMA_VERSION: u32 = 1;
+use std::{
+    fs,
+    io::Cursor,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+};
+
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use directories::ProjectDirs;
+use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
+use image::ImageFormat;
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use rmcp::{schemars, ServiceExt};
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
+use uuid::Uuid;
+
+// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
+
+
+use super::*;
+
+pub(crate) const PROMPT_MESSAGE_ABSTRACT_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone)]
-struct MessageProjectionContext {
-    current_department_id: String,
-    current_agent_id: String,
+pub(crate) struct MessageProjectionContext {
+    pub(crate) current_department_id: String,
+    pub(crate) current_agent_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct PromptMessageAbstract {
-    schema_version: u32,
-    message_id: String,
-    role: String,
-    parts: Vec<PromptMessageAbstractPart>,
+pub(crate) struct PromptMessageAbstract {
+    pub(crate) schema_version: u32,
+    pub(crate) message_id: String,
+    pub(crate) role: String,
+    pub(crate) parts: Vec<PromptMessageAbstractPart>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -21,7 +45,7 @@ struct PromptMessageAbstract {
     rename_all_fields = "camelCase",
     tag = "type"
 )]
-enum PromptMessageAbstractPart {
+pub(crate) enum PromptMessageAbstractPart {
     Text {
         text: String,
     },
@@ -39,29 +63,29 @@ enum PromptMessageAbstractPart {
 }
 
 #[derive(Debug, Clone)]
-struct AttachmentProjectionWarning {
-    message_id: String,
-    part_index: usize,
-    detail: String,
+pub(crate) struct AttachmentProjectionWarning {
+    pub(crate) message_id: String,
+    pub(crate) part_index: usize,
+    pub(crate) detail: String,
 }
 
 #[derive(Debug, Clone)]
-struct PromptMessageProjectionOutcome {
-    message: PromptMessageAbstract,
-    warnings: Vec<AttachmentProjectionWarning>,
-}
-
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-struct MaterializedPromptMessage {
-    message_id: String,
-    role: String,
-    parts: Vec<MaterializedPromptMessagePart>,
+pub(crate) struct PromptMessageProjectionOutcome {
+    pub(crate) message: PromptMessageAbstract,
+    pub(crate) warnings: Vec<AttachmentProjectionWarning>,
 }
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-enum MaterializedPromptMessagePart {
+pub(crate) struct MaterializedPromptMessage {
+    pub(crate) message_id: String,
+    pub(crate) role: String,
+    pub(crate) parts: Vec<MaterializedPromptMessagePart>,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub(crate) enum MaterializedPromptMessagePart {
     Text {
         text: String,
     },
@@ -79,7 +103,7 @@ enum MaterializedPromptMessagePart {
     },
 }
 
-fn message_attachment_kind(mime: &str) -> &'static str {
+pub(crate) fn message_attachment_kind(mime: &str) -> &'static str {
     let normalized = mime.trim().to_ascii_lowercase();
     if normalized.starts_with("image/") {
         "image"
@@ -92,11 +116,11 @@ fn message_attachment_kind(mime: &str) -> &'static str {
     }
 }
 
-fn message_attachment_display_path(path: &str) -> String {
+pub(crate) fn message_attachment_display_path(path: &str) -> String {
     path.trim().replace('\\', "/")
 }
 
-fn message_attachment_notice_text(label: &str, path: &str) -> String {
+pub(crate) fn message_attachment_notice_text(label: &str, path: &str) -> String {
     format!(
         "[{}]\npath: {}",
         label.trim(),
@@ -104,7 +128,7 @@ fn message_attachment_notice_text(label: &str, path: &str) -> String {
     )
 }
 
-fn prompt_projection_role(message: &ChatMessage, context: &MessageProjectionContext) -> String {
+pub(crate) fn prompt_projection_role(message: &ChatMessage, context: &MessageProjectionContext) -> String {
     let role = message.role.trim().to_ascii_lowercase();
     if !matches!(role.as_str(), "user" | "assistant") {
         return role;
@@ -121,7 +145,7 @@ fn prompt_projection_role(message: &ChatMessage, context: &MessageProjectionCont
     }
 }
 
-fn project_message_attachments(
+pub(crate) fn project_message_attachments(
     message: &ChatMessage,
     context: &MessageProjectionContext,
 ) -> PromptMessageProjectionOutcome {
@@ -209,7 +233,7 @@ fn project_message_attachments(
     }
 }
 
-fn materialize_prompt_message_attachments(
+pub(crate) fn materialize_prompt_message_attachments(
     projected: &PromptMessageAbstract,
 ) -> MaterializedPromptMessage {
     let mut parts = Vec::<MaterializedPromptMessagePart>::new();
@@ -266,7 +290,7 @@ fn materialize_prompt_message_attachments(
     }
 }
 
-fn render_prompt_message_abstract_user_text(projected: &PromptMessageAbstract) -> String {
+pub(crate) fn render_prompt_message_abstract_user_text(projected: &PromptMessageAbstract) -> String {
     let mut chunks = Vec::<String>::new();
     for part in &projected.parts {
         match part {
@@ -298,7 +322,7 @@ fn render_prompt_message_abstract_user_text(projected: &PromptMessageAbstract) -
 }
 
 #[cfg(test)]
-fn prompt_message_abstract_set_image_description(
+pub(crate) fn prompt_message_abstract_set_image_description(
     projected: &mut PromptMessageAbstract,
     label: &str,
     description: &str,
@@ -329,21 +353,21 @@ fn prompt_message_abstract_set_image_description(
 }
 
 #[derive(Debug, Clone)]
-struct AttachmentIngressInput {
-    path: Option<String>,
-    bytes_base64: Option<String>,
-    mime: String,
-    name: String,
-    storage_subdir: Option<String>,
+pub(crate) struct AttachmentIngressInput {
+    pub(crate) path: Option<String>,
+    pub(crate) bytes_base64: Option<String>,
+    pub(crate) mime: String,
+    pub(crate) name: String,
+    pub(crate) storage_subdir: Option<String>,
 }
 
 #[derive(Debug, Clone)]
-struct AttachmentIngressOutcome {
-    part: Option<MessagePart>,
-    warnings: Vec<String>,
+pub(crate) struct AttachmentIngressOutcome {
+    pub(crate) part: Option<MessagePart>,
+    pub(crate) warnings: Vec<String>,
 }
 
-fn attachment_path_is_legacy_marker_or_url(path: &str) -> bool {
+pub(crate) fn attachment_path_is_legacy_marker_or_url(path: &str) -> bool {
     let normalized = path.trim().to_ascii_lowercase();
     normalized.starts_with("@media:")
         || normalized.starts_with("@download:")
@@ -352,7 +376,7 @@ fn attachment_path_is_legacy_marker_or_url(path: &str) -> bool {
         || normalized.starts_with("data:")
 }
 
-fn attachment_absolute_path_from_input(state: &AppState, path: &str) -> Option<PathBuf> {
+pub(crate) fn attachment_absolute_path_from_input(state: &AppState, path: &str) -> Option<PathBuf> {
     let trimmed = path.trim();
     if trimmed.is_empty() || attachment_path_is_legacy_marker_or_url(trimmed) {
         return None;
@@ -366,7 +390,7 @@ fn attachment_absolute_path_from_input(state: &AppState, path: &str) -> Option<P
     Some(workspace_root.join(candidate))
 }
 
-fn attachment_name_from_path_or_input(path: &std::path::Path, name: &str) -> String {
+pub(crate) fn attachment_name_from_path_or_input(path: &std::path::Path, name: &str) -> String {
     let normalized_name = name.trim();
     if !normalized_name.is_empty() {
         return normalized_name.to_string();
@@ -379,7 +403,7 @@ fn attachment_name_from_path_or_input(path: &std::path::Path, name: &str) -> Str
         .to_string()
 }
 
-fn attachment_mime_from_input(path: Option<&std::path::Path>, mime: &str, raw: Option<&[u8]>) -> String {
+pub(crate) fn attachment_mime_from_input(path: Option<&std::path::Path>, mime: &str, raw: Option<&[u8]>) -> String {
     let normalized = mime.trim().to_ascii_lowercase();
     if !normalized.is_empty() {
         return normalized;
@@ -394,7 +418,7 @@ fn attachment_mime_from_input(path: Option<&std::path::Path>, mime: &str, raw: O
         .to_string()
 }
 
-fn normalize_attachment_ingress(
+pub(crate) fn normalize_attachment_ingress(
     state: &AppState,
     input: AttachmentIngressInput,
 ) -> AttachmentIngressOutcome {
@@ -494,7 +518,7 @@ fn normalize_attachment_ingress(
     }
 }
 
-fn push_normalized_attachment_ingress(
+pub(crate) fn push_normalized_attachment_ingress(
     state: &AppState,
     input: AttachmentIngressInput,
     parts: &mut Vec<MessagePart>,
@@ -523,7 +547,7 @@ fn push_normalized_attachment_ingress(
     }
 }
 
-fn normalize_chat_input_payload_to_message_parts(
+pub(crate) fn normalize_chat_input_payload_to_message_parts(
     state: &AppState,
     payload: &ChatInputPayload,
     storage_subdir: Option<&str>,
@@ -632,7 +656,7 @@ fn normalize_chat_input_payload_to_message_parts(
     (parts, warnings)
 }
 
-fn chat_input_payload_has_content(payload: &ChatInputPayload) -> bool {
+pub(crate) fn chat_input_payload_has_content(payload: &ChatInputPayload) -> bool {
     payload
         .parts
         .as_ref()
@@ -666,12 +690,14 @@ fn chat_input_payload_has_content(payload: &ChatInputPayload) -> bool {
             .is_some_and(|items| !items.is_empty())
 }
 
-fn legacy_attachment_unavailable_candidate_path(
+pub(crate) fn legacy_attachment_unavailable_candidate_path(
     data_path: &PathBuf,
     mime: &str,
     source: &str,
 ) -> PathBuf {
     use sha2::{Digest, Sha256};
+
+use super::*;
     let mut hasher = Sha256::new();
     hasher.update(source.as_bytes());
     let hash = bytes_to_lower_hex(hasher.finalize());
@@ -685,7 +711,7 @@ fn legacy_attachment_unavailable_candidate_path(
         ))
 }
 
-fn canonical_attachment_path_for_persistence(
+pub(crate) fn canonical_attachment_path_for_persistence(
     data_path: &PathBuf,
     path: &str,
     mime: &str,
@@ -721,7 +747,7 @@ fn canonical_attachment_path_for_persistence(
     )
 }
 
-fn legacy_binary_message_part_to_attachment(
+pub(crate) fn legacy_binary_message_part_to_attachment(
     data_path: &PathBuf,
     mime: &str,
     stored: &str,
@@ -811,7 +837,7 @@ fn legacy_binary_message_part_to_attachment(
     )
 }
 
-fn canonicalize_message_parts_for_persistence(
+pub(crate) fn canonicalize_message_parts_for_persistence(
     parts: &mut Vec<MessagePart>,
     data_path: &PathBuf,
 ) -> bool {
@@ -880,7 +906,6 @@ fn canonicalize_message_parts_for_persistence(
 
 #[cfg(test)]
 mod message_attachment_projection_tests {
-    use super::*;
 
     fn test_message(parts: Vec<MessagePart>) -> ChatMessage {
         ChatMessage {

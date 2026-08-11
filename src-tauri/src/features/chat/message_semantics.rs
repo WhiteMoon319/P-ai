@@ -1,30 +1,54 @@
+use std::{
+    fs,
+    io::Cursor,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+};
+
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use directories::ProjectDirs;
+use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
+use image::ImageFormat;
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use rmcp::{schemars, ServiceExt};
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
+use uuid::Uuid;
+
+
+use super::*;
+// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MessageToolHistoryView {
+
+pub(crate) enum MessageToolHistoryView {
     Display,
     PromptReplay,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct NormalizedToolCallRecord {
-    invocation_id: Option<String>,
-    provider_call_id: Option<String>,
-    tool_type: Option<String>,
-    tool_name: Option<String>,
-    arguments_value: Value,
-    arguments_text: String,
-    raw_arguments: Value,
+pub(crate) struct NormalizedToolCallRecord {
+    pub(crate) invocation_id: Option<String>,
+    pub(crate) provider_call_id: Option<String>,
+    pub(crate) tool_type: Option<String>,
+    pub(crate) tool_name: Option<String>,
+    pub(crate) arguments_value: Value,
+    pub(crate) arguments_text: String,
+    pub(crate) raw_arguments: Value,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct NormalizedMessageToolEvent {
-    role: String,
-    text: String,
-    reasoning_content: Option<String>,
-    tool_calls: Vec<NormalizedToolCallRecord>,
-    tool_call_id: Option<String>,
+pub(crate) struct NormalizedMessageToolEvent {
+    pub(crate) role: String,
+    pub(crate) text: String,
+    pub(crate) reasoning_content: Option<String>,
+    pub(crate) tool_calls: Vec<NormalizedToolCallRecord>,
+    pub(crate) tool_call_id: Option<String>,
 }
 
-fn normalize_tool_call_arguments(raw: Option<&Value>) -> (Value, String, Value) {
+pub(crate) fn normalize_tool_call_arguments(raw: Option<&Value>) -> (Value, String, Value) {
     let raw_arguments = raw
         .cloned()
         .unwrap_or_else(|| Value::String("{}".to_string()));
@@ -39,7 +63,7 @@ fn normalize_tool_call_arguments(raw: Option<&Value>) -> (Value, String, Value) 
     (arguments_value, arguments_text, raw_arguments)
 }
 
-fn normalize_prompt_tool_calls(raw_calls: &[Value]) -> Vec<NormalizedToolCallRecord> {
+pub(crate) fn normalize_prompt_tool_calls(raw_calls: &[Value]) -> Vec<NormalizedToolCallRecord> {
     raw_calls
         .iter()
         .map(|raw| {
@@ -84,7 +108,7 @@ fn normalize_prompt_tool_calls(raw_calls: &[Value]) -> Vec<NormalizedToolCallRec
         .collect()
 }
 
-fn normalize_message_tool_history_events(
+pub(crate) fn normalize_message_tool_history_events(
     message: &ChatMessage,
     view: MessageToolHistoryView,
 ) -> Vec<NormalizedMessageToolEvent> {
@@ -151,7 +175,7 @@ fn normalize_message_tool_history_events(
     normalized
 }
 
-fn normalized_tool_call_to_history_value(call: &NormalizedToolCallRecord) -> Option<Value> {
+pub(crate) fn normalized_tool_call_to_history_value(call: &NormalizedToolCallRecord) -> Option<Value> {
     let invocation_id = call.invocation_id.as_deref()?.trim();
     let tool_name = call.tool_name.as_deref()?.trim();
     if invocation_id.is_empty() || tool_name.is_empty() {
@@ -186,7 +210,7 @@ fn normalized_tool_call_to_history_value(call: &NormalizedToolCallRecord) -> Opt
     Some(Value::Object(obj))
 }
 
-fn build_prepared_history_messages_from_tool_history(
+pub(crate) fn build_prepared_history_messages_from_tool_history(
     message: &ChatMessage,
     view: MessageToolHistoryView,
 ) -> Vec<PreparedHistoryMessage> {
@@ -233,13 +257,13 @@ fn build_prepared_history_messages_from_tool_history(
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct FoldedAssistantRequestMessages {
-    assistant_text: String,
-    activity_reasoning_text: Option<String>,
-    tool_history_events: Vec<Value>,
+pub(crate) struct FoldedAssistantRequestMessages {
+    pub(crate) assistant_text: String,
+    pub(crate) activity_reasoning_text: Option<String>,
+    pub(crate) tool_history_events: Vec<Value>,
 }
 
-fn final_assistant_reasoning_from_request_sequence(
+pub(crate) fn final_assistant_reasoning_from_request_sequence(
     cumulative_reasoning: &str,
     tool_history_events: &[Value],
 ) -> String {
@@ -274,7 +298,7 @@ fn final_assistant_reasoning_from_request_sequence(
     remaining.trim().to_string()
 }
 
-fn assistant_request_sequence_from_tool_history(
+pub(crate) fn assistant_request_sequence_from_tool_history(
     tool_history_events: &[Value],
     assistant_text: &str,
     cumulative_activity_reasoning_text: &str,
@@ -308,14 +332,14 @@ fn assistant_request_sequence_from_tool_history(
     request_messages
 }
 
-fn request_message_has_tool_calls(message: &Value) -> bool {
+pub(crate) fn request_message_has_tool_calls(message: &Value) -> bool {
     message
         .get("tool_calls")
         .and_then(Value::as_array)
         .is_some_and(|calls| !calls.is_empty())
 }
 
-fn request_message_text_content(message: &Value) -> String {
+pub(crate) fn request_message_text_content(message: &Value) -> String {
     match message.get("content") {
         Some(Value::String(text)) => text.clone(),
         Some(Value::Null) | None => String::new(),
@@ -323,7 +347,7 @@ fn request_message_text_content(message: &Value) -> String {
     }
 }
 
-fn extract_final_assistant_text_and_meta(request_messages: &[Value]) -> (String, Option<String>) {
+pub(crate) fn extract_final_assistant_text_and_meta(request_messages: &[Value]) -> (String, Option<String>) {
     request_messages
         .iter()
         .rev()
@@ -347,7 +371,7 @@ fn extract_final_assistant_text_and_meta(request_messages: &[Value]) -> (String,
         .unwrap_or_else(|| (String::new(), None))
 }
 
-fn fold_request_messages_to_assistant_content(
+pub(crate) fn fold_request_messages_to_assistant_content(
     request_messages: &[Value],
 ) -> FoldedAssistantRequestMessages {
     let final_assistant_index = request_messages
@@ -388,7 +412,7 @@ fn fold_request_messages_to_assistant_content(
     }
 }
 
-fn normalize_assistant_provider_meta(provider_meta: Option<Value>) -> Option<Value> {
+pub(crate) fn normalize_assistant_provider_meta(provider_meta: Option<Value>) -> Option<Value> {
     let mut merged = provider_meta?;
     if !merged.is_object() {
         let raw_provider_meta = std::mem::replace(&mut merged, serde_json::json!({}));
@@ -399,7 +423,7 @@ fn normalize_assistant_provider_meta(provider_meta: Option<Value>) -> Option<Val
     Some(merged)
 }
 
-fn build_assistant_message_from_request_sequence(
+pub(crate) fn build_assistant_message_from_request_sequence(
     id: String,
     agent_id: &str,
     created_at: String,
@@ -429,7 +453,7 @@ fn build_assistant_message_from_request_sequence(
     }
 }
 
-fn populate_assistant_meme_annotations(
+pub(crate) fn populate_assistant_meme_annotations(
     state: &AppState,
     seed_source: &str,
     assistant_text: &str,
@@ -455,7 +479,7 @@ fn populate_assistant_meme_annotations(
     })
 }
 
-fn tool_history_markdown_lines_from_message(message: &ChatMessage) -> Vec<String> {
+pub(crate) fn tool_history_markdown_lines_from_message(message: &ChatMessage) -> Vec<String> {
     let mut out = Vec::<String>::new();
     for event in normalize_message_tool_history_events(message, MessageToolHistoryView::Display) {
         if event.role == "assistant" {
@@ -487,7 +511,6 @@ fn tool_history_markdown_lines_from_message(message: &ChatMessage) -> Vec<String
 
 #[cfg(test)]
 mod message_semantics_tests {
-    use super::*;
 
     fn test_message(role: &str, text: &str, created_at: &str) -> ChatMessage {
         ChatMessage {

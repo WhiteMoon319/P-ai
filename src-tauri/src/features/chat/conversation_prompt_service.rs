@@ -1,71 +1,96 @@
+use std::{
+    fs,
+    io::Cursor,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+};
+
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use directories::ProjectDirs;
+use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
+use image::ImageFormat;
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use rmcp::{schemars, ServiceExt};
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
+use uuid::Uuid;
+
+// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
+
+use super::*;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationPromptRevisions {
-    conversation_revision: u64,
-    prompt_revision: u64,
+
+
+pub(crate) struct ConversationPromptRevisions {
+    pub(crate) conversation_revision: u64,
+    pub(crate) prompt_revision: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AbstractConversationMessageProjection {
-    stable_message_id: String,
-    created_at: String,
-    role: String,
+pub(crate) struct AbstractConversationMessageProjection {
+    pub(crate) stable_message_id: String,
+    pub(crate) created_at: String,
+    pub(crate) role: String,
     #[serde(default)]
-    prompt_role: Option<String>,
-    semantic_kind: String,
+    pub(crate) prompt_role: Option<String>,
+    pub(crate) semantic_kind: String,
     #[serde(default)]
-    speaker_agent_id: Option<String>,
-    text_part_count: usize,
-    extra_text_block_count: usize,
-    image_part_count: usize,
-    audio_part_count: usize,
-    attachment_refs: Vec<String>,
-    tool_call_count: usize,
-    mcp_call_count: usize,
-    has_provider_meta: bool,
+    pub(crate) speaker_agent_id: Option<String>,
+    pub(crate) text_part_count: usize,
+    pub(crate) extra_text_block_count: usize,
+    pub(crate) image_part_count: usize,
+    pub(crate) audio_part_count: usize,
+    pub(crate) attachment_refs: Vec<String>,
+    pub(crate) tool_call_count: usize,
+    pub(crate) mcp_call_count: usize,
+    pub(crate) has_provider_meta: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationPromptSnapshot {
-    conversation_id: String,
-    agent_id: String,
-    revisions: ConversationPromptRevisions,
-    department_prompt: String,
-    environment_prompt: String,
-    abstract_messages: Vec<AbstractConversationMessageProjection>,
+pub(crate) struct ConversationPromptSnapshot {
+    pub(crate) conversation_id: String,
+    pub(crate) agent_id: String,
+    pub(crate) revisions: ConversationPromptRevisions,
+    pub(crate) department_prompt: String,
+    pub(crate) environment_prompt: String,
+    pub(crate) abstract_messages: Vec<AbstractConversationMessageProjection>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct PromptUsageResolution {
-    effective_prompt_tokens: u64,
-    usage_ratio: f64,
-    estimated_prompt_tokens: Option<u64>,
-    source: &'static str,
+pub(crate) struct PromptUsageResolution {
+    pub(crate) effective_prompt_tokens: u64,
+    pub(crate) usage_ratio: f64,
+    pub(crate) estimated_prompt_tokens: Option<u64>,
+    pub(crate) source: &'static str,
 }
 
 #[derive(Debug, Clone)]
-struct AbstractMessageProjectionCacheEntry {
-    revision: u64,
-    messages: Vec<AbstractConversationMessageProjection>,
+pub(crate) struct AbstractMessageProjectionCacheEntry {
+    pub(crate) revision: u64,
+    pub(crate) messages: Vec<AbstractConversationMessageProjection>,
 }
 
 #[derive(Debug, Default)]
-struct ConversationPromptService;
+pub(crate) struct ConversationPromptService;
 
-fn conversation_prompt_service() -> &'static ConversationPromptService {
+pub(crate) fn conversation_prompt_service() -> &'static ConversationPromptService {
     static SERVICE: OnceLock<ConversationPromptService> = OnceLock::new();
     SERVICE.get_or_init(ConversationPromptService::default)
 }
 
-fn prompt_usage_u64(value: &Value) -> Option<u64> {
+pub(crate) fn prompt_usage_u64(value: &Value) -> Option<u64> {
     value
         .as_u64()
         .or_else(|| value.as_i64().and_then(|item| u64::try_from(item).ok()))
 }
 
-fn prompt_usage_f64(value: &Value) -> Option<f64> {
+pub(crate) fn prompt_usage_f64(value: &Value) -> Option<f64> {
     value
         .as_f64()
         .or_else(|| value.as_i64().map(|item| item as f64))
@@ -73,7 +98,7 @@ fn prompt_usage_f64(value: &Value) -> Option<f64> {
         .filter(|item| item.is_finite())
 }
 
-fn prompt_usage_meta_u64(provider_meta: &Value, keys: &[&str]) -> Option<u64> {
+pub(crate) fn prompt_usage_meta_u64(provider_meta: &Value, keys: &[&str]) -> Option<u64> {
     keys.iter()
         .find_map(|key| provider_meta.get(*key).and_then(prompt_usage_u64))
         .or_else(|| {
@@ -85,7 +110,7 @@ fn prompt_usage_meta_u64(provider_meta: &Value, keys: &[&str]) -> Option<u64> {
         .filter(|value| *value > 0)
 }
 
-fn prompt_usage_meta_f64(provider_meta: &Value, keys: &[&str]) -> Option<f64> {
+pub(crate) fn prompt_usage_meta_f64(provider_meta: &Value, keys: &[&str]) -> Option<f64> {
     keys.iter()
         .find_map(|key| provider_meta.get(*key).and_then(prompt_usage_f64))
         .or_else(|| {
@@ -97,7 +122,7 @@ fn prompt_usage_meta_f64(provider_meta: &Value, keys: &[&str]) -> Option<f64> {
         .filter(|value| *value > 0.0)
 }
 
-fn prompt_usage_tokens_from_provider_meta(provider_meta: &Value) -> Option<(u64, &'static str)> {
+pub(crate) fn prompt_usage_tokens_from_provider_meta(provider_meta: &Value) -> Option<(u64, &'static str)> {
     if let Some(value) = prompt_usage_meta_u64(provider_meta, &["effectivePromptTokens"]) {
         return Some((value, "assistant_message_effective_prompt_tokens"));
     }
@@ -111,7 +136,7 @@ fn prompt_usage_tokens_from_provider_meta(provider_meta: &Value) -> Option<(u64,
     .map(|value| (value, "assistant_message_usage_prompt_tokens"))
 }
 
-fn prompt_usage_ratio_from_provider_meta(provider_meta: &Value) -> Option<(f64, &'static str)> {
+pub(crate) fn prompt_usage_ratio_from_provider_meta(provider_meta: &Value) -> Option<(f64, &'static str)> {
     if let Some(value) = prompt_usage_meta_f64(provider_meta, &["contextUsageRatio"]) {
         return Some((value, "assistant_message_context_usage_ratio"));
     }
@@ -119,7 +144,7 @@ fn prompt_usage_ratio_from_provider_meta(provider_meta: &Value) -> Option<(f64, 
         .map(|value| (value / 100.0, "assistant_message_context_usage_percent"))
 }
 
-fn prompt_usage_resolution_from_provider_meta(
+pub(crate) fn prompt_usage_resolution_from_provider_meta(
     provider_meta: &Value,
     selected_api: &ApiConfig,
 ) -> Option<PromptUsageResolution> {
@@ -147,7 +172,7 @@ fn prompt_usage_resolution_from_provider_meta(
     })
 }
 
-fn abstract_message_projection_cache(
+pub(crate) fn abstract_message_projection_cache(
 ) -> &'static Mutex<std::collections::HashMap<String, AbstractMessageProjectionCacheEntry>> {
     static CACHE: OnceLock<
         Mutex<std::collections::HashMap<String, AbstractMessageProjectionCacheEntry>>,
@@ -155,8 +180,10 @@ fn abstract_message_projection_cache(
     CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
-fn stable_revision_hash(parts: &[&str]) -> u64 {
+pub(crate) fn stable_revision_hash(parts: &[&str]) -> u64 {
     use std::hash::{Hash, Hasher};
+
+use super::*;
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     for part in parts {
         part.hash(&mut hasher);
@@ -164,14 +191,14 @@ fn stable_revision_hash(parts: &[&str]) -> u64 {
     hasher.finish()
 }
 
-fn stable_revision_hash_json<T: Serialize>(value: &T) -> u64 {
+pub(crate) fn stable_revision_hash_json<T: Serialize>(value: &T) -> u64 {
     match serde_json::to_string(value) {
         Ok(text) => stable_revision_hash(&[text.as_str()]),
         Err(err) => stable_revision_hash(&[format!("serde_error:{err}").as_str()]),
     }
 }
 
-fn flatten_system_prompt_blocks(blocks: &[String]) -> String {
+pub(crate) fn flatten_system_prompt_blocks(blocks: &[String]) -> String {
     let normalized = blocks
         .iter()
         .map(|value| value.trim())
@@ -181,7 +208,7 @@ fn flatten_system_prompt_blocks(blocks: &[String]) -> String {
     build_system_prompt_text_uncached(&normalized)
 }
 
-fn abstract_message_projection_semantic_kind(message: &ChatMessage, agent_id: &str) -> String {
+pub(crate) fn abstract_message_projection_semantic_kind(message: &ChatMessage, agent_id: &str) -> String {
     if is_context_compaction_message(message, &message.role) {
         let kind = message
             .provider_meta
@@ -207,7 +234,7 @@ fn abstract_message_projection_semantic_kind(message: &ChatMessage, agent_id: &s
     "standard".to_string()
 }
 
-fn build_abstract_message_projection(
+pub(crate) fn build_abstract_message_projection(
     message: &ChatMessage,
     agent_id: &str,
 ) -> AbstractConversationMessageProjection {
@@ -266,7 +293,7 @@ fn build_abstract_message_projection(
 }
 
 impl ConversationPromptService {
-    fn trusted_prompt_usage_from_real_usage(
+    pub(crate) fn trusted_prompt_usage_from_real_usage(
         &self,
         usage: PromptUsageResolution,
     ) -> Option<TrustedPromptUsage> {
@@ -280,7 +307,7 @@ impl ConversationPromptService {
         })
     }
 
-    fn trusted_prompt_usage_from_tokens(
+    pub(crate) fn trusted_prompt_usage_from_tokens(
         &self,
         effective_prompt_tokens: u64,
         selected_api: &ApiConfig,
@@ -297,7 +324,7 @@ impl ConversationPromptService {
         })
     }
 
-    fn prompt_usage_from_runtime_usage(
+    pub(crate) fn prompt_usage_from_runtime_usage(
         &self,
         usage: TrustedPromptUsage,
         trusted_source: &'static str,
@@ -314,7 +341,7 @@ impl ConversationPromptService {
         }
     }
 
-    fn prime_runtime_trusted_prompt_usage(
+    pub(crate) fn prime_runtime_trusted_prompt_usage(
         &self,
         runtime_context: &mut RuntimeContext,
         conversation: &Conversation,
@@ -339,7 +366,7 @@ impl ConversationPromptService {
         usage
     }
 
-    fn resolve_shared_trusted_prompt_usage_or_estimate(
+    pub(crate) fn resolve_shared_trusted_prompt_usage_or_estimate(
         &self,
         trusted_prompt_usage: &std::sync::Mutex<Option<TrustedPromptUsage>>,
         prepared: &PreparedPrompt,
@@ -354,7 +381,7 @@ impl ConversationPromptService {
         self.resolve_prompt_usage_from_estimate(prepared, selected_api, current_agent)
     }
 
-    fn refresh_shared_trusted_prompt_usage(
+    pub(crate) fn refresh_shared_trusted_prompt_usage(
         &self,
         trusted_prompt_usage: &std::sync::Mutex<Option<TrustedPromptUsage>>,
         provider_prompt_tokens: Option<u64>,
@@ -370,7 +397,7 @@ impl ConversationPromptService {
         *guard = Some(next);
     }
 
-    fn update_runtime_trusted_prompt_usage_from_request(
+    pub(crate) fn update_runtime_trusted_prompt_usage_from_request(
         &self,
         runtime_context: &mut RuntimeContext,
         provider_prompt_tokens: Option<u64>,
@@ -390,7 +417,7 @@ impl ConversationPromptService {
         }
     }
 
-    fn store_shared_prompt_usage_resolution(
+    pub(crate) fn store_shared_prompt_usage_resolution(
         &self,
         trusted_prompt_usage: &std::sync::Mutex<Option<TrustedPromptUsage>>,
         usage: &PromptUsageResolution,
@@ -407,7 +434,7 @@ impl ConversationPromptService {
         *guard = Some(next);
     }
 
-    fn latest_real_prompt_usage(
+    pub(crate) fn latest_real_prompt_usage(
         &self,
         conversation: &Conversation,
         selected_api: &ApiConfig,
@@ -431,7 +458,7 @@ impl ConversationPromptService {
         None
     }
 
-    fn estimate_prepared_prompt_tokens(
+    pub(crate) fn estimate_prepared_prompt_tokens(
         &self,
         prepared: &PreparedPrompt,
         selected_api: &ApiConfig,
@@ -503,7 +530,7 @@ impl ConversationPromptService {
         total.ceil().max(0.0).min(u64::MAX as f64) as u64
     }
 
-    fn resolve_prompt_usage_from_estimate(
+    pub(crate) fn resolve_prompt_usage_from_estimate(
         &self,
         prepared: &PreparedPrompt,
         selected_api: &ApiConfig,
@@ -520,7 +547,7 @@ impl ConversationPromptService {
         }
     }
 
-    fn resolve_prompt_usage(
+    pub(crate) fn resolve_prompt_usage(
         &self,
         prepared: &PreparedPrompt,
         selected_api: &ApiConfig,
@@ -533,7 +560,7 @@ impl ConversationPromptService {
         self.resolve_prompt_usage_from_estimate(prepared, selected_api, current_agent)
     }
 
-    fn build_prompt_revisions(
+    pub(crate) fn build_prompt_revisions(
         &self,
         conversation: &Conversation,
         department_prompt: &str,
@@ -553,7 +580,7 @@ impl ConversationPromptService {
         }
     }
 
-    fn get_or_build_abstract_message_projection(
+    pub(crate) fn get_or_build_abstract_message_projection(
         &self,
         state: Option<&AppState>,
         conversation: &Conversation,
@@ -603,7 +630,7 @@ impl ConversationPromptService {
         messages
     }
 
-    fn build_prompt_snapshot(
+    pub(crate) fn build_prompt_snapshot(
         &self,
         state: Option<&AppState>,
         mode_label: &str,
@@ -795,7 +822,7 @@ impl ConversationPromptService {
         }
     }
 
-    fn resolve_terminal_block(
+    pub(crate) fn resolve_terminal_block(
         &self,
         state: Option<&AppState>,
         conversation: &Conversation,
@@ -823,7 +850,7 @@ impl ConversationPromptService {
         block
     }
 
-    fn build_internal_system_preamble_blocks(
+    pub(crate) fn build_internal_system_preamble_blocks(
         &self,
         state: Option<&AppState>,
         conversation: &Conversation,
@@ -895,7 +922,7 @@ impl ConversationPromptService {
         blocks
     }
 
-    fn build_latest_user_payload(
+    pub(crate) fn build_latest_user_payload(
         &self,
         _mode: PromptBuildMode,
         state: Option<&AppState>,
@@ -990,7 +1017,7 @@ impl ConversationPromptService {
         }
     }
 
-    fn finalize_system_prompt(
+    pub(crate) fn finalize_system_prompt(
         &self,
         state: Option<&AppState>,
         mode_label: &str,
@@ -1091,7 +1118,7 @@ impl ConversationPromptService {
         prompt_text
     }
 
-    fn build_conversation_payload(
+    pub(crate) fn build_conversation_payload(
         &self,
         enriched_conversation: &Conversation,
         source_conversation: &Conversation,
@@ -1123,7 +1150,7 @@ impl ConversationPromptService {
         )
     }
 
-    fn build_prepared_prompt_for_mode(
+    pub(crate) fn build_prepared_prompt_for_mode(
         &self,
         mode: PromptBuildMode,
         conversation: &Conversation,
@@ -1263,7 +1290,7 @@ impl ConversationPromptService {
         }
     }
 
-    fn build_tool_safety_review_prepared_prompt(
+    pub(crate) fn build_tool_safety_review_prepared_prompt(
         &self,
         language: &str,
         tool_name: &str,
@@ -1281,7 +1308,7 @@ impl ConversationPromptService {
         }
     }
 
-    fn build_vision_description_prepared_prompt(
+    pub(crate) fn build_vision_description_prepared_prompt(
         &self,
         image: &BinaryPart,
     ) -> PreparedPrompt {

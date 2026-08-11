@@ -1,37 +1,37 @@
-const INTERNAL_MAX_TOOL_LOOP_ROUNDS: usize = 10000;
-const REPEATED_TOOL_CALL_BLOCK_THRESHOLD: usize = 3;
+pub(crate) const INTERNAL_MAX_TOOL_LOOP_ROUNDS: usize = 10000;
+pub(crate) const REPEATED_TOOL_CALL_BLOCK_THRESHOLD: usize = 3;
 
-struct GenaiToolLoopRoundOutput {
-    turn_text: String,
-    turn_reasoning: String,
-    reasoning_delta_emitted: bool,
-    turn_tool_calls: Vec<genai::chat::ToolCall>,
-    trusted_input_tokens: Option<u64>,
-    usage: Option<Value>,
-    assistant_provider_meta: Option<Value>,
+pub(crate) struct GenaiToolLoopRoundOutput {
+    pub(crate) turn_text: String,
+    pub(crate) turn_reasoning: String,
+    pub(crate) reasoning_delta_emitted: bool,
+    pub(crate) turn_tool_calls: Vec<genai::chat::ToolCall>,
+    pub(crate) trusted_input_tokens: Option<u64>,
+    pub(crate) usage: Option<Value>,
+    pub(crate) assistant_provider_meta: Option<Value>,
 }
 
 #[derive(Debug, Clone)]
-struct PreparedToolCall {
-    tool_call_id: String,
-    tool_name: String,
-    tool_args: String,
+pub(crate) struct PreparedToolCall {
+    pub(crate) tool_call_id: String,
+    pub(crate) tool_name: String,
+    pub(crate) tool_args: String,
 }
 
 #[derive(Debug)]
-struct ExecutedToolCall {
-    tool_call_id: String,
-    tool_name: String,
-    tool_args: String,
-    tool_result: ProviderToolResult,
+pub(crate) struct ExecutedToolCall {
+    pub(crate) tool_call_id: String,
+    pub(crate) tool_name: String,
+    pub(crate) tool_args: String,
+    pub(crate) tool_result: ProviderToolResult,
 }
 
 #[derive(Debug)]
-struct PreparedToolCallBatch {
-    calls: Vec<PreparedToolCall>,
+pub(crate) struct PreparedToolCallBatch {
+    pub(crate) calls: Vec<PreparedToolCall>,
 }
 
-fn tool_result_history_event(
+pub(crate) fn tool_result_history_event(
     tool_call_id: &str,
     content: String,
     metadata: &ProviderToolMetadata,
@@ -54,7 +54,7 @@ fn tool_result_history_event(
 include!("tool_loop/repeat_guard.rs");
 include!("tool_loop/tool_output_store.rs");
 
-fn tool_loop_round_tool_calls_json(tool_calls: &[genai::chat::ToolCall]) -> Vec<Value> {
+pub(crate) fn tool_loop_round_tool_calls_json(tool_calls: &[genai::chat::ToolCall]) -> Vec<Value> {
     tool_calls
         .iter()
         .map(|tool_call| {
@@ -74,7 +74,7 @@ fn tool_loop_round_tool_calls_json(tool_calls: &[genai::chat::ToolCall]) -> Vec<
         .collect::<Vec<_>>()
 }
 
-fn tool_loop_assistant_message(
+pub(crate) fn tool_loop_assistant_message(
     turn_text: &str,
     turn_tool_calls: &[genai::chat::ToolCall],
     turn_reasoning: &str,
@@ -102,7 +102,7 @@ fn tool_loop_assistant_message(
     .with_reasoning_content(Some(turn_reasoning.trim().to_string()))
 }
 
-fn tool_loop_round_response_value(
+pub(crate) fn tool_loop_round_response_value(
     turn_text: &str,
     turn_reasoning: &str,
     turn_tool_calls: &[genai::chat::ToolCall],
@@ -121,7 +121,7 @@ fn tool_loop_round_response_value(
     response
 }
 
-fn push_tool_loop_round_log(
+pub(crate) fn push_tool_loop_round_log(
     state: Option<&AppState>,
     chat_session_key: &str,
     selected_api: &ApiConfig,
@@ -155,30 +155,30 @@ fn push_tool_loop_round_log(
 }
 
 #[derive(Debug, Clone)]
-struct ToolLoopAutoCompactionContext {
-    conversation_id: String,
-    request_id: Option<String>,
+pub(crate) struct ToolLoopAutoCompactionContext {
+    pub(crate) conversation_id: String,
+    pub(crate) request_id: Option<String>,
     /// 不能从会话级流缓存回读：远程应答委托允许同会话并发。
-    assistant_message_id: Option<String>,
-    remote_im_reply_delegate_id: Option<String>,
-    remote_im_auto_send_source: Option<RemoteImActivationSource>,
-    prompt_mode: PromptBuildMode,
-    agent: AgentProfile,
-    agents: Vec<AgentProfile>,
-    departments: Vec<DepartmentConfig>,
-    user_name: String,
-    user_intro: String,
-    response_style_id: String,
-    ui_language: String,
-    last_archive_summary: Option<String>,
-    chat_overrides: Option<ChatPromptOverrides>,
-    trusted_prompt_usage: std::sync::Arc<std::sync::Mutex<Option<TrustedPromptUsage>>>,
+    pub(crate) assistant_message_id: Option<String>,
+    pub(crate) remote_im_reply_delegate_id: Option<String>,
+    pub(crate) remote_im_auto_send_source: Option<RemoteImActivationSource>,
+    pub(crate) prompt_mode: PromptBuildMode,
+    pub(crate) agent: AgentProfile,
+    pub(crate) agents: Vec<AgentProfile>,
+    pub(crate) departments: Vec<DepartmentConfig>,
+    pub(crate) user_name: String,
+    pub(crate) user_intro: String,
+    pub(crate) response_style_id: String,
+    pub(crate) ui_language: String,
+    pub(crate) last_archive_summary: Option<String>,
+    pub(crate) chat_overrides: Option<ChatPromptOverrides>,
+    pub(crate) trusted_prompt_usage: std::sync::Arc<std::sync::Mutex<Option<TrustedPromptUsage>>>,
     /// 写入前闸门命中压缩时，把压缩保留消息交回外层调度。
-    compaction_preserved_messages:
+    pub(crate) compaction_preserved_messages:
         std::sync::Arc<std::sync::Mutex<Option<CompactionPreservedMessages>>>,
 }
 
-fn tool_loop_transient_tool_history_message(events: &[Value]) -> Option<ChatMessage> {
+pub(crate) fn tool_loop_transient_tool_history_message(events: &[Value]) -> Option<ChatMessage> {
     if events.is_empty() {
         return None;
     }
@@ -199,7 +199,7 @@ fn tool_loop_transient_tool_history_message(events: &[Value]) -> Option<ChatMess
     })
 }
 
-fn append_tool_loop_transient_history_to_prepared(
+pub(crate) fn append_tool_loop_transient_history_to_prepared(
     prepared: &mut PreparedPrompt,
     transient_tool_history: &[Value],
 ) {
@@ -215,7 +215,7 @@ fn append_tool_loop_transient_history_to_prepared(
     normalize_prepared_history_messages_in_place(prepared);
 }
 
-fn tool_loop_guided_close_reply(
+pub(crate) fn tool_loop_guided_close_reply(
     activity_reasoning_text: String,
     tool_history_events: Vec<Value>,
     trusted_input_tokens: Option<u64>,
@@ -236,11 +236,11 @@ fn tool_loop_guided_close_reply(
 }
 
 #[derive(Debug, Clone)]
-enum DeferredToolLoopOutcome {
+pub(crate) enum DeferredToolLoopOutcome {
     PlanPresent(TerminalToolResultMessage),
 }
 
-fn deferred_tool_loop_outcome_from_result(
+pub(crate) fn deferred_tool_loop_outcome_from_result(
     tool_name: &str,
     tool_args: &str,
     tool_result: &ProviderToolResult,
@@ -249,7 +249,7 @@ fn deferred_tool_loop_outcome_from_result(
         .map(DeferredToolLoopOutcome::PlanPresent)
 }
 
-fn finalize_deferred_tool_loop_outcome(
+pub(crate) fn finalize_deferred_tool_loop_outcome(
     outcome: DeferredToolLoopOutcome,
     full_activity_reasoning_text: String,
     tool_history_events: Vec<Value>,
@@ -274,7 +274,7 @@ fn finalize_deferred_tool_loop_outcome(
 
 include!("tool_loop/tool_event_projection.rs");
 
-fn tool_loop_active_conversation_snapshot(
+pub(crate) fn tool_loop_active_conversation_snapshot(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<Option<Conversation>, String> {
@@ -289,7 +289,7 @@ fn tool_loop_active_conversation_snapshot(
     }
 }
 
-fn build_tool_loop_prepared_for_continuation(
+pub(crate) fn build_tool_loop_prepared_for_continuation(
     state: &AppState,
     context: &ToolLoopAutoCompactionContext,
     selected_api: &ApiConfig,
@@ -327,7 +327,7 @@ include!("tool_loop/remote_im_tools.rs");
 include!("tool_loop/tool_result_handling.rs");
 include!("tool_loop/runtime_execution.rs");
 include!("tool_loop/compaction.rs");
-async fn run_genai_tool_loop(
+pub(crate) async fn run_genai_tool_loop(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
@@ -915,7 +915,7 @@ async fn run_genai_tool_loop(
     })
 }
 
-async fn execute_genai_non_stream_round(
+pub(crate) async fn execute_genai_non_stream_round(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     client: &genai::Client,
@@ -973,7 +973,7 @@ async fn execute_genai_non_stream_round(
     })
 }
 
-async fn run_genai_tool_loop_non_stream(
+pub(crate) async fn run_genai_tool_loop_non_stream(
     api_config: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
@@ -1477,8 +1477,8 @@ mod tool_loop_tests {
     use super::*;
 
     struct TestRuntimeTool {
-        name: &'static str,
-        mcp: bool,
+        pub(crate) name: &'static str,
+        pub(crate) mcp: bool,
     }
 
     impl RuntimeToolDyn for TestRuntimeTool {

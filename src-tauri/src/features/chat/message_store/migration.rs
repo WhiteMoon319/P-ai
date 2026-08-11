@@ -1,20 +1,20 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct MessageStoreMigrationPlan {
-    conversation_id: String,
-    source_message_count: usize,
-    source_last_message_id: String,
-    target_store_kind: MessageStoreKind,
-    dry_run: bool,
+pub(crate) struct MessageStoreMigrationPlan {
+    pub(crate) conversation_id: String,
+    pub(crate) source_message_count: usize,
+    pub(crate) source_last_message_id: String,
+    pub(crate) target_store_kind: MessageStoreKind,
+    pub(crate) dry_run: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct MessageStoreMigrationOutcome {
-    pub(super) conversation_id: String,
-    pub(super) manifest: MessageStoreManifest,
-    pub(super) wrote_files: bool,
+pub(crate) struct MessageStoreMigrationOutcome {
+    pub(crate) conversation_id: String,
+    pub(crate) manifest: MessageStoreManifest,
+    pub(crate) wrote_files: bool,
 }
 
-fn plan_message_store_jsonl_snapshot_migration(
+pub(crate) fn plan_message_store_jsonl_snapshot_migration(
     conversation: &Conversation,
     dry_run: bool,
 ) -> Result<MessageStoreMigrationPlan, String> {
@@ -35,7 +35,7 @@ fn plan_message_store_jsonl_snapshot_migration(
     })
 }
 
-fn build_jsonl_snapshot_migration_artifacts(
+pub(crate) fn build_jsonl_snapshot_migration_artifacts(
     conversation: &Conversation,
 ) -> Result<(String, MessageStoreManifest, MessageStoreIndexFile), String> {
     let plan = plan_message_store_jsonl_snapshot_migration(conversation, false)?;
@@ -50,7 +50,7 @@ fn build_jsonl_snapshot_migration_artifacts(
     Ok((content, manifest, report.index))
 }
 
-pub(super) fn run_jsonl_snapshot_migration(
+pub(crate) fn run_jsonl_snapshot_migration(
     paths: &MessageStorePaths,
     conversation: &Conversation,
     dry_run: bool,
@@ -75,7 +75,7 @@ pub(super) fn run_jsonl_snapshot_migration(
     })
 }
 
-fn read_message_store_manifest_for_resume(
+pub(crate) fn read_message_store_manifest_for_resume(
     paths: &MessageStorePaths,
 ) -> Result<Option<MessageStoreManifest>, String> {
     if !paths.manifest_file.exists() {
@@ -106,7 +106,7 @@ fn read_message_store_manifest_for_resume(
     }
 }
 
-fn backup_corrupt_message_store_manifest(
+pub(crate) fn backup_corrupt_message_store_manifest(
     paths: &MessageStorePaths,
     raw: &str,
 ) -> Result<PathBuf, String> {
@@ -123,7 +123,7 @@ fn backup_corrupt_message_store_manifest(
     Ok(backup_path)
 }
 
-pub(super) fn resume_jsonl_snapshot_migration(
+pub(crate) fn resume_jsonl_snapshot_migration(
     paths: &MessageStorePaths,
     conversation: &Conversation,
 ) -> Result<MessageStoreMigrationOutcome, String> {
@@ -170,7 +170,7 @@ pub(super) fn resume_jsonl_snapshot_migration(
     }
 }
 
-pub(super) fn recover_ready_jsonl_snapshot_manifest_from_directory(
+pub(crate) fn recover_ready_jsonl_snapshot_manifest_from_directory(
     paths: &MessageStorePaths,
 ) -> Result<Option<MessageStoreManifest>, String> {
     let Some(manifest) = read_message_store_manifest(&paths.manifest_file)? else {
@@ -211,7 +211,7 @@ pub(super) fn recover_ready_jsonl_snapshot_manifest_from_directory(
     Ok(Some(ready_manifest))
 }
 
-pub(super) fn rollback_jsonl_snapshot_migration(
+pub(crate) fn rollback_jsonl_snapshot_migration(
     paths: &MessageStorePaths,
     conversation: &Conversation,
 ) -> Result<MessageStoreManifest, String> {
@@ -221,7 +221,7 @@ pub(super) fn rollback_jsonl_snapshot_migration(
     Ok(manifest)
 }
 
-pub(super) fn rollback_message_store_manifest(
+pub(crate) fn rollback_message_store_manifest(
     paths: &MessageStorePaths,
     mut manifest: MessageStoreManifest,
 ) -> Result<MessageStoreManifest, String> {

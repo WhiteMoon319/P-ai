@@ -1,19 +1,19 @@
-const TOOL_OUTPUT_RETENTION_SECS: u64 = 7 * 24 * 60 * 60;
-static TOOL_OUTPUT_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+pub(crate) const TOOL_OUTPUT_RETENTION_SECS: u64 = 7 * 24 * 60 * 60;
+pub(crate) static TOOL_OUTPUT_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
-fn tool_output_line_count(text: &str) -> usize {
+pub(crate) fn tool_output_line_count(text: &str) -> usize {
     text.bytes().filter(|byte| *byte == b'\n').count().saturating_add(1)
 }
 
-fn tool_output_directory_from_workspace(llm_workspace_path: &std::path::Path) -> std::path::PathBuf {
+pub(crate) fn tool_output_directory_from_workspace(llm_workspace_path: &std::path::Path) -> std::path::PathBuf {
     llm_workspace_path.join("tool-output")
 }
 
-fn tool_output_directory(state: &AppState) -> std::path::PathBuf {
+pub(crate) fn tool_output_directory(state: &AppState) -> std::path::PathBuf {
     tool_output_directory_from_workspace(&state.llm_workspace_path)
 }
 
-fn cleanup_expired_tool_outputs(directory: &std::path::Path) {
+pub(crate) fn cleanup_expired_tool_outputs(directory: &std::path::Path) {
     let Ok(entries) = std::fs::read_dir(directory) else { return; };
     let now = std::time::SystemTime::now();
     for entry in entries.flatten() {
@@ -26,7 +26,7 @@ fn cleanup_expired_tool_outputs(directory: &std::path::Path) {
     }
 }
 
-fn store_full_tool_output_at(directory: &std::path::Path, text: &str) -> Result<std::path::PathBuf, String> {
+pub(crate) fn store_full_tool_output_at(directory: &std::path::Path, text: &str) -> Result<std::path::PathBuf, String> {
     std::fs::create_dir_all(&directory).map_err(|err| format!("创建工具输出目录失败: {err}"))?;
     cleanup_expired_tool_outputs(directory);
     let sequence = TOOL_OUTPUT_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -35,28 +35,28 @@ fn store_full_tool_output_at(directory: &std::path::Path, text: &str) -> Result<
     Ok(file)
 }
 
-fn store_full_tool_output(state: &AppState, text: &str) -> Result<std::path::PathBuf, String> {
+pub(crate) fn store_full_tool_output(state: &AppState, text: &str) -> Result<std::path::PathBuf, String> {
     store_full_tool_output_at(&tool_output_directory(state), text)
 }
 
-fn append_full_tool_output_notice(text: &str, path: &std::path::Path) -> String {
+pub(crate) fn append_full_tool_output_notice(text: &str, path: &std::path::Path) -> String {
     format!(
         "{text}\n\nFull output saved to: {}\nUse search or ranged reads; do not read the whole file.",
         terminal_path_for_user(path)
     )
 }
 
-fn append_full_tool_output_failure_notice(text: &str) -> String {
+pub(crate) fn append_full_tool_output_failure_notice(text: &str) -> String {
     format!("{text}\n\nFull output could not be saved.")
 }
 
 #[derive(Debug, Clone)]
-struct ProviderToolProjection {
-    text: String,
-    metadata: ProviderToolMetadata,
+pub(crate) struct ProviderToolProjection {
+    pub(crate) text: String,
+    pub(crate) metadata: ProviderToolMetadata,
 }
 
-fn project_provider_tool_result(
+pub(crate) fn project_provider_tool_result(
     state: Option<&AppState>,
     tool_name: &str,
     result: &ProviderToolResult,

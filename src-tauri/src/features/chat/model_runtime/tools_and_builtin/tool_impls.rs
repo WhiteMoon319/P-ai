@@ -1,6 +1,6 @@
 #[derive(Debug, Clone)]
-struct BuiltinFetchTool {
-    app_state: AppState,
+pub(crate) struct BuiltinFetchTool {
+    pub(crate) app_state: AppState,
 }
 
 impl RuntimeToolMetadata for BuiltinFetchTool {
@@ -47,8 +47,8 @@ impl RuntimeValueTool for BuiltinFetchTool {
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinBingSearchTool {
-    app_state: AppState,
+pub(crate) struct BuiltinBingSearchTool {
+    pub(crate) app_state: AppState,
 }
 
 impl RuntimeToolMetadata for BuiltinBingSearchTool {
@@ -96,9 +96,9 @@ impl RuntimeValueTool for BuiltinBingSearchTool {
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinRememberTool {
-    app_state: AppState,
-    memory_context: MemoryAgentContext,
+pub(crate) struct BuiltinRememberTool {
+    pub(crate) app_state: AppState,
+    pub(crate) memory_context: MemoryAgentContext,
 }
 
 impl RuntimeToolMetadata for BuiltinRememberTool {
@@ -188,9 +188,9 @@ impl RuntimeValueTool for BuiltinRememberTool {
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinRecallTool {
-    app_state: AppState,
-    memory_context: MemoryAgentContext,
+pub(crate) struct BuiltinRecallTool {
+    pub(crate) app_state: AppState,
+    pub(crate) memory_context: MemoryAgentContext,
 }
 
 impl RuntimeToolMetadata for BuiltinRecallTool {
@@ -246,19 +246,19 @@ impl RuntimeValueTool for BuiltinRecallTool {
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinTerminalExecTool {
-    app_state: AppState,
-    session_id: String,
-    executor_department_id: String,
+pub(crate) struct BuiltinTerminalExecTool {
+    pub(crate) app_state: AppState,
+    pub(crate) session_id: String,
+    pub(crate) executor_department_id: String,
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinConfigTool {
-    app_state: AppState,
+pub(crate) struct BuiltinConfigTool {
+    pub(crate) app_state: AppState,
 }
 
 #[derive(Debug, Clone)]
-enum ConfigToolRuntimeEffect {
+pub(crate) enum ConfigToolRuntimeEffect {
     None,
     McpDeploy { server_id: String },
     McpUndeploy { server_id: String },
@@ -267,7 +267,7 @@ enum ConfigToolRuntimeEffect {
     WorkspaceReload { reason: &'static str },
 }
 
-fn invalidate_config_tool_runtime_caches(state: &AppState) -> Result<(), String> {
+pub(crate) fn invalidate_config_tool_runtime_caches(state: &AppState) -> Result<(), String> {
     *state
         .cached_config
         .lock()
@@ -302,11 +302,11 @@ fn invalidate_config_tool_runtime_caches(state: &AppState) -> Result<(), String>
     Ok(())
 }
 
-fn config_tool_split_command(command: &str) -> Vec<String> {
+pub(crate) fn config_tool_split_command(command: &str) -> Vec<String> {
     pai_config_tool::split_command_line(command).unwrap_or_default()
 }
 
-fn config_tool_resolve_mcp_server_id(state: &AppState, selector: &str) -> String {
+pub(crate) fn config_tool_resolve_mcp_server_id(state: &AppState, selector: &str) -> String {
     load_workspace_mcp_servers(state)
         .ok()
         .and_then(|servers| {
@@ -321,7 +321,7 @@ fn config_tool_resolve_mcp_server_id(state: &AppState, selector: &str) -> String
         .unwrap_or_else(|| selector.to_string())
 }
 
-fn config_tool_runtime_effect_for_command(
+pub(crate) fn config_tool_runtime_effect_for_command(
     state: &AppState,
     command: &str,
 ) -> ConfigToolRuntimeEffect {
@@ -364,7 +364,7 @@ fn config_tool_runtime_effect_for_command(
     }
 }
 
-fn config_tool_mcp_start_server(
+pub(crate) fn config_tool_mcp_start_server(
     state: &AppState,
     server_id: &str,
     trigger: &'static str,
@@ -382,7 +382,7 @@ fn config_tool_mcp_start_server(
     }))
 }
 
-async fn config_tool_mcp_stop_server(
+pub(crate) async fn config_tool_mcp_stop_server(
     state: &AppState,
     server_id: &str,
 ) -> Result<Value, String> {
@@ -399,7 +399,7 @@ async fn config_tool_mcp_stop_server(
     }))
 }
 
-async fn config_tool_mcp_remove_runtime(
+pub(crate) async fn config_tool_mcp_remove_runtime(
     state: &AppState,
     server_id: &str,
 ) -> Result<Value, String> {
@@ -414,7 +414,7 @@ async fn config_tool_mcp_remove_runtime(
     }))
 }
 
-async fn config_tool_mcp_restart_if_enabled(
+pub(crate) async fn config_tool_mcp_restart_if_enabled(
     state: &AppState,
     server_id: &str,
 ) -> Result<Value, String> {
@@ -442,7 +442,7 @@ async fn config_tool_mcp_restart_if_enabled(
     }
 }
 
-async fn apply_config_tool_runtime_effect(
+pub(crate) async fn apply_config_tool_runtime_effect(
     state: &AppState,
     effect: ConfigToolRuntimeEffect,
 ) -> Result<Option<Value>, String> {
@@ -663,40 +663,40 @@ impl RuntimeValueTool for BuiltinTerminalExecTool {
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinWriteFileTool {
-    app_state: AppState,
-    session_id: String,
-    executor_department_id: String,
+pub(crate) struct BuiltinWriteFileTool {
+    pub(crate) app_state: AppState,
+    pub(crate) session_id: String,
+    pub(crate) executor_department_id: String,
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinDeleteFileTool {
-    app_state: AppState,
-    session_id: String,
-    executor_department_id: String,
+pub(crate) struct BuiltinDeleteFileTool {
+    pub(crate) app_state: AppState,
+    pub(crate) session_id: String,
+    pub(crate) executor_department_id: String,
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinUpdateFileTool {
-    app_state: AppState,
-    session_id: String,
-    executor_department_id: String,
+pub(crate) struct BuiltinUpdateFileTool {
+    pub(crate) app_state: AppState,
+    pub(crate) session_id: String,
+    pub(crate) executor_department_id: String,
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinMoveFileTool {
-    app_state: AppState,
-    session_id: String,
-    executor_department_id: String,
+pub(crate) struct BuiltinMoveFileTool {
+    pub(crate) app_state: AppState,
+    pub(crate) session_id: String,
+    pub(crate) executor_department_id: String,
 }
 
-fn path_is_within_directory(path: &std::path::Path, directory: &std::path::Path) -> bool {
+pub(crate) fn path_is_within_directory(path: &std::path::Path, directory: &std::path::Path) -> bool {
     let normalized_path = terminal_normalize_for_access_check(path);
     let normalized_directory = terminal_normalize_for_access_check(directory);
     normalized_path == normalized_directory || normalized_path.starts_with(normalized_directory)
 }
 
-fn ensure_saddler_file_target_allowed(
+pub(crate) fn ensure_saddler_file_target_allowed(
     state: &AppState,
     session_id: &str,
     executor_department_id: &str,
@@ -716,7 +716,7 @@ fn ensure_saddler_file_target_allowed(
     }
 }
 
-fn ensure_saddler_exec_allowed(
+pub(crate) fn ensure_saddler_exec_allowed(
     state: &AppState,
     session_id: &str,
     executor_department_id: &str,
@@ -964,48 +964,48 @@ impl RuntimeValueTool for BuiltinMoveFileTool {
 
 
 #[derive(Debug, Clone)]
-struct BuiltinPlanTool {
-    app_state: AppState,
-    session_id: String,
+pub(crate) struct BuiltinPlanTool {
+    pub(crate) app_state: AppState,
+    pub(crate) session_id: String,
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinTaskTool {
-    app_state: AppState,
-    session_id: String,
-    api_config_id: String,
-    executor_department_id: String,
-    executor_agent_id: String,
+pub(crate) struct BuiltinTaskTool {
+    pub(crate) app_state: AppState,
+    pub(crate) session_id: String,
+    pub(crate) api_config_id: String,
+    pub(crate) executor_department_id: String,
+    pub(crate) executor_agent_id: String,
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinTodoTool {
-    app_state: AppState,
-    session_id: String,
+pub(crate) struct BuiltinTodoTool {
+    pub(crate) app_state: AppState,
+    pub(crate) session_id: String,
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinCreateGoalTool {
-    app_state: AppState,
-    session_id: String,
+pub(crate) struct BuiltinCreateGoalTool {
+    pub(crate) app_state: AppState,
+    pub(crate) session_id: String,
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinUpdateGoalTool {
-    app_state: AppState,
-    session_id: String,
+pub(crate) struct BuiltinUpdateGoalTool {
+    pub(crate) app_state: AppState,
+    pub(crate) session_id: String,
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinGetSessionTool {
-    app_state: AppState,
-    session_id: String,
+pub(crate) struct BuiltinGetSessionTool {
+    pub(crate) app_state: AppState,
+    pub(crate) session_id: String,
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinInformSessionTool {
-    app_state: AppState,
-    session_id: String,
+pub(crate) struct BuiltinInformSessionTool {
+    pub(crate) app_state: AppState,
+    pub(crate) session_id: String,
 }
 
 impl RuntimeToolMetadata for BuiltinTodoTool {
@@ -1327,11 +1327,11 @@ impl RuntimeValueTool for BuiltinTaskTool {
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinDelegateTool {
-    app_state: AppState,
-    session_id: String,
-    source_agent_id: String,
-    source_department_id: String,
+pub(crate) struct BuiltinDelegateTool {
+    pub(crate) app_state: AppState,
+    pub(crate) session_id: String,
+    pub(crate) source_agent_id: String,
+    pub(crate) source_department_id: String,
 }
 
 impl RuntimeToolMetadata for BuiltinDelegateTool {

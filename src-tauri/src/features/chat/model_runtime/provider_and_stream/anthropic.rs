@@ -1,4 +1,4 @@
-async fn call_model_anthropic_with_tools(
+pub(crate) async fn call_model_anthropic_with_tools(
     api_config: &ResolvedApiConfig,
     selected_api: &ApiConfig,
     model_name: &str,

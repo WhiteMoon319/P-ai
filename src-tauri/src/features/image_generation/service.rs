@@ -1,4 +1,4 @@
-fn resolve_image_generation_model(
+pub(crate) fn resolve_image_generation_model(
     config: &AppConfig,
     requested_model_id: Option<&str>,
 ) -> Result<ResolvedImageGenerationModel, String> {
@@ -41,7 +41,7 @@ fn resolve_image_generation_model(
     })
 }
 
-fn normalize_image_generation_request(
+pub(crate) fn normalize_image_generation_request(
     mut request: ImageGenerationRequest,
 ) -> Result<ImageGenerationRequest, String> {
     request.prompt = request.prompt.trim().to_string();
@@ -105,7 +105,7 @@ fn normalize_image_generation_request(
     Ok(request)
 }
 
-async fn generate_image_with_provider_once(
+pub(crate) async fn generate_image_with_provider_once(
     state: &AppState,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
@@ -150,7 +150,7 @@ async fn generate_image_with_provider_once(
     }
 }
 
-async fn generate_images(
+pub(crate) async fn generate_images(
     state: &AppState,
     request: ImageGenerationRequest,
 ) -> Result<ImageGenerationResult, String> {

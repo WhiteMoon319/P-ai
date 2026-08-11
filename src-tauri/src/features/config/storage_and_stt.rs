@@ -1,11 +1,36 @@
-fn ensure_parent_dir(path: &PathBuf) -> Result<(), String> {
+use std::{
+    fs,
+    io::Cursor,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+};
+
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use directories::ProjectDirs;
+use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
+use image::ImageFormat;
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use rmcp::{schemars, ServiceExt};
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
+use uuid::Uuid;
+
+// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
+
+
+
+use super::*;
+
+pub(crate) fn ensure_parent_dir(path: &PathBuf) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| "Config path has no parent directory".to_string())?;
     fs::create_dir_all(parent).map_err(|err| format!("Create config directory failed: {err}"))
 }
 
-fn config_missing_enable_audio_field(content: &str) -> bool {
+pub(crate) fn config_missing_enable_audio_field(content: &str) -> bool {
     let Ok(value) = content.parse::<toml::Value>() else {
         return false;
     };
@@ -38,7 +63,7 @@ fn config_missing_enable_audio_field(content: &str) -> bool {
     has_missing_model_audio || has_missing_legacy_audio
 }
 
-fn read_config(path: &PathBuf) -> Result<AppConfig, String> {
+pub(crate) fn read_config(path: &PathBuf) -> Result<AppConfig, String> {
     let resolved_path = if path.exists() {
         path.clone()
     } else {
@@ -80,19 +105,19 @@ fn read_config(path: &PathBuf) -> Result<AppConfig, String> {
     Ok(parsed)
 }
 
-fn write_config(path: &PathBuf, config: &AppConfig) -> Result<(), String> {
+pub(crate) fn write_config(path: &PathBuf, config: &AppConfig) -> Result<(), String> {
     ensure_parent_dir(path)?;
     let toml_str =
         toml::to_string_pretty(config).map_err(|err| format!("Serialize config failed: {err}"))?;
     fs::write(path, toml_str).map_err(|err| format!("Write config failed: {err}"))
 }
 
-fn run_startup_self_checks(config: &mut AppConfig) -> bool {
+pub(crate) fn run_startup_self_checks(config: &mut AppConfig) -> bool {
     let _ = config;
     false
 }
 
-fn api_endpoint_id(provider_id: &str, model_id: &str) -> String {
+pub(crate) fn api_endpoint_id(provider_id: &str, model_id: &str) -> String {
     format!(
         "{}::{}",
         provider_id.trim().to_string(),
@@ -100,7 +125,7 @@ fn api_endpoint_id(provider_id: &str, model_id: &str) -> String {
     )
 }
 
-fn parse_api_endpoint_id(endpoint_id: &str) -> Option<(String, String)> {
+pub(crate) fn parse_api_endpoint_id(endpoint_id: &str) -> Option<(String, String)> {
     let trimmed = endpoint_id.trim();
     let (provider_id, model_id) = trimmed.split_once("::")?;
     let provider_id = provider_id.trim().to_string();
@@ -111,16 +136,16 @@ fn parse_api_endpoint_id(endpoint_id: &str) -> Option<(String, String)> {
     Some((provider_id, model_id))
 }
 
-fn provider_key_cursor_state() -> &'static Mutex<std::collections::HashMap<String, usize>> {
+pub(crate) fn provider_key_cursor_state() -> &'static Mutex<std::collections::HashMap<String, usize>> {
     static CURSORS: OnceLock<Mutex<std::collections::HashMap<String, usize>>> = OnceLock::new();
     CURSORS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
-fn anthropic_default_max_output_tokens() -> u32 {
+pub(crate) fn anthropic_default_max_output_tokens() -> u32 {
     128_000
 }
 
-fn peek_provider_api_key(provider: &ApiProviderConfig) -> String {
+pub(crate) fn peek_provider_api_key(provider: &ApiProviderConfig) -> String {
     let keys = provider
         .api_keys
         .iter()
@@ -142,7 +167,7 @@ fn peek_provider_api_key(provider: &ApiProviderConfig) -> String {
     keys[idx].to_string()
 }
 
-fn select_and_advance_provider_api_key(provider: &ApiProviderConfig) -> String {
+pub(crate) fn select_and_advance_provider_api_key(provider: &ApiProviderConfig) -> String {
     let keys = provider
         .api_keys
         .iter()
@@ -165,7 +190,7 @@ fn select_and_advance_provider_api_key(provider: &ApiProviderConfig) -> String {
     selected
 }
 
-fn consume_api_key_for_request(resolved_api: &ResolvedApiConfig) -> String {
+pub(crate) fn consume_api_key_for_request(resolved_api: &ResolvedApiConfig) -> String {
     let keys = resolved_api
         .provider_api_keys
         .iter()
@@ -209,7 +234,7 @@ fn consume_api_key_for_request(resolved_api: &ResolvedApiConfig) -> String {
     }
 }
 
-fn migrate_legacy_api_configs_into_providers(config: &mut AppConfig) {
+pub(crate) fn migrate_legacy_api_configs_into_providers(config: &mut AppConfig) {
     let only_default_placeholder_providers = !config.api_providers.is_empty()
         && config
             .api_providers
@@ -283,7 +308,7 @@ fn migrate_legacy_api_configs_into_providers(config: &mut AppConfig) {
         .collect();
 }
 
-fn is_default_placeholder_provider(provider: &ApiProviderConfig) -> bool {
+pub(crate) fn is_default_placeholder_provider(provider: &ApiProviderConfig) -> bool {
     let Some(model) = provider.models.first() else {
         return false;
     };
@@ -331,14 +356,14 @@ fn is_default_placeholder_provider(provider: &ApiProviderConfig) -> bool {
         && provider.failure_retry_count == default_failure_retry_count()
 }
 
-fn provider_first_endpoint_id(provider: &ApiProviderConfig) -> Option<String> {
+pub(crate) fn provider_first_endpoint_id(provider: &ApiProviderConfig) -> Option<String> {
     provider.models.iter().find_map(|model| {
         (!provider.deprecated && !model.deprecated && !model.model.trim().is_empty())
             .then(|| api_endpoint_id(&provider.id, &model.id))
     })
 }
 
-fn remap_legacy_api_config_id_to_endpoint(config: &AppConfig, raw_id: &str) -> String {
+pub(crate) fn remap_legacy_api_config_id_to_endpoint(config: &AppConfig, raw_id: &str) -> String {
     let trimmed = raw_id.trim();
     if trimmed.is_empty() {
         return String::new();
@@ -357,7 +382,7 @@ fn remap_legacy_api_config_id_to_endpoint(config: &AppConfig, raw_id: &str) -> S
         .unwrap_or_else(|| trimmed.to_string())
 }
 
-fn expand_api_configs_from_providers(config: &mut AppConfig) {
+pub(crate) fn expand_api_configs_from_providers(config: &mut AppConfig) {
     let mut expanded = Vec::<ApiConfig>::new();
     for provider in &config.api_providers {
         if provider.deprecated {
@@ -409,7 +434,7 @@ fn expand_api_configs_from_providers(config: &mut AppConfig) {
     config.api_configs = expanded;
 }
 
-fn normalize_tools_list(tools: &mut Vec<ApiToolConfig>, enable_tools: bool) {
+pub(crate) fn normalize_tools_list(tools: &mut Vec<ApiToolConfig>, enable_tools: bool) {
     for tool in tools.iter_mut() {
         match tool.id.as_str() {
             "bing-search" => {
@@ -454,13 +479,13 @@ fn normalize_tools_list(tools: &mut Vec<ApiToolConfig>, enable_tools: bool) {
     }
 }
 
-fn is_codex_spark_model(model_id: &str) -> bool {
+pub(crate) fn is_codex_spark_model(model_id: &str) -> bool {
     let normalized = model_id.trim().to_ascii_lowercase();
     normalized.starts_with("gpt-5.3-codex-spark")
         || normalized.contains("-codex-spark")
 }
 
-fn selected_reasoning_effort_for_runtime(selected: &ApiConfig) -> Option<String> {
+pub(crate) fn selected_reasoning_effort_for_runtime(selected: &ApiConfig) -> Option<String> {
     let normalized = selected.reasoning_effort.trim().to_ascii_lowercase();
     match normalized.as_str() {
         "default" | "" => None,
@@ -469,7 +494,7 @@ fn selected_reasoning_effort_for_runtime(selected: &ApiConfig) -> Option<String>
     }
 }
 
-fn normalize_api_tools(config: &mut AppConfig) {
+pub(crate) fn normalize_api_tools(config: &mut AppConfig) {
     for provider in &mut config.api_providers {
         provider.key_cursor = provider.key_cursor.min(1_000_000);
         provider.failure_retry_count = provider.failure_retry_count.clamp(0, 20);
@@ -577,7 +602,7 @@ fn normalize_api_tools(config: &mut AppConfig) {
     }
 }
 
-fn trim_wrapping_quotes(value: &str) -> &str {
+pub(crate) fn trim_wrapping_quotes(value: &str) -> &str {
     let trimmed = value.trim();
     if trimmed.len() >= 2 {
         let bytes = trimmed.as_bytes();
@@ -590,7 +615,7 @@ fn trim_wrapping_quotes(value: &str) -> &str {
     trimmed
 }
 
-fn resolve_user_home_dir() -> Option<PathBuf> {
+pub(crate) fn resolve_user_home_dir() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         std::env::var_os("USERPROFILE").map(PathBuf::from)
@@ -601,7 +626,7 @@ fn resolve_user_home_dir() -> Option<PathBuf> {
     }
 }
 
-fn expand_home_prefix(value: &str) -> String {
+pub(crate) fn expand_home_prefix(value: &str) -> String {
     if value == "~" {
         return resolve_user_home_dir()
             .map(|path| path.to_string_lossy().to_string())
@@ -623,13 +648,13 @@ fn expand_home_prefix(value: &str) -> String {
 }
 
 #[cfg(target_os = "windows")]
-fn has_windows_drive_prefix(value: &str) -> bool {
+pub(crate) fn has_windows_drive_prefix(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic()
 }
 
 #[cfg(target_os = "windows")]
-fn try_convert_git_bash_drive_path(value: &str) -> Option<String> {
+pub(crate) fn try_convert_git_bash_drive_path(value: &str) -> Option<String> {
     let bytes = value.as_bytes();
     if bytes.len() < 2 || bytes[0] != b'/' || !bytes[1].is_ascii_alphabetic() {
         return None;
@@ -646,7 +671,7 @@ fn try_convert_git_bash_drive_path(value: &str) -> Option<String> {
 }
 
 #[cfg(target_os = "windows")]
-fn normalize_windows_path_input(value: &str) -> String {
+pub(crate) fn normalize_windows_path_input(value: &str) -> String {
     let mut text = value.trim().to_string();
     if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
         return format!(r"\\{}", rest.replace('/', "\\"));
@@ -666,7 +691,7 @@ fn normalize_windows_path_input(value: &str) -> String {
     text
 }
 
-fn normalize_terminal_path_input_for_current_platform(raw: &str) -> String {
+pub(crate) fn normalize_terminal_path_input_for_current_platform(raw: &str) -> String {
     let unquoted = trim_wrapping_quotes(raw);
     if unquoted.is_empty() {
         return String::new();
@@ -682,7 +707,7 @@ fn normalize_terminal_path_input_for_current_platform(raw: &str) -> String {
     }
 }
 
-fn normalize_shell_workspaces(config: &mut AppConfig) {
+pub(crate) fn normalize_shell_workspaces(config: &mut AppConfig) {
     let mut normalized = Vec::<ShellWorkspaceConfig>::new();
     let mut seen_paths = std::collections::HashSet::<String>::new();
     for raw in &config.shell_workspaces {
@@ -726,7 +751,7 @@ fn normalize_shell_workspaces(config: &mut AppConfig) {
     config.shell_workspaces = normalized;
 }
 
-fn normalize_terminal_shell_kind(config: &mut AppConfig) {
+pub(crate) fn normalize_terminal_shell_kind(config: &mut AppConfig) {
     let raw = config.terminal_shell_kind.trim().to_ascii_lowercase();
     config.terminal_shell_kind = match raw.as_str() {
         "auto" | "powershell7" | "powershell5" | "git-bash" | "zsh" | "bash" | "sh" => raw,
@@ -734,7 +759,7 @@ fn normalize_terminal_shell_kind(config: &mut AppConfig) {
     };
 }
 
-fn normalize_mcp_servers(config: &mut AppConfig) {
+pub(crate) fn normalize_mcp_servers(config: &mut AppConfig) {
     let mut out = Vec::<McpServerConfig>::new();
     let mut seen = std::collections::HashSet::<String>::new();
     for raw in &config.mcp_servers {
@@ -798,7 +823,7 @@ fn normalize_mcp_servers(config: &mut AppConfig) {
     config.mcp_servers = out;
 }
 
-fn normalize_remote_im_channels(config: &mut AppConfig) {
+pub(crate) fn normalize_remote_im_channels(config: &mut AppConfig) {
     let mut out = Vec::<RemoteImChannelConfig>::new();
     let mut seen_ids = std::collections::HashSet::<String>::new();
     for raw in &config.remote_im_channels {
@@ -835,7 +860,7 @@ fn normalize_remote_im_channels(config: &mut AppConfig) {
     config.remote_im_channels = out;
 }
 
-fn normalize_provider_non_stream_base_urls(config: &mut AppConfig) {
+pub(crate) fn normalize_provider_non_stream_base_urls(config: &mut AppConfig) {
     let mut out = Vec::<String>::new();
     let mut seen = std::collections::HashSet::<String>::new();
     for raw in &config.provider_non_stream_base_urls {
@@ -853,11 +878,11 @@ fn normalize_provider_non_stream_base_urls(config: &mut AppConfig) {
     config.provider_non_stream_base_urls = out;
 }
 
-fn is_text_chat_api(api: &ApiConfig) -> bool {
+pub(crate) fn is_text_chat_api(api: &ApiConfig) -> bool {
     api.enable_text && api.request_format.is_chat_text()
 }
 
-fn normalized_assistant_department_api_config_id(config: &AppConfig) -> String {
+pub(crate) fn normalized_assistant_department_api_config_id(config: &AppConfig) -> String {
     let current_id = config.assistant_department_api_config_id.trim();
     config
         .api_configs
@@ -875,7 +900,7 @@ fn normalized_assistant_department_api_config_id(config: &AppConfig) -> String {
         .unwrap_or_default()
 }
 
-fn chat_api_has_required_auth(api: &ApiConfig) -> bool {
+pub(crate) fn chat_api_has_required_auth(api: &ApiConfig) -> bool {
     if api.request_format.is_codex()
         && matches!(
             normalize_codex_auth_mode(&api.codex_auth_mode).as_str(),
@@ -887,14 +912,14 @@ fn chat_api_has_required_auth(api: &ApiConfig) -> bool {
     !api.api_key.trim().is_empty()
 }
 
-fn is_usable_text_llm_api(api: &ApiConfig) -> bool {
+pub(crate) fn is_usable_text_llm_api(api: &ApiConfig) -> bool {
     is_text_chat_api(api)
         && !api.base_url.trim().is_empty()
         && !api.model.trim().is_empty()
         && chat_api_has_required_auth(api)
 }
 
-fn has_usable_text_llm(config: &AppConfig) -> bool {
+pub(crate) fn has_usable_text_llm(config: &AppConfig) -> bool {
     let usable_api_ids = config
         .api_configs
         .iter()
@@ -916,7 +941,7 @@ fn has_usable_text_llm(config: &AppConfig) -> bool {
         .unwrap_or(false)
 }
 
-fn startup_window_label_for_config(config: &AppConfig) -> &'static str {
+pub(crate) fn startup_window_label_for_config(config: &AppConfig) -> &'static str {
     if has_usable_text_llm(config) {
         "chat"
     } else {
@@ -924,7 +949,7 @@ fn startup_window_label_for_config(config: &AppConfig) -> &'static str {
     }
 }
 
-fn normalize_departments(config: &mut AppConfig) {
+pub(crate) fn normalize_departments(config: &mut AppConfig) {
     let fallback_api_id = config
         .api_configs
         .iter()
@@ -1163,7 +1188,7 @@ fn normalize_departments(config: &mut AppConfig) {
     config.departments = out;
 }
 
-fn normalize_app_config(config: &mut AppConfig) {
+pub(crate) fn normalize_app_config(config: &mut AppConfig) {
     if config.api_configs.is_empty() && config.api_providers.is_empty() {
         *config = AppConfig::default();
         return;
@@ -1274,7 +1299,7 @@ fn normalize_app_config(config: &mut AppConfig) {
     normalize_image_generation_config(config);
 }
 
-fn normalize_app_config_and_detect_changes(config: &mut AppConfig) -> bool {
+pub(crate) fn normalize_app_config_and_detect_changes(config: &mut AppConfig) -> bool {
     let before = serde_json::to_value(&*config);
     normalize_app_config(config);
     match before {
@@ -1286,31 +1311,31 @@ fn normalize_app_config_and_detect_changes(config: &mut AppConfig) -> bool {
     }
 }
 
-const MEDIA_REF_PREFIX: &str = "@media:";
-const DOWNLOAD_REF_PREFIX: &str = "@download:";
-const MEDIA_BASE64_CACHE_MAX_BYTES: usize = 64 * 1024 * 1024;
-const MAX_IMAGE_TEXT_CACHE_ENTRIES: usize = 1000;
+pub(crate) const MEDIA_REF_PREFIX: &str = "@media:";
+pub(crate) const DOWNLOAD_REF_PREFIX: &str = "@download:";
+pub(crate) const MEDIA_BASE64_CACHE_MAX_BYTES: usize = 64 * 1024 * 1024;
+pub(crate) const MAX_IMAGE_TEXT_CACHE_ENTRIES: usize = 1000;
 
 #[derive(Default)]
-struct MediaBase64Cache {
-    entries: std::collections::HashMap<String, MediaBase64CacheEntry>,
-    total_bytes: usize,
-    seq: u64,
+pub(crate) struct MediaBase64Cache {
+    pub(crate) entries: std::collections::HashMap<String, MediaBase64CacheEntry>,
+    pub(crate) total_bytes: usize,
+    pub(crate) seq: u64,
 }
 
 #[derive(Debug, Clone)]
-struct MediaBase64CacheEntry {
-    value: String,
-    bytes: usize,
-    seq: u64,
+pub(crate) struct MediaBase64CacheEntry {
+    pub(crate) value: String,
+    pub(crate) bytes: usize,
+    pub(crate) seq: u64,
 }
 
-fn media_base64_cache() -> &'static Mutex<MediaBase64Cache> {
+pub(crate) fn media_base64_cache() -> &'static Mutex<MediaBase64Cache> {
     static CACHE: OnceLock<Mutex<MediaBase64Cache>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(MediaBase64Cache::default()))
 }
 
-fn media_base64_cache_get(key: &str) -> Option<String> {
+pub(crate) fn media_base64_cache_get(key: &str) -> Option<String> {
     let mut guard = media_base64_cache().lock().ok()?;
     guard.seq = guard.seq.saturating_add(1);
     let current_seq = guard.seq;
@@ -1319,7 +1344,7 @@ fn media_base64_cache_get(key: &str) -> Option<String> {
     Some(entry.value.clone())
 }
 
-fn media_base64_cache_put(key: String, value: String) {
+pub(crate) fn media_base64_cache_put(key: String, value: String) {
     let bytes = value.len();
     if bytes > MEDIA_BASE64_CACHE_MAX_BYTES {
         return;
@@ -1359,17 +1384,17 @@ fn media_base64_cache_put(key: String, value: String) {
     }
 }
 
-fn media_storage_dir_from_data_path(data_path: &PathBuf) -> Result<PathBuf, String> {
+pub(crate) fn media_storage_dir_from_data_path(data_path: &PathBuf) -> Result<PathBuf, String> {
     Ok(app_root_from_data_path(data_path).join("media"))
 }
 
-fn downloads_storage_dir_from_data_path(data_path: &PathBuf) -> Result<PathBuf, String> {
+pub(crate) fn downloads_storage_dir_from_data_path(data_path: &PathBuf) -> Result<PathBuf, String> {
     Ok(app_root_from_data_path(data_path)
         .join("llm-workspace")
         .join("downloads"))
 }
 
-fn media_extension_from_mime(mime: &str) -> &'static str {
+pub(crate) fn media_extension_from_mime(mime: &str) -> &'static str {
     match mime.trim().to_ascii_lowercase().as_str() {
         "image/webp" => "webp",
         "image/jpeg" | "image/jpg" => "jpg",
@@ -1391,30 +1416,30 @@ fn media_extension_from_mime(mime: &str) -> &'static str {
 }
 
 #[cfg(test)]
-fn media_marker_from_id(media_id: &str) -> String {
+pub(crate) fn media_marker_from_id(media_id: &str) -> String {
     format!("{MEDIA_REF_PREFIX}{media_id}")
 }
 
 #[cfg(test)]
-fn download_marker_from_id(download_id: &str) -> String {
+pub(crate) fn download_marker_from_id(download_id: &str) -> String {
     format!("{DOWNLOAD_REF_PREFIX}{download_id}")
 }
 
-fn media_id_from_marker(value: &str) -> Option<&str> {
+pub(crate) fn media_id_from_marker(value: &str) -> Option<&str> {
     value.trim().strip_prefix(MEDIA_REF_PREFIX)
 }
 
-fn download_id_from_marker(value: &str) -> Option<&str> {
+pub(crate) fn download_id_from_marker(value: &str) -> Option<&str> {
     value.trim().strip_prefix(DOWNLOAD_REF_PREFIX)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum StoredBinaryRefKind {
+pub(crate) enum StoredBinaryRefKind {
     Media,
     Download,
 }
 
-fn stored_binary_ref_from_marker(value: &str) -> Option<(StoredBinaryRefKind, &str)> {
+pub(crate) fn stored_binary_ref_from_marker(value: &str) -> Option<(StoredBinaryRefKind, &str)> {
     if let Some(media_id) = media_id_from_marker(value) {
         return Some((StoredBinaryRefKind::Media, media_id));
     }
@@ -1424,7 +1449,7 @@ fn stored_binary_ref_from_marker(value: &str) -> Option<(StoredBinaryRefKind, &s
     None
 }
 
-fn persist_media_bytes(data_path: &PathBuf, mime: &str, raw: &[u8]) -> Result<String, String> {
+pub(crate) fn persist_media_bytes(data_path: &PathBuf, mime: &str, raw: &[u8]) -> Result<String, String> {
     use sha2::{Digest, Sha256};
 
     if raw.is_empty() {
@@ -1444,7 +1469,7 @@ fn persist_media_bytes(data_path: &PathBuf, mime: &str, raw: &[u8]) -> Result<St
     Ok(media_id)
 }
 
-fn resolve_stored_binary_base64(data_path: &PathBuf, stored: &str) -> Result<String, String> {
+pub(crate) fn resolve_stored_binary_base64(data_path: &PathBuf, stored: &str) -> Result<String, String> {
     let trimmed = stored.trim();
     if trimmed.is_empty() {
         return Ok(String::new());
@@ -1471,7 +1496,7 @@ fn resolve_stored_binary_base64(data_path: &PathBuf, stored: &str) -> Result<Str
     Ok(encoded)
 }
 
-fn sanitize_storage_subdir(value: &str) -> Result<String, String> {
+pub(crate) fn sanitize_storage_subdir(value: &str) -> Result<String, String> {
     let normalized = value.trim().replace('\\', "/");
     if normalized.is_empty() {
         return Err("storage subdir is empty".to_string());
@@ -1493,7 +1518,7 @@ fn sanitize_storage_subdir(value: &str) -> Result<String, String> {
     Ok(parts.join("/"))
 }
 
-fn externalize_message_parts_to_media_refs(
+pub(crate) fn externalize_message_parts_to_media_refs(
     parts: &mut [MessagePart],
     data_path: &PathBuf,
 ) -> Result<bool, String> {
@@ -1533,11 +1558,11 @@ fn externalize_message_parts_to_media_refs(
     Ok(changed)
 }
 
-fn externalize_message_parts_to_media_refs_lossy(parts: &mut [MessagePart], data_path: &PathBuf) -> bool {
+pub(crate) fn externalize_message_parts_to_media_refs_lossy(parts: &mut [MessagePart], data_path: &PathBuf) -> bool {
     externalize_message_parts_to_media_refs(parts, data_path).unwrap_or(false)
 }
 
-fn materialize_message_parts_from_media_refs(parts: &mut [MessagePart], data_path: &PathBuf) {
+pub(crate) fn materialize_message_parts_from_media_refs(parts: &mut [MessagePart], data_path: &PathBuf) {
     for part in parts {
         match part {
             // 图片在前台显示链路里保留已外置附件引用，由前端按需懒加载；
@@ -1560,7 +1585,7 @@ fn materialize_message_parts_from_media_refs(parts: &mut [MessagePart], data_pat
     }
 }
 
-fn materialize_chat_message_parts_from_media_refs(messages: &mut [ChatMessage], data_path: &PathBuf) {
+pub(crate) fn materialize_chat_message_parts_from_media_refs(messages: &mut [ChatMessage], data_path: &PathBuf) {
     for message in messages {
         materialize_message_parts_from_media_refs(&mut message.parts, data_path);
     }
@@ -1568,11 +1593,11 @@ fn materialize_chat_message_parts_from_media_refs(messages: &mut [ChatMessage], 
 
 // app data layout + migration logic moved to features/config/app_data_layout.rs
 
-fn candidate_debug_config_paths() -> Vec<PathBuf> {
+pub(crate) fn candidate_debug_config_paths() -> Vec<PathBuf> {
     vec![PathBuf::from(".debug").join("api-key.json")]
 }
 
-fn read_debug_api_config() -> Result<Option<DebugApiConfig>, String> {
+pub(crate) fn read_debug_api_config() -> Result<Option<DebugApiConfig>, String> {
     for path in candidate_debug_config_paths() {
         if !path.exists() {
             continue;
@@ -1587,7 +1612,7 @@ fn read_debug_api_config() -> Result<Option<DebugApiConfig>, String> {
     Ok(None)
 }
 
-fn resolve_selected_api_config(
+pub(crate) fn resolve_selected_api_config(
     app_config: &AppConfig,
     requested_id: Option<&str>,
 ) -> Option<ApiConfig> {
@@ -1609,7 +1634,7 @@ fn resolve_selected_api_config(
     app_config.api_configs.first().cloned()
 }
 
-fn resolve_api_config(
+pub(crate) fn resolve_api_config(
     app_config: &AppConfig,
     requested_id: Option<&str>,
 ) -> Result<ResolvedApiConfig, String> {
@@ -1763,7 +1788,7 @@ fn resolve_api_config(
     })
 }
 
-fn resolve_vision_api_config(app_config: &AppConfig) -> Result<ApiConfig, String> {
+pub(crate) fn resolve_vision_api_config(app_config: &AppConfig) -> Result<ApiConfig, String> {
     let vision_id = app_config.vision_api_config_id.as_deref().ok_or_else(|| {
         "当前未配置多模态分析模型。".to_string()
     })?;
@@ -1791,14 +1816,16 @@ fn resolve_vision_api_config(app_config: &AppConfig) -> Result<ApiConfig, String
     Ok(api)
 }
 
-fn decode_image_bytes(image: &BinaryPart) -> Result<Vec<u8>, String> {
+pub(crate) fn decode_image_bytes(image: &BinaryPart) -> Result<Vec<u8>, String> {
     B64.decode(image.bytes_base64.trim())
         .map_err(|err| format!("Decode image base64 failed: {err}"))
 }
 
-fn compute_image_hash_hex(image: &BinaryPart) -> Result<String, String> {
+pub(crate) fn compute_image_hash_hex(image: &BinaryPart) -> Result<String, String> {
     use sha2::{Digest, Sha256};
 
+
+use super::*;
     let raw = decode_image_bytes(image)?;
     let mut hasher = Sha256::new();
     hasher.update(raw);
@@ -1806,7 +1833,7 @@ fn compute_image_hash_hex(image: &BinaryPart) -> Result<String, String> {
 }
 
 #[cfg(test)]
-fn find_image_text_cache(
+pub(crate) fn find_image_text_cache(
     data: &AppData,
     hash: &str,
     vision_api_id: &str,
@@ -1818,7 +1845,7 @@ fn find_image_text_cache(
 }
 
 #[cfg(test)]
-fn upsert_image_text_cache(data: &mut AppData, hash: &str, vision_api_id: &str, text: &str) {
+pub(crate) fn upsert_image_text_cache(data: &mut AppData, hash: &str, vision_api_id: &str, text: &str) {
     if let Some(entry) = data
         .image_text_cache
         .iter_mut()
@@ -1851,6 +1878,6 @@ fn upsert_image_text_cache(data: &mut AppData, hash: &str, vision_api_id: &str, 
     data.image_text_cache.remove(oldest_idx);
 }
 
-fn is_openai_style_request_format(request_format: RequestFormat) -> bool {
+pub(crate) fn is_openai_style_request_format(request_format: RequestFormat) -> bool {
     request_format.is_openai_style()
 }

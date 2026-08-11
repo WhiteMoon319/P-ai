@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ModelProtocolResolutionSource {
+pub(crate) enum ModelProtocolResolutionSource {
     Explicit,
     BaseUrl,
     Model,
@@ -7,7 +7,7 @@ enum ModelProtocolResolutionSource {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ProviderAuthScheme {
+pub(crate) enum ProviderAuthScheme {
     Bearer,
     ApiKey,
     GoogleApiKey,
@@ -15,13 +15,13 @@ enum ProviderAuthScheme {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct ResolvedModelProtocol {
-    adapter_kind: genai::adapter::AdapterKind,
-    auth_scheme: ProviderAuthScheme,
-    source: ModelProtocolResolutionSource,
+pub(crate) struct ResolvedModelProtocol {
+    pub(crate) adapter_kind: genai::adapter::AdapterKind,
+    pub(crate) auth_scheme: ProviderAuthScheme,
+    pub(crate) source: ModelProtocolResolutionSource,
 }
 
-fn provider_auth_scheme_for_adapter(
+pub(crate) fn provider_auth_scheme_for_adapter(
     adapter_kind: genai::adapter::AdapterKind,
 ) -> ProviderAuthScheme {
     match adapter_kind {
@@ -34,7 +34,7 @@ fn provider_auth_scheme_for_adapter(
     }
 }
 
-fn apply_provider_auth_scheme(
+pub(crate) fn apply_provider_auth_scheme(
     request_builder: reqwest::RequestBuilder,
     auth_scheme: ProviderAuthScheme,
     api_key: &str,
@@ -56,7 +56,7 @@ fn apply_provider_auth_scheme(
     }
 }
 
-fn resolve_adapter_kind_from_base_url(base_url: &str) -> Option<genai::adapter::AdapterKind> {
+pub(crate) fn resolve_adapter_kind_from_base_url(base_url: &str) -> Option<genai::adapter::AdapterKind> {
     let parsed = reqwest::Url::parse(base_url.trim()).ok()?;
     let host = parsed.host_str()?.trim().to_ascii_lowercase();
     let path = parsed
@@ -154,11 +154,11 @@ fn resolve_adapter_kind_from_base_url(base_url: &str) -> Option<genai::adapter::
     None
 }
 
-fn is_qwen_model_name(model_name: &str) -> bool {
+pub(crate) fn is_qwen_model_name(model_name: &str) -> bool {
     model_name.trim().to_ascii_lowercase().contains("qwen")
 }
 
-fn resolve_adapter_kind_from_model_name(
+pub(crate) fn resolve_adapter_kind_from_model_name(
     model_name: &str,
 ) -> Option<genai::adapter::AdapterKind> {
     let normalized = model_name.trim().to_ascii_lowercase();
@@ -182,12 +182,12 @@ fn resolve_adapter_kind_from_model_name(
     }
 }
 
-fn resolve_model_adapter_for_auto(model_name: &str) -> genai::adapter::AdapterKind {
+pub(crate) fn resolve_model_adapter_for_auto(model_name: &str) -> genai::adapter::AdapterKind {
     resolve_adapter_kind_from_model_name(model_name)
         .unwrap_or(genai::adapter::AdapterKind::OpenAI)
 }
 
-fn resolve_model_protocol(
+pub(crate) fn resolve_model_protocol(
     request_format: RequestFormat,
     base_url: &str,
     model_name: &str,

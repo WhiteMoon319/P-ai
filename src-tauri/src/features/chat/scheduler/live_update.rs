@@ -9,21 +9,21 @@
 // 桌面端无此语义，函数为空实现。
 
 #[cfg(target_os = "android")]
-const CHAT_LIVE_UPDATE_NOTIFICATION_ID: i32 = 0x50414901;
+pub(crate) const CHAT_LIVE_UPDATE_NOTIFICATION_ID: i32 = 0x50414901;
 #[cfg(target_os = "android")]
-const GOAL_LIVE_UPDATE_NOTIFICATION_ID: i32 = 0x50414902;
+pub(crate) const GOAL_LIVE_UPDATE_NOTIFICATION_ID: i32 = 0x50414902;
 #[cfg(target_os = "android")]
-const LIVE_UPDATE_BODY_MAX_CHARS: usize = 180;
+pub(crate) const LIVE_UPDATE_BODY_MAX_CHARS: usize = 180;
 
 // 固定通知 id 只有一条，多会话并发输出时后到的会话会覆盖前一条。
 // 记录当前 live 通知归属的会话：只有归属会话结束才更新终态，避免误改
 // 仍在进行中的其他会话通知。
 #[cfg(target_os = "android")]
-static CHAT_LIVE_UPDATE_OWNER: std::sync::OnceLock<
+pub(crate) static CHAT_LIVE_UPDATE_OWNER: std::sync::OnceLock<
     std::sync::Mutex<Option<String>>,
 > = std::sync::OnceLock::new();
 #[cfg(target_os = "android")]
-static GOAL_LIVE_UPDATE_OWNER: std::sync::OnceLock<
+pub(crate) static GOAL_LIVE_UPDATE_OWNER: std::sync::OnceLock<
     std::sync::Mutex<Option<String>>,
 > = std::sync::OnceLock::new();
 
@@ -31,26 +31,26 @@ static GOAL_LIVE_UPDATE_OWNER: std::sync::OnceLock<
 // 集合非空则启动前台服务提升进程优先级，空则停止。保活独立于通知权限，
 // 通知权限被拒时任务仍在后台运行，进程仍需保活。
 #[cfg(target_os = "android")]
-static CHAT_KEEP_ALIVE: std::sync::OnceLock<
+pub(crate) static CHAT_KEEP_ALIVE: std::sync::OnceLock<
     std::sync::Mutex<std::collections::HashSet<String>>,
 > = std::sync::OnceLock::new();
 #[cfg(target_os = "android")]
-static GOAL_KEEP_ALIVE: std::sync::OnceLock<
+pub(crate) static GOAL_KEEP_ALIVE: std::sync::OnceLock<
     std::sync::Mutex<std::collections::HashSet<String>>,
 > = std::sync::OnceLock::new();
 #[cfg(target_os = "android")]
-static KEEP_ALIVE_ACTIVE: std::sync::atomic::AtomicBool =
+pub(crate) static KEEP_ALIVE_ACTIVE: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
 #[cfg(target_os = "android")]
-fn live_update_owner_take(owner: &'static std::sync::OnceLock<std::sync::Mutex<Option<String>>>) {
+pub(crate) fn live_update_owner_take(owner: &'static std::sync::OnceLock<std::sync::Mutex<Option<String>>>) {
     if let Ok(mut guard) = owner.get_or_init(|| std::sync::Mutex::new(None)).lock() {
         *guard = None;
     }
 }
 
 #[cfg(target_os = "android")]
-fn live_update_owner_matches(
+pub(crate) fn live_update_owner_matches(
     owner: &'static std::sync::OnceLock<std::sync::Mutex<Option<String>>>,
     conversation_id: &str,
 ) -> bool {
@@ -64,7 +64,7 @@ fn live_update_owner_matches(
 }
 
 #[cfg(target_os = "android")]
-fn live_update_owner_set(
+pub(crate) fn live_update_owner_set(
     owner: &'static std::sync::OnceLock<std::sync::Mutex<Option<String>>>,
     conversation_id: &str,
 ) {
@@ -74,7 +74,7 @@ fn live_update_owner_set(
 }
 
 #[cfg(target_os = "android")]
-fn live_update_keep_alive_changed() {
+pub(crate) fn live_update_keep_alive_changed() {
     let chat_active = match CHAT_KEEP_ALIVE
         .get_or_init(|| std::sync::Mutex::new(Default::default()))
         .lock()
@@ -103,7 +103,7 @@ fn live_update_keep_alive_changed() {
 }
 
 #[cfg(target_os = "android")]
-fn live_update_keep_alive_chat(state: &AppState, conversation_id: &str, active: bool) {
+pub(crate) fn live_update_keep_alive_chat(state: &AppState, conversation_id: &str, active: bool) {
     let mut guard = match CHAT_KEEP_ALIVE
         .get_or_init(|| std::sync::Mutex::new(Default::default()))
         .lock()
@@ -121,7 +121,7 @@ fn live_update_keep_alive_chat(state: &AppState, conversation_id: &str, active: 
 }
 
 #[cfg(target_os = "android")]
-fn live_update_keep_alive_goal(state: &AppState, conversation_id: &str, active: bool) {
+pub(crate) fn live_update_keep_alive_goal(state: &AppState, conversation_id: &str, active: bool) {
     let mut guard = match GOAL_KEEP_ALIVE
         .get_or_init(|| std::sync::Mutex::new(Default::default()))
         .lock()
@@ -139,7 +139,7 @@ fn live_update_keep_alive_goal(state: &AppState, conversation_id: &str, active: 
 }
 
 #[cfg(target_os = "android")]
-fn live_update_send(
+pub(crate) fn live_update_send(
     id: i32,
     title: &str,
     body: &str,
@@ -170,7 +170,7 @@ fn live_update_send(
 }
 
 #[cfg(target_os = "android")]
-fn live_update_todo_step_text(
+pub(crate) fn live_update_todo_step_text(
     state: &AppState,
     conversation_id: &str,
     ui_language: &str,
@@ -202,7 +202,7 @@ fn live_update_todo_step_text(
 }
 
 #[cfg(target_os = "android")]
-fn live_update_chat_meta_title(
+pub(crate) fn live_update_chat_meta_title(
     state: &AppState,
     conversation_id: &str,
     ui_language: &str,
@@ -230,7 +230,7 @@ fn live_update_chat_meta_title(
 }
 
 #[cfg(target_os = "android")]
-fn live_update_chat_started(state: &AppState, conversation_id: &str) {
+pub(crate) fn live_update_chat_started(state: &AppState, conversation_id: &str) {
     live_update_keep_alive_chat(state, conversation_id, true);
     let settings = local_chat_notification_settings(state, conversation_id);
     let Some(title) =
@@ -261,7 +261,7 @@ fn live_update_chat_started(state: &AppState, conversation_id: &str) {
 }
 
 #[cfg(target_os = "android")]
-fn live_update_chat_finished(
+pub(crate) fn live_update_chat_finished(
     state: &AppState,
     conversation_id: &str,
     failed: bool,
@@ -318,7 +318,7 @@ fn live_update_chat_finished(
 }
 
 #[cfg(target_os = "android")]
-fn live_update_goal_changed(
+pub(crate) fn live_update_goal_changed(
     state: &AppState,
     conversation_id: &str,
     goal: Option<&ConversationGoalState>,
@@ -411,7 +411,7 @@ fn live_update_goal_changed(
 // todo 列表变化（新增/进度推进/状态切换）后刷新 live 通知：
 // 同 id 重发 ongoing 通知，让岛/通知栏展示最新步骤文本。
 #[cfg(target_os = "android")]
-fn live_update_todos_changed(state: &AppState, conversation_id: &str) {
+pub(crate) fn live_update_todos_changed(state: &AppState, conversation_id: &str) {
     // 只有归属会话才刷新：通知可能已被其他会话的 live 通知覆盖。
     if !live_update_owner_matches(&CHAT_LIVE_UPDATE_OWNER, conversation_id) {
         return;
@@ -458,7 +458,7 @@ fn live_update_todos_changed(state: &AppState, conversation_id: &str) {
 // 桌面端无此语义，no-op。
 
 #[cfg(target_os = "android")]
-const REMOTE_LIVE_UPDATE_NOTIFICATION_ID: i32 = 0x50414903;
+pub(crate) const REMOTE_LIVE_UPDATE_NOTIFICATION_ID: i32 = 0x50414903;
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -581,7 +581,7 @@ pub(crate) fn remote_live_update_notify_android(
 
 
 #[cfg(target_os = "android")]
-fn remote_live_update_title(payload: &RemoteLiveUpdatePayload, failed: bool) -> String {
+pub(crate) fn remote_live_update_title(payload: &RemoteLiveUpdatePayload, failed: bool) -> String {
     let conversation_id = payload.conversation_id.trim();
     // 电脑 PAI 广播附带的会话标题与本地通知标题同源；为空时回退固定前缀 + 会话 id 短尾。
     let title = payload.title.trim();

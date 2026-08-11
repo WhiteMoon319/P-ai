@@ -1,31 +1,31 @@
 use rusqlite::{OptionalExtension as _, TransactionBehavior};
 
-const CHAT_METADATA_DB_FILE_NAME: &str = "chat_metadata.sqlite";
-const CHAT_STORAGE_MIGRATION_KEY: &str = "v3_chat_metadata_sqlite";
-pub(super) const USAGE_TRAIL_MIGRATION_KEY: &str = "usage_trail_v1";
+pub(crate) const CHAT_METADATA_DB_FILE_NAME: &str = "chat_metadata.sqlite";
+pub(crate) const CHAT_STORAGE_MIGRATION_KEY: &str = "v3_chat_metadata_sqlite";
+pub(crate) const USAGE_TRAIL_MIGRATION_KEY: &str = "usage_trail_v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ChatStorageOperationDetail {
-    conversation_id: String,
-    expected_block_files: Vec<String>,
+pub(crate) struct ChatStorageOperationDetail {
+    pub(crate) conversation_id: String,
+    pub(crate) expected_block_files: Vec<String>,
     #[serde(default)]
-    replaced_block_files: Vec<String>,
+    pub(crate) replaced_block_files: Vec<String>,
     #[serde(default)]
-    retired_block_files: Vec<String>,
+    pub(crate) retired_block_files: Vec<String>,
     #[serde(default)]
-    new_block_files: Vec<String>,
+    pub(crate) new_block_files: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
-struct ChatMetadataLocator {
-    sequence: i64,
-    item: MessageStoreIndexItem,
+pub(crate) struct ChatMetadataLocator {
+    pub(crate) sequence: i64,
+    pub(crate) item: MessageStoreIndexItem,
 }
 
-static CHAT_METADATA_WRITER_GATES: OnceLock<Mutex<std::collections::HashMap<String, std::sync::Weak<Mutex<()>>>>> = OnceLock::new();
-static CHAT_METADATA_PUBLICATION_GATES: OnceLock<Mutex<std::collections::HashMap<String, std::sync::Weak<std::sync::RwLock<()>>>>> = OnceLock::new();
+pub(crate) static CHAT_METADATA_WRITER_GATES: OnceLock<Mutex<std::collections::HashMap<String, std::sync::Weak<Mutex<()>>>>> = OnceLock::new();
+pub(crate) static CHAT_METADATA_PUBLICATION_GATES: OnceLock<Mutex<std::collections::HashMap<String, std::sync::Weak<std::sync::RwLock<()>>>>> = OnceLock::new();
 
-fn chat_metadata_store_with_writer_gate<T>(
+pub(crate) fn chat_metadata_store_with_writer_gate<T>(
     paths: &MessageStorePaths,
     operation: impl FnOnce() -> Result<T, String>,
 ) -> Result<T, String> {
@@ -50,7 +50,7 @@ fn chat_metadata_store_with_writer_gate<T>(
     operation()
 }
 
-fn chat_metadata_store_publication_gate(
+pub(crate) fn chat_metadata_store_publication_gate(
     paths: &MessageStorePaths,
 ) -> std::sync::Arc<std::sync::RwLock<()>> {
     let key = format!(
@@ -70,7 +70,7 @@ fn chat_metadata_store_publication_gate(
     gate
 }
 
-fn chat_metadata_store_with_read_snapshot<T>(
+pub(crate) fn chat_metadata_store_with_read_snapshot<T>(
     paths: &MessageStorePaths,
     operation: impl FnOnce() -> Result<T, String>,
 ) -> Result<T, String> {
@@ -79,11 +79,11 @@ fn chat_metadata_store_with_read_snapshot<T>(
     operation()
 }
 
-fn chat_metadata_operation_root(paths: &MessageStorePaths, operation_id: &str) -> PathBuf {
+pub(crate) fn chat_metadata_operation_root(paths: &MessageStorePaths, operation_id: &str) -> PathBuf {
     paths.shard_dir.join(".v3-operations").join(operation_id)
 }
 
-fn chat_metadata_copy_blocks(source: &PathBuf, target: &PathBuf) -> Result<(), String> {
+pub(crate) fn chat_metadata_copy_blocks(source: &PathBuf, target: &PathBuf) -> Result<(), String> {
     fs::create_dir_all(target).map_err(|err| format!("创建聊天存储操作目录失败，path={}，error={err}", target.display()))?;
     if !source.exists() {
         return Ok(());
@@ -98,7 +98,7 @@ fn chat_metadata_copy_blocks(source: &PathBuf, target: &PathBuf) -> Result<(), S
     Ok(())
 }
 
-fn chat_metadata_restore_blocks(paths: &MessageStorePaths, source: &PathBuf) -> Result<(), String> {
+pub(crate) fn chat_metadata_restore_blocks(paths: &MessageStorePaths, source: &PathBuf) -> Result<(), String> {
     if paths.blocks_dir.exists() {
         fs::remove_dir_all(&paths.blocks_dir).map_err(|err| format!("恢复聊天块前清理失败，path={}，error={err}", paths.blocks_dir.display()))?;
     }
@@ -106,11 +106,11 @@ fn chat_metadata_restore_blocks(paths: &MessageStorePaths, source: &PathBuf) -> 
 }
 
 
-fn chat_metadata_store_db_path(data_path: &PathBuf) -> PathBuf {
+pub(crate) fn chat_metadata_store_db_path(data_path: &PathBuf) -> PathBuf {
     app_layout_chat_dir(data_path).join(CHAT_METADATA_DB_FILE_NAME)
 }
 
-fn chat_metadata_store_open(data_path: &PathBuf) -> Result<rusqlite::Connection, String> {
+pub(crate) fn chat_metadata_store_open(data_path: &PathBuf) -> Result<rusqlite::Connection, String> {
     let db_path = chat_metadata_store_db_path(data_path);
     if let Some(parent) = db_path.parent() {
         fs::create_dir_all(parent).map_err(|err| {
@@ -219,7 +219,7 @@ fn chat_metadata_store_open(data_path: &PathBuf) -> Result<rusqlite::Connection,
     Ok(conn)
 }
 
-fn chat_metadata_store_migration_is_completed(
+pub(crate) fn chat_metadata_store_migration_is_completed(
     data_path: &PathBuf,
     migration_key: &str,
 ) -> Result<bool, String> {
@@ -244,7 +244,7 @@ fn chat_metadata_store_migration_is_completed(
     .map_err(|err| format!("读取聊天元数据迁移状态失败: {err}"))
 }
 
-fn chat_metadata_store_mark_migration_completed(
+pub(crate) fn chat_metadata_store_mark_migration_completed(
     data_path: &PathBuf,
     migration_key: &str,
 ) -> Result<(), String> {
@@ -258,15 +258,15 @@ fn chat_metadata_store_mark_migration_completed(
     Ok(())
 }
 
-fn chat_metadata_store_v3_conversation_migration_key(conversation_id: &str) -> String {
+pub(crate) fn chat_metadata_store_v3_conversation_migration_key(conversation_id: &str) -> String {
     format!("{CHAT_STORAGE_MIGRATION_KEY}:conversation:{conversation_id}")
 }
 
-pub(super) fn chat_metadata_store_is_ready(data_path: &PathBuf) -> Result<bool, String> {
+pub(crate) fn chat_metadata_store_is_ready(data_path: &PathBuf) -> Result<bool, String> {
     chat_metadata_store_migration_is_completed(data_path, CHAT_STORAGE_MIGRATION_KEY)
 }
 
-pub(super) fn chat_metadata_store_contains_conversation(
+pub(crate) fn chat_metadata_store_contains_conversation(
     data_path: &PathBuf,
     conversation_id: &str,
 ) -> Result<bool, String> {
@@ -284,7 +284,7 @@ pub(super) fn chat_metadata_store_contains_conversation(
     })
 }
 
-fn chat_metadata_store_read_messages_for_locators(
+pub(crate) fn chat_metadata_store_read_messages_for_locators(
     paths: &MessageStorePaths,
     locators: &[ChatMetadataLocator],
     cached: bool,
@@ -297,7 +297,7 @@ fn chat_metadata_store_read_messages_for_locators(
     }
 }
 
-fn chat_metadata_store_read_recent_page(
+pub(crate) fn chat_metadata_store_read_recent_page(
     paths: &MessageStorePaths,
     limit: usize,
     cached: bool,
@@ -311,7 +311,7 @@ fn chat_metadata_store_read_recent_page(
     })
 }
 
-fn chat_metadata_store_read_message_by_id(
+pub(crate) fn chat_metadata_store_read_message_by_id(
     paths: &MessageStorePaths,
     message_id: &str,
 ) -> Result<ChatMessage, String> {
@@ -324,7 +324,7 @@ fn chat_metadata_store_read_message_by_id(
     })
 }
 
-fn chat_metadata_store_read_message_sequence(
+pub(crate) fn chat_metadata_store_read_message_sequence(
     paths: &MessageStorePaths,
     message_id: &str,
 ) -> Result<Option<usize>, String> {
@@ -348,7 +348,7 @@ fn chat_metadata_store_read_message_sequence(
     })
 }
 
-fn chat_metadata_store_read_latest_compaction_message(
+pub(crate) fn chat_metadata_store_read_latest_compaction_message(
     paths: &MessageStorePaths,
 ) -> Result<Option<ChatMessage>, String> {
     chat_metadata_store_with_read_snapshot(paths, || {
@@ -389,7 +389,7 @@ fn chat_metadata_store_read_latest_compaction_message(
 
 /// 轻量重算替换后的最新摘要标题：只读取摘要消息范围（compaction locator 索引 + 按需正文），
 /// 不整读会话。`updated_messages` 为本次替换后的消息；磁盘上未被替换的摘要消息按原样参与计算。
-pub(super) fn chat_metadata_store_recompute_latest_summary_title(
+pub(crate) fn chat_metadata_store_recompute_latest_summary_title(
     paths: &MessageStorePaths,
     updated_messages: &[ChatMessage],
 ) -> Result<Option<String>, String> {
@@ -428,16 +428,16 @@ pub(super) fn chat_metadata_store_recompute_latest_summary_title(
         let mut candidates = Vec::<(i64, Option<String>)>::with_capacity(locators.len());
         for locator in &locators {
             let title = if let Some(updated) = replaced_by_id.get(locator.item.message_id.as_str()) {
-                super::summary_context_message_title(updated)
+                crate::summary_context_message_title(updated)
             } else {
                 chat_metadata_store_read_messages_for_locators(paths, std::slice::from_ref(locator), false)?
                     .first()
-                    .and_then(super::summary_context_message_title)
+                    .and_then(crate::summary_context_message_title)
             };
             candidates.push((locator.sequence, title));
         }
         for updated in updated_messages {
-            if super::summary_context_message_title(updated).is_none() {
+            if crate::summary_context_message_title(updated).is_none() {
                 continue;
             }
             let message_id = updated.id.trim();
@@ -462,7 +462,7 @@ pub(super) fn chat_metadata_store_recompute_latest_summary_title(
                         message_id
                     )
                 })?;
-            candidates.push((sequence, super::summary_context_message_title(updated)));
+            candidates.push((sequence, crate::summary_context_message_title(updated)));
         }
         Ok(candidates
             .into_iter()
@@ -472,7 +472,7 @@ pub(super) fn chat_metadata_store_recompute_latest_summary_title(
     })
 }
 
-fn chat_metadata_store_read_messages_before(
+pub(crate) fn chat_metadata_store_read_messages_before(
     paths: &MessageStorePaths,
     message_id: &str,
     limit: usize,
@@ -488,7 +488,7 @@ fn chat_metadata_store_read_messages_before(
     })
 }
 
-fn chat_metadata_store_read_messages_after(
+pub(crate) fn chat_metadata_store_read_messages_after(
     paths: &MessageStorePaths,
     message_id: &str,
     limit: usize,
@@ -504,7 +504,7 @@ fn chat_metadata_store_read_messages_after(
     })
 }
 
-fn chat_metadata_store_read_messages_after_all(
+pub(crate) fn chat_metadata_store_read_messages_after_all(
     paths: &MessageStorePaths,
     message_id: &str,
 ) -> Result<Vec<ChatMessage>, String> {
@@ -517,7 +517,7 @@ fn chat_metadata_store_read_messages_after_all(
     })
 }
 
-fn chat_metadata_store_latest_block_paths(
+pub(crate) fn chat_metadata_store_latest_block_paths(
     paths: &MessageStorePaths,
     limit: usize,
 ) -> Result<Vec<PathBuf>, String> {
@@ -533,7 +533,7 @@ fn chat_metadata_store_latest_block_paths(
     Ok(paths_out)
 }
 
-fn chat_metadata_store_read_recent_blocks_page(
+pub(crate) fn chat_metadata_store_read_recent_blocks_page(
     paths: &MessageStorePaths,
     limit: usize,
     cached: bool,
@@ -560,7 +560,7 @@ fn chat_metadata_store_read_recent_blocks_page(
     })
 }
 
-fn chat_metadata_store_index_summary(
+pub(crate) fn chat_metadata_store_index_summary(
     paths: &MessageStorePaths,
 ) -> Result<MessageStoreIndexSummary, String> {
     chat_metadata_store_with_read_snapshot(paths, || {
@@ -636,7 +636,7 @@ fn chat_metadata_store_index_summary(
     })
 }
 
-fn chat_metadata_store_chat_snapshot(
+pub(crate) fn chat_metadata_store_chat_snapshot(
     paths: &MessageStorePaths,
 ) -> Result<MessageStoreChatSnapshot, String> {
     chat_metadata_store_with_read_snapshot(paths, || {
@@ -667,7 +667,7 @@ fn chat_metadata_store_chat_snapshot(
     })
 }
 
-fn chat_metadata_store_read_meta(paths: &MessageStorePaths) -> Result<Option<ConversationShardMeta>, String> {
+pub(crate) fn chat_metadata_store_read_meta(paths: &MessageStorePaths) -> Result<Option<ConversationShardMeta>, String> {
     if !paths.is_v3_ready()? {
         return Ok(None);
     }
@@ -685,7 +685,7 @@ fn chat_metadata_store_read_meta(paths: &MessageStorePaths) -> Result<Option<Con
         .transpose()
 }
 
-fn chat_metadata_store_read_index(paths: &MessageStorePaths) -> Result<Option<MessageStoreIndexFile>, String> {
+pub(crate) fn chat_metadata_store_read_index(paths: &MessageStorePaths) -> Result<Option<MessageStoreIndexFile>, String> {
     if !paths.is_v3_ready()? {
         return Ok(None);
     }
@@ -704,7 +704,7 @@ fn chat_metadata_store_read_index(paths: &MessageStorePaths) -> Result<Option<Me
     )))
 }
 
-fn chat_metadata_store_query_locators(
+pub(crate) fn chat_metadata_store_query_locators(
     conn: &rusqlite::Connection,
     conversation_id: &str,
     predicate: &str,
@@ -735,7 +735,7 @@ fn chat_metadata_store_query_locators(
     rows.map(|row| row.map_err(|err| format!("解析 SQLite locator 失败: {err}"))).collect()
 }
 
-fn chat_metadata_store_read_locator_by_id(
+pub(crate) fn chat_metadata_store_read_locator_by_id(
     paths: &MessageStorePaths,
     message_id: &str,
 ) -> Result<Option<ChatMetadataLocator>, String> {
@@ -749,7 +749,7 @@ fn chat_metadata_store_read_locator_by_id(
     Ok(rows.pop())
 }
 
-fn chat_metadata_store_read_locator_page(
+pub(crate) fn chat_metadata_store_read_locator_page(
     paths: &MessageStorePaths,
     after_sequence: Option<i64>,
     before_sequence: Option<i64>,
@@ -799,7 +799,7 @@ fn chat_metadata_store_read_locator_page(
     Ok((rows, has_more))
 }
 
-fn chat_metadata_store_read_locators_for_block(
+pub(crate) fn chat_metadata_store_read_locators_for_block(
     paths: &MessageStorePaths,
     block_id: u32,
 ) -> Result<Vec<ChatMetadataLocator>, String> {
@@ -807,7 +807,7 @@ fn chat_metadata_store_read_locators_for_block(
     chat_metadata_store_query_locators(&conn, &paths.conversation_id, "AND block_id=?2", &[&(block_id as i64)])
 }
 
-fn chat_metadata_store_read_last_block_id(paths: &MessageStorePaths) -> Result<Option<u32>, String> {
+pub(crate) fn chat_metadata_store_read_last_block_id(paths: &MessageStorePaths) -> Result<Option<u32>, String> {
     let conn = chat_metadata_store_open(&paths.data_path)?;
     conn.query_row(
         "SELECT block_id FROM conversation_blocks WHERE conversation_id=?1 ORDER BY block_id DESC LIMIT 1",
@@ -817,7 +817,7 @@ fn chat_metadata_store_read_last_block_id(paths: &MessageStorePaths) -> Result<O
         .map_err(|err| format!("读取 SQLite 最新 block 失败: {err}"))
 }
 
-fn chat_metadata_store_message_count(paths: &MessageStorePaths) -> Result<usize, String> {
+pub(crate) fn chat_metadata_store_message_count(paths: &MessageStorePaths) -> Result<usize, String> {
     let conn = chat_metadata_store_open(&paths.data_path)?;
     conn.query_row(
         "SELECT COUNT(*) FROM message_locator WHERE conversation_id=?1",
@@ -826,7 +826,7 @@ fn chat_metadata_store_message_count(paths: &MessageStorePaths) -> Result<usize,
     ).map(|count| count as usize).map_err(|err| format!("统计 SQLite locator 失败: {err}"))
 }
 
-pub(super) fn chat_metadata_store_list_chat_index(
+pub(crate) fn chat_metadata_store_list_chat_index(
     data_path: &PathBuf,
 ) -> Result<Option<Vec<ChatIndexConversationItem>>, String> {
     if !chat_metadata_store_is_ready(data_path)? {
@@ -853,7 +853,7 @@ pub(super) fn chat_metadata_store_list_chat_index(
     Ok(Some(items))
 }
 
-fn chat_metadata_store_read_active_plans(
+pub(crate) fn chat_metadata_store_read_active_plans(
     data_path: &PathBuf,
     conversation_id: &str,
 ) -> Result<Option<Vec<ActivePlanRecord>>, String> {
@@ -874,7 +874,7 @@ fn chat_metadata_store_read_active_plans(
     Ok(Some(out))
 }
 
-fn chat_metadata_store_append_active_plan(
+pub(crate) fn chat_metadata_store_append_active_plan(
     paths: &MessageStorePaths,
     record: &ActivePlanRecord,
 ) -> Result<(), String> {
@@ -891,7 +891,7 @@ fn chat_metadata_store_append_active_plan(
     })
 }
 
-fn chat_metadata_store_complete_active_plan_by_path(
+pub(crate) fn chat_metadata_store_complete_active_plan_by_path(
     paths: &MessageStorePaths,
     normalized_path: &str,
     completion_text: Option<&str>,
@@ -948,7 +948,7 @@ fn chat_metadata_store_complete_active_plan_by_path(
     })
 }
 
-fn chat_metadata_store_delete_conversation_unlocked(paths: &MessageStorePaths) -> Result<bool, String> {
+pub(crate) fn chat_metadata_store_delete_conversation_unlocked(paths: &MessageStorePaths) -> Result<bool, String> {
     let conn = chat_metadata_store_open(&paths.data_path)?;
     let deleted = conn.execute(
         "DELETE FROM conversation_metadata WHERE conversation_id=?1",
@@ -957,7 +957,7 @@ fn chat_metadata_store_delete_conversation_unlocked(paths: &MessageStorePaths) -
     Ok(deleted > 0)
 }
 
-fn chat_metadata_store_with_delete_gate<T>(
+pub(crate) fn chat_metadata_store_with_delete_gate<T>(
     paths: &MessageStorePaths,
     operation: impl FnOnce() -> Result<T, String>,
 ) -> Result<T, String> {
@@ -968,7 +968,7 @@ fn chat_metadata_store_with_delete_gate<T>(
     })
 }
 
-fn chat_metadata_store_write_meta_only(
+pub(crate) fn chat_metadata_store_write_meta_only(
     paths: &MessageStorePaths,
     meta: &ConversationShardMeta,
 ) -> Result<(), String> {
@@ -988,7 +988,7 @@ fn chat_metadata_store_write_meta_only(
     })
 }
 
-fn chat_metadata_store_write_result(
+pub(crate) fn chat_metadata_store_write_result(
     conn: &rusqlite::Connection,
     paths: &MessageStorePaths,
 ) -> Result<MessageStoreDirectorySnapshotWrite, String> {
@@ -1020,7 +1020,7 @@ fn chat_metadata_store_write_result(
     })
 }
 
-fn chat_metadata_store_publish_blocks(
+pub(crate) fn chat_metadata_store_publish_blocks(
     paths: &MessageStorePaths,
     meta: &ConversationShardMeta,
     changed_blocks: &[JsonlSnapshotConversationBlock],
@@ -1159,7 +1159,7 @@ fn chat_metadata_store_publish_blocks(
     chat_metadata_store_write_result(&conn, paths)
 }
 
-fn chat_metadata_store_append_messages(
+pub(crate) fn chat_metadata_store_append_messages(
     paths: &MessageStorePaths,
     meta: &ConversationPersistMeta,
     messages: &[ChatMessage],
@@ -1224,7 +1224,7 @@ fn chat_metadata_store_append_messages(
     })
 }
 
-fn chat_metadata_store_read_block_count(paths: &MessageStorePaths) -> Result<usize, String> {
+pub(crate) fn chat_metadata_store_read_block_count(paths: &MessageStorePaths) -> Result<usize, String> {
     let conn = chat_metadata_store_open(&paths.data_path)?;
     conn.query_row(
         "SELECT COUNT(*) FROM conversation_blocks WHERE conversation_id=?1",
@@ -1233,7 +1233,7 @@ fn chat_metadata_store_read_block_count(paths: &MessageStorePaths) -> Result<usi
     ).map(|value| value as usize).map_err(|err| format!("统计 SQLite block 失败: {err}"))
 }
 
-fn chat_metadata_store_read_locator_at_sequence(
+pub(crate) fn chat_metadata_store_read_locator_at_sequence(
     paths: &MessageStorePaths,
     sequence: i64,
 ) -> Result<Option<ChatMetadataLocator>, String> {
@@ -1247,7 +1247,7 @@ fn chat_metadata_store_read_locator_at_sequence(
     Ok(rows.pop())
 }
 
-fn chat_metadata_store_read_block_ids_after(
+pub(crate) fn chat_metadata_store_read_block_ids_after(
     paths: &MessageStorePaths,
     block_id: u32,
 ) -> Result<Vec<u32>, String> {
@@ -1261,7 +1261,7 @@ fn chat_metadata_store_read_block_ids_after(
         .collect()
 }
 
-fn chat_metadata_store_read_all_block_ids(paths: &MessageStorePaths) -> Result<Vec<u32>, String> {
+pub(crate) fn chat_metadata_store_read_all_block_ids(paths: &MessageStorePaths) -> Result<Vec<u32>, String> {
     let conn = chat_metadata_store_open(&paths.data_path)?;
     let mut statement = conn.prepare(
         "SELECT block_id FROM conversation_blocks WHERE conversation_id=?1 ORDER BY block_id ASC",
@@ -1272,7 +1272,7 @@ fn chat_metadata_store_read_all_block_ids(paths: &MessageStorePaths) -> Result<V
         .collect()
 }
 
-fn chat_metadata_store_splice_messages(
+pub(crate) fn chat_metadata_store_splice_messages(
     paths: &MessageStorePaths,
     meta: &ConversationPersistMeta,
     start_index: usize,
@@ -1359,7 +1359,7 @@ fn chat_metadata_store_splice_messages(
     })
 }
 
-fn should_slim_spliced_block(
+pub(crate) fn should_slim_spliced_block(
     force_slim_closed_remote_blocks: bool,
     archived_conversation: bool,
     block_index: usize,
@@ -1373,7 +1373,7 @@ fn should_slim_spliced_block(
 
 #[cfg(test)]
 #[test]
-fn remote_wake_splice_should_slim_every_closed_block_immediately() {
+pub(crate) fn remote_wake_splice_should_slim_every_closed_block_immediately() {
     assert!(should_slim_spliced_block(true, false, 0, 2));
     assert!(!should_slim_spliced_block(true, false, 1, 2));
     assert!(!should_slim_spliced_block(false, false, 0, 2));
@@ -1381,7 +1381,7 @@ fn remote_wake_splice_should_slim_every_closed_block_immediately() {
 
 #[cfg(test)]
 #[test]
-fn remote_wake_splice_should_preserve_trigger_in_new_block_and_slim_old_block() {
+pub(crate) fn remote_wake_splice_should_preserve_trigger_in_new_block_and_slim_old_block() {
     let root = std::env::temp_dir().join(format!("eca-remote-wake-splice-{}", Uuid::new_v4()));
     let data_path = root.join("app_data.json");
     let message = |id: &str, role: &str, text: &str| ChatMessage {
@@ -1491,7 +1491,7 @@ fn remote_wake_splice_should_preserve_trigger_in_new_block_and_slim_old_block() 
     let _ = fs::remove_dir_all(root);
 }
 
-fn chat_metadata_store_append_messages_unlocked(
+pub(crate) fn chat_metadata_store_append_messages_unlocked(
     paths: &MessageStorePaths,
     meta: &ConversationPersistMeta,
     messages: &[ChatMessage],
@@ -1537,7 +1537,7 @@ fn chat_metadata_store_append_messages_unlocked(
     chat_metadata_store_publish_blocks(paths, &ConversationShardMeta::from_persist_meta(meta), &changed_blocks, &[], &rows)
 }
 
-fn chat_metadata_store_replace_message(
+pub(crate) fn chat_metadata_store_replace_message(
     paths: &MessageStorePaths,
     meta: &ConversationPersistMeta,
     message: &ChatMessage,
@@ -1572,7 +1572,7 @@ fn chat_metadata_store_replace_message(
     })
 }
 
-fn chat_metadata_store_replace_messages(
+pub(crate) fn chat_metadata_store_replace_messages(
     paths: &MessageStorePaths,
     meta: &ConversationPersistMeta,
     messages: &[ChatMessage],
@@ -1627,7 +1627,7 @@ fn chat_metadata_store_replace_messages(
     })
 }
 
-fn chat_metadata_store_truncate_messages(
+pub(crate) fn chat_metadata_store_truncate_messages(
     paths: &MessageStorePaths,
     meta: &ConversationPersistMeta,
     keep_count: usize,
@@ -1671,7 +1671,7 @@ fn chat_metadata_store_truncate_messages(
     })
 }
 
-fn chat_metadata_store_import_v2_conversation(paths: &MessageStorePaths) -> Result<(), String> {
+pub(crate) fn chat_metadata_store_import_v2_conversation(paths: &MessageStorePaths) -> Result<(), String> {
     let manifest = read_message_store_manifest(&paths.manifest_file)?
         .ok_or_else(|| format!("v3 迁移缺少 v2 manifest，conversation_id={}", paths.conversation_id))?;
     if !manifest.should_read_jsonl() {
@@ -1736,7 +1736,7 @@ fn chat_metadata_store_import_v2_conversation(paths: &MessageStorePaths) -> Resu
     transaction.commit().map_err(|err| format!("提交 v3 会话导入失败: {err}"))
 }
 
-fn chat_metadata_store_collect_v2_conversation_paths(
+pub(crate) fn chat_metadata_store_collect_v2_conversation_paths(
     data_path: &PathBuf,
 ) -> Result<Vec<MessageStorePaths>, String> {
     let conversation_dir = app_layout_chat_conversations_dir(data_path);
@@ -1761,7 +1761,7 @@ fn chat_metadata_store_collect_v2_conversation_paths(
     Ok(paths)
 }
 
-fn chat_metadata_store_cleanup_v2_metadata_files(
+pub(crate) fn chat_metadata_store_cleanup_v2_metadata_files(
     paths: &[MessageStorePaths],
 ) -> usize {
     let mut failed_count = 0usize;
@@ -1787,7 +1787,7 @@ fn chat_metadata_store_cleanup_v2_metadata_files(
     failed_count
 }
 
-pub(super) fn chat_metadata_store_run_v3_migration(data_path: &PathBuf) -> Result<(), String> {
+pub(crate) fn chat_metadata_store_run_v3_migration(data_path: &PathBuf) -> Result<(), String> {
     if chat_metadata_store_is_ready(data_path)? {
         return chat_metadata_store_recover_operations(data_path);
     }
@@ -1852,7 +1852,7 @@ pub(super) fn chat_metadata_store_run_v3_migration(data_path: &PathBuf) -> Resul
     Ok(())
 }
 
-fn chat_metadata_store_compaction_segment(
+pub(crate) fn chat_metadata_store_compaction_segment(
     paths: &MessageStorePaths,
     boundary_message_id: Option<&str>,
 ) -> Result<MessageStoreCompactionSegment, String> {
@@ -1910,7 +1910,7 @@ fn chat_metadata_store_compaction_segment(
     })
 }
 
-fn chat_metadata_store_block_page(
+pub(crate) fn chat_metadata_store_block_page(
     paths: &MessageStorePaths,
     requested_block_id: Option<u32>,
 ) -> Result<MessageStoreBlockPage, String> {
@@ -1954,7 +1954,7 @@ fn chat_metadata_store_block_page(
     })
 }
 
-fn chat_metadata_store_query_block_locators_before(
+pub(crate) fn chat_metadata_store_query_block_locators_before(
     conn: &rusqlite::Connection,
     conversation_id: &str,
     block_id: u32,
@@ -2010,7 +2010,7 @@ fn chat_metadata_store_query_block_locators_before(
     Ok((locators, has_more))
 }
 
-fn chat_metadata_store_read_block_messages_before(
+pub(crate) fn chat_metadata_store_read_block_messages_before(
     paths: &MessageStorePaths,
     requested_block_id: Option<u32>,
     before_message_id: Option<&str>,
@@ -2076,7 +2076,7 @@ fn chat_metadata_store_read_block_messages_before(
     })
 }
 
-fn chat_metadata_store_count_block_messages(
+pub(crate) fn chat_metadata_store_count_block_messages(
     paths: &MessageStorePaths,
     before_message_id: &str,
 ) -> Result<usize, String> {
@@ -2101,7 +2101,7 @@ fn chat_metadata_store_count_block_messages(
     })
 }
 
-fn chat_metadata_store_status(paths: &MessageStorePaths) -> Result<Option<MessageStoreStatus>, String> {
+pub(crate) fn chat_metadata_store_status(paths: &MessageStorePaths) -> Result<Option<MessageStoreStatus>, String> {
     let Some(meta) = chat_metadata_store_read_meta(paths)? else { return Ok(None); };
     let conn = chat_metadata_store_open(&paths.data_path)?;
     let (count, last_message_id) = conn.query_row(
@@ -2122,7 +2122,7 @@ fn chat_metadata_store_status(paths: &MessageStorePaths) -> Result<Option<Messag
     }))
 }
 
-fn chat_metadata_store_read_conversation(paths: &MessageStorePaths) -> Result<Option<Conversation>, String> {
+pub(crate) fn chat_metadata_store_read_conversation(paths: &MessageStorePaths) -> Result<Option<Conversation>, String> {
     chat_metadata_store_with_read_snapshot(paths, || {
         let Some(meta) = chat_metadata_store_read_meta(paths)? else {
             return Ok(None);
@@ -2134,7 +2134,7 @@ fn chat_metadata_store_read_conversation(paths: &MessageStorePaths) -> Result<Op
     })
 }
 
-fn chat_metadata_store_write_snapshot(
+pub(crate) fn chat_metadata_store_write_snapshot(
     paths: &MessageStorePaths,
     conversation: &Conversation,
 ) -> Result<MessageStoreDirectorySnapshotWrite, String> {
@@ -2143,7 +2143,7 @@ fn chat_metadata_store_write_snapshot(
     })
 }
 
-fn chat_metadata_store_write_snapshot_unlocked(
+pub(crate) fn chat_metadata_store_write_snapshot_unlocked(
     paths: &MessageStorePaths,
     conversation: &Conversation,
 ) -> Result<MessageStoreDirectorySnapshotWrite, String> {
@@ -2235,7 +2235,7 @@ fn chat_metadata_store_write_snapshot_unlocked(
     })
 }
 
-fn chat_metadata_store_drop_recover_operation(
+pub(crate) fn chat_metadata_store_drop_recover_operation(
     conn: &rusqlite::Connection,
     operation_id: &str,
     reason: &str,
@@ -2249,7 +2249,7 @@ fn chat_metadata_store_drop_recover_operation(
     Ok(())
 }
 
-fn chat_metadata_store_recover_operations(data_path: &PathBuf) -> Result<(), String> {
+pub(crate) fn chat_metadata_store_recover_operations(data_path: &PathBuf) -> Result<(), String> {
     let conn = chat_metadata_store_open(data_path)?;
     let mut statement = conn.prepare(
         "SELECT operation_id, conversation_id, before_revision, after_revision, state, detail_json
@@ -2344,7 +2344,7 @@ fn chat_metadata_store_recover_operations(data_path: &PathBuf) -> Result<(), Str
 
 #[cfg(test)]
 #[test]
-fn v3_chat_metadata_migration_should_initialize_empty_chat_without_legacy_files() {
+pub(crate) fn v3_chat_metadata_migration_should_initialize_empty_chat_without_legacy_files() {
     let root = std::env::temp_dir().join(format!("eca-chat-v3-empty-{}", Uuid::new_v4()));
     let data_path = root.join("app_data.json");
     chat_metadata_store_run_v3_migration(&data_path).expect("migrate empty chat storage");
@@ -2356,7 +2356,7 @@ fn v3_chat_metadata_migration_should_initialize_empty_chat_without_legacy_files(
 
 #[cfg(test)]
 #[test]
-fn v3_chat_metadata_migration_should_import_v2_metadata_and_remove_v2_files() {
+pub(crate) fn v3_chat_metadata_migration_should_import_v2_metadata_and_remove_v2_files() {
     let root = std::env::temp_dir().join(format!("eca-chat-v3-import-{}", Uuid::new_v4()));
     let data_path = root.join("app_data.json");
     let mut conversation = Conversation {
@@ -2471,7 +2471,7 @@ fn v3_chat_metadata_migration_should_import_v2_metadata_and_remove_v2_files() {
 
 #[cfg(test)]
 #[test]
-fn v3_chat_metadata_recover_operations_should_drop_bad_operation_detail() {
+pub(crate) fn v3_chat_metadata_recover_operations_should_drop_bad_operation_detail() {
     let root = std::env::temp_dir().join(format!("eca-chat-v3-bad-operation-{}", Uuid::new_v4()));
     let data_path = root.join("app_data.json");
     chat_metadata_store_run_v3_migration(&data_path).expect("initialize v3 storage");
@@ -2496,7 +2496,7 @@ fn v3_chat_metadata_recover_operations_should_drop_bad_operation_detail() {
 
 #[cfg(test)]
 #[test]
-fn v3_chat_metadata_recover_operations_should_keep_record_when_cleanup_fails() {
+pub(crate) fn v3_chat_metadata_recover_operations_should_keep_record_when_cleanup_fails() {
     let root = std::env::temp_dir().join(format!("eca-chat-v3-cleanup-retry-{}", Uuid::new_v4()));
     let data_path = root.join("app_data.json");
     chat_metadata_store_run_v3_migration(&data_path).expect("initialize v3 storage");
@@ -2541,7 +2541,7 @@ fn v3_chat_metadata_recover_operations_should_keep_record_when_cleanup_fails() {
 
 #[cfg(test)]
 #[test]
-fn v3_chat_metadata_migration_should_recover_building_from_blocks_and_drop_bad_lines() {
+pub(crate) fn v3_chat_metadata_migration_should_recover_building_from_blocks_and_drop_bad_lines() {
     let root = std::env::temp_dir().join(format!("eca-chat-v3-recover-building-{}", Uuid::new_v4()));
     let data_path = root.join("app_data.json");
     let message = |id: &str| ChatMessage {
@@ -2580,7 +2580,7 @@ fn v3_chat_metadata_migration_should_recover_building_from_blocks_and_drop_bad_l
 
 #[cfg(test)]
 #[test]
-fn v3_chat_metadata_block_reader_should_stop_at_block_boundary() {
+pub(crate) fn v3_chat_metadata_block_reader_should_stop_at_block_boundary() {
     let root = std::env::temp_dir().join(format!("eca-chat-v3-block-reader-{}", Uuid::new_v4()));
     let data_path = root.join("app_data.json");
     let message = |id: &str, role: &str| ChatMessage {
@@ -2626,7 +2626,7 @@ fn v3_chat_metadata_block_reader_should_stop_at_block_boundary() {
 
 #[cfg(test)]
 #[test]
-fn v3_chat_metadata_mutations_should_publish_only_sql_locator_and_blocks() {
+pub(crate) fn v3_chat_metadata_mutations_should_publish_only_sql_locator_and_blocks() {
     let root = std::env::temp_dir().join(format!("eca-chat-v3-mutations-{}", Uuid::new_v4()));
     let data_path = root.join("app_data.json");
     let mut conversation = Conversation {
@@ -2792,7 +2792,7 @@ fn v3_chat_metadata_mutations_should_publish_only_sql_locator_and_blocks() {
 
 #[cfg(test)]
 #[test]
-fn v3_chat_metadata_migration_should_keep_legacy_conversation_file_without_blocking() {
+pub(crate) fn v3_chat_metadata_migration_should_keep_legacy_conversation_file_without_blocking() {
     let root = std::env::temp_dir().join(format!("eca-chat-v3-legacy-{}", Uuid::new_v4()));
     let data_path = root.join("app_data.json");
     let legacy_dir = app_layout_chat_conversations_dir(&data_path);
@@ -2807,7 +2807,7 @@ fn v3_chat_metadata_migration_should_keep_legacy_conversation_file_without_block
 
 #[cfg(test)]
 #[test]
-fn v3_chat_metadata_snapshot_should_wait_for_same_conversation_writer() {
+pub(crate) fn v3_chat_metadata_snapshot_should_wait_for_same_conversation_writer() {
     let root = std::env::temp_dir().join(format!("eca-chat-v3-snapshot-writer-gate-{}", Uuid::new_v4()));
     let data_path = root.join("app_data.json");
     chat_metadata_store_run_v3_migration(&data_path).expect("initialize v3 storage");
@@ -2890,7 +2890,7 @@ fn v3_chat_metadata_snapshot_should_wait_for_same_conversation_writer() {
 
 #[cfg(test)]
 #[test]
-fn v3_chat_metadata_delete_should_wait_for_same_conversation_reader() {
+pub(crate) fn v3_chat_metadata_delete_should_wait_for_same_conversation_reader() {
     let root = std::env::temp_dir().join(format!("eca-chat-v3-delete-gate-{}", Uuid::new_v4()));
     let data_path = root.join("app_data.json");
     chat_metadata_store_run_v3_migration(&data_path).expect("initialize v3 storage");
@@ -2933,7 +2933,7 @@ fn v3_chat_metadata_delete_should_wait_for_same_conversation_reader() {
 
 #[cfg(test)]
 #[test]
-fn v3_chat_metadata_publication_gate_should_wait_only_for_same_conversation() {
+pub(crate) fn v3_chat_metadata_publication_gate_should_wait_only_for_same_conversation() {
     let root = std::env::temp_dir().join(format!("eca-chat-v3-publication-gate-{}", Uuid::new_v4()));
     let data_path = root.join("app_data.json");
     let paths = message_store_paths(&data_path, "same-conversation").expect("same paths");

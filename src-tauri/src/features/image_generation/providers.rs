@@ -1,9 +1,9 @@
-fn image_provider_key_cursor_state() -> &'static Mutex<std::collections::HashMap<String, usize>> {
+pub(crate) fn image_provider_key_cursor_state() -> &'static Mutex<std::collections::HashMap<String, usize>> {
     static CURSORS: OnceLock<Mutex<std::collections::HashMap<String, usize>>> = OnceLock::new();
     CURSORS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
-fn select_image_generation_api_key(provider: &ImageGenerationProviderConfig) -> String {
+pub(crate) fn select_image_generation_api_key(provider: &ImageGenerationProviderConfig) -> String {
     let keys = provider
         .api_keys
         .iter()
@@ -24,14 +24,14 @@ fn select_image_generation_api_key(provider: &ImageGenerationProviderConfig) -> 
     selected
 }
 
-fn trimmed_image_generation_option(value: &Option<String>) -> Option<String> {
+pub(crate) fn trimmed_image_generation_option(value: &Option<String>) -> Option<String> {
     value
         .as_ref()
         .map(|item| item.trim().to_string())
         .filter(|item| !item.is_empty())
 }
 
-fn effective_image_generation_size(
+pub(crate) fn effective_image_generation_size(
     request: &ImageGenerationRequest,
     model: &ImageGenerationModelConfig,
 ) -> Option<String> {
@@ -39,7 +39,7 @@ fn effective_image_generation_size(
         .or_else(|| trimmed_image_generation_option(&model.default_size))
 }
 
-fn effective_image_generation_aspect_ratio(
+pub(crate) fn effective_image_generation_aspect_ratio(
     request: &ImageGenerationRequest,
     model: &ImageGenerationModelConfig,
 ) -> Option<String> {
@@ -47,7 +47,7 @@ fn effective_image_generation_aspect_ratio(
         .or_else(|| trimmed_image_generation_option(&model.default_aspect_ratio))
 }
 
-fn effective_image_generation_quality(
+pub(crate) fn effective_image_generation_quality(
     request: &ImageGenerationRequest,
     model: &ImageGenerationModelConfig,
 ) -> Option<String> {
@@ -55,7 +55,7 @@ fn effective_image_generation_quality(
         .or_else(|| trimmed_image_generation_option(&model.default_quality))
 }
 
-fn effective_image_generation_prompt(request: &ImageGenerationRequest) -> String {
+pub(crate) fn effective_image_generation_prompt(request: &ImageGenerationRequest) -> String {
     let prompt = request.prompt.trim();
     let Some(negative_prompt) = request
         .negative_prompt
@@ -68,7 +68,7 @@ fn effective_image_generation_prompt(request: &ImageGenerationRequest) -> String
     format!("{prompt}\n\n请避免出现以下内容：{negative_prompt}")
 }
 
-fn parse_pixel_size(value: &str) -> Option<(u32, u32)> {
+pub(crate) fn parse_pixel_size(value: &str) -> Option<(u32, u32)> {
     let normalized = value.trim().to_ascii_lowercase().replace('×', "x");
     let (width, height) = normalized.split_once('x')?;
     let width = width.trim().parse::<u32>().ok()?;
@@ -79,7 +79,7 @@ fn parse_pixel_size(value: &str) -> Option<(u32, u32)> {
     Some((width, height))
 }
 
-fn greatest_common_divisor(mut left: u32, mut right: u32) -> u32 {
+pub(crate) fn greatest_common_divisor(mut left: u32, mut right: u32) -> u32 {
     while right != 0 {
         let remainder = left % right;
         left = right;
@@ -88,12 +88,12 @@ fn greatest_common_divisor(mut left: u32, mut right: u32) -> u32 {
     left.max(1)
 }
 
-fn aspect_ratio_from_dimensions(width: u32, height: u32) -> String {
+pub(crate) fn aspect_ratio_from_dimensions(width: u32, height: u32) -> String {
     let divisor = greatest_common_divisor(width, height);
     format!("{}:{}", width / divisor, height / divisor)
 }
 
-fn parse_aspect_ratio(value: &str) -> Option<(u32, u32)> {
+pub(crate) fn parse_aspect_ratio(value: &str) -> Option<(u32, u32)> {
     let (width, height) = value.trim().split_once(':')?;
     let width = width.trim().parse::<u32>().ok()?;
     let height = height.trim().parse::<u32>().ok()?;
@@ -103,7 +103,7 @@ fn parse_aspect_ratio(value: &str) -> Option<(u32, u32)> {
     Some((width, height))
 }
 
-fn openai_size_from_aspect_ratio(value: &str, arbitrary_size: bool) -> Option<String> {
+pub(crate) fn openai_size_from_aspect_ratio(value: &str, arbitrary_size: bool) -> Option<String> {
     let (width, height) = parse_aspect_ratio(value)?;
     let ratio = f64::from(width) / f64::from(height);
     if arbitrary_size {
@@ -131,7 +131,7 @@ fn openai_size_from_aspect_ratio(value: &str, arbitrary_size: bool) -> Option<St
     })
 }
 
-fn append_image_generation_endpoint(base_url: &str, suffix: &str) -> String {
+pub(crate) fn append_image_generation_endpoint(base_url: &str, suffix: &str) -> String {
     let base = base_url.trim().trim_end_matches('/');
     let suffix = suffix.trim();
     let normalized_suffix = if suffix.starts_with('/') {
@@ -149,7 +149,7 @@ fn append_image_generation_endpoint(base_url: &str, suffix: &str) -> String {
     }
 }
 
-fn openai_image_generation_payload(
+pub(crate) fn openai_image_generation_payload(
     request: &ImageGenerationRequest,
     model: &ImageGenerationModelConfig,
 ) -> Value {
@@ -195,7 +195,7 @@ fn openai_image_generation_payload(
     payload
 }
 
-fn xai_resolution_from_request(
+pub(crate) fn xai_resolution_from_request(
     request: &ImageGenerationRequest,
     model: &ImageGenerationModelConfig,
 ) -> Option<String> {
@@ -217,7 +217,7 @@ fn xai_resolution_from_request(
     None
 }
 
-fn xai_image_generation_payload(
+pub(crate) fn xai_image_generation_payload(
     request: &ImageGenerationRequest,
     model: &ImageGenerationModelConfig,
 ) -> Value {
@@ -244,7 +244,7 @@ fn xai_image_generation_payload(
     payload
 }
 
-fn seedream_image_generation_payload(
+pub(crate) fn seedream_image_generation_payload(
     request: &ImageGenerationRequest,
     provider: &ImageGenerationProviderConfig,
     model: &ImageGenerationModelConfig,
@@ -313,7 +313,7 @@ fn seedream_image_generation_payload(
     payload
 }
 
-fn gemini_image_generation_payload(
+pub(crate) fn gemini_image_generation_payload(
     request: &ImageGenerationRequest,
     model: &ImageGenerationModelConfig,
 ) -> Value {
@@ -348,11 +348,11 @@ fn gemini_image_generation_payload(
     })
 }
 
-fn image_generation_value_string<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
+pub(crate) fn image_generation_value_string<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a str> {
     keys.iter().find_map(|key| value.get(*key).and_then(Value::as_str))
 }
 
-fn parse_openai_style_image_response(value: &Value) -> Result<ProviderImageGenerationOutput, String> {
+pub(crate) fn parse_openai_style_image_response(value: &Value) -> Result<ProviderImageGenerationOutput, String> {
     let data = value
         .get("data")
         .and_then(Value::as_array)
@@ -400,7 +400,7 @@ fn parse_openai_style_image_response(value: &Value) -> Result<ProviderImageGener
     Ok(ProviderImageGenerationOutput { images, text: None })
 }
 
-fn parse_gemini_image_response(value: &Value) -> Result<ProviderImageGenerationOutput, String> {
+pub(crate) fn parse_gemini_image_response(value: &Value) -> Result<ProviderImageGenerationOutput, String> {
     let mut images = Vec::<PendingGeneratedImage>::new();
     let mut text_parts = Vec::<String>::new();
     if let Some(steps) = value.get("steps").and_then(Value::as_array) {
@@ -489,7 +489,7 @@ fn parse_gemini_image_response(value: &Value) -> Result<ProviderImageGenerationO
     })
 }
 
-async fn post_bearer_image_generation_json(
+pub(crate) async fn post_bearer_image_generation_json(
     state: &AppState,
     provider: &ImageGenerationProviderConfig,
     api_key: &str,
@@ -509,7 +509,7 @@ async fn post_bearer_image_generation_json(
     parse_image_generation_json_response(response, &provider.name).await
 }
 
-async fn generate_openai_image_once(
+pub(crate) async fn generate_openai_image_once(
     state: &AppState,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
@@ -528,7 +528,7 @@ async fn generate_openai_image_once(
     parse_openai_style_image_response(&value)
 }
 
-async fn generate_xai_image_once(
+pub(crate) async fn generate_xai_image_once(
     state: &AppState,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
@@ -547,7 +547,7 @@ async fn generate_xai_image_once(
     parse_openai_style_image_response(&value)
 }
 
-async fn generate_seedream_image_once(
+pub(crate) async fn generate_seedream_image_once(
     state: &AppState,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
@@ -566,7 +566,7 @@ async fn generate_seedream_image_once(
     parse_openai_style_image_response(&value)
 }
 
-async fn post_gemini_image_interactions(
+pub(crate) async fn post_gemini_image_interactions(
     state: &AppState,
     resolved: &ResolvedImageGenerationModel,
     api_key: &str,
@@ -592,7 +592,7 @@ async fn post_gemini_image_interactions(
     parse_image_generation_json_response(response, &resolved.provider.name).await
 }
 
-async fn generate_gemini_image_once(
+pub(crate) async fn generate_gemini_image_once(
     state: &AppState,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,

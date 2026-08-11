@@ -1,13 +1,13 @@
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct JsonlSnapshotMessageLine {
-    kind: String,
-    message: ChatMessage,
+pub(crate) struct JsonlSnapshotMessageLine {
+    pub(crate) kind: String,
+    pub(crate) message: ChatMessage,
 }
 
-const JSONL_SNAPSHOT_MESSAGE_KIND: &str = "message";
+pub(crate) const JSONL_SNAPSHOT_MESSAGE_KIND: &str = "message";
 
-fn encode_jsonl_snapshot_message(message: &ChatMessage) -> Result<String, String> {
+pub(crate) fn encode_jsonl_snapshot_message(message: &ChatMessage) -> Result<String, String> {
     let line = JsonlSnapshotMessageLine {
         kind: JSONL_SNAPSHOT_MESSAGE_KIND.to_string(),
         message: message.clone(),
@@ -17,7 +17,7 @@ fn encode_jsonl_snapshot_message(message: &ChatMessage) -> Result<String, String
         .map_err(|err| format!("序列化 JSONL 消息失败: {err}"))
 }
 
-fn decode_jsonl_snapshot_message(line: &str) -> Result<ChatMessage, String> {
+pub(crate) fn decode_jsonl_snapshot_message(line: &str) -> Result<ChatMessage, String> {
     let parsed: JsonlSnapshotMessageLine =
         serde_json::from_str(line).map_err(|err| format!("解析 JSONL 消息失败: {err}"))?;
     if parsed.kind.trim() != JSONL_SNAPSHOT_MESSAGE_KIND {
@@ -26,7 +26,7 @@ fn decode_jsonl_snapshot_message(line: &str) -> Result<ChatMessage, String> {
     Ok(parsed.message)
 }
 
-fn encode_jsonl_snapshot_messages(messages: &[ChatMessage]) -> Result<String, String> {
+pub(crate) fn encode_jsonl_snapshot_messages(messages: &[ChatMessage]) -> Result<String, String> {
     let mut out = String::new();
     for message in messages {
         out.push_str(&encode_jsonl_snapshot_message(message)?);
@@ -35,30 +35,30 @@ fn encode_jsonl_snapshot_messages(messages: &[ChatMessage]) -> Result<String, St
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct JsonlSnapshotConversationBlock {
-    block_id: u32,
-    block_file: String,
-    content: String,
-    index_items: Vec<MessageStoreIndexItem>,
+pub(crate) struct JsonlSnapshotConversationBlock {
+    pub(crate) block_id: u32,
+    pub(crate) block_file: String,
+    pub(crate) content: String,
+    pub(crate) index_items: Vec<MessageStoreIndexItem>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct JsonlSnapshotConversationBlocks {
-    blocks: Vec<JsonlSnapshotConversationBlock>,
-    index: MessageStoreIndexFile,
-    message_count: usize,
-    last_message_id: String,
-    total_bytes: u64,
+pub(crate) struct JsonlSnapshotConversationBlocks {
+    pub(crate) blocks: Vec<JsonlSnapshotConversationBlock>,
+    pub(crate) index: MessageStoreIndexFile,
+    pub(crate) message_count: usize,
+    pub(crate) last_message_id: String,
+    pub(crate) total_bytes: u64,
 }
 
 #[derive(Debug, Clone)]
-struct ConversationBlockMessageRefs<'a> {
-    block_id: u32,
-    block_file: String,
-    messages: Vec<&'a ChatMessage>,
+pub(crate) struct ConversationBlockMessageRefs<'a> {
+    pub(crate) block_id: u32,
+    pub(crate) block_file: String,
+    pub(crate) messages: Vec<&'a ChatMessage>,
 }
 
-fn build_jsonl_snapshot_conversation_blocks(
+pub(crate) fn build_jsonl_snapshot_conversation_blocks(
     messages: &[ChatMessage],
 ) -> Result<JsonlSnapshotConversationBlocks, String> {
     build_jsonl_snapshot_conversation_blocks_from_refs(
@@ -67,7 +67,7 @@ fn build_jsonl_snapshot_conversation_blocks(
     )
 }
 
-fn build_jsonl_snapshot_conversation_blocks_for_conversation(
+pub(crate) fn build_jsonl_snapshot_conversation_blocks_for_conversation(
     conversation: &Conversation,
 ) -> Result<JsonlSnapshotConversationBlocks, String> {
     build_jsonl_snapshot_conversation_blocks_from_refs(
@@ -76,7 +76,7 @@ fn build_jsonl_snapshot_conversation_blocks_for_conversation(
     )
 }
 
-fn build_jsonl_snapshot_conversation_blocks_from_refs(
+pub(crate) fn build_jsonl_snapshot_conversation_blocks_from_refs(
     archived_conversation: bool,
     source_blocks: &[ConversationBlockMessageRefs<'_>],
 ) -> Result<JsonlSnapshotConversationBlocks, String> {
@@ -114,13 +114,13 @@ fn build_jsonl_snapshot_conversation_blocks_from_refs(
     })
 }
 
-fn split_conversation_messages_into_blocks(
+pub(crate) fn split_conversation_messages_into_blocks(
     conversation: &Conversation,
 ) -> Vec<ConversationBlockMessageRefs<'_>> {
     split_messages_into_conversation_blocks(&conversation.messages)
 }
 
-fn split_messages_into_conversation_blocks(
+pub(crate) fn split_messages_into_conversation_blocks(
     messages: &[ChatMessage],
 ) -> Vec<ConversationBlockMessageRefs<'_>> {
     let mut raw_blocks = Vec::<Vec<&ChatMessage>>::new();
@@ -146,7 +146,7 @@ fn split_messages_into_conversation_blocks(
         .collect()
 }
 
-fn should_slim_conversation_block(
+pub(crate) fn should_slim_conversation_block(
     archived_conversation: bool,
     block_idx: usize,
     block_count: usize,
@@ -157,7 +157,7 @@ fn should_slim_conversation_block(
     block_idx < block_count.saturating_sub(2)
 }
 
-fn raw_blocks_to_conversation_block_refs(
+pub(crate) fn raw_blocks_to_conversation_block_refs(
     raw_blocks: Vec<Vec<&ChatMessage>>,
 ) -> Vec<ConversationBlockMessageRefs<'_>> {
     raw_blocks
@@ -171,7 +171,7 @@ fn raw_blocks_to_conversation_block_refs(
         .collect()
 }
 
-fn message_store_message_day_key(message: &ChatMessage) -> String {
+pub(crate) fn message_store_message_day_key(message: &ChatMessage) -> String {
     message_store_message_business_day_key(&message.created_at).unwrap_or_else(|| {
         message
             .created_at
@@ -184,7 +184,7 @@ fn message_store_message_day_key(message: &ChatMessage) -> String {
     })
 }
 
-fn message_store_message_business_day_key(created_at: &str) -> Option<String> {
+pub(crate) fn message_store_message_business_day_key(created_at: &str) -> Option<String> {
     let parsed = chrono::DateTime::parse_from_rfc3339(created_at.trim()).ok()?;
     let local = parsed.with_timezone(&chrono::Local);
     let day = if local.time() < chrono::NaiveTime::from_hms_opt(4, 0, 0)? {
@@ -195,7 +195,7 @@ fn message_store_message_business_day_key(created_at: &str) -> Option<String> {
     Some(day.format("%Y-%m-%d").to_string())
 }
 
-fn build_jsonl_snapshot_conversation_block(
+pub(crate) fn build_jsonl_snapshot_conversation_block(
     block: &ConversationBlockMessageRefs<'_>,
     should_slim: bool,
 ) -> Result<JsonlSnapshotConversationBlock, String> {
@@ -241,7 +241,7 @@ fn build_jsonl_snapshot_conversation_block(
     })
 }
 
-fn slim_older_conversation_block_message(message: &ChatMessage) -> ChatMessage {
+pub(crate) fn slim_older_conversation_block_message(message: &ChatMessage) -> ChatMessage {
     let mut next = message.clone();
     next.parts = message
         .parts
@@ -255,7 +255,7 @@ fn slim_older_conversation_block_message(message: &ChatMessage) -> ChatMessage {
     next
 }
 
-fn slim_older_conversation_block_part(part: &MessagePart) -> Option<MessagePart> {
+pub(crate) fn slim_older_conversation_block_part(part: &MessagePart) -> Option<MessagePart> {
     match part {
         MessagePart::Text {
             text,
@@ -314,7 +314,7 @@ fn slim_older_conversation_block_part(part: &MessagePart) -> Option<MessagePart>
     }
 }
 
-fn slim_older_conversation_block_provider_meta(message: &ChatMessage) -> Option<Value> {
+pub(crate) fn slim_older_conversation_block_provider_meta(message: &ChatMessage) -> Option<Value> {
     let mut meta = serde_json::Map::new();
     if let Some(kind) = message_store_compaction_kind(message) {
         meta.insert(
@@ -334,7 +334,7 @@ fn slim_older_conversation_block_provider_meta(message: &ChatMessage) -> Option<
     }
 }
 
-fn write_jsonl_snapshot_atomic(path: &PathBuf, content: &str) -> Result<(), String> {
+pub(crate) fn write_jsonl_snapshot_atomic(path: &PathBuf, content: &str) -> Result<(), String> {
     write_message_store_text_atomic(path, "jsonl.tmp", content, "JSONL 快照")
 }
 

@@ -1,4 +1,4 @@
-fn send_reasoning_delta_event(
+pub(crate) fn send_reasoning_delta_event(
     on_delta: &DeltaChannel,
     reasoning: &str,
 ) {
@@ -21,7 +21,7 @@ fn send_reasoning_delta_event(
     });
 }
 
-fn join_model_text_blocks<'a, I>(texts: I) -> String
+pub(crate) fn join_model_text_blocks<'a, I>(texts: I) -> String
 where
     I: IntoIterator<Item = &'a str>,
 {
@@ -40,7 +40,7 @@ where
     joined.join("\n")
 }
 
-async fn collect_streaming_model_reply_genai<S>(
+pub(crate) async fn collect_streaming_model_reply_genai<S>(
     mut stream: S,
     on_delta: Option<&DeltaChannel>,
     app_state: Option<&AppState>,

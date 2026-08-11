@@ -1,4 +1,4 @@
-fn render_preserved_conversation_message_text(message: &ChatMessage) -> String {
+pub(crate) fn render_preserved_conversation_message_text(message: &ChatMessage) -> String {
     let mut blocks = Vec::<String>::new();
     if message.role.trim().eq_ignore_ascii_case("assistant") {
         for event in message.tool_call.iter().flatten() {
@@ -27,7 +27,7 @@ fn render_preserved_conversation_message_text(message: &ChatMessage) -> String {
 }
 
 impl ConversationServiceV2 {
-    fn ensure_unarchived_conversation(
+    pub(crate) fn ensure_unarchived_conversation(
         &self,
         conversation: &Conversation,
         conversation_id: &str,
@@ -41,7 +41,7 @@ impl ConversationServiceV2 {
         Ok(())
     }
 
-    fn read_persisted_conversation(
+    pub(crate) fn read_persisted_conversation(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -66,7 +66,7 @@ impl ConversationServiceV2 {
         Ok(conversation)
     }
 
-    fn read_archive_pipeline_source_conversation(
+    pub(crate) fn read_archive_pipeline_source_conversation(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -76,7 +76,7 @@ impl ConversationServiceV2 {
 
     /// 压缩/归档输入读取最后 block 完整消息（不过滤旧压缩消息，上一轮摘要保留在输入内）。
     /// 远程唤醒精简读取器已随远程唤醒 LLM 压缩移除，压缩输入不再受字符上限裁剪。
-    fn read_archive_pipeline_last_block_conversation(
+    pub(crate) fn read_archive_pipeline_last_block_conversation(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -96,7 +96,7 @@ impl ConversationServiceV2 {
         Ok(last_block)
     }
 
-    fn try_read_persisted_conversation(
+    pub(crate) fn try_read_persisted_conversation(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -112,7 +112,7 @@ impl ConversationServiceV2 {
         }
     }
 
-    fn collect_unarchived_conversation_summaries_cached(
+    pub(crate) fn collect_unarchived_conversation_summaries_cached(
         &self,
         state: &AppState,
         app_config: &AppConfig,

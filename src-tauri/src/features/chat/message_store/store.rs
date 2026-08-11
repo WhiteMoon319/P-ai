@@ -1,111 +1,111 @@
 #[derive(Debug, Clone)]
-pub(super) struct MessageStoreLimitPage {
-    pub(super) messages: Vec<ChatMessage>,
-    pub(super) has_more: bool,
+pub(crate) struct MessageStoreLimitPage {
+    pub(crate) messages: Vec<ChatMessage>,
+    pub(crate) has_more: bool,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct MessageStoreStatus {
-    pub(super) manifest_exists: bool,
-    pub(super) legacy_shard_exists: bool,
-    pub(super) directory_shard_exists: bool,
-    pub(super) message_store_kind: String,
-    pub(super) migration_state: String,
-    pub(super) source_message_count: usize,
-    pub(super) last_message_id: String,
-    pub(super) messages_jsonl_bytes: u64,
-    pub(super) updated_at: String,
-    pub(super) ready_jsonl: bool,
+pub(crate) struct MessageStoreStatus {
+    pub(crate) manifest_exists: bool,
+    pub(crate) legacy_shard_exists: bool,
+    pub(crate) directory_shard_exists: bool,
+    pub(crate) message_store_kind: String,
+    pub(crate) migration_state: String,
+    pub(crate) source_message_count: usize,
+    pub(crate) last_message_id: String,
+    pub(crate) messages_jsonl_bytes: u64,
+    pub(crate) updated_at: String,
+    pub(crate) ready_jsonl: bool,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct MessageStoreIndexSummary {
-    pub(super) message_count: usize,
-    pub(super) visible_message_count: usize,
-    pub(super) last_message_id: String,
-    pub(super) last_message_at: Option<String>,
-    pub(super) first_user_text_preview: Option<String>,
-    pub(super) preview_items: Vec<MessageStoreIndexPreviewItem>,
+pub(crate) struct MessageStoreIndexSummary {
+    pub(crate) message_count: usize,
+    pub(crate) visible_message_count: usize,
+    pub(crate) last_message_id: String,
+    pub(crate) last_message_at: Option<String>,
+    pub(crate) first_user_text_preview: Option<String>,
+    pub(crate) preview_items: Vec<MessageStoreIndexPreviewItem>,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct MessageStoreIndexPreviewItem {
-    pub(super) message_id: String,
-    pub(super) role: String,
-    pub(super) speaker_agent_id: Option<String>,
-    pub(super) created_at: Option<String>,
-    pub(super) text_preview: String,
-    pub(super) has_image: bool,
-    pub(super) has_pdf: bool,
-    pub(super) has_audio: bool,
-    pub(super) has_attachment: bool,
+pub(crate) struct MessageStoreIndexPreviewItem {
+    pub(crate) message_id: String,
+    pub(crate) role: String,
+    pub(crate) speaker_agent_id: Option<String>,
+    pub(crate) created_at: Option<String>,
+    pub(crate) text_preview: String,
+    pub(crate) has_image: bool,
+    pub(crate) has_pdf: bool,
+    pub(crate) has_audio: bool,
+    pub(crate) has_attachment: bool,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct MessageStoreChatSnapshot {
-    pub(super) latest_user: Option<ChatMessage>,
-    pub(super) latest_assistant: Option<ChatMessage>,
-    pub(super) active_message_count: usize,
+pub(crate) struct MessageStoreChatSnapshot {
+    pub(crate) latest_user: Option<ChatMessage>,
+    pub(crate) latest_assistant: Option<ChatMessage>,
+    pub(crate) active_message_count: usize,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct MessageStoreCompactionSegment {
-    pub(super) messages: Vec<ChatMessage>,
-    pub(super) boundary_message_id: Option<String>,
-    pub(super) previous_boundary_message_id: Option<String>,
-    pub(super) has_previous_segment: bool,
+pub(crate) struct MessageStoreCompactionSegment {
+    pub(crate) messages: Vec<ChatMessage>,
+    pub(crate) boundary_message_id: Option<String>,
+    pub(crate) previous_boundary_message_id: Option<String>,
+    pub(crate) has_previous_segment: bool,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct MessageStoreBlockSummary {
-    pub(super) block_id: u32,
-    pub(super) message_count: usize,
-    pub(super) first_message_id: String,
-    pub(super) last_message_id: String,
-    pub(super) first_created_at: Option<String>,
-    pub(super) last_created_at: Option<String>,
-    pub(super) is_latest: bool,
+pub(crate) struct MessageStoreBlockSummary {
+    pub(crate) block_id: u32,
+    pub(crate) message_count: usize,
+    pub(crate) first_message_id: String,
+    pub(crate) last_message_id: String,
+    pub(crate) first_created_at: Option<String>,
+    pub(crate) last_created_at: Option<String>,
+    pub(crate) is_latest: bool,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct MessageStoreBlockPage {
-    pub(super) blocks: Vec<MessageStoreBlockSummary>,
-    pub(super) selected_block_id: u32,
-    pub(super) messages: Vec<ChatMessage>,
-    pub(super) has_prev_block: bool,
-    pub(super) has_next_block: bool,
+pub(crate) struct MessageStoreBlockPage {
+    pub(crate) blocks: Vec<MessageStoreBlockSummary>,
+    pub(crate) selected_block_id: u32,
+    pub(crate) messages: Vec<ChatMessage>,
+    pub(crate) has_prev_block: bool,
+    pub(crate) has_next_block: bool,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct MessageStoreBlockMessagePage {
-    pub(super) selected_block_id: u32,
-    pub(super) messages: Vec<ChatMessage>,
-    pub(super) has_more: bool,
+pub(crate) struct MessageStoreBlockMessagePage {
+    pub(crate) selected_block_id: u32,
+    pub(crate) messages: Vec<ChatMessage>,
+    pub(crate) has_more: bool,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct MessageStoreBranchSelection {
-    pub(super) selected_messages: Vec<ChatMessage>,
-    pub(super) first_selected_ordinal: usize,
-    pub(super) latest_compaction_message: Option<ChatMessage>,
+pub(crate) struct MessageStoreBranchSelection {
+    pub(crate) selected_messages: Vec<ChatMessage>,
+    pub(crate) first_selected_ordinal: usize,
+    pub(crate) latest_compaction_message: Option<ChatMessage>,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct MessageStoreRewindSlice {
-    pub(super) keep_count: usize,
-    pub(super) removed_messages: Vec<ChatMessage>,
-    pub(super) recalled_user_message: ChatMessage,
+pub(crate) struct MessageStoreRewindSlice {
+    pub(crate) keep_count: usize,
+    pub(crate) removed_messages: Vec<ChatMessage>,
+    pub(crate) recalled_user_message: ChatMessage,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct MessageStoreToolCallResultAppend {
-    pub(super) conversation: Conversation,
-    pub(super) assistant_message_id: String,
-    pub(super) created: bool,
-    pub(super) tool_event_count: usize,
+pub(crate) struct MessageStoreToolCallResultAppend {
+    pub(crate) conversation: Conversation,
+    pub(crate) assistant_message_id: String,
+    pub(crate) created: bool,
+    pub(crate) tool_event_count: usize,
 }
 
-trait MessageStore {
+pub(crate) trait MessageStore {
     fn read_all_messages(&self) -> Result<Vec<ChatMessage>, String>;
     fn read_recent_messages(&self, limit: usize) -> Result<Vec<ChatMessage>, String>;
     fn read_message_by_id(&self, message_id: &str) -> Result<ChatMessage, String>;
@@ -115,38 +115,38 @@ trait MessageStore {
     fn read_compaction_segment_before(&self, boundary_message_id: &str) -> Result<MessageStoreCompactionSegment, String>;
 }
 
-struct ConversationJsonMessageStore<'a> {
-    conversation: &'a Conversation,
+pub(crate) struct ConversationJsonMessageStore<'a> {
+    pub(crate) conversation: &'a Conversation,
 }
 
-struct JsonlSnapshotMessageStore {
-    messages_file: PathBuf,
-    index_file: Option<PathBuf>,
-    sqlite_index: Option<Arc<MessageStoreIndexFile>>,
+pub(crate) struct JsonlSnapshotMessageStore {
+    pub(crate) messages_file: PathBuf,
+    pub(crate) index_file: Option<PathBuf>,
+    pub(crate) sqlite_index: Option<Arc<MessageStoreIndexFile>>,
 }
 
 #[derive(Debug, Clone)]
-struct CachedMessageStoreBlockFile {
-    modified_at: Option<std::time::SystemTime>,
-    len: u64,
-    messages_by_id: Arc<std::collections::HashMap<String, ChatMessage>>,
+pub(crate) struct CachedMessageStoreBlockFile {
+    pub(crate) modified_at: Option<std::time::SystemTime>,
+    pub(crate) len: u64,
+    pub(crate) messages_by_id: Arc<std::collections::HashMap<String, ChatMessage>>,
 }
 
-enum MessageStoreBackend<'a> {
+pub(crate) enum MessageStoreBackend<'a> {
     ConversationJson(ConversationJsonMessageStore<'a>),
     JsonlSnapshot(JsonlSnapshotMessageStore),
 }
 
-static MESSAGE_STORE_BLOCK_FILE_CACHE: OnceLock<
+pub(crate) static MESSAGE_STORE_BLOCK_FILE_CACHE: OnceLock<
     Mutex<std::collections::HashMap<PathBuf, CachedMessageStoreBlockFile>>,
 > = OnceLock::new();
 
-fn message_store_block_file_cache(
+pub(crate) fn message_store_block_file_cache(
 ) -> &'static Mutex<std::collections::HashMap<PathBuf, CachedMessageStoreBlockFile>> {
     MESSAGE_STORE_BLOCK_FILE_CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
-fn lock_message_store_block_file_cache(
+pub(crate) fn lock_message_store_block_file_cache(
 ) -> std::sync::MutexGuard<
     'static,
     std::collections::HashMap<PathBuf, CachedMessageStoreBlockFile>,
@@ -160,14 +160,14 @@ fn lock_message_store_block_file_cache(
     })
 }
 
-pub(super) fn retain_message_store_block_file_cache_paths(
+pub(crate) fn retain_message_store_block_file_cache_paths(
     allowed_paths: &std::collections::HashSet<PathBuf>,
 ) {
     let mut cache = lock_message_store_block_file_cache();
     cache.retain(|path, _| allowed_paths.contains(path));
 }
 
-pub(super) fn forget_message_store_block_file_cache_paths(
+pub(crate) fn forget_message_store_block_file_cache_paths(
     paths: &std::collections::HashSet<PathBuf>,
 ) {
     if paths.is_empty() {
@@ -179,7 +179,7 @@ pub(super) fn forget_message_store_block_file_cache_paths(
     }
 }
 
-pub(super) fn message_store_block_file_cache_stats() -> (usize, usize, usize) {
+pub(crate) fn message_store_block_file_cache_stats() -> (usize, usize, usize) {
     let cache = lock_message_store_block_file_cache();
     let entry_count = cache.len();
     let message_count = cache
@@ -209,7 +209,7 @@ impl<'a> ConversationJsonMessageStore<'a> {
 }
 
 impl JsonlSnapshotMessageStore {
-    fn new(messages_file: PathBuf) -> Self {
+    pub(crate) fn new(messages_file: PathBuf) -> Self {
         Self {
             messages_file,
             index_file: None,
@@ -217,7 +217,7 @@ impl JsonlSnapshotMessageStore {
         }
     }
 
-    fn with_index(messages_file: PathBuf, index_file: PathBuf) -> Self {
+    pub(crate) fn with_index(messages_file: PathBuf, index_file: PathBuf) -> Self {
         Self {
             messages_file,
             index_file: Some(index_file),
@@ -225,7 +225,7 @@ impl JsonlSnapshotMessageStore {
         }
     }
 
-    fn with_sqlite_index(messages_file: PathBuf, index: MessageStoreIndexFile) -> Self {
+    pub(crate) fn with_sqlite_index(messages_file: PathBuf, index: MessageStoreIndexFile) -> Self {
         Self {
             messages_file,
             index_file: None,
@@ -233,14 +233,14 @@ impl JsonlSnapshotMessageStore {
         }
     }
 
-    fn messages(&self) -> Result<Vec<ChatMessage>, String> {
+    pub(crate) fn messages(&self) -> Result<Vec<ChatMessage>, String> {
         if let Some(index) = self.index()? {
             return read_jsonl_snapshot_messages_by_index_items(&self.messages_file, &index.items);
         }
         read_jsonl_snapshot_messages_file(&self.messages_file)
     }
 
-    fn index(&self) -> Result<Option<Arc<MessageStoreIndexFile>>, String> {
+    pub(crate) fn index(&self) -> Result<Option<Arc<MessageStoreIndexFile>>, String> {
         if let Some(index) = self.sqlite_index.as_ref() {
             return Ok(Some(Arc::clone(index)));
         }
@@ -253,7 +253,7 @@ impl JsonlSnapshotMessageStore {
         read_message_store_index_file(index_file).map(Some)
     }
 
-    fn read_messages_after_all(&self, after_message_id: &str) -> Result<Vec<ChatMessage>, String> {
+    pub(crate) fn read_messages_after_all(&self, after_message_id: &str) -> Result<Vec<ChatMessage>, String> {
         if let Some(index) = self.index()? {
             return read_messages_after_all_from_index(&self.messages_file, &index, after_message_id);
         }
@@ -261,7 +261,7 @@ impl JsonlSnapshotMessageStore {
         read_messages_after_all_from_slice(&messages, after_message_id)
     }
 
-    fn read_recent_messages_page(&self, limit: usize) -> Result<MessageStoreLimitPage, String> {
+    pub(crate) fn read_recent_messages_page(&self, limit: usize) -> Result<MessageStoreLimitPage, String> {
         if let Some(index) = self.index()? {
             return read_recent_messages_page_from_index(&self.messages_file, &index, limit);
         }
@@ -405,7 +405,7 @@ impl MessageStore for MessageStoreBackend<'_> {
     }
 }
 
-fn message_store_backend_for_conversation<'a>(
+pub(crate) fn message_store_backend_for_conversation<'a>(
     paths: &MessageStorePaths,
     conversation: &'a Conversation,
 ) -> Result<MessageStoreBackend<'a>, String> {
@@ -444,7 +444,7 @@ fn message_store_backend_for_conversation<'a>(
     ))
 }
 
-pub(super) fn read_ready_message_store_directory_conversation(
+pub(crate) fn read_ready_message_store_directory_conversation(
     paths: &MessageStorePaths,
 ) -> Result<Option<Conversation>, String> {
     if paths.is_v3_ready()? {
@@ -477,7 +477,7 @@ pub(super) fn read_ready_message_store_directory_conversation(
     Ok(None)
 }
 
-pub(super) fn read_ready_message_store_meta(
+pub(crate) fn read_ready_message_store_meta(
     paths: &MessageStorePaths,
 ) -> Result<Option<ConversationShardMeta>, String> {
     if paths.is_v3_ready()? {
@@ -514,7 +514,7 @@ pub(super) fn read_ready_message_store_meta(
 
 /// 按替换后的消息集合重算最新摘要标题（统一派生规则）。
 /// v3 走轻量摘要范围读取；非 v3 目录型会话按该后端既有整读成本读取并合并替换。
-pub(super) fn recompute_latest_summary_title_after_replace(
+pub(crate) fn recompute_latest_summary_title_after_replace(
     paths: &MessageStorePaths,
     updated_messages: &[ChatMessage],
 ) -> Result<Option<String>, String> {
@@ -534,7 +534,7 @@ pub(super) fn recompute_latest_summary_title_after_replace(
     Ok(conversation_latest_summary_title(&current))
 }
 
-pub(super) fn read_ready_message_store_all_messages(
+pub(crate) fn read_ready_message_store_all_messages(
     paths: &MessageStorePaths,
 ) -> Result<Option<Vec<ChatMessage>>, String> {
     if paths.is_v3_ready()? {
@@ -552,7 +552,7 @@ pub(super) fn read_ready_message_store_all_messages(
     store.read_all_messages().map(Some)
 }
 
-pub(super) fn read_ready_message_store_latest_compaction_message(
+pub(crate) fn read_ready_message_store_latest_compaction_message(
     paths: &MessageStorePaths,
 ) -> Result<Option<ChatMessage>, String> {
     if paths.is_v3_ready()? {
@@ -568,7 +568,7 @@ pub(super) fn read_ready_message_store_latest_compaction_message(
         .next())
 }
 
-pub(super) fn read_ready_message_store_recent_messages(
+pub(crate) fn read_ready_message_store_recent_messages(
     paths: &MessageStorePaths,
     limit: usize,
 ) -> Result<Option<Vec<ChatMessage>>, String> {
@@ -581,7 +581,7 @@ pub(super) fn read_ready_message_store_recent_messages(
     store.read_recent_messages(limit).map(Some)
 }
 
-pub(super) fn read_ready_message_store_recent_messages_page(
+pub(crate) fn read_ready_message_store_recent_messages_page(
     paths: &MessageStorePaths,
     limit: usize,
 ) -> Result<Option<MessageStoreLimitPage>, String> {
@@ -594,7 +594,7 @@ pub(super) fn read_ready_message_store_recent_messages_page(
     store.read_recent_messages_page(limit).map(Some)
 }
 
-pub(super) fn read_ready_message_store_recent_messages_page_cached(
+pub(crate) fn read_ready_message_store_recent_messages_page_cached(
     paths: &MessageStorePaths,
     limit: usize,
 ) -> Result<Option<MessageStoreLimitPage>, String> {
@@ -650,7 +650,7 @@ pub(super) fn read_ready_message_store_recent_messages_page_cached(
     }))
 }
 
-fn read_message_store_index_file_uncached(path: &PathBuf) -> Result<MessageStoreIndexFile, String> {
+pub(crate) fn read_message_store_index_file_uncached(path: &PathBuf) -> Result<MessageStoreIndexFile, String> {
     let raw = fs::read_to_string(path)
         .map_err(|err| format!("读取消息索引失败，path={}，error={err}", path.display()))?;
     let index = serde_json::from_str::<MessageStoreIndexFile>(&raw)
@@ -659,21 +659,21 @@ fn read_message_store_index_file_uncached(path: &PathBuf) -> Result<MessageStore
     Ok(index.with_position_lookup())
 }
 
-pub(super) fn read_ready_message_store_recent_blocks_page(
+pub(crate) fn read_ready_message_store_recent_blocks_page(
     paths: &MessageStorePaths,
     block_limit: usize,
 ) -> Result<Option<MessageStoreLimitPage>, String> {
     read_ready_message_store_recent_blocks_page_with_cache(paths, block_limit, false)
 }
 
-pub(super) fn read_ready_message_store_recent_blocks_page_cached(
+pub(crate) fn read_ready_message_store_recent_blocks_page_cached(
     paths: &MessageStorePaths,
     block_limit: usize,
 ) -> Result<Option<MessageStoreLimitPage>, String> {
     read_ready_message_store_recent_blocks_page_with_cache(paths, block_limit, true)
 }
 
-pub(super) fn read_ready_message_store_latest_block_paths(
+pub(crate) fn read_ready_message_store_latest_block_paths(
     paths: &MessageStorePaths,
     block_limit: usize,
 ) -> Result<Option<Vec<PathBuf>>, String> {
@@ -708,7 +708,7 @@ pub(super) fn read_ready_message_store_latest_block_paths(
     Ok(Some(block_paths))
 }
 
-fn read_ready_message_store_recent_blocks_page_with_cache(
+pub(crate) fn read_ready_message_store_recent_blocks_page_with_cache(
     paths: &MessageStorePaths,
     block_limit: usize,
     use_block_cache: bool,
@@ -763,7 +763,7 @@ fn read_ready_message_store_recent_blocks_page_with_cache(
     }))
 }
 
-pub(super) fn read_ready_message_store_message_by_id(
+pub(crate) fn read_ready_message_store_message_by_id(
     paths: &MessageStorePaths,
     message_id: &str,
 ) -> Result<Option<ChatMessage>, String> {
@@ -776,7 +776,7 @@ pub(super) fn read_ready_message_store_message_by_id(
     store.read_message_by_id(message_id).map(Some)
 }
 
-pub(super) fn read_ready_message_store_message_sequence(
+pub(crate) fn read_ready_message_store_message_sequence(
     paths: &MessageStorePaths,
     message_id: &str,
 ) -> Result<Option<usize>, String> {
@@ -792,7 +792,7 @@ pub(super) fn read_ready_message_store_message_sequence(
         .position(|message| message.id.trim() == message_id.trim()))
 }
 
-pub(super) fn read_ready_message_store_messages_after_all(
+pub(crate) fn read_ready_message_store_messages_after_all(
     paths: &MessageStorePaths,
     after_message_id: &str,
 ) -> Result<Option<Vec<ChatMessage>>, String> {
@@ -805,7 +805,7 @@ pub(super) fn read_ready_message_store_messages_after_all(
     store.read_messages_after_all(after_message_id).map(Some)
 }
 
-pub(super) fn read_ready_message_store_rewind_slice(
+pub(crate) fn read_ready_message_store_rewind_slice(
     paths: &MessageStorePaths,
     message_id: &str,
 ) -> Result<Option<MessageStoreRewindSlice>, String> {
@@ -851,7 +851,7 @@ pub(super) fn read_ready_message_store_rewind_slice(
     }))
 }
 
-pub(super) fn read_message_store_status(
+pub(crate) fn read_message_store_status(
     paths: &MessageStorePaths,
     fallback_conversation: &Conversation,
 ) -> Result<MessageStoreStatus, String> {
@@ -904,7 +904,7 @@ pub(super) fn read_message_store_status(
     })
 }
 
-pub(super) fn read_ready_message_store_status(
+pub(crate) fn read_ready_message_store_status(
     paths: &MessageStorePaths,
 ) -> Result<Option<MessageStoreStatus>, String> {
     if paths.is_v3_ready()? {
@@ -934,7 +934,7 @@ pub(super) fn read_ready_message_store_status(
     }))
 }
 
-pub(super) fn read_ready_message_store_index_summary(
+pub(crate) fn read_ready_message_store_index_summary(
     paths: &MessageStorePaths,
 ) -> Result<Option<MessageStoreIndexSummary>, String> {
     if paths.is_v3_ready()? {
@@ -1002,7 +1002,7 @@ pub(super) fn read_ready_message_store_index_summary(
     }))
 }
 
-pub(super) fn read_ready_message_store_chat_snapshot(
+pub(crate) fn read_ready_message_store_chat_snapshot(
     paths: &MessageStorePaths,
 ) -> Result<Option<MessageStoreChatSnapshot>, String> {
     if paths.is_v3_ready()? {
@@ -1038,7 +1038,7 @@ pub(super) fn read_ready_message_store_chat_snapshot(
     }))
 }
 
-pub(super) fn read_ready_message_store_branch_selection(
+pub(crate) fn read_ready_message_store_branch_selection(
     paths: &MessageStorePaths,
     selected_message_ids: &[String],
 ) -> Result<Option<MessageStoreBranchSelection>, String> {
@@ -1135,7 +1135,7 @@ pub(super) fn read_ready_message_store_branch_selection(
     }))
 }
 
-pub(super) fn read_message_store_manifest_status(
+pub(crate) fn read_message_store_manifest_status(
     paths: &MessageStorePaths,
 ) -> Result<Option<MessageStoreStatus>, String> {
     if paths.is_v3_ready()? {
@@ -1158,7 +1158,7 @@ pub(super) fn read_message_store_manifest_status(
     }))
 }
 
-pub(super) fn read_ready_message_store_messages_before(
+pub(crate) fn read_ready_message_store_messages_before(
     paths: &MessageStorePaths,
     before_message_id: &str,
     limit: usize,
@@ -1172,7 +1172,7 @@ pub(super) fn read_ready_message_store_messages_before(
     store.read_messages_before(before_message_id, limit).map(Some)
 }
 
-pub(super) fn read_ready_message_store_messages_after(
+pub(crate) fn read_ready_message_store_messages_after(
     paths: &MessageStorePaths,
     after_message_id: &str,
     limit: usize,
@@ -1186,7 +1186,7 @@ pub(super) fn read_ready_message_store_messages_after(
     store.read_messages_after(after_message_id, limit).map(Some)
 }
 
-pub(super) fn read_ready_message_store_current_compaction_segment(
+pub(crate) fn read_ready_message_store_current_compaction_segment(
     paths: &MessageStorePaths,
 ) -> Result<Option<MessageStoreCompactionSegment>, String> {
     if paths.is_v3_ready()? {
@@ -1198,7 +1198,7 @@ pub(super) fn read_ready_message_store_current_compaction_segment(
     store.read_current_compaction_segment().map(Some)
 }
 
-pub(super) fn read_ready_message_store_compaction_segment_before(
+pub(crate) fn read_ready_message_store_compaction_segment_before(
     paths: &MessageStorePaths,
     boundary_message_id: &str,
 ) -> Result<Option<MessageStoreCompactionSegment>, String> {
@@ -1213,7 +1213,7 @@ pub(super) fn read_ready_message_store_compaction_segment_before(
         .map(Some)
 }
 
-pub(super) fn read_ready_message_store_block_page(
+pub(crate) fn read_ready_message_store_block_page(
     paths: &MessageStorePaths,
     requested_block_id: Option<u32>,
 ) -> Result<Option<MessageStoreBlockPage>, String> {
@@ -1276,7 +1276,7 @@ pub(super) fn read_ready_message_store_block_page(
     }))
 }
 
-pub(super) fn read_ready_message_store_block_messages_before(
+pub(crate) fn read_ready_message_store_block_messages_before(
     paths: &MessageStorePaths,
     requested_block_id: Option<u32>,
     before_message_id: Option<&str>,
@@ -1306,7 +1306,7 @@ pub(super) fn read_ready_message_store_block_messages_before(
 /// 仅从索引计数触发消息所在同一当前 block 的总消息数。
 ///
 /// 远程唤醒的低频判断要看当前 block 的完整消息规模，不能只看触发消息之前的数量。
-pub(super) fn read_ready_message_store_block_message_count(
+pub(crate) fn read_ready_message_store_block_message_count(
     paths: &MessageStorePaths,
     before_message_id: &str,
 ) -> Result<Option<usize>, String> {
@@ -1327,7 +1327,7 @@ pub(super) fn read_ready_message_store_block_message_count(
     count_jsonl_block_messages(&index, before_message_id).map(Some)
 }
 
-pub(super) fn read_message_store_current_compaction_segment_for_conversation(
+pub(crate) fn read_message_store_current_compaction_segment_for_conversation(
     paths: &MessageStorePaths,
     conversation: &Conversation,
 ) -> Result<MessageStoreCompactionSegment, String> {
@@ -1338,7 +1338,7 @@ pub(super) fn read_message_store_current_compaction_segment_for_conversation(
         .read_current_compaction_segment()
 }
 
-pub(super) fn read_message_store_compaction_segment_before_for_conversation(
+pub(crate) fn read_message_store_compaction_segment_before_for_conversation(
     paths: &MessageStorePaths,
     conversation: &Conversation,
     boundary_message_id: &str,
@@ -1350,7 +1350,7 @@ pub(super) fn read_message_store_compaction_segment_before_for_conversation(
         .read_compaction_segment_before(boundary_message_id)
 }
 
-pub(super) fn append_message_store_tool_group_result(
+pub(crate) fn append_message_store_tool_group_result(
     paths: &MessageStorePaths,
     conversation: &Conversation,
     agent_id: &str,
@@ -1417,7 +1417,7 @@ pub(super) fn append_message_store_tool_group_result(
     })
 }
 
-pub(super) fn apply_message_store_tool_group_result(
+pub(crate) fn apply_message_store_tool_group_result(
     conversation: &Conversation,
     agent_id: &str,
     assistant_tool_call_event: Value,
@@ -1443,13 +1443,13 @@ pub(super) fn apply_message_store_tool_group_result(
 }
 
 #[derive(Debug, Clone)]
-struct ToolGroupResultAppend {
-    assistant_message_id: String,
-    created: bool,
-    tool_event_count: usize,
+pub(crate) struct ToolGroupResultAppend {
+    pub(crate) assistant_message_id: String,
+    pub(crate) created: bool,
+    pub(crate) tool_event_count: usize,
 }
 
-fn append_tool_group_result_to_conversation(
+pub(crate) fn append_tool_group_result_to_conversation(
     conversation: &mut Conversation,
     agent_id: &str,
     assistant_tool_call_event: Value,
@@ -1528,7 +1528,7 @@ fn append_tool_group_result_to_conversation(
     })
 }
 
-fn merge_provider_meta_patch(target: &mut Option<Value>, patch: Option<Value>) {
+pub(crate) fn merge_provider_meta_patch(target: &mut Option<Value>, patch: Option<Value>) {
     let Some(patch) = patch else {
         return;
     };
@@ -1552,7 +1552,7 @@ fn merge_provider_meta_patch(target: &mut Option<Value>, patch: Option<Value>) {
     *target = Some(current);
 }
 
-fn tool_call_ids_from_assistant_tool_event(event: &Value) -> Vec<String> {
+pub(crate) fn tool_call_ids_from_assistant_tool_event(event: &Value) -> Vec<String> {
     event
         .get("tool_calls")
         .and_then(Value::as_array)
@@ -1569,7 +1569,7 @@ fn tool_call_ids_from_assistant_tool_event(event: &Value) -> Vec<String> {
         .collect()
 }
 
-fn tool_history_contains_assistant_tool_group(events: &[Value], group_call_ids: &[String]) -> bool {
+pub(crate) fn tool_history_contains_assistant_tool_group(events: &[Value], group_call_ids: &[String]) -> bool {
     if group_call_ids.is_empty() {
         return false;
     }
@@ -1593,7 +1593,7 @@ fn tool_history_contains_assistant_tool_group(events: &[Value], group_call_ids: 
     })
 }
 
-fn tool_history_contains_tool_result_id(events: &[Value], tool_call_id: &str) -> bool {
+pub(crate) fn tool_history_contains_tool_result_id(events: &[Value], tool_call_id: &str) -> bool {
     events.iter().any(|event| {
         event
             .get("role")
@@ -1607,7 +1607,7 @@ fn tool_history_contains_tool_result_id(events: &[Value], tool_call_id: &str) ->
     })
 }
 
-fn validate_tool_group_result_append(
+pub(crate) fn validate_tool_group_result_append(
     assistant_tool_call_event: &Value,
     tool_result_event: &Value,
 ) -> Result<String, String> {
@@ -1647,7 +1647,7 @@ fn validate_tool_group_result_append(
     Ok(result_call_id.to_string())
 }
 
-fn ready_jsonl_snapshot_store(
+pub(crate) fn ready_jsonl_snapshot_store(
     paths: &MessageStorePaths,
 ) -> Result<Option<JsonlSnapshotMessageStore>, String> {
     if let Some(index) = chat_metadata_store_read_index(paths)? {
@@ -1687,7 +1687,7 @@ fn ready_jsonl_snapshot_store(
     Ok(None)
 }
 
-pub(super) fn validate_ready_message_store_snapshot_integrity(
+pub(crate) fn validate_ready_message_store_snapshot_integrity(
     paths: &MessageStorePaths,
     manifest: &MessageStoreManifest,
 ) -> Result<(), String> {
@@ -1716,26 +1716,26 @@ pub(super) fn validate_ready_message_store_snapshot_integrity(
 }
 
 #[derive(Debug, Clone)]
-struct RebuiltReadyMessageStoreSnapshot {
-    index: MessageStoreIndexFile,
-    total_bytes: u64,
-    message_count: usize,
-    last_message_id: String,
+pub(crate) struct RebuiltReadyMessageStoreSnapshot {
+    pub(crate) index: MessageStoreIndexFile,
+    pub(crate) total_bytes: u64,
+    pub(crate) message_count: usize,
+    pub(crate) last_message_id: String,
 }
 
-fn rebuild_ready_message_store_snapshot_from_blocks(
+pub(crate) fn rebuild_ready_message_store_snapshot_from_blocks(
     paths: &MessageStorePaths,
 ) -> Result<RebuiltReadyMessageStoreSnapshot, String> {
     rebuild_message_store_snapshot_from_blocks(paths, false)
 }
 
-fn repair_and_rebuild_ready_message_store_snapshot_from_blocks(
+pub(crate) fn repair_and_rebuild_ready_message_store_snapshot_from_blocks(
     paths: &MessageStorePaths,
 ) -> Result<RebuiltReadyMessageStoreSnapshot, String> {
     rebuild_message_store_snapshot_from_blocks(paths, true)
 }
 
-fn rebuild_message_store_snapshot_from_blocks(
+pub(crate) fn rebuild_message_store_snapshot_from_blocks(
     paths: &MessageStorePaths,
     repair_invalid_lines: bool,
 ) -> Result<RebuiltReadyMessageStoreSnapshot, String> {
@@ -1829,7 +1829,7 @@ fn rebuild_message_store_snapshot_from_blocks(
     })
 }
 
-fn message_store_index_total_bytes(
+pub(crate) fn message_store_index_total_bytes(
     paths: &MessageStorePaths,
     index: &MessageStoreIndexFile,
 ) -> Result<u64, String> {
@@ -1860,13 +1860,13 @@ fn message_store_index_total_bytes(
     Ok(total)
 }
 
-fn read_message_store_directory_conversation(paths: &MessageStorePaths) -> Result<Conversation, String> {
+pub(crate) fn read_message_store_directory_conversation(paths: &MessageStorePaths) -> Result<Conversation, String> {
     let manifest = read_message_store_manifest(&paths.manifest_file)?
         .ok_or_else(|| format!("目录型会话缺少 manifest，path={}", paths.manifest_file.display()))?;
     read_message_store_directory_conversation_with_manifest(paths, manifest)
 }
 
-fn read_message_store_directory_conversation_with_manifest(
+pub(crate) fn read_message_store_directory_conversation_with_manifest(
     paths: &MessageStorePaths,
     manifest: MessageStoreManifest,
 ) -> Result<Conversation, String> {
@@ -1910,7 +1910,7 @@ fn read_message_store_directory_conversation_with_manifest(
     Ok(meta.into_conversation(messages))
 }
 
-fn validate_conversation_shard_meta_id(
+pub(crate) fn validate_conversation_shard_meta_id(
     paths: &MessageStorePaths,
     meta: &ConversationShardMeta,
 ) -> Result<(), String> {
@@ -1925,7 +1925,7 @@ fn validate_conversation_shard_meta_id(
     Ok(())
 }
 
-pub(super) fn delete_message_store_shard_artifacts(
+pub(crate) fn delete_message_store_shard_artifacts(
     paths: &MessageStorePaths,
 ) -> Result<bool, String> {
     let delete_artifacts = || {
@@ -1966,7 +1966,7 @@ pub(super) fn delete_message_store_shard_artifacts(
 }
 
 #[cfg(test)]
-pub(super) fn message_store_shard_write_signature(
+pub(crate) fn message_store_shard_write_signature(
     paths: &MessageStorePaths,
 ) -> Vec<(PathBuf, u64, Option<std::time::SystemTime>)> {
     let mut signatures = Vec::new();
@@ -1977,7 +1977,7 @@ pub(super) fn message_store_shard_write_signature(
 }
 
 #[cfg(test)]
-fn collect_message_store_shard_write_signatures(
+pub(crate) fn collect_message_store_shard_write_signatures(
     path: &PathBuf,
     signatures: &mut Vec<(PathBuf, u64, Option<std::time::SystemTime>)>,
 ) {
@@ -1996,7 +1996,7 @@ fn collect_message_store_shard_write_signatures(
     }
 }
 
-fn validate_message_store_shard_dir_for_delete(paths: &MessageStorePaths) -> Result<(), String> {
+pub(crate) fn validate_message_store_shard_dir_for_delete(paths: &MessageStorePaths) -> Result<(), String> {
     let conversations_dir = paths
         .legacy_conversation_file
         .parent()
@@ -2027,13 +2027,13 @@ fn validate_message_store_shard_dir_for_delete(paths: &MessageStorePaths) -> Res
     Ok(())
 }
 
-fn read_jsonl_snapshot_messages_file(path: &PathBuf) -> Result<Vec<ChatMessage>, String> {
+pub(crate) fn read_jsonl_snapshot_messages_file(path: &PathBuf) -> Result<Vec<ChatMessage>, String> {
     let raw = fs::read_to_string(path)
         .map_err(|err| format!("读取 JSONL 消息文件失败，path={}，error={err}", path.display()))?;
     read_jsonl_snapshot_messages_from_content(&raw)
 }
 
-fn read_jsonl_snapshot_messages_from_content(content: &str) -> Result<Vec<ChatMessage>, String> {
+pub(crate) fn read_jsonl_snapshot_messages_from_content(content: &str) -> Result<Vec<ChatMessage>, String> {
     let report = verify_jsonl_snapshot_content(content, usize::MAX, "")?;
     let mut messages = Vec::with_capacity(report.message_count);
     for (line_no, line) in content.lines().enumerate() {
@@ -2047,7 +2047,7 @@ fn read_jsonl_snapshot_messages_from_content(content: &str) -> Result<Vec<ChatMe
     Ok(messages)
 }
 
-fn find_index_item_position(index: &MessageStoreIndexFile, message_id: &str) -> Option<usize> {
+pub(crate) fn find_index_item_position(index: &MessageStoreIndexFile, message_id: &str) -> Option<usize> {
     let message_id = message_id.trim();
     if message_id.is_empty() {
         return None;
@@ -2061,7 +2061,7 @@ fn find_index_item_position(index: &MessageStoreIndexFile, message_id: &str) -> 
         .position(|item| item.message_id.trim() == message_id)
 }
 
-fn read_jsonl_block_messages_before(
+pub(crate) fn read_jsonl_block_messages_before(
     paths: &MessageStorePaths,
     index: &MessageStoreIndexFile,
     requested_block_id: Option<u32>,
@@ -2143,7 +2143,7 @@ fn read_jsonl_block_messages_before(
     })
 }
 
-fn count_jsonl_block_messages(
+pub(crate) fn count_jsonl_block_messages(
     index: &MessageStoreIndexFile,
     before_message_id: &str,
 ) -> Result<usize, String> {
@@ -2161,7 +2161,7 @@ fn count_jsonl_block_messages(
         .count())
 }
 
-fn read_jsonl_snapshot_messages_by_index_items(
+pub(crate) fn read_jsonl_snapshot_messages_by_index_items(
     path: &PathBuf,
     items: &[MessageStoreIndexItem],
 ) -> Result<Vec<ChatMessage>, String> {
@@ -2221,7 +2221,7 @@ fn read_jsonl_snapshot_messages_by_index_items(
     Ok(messages)
 }
 
-fn read_jsonl_snapshot_messages_by_index_items_cached(
+pub(crate) fn read_jsonl_snapshot_messages_by_index_items_cached(
     path: &PathBuf,
     items: &[MessageStoreIndexItem],
 ) -> Result<Vec<ChatMessage>, String> {
@@ -2352,7 +2352,7 @@ fn read_jsonl_snapshot_messages_by_index_items_cached(
     Ok(messages)
 }
 
-fn build_message_store_block_summaries(
+pub(crate) fn build_message_store_block_summaries(
     path: &MessageStorePaths,
     index: &MessageStoreIndexFile,
 ) -> Result<Vec<MessageStoreBlockSummary>, String> {
@@ -2400,7 +2400,7 @@ fn build_message_store_block_summaries(
     Ok(summaries)
 }
 
-fn jsonl_snapshot_index_item_path(base_messages_file: &PathBuf, block_id: Option<u32>) -> Result<PathBuf, String> {
+pub(crate) fn jsonl_snapshot_index_item_path(base_messages_file: &PathBuf, block_id: Option<u32>) -> Result<PathBuf, String> {
     let Some(block_id) = block_id else {
         return Err(format!(
             "会话块路径解析失败：索引缺少 block_id，path={}",
@@ -2418,21 +2418,21 @@ fn jsonl_snapshot_index_item_path(base_messages_file: &PathBuf, block_id: Option
         .join(format!("{block_id:06}.jsonl")))
 }
 
-fn message_store_message_has_image(message: &ChatMessage) -> bool {
+pub(crate) fn message_store_message_has_image(message: &ChatMessage) -> bool {
     message.parts.iter().any(|part| {
         matches!(part, MessagePart::Image { mime, .. } if !mime.trim().eq_ignore_ascii_case("application/pdf"))
             || matches!(part, MessagePart::Attachment { mime, .. } if message_attachment_kind(mime) == "image")
     })
 }
 
-fn message_store_message_has_pdf(message: &ChatMessage) -> bool {
+pub(crate) fn message_store_message_has_pdf(message: &ChatMessage) -> bool {
     message.parts.iter().any(|part| {
         matches!(part, MessagePart::Image { mime, .. } if mime.trim().eq_ignore_ascii_case("application/pdf"))
             || matches!(part, MessagePart::Attachment { mime, .. } if message_attachment_kind(mime) == "pdf")
     })
 }
 
-fn message_store_message_has_audio(message: &ChatMessage) -> bool {
+pub(crate) fn message_store_message_has_audio(message: &ChatMessage) -> bool {
     message
         .parts
         .iter()
@@ -2442,7 +2442,7 @@ fn message_store_message_has_audio(message: &ChatMessage) -> bool {
         })
 }
 
-fn read_messages_before_from_index(
+pub(crate) fn read_messages_before_from_index(
     path: &PathBuf,
     index: &MessageStoreIndexFile,
     before_message_id: &str,
@@ -2458,7 +2458,7 @@ fn read_messages_before_from_index(
     })
 }
 
-fn read_messages_after_from_index(
+pub(crate) fn read_messages_after_from_index(
     path: &PathBuf,
     index: &MessageStoreIndexFile,
     after_message_id: &str,
@@ -2475,7 +2475,7 @@ fn read_messages_after_from_index(
     })
 }
 
-fn read_messages_after_all_from_index(
+pub(crate) fn read_messages_after_all_from_index(
     path: &PathBuf,
     index: &MessageStoreIndexFile,
     after_message_id: &str,
@@ -2486,7 +2486,7 @@ fn read_messages_after_all_from_index(
     read_jsonl_snapshot_messages_by_index_items(path, &index.items[start..])
 }
 
-fn compaction_boundary_index_items(index: &MessageStoreIndexFile) -> Vec<usize> {
+pub(crate) fn compaction_boundary_index_items(index: &MessageStoreIndexFile) -> Vec<usize> {
     if !index.positions_by_message_id.is_empty() || index.items.is_empty() {
         return index.compaction_boundary_positions.clone();
     }
@@ -2504,7 +2504,7 @@ fn compaction_boundary_index_items(index: &MessageStoreIndexFile) -> Vec<usize> 
         .collect()
 }
 
-fn build_indexed_compaction_segment(
+pub(crate) fn build_indexed_compaction_segment(
     path: &PathBuf,
     index: &MessageStoreIndexFile,
     start: usize,
@@ -2527,7 +2527,7 @@ fn build_indexed_compaction_segment(
     })
 }
 
-fn is_index_compaction_boundary_position(index: &MessageStoreIndexFile, idx: usize) -> bool {
+pub(crate) fn is_index_compaction_boundary_position(index: &MessageStoreIndexFile, idx: usize) -> bool {
     index.compaction_boundary_positions.contains(&idx)
         || index
             .items
@@ -2535,7 +2535,7 @@ fn is_index_compaction_boundary_position(index: &MessageStoreIndexFile, idx: usi
             .is_some_and(|item| item.compaction_kind.is_some())
 }
 
-fn read_current_compaction_segment_from_index(
+pub(crate) fn read_current_compaction_segment_from_index(
     path: &PathBuf,
     index: &MessageStoreIndexFile,
 ) -> Result<MessageStoreCompactionSegment, String> {
@@ -2553,7 +2553,7 @@ fn read_current_compaction_segment_from_index(
     build_indexed_compaction_segment(path, index, start, index.items.len(), previous_boundary_index)
 }
 
-fn read_compaction_segment_before_from_index(
+pub(crate) fn read_compaction_segment_before_from_index(
     path: &PathBuf,
     index: &MessageStoreIndexFile,
     boundary_message_id: &str,
@@ -2577,11 +2577,11 @@ fn read_compaction_segment_before_from_index(
     build_indexed_compaction_segment(path, index, start, boundary_idx, previous_boundary_index)
 }
 
-fn normalized_message_limit(limit: usize) -> usize {
+pub(crate) fn normalized_message_limit(limit: usize) -> usize {
     limit.clamp(1, 100)
 }
 
-fn find_message_index(messages: &[ChatMessage], message_id: &str) -> Option<usize> {
+pub(crate) fn find_message_index(messages: &[ChatMessage], message_id: &str) -> Option<usize> {
     let message_id = message_id.trim();
     if message_id.is_empty() {
         return None;
@@ -2591,7 +2591,7 @@ fn find_message_index(messages: &[ChatMessage], message_id: &str) -> Option<usiz
         .position(|message| message.id.trim() == message_id)
 }
 
-fn read_recent_messages_from_index(
+pub(crate) fn read_recent_messages_from_index(
     path: &PathBuf,
     index: &MessageStoreIndexFile,
     limit: usize,
@@ -2601,7 +2601,7 @@ fn read_recent_messages_from_index(
     read_jsonl_snapshot_messages_by_index_items(path, &index.items[start..])
 }
 
-fn read_recent_messages_page_from_index(
+pub(crate) fn read_recent_messages_page_from_index(
     path: &PathBuf,
     index: &MessageStoreIndexFile,
     limit: usize,
@@ -2615,7 +2615,7 @@ fn read_recent_messages_page_from_index(
     })
 }
 
-fn read_message_by_id_from_index(
+pub(crate) fn read_message_by_id_from_index(
     path: &PathBuf,
     index: &MessageStoreIndexFile,
     message_id: &str,
@@ -2628,7 +2628,7 @@ fn read_message_by_id_from_index(
         .ok_or_else(|| format!("Message not found: {}", message_id.trim()))
 }
 
-fn read_recent_messages_from_slice(
+pub(crate) fn read_recent_messages_from_slice(
     messages: &[ChatMessage],
     limit: usize,
 ) -> Result<Vec<ChatMessage>, String> {
@@ -2637,7 +2637,7 @@ fn read_recent_messages_from_slice(
     Ok(messages[start..].to_vec())
 }
 
-fn read_recent_messages_page_from_slice(
+pub(crate) fn read_recent_messages_page_from_slice(
     messages: &[ChatMessage],
     limit: usize,
 ) -> Result<MessageStoreLimitPage, String> {
@@ -2649,7 +2649,7 @@ fn read_recent_messages_page_from_slice(
     })
 }
 
-fn read_message_by_id_from_slice(
+pub(crate) fn read_message_by_id_from_slice(
     messages: &[ChatMessage],
     message_id: &str,
 ) -> Result<ChatMessage, String> {
@@ -2664,7 +2664,7 @@ fn read_message_by_id_from_slice(
         .ok_or_else(|| format!("Message not found: {message_id}"))
 }
 
-fn read_messages_before_from_slice(
+pub(crate) fn read_messages_before_from_slice(
     messages: &[ChatMessage],
     before_message_id: &str,
     limit: usize,
@@ -2679,7 +2679,7 @@ fn read_messages_before_from_slice(
     })
 }
 
-fn read_messages_after_from_slice(
+pub(crate) fn read_messages_after_from_slice(
     messages: &[ChatMessage],
     after_message_id: &str,
     limit: usize,
@@ -2695,7 +2695,7 @@ fn read_messages_after_from_slice(
     })
 }
 
-fn read_messages_after_all_from_slice(
+pub(crate) fn read_messages_after_all_from_slice(
     messages: &[ChatMessage],
     after_message_id: &str,
 ) -> Result<Vec<ChatMessage>, String> {
@@ -2704,7 +2704,7 @@ fn read_messages_after_all_from_slice(
     Ok(messages[(after_idx + 1)..].to_vec())
 }
 
-fn compaction_boundary_indexes(messages: &[ChatMessage]) -> Vec<usize> {
+pub(crate) fn compaction_boundary_indexes(messages: &[ChatMessage]) -> Vec<usize> {
     messages
         .iter()
         .enumerate()
@@ -2718,7 +2718,7 @@ fn compaction_boundary_indexes(messages: &[ChatMessage]) -> Vec<usize> {
         .collect()
 }
 
-fn build_compaction_segment(
+pub(crate) fn build_compaction_segment(
     messages: &[ChatMessage],
     start: usize,
     end: usize,
@@ -2739,7 +2739,7 @@ fn build_compaction_segment(
     }
 }
 
-fn read_current_compaction_segment_from_slice(messages: &[ChatMessage]) -> Result<MessageStoreCompactionSegment, String> {
+pub(crate) fn read_current_compaction_segment_from_slice(messages: &[ChatMessage]) -> Result<MessageStoreCompactionSegment, String> {
     if messages.is_empty() {
         return Ok(MessageStoreCompactionSegment {
             messages: Vec::new(),
@@ -2763,7 +2763,7 @@ fn read_current_compaction_segment_from_slice(messages: &[ChatMessage]) -> Resul
     ))
 }
 
-fn read_compaction_segment_before_from_slice(
+pub(crate) fn read_compaction_segment_before_from_slice(
     messages: &[ChatMessage],
     boundary_message_id: &str,
 ) -> Result<MessageStoreCompactionSegment, String> {

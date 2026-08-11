@@ -1,4 +1,4 @@
-fn gemini_to_openapi_schema(schema: &mut serde_json::Value) {
+pub(crate) fn gemini_to_openapi_schema(schema: &mut serde_json::Value) {
     let serde_json::Value::Object(map) = schema else {
         return;
     };
@@ -12,7 +12,7 @@ fn gemini_to_openapi_schema(schema: &mut serde_json::Value) {
     *map = filtered;
 }
 
-fn gemini_extract_schema_defs(
+pub(crate) fn gemini_extract_schema_defs(
     map: &mut serde_json::Map<String, serde_json::Value>,
 ) -> serde_json::Map<String, serde_json::Value> {
     let mut definitions = serde_json::Map::<String, serde_json::Value>::new();
@@ -24,7 +24,7 @@ fn gemini_extract_schema_defs(
     definitions
 }
 
-fn gemini_resolve_schema_refs(
+pub(crate) fn gemini_resolve_schema_refs(
     map: &mut serde_json::Map<String, serde_json::Value>,
     definitions: &serde_json::Map<String, serde_json::Value>,
     visited: &mut std::collections::HashSet<String>,
@@ -67,7 +67,7 @@ fn gemini_resolve_schema_refs(
     }
 }
 
-fn gemini_is_null_schema(value: &serde_json::Value) -> bool {
+pub(crate) fn gemini_is_null_schema(value: &serde_json::Value) -> bool {
     value
         .as_object()
         .and_then(|map| map.get("type"))
@@ -75,7 +75,7 @@ fn gemini_is_null_schema(value: &serde_json::Value) -> bool {
         == Some("null")
 }
 
-fn gemini_flatten_schema_composites(map: &mut serde_json::Map<String, serde_json::Value>) {
+pub(crate) fn gemini_flatten_schema_composites(map: &mut serde_json::Map<String, serde_json::Value>) {
     for keyword in ["allOf", "anyOf", "oneOf"] {
         let Some(serde_json::Value::Array(variants)) = map.remove(keyword) else {
             continue;
@@ -96,7 +96,7 @@ fn gemini_flatten_schema_composites(map: &mut serde_json::Map<String, serde_json
     }
 }
 
-fn gemini_normalize_nullable_schema_type(map: &mut serde_json::Map<String, serde_json::Value>) {
+pub(crate) fn gemini_normalize_nullable_schema_type(map: &mut serde_json::Map<String, serde_json::Value>) {
     let Some(serde_json::Value::Array(types)) = map.get("type") else {
         return;
     };
@@ -112,7 +112,7 @@ fn gemini_normalize_nullable_schema_type(map: &mut serde_json::Map<String, serde
     }
 }
 
-fn gemini_recurse_schema_children(map: &mut serde_json::Map<String, serde_json::Value>) {
+pub(crate) fn gemini_recurse_schema_children(map: &mut serde_json::Map<String, serde_json::Value>) {
     if let Some(serde_json::Value::Object(properties)) = map.get_mut("properties") {
         for property in properties.values_mut() {
             if let serde_json::Value::Object(inner) = property {
@@ -154,7 +154,7 @@ fn gemini_recurse_schema_children(map: &mut serde_json::Map<String, serde_json::
     }
 }
 
-fn gemini_take_schema_value(
+pub(crate) fn gemini_take_schema_value(
     primary: &serde_json::Map<String, serde_json::Value>,
     fallback: Option<&serde_json::Map<String, serde_json::Value>>,
     key: &str,
@@ -165,7 +165,7 @@ fn gemini_take_schema_value(
         .or_else(|| fallback.and_then(|value| value.get(key).cloned()))
 }
 
-fn gemini_extract_schema_source_from_composition(
+pub(crate) fn gemini_extract_schema_source_from_composition(
     map: &serde_json::Map<String, serde_json::Value>,
 ) -> Option<serde_json::Map<String, serde_json::Value>> {
     for keyword in ["anyOf", "oneOf", "allOf"] {
@@ -185,7 +185,7 @@ fn gemini_extract_schema_source_from_composition(
     None
 }
 
-fn gemini_extract_schema_type(
+pub(crate) fn gemini_extract_schema_type(
     map: &serde_json::Map<String, serde_json::Value>,
 ) -> Option<String> {
     if let Some(serde_json::Value::String(type_name)) = map.get("type") {
@@ -218,7 +218,7 @@ fn gemini_extract_schema_type(
     None
 }
 
-fn gemini_filter_schema_object(
+pub(crate) fn gemini_filter_schema_object(
     map: serde_json::Map<String, serde_json::Value>,
 ) -> serde_json::Map<String, serde_json::Value> {
     let fallback = gemini_extract_schema_source_from_composition(&map);
@@ -326,7 +326,7 @@ fn gemini_filter_schema_object(
     filtered
 }
 
-fn gemini_simplify_schema_object(map: &mut serde_json::Map<String, serde_json::Value>) {
+pub(crate) fn gemini_simplify_schema_object(map: &mut serde_json::Map<String, serde_json::Value>) {
     gemini_flatten_schema_composites(map);
     gemini_normalize_nullable_schema_type(map);
     map.remove("$schema");

@@ -2,18 +2,18 @@
 // 输入图片引用支持 {Assistant Space} 相对路径、绝对路径与 data URL；
 // 各供应商编辑能力差异（张数上限、mask 支持）在此统一显式表达，不静默降级。
 
-const IMAGE_EDIT_MAX_INPUT_IMAGES: usize = 16;
-const OPENAI_IMAGE_EDIT_MAX_IMAGES: usize = 16;
-const XAI_IMAGE_EDIT_MAX_IMAGES: usize = 3;
-const SEEDREAM_IMAGE_EDIT_MAX_IMAGES: usize = 10;
-const GEMINI_IMAGE_EDIT_MAX_IMAGES: usize = 14;
-const CODEX_IMAGE_EDIT_MAX_IMAGES: usize = 16;
+pub(crate) const IMAGE_EDIT_MAX_INPUT_IMAGES: usize = 16;
+pub(crate) const OPENAI_IMAGE_EDIT_MAX_IMAGES: usize = 16;
+pub(crate) const XAI_IMAGE_EDIT_MAX_IMAGES: usize = 3;
+pub(crate) const SEEDREAM_IMAGE_EDIT_MAX_IMAGES: usize = 10;
+pub(crate) const GEMINI_IMAGE_EDIT_MAX_IMAGES: usize = 14;
+pub(crate) const CODEX_IMAGE_EDIT_MAX_IMAGES: usize = 16;
 // xAI 编辑接口对参考图有严格限制，超限直接返回 400，需要预压缩。
-const XAI_IMAGE_EDIT_MAX_REF_BYTES: usize = 400 * 1024;
-const XAI_IMAGE_EDIT_MAX_REF_EDGE: u32 = 768;
-const XAI_IMAGE_EDIT_JPEG_QUALITIES: [u8; 4] = [80, 65, 50, 35];
+pub(crate) const XAI_IMAGE_EDIT_MAX_REF_BYTES: usize = 400 * 1024;
+pub(crate) const XAI_IMAGE_EDIT_MAX_REF_EDGE: u32 = 768;
+pub(crate) const XAI_IMAGE_EDIT_JPEG_QUALITIES: [u8; 4] = [80, 65, 50, 35];
 
-fn image_edit_file_extension(mime: &str) -> &'static str {
+pub(crate) fn image_edit_file_extension(mime: &str) -> &'static str {
     match mime {
         "image/jpeg" => "jpg",
         "image/gif" => "gif",
@@ -23,11 +23,11 @@ fn image_edit_file_extension(mime: &str) -> &'static str {
     }
 }
 
-fn image_edit_data_url(input: &ImageEditInputImage) -> String {
+pub(crate) fn image_edit_data_url(input: &ImageEditInputImage) -> String {
     format!("data:{};base64,{}", input.mime, B64.encode(&input.bytes))
 }
 
-async fn load_image_edit_reference(
+pub(crate) async fn load_image_edit_reference(
     state: &AppState,
     reference: &str,
     field_name: &str,
@@ -57,7 +57,7 @@ async fn load_image_edit_reference(
     })
 }
 
-async fn load_image_edit_inputs(
+pub(crate) async fn load_image_edit_inputs(
     state: &AppState,
     request: &ImageGenerationRequest,
 ) -> Result<ImageEditInputs, String> {
@@ -85,7 +85,7 @@ async fn load_image_edit_inputs(
     Ok(ImageEditInputs { images, mask })
 }
 
-fn ensure_image_edit_input_limits(
+pub(crate) fn ensure_image_edit_input_limits(
     provider_label: &str,
     inputs: &ImageEditInputs,
     max_images: usize,
@@ -109,7 +109,7 @@ fn ensure_image_edit_input_limits(
 }
 
 // 编辑路径的尺寸只采用请求显式值，不落模型默认值，避免破坏原图比例。
-fn image_edit_explicit_aspect_ratio(request: &ImageGenerationRequest) -> Option<String> {
+pub(crate) fn image_edit_explicit_aspect_ratio(request: &ImageGenerationRequest) -> Option<String> {
     trimmed_image_generation_option(&request.aspect_ratio).or_else(|| {
         trimmed_image_generation_option(&request.size)
             .as_deref()
@@ -120,7 +120,7 @@ fn image_edit_explicit_aspect_ratio(request: &ImageGenerationRequest) -> Option<
 
 // ==================== OpenAI /images/edits（multipart） ====================
 
-fn openai_image_edit_scalar_fields(
+pub(crate) fn openai_image_edit_scalar_fields(
     request: &ImageGenerationRequest,
     model: &ImageGenerationModelConfig,
 ) -> Vec<(String, String)> {
@@ -151,7 +151,7 @@ fn openai_image_edit_scalar_fields(
     fields
 }
 
-fn image_edit_multipart_part(
+pub(crate) fn image_edit_multipart_part(
     input: &ImageEditInputImage,
     file_stem: &str,
 ) -> Result<reqwest::multipart::Part, String> {
@@ -161,7 +161,7 @@ fn image_edit_multipart_part(
         .map_err(|err| format!("构造图片上传分段失败：{err}"))
 }
 
-async fn edit_openai_image_once(
+pub(crate) async fn edit_openai_image_once(
     state: &AppState,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
@@ -202,7 +202,7 @@ async fn edit_openai_image_once(
 
 // ==================== xAI /images/edits（JSON + data URL） ====================
 
-fn compress_image_for_xai_edit(input: &ImageEditInputImage) -> Result<ImageEditInputImage, String> {
+pub(crate) fn compress_image_for_xai_edit(input: &ImageEditInputImage) -> Result<ImageEditInputImage, String> {
     if input.bytes.len() <= XAI_IMAGE_EDIT_MAX_REF_BYTES
         && matches!(input.mime.as_str(), "image/jpeg" | "image/png")
     {
@@ -236,7 +236,7 @@ fn compress_image_for_xai_edit(input: &ImageEditInputImage) -> Result<ImageEditI
     Err("输入图片过大，压缩后仍超过 xAI 图像编辑接口限制".to_string())
 }
 
-fn xai_image_edit_payload(
+pub(crate) fn xai_image_edit_payload(
     request: &ImageGenerationRequest,
     model: &ImageGenerationModelConfig,
     image_data_urls: &[String],
@@ -273,7 +273,7 @@ fn xai_image_edit_payload(
     payload
 }
 
-async fn edit_xai_image_once(
+pub(crate) async fn edit_xai_image_once(
     state: &AppState,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
@@ -305,7 +305,7 @@ async fn edit_xai_image_once(
 
 // ==================== Seedream 图生图（单图/多图） ====================
 
-fn seedream_image_edit_payload(
+pub(crate) fn seedream_image_edit_payload(
     request: &ImageGenerationRequest,
     provider: &ImageGenerationProviderConfig,
     model: &ImageGenerationModelConfig,
@@ -349,7 +349,7 @@ fn seedream_image_edit_payload(
     payload
 }
 
-async fn edit_seedream_image_once(
+pub(crate) async fn edit_seedream_image_once(
     state: &AppState,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
@@ -382,7 +382,7 @@ async fn edit_seedream_image_once(
 
 // ==================== Gemini 多模态编辑（inlineData + text） ====================
 
-fn gemini_image_edit_payload(
+pub(crate) fn gemini_image_edit_payload(
     request: &ImageGenerationRequest,
     model: &ImageGenerationModelConfig,
     inputs: &ImageEditInputs,
@@ -420,7 +420,7 @@ fn gemini_image_edit_payload(
     })
 }
 
-async fn edit_gemini_image_once(
+pub(crate) async fn edit_gemini_image_once(
     state: &AppState,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,

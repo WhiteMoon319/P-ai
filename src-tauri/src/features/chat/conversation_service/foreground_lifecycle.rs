@@ -1,5 +1,5 @@
 impl ConversationServiceV2 {
-    fn create_remote_im_contact_conversation(
+    pub(crate) fn create_remote_im_contact_conversation(
         &self,
         state: &AppState,
         title: &str,
@@ -49,7 +49,7 @@ impl ConversationServiceV2 {
         Ok(conversation)
     }
 
-    fn create_conversation(
+    pub(crate) fn create_conversation(
         &self,
         state: &AppState,
         input: &CreateUnarchivedConversationInput,
@@ -57,7 +57,7 @@ impl ConversationServiceV2 {
         create_unarchived_conversation_shared(state, input)
     }
 
-    fn switch_active_conversation_snapshot(
+    pub(crate) fn switch_active_conversation_snapshot(
         &self,
         state: &AppState,
         input: &SwitchActiveConversationSnapshotInput,
@@ -190,7 +190,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn get_foreground_conversation_meta_for_fast_path(
+    pub(crate) fn get_foreground_conversation_meta_for_fast_path(
         &self,
         state: &AppState,
         conversation_id: Option<&str>,
@@ -251,7 +251,7 @@ impl ConversationServiceV2 {
         Ok(None)
     }
 
-    fn get_foreground_snapshot(
+    pub(crate) fn get_foreground_snapshot(
         &self,
         state: &AppState,
         conversation_id: Option<&str>,
@@ -285,7 +285,7 @@ impl ConversationServiceV2 {
         Ok(snapshot)
     }
 
-    fn mark_conversation_read(
+    pub(crate) fn mark_conversation_read(
         &self,
         state: &AppState,
         conversation_id: &str,

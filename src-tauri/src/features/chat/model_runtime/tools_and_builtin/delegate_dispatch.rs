@@ -1,4 +1,4 @@
-fn delegate_resolve_context(
+pub(crate) fn delegate_resolve_context(
     app_state: &AppState,
     source_agent_id: &str,
     source_department_id: Option<&str>,
@@ -36,7 +36,7 @@ fn delegate_resolve_context(
     ))
 }
 
-fn delegate_create_record(
+pub(crate) fn delegate_create_record(
     app_state: &AppState,
     kind: &str,
     root_conversation_id: &str,
@@ -72,7 +72,7 @@ fn delegate_create_record(
     )
 }
 
-fn delegate_failed_result(reason: impl Into<String>) -> Value {
+pub(crate) fn delegate_failed_result(reason: impl Into<String>) -> Value {
     let reason = reason.into();
     serde_json::json!({
         "ok": false,
@@ -82,11 +82,11 @@ fn delegate_failed_result(reason: impl Into<String>) -> Value {
     })
 }
 
-const SAME_PERSONA_BACKGROUND_DELEGATE_REASON: &str =
+pub(crate) const SAME_PERSONA_BACKGROUND_DELEGATE_REASON: &str =
     "你同时担任这个职位，只能使用 wait 等待结果";
-const DELEGATE_THREAD_BACKGROUND_ONLY_REASON: &str = "委托线程中只能使用 wait 等待结果";
+pub(crate) const DELEGATE_THREAD_BACKGROUND_ONLY_REASON: &str = "委托线程中只能使用 wait 等待结果";
 
-fn same_persona_background_delegate_block_reason(
+pub(crate) fn same_persona_background_delegate_block_reason(
     source_agent_id: &str,
     target_agent_id: &str,
 ) -> Option<&'static str> {
@@ -116,17 +116,17 @@ mod delegate_dispatch_tests {
 }
 
 #[derive(Debug, Clone)]
-struct ValidatedDelegateArgs {
-    mode: DelegateMode,
-    target_department_id: String,
-    target_agent_id: Option<String>,
-    title: String,
-    why: String,
-    goal: String,
-    todo: String,
+pub(crate) struct ValidatedDelegateArgs {
+    pub(crate) mode: DelegateMode,
+    pub(crate) target_department_id: String,
+    pub(crate) target_agent_id: Option<String>,
+    pub(crate) title: String,
+    pub(crate) why: String,
+    pub(crate) goal: String,
+    pub(crate) todo: String,
 }
 
-fn delegate_title_from_goal(goal: &str) -> String {
+pub(crate) fn delegate_title_from_goal(goal: &str) -> String {
     let compact = goal
         .trim()
         .lines()
@@ -141,7 +141,7 @@ fn delegate_title_from_goal(goal: &str) -> String {
     }
 }
 
-fn validate_delegate_args(args: &DelegateToolArgs) -> Result<ValidatedDelegateArgs, String> {
+pub(crate) fn validate_delegate_args(args: &DelegateToolArgs) -> Result<ValidatedDelegateArgs, String> {
     let mode = parse_delegate_mode(args.mode.as_deref())?;
     let target_department_id = args.department_id.trim().to_string();
     if target_department_id.is_empty() {
@@ -171,7 +171,7 @@ fn validate_delegate_args(args: &DelegateToolArgs) -> Result<ValidatedDelegateAr
     })
 }
 
-fn check_and_push_call_stack(
+pub(crate) fn check_and_push_call_stack(
     current_thread: Option<&DelegateRuntimeThread>,
     source_department_id: &str,
     target_department_id: &str,
@@ -192,17 +192,17 @@ fn check_and_push_call_stack(
 }
 
 #[derive(Debug, Clone)]
-struct DelegatePreflight {
-    config: AppConfig,
-    agents: Vec<AgentProfile>,
-    source_department: DepartmentConfig,
-    target_department: DepartmentConfig,
-    target_agent_id: String,
-    root_conversation_id: String,
-    current_thread: Option<DelegateRuntimeThread>,
+pub(crate) struct DelegatePreflight {
+    pub(crate) config: AppConfig,
+    pub(crate) agents: Vec<AgentProfile>,
+    pub(crate) source_department: DepartmentConfig,
+    pub(crate) target_department: DepartmentConfig,
+    pub(crate) target_agent_id: String,
+    pub(crate) root_conversation_id: String,
+    pub(crate) current_thread: Option<DelegateRuntimeThread>,
 }
 
-fn common_delegate_preflight(
+pub(crate) fn common_delegate_preflight(
     app_state: &AppState,
     source_agent_id: &str,
     source_department_id: Option<&str>,
@@ -230,7 +230,7 @@ fn common_delegate_preflight(
     })
 }
 
-fn validate_delegate_tool_direct_child_target(preflight: &DelegatePreflight) -> Result<(), String> {
+pub(crate) fn validate_delegate_tool_direct_child_target(preflight: &DelegatePreflight) -> Result<(), String> {
     if preflight
         .source_department
         .child_department_ids
@@ -253,14 +253,14 @@ fn validate_delegate_tool_direct_child_target(preflight: &DelegatePreflight) -> 
     ))
 }
 
-fn delegate_target_chat_api_config_ids(
+pub(crate) fn delegate_target_chat_api_config_ids(
     config: &AppConfig,
     target_department: &DepartmentConfig,
 ) -> Vec<String> {
     department_effective_chat_api_config_ids(config, target_department)
 }
 
-fn spawn_delegate_task(
+pub(crate) fn spawn_delegate_task(
     app_state: AppState,
     delegate: DelegateEntry,
     root_conversation_id: String,
@@ -343,7 +343,7 @@ fn spawn_delegate_task(
     });
 }
 
-async fn run_sync_delegate_on_child_task(
+pub(crate) async fn run_sync_delegate_on_child_task(
     app_state: AppState,
     delegate: DelegateEntry,
     target_api_config_ids: Vec<String>,
@@ -392,20 +392,20 @@ async fn run_sync_delegate_on_child_task(
     }
 }
 
-struct SyncDelegateChildAbortGuard {
-    abort_handle: futures_util::future::AbortHandle,
-    completed: bool,
+pub(crate) struct SyncDelegateChildAbortGuard {
+    pub(crate) abort_handle: futures_util::future::AbortHandle,
+    pub(crate) completed: bool,
 }
 
 impl SyncDelegateChildAbortGuard {
-    fn new(abort_handle: futures_util::future::AbortHandle) -> Self {
+    pub(crate) fn new(abort_handle: futures_util::future::AbortHandle) -> Self {
         Self {
             abort_handle,
             completed: false,
         }
     }
 
-    fn complete(&mut self) {
+    pub(crate) fn complete(&mut self) {
         self.completed = true;
     }
 }
@@ -418,14 +418,14 @@ impl Drop for SyncDelegateChildAbortGuard {
     }
 }
 
-struct SyncDelegateAbortGuard {
-    state: AppState,
-    delegate_id: String,
-    completed: bool,
+pub(crate) struct SyncDelegateAbortGuard {
+    pub(crate) state: AppState,
+    pub(crate) delegate_id: String,
+    pub(crate) completed: bool,
 }
 
 impl SyncDelegateAbortGuard {
-    fn new(state: AppState, delegate_id: String) -> Self {
+    pub(crate) fn new(state: AppState, delegate_id: String) -> Self {
         Self {
             state,
             delegate_id,
@@ -433,7 +433,7 @@ impl SyncDelegateAbortGuard {
         }
     }
 
-    fn complete(&mut self) {
+    pub(crate) fn complete(&mut self) {
         self.completed = true;
     }
 }
@@ -451,7 +451,7 @@ impl Drop for SyncDelegateAbortGuard {
     }
 }
 
-fn resolve_delegate_call_stack(
+pub(crate) fn resolve_delegate_call_stack(
     current_thread: Option<&DelegateRuntimeThread>,
     source_department: &DepartmentConfig,
     target_department: &DepartmentConfig,
@@ -463,7 +463,7 @@ fn resolve_delegate_call_stack(
     )
 }
 
-async fn builtin_delegate(
+pub(crate) async fn builtin_delegate(
     app_state: &AppState,
     session_id: &str,
     source_agent_id: Option<&str>,
@@ -569,7 +569,7 @@ async fn builtin_delegate(
     }))
 }
 
-async fn delegate_execute_sync(
+pub(crate) async fn delegate_execute_sync(
     app_state: &AppState,
     session_id: &str,
     source_agent_id: Option<&str>,

@@ -1,4 +1,4 @@
-fn tool_manifest_item(
+pub(crate) fn tool_manifest_item(
     source: &str,
     name: &str,
     enabled: bool,
@@ -15,7 +15,7 @@ fn tool_manifest_item(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum CachedRuntimeToolSource {
+pub(crate) enum CachedRuntimeToolSource {
     Builtin,
     Mcp {
         server_id: String,
@@ -25,15 +25,15 @@ enum CachedRuntimeToolSource {
 }
 
 #[derive(Debug, Clone)]
-struct CachedRuntimeToolSchema {
-    source: CachedRuntimeToolSource,
-    permission_candidate_names: Vec<String>,
-    definition: ProviderToolDefinition,
-    compatibility_error: Option<String>,
+pub(crate) struct CachedRuntimeToolSchema {
+    pub(crate) source: CachedRuntimeToolSource,
+    pub(crate) permission_candidate_names: Vec<String>,
+    pub(crate) definition: ProviderToolDefinition,
+    pub(crate) compatibility_error: Option<String>,
 }
 
 impl CachedRuntimeToolSchema {
-    fn builtin(definition: ProviderToolDefinition) -> Self {
+    pub(crate) fn builtin(definition: ProviderToolDefinition) -> Self {
         Self {
             permission_candidate_names: vec![definition.name.clone()],
             source: CachedRuntimeToolSource::Builtin,
@@ -42,7 +42,7 @@ impl CachedRuntimeToolSchema {
         }
     }
 
-    fn mcp(
+    pub(crate) fn mcp(
         server_id: &str,
         server_name: &str,
         runtime_tool_name: &str,
@@ -71,7 +71,7 @@ impl CachedRuntimeToolSchema {
         }
     }
 
-    fn source_label(&self) -> String {
+    pub(crate) fn source_label(&self) -> String {
         match &self.source {
             CachedRuntimeToolSource::Builtin => "builtin".to_string(),
             CachedRuntimeToolSource::Mcp { server_id, .. } => format!("mcp:{server_id}"),
@@ -79,12 +79,12 @@ impl CachedRuntimeToolSchema {
     }
 }
 
-fn tool_schema_cache_store() -> &'static Mutex<Option<Vec<CachedRuntimeToolSchema>>> {
+pub(crate) fn tool_schema_cache_store() -> &'static Mutex<Option<Vec<CachedRuntimeToolSchema>>> {
     static STORE: OnceLock<Mutex<Option<Vec<CachedRuntimeToolSchema>>>> = OnceLock::new();
     STORE.get_or_init(|| Mutex::new(None))
 }
 
-fn cached_tool_to_manifest_item(tool: &CachedRuntimeToolSchema) -> Value {
+pub(crate) fn cached_tool_to_manifest_item(tool: &CachedRuntimeToolSchema) -> Value {
     tool_manifest_item(
         &tool.source_label(),
         &tool.definition.name,
@@ -94,7 +94,7 @@ fn cached_tool_to_manifest_item(tool: &CachedRuntimeToolSchema) -> Value {
     )
 }
 
-fn runtime_tool_names_for_log(tool_assembly: &RuntimeToolAssembly) -> Option<Value> {
+pub(crate) fn runtime_tool_names_for_log(tool_assembly: &RuntimeToolAssembly) -> Option<Value> {
     let mut names = Vec::<String>::new();
     for item in &tool_assembly.tool_manifest {
         let Some(name) = item
@@ -122,7 +122,7 @@ fn runtime_tool_names_for_log(tool_assembly: &RuntimeToolAssembly) -> Option<Val
     ))
 }
 
-fn operate_provider_tool_definition() -> ProviderToolDefinition {
+pub(crate) fn operate_provider_tool_definition() -> ProviderToolDefinition {
     ProviderToolDefinition::new(
         OPERATE_TOOL_NAME,
         "统一桌面脚本工具。入参只有 script:string，一行一个动作。\n可用语法：\nmouse <button> click @x,y [repeat=n] [delay=s] [pre_delay=s] [press=s]\nmouse scroll_up [repeat=n] [delay=s] [pre_delay=s]\nmouse scroll_down [repeat=n] [delay=s] [pre_delay=s]\nkey <combo> [repeat=n] [delay=s] [pre_delay=s] [press=s]\ntext \"内容\" [repeat=n] [delay=s] [pre_delay=s]\nwait <seconds>\nscreenshot [focused_window] [region=@x,y,w,h] [save=\"绝对路径\"] [quality=1..100]\n参数说明：button=left|right|middle|back|forward；combo 用 + 连接按键，如 Control+L、Control+Shift+P、Enter；x/y/w/h 为 0~1 百分比坐标；repeat=1~100；delay/pre_delay/press=0~300 秒；save 必须是绝对路径；quality 默认 75。规则：screenshot 对模型只保留最新一张，旧画面视为已经离去。",
@@ -145,7 +145,7 @@ fn operate_provider_tool_definition() -> ProviderToolDefinition {
     )
 }
 
-fn read_provider_tool_definition() -> ProviderToolDefinition {
+pub(crate) fn read_provider_tool_definition() -> ProviderToolDefinition {
     ProviderToolDefinition::new(
         READ_TOOL_NAME,
         "读取本地文档内容。支持文本、代码、PDF 与 Office 文件；path 必须是绝对路径；Android proot 中也可直接传 /workspace/... 或 /root/.pai/... 这类沙盒内路径，工具会映射到应用私有工作区；对文本、代码、Office 等非 PDF 内容，offset 表示跳过行，limit 表示返回行数；对 PDF 则代表页。图片、音频、视频请改用 read_media。",
@@ -172,7 +172,7 @@ fn read_provider_tool_definition() -> ProviderToolDefinition {
     )
 }
 
-fn read_media_provider_tool_definition() -> ProviderToolDefinition {
+pub(crate) fn read_media_provider_tool_definition() -> ProviderToolDefinition {
     ProviderToolDefinition::new(
         READ_MEDIA_TOOL_NAME,
         "解析本地图片、音频或视频；仅在当前看不到图片，或需要解析音频、视频时使用。Android proot 中可直接传 /workspace/... 或 /root/.pai/... 这类沙盒内路径。",
@@ -193,12 +193,12 @@ fn read_media_provider_tool_definition() -> ProviderToolDefinition {
     )
 }
 
-const OPERATE_TOOL_DEFAULT_TIMEOUT_MS: u64 = 300_000;
-const READ_MEDIA_IMAGE_TOOL_TIMEOUT_SECS: u64 = 90;
-const READ_MEDIA_AUDIO_TOOL_TIMEOUT_SECS: u64 = 4 * 60;
-const READ_MEDIA_VIDEO_TOOL_TIMEOUT_SECS: u64 = 10 * 60;
+pub(crate) const OPERATE_TOOL_DEFAULT_TIMEOUT_MS: u64 = 300_000;
+pub(crate) const READ_MEDIA_IMAGE_TOOL_TIMEOUT_SECS: u64 = 90;
+pub(crate) const READ_MEDIA_AUDIO_TOOL_TIMEOUT_SECS: u64 = 4 * 60;
+pub(crate) const READ_MEDIA_VIDEO_TOOL_TIMEOUT_SECS: u64 = 10 * 60;
 
-fn operate_tool_timeout_override(args_json: &str) -> std::time::Duration {
+pub(crate) fn operate_tool_timeout_override(args_json: &str) -> std::time::Duration {
     let timeout_ms = parse_runtime_tool_args::<OperateRequest>(args_json)
         .ok()
         .and_then(|args| args.timeout_ms)
@@ -207,7 +207,7 @@ fn operate_tool_timeout_override(args_json: &str) -> std::time::Duration {
     std::time::Duration::from_millis(timeout_ms)
 }
 
-fn read_media_tool_timeout_override(args_json: &str) -> std::time::Duration {
+pub(crate) fn read_media_tool_timeout_override(args_json: &str) -> std::time::Duration {
     let media_type = parse_runtime_tool_args::<ReadMediaToolArgs>(args_json)
         .ok()
         .and_then(|args| detect_read_media_type(std::path::Path::new(args.path.trim())));
@@ -219,7 +219,7 @@ fn read_media_tool_timeout_override(args_json: &str) -> std::time::Duration {
     std::time::Duration::from_secs(timeout_secs)
 }
 
-fn model_mcp_tool_name(
+pub(crate) fn model_mcp_tool_name(
     member_name: &str,
     raw_tool_name: &str,
     builtin_tool_names: &HashSet<String>,
@@ -238,7 +238,7 @@ fn model_mcp_tool_name(
     }
 }
 
-fn build_global_tool_schema_cache(state: &AppState) -> Vec<CachedRuntimeToolSchema> {
+pub(crate) fn build_global_tool_schema_cache(state: &AppState) -> Vec<CachedRuntimeToolSchema> {
     let preview_session_id = "__tool_schema_cache__".to_string();
     let _preview_api_id = "__tool_schema_cache__".to_string();
     let preview_agent_id = DEFAULT_AGENT_ID.to_string();
@@ -414,7 +414,7 @@ fn build_global_tool_schema_cache(state: &AppState) -> Vec<CachedRuntimeToolSche
     definitions
 }
 
-fn refresh_global_tool_schema_cache(state: &AppState) -> Vec<CachedRuntimeToolSchema> {
+pub(crate) fn refresh_global_tool_schema_cache(state: &AppState) -> Vec<CachedRuntimeToolSchema> {
     let definitions = build_global_tool_schema_cache(state);
     match tool_schema_cache_store().lock() {
         Ok(mut guard) => {
@@ -425,7 +425,7 @@ fn refresh_global_tool_schema_cache(state: &AppState) -> Vec<CachedRuntimeToolSc
     definitions
 }
 
-fn clear_global_tool_schema_cache() {
+pub(crate) fn clear_global_tool_schema_cache() {
     match tool_schema_cache_store().lock() {
         Ok(mut guard) => {
             *guard = None;
@@ -434,7 +434,7 @@ fn clear_global_tool_schema_cache() {
     }
 }
 
-fn read_global_tool_schema_cache(_state: Option<&AppState>) -> Vec<CachedRuntimeToolSchema> {
+pub(crate) fn read_global_tool_schema_cache(_state: Option<&AppState>) -> Vec<CachedRuntimeToolSchema> {
     match tool_schema_cache_store().lock() {
         Ok(guard) => {
             if let Some(definitions) = guard.as_ref() {
@@ -446,7 +446,7 @@ fn read_global_tool_schema_cache(_state: Option<&AppState>) -> Vec<CachedRuntime
     Vec::new()
 }
 
-fn resolve_runtime_tool_current_department<'a>(
+pub(crate) fn resolve_runtime_tool_current_department<'a>(
     app_config: &'a AppConfig,
     executor_department_id: Option<&str>,
 ) -> Option<&'a DepartmentConfig> {
@@ -457,17 +457,17 @@ fn resolve_runtime_tool_current_department<'a>(
 }
 
 #[derive(Debug, Clone, Default)]
-struct RuntimeToolPolicy {
-    conversation_resolved: bool,
-    local_conversation: bool,
-    delegate_conversation: bool,
-    remote_reply_delegate: bool,
-    contact_send_files_allowed: bool,
-    origin_scope: RuntimeToolOriginScope,
+pub(crate) struct RuntimeToolPolicy {
+    pub(crate) conversation_resolved: bool,
+    pub(crate) local_conversation: bool,
+    pub(crate) delegate_conversation: bool,
+    pub(crate) remote_reply_delegate: bool,
+    pub(crate) contact_send_files_allowed: bool,
+    pub(crate) origin_scope: RuntimeToolOriginScope,
 }
 
 impl RuntimeToolPolicy {
-    fn from_conversation(conversation: Option<&Conversation>) -> Self {
+    pub(crate) fn from_conversation(conversation: Option<&Conversation>) -> Self {
         let Some(conversation) = conversation else {
             return Self::default();
         };
@@ -487,7 +487,7 @@ impl RuntimeToolPolicy {
         }
     }
 
-    fn tool_unavailable_reason(&self, tool_name: &str) -> Option<String> {
+    pub(crate) fn tool_unavailable_reason(&self, tool_name: &str) -> Option<String> {
         builtin_tool_runtime_unavailable_reason(
             tool_name,
             self.origin_scope,
@@ -500,7 +500,7 @@ impl RuntimeToolPolicy {
     }
 }
 
-fn runtime_tool_policy_from_session(
+pub(crate) fn runtime_tool_policy_from_session(
     app_state: Option<&AppState>,
     tool_session_id: &str,
     resolve_contact_send_files: bool,
@@ -579,7 +579,7 @@ fn runtime_tool_policy_from_session(
     policy
 }
 
-fn runtime_tool_origin_scope_from_root_conversation_key(
+pub(crate) fn runtime_tool_origin_scope_from_root_conversation_key(
     root_conversation_id: Option<&str>,
 ) -> Option<RuntimeToolOriginScope> {
     let root = root_conversation_id?.trim();
@@ -588,7 +588,7 @@ fn runtime_tool_origin_scope_from_root_conversation_key(
     Some(runtime_tool_origin_scope_from_contact_type(contact_type))
 }
 
-fn runtime_tool_origin_scope_from_conversation(
+pub(crate) fn runtime_tool_origin_scope_from_conversation(
     state: &AppState,
     conversation: &Conversation,
 ) -> RuntimeToolOriginScope {
@@ -604,12 +604,12 @@ fn runtime_tool_origin_scope_from_conversation(
 }
 
 #[derive(Debug, Clone)]
-struct ResolvedLegalRuntimeTools {
-    attached: Vec<CachedRuntimeToolSchema>,
-    manifest: Vec<Value>,
+pub(crate) struct ResolvedLegalRuntimeTools {
+    pub(crate) attached: Vec<CachedRuntimeToolSchema>,
+    pub(crate) manifest: Vec<Value>,
 }
 
-fn runtime_tool_denied_reason(
+pub(crate) fn runtime_tool_denied_reason(
     app_config: &AppConfig,
     selected_api: &ApiConfig,
     current_department: Option<&DepartmentConfig>,
@@ -703,7 +703,7 @@ fn runtime_tool_denied_reason(
     }
 }
 
-fn resolve_legal_runtime_tools_for_department(
+pub(crate) fn resolve_legal_runtime_tools_for_department(
     app_config: &AppConfig,
     selected_api: &ApiConfig,
     current_department: Option<&DepartmentConfig>,
@@ -778,21 +778,21 @@ fn resolve_legal_runtime_tools_for_department(
     ResolvedLegalRuntimeTools { attached, manifest }
 }
 
-struct AuthorizationCheckedRuntimeTool {
-    inner: Box<dyn RuntimeToolDyn>,
-    app_state: AppState,
-    tool_name: String,
-    tool_session_id: String,
-    executor_department_id: String,
+pub(crate) struct AuthorizationCheckedRuntimeTool {
+    pub(crate) inner: Box<dyn RuntimeToolDyn>,
+    pub(crate) app_state: AppState,
+    pub(crate) tool_name: String,
+    pub(crate) tool_session_id: String,
+    pub(crate) executor_department_id: String,
 }
 
-struct AndroidWorkspaceCheckedRuntimeTool {
-    inner: Box<dyn RuntimeToolDyn>,
-    app_state: AppState,
-    tool_name: String,
+pub(crate) struct AndroidWorkspaceCheckedRuntimeTool {
+    pub(crate) inner: Box<dyn RuntimeToolDyn>,
+    pub(crate) app_state: AppState,
+    pub(crate) tool_name: String,
 }
 
-fn runtime_builtin_tool_authorization_error(
+pub(crate) fn runtime_builtin_tool_authorization_error(
     state: &AppState,
     tool_name: &str,
     tool_session_id: &str,
@@ -883,7 +883,7 @@ impl RuntimeToolDyn for AndroidWorkspaceCheckedRuntimeTool {
     }
 }
 
-fn android_workspace_checked_runtime_tool(
+pub(crate) fn android_workspace_checked_runtime_tool(
     inner: Box<dyn RuntimeToolDyn>,
     app_state: AppState,
     tool_name: String,
@@ -895,7 +895,7 @@ fn android_workspace_checked_runtime_tool(
     })
 }
 
-fn empty_runtime_tool_assembly(tool_manifest: Vec<Value>) -> RuntimeToolAssembly {
+pub(crate) fn empty_runtime_tool_assembly(tool_manifest: Vec<Value>) -> RuntimeToolAssembly {
     RuntimeToolAssembly {
         tools: Vec::new(),
         tool_definitions: Vec::new(),
@@ -1025,7 +1025,7 @@ pub(crate) async fn assemble_runtime_tools(
     }
 }
 
-fn build_builtin_runtime_tool_executor(
+pub(crate) fn build_builtin_runtime_tool_executor(
     state: &AppState,
     selected_api: &ApiConfig,
     agent: &AgentProfile,
@@ -1147,7 +1147,7 @@ fn build_builtin_runtime_tool_executor(
     Ok(android_workspace_checked_runtime_tool(tool, state, tool_name))
 }
 
-fn build_cached_mcp_runtime_tool_executor(
+pub(crate) fn build_cached_mcp_runtime_tool_executor(
     state: &AppState,
     server_id: &str,
     executor_department_id: &str,
@@ -1188,7 +1188,7 @@ fn build_cached_mcp_runtime_tool_executor(
 /// 模型即将操作电脑（operate 工具）时，发送一条系统通知提醒用户。
 /// 每轮调度内最多提醒一次由调度器（tool_loop）控制，本函数只负责发通知；
 /// 通知异步发出，不等待提交确认，不阻塞工具执行。
-fn notify_desktop_operation_started(state: &AppState, script: &str) {
+pub(crate) fn notify_desktop_operation_started(state: &AppState, script: &str) {
     let enabled = match state_read_config_cached(state) {
         Ok(config) => config.desktop_operation_notice_enabled,
         Err(err) => {
@@ -1222,25 +1222,25 @@ fn notify_desktop_operation_started(state: &AppState, script: &str) {
     });
 }
 
-const OPERATE_TOOL_NAME: &str = "operate";
+pub(crate) const OPERATE_TOOL_NAME: &str = "operate";
 
 #[derive(Debug, Clone)]
-struct BuiltinOperateTool {
-    app_state: AppState,
-    model_supports_image: bool,
-    session_id: String,
+pub(crate) struct BuiltinOperateTool {
+    pub(crate) app_state: AppState,
+    pub(crate) model_supports_image: bool,
+    pub(crate) session_id: String,
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinReadFileTool {
-    app_state: AppState,
-    session_id: String,
-    api_config_id: String,
+pub(crate) struct BuiltinReadFileTool {
+    pub(crate) app_state: AppState,
+    pub(crate) session_id: String,
+    pub(crate) api_config_id: String,
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinReadMediaTool {
-    app_state: AppState,
+pub(crate) struct BuiltinReadMediaTool {
+    pub(crate) app_state: AppState,
 }
 
 impl RuntimeToolMetadata for BuiltinOperateTool {

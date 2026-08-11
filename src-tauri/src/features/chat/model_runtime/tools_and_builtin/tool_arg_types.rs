@@ -1,114 +1,114 @@
 #[derive(Debug, Clone, Deserialize, Serialize)]
-struct FetchToolArgs {
-    url: String,
+pub(crate) struct FetchToolArgs {
+    pub(crate) url: String,
     #[serde(default)]
-    max_length: Option<usize>,
+    pub(crate) max_length: Option<usize>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-struct BingSearchToolArgs {
-    query: String,
+pub(crate) struct BingSearchToolArgs {
+    pub(crate) query: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct MemorySaveToolArgs {
-    action: String,
+pub(crate) struct MemorySaveToolArgs {
+    pub(crate) action: String,
     #[serde(default, rename = "sourceMemoryIds")]
-    source_memory_ids: Vec<String>,
-    memory: MemorySaveToolMemoryArgs,
+    pub(crate) source_memory_ids: Vec<String>,
+    pub(crate) memory: MemorySaveToolMemoryArgs,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct MemorySaveToolMemoryArgs {
+pub(crate) struct MemorySaveToolMemoryArgs {
     #[serde(rename = "memoryType")]
-    memory_type: String,
-    judgment: String,
+    pub(crate) memory_type: String,
+    pub(crate) judgment: String,
     #[serde(default)]
-    reasoning: Option<String>,
-    tags: Vec<String>,
+    pub(crate) reasoning: Option<String>,
+    pub(crate) tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-struct RecallToolArgs {
+pub(crate) struct RecallToolArgs {
     #[serde(default)]
-    query: Option<String>,
+    pub(crate) query: Option<String>,
     #[serde(default)]
-    time: Option<String>,
+    pub(crate) time: Option<String>,
     #[serde(default)]
-    offset: Option<usize>,
+    pub(crate) offset: Option<usize>,
     #[serde(default)]
-    limit: Option<usize>,
+    pub(crate) limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-struct TerminalExecToolArgs {
+pub(crate) struct TerminalExecToolArgs {
     #[serde(default)]
-    action: Option<String>,
+    pub(crate) action: Option<String>,
     #[serde(default)]
-    command: Option<String>,
+    pub(crate) command: Option<String>,
     #[serde(default)]
-    timeout_ms: Option<u64>,
+    pub(crate) timeout_ms: Option<u64>,
     #[serde(default)]
-    commitment: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct ConfigToolArgs {
-    command: String,
+    pub(crate) commitment: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct ReadMediaToolArgs {
+pub(crate) struct ConfigToolArgs {
+    pub(crate) command: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ReadMediaToolArgs {
     #[serde(alias = "absolute_path", alias = "absolutePath")]
-    path: String,
+    pub(crate) path: String,
     #[serde(default)]
-    description: Option<String>,
+    pub(crate) description: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-struct ContactSendFilesToolArgs {
-    file_paths: Vec<String>,
+pub(crate) struct ContactSendFilesToolArgs {
+    pub(crate) file_paths: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
-struct GetSessionToolArgs {
+pub(crate) struct GetSessionToolArgs {
     #[serde(default)]
-    keyword: Option<String>,
+    pub(crate) keyword: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-struct InformSessionToolArgs {
-    session_id: String,
-    content: String,
+pub(crate) struct InformSessionToolArgs {
+    pub(crate) session_id: String,
+    pub(crate) content: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct DelegateToolArgs {
-    department_id: String,
+pub(crate) struct DelegateToolArgs {
+    pub(crate) department_id: String,
     #[serde(default)]
-    target_agent_id: Option<String>,
+    pub(crate) target_agent_id: Option<String>,
     #[serde(default)]
-    mode: Option<String>,
+    pub(crate) mode: Option<String>,
     #[serde(default)]
-    why: Option<String>,
+    pub(crate) why: Option<String>,
     #[serde(default)]
-    goal: Option<String>,
+    pub(crate) goal: Option<String>,
     #[serde(default)]
-    todo: Option<String>,
+    pub(crate) todo: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    background: Option<String>,
+    pub(crate) background: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    question: Option<String>,
+    pub(crate) question: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    focus: Option<String>,
+    pub(crate) focus: Option<String>,
 }
 
-fn delegate_arg_new_or_legacy(new_value: &Option<String>, legacy_value: &Option<String>) -> String {
+pub(crate) fn delegate_arg_new_or_legacy(new_value: &Option<String>, legacy_value: &Option<String>) -> String {
     new_value
         .as_deref()
         .map(str::trim)
@@ -124,12 +124,12 @@ fn delegate_arg_new_or_legacy(new_value: &Option<String>, legacy_value: &Option<
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DelegateMode {
+pub(crate) enum DelegateMode {
     Background,
     Wait,
 }
 
-fn parse_delegate_mode(raw: Option<&str>) -> Result<DelegateMode, String> {
+pub(crate) fn parse_delegate_mode(raw: Option<&str>) -> Result<DelegateMode, String> {
     match raw.map(str::trim).filter(|value| !value.is_empty()) {
         None => Ok(DelegateMode::Wait),
         Some("background") => Ok(DelegateMode::Background),
@@ -157,7 +157,7 @@ mod tool_arg_types_tests {
     }
 }
 
-fn debug_text_snippet(text: &str, max_chars: usize) -> String {
+pub(crate) fn debug_text_snippet(text: &str, max_chars: usize) -> String {
     let compact = text.trim().replace('\r', "").replace('\n', "\\n");
     if compact.chars().count() <= max_chars {
         compact
@@ -167,7 +167,7 @@ fn debug_text_snippet(text: &str, max_chars: usize) -> String {
     }
 }
 
-fn debug_exec_result_summary(value: &Value) -> String {
+pub(crate) fn debug_exec_result_summary(value: &Value) -> String {
     let Some(obj) = value.as_object() else {
         return debug_value_snippet(value, 320);
     };
@@ -200,43 +200,43 @@ fn debug_exec_result_summary(value: &Value) -> String {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-struct TaskToolArgsWire {
-    action: String,
+pub(crate) struct TaskToolArgsWire {
+    pub(crate) action: String,
     #[serde(default)]
-    task_id: Option<String>,
+    pub(crate) task_id: Option<String>,
     #[serde(default)]
-    goal: Option<String>,
+    pub(crate) goal: Option<String>,
     #[serde(default)]
-    todo: Option<String>,
+    pub(crate) todo: Option<String>,
     #[serde(default)]
-    how: Option<String>,
+    pub(crate) how: Option<String>,
     #[serde(default)]
-    why: Option<String>,
+    pub(crate) why: Option<String>,
     #[serde(default)]
-    title: Option<String>,
+    pub(crate) title: Option<String>,
     #[serde(default)]
-    cause: Option<String>,
+    pub(crate) cause: Option<String>,
     #[serde(default)]
-    flow: Option<String>,
+    pub(crate) flow: Option<String>,
     #[serde(default)]
-    todos: Option<Vec<String>>,
+    pub(crate) todos: Option<Vec<String>>,
     #[serde(default)]
-    status_summary: Option<String>,
+    pub(crate) status_summary: Option<String>,
     #[serde(default)]
-    stage_key: Option<String>,
+    pub(crate) stage_key: Option<String>,
     #[serde(default)]
-    append_note: Option<String>,
+    pub(crate) append_note: Option<String>,
     #[serde(default)]
-    completion_state: Option<String>,
+    pub(crate) completion_state: Option<String>,
     #[serde(default)]
-    completion_conclusion: Option<String>,
+    pub(crate) completion_conclusion: Option<String>,
     #[serde(default)]
-    trigger: Option<TaskTriggerInputLocal>,
+    pub(crate) trigger: Option<TaskTriggerInputLocal>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct PlanToolArgs {
-    action: String,
-    path: String,
+pub(crate) struct PlanToolArgs {
+    pub(crate) action: String,
+    pub(crate) path: String,
 }

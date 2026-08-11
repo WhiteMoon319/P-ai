@@ -1,5 +1,5 @@
 impl ConversationServiceV2 {
-    fn rename_conversation(
+    pub(crate) fn rename_conversation(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -34,7 +34,7 @@ impl ConversationServiceV2 {
         Ok(normalized_title.to_string())
     }
 
-    fn update_latest_summary_title(
+    pub(crate) fn update_latest_summary_title(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -48,7 +48,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn update_latest_summary_title_with_source(
+    pub(crate) fn update_latest_summary_title_with_source(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -64,7 +64,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn toggle_conversation_pin(
+    pub(crate) fn toggle_conversation_pin(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -151,7 +151,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn set_preferred_api_config_id(
+    pub(crate) fn set_preferred_api_config_id(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -168,7 +168,7 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn set_auto_push_remote_contact_id(
+    pub(crate) fn set_auto_push_remote_contact_id(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -185,7 +185,7 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn set_title(
+    pub(crate) fn set_title(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -202,7 +202,7 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn refresh_unarchived_conversation_overview(
+    pub(crate) fn refresh_unarchived_conversation_overview(
         &self,
         state: &AppState,
     ) -> Result<UnarchivedConversationOverviewUpdatedPayload, String> {
@@ -217,7 +217,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn list_unarchived_conversation_summaries(
+    pub(crate) fn list_unarchived_conversation_summaries(
         &self,
         state: &AppState,
     ) -> Result<ListUnarchivedConversationsMutationResult, String> {
@@ -226,7 +226,7 @@ impl ConversationServiceV2 {
         Ok(ListUnarchivedConversationsMutationResult { summaries })
     }
 
-    fn set_active_conversation(
+    pub(crate) fn set_active_conversation(
         &self,
         state: &AppState,
         input: &SetActiveUnarchivedConversationInput,
@@ -321,7 +321,7 @@ impl ConversationServiceV2 {
         Ok(conversation_id)
     }
 
-    fn update_conversation_todos(
+    pub(crate) fn update_conversation_todos(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -364,7 +364,7 @@ impl ConversationServiceV2 {
         Ok(Some(ConversationTodosUpdateResult { current_todo }))
     }
 
-    fn read_unarchived_conversation_summary(
+    pub(crate) fn read_unarchived_conversation_summary(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -437,7 +437,7 @@ impl ConversationServiceV2 {
         Ok(Some(summary))
     }
 
-    fn set_current_todos(
+    pub(crate) fn set_current_todos(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -454,7 +454,7 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn set_shell_workspace(
+    pub(crate) fn set_shell_workspace(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -477,7 +477,7 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn update_shell_workspace(
+    pub(crate) fn update_shell_workspace(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -515,7 +515,7 @@ impl ConversationServiceV2 {
         Ok(updated)
     }
 
-    fn add_conversation_cumulative_usage_delta(
+    pub(crate) fn add_conversation_cumulative_usage_delta(
         &self,
         state: &AppState,
         conversation_id: &str,

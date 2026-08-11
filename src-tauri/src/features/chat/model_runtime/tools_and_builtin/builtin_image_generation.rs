@@ -1,14 +1,14 @@
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct ImageGenerateToolArgs {
-    prompt: String,
+pub(crate) struct ImageGenerateToolArgs {
+    pub(crate) prompt: String,
     #[serde(default, alias = "size")]
-    resolution: Option<String>,
+    pub(crate) resolution: Option<String>,
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinImageGenerateTool {
-    app_state: AppState,
+pub(crate) struct BuiltinImageGenerateTool {
+    pub(crate) app_state: AppState,
 }
 
 impl RuntimeToolMetadata for BuiltinImageGenerateTool {
@@ -59,7 +59,7 @@ impl RuntimeValueTool for BuiltinImageGenerateTool {
     }
 }
 
-fn image_generation_tool_success_value(
+pub(crate) fn image_generation_tool_success_value(
     result: &ImageGenerationResult,
     summary_prefix: &str,
 ) -> Result<Value, ToolInvokeError> {
@@ -89,16 +89,16 @@ fn image_generation_tool_success_value(
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct ImageEditToolArgs {
-    prompt: String,
-    images: Vec<String>,
+pub(crate) struct ImageEditToolArgs {
+    pub(crate) prompt: String,
+    pub(crate) images: Vec<String>,
     #[serde(default)]
-    mask: Option<String>,
+    pub(crate) mask: Option<String>,
 }
 
 #[derive(Debug, Clone)]
-struct BuiltinImageEditTool {
-    app_state: AppState,
+pub(crate) struct BuiltinImageEditTool {
+    pub(crate) app_state: AppState,
 }
 
 impl RuntimeToolMetadata for BuiltinImageEditTool {

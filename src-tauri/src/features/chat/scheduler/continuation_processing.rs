@@ -1,4 +1,4 @@
-fn goal_continue_turn_for_conversation(
+pub(crate) fn goal_continue_turn_for_conversation(
     conversation: &Conversation,
     goal_id: &str,
 ) -> usize {
@@ -25,7 +25,7 @@ fn goal_continue_turn_for_conversation(
         + 1
 }
 
-fn build_goal_continue_message(
+pub(crate) fn build_goal_continue_message(
     goal: &ConversationGoalState,
     goal_turn: usize,
     now: String,
@@ -56,7 +56,7 @@ fn build_goal_continue_message(
     }
 }
 
-fn maybe_enqueue_goal_continue_after_idle(
+pub(crate) fn maybe_enqueue_goal_continue_after_idle(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<bool, String> {
@@ -138,7 +138,7 @@ fn maybe_enqueue_goal_continue_after_idle(
     Ok(true)
 }
 
-async fn process_claimed_conversation_batch(
+pub(crate) async fn process_claimed_conversation_batch(
     state: &AppState,
     conversation_id: &str,
     events: Vec<ChatPendingEvent>,
@@ -170,7 +170,7 @@ async fn process_claimed_conversation_batch(
     result
 }
 
-fn resolve_activation_reason(runtime_context: &RuntimeContext) -> String {
+pub(crate) fn resolve_activation_reason(runtime_context: &RuntimeContext) -> String {
     let dispatch_reason = runtime_context
         .dispatch_reason
         .as_deref()
@@ -192,7 +192,7 @@ fn resolve_activation_reason(runtime_context: &RuntimeContext) -> String {
     .to_string()
 }
 
-async fn process_guided_queue_after_round(
+pub(crate) async fn process_guided_queue_after_round(
     state: &AppState,
     conversation_id: &str,
     guided_events: Vec<ChatPendingEvent>,
@@ -217,7 +217,7 @@ async fn process_guided_queue_after_round(
     Ok(true)
 }
 
-async fn process_guided_queue_when_idle(
+pub(crate) async fn process_guided_queue_when_idle(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<(), String> {
@@ -269,7 +269,7 @@ pub(crate) fn trigger_guided_queue_processing(state: &AppState, conversation_id:
     });
 }
 
-fn trigger_pending_guided_queue_processing(state: &AppState) {
+pub(crate) fn trigger_pending_guided_queue_processing(state: &AppState) {
     let conversation_ids = lock_conversation_runtime_slots(state)
         .map(|slots| {
             slots

@@ -1,4 +1,4 @@
-fn latest_user_text_from_events(events: &[ChatPendingEvent]) -> String {
+pub(crate) fn latest_user_text_from_events(events: &[ChatPendingEvent]) -> String {
     events
         .iter()
         .flat_map(|event| event.messages.iter())
@@ -15,7 +15,7 @@ fn latest_user_text_from_events(events: &[ChatPendingEvent]) -> String {
         .unwrap_or_default()
 }
 
-fn emit_history_flushed_event(
+pub(crate) fn emit_history_flushed_event(
     state: &AppState,
     payload: &serde_json::Value,
     conversation_id: &str,
@@ -44,7 +44,7 @@ fn emit_history_flushed_event(
     }
 }
 
-fn emit_round_started_event(
+pub(crate) fn emit_round_started_event(
     state: &AppState,
     conversation_id: &str,
     activation_id: &str,
@@ -89,7 +89,7 @@ fn emit_round_started_event(
     }
 }
 
-fn emit_round_completed_event(
+pub(crate) fn emit_round_completed_event(
     state: &AppState,
     conversation_id: &str,
     result: &SendChatResult,
@@ -142,7 +142,7 @@ fn emit_round_completed_event(
     }
 }
 
-fn notify_local_chat_round_completed(
+pub(crate) fn notify_local_chat_round_completed(
     state: &AppState,
     conversation_id: &str,
     assistant_text: &str,
@@ -228,7 +228,7 @@ fn notify_local_chat_round_completed(
     }
 }
 
-fn notification_body_with_speaker(speaker_name: &str, body: String, ui_language: &str) -> String {
+pub(crate) fn notification_body_with_speaker(speaker_name: &str, body: String, ui_language: &str) -> String {
     let body = body.trim();
     let speaker_name = speaker_name.trim();
     if speaker_name.is_empty() {
@@ -240,7 +240,7 @@ fn notification_body_with_speaker(speaker_name: &str, body: String, ui_language:
     }
 }
 
-fn notification_title_for_conversation_meta(
+pub(crate) fn notification_title_for_conversation_meta(
     state: &AppState,
     conversation_meta: &ConversationMetaView,
     ui_language: &str,
@@ -251,7 +251,7 @@ fn notification_title_for_conversation_meta(
     notification_title_from_parts(&base_title, department_name.as_deref(), ui_language, failed)
 }
 
-fn notification_title_from_parts(
+pub(crate) fn notification_title_from_parts(
     base_title: &str,
     department_name: Option<&str>,
     ui_language: &str,
@@ -275,7 +275,7 @@ fn notification_title_from_parts(
     parts.join(" · ")
 }
 
-fn notification_conversation_display_title(
+pub(crate) fn notification_conversation_display_title(
     conversation_meta: &ConversationMetaView,
     ui_language: &str,
 ) -> String {
@@ -289,7 +289,7 @@ fn notification_conversation_display_title(
     )
 }
 
-fn notification_conversation_display_title_from_parts(
+pub(crate) fn notification_conversation_display_title_from_parts(
     conversation_id: &str,
     title: &str,
     summary_title: Option<&str>,
@@ -317,7 +317,7 @@ fn notification_conversation_display_title_from_parts(
         })
 }
 
-fn normalized_notification_title_part(value: &str, conversation_id: &str) -> Option<String> {
+pub(crate) fn normalized_notification_title_part(value: &str, conversation_id: &str) -> Option<String> {
     let title = value.trim();
     if title.is_empty() || title == conversation_id.trim() {
         return None;
@@ -325,7 +325,7 @@ fn normalized_notification_title_part(value: &str, conversation_id: &str) -> Opt
     Some(title.to_string())
 }
 
-fn notification_fallback_title_from_time(value: &str, _ui_language: &str) -> Option<String> {
+pub(crate) fn notification_fallback_title_from_time(value: &str, _ui_language: &str) -> Option<String> {
     let raw_value = value.trim();
     if raw_value.is_empty() {
         return None;
@@ -335,7 +335,7 @@ fn notification_fallback_title_from_time(value: &str, _ui_language: &str) -> Opt
     Some(local.format("%m/%d %H:%M").to_string())
 }
 
-fn local_chat_notification_text(
+pub(crate) fn local_chat_notification_text(
     ui_language: &str,
     zh_cn: &str,
     zh_tw: &str,
@@ -348,7 +348,7 @@ fn local_chat_notification_text(
     }
 }
 
-fn conversation_meta_is_local_normal_chat_for_notification(
+pub(crate) fn conversation_meta_is_local_normal_chat_for_notification(
     conversation_meta: &ConversationMetaView,
 ) -> bool {
     matches!(
@@ -360,7 +360,7 @@ fn conversation_meta_is_local_normal_chat_for_notification(
         && conversation_meta.conversation_kind.trim() != CONVERSATION_KIND_REMOTE_IM_CONTACT
 }
 
-fn notification_speaker_name_for_conversation_meta(
+pub(crate) fn notification_speaker_name_for_conversation_meta(
     state: &AppState,
     conversation_meta: &ConversationMetaView,
     ui_language: &str,
@@ -392,7 +392,7 @@ fn notification_speaker_name_for_conversation_meta(
     }
 }
 
-fn notification_department_name_for_conversation_meta(
+pub(crate) fn notification_department_name_for_conversation_meta(
     state: &AppState,
     conversation_meta: &ConversationMetaView,
 ) -> Option<String> {
@@ -415,10 +415,10 @@ fn notification_department_name_for_conversation_meta(
 }
 
 #[derive(Debug, Clone, Copy)]
-struct LocalChatNotificationSettings {
-    enabled: bool,
-    sound_enabled: bool,
-    ui_language: &'static str,
+pub(crate) struct LocalChatNotificationSettings {
+    pub(crate) enabled: bool,
+    pub(crate) sound_enabled: bool,
+    pub(crate) ui_language: &'static str,
 }
 
 impl Default for LocalChatNotificationSettings {
@@ -431,7 +431,7 @@ impl Default for LocalChatNotificationSettings {
     }
 }
 
-fn local_chat_notification_settings(
+pub(crate) fn local_chat_notification_settings(
     state: &AppState,
     conversation_id: &str,
 ) -> LocalChatNotificationSettings {
@@ -455,7 +455,7 @@ fn local_chat_notification_settings(
     }
 }
 
-fn emit_round_failed_event(
+pub(crate) fn emit_round_failed_event(
     state: &AppState,
     conversation_id: &str,
     error_text: &str,
@@ -502,7 +502,7 @@ fn emit_round_failed_event(
     }
 }
 
-fn notify_local_chat_round_failed(state: &AppState, conversation_id: &str, error_text: &str) {
+pub(crate) fn notify_local_chat_round_failed(state: &AppState, conversation_id: &str, error_text: &str) {
     let conversation_meta = match conversation_service_v2().get_conversation_meta(state, conversation_id) {
         Ok(conversation_meta) => conversation_meta,
         Err(err) => {

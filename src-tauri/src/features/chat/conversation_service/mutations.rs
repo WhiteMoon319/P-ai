@@ -1,4 +1,4 @@
-enum StopChatConversationTarget {
+pub(crate) enum StopChatConversationTarget {
     Runtime(Conversation),
     PersistedRef {
         conversation_id: String,
@@ -7,7 +7,7 @@ enum StopChatConversationTarget {
 }
 
 impl StopChatConversationTarget {
-    fn conversation_id(&self) -> &str {
+    pub(crate) fn conversation_id(&self) -> &str {
         match self {
             Self::Runtime(conversation) => conversation.id.as_str(),
             Self::PersistedRef {
@@ -16,7 +16,7 @@ impl StopChatConversationTarget {
         }
     }
 
-    fn last_message(&self) -> Option<&ChatMessage> {
+    pub(crate) fn last_message(&self) -> Option<&ChatMessage> {
         match self {
             Self::Runtime(conversation) => conversation.messages.last(),
             Self::PersistedRef { last_message, .. } => last_message.as_ref(),
@@ -24,7 +24,7 @@ impl StopChatConversationTarget {
     }
 }
 
-fn maybe_undo_rewind_apply_patch(
+pub(crate) fn maybe_undo_rewind_apply_patch(
     state: &AppState,
     input: &RewindConversationInput,
     removed_messages: &[ChatMessage],
@@ -71,7 +71,7 @@ fn maybe_undo_rewind_apply_patch(
     Ok(())
 }
 
-fn resolve_stop_chat_api_config_id(
+pub(crate) fn resolve_stop_chat_api_config_id(
     app_config: &AppConfig,
     requested_department_id: Option<&str>,
     agent_id: &str,
@@ -86,7 +86,7 @@ fn resolve_stop_chat_api_config_id(
         .ok_or_else(|| format!("Model role '{raw_api_config_id}' is not configured."))
 }
 
-fn resolve_stop_chat_target(
+pub(crate) fn resolve_stop_chat_target(
     state: &AppState,
     requested_conversation_id: Option<&str>,
     agent_id: &str,
@@ -132,7 +132,7 @@ fn resolve_stop_chat_target(
     }))
 }
 
-fn build_stop_chat_skip_result(target: &StopChatConversationTarget) -> Option<StopChatPersistResult> {
+pub(crate) fn build_stop_chat_skip_result(target: &StopChatConversationTarget) -> Option<StopChatPersistResult> {
     let last_message = target.last_message()?;
     if last_message.role == "assistant" {
         return Some(StopChatPersistResult {
@@ -144,7 +144,7 @@ fn build_stop_chat_skip_result(target: &StopChatConversationTarget) -> Option<St
     None
 }
 
-fn build_stop_chat_partial_assistant_message(
+pub(crate) fn build_stop_chat_partial_assistant_message(
     agent_id: &str,
     partial_assistant_text: &str,
     partial_activity_reasoning_text: &str,
@@ -166,7 +166,7 @@ fn build_stop_chat_partial_assistant_message(
     )
 }
 
-fn build_stop_chat_partial_assistant_message_for_id(
+pub(crate) fn build_stop_chat_partial_assistant_message_for_id(
     assistant_message_id: &str,
     agent_id: &str,
     created_at: &str,
@@ -206,7 +206,7 @@ fn build_stop_chat_partial_assistant_message_for_id(
     message
 }
 
-fn merge_stop_chat_tool_history(
+pub(crate) fn merge_stop_chat_tool_history(
     existing_tool_call: Option<Vec<Value>>,
     partial_tool_history: &[Value],
 ) -> Option<Vec<Value>> {
@@ -243,7 +243,7 @@ fn merge_stop_chat_tool_history(
     (!merged.is_empty()).then_some(merged)
 }
 
-fn apply_stop_chat_partial_message(
+pub(crate) fn apply_stop_chat_partial_message(
     conversation: &mut Conversation,
     assistant_message: &ChatMessage,
 ) -> String {
@@ -253,7 +253,7 @@ fn apply_stop_chat_partial_message(
     conversation.id.clone()
 }
 
-fn apply_stop_chat_partial_message_by_id(
+pub(crate) fn apply_stop_chat_partial_message_by_id(
     conversation: &mut Conversation,
     assistant_message: &ChatMessage,
 ) -> Result<String, String> {
@@ -289,7 +289,7 @@ fn apply_stop_chat_partial_message_by_id(
     Ok(conversation.id.clone())
 }
 
-fn read_latest_archive_summary_from_chat_index(state: &AppState) -> Result<Option<String>, String> {
+pub(crate) fn read_latest_archive_summary_from_chat_index(state: &AppState) -> Result<Option<String>, String> {
     let chat_index = state_read_chat_index_cached(state)?;
     Ok(chat_index
         .conversations
@@ -303,7 +303,7 @@ fn read_latest_archive_summary_from_chat_index(state: &AppState) -> Result<Optio
         .map(|conversation_meta| conversation_meta.summary.to_string()))
 }
 
-fn validate_isolated_worktree_root(path: &str) -> Result<(), String> {
+pub(crate) fn validate_isolated_worktree_root(path: &str) -> Result<(), String> {
     let raw_path = path.trim();
     if raw_path.is_empty() {
         return Err("隔离工作树需要 Git 仓库根目录，当前工作区路径为空。".to_string());
@@ -346,7 +346,7 @@ fn validate_isolated_worktree_root(path: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn create_unarchived_conversation_shared(
+pub(crate) fn create_unarchived_conversation_shared(
     state: &AppState,
     input: &CreateUnarchivedConversationInput,
 ) -> Result<CreateUnarchivedConversationMutationResult, String> {
@@ -498,7 +498,7 @@ fn create_unarchived_conversation_shared(
     })
 }
 
-fn build_unarchived_conversation_record_from_runtime(
+pub(crate) fn build_unarchived_conversation_record_from_runtime(
     data_path: &PathBuf,
     agents: &[AgentProfile],
     assistant_department_agent_id: &str,
@@ -546,7 +546,7 @@ fn build_unarchived_conversation_record_from_runtime(
     conversation
 }
 
-fn branch_conversation_settings_agent_id_runtime(
+pub(crate) fn branch_conversation_settings_agent_id_runtime(
     agents: &[AgentProfile],
     department: &DepartmentConfig,
     requested_agent_id: &str,
@@ -565,7 +565,7 @@ fn branch_conversation_settings_agent_id_runtime(
     ))
 }
 
-fn build_branch_conversation_record_from_selection_runtime_meta_view(
+pub(crate) fn build_branch_conversation_record_from_selection_runtime_meta_view(
     data_path: &PathBuf,
     agents: &[AgentProfile],
     source_meta: &ConversationMetaView,
@@ -643,7 +643,7 @@ fn build_branch_conversation_record_from_selection_runtime_meta_view(
     Ok(conversation)
 }
 
-fn read_latest_visible_foreground_conversation_metadata(
+pub(crate) fn read_latest_visible_foreground_conversation_metadata(
     state: &AppState,
 ) -> Result<Option<ConversationMetaView>, String> {
     let chat_index = state_read_chat_index_cached(state)?;
@@ -664,7 +664,7 @@ fn read_latest_visible_foreground_conversation_metadata(
         }))
 }
 
-fn read_branch_selection_or_pending_conversation(
+pub(crate) fn read_branch_selection_or_pending_conversation(
     state: &AppState,
     conversation_id: &str,
     selected_message_ids: &[String],
@@ -675,23 +675,23 @@ fn read_branch_selection_or_pending_conversation(
         .ok_or_else(|| "源会话消息尚未就绪".to_string())
 }
 
-struct ReadyStoreRewindState {
-    keep_count: usize,
-    removed_messages: Vec<ChatMessage>,
-    recalled_user_message: ChatMessage,
-    remaining_last_message_id: Option<String>,
-    remaining_last_message_at: Option<String>,
-    remaining_last_user_at: Option<String>,
-    remaining_last_assistant_at: Option<String>,
-    remaining_todos: Vec<ConversationTodoItem>,
-    remaining_body_message_count: usize,
-    remaining_body_text_length: usize,
-    remaining_has_context_compaction_message: bool,
-    remaining_latest_summary_title: Option<String>,
-    remaining_preview_messages: Vec<message_store::ConversationShardPreviewMessage>,
+pub(crate) struct ReadyStoreRewindState {
+    pub(crate) keep_count: usize,
+    pub(crate) removed_messages: Vec<ChatMessage>,
+    pub(crate) recalled_user_message: ChatMessage,
+    pub(crate) remaining_last_message_id: Option<String>,
+    pub(crate) remaining_last_message_at: Option<String>,
+    pub(crate) remaining_last_user_at: Option<String>,
+    pub(crate) remaining_last_assistant_at: Option<String>,
+    pub(crate) remaining_todos: Vec<ConversationTodoItem>,
+    pub(crate) remaining_body_message_count: usize,
+    pub(crate) remaining_body_text_length: usize,
+    pub(crate) remaining_has_context_compaction_message: bool,
+    pub(crate) remaining_latest_summary_title: Option<String>,
+    pub(crate) remaining_preview_messages: Vec<message_store::ConversationShardPreviewMessage>,
 }
 
-fn read_ready_store_rewind_state_meta_view(
+pub(crate) fn read_ready_store_rewind_state_meta_view(
     _state: &AppState,
     store_paths: &message_store::MessageStorePaths,
     conversation_meta: &ConversationMetaView,
@@ -826,7 +826,7 @@ fn read_ready_store_rewind_state_meta_view(
     })
 }
 
-fn read_conversation_for_backup_cleanup(
+pub(crate) fn read_conversation_for_backup_cleanup(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<Conversation, String> {

@@ -54,26 +54,54 @@ fn bytes_to_lower_hex(bytes: impl AsRef<[u8]>) -> String {
 #[path = "features/core/domain.rs"]
 mod features_core_domain;
 pub(crate) use features_core_domain::*;
-include!("features/core/time_semantics.rs");
+#[path = "features/core/time_semantics.rs"]
+mod features_core_time_semantics;
+pub(crate) use features_core_time_semantics::*;
 
 // ==================== 配置与存储 ====================
-include!("features/config/storage_and_stt.rs");
-include!("features/config/app_data_layout.rs");
-include!("features/chat/message_store/mod.rs");
+#[path = "features/config/storage_and_stt.rs"]
+mod features_config_storage_and_stt;
+pub(crate) use features_config_storage_and_stt::*;
+#[path = "features/config/app_data_layout.rs"]
+mod features_config_app_data_layout;
+pub(crate) use features_config_app_data_layout::*;
+#[path = "features/chat/message_store/mod.rs"]
+mod features_chat_message_store_mod;
+pub(crate) use features_chat_message_store_mod::message_store;
 
 // ==================== 独立图像生成 ====================
-include!("features/image_generation.rs");
+#[path = "features/image_generation.rs"]
+mod features_image_generation;
+pub(crate) use features_image_generation::*;
 
 // ==================== 对话核心 ====================
-include!("features/chat/message_semantics.rs");
-include!("features/chat/conversation.rs");
-include!("features/chat/message_attachment_projection.rs");
-include!("features/chat/prompt_manager.rs");
-include!("features/chat/conversation_prompt_service.rs");
-include!("features/chat/conversation_service/mod.rs");
-include!("features/chat/model_runtime.rs");
-include!("features/chat/scheduler.rs");
-include!("features/remote_im/channel_store.rs");
+#[path = "features/chat/message_semantics.rs"]
+mod features_chat_message_semantics;
+pub(crate) use features_chat_message_semantics::*;
+#[path = "features/chat/conversation.rs"]
+mod features_chat_conversation;
+pub(crate) use features_chat_conversation::*;
+#[path = "features/chat/message_attachment_projection.rs"]
+mod features_chat_message_attachment_projection;
+pub(crate) use features_chat_message_attachment_projection::*;
+#[path = "features/chat/prompt_manager.rs"]
+mod features_chat_prompt_manager;
+pub(crate) use features_chat_prompt_manager::*;
+#[path = "features/chat/conversation_prompt_service.rs"]
+mod features_chat_conversation_prompt_service;
+pub(crate) use features_chat_conversation_prompt_service::*;
+#[path = "features/chat/conversation_service/mod.rs"]
+mod features_chat_conversation_service_mod;
+pub(crate) use features_chat_conversation_service_mod::*;
+#[path = "features/chat/model_runtime.rs"]
+mod features_chat_model_runtime;
+pub(crate) use features_chat_model_runtime::*;
+#[path = "features/chat/scheduler.rs"]
+mod features_chat_scheduler;
+pub(crate) use features_chat_scheduler::*;
+#[path = "features/remote_im/channel_store.rs"]
+mod features_remote_im_channel_store;
+pub(crate) use features_remote_im_channel_store::*;
 include!("features/remote_im/markdown_filter.rs");
 include!("features/remote_im/onebot_v11_ws.rs");
 #[cfg(target_os = "android")]

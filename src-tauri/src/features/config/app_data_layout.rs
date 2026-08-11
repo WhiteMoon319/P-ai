@@ -1,4 +1,28 @@
-fn migrate_app_data_inline_media_to_refs(data_path: &PathBuf, data: &mut AppData) -> bool {
+use std::{
+    fs,
+    io::Cursor,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+};
+
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use directories::ProjectDirs;
+use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
+use image::ImageFormat;
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use rmcp::{schemars, ServiceExt};
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
+use uuid::Uuid;
+
+
+use super::*;
+// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
+
+
+pub(crate) fn migrate_app_data_inline_media_to_refs(data_path: &PathBuf, data: &mut AppData) -> bool {
     let mut changed = false;
     for conversation in &mut data.conversations {
         for message in &mut conversation.messages {
@@ -13,7 +37,7 @@ fn migrate_app_data_inline_media_to_refs(data_path: &PathBuf, data: &mut AppData
     changed
 }
 
-fn migrate_app_data_archives_into_conversations(
+pub(crate) fn migrate_app_data_archives_into_conversations(
     data_path: &PathBuf,
     data: &mut AppData,
 ) -> Result<bool, String> {
@@ -56,7 +80,7 @@ fn migrate_app_data_archives_into_conversations(
     Ok(true)
 }
 
-fn migrate_agent_avatar_paths(data_path: &PathBuf, data: &mut AppData) -> bool {
+pub(crate) fn migrate_agent_avatar_paths(data_path: &PathBuf, data: &mut AppData) -> bool {
     let root = app_root_from_data_path(data_path);
     let new_avatar_dir = root.join("avatars");
     let legacy_avatar_dir = root.join("config").join("avatars");
@@ -123,66 +147,66 @@ fn migrate_agent_avatar_paths(data_path: &PathBuf, data: &mut AppData) -> bool {
     changed
 }
 
-const LEGACY_APP_DATA_SPLIT_DIR_NAME: &str = "app_data";
+pub(crate) const LEGACY_APP_DATA_SPLIT_DIR_NAME: &str = "app_data";
 
-const LAYOUT_DIR_CONFIG: &str = "config";
-const LAYOUT_DIR_STATE: &str = "state";
-const LAYOUT_DIR_CHAT: &str = "chat";
-const LAYOUT_DIR_CHAT_CONVERSATIONS: &str = "conversations";
-const LAYOUT_DIR_BACKUPS: &str = "backups";
-const LAYOUT_FILE_AGENTS: &str = "agents.json";
-const LAYOUT_FILE_RUNTIME: &str = "runtime_state.json";
-const LAYOUT_FILE_CHAT_INDEX: &str = "index.json";
+pub(crate) const LAYOUT_DIR_CONFIG: &str = "config";
+pub(crate) const LAYOUT_DIR_STATE: &str = "state";
+pub(crate) const LAYOUT_DIR_CHAT: &str = "chat";
+pub(crate) const LAYOUT_DIR_CHAT_CONVERSATIONS: &str = "conversations";
+pub(crate) const LAYOUT_DIR_BACKUPS: &str = "backups";
+pub(crate) const LAYOUT_FILE_AGENTS: &str = "agents.json";
+pub(crate) const LAYOUT_FILE_RUNTIME: &str = "runtime_state.json";
+pub(crate) const LAYOUT_FILE_CHAT_INDEX: &str = "index.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct AgentsFile {
+pub(crate) struct AgentsFile {
     #[serde(default)]
-    agents: Vec<AgentProfile>,
+    pub(crate) agents: Vec<AgentProfile>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RuntimeStateFile {
-    version: u32,
+pub(crate) struct RuntimeStateFile {
+    pub(crate) version: u32,
     #[serde(default)]
-    runtime_revision: u64,
+    pub(crate) runtime_revision: u64,
     #[serde(default)]
-    data_migration_version: u32,
+    pub(crate) data_migration_version: u32,
     #[serde(default, alias = "messageStoreMigrationVersion")]
-    message_store_migration_version: u32,
+    pub(crate) message_store_migration_version: u32,
     #[serde(alias = "selectedAgentId", alias = "selected_agent_id")]
-    assistant_department_agent_id: String,
-    response_style_id: String,
+    pub(crate) assistant_department_agent_id: String,
+    pub(crate) response_style_id: String,
     #[serde(default = "default_pdf_read_mode")]
-    pdf_read_mode: String,
+    pub(crate) pdf_read_mode: String,
     #[serde(default = "default_background_voice_screenshot_keywords")]
-    background_voice_screenshot_keywords: String,
+    pub(crate) background_voice_screenshot_keywords: String,
     #[serde(default = "default_background_voice_screenshot_mode")]
-    background_voice_screenshot_mode: String,
+    pub(crate) background_voice_screenshot_mode: String,
     #[serde(default)]
-    instruction_presets: Vec<PromptCommandPreset>,
+    pub(crate) instruction_presets: Vec<PromptCommandPreset>,
     #[serde(
         default,
         rename = "systemNotificationConversationId",
         alias = "mainConversationId",
         alias = "main_conversation_id"
     )]
-    main_conversation_id: Option<String>,
+    pub(crate) main_conversation_id: Option<String>,
     #[serde(default)]
-    pinned_conversation_ids: Vec<String>,
+    pub(crate) pinned_conversation_ids: Vec<String>,
     #[serde(default)]
-    conversation_section_orders: ConversationSectionOrders,
+    pub(crate) conversation_section_orders: ConversationSectionOrders,
     #[serde(default)]
-    image_text_cache: Vec<ImageTextCacheEntry>,
+    pub(crate) image_text_cache: Vec<ImageTextCacheEntry>,
     #[serde(default)]
-    pdf_text_cache: Vec<PdfTextCacheEntry>,
+    pub(crate) pdf_text_cache: Vec<PdfTextCacheEntry>,
     #[serde(default)]
-    pdf_image_cache: Vec<PdfImageCacheEntry>,
+    pub(crate) pdf_image_cache: Vec<PdfImageCacheEntry>,
     #[serde(default)]
-    remote_im_contacts: Vec<RemoteImContact>,
+    pub(crate) remote_im_contacts: Vec<RemoteImContact>,
     #[serde(default)]
-    remote_im_contact_checkpoints: Vec<RemoteImContactCheckpoint>,
+    pub(crate) remote_im_contact_checkpoints: Vec<RemoteImContactCheckpoint>,
 }
 
 impl Default for RuntimeStateFile {
@@ -212,81 +236,81 @@ impl Default for RuntimeStateFile {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatIndexConversationItem {
-    id: String,
-    updated_at: String,
-    status: String,
+pub(crate) struct ChatIndexConversationItem {
+    pub(crate) id: String,
+    pub(crate) updated_at: String,
+    pub(crate) status: String,
     #[serde(default)]
-    summary: String,
+    pub(crate) summary: String,
     #[serde(default)]
-    archived_at: Option<String>,
+    pub(crate) archived_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct ChatIndexFile {
+pub(crate) struct ChatIndexFile {
     #[serde(default)]
-    conversations: Vec<ChatIndexConversationItem>,
+    pub(crate) conversations: Vec<ChatIndexConversationItem>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-struct AppDataWriteStats {
-    agents_written: bool,
-    runtime_written: bool,
-    conversation_writes: usize,
-    conversation_deletes: usize,
+pub(crate) struct AppDataWriteStats {
+    pub(crate) agents_written: bool,
+    pub(crate) runtime_written: bool,
+    pub(crate) conversation_writes: usize,
+    pub(crate) conversation_deletes: usize,
 }
 
-fn app_layout_config_dir(path: &PathBuf) -> PathBuf {
+pub(crate) fn app_layout_config_dir(path: &PathBuf) -> PathBuf {
     app_root_from_data_path(path).join(LAYOUT_DIR_CONFIG)
 }
 
-fn app_layout_state_dir(path: &PathBuf) -> PathBuf {
+pub(crate) fn app_layout_state_dir(path: &PathBuf) -> PathBuf {
     app_root_from_data_path(path).join(LAYOUT_DIR_STATE)
 }
 
-fn app_layout_chat_dir(path: &PathBuf) -> PathBuf {
+pub(crate) fn app_layout_chat_dir(path: &PathBuf) -> PathBuf {
     app_root_from_data_path(path).join(LAYOUT_DIR_CHAT)
 }
 
-fn app_layout_chat_conversations_dir(path: &PathBuf) -> PathBuf {
+pub(crate) fn app_layout_chat_conversations_dir(path: &PathBuf) -> PathBuf {
     app_layout_chat_dir(path).join(LAYOUT_DIR_CHAT_CONVERSATIONS)
 }
 
-fn app_layout_backups_dir(path: &PathBuf) -> PathBuf {
+pub(crate) fn app_layout_backups_dir(path: &PathBuf) -> PathBuf {
     app_root_from_data_path(path).join(LAYOUT_DIR_BACKUPS)
 }
 
-fn app_layout_agents_path(path: &PathBuf) -> PathBuf {
+pub(crate) fn app_layout_agents_path(path: &PathBuf) -> PathBuf {
     app_layout_config_dir(path).join(LAYOUT_FILE_AGENTS)
 }
 
-fn app_layout_runtime_state_path(path: &PathBuf) -> PathBuf {
+pub(crate) fn app_layout_runtime_state_path(path: &PathBuf) -> PathBuf {
     app_layout_state_dir(path).join(LAYOUT_FILE_RUNTIME)
 }
 
-fn app_layout_chat_index_path(path: &PathBuf) -> PathBuf {
+pub(crate) fn app_layout_chat_index_path(path: &PathBuf) -> PathBuf {
     app_layout_chat_dir(path).join(LAYOUT_FILE_CHAT_INDEX)
 }
 
-fn app_layout_chat_conversation_path(path: &PathBuf, conversation_id: &str) -> PathBuf {
+pub(crate) fn app_layout_chat_conversation_path(path: &PathBuf, conversation_id: &str) -> PathBuf {
     app_layout_chat_conversations_dir(path).join(format!("{conversation_id}.json"))
 }
 
-fn build_agents_file(agents: &[AgentProfile]) -> AgentsFile {
+pub(crate) fn build_agents_file(agents: &[AgentProfile]) -> AgentsFile {
     AgentsFile {
         agents: agents.to_vec(),
     }
 }
 
-fn normalize_runtime_state_contact_communication(runtime: &mut RuntimeStateFile) {
+pub(crate) fn normalize_runtime_state_contact_communication(runtime: &mut RuntimeStateFile) {
     for contact in &mut runtime.remote_im_contacts {
         contact.allow_send = contact.allow_send || contact.allow_receive;
         contact.allow_receive = contact.allow_send;
     }
 }
 
-fn normalize_runtime_state_system_notification_pointer(runtime: &mut RuntimeStateFile) -> bool {
+pub(crate) fn normalize_runtime_state_system_notification_pointer(runtime: &mut RuntimeStateFile) -> bool {
     if runtime.main_conversation_id.as_deref().map(str::trim)
         == Some(SYSTEM_NOTIFICATION_CONVERSATION_ID)
     {
@@ -296,7 +320,7 @@ fn normalize_runtime_state_system_notification_pointer(runtime: &mut RuntimeStat
     true
 }
 
-fn system_notification_conversation_shard_has_artifacts(path: &PathBuf) -> Result<bool, String> {
+pub(crate) fn system_notification_conversation_shard_has_artifacts(path: &PathBuf) -> Result<bool, String> {
     if app_layout_chat_conversation_path(path, SYSTEM_NOTIFICATION_CONVERSATION_ID).exists() {
         return Ok(true);
     }
@@ -304,7 +328,7 @@ fn system_notification_conversation_shard_has_artifacts(path: &PathBuf) -> Resul
     Ok(message_store::message_store_shard_modified_time(&store_paths).is_some())
 }
 
-fn ensure_system_notification_conversation_shard(path: &PathBuf) -> Result<bool, String> {
+pub(crate) fn ensure_system_notification_conversation_shard(path: &PathBuf) -> Result<bool, String> {
     match read_conversation_shard(path, SYSTEM_NOTIFICATION_CONVERSATION_ID) {
         Ok(mut conversation) => {
             if normalize_system_notification_conversation(&mut conversation) {
@@ -327,7 +351,7 @@ fn ensure_system_notification_conversation_shard(path: &PathBuf) -> Result<bool,
     }
 }
 
-fn build_runtime_state_file(data: &AppData) -> RuntimeStateFile {
+pub(crate) fn build_runtime_state_file(data: &AppData) -> RuntimeStateFile {
     let mut runtime = RuntimeStateFile {
         version: APP_DATA_SCHEMA_VERSION,
         runtime_revision: 0,
@@ -353,7 +377,7 @@ fn build_runtime_state_file(data: &AppData) -> RuntimeStateFile {
     runtime
 }
 
-fn build_chat_index_item(conversation: &Conversation) -> ChatIndexConversationItem {
+pub(crate) fn build_chat_index_item(conversation: &Conversation) -> ChatIndexConversationItem {
     ChatIndexConversationItem {
         id: conversation.id.clone(),
         updated_at: conversation.updated_at.clone(),
@@ -363,7 +387,7 @@ fn build_chat_index_item(conversation: &Conversation) -> ChatIndexConversationIt
     }
 }
 
-fn chat_index_item_is_archived(item: &ChatIndexConversationItem) -> bool {
+pub(crate) fn chat_index_item_is_archived(item: &ChatIndexConversationItem) -> bool {
     if item.status.trim() == "archived" {
         return true;
     }
@@ -375,7 +399,7 @@ fn chat_index_item_is_archived(item: &ChatIndexConversationItem) -> bool {
 }
 
 #[cfg(test)]
-fn build_chat_index_file(conversations: &[Conversation]) -> ChatIndexFile {
+pub(crate) fn build_chat_index_file(conversations: &[Conversation]) -> ChatIndexFile {
     ChatIndexFile {
         conversations: conversations
             .iter()
@@ -384,7 +408,7 @@ fn build_chat_index_file(conversations: &[Conversation]) -> ChatIndexFile {
     }
 }
 
-fn upsert_chat_index_conversation(index: &mut ChatIndexFile, conversation: &Conversation) {
+pub(crate) fn upsert_chat_index_conversation(index: &mut ChatIndexFile, conversation: &Conversation) {
     let next = build_chat_index_item(conversation);
     if let Some(existing) = index
         .conversations
@@ -398,7 +422,7 @@ fn upsert_chat_index_conversation(index: &mut ChatIndexFile, conversation: &Conv
 }
 
 #[allow(dead_code)]
-fn remove_chat_index_conversation(index: &mut ChatIndexFile, conversation_id: &str) {
+pub(crate) fn remove_chat_index_conversation(index: &mut ChatIndexFile, conversation_id: &str) {
     let conversation_id = conversation_id.trim();
     if conversation_id.is_empty() {
         return;
@@ -406,7 +430,7 @@ fn remove_chat_index_conversation(index: &mut ChatIndexFile, conversation_id: &s
     index.conversations.retain(|item| item.id != conversation_id);
 }
 
-fn apply_runtime_state_to_app_data(data: &mut AppData, runtime: &RuntimeStateFile) {
+pub(crate) fn apply_runtime_state_to_app_data(data: &mut AppData, runtime: &RuntimeStateFile) {
     data.version = runtime.version;
     data.data_migration_version = runtime.data_migration_version;
     data.message_store_migration_version = runtime.message_store_migration_version;
@@ -427,7 +451,7 @@ fn apply_runtime_state_to_app_data(data: &mut AppData, runtime: &RuntimeStateFil
     data.remote_im_contact_checkpoints = runtime.remote_im_contact_checkpoints.clone();
 }
 
-fn read_agents_shard(path: &PathBuf) -> Result<Vec<AgentProfile>, String> {
+pub(crate) fn read_agents_shard(path: &PathBuf) -> Result<Vec<AgentProfile>, String> {
     let mut agents = if !app_layout_exists(path) && path.exists() {
         read_app_data(path)?.agents
     } else if app_layout_agents_path(path).exists() {
@@ -439,7 +463,7 @@ fn read_agents_shard(path: &PathBuf) -> Result<Vec<AgentProfile>, String> {
     Ok(agents)
 }
 
-fn write_agents_shard(path: &PathBuf, agents: &[AgentProfile]) -> Result<bool, String> {
+pub(crate) fn write_agents_shard(path: &PathBuf, agents: &[AgentProfile]) -> Result<bool, String> {
     fs::create_dir_all(app_layout_config_dir(path))
         .map_err(|err| format!("Create config layout dir failed: {err}"))?;
     let mut normalized_agents = agents.to_vec();
@@ -451,7 +475,7 @@ fn write_agents_shard(path: &PathBuf, agents: &[AgentProfile]) -> Result<bool, S
     )
 }
 
-fn read_runtime_state_shard(path: &PathBuf) -> Result<RuntimeStateFile, String> {
+pub(crate) fn read_runtime_state_shard(path: &PathBuf) -> Result<RuntimeStateFile, String> {
     let mut runtime = if app_layout_runtime_state_path(path).exists() {
         read_json_file::<RuntimeStateFile>(&app_layout_runtime_state_path(path), "runtime state file")?
     } else {
@@ -463,7 +487,7 @@ fn read_runtime_state_shard(path: &PathBuf) -> Result<RuntimeStateFile, String> 
     Ok(runtime)
 }
 
-fn write_runtime_state_shard(path: &PathBuf, runtime: &RuntimeStateFile) -> Result<bool, String> {
+pub(crate) fn write_runtime_state_shard(path: &PathBuf, runtime: &RuntimeStateFile) -> Result<bool, String> {
     fs::create_dir_all(app_layout_state_dir(path))
         .map_err(|err| format!("Create state layout dir failed: {err}"))?;
     let mut normalized = runtime.clone();
@@ -478,13 +502,13 @@ fn write_runtime_state_shard(path: &PathBuf, runtime: &RuntimeStateFile) -> Resu
     Ok(runtime_written || conversation_written)
 }
 
-fn read_conversation_shard(path: &PathBuf, conversation_id: &str) -> Result<Conversation, String> {
+pub(crate) fn read_conversation_shard(path: &PathBuf, conversation_id: &str) -> Result<Conversation, String> {
     let mut conversation = read_conversation_shard_raw(path, conversation_id)?;
     normalize_conversation_runtime_volatile_fields(&mut conversation);
     Ok(conversation)
 }
 
-fn read_conversation_meta_shard(
+pub(crate) fn read_conversation_meta_shard(
     path: &PathBuf,
     conversation_id: &str,
 ) -> Result<message_store::ConversationShardMeta, String> {
@@ -525,7 +549,7 @@ fn read_conversation_meta_shard(
     Err(format!("Conversation '{conversation_id}' not found."))
 }
 
-fn refresh_conversation_meta_shard_if_needed(
+pub(crate) fn refresh_conversation_meta_shard_if_needed(
     path: &PathBuf,
     conversation_id: &str,
 ) -> Result<bool, String> {
@@ -552,7 +576,7 @@ fn refresh_conversation_meta_shard_if_needed(
     Ok(true)
 }
 
-fn read_conversation_shard_raw(path: &PathBuf, conversation_id: &str) -> Result<Conversation, String> {
+pub(crate) fn read_conversation_shard_raw(path: &PathBuf, conversation_id: &str) -> Result<Conversation, String> {
     let conversation_id = conversation_id.trim();
     if conversation_id.is_empty() {
         return Err("Conversation id is empty".to_string());
@@ -616,7 +640,7 @@ fn read_conversation_shard_raw(path: &PathBuf, conversation_id: &str) -> Result<
     Err(format!("Conversation '{conversation_id}' not found."))
 }
 
-fn write_conversation_shard(path: &PathBuf, conversation: &Conversation) -> Result<bool, String> {
+pub(crate) fn write_conversation_shard(path: &PathBuf, conversation: &Conversation) -> Result<bool, String> {
     fs::create_dir_all(app_layout_chat_conversations_dir(path))
         .map_err(|err| format!("Create chat conversations dir failed: {err}"))?;
     let store_paths = message_store::message_store_paths(path, &conversation.id)?;
@@ -634,7 +658,7 @@ fn write_conversation_shard(path: &PathBuf, conversation: &Conversation) -> Resu
     message_store::write_jsonl_snapshot_directory_shard_if_changed(&store_paths, conversation)
 }
 
-fn write_conversation_meta_shard_from_meta(
+pub(crate) fn write_conversation_meta_shard_from_meta(
     path: &PathBuf,
     meta: &message_store::ConversationShardMeta,
 ) -> Result<(), String> {
@@ -647,7 +671,7 @@ fn write_conversation_meta_shard_from_meta(
     message_store::write_conversation_directory_meta_shard(&paths, &persist_meta)
 }
 
-fn delete_conversation_shard(path: &PathBuf, conversation_id: &str) -> Result<bool, String> {
+pub(crate) fn delete_conversation_shard(path: &PathBuf, conversation_id: &str) -> Result<bool, String> {
     let conversation_id = conversation_id.trim();
     if conversation_id.is_empty() {
         return Ok(false);
@@ -656,13 +680,13 @@ fn delete_conversation_shard(path: &PathBuf, conversation_id: &str) -> Result<bo
     message_store::delete_message_store_shard_artifacts(&store_paths)
 }
 
-fn app_layout_exists(path: &PathBuf) -> bool {
+pub(crate) fn app_layout_exists(path: &PathBuf) -> bool {
     app_layout_agents_path(path).exists()
         || app_layout_runtime_state_path(path).exists()
         || app_layout_chat_conversations_dir(path).exists()
 }
 
-fn legacy_app_data_split_dir(path: &PathBuf) -> PathBuf {
+pub(crate) fn legacy_app_data_split_dir(path: &PathBuf) -> PathBuf {
     let parent = path
         .parent()
         .map(ToOwned::to_owned)
@@ -670,7 +694,7 @@ fn legacy_app_data_split_dir(path: &PathBuf) -> PathBuf {
     parent.join(LEGACY_APP_DATA_SPLIT_DIR_NAME)
 }
 
-fn read_json_file<T>(path: &PathBuf, label: &str) -> Result<T, String>
+pub(crate) fn read_json_file<T>(path: &PathBuf, label: &str) -> Result<T, String>
 where
     T: serde::de::DeserializeOwned,
 {
@@ -681,14 +705,14 @@ where
     })
 }
 
-fn file_metadata_signature(path: &PathBuf) -> (u64, Option<std::time::SystemTime>) {
+pub(crate) fn file_metadata_signature(path: &PathBuf) -> (u64, Option<std::time::SystemTime>) {
     match fs::metadata(path) {
         Ok(metadata) => (metadata.len(), metadata.modified().ok()),
         Err(_) => (0, None),
     }
 }
 
-fn update_conversation_cache_signature_for_file(
+pub(crate) fn update_conversation_cache_signature_for_file(
     conversations: &mut ConversationDirCacheSignature,
     file_path: &PathBuf,
     file_name: String,
@@ -720,7 +744,7 @@ fn update_conversation_cache_signature_for_file(
     }
 }
 
-fn app_data_cache_signature(path: &PathBuf) -> AppDataCacheSignature {
+pub(crate) fn app_data_cache_signature(path: &PathBuf) -> AppDataCacheSignature {
     let agents_path = app_layout_agents_path(path);
     let runtime_path = app_layout_runtime_state_path(path);
     let (agents_len, agents_modified) = file_metadata_signature(&agents_path);
@@ -781,7 +805,7 @@ fn app_data_cache_signature(path: &PathBuf) -> AppDataCacheSignature {
     }
 }
 
-fn write_json_file_atomic<T>(path: &PathBuf, value: &T, label: &str) -> Result<(), String>
+pub(crate) fn write_json_file_atomic<T>(path: &PathBuf, value: &T, label: &str) -> Result<(), String>
 where
     T: Serialize,
 {
@@ -804,7 +828,7 @@ where
     Ok(())
 }
 
-fn write_json_file_atomic_if_changed<T>(
+pub(crate) fn write_json_file_atomic_if_changed<T>(
     path: &PathBuf,
     value: &T,
     label: &str,
@@ -836,7 +860,7 @@ where
     Ok(true)
 }
 
-fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
+pub(crate) fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
     let mut agents = if app_layout_agents_path(path).exists() {
         read_json_file::<AgentsFile>(&app_layout_agents_path(path), "agents file")?.agents
     } else {
@@ -908,24 +932,24 @@ fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
 // ========== 数据迁移 registry ==========
 //
 // v2+ 需要显式上下文，避免在只有 app_data 路径时猜测助理空间位置或名称。
-struct DataMigrationContext<'a> {
-    state: &'a AppState,
-    config: &'a AppConfig,
+pub(crate) struct DataMigrationContext<'a> {
+    pub(crate) state: &'a AppState,
+    pub(crate) config: &'a AppConfig,
 }
 
 #[derive(Debug, Default, Clone, Copy)]
-struct DataMigrationStepStats {
-    data_changed: bool,
-    conversation_writes: usize,
+pub(crate) struct DataMigrationStepStats {
+    pub(crate) data_changed: bool,
+    pub(crate) conversation_writes: usize,
 }
 
-struct DataMigrationStep {
-    version: u32,
-    name: &'static str,
-    run: for<'a> fn(&DataMigrationContext<'a>) -> Result<DataMigrationStepStats, String>,
+pub(crate) struct DataMigrationStep {
+    pub(crate) version: u32,
+    pub(crate) name: &'static str,
+    pub(crate) run: for<'a> fn(&DataMigrationContext<'a>) -> Result<DataMigrationStepStats, String>,
 }
 
-fn data_migration_steps() -> Vec<DataMigrationStep> {
+pub(crate) fn data_migration_steps() -> Vec<DataMigrationStep> {
     vec![DataMigrationStep {
         version: DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES,
         name: "v2_assistant_workspace_for_empty_shell_workspaces",
@@ -933,7 +957,7 @@ fn data_migration_steps() -> Vec<DataMigrationStep> {
     }]
 }
 
-fn conversation_shell_workspace_path_key(path: &str) -> String {
+pub(crate) fn conversation_shell_workspace_path_key(path: &str) -> String {
     let path = path.trim();
     if path.is_empty() {
         String::new()
@@ -942,7 +966,7 @@ fn conversation_shell_workspace_path_key(path: &str) -> String {
     }
 }
 
-fn legacy_shell_workspace_path_as_main_workspace(
+pub(crate) fn legacy_shell_workspace_path_as_main_workspace(
     state: &AppState,
     path: &str,
 ) -> Option<ShellWorkspaceConfig> {
@@ -970,7 +994,7 @@ fn legacy_shell_workspace_path_as_main_workspace(
     .next()
 }
 
-fn state_write_conversation_shell_workspace_metadata_direct(
+pub(crate) fn state_write_conversation_shell_workspace_metadata_direct(
     state: &AppState,
     conversation_id: &str,
     shell_workspaces: Vec<ShellWorkspaceConfig>,
@@ -1002,7 +1026,7 @@ fn state_write_conversation_shell_workspace_metadata_direct(
     Ok(true)
 }
 
-fn shell_workspaces_for_empty_conversation_workspace_migration(
+pub(crate) fn shell_workspaces_for_empty_conversation_workspace_migration(
     state: &AppState,
     config: &AppConfig,
     conversation: &Conversation,
@@ -1025,7 +1049,7 @@ fn shell_workspaces_for_empty_conversation_workspace_migration(
     )])
 }
 
-fn migrate_empty_shell_workspaces_to_assistant_workspace(
+pub(crate) fn migrate_empty_shell_workspaces_to_assistant_workspace(
     context: &DataMigrationContext<'_>,
 ) -> Result<DataMigrationStepStats, String> {
     let chat_index = collect_chat_index_items_from_storage(&context.state.data_path)?;
@@ -1073,7 +1097,7 @@ fn migrate_empty_shell_workspaces_to_assistant_workspace(
     Ok(stats)
 }
 
-fn run_app_data_migrations_with_state(
+pub(crate) fn run_app_data_migrations_with_state(
     state: &AppState,
     config: &AppConfig,
 ) -> Result<bool, String> {
@@ -1108,7 +1132,7 @@ fn run_app_data_migrations_with_state(
     Ok(any_data_changed || migration_version_before != runtime.data_migration_version)
 }
 
-fn assistant_workspace_label_sync_target_keys(
+pub(crate) fn assistant_workspace_label_sync_target_keys(
     state: &AppState,
     previous_config: &AppConfig,
     next_config: &AppConfig,
@@ -1127,7 +1151,7 @@ fn assistant_workspace_label_sync_target_keys(
     .collect()
 }
 
-fn sync_assistant_workspace_label_for_unarchived_conversations(
+pub(crate) fn sync_assistant_workspace_label_for_unarchived_conversations(
     state: &AppState,
     previous_config: &AppConfig,
     next_config: &AppConfig,
@@ -1208,7 +1232,7 @@ fn sync_assistant_workspace_label_for_unarchived_conversations(
     Ok(changed)
 }
 
-fn read_app_data(path: &PathBuf) -> Result<AppData, String> {
+pub(crate) fn read_app_data(path: &PathBuf) -> Result<AppData, String> {
     let mut parsed = read_layout_app_data(path)?;
     parsed.version = APP_DATA_SCHEMA_VERSION;
     let migration_version_before = parsed.data_migration_version;
@@ -1312,7 +1336,7 @@ fn read_app_data(path: &PathBuf) -> Result<AppData, String> {
     Ok(parsed)
 }
 
-fn normalize_conversation_runtime_volatile_fields(conversation: &mut Conversation) {
+pub(crate) fn normalize_conversation_runtime_volatile_fields(conversation: &mut Conversation) {
     let _ = fill_missing_conversation_message_speaker_agent_ids(conversation);
     let _ = cleanup_legacy_summary_context_messages(conversation);
 }
@@ -1320,7 +1344,7 @@ fn normalize_conversation_runtime_volatile_fields(conversation: &mut Conversatio
 // AppData 聚合写入需要保留，作为兼容/迁移/全量导入导出入口。
 // 但业务热路径禁止直接依赖它，应该优先走分片写入：
 // agents / runtime_state / conversation:<id>
-fn write_app_data_with_stats(path: &PathBuf, data: &AppData) -> Result<AppDataWriteStats, String> {
+pub(crate) fn write_app_data_with_stats(path: &PathBuf, data: &AppData) -> Result<AppDataWriteStats, String> {
     let agents = build_agents_file(&data.agents);
     let mut runtime = build_runtime_state_file(data);
     if app_layout_runtime_state_path(path).exists() {
@@ -1424,7 +1448,7 @@ fn write_app_data_with_stats(path: &PathBuf, data: &AppData) -> Result<AppDataWr
 #[deprecated(
     note = "兼容层专用的全量 AppData 写入器；新代码禁止调用，请改用 agents/runtime_state/chat_index/conversation 分片写入 API。"
 )]
-fn write_app_data(path: &PathBuf, data: &AppData) -> Result<(), String> {
+pub(crate) fn write_app_data(path: &PathBuf, data: &AppData) -> Result<(), String> {
     let started = std::time::Instant::now();
     let stats = write_app_data_with_stats(path, data)?;
     runtime_log_debug(format!(
@@ -1440,7 +1464,6 @@ fn write_app_data(path: &PathBuf, data: &AppData) -> Result<(), String> {
 
 #[cfg(test)]
 mod conversation_section_orders_runtime_tests {
-    use super::*;
 
     #[test]
     fn build_runtime_state_file_should_preserve_conversation_section_orders() {

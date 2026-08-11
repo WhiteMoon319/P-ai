@@ -1,12 +1,12 @@
-const LOCAL_IMAGE_THUMBNAIL_MAX_EDGE: u32 = 1080;
-const LOCAL_IMAGE_REMOTE_MAX_EDGE: u32 = 2160;
-const LOCAL_IMAGE_WEBP_QUALITY: f32 = 82.0;
-const LOCAL_IMAGE_FALLBACK_MIME: &str = "image/webp";
-const LOCAL_IMAGE_MAX_SOURCE_BYTES: u64 = 100 * 1024 * 1024;
+pub(crate) const LOCAL_IMAGE_THUMBNAIL_MAX_EDGE: u32 = 1080;
+pub(crate) const LOCAL_IMAGE_REMOTE_MAX_EDGE: u32 = 2160;
+pub(crate) const LOCAL_IMAGE_WEBP_QUALITY: f32 = 82.0;
+pub(crate) const LOCAL_IMAGE_FALLBACK_MIME: &str = "image/webp";
+pub(crate) const LOCAL_IMAGE_MAX_SOURCE_BYTES: u64 = 100 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
-enum PersistedInlineMessageSegment {
+pub(crate) enum PersistedInlineMessageSegment {
     Text { text: String },
     Meme {
         name: String,
@@ -29,27 +29,27 @@ enum PersistedInlineMessageSegment {
 }
 
 #[derive(Debug, Clone)]
-struct LocalImageRenderData {
-    mime: String,
-    bytes: Vec<u8>,
-    original_width: u32,
-    original_height: u32,
-    output_width: u32,
-    output_height: u32,
+pub(crate) struct LocalImageRenderData {
+    pub(crate) mime: String,
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) original_width: u32,
+    pub(crate) original_height: u32,
+    pub(crate) output_width: u32,
+    pub(crate) output_height: u32,
 }
 
 #[derive(Debug, Clone)]
-struct LocalImageFileInfo {
-    mime: String,
-    width: u32,
-    height: u32,
+pub(crate) struct LocalImageFileInfo {
+    pub(crate) mime: String,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
 }
 
-fn local_image_workspace_root(state: &AppState) -> PathBuf {
+pub(crate) fn local_image_workspace_root(state: &AppState) -> PathBuf {
     configured_workspace_root_path(state).unwrap_or_else(|_| state.llm_workspace_path.clone())
 }
 
-fn local_image_resolve_path(state: &AppState, raw: &str) -> PathBuf {
+pub(crate) fn local_image_resolve_path(state: &AppState, raw: &str) -> PathBuf {
     let trimmed = raw.trim();
     let direct = PathBuf::from(trimmed);
     if direct.is_absolute() {
@@ -59,7 +59,7 @@ fn local_image_resolve_path(state: &AppState, raw: &str) -> PathBuf {
     }
 }
 
-fn local_image_file_name(path: &std::path::Path, alt: Option<&str>) -> String {
+pub(crate) fn local_image_file_name(path: &std::path::Path, alt: Option<&str>) -> String {
     path.file_name()
         .and_then(|value| value.to_str())
         .map(str::trim)
@@ -73,7 +73,7 @@ fn local_image_file_name(path: &std::path::Path, alt: Option<&str>) -> String {
         .unwrap_or_else(|| "image.webp".to_string())
 }
 
-fn local_image_mime_from_format(format: image::ImageFormat) -> Option<&'static str> {
+pub(crate) fn local_image_mime_from_format(format: image::ImageFormat) -> Option<&'static str> {
     match format {
         image::ImageFormat::Png => Some("image/png"),
         image::ImageFormat::Jpeg => Some("image/jpeg"),
@@ -84,7 +84,7 @@ fn local_image_mime_from_format(format: image::ImageFormat) -> Option<&'static s
     }
 }
 
-fn local_image_format_from_mime(mime: &str) -> Option<image::ImageFormat> {
+pub(crate) fn local_image_format_from_mime(mime: &str) -> Option<image::ImageFormat> {
     match mime.trim().to_ascii_lowercase().as_str() {
         "image/png" => Some(image::ImageFormat::Png),
         "image/jpeg" | "image/jpg" => Some(image::ImageFormat::Jpeg),
@@ -95,7 +95,7 @@ fn local_image_format_from_mime(mime: &str) -> Option<image::ImageFormat> {
     }
 }
 
-fn local_image_guess_mime_from_path(path: &std::path::Path) -> String {
+pub(crate) fn local_image_guess_mime_from_path(path: &std::path::Path) -> String {
     media_mime_from_path(path)
         .and_then(local_image_format_from_mime)
         .and_then(local_image_mime_from_format)
@@ -103,7 +103,7 @@ fn local_image_guess_mime_from_path(path: &std::path::Path) -> String {
         .to_string()
 }
 
-fn local_image_detect_format(raw: &[u8], path: &std::path::Path) -> Result<(image::ImageFormat, String), String> {
+pub(crate) fn local_image_detect_format(raw: &[u8], path: &std::path::Path) -> Result<(image::ImageFormat, String), String> {
     let format = image::guess_format(raw).map_err(|err| {
         format!(
             "识别本地图片格式失败: path={}, err={err}",
@@ -119,7 +119,7 @@ fn local_image_detect_format(raw: &[u8], path: &std::path::Path) -> Result<(imag
     Ok((format, mime.to_string()))
 }
 
-fn local_image_read_raw(path: &std::path::Path) -> Result<Vec<u8>, String> {
+pub(crate) fn local_image_read_raw(path: &std::path::Path) -> Result<Vec<u8>, String> {
     let metadata = std::fs::metadata(path)
         .map_err(|err| format!("本地图片不存在或无法读取元数据: path={}, err={err}", path.to_string_lossy()))?;
     if !metadata.is_file() {
@@ -137,7 +137,7 @@ fn local_image_read_raw(path: &std::path::Path) -> Result<Vec<u8>, String> {
         .map_err(|err| format!("读取本地图片失败: path={}, err={err}", path.to_string_lossy()))
 }
 
-fn local_image_decode_dynamic(raw: &[u8], path: &std::path::Path) -> Result<(image::DynamicImage, String), String> {
+pub(crate) fn local_image_decode_dynamic(raw: &[u8], path: &std::path::Path) -> Result<(image::DynamicImage, String), String> {
     let (format, mime) = local_image_detect_format(raw, path)?;
     let image = image::load_from_memory_with_format(raw, format).map_err(|err| {
         format!(
@@ -148,7 +148,7 @@ fn local_image_decode_dynamic(raw: &[u8], path: &std::path::Path) -> Result<(ima
     Ok((image, mime))
 }
 
-fn local_image_file_info(path: &std::path::Path) -> Result<LocalImageFileInfo, String> {
+pub(crate) fn local_image_file_info(path: &std::path::Path) -> Result<LocalImageFileInfo, String> {
     let raw = local_image_read_raw(path)?;
     let (image, mime) = local_image_decode_dynamic(&raw, path)?;
     Ok(LocalImageFileInfo {
@@ -158,7 +158,7 @@ fn local_image_file_info(path: &std::path::Path) -> Result<LocalImageFileInfo, S
     })
 }
 
-fn local_image_resized_dimensions(width: u32, height: u32, max_edge: u32) -> (u32, u32) {
+pub(crate) fn local_image_resized_dimensions(width: u32, height: u32, max_edge: u32) -> (u32, u32) {
     let longest = width.max(height);
     if longest <= max_edge || longest == 0 {
         return (width.max(1), height.max(1));
@@ -170,7 +170,7 @@ fn local_image_resized_dimensions(width: u32, height: u32, max_edge: u32) -> (u3
     (new_width, new_height)
 }
 
-fn local_image_encode_webp(image: image::DynamicImage, max_edge: u32) -> Result<LocalImageRenderData, String> {
+pub(crate) fn local_image_encode_webp(image: image::DynamicImage, max_edge: u32) -> Result<LocalImageRenderData, String> {
     let original_width = image.width();
     let original_height = image.height();
     let (target_width, target_height) =
@@ -193,7 +193,7 @@ fn local_image_encode_webp(image: image::DynamicImage, max_edge: u32) -> Result<
     })
 }
 
-fn local_image_read_for_display(path: &std::path::Path, max_edge: u32) -> Result<LocalImageRenderData, String> {
+pub(crate) fn local_image_read_for_display(path: &std::path::Path, max_edge: u32) -> Result<LocalImageRenderData, String> {
     let raw = local_image_read_raw(path)?;
     let (image, mime) = local_image_decode_dynamic(&raw, path)?;
     let original_width = image.width();
@@ -211,7 +211,7 @@ fn local_image_read_for_display(path: &std::path::Path, max_edge: u32) -> Result
     local_image_encode_webp(image, max_edge)
 }
 
-fn local_image_read_original(path: &std::path::Path) -> Result<LocalImageRenderData, String> {
+pub(crate) fn local_image_read_original(path: &std::path::Path) -> Result<LocalImageRenderData, String> {
     let raw = local_image_read_raw(path)?;
     let (image, mime) = local_image_decode_dynamic(&raw, path)?;
     Ok(LocalImageRenderData {
@@ -225,14 +225,14 @@ fn local_image_read_original(path: &std::path::Path) -> Result<LocalImageRenderD
 }
 
 #[derive(Debug, Clone)]
-struct LocalImageReference {
-    start: usize,
-    end: usize,
-    raw_path: String,
-    alt: Option<String>,
+pub(crate) struct LocalImageReference {
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+    pub(crate) raw_path: String,
+    pub(crate) alt: Option<String>,
 }
 
-fn local_image_markdown_is_escaped(bytes: &[u8], index: usize) -> bool {
+pub(crate) fn local_image_markdown_is_escaped(bytes: &[u8], index: usize) -> bool {
     let mut cursor = index;
     let mut backslash_count = 0usize;
     while cursor > 0 {
@@ -245,7 +245,7 @@ fn local_image_markdown_is_escaped(bytes: &[u8], index: usize) -> bool {
     backslash_count % 2 == 1
 }
 
-fn local_image_skip_ascii_whitespace(bytes: &[u8], mut cursor: usize) -> usize {
+pub(crate) fn local_image_skip_ascii_whitespace(bytes: &[u8], mut cursor: usize) -> usize {
     while let Some(value) = bytes.get(cursor) {
         if !matches!(value, b' ' | b'\t' | b'\r' | b'\n') {
             break;
@@ -255,7 +255,7 @@ fn local_image_skip_ascii_whitespace(bytes: &[u8], mut cursor: usize) -> usize {
     cursor
 }
 
-fn local_image_unescape_markdown_text(raw: &str) -> String {
+pub(crate) fn local_image_unescape_markdown_text(raw: &str) -> String {
     let mut out = String::new();
     let mut chars = raw.chars().peekable();
     while let Some(ch) = chars.next() {
@@ -277,7 +277,7 @@ fn local_image_unescape_markdown_text(raw: &str) -> String {
     out
 }
 
-fn local_image_strip_markdown_destination_title(value: &str, quote: char) -> Option<String> {
+pub(crate) fn local_image_strip_markdown_destination_title(value: &str, quote: char) -> Option<String> {
     if !value.ends_with(quote) {
         return None;
     }
@@ -288,7 +288,7 @@ fn local_image_strip_markdown_destination_title(value: &str, quote: char) -> Opt
         .filter(|path| !path.is_empty())
 }
 
-fn local_image_clean_markdown_destination_path(value: &str) -> String {
+pub(crate) fn local_image_clean_markdown_destination_path(value: &str) -> String {
     let trimmed = value.trim();
     if local_image_is_windows_drive_path(trimmed) || trimmed.starts_with("\\\\") {
         return trimmed.to_string();
@@ -296,7 +296,7 @@ fn local_image_clean_markdown_destination_path(value: &str) -> String {
     local_image_unescape_markdown_text(trimmed)
 }
 
-fn local_image_extract_markdown_destination_path(raw: &str) -> String {
+pub(crate) fn local_image_extract_markdown_destination_path(raw: &str) -> String {
     let trimmed = raw.trim();
     if let Some(rest) = trimmed.strip_prefix('<') {
         if let Some(end) = rest.find('>') {
@@ -309,7 +309,7 @@ fn local_image_extract_markdown_destination_path(raw: &str) -> String {
     local_image_clean_markdown_destination_path(&without_title)
 }
 
-fn local_image_is_windows_drive_path(value: &str) -> bool {
+pub(crate) fn local_image_is_windows_drive_path(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes.len() >= 3
         && bytes[0].is_ascii_alphabetic()
@@ -317,7 +317,7 @@ fn local_image_is_windows_drive_path(value: &str) -> bool {
         && matches!(bytes[2], b'/' | b'\\')
 }
 
-fn local_image_uri_scheme(value: &str) -> Option<&str> {
+pub(crate) fn local_image_uri_scheme(value: &str) -> Option<&str> {
     let colon = value.find(':')?;
     let scheme = &value[..colon];
     let mut chars = scheme.chars();
@@ -331,7 +331,7 @@ fn local_image_uri_scheme(value: &str) -> Option<&str> {
     Some(scheme)
 }
 
-fn local_image_path_from_file_url(raw: &str) -> Option<String> {
+pub(crate) fn local_image_path_from_file_url(raw: &str) -> Option<String> {
     let parsed = reqwest::Url::parse(raw).ok()?;
     if parsed.scheme() != "file" {
         return None;
@@ -357,7 +357,7 @@ fn local_image_path_from_file_url(raw: &str) -> Option<String> {
     Some(decoded_path)
 }
 
-fn local_image_path_from_markdown_destination(raw: &str) -> Option<String> {
+pub(crate) fn local_image_path_from_markdown_destination(raw: &str) -> Option<String> {
     let value = local_image_extract_markdown_destination_path(raw);
     let trimmed = value.trim();
     if trimmed.is_empty() {
@@ -382,7 +382,7 @@ fn local_image_path_from_markdown_destination(raw: &str) -> Option<String> {
     Some(trimmed.to_string())
 }
 
-fn local_image_find_markdown_alt_end(text: &str, cursor: usize) -> Option<usize> {
+pub(crate) fn local_image_find_markdown_alt_end(text: &str, cursor: usize) -> Option<usize> {
     let bytes = text.as_bytes();
     let mut index = cursor;
     while index < bytes.len() {
@@ -394,7 +394,7 @@ fn local_image_find_markdown_alt_end(text: &str, cursor: usize) -> Option<usize>
     None
 }
 
-fn local_image_find_angle_destination_end(text: &str, cursor: usize) -> Option<(usize, usize)> {
+pub(crate) fn local_image_find_angle_destination_end(text: &str, cursor: usize) -> Option<(usize, usize)> {
     let bytes = text.as_bytes();
     let mut index = cursor + 1;
     while index < bytes.len() {
@@ -410,7 +410,7 @@ fn local_image_find_angle_destination_end(text: &str, cursor: usize) -> Option<(
     None
 }
 
-fn local_image_find_plain_destination_end(text: &str, cursor: usize) -> Option<(usize, usize)> {
+pub(crate) fn local_image_find_plain_destination_end(text: &str, cursor: usize) -> Option<(usize, usize)> {
     let bytes = text.as_bytes();
     let mut depth = 0usize;
     let mut index = cursor;
@@ -432,7 +432,7 @@ fn local_image_find_plain_destination_end(text: &str, cursor: usize) -> Option<(
     None
 }
 
-fn local_image_find_markdown_destination_end(text: &str, open_paren: usize) -> Option<(usize, usize, usize)> {
+pub(crate) fn local_image_find_markdown_destination_end(text: &str, open_paren: usize) -> Option<(usize, usize, usize)> {
     let bytes = text.as_bytes();
     let start = local_image_skip_ascii_whitespace(bytes, open_paren + 1);
     if bytes.get(start) == Some(&b'<') {
@@ -446,7 +446,7 @@ fn local_image_find_markdown_destination_end(text: &str, open_paren: usize) -> O
     Some((start, end, token_end))
 }
 
-fn local_image_find_next_markdown_reference(text: &str, cursor: usize) -> Option<LocalImageReference> {
+pub(crate) fn local_image_find_next_markdown_reference(text: &str, cursor: usize) -> Option<LocalImageReference> {
     let bytes = text.as_bytes();
     let mut search_from = cursor;
     while search_from + 2 <= text.len() {
@@ -484,11 +484,11 @@ fn local_image_find_next_markdown_reference(text: &str, cursor: usize) -> Option
     None
 }
 
-fn local_image_find_next_reference(text: &str, cursor: usize) -> Option<LocalImageReference> {
+pub(crate) fn local_image_find_next_reference(text: &str, cursor: usize) -> Option<LocalImageReference> {
     local_image_find_next_markdown_reference(text, cursor)
 }
 
-fn local_image_segment_from_reference(
+pub(crate) fn local_image_segment_from_reference(
     state: &AppState,
     reference: &LocalImageReference,
 ) -> PersistedInlineMessageSegment {
@@ -507,7 +507,7 @@ fn local_image_segment_from_reference(
     }
 }
 
-fn resolve_text_to_local_image_segments(
+pub(crate) fn resolve_text_to_local_image_segments(
     state: &AppState,
     text: &str,
 ) -> Vec<PersistedInlineMessageSegment> {
@@ -540,7 +540,7 @@ fn resolve_text_to_local_image_segments(
     segments
 }
 
-fn inline_segment_from_meme_segment(segment: PersistedMemeSegment) -> PersistedInlineMessageSegment {
+pub(crate) fn inline_segment_from_meme_segment(segment: PersistedMemeSegment) -> PersistedInlineMessageSegment {
     match segment {
         PersistedMemeSegment::Text { text } => PersistedInlineMessageSegment::Text { text },
         PersistedMemeSegment::Meme {
@@ -560,14 +560,14 @@ fn inline_segment_from_meme_segment(segment: PersistedMemeSegment) -> PersistedI
 }
 
 #[derive(Debug, Clone)]
-struct MemeAnnotationInlineReference {
-    start: usize,
-    end: usize,
-    meme: String,
-    path: String,
+pub(crate) struct MemeAnnotationInlineReference {
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+    pub(crate) meme: String,
+    pub(crate) path: String,
 }
 
-fn collect_meme_annotation_inline_references(
+pub(crate) fn collect_meme_annotation_inline_references(
     text: &str,
     annotations: &[MemeAnnotation],
 ) -> Vec<MemeAnnotationInlineReference> {
@@ -595,7 +595,7 @@ fn collect_meme_annotation_inline_references(
     out
 }
 
-fn inline_segment_from_meme_annotation(
+pub(crate) fn inline_segment_from_meme_annotation(
     state: &AppState,
     reference: &MemeAnnotationInlineReference,
 ) -> Result<PersistedInlineMessageSegment, String> {
@@ -627,7 +627,7 @@ fn inline_segment_from_meme_annotation(
     })
 }
 
-fn resolve_text_and_meme_annotations_to_inline_segments(
+pub(crate) fn resolve_text_and_meme_annotations_to_inline_segments(
     state: &AppState,
     text: &str,
     annotations: Option<&[MemeAnnotation]>,
@@ -714,7 +714,7 @@ fn resolve_text_and_meme_annotations_to_inline_segments(
     }
 }
 
-fn resolve_text_to_persisted_inline_segments(
+pub(crate) fn resolve_text_to_persisted_inline_segments(
     state: &AppState,
     text: &str,
     seed_source: &str,

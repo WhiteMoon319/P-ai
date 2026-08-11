@@ -1,16 +1,16 @@
-const PLAN_MARKDOWN_MAX_BYTES: u64 = 512 * 1024;
+pub(crate) const PLAN_MARKDOWN_MAX_BYTES: u64 = 512 * 1024;
 
 #[derive(Debug, Clone)]
-struct ResolvedPlanFilePath {
-    canonical_path: PathBuf,
-    display_path: String,
+pub(crate) struct ResolvedPlanFilePath {
+    pub(crate) canonical_path: PathBuf,
+    pub(crate) display_path: String,
 }
 
-fn plan_directory_for_root(root: &Path) -> PathBuf {
+pub(crate) fn plan_directory_for_root(root: &Path) -> PathBuf {
     root.join(".pai").join("plan")
 }
 
-fn plan_markdown_extension_allowed(path: &Path) -> bool {
+pub(crate) fn plan_markdown_extension_allowed(path: &Path) -> bool {
     path.extension()
         .and_then(|value| value.to_str())
         .map(|value| value.trim().to_ascii_lowercase())
@@ -18,7 +18,7 @@ fn plan_markdown_extension_allowed(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-fn plan_assistant_space_canonical(state: &AppState) -> Result<PathBuf, String> {
+pub(crate) fn plan_assistant_space_canonical(state: &AppState) -> Result<PathBuf, String> {
     terminal_system_workspace_resolved(state)
         .map(|workspace| workspace.path)
         .or_else(|_| {
@@ -29,7 +29,7 @@ fn plan_assistant_space_canonical(state: &AppState) -> Result<PathBuf, String> {
         })
 }
 
-fn plan_preferred_directory_for_conversation(
+pub(crate) fn plan_preferred_directory_for_conversation(
     state: &AppState,
     conversation: Option<&Conversation>,
 ) -> Result<PathBuf, String> {
@@ -52,7 +52,7 @@ pub(crate) fn plan_preferred_directory_display_for_conversation(
     ))
 }
 
-fn resolve_plan_candidate_path(base_root: &Path, raw_path: &str) -> Result<PathBuf, String> {
+pub(crate) fn resolve_plan_candidate_path(base_root: &Path, raw_path: &str) -> Result<PathBuf, String> {
     let normalized = normalize_terminal_path_input_for_current_platform(raw_path.trim());
     if normalized.is_empty() {
         return Err("plan.path 不能为空".to_string());
@@ -70,7 +70,7 @@ fn resolve_plan_candidate_path(base_root: &Path, raw_path: &str) -> Result<PathB
     }
 }
 
-fn plan_file_metadata(canonical_path: &Path) -> Result<std::fs::Metadata, String> {
+pub(crate) fn plan_file_metadata(canonical_path: &Path) -> Result<std::fs::Metadata, String> {
     std::fs::metadata(canonical_path).map_err(|err| {
         format!(
             "读取计划文件元数据失败，path={}，error={err}",
@@ -150,7 +150,7 @@ pub(crate) fn plan_tool_description() -> String {
     .join("\n")
 }
 
-fn plan_tool_should_auto_approve_present(conversation: Option<&Conversation>) -> bool {
+pub(crate) fn plan_tool_should_auto_approve_present(conversation: Option<&Conversation>) -> bool {
     conversation
         .map(|value| value.shell_autonomous_mode || conversation_is_remote_im_contact(value))
         .unwrap_or(false)

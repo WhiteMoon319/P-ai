@@ -1,10 +1,10 @@
-fn default_image_generation_count() -> u32 {
+pub(crate) fn default_image_generation_count() -> u32 {
     1
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-enum ImageGenerationOperation {
+pub(crate) enum ImageGenerationOperation {
     #[default]
     Generate,
     Edit,
@@ -12,30 +12,30 @@ enum ImageGenerationOperation {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ImageGenerationRequest {
-    prompt: String,
+pub(crate) struct ImageGenerationRequest {
+    pub(crate) prompt: String,
     #[serde(default)]
-    operation: ImageGenerationOperation,
+    pub(crate) operation: ImageGenerationOperation,
     #[serde(default, alias = "model_id")]
-    model_id: Option<String>,
+    pub(crate) model_id: Option<String>,
     #[serde(default, alias = "negative_prompt")]
-    negative_prompt: Option<String>,
+    pub(crate) negative_prompt: Option<String>,
     #[serde(default)]
-    size: Option<String>,
+    pub(crate) size: Option<String>,
     #[serde(default, alias = "aspect_ratio")]
-    aspect_ratio: Option<String>,
+    pub(crate) aspect_ratio: Option<String>,
     #[serde(default)]
-    quality: Option<String>,
+    pub(crate) quality: Option<String>,
     #[serde(default = "default_image_generation_count")]
-    n: u32,
+    pub(crate) n: u32,
     #[serde(default)]
-    seed: Option<i64>,
+    pub(crate) seed: Option<i64>,
     #[serde(default)]
-    steps: Option<u32>,
+    pub(crate) steps: Option<u32>,
     #[serde(default)]
-    images: Vec<String>,
+    pub(crate) images: Vec<String>,
     #[serde(default)]
-    mask: Option<String>,
+    pub(crate) mask: Option<String>,
 }
 
 impl Default for ImageGenerationRequest {
@@ -59,66 +59,66 @@ impl Default for ImageGenerationRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GeneratedImageAsset {
-    relative_path: String,
+pub(crate) struct GeneratedImageAsset {
+    pub(crate) relative_path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    remote_url: Option<String>,
-    markdown: String,
-    mime: String,
-    width: u32,
-    height: u32,
+    pub(crate) remote_url: Option<String>,
+    pub(crate) markdown: String,
+    pub(crate) mime: String,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    revised_prompt: Option<String>,
+    pub(crate) revised_prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ImageGenerationResult {
-    provider_id: String,
-    provider_name: String,
-    provider_type: ImageGenerationProviderKind,
-    model_id: String,
-    model: String,
-    images: Vec<GeneratedImageAsset>,
+pub(crate) struct ImageGenerationResult {
+    pub(crate) provider_id: String,
+    pub(crate) provider_name: String,
+    pub(crate) provider_type: ImageGenerationProviderKind,
+    pub(crate) model_id: String,
+    pub(crate) model: String,
+    pub(crate) images: Vec<GeneratedImageAsset>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    provider_text: Option<String>,
+    pub(crate) provider_text: Option<String>,
 }
 
 #[derive(Debug, Clone)]
-struct ResolvedImageGenerationModel {
-    endpoint_id: String,
-    provider: ImageGenerationProviderConfig,
-    model: ImageGenerationModelConfig,
+pub(crate) struct ResolvedImageGenerationModel {
+    pub(crate) endpoint_id: String,
+    pub(crate) provider: ImageGenerationProviderConfig,
+    pub(crate) model: ImageGenerationModelConfig,
 }
 
 #[derive(Debug, Clone)]
-enum PendingImageSource {
+pub(crate) enum PendingImageSource {
     Bytes(Vec<u8>),
     RemoteUrl(String),
 }
 
 #[derive(Debug, Clone)]
-struct PendingGeneratedImage {
-    source: PendingImageSource,
-    mime_hint: Option<String>,
-    remote_url: Option<String>,
-    revised_prompt: Option<String>,
+pub(crate) struct PendingGeneratedImage {
+    pub(crate) source: PendingImageSource,
+    pub(crate) mime_hint: Option<String>,
+    pub(crate) remote_url: Option<String>,
+    pub(crate) revised_prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
-struct ProviderImageGenerationOutput {
-    images: Vec<PendingGeneratedImage>,
-    text: Option<String>,
+pub(crate) struct ProviderImageGenerationOutput {
+    pub(crate) images: Vec<PendingGeneratedImage>,
+    pub(crate) text: Option<String>,
 }
 
 #[derive(Debug, Clone)]
-struct ImageEditInputImage {
-    bytes: Vec<u8>,
-    mime: String,
+pub(crate) struct ImageEditInputImage {
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) mime: String,
 }
 
 #[derive(Debug, Clone, Default)]
-struct ImageEditInputs {
-    images: Vec<ImageEditInputImage>,
-    mask: Option<ImageEditInputImage>,
+pub(crate) struct ImageEditInputs {
+    pub(crate) images: Vec<ImageEditInputImage>,
+    pub(crate) mask: Option<ImageEditInputImage>,
 }

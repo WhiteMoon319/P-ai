@@ -1,5 +1,5 @@
 impl ConversationServiceV2 {
-    fn get_chat_snapshot(
+    pub(crate) fn get_chat_snapshot(
         &self,
         state: &AppState,
         input: &SessionSelector,
@@ -144,7 +144,7 @@ impl ConversationServiceV2 {
         })
     }
 
-    fn get_conversation_recent_messages(
+    pub(crate) fn get_conversation_recent_messages(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -166,7 +166,7 @@ impl ConversationServiceV2 {
             .unwrap_or_default())
     }
 
-    fn get_conversation_prompt_context(
+    pub(crate) fn get_conversation_prompt_context(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -191,7 +191,7 @@ impl ConversationServiceV2 {
         Ok(conversation)
     }
 
-    fn get_current_compaction_segment_messages_through(
+    pub(crate) fn get_current_compaction_segment_messages_through(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -221,7 +221,7 @@ impl ConversationServiceV2 {
         Ok(messages)
     }
 
-    fn get_conversation_snapshot(
+    pub(crate) fn get_conversation_snapshot(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -246,7 +246,7 @@ impl ConversationServiceV2 {
         Ok(conversation)
     }
 
-    fn try_get_conversation_snapshot(
+    pub(crate) fn try_get_conversation_snapshot(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -262,7 +262,7 @@ impl ConversationServiceV2 {
         }
     }
 
-    fn get_conversation_last_block(
+    pub(crate) fn get_conversation_last_block(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -272,7 +272,7 @@ impl ConversationServiceV2 {
         self.get_conversation_block(state, conversation_id, None)
     }
 
-    fn get_conversation_block(
+    pub(crate) fn get_conversation_block(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -333,7 +333,7 @@ impl ConversationServiceV2 {
     }
 
     // 前端消息展示专用读取：返回值已经做过展示投影，禁止写路径/撤回路径复用。
-    fn get_recent_messages_for_frontend_display_only(
+    pub(crate) fn get_recent_messages_for_frontend_display_only(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -344,7 +344,7 @@ impl ConversationServiceV2 {
         ))
     }
 
-    fn get_all_messages(
+    pub(crate) fn get_all_messages(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -357,7 +357,7 @@ impl ConversationServiceV2 {
         Ok(project_messages_for_frontend_display_only(messages))
     }
 
-    fn get_recent_block_messages(
+    pub(crate) fn get_recent_block_messages(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -381,7 +381,7 @@ impl ConversationServiceV2 {
         Ok(project_messages_for_frontend_display_only(messages))
     }
 
-    fn get_active_conversation_messages(
+    pub(crate) fn get_active_conversation_messages(
         &self,
         state: &AppState,
         input: &SessionSelector,
@@ -396,7 +396,7 @@ impl ConversationServiceV2 {
     }
 
     // 前端消息展示专用读取：返回值已经做过展示投影，禁止写路径/撤回路径复用。
-    fn get_message_by_id_for_frontend_display_only(
+    pub(crate) fn get_message_by_id_for_frontend_display_only(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -407,7 +407,7 @@ impl ConversationServiceV2 {
         ))
     }
 
-    fn read_messages_before_internal(
+    pub(crate) fn read_messages_before_internal(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -447,7 +447,7 @@ impl ConversationServiceV2 {
         Ok((project_messages_for_frontend_display_only(page), has_more))
     }
 
-    fn read_messages_after_internal(
+    pub(crate) fn read_messages_after_internal(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -485,7 +485,7 @@ impl ConversationServiceV2 {
         Ok(project_messages_for_frontend_display_only(page))
     }
 
-    fn get_messages_before(
+    pub(crate) fn get_messages_before(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -501,7 +501,7 @@ impl ConversationServiceV2 {
         Ok(build_message_page_view_v2(messages, has_more, false))
     }
 
-    fn get_messages_after(
+    pub(crate) fn get_messages_after(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -522,7 +522,7 @@ impl ConversationServiceV2 {
         ))
     }
 
-    fn get_messages_after_with_fallback(
+    pub(crate) fn get_messages_after_with_fallback(
         &self,
         state: &AppState,
         conversation_id: &str,

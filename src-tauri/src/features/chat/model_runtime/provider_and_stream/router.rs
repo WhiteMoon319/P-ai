@@ -1,4 +1,4 @@
-fn replace_disabled_multimodal_with_text(
+pub(crate) fn replace_disabled_multimodal_with_text(
     prepared: &mut PreparedPrompt,
     enable_image: bool,
     enable_audio: bool,
@@ -83,14 +83,14 @@ mod router_multimodal_filter_tests {
     }
 }
 
-fn prepared_has_any_history_image(prepared: &PreparedPrompt) -> bool {
+pub(crate) fn prepared_has_any_history_image(prepared: &PreparedPrompt) -> bool {
     prepared
         .history_messages
         .iter()
         .any(|hm| hm.role == "user" && !hm.images.is_empty())
 }
 
-fn append_unavailable_tool_notices_to_prepared(
+pub(crate) fn append_unavailable_tool_notices_to_prepared(
     prepared: &mut PreparedPrompt,
     notices: &[String],
 ) {
@@ -109,7 +109,7 @@ fn append_unavailable_tool_notices_to_prepared(
     prepared_prompt_append_latest_user_extra_block(prepared, block);
 }
 
-fn apply_cached_system_message_user_fallback_to_prepared(
+pub(crate) fn apply_cached_system_message_user_fallback_to_prepared(
     prepared: &mut PreparedPrompt,
     base_url: &str,
     app_state: Option<&AppState>,
@@ -124,7 +124,7 @@ fn apply_cached_system_message_user_fallback_to_prepared(
     }
 }
 
-async fn retry_openai_responses_with_system_message_user_fallback(
+pub(crate) async fn retry_openai_responses_with_system_message_user_fallback(
     api_config: &ResolvedApiConfig,
     app_config: &AppConfig,
     selected_api: &ApiConfig,
@@ -198,7 +198,7 @@ async fn retry_openai_responses_with_system_message_user_fallback(
     }
 }
 
-async fn dispatch_openai_style_call(
+pub(crate) async fn dispatch_openai_style_call(
     api_config: &ResolvedApiConfig,
     selected_api: &ApiConfig,
     model_name: &str,
@@ -259,7 +259,7 @@ async fn dispatch_openai_style_call(
     }
 }
 
-async fn prepare_openai_style_tool_assembly(
+pub(crate) async fn prepare_openai_style_tool_assembly(
     app_config: &AppConfig,
     selected_api: &ApiConfig,
     agent: &AgentProfile,
@@ -289,7 +289,7 @@ async fn prepare_openai_style_tool_assembly(
     Ok(Some(tool_assembly))
 }
 
-async fn execute_openai_style_request(
+pub(crate) async fn execute_openai_style_request(
     api_config: &ResolvedApiConfig,
     selected_api: &ApiConfig,
     model_name: &str,
@@ -395,7 +395,7 @@ async fn execute_openai_style_request(
     }
 }
 
-async fn call_openai_style_non_stream_fallback(
+pub(crate) async fn call_openai_style_non_stream_fallback(
     api_config: &ResolvedApiConfig,
     app_config: &AppConfig,
     selected_api: &ApiConfig,
@@ -439,7 +439,7 @@ async fn call_openai_style_non_stream_fallback(
     .await
 }
 
-async fn call_model_dispatch(
+pub(crate) async fn call_model_dispatch(
     api_config: &ResolvedApiConfig,
     app_config: &AppConfig,
     selected_api: &ApiConfig,

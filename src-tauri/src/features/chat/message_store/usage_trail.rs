@@ -2,10 +2,10 @@
 // 全局 SQLite 台账表：按「小时桶 × 会话」记录每次 LLM 调用的 token 用量，
 // 作为足迹墙与用量页的唯一用量数据源（写时记账，不逐会话读消息）。
 
-pub(super) const USAGE_TRAIL_EPOCH_BUCKET: &str = "epoch";
+pub(crate) const USAGE_TRAIL_EPOCH_BUCKET: &str = "epoch";
 
 #[derive(Debug, Clone, Default)]
-pub(super) struct UsageTrailTokenDelta {
+pub(crate) struct UsageTrailTokenDelta {
     pub input_tokens: u64,
     pub output_tokens: u64,
     pub total_tokens: u64,
@@ -15,7 +15,7 @@ pub(super) struct UsageTrailTokenDelta {
 }
 
 impl UsageTrailTokenDelta {
-    pub(super) fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.input_tokens == 0
             && self.output_tokens == 0
             && self.total_tokens == 0
@@ -24,7 +24,7 @@ impl UsageTrailTokenDelta {
             && self.reasoning_tokens == 0
     }
 
-    pub(super) fn saturating_add_assign(&mut self, other: &UsageTrailTokenDelta) {
+    pub(crate) fn saturating_add_assign(&mut self, other: &UsageTrailTokenDelta) {
         self.input_tokens = self.input_tokens.saturating_add(other.input_tokens);
         self.output_tokens = self.output_tokens.saturating_add(other.output_tokens);
         self.total_tokens = self.total_tokens.saturating_add(other.total_tokens);
@@ -35,7 +35,7 @@ impl UsageTrailTokenDelta {
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct UsageTrailDelta {
+pub(crate) struct UsageTrailDelta {
     pub conversation_id: String,
     pub agent_id: String,
     pub department_id: String,
@@ -48,7 +48,7 @@ pub(super) struct UsageTrailDelta {
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct UsageTrailRow {
+pub(crate) struct UsageTrailRow {
     pub bucket: String,
     pub conversation_id: String,
     pub agent_id: String,
@@ -61,7 +61,7 @@ pub(super) struct UsageTrailRow {
     pub tokens: UsageTrailTokenDelta,
 }
 
-fn usage_trail_read_u64(usage: &Value, keys: &[&str]) -> u64 {
+pub(crate) fn usage_trail_read_u64(usage: &Value, keys: &[&str]) -> u64 {
     keys.iter()
         .find_map(|key| {
             let value = usage.get(*key)?;
@@ -74,7 +74,7 @@ fn usage_trail_read_u64(usage: &Value, keys: &[&str]) -> u64 {
 
 /// 从 LLM usage JSON 解析本次调用的 token 增量，key 口径与
 /// conversation_cumulative_usage_add_provider_usage 保持一致。
-pub(super) fn usage_trail_token_delta_from_usage_value(usage: &Value) -> UsageTrailTokenDelta {
+pub(crate) fn usage_trail_token_delta_from_usage_value(usage: &Value) -> UsageTrailTokenDelta {
     let input_tokens = usage_trail_read_u64(usage, &["promptTokens", "prompt_tokens"]);
     let output_tokens = usage_trail_read_u64(usage, &["completionTokens", "completion_tokens"]);
     UsageTrailTokenDelta {
@@ -101,7 +101,7 @@ pub(super) fn usage_trail_token_delta_from_usage_value(usage: &Value) -> UsageTr
 
 /// 本地时区小时桶：YYYY-MM-DDTHH:00:00。
 /// 按凌晨 4 点分界：0:00-3:59 的使用归属前一个分界日（日期减一天），小时保持实际小时。
-pub(super) fn usage_trail_hour_bucket(dt: OffsetDateTime) -> String {
+pub(crate) fn usage_trail_hour_bucket(dt: OffsetDateTime) -> String {
     let local = to_local_datetime(dt);
     let shifted = local - time::Duration::hours(4);
     format!(
@@ -114,7 +114,7 @@ pub(super) fn usage_trail_hour_bucket(dt: OffsetDateTime) -> String {
 }
 
 /// 按小时桶 UPSERT 累加一次用量增量；同一小时同一会话同一模型多次调用累加同一行。
-pub(super) fn chat_metadata_store_usage_trail_upsert_delta(
+pub(crate) fn chat_metadata_store_usage_trail_upsert_delta(
     data_path: &PathBuf,
     bucket: &str,
     delta: &UsageTrailDelta,
@@ -131,7 +131,7 @@ pub(super) fn chat_metadata_store_usage_trail_upsert_delta(
 }
 
 /// 在已打开的连接上执行台账 UPSERT（供写入链路与迁移事务共用）。
-fn usage_trail_upsert_on_conn(
+pub(crate) fn usage_trail_upsert_on_conn(
     conn: &rusqlite::Connection,
     bucket: &str,
     delta: &UsageTrailDelta,
@@ -180,7 +180,7 @@ fn usage_trail_upsert_on_conn(
 }
 
 /// 查询台账行；bucket_start 为本地小时桶下界（含），None 表示全部（含 epoch 历史桶）。
-pub(super) fn chat_metadata_store_usage_trail_query(
+pub(crate) fn chat_metadata_store_usage_trail_query(
     data_path: &PathBuf,
     bucket_start: Option<&str>,
 ) -> Result<Vec<UsageTrailRow>, String> {
@@ -242,7 +242,7 @@ pub(super) fn chat_metadata_store_usage_trail_query(
 ///
 /// 事务 + 进程内互斥：全程在一个事务内 UPSERT 并写入 completed 标记，
 /// 中途失败整体回滚，避免重跑时对已写入的 epoch 行再次累加（翻倍）。
-pub(super) fn chat_metadata_store_run_usage_trail_migration(
+pub(crate) fn chat_metadata_store_run_usage_trail_migration(
     data_path: &PathBuf,
     config: &AppConfig,
 ) -> Result<(), String> {
@@ -370,7 +370,7 @@ pub(super) fn chat_metadata_store_run_usage_trail_migration(
     Ok(())
 }
 
-fn usage_trail_kind_key_from_meta(meta: &ConversationShardMeta) -> String {
+pub(crate) fn usage_trail_kind_key_from_meta(meta: &ConversationShardMeta) -> String {
     if meta.id.trim() == SYSTEM_NOTIFICATION_CONVERSATION_ID
         || meta.conversation_kind.trim() == CONVERSATION_KIND_SYSTEM_NOTIFICATION
     {
@@ -394,7 +394,7 @@ fn usage_trail_kind_key_from_meta(meta: &ConversationShardMeta) -> String {
     "normal".to_string()
 }
 
-fn usage_trail_resolve_api_config_id_from_meta(meta: &ConversationShardMeta, config: &AppConfig) -> String {
+pub(crate) fn usage_trail_resolve_api_config_id_from_meta(meta: &ConversationShardMeta, config: &AppConfig) -> String {
     let preferred = meta
         .preferred_api_config_id
         .as_deref()
@@ -432,7 +432,7 @@ fn usage_trail_resolve_api_config_id_from_meta(meta: &ConversationShardMeta, con
         .unwrap_or_default()
 }
 
-fn usage_trail_provider_key_from_api_config_id(api_config_id: &str, config: &AppConfig) -> String {
+pub(crate) fn usage_trail_provider_key_from_api_config_id(api_config_id: &str, config: &AppConfig) -> String {
     let normalized_api_config_id = api_config_id.trim();
     if normalized_api_config_id.is_empty() {
         return "unknown_provider".to_string();
@@ -449,7 +449,7 @@ fn usage_trail_provider_key_from_api_config_id(api_config_id: &str, config: &App
         .unwrap_or_else(|| "unknown_provider".to_string())
 }
 
-fn usage_trail_provider_label_from_provider_key(provider_key: &str, config: &AppConfig) -> String {
+pub(crate) fn usage_trail_provider_label_from_provider_key(provider_key: &str, config: &AppConfig) -> String {
     let normalized_provider_key = provider_key.trim();
     if normalized_provider_key.is_empty() {
         return "未识别供应商".to_string();
@@ -462,7 +462,7 @@ fn usage_trail_provider_label_from_provider_key(provider_key: &str, config: &App
         .unwrap_or_else(|| normalized_provider_key.to_string())
 }
 
-fn usage_trail_resolve_model_name(api_config_id: &str, config: &AppConfig) -> String {
+pub(crate) fn usage_trail_resolve_model_name(api_config_id: &str, config: &AppConfig) -> String {
     let normalized_api_config_id = api_config_id.trim();
     if normalized_api_config_id.is_empty() {
         return String::new();

@@ -1,4 +1,4 @@
-fn delegate_parse_session_parts(session_id: &str) -> (String, String, Option<String>) {
+pub(crate) fn delegate_parse_session_parts(session_id: &str) -> (String, String, Option<String>) {
     let parts = session_id
         .split("::")
         .map(str::trim)
@@ -44,19 +44,19 @@ fn delegate_parse_session_parts(session_id: &str) -> (String, String, Option<Str
     }
 }
 
-fn delegate_session_conversation_id(session_id: &str) -> Option<String> {
+pub(crate) fn delegate_session_conversation_id(session_id: &str) -> Option<String> {
     let (_, _, conversation_id) = delegate_parse_session_parts(session_id);
     conversation_id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
 }
 
-fn delegate_session_agent_id(session_id: &str) -> String {
+pub(crate) fn delegate_session_agent_id(session_id: &str) -> String {
     let (_, agent_id, _) = delegate_parse_session_parts(session_id);
     agent_id
 }
 
-fn delegate_session_is_remote_reply_delegate(session_id: &str) -> bool {
+pub(crate) fn delegate_session_is_remote_reply_delegate(session_id: &str) -> bool {
     let normalized = session_id.trim();
     normalized
         .split("::")
@@ -64,7 +64,7 @@ fn delegate_session_is_remote_reply_delegate(session_id: &str) -> bool {
         .is_some_and(|tag| tag.trim().starts_with("remote_reply_delegate:"))
 }
 
-fn delegate_build_task_prompt_block(
+pub(crate) fn delegate_build_task_prompt_block(
     title: &str,
     why: &str,
     goal: &str,
@@ -97,7 +97,7 @@ fn delegate_build_task_prompt_block(
     prompt_xml_block("delegate goal", lines.join("\n\n"))
 }
 
-fn delegate_build_trigger_provider_meta(
+pub(crate) fn delegate_build_trigger_provider_meta(
     delegate: &DelegateEntry,
     root_conversation_id: &str,
 ) -> Value {
@@ -115,7 +115,7 @@ fn delegate_build_trigger_provider_meta(
     })
 }
 
-fn delegate_enqueue_result_message(
+pub(crate) fn delegate_enqueue_result_message(
     app_state: &AppState,
     root_conversation_id: &str,
     speaker_agent_id: &str,
@@ -164,18 +164,18 @@ fn delegate_enqueue_result_message(
     )
 }
 
-const AGENT_WORK_EVENT_START: &str = "easy-call:agent-work-start";
-const AGENT_WORK_EVENT_STOP: &str = "easy-call:agent-work-stop";
+pub(crate) const AGENT_WORK_EVENT_START: &str = "easy-call:agent-work-start";
+pub(crate) const AGENT_WORK_EVENT_STOP: &str = "easy-call:agent-work-stop";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct AgentWorkSignalPayload {
-    conversation_id: String,
-    agent_id: String,
-    delegate_id: String,
+pub(crate) struct AgentWorkSignalPayload {
+    pub(crate) conversation_id: String,
+    pub(crate) agent_id: String,
+    pub(crate) delegate_id: String,
 }
 
-fn emit_agent_work_signal(
+pub(crate) fn emit_agent_work_signal(
     app_state: &AppState,
     event_name: &str,
     conversation_id: &str,
@@ -206,9 +206,9 @@ fn emit_agent_work_signal(
 
 /// 委托线程进入时将 conversation_id 插入全局活跃表，离开时自动移除。
 /// 工具审批链路通过查表判断当前是否应跳过弹窗（表非空 → 不弹窗，默认拒绝）。
-struct NoApprovalDialogGuard<'a> {
-    state: &'a AppState,
-    conversation_id: String,
+pub(crate) struct NoApprovalDialogGuard<'a> {
+    pub(crate) state: &'a AppState,
+    pub(crate) conversation_id: String,
 }
 
 impl<'a> NoApprovalDialogGuard<'a> {
@@ -236,7 +236,7 @@ impl<'a> Drop for NoApprovalDialogGuard<'a> {
     }
 }
 
-async fn delegate_execute_agent_prompt(
+pub(crate) async fn delegate_execute_agent_prompt(
     app_state: &AppState,
     delegate: &DelegateEntry,
     target_api_config_id: &str,
@@ -294,7 +294,7 @@ async fn delegate_execute_agent_prompt(
     send_chat_message_inner(request, app_state, &noop_channel).await
 }
 
-async fn delegate_execute_agent_initial_run(
+pub(crate) async fn delegate_execute_agent_initial_run(
     app_state: &AppState,
     delegate: &DelegateEntry,
     target_api_config_id: &str,
@@ -318,7 +318,7 @@ async fn delegate_execute_agent_initial_run(
     .await
 }
 
-fn delegate_runtime_thread_touch(
+pub(crate) fn delegate_runtime_thread_touch(
     app_state: &AppState,
     delegate_id: &str,
 ) -> Result<(), String> {
@@ -328,7 +328,7 @@ fn delegate_runtime_thread_touch(
     })
 }
 
-async fn delegate_run_thread_to_completion(
+pub(crate) async fn delegate_run_thread_to_completion(
     app_state: AppState,
     delegate: DelegateEntry,
     target_api_config_ids: Vec<String>,
