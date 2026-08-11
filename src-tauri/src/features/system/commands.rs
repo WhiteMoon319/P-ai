@@ -55,10 +55,12 @@ include!("commands/share_export_commands.rs");
 include!("commands/memory_curation/prompt_contract.rs");
 
 // ==================== JSON提取工具 ====================
-include!("commands/json_extractor.rs");
+// json_extractor 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::json_extractor::*;
 
 // ==================== 归档JSON解析层 ====================
-include!("commands/archive_summary_parser.rs");
+// archive_summary_parser 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::archive_summary_parser::*;
 
 // ==================== 推理网关层 ====================
 include!("commands/inference_gateway.rs");
@@ -76,7 +78,8 @@ include!("commands/archive_commands.rs");
 include!("commands/archive_io_commands.rs");
 
 // ==================== 归档主持人格选择 ====================
-include!("commands/archive_host_selector.rs");
+// archive_host_selector 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::archive_host_selector::*;
 
 // ==================== 会话归档与压缩入口 ====================
 include!("commands/conversation_archive.rs");

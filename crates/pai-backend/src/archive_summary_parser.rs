@@ -1,12 +1,17 @@
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::json_extractor::extract_best_json_object_value;
+
 #[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
 #[serde(untagged)]
-pub(crate) enum StringishId {
+pub enum StringishId {
     Text(String),
     Integer(i64),
     Unsigned(u64),
 }
 
-pub(crate) fn stringish_id_to_string(value: StringishId) -> Option<String> {
+pub fn stringish_id_to_string(value: StringishId) -> Option<String> {
     match value {
         StringishId::Text(text) => {
             let trimmed = text.trim();
@@ -21,7 +26,7 @@ pub(crate) fn stringish_id_to_string(value: StringishId) -> Option<String> {
     }
 }
 
-pub(crate) fn deserialize_stringish_ids<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+pub fn deserialize_stringish_ids<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -32,7 +37,7 @@ where
         .collect::<Vec<_>>())
 }
 
-pub(crate) fn deserialize_trimmed_strings<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+pub fn deserialize_trimmed_strings<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -46,7 +51,7 @@ where
 
 /// openLoops 兼容两种模型输出形态：纯字符串数组 ["..."] 或带 loop 键的对象数组 [{"loop": "..."}]。
 /// 对象形态缺少 loop 键或 loop 不是字符串时跳过该元素；最终统一为裁剪后的非空字符串列表。
-pub(crate) fn deserialize_open_loops<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+pub fn deserialize_open_loops<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -73,20 +78,20 @@ where
 
 #[derive(Debug, Clone, Serialize, Deserialize, rmcp::schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ArchiveMemoryDraft {
+pub struct ArchiveMemoryDraft {
     #[serde(default)]
-    pub(crate) memory_type: String,
+    pub memory_type: String,
     #[serde(default)]
-    pub(crate) judgment: String,
+    pub judgment: String,
     #[serde(default)]
-    pub(crate) reasoning: String,
+    pub reasoning: String,
     #[serde(default, deserialize_with = "deserialize_trimmed_strings")]
-    pub(crate) tags: Vec<String>,
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, rmcp::schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum ArchiveMemoryActionKind {
+pub enum ArchiveMemoryActionKind {
     Create,
     Update,
     Merge,
@@ -94,33 +99,33 @@ pub(crate) enum ArchiveMemoryActionKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize, rmcp::schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ArchiveMemoryActionDraft {
-    pub(crate) action: ArchiveMemoryActionKind,
+pub struct ArchiveMemoryActionDraft {
+    pub action: ArchiveMemoryActionKind,
     #[serde(default, deserialize_with = "deserialize_stringish_ids")]
-    pub(crate) source_memory_ids: Vec<String>,
-    pub(crate) memory: ArchiveMemoryDraft,
+    pub source_memory_ids: Vec<String>,
+    pub memory: ArchiveMemoryDraft,
 }
 
 #[derive(Debug, Clone, Deserialize, rmcp::schemars::JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct MemoryCurationDraft {
+pub struct MemoryCurationDraft {
     #[serde(default)]
-    pub(crate) title: String,
+    pub title: String,
     #[serde(default)]
-    pub(crate) summary: String,
+    pub summary: String,
     #[serde(default, deserialize_with = "deserialize_open_loops")]
-    pub(crate) open_loops: Vec<String>,
+    pub open_loops: Vec<String>,
     #[serde(default, deserialize_with = "deserialize_stringish_ids")]
-    pub(crate) useful_memory_ids: Vec<String>,
+    pub useful_memory_ids: Vec<String>,
     #[serde(default)]
-    pub(crate) memory_actions: Vec<ArchiveMemoryActionDraft>,
+    pub memory_actions: Vec<ArchiveMemoryActionDraft>,
 }
 
-pub(crate) fn memory_curation_uses_removed_legacy_fields(obj: &serde_json::Map<String, serde_json::Value>) -> bool {
+pub fn memory_curation_uses_removed_legacy_fields(obj: &serde_json::Map<String, serde_json::Value>) -> bool {
     obj.contains_key("newMemories") || obj.contains_key("profileActions")
 }
 
-pub(crate) fn parse_memory_curation_draft_from_value(value: serde_json::Value) -> Option<MemoryCurationDraft> {
+pub fn parse_memory_curation_draft_from_value(value: serde_json::Value) -> Option<MemoryCurationDraft> {
     let obj = value.as_object()?;
     let has_any_useful_key = obj.contains_key("usefulMemoryIds")
         || obj.contains_key("title")
@@ -137,7 +142,7 @@ pub(crate) fn parse_memory_curation_draft_from_value(value: serde_json::Value) -
     validate_memory_curation_draft(parsed)
 }
 
-pub(crate) fn validate_memory_curation_draft(draft: MemoryCurationDraft) -> Option<MemoryCurationDraft> {
+pub fn validate_memory_curation_draft(draft: MemoryCurationDraft) -> Option<MemoryCurationDraft> {
     let memory_actions_valid = draft.memory_actions.iter().all(|item| match item.action {
         ArchiveMemoryActionKind::Create => item.source_memory_ids.is_empty(),
         ArchiveMemoryActionKind::Update => !item.source_memory_ids.is_empty(),
@@ -150,7 +155,7 @@ pub(crate) fn validate_memory_curation_draft(draft: MemoryCurationDraft) -> Opti
     Some(draft)
 }
 
-pub(crate) fn parse_memory_curation_draft(raw: &str) -> Option<MemoryCurationDraft> {
+pub fn parse_memory_curation_draft(raw: &str) -> Option<MemoryCurationDraft> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return None;
@@ -176,7 +181,7 @@ pub(crate) fn parse_memory_curation_draft(raw: &str) -> Option<MemoryCurationDra
 }
 
 #[cfg(test)]
-pub(crate) mod archive_summary_parser_tests {
+pub mod archive_summary_parser_tests {
     use super::*;
 
     #[test]

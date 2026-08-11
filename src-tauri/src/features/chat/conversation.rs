@@ -102,29 +102,8 @@ pub(crate) fn conversation_is_system_notification(conversation: &Conversation) -
         || conversation.conversation_kind.trim() == CONVERSATION_KIND_SYSTEM_NOTIFICATION
 }
 
-pub(crate) fn available_non_user_agent<'a>(
-    agents: &'a [AgentProfile],
-    agent_id: &str,
-) -> Option<&'a AgentProfile> {
-    let agent_id = agent_id.trim();
-    if agent_id.is_empty() {
-        return None;
-    }
-    agents
-        .iter()
-        .find(|agent| agent.id == agent_id && !agent.is_built_in_user)
-}
-
-pub(crate) fn first_available_department_agent<'a>(
-    department: &DepartmentConfig,
-    agents: &'a [AgentProfile],
-) -> Option<&'a AgentProfile> {
-    department
-        .agent_ids
-        .iter()
-        .map(|id| id.trim())
-        .find_map(|agent_id| available_non_user_agent(agents, agent_id))
-}
+// available_non_user_agent / first_available_department_agent 已迁至
+// crates/pai-backend archive_host_selector（阶段 4），通过 crate 根重导出生效。
 
 pub(crate) fn resolve_conversation_bound_agent<'a>(
     conversation: &Conversation,

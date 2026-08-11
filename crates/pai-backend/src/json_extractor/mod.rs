@@ -1,4 +1,6 @@
-pub(crate) fn strip_json_code_fences(text: &str) -> String {
+use serde_json::Value;
+
+pub fn strip_json_code_fences(text: &str) -> String {
     text.replace("```json", "")
         .replace("```JSON", "")
         .replace("```", "")
@@ -6,7 +8,7 @@ pub(crate) fn strip_json_code_fences(text: &str) -> String {
         .to_string()
 }
 
-pub(crate) fn find_balanced_json_object_candidates(text: &str) -> Vec<&str> {
+pub fn find_balanced_json_object_candidates(text: &str) -> Vec<&str> {
     let mut candidates = Vec::new();
     let mut in_string = false;
     let mut escaped = false;
@@ -54,7 +56,7 @@ pub(crate) fn find_balanced_json_object_candidates(text: &str) -> Vec<&str> {
     candidates
 }
 
-pub(crate) fn find_json_object_candidates_from_each_start(text: &str) -> Vec<&str> {
+pub fn find_json_object_candidates_from_each_start(text: &str) -> Vec<&str> {
     let mut candidates = Vec::new();
     for (start, ch) in text.char_indices() {
         if ch != '{' {
@@ -97,7 +99,7 @@ pub(crate) fn find_json_object_candidates_from_each_start(text: &str) -> Vec<&st
     candidates
 }
 
-pub(crate) fn select_best_json_object_candidate(
+pub fn select_best_json_object_candidate(
     candidates: Vec<&str>,
     required_fields: &[&str],
     optional_fields: &[&str],
@@ -135,7 +137,7 @@ pub(crate) fn select_best_json_object_candidate(
     best.map(|(_, value)| value)
 }
 
-pub(crate) fn extract_best_json_object_value(
+pub fn extract_best_json_object_value(
     text: &str,
     separator: &str,
     required_fields: &[&str],
@@ -167,7 +169,7 @@ pub(crate) fn extract_best_json_object_value(
 }
 
 #[cfg(test)]
-pub(crate) mod json_extractor_tests {
+pub mod json_extractor_tests {
     use super::*;
 
     #[test]
