@@ -1172,7 +1172,10 @@ fun ChatScreen(
                             shape = MaterialTheme.shapes.medium,
                             modifier = Modifier.padding(12.dp),
                         ) {
-                            MarkdownText(content = streaming, modifier = Modifier.padding(10.dp))
+                            MarkdownText(
+                                content = streaming + if (isStreaming) "▍" else "",
+                                modifier = Modifier.padding(10.dp),
+                            )
                         }
                     }
                 }
