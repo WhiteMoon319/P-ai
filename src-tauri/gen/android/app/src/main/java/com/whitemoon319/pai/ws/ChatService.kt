@@ -171,6 +171,13 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("conversation.exportShare", mapOf("input" to mapOf("conversationId" to conversationId)), Map::class.java) as Map<String, Any?>
     }
 
+    /** 设置会话自动推送远程联系人（conversation.autoPush）。 */
+    suspend fun setConversationAutoPush(conversationId: String, remoteContactId: String?): Map<String, Any?> {
+        val input = mapOf("conversationId" to conversationId, "remoteContactId" to remoteContactId)
+        @Suppress("UNCHECKED_CAST")
+        return client.request("conversation.autoPush", mapOf("input" to input), Map::class.java) as Map<String, Any?>
+    }
+
     /** 当前会话提示词预览（get_prompt_preview）。 */
     suspend fun promptPreview(
         conversationId: String,

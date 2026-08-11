@@ -220,6 +220,8 @@ private fun ConversationListScreenImpl(
     val context = LocalContext.current
     val conversations by vm.conversations.collectAsState()
     val loading by vm.loading.collectAsState()
+    var autoPushTargetConvId by remember { mutableStateOf<String?>(null) }
+    val autoPushContacts = vm.remoteImContacts.collectAsState().value
     var showNewDialog by remember { mutableStateOf(false) }
     var fullOptions by remember { mutableStateOf<com.whitemoon319.pai.model.CreateConversationOptions>(com.whitemoon319.pai.model.CreateConversationOptions()) }
     var optionsLoading by remember { mutableStateOf(false) }
@@ -305,6 +307,12 @@ private fun ConversationListScreenImpl(
                                         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("PAI 会话导出", result.second))
                                         android.widget.Toast.makeText(context, "已复制导出内容（${result.first}）", android.widget.Toast.LENGTH_SHORT).show()
                                     }
+                                }
+                            },
+                            onAutoPush = { convId ->
+                                scope.launch {
+                                    vm.loadRemoteImContacts()
+                                    autoPushTargetConvId = convId
                                 }
                             },
                             onDelete = {
@@ -405,6 +413,62 @@ private fun ConversationListScreenImpl(
             },
             dismissButton = {
                 TextButton(onClick = { showNewDialog = false }) { Text("取消") }
+            },
+        )
+    }
+
+    // 自动推送目标联系人选择
+    autoPushTargetConvId?.let { convId ->
+        AlertDialog(
+            onDismissRequest = { autoPushTargetConvId = null },
+            title = { Text("自动推送联系人") },
+            text = {
+                val contacts = autoPushContacts.orEmpty()
+                if (contacts.isEmpty()) {
+                    Text(
+                        "暂无远程 IM 联系人。可先到设置 → 远程IM 查看；选择联系人后该会话的新消息会自动推送给对方。",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else {
+                    LazyColumn(Modifier.heightIn(max = 320.dp)) {
+                        items(contacts.size) { index ->
+                            val contact = contacts[index]
+                            val contactId = (contact["id"] as? String) ?: ""
+                            val displayName = (contact["displayName"] as? String)
+                                ?: (contact["name"] as? String)
+                                ?: contactId
+                            Row(
+                                Modifier.fillMaxWidth().clickable {
+                                    autoPushTargetConvId = null
+                                    if (contactId.isNotBlank()) {
+                                        scope.launch {
+                                            val ok = vm.setConversationAutoPush(convId, contactId)
+                                            if (ok) {
+                                                android.widget.Toast.makeText(
+                                                    context,
+                                                    "已设置自动推送",
+                                                    android.widget.Toast.LENGTH_SHORT,
+                                                ).show()
+                                            }
+                                        }
+                                    }
+                                }.padding(vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(displayName, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    autoPushTargetConvId = null
+                    scope.launch { vm.setConversationAutoPush(convId, null) }
+                }) { Text("取消推送") }
+            },
+            dismissButton = {
+                TextButton(onClick = { autoPushTargetConvId = null }) { Text("取消") }
             },
         )
     }
@@ -516,6 +580,7 @@ fun ConversationRow(
     onArchive: () -> Unit,
     onDelete: () -> Unit,
     onExport: (String) -> Unit = {},
+    onAutoPush: (String) -> Unit = {},
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
@@ -588,6 +653,13 @@ fun ConversationRow(
             onClick = {
                 menuExpanded = false
                 onExport(conv.conversationId)
+            },
+        )
+        DropdownMenuItem(
+            text = { Text("自动推送") },
+            onClick = {
+                menuExpanded = false
+                onAutoPush(conv.conversationId)
             },
         )
         DropdownMenuItem(

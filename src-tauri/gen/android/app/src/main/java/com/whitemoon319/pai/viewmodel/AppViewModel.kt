@@ -430,6 +430,21 @@ class AppViewModel(
         }
     }
 
+    /** 设置会话自动推送远程联系人（autoPush）。 */
+    suspend fun setConversationAutoPush(conversationId: String, remoteContactId: String?): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val result = service.setConversationAutoPush(conversationId, remoteContactId)
+                val ok = result.isNotEmpty()
+                if (!ok) error.value = "设置自动推送失败"
+                ok
+            } catch (e: Exception) {
+                error.value = "设置自动推送失败: ${e.message}"
+                false
+            }
+        }
+    }
+
     /** 当前会话提示词预览：返回 (标题, 内容)。 */
     suspend fun promptPreviewForCurrent(): Pair<String, String>? {
         val conversationId = currentConversationId.value ?: return null

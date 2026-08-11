@@ -282,6 +282,7 @@ async fn native_dispatch(
         "conversation.rewindPreview" => ide_chat_preview_rewind_conversation(state, params).await,
         "conversation.compact" => ide_chat_compact_conversation(state, params).await,
         "conversation.compactPreview" => ide_chat_compact_preview(state, params),
+        "conversation.autoPush" => ide_chat_set_auto_push_command(state, params),
         "conversation.rename" => ide_chat_rename_conversation_command(state, params),
         "conversation.pin" => ide_chat_toggle_pin_command(state, params),
         "conversation.delete" => ide_chat_delete_conversation(state, params).await,
