@@ -22,42 +22,6 @@ use uuid::Uuid;
 use std::collections::{HashMap};
 use super::*;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-
-pub(crate) struct RemoteImChannelPrivateState {
-    #[serde(default = "remote_im_channel_private_state_schema_version")]
-    pub(crate) schema_version: u32,
-    #[serde(default)]
-    pub(crate) channel_id: String,
-    #[serde(default)]
-    pub(crate) platform: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub(crate) token: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub(crate) base_url: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub(crate) account_id: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub(crate) user_id: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub(crate) sync_buf: String,
-    #[serde(default, skip_serializing_if = "remote_im_string_map_is_empty")]
-    pub(crate) context_tokens: std::collections::HashMap<String, String>,
-    #[serde(default)]
-    pub(crate) updated_at: String,
-}
-
-pub(crate) fn remote_im_channel_private_state_schema_version() -> u32 {
-    1
-}
-
-pub(crate) fn remote_im_string_map_is_empty(
-    value: &std::collections::HashMap<String, String>,
-) -> bool {
-    value.is_empty()
-}
-
 pub(crate) fn remote_im_platform_store_key(platform: &RemoteImPlatform) -> &'static str {
     match platform {
         RemoteImPlatform::Feishu => "feishu",

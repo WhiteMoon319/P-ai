@@ -1,16 +1,29 @@
+use pai_backend::core::domain::types_config::{AppConfig, RemoteImChannelConfig, RemoteImPlatform};
+use pai_backend::core::domain::types_requests::{ChatIngressPart, ChatInputPayload, SessionSelector};
+use pai_backend::core::domain::types_storage::RemoteImChannelPrivateState;
+use pai_backend::core::time_semantics::now_iso;
+use pai_backend::logging::{runtime_log_debug, runtime_log_error, runtime_log_info, runtime_log_warn};
+use serde_json::Value;
+use uuid::Uuid;
+
+use super::*;
+
 impl WeixinOcManager {
-    pub(crate) async fn start_login(
+    pub async fn start_login(
         &self,
-        state: &AppState,
+        access: std::sync::Arc<dyn WeixinOcStateAccess>,
         input: WeixinOcLoginStartInput,
     ) -> Result<WeixinOcLoginStartResult, String> {
-        let config = state_read_config_cached(state)?;
-        let channel = remote_im_channel_by_id(&config, &input.channel_id)
+        let config = access.read_config()?;
+        let channel = config
+            .remote_im_channels
+            .iter()
+            .find(|item| item.id == input.channel_id)
             .ok_or_else(|| format!("渠道不存在: {}", input.channel_id))?;
         if channel.platform != RemoteImPlatform::WeixinOc {
             return Err("该渠道不是个人微信渠道".to_string());
         }
-        self.load_state_from_channel(state, channel).await;
+        self.load_state_from_channel(access.as_ref(), channel).await;
         if !input.force_refresh {
             if let Some(existing) = self
                 .login_sessions
@@ -31,7 +44,7 @@ impl WeixinOcManager {
                 }
             }
         }
-        let credentials = remote_im_effective_credentials(state, channel)?;
+        let credentials = access.effective_credentials(channel)?;
         let creds = WeixinOcCredentials::from_value(&credentials);
         let client = build_weixin_oc_http_client(creds.normalized_api_timeout_ms())?;
         let url = format!(
@@ -98,9 +111,9 @@ impl WeixinOcManager {
         })
     }
 
-    pub(crate) async fn poll_login_status(
+    pub async fn poll_login_status(
         &self,
-        state: &AppState,
+        access: std::sync::Arc<dyn WeixinOcStateAccess>,
         input: WeixinOcLoginStatusInput,
     ) -> Result<WeixinOcLoginStatusResult, String> {
         let mut login = {
@@ -131,10 +144,13 @@ impl WeixinOcManager {
                 last_error: "二维码已过期，请重新生成".to_string(),
             });
         }
-        let config = state_read_config_cached(state)?;
-        let channel = remote_im_channel_by_id(&config, &input.channel_id)
+        let config = access.read_config()?;
+        let channel = config
+            .remote_im_channels
+            .iter()
+            .find(|item| item.id == input.channel_id)
             .ok_or_else(|| format!("渠道不存在: {}", input.channel_id))?;
-        let credentials = remote_im_effective_credentials(state, channel)?;
+        let credentials = access.effective_credentials(channel)?;
         let creds = WeixinOcCredentials::from_value(&credentials);
         let client = build_weixin_oc_http_client(creds.normalized_long_poll_timeout_ms())?;
         let url = format!(
@@ -205,18 +221,20 @@ impl WeixinOcManager {
                     last_error: login.error,
                 });
             }
-            remote_im_patch_channel_private_state(
-                state,
-                &RemoteImPlatform::WeixinOc,
+            let patch_token = bot_token.clone();
+            let patch_account_id = account_id.clone();
+            let patch_user_id = user_id.clone();
+            let patch_base_url = base_url.clone();
+            access.patch_private_state(
                 &input.channel_id,
-                |private| {
-                    private.token = bot_token.clone();
-                    private.account_id = account_id.clone();
-                    private.user_id = user_id.clone();
-                    private.base_url = base_url.clone();
-                },
+                Box::new(move |private| {
+                    private.token = patch_token;
+                    private.account_id = patch_account_id;
+                    private.user_id = patch_user_id;
+                    private.base_url = patch_base_url;
+                }),
             )?;
-            let updated_channel = remote_im_channel_with_effective_credentials(state, channel)?;
+            let updated_channel = access.channel_with_effective_credentials(channel)?;
             self.login_sessions.write().await.remove(&input.channel_id);
             self.set_state(&input.channel_id, |runtime| {
                 runtime.connected = false;
@@ -240,7 +258,7 @@ impl WeixinOcManager {
             )
             .await;
             if !user_id.is_empty() {
-                let (_, created) = sync_weixin_oc_contact_from_user_id(state, channel, &user_id)?;
+                let (_, created) = access.upsert_contact(channel, &user_id)?;
                 let log_message = if created {
                     format!("[个人微信] 已自动补录联系人: {}", user_id)
                 } else {
@@ -249,7 +267,7 @@ impl WeixinOcManager {
                 self.add_log(&input.channel_id, "info", &log_message).await;
             }
             if updated_channel.enabled {
-                self.reconcile_channel_runtime(&updated_channel, state.clone()).await?;
+                self.reconcile_channel_runtime(&updated_channel, access.clone()).await?;
             }
             return Ok(WeixinOcLoginStatusResult {
                 channel_id: input.channel_id,
@@ -313,10 +331,14 @@ impl WeixinOcManager {
         })
     }
 
-    pub(crate) async fn logout(&self, state: &AppState, channel_id: &str) -> Result<(), String> {
+    pub async fn logout(
+        &self,
+        access: std::sync::Arc<dyn WeixinOcStateAccess>,
+        channel_id: &str,
+    ) -> Result<(), String> {
         self.stop_channel(channel_id).await;
         self.login_sessions.write().await.remove(channel_id);
-        remote_im_delete_channel_private_state(state, &RemoteImPlatform::WeixinOc, channel_id)?;
+        access.delete_private_state(channel_id)?;
         self.set_state(channel_id, |runtime| {
             *runtime = WeixinOcRuntimeState::default();
             runtime.login_status = "logged_out".to_string();

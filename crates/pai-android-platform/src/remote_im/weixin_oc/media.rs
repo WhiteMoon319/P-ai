@@ -1,16 +1,26 @@
-pub(crate) fn build_weixin_oc_http_client(timeout_ms: u64) -> Result<reqwest::Client, String> {
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use pai_backend::logging::{runtime_log_info, runtime_log_warn};
+use pai_backend::core::domain::types_requests::ChatIngressPart;
+use serde::Deserialize;
+use serde_json::Value;
+use uuid::Uuid;
+
+use super::api::weixin_oc_request_headers;
+use super::core::{WeixinOcCollectedMedia, WeixinOcCredentials, WeixinOcMessageItem};
+
+pub fn build_weixin_oc_http_client(timeout_ms: u64) -> Result<reqwest::Client, String> {
     let mut client_builder = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(timeout_ms));
     #[cfg(target_os = "android")]
     {
-        client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)?;
+        client_builder = crate::tls::android_workspace_apply_static_webpki_roots(client_builder)?;
     }
     client_builder
         .build()
         .map_err(|err| format!("创建个人微信 HTTP 客户端失败: {err}"))
 }
 
-pub(crate) fn weixin_oc_cdn_download_url(cdn_base_url: &str, encrypted_query_param: &str) -> String {
+pub fn weixin_oc_cdn_download_url(cdn_base_url: &str, encrypted_query_param: &str) -> String {
     format!(
         "{}/download?encrypted_query_param={}",
         cdn_base_url.trim_end_matches('/'),
@@ -18,7 +28,7 @@ pub(crate) fn weixin_oc_cdn_download_url(cdn_base_url: &str, encrypted_query_par
     )
 }
 
-pub(crate) fn weixin_oc_cdn_upload_url(cdn_base_url: &str, upload_param: &str, file_key: &str) -> String {
+pub fn weixin_oc_cdn_upload_url(cdn_base_url: &str, upload_param: &str, file_key: &str) -> String {
     format!(
         "{}/upload?encrypted_query_param={}&filekey={}",
         cdn_base_url.trim_end_matches('/'),
@@ -27,7 +37,7 @@ pub(crate) fn weixin_oc_cdn_upload_url(cdn_base_url: &str, upload_param: &str, f
     )
 }
 
-pub(crate) fn weixin_oc_pkcs7_pad(data: &[u8]) -> Vec<u8> {
+pub fn weixin_oc_pkcs7_pad(data: &[u8]) -> Vec<u8> {
     let pad_len = 16 - (data.len() % 16);
     let pad_len = if pad_len == 0 { 16 } else { pad_len };
     let mut out = Vec::with_capacity(data.len() + pad_len);
@@ -36,7 +46,7 @@ pub(crate) fn weixin_oc_pkcs7_pad(data: &[u8]) -> Vec<u8> {
     out
 }
 
-pub(crate) fn weixin_oc_encrypt_media_ecb(raw: &[u8], key: &[u8]) -> Result<Vec<u8>, String> {
+pub fn weixin_oc_encrypt_media_ecb(raw: &[u8], key: &[u8]) -> Result<Vec<u8>, String> {
     use aes::cipher::{BlockCipherEncrypt, KeyInit};
 
     if key.len() != 16 {
@@ -53,7 +63,7 @@ pub(crate) fn weixin_oc_encrypt_media_ecb(raw: &[u8], key: &[u8]) -> Result<Vec<
     Ok(encrypted)
 }
 
-pub(crate) fn weixin_oc_aes_padded_size(size: usize) -> usize {
+pub fn weixin_oc_aes_padded_size(size: usize) -> usize {
     let remainder = size % 16;
     if remainder == 0 {
         size + 16
@@ -62,7 +72,7 @@ pub(crate) fn weixin_oc_aes_padded_size(size: usize) -> usize {
     }
 }
 
-pub(crate) fn weixin_oc_encode_hex(bytes: &[u8]) -> String {
+pub fn weixin_oc_encode_hex(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
@@ -72,7 +82,7 @@ pub(crate) fn weixin_oc_encode_hex(bytes: &[u8]) -> String {
     out
 }
 
-pub(crate) fn weixin_oc_pkcs7_unpad(data: &[u8]) -> Vec<u8> {
+pub fn weixin_oc_pkcs7_unpad(data: &[u8]) -> Vec<u8> {
     let Some(&pad_len) = data.last() else {
         return Vec::new();
     };
@@ -90,7 +100,7 @@ pub(crate) fn weixin_oc_pkcs7_unpad(data: &[u8]) -> Vec<u8> {
     }
 }
 
-pub(crate) fn weixin_oc_decode_hex(input: &str) -> Result<Vec<u8>, String> {
+pub fn weixin_oc_decode_hex(input: &str) -> Result<Vec<u8>, String> {
     let normalized = input.trim();
     if normalized.is_empty() {
         return Err("十六进制密钥为空".to_string());
@@ -114,7 +124,7 @@ pub(crate) fn weixin_oc_decode_hex(input: &str) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-pub(crate) fn weixin_oc_parse_media_aes_key(aes_key_value: &str) -> Result<Vec<u8>, String> {
+pub fn weixin_oc_parse_media_aes_key(aes_key_value: &str) -> Result<Vec<u8>, String> {
     let normalized = aes_key_value.trim();
     if normalized.is_empty() {
         return Err("媒体 AES 密钥为空".to_string());
@@ -142,7 +152,7 @@ pub(crate) fn weixin_oc_parse_media_aes_key(aes_key_value: &str) -> Result<Vec<u
     Err("媒体 AES 密钥格式不支持".to_string())
 }
 
-pub(crate) fn weixin_oc_decrypt_media_ecb(encrypted: &[u8], key: &[u8]) -> Result<Vec<u8>, String> {
+pub fn weixin_oc_decrypt_media_ecb(encrypted: &[u8], key: &[u8]) -> Result<Vec<u8>, String> {
     use aes::cipher::{BlockCipherDecrypt, KeyInit};
 
     if key.len() != 16 {
@@ -165,7 +175,7 @@ pub(crate) fn weixin_oc_decrypt_media_ecb(encrypted: &[u8], key: &[u8]) -> Resul
     Ok(weixin_oc_pkcs7_unpad(&decrypted))
 }
 
-pub(crate) async fn weixin_oc_download_image_bytes(
+pub async fn weixin_oc_download_image_bytes(
     client: &reqwest::Client,
     cdn_base_url: &str,
     encrypted_query_param: &str,
@@ -192,17 +202,54 @@ pub(crate) async fn weixin_oc_download_image_bytes(
     Ok(encrypted.to_vec())
 }
 
-pub(crate) fn weixin_oc_normalize_image_mime(raw: &[u8]) -> String {
-    image_mime_from_bytes(raw).unwrap_or("image/jpeg").to_string()
+pub fn weixin_oc_normalize_image_mime(raw: &[u8]) -> String {
+    weixin_oc_image_mime_from_bytes(raw)
+        .unwrap_or("image/jpeg")
+        .to_string()
 }
 
-pub(crate) fn weixin_oc_guess_attachment_mime(file_name: &str, fallback: &str) -> String {
-    media_mime_from_path(std::path::Path::new(file_name))
+pub fn weixin_oc_guess_attachment_mime(file_name: &str, fallback: &str) -> String {
+    weixin_oc_media_mime_from_path(std::path::Path::new(file_name))
         .unwrap_or(fallback)
         .to_string()
 }
 
-pub(crate) async fn weixin_oc_collect_media(
+fn weixin_oc_media_mime_from_path(path: &std::path::Path) -> Option<&'static str> {
+    let ext = path
+        .extension()
+        .and_then(|v| v.to_str())
+        .map(|v| v.trim().to_ascii_lowercase())
+        .unwrap_or_default();
+    match ext.as_str() {
+        "pdf" => Some("application/pdf"),
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        "bmp" => Some("image/bmp"),
+        "heic" => Some("image/heic"),
+        "heif" => Some("image/heif"),
+        "svg" => Some("image/svg+xml"),
+        "wav" | "wave" => Some("audio/wav"),
+        "mp3" => Some("audio/mpeg"),
+        "m4a" => Some("audio/mp4"),
+        "aac" => Some("audio/aac"),
+        "aiff" | "aif" => Some("audio/aiff"),
+        "ogg" | "oga" => Some("audio/ogg"),
+        "opus" => Some("audio/opus"),
+        "flac" => Some("audio/flac"),
+        "webm" => Some("audio/webm"),
+        _ => None,
+    }
+}
+
+fn weixin_oc_image_mime_from_bytes(raw: &[u8]) -> Option<&'static str> {
+    infer::get(raw)
+        .map(|kind| kind.mime_type())
+        .filter(|mime| mime.starts_with("image/"))
+}
+
+pub async fn weixin_oc_collect_media(
     client: &reqwest::Client,
     credentials: &WeixinOcCredentials,
     item_list: &[WeixinOcMessageItem],
@@ -358,30 +405,30 @@ pub(crate) async fn weixin_oc_collect_media(
 }
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct WeixinOcGetUploadUrlResp {
+pub struct WeixinOcGetUploadUrlResp {
     #[serde(default)]
-    pub(crate) ret: i64,
+    pub ret: i64,
     #[serde(default)]
-    pub(crate) errcode: i64,
+    pub errcode: i64,
     #[serde(default)]
-    pub(crate) errmsg: String,
+    pub errmsg: String,
     #[serde(default)]
     #[serde(alias = "uploadParam")]
-    pub(crate) upload_param: String,
+    pub upload_param: String,
     #[serde(default)]
     #[serde(alias = "uploadFullUrl")]
-    pub(crate) upload_full_url: String,
+    pub upload_full_url: String,
 }
 
-pub(crate) fn weixin_oc_media_aes_key_hex() -> String {
+pub fn weixin_oc_media_aes_key_hex() -> String {
     weixin_oc_encode_hex(Uuid::new_v4().as_bytes())
 }
 
-pub(crate) fn weixin_oc_random_hex_id() -> String {
+pub fn weixin_oc_random_hex_id() -> String {
     Uuid::new_v4().simple().to_string()
 }
 
-pub(crate) async fn weixin_oc_request_upload_url(
+pub async fn weixin_oc_request_upload_url(
     client: &reqwest::Client,
     credentials: &WeixinOcCredentials,
     to_user_id: &str,
@@ -450,7 +497,7 @@ pub(crate) async fn weixin_oc_request_upload_url(
     Ok(parsed)
 }
 
-pub(crate) async fn weixin_oc_upload_to_cdn(
+pub async fn weixin_oc_upload_to_cdn(
     client: &reqwest::Client,
     credentials: &WeixinOcCredentials,
     upload_param: &str,
@@ -506,7 +553,7 @@ pub(crate) async fn weixin_oc_upload_to_cdn(
     Ok(encrypted_query_param)
 }
 
-pub(crate) async fn weixin_oc_prepare_outbound_media_item(
+pub async fn weixin_oc_prepare_outbound_media_item(
     client: &reqwest::Client,
     credentials: &WeixinOcCredentials,
     to_user_id: &str,

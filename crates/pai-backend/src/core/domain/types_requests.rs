@@ -211,6 +211,30 @@ pub struct SessionSelector {
     pub conversation_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteImEnqueueInput {
+    pub channel_id: String,
+    pub platform: crate::core::domain::types_config::RemoteImPlatform,
+    pub im_name: String,
+    pub remote_contact_type: String,
+    pub remote_contact_id: String,
+    #[serde(default)]
+    pub remote_contact_name: Option<String>,
+    pub sender_id: String,
+    pub sender_name: String,
+    #[serde(default)]
+    pub sender_avatar_url: Option<String>,
+    #[serde(default)]
+    pub platform_message_id: Option<String>,
+    #[serde(default)]
+    pub dingtalk_session_webhook: Option<String>,
+    #[serde(default)]
+    pub dingtalk_session_webhook_expired_time: Option<i64>,
+    pub session: SessionSelector,
+    pub payload: ChatInputPayload,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeContext {

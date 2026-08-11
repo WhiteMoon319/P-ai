@@ -1,17 +1,23 @@
-pub(crate) fn weixin_oc_random_wechat_uin() -> String {
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use uuid::Uuid;
+
+use super::core::WeixinOcCredentials;
+use super::media::build_weixin_oc_http_client;
+
+pub fn weixin_oc_random_wechat_uin() -> String {
     let bytes = *Uuid::new_v4().as_bytes();
     let value = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
     B64.encode(value.to_string())
 }
 
-pub(crate) fn weixin_oc_is_login_confirmed(status: &str) -> bool {
+pub fn weixin_oc_is_login_confirmed(status: &str) -> bool {
     matches!(
         status.trim().to_ascii_lowercase().as_str(),
         "confirmed" | "confirm" | "success" | "logged_in" | "login_success"
     )
 }
 
-pub(crate) fn weixin_oc_request_headers(
+pub fn weixin_oc_request_headers(
     body: &str,
     token: Option<&str>,
 ) -> Result<reqwest::header::HeaderMap, String> {
@@ -44,7 +50,7 @@ pub(crate) fn weixin_oc_request_headers(
     Ok(headers)
 }
 
-pub(crate) async fn weixin_oc_get_typing_config(
+pub async fn weixin_oc_get_typing_config(
     credentials: &WeixinOcCredentials,
     ilink_user_id: &str,
     context_token: Option<&str>,
@@ -112,7 +118,7 @@ pub(crate) async fn weixin_oc_get_typing_config(
 }
 
 /// status: 1 = 开始输入, 2 = 停止输入
-pub(crate) async fn weixin_oc_send_typing(
+pub async fn weixin_oc_send_typing(
     credentials: &WeixinOcCredentials,
     ilink_user_id: &str,
     typing_ticket: &str,

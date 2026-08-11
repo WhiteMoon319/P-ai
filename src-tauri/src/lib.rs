@@ -126,6 +126,9 @@ pub(crate) use features_remote_im_dingtalk_stream_android_stub::*;
 #[path = "features/remote_im/weixin_oc.rs"]
 mod features_remote_im_weixin_oc;
 pub(crate) use features_remote_im_weixin_oc::*;
+#[path = "features/remote_im/weixin_oc_state_access.rs"]
+mod features_remote_im_weixin_oc_state_access;
+pub(crate) use features_remote_im_weixin_oc_state_access::*;
 #[path = "features/remote_im.rs"]
 mod features_remote_im;
 pub(crate) use features_remote_im::*;

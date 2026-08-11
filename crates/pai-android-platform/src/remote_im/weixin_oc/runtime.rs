@@ -1,10 +1,21 @@
+use pai_backend::core::domain::types_config::{AppConfig, RemoteImChannelConfig, RemoteImPlatform};
+use pai_backend::core::domain::types_requests::{ChatIngressPart, ChatInputPayload, SessionSelector};
+use pai_backend::core::domain::types_storage::{ChannelConnectionStatus, RemoteImChannelPrivateState};
+use pai_backend::core::time_semantics::now_iso;
+use pai_backend::logging::{runtime_log_debug, runtime_log_error, runtime_log_info, runtime_log_warn};
+use serde_json::Value;
+use uuid::Uuid;
+
+use super::*;
+use crate::local_port_service::ChannelLogEntry;
+
 impl WeixinOcManager {
-    pub(crate) async fn add_log(&self, channel_id: &str, level: &str, message: &str) {
+    pub async fn add_log(&self, channel_id: &str, level: &str, message: &str) {
         self.port_service.add_log(channel_id, level, message).await;
     }
 
     #[cfg_attr(test, allow(dead_code))]
-    pub(crate) async fn add_contact_log(
+    pub async fn add_contact_log(
         &self,
         channel_id: &str,
         level: &str,
@@ -16,7 +27,7 @@ impl WeixinOcManager {
             .await;
     }
 
-    pub(crate) async fn set_state<F>(&self, channel_id: &str, update: F)
+    pub async fn set_state<F>(&self, channel_id: &str, update: F)
     where
         F: FnOnce(&mut WeixinOcRuntimeState),
     {
@@ -44,13 +55,16 @@ impl WeixinOcManager {
         self.port_service.set_last_error(channel_id, last_error).await;
     }
 
-    pub(crate) async fn load_state_from_channel(&self, state: &AppState, channel: &RemoteImChannelConfig) {
-        let credentials = remote_im_effective_credentials(state, channel)
+    pub async fn load_state_from_channel(
+        &self,
+        access: &dyn WeixinOcStateAccess,
+        channel: &RemoteImChannelConfig,
+    ) {
+        let credentials = access
+            .effective_credentials(channel)
             .unwrap_or_else(|_| channel.credentials.clone());
         let creds = WeixinOcCredentials::from_value(&credentials);
-        let private_state =
-            remote_im_read_channel_private_state(state, &RemoteImPlatform::WeixinOc, &channel.id)
-                .ok();
+        let private_state = access.read_private_state(&channel.id).ok();
         self.set_state(&channel.id, |state| {
             state.base_url = creds.normalized_base_url();
             state.account_id = creds.account_id.trim().to_string();
@@ -78,7 +92,7 @@ impl WeixinOcManager {
         }
     }
 
-    pub(crate) async fn build_status(&self, channel_id: &str) -> ChannelConnectionStatus {
+    pub async fn build_status(&self, channel_id: &str) -> ChannelConnectionStatus {
         let state = self
             .states
             .read()
@@ -127,9 +141,9 @@ impl WeixinOcManager {
         }
     }
 
-    pub(crate) async fn set_context_token(
+    pub async fn set_context_token(
         &self,
-        state: &AppState,
+        access: &dyn WeixinOcStateAccess,
         channel_id: &str,
         user_id: &str,
         token: &str,
@@ -139,19 +153,18 @@ impl WeixinOcManager {
         }
         let key = format!("{}:{}", channel_id.trim(), user_id.trim());
         let normalized_token = token.trim().to_string();
+        let normalized_user_id = user_id.trim().to_string();
         self.context_tokens
             .write()
             .await
             .insert(key, normalized_token.clone());
-        if let Err(err) = remote_im_patch_channel_private_state(
-            state,
-            &RemoteImPlatform::WeixinOc,
+        if let Err(err) = access.patch_private_state(
             channel_id,
-            |private| {
+            Box::new(move |private| {
                 private
                     .context_tokens
-                    .insert(user_id.trim().to_string(), normalized_token.clone());
-            },
+                    .insert(normalized_user_id.clone(), normalized_token.clone());
+            }),
         ) {
             runtime_log_error(format!(
                 "[个人微信] 持久化 context_token 失败: channel_id={}, user_id={}, error={}",
@@ -162,7 +175,7 @@ impl WeixinOcManager {
         }
     }
 
-    pub(crate) async fn get_context_token(&self, channel_id: &str, user_id: &str) -> Option<String> {
+    pub async fn get_context_token(&self, channel_id: &str, user_id: &str) -> Option<String> {
         self.context_tokens
             .read()
             .await
@@ -170,7 +183,7 @@ impl WeixinOcManager {
             .cloned()
     }
 
-    pub(crate) async fn stop_channel_inner(&self, channel_id: &str) {
+    pub async fn stop_channel_inner(&self, channel_id: &str) {
         let started_at = std::time::Instant::now();
         self.add_log(channel_id, "info", "[个人微信] 开始停止渠道").await;
         if let Some(tx) = self.stop_senders.write().await.remove(channel_id) {
@@ -235,7 +248,7 @@ impl WeixinOcManager {
         .await;
     }
 
-    pub(crate) async fn stop_channel(&self, channel_id: &str) {
+    pub async fn stop_channel(&self, channel_id: &str) {
         let _ = self
             .port_service
             .stop_serialized(channel_id, || async {
@@ -245,7 +258,7 @@ impl WeixinOcManager {
             .await;
     }
 
-    pub(crate) async fn start_typing(
+    pub async fn start_typing(
         &self,
         channel_id: &str,
         credentials: WeixinOcCredentials,
@@ -446,7 +459,7 @@ impl WeixinOcManager {
         });
     }
 
-    pub(crate) async fn stop_typing(&self, channel_id: &str, ilink_user_id: &str) {
+    pub async fn stop_typing(&self, channel_id: &str, ilink_user_id: &str) {
         let key = format!("{}:{}", channel_id.trim(), ilink_user_id.trim());
         let removed = self.typing_states.write().await.remove(&key);
         if let Some(state) = removed {
@@ -455,7 +468,7 @@ impl WeixinOcManager {
         }
     }
 
-    pub(crate) async fn stop_all_typing_for_channel(&self, channel_id: &str) {
+    pub async fn stop_all_typing_for_channel(&self, channel_id: &str) {
         let prefix = format!("{}:", channel_id.trim());
         let mut keys_to_remove = Vec::<String>::new();
         {
@@ -475,10 +488,10 @@ impl WeixinOcManager {
         }
     }
 
-    pub(crate) async fn reconcile_channel_runtime(
+    pub async fn reconcile_channel_runtime(
         &self,
         channel: &RemoteImChannelConfig,
-        state: AppState,
+        access: std::sync::Arc<dyn WeixinOcStateAccess>,
     ) -> Result<(), String> {
         self.port_service
             .reconcile_serialized(&channel.id, || async move {
@@ -486,7 +499,7 @@ impl WeixinOcManager {
                     "[个人微信] reconcile_channel_runtime: channel_id={}, enabled={}, platform={:?}",
                     channel.id, channel.enabled, channel.platform
                 ));
-                self.load_state_from_channel(&state, channel).await;
+                self.load_state_from_channel(access.as_ref(), channel).await;
                 self.stop_channel_inner(&channel.id).await;
                 if channel.platform != RemoteImPlatform::WeixinOc || !channel.enabled {
                     runtime_log_info(format!("[个人微信] 渠道已停用: channel_id={}", channel.id));
@@ -499,7 +512,7 @@ impl WeixinOcManager {
                     self.add_log(&channel.id, "info", "[个人微信] 渠道已停用").await;
                     return Ok(());
                 }
-                let effective_channel = remote_im_channel_with_effective_credentials(&state, channel)?;
+                let effective_channel = access.channel_with_effective_credentials(channel)?;
                 let creds = WeixinOcCredentials::from_value(&effective_channel.credentials);
                 runtime_log_info(format!(
                     "[个人微信] 当前凭证: channel_id={}, base_url={}, token_len={}, account_id={}, user_id={}",
@@ -524,15 +537,15 @@ impl WeixinOcManager {
                 runtime_log_debug(format!("[个人微信] 渠道已启用，正在启动轮询: channel_id={}", channel.id));
                 self.add_log(&channel.id, "info", "[个人微信] 渠道已启用，正在启动轮询")
                     .await;
-                self.start_channel_inner(effective_channel, state).await
+                self.start_channel_inner(effective_channel, access).await
             })
             .await
     }
 
-    pub(crate) async fn start_channel_inner(
+    pub async fn start_channel_inner(
         &self,
         channel: RemoteImChannelConfig,
-        state: AppState,
+        access: std::sync::Arc<dyn WeixinOcStateAccess>,
     ) -> Result<(), String> {
         let channel_id = channel.id.clone();
         runtime_log_info(format!("[个人微信] start_channel: channel_id={}", channel_id));
@@ -548,6 +561,7 @@ impl WeixinOcManager {
             .insert(channel_id.clone(), stop_tx);
         let manager = weixin_oc_manager();
         let task_channel_id = channel_id.clone();
+        let poll_access = access.clone();
         let handle = tokio::spawn(async move {
             manager
                 .add_log(&task_channel_id, "info", "[个人微信] 轮询任务开始")
@@ -569,7 +583,7 @@ impl WeixinOcManager {
                             Err(_) => break,
                         }
                     }
-                    ret = run_single_weixin_oc_poll_cycle(&channel.id, &state) => ret,
+                    ret = run_single_weixin_oc_poll_cycle(&channel.id, poll_access.clone()) => ret,
                 };
                 if let Err(err) = result {
                     manager
@@ -623,18 +637,18 @@ impl WeixinOcManager {
     }
 
     #[allow(dead_code)]
-    pub(crate) async fn start_channel(
+    pub async fn start_channel(
         &self,
         channel: RemoteImChannelConfig,
-        state: AppState,
+        access: std::sync::Arc<dyn WeixinOcStateAccess>,
     ) -> Result<(), String> {
         let service_id = channel.id.clone();
         self.port_service
-            .restart_serialized(&service_id, || async move { self.start_channel_inner(channel, state).await })
+            .restart_serialized(&service_id, || async move { self.start_channel_inner(channel, access).await })
             .await
     }
 
-    pub(crate) async fn get_logs(&self, channel_id: &str) -> Vec<ChannelLogEntry> {
+    pub async fn get_logs(&self, channel_id: &str) -> Vec<ChannelLogEntry> {
         self.port_service.get_logs(channel_id).await
     }
 }

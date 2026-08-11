@@ -23,30 +23,6 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use super::*;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RemoteImEnqueueInput {
-    pub(crate) channel_id: String,
-    pub(crate) platform: RemoteImPlatform,
-    pub(crate) im_name: String,
-    pub(crate) remote_contact_type: String,
-    pub(crate) remote_contact_id: String,
-    #[serde(default)]
-    pub(crate) remote_contact_name: Option<String>,
-    pub(crate) sender_id: String,
-    pub(crate) sender_name: String,
-    #[serde(default)]
-    pub(crate) sender_avatar_url: Option<String>,
-    #[serde(default)]
-    pub(crate) platform_message_id: Option<String>,
-    #[serde(default)]
-    pub(crate) dingtalk_session_webhook: Option<String>,
-    #[serde(default)]
-    pub(crate) dingtalk_session_webhook_expired_time: Option<i64>,
-    pub(crate) session: SessionSelector,
-    pub(crate) payload: ChatInputPayload,
-}
-
 pub(crate) const FAST_REQUEST_KIND_REMOTE_IM_REPLY_DECISION: &str = "remote_im_reply_decision";
 // 群聊长度门改写（默认禁用，保留待重新启用）。
 #[allow(dead_code)]

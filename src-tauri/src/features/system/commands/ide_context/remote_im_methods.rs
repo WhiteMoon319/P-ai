@@ -109,8 +109,9 @@ pub(crate) async fn remote_im_restart_channel_inner(
             }
         });
     } else if channel.platform == RemoteImPlatform::WeixinOc {
+        let access = std::sync::Arc::new(AppStateWeixinOcAccess::new(state));
         weixin_oc_manager()
-            .reconcile_channel_runtime(&effective_channel, state.clone())
+            .reconcile_channel_runtime(&effective_channel, access)
             .await?;
     }
 
@@ -264,7 +265,8 @@ pub(crate) async fn ide_chat_remote_im_weixin_oc_start_login_for_web_settings(
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<WeixinOcLoginStartInput>(params, "input")?;
-    ide_chat_serialize(weixin_oc_manager().start_login(state, input).await?)
+    let access = std::sync::Arc::new(AppStateWeixinOcAccess::new(state));
+    ide_chat_serialize(weixin_oc_manager().start_login(access, input).await?)
 }
 
 pub(crate) async fn ide_chat_remote_im_weixin_oc_get_login_status_for_web_settings(
@@ -272,7 +274,8 @@ pub(crate) async fn ide_chat_remote_im_weixin_oc_get_login_status_for_web_settin
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<WeixinOcLoginStatusInput>(params, "input")?;
-    ide_chat_serialize(weixin_oc_manager().poll_login_status(state, input).await?)
+    let access = std::sync::Arc::new(AppStateWeixinOcAccess::new(state));
+    ide_chat_serialize(weixin_oc_manager().poll_login_status(access, input).await?)
 }
 
 pub(crate) async fn ide_chat_remote_im_weixin_oc_logout_for_web_settings(
@@ -280,8 +283,9 @@ pub(crate) async fn ide_chat_remote_im_weixin_oc_logout_for_web_settings(
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<WeixinOcLoginStatusInput>(params, "input")?;
+    let access = std::sync::Arc::new(AppStateWeixinOcAccess::new(state));
     weixin_oc_manager()
-        .logout(state, input.channel_id.as_str())
+        .logout(access, input.channel_id.as_str())
         .await?;
     ide_chat_serialize(true)
 }

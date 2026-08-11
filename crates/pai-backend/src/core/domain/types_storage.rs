@@ -418,6 +418,7 @@ pub struct RemoteImContactCheckpoint {
     pub latest_seen_message_id: Option<String>,
     #[serde(default)]
     pub last_boundary_message_id: Option<String>,
+
     #[serde(default)]
     pub last_boundary_covers_message_id: Option<String>,
     #[serde(default)]
@@ -430,6 +431,62 @@ pub struct RemoteImContactCheckpoint {
     pub last_success_reply_at: Option<String>,
     #[serde(default)]
     pub group_reply_delivery: Option<RemoteImGroupReplyDeliveryMarker>,
+}
+
+pub fn remote_im_channel_private_state_schema_version() -> u32 {
+    1
+}
+
+pub fn remote_im_string_map_is_empty(value: &std::collections::HashMap<String, String>) -> bool {
+    value.is_empty()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteImChannelPrivateState {
+    #[serde(default = "remote_im_channel_private_state_schema_version")]
+    pub schema_version: u32,
+    #[serde(default)]
+    pub channel_id: String,
+    #[serde(default)]
+    pub platform: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub token: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub base_url: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub account_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub user_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub sync_buf: String,
+    #[serde(default, skip_serializing_if = "remote_im_string_map_is_empty")]
+    pub context_tokens: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
+/// 远程 IM 渠道连接状态（weixin_oc / onebot 共用）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChannelConnectionStatus {
+    pub channel_id: String,
+    pub connected: bool,
+    pub peer_addr: Option<String>,
+    pub connected_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub listen_addr: String,
+    #[serde(default)]
+    pub status_text: Option<String>,
+    #[serde(default)]
+    pub last_error: Option<String>,
+    #[serde(default)]
+    pub account_id: Option<String>,
+    #[serde(default)]
+    pub base_url: Option<String>,
+    #[serde(default)]
+    pub login_session_key: Option<String>,
+    #[serde(default)]
+    pub qrcode_url: Option<String>,
 }
 
 pub fn default_assistant_department_agent_id() -> String {

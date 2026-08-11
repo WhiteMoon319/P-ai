@@ -1,4 +1,14 @@
-pub(crate) fn weixin_oc_contact_display_name(
+use pai_backend::core::domain::types_config::{AppConfig, RemoteImChannelConfig, RemoteImPlatform};
+use pai_backend::core::domain::types_requests::{ChatIngressPart, ChatInputPayload, SessionSelector};
+use pai_backend::core::domain::types_storage::RemoteImChannelPrivateState;
+use pai_backend::logging::{runtime_log_debug, runtime_log_error, runtime_log_info, runtime_log_warn};
+use serde_json::Value;
+use uuid::Uuid;
+
+use super::*;
+use crate::remote_im_sdk::{RemoteImSdkSendError, remote_im_http_rejection_error};
+
+pub fn weixin_oc_contact_display_name(
     channel: &RemoteImChannelConfig,
     user_id: &str,
 ) -> String {
@@ -13,9 +23,9 @@ pub(crate) fn weixin_oc_contact_display_name(
     "个人微信".to_string()
 }
 
-pub(crate) async fn handle_weixin_oc_inbound_message(
+pub async fn handle_weixin_oc_inbound_message(
     channel: &RemoteImChannelConfig,
-    state: &AppState,
+    access: &dyn WeixinOcStateAccess,
     msg: WeixinOcInboundMessage,
 ) -> Result<(), String> {
     let from_user_id = msg
@@ -33,7 +43,7 @@ pub(crate) async fn handle_weixin_oc_inbound_message(
         .filter(|value| !value.is_empty())
     {
         weixin_oc_manager()
-            .set_context_token(state, &channel.id, from_user_id, token)
+            .set_context_token(access, &channel.id, from_user_id, token)
             .await;
     }
     let item_list = msg.item_list.unwrap_or_default();
@@ -77,8 +87,8 @@ pub(crate) async fn handle_weixin_oc_inbound_message(
         .or(msg.msg_id)
         .map(|value| value.to_string())
         .unwrap_or_else(|| Uuid::new_v4().to_string());
-    remote_im_enqueue_message_internal(
-        RemoteImEnqueueInput {
+    access.enqueue_message(
+        pai_backend::core::domain::types_requests::RemoteImEnqueueInput {
             channel_id: channel.id.clone(),
             platform: RemoteImPlatform::WeixinOc,
             im_name: "weixin".to_string(),
@@ -91,13 +101,13 @@ pub(crate) async fn handle_weixin_oc_inbound_message(
             platform_message_id: Some(message_id),
             dingtalk_session_webhook: None,
             dingtalk_session_webhook_expired_time: None,
-            session: SessionSelector {
+            session: pai_backend::core::domain::types_requests::SessionSelector {
                 api_config_id: None,
                 conversation_id: None,
                 department_id: None,
                 agent_id: String::new(),
             },
-            payload: ChatInputPayload {
+            payload: pai_backend::core::domain::types_requests::ChatInputPayload {
                 text: if final_text.is_empty() {
                     None
                 } else {
@@ -122,23 +132,22 @@ pub(crate) async fn handle_weixin_oc_inbound_message(
                 }),
             },
         },
-        state,
     )?;
     Ok(())
 }
 
-pub(crate) async fn run_single_weixin_oc_poll_cycle(
+pub async fn run_single_weixin_oc_poll_cycle(
     channel_id: &str,
-    state: &AppState,
+    access: std::sync::Arc<dyn WeixinOcStateAccess>,
 ) -> Result<(), String> {
-    let config = state_read_config_cached(state)?;
+    let config = access.read_config()?;
     let channel = config
         .remote_im_channels
         .iter()
         .find(|item| item.id == channel_id)
         .cloned()
         .ok_or_else(|| format!("个人微信渠道不存在: {channel_id}"))?;
-    let channel = remote_im_channel_with_effective_credentials(state, &channel)?;
+    let channel = access.channel_with_effective_credentials(&channel)?;
     let creds = WeixinOcCredentials::from_value(&channel.credentials);
     let token = creds.token.trim().to_string();
     if token.is_empty() {
@@ -188,125 +197,22 @@ pub(crate) async fn run_single_weixin_oc_poll_cycle(
         .filter(|value| !value.is_empty())
     {
         if creds.sync_buf.trim() != next_sync_buf {
-            remote_im_patch_channel_private_state(
-                state,
-                &RemoteImPlatform::WeixinOc,
+            let sync_buf_value = next_sync_buf.to_string();
+            access.patch_private_state(
                 &channel.id,
-                |private| {
-                    private.sync_buf = next_sync_buf.to_string();
-                },
+                Box::new(move |private| {
+                    private.sync_buf = sync_buf_value;
+                }),
             )?;
         }
     }
     for msg in data.msgs.unwrap_or_default() {
-        handle_weixin_oc_inbound_message(&channel, state, msg).await?;
+        handle_weixin_oc_inbound_message(&channel, access.as_ref(), msg).await?;
     }
     Ok(())
 }
 
-pub(crate) fn upsert_weixin_oc_contact(
-    runtime: &mut RuntimeStateFile,
-    channel: &RemoteImChannelConfig,
-    user_id: &str,
-) -> (String, bool) {
-    let normalized_user_id = user_id.trim();
-    let display_name = weixin_oc_contact_display_name(channel, normalized_user_id);
-    if let Some(contact) = runtime.remote_im_contacts.iter_mut().find(|item| {
-        item.channel_id == channel.id
-            && item.remote_contact_type == "private"
-            && item.remote_contact_id == normalized_user_id
-    }) {
-        let current_name = contact.remote_contact_name.trim();
-        if current_name.is_empty() || current_name == normalized_user_id {
-            contact.remote_contact_name = display_name;
-        }
-        return (contact.id.clone(), false);
-    }
-
-    let contact_id = Uuid::new_v4().to_string();
-    runtime.remote_im_contacts.push(RemoteImContact {
-        id: contact_id.clone(),
-        channel_id: channel.id.clone(),
-        platform: RemoteImPlatform::WeixinOc,
-        remote_contact_type: "private".to_string(),
-        remote_contact_id: normalized_user_id.to_string(),
-        remote_contact_name: display_name,
-        avatar_url: String::new(),
-        remark_name: String::new(),
-        allow_send: true,
-        allow_send_files: false,
-        allow_receive: true,
-        activation_mode: "never".to_string(),
-        activation_keywords: Vec::new(),
-        mute_keywords: default_remote_im_contact_mute_keywords(),
-        unmute_keywords: default_remote_im_contact_unmute_keywords(),
-        patience_seconds: default_remote_im_contact_patience_seconds(),
-        mute_duration_seconds: default_remote_im_contact_mute_duration_seconds(),
-        activation_cooldown_seconds: 0,
-        route_mode: "dedicated_contact_conversation".to_string(),
-        bound_department_id: None,
-        bound_agent_id: None,
-        bound_conversation_id: None,
-        processing_mode: "continuous".to_string(),
-        response_strategy: default_remote_im_contact_response_strategy(),
-        response_guidance: default_remote_im_contact_response_guidance(),
-            blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
-            group_reply_pacing: RemoteImGroupReplyPacing::default(),
-            last_activated_at: None,
-        last_message_at: None,
-        dingtalk_session_webhook: None,
-        dingtalk_session_webhook_expired_time: None,
-        onebot_group_members: Vec::new(),
-        shell_workspaces: Vec::new(),
-    });
-    (contact_id, true)
-}
-
-#[cfg(test)]
-pub(crate) mod weixin_oc_inbound_tests {
-    use super::*;
-
-    #[test]
-    fn weixin_oc_contact_display_name_prefers_channel_name() {
-        let channel = RemoteImChannelConfig {
-            id: "channel-1".to_string(),
-            name: "我的微信".to_string(),
-            platform: RemoteImPlatform::WeixinOc,
-            enabled: true,
-            credentials: serde_json::json!({}),
-            receive_files: true,
-            streaming_send: false,
-            show_tool_calls: false,
-            filter_markdown: false,
-            allow_send_files: false,
-            behavior_settings: RemoteImChannelBehaviorSettings::default(),
-        };
-
-        let display_name = weixin_oc_contact_display_name(&channel, "wxid_123");
-
-        assert_eq!(display_name, "我的微信".to_string());
-    }
-}
-
-pub(crate) fn sync_weixin_oc_contact_from_user_id(
-    state: &AppState,
-    channel: &RemoteImChannelConfig,
-    user_id: &str,
-) -> Result<(String, bool), String> {
-    let normalized_user_id = user_id.trim();
-    if normalized_user_id.is_empty() {
-        return Err("当前登录状态没有返回联系人 user_id，暂时无法补录联系人".to_string());
-    }
-    state_mutate_runtime_state_cached(state, |runtime| {
-        Ok(upsert_weixin_oc_contact(
-            runtime,
-            channel,
-            normalized_user_id,
-        ))
-    })
-}
-
-pub(crate) async fn weixin_oc_send_text_message(
+pub async fn weixin_oc_send_text_message(
     credentials: WeixinOcCredentials,
     to_user_id: &str,
     text: &str,
@@ -321,7 +227,7 @@ pub(crate) async fn weixin_oc_send_text_message(
     weixin_oc_send_message_items(credentials, to_user_id, item_list, context_token).await
 }
 
-pub(crate) async fn weixin_oc_send_message_items(
+pub async fn weixin_oc_send_message_items(
     credentials: WeixinOcCredentials,
     to_user_id: &str,
     item_list: Vec<Value>,
@@ -402,40 +308,5 @@ pub(crate) async fn weixin_oc_send_message_items(
         )));
     }
     Ok(client_id)
-}
-
-
-
-
-pub(crate) fn remote_im_weixin_oc_sync_contacts_inner(
-    state: &AppState,
-    input: WeixinOcLoginStatusInput,
-) -> Result<WeixinOcSyncContactsResult, String> {
-    let config = state_read_config_cached(state)?;
-    let channel = remote_im_channel_by_id(&config, &input.channel_id)
-        .ok_or_else(|| format!("渠道不存在: {}", input.channel_id))?;
-    if channel.platform != RemoteImPlatform::WeixinOc {
-        return Err("该渠道不是个人微信渠道".to_string());
-    }
-    let credentials = remote_im_effective_credentials(state, channel)?;
-    let creds = WeixinOcCredentials::from_value(&credentials);
-    if creds.account_id.trim().is_empty() || creds.token.trim().is_empty() {
-        return Ok(WeixinOcSyncContactsResult {
-            channel_id: input.channel_id,
-            synced_count: 0,
-            message: "当前还没有完成扫码登录，请先登录后再同步联系人。".to_string(),
-        });
-    }
-    let user_id = creds.user_id.trim().to_string();
-    let (_, created) = sync_weixin_oc_contact_from_user_id(state, channel, &user_id)?;
-    Ok(WeixinOcSyncContactsResult {
-        channel_id: input.channel_id,
-        synced_count: 1,
-        message: if created {
-            format!("已同步个人微信联系人：{}", user_id)
-        } else {
-            format!("联系人已存在，无需重复同步：{}", user_id)
-        },
-    })
 }
 

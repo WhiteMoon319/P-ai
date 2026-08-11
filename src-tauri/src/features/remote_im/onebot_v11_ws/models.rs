@@ -17,29 +17,6 @@ use tokio_util::task::TaskTracker;
 use tokio_tungstenite::accept_hdr_async;
 use tokio_tungstenite::tungstenite::handshake::server::{Request, Response};
 
-/// 渠道连接状态
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChannelConnectionStatus {
-    pub channel_id: String,
-    pub connected: bool,
-    pub peer_addr: Option<String>,
-    pub connected_at: Option<DateTime<Utc>>,
-    pub listen_addr: String,
-    #[serde(default)]
-    pub status_text: Option<String>,
-    #[serde(default)]
-    pub last_error: Option<String>,
-    #[serde(default)]
-    pub account_id: Option<String>,
-    #[serde(default)]
-    pub base_url: Option<String>,
-    #[serde(default)]
-    pub login_session_key: Option<String>,
-    #[serde(default)]
-    pub qrcode_url: Option<String>,
-}
-
 /// OneBot v11 凭证配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

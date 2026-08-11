@@ -6,15 +6,19 @@ description = "P-AI Android 平台能力（workspace/rootfs/proot/TLS/沙盒）"
 
 [dependencies]
 pai-backend = { path = "../pai-backend" }
+aes = "0.9.1"
 axum = { version = "0.8", features = ["ws"] }
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 infer = "0.19.0"
+md5 = "0.8"
+once_cell = "1"
 regex = "1"
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "multipart", "query", "rustls"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { version = "1.52.1", features = ["rt-multi-thread", "sync", "time", "process", "io-util", "macros"] }
 tokio-util = { version = "0.7.18", features = ["rt"] }
+urlencoding = "2.1"
 uuid = { version = "1", features = ["v4"] }
 webpki-root-certs = "1"

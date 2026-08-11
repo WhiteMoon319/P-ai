@@ -3513,10 +3513,13 @@ dependencies = [
 name = "pai-android-platform"
 version = "0.57.0"
 dependencies = [
+ "aes 0.9.1",
  "axum",
  "base64 0.22.1",
  "chrono",
  "infer",
+ "md5",
+ "once_cell",
  "pai-backend",
  "regex",
  "reqwest",
@@ -3524,6 +3527,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-util",
+ "urlencoding",
  "uuid",
  "webpki-root-certs",
 ]
