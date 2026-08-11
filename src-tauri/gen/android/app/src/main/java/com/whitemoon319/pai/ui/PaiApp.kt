@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -1565,6 +1566,76 @@ private fun ChatImagePart(
 }
 
 /**
+ * 消息内音频：解码 bytesBase64 → 临时文件 → MediaPlayer 播放/停止。
+ */
+@Composable
+private fun ChatAudioPart(
+    context: android.content.Context,
+    part: com.whitemoon319.pai.model.MessagePart,
+) {
+    val scope = rememberCoroutineScope()
+    var playing by remember { mutableStateOf(false) }
+    var player by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
+    val fileName = part.name?.takeIf { it.isNotBlank() } ?: "音频"
+
+    DisposableEffect(Unit) {
+        onDispose {
+            player?.release()
+            player = null
+        }
+    }
+
+    fun stopPlayback() {
+        player?.stop()
+        player?.release()
+        player = null
+        playing = false
+    }
+
+    Row(
+        Modifier
+            .padding(vertical = 4.dp)
+            .clip(MaterialTheme.shapes.small)
+            .clickable {
+                if (playing) {
+                    stopPlayback()
+                } else {
+                    val base64 = part.bytesBase64?.takeIf { it.isNotBlank() }
+                    if (base64 != null) {
+                        scope.launch(Dispatchers.IO) {
+                            val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                            val tmp = java.io.File(context.cacheDir, "pai_audio_${System.currentTimeMillis()}.${part.mime?.substringAfter("/") ?: "m4a"}")
+                            tmp.writeBytes(bytes)
+                            val mp = android.media.MediaPlayer()
+                            mp.setDataSource(tmp.absolutePath)
+                            mp.setOnCompletionListener { stopPlayback() }
+                            mp.prepare()
+                            mp.start()
+                            player = mp
+                            playing = true
+                        }
+                    }
+                }
+            }
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (playing) Icons.Default.Clear else Icons.Default.PlayArrow,
+            contentDescription = if (playing) "停止播放" else "播放音频",
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            if (playing) "播放中…" else "🎵 $fileName",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
  * 「思维活动」大类容器：承载一段回合内交错出现的思考与工具调用。
  * 两层折叠——大类可整体折叠/展开；大类内每个 step 又各自展开/折叠。
  * 语义参考 rikkahub 的 groupMessageParts（thinking 大类 → steps[]）。
@@ -1745,6 +1816,12 @@ fun MessageBubble(
                                 onClick = { showMenu = true },
                             )
                         }
+                        if (part.type == "Audio") {
+                            ChatAudioPart(
+                                context = context,
+                                part = part,
+                            )
+                        }
                     }
                     if (textContent.isNotBlank()) {
                         Text(textContent)
@@ -1771,6 +1848,12 @@ fun MessageBubble(
                                 vm = vm,
                                 part = part,
                                 onClick = { showMenu = true },
+                            )
+                        }
+                        if (part.type == "Audio") {
+                            ChatAudioPart(
+                                context = context,
+                                part = part,
                             )
                         }
                     }
