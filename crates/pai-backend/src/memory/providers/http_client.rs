@@ -2,7 +2,7 @@
 // Android 上 reqwest 默认走 rustls-platform-verifier，未初始化会 panic；
 // 统一改用静态 WebPKI 根证书构建，保证嵌入/重排等外部调用在 Android 可用。
 
-pub(crate) fn memory_http_client() -> Result<reqwest::Client, String> {
+pub fn memory_http_client() -> Result<reqwest::Client, String> {
     let mut builder = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(60))
         .connect_timeout(std::time::Duration::from_secs(15));

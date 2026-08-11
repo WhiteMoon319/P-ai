@@ -22,9 +22,6 @@ use uuid::Uuid;
 
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use super::*;
-include!("providers/http_client.rs");
-include!("providers/types.rs");
-include!("providers/openai_embedding.rs");
-include!("providers/gemini_embedding.rs");
-include!("providers/vllm_rerank.rs");
+// providers 域已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::memory::providers::*;
 include!("providers/factory.rs");

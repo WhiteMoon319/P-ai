@@ -15,6 +15,7 @@ pub mod desktop_tools;
 pub mod image_generation;
 pub mod logging;
 pub mod mcp;
+pub mod memory;
 pub mod skill;
 pub mod task;
 pub mod text_codec;

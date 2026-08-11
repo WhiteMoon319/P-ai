@@ -1,12 +1,19 @@
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+
+use crate::memory::providers::http_client::memory_http_client;
+use crate::memory::providers::types::{
+    memory_join_url, memory_run_async, MemoryEmbeddingProvider, MemoryProviderApiConfig,
+};
+
 #[derive(Debug, Clone)]
-pub(crate) struct OpenAIEmbeddingProvider {
-    pub(crate) base_url: String,
-    pub(crate) api_key: String,
-    pub(crate) model: String,
+pub struct OpenAIEmbeddingProvider {
+    pub base_url: String,
+    pub api_key: String,
+    pub model: String,
 }
 
 impl OpenAIEmbeddingProvider {
-    pub(crate) fn endpoint_url(&self) -> String {
+    pub fn endpoint_url(&self) -> String {
         let base = self.base_url.trim().trim_end_matches('/');
         let lower = base.to_ascii_lowercase();
         if lower.ends_with("/embeddings") {

@@ -3516,6 +3516,7 @@ dependencies = [
  "encoding_rs",
  "genai",
  "pai-protocol",
+ "reqwest",
  "rmcp",
  "schemars 1.2.1",
  "serde",
@@ -3523,6 +3524,7 @@ dependencies = [
  "time",
  "tokio",
  "uuid",
+ "webpki-root-certs",
 ]
 
 [[package]]
