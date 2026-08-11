@@ -578,9 +578,8 @@ pub(crate) fn effective_remote_im_channel_response_guidance(
 }
 
 include!("remote_im/group_reply_focus.rs");
-
-include!("remote_im/multilingual_text_units.rs");
-
+// multilingual_text_units 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::multilingual::text_units::*;
 include!("remote_im/group_reply_energy.rs");
 
 include!("remote_im/group_reply_state.rs");

@@ -1669,6 +1669,7 @@ dependencies = [
  "time",
  "tokio",
  "toml",
+ "unicode-segmentation",
  "uuid",
  "webp",
  "webpki-root-certs",

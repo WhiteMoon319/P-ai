@@ -101,9 +101,8 @@ pub(crate) use features_chat_scheduler::*;
 #[path = "features/remote_im/channel_store.rs"]
 mod features_remote_im_channel_store;
 pub(crate) use features_remote_im_channel_store::*;
-#[path = "features/remote_im/markdown_filter.rs"]
-mod features_remote_im_markdown_filter;
-pub(crate) use features_remote_im_markdown_filter::*;
+// markdown_filter 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::multilingual::markdown_filter::*;
 #[path = "features/remote_im/onebot_v11_ws.rs"]
 mod features_remote_im_onebot_v11_ws;
 pub(crate) use features_remote_im_onebot_v11_ws::*;
