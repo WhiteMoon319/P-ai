@@ -768,29 +768,39 @@ fun ChatScreen(
                     .padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // 模型切换（对齐 Vue：输入区左侧下拉）
-                val apiConfigs = vm.appConfig.collectAsState().value?.apiConfigs ?: emptyList()
+                // 模型切换（对齐 Vue：输入区左侧下拉，会话级 model.list）
+                val convIdForModel = vm.currentConversationId.value
+                var modelOptions by remember(convIdForModel) { mutableStateOf<List<Map<String, Any?>>?>(null) }
                 var modelMenuExpanded by remember { mutableStateOf(false) }
+                LaunchedEffect(convIdForModel) {
+                    if (convIdForModel != null) {
+                        runCatching { modelOptions = vm.loadModelList(convIdForModel) }
+                    }
+                }
                 Box {
                     TextButton(onClick = { modelMenuExpanded = true }) {
                         Text("模型", style = MaterialTheme.typography.labelLarge)
                     }
                     DropdownMenu(expanded = modelMenuExpanded, onDismissRequest = { modelMenuExpanded = false }) {
-                        if (apiConfigs.isEmpty()) {
+                        val options = modelOptions ?: emptyList()
+                        if (options.isEmpty()) {
                             DropdownMenuItem(
-                                text = { Text("暂无供应商，请先到设置添加") },
+                                text = { Text("暂无可用模型，请先到设置添加") },
                                 onClick = { modelMenuExpanded = false },
                             )
                         } else {
-                            apiConfigs.forEach { api ->
+                            options.forEach { model ->
                                 DropdownMenuItem(
-                                    text = { Text("${api.name ?: api.id ?: "未命名"} · ${api.model ?: "—"}") },
+                                    text = {
+                                        Text("${model["name"] ?: model["id"] ?: "未命名"} · ${model["model"] ?: "—"}")
+                                    },
                                     onClick = {
                                         modelMenuExpanded = false
                                         val convId = vm.currentConversationId.value
-                                        if (convId != null) {
+                                        val modelId = (model["id"] as? String) ?: ""
+                                        if (convId != null && modelId.isNotBlank()) {
                                             scope.launch {
-                                                vm.setConversationPreferredModel(convId, api.id)
+                                                vm.setConversationPreferredModel(convId, modelId)
                                             }
                                         }
                                     },

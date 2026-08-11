@@ -1324,6 +1324,18 @@ class AppViewModel(
         }
     }
 
+    /** 会话可用模型列表（model.list）。 */
+    suspend fun loadModelList(conversationId: String): List<Map<String, Any?>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                service.modelList(conversationId)
+            } catch (e: Exception) {
+                error.value = "读取模型列表失败: ${e.message}"
+                emptyList()
+            }
+        }
+    }
+
     // ---------------- 语音输入 ----------------
 
     private var audioRecorder: android.media.MediaRecorder? = null
