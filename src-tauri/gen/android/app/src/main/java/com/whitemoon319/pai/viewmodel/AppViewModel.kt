@@ -815,6 +815,41 @@ class AppViewModel(
     val memories = MutableStateFlow<List<Map<String, Any?>>?>(null)
     val memoryLoading = MutableStateFlow(false)
 
+    // ---------------- 人设（Persona）管理 ----------------
+
+    val agents = MutableStateFlow<List<com.whitemoon319.pai.model.AgentProfile>?>(null)
+    val agentsLoading = MutableStateFlow(false)
+
+    suspend fun loadAgents() {
+        withContext(Dispatchers.IO) {
+            agentsLoading.value = true
+            try {
+                agents.value = service.loadAgents()
+            } catch (e: Exception) {
+                error.value = "读取人设失败: ${e.message}"
+            } finally {
+                agentsLoading.value = false
+            }
+        }
+    }
+
+    /** 保存人设编辑（全量写回）。 */
+    suspend fun saveAgents(agents: List<com.whitemoon319.pai.model.AgentProfile>): Boolean {
+        return withContext(Dispatchers.IO) {
+            settingsSaving.value = true
+            try {
+                val ok = service.saveAgents(agents)
+                if (ok) loadAgents()
+                ok
+            } catch (e: Exception) {
+                error.value = "保存人设失败: ${e.message}"
+                false
+            } finally {
+                settingsSaving.value = false
+            }
+        }
+    }
+
     suspend fun loadMemories() {
         withContext(Dispatchers.IO) {
             memoryLoading.value = true

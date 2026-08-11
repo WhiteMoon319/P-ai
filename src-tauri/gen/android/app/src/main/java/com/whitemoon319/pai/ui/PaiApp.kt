@@ -1049,10 +1049,7 @@ fun SettingsScreen(
             SettingsEntry.Api -> ApiSettingsTab(appConfig = appConfig, vm = vm)
             SettingsEntry.Tools -> ToolsSettingsTab(vm = vm, toolStatus = toolStatus)
             SettingsEntry.Mcp -> McpSettingsTab(vm = vm)
-            SettingsEntry.Persona -> Text(
-                "人设管理：请在「模型与供应商」页配置（当前版本仅支持主 Agent）。",
-                modifier = Modifier.padding(20.dp),
-            )
+            SettingsEntry.Persona -> PersonaSettingsTab(vm = vm)
             SettingsEntry.Department -> Text(
                 "部门管理：当前版本使用默认部门，暂不支持编辑。",
                 modifier = Modifier.padding(20.dp),
@@ -1764,6 +1761,101 @@ private fun AppearanceSettingsTab(vm: AppViewModel) {
         if (saved) {
             Spacer(Modifier.height(8.dp))
             Text("已保存", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
+/** 人设设置（对齐 Vue PersonaTab：列表 + 编辑姓名/提示词）。 */
+@Composable
+private fun PersonaSettingsTab(vm: AppViewModel) {
+    val scope = rememberCoroutineScope()
+    val agents by vm.agents.collectAsState()
+    val loading by vm.agentsLoading.collectAsState()
+    val saving by vm.settingsSaving.collectAsState()
+    var selectedId by remember { mutableStateOf<String?>(null) }
+    var editName by remember { mutableStateOf("") }
+    var editPrompt by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) { vm.loadAgents() }
+
+    val selected = agents?.firstOrNull { it.id == selectedId }
+
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("人设管理", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { scope.launch { vm.loadAgents() } }, enabled = !loading) { Text(if (loading) "加载中…" else "刷新") }
+        }
+        if (agents.isNullOrEmpty()) {
+            Text(
+                if (loading) "加载中…" else "暂无可用人设",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp),
+            )
+        } else {
+            // 人设选择
+            agents!!.forEach { agent ->
+                val isSelected = agent.id == selectedId
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                        .clickable { selectedId = agent.id },
+                ) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                buildString {
+                                    append(agent.name ?: "未命名")
+                                    if (agent.isBuiltInUser == true) append("（用户）")
+                                    if (agent.isBuiltInSystem == true) append("（系统）")
+                                },
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            val scopeTag = agent.source ?: agent.scope ?: ""
+                            if (scopeTag.isNotBlank()) {
+                                Text(scopeTag, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        if (isSelected) Text("✓", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+
+        selected?.let { agent ->
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(8.dp))
+            LaunchedEffect(agent.id) {
+                editName = agent.name ?: ""
+                editPrompt = agent.systemPrompt ?: ""
+            }
+            OutlinedTextField(
+                value = editName,
+                onValueChange = { editName = it },
+                label = { Text("名称") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = editPrompt,
+                onValueChange = { editPrompt = it },
+                label = { Text("系统提示词") },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        val updated = agents!!.map { a ->
+                            if (a.id == agent.id) a.copy(name = editName, systemPrompt = editPrompt) else a
+                        }
+                        vm.saveAgents(updated)
+                    }
+                },
+                enabled = !saving,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(if (saving) "保存中…" else "保存修改") }
         }
     }
 }

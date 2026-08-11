@@ -158,6 +158,20 @@ class ChatService(private val client: PaiWsClient) {
     suspend fun saveConfig(config: com.whitemoon319.pai.model.AppConfig): com.whitemoon319.pai.model.AppConfig =
         client.request("save_config", mapOf("config" to config), com.whitemoon319.pai.model.AppConfig::class.java)
 
+    /** 读取人设/代理列表（load_agents）。 */
+    suspend fun loadAgents(): List<com.whitemoon319.pai.model.AgentProfile> =
+        client.request(
+            "load_agents",
+            emptyMap<String, Any?>(),
+            object : com.google.gson.reflect.TypeToken<List<com.whitemoon319.pai.model.AgentProfile>>() {}.type,
+        )
+
+    /** 保存人设/代理列表（save_agents）。 */
+    suspend fun saveAgents(agents: List<com.whitemoon319.pai.model.AgentProfile>): Boolean {
+        val input = com.whitemoon319.pai.model.SaveAgentsInput(agents = agents)
+        return client.request("save_agents", mapOf("input" to input), Boolean::class.java)
+    }
+
     /** 查询 Web 访问（远程连接）状态：running/enabled/port/urls/password/connections。 */
     suspend fun getWebAccessInfo(forceRefresh: Boolean = false): Map<String, Any?> {
         val input = mapOf("forceRefresh" to forceRefresh)

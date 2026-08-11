@@ -539,6 +539,27 @@ data class ChatSettings(
     @SerializedName("instructionPresets") val instructionPresets: List<PromptCommandPreset> = emptyList(),
 )
 
+/** 人设/代理（AgentProfile），load_agents / save_agents 用。 */
+data class AgentProfile(
+    val id: String? = null,
+    val name: String? = null,
+    @SerializedName("systemPrompt") val systemPrompt: String? = null,
+    @SerializedName("createdAt") val createdAt: String? = null,
+    @SerializedName("updatedAt") val updatedAt: String? = null,
+    @SerializedName("avatarPath") val avatarPath: String? = null,
+    @SerializedName("isBuiltInUser") val isBuiltInUser: Boolean = false,
+    @SerializedName("isBuiltInSystem") val isBuiltInSystem: Boolean = false,
+    @SerializedName("privateMemoryEnabled") val privateMemoryEnabled: Boolean = false,
+    @SerializedName("memoryRecallMode") val memoryRecallMode: String? = null,
+    val source: String? = null,
+    val scope: String? = null,
+)
+
+/** save_agents 输入。 */
+data class SaveAgentsInput(
+    val agents: List<AgentProfile> = emptyList(),
+)
+
 data class PromptCommandPreset(
     val id: String? = null,
     val name: String? = null,
