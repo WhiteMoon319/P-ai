@@ -91,6 +91,10 @@ fun PaiApp(vm: AppViewModel) {
         vm.start()
         onDispose { vm.stop() }
     }
+    // 预载人设列表：消息气泡显示 agent 名
+    LaunchedEffect(Unit) {
+        vm.loadAgents()
+    }
 
     // 错误反馈：一次性 Toast 提示（新建失败/刷新失败等），避免静默无反应
     val errorMsg by vm.error.collectAsState()
@@ -560,7 +564,10 @@ fun ChatScreen(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
             ) {
                 items(messages, key = { it.id }) { msg ->
-                    MessageBubble(msg)
+                    val agentName = vm.agents.collectAsState().value
+                        ?.firstOrNull { it.id == msg.speakerAgentId }
+                        ?.name
+                    MessageBubble(msg, agentName = agentName)
                 }
                 if (activitySteps.isNotEmpty()) {
                     item(key = "thinking") {
@@ -898,7 +905,7 @@ private fun ThinkingSectionMessage(steps: List<ActivityStep>) {
 }
 
 @Composable
-fun MessageBubble(message: ChatMessage) {
+fun MessageBubble(message: ChatMessage, agentName: String? = null) {
     val isUser = message.role == "user"
     Row(
         Modifier
@@ -913,9 +920,25 @@ fun MessageBubble(message: ChatMessage) {
         ) {
             val text = message.parts.joinToString("\n") { it.displayText }
             if (isUser) {
-                Text(text, Modifier.padding(10.dp))
+                Column(Modifier.padding(10.dp)) {
+                    Text(
+                        "我",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(text)
+                }
             } else {
                 Column(Modifier.padding(10.dp)) {
+                    if (!agentName.isNullOrBlank()) {
+                        Text(
+                            agentName,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                    }
                     // 落盘消息的思考+工具统一聚合为 thinking 大类（两级折叠），与流式一致
                     val steps = buildActivityStepsFromMessage(message)
                     if (steps.isNotEmpty()) {
