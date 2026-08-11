@@ -24,6 +24,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
+        // Android 13+ 通知运行时权限（消息通知功能依赖）
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1001)
+        }
+
         viewModel = (application as PaiApplication).viewModel
         // 用应用数据目录初始化原生后端（等价旧 tauri 的 app_data_dir）。
         // dataDir = /data/user/0/<pkg>，与旧版一致，可复用现有配置/工作区/rootfs。
