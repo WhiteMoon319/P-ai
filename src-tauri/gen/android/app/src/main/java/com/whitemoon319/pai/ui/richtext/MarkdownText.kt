@@ -5,12 +5,18 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
@@ -199,6 +205,7 @@ private fun renderCodeBlock(element: Element, color: ColorScheme) {
         ?: "plaintext"
     val code = codeElement?.wholeText()?.trimEnd('\n')
         ?: element.wholeText().trimEnd('\n')
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     Surface(
         color = color.surfaceVariant.copy(alpha = 0.5f),
@@ -206,8 +213,28 @@ private fun renderCodeBlock(element: Element, color: ColorScheme) {
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
     ) {
         Column(modifier = Modifier.padding(10.dp)) {
-            if (language != "plaintext") {
-                Text(language, style = MaterialTheme.typography.labelSmall, color = color.primary)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (language != "plaintext") {
+                    Text(language, style = MaterialTheme.typography.labelSmall, color = color.primary, modifier = Modifier.weight(1f))
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                // 代码块复制按钮（对齐 Vue CodeBlock.copyCode）
+                IconButton(
+                    onClick = {
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("代码", code))
+                        android.widget.Toast.makeText(context, "代码已复制", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.size(24.dp),
+                ) {
+                    Icon(
+                        androidx.compose.material.icons.Icons.Default.ContentCopy,
+                        contentDescription = "复制代码",
+                        modifier = Modifier.size(14.dp),
+                        tint = color.onSurfaceVariant,
+                    )
+                }
             }
             Text(
                 text = code,
