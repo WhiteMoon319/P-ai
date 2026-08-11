@@ -165,6 +165,12 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("conversation.compact", mapOf("conversationId" to conversationId), Map::class.java) as Map<String, Any?>
     }
 
+    /** 导出会话分享（exportShare：返回 fileName + payloadJson）。 */
+    suspend fun exportConversationShare(conversationId: String): Map<String, Any?> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("conversation.exportShare", mapOf("input" to mapOf("conversationId" to conversationId)), Map::class.java) as Map<String, Any?>
+    }
+
     /** 会话可用模型列表（model.list，Vue 模型切换语义）。 */
     suspend fun modelList(conversationId: String): List<Map<String, Any?>> {
         @Suppress("UNCHECKED_CAST")

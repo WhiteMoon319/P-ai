@@ -216,6 +216,7 @@ private fun ConversationListScreenImpl(
     onArchives: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val conversations by vm.conversations.collectAsState()
     val loading by vm.loading.collectAsState()
     var showNewDialog by remember { mutableStateOf(false) }
@@ -294,6 +295,16 @@ private fun ConversationListScreenImpl(
                             },
                             onArchive = {
                                 scope.launch { vm.archiveConversation(conv.conversationId) }
+                            },
+                            onExport = { convId ->
+                                scope.launch {
+                                    val result = vm.exportConversationShare(convId)
+                                    if (result != null) {
+                                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("PAI 会话导出", result.second))
+                                        android.widget.Toast.makeText(context, "已复制导出内容（${result.first}）", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             },
                             onDelete = {
                                 scope.launch { vm.deleteConversation(conv.conversationId) }
@@ -503,6 +514,7 @@ fun ConversationRow(
     onTogglePin: (Boolean) -> Unit,
     onArchive: () -> Unit,
     onDelete: () -> Unit,
+    onExport: (String) -> Unit = {},
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
@@ -568,6 +580,13 @@ fun ConversationRow(
             onClick = {
                 menuExpanded = false
                 onArchive()
+            },
+        )
+        DropdownMenuItem(
+            text = { Text("导出会话") },
+            onClick = {
+                menuExpanded = false
+                onExport(conv.conversationId)
             },
         )
         DropdownMenuItem(

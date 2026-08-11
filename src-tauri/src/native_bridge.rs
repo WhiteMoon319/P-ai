@@ -284,6 +284,7 @@ async fn native_dispatch(
         "conversation.pin" => ide_chat_toggle_pin_command(state, params),
         "conversation.delete" => ide_chat_delete_conversation(state, params).await,
         "conversation.batchArchive" => ide_chat_batch_archive_conversations(state, params).await,
+        "conversation.exportShare" => ide_chat_export_conversation_share_command(state, params),
         // ---- 归档会话管理（对齐 Vue ArchivesWindow）----
         "archives.list" => ide_chat_list_archives_command(state),
         "archives.blockPage" => ide_chat_archive_block_page_command(state, params),

@@ -410,6 +410,26 @@ class AppViewModel(
         }
     }
 
+    /** 导出会话分享：返回 (fileName, payloadJson)，供 UI 复制/分享。 */
+    suspend fun exportConversationShare(conversationId: String): Pair<String, String>? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val result = service.exportConversationShare(conversationId)
+                val fileName = (result["fileName"] as? String) ?: "conversation.json"
+                val payload = (result["payloadJson"] as? String) ?: ""
+                if (payload.isBlank()) {
+                    error.value = "导出会话失败：内容为空"
+                    null
+                } else {
+                    fileName to payload
+                }
+            } catch (e: Exception) {
+                error.value = "导出会话失败: ${e.message}"
+                null
+            }
+        }
+    }
+
     /** 归档会话。 */
     suspend fun archiveConversation(conversationId: String): Boolean {
         return withContext(Dispatchers.IO) {
