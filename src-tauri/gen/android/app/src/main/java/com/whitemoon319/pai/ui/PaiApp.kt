@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -84,6 +85,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -1095,9 +1097,23 @@ fun ChatScreen(
             if (nearBottom || atInitialBottom) {
                 val last = total - 1
                 if (last >= 0) {
-                    // 流式输出中用平滑动画，其余（进入/加载完成/追加消息）瞬移到最底部，避免滑动过程
                     if (isStreaming) {
-                        listState.animateScrollToItem(last)
+                        // 流式输出中：streaming 是单个超高 item，scrollToItem 只滚到 item 顶部，
+                        // 视觉上停在长文本中间。先滚到 item，再等一帧测量完成，用 scrollBy
+                        // 把 item 底部对齐视口底部（不用 animateScrollToItem：高频 delta 会反复
+                        // 取消重启动画，反而卡在中间）。
+                        listState.scrollToItem(last)
+                        withFrameNanos { }
+                        val info2 = listState.layoutInfo
+                        val lastItem = info2.visibleItemsInfo.lastOrNull()
+                        if (lastItem != null) {
+                            val itemBottom = lastItem.offset + lastItem.size
+                            val viewportEnd = info2.viewportEndOffset
+                            val delta = itemBottom - viewportEnd
+                            if (delta > 0) {
+                                listState.scrollBy(delta.toFloat())
+                            }
+                        }
                     } else {
                         listState.scrollToItem(last)
                     }

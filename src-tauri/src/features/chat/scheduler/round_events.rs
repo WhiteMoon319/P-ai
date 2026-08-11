@@ -98,17 +98,6 @@ fn emit_round_completed_event(
 ) {
     live_update_chat_finished(state, conversation_id, false, &result.assistant_text);
     notify_local_chat_round_completed(state, conversation_id, &result.assistant_text);
-    let app_handle = match state.app_handle.lock() {
-        Ok(guard) => guard.as_ref().cloned(),
-        Err(_) => None,
-    };
-    let Some(app_handle) = app_handle else {
-        runtime_log_error(format!(
-            "[聊天推送] emit round_completed 失败: app_handle unavailable, conversation_id={}",
-            conversation_id
-        ));
-        return;
-    };
     let payload = serde_json::json!({
         "conversationId": conversation_id,
         "activationId": activation_id.map(str::trim).filter(|value| !value.is_empty()),
@@ -121,6 +110,28 @@ fn emit_round_completed_event(
             .clone()
             .map(project_message_for_frontend_display_only),
     });
+    // Android 原生模式：app_handle 恒为 None（无 Tauri 事件发射器），必须直接把
+    // roundFinished 事件 push 进 native 事件队列，Kotlin pollEvents 消费后
+    // commitAssistant + finalizeStreaming 复位 isStreaming，否则右下角一直卡发送状态。
+    #[cfg(target_os = "android")]
+    {
+        crate::push_native_delta_event(serde_json::json!({
+            "method": "chat.roundFinished",
+            "params": payload,
+        }));
+        return;
+    }
+    let app_handle = match state.app_handle.lock() {
+        Ok(guard) => guard.as_ref().cloned(),
+        Err(_) => None,
+    };
+    let Some(app_handle) = app_handle else {
+        runtime_log_error(format!(
+            "[聊天推送] emit round_completed 失败: app_handle unavailable, conversation_id={}",
+            conversation_id
+        ));
+        return;
+    };
     ide_chat_broadcast_notification("chat.roundFinished", payload.clone());
     match app_handle.emit(CHAT_ROUND_COMPLETED_EVENT, payload) {
         Ok(_) => {}
@@ -453,6 +464,23 @@ fn emit_round_failed_event(
 ) {
     live_update_chat_finished(state, conversation_id, true, error_text);
     notify_local_chat_round_failed(state, conversation_id, error_text);
+    let payload = serde_json::json!({
+        "conversationId": conversation_id,
+        "activationId": activation_id.map(str::trim).filter(|value| !value.is_empty()),
+        "requestId": request_id.map(str::trim).filter(|value| !value.is_empty()),
+        "status": "failed",
+        "error": error_text,
+    });
+    // Android 原生模式：app_handle 恒为 None，直接把 roundFinished(failed) push 进
+    // native 事件队列，Kotlin 消费后复位 isStreaming 并展示失败信息。
+    #[cfg(target_os = "android")]
+    {
+        crate::push_native_delta_event(serde_json::json!({
+            "method": "chat.roundFinished",
+            "params": payload,
+        }));
+        return;
+    }
     let app_handle = match state.app_handle.lock() {
         Ok(guard) => guard.as_ref().cloned(),
         Err(_) => None,
@@ -464,13 +492,6 @@ fn emit_round_failed_event(
         ));
         return;
     };
-    let payload = serde_json::json!({
-        "conversationId": conversation_id,
-        "activationId": activation_id.map(str::trim).filter(|value| !value.is_empty()),
-        "requestId": request_id.map(str::trim).filter(|value| !value.is_empty()),
-        "status": "failed",
-        "error": error_text,
-    });
     ide_chat_broadcast_notification("chat.roundFinished", payload.clone());
     match app_handle.emit(CHAT_ROUND_FAILED_EVENT, payload) {
         Ok(_) => {}

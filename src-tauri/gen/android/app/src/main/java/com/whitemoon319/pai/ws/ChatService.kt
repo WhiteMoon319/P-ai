@@ -390,8 +390,8 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("delete_memory", mapOf("input" to input), Boolean::class.java)
     }
 
-    /** 记忆回忆搜索（search_memories_recall）。 */
-    suspend fun searchMemoriesRecall(agentId: String, query: String, mode: String = "auto"): Map<String, Any?> {
+    /** 记忆回忆搜索（search_memories_recall）。默认 rag 模式（对话召回同链路），后端仅接受 rag/tool。 */
+    suspend fun searchMemoriesRecall(agentId: String, query: String, mode: String = "rag"): Map<String, Any?> {
         val input = mapOf("agentId" to agentId, "query" to query, "mode" to mode)
         @Suppress("UNCHECKED_CAST")
         return client.request("search_memories_recall", mapOf("input" to input), Map::class.java) as Map<String, Any?>

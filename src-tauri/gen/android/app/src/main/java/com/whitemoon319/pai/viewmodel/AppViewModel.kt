@@ -866,17 +866,24 @@ class AppViewModel(
             }
             "chat.roundFinished" -> {
                 // params 顶层平铺 assistantText / assistantMessage；用 commitAssistant 去重
-                val text = params?.asJsonObject?.get("assistantText")?.takeIf { !it.isJsonNull }?.asString
-                if (!text.isNullOrEmpty()) {
-                    commitAssistant(text, null)
+                val status = params?.asJsonObject?.get("status")?.takeIf { !it.isJsonNull }?.asString
+                if (status == "failed") {
+                    val errText = params?.asJsonObject?.get("error")?.takeIf { !it.isJsonNull }?.asString
+                    if (!errText.isNullOrEmpty()) error.value = errText
+                    finalizeStreaming()
                 } else {
-                    val msg = params?.asJsonObject?.get("assistantMessage")?.takeIf { !it.isJsonNull }
-                    val parsed = msg?.let {
-                        runCatching { gson.fromJson(it, ChatMessage::class.java) }.getOrNull()
+                    val text = params?.asJsonObject?.get("assistantText")?.takeIf { !it.isJsonNull }?.asString
+                    if (!text.isNullOrEmpty()) {
+                        commitAssistant(text, null)
+                    } else {
+                        val msg = params?.asJsonObject?.get("assistantMessage")?.takeIf { !it.isJsonNull }
+                        val parsed = msg?.let {
+                            runCatching { gson.fromJson(it, ChatMessage::class.java) }.getOrNull()
+                        }
+                        if (parsed != null) commitAssistant("", parsed)
                     }
-                    if (parsed != null) commitAssistant("", parsed)
+                    finalizeStreaming()
                 }
-                finalizeStreaming()
             }
             "app.notification" -> {
                 handleNativeNotification(params)
@@ -1291,8 +1298,26 @@ class AppViewModel(
                     conversations.value.firstOrNull { it.conversationId == id }?.agentId
                 } ?: "agent"
                 val result = service.searchMemoriesRecall(agentId, query.trim())
+                // 后端返回 memories: [{memory: {id, judgment, ...}, finalScore, ...}] 嵌套结构，
+                // 扁平化为 UI 直接消费的 {id, content, score}。
+                val raw = (result["memories"] as? List<*>) ?: emptyList<Any?>()
                 @Suppress("UNCHECKED_CAST")
-                memorySearchResults.value = (result["memories"] as? List<Map<String, Any?>>) ?: emptyList()
+                memorySearchResults.value = raw.mapNotNull { hit ->
+                    val hitMap = hit as? Map<String, Any?> ?: return@mapNotNull null
+                    val memory = hitMap["memory"] as? Map<String, Any?> ?: return@mapNotNull null
+                    val id = memory["id"] as? String ?: ""
+                    val content = (memory["judgment"] as? String)
+                        ?: (memory["content"] as? String)
+                        ?: (memory["text"] as? String)
+                        ?: ""
+                    val score = (hitMap["finalScore"] as? Number)
+                        ?: (hitMap["score"] as? Number)
+                    mapOf(
+                        "id" to id,
+                        "content" to content,
+                        "score" to score,
+                    )
+                }
             } catch (e: Exception) {
                 error.value = "搜索记忆失败: ${e.message}"
             } finally {
