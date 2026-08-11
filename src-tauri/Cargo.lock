@@ -3516,6 +3516,7 @@ dependencies = [
  "chardetng",
  "encoding_rs",
  "genai",
+ "image",
  "pai-protocol",
  "reqwest",
  "rmcp",
@@ -3529,6 +3530,7 @@ dependencies = [
  "tokio",
  "toml 1.1.2+spec-1.1.0",
  "uuid",
+ "webp",
  "webpki-root-certs",
 ]
 

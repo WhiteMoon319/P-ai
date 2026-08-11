@@ -26,7 +26,8 @@ use super::*;
 // tools/types.rs 与 tools/operate_parser.rs 已迁至 crates/pai-backend（阶段 4）。
 pub(crate) use pai_backend::desktop_tools::operate_parser::*;
 pub(crate) use pai_backend::desktop_tools::types::*;
-include!("tools/image_normalizer_for_llm_request.rs");
+// image_normalizer 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::image_normalizer::*;
 #[cfg(target_os = "android")]
 include!("tools/desktop_only_android_stub.rs");
 include!("tools/operate_mcp.rs");

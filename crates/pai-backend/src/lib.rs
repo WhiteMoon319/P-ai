@@ -15,6 +15,7 @@ pub mod core;
 pub mod delegate;
 pub mod desktop_tools;
 pub mod image_generation;
+pub mod image_normalizer;
 pub mod json_extractor;
 pub mod logging;
 pub mod mcp;

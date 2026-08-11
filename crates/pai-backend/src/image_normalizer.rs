@@ -1,17 +1,17 @@
 // 该模块只用于“给 LLM 组请求体前”的图片规范化。
 // 它不是通用图片存储模块，也不负责 path、消息持久化或历史回放语义。
 
-pub(crate) const IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_PIXEL_BUDGET: u64 = 1080 * 1080;
-pub(crate) const IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_WEBP_QUALITY: f32 = 80.0;
-pub(crate) const IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_MAX_SOURCE_BYTES: u64 = 50 * 1024 * 1024;
-pub(crate) const IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_MAX_DIMENSION: u32 = 10_000;
+pub const IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_PIXEL_BUDGET: u64 = 1080 * 1080;
+pub const IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_WEBP_QUALITY: f32 = 80.0;
+pub const IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_MAX_SOURCE_BYTES: u64 = 50 * 1024 * 1024;
+pub const IMAGE_NORMALIZE_FOR_LLM_REQUEST_DEFAULT_MAX_DIMENSION: u32 = 10_000;
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct LlmRequestImageNormalizeOptions {
-    pub(crate) target_pixel_budget: u64,
-    pub(crate) webp_quality: f32,
-    pub(crate) max_source_bytes: u64,
-    pub(crate) max_dimension: u32,
+pub struct LlmRequestImageNormalizeOptions {
+    pub target_pixel_budget: u64,
+    pub webp_quality: f32,
+    pub max_source_bytes: u64,
+    pub max_dimension: u32,
 }
 
 impl Default for LlmRequestImageNormalizeOptions {
@@ -26,15 +26,15 @@ impl Default for LlmRequestImageNormalizeOptions {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct LlmRequestNormalizedImage {
-    pub(crate) mime: String,
-    pub(crate) bytes: Vec<u8>,
-    pub(crate) output_width: u32,
-    pub(crate) output_height: u32,
+pub struct LlmRequestNormalizedImage {
+    pub mime: String,
+    pub bytes: Vec<u8>,
+    pub output_width: u32,
+    pub output_height: u32,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum LlmRequestImageInputFormat {
+pub enum LlmRequestImageInputFormat {
     Jpeg,
     Png,
     Gif,
@@ -42,11 +42,11 @@ pub(crate) enum LlmRequestImageInputFormat {
     Bmp,
 }
 
-pub(crate) fn llm_request_image_normalize_options_default() -> LlmRequestImageNormalizeOptions {
+pub fn llm_request_image_normalize_options_default() -> LlmRequestImageNormalizeOptions {
     LlmRequestImageNormalizeOptions::default()
 }
 
-pub(crate) fn llm_request_image_detect_format(
+pub fn llm_request_image_detect_format(
     bytes: &[u8],
     declared_mime: Option<&str>,
 ) -> Result<(LlmRequestImageInputFormat, image::ImageFormat), String> {
@@ -69,7 +69,7 @@ pub(crate) fn llm_request_image_detect_format(
     Ok((input, guessed))
 }
 
-pub(crate) fn llm_request_image_output_dimensions(
+pub fn llm_request_image_output_dimensions(
     width: u32,
     height: u32,
     target_pixel_budget: u64,
@@ -93,7 +93,7 @@ pub(crate) fn llm_request_image_output_dimensions(
     (out_width.max(1), out_height.max(1))
 }
 
-pub(crate) fn llm_request_image_validate_dimensions(
+pub fn llm_request_image_validate_dimensions(
     width: u32,
     height: u32,
     options: &LlmRequestImageNormalizeOptions,
@@ -110,7 +110,7 @@ pub(crate) fn llm_request_image_validate_dimensions(
     Ok(())
 }
 
-pub(crate) fn normalize_image_bytes_for_llm_request_with_options(
+pub fn normalize_image_bytes_for_llm_request_with_options(
     bytes: &[u8],
     declared_mime: Option<&str>,
     options: LlmRequestImageNormalizeOptions,
@@ -155,7 +155,7 @@ pub(crate) fn normalize_image_bytes_for_llm_request_with_options(
     })
 }
 
-pub(crate) fn normalize_image_bytes_for_llm_request(
+pub fn normalize_image_bytes_for_llm_request(
     bytes: &[u8],
     declared_mime: Option<&str>,
 ) -> Result<LlmRequestNormalizedImage, String> {
@@ -166,7 +166,7 @@ pub(crate) fn normalize_image_bytes_for_llm_request(
     )
 }
 
-pub(crate) fn normalize_rgba_image_for_llm_request_with_options(
+pub fn normalize_rgba_image_for_llm_request_with_options(
     rgba: &[u8],
     width: u32,
     height: u32,
@@ -204,7 +204,7 @@ pub(crate) fn normalize_rgba_image_for_llm_request_with_options(
     })
 }
 
-pub(crate) fn normalize_rgba_image_for_llm_request(
+pub fn normalize_rgba_image_for_llm_request(
     rgba: &[u8],
     width: u32,
     height: u32,
@@ -218,7 +218,7 @@ pub(crate) fn normalize_rgba_image_for_llm_request(
 }
 
 #[cfg(test)]
-pub(crate) fn image_normalizer_test_jpeg(width: u32, height: u32, quality: u8) -> Vec<u8> {
+pub fn image_normalizer_test_jpeg(width: u32, height: u32, quality: u8) -> Vec<u8> {
     let image = image::DynamicImage::ImageRgb8(image::RgbImage::from_fn(width, height, |x, y| {
         image::Rgb([
             (x % 255) as u8,
@@ -233,7 +233,7 @@ pub(crate) fn image_normalizer_test_jpeg(width: u32, height: u32, quality: u8) -
 }
 
 #[cfg(test)]
-pub(crate) fn image_normalizer_test_noisy_jpeg(width: u32, height: u32, quality: u8) -> Vec<u8> {
+pub fn image_normalizer_test_noisy_jpeg(width: u32, height: u32, quality: u8) -> Vec<u8> {
     let image = image::DynamicImage::ImageRgb8(image::RgbImage::from_fn(width, height, |x, y| {
         let seed = (u64::from(x) * 1_103_515_245)
             ^ (u64::from(y) * 12_345_679)
@@ -251,7 +251,7 @@ pub(crate) fn image_normalizer_test_noisy_jpeg(width: u32, height: u32, quality:
 }
 
 #[cfg(test)]
-pub(crate) fn image_normalizer_test_png(width: u32, height: u32) -> Vec<u8> {
+pub fn image_normalizer_test_png(width: u32, height: u32) -> Vec<u8> {
     let image = image::DynamicImage::ImageRgba8(image::RgbaImage::from_fn(width, height, |x, y| {
         image::Rgba([
             (x % 255) as u8,
@@ -269,7 +269,7 @@ pub(crate) fn image_normalizer_test_png(width: u32, height: u32) -> Vec<u8> {
 
 #[cfg(test)]
 #[test]
-pub(crate) fn normalize_image_bytes_for_llm_request_should_encode_small_jpeg_as_webp() {
+pub fn normalize_image_bytes_for_llm_request_should_encode_small_jpeg_as_webp() {
     let bytes = image_normalizer_test_jpeg(512, 512, 80);
     let normalized =
         normalize_image_bytes_for_llm_request(&bytes, Some("image/jpeg")).expect("normalize jpeg");
@@ -280,7 +280,7 @@ pub(crate) fn normalize_image_bytes_for_llm_request_should_encode_small_jpeg_as_
 
 #[cfg(test)]
 #[test]
-pub(crate) fn normalize_image_bytes_for_llm_request_should_compress_large_jpeg_within_budget() {
+pub fn normalize_image_bytes_for_llm_request_should_compress_large_jpeg_within_budget() {
     let bytes = image_normalizer_test_noisy_jpeg(1166, 1000, 100);
     let normalized =
         normalize_image_bytes_for_llm_request(&bytes, Some("image/jpeg")).expect("normalize jpeg");
@@ -289,7 +289,7 @@ pub(crate) fn normalize_image_bytes_for_llm_request_should_compress_large_jpeg_w
 
 #[cfg(test)]
 #[test]
-pub(crate) fn normalize_image_bytes_for_llm_request_should_compress_when_pixel_budget_exceeded() {
+pub fn normalize_image_bytes_for_llm_request_should_compress_when_pixel_budget_exceeded() {
     let bytes = image_normalizer_test_png(3000, 1500);
     let normalized =
         normalize_image_bytes_for_llm_request(&bytes, Some("image/png")).expect("normalize png");
@@ -302,7 +302,7 @@ pub(crate) fn normalize_image_bytes_for_llm_request_should_compress_when_pixel_b
 
 #[cfg(test)]
 #[test]
-pub(crate) fn normalize_image_bytes_for_llm_request_should_reject_corrupt_input() {
+pub fn normalize_image_bytes_for_llm_request_should_reject_corrupt_input() {
     let err = normalize_image_bytes_for_llm_request(b"not-an-image", Some("image/png"))
         .expect_err("should fail");
     assert!(err.contains("识别图片格式失败") || err.contains("解码图片失败"));

@@ -10,6 +10,7 @@ aho-corasick = "1.1"
 chardetng = "1.0.0"
 encoding_rs = "0.8"
 genai = { git = "https://github.com/jeremychone/rust-genai.git", rev = "cf3396e3ac9c6bf74be5a9ed4c2400ff920f29e7" }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "query", "rustls"] }
 rmcp = { version = "3.0.1", features = ["macros"] }
 rusqlite = { version = "0.39.0", features = ["bundled"] }
@@ -22,4 +23,5 @@ tokio = { workspace = true }
 time = { version = "0.3.53", features = ["local-offset", "formatting", "parsing"] }
 toml = "1.1.2"
 uuid = { version = "1", features = ["v4"] }
+webp = "0.3"
 webpki-root-certs = "1"
