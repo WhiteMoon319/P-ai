@@ -1,6 +1,10 @@
 use once_cell::sync::Lazy;
+use std::sync::Arc;
 
-use super::*;
+use pai_backend::core::domain::types_config::RemoteImChannelConfig;
+use pai_backend::core::domain::types_storage::ChannelConnectionStatus;
+
+use crate::local_port_service::ChannelLogEntry;
 
 pub struct DingtalkStreamManager;
 
@@ -9,9 +13,9 @@ impl DingtalkStreamManager {
         Self
     }
 
-    pub(crate) async fn add_log(&self, _channel_id: &str, _level: &str, _message: &str) {}
+    pub async fn add_log(&self, _channel_id: &str, _level: &str, _message: &str) {}
 
-    pub(crate) async fn add_contact_log(
+    pub async fn add_contact_log(
         &self,
         _channel_id: &str,
         _level: &str,
@@ -20,25 +24,23 @@ impl DingtalkStreamManager {
     ) {
     }
 
-    pub(crate) async fn stop_channel(&self, _channel_id: &str) {}
+    pub async fn stop_channel(&self, _channel_id: &str) {}
 
-    pub(crate) async fn reconcile_channel_runtime(
+    pub async fn reconcile_channel_runtime(
         &self,
         _channel: &RemoteImChannelConfig,
-        _state: AppState,
     ) -> Result<(), String> {
         Ok(())
     }
 
-    pub(crate) async fn start_channel(
+    pub async fn start_channel(
         &self,
         _channel: RemoteImChannelConfig,
-        _state: AppState,
     ) -> Result<(), String> {
         Ok(())
     }
 
-    pub(crate) async fn get_channel_status(&self, channel_id: &str) -> ChannelConnectionStatus {
+    pub async fn get_channel_status(&self, channel_id: &str) -> ChannelConnectionStatus {
         ChannelConnectionStatus {
             channel_id: channel_id.to_string(),
             connected: false,
@@ -54,7 +56,7 @@ impl DingtalkStreamManager {
         }
     }
 
-    pub(crate) async fn get_logs(&self, _channel_id: &str) -> Vec<ChannelLogEntry> {
+    pub async fn get_logs(&self, _channel_id: &str) -> Vec<ChannelLogEntry> {
         Vec::new()
     }
 }
@@ -65,7 +67,7 @@ impl Default for DingtalkStreamManager {
     }
 }
 
-pub(crate) static DINGTALK_STREAM_MANAGER: Lazy<Arc<DingtalkStreamManager>> =
+pub static DINGTALK_STREAM_MANAGER: Lazy<Arc<DingtalkStreamManager>> =
     Lazy::new(|| Arc::new(DingtalkStreamManager::new()));
 
 pub fn dingtalk_stream_manager() -> Arc<DingtalkStreamManager> {

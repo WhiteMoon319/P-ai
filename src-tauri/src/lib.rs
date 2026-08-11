@@ -122,10 +122,9 @@ pub(crate) use features_remote_im_onebot_v11_ws::*;
 #[path = "features/remote_im/onebot_v11_ws_state_access.rs"]
 mod features_remote_im_onebot_v11_ws_state_access;
 pub(crate) use features_remote_im_onebot_v11_ws_state_access::*;
-#[cfg(target_os = "android")]
-#[path = "features/remote_im/dingtalk_stream_android_stub.rs"]
-mod features_remote_im_dingtalk_stream_android_stub;
-pub(crate) use features_remote_im_dingtalk_stream_android_stub::*;
+#[path = "features/remote_im/dingtalk_stream.rs"]
+mod features_remote_im_dingtalk_stream;
+pub(crate) use features_remote_im_dingtalk_stream::*;
 #[path = "features/remote_im/weixin_oc.rs"]
 mod features_remote_im_weixin_oc;
 pub(crate) use features_remote_im_weixin_oc::*;

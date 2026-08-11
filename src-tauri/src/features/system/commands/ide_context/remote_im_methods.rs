@@ -96,12 +96,11 @@ pub(crate) async fn remote_im_restart_channel_inner(
             .await
             .map_err(|err| format!("重启事件消费器失败: {}", err))?;
     } else if channel.enabled && channel.platform == RemoteImPlatform::Dingtalk {
-        let state_clone = state.clone();
         let manager = dingtalk_stream_manager();
-        let channel_clone = remote_im_channel_with_effective_credentials(&state_clone, &channel)?;
+        let channel_clone = channel.clone();
         tokio::spawn(async move {
             if let Err(err) = manager
-                .reconcile_channel_runtime(&channel_clone, state_clone)
+                .reconcile_channel_runtime(&channel_clone)
                 .await
             {
                 runtime_log_error(format!(
