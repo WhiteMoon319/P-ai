@@ -1392,6 +1392,7 @@ dependencies = [
  "md5",
  "once_cell",
  "os_info",
+ "pai-backend",
  "parking_lot",
  "pdf_oxide",
  "rayon",
@@ -3505,6 +3506,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fbd56f7631767e61784dc43f8580f403f4475bd4aaa4da003e6295e1bab4a7e"
 dependencies = [
  "stable_deref_trait",
+]
+
+[[package]]
+name = "pai-backend"
+version = "0.57.0"
+dependencies = [
+ "pai-protocol",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "pai-protocol"
+version = "0.57.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

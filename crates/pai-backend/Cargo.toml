@@ -1,0 +1,11 @@
+[package]
+name = "pai-backend"
+version.workspace = true
+edition.workspace = true
+description = "P-AI 平台无关业务后端（会话/消息/记忆/任务/远程IM/配置/migration）"
+
+[dependencies]
+pai-protocol = { path = "../pai-protocol" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }

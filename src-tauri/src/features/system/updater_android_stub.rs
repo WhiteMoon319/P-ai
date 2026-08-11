@@ -1,10 +1,7 @@
 // Android 平台的应用内更新 stub：移动端不支持 GitHub 自更新，
 // 保留与 updater.rs 相同的对外签名，命令返回友好错误或空状态。
 
-pub(crate) mod android_version_compare {
-    include!("version_compare.rs");
-}
-use android_version_compare::*;
+use pai_backend::version_compare::*;
 
 use super::*;
 

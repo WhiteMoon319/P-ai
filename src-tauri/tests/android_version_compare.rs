@@ -1,9 +1,6 @@
-// Android 版本比较纯逻辑测试（integration test，只 include 无依赖模块，
-// 绕开 Windows 本机 lib test 因 tauri 依赖无法编译的限制）。
-#[path = "../src/features/system/version_compare.rs"]
-mod version_compare;
-
-use version_compare::*;
+// Android 版本比较纯逻辑测试（阶段 4 起直接依赖 pai-backend crate，
+// 不再 include src-tauri 内模块；逻辑本体已迁移至 crates/pai-backend）。
+use pai_backend::version_compare::*;
 
 #[test]
 fn version_parse_and_compare_basic() {

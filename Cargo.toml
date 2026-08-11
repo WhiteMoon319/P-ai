@@ -5,8 +5,8 @@
 resolver = "2"
 members = [
     "crates/pai-protocol",
-    # 阶段 4-6 依次加入：
-    # "crates/pai-backend",
+    "crates/pai-backend",
+    # 阶段 5-6 依次加入：
     # "crates/pai-android-bridge",
     # "crates/pai-android-platform",
 ]

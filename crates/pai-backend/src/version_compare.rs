@@ -1,15 +1,15 @@
-// Android 版本号解析与比较（纯逻辑，无 crate 依赖，可被 integration test 直接 include）。
+// Android 版本号解析与比较（纯逻辑，无 crate 依赖）。
 // 用途：updater 判断 latest 是否严格比 current 新，正确处理 v 前缀 / 预发布 / 版本大小关系。
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct AndroidVersionParts {
-    pub(crate) major: u64,
-    pub(crate) minor: u64,
-    pub(crate) patch: u64,
-    pub(crate) prerelease: Option<String>,
+pub struct AndroidVersionParts {
+    pub major: u64,
+    pub minor: u64,
+    pub patch: u64,
+    pub prerelease: Option<String>,
 }
 
-pub(crate) fn parse_android_version(raw: &str) -> Option<AndroidVersionParts> {
+pub fn parse_android_version(raw: &str) -> Option<AndroidVersionParts> {
     let normalized = raw
         .trim()
         .trim_start_matches('v')
@@ -59,7 +59,7 @@ impl Ord for AndroidVersionParts {
 }
 
 /// 判断 latest 是否严格比 current 新（v 前缀 / 预发布 / 版本大小都正确处理）。
-pub(crate) fn android_version_is_newer(latest: &str, current: &str) -> bool {
+pub fn android_version_is_newer(latest: &str, current: &str) -> bool {
     let Some(latest_parts) = parse_android_version(latest) else {
         return false;
     };
@@ -71,7 +71,7 @@ pub(crate) fn android_version_is_newer(latest: &str, current: &str) -> bool {
     latest_parts > current_parts
 }
 
-pub(crate) fn normalize_android_release_version(raw: &str) -> String {
+pub fn normalize_android_release_version(raw: &str) -> String {
     raw.trim()
         .trim_start_matches('v')
         .trim_start_matches('V')
