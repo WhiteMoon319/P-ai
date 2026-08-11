@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::core::domain::types_config::default_true;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ImageGenerationProviderKind {
@@ -9,11 +11,6 @@ pub enum ImageGenerationProviderKind {
     Xai,
     Seedream,
     Gemini,
-}
-
-/// serde default 辅助（从 src-tauri core/domain/types_config.rs 内联迁入）。
-pub fn default_true() -> bool {
-    true
 }
 
 pub const CODEX_IMAGE_MAIN_MODEL: &str = "gpt-5.6-luna";

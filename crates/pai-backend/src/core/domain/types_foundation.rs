@@ -1,12 +1,21 @@
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::sync::OnceLock;
+
+use crate::core::domain::constants::{
+    DEFAULT_BACKGROUND_VOICE_SCREENSHOT_MODE, DEFAULT_PDF_READ_MODE, DEFAULT_RESPONSE_STYLE_ID,
+};
+use crate::core::domain::types_config::default_true;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ResponseStylePreset {
-    pub(crate) id: String,
-    pub(crate) name: String,
-    pub(crate) prompt: String,
+pub struct ResponseStylePreset {
+    pub id: String,
+    pub name: String,
+    pub prompt: String,
 }
 
-pub(crate) fn built_in_response_styles() -> &'static Vec<ResponseStylePreset> {
+pub fn built_in_response_styles() -> &'static Vec<ResponseStylePreset> {
     static STYLES: OnceLock<Vec<ResponseStylePreset>> = OnceLock::new();
     STYLES.get_or_init(|| {
         serde_json::from_str(include_str!(
@@ -22,15 +31,15 @@ pub(crate) fn built_in_response_styles() -> &'static Vec<ResponseStylePreset> {
     })
 }
 
-pub(crate) fn default_response_style_id() -> String {
+pub fn default_response_style_id() -> String {
     DEFAULT_RESPONSE_STYLE_ID.to_string()
 }
 
-pub(crate) fn default_pdf_read_mode() -> String {
+pub fn default_pdf_read_mode() -> String {
     DEFAULT_PDF_READ_MODE.to_string()
 }
 
-pub(crate) fn normalize_pdf_read_mode(value: &str) -> String {
+pub fn normalize_pdf_read_mode(value: &str) -> String {
     match value.trim() {
         "text" => "text".to_string(),
         "image" => "image".to_string(),
@@ -38,15 +47,15 @@ pub(crate) fn normalize_pdf_read_mode(value: &str) -> String {
     }
 }
 
-pub(crate) fn default_background_voice_screenshot_keywords() -> String {
+pub fn default_background_voice_screenshot_keywords() -> String {
     "看看,这个,屏幕上,see,look,watch".to_string()
 }
 
-pub(crate) fn default_background_voice_screenshot_mode() -> String {
+pub fn default_background_voice_screenshot_mode() -> String {
     DEFAULT_BACKGROUND_VOICE_SCREENSHOT_MODE.to_string()
 }
 
-pub(crate) fn normalize_background_voice_screenshot_mode(value: &str) -> String {
+pub fn normalize_background_voice_screenshot_mode(value: &str) -> String {
     match value.trim() {
         "desktop" => "desktop".to_string(),
         "focused_window" => "focused_window".to_string(),
@@ -54,7 +63,7 @@ pub(crate) fn normalize_background_voice_screenshot_mode(value: &str) -> String 
     }
 }
 
-pub(crate) fn normalize_response_style_id(value: &str) -> String {
+pub fn normalize_response_style_id(value: &str) -> String {
     let id = value.trim();
     if built_in_response_styles().iter().any(|s| s.id == id) {
         id.to_string()
@@ -63,7 +72,7 @@ pub(crate) fn normalize_response_style_id(value: &str) -> String {
     }
 }
 
-pub(crate) fn response_style_preset(id: &str) -> ResponseStylePreset {
+pub fn response_style_preset(id: &str) -> ResponseStylePreset {
     built_in_response_styles()
         .iter()
         .find(|s| s.id == id)
@@ -76,7 +85,7 @@ pub(crate) fn response_style_preset(id: &str) -> ResponseStylePreset {
         })
 }
 
-pub(crate) fn response_style_preset_optional(id: &str) -> Option<ResponseStylePreset> {
+pub fn response_style_preset_optional(id: &str) -> Option<ResponseStylePreset> {
     let preset = response_style_preset(id);
     if preset.id == "none" {
         None
@@ -85,7 +94,17 @@ pub(crate) fn response_style_preset_optional(id: &str) -> Option<ResponseStylePr
     }
 }
 
-pub(crate) fn highest_instruction_markdown() -> String {
+/// XML 提示块包装（从 src-tauri prompt_assembly.rs 迁入）。
+pub fn prompt_xml_block(block_name: &str, body: impl AsRef<str>) -> String {
+    let name = block_name.trim();
+    let content = body.as_ref().trim();
+    if name.is_empty() || content.is_empty() {
+        return String::new();
+    }
+    format!("<{}>\n{}\n</{}>", name, content, name)
+}
+
+pub fn highest_instruction_markdown() -> String {
     prompt_xml_block(
         "system rules",
         include_str!("../../../../../src/constants/highest-instruction.md").trim(),
@@ -94,18 +113,18 @@ pub(crate) fn highest_instruction_markdown() -> String {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ApiToolConfig {
-    pub(crate) id: String,
-    pub(crate) command: String,
-    pub(crate) args: Vec<String>,
+pub struct ApiToolConfig {
+    pub id: String,
+    pub command: String,
+    pub args: Vec<String>,
     #[serde(default = "default_true")]
-    pub(crate) enabled: bool,
+    pub enabled: bool,
     #[serde(default)]
-    pub(crate) values: Value,
+    pub values: Value,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub(crate) enum RequestFormat {
+pub enum RequestFormat {
     #[serde(rename = "openai")]
     OpenAI,
     #[serde(rename = "auto")]
@@ -175,7 +194,7 @@ pub(crate) enum RequestFormat {
 }
 
 impl RequestFormat {
-    pub(crate) fn from_str(value: &str) -> Option<Self> {
+    pub fn from_str(value: &str) -> Option<Self> {
         let raw = value.trim().to_ascii_lowercase();
         let normalized = raw.replace([' ', '-'], "_");
         match raw.as_str() {
@@ -239,7 +258,7 @@ impl RequestFormat {
         }
     }
 
-    pub(crate) fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::OpenAI => "openai",
             Self::Auto => "auto",
@@ -277,19 +296,19 @@ impl RequestFormat {
         }
     }
 
-    pub(crate) fn is_stt(self) -> bool {
+    pub fn is_stt(self) -> bool {
         matches!(self, Self::OpenAIStt | Self::MimoAsr)
     }
 
-    pub(crate) fn is_gemini(self) -> bool {
+    pub fn is_gemini(self) -> bool {
         matches!(self, Self::Gemini)
     }
 
-    pub(crate) fn is_anthropic(self) -> bool {
+    pub fn is_anthropic(self) -> bool {
         matches!(self, Self::Anthropic)
     }
 
-    pub(crate) fn genai_adapter_kind(self) -> Option<genai::adapter::AdapterKind> {
+    pub fn genai_adapter_kind(self) -> Option<genai::adapter::AdapterKind> {
         match self {
             Self::OpenAI => Some(genai::adapter::AdapterKind::OpenAI),
             Self::DeepSeek => Some(genai::adapter::AdapterKind::DeepSeek),
@@ -326,30 +345,30 @@ impl RequestFormat {
         }
     }
 
-    pub(crate) fn is_genai_chat(self) -> bool {
+    pub fn is_genai_chat(self) -> bool {
         self.genai_adapter_kind().is_some()
     }
 
-    pub(crate) fn is_openai_style(self) -> bool {
+    pub fn is_openai_style(self) -> bool {
         matches!(
             self,
             Self::OpenAI | Self::Auto | Self::DeepSeek | Self::DeepSeekKimi | Self::OpenAIResponses | Self::Codex
         ) || self.is_genai_chat()
     }
 
-    pub(crate) fn is_auto(self) -> bool {
+    pub fn is_auto(self) -> bool {
         matches!(self, Self::Auto)
     }
 
-    pub(crate) fn is_openai_responses_family(self) -> bool {
+    pub fn is_openai_responses_family(self) -> bool {
         matches!(self, Self::OpenAIResponses | Self::Codex)
     }
 
-    pub(crate) fn is_codex(self) -> bool {
+    pub fn is_codex(self) -> bool {
         matches!(self, Self::Codex)
     }
 
-    pub(crate) fn is_chat_text(self) -> bool {
+    pub fn is_chat_text(self) -> bool {
         matches!(self, Self::Auto) || self.is_genai_chat()
     }
 }
@@ -370,15 +389,15 @@ impl<'de> serde::Deserialize<'de> for RequestFormat {
     }
 }
 
-pub(crate) fn default_request_format() -> RequestFormat {
+pub fn default_request_format() -> RequestFormat {
     RequestFormat::Auto
 }
 
-pub(crate) fn default_false() -> bool {
+pub fn default_false() -> bool {
     false
 }
 
-pub(crate) fn default_api_tools() -> Vec<ApiToolConfig> {
+pub fn default_api_tools() -> Vec<ApiToolConfig> {
     vec![
         ApiToolConfig {
             id: "fetch".to_string(),
@@ -509,7 +528,7 @@ pub(crate) fn default_api_tools() -> Vec<ApiToolConfig> {
     ]
 }
 
-pub(crate) fn default_agent_tools() -> Vec<ApiToolConfig> {
+pub fn default_agent_tools() -> Vec<ApiToolConfig> {
     let mut tools = default_api_tools();
     tools.insert(
         2,

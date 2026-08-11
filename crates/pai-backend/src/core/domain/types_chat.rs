@@ -1,12 +1,34 @@
-pub(crate) const MEMORY_RECALL_MODE_AUTO: &str = "auto";
-pub(crate) const MEMORY_RECALL_MODE_MANUAL: &str = "manual";
-pub(crate) const MEMORY_RECALL_MODE_OFF: &str = "off";
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
-pub(crate) fn default_agent_memory_recall_mode() -> String {
+use crate::core::domain::types_config::{
+    default_global_scope, default_main_source, default_shell_work_mode, RemoteImPlatform,
+    ShellWorkspaceConfig,
+};
+use crate::core::domain::types_foundation::{default_agent_tools, ApiToolConfig};
+use crate::core::domain::types_requests::RuntimeContext;
+
+/// 主助理会话状态（从 src-tauri chat/scheduler.rs 迁入）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MainSessionState {
+    /// 空闲，可以出队
+    Idle,
+    /// 主助理正在流式输出
+    AssistantStreaming,
+    /// 正在整理上下文
+    OrganizingContext,
+}
+
+pub const MEMORY_RECALL_MODE_AUTO: &str = "auto";
+pub const MEMORY_RECALL_MODE_MANUAL: &str = "manual";
+pub const MEMORY_RECALL_MODE_OFF: &str = "off";
+
+pub fn default_agent_memory_recall_mode() -> String {
     MEMORY_RECALL_MODE_AUTO.to_string()
 }
 
-pub(crate) fn normalize_agent_memory_recall_mode(value: &str) -> String {
+pub fn normalize_agent_memory_recall_mode(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         MEMORY_RECALL_MODE_MANUAL => MEMORY_RECALL_MODE_MANUAL.to_string(),
         MEMORY_RECALL_MODE_OFF => MEMORY_RECALL_MODE_OFF.to_string(),
@@ -14,55 +36,55 @@ pub(crate) fn normalize_agent_memory_recall_mode(value: &str) -> String {
     }
 }
 
-pub(crate) fn agent_memory_recall_mode(agent: &AgentProfile) -> String {
+pub fn agent_memory_recall_mode(agent: &AgentProfile) -> String {
     normalize_agent_memory_recall_mode(&agent.memory_recall_mode)
 }
 
-pub(crate) fn agent_memory_rag_enabled(agent: &AgentProfile) -> bool {
+pub fn agent_memory_rag_enabled(agent: &AgentProfile) -> bool {
     agent_memory_recall_mode(agent) == MEMORY_RECALL_MODE_AUTO
 }
 
-pub(crate) fn agent_memory_recall_enabled(agent: &AgentProfile) -> bool {
+pub fn agent_memory_recall_enabled(agent: &AgentProfile) -> bool {
     agent_memory_recall_mode(agent) != MEMORY_RECALL_MODE_OFF
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct AgentProfile {
-    pub(crate) id: String,
-    pub(crate) name: String,
-    pub(crate) system_prompt: String,
+pub struct AgentProfile {
+    pub id: String,
+    pub name: String,
+    pub system_prompt: String,
     #[serde(default = "default_agent_tools")]
-    pub(crate) tools: Vec<ApiToolConfig>,
-    pub(crate) created_at: String,
-    pub(crate) updated_at: String,
+    pub tools: Vec<ApiToolConfig>,
+    pub created_at: String,
+    pub updated_at: String,
     #[serde(default)]
-    pub(crate) avatar_path: Option<String>,
+    pub avatar_path: Option<String>,
     #[serde(default)]
-    pub(crate) avatar_updated_at: Option<String>,
+    pub avatar_updated_at: Option<String>,
     #[serde(default)]
-    pub(crate) is_built_in_user: bool,
+    pub is_built_in_user: bool,
     #[serde(default)]
-    pub(crate) is_built_in_system: bool,
+    pub is_built_in_system: bool,
     #[serde(default)]
-    pub(crate) private_memory_enabled: bool,
+    pub private_memory_enabled: bool,
     #[serde(default = "default_agent_memory_recall_mode")]
-    pub(crate) memory_recall_mode: String,
+    pub memory_recall_mode: String,
     #[serde(default = "default_main_source")]
-    pub(crate) source: String,
+    pub source: String,
     #[serde(default = "default_global_scope")]
-    pub(crate) scope: String,
+    pub scope: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct SaveAgentsInput {
-    pub(crate) agents: Vec<AgentProfile>,
+pub struct SaveAgentsInput {
+    pub agents: Vec<AgentProfile>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
-pub(crate) enum MessagePart {
+pub enum MessagePart {
     Text {
         text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -93,116 +115,116 @@ pub(crate) enum MessagePart {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct MemeAnnotation {
-    pub(crate) meme: String,
-    pub(crate) path: String,
+pub struct MemeAnnotation {
+    pub meme: String,
+    pub path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ChatMessage {
-    pub(crate) id: String,
-    pub(crate) role: String,
-    pub(crate) created_at: String,
+pub struct ChatMessage {
+    pub id: String,
+    pub role: String,
+    pub created_at: String,
     #[serde(default)]
-    pub(crate) speaker_agent_id: Option<String>,
-    pub(crate) parts: Vec<MessagePart>,
+    pub speaker_agent_id: Option<String>,
+    pub parts: Vec<MessagePart>,
     #[serde(default)]
-    pub(crate) extra_text_blocks: Vec<String>,
-    pub(crate) provider_meta: Option<Value>,
-    pub(crate) tool_call: Option<Vec<Value>>,
-    pub(crate) mcp_call: Option<Vec<Value>>,
+    pub extra_text_blocks: Vec<String>,
+    pub provider_meta: Option<Value>,
+    pub tool_call: Option<Vec<Value>>,
+    pub mcp_call: Option<Vec<Value>>,
     // 正式 meme 替换语义：把正文中的 token 映射为 markdown 图片引用。
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) meme_annotations: Option<Vec<MemeAnnotation>>,
+    pub meme_annotations: Option<Vec<MemeAnnotation>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct RemoteImMessageSource {
-    pub(crate) channel_id: String,
-    pub(crate) platform: RemoteImPlatform,
-    pub(crate) im_name: String,
-    pub(crate) remote_contact_type: String,
-    pub(crate) remote_contact_id: String,
-    pub(crate) remote_contact_name: String,
-    pub(crate) sender_id: String,
-    pub(crate) sender_name: String,
+pub struct RemoteImMessageSource {
+    pub channel_id: String,
+    pub platform: RemoteImPlatform,
+    pub im_name: String,
+    pub remote_contact_type: String,
+    pub remote_contact_id: String,
+    pub remote_contact_name: String,
+    pub sender_id: String,
+    pub sender_name: String,
     #[serde(default)]
-    pub(crate) sender_avatar_url: Option<String>,
+    pub sender_avatar_url: Option<String>,
     #[serde(default)]
-    pub(crate) platform_message_id: Option<String>,
+    pub platform_message_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct RemoteImActivationSource {
-    pub(crate) channel_id: String,
-    pub(crate) platform: RemoteImPlatform,
-    pub(crate) remote_contact_type: String,
-    pub(crate) remote_contact_id: String,
-    pub(crate) remote_contact_name: String,
+pub struct RemoteImActivationSource {
+    pub channel_id: String,
+    pub platform: RemoteImPlatform,
+    pub remote_contact_type: String,
+    pub remote_contact_id: String,
+    pub remote_contact_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ConversationTodoItem {
-    pub(crate) content: String,
-    pub(crate) status: String,
+pub struct ConversationTodoItem {
+    pub content: String,
+    pub status: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct FastRequestTurn {
+pub struct FastRequestTurn {
     #[serde(default)]
-    pub(crate) id: String,
+    pub id: String,
     #[serde(default)]
-    pub(crate) kind: String,
+    pub kind: String,
     #[serde(default)]
-    pub(crate) request_text: String,
+    pub request_text: String,
     #[serde(default)]
-    pub(crate) response_text: String,
+    pub response_text: String,
     #[serde(default)]
-    pub(crate) success: bool,
+    pub success: bool,
     #[serde(default)]
-    pub(crate) error: Option<String>,
+    pub error: Option<String>,
     #[serde(default)]
-    pub(crate) model_name: Option<String>,
+    pub model_name: Option<String>,
     #[serde(default)]
-    pub(crate) duration_ms: Option<u64>,
+    pub duration_ms: Option<u64>,
     #[serde(default)]
-    pub(crate) created_at: String,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ConversationUsageBucket {
+pub struct ConversationUsageBucket {
     #[serde(default)]
-    pub(crate) input_tokens: u64,
+    pub input_tokens: u64,
     #[serde(default)]
-    pub(crate) output_tokens: u64,
+    pub output_tokens: u64,
     #[serde(default)]
-    pub(crate) total_tokens: u64,
+    pub total_tokens: u64,
     #[serde(default)]
-    pub(crate) cache_read_tokens: u64,
+    pub cache_read_tokens: u64,
     #[serde(default)]
-    pub(crate) cache_write_tokens: u64,
+    pub cache_write_tokens: u64,
     #[serde(default)]
-    pub(crate) reasoning_tokens: u64,
+    pub reasoning_tokens: u64,
 }
 
 impl ConversationUsageBucket {
-    pub(crate) fn needs_legacy_total_tokens_backfill(&self) -> bool {
+    pub fn needs_legacy_total_tokens_backfill(&self) -> bool {
         self.total_tokens < self.input_tokens.saturating_add(self.output_tokens)
     }
 
-    pub(crate) fn normalized_legacy_totals(mut self) -> Self {
+    pub fn normalized_legacy_totals(mut self) -> Self {
         let floor_total_tokens = self.input_tokens.saturating_add(self.output_tokens);
         self.total_tokens = self.total_tokens.max(floor_total_tokens);
         self
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.input_tokens == 0
             && self.output_tokens == 0
             && self.total_tokens == 0
@@ -211,7 +233,7 @@ impl ConversationUsageBucket {
             && self.reasoning_tokens == 0
     }
 
-    pub(crate) fn keep_at_least(&mut self, other: &ConversationUsageBucket) {
+    pub fn keep_at_least(&mut self, other: &ConversationUsageBucket) {
         self.input_tokens = self.input_tokens.max(other.input_tokens);
         self.output_tokens = self.output_tokens.max(other.output_tokens);
         self.total_tokens = self.total_tokens.max(other.total_tokens);
@@ -220,7 +242,7 @@ impl ConversationUsageBucket {
         self.reasoning_tokens = self.reasoning_tokens.max(other.reasoning_tokens);
     }
 
-    pub(crate) fn saturating_add_assign(&mut self, other: &ConversationUsageBucket) {
+    pub fn saturating_add_assign(&mut self, other: &ConversationUsageBucket) {
         self.input_tokens = self.input_tokens.saturating_add(other.input_tokens);
         self.output_tokens = self.output_tokens.saturating_add(other.output_tokens);
         self.total_tokens = self.total_tokens.saturating_add(other.total_tokens);
@@ -229,7 +251,7 @@ impl ConversationUsageBucket {
         self.reasoning_tokens = self.reasoning_tokens.saturating_add(other.reasoning_tokens);
     }
 
-    pub(crate) fn saturating_sub_from_totals(
+    pub fn saturating_sub_from_totals(
         total_input_tokens: u64,
         total_output_tokens: u64,
         total_total_tokens: u64,
@@ -249,7 +271,7 @@ impl ConversationUsageBucket {
     }
 }
 
-pub(crate) fn conversation_provider_model_usage_is_empty(
+pub fn conversation_provider_model_usage_is_empty(
     value: &std::collections::BTreeMap<String, std::collections::BTreeMap<String, ConversationUsageBucket>>,
 ) -> bool {
     value.is_empty()
@@ -257,26 +279,26 @@ pub(crate) fn conversation_provider_model_usage_is_empty(
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ConversationCumulativeUsage {
+pub struct ConversationCumulativeUsage {
     #[serde(default)]
-    pub(crate) input_tokens: u64,
+    pub input_tokens: u64,
     #[serde(default)]
-    pub(crate) output_tokens: u64,
+    pub output_tokens: u64,
     #[serde(default)]
-    pub(crate) total_tokens: u64,
+    pub total_tokens: u64,
     #[serde(default)]
-    pub(crate) cache_read_tokens: u64,
+    pub cache_read_tokens: u64,
     #[serde(default)]
-    pub(crate) cache_write_tokens: u64,
+    pub cache_write_tokens: u64,
     #[serde(default)]
-    pub(crate) reasoning_tokens: u64,
+    pub reasoning_tokens: u64,
     #[serde(default, skip_serializing_if = "conversation_provider_model_usage_is_empty")]
-    pub(crate) by_provider_model:
+    pub by_provider_model:
         std::collections::BTreeMap<String, std::collections::BTreeMap<String, ConversationUsageBucket>>,
 }
 
 impl ConversationCumulativeUsage {
-    pub(crate) fn needs_legacy_total_tokens_backfill(&self) -> bool {
+    pub fn needs_legacy_total_tokens_backfill(&self) -> bool {
         self.total_tokens < self.input_tokens.saturating_add(self.output_tokens)
             || self
                 .by_provider_model
@@ -284,7 +306,7 @@ impl ConversationCumulativeUsage {
                 .any(|models| models.values().any(ConversationUsageBucket::needs_legacy_total_tokens_backfill))
     }
 
-    pub(crate) fn normalized_legacy_totals(mut self) -> Self {
+    pub fn normalized_legacy_totals(mut self) -> Self {
         let floor_total_tokens = self.input_tokens.saturating_add(self.output_tokens);
         self.total_tokens = self.total_tokens.max(floor_total_tokens);
         self.by_provider_model = self
@@ -303,7 +325,7 @@ impl ConversationCumulativeUsage {
         self
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.input_tokens == 0
             && self.output_tokens == 0
             && self.total_tokens == 0
@@ -313,7 +335,7 @@ impl ConversationCumulativeUsage {
             && self.by_provider_model.is_empty()
     }
 
-    pub(crate) fn keep_at_least(&mut self, other: &ConversationCumulativeUsage) {
+    pub fn keep_at_least(&mut self, other: &ConversationCumulativeUsage) {
         self.input_tokens = self.input_tokens.max(other.input_tokens);
         self.output_tokens = self.output_tokens.max(other.output_tokens);
         self.total_tokens = self.total_tokens.max(other.total_tokens);
@@ -334,7 +356,7 @@ impl ConversationCumulativeUsage {
         }
     }
 
-    pub(crate) fn detailed_usage_sum(&self) -> ConversationUsageBucket {
+    pub fn detailed_usage_sum(&self) -> ConversationUsageBucket {
         let mut sum = ConversationUsageBucket::default();
         for models in self.by_provider_model.values() {
             for bucket in models.values() {
@@ -344,7 +366,7 @@ impl ConversationCumulativeUsage {
         sum
     }
 
-    pub(crate) fn legacy_remainder(&self) -> ConversationUsageBucket {
+    pub fn legacy_remainder(&self) -> ConversationUsageBucket {
         ConversationUsageBucket::saturating_sub_from_totals(
             self.input_tokens,
             self.output_tokens,
@@ -357,7 +379,7 @@ impl ConversationCumulativeUsage {
     }
 }
 
-pub(crate) fn conversation_cumulative_usage_add_provider_usage(
+pub fn conversation_cumulative_usage_add_provider_usage(
     target: &mut ConversationCumulativeUsage,
     provider_key: Option<&str>,
     model_name: Option<&str>,
@@ -434,24 +456,24 @@ pub(crate) fn conversation_cumulative_usage_add_provider_usage(
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ConversationGoalState {
-    pub(crate) goal_id: String,
-    pub(crate) status: String,
-    pub(crate) objective: String,
-    pub(crate) started_at: String,
+pub struct ConversationGoalState {
+    pub goal_id: String,
+    pub status: String,
+    pub objective: String,
+    pub started_at: String,
     #[serde(default)]
-    pub(crate) ended_at: Option<String>,
+    pub ended_at: Option<String>,
     #[serde(default)]
-    pub(crate) usage_start: ConversationCumulativeUsage,
+    pub usage_start: ConversationCumulativeUsage,
     #[serde(default)]
-    pub(crate) usage_end: Option<ConversationCumulativeUsage>,
+    pub usage_end: Option<ConversationCumulativeUsage>,
 }
 
-pub(crate) fn conversation_goal_is_active(goal: &ConversationGoalState) -> bool {
+pub fn conversation_goal_is_active(goal: &ConversationGoalState) -> bool {
     goal.status.trim() == "active"
 }
 
-pub(crate) fn conversation_cumulative_usage_weighted_tokens(
+pub fn conversation_cumulative_usage_weighted_tokens(
     cumulative_usage: &ConversationCumulativeUsage,
 ) -> u64 {
     let weighted = (cumulative_usage.output_tokens as f64 * 2.0)
@@ -468,133 +490,133 @@ pub(crate) fn conversation_cumulative_usage_weighted_tokens(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct Conversation {
-    pub(crate) id: String,
-    pub(crate) title: String,
-    pub(crate) agent_id: String,
+pub struct Conversation {
+    pub id: String,
+    pub title: String,
+    pub agent_id: String,
     #[serde(default)]
-    pub(crate) department_id: String,
+    pub department_id: String,
     #[serde(default)]
-    pub(crate) bound_conversation_id: Option<String>,
+    pub bound_conversation_id: Option<String>,
     #[serde(default)]
-    pub(crate) parent_conversation_id: Option<String>,
+    pub parent_conversation_id: Option<String>,
     #[serde(default)]
-    pub(crate) child_conversation_ids: Vec<String>,
+    pub child_conversation_ids: Vec<String>,
     #[serde(default)]
-    pub(crate) fork_message_cursor: Option<String>,
+    pub fork_message_cursor: Option<String>,
     #[serde(default)]
-    pub(crate) unread_count: usize,
+    pub unread_count: usize,
     #[serde(default)]
-    pub(crate) conversation_kind: String,
+    pub conversation_kind: String,
     #[serde(default)]
-    pub(crate) root_conversation_id: Option<String>,
+    pub root_conversation_id: Option<String>,
     #[serde(default)]
-    pub(crate) delegate_id: Option<String>,
-    pub(crate) created_at: String,
-    pub(crate) updated_at: String,
+    pub delegate_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
     #[serde(default)]
-    pub(crate) last_user_at: Option<String>,
-    pub(crate) last_assistant_at: Option<String>,
-    pub(crate) status: String,
+    pub last_user_at: Option<String>,
+    pub last_assistant_at: Option<String>,
+    pub status: String,
     #[serde(default)]
-    pub(crate) summary: String,
+    pub summary: String,
     #[serde(default)]
-    pub(crate) user_profile_snapshot: String,
+    pub user_profile_snapshot: String,
     #[serde(default)]
-    pub(crate) shell_workspace_path: Option<String>,
+    pub shell_workspace_path: Option<String>,
     #[serde(default)]
-    pub(crate) shell_workspaces: Vec<ShellWorkspaceConfig>,
+    pub shell_workspaces: Vec<ShellWorkspaceConfig>,
     #[serde(default)]
-    pub(crate) shell_autonomous_mode: bool,
+    pub shell_autonomous_mode: bool,
     #[serde(default = "default_shell_work_mode")]
-    pub(crate) shell_work_mode: String,
+    pub shell_work_mode: String,
     #[serde(default)]
-    pub(crate) archived_at: Option<String>,
-    pub(crate) messages: Vec<ChatMessage>,
+    pub archived_at: Option<String>,
+    pub messages: Vec<ChatMessage>,
     #[serde(default)]
-    pub(crate) fast_request_turns: Vec<FastRequestTurn>,
+    pub fast_request_turns: Vec<FastRequestTurn>,
     #[serde(default)]
-    pub(crate) current_todos: Vec<ConversationTodoItem>,
+    pub current_todos: Vec<ConversationTodoItem>,
     #[serde(default)]
-    pub(crate) memory_recall_table: Vec<String>,
+    pub memory_recall_table: Vec<String>,
     #[serde(default)]
-    pub(crate) plan_mode_enabled: bool,
+    pub plan_mode_enabled: bool,
     #[serde(default)]
-    pub(crate) preferred_api_config_id: Option<String>,
+    pub preferred_api_config_id: Option<String>,
     #[serde(default)]
-    pub(crate) auto_push_remote_contact_id: Option<String>,
+    pub auto_push_remote_contact_id: Option<String>,
     #[serde(default, alias = "usageSummary")]
-    pub(crate) cumulative_usage: ConversationCumulativeUsage,
+    pub cumulative_usage: ConversationCumulativeUsage,
     #[serde(default)]
-    pub(crate) active_goal: Option<ConversationGoalState>,
+    pub active_goal: Option<ConversationGoalState>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct RemoteImConversationAssistantContext {
-    pub(crate) department_id: String,
-    pub(crate) department_name: String,
-    pub(crate) agent_id: String,
-    pub(crate) agent_name: String,
+pub struct RemoteImConversationAssistantContext {
+    pub department_id: String,
+    pub department_name: String,
+    pub agent_id: String,
+    pub agent_name: String,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ConversationRuntimeSlot {
-    pub(crate) state: MainSessionState,
-    pub(crate) pending_queue: std::collections::VecDeque<ChatPendingEvent>,
-    pub(crate) stream_cache: ConversationStreamRuntimeCache,
-    pub(crate) active_remote_im_activation_sources: Vec<RemoteImActivationSource>,
-    pub(crate) active_remote_im_assistant_context: Option<RemoteImConversationAssistantContext>,
-    pub(crate) plan_mode_enabled: bool,
-    pub(crate) last_activity_at: String,
+pub struct ConversationRuntimeSlot {
+    pub state: MainSessionState,
+    pub pending_queue: std::collections::VecDeque<ChatPendingEvent>,
+    pub stream_cache: ConversationStreamRuntimeCache,
+    pub active_remote_im_activation_sources: Vec<RemoteImActivationSource>,
+    pub active_remote_im_assistant_context: Option<RemoteImConversationAssistantContext>,
+    pub plan_mode_enabled: bool,
+    pub last_activity_at: String,
 }
 
 #[derive(Debug, Clone, Default)]
-pub(crate) struct ConversationStreamRuntimeCache {
-    pub(crate) activation_id: String,
-    pub(crate) request_id: String,
-    pub(crate) department_id: String,
-    pub(crate) agent_id: String,
-    pub(crate) assistant_text: String,
-    pub(crate) activity_reasoning_text: String,
-    pub(crate) tool_status_text: String,
-    pub(crate) tool_status_state: String,
-    pub(crate) stream_blocks: Vec<AssistantStreamBlock>,
-    pub(crate) started_at: String,
-    pub(crate) started_at_ms: u64,
-    pub(crate) updated_at: String,
-    pub(crate) persisted_assistant_message_id: String,
+pub struct ConversationStreamRuntimeCache {
+    pub activation_id: String,
+    pub request_id: String,
+    pub department_id: String,
+    pub agent_id: String,
+    pub assistant_text: String,
+    pub activity_reasoning_text: String,
+    pub tool_status_text: String,
+    pub tool_status_state: String,
+    pub stream_blocks: Vec<AssistantStreamBlock>,
+    pub started_at: String,
+    pub started_at_ms: u64,
+    pub updated_at: String,
+    pub persisted_assistant_message_id: String,
     // 上下文用量随流式缓存下发：工具执行期间落盘用量后写入，
     // 前端随每个 delta 事件的 stream_cache 拿到最新准确占用率，
     // 切屏恢复时也直接来自缓存，无需旁路广播。
-    pub(crate) context_usage_ratio: f64,
-    pub(crate) context_usage_percent: u32,
-    pub(crate) effective_prompt_tokens: u64,
-    pub(crate) context_window_tokens: u32,
+    pub context_usage_ratio: f64,
+    pub context_usage_percent: u32,
+    pub effective_prompt_tokens: u64,
+    pub context_window_tokens: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct AssistantStreamToolBlock {
-    pub(crate) tool_call_id: String,
-    pub(crate) name: String,
-    pub(crate) args_text: String,
+pub struct AssistantStreamToolBlock {
+    pub tool_call_id: String,
+    pub name: String,
+    pub args_text: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub(crate) result_text: String,
+    pub result_text: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub(crate) status: String,
+    pub status: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct AssistantStreamBlock {
+pub struct AssistantStreamBlock {
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub(crate) reasoning: String,
+    pub reasoning: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub(crate) text: String,
+    pub text: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub(crate) tools: Vec<AssistantStreamToolBlock>,
+    pub tools: Vec<AssistantStreamToolBlock>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub(crate) pending_text_break: bool,
+    pub pending_text_break: bool,
 }
 
 impl Default for ConversationRuntimeSlot {
@@ -688,33 +710,126 @@ mod conversation_usage_tests {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct DelegateRuntimeThread {
-    pub(crate) delegate_id: String,
-    pub(crate) root_conversation_id: String,
-    pub(crate) target_agent_id: String,
-    pub(crate) title: String,
-    pub(crate) call_stack: Vec<String>,
-    pub(crate) parent_chat_session_key: Option<String>,
-    pub(crate) archived_at: Option<String>,
-    pub(crate) conversation: Conversation,
+pub struct DelegateRuntimeThread {
+    pub delegate_id: String,
+    pub root_conversation_id: String,
+    pub target_agent_id: String,
+    pub title: String,
+    pub call_stack: Vec<String>,
+    pub parent_chat_session_key: Option<String>,
+    pub archived_at: Option<String>,
+    pub conversation: Conversation,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ConversationArchive {
-    pub(crate) archive_id: String,
-    pub(crate) archived_at: String,
-    pub(crate) reason: String,
-    pub(crate) source_conversation: Conversation,
+pub struct ConversationArchive {
+    pub archive_id: String,
+    pub archived_at: String,
+    pub reason: String,
+    pub source_conversation: Conversation,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ArchiveSummary {
-    pub(crate) archive_id: String,
-    pub(crate) archived_at: String,
-    pub(crate) title: String,
-    pub(crate) message_count: usize,
-    pub(crate) api_config_id: String,
-    pub(crate) agent_id: String,
+pub struct ArchiveSummary {
+    pub archive_id: String,
+    pub archived_at: String,
+    pub title: String,
+    pub message_count: usize,
+    pub api_config_id: String,
+    pub agent_id: String,
+}
+
+// ==================== 聊天调度队列类型（从 src-tauri chat/scheduler.rs 迁入） ====================
+
+/// 消息来源类型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ChatEventSource {
+    /// 用户发言
+    User,
+    /// 任务触发
+    Task,
+    /// 委托回报
+    Delegate,
+    /// 系统事件
+    System,
+    /// 远程 IM 渠道消息
+    #[serde(rename = "remote_im")]
+    RemoteIm,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChatQueueMode {
+    Normal,
+    Guided,
+}
+
+pub fn default_chat_queue_mode() -> ChatQueueMode {
+    ChatQueueMode::Normal
+}
+
+/// 会话信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatSessionInfo {
+    pub department_id: String,
+    pub agent_id: String,
+}
+
+/// 待处理事件
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatPendingEvent {
+    /// 事件唯一ID
+    pub id: String,
+    /// 目标会话ID
+    pub conversation_id: String,
+    /// 入队时间，仅用于排队观测，不代表正式生效时间
+    pub created_at: String,
+    /// 来源类型
+    pub source: ChatEventSource,
+    /// 队列模式
+    #[serde(default = "default_chat_queue_mode")]
+    pub queue_mode: ChatQueueMode,
+    /// 要写入的消息集合
+    pub messages: Vec<ChatMessage>,
+    /// 是否在本批消息写入历史后激活主助理
+    pub activate_assistant: bool,
+    /// 若本批消息会激活主助理，则预先分配真实 assistant message id
+    #[serde(default)]
+    pub assistant_message_id: Option<String>,
+    /// 会话信息
+    pub session_info: ChatSessionInfo,
+    /// 运行上下文（渐进接入）
+    #[serde(default)]
+    pub runtime_context: Option<RuntimeContext>,
+    /// 远程消息来源（仅 source=RemoteIm 时使用）
+    #[serde(default)]
+    pub sender_info: Option<RemoteImMessageSource>,
+}
+
+/// 流式运行时缓存快照（从 src-tauri chat/scheduler.rs 迁入）。
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationStreamRuntimeCacheSnapshot {
+    pub activation_id: String,
+    pub request_id: String,
+    pub department_id: String,
+    pub agent_id: String,
+    pub assistant_text: String,
+    pub tool_status_text: String,
+    pub tool_status_state: String,
+    pub stream_blocks: Vec<AssistantStreamBlock>,
+    pub started_at: String,
+    pub started_at_ms: u64,
+    pub updated_at: String,
+    pub has_visible_progress: bool,
+    pub persisted_assistant_message_id: String,
+    pub context_usage_ratio: f64,
+    pub context_usage_percent: u32,
+    pub effective_prompt_tokens: u64,
+    pub context_window_tokens: u32,
 }

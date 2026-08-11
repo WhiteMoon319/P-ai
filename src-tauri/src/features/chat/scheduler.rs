@@ -63,87 +63,11 @@ use super::*;
 
 // ==================== 数据结构定义 ====================
 
-/// 主会话状态机
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+// MainSessionState / ChatEventSource / ChatQueueMode / ChatSessionInfo /
+// ChatPendingEvent 已迁至 crates/pai-backend core::domain（阶段 4），
+// 通过 lib.rs pub(crate) use 生效。
 
-
-pub(crate) enum MainSessionState {
-    /// 空闲，可以出队
-    Idle,
-    /// 主助理正在流式输出
-    AssistantStreaming,
-    /// 正在整理上下文
-    OrganizingContext,
-}
-
-/// 消息来源类型
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub(crate) enum ChatEventSource {
-    /// 用户发言
-    User,
-    /// 任务触发
-    Task,
-    /// 委托回报
-    Delegate,
-    /// 系统事件
-    System,
-    /// 远程 IM 渠道消息
-    #[serde(rename = "remote_im")]
-    RemoteIm,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum ChatQueueMode {
-    Normal,
-    Guided,
-}
-
-pub(crate) fn default_chat_queue_mode() -> ChatQueueMode {
-    ChatQueueMode::Normal
-}
-
-/// 会话信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ChatSessionInfo {
-    pub department_id: String,
-    pub agent_id: String,
-}
-
-/// 待处理事件
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ChatPendingEvent {
-    /// 事件唯一ID
-    pub id: String,
-    /// 目标会话ID
-    pub conversation_id: String,
-    /// 入队时间，仅用于排队观测，不代表正式生效时间
-    pub created_at: String,
-    /// 来源类型
-    pub source: ChatEventSource,
-    /// 队列模式
-    #[serde(default = "default_chat_queue_mode")]
-    pub queue_mode: ChatQueueMode,
-    /// 要写入的消息集合
-    pub messages: Vec<ChatMessage>,
-    /// 是否在本批消息写入历史后激活主助理
-    pub activate_assistant: bool,
-    /// 若本批消息会激活主助理，则预先分配真实 assistant message id
-    #[serde(default)]
-    pub assistant_message_id: Option<String>,
-    /// 会话信息
-    pub session_info: ChatSessionInfo,
-    /// 运行上下文（渐进接入）
-    #[serde(default)]
-    pub runtime_context: Option<RuntimeContext>,
-    /// 远程消息来源（仅 source=RemoteIm 时使用）
-    #[serde(default)]
-    pub sender_info: Option<RemoteImMessageSource>,
-}
+/// 待处理事件（已迁至 pai-backend）
 
 #[derive(Clone)]
 pub(crate) struct QueuedChatActivation {
@@ -202,28 +126,6 @@ pub(crate) struct ConversationRuntimeSnapshot {
     pub has_pending_queue: bool,
     pub pending_queue_count: usize,
     pub stream_cache: ConversationStreamRuntimeCacheSnapshot,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ConversationStreamRuntimeCacheSnapshot {
-    pub activation_id: String,
-    pub request_id: String,
-    pub department_id: String,
-    pub agent_id: String,
-    pub assistant_text: String,
-    pub tool_status_text: String,
-    pub tool_status_state: String,
-    pub stream_blocks: Vec<AssistantStreamBlock>,
-    pub started_at: String,
-    pub started_at_ms: u64,
-    pub updated_at: String,
-    pub has_visible_progress: bool,
-    pub persisted_assistant_message_id: String,
-    pub context_usage_ratio: f64,
-    pub context_usage_percent: u32,
-    pub effective_prompt_tokens: u64,
-    pub context_window_tokens: u32,
 }
 
 pub(crate) const CHAT_QUEUE_SNAPSHOT_EVENT: &str = "easy-call:chat-queue-snapshot";

@@ -1,18 +1,38 @@
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::core::domain::constants::{
+    APP_DATA_SCHEMA_VERSION, ASSISTANT_DEPARTMENT_ID, DEFAULT_AGENT_ID, USER_PERSONA_ID,
+};
+use crate::core::domain::runtime_defaults::{
+    default_agent, default_deputy_agent, default_system_persona, default_user_persona,
+};
+use crate::core::domain::types_chat::{AgentProfile, Conversation, ConversationArchive};
+use crate::core::domain::types_config::{
+    default_assistant_department, default_deputy_department, normalize_department_child_ids,
+    AppConfig, DepartmentConfig, DepartmentPermissionControl, RemoteImPlatform,
+    ShellWorkspaceConfig,
+};
+use crate::core::domain::types_foundation::{
+    default_background_voice_screenshot_keywords, default_background_voice_screenshot_mode,
+    default_pdf_read_mode, default_response_style_id,
+};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ImageTextCacheEntry {
-    pub(crate) hash: String,
+pub struct ImageTextCacheEntry {
+    pub hash: String,
     #[serde(alias = "visionApiId")]
-    pub(crate) model_api_id: String,
+    pub model_api_id: String,
     #[serde(default = "default_media_cache_entry_type")]
-    pub(crate) media_type: String,
+    pub media_type: String,
     #[serde(default)]
-    pub(crate) description: String,
-    pub(crate) text: String,
-    pub(crate) updated_at: String,
+    pub description: String,
+    pub text: String,
+    pub updated_at: String,
 }
 
-pub(crate) fn default_media_cache_entry_type() -> String {
+pub fn default_media_cache_entry_type() -> String {
     "image".to_string()
 }
 
@@ -58,26 +78,26 @@ pub struct PdfRenderedImage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct MemoryEntry {
-    pub(crate) id: String,
+pub struct MemoryEntry {
+    pub id: String,
     #[serde(default)]
-    pub(crate) memory_no: Option<u64>,
+    pub memory_no: Option<u64>,
     #[serde(default, alias = "memoryType")]
-    pub(crate) memory_type: String,
+    pub memory_type: String,
     #[serde(default, alias = "content")]
-    pub(crate) judgment: String,
+    pub judgment: String,
     #[serde(default)]
-    pub(crate) reasoning: String,
+    pub reasoning: String,
     #[serde(default, alias = "keywords")]
-    pub(crate) tags: Vec<String>,
+    pub tags: Vec<String>,
     #[serde(default)]
-    pub(crate) owner_agent_id: Option<String>,
-    pub(crate) created_at: String,
-    pub(crate) updated_at: String,
+    pub owner_agent_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 impl MemoryEntry {
-    pub(crate) fn display_id(&self) -> String {
+    pub fn display_id(&self) -> String {
         self.memory_no
             .map(|value| value.to_string())
             .unwrap_or_else(|| self.id.clone())
@@ -86,72 +106,72 @@ impl MemoryEntry {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct PromptCommandPreset {
-    pub(crate) id: String,
-    pub(crate) name: String,
-    pub(crate) prompt: String,
+pub struct PromptCommandPreset {
+    pub id: String,
+    pub name: String,
+    pub prompt: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ConversationSectionOrders {
+pub struct ConversationSectionOrders {
     #[serde(default)]
-    pub(crate) local: Vec<String>,
+    pub local: Vec<String>,
     #[serde(default)]
-    pub(crate) contact: Vec<String>,
+    pub contact: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct AppData {
-    pub(crate) version: u32,
+pub struct AppData {
+    pub version: u32,
     #[serde(default)]
-    pub(crate) data_migration_version: u32,
+    pub data_migration_version: u32,
     #[serde(default, alias = "messageStoreMigrationVersion")]
-    pub(crate) message_store_migration_version: u32,
-    pub(crate) agents: Vec<AgentProfile>,
+    pub message_store_migration_version: u32,
+    pub agents: Vec<AgentProfile>,
     #[serde(
         default = "default_assistant_department_agent_id",
         alias = "selectedAgentId",
         alias = "selected_agent_id"
     )]
-    pub(crate) assistant_department_agent_id: String,
+    pub assistant_department_agent_id: String,
     #[serde(default = "default_user_alias")]
-    pub(crate) user_alias: String,
+    pub user_alias: String,
     #[serde(default = "default_response_style_id")]
-    pub(crate) response_style_id: String,
+    pub response_style_id: String,
     #[serde(default = "default_pdf_read_mode")]
-    pub(crate) pdf_read_mode: String,
+    pub pdf_read_mode: String,
     #[serde(default = "default_background_voice_screenshot_keywords")]
-    pub(crate) background_voice_screenshot_keywords: String,
+    pub background_voice_screenshot_keywords: String,
     #[serde(default = "default_background_voice_screenshot_mode")]
-    pub(crate) background_voice_screenshot_mode: String,
+    pub background_voice_screenshot_mode: String,
     #[serde(default)]
-    pub(crate) instruction_presets: Vec<PromptCommandPreset>,
+    pub instruction_presets: Vec<PromptCommandPreset>,
     #[serde(
         default,
         rename = "systemNotificationConversationId",
         alias = "mainConversationId",
         alias = "main_conversation_id"
     )]
-    pub(crate) main_conversation_id: Option<String>,
+    pub main_conversation_id: Option<String>,
     #[serde(default)]
-    pub(crate) pinned_conversation_ids: Vec<String>,
+    pub pinned_conversation_ids: Vec<String>,
     #[serde(default)]
-    pub(crate) conversation_section_orders: ConversationSectionOrders,
-    pub(crate) conversations: Vec<Conversation>,
+    pub conversation_section_orders: ConversationSectionOrders,
+    pub conversations: Vec<Conversation>,
     #[serde(default)]
-    pub(crate) image_text_cache: Vec<ImageTextCacheEntry>,
+    pub image_text_cache: Vec<ImageTextCacheEntry>,
     #[serde(default)]
-    pub(crate) pdf_text_cache: Vec<PdfTextCacheEntry>,
+    pub pdf_text_cache: Vec<PdfTextCacheEntry>,
     #[serde(default)]
-    pub(crate) pdf_image_cache: Vec<PdfImageCacheEntry>,
+    pub pdf_image_cache: Vec<PdfImageCacheEntry>,
     #[serde(default)]
-    pub(crate) remote_im_contacts: Vec<RemoteImContact>,
+    pub remote_im_contacts: Vec<RemoteImContact>,
     #[serde(default)]
-    pub(crate) remote_im_contact_checkpoints: Vec<RemoteImContactCheckpoint>,
+    pub remote_im_contact_checkpoints: Vec<RemoteImContactCheckpoint>,
     #[serde(default)]
-    pub(crate) archived_conversations: Vec<ConversationArchive>,
+    pub archived_conversations: Vec<ConversationArchive>,
 }
 
 impl Default for AppData {
@@ -189,120 +209,120 @@ impl Default for AppData {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct RemoteImGroupMemberInfo {
-    pub(crate) user_id: String,
+pub struct RemoteImGroupMemberInfo {
+    pub user_id: String,
     #[serde(default)]
-    pub(crate) nickname: String,
+    pub nickname: String,
     #[serde(default)]
-    pub(crate) card: String,
+    pub card: String,
     #[serde(default)]
-    pub(crate) display_name: String,
+    pub display_name: String,
     #[serde(default)]
-    pub(crate) updated_at: Option<String>,
+    pub updated_at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) raw: Option<Value>,
+    pub raw: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct RemoteImContact {
-    pub(crate) id: String,
-    pub(crate) channel_id: String,
-    pub(crate) platform: RemoteImPlatform,
-    pub(crate) remote_contact_type: String,
-    pub(crate) remote_contact_id: String,
+pub struct RemoteImContact {
+    pub id: String,
+    pub channel_id: String,
+    pub platform: RemoteImPlatform,
+    pub remote_contact_type: String,
+    pub remote_contact_id: String,
     #[serde(default)]
-    pub(crate) remote_contact_name: String,
+    pub remote_contact_name: String,
     #[serde(default)]
-    pub(crate) avatar_url: String,
+    pub avatar_url: String,
     #[serde(default)]
-    pub(crate) remark_name: String,
+    pub remark_name: String,
     #[serde(default)]
-    pub(crate) allow_send: bool,
+    pub allow_send: bool,
     #[serde(default)]
-    pub(crate) allow_send_files: bool,
+    pub allow_send_files: bool,
     #[serde(default)]
-    pub(crate) allow_receive: bool,
+    pub allow_receive: bool,
     #[serde(default = "default_remote_im_contact_activation_mode")]
-    pub(crate) activation_mode: String,
+    pub activation_mode: String,
     #[serde(default)]
-    pub(crate) activation_keywords: Vec<String>,
+    pub activation_keywords: Vec<String>,
     #[serde(default = "default_remote_im_contact_mute_keywords")]
-    pub(crate) mute_keywords: Vec<String>,
+    pub mute_keywords: Vec<String>,
     #[serde(default = "default_remote_im_contact_unmute_keywords")]
-    pub(crate) unmute_keywords: Vec<String>,
+    pub unmute_keywords: Vec<String>,
     #[serde(default = "default_remote_im_contact_patience_seconds")]
-    pub(crate) patience_seconds: u64,
+    pub patience_seconds: u64,
     #[serde(default = "default_remote_im_contact_mute_duration_seconds")]
-    pub(crate) mute_duration_seconds: u64,
+    pub mute_duration_seconds: u64,
     #[serde(default)]
-    pub(crate) activation_cooldown_seconds: u64,
+    pub activation_cooldown_seconds: u64,
     #[serde(default = "default_remote_im_contact_route_mode")]
-    pub(crate) route_mode: String,
+    pub route_mode: String,
     #[serde(default)]
-    pub(crate) bound_department_id: Option<String>,
+    pub bound_department_id: Option<String>,
     #[serde(default)]
-    pub(crate) bound_agent_id: Option<String>,
+    pub bound_agent_id: Option<String>,
     #[serde(default)]
-    pub(crate) bound_conversation_id: Option<String>,
+    pub bound_conversation_id: Option<String>,
     #[serde(default = "default_remote_im_contact_processing_mode")]
-    pub(crate) processing_mode: String,
+    pub processing_mode: String,
     #[serde(default = "default_remote_im_contact_response_strategy")]
-    pub(crate) response_strategy: String,
+    pub response_strategy: String,
     #[allow(dead_code)]
     #[serde(default = "default_remote_im_contact_response_guidance", skip_serializing)]
-    pub(crate) response_guidance: String,
+    pub response_guidance: String,
     #[serde(default = "default_remote_im_contact_blocked_message_prefixes")]
-    pub(crate) blocked_message_prefixes: Vec<String>,
+    pub blocked_message_prefixes: Vec<String>,
     #[serde(default)]
-    pub(crate) group_reply_pacing: RemoteImGroupReplyPacing,
+    pub group_reply_pacing: RemoteImGroupReplyPacing,
     #[serde(default)]
-    pub(crate) last_activated_at: Option<String>,
+    pub last_activated_at: Option<String>,
     #[serde(default)]
-    pub(crate) last_message_at: Option<String>,
+    pub last_message_at: Option<String>,
     #[serde(default)]
-    pub(crate) dingtalk_session_webhook: Option<String>,
+    pub dingtalk_session_webhook: Option<String>,
     #[serde(default)]
-    pub(crate) dingtalk_session_webhook_expired_time: Option<i64>,
+    pub dingtalk_session_webhook_expired_time: Option<i64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub(crate) onebot_group_members: Vec<RemoteImGroupMemberInfo>,
+    pub onebot_group_members: Vec<RemoteImGroupMemberInfo>,
     #[serde(default)]
-    pub(crate) shell_workspaces: Vec<ShellWorkspaceConfig>,
+    pub shell_workspaces: Vec<ShellWorkspaceConfig>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct RemoteImGroupReplyPacing {
+pub struct RemoteImGroupReplyPacing {
     #[serde(default = "default_remote_im_assistant_debounce_seconds")]
-    pub(crate) assistant_debounce_seconds: u64,
+    pub assistant_debounce_seconds: u64,
     #[serde(default = "default_remote_im_secretary_inspection_seconds")]
-    pub(crate) secretary_inspection_seconds: u64,
+    pub secretary_inspection_seconds: u64,
     #[serde(default = "default_remote_im_reply_cooldown_seconds")]
-    pub(crate) reply_cooldown_seconds: u64,
+    pub reply_cooldown_seconds: u64,
     #[serde(default = "default_remote_im_inspection_jitter_ratio")]
-    pub(crate) inspection_jitter_ratio: f64,
+    pub inspection_jitter_ratio: f64,
     #[serde(default = "default_remote_im_maximum_energy")]
-    pub(crate) maximum_energy: f64,
+    pub maximum_energy: f64,
     #[serde(default = "default_remote_im_base_reply_energy_cost")]
-    pub(crate) base_reply_energy_cost: f64,
+    pub base_reply_energy_cost: f64,
     #[serde(default = "default_remote_im_energy_cost_per_character")]
-    pub(crate) energy_cost_per_character: f64,
+    pub energy_cost_per_character: f64,
     #[serde(default = "default_remote_im_energy_recovery_per_second")]
-    pub(crate) energy_recovery_per_second: f64,
+    pub energy_recovery_per_second: f64,
     #[serde(default = "default_remote_im_positive_energy_phrases")]
-    pub(crate) positive_energy_phrases: Vec<String>,
+    pub positive_energy_phrases: Vec<String>,
     #[serde(default = "default_remote_im_negative_energy_phrases")]
-    pub(crate) negative_energy_phrases: Vec<String>,
+    pub negative_energy_phrases: Vec<String>,
     #[serde(default = "default_remote_im_positive_energy_delta")]
-    pub(crate) positive_energy_delta: f64,
+    pub positive_energy_delta: f64,
     #[serde(default = "default_remote_im_negative_energy_delta")]
-    pub(crate) negative_energy_delta: f64,
+    pub negative_energy_delta: f64,
     #[serde(default = "default_remote_im_normal_reply_max_chars")]
-    pub(crate) normal_reply_max_chars: u32,
+    pub normal_reply_max_chars: u32,
     #[serde(default = "default_remote_im_focus_reply_max_chars")]
-    pub(crate) focus_reply_max_chars: u32,
+    pub focus_reply_max_chars: u32,
     #[serde(default = "default_remote_im_focus_instructions")]
-    pub(crate) focus_instructions: Vec<String>,
+    pub focus_instructions: Vec<String>,
 }
 
 impl Default for RemoteImGroupReplyPacing {
@@ -333,23 +353,23 @@ impl Default for RemoteImGroupReplyPacing {
 /// 消息过滤、闭嘴、什么时候应该回答、在场和群聊巡检策略的唯一真值。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct RemoteImChannelBehaviorSettings {
+pub struct RemoteImChannelBehaviorSettings {
     #[serde(default = "default_remote_im_contact_response_guidance")]
-    pub(crate) response_guidance: String,
+    pub response_guidance: String,
     #[serde(default = "default_remote_im_contact_blocked_message_prefixes")]
-    pub(crate) blocked_message_prefixes: Vec<String>,
+    pub blocked_message_prefixes: Vec<String>,
     #[serde(default = "default_remote_im_contact_mute_keywords")]
-    pub(crate) mute_keywords: Vec<String>,
+    pub mute_keywords: Vec<String>,
     #[serde(default = "default_remote_im_contact_unmute_keywords")]
-    pub(crate) unmute_keywords: Vec<String>,
+    pub unmute_keywords: Vec<String>,
     #[serde(default = "default_remote_im_contact_patience_seconds")]
-    pub(crate) patience_seconds: u64,
+    pub patience_seconds: u64,
     #[serde(default = "default_remote_im_contact_mute_duration_seconds")]
-    pub(crate) mute_duration_seconds: u64,
+    pub mute_duration_seconds: u64,
     #[serde(default)]
-    pub(crate) activation_cooldown_seconds: u64,
+    pub activation_cooldown_seconds: u64,
     #[serde(default)]
-    pub(crate) group_reply_pacing: RemoteImGroupReplyPacing,
+    pub group_reply_pacing: RemoteImGroupReplyPacing,
 }
 
 impl Default for RemoteImChannelBehaviorSettings {
@@ -369,153 +389,176 @@ impl Default for RemoteImChannelBehaviorSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct RemoteImGroupReplyDeliveryMarker {
+pub struct RemoteImGroupReplyDeliveryMarker {
     #[serde(default)]
-    pub(crate) generation: u64,
+    pub generation: u64,
     #[serde(default)]
-    pub(crate) boundary_message_id: String,
+    pub boundary_message_id: String,
     #[serde(default)]
-    pub(crate) outbound_key: String,
+    pub outbound_key: String,
     #[serde(default)]
-    pub(crate) final_text: String,
+    pub final_text: String,
     #[serde(default)]
-    pub(crate) status: String,
+    pub status: String,
     #[serde(default)]
-    pub(crate) platform_message_id: Option<String>,
+    pub platform_message_id: Option<String>,
     #[serde(default)]
-    pub(crate) energy_applied: bool,
+    pub energy_applied: bool,
     #[serde(default)]
-    pub(crate) updated_at: Option<String>,
+    pub updated_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct RemoteImContactCheckpoint {
-    pub(crate) contact_id: String,
+pub struct RemoteImContactCheckpoint {
+    pub contact_id: String,
     #[serde(default)]
-    pub(crate) atomic_revision: u64,
+    pub atomic_revision: u64,
     #[serde(default)]
-    pub(crate) latest_seen_message_id: Option<String>,
+    pub latest_seen_message_id: Option<String>,
     #[serde(default)]
-    pub(crate) last_boundary_message_id: Option<String>,
+    pub last_boundary_message_id: Option<String>,
     #[serde(default)]
-    pub(crate) last_boundary_covers_message_id: Option<String>,
+    pub last_boundary_covers_message_id: Option<String>,
     #[serde(default)]
-    pub(crate) updated_at: Option<String>,
+    pub updated_at: Option<String>,
     #[serde(default)]
-    pub(crate) energy: Option<f64>,
+    pub energy: Option<f64>,
     #[serde(default)]
-    pub(crate) energy_updated_at: Option<String>,
+    pub energy_updated_at: Option<String>,
     #[serde(default)]
-    pub(crate) last_success_reply_at: Option<String>,
+    pub last_success_reply_at: Option<String>,
     #[serde(default)]
-    pub(crate) group_reply_delivery: Option<RemoteImGroupReplyDeliveryMarker>,
+    pub group_reply_delivery: Option<RemoteImGroupReplyDeliveryMarker>,
 }
 
-pub(crate) fn default_assistant_department_agent_id() -> String {
+pub fn default_assistant_department_agent_id() -> String {
     DEFAULT_AGENT_ID.to_string()
 }
 
-pub(crate) fn default_remote_im_contact_activation_mode() -> String {
+pub fn default_remote_im_contact_activation_mode() -> String {
     "never".to_string()
 }
 
-pub(crate) fn default_remote_im_contact_patience_seconds() -> u64 {
+pub fn default_remote_im_contact_patience_seconds() -> u64 {
     60
 }
 
-pub(crate) fn default_remote_im_contact_mute_keywords() -> Vec<String> {
+pub fn default_remote_im_contact_mute_keywords() -> Vec<String> {
     vec!["闭嘴".to_string()]
 }
 
-pub(crate) fn default_remote_im_contact_unmute_keywords() -> Vec<String> {
+pub fn default_remote_im_contact_unmute_keywords() -> Vec<String> {
     vec!["张嘴".to_string()]
 }
 
-pub(crate) fn default_remote_im_contact_mute_duration_seconds() -> u64 {
+pub fn default_remote_im_contact_mute_duration_seconds() -> u64 {
     600
 }
 
-pub(crate) fn default_remote_im_contact_route_mode() -> String {
+pub fn default_remote_im_contact_route_mode() -> String {
     "main_session".to_string()
 }
 
-pub(crate) fn default_remote_im_contact_processing_mode() -> String {
+pub fn default_remote_im_contact_processing_mode() -> String {
     "continuous".to_string()
 }
 
-pub(crate) fn default_remote_im_contact_response_strategy() -> String {
+pub fn default_remote_im_contact_response_strategy() -> String {
     "smart_judge".to_string()
 }
 
-pub(crate) const DEFAULT_REMOTE_IM_GROUP_RESPONSE_GUIDANCE: &str =
-    include_str!("../../../../resources/prompts/remote_im_group_response_guidance.md");
+pub const DEFAULT_REMOTE_IM_GROUP_RESPONSE_GUIDANCE: &str = r#"# 群聊什么时候应该回答
 
-pub(crate) fn default_remote_im_contact_response_guidance() -> String {
+默认保持沉默。`shouldReply` 默认应为 `false`；信息不足、关系不明确或无法判断时，也应为 `false`。
+
+最终宗旨是让回复保持必要且有变化，不让群友觉得助理话很多、总在重复同一种回应。只有本次回应能带来新的必要价值时才入场；相同话题、相同立场、相近提问或已表达过的内容，优先保持沉默。
+
+仅在以下情况回答：
+
+1. 有人明确叫到助理的昵称或 @ 助理。除非上下文清楚表明不需要助理回应，否则尽量回答。
+2. 有人追问助理刚才的回答、正在处理的事项、给出的结论或未完成的承诺。
+
+对助理刚才的回答、行为或产出的点评、质疑、纠正、评价或反馈，不论首次还是后续，一律不回答；即使明确 @ 助理也保持沉默。不要解释、辩论、致歉或补充自证。
+
+同一问题或实质相近的问题，助理已经回答过就不再重复回应；不要因重复提问、追打或换一种说法而再次入场。即使主题不同，若只能给出与近期相同的套话、态度或信息，也不要为了接话而回答。
+
+除此以外一律不回答，包括：
+
+- 群友之间互相提问、讨论、点评或玩笑；
+- 与助理无关的技术问题、求助、知识问答和任务请求；
+- 对助理回答、行为或产出的点评、质疑、纠正、评价或反馈；
+- 即使助理能够提供有用信息、活跃气氛或表现得很懂，也不要主动插话；
+- 只要不能明确确认消息是在指向助理，就不要把它理解为对助理的邀请。
+
+判断时优先识别消息的指向对象，而不是问题本身是否容易回答。不要因为群聊正在讨论某个助理熟悉的话题而加入。
+"#;
+
+pub fn default_remote_im_contact_response_guidance() -> String {
     DEFAULT_REMOTE_IM_GROUP_RESPONSE_GUIDANCE.trim().to_string()
 }
 
-pub(crate) fn default_remote_im_contact_blocked_message_prefixes() -> Vec<String> {
+pub fn default_remote_im_contact_blocked_message_prefixes() -> Vec<String> {
     vec!["#".to_string(), "/".to_string(), "%".to_string()]
 }
 
-pub(crate) fn default_remote_im_assistant_debounce_seconds() -> u64 {
+pub fn default_remote_im_assistant_debounce_seconds() -> u64 {
     1
 }
 
-pub(crate) fn default_remote_im_secretary_inspection_seconds() -> u64 {
+pub fn default_remote_im_secretary_inspection_seconds() -> u64 {
     60
 }
 
-pub(crate) fn default_remote_im_reply_cooldown_seconds() -> u64 {
+pub fn default_remote_im_reply_cooldown_seconds() -> u64 {
     10
 }
 
-pub(crate) fn default_remote_im_inspection_jitter_ratio() -> f64 {
+pub fn default_remote_im_inspection_jitter_ratio() -> f64 {
     0.2
 }
 
-pub(crate) fn default_remote_im_maximum_energy() -> f64 {
+pub fn default_remote_im_maximum_energy() -> f64 {
     100.0
 }
 
-pub(crate) fn default_remote_im_base_reply_energy_cost() -> f64 {
+pub fn default_remote_im_base_reply_energy_cost() -> f64 {
     14.0
 }
 
-pub(crate) fn default_remote_im_energy_cost_per_character() -> f64 {
+pub fn default_remote_im_energy_cost_per_character() -> f64 {
     0.12
 }
 
-pub(crate) fn default_remote_im_energy_recovery_per_second() -> f64 {
+pub fn default_remote_im_energy_recovery_per_second() -> f64 {
     0.6
 }
 
-pub(crate) fn default_remote_im_positive_energy_phrases() -> Vec<String> {
+pub fn default_remote_im_positive_energy_phrases() -> Vec<String> {
     vec!["厉害".to_string(), "像人".to_string()]
 }
 
-pub(crate) fn default_remote_im_negative_energy_phrases() -> Vec<String> {
+pub fn default_remote_im_negative_energy_phrases() -> Vec<String> {
     vec!["够了".to_string(), "烦".to_string(), "串了".to_string()]
 }
 
-pub(crate) fn default_remote_im_positive_energy_delta() -> f64 {
+pub fn default_remote_im_positive_energy_delta() -> f64 {
     6.0
 }
 
-pub(crate) fn default_remote_im_negative_energy_delta() -> f64 {
+pub fn default_remote_im_negative_energy_delta() -> f64 {
     -15.0
 }
 
-pub(crate) fn default_remote_im_normal_reply_max_chars() -> u32 {
+pub fn default_remote_im_normal_reply_max_chars() -> u32 {
     20
 }
 
-pub(crate) fn default_remote_im_focus_reply_max_chars() -> u32 {
+pub fn default_remote_im_focus_reply_max_chars() -> u32 {
     200
 }
 
-pub(crate) fn default_remote_im_focus_instructions() -> Vec<String> {
+pub fn default_remote_im_focus_instructions() -> Vec<String> {
     vec![
         "分析".to_string(),
         "总结".to_string(),
@@ -525,18 +568,18 @@ pub(crate) fn default_remote_im_focus_instructions() -> Vec<String> {
     ]
 }
 
-pub(crate) fn default_user_alias() -> String {
+pub fn default_user_alias() -> String {
     "用户".to_string()
 }
 
-pub(crate) fn assistant_department(config: &AppConfig) -> Option<&DepartmentConfig> {
+pub fn assistant_department(config: &AppConfig) -> Option<&DepartmentConfig> {
     config
         .departments
         .iter()
         .find(|item| item.id == ASSISTANT_DEPARTMENT_ID || item.is_built_in_assistant)
 }
 
-pub(crate) fn assistant_department_agent_id(config: &AppConfig) -> Option<String> {
+pub fn assistant_department_agent_id(config: &AppConfig) -> Option<String> {
     assistant_department(config).and_then(|dept| {
         dept.agent_ids
             .iter()
@@ -545,7 +588,7 @@ pub(crate) fn assistant_department_agent_id(config: &AppConfig) -> Option<String
     })
 }
 
-pub(crate) fn department_by_id<'a>(
+pub fn department_by_id<'a>(
     config: &'a AppConfig,
     department_id: &str,
 ) -> Option<&'a DepartmentConfig> {
@@ -556,7 +599,7 @@ pub(crate) fn department_by_id<'a>(
     config.departments.iter().find(|item| item.id == trimmed)
 }
 
-pub(crate) fn department_direct_child_ids(
+pub fn department_direct_child_ids(
     config: &AppConfig,
     department: &DepartmentConfig,
 ) -> Vec<String> {
@@ -572,7 +615,7 @@ pub(crate) fn department_direct_child_ids(
         .collect::<Vec<_>>()
 }
 
-pub(crate) fn department_direct_child_departments<'a>(
+pub fn department_direct_child_departments<'a>(
     config: &'a AppConfig,
     department: &DepartmentConfig,
 ) -> Vec<&'a DepartmentConfig> {
@@ -583,7 +626,7 @@ pub(crate) fn department_direct_child_departments<'a>(
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
-pub(crate) fn department_has_direct_child(
+pub fn department_has_direct_child(
     config: &AppConfig,
     source_department_id: &str,
     target_department_id: &str,
@@ -601,7 +644,7 @@ pub(crate) fn department_has_direct_child(
         .any(|id| id == target_department_id)
 }
 
-pub(crate) fn department_for_agent_id<'a>(
+pub fn department_for_agent_id<'a>(
     config: &'a AppConfig,
     agent_id: &str,
 ) -> Option<&'a DepartmentConfig> {
@@ -623,40 +666,46 @@ pub(crate) fn department_for_agent_id<'a>(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum DepartmentPermissionCategory {
+pub enum DepartmentPermissionCategory {
     BuiltinTool,
     Skill,
     McpTool,
 }
 
-pub(crate) fn builtin_tool_is_fixed_system(tool_id: &str) -> bool {
-    builtin_tool_is_fixed_system_from_policy(tool_id)
+// 内置工具策略查询（阶段 4 迁入 pai-backend 的保守实现：
+// 完整策略表仍在 src-tauri tool_policy.rs，此处只保留核心默认值，
+// 避免 core 域反向依赖业务模块）。
+pub fn builtin_tool_is_fixed_system(tool_id: &str) -> bool {
+    matches!(
+        tool_id.trim(),
+        "delegate" | "user_async_delegate" | "create_goal" | "update_goal"
+    )
 }
 
-pub(crate) fn builtin_tool_is_local_conversation_fixed(tool_id: &str) -> bool {
-    builtin_tool_is_local_conversation_fixed_from_policy(tool_id)
+pub fn builtin_tool_is_local_conversation_fixed(tool_id: &str) -> bool {
+    matches!(tool_id.trim(), "read" | "read_file" | "write" | "update" | "delete" | "move")
 }
 
-pub(crate) fn builtin_tool_is_contact_only_hidden(tool_id: &str) -> bool {
-    builtin_tool_is_contact_only_hidden_from_policy(tool_id)
+pub fn builtin_tool_is_contact_only_hidden(_tool_id: &str) -> bool {
+    false
 }
 
-pub(crate) fn builtin_tool_is_department_controlled(tool_id: &str) -> bool {
-    builtin_tool_is_department_controlled_from_policy(tool_id)
+pub fn builtin_tool_is_department_controlled(tool_id: &str) -> bool {
+    !tool_id.trim().is_empty()
 }
 
-pub(crate) fn builtin_tool_visible_in_department_permissions(tool_id: &str) -> bool {
-    builtin_tool_visible_in_department_permissions_from_policy(tool_id)
+pub fn builtin_tool_visible_in_department_permissions(_tool_id: &str) -> bool {
+    true
 }
 
-pub(crate) fn normalize_department_permission_mode(value: &str) -> String {
+pub fn normalize_department_permission_mode(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         "whitelist" => "whitelist".to_string(),
         _ => "blacklist".to_string(),
     }
 }
 
-pub(crate) fn normalize_department_permission_names(values: &[String]) -> Vec<String> {
+pub fn normalize_department_permission_names(values: &[String]) -> Vec<String> {
     let mut out = Vec::<String>::new();
     let mut seen = std::collections::HashSet::<String>::new();
     for value in values {
@@ -671,7 +720,7 @@ pub(crate) fn normalize_department_permission_names(values: &[String]) -> Vec<St
     out
 }
 
-pub(crate) fn normalize_department_permission_control(
+pub fn normalize_department_permission_control(
     raw: &DepartmentPermissionControl,
 ) -> DepartmentPermissionControl {
     DepartmentPermissionControl {
@@ -683,7 +732,7 @@ pub(crate) fn normalize_department_permission_control(
     }
 }
 
-pub(crate) fn department_permission_candidates<'a>(
+pub fn department_permission_candidates<'a>(
     department: Option<&'a DepartmentConfig>,
     category: DepartmentPermissionCategory,
 ) -> Option<(&'a DepartmentPermissionControl, &'a [String])> {
@@ -700,7 +749,7 @@ pub(crate) fn department_permission_candidates<'a>(
     Some((control, list.as_slice()))
 }
 
-pub(crate) fn department_permission_allows_any_name(
+pub fn department_permission_allows_any_name(
     department: Option<&DepartmentConfig>,
     category: DepartmentPermissionCategory,
     candidate_names: &[&str],
@@ -719,7 +768,7 @@ pub(crate) fn department_permission_allows_any_name(
     }
 }
 
-pub(crate) fn department_permission_mode_label(mode: &str) -> &'static str {
+pub fn department_permission_mode_label(mode: &str) -> &'static str {
     if normalize_department_permission_mode(mode) == "whitelist" {
         "白名单"
     } else {
@@ -727,7 +776,7 @@ pub(crate) fn department_permission_mode_label(mode: &str) -> &'static str {
     }
 }
 
-pub(crate) fn department_permission_restricted_reason(
+pub fn department_permission_restricted_reason(
     department: Option<&DepartmentConfig>,
     category: DepartmentPermissionCategory,
     item_name: &str,
@@ -751,7 +800,7 @@ pub(crate) fn department_permission_restricted_reason(
     ))
 }
 
-pub(crate) fn tool_restricted_by_department(
+pub fn tool_restricted_by_department(
     department: Option<&DepartmentConfig>,
     tool_id: &str,
 ) -> Option<String> {
@@ -766,7 +815,7 @@ pub(crate) fn tool_restricted_by_department(
     )
 }
 
-pub(crate) fn delegate_builtin_tool_unavailable_reason(
+pub fn delegate_builtin_tool_unavailable_reason(
     config: &AppConfig,
     department: Option<&DepartmentConfig>,
 ) -> Option<String> {
@@ -779,7 +828,7 @@ pub(crate) fn delegate_builtin_tool_unavailable_reason(
     Some("当前部门没有直接下级，无法使用委托".to_string())
 }
 
-pub(crate) fn builtin_tool_unavailable_reason(
+pub fn builtin_tool_unavailable_reason(
     config: &AppConfig,
     department: Option<&DepartmentConfig>,
     tool_id: &str,
@@ -792,7 +841,7 @@ pub(crate) fn builtin_tool_unavailable_reason(
     tool_restricted_by_department(department, tool_id)
 }
 
-pub(crate) fn tool_forced_by_department(
+pub fn tool_forced_by_department(
     department: Option<&DepartmentConfig>,
     tool_id: &str,
 ) -> bool {
@@ -801,7 +850,7 @@ pub(crate) fn tool_forced_by_department(
     false
 }
 
-pub(crate) fn user_persona_name(data: &AppData) -> String {
+pub fn user_persona_name(data: &AppData) -> String {
     data.agents
         .iter()
         .find(|a| a.id == USER_PERSONA_ID || a.is_built_in_user)
@@ -810,7 +859,7 @@ pub(crate) fn user_persona_name(data: &AppData) -> String {
         .unwrap_or_else(default_user_alias)
 }
 
-pub(crate) fn user_persona_intro(data: &AppData) -> String {
+pub fn user_persona_intro(data: &AppData) -> String {
     data.agents
         .iter()
         .find(|a| a.id == USER_PERSONA_ID || a.is_built_in_user)

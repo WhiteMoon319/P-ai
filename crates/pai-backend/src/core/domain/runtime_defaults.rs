@@ -1,12 +1,23 @@
-pub(crate) fn format_message_time_rfc3339_local(raw: &str) -> String {
+use serde::{Deserialize, Serialize};
+
+use crate::core::domain::constants::{CONVERSATION_KIND_CHAT, DEFAULT_AGENT_ID, DEPUTY_AGENT_ID, SYSTEM_PERSONA_ID, USER_PERSONA_ID};
+use crate::core::domain::types_chat::{default_agent_memory_recall_mode, AgentProfile, ChatMessage, Conversation};
+use crate::core::domain::types_config::{default_global_scope, default_main_source};
+use crate::core::domain::types_foundation::{default_agent_tools, ApiToolConfig};
+use crate::core::domain::types_storage::AppData;
+use crate::core::time_semantics::{
+    format_utc_storage_time_to_local_rfc3339, format_utc_storage_time_to_local_text, now_iso,
+};
+
+pub fn format_message_time_rfc3339_local(raw: &str) -> String {
     format_utc_storage_time_to_local_rfc3339(raw)
 }
 
-pub(crate) fn format_message_time_text(raw: &str) -> String {
+pub fn format_message_time_text(raw: &str) -> String {
     format_utc_storage_time_to_local_text(raw)
 }
 
-pub(crate) fn default_agent() -> AgentProfile {
+pub fn default_agent() -> AgentProfile {
     let now = now_iso();
     AgentProfile {
         id: DEFAULT_AGENT_ID.to_string(),
@@ -27,7 +38,7 @@ pub(crate) fn default_agent() -> AgentProfile {
 }
 
 #[allow(dead_code)]
-pub(crate) fn default_deputy_agent() -> AgentProfile {
+pub fn default_deputy_agent() -> AgentProfile {
     let now = now_iso();
     AgentProfile {
         id: DEPUTY_AGENT_ID.to_string(),
@@ -47,7 +58,7 @@ pub(crate) fn default_deputy_agent() -> AgentProfile {
     }
 }
 
-pub(crate) fn default_user_persona() -> AgentProfile {
+pub fn default_user_persona() -> AgentProfile {
     let now = now_iso();
     AgentProfile {
         id: USER_PERSONA_ID.to_string(),
@@ -67,7 +78,7 @@ pub(crate) fn default_user_persona() -> AgentProfile {
     }
 }
 
-pub(crate) fn default_system_persona() -> AgentProfile {
+pub fn default_system_persona() -> AgentProfile {
     let now = now_iso();
     AgentProfile {
         id: SYSTEM_PERSONA_ID.to_string(),
@@ -87,7 +98,7 @@ pub(crate) fn default_system_persona() -> AgentProfile {
     }
 }
 
-pub(crate) fn normalize_agent_tools(agent: &mut AgentProfile) -> bool {
+pub fn normalize_agent_tools(agent: &mut AgentProfile) -> bool {
     let defaults = default_agent_tools();
     let mut next = Vec::<ApiToolConfig>::new();
     for default in defaults {
@@ -130,7 +141,7 @@ pub(crate) fn normalize_agent_tools(agent: &mut AgentProfile) -> bool {
     changed
 }
 
-pub(crate) fn ensure_required_builtin_agents_in_list(agents: &mut Vec<AgentProfile>) -> bool {
+pub fn ensure_required_builtin_agents_in_list(agents: &mut Vec<AgentProfile>) -> bool {
     let mut changed = false;
     if !agents.iter().any(|agent| agent.id == DEFAULT_AGENT_ID) {
         agents.push(default_agent());
@@ -151,11 +162,11 @@ pub(crate) fn ensure_required_builtin_agents_in_list(agents: &mut Vec<AgentProfi
     changed
 }
 
-pub(crate) fn ensure_required_builtin_agents(data: &mut AppData) -> bool {
+pub fn ensure_required_builtin_agents(data: &mut AppData) -> bool {
     ensure_required_builtin_agents_in_list(&mut data.agents)
 }
 
-pub(crate) fn fill_missing_conversation_message_speaker_agent_ids(conversation: &mut Conversation) -> bool {
+pub fn fill_missing_conversation_message_speaker_agent_ids(conversation: &mut Conversation) -> bool {
     fn provider_meta_speaker_agent_id(message: &ChatMessage) -> Option<String> {
         let meta = message.provider_meta.as_ref()?;
         let object = meta.as_object()?;
@@ -207,7 +218,7 @@ pub(crate) fn fill_missing_conversation_message_speaker_agent_ids(conversation: 
     changed
 }
 
-pub(crate) fn fill_missing_conversation_metadata(data: &mut AppData) -> bool {
+pub fn fill_missing_conversation_metadata(data: &mut AppData) -> bool {
     let mut changed = false;
     for conversation in &mut data.conversations {
         if conversation.conversation_kind.trim().is_empty() {

@@ -3512,11 +3512,13 @@ dependencies = [
 name = "pai-backend"
 version = "0.57.0"
 dependencies = [
+ "genai",
  "pai-protocol",
  "serde",
  "serde_json",
  "time",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

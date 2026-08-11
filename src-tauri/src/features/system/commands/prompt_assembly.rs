@@ -34,15 +34,6 @@ pub(crate) enum LatestUserPayloadIntent {
     },
 }
 
-pub(crate) fn prompt_xml_block(block_name: &str, body: impl AsRef<str>) -> String {
-    let name = block_name.trim();
-    let content = body.as_ref().trim();
-    if name.is_empty() || content.is_empty() {
-        return String::new();
-    }
-    format!("<{}>\n{}\n</{}>", name, content, name)
-}
-
 pub(crate) fn build_prepared_prompt_for_mode(
     mode: PromptBuildMode,
     conversation: &Conversation,

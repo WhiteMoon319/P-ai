@@ -879,10 +879,6 @@ pub(crate) fn normalize_provider_non_stream_base_urls(config: &mut AppConfig) {
     config.provider_non_stream_base_urls = out;
 }
 
-pub(crate) fn is_text_chat_api(api: &ApiConfig) -> bool {
-    api.enable_text && api.request_format.is_chat_text()
-}
-
 pub(crate) fn normalized_assistant_department_api_config_id(config: &AppConfig) -> String {
     let current_id = config.assistant_department_api_config_id.trim();
     config

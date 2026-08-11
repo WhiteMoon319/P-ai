@@ -7,9 +7,33 @@
 //! 迁移策略：从 src-tauri 逐步搬入零平台依赖的纯逻辑模块，
 //! 每个模块迁移后保持 `cargo check -p pai-backend` 与 Android 交叉编译通过。
 
+use std::sync::{Mutex, OnceLock};
+
 pub mod core;
 pub mod delegate;
 pub mod mcp;
 pub mod skill;
 pub mod task;
 pub mod version_compare;
+
+/// 原生流式事件队列：Kotlin 通过 pollEvents 轮询弹出。
+/// Android 原生模式下所有 delta 事件 push 进来，AppViewModel/前端轮询取出。
+/// （阶段 4 从 src-tauri native_bridge 迁入；桌面端 tauri Channel 分支已剥离。）
+static NATIVE_DELTA_QUEUE: OnceLock<Mutex<Vec<serde_json::Value>>> = OnceLock::new();
+
+fn native_delta_queue() -> &'static Mutex<Vec<serde_json::Value>> {
+    NATIVE_DELTA_QUEUE.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+/// 把一条流式事件追加进原生事件队列（Android 分支专用）。
+pub fn push_native_delta_event(event: serde_json::Value) {
+    if let Ok(mut guard) = native_delta_queue().lock() {
+        guard.push(event);
+        // 队列只作短暂缓冲，Kotlin 高频轮询清空，不会无限增长。
+        if guard.len() > 4096 {
+            let len = guard.len();
+            let overflow = guard.split_off(len - 2048);
+            *guard = overflow;
+        }
+    }
+}

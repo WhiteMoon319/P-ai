@@ -1215,30 +1215,6 @@ pub(crate) fn cached_text_token_bpe() -> Option<&'static tiktoken_rs::CoreBPE> {
         .as_ref()
 }
 
-pub(crate) fn estimated_tokens_for_text(text: &str) -> f64 {
-    if let Some(bpe) = cached_text_token_bpe() {
-        return bpe.encode_with_special_tokens(text).len() as f64;
-    }
-
-    // 极端情况下 tokenizer 初始化失败，回退到旧启发式，避免中断主流程。
-    let mut zh_chars = 0usize;
-    let mut other_chars = 0usize;
-    for ch in text.chars() {
-        if ch.is_whitespace() {
-            continue;
-        }
-        if ('\u{4e00}'..='\u{9fff}').contains(&ch)
-            || ('\u{3400}'..='\u{4dbf}').contains(&ch)
-            || ('\u{f900}'..='\u{faff}').contains(&ch)
-        {
-            zh_chars += 1;
-        } else {
-            other_chars += 1;
-        }
-    }
-    zh_chars as f64 * 0.6 + other_chars as f64 * 0.3
-}
-
 pub(crate) fn truncate_text_to_token_limit(text: &str, token_limit: usize) -> String {
     if text.is_empty() || token_limit == 0 {
         return String::new();
