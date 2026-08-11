@@ -4,8 +4,10 @@ pub mod feishu_sdk;
 pub mod weixin_oc;
 pub mod onebot_v11_ws;
 pub mod dingtalk;
+pub mod channel_store;
 
 pub use feishu_sdk::*;
 pub use weixin_oc::*;
 pub use onebot_v11_ws::*;
 pub use dingtalk::*;
+pub use channel_store::*;

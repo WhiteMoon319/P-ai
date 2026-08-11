@@ -331,8 +331,9 @@ pub(crate) fn load_config_inner(state: &AppState) -> Result<AppConfig, String> {
     let mut result = state_read_config_cached(&state)?;
     let config_changed_by_normalize = normalize_app_config_and_detect_changes(&mut result);
     let workspace_changed = ensure_default_shell_workspace_in_config(&mut result, &state);
+    let ctx = remote_im_channel_store_ctx_from_state(state);
     let remote_im_private_state_migrated =
-        remote_im_migrate_channel_private_states(&state, &mut result)?;
+        remote_im_migrate_channel_private_states(&ctx, &mut result)?;
     if config_changed_by_normalize || workspace_changed || remote_im_private_state_migrated {
         state_write_config_cached(&state, &result)?;
     }
@@ -351,8 +352,9 @@ pub(crate) fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstr
     let mut config = state_read_config_cached(state)?;
     let config_changed_by_normalize = normalize_app_config_and_detect_changes(&mut config);
     let workspace_changed = ensure_default_shell_workspace_in_config(&mut config, state);
+    let ctx = remote_im_channel_store_ctx_from_state(state);
     let remote_im_private_state_migrated =
-        remote_im_migrate_channel_private_states(state, &mut config)?;
+        remote_im_migrate_channel_private_states(&ctx, &mut config)?;
     if config_changed_by_normalize || workspace_changed || remote_im_private_state_migrated {
         state_write_config_cached(state, &config)?;
     }
@@ -451,9 +453,14 @@ pub(crate) fn stop_removed_remote_im_channel_runtimes(
                 }
                 RemoteImPlatform::Feishu => {}
             }
-            if let Err(err) =
-                remote_im_delete_channel_private_state(&state, &channel.platform, &channel_id)
-            {
+            if let Err(err) = {
+                let ctx = remote_im_channel_store_ctx_from_state(&state);
+                remote_im_delete_channel_private_state(
+                    &ctx,
+                    &channel.platform,
+                    &channel_id,
+                )
+            } {
                 runtime_log_error(format!(
                     "[远程IM] 删除渠道后清理私有状态失败: channel_id={}, platform={:?}, error={}",
                     channel_id, channel.platform, err
@@ -525,7 +532,8 @@ pub(crate) fn save_config_inner(
     }
     let mut config = config;
     normalize_app_config(&mut config);
-    remote_im_migrate_channel_private_states(&state, &mut config)?;
+    let ctx = remote_im_channel_store_ctx_from_state(state);
+    remote_im_migrate_channel_private_states(&ctx, &mut config)?;
     let _ = ensure_default_shell_workspace_in_config(&mut config, &state);
     #[cfg(not(target_os = "android"))]
     set_record_hotkey_probe_background_wake_enabled(config.record_background_wake_enabled);

@@ -77,7 +77,8 @@ pub(crate) async fn remote_im_restart_channel_inner(
         )
         .await;
 
-    let effective_channel = remote_im_channel_with_effective_credentials(state, &channel)?;
+    let ctx = remote_im_channel_store_ctx_from_state(state);
+    let effective_channel = remote_im_channel_with_effective_credentials(&ctx, &channel)?;
     let manager = onebot_v11_ws_manager();
     manager
         .reconcile_channel_runtime(&effective_channel)

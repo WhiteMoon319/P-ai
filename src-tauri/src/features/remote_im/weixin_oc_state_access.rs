@@ -21,6 +21,13 @@ impl AppStateWeixinOcAccess {
             state: state.clone(),
         }
     }
+
+    fn store_ctx(&self) -> pai_android_platform::remote_im::channel_store::RemoteImChannelStoreCtx<'_> {
+        pai_android_platform::remote_im::channel_store::RemoteImChannelStoreCtx {
+            data_path: &self.state.data_path,
+            write_locks: &self.state.remote_im_channel_state_write_locks,
+        }
+    }
 }
 
 impl WeixinOcStateAccess for AppStateWeixinOcAccess {
@@ -29,8 +36,9 @@ impl WeixinOcStateAccess for AppStateWeixinOcAccess {
     }
 
     fn read_private_state(&self, channel_id: &str) -> Result<RemoteImChannelPrivateState, String> {
+        let ctx = self.store_ctx();
         remote_im_read_channel_private_state(
-            &self.state,
+            &ctx,
             &RemoteImPlatform::WeixinOc,
             channel_id,
         )
@@ -41,8 +49,9 @@ impl WeixinOcStateAccess for AppStateWeixinOcAccess {
         channel_id: &str,
         patch: Box<dyn FnOnce(&mut RemoteImChannelPrivateState) + Send>,
     ) -> Result<(), String> {
+        let ctx = self.store_ctx();
         remote_im_patch_channel_private_state(
-            &self.state,
+            &ctx,
             &RemoteImPlatform::WeixinOc,
             channel_id,
             patch,
@@ -51,22 +60,25 @@ impl WeixinOcStateAccess for AppStateWeixinOcAccess {
     }
 
     fn delete_private_state(&self, channel_id: &str) -> Result<(), String> {
+        let ctx = self.store_ctx();
         remote_im_delete_channel_private_state(
-            &self.state,
+            &ctx,
             &RemoteImPlatform::WeixinOc,
             channel_id,
         )
     }
 
     fn effective_credentials(&self, channel: &RemoteImChannelConfig) -> Result<Value, String> {
-        remote_im_effective_credentials(&self.state, channel)
+        let ctx = self.store_ctx();
+        remote_im_effective_credentials(&ctx, channel)
     }
 
     fn channel_with_effective_credentials(
         &self,
         channel: &RemoteImChannelConfig,
     ) -> Result<RemoteImChannelConfig, String> {
-        remote_im_channel_with_effective_credentials(&self.state, channel)
+        let ctx = self.store_ctx();
+        remote_im_channel_with_effective_credentials(&ctx, channel)
     }
 
     fn upsert_contact(

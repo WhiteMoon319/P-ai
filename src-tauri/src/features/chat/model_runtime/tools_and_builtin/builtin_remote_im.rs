@@ -419,7 +419,8 @@ pub(crate) async fn remote_im_send_content_payload_with_stage(
         "contact_id": contact.remote_contact_id,
         "content": content,
     });
-    let send_channel = remote_im_channel_with_effective_credentials(state, channel).map_err(
+    let ctx = remote_im_channel_store_ctx_from_state(state);
+    let send_channel = remote_im_channel_with_effective_credentials(&ctx, channel).map_err(
         |message| RemoteImSendContentError {
             stage: RemoteImSendContentErrorStage::Preflight,
             message,

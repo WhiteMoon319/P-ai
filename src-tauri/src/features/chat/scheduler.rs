@@ -1374,8 +1374,9 @@ pub(crate) async fn activate_main_assistant(
             .filter(|src| src.platform == RemoteImPlatform::WeixinOc)
             .filter_map(|src| {
                 let channel = remote_im_channel_by_id(&config, &src.channel_id)?;
+                let ctx = remote_im_channel_store_ctx_from_state(state);
                 let effective_channel =
-                    remote_im_channel_with_effective_credentials(state, channel).ok()?;
+                    remote_im_channel_with_effective_credentials(&ctx, channel).ok()?;
                 let credentials = WeixinOcCredentials::from_value(&effective_channel.credentials);
                 if credentials.token.trim().is_empty() {
                     runtime_log_warn(format!(

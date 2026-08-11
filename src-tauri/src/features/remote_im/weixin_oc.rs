@@ -94,7 +94,8 @@ pub(crate) fn remote_im_weixin_oc_sync_contacts_inner(
     if channel.platform != RemoteImPlatform::WeixinOc {
         return Err("该渠道不是个人微信渠道".to_string());
     }
-    let credentials = remote_im_effective_credentials(state, channel)?;
+    let ctx = remote_im_channel_store_ctx_from_state(state);
+    let credentials = remote_im_effective_credentials(&ctx, channel)?;
     let creds = WeixinOcCredentials::from_value(&credentials);
     if creds.account_id.trim().is_empty() || creds.token.trim().is_empty() {
         return Ok(WeixinOcSyncContactsResult {
