@@ -237,6 +237,15 @@ pub struct RemoteImEnqueueInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
+pub struct RemoteImEnqueueResult {
+    pub event_id: String,
+    pub conversation_id: String,
+    pub activate_assistant: bool,
+    pub contact_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct RuntimeContext {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,

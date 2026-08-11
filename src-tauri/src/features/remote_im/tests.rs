@@ -1075,9 +1075,11 @@
     async fn onebot_event_consumer_should_remain_singleton_per_channel() {
         let manager = OnebotV11WsManager::new();
         let state = remote_im_test_state();
+        let access: std::sync::Arc<dyn OnebotV11StateAccess> =
+            std::sync::Arc::new(AppStateOnebotAccess::new(&state));
 
         manager
-            .start_event_consumer("channel-a".to_string(), state.clone())
+            .start_event_consumer("channel-a".to_string(), access.clone())
             .await
             .expect("start consumer 1");
         tokio::time::sleep(Duration::from_millis(30)).await;
@@ -1085,7 +1087,7 @@
         assert_eq!(manager.event_consumer_stop_senders.read().await.len(), 1);
 
         manager
-            .start_event_consumer("channel-a".to_string(), state)
+            .start_event_consumer("channel-a".to_string(), access)
             .await
             .expect("start consumer 2");
         tokio::time::sleep(Duration::from_millis(30)).await;

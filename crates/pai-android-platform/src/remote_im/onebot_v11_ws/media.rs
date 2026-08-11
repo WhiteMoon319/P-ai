@@ -1,4 +1,5 @@
-pub(crate) fn mime_from_name_or_hint(file_name: &str, mime_hint: Option<&str>) -> String {
+use super::*;
+pub fn mime_from_name_or_hint(file_name: &str, mime_hint: Option<&str>) -> String {
     if let Some(hint) = mime_hint
         .map(str::trim)
         .filter(|v| !v.is_empty())
@@ -11,7 +12,7 @@ pub(crate) fn mime_from_name_or_hint(file_name: &str, mime_hint: Option<&str>) -
         .to_string()
 }
 
-pub(crate) fn onebot_guess_name_from_ref(file_ref: &str, fallback: &str) -> String {
+pub fn onebot_guess_name_from_ref(file_ref: &str, fallback: &str) -> String {
     if let Some(pos) = file_ref.rfind('/') {
         let candidate = file_ref[(pos + 1)..].trim();
         if !candidate.is_empty() && !candidate.contains('?') {
@@ -27,7 +28,7 @@ pub(crate) fn onebot_guess_name_from_ref(file_ref: &str, fallback: &str) -> Stri
     fallback.to_string()
 }
 
-pub(crate) async fn onebot_read_media_bytes(file_ref: &str) -> Result<(Vec<u8>, Option<String>), String> {
+pub async fn onebot_read_media_bytes(file_ref: &str) -> Result<(Vec<u8>, Option<String>), String> {
     let raw = file_ref.trim();
     if raw.is_empty() {
         return Err("empty file ref".to_string());
@@ -63,7 +64,7 @@ pub(crate) async fn onebot_read_media_bytes(file_ref: &str) -> Result<(Vec<u8>, 
     Ok((bytes, None))
 }
 
-pub(crate) async fn onebot_download_media_by_url(
+pub async fn onebot_download_media_by_url(
     url: &str,
     headers: Option<reqwest::header::HeaderMap>,
 ) -> Result<(Vec<u8>, Option<String>), String> {
@@ -71,7 +72,7 @@ pub(crate) async fn onebot_download_media_by_url(
         .timeout(Duration::from_secs(20));
     #[cfg(target_os = "android")]
     {
-        client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)?;
+        client_builder = crate::tls::android_workspace_apply_static_webpki_roots(client_builder)?;
     }
     let client = client_builder
         .build()
@@ -120,7 +121,7 @@ pub(crate) async fn onebot_download_media_by_url(
     Ok((bytes, header_mime))
 }
 
-pub(crate) fn onebot_extract_file_ref_from_get_file_response(value: &Value) -> Option<String> {
+pub fn onebot_extract_file_ref_from_get_file_response(value: &Value) -> Option<String> {
     let direct = value
         .get("url")
         .and_then(Value::as_str)
@@ -145,7 +146,7 @@ pub(crate) fn onebot_extract_file_ref_from_get_file_response(value: &Value) -> O
         .map(ToOwned::to_owned)
 }
 
-pub(crate) fn onebot_extract_string_field(value: &Value, key: &str) -> Option<String> {
+pub fn onebot_extract_string_field(value: &Value, key: &str) -> Option<String> {
     value
         .get(key)
         .and_then(Value::as_str)
@@ -155,7 +156,7 @@ pub(crate) fn onebot_extract_string_field(value: &Value, key: &str) -> Option<St
         .map(ToOwned::to_owned)
 }
 
-pub(crate) fn onebot_extract_headers_field(value: &Value) -> Option<reqwest::header::HeaderMap> {
+pub fn onebot_extract_headers_field(value: &Value) -> Option<reqwest::header::HeaderMap> {
     let raw_headers = value
         .get("headers")
         .or_else(|| value.get("data").and_then(|v| v.get("headers")))?;
@@ -204,7 +205,7 @@ pub(crate) fn onebot_extract_headers_field(value: &Value) -> Option<reqwest::hea
     }
 }
 
-pub(crate) async fn onebot_get_file_with_type(
+pub async fn onebot_get_file_with_type(
     manager: &OnebotV11WsManager,
     channel_id: &str,
     file_id: &str,
@@ -339,7 +340,7 @@ pub(crate) async fn onebot_get_file_with_type(
     ))
 }
 
-pub(crate) async fn onebot_resolve_inbound_media(
+pub async fn onebot_resolve_inbound_media(
     manager: &OnebotV11WsManager,
     channel_id: &str,
     group_id: Option<u64>,

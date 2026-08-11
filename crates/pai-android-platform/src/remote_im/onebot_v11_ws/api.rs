@@ -1,3 +1,4 @@
+use super::*;
 impl OnebotV11WsManager {
     /// 调用 OneBot API 并等待响应
     pub async fn call_api(
@@ -12,7 +13,7 @@ impl OnebotV11WsManager {
             .map_err(|err| err.message)
     }
 
-    pub(crate) async fn call_api_classified(
+    pub async fn call_api_classified(
         &self,
         channel_id: &str,
         action: &str,

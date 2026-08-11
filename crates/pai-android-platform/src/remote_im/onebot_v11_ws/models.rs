@@ -1,3 +1,4 @@
+use super::*;
 // OneBot v11 反向 WebSocket 服务器
 // 实现 OneBot v11 协议的反向 WebSocket 连接（基于 axum WebSocket）
 
@@ -29,17 +30,17 @@ pub struct OnebotV11WsCredentials {
     pub ws_token: Option<String>,
 }
 
-pub(crate) fn default_ws_host() -> String {
+pub fn default_ws_host() -> String {
     "0.0.0.0".to_string()
 }
 
-pub(crate) fn default_ws_port() -> u16 {
+pub fn default_ws_port() -> u16 {
     6199
 }
 
-pub(crate) const NAPCAT_RECONNECT_INTERVAL_SECS: u64 = 30;
-pub(crate) const NAPCAT_MAX_MEDIA_DOWNLOAD_SIZE_BYTES: u64 = 20 * 1024 * 1024;
-pub(crate) const NAPCAT_ACTIVE_CONNECTION_REPLACE_TIMEOUT_MS: u64 = 1500;
+pub const NAPCAT_RECONNECT_INTERVAL_SECS: u64 = 30;
+pub const NAPCAT_MAX_MEDIA_DOWNLOAD_SIZE_BYTES: u64 = 20 * 1024 * 1024;
+pub const NAPCAT_ACTIVE_CONNECTION_REPLACE_TIMEOUT_MS: u64 = 1500;
 
 impl OnebotV11WsCredentials {
     pub fn from_credentials(credentials: &Value) -> Self {
@@ -59,78 +60,78 @@ impl Default for OnebotV11WsCredentials {
 
 /// OneBot v11 API 请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct OneBotApiRequest {
-    pub(crate) action: String,
-    pub(crate) params: Value,
+pub struct OneBotApiRequest {
+    pub action: String,
+    pub params: Value,
     #[serde(default)]
-    pub(crate) echo: Option<Value>,
+    pub echo: Option<Value>,
 }
 
 /// OneBot v11 API 响应
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct OneBotApiResponse {
-    pub(crate) status: String,
-    pub(crate) retcode: i64,
-    pub(crate) data: Value,
+pub struct OneBotApiResponse {
+    pub status: String,
+    pub retcode: i64,
+    pub data: Value,
     #[serde(default)]
-    pub(crate) echo: Option<Value>,
+    pub echo: Option<Value>,
 }
 
 /// WebSocket 连接信息
-pub(crate) struct WsConnection {
+pub struct WsConnection {
     /// 发送请求的通道
-    pub(crate) tx: broadcast::Sender<String>,
+    pub tx: broadcast::Sender<String>,
     /// 等待响应的 oneshot 映射: echo -> sender
-    pub(crate) pending_responses: Arc<RwLock<HashMap<String, oneshot::Sender<OneBotApiResponse>>>>,
+    pub pending_responses: Arc<RwLock<HashMap<String, oneshot::Sender<OneBotApiResponse>>>>,
     /// 连接的对端地址
-    pub(crate) peer_addr: Option<String>,
+    pub peer_addr: Option<String>,
     /// 连接时间
-    pub(crate) connected_at: Option<DateTime<Utc>>,
+    pub connected_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Clone)]
-pub(crate) struct OnebotChannelRuntime {
+pub struct OnebotChannelRuntime {
     #[allow(dead_code)] // 用于测试中的 runtime 匹配验证
-    pub(crate) id: String,
-    pub(crate) cancel: CancellationToken,
-    pub(crate) tasks: TaskTracker,
+    pub id: String,
+    pub cancel: CancellationToken,
+    pub tasks: TaskTracker,
 }
 
 /// axum WebSocket handler 所需的共享状态
 #[derive(Clone)]
-pub(crate) struct OnebotAxumState {
-    pub(crate) channel_id: String,
-    pub(crate) expected_token: Option<String>,
-    pub(crate) conn_tx: broadcast::Sender<String>,
-    pub(crate) pending_responses: Arc<RwLock<HashMap<String, oneshot::Sender<OneBotApiResponse>>>>,
-    pub(crate) event_tx: broadcast::Sender<Value>,
-    pub(crate) connections: Arc<RwLock<HashMap<String, WsConnection>>>,
-    pub(crate) connection_stop_senders: Arc<RwLock<HashMap<String, watch::Sender<bool>>>>,
-    pub(crate) port_service: Arc<LocalPortServiceCore>,
-    pub(crate) active_connection_gate: Arc<std::sync::atomic::AtomicBool>,
-    pub(crate) cancel: CancellationToken,
+pub struct OnebotAxumState {
+    pub channel_id: String,
+    pub expected_token: Option<String>,
+    pub conn_tx: broadcast::Sender<String>,
+    pub pending_responses: Arc<RwLock<HashMap<String, oneshot::Sender<OneBotApiResponse>>>>,
+    pub event_tx: broadcast::Sender<Value>,
+    pub connections: Arc<RwLock<HashMap<String, WsConnection>>>,
+    pub connection_stop_senders: Arc<RwLock<HashMap<String, watch::Sender<bool>>>>,
+    pub port_service: Arc<LocalPortServiceCore>,
+    pub active_connection_gate: Arc<std::sync::atomic::AtomicBool>,
+    pub cancel: CancellationToken,
 }
 
 /// OneBot v11 WebSocket 服务器管理器
 #[derive(Clone)]
 pub struct OnebotV11WsManager {
     /// 活跃连接: channel_id -> 连接信息
-    connections: Arc<RwLock<HashMap<String, WsConnection>>>,
+    pub connections: Arc<RwLock<HashMap<String, WsConnection>>>,
     /// 活跃连接停止信号: channel_id -> stop sender
-    connection_stop_senders: Arc<RwLock<HashMap<String, watch::Sender<bool>>>>,
+    pub connection_stop_senders: Arc<RwLock<HashMap<String, watch::Sender<bool>>>>,
     /// 每个渠道独立的事件总线: channel_id -> event sender
-    channel_event_senders: Arc<RwLock<HashMap<String, broadcast::Sender<Value>>>>,
+    pub channel_event_senders: Arc<RwLock<HashMap<String, broadcast::Sender<Value>>>>,
     /// 渠道本地端口服务共享状态
-    port_service: Arc<LocalPortServiceCore>,
+    pub port_service: Arc<LocalPortServiceCore>,
     /// 渠道 axum serve 任务的 JoinHandle
-    channel_tasks: Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
+    pub channel_tasks: Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
     /// 渠道派生任务组，用于 stop 时收割所有连接任务
-    channel_runtimes: Arc<RwLock<HashMap<String, OnebotChannelRuntime>>>,
+    pub channel_runtimes: Arc<RwLock<HashMap<String, OnebotChannelRuntime>>>,
     /// OneBot 事件消费器停止信号: channel_id -> stop sender
-    event_consumer_stop_senders: Arc<RwLock<HashMap<String, watch::Sender<bool>>>>,
+    pub event_consumer_stop_senders: Arc<RwLock<HashMap<String, watch::Sender<bool>>>>,
     /// OneBot 事件消费器任务: channel_id -> JoinHandle
-    event_consumer_tasks: Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
+    pub event_consumer_tasks: Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
 }
 
-pub(crate) type AxumWsSender = SplitSink<WebSocket, AxumWsMessage>;
-pub(crate) type AxumWsReceiver = SplitStream<WebSocket>;
+pub type AxumWsSender = SplitSink<WebSocket, AxumWsMessage>;
+pub type AxumWsReceiver = SplitStream<WebSocket>;

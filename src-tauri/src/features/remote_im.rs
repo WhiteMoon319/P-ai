@@ -77,15 +77,6 @@ pub(crate) fn resolve_dingtalk_session_webhook_expired_time(input: &RemoteImEnqu
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct RemoteImEnqueueResult {
-    pub(crate) event_id: String,
-    pub(crate) conversation_id: String,
-    pub(crate) activate_assistant: bool,
-    pub(crate) contact_id: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub(crate) struct RemoteImContactAllowSendUpdateInput {
     pub(crate) contact_id: String,
     pub(crate) allow_send: bool,

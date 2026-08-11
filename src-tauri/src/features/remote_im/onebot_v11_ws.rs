@@ -1,33 +1,4 @@
-use std::{
-    fs,
-    io::Cursor,
-    path::PathBuf,
-    sync::{Arc, Mutex, OnceLock},
-};
+// onebot_v11_ws 域已整体迁入 pai-android-platform（8 文件：models/transport/runtime/
+// api/lifecycle/parsing/media/inbound）。本文件仅作 src-tauri 桥接 re-export。
 
-use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
-use directories::ProjectDirs;
-use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
-use image::ImageFormat;
-use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
-use rmcp::{schemars, ServiceExt};
-use scraper::{Html, Selector};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
-use uuid::Uuid;
-
-// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
-
-
-use std::collections::{HashMap};
-use std::path::Path;
-use super::*;
-include!("onebot_v11_ws/models.rs");
-include!("onebot_v11_ws/transport.rs");
-include!("onebot_v11_ws/runtime.rs");
-include!("onebot_v11_ws/api.rs");
-include!("onebot_v11_ws/lifecycle.rs");
-include!("onebot_v11_ws/parsing.rs");
-include!("onebot_v11_ws/media.rs");
-include!("onebot_v11_ws/inbound.rs");
+pub(crate) use pai_android_platform::remote_im::onebot_v11_ws::*;

@@ -127,17 +127,6 @@ pub fn shell_workspace_display_path(path: &Path) -> String {
 pub fn android_workspace_status_paths(root: &Path) -> (String, String) {
     (
         shell_workspace_display_path(root),
-        shell_workspace_display_path(&android_workspace_runtime_root(root)),
+        shell_workspace_display_path(&super::paths::android_workspace_runtime_root(root)),
     )
-}
-
-/// Android 工作区运行时根（与 src-tauri android_workspace_paths.rs 同源）。
-pub(crate) fn android_workspace_runtime_root(root: &Path) -> PathBuf {
-    root.parent()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| root.to_path_buf())
-        .join("runtime")
-        .join("android-workspace")
-        .join("default")
-        .join("linux")
 }

@@ -1,4 +1,5 @@
-pub(crate) fn build_remote_im_enqueue_input(
+use super::*;
+pub fn build_remote_im_enqueue_input(
     channel_id: &str,
     sender_name: String,
     sender_id: String,
@@ -45,10 +46,10 @@ pub(crate) fn build_remote_im_enqueue_input(
 }
 
 /// 解析 OneBot v11 message 事件并入队
-pub(crate) async fn parse_and_enqueue_onebot_event(
+pub async fn parse_and_enqueue_onebot_event(
     channel_id: &str,
     event: &Value,
-    state: &AppState,
+    access: &dyn OnebotV11StateAccess,
     manager: &OnebotV11WsManager,
 ) -> Result<RemoteImEnqueueResult, String> {
     runtime_log_info(format!(
@@ -76,13 +77,13 @@ pub(crate) async fn parse_and_enqueue_onebot_event(
     if remote_contact_type != "group" {
         remote_contact_name = Some(sender_name.clone());
     }
-    let channel_config = read_channel_config(state, channel_id)?;
+    let channel_config = read_channel_config(access, channel_id)?;
     let im_name = channel_config
         .as_ref()
         .map(|ch| ch.name.clone())
         .unwrap_or_else(|| "OneBot v11".to_string());
     let mut group_member_cache = if remote_contact_type == "group" {
-        onebot_group_member_cache_for_contact(state, channel_id, group_id)
+        onebot_group_member_cache_for_contact(access, channel_id, group_id)
     } else {
         std::collections::HashMap::new()
     };
@@ -208,18 +209,18 @@ pub(crate) async fn parse_and_enqueue_onebot_event(
         text,
         ordered_parts,
     );
-    let result = remote_im_enqueue_message_internal(input, state)?;
+    let result = access.enqueue_message(input)?;
     if !result.conversation_id.trim().is_empty() {
         let group_members = group_member_cache.into_values().collect::<Vec<_>>();
-        onebot_persist_group_member_cache(state, &result.contact_id, group_members)?;
+        onebot_persist_group_member_cache(access, &result.contact_id, group_members)?;
     }
     Ok(result)
 }
 
-pub(crate) async fn napcat_run_event_consumer_loop(
+pub async fn napcat_run_event_consumer_loop(
     manager: OnebotV11WsManager,
     channel_id: String,
-    state: AppState,
+    access: std::sync::Arc<dyn OnebotV11StateAccess>,
     mut stop_rx: tokio::sync::watch::Receiver<bool>,
 ) {
     loop {
@@ -264,7 +265,7 @@ pub(crate) async fn napcat_run_event_consumer_loop(
                                 continue;
                             }
 
-                            match parse_and_enqueue_onebot_event(&channel_id, &event, &state, &manager).await {
+                            match parse_and_enqueue_onebot_event(&channel_id, &event, access.as_ref(), &manager).await {
                                 Ok(result) => {
                                     runtime_log_info(format!("[远程IM][OneBot v11 事件] 渠道 {} 入队成功: 事件ID={}", channel_id, result.event_id));
                                 }
@@ -327,7 +328,7 @@ pub(crate) async fn napcat_run_event_consumer_loop(
 }
 
 impl OnebotV11WsManager {
-    pub(crate) async fn stop_event_consumer_inner(&self, channel_id: &str) -> Result<(), String> {
+    pub async fn stop_event_consumer_inner(&self, channel_id: &str) -> Result<(), String> {
         self.add_log(channel_id, "info", "开始停止事件消费器").await;
         let stop_sender = {
             self.event_consumer_stop_senders
@@ -371,10 +372,10 @@ impl OnebotV11WsManager {
         Ok(())
     }
 
-    pub(crate) async fn start_event_consumer(
+    pub async fn start_event_consumer(
         &self,
         channel_id: String,
-        state: AppState,
+        access: std::sync::Arc<dyn OnebotV11StateAccess>,
     ) -> Result<(), String> {
         let service_id = channel_id.clone();
         self.port_service
@@ -391,7 +392,7 @@ impl OnebotV11WsManager {
                 let task_channel_id = channel_id.clone();
                 let manager = self.clone();
                 let handle = tokio::spawn(async move {
-                    napcat_run_event_consumer_loop(manager, task_channel_id.clone(), state, stop_rx).await;
+                    napcat_run_event_consumer_loop(manager, task_channel_id.clone(), access, stop_rx).await;
                     stop_senders.write().await.remove(&task_channel_id);
                     tasks.write().await.remove(&task_channel_id);
                 });

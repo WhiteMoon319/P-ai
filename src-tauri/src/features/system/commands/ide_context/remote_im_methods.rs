@@ -89,8 +89,10 @@ pub(crate) async fn remote_im_restart_channel_inner(
     ));
 
     if channel.enabled && channel.platform == RemoteImPlatform::OnebotV11 {
+        let access: std::sync::Arc<dyn OnebotV11StateAccess> =
+            std::sync::Arc::new(AppStateOnebotAccess::new(state));
         manager
-            .start_event_consumer(channel_id.clone(), state.clone())
+            .start_event_consumer(channel_id.clone(), access)
             .await
             .map_err(|err| format!("重启事件消费器失败: {}", err))?;
     } else if channel.enabled && channel.platform == RemoteImPlatform::Dingtalk {

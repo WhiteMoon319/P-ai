@@ -119,6 +119,9 @@ pub(crate) use pai_backend::multilingual::markdown_filter::*;
 #[path = "features/remote_im/onebot_v11_ws.rs"]
 mod features_remote_im_onebot_v11_ws;
 pub(crate) use features_remote_im_onebot_v11_ws::*;
+#[path = "features/remote_im/onebot_v11_ws_state_access.rs"]
+mod features_remote_im_onebot_v11_ws_state_access;
+pub(crate) use features_remote_im_onebot_v11_ws_state_access::*;
 #[cfg(target_os = "android")]
 #[path = "features/remote_im/dingtalk_stream_android_stub.rs"]
 mod features_remote_im_dingtalk_stream_android_stub;

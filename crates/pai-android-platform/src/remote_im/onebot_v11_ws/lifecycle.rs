@@ -1,3 +1,4 @@
+use super::*;
 impl OnebotV11WsManager {
     /// 订阅事件流
     pub async fn subscribe_events(&self, channel_id: &str) -> Option<broadcast::Receiver<Value>> {
@@ -19,7 +20,7 @@ impl OnebotV11WsManager {
     }
 
     /// 获取渠道的 CancellationToken，事件消费器用它来感知渠道停止
-    pub(crate) async fn get_channel_cancel_token(&self, channel_id: &str) -> Option<CancellationToken> {
+    pub async fn get_channel_cancel_token(&self, channel_id: &str) -> Option<CancellationToken> {
         self.channel_runtimes
             .read()
             .await
@@ -35,7 +36,7 @@ impl Default for OnebotV11WsManager {
 }
 
 /// 全局 OneBot v11 WebSocket 管理器
-pub(crate) static ONEBOT_V11_WS_MANAGER: once_cell::sync::Lazy<Arc<OnebotV11WsManager>> =
+pub static ONEBOT_V11_WS_MANAGER: once_cell::sync::Lazy<Arc<OnebotV11WsManager>> =
     once_cell::sync::Lazy::new(|| Arc::new(OnebotV11WsManager::new()));
 
 pub fn onebot_v11_ws_manager() -> Arc<OnebotV11WsManager> {
@@ -43,7 +44,7 @@ pub fn onebot_v11_ws_manager() -> Arc<OnebotV11WsManager> {
 }
 
 /// 启动 OneBot v11 WebSocket 服务器
-pub(crate) async fn onebot_v11_ws_server_start(
+pub async fn onebot_v11_ws_server_start(
     channel: RemoteImChannelConfig,
 ) -> Result<(), String> {
     let credentials = OnebotV11WsCredentials::from_credentials(&channel.credentials);
