@@ -1,4 +1,30 @@
-pub(crate) fn send_text_delta_event(
+use serde_json::Value;
+
+use crate::core::domain::types_chat::ChatMessage;
+use crate::core::domain::types_requests::{AssistantDeltaEvent, DeltaChannel};
+
+/// 工具调用转 JSON（从 src-tauri tool_loop.rs 迁入）。
+pub fn tool_loop_round_tool_calls_json(tool_calls: &[genai::chat::ToolCall]) -> Vec<Value> {
+    tool_calls
+        .iter()
+        .map(|tool_call| {
+            serde_json::json!({
+                "id": tool_call.call_id.clone(),
+                "call_id": tool_call.call_id.clone(),
+                "type": "function",
+                "function": {
+                    "name": tool_call.fn_name.clone(),
+                    "arguments": match &tool_call.fn_arguments {
+                        Value::String(raw) => raw.clone(),
+                        other => other.to_string(),
+                    },
+                },
+            })
+        })
+        .collect()
+}
+
+pub fn send_text_delta_event(
     on_delta: &DeltaChannel,
     text: &str,
 ) {
@@ -21,7 +47,7 @@ pub(crate) fn send_text_delta_event(
     });
 }
 
-pub(crate) fn assistant_tool_group_history_event_value(
+pub fn assistant_tool_group_history_event_value(
     turn_text: &str,
     tool_calls: &[genai::chat::ToolCall],
     turn_reasoning: &str,
@@ -49,7 +75,7 @@ pub(crate) fn assistant_tool_group_history_event_value(
     assistant_tool_event
 }
 
-pub(crate) fn assistant_tool_group_stream_event_value(
+pub fn assistant_tool_group_stream_event_value(
     turn_text: &str,
     tool_calls: &[genai::chat::ToolCall],
 ) -> Value {
@@ -66,7 +92,7 @@ pub(crate) fn assistant_tool_group_stream_event_value(
     })
 }
 
-pub(crate) fn insert_before_trailing_user_history_events(events: &mut Vec<Value>, event: Value) {
+pub fn insert_before_trailing_user_history_events(events: &mut Vec<Value>, event: Value) {
     let insert_at = events
         .iter()
         .rposition(|item| {
@@ -80,7 +106,7 @@ pub(crate) fn insert_before_trailing_user_history_events(events: &mut Vec<Value>
     events.insert(insert_at, event);
 }
 
-pub(crate) fn insert_before_trailing_user_messages(
+pub fn insert_before_trailing_user_messages(
     messages: &mut Vec<genai::chat::ChatMessage>,
     message: genai::chat::ChatMessage,
 ) {
@@ -92,7 +118,7 @@ pub(crate) fn insert_before_trailing_user_messages(
     messages.insert(insert_at, message);
 }
 
-pub(crate) fn send_assistant_tool_event(
+pub fn send_assistant_tool_event(
     on_delta: &DeltaChannel,
     assistant_tool_event: &Value,
 ) {
@@ -112,7 +138,7 @@ pub(crate) fn send_assistant_tool_event(
     });
 }
 
-pub(crate) fn send_assistant_tool_result_event(
+pub fn send_assistant_tool_result_event(
     on_delta: &DeltaChannel,
     tool_result_event: &Value,
 ) {

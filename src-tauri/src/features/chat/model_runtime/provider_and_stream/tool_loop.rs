@@ -273,7 +273,8 @@ pub(crate) fn finalize_deferred_tool_loop_outcome(
     }
 }
 
-include!("tool_loop/tool_event_projection.rs");
+// tool_event_projection 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::tool_loop::tool_event_projection::*;
 
 pub(crate) fn tool_loop_active_conversation_snapshot(
     state: &AppState,
