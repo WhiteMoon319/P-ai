@@ -276,6 +276,8 @@ async fn native_dispatch(
         "conversation.markRead" => ide_chat_mark_conversation_read(state, params),
         "conversation.setPreferredModel" => ide_chat_set_preferred_model_command(state, params),
         "model.list" => ide_chat_model_list(state, params),
+        "get_prompt_preview" => ide_chat_get_prompt_preview_for_web_settings(state, params).await,
+        "prompt.systemPreview" => ide_chat_get_system_prompt_preview_for_web_settings(state, params).await,
         "conversation.rewind" => ide_chat_rewind_conversation_command(state, params).await,
         "conversation.rewindPreview" => ide_chat_preview_rewind_conversation(state, params).await,
         "conversation.compact" => ide_chat_compact_conversation(state, params).await,

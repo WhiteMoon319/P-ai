@@ -171,6 +171,24 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("conversation.exportShare", mapOf("input" to mapOf("conversationId" to conversationId)), Map::class.java) as Map<String, Any?>
     }
 
+    /** 当前会话提示词预览（get_prompt_preview）。 */
+    suspend fun promptPreview(
+        conversationId: String,
+        departmentId: String?,
+        agentId: String?,
+        previewMode: String? = null,
+    ): Map<String, Any?> {
+        val input = mapOf(
+            "departmentId" to departmentId,
+            "agentId" to (agentId ?: "agent"),
+            "conversationId" to conversationId,
+        )
+        val params = mutableMapOf<String, Any?>("input" to input)
+        if (previewMode != null) params["previewMode"] = previewMode
+        @Suppress("UNCHECKED_CAST")
+        return client.request("get_prompt_preview", params, Map::class.java) as Map<String, Any?>
+    }
+
     /** 会话可用模型列表（model.list，Vue 模型切换语义）。 */
     suspend fun modelList(conversationId: String): List<Map<String, Any?>> {
         @Suppress("UNCHECKED_CAST")

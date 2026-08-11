@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Compress
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
@@ -654,6 +655,8 @@ fun ChatScreen(
         initialFirstVisibleItemIndex = Int.MAX_VALUE // 首帧即锚定列表末尾，避免顶部闪现/滑动
     )
     val chatContext = LocalContext.current
+    var showPromptPreview by remember { mutableStateOf(false) }
+    var promptPreviewText by remember { mutableStateOf("") }
 
     // 消息/流式输出/活动步骤变化时自动滚动到最底部
     LaunchedEffect(messages.size, streaming.length, activitySteps.size) {
@@ -693,6 +696,17 @@ fun ChatScreen(
                     }
                 }) {
                     Icon(Icons.Default.Compress, contentDescription = "压缩会话")
+                }
+                IconButton(onClick = {
+                    scope.launch {
+                        val preview = vm.promptPreviewForCurrent()
+                        if (preview != null) {
+                            promptPreviewText = preview.second
+                            showPromptPreview = true
+                        }
+                    }
+                }) {
+                    Icon(Icons.Default.Description, contentDescription = "查看提示词")
                 }
                 IconButton(onClick = onSettings) {
                     Icon(Icons.Default.Settings, contentDescription = "设置")
@@ -933,6 +947,25 @@ fun ChatScreen(
                 }
             }
         }
+    }
+
+    if (showPromptPreview) {
+        AlertDialog(
+            onDismissRequest = { showPromptPreview = false },
+            title = { Text("提示词预览") },
+            text = {
+                Text(
+                    promptPreviewText,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState()),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showPromptPreview = false }) { Text("关闭") }
+            },
+        )
     }
 }
 

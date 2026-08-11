@@ -430,6 +430,31 @@ class AppViewModel(
         }
     }
 
+    /** 当前会话提示词预览：返回 (标题, 内容)。 */
+    suspend fun promptPreviewForCurrent(): Pair<String, String>? {
+        val conversationId = currentConversationId.value ?: return null
+        val conv = conversations.value.firstOrNull { it.conversationId == conversationId }
+        return withContext(Dispatchers.IO) {
+            try {
+                val result = service.promptPreview(conversationId, conv?.departmentId, conv?.agentId)
+                // 取 preamble / systemPrompt / messages 等字段拼接展示
+                val preamble = result["preamble"] as? String ?: ""
+                val systemPrompt = result["systemPrompt"] as? String ?: ""
+                val userText = result["userText"] as? String ?: ""
+                val content = buildString {
+                    if (preamble.isNotBlank()) append("【前言】\n$preamble\n\n")
+                    if (systemPrompt.isNotBlank()) append("【系统提示词】\n$systemPrompt\n\n")
+                    if (userText.isNotBlank()) append("【用户内容】\n$userText\n")
+                    if (isEmpty()) append("（无提示词内容）")
+                }.trim()
+                "提示词预览" to content
+            } catch (e: Exception) {
+                error.value = "读取提示词失败: ${e.message}"
+                null
+            }
+        }
+    }
+
     /** 归档会话。 */
     suspend fun archiveConversation(conversationId: String): Boolean {
         return withContext(Dispatchers.IO) {
