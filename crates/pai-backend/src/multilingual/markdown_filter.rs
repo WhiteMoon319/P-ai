@@ -1,6 +1,7 @@
 use serde_json::Value;
 
-use crate::core::domain::types_config::RemoteImChannelConfig;
+use crate::core::domain::types_config::{RemoteImChannelConfig, RemoteImPlatform};
+use crate::core::domain::types_storage::RemoteImChannelBehaviorSettings;
 
 pub fn remote_im_strip_simple_markdown(input: &str) -> String {
     let normalized = input.replace("\r\n", "\n").replace('\r', "\n");
