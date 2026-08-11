@@ -868,6 +868,20 @@ fun ArchivesScreen(
     }
 }
 
+/** RFC3339 时间 → 相对时间（刚刚/N 分钟前/N 小时前/N 天前/日期）。 */
+private fun formatRelativeTime(rfc3339: String?): String {
+    if (rfc3339.isNullOrBlank()) return ""
+    val millis = runCatching { java.time.Instant.parse(rfc3339).toEpochMilli() }.getOrNull() ?: return ""
+    val diff = System.currentTimeMillis() - millis
+    return when {
+        diff < 60_000 -> "刚刚"
+        diff < 3_600_000 -> "${diff / 60_000} 分钟前"
+        diff < 86_400_000 -> "${diff / 3_600_000} 小时前"
+        diff < 7 * 86_400_000 -> "${diff / 86_400_000} 天前"
+        else -> runCatching { java.time.Instant.parse(rfc3339).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("MM-dd")) }.getOrDefault("")
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ConversationRow(
@@ -900,6 +914,15 @@ fun ConversationRow(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
+            val timeText = formatRelativeTime(conv.updatedAt ?: conv.lastMessageAt)
+            if (timeText.isNotBlank()) {
+                Text(
+                    timeText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(end = 4.dp),
+                )
+            }
             IconButton(onClick = { menuExpanded = true }) {
                 Icon(Icons.Default.MoreVert, contentDescription = "会话操作")
             }
@@ -1847,11 +1870,22 @@ fun MessageBubble(
             ) {
             if (isUser) {
                 Column(Modifier.padding(10.dp)) {
-                    Text(
-                        "我",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "我",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        val msgTime = formatRelativeTime(message.createdAt)
+                        if (msgTime.isNotBlank()) {
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                msgTime,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            )
+                        }
+                    }
                     Spacer(Modifier.height(2.dp))
                     message.parts.forEach { part ->
                         if (part.type == "Image") {
@@ -1889,11 +1923,22 @@ fun MessageBubble(
             } else {
                 Column(Modifier.padding(10.dp)) {
                     if (!agentName.isNullOrBlank()) {
-                        Text(
-                            agentName,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                agentName,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            val msgTime = formatRelativeTime(message.createdAt)
+                            if (msgTime.isNotBlank()) {
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    msgTime,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                )
+                            }
+                        }
                         Spacer(Modifier.height(2.dp))
                     }
                     // 落盘消息的思考+工具统一聚合为 thinking 大类（两级折叠），与流式一致
