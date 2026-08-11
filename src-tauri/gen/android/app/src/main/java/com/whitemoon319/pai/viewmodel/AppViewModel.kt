@@ -927,6 +927,37 @@ class AppViewModel(
         }
     }
 
+    /** 记忆回忆搜索结果（搜索命中列表）。 */
+    val memorySearchResults = MutableStateFlow<List<Map<String, Any?>>?>(null)
+    val memorySearching = MutableStateFlow(false)
+
+    /** 记忆回忆搜索：优先当前会话 agent，否则用默认。 */
+    suspend fun searchMemories(query: String) {
+        if (query.isBlank()) {
+            memorySearchResults.value = null
+            return
+        }
+        withContext(Dispatchers.IO) {
+            memorySearching.value = true
+            try {
+                val agentId = currentConversationId.value?.let { id ->
+                    conversations.value.firstOrNull { it.conversationId == id }?.agentId
+                } ?: "agent"
+                val result = service.searchMemoriesRecall(agentId, query.trim())
+                @Suppress("UNCHECKED_CAST")
+                memorySearchResults.value = (result["memories"] as? List<Map<String, Any?>>) ?: emptyList()
+            } catch (e: Exception) {
+                error.value = "搜索记忆失败: ${e.message}"
+            } finally {
+                memorySearching.value = false
+            }
+        }
+    }
+
+    fun clearMemorySearch() {
+        memorySearchResults.value = null
+    }
+
     val runtimeLogs = MutableStateFlow<List<Map<String, Any?>>?>(null)
     val runtimeLogsLoading = MutableStateFlow(false)
 

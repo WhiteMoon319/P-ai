@@ -353,6 +353,7 @@ async fn native_dispatch(
         "list_memories" => ide_chat_list_memories_for_web_settings(state),
         "delete_memory" => ide_chat_delete_memory_for_web_settings(state, params),
         "search_memories_mixed" => ide_chat_search_memories_mixed_for_web_settings(state, params),
+        "search_memories_recall" => ide_chat_search_memories_recall_command(state, params),
         "get_memory_provider_bindings" => ide_chat_get_memory_provider_bindings_for_web_settings(state),
         "get_memory_embedding_sync_progress" => ide_chat_get_memory_embedding_sync_progress_for_web_settings(state),
         "save_memory_embedding_binding" => ide_chat_save_memory_embedding_binding_for_web_settings(state, params),

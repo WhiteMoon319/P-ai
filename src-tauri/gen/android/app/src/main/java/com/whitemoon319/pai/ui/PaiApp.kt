@@ -2120,6 +2120,9 @@ private fun MemorySettingsTab(vm: AppViewModel) {
     val scope = rememberCoroutineScope()
     val memories by vm.memories.collectAsState()
     val loading by vm.memoryLoading.collectAsState()
+    val searchResults by vm.memorySearchResults.collectAsState()
+    val searching by vm.memorySearching.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<Map<String, Any?>?>(null) }
 
     LaunchedEffect(Unit) { vm.loadMemories() }
@@ -2129,19 +2132,55 @@ private fun MemorySettingsTab(vm: AppViewModel) {
             Text("记忆管理", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             TextButton(onClick = { scope.launch { vm.loadMemories() } }, enabled = !loading) { Text(if (loading) "加载中…" else "刷新") }
         }
-        if (memories.isNullOrEmpty()) {
+        // 回忆搜索框
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("搜索记忆（回忆检索）…") },
+            singleLine = true,
+            trailingIcon = {
+                if (searchQuery.isNotBlank()) {
+                    TextButton(
+                        onClick = {
+                            searchQuery = ""
+                            vm.clearMemorySearch()
+                        },
+                    ) { Text("清除") }
+                }
+            },
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onDone = { scope.launch { vm.searchMemories(searchQuery) } },
+            ),
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                imeAction = androidx.compose.ui.text.input.ImeAction.Search,
+            ),
+        )
+        Spacer(Modifier.height(6.dp))
+        // 搜索结果优先展示
+        val displayItems: List<Map<String, Any?>> = when {
+            searchResults != null -> searchResults!!
+            else -> memories.orEmpty()
+        }
+        if (searching) {
+            Text("搜索中…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else if (displayItems.isEmpty()) {
             Text(
-                if (loading) "加载中…" else "暂无记忆",
+                if (searchResults != null) "无匹配结果" else if (loading) "加载中…" else "暂无记忆",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(16.dp),
             )
         } else {
             LazyColumn(Modifier.weight(1f)) {
-                items(memories!!.size) { index ->
-                    val item = memories!![index]
-                    val content = item["content"] as? String ?: item["judgment"] as? String ?: ""
+                items(displayItems.size) { index ->
+                    val item = displayItems[index]
+                    val content = item["content"] as? String
+                        ?: item["judgment"] as? String
+                        ?: item["text"] as? String
+                        ?: ""
                     val id = (item["id"] as? String) ?: ""
+                    val score = item["score"] as? Number
                     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(
@@ -2149,7 +2188,16 @@ private fun MemorySettingsTab(vm: AppViewModel) {
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.weight(1f),
                             )
-                            TextButton(onClick = { pendingDelete = item }) { Text("删除") }
+                            if (score != null) {
+                                Text(
+                                    "${(score.toDouble() * 100).toInt()}%",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            if (id.isNotBlank()) {
+                                TextButton(onClick = { pendingDelete = item }) { Text("删除") }
+                            }
                         }
                     }
                 }
