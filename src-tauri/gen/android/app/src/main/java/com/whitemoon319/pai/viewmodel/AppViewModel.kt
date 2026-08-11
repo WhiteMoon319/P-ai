@@ -1130,13 +1130,12 @@ class AppViewModel(
         return withContext(Dispatchers.IO) {
             settingsSaving.value = true
             try {
-                val current = appConfig.value ?: service.loadConfig()
-                val updated = current.copy(
-                    webAccessEnabled = enabled,
-                    webAccessPort = port,
-                    webAccessPassword = password,
+                val input = mapOf(
+                    "webAccessEnabled" to enabled,
+                    "webAccessPort" to port,
+                    "webAccessPassword" to password,
                 )
-                appConfig.value = service.saveConfig(updated)
+                appConfig.value = service.patchConfig(input)
                 refreshWebAccessInfo(forceRefresh = true)
                 true
             } catch (e: Exception) {
@@ -1153,9 +1152,7 @@ class AppViewModel(
         return withContext(Dispatchers.IO) {
             settingsSaving.value = true
             try {
-                val current = appConfig.value ?: service.loadConfig()
-                val updated = current.copy(sttApiConfigId = sttApiConfigId)
-                appConfig.value = service.saveConfig(updated)
+                appConfig.value = service.patchConfig(mapOf("sttApiConfigId" to sttApiConfigId))
                 true
             } catch (e: Exception) {
                 error.value = "保存语音供应商失败: ${e.message}"
@@ -1179,15 +1176,13 @@ class AppViewModel(
         return withContext(Dispatchers.IO) {
             settingsSaving.value = true
             try {
-                val current = appConfig.value ?: service.loadConfig()
-                val updated = current.copy(
-                    messageNotificationEnabled = messageNotificationEnabled ?: current.messageNotificationEnabled,
-                    messageNotificationSoundEnabled = messageNotificationSoundEnabled ?: current.messageNotificationSoundEnabled,
-                    desktopOperationNoticeEnabled = desktopOperationNoticeEnabled ?: current.desktopOperationNoticeEnabled,
-                    uiLanguage = uiLanguage ?: current.uiLanguage,
-                    uiSizeScale = uiSizeScale ?: current.uiSizeScale,
-                )
-                appConfig.value = service.saveConfig(updated)
+                val input = mutableMapOf<String, Any?>()
+                messageNotificationEnabled?.let { input["messageNotificationEnabled"] = it }
+                messageNotificationSoundEnabled?.let { input["messageNotificationSoundEnabled"] = it }
+                desktopOperationNoticeEnabled?.let { input["desktopOperationNoticeEnabled"] = it }
+                uiLanguage?.let { input["uiLanguage"] = it }
+                uiSizeScale?.let { input["uiSizeScale"] = it }
+                appConfig.value = service.patchConfig(input)
                 true
             } catch (e: Exception) {
                 error.value = "保存设置失败: ${e.message}"

@@ -321,6 +321,7 @@ async fn native_dispatch(
         "load_config" => ide_chat_load_config_for_web_settings(state),
         "load_chat_settings" => ide_chat_load_chat_settings_for_web_settings(state),
         "save_config" => ide_chat_save_config_for_web_settings(state, &native_app, ide_context_runtime, params),
+        "patch_config" => ide_chat_patch_config_for_web_settings(state, &native_app, ide_context_runtime, params),
         "load_agents" => ide_chat_load_agents_for_web_settings(state),
         "save_agents" => ide_chat_save_agents_for_web_settings(state, &native_app, params),
         "save_chat_settings" => ide_chat_save_chat_settings_for_web_settings(state, &native_app, params),

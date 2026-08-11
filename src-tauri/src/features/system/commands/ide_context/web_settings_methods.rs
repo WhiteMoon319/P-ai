@@ -608,6 +608,17 @@ fn ide_chat_save_config_for_web_settings(
     ide_chat_serialize(save_config_inner(config, app, state, ide_context_runtime)?)
 }
 
+/// 局部更新配置（patch_config）：只更新传入字段，避免全量覆盖丢失其他配置。
+fn ide_chat_patch_config_for_web_settings(
+    state: &AppState,
+    app: &NativeAppHandle,
+    ide_context_runtime: &IdeContextRuntime,
+    params: Value,
+) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<PatchAppConfigInput>(params, "input")?;
+    ide_chat_serialize(patch_config_inner(input, app, state, ide_context_runtime)?)
+}
+
 fn ide_chat_save_agents_for_web_settings(
     state: &AppState,
     app: &NativeAppHandle,

@@ -463,6 +463,57 @@ fn stop_removed_remote_im_channel_runtimes(
     });
 }
 
+/** 配置局部更新输入：所有字段可空，只更新传入的非空字段（读旧配置 merge，避免覆盖丢失）。 */
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PatchAppConfigInput {
+    #[serde(default)]
+    web_access_enabled: Option<bool>,
+    #[serde(default)]
+    web_access_port: Option<u16>,
+    #[serde(default)]
+    web_access_password: Option<String>,
+    #[serde(default)]
+    ui_language: Option<String>,
+    #[serde(default)]
+    ui_size_scale: Option<u16>,
+    #[serde(default)]
+    message_notification_enabled: Option<bool>,
+    #[serde(default)]
+    message_notification_sound_enabled: Option<bool>,
+    #[serde(default)]
+    desktop_operation_notice_enabled: Option<bool>,
+    #[serde(default)]
+    stt_api_config_id: Option<String>,
+    #[serde(default)]
+    stt_auto_send: Option<bool>,
+    #[serde(default)]
+    api_configs: Option<Vec<ApiConfig>>,
+}
+
+/** 局部更新配置：读当前配置，仅覆盖传入字段，其余保留（修复 saveConfig 全量覆盖丢字段）。 */
+fn patch_config_inner(
+    input: PatchAppConfigInput,
+    app: &NativeAppHandle,
+    state: &AppState,
+    ide_context_runtime: &IdeContextRuntime,
+) -> Result<AppConfig, String> {
+    let mut config = state_read_config_cached(state)?;
+    if let Some(v) = input.web_access_enabled { config.web_access_enabled = v; }
+    if let Some(v) = input.web_access_port { config.web_access_port = normalize_web_access_port(v); }
+    if let Some(v) = input.web_access_password { config.web_access_password = normalize_web_access_password(&v); }
+    if let Some(v) = input.ui_language { config.ui_language = v; }
+    if let Some(v) = input.ui_size_scale { config.ui_size_scale = v; }
+    if let Some(v) = input.message_notification_enabled { config.message_notification_enabled = v; }
+    if let Some(v) = input.message_notification_sound_enabled { config.message_notification_sound_enabled = v; }
+    if let Some(v) = input.desktop_operation_notice_enabled { config.desktop_operation_notice_enabled = v; }
+    if let Some(v) = input.stt_api_config_id { config.stt_api_config_id = Some(v); }
+    if let Some(v) = input.stt_auto_send { config.stt_auto_send = v; }
+    if let Some(v) = input.api_configs { config.api_configs = v; }
+    // 复用 save_config_inner 的完整保存流程（引用清理/广播/服务联动）
+    save_config_inner(config, app, state, ide_context_runtime)
+}
+
 fn save_config_inner(
     config: AppConfig,
     app: &NativeAppHandle,

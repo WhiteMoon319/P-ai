@@ -354,6 +354,10 @@ class ChatService(private val client: PaiWsClient) {
     suspend fun saveConfig(config: com.whitemoon319.pai.model.AppConfig): com.whitemoon319.pai.model.AppConfig =
         client.request("save_config", mapOf("config" to config), com.whitemoon319.pai.model.AppConfig::class.java)
 
+    /** 局部更新配置（patch_config：只更新传入字段，避免全量覆盖丢其他配置）。 */
+    suspend fun patchConfig(input: Map<String, Any?>): com.whitemoon319.pai.model.AppConfig =
+        client.request("patch_config", mapOf("input" to input), com.whitemoon319.pai.model.AppConfig::class.java)
+
     /** 读取人设/代理列表（load_agents）。 */
     suspend fun loadAgents(): List<com.whitemoon319.pai.model.AgentProfile> =
         client.request(

@@ -3459,7 +3459,7 @@ private fun StorageSettingsTab(vm: AppViewModel) {
     }
 }
 
-/** 用量设置（对齐 Vue UsageTab）。 */
+/** 用量设置（对齐 Vue UsageTab：totals 摘要 + 按模型/代理分组）。 */
 @Composable
 private fun UsageSettingsTab(vm: AppViewModel) {
     val scope = rememberCoroutineScope()
@@ -3475,14 +3475,61 @@ private fun UsageSettingsTab(vm: AppViewModel) {
         }
         if (overview == null) {
             Text(if (loading) "加载中…" else "暂无数据", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(8.dp))
-        } else {
-            overview!!.forEach { (key, value) ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Text(key, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    Text(value?.toString() ?: "—", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            return@Column
+        }
+        // totals 摘要
+        @Suppress("UNCHECKED_CAST")
+        val totals = overview?.get("totals") as? Map<String, Any?> ?: emptyMap()
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp)) {
+                Text("总量", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(6.dp))
+                val tokenRows: List<Pair<String, Long>> = listOf(
+                    Pair("总 Token", ((totals["totalTokens"] as? Number)?.toLong()) ?: 0L),
+                    Pair("输入 Token", ((totals["inputTokens"] as? Number)?.toLong()) ?: 0L),
+                    Pair("输出 Token", ((totals["outputTokens"] as? Number)?.toLong()) ?: 0L),
+                    Pair("缓存读", ((totals["cacheReadTokens"] as? Number)?.toLong()) ?: 0L),
+                    Pair("缓存写", ((totals["cacheWriteTokens"] as? Number)?.toLong()) ?: 0L),
+                    Pair("推理 Token", ((totals["reasoningTokens"] as? Number)?.toLong()) ?: 0L),
+                )
+                tokenRows.forEach { (label, value) ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        Text(formatTokenCount(value), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                val convCount = (totals["conversationCount"] as? Number)?.toLong() ?: 0L
+                Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+                    Text("会话数", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Text("$convCount", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
+        Spacer(Modifier.height(12.dp))
+        // 按模型分组
+        @Suppress("UNCHECKED_CAST")
+        val byModel = (overview?.get("byModel") as? List<Map<String, Any?>>).orEmpty()
+        if (byModel.isNotEmpty()) {
+            Text("按模型", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            byModel.take(10).forEach { item ->
+                val label = (item["label"] as? String) ?: (item["key"] as? String) ?: "—"
+                val weighted = (item["weightedTokens"] as? Number)?.toLong() ?: 0L
+                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                    Text(label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    Text(formatTokenCount(weighted), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+/** 格式化为人类可读 token 数（如 1.2K / 3.4M）。 */
+private fun formatTokenCount(value: Long): String {
+    return when {
+        value >= 1_000_000 -> String.format("%.1fM", value / 1_000_000.0)
+        value >= 1_000 -> String.format("%.1fK", value / 1_000.0)
+        else -> value.toString()
     }
 }
 
