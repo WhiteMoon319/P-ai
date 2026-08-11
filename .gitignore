@@ -31,6 +31,15 @@ src-tauri/target/
 src-tauri/gen/schemas/
 src-tauri/memory/
 target/
+target-tests/
+
+# Android Gradle build outputs
+apps/android/**/build/
+apps/android/.gradle/
+apps/android/app/.gradle/
+apps/android/.kotlin/
+*.apk
+*.aab
 
 # Tauri local config overrides
 src-tauri/.cargo/

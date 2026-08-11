@@ -1,243 +1,117 @@
-# AGENTS.md
+# AGENTS.md — P-AI Android-only 单仓库
 
 This file provides guidance to AI coding when working with code in this repository.
 
 ## 项目概述
 
-PAI 是一个 Windows 优先的桌面 AI 助手，使用全局热键呼出/隐藏对话窗口，常驻系统托盘。技术栈为 Tauri 2 (Rust) + Vue 3 (TypeScript) + Vite + DaisyUI，包管理使用 pnpm。
+P-AI 是 **Android-only** 的 AI 工作系统：Kotlin/Compose 客户端 + Rust 进程内后端（JNI 通信）。
+仓库已彻底移除 Tauri / WebView / Vue 桌面前端 / 桌面打包 / VS Code 扩展，**禁止恢复**。
 
-当前发布策略为 Windows + Linux + macOS：
-- Windows 安装版使用 NSIS
-- Windows 便携版使用 zip + `PORTABLE` 标记文件
-- Linux 发布构建产物至少保留 `.deb` / `AppImage`
-- macOS 发布构建产物使用 Intel + Apple Silicon 通用 DMG
-- 应用内自动更新当前仅覆盖 Windows 安装版与便携版
+- 包名：`com.whitemoon319.pai`
+- Android 工程：`apps/android/`（Gradle）
+- Rust 后端（迁移中）：旧 `src-tauri/`（include!() 单入口）→ 目标 `crates/pai-*`
+- 唯一 RPC 契约：`contracts/native-rpc/methods.json` + `events.json`
 
 ## 构建与开发命令
 
 ```bash
-# 开发模式（前端热重载 + Rust 自动重编译）
-pnpm tauri dev
+# Rust .so（旧 src-tauri 单 crate，Android 目标；Windows 需 NDK env）
+cd src-tauri
+export NDK="$HOME/AppData/Local/Android/Sdk/ndk/<version>"
+export CC_aarch64_linux_android="$NDK/toolchains/llvm/prebuilt/windows-x86_64/bin/aarch64-linux-android21-clang.cmd"
+export AR_aarch64_linux_android="$NDK/toolchains/llvm/prebuilt/windows-x86_64/bin/llvm-ar"
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CC_aarch64_linux_android"
+export RUSTC_WRAPPER="" && export CARGO_BUILD_RUSTC_WRAPPER=""
+export CARGO_PROFILE_DEV_CODEGEN_UNITS=1 && export CARGO_PROFILE_DEV_INCREMENTAL=false
+cargo check --target aarch64-linux-android      # 快速校验
+cargo build --target aarch64-linux-android      # 产出 .so
+cp target/aarch64-linux-android/debug/libeasy_call_ai_lib.so ../apps/android/app/src/main/jniLibs/arm64-v8a/
 
-# 仅启动前端 dev server（端口 1420）
-pnpm dev
+# 契约测试（workspace crates）
+cd .. && cargo test -p pai-protocol
 
-# 类型检查
-pnpm typecheck                              # 前端 Vue + TypeScript
-cd src-tauri && cargo check                  # Rust
+# APK
+cd apps/android
+bash gradlew :app:assembleDebug --no-daemon
+bash gradlew :app:assembleRelease --no-daemon
 
-# 测试
-pnpm test                                    # 前端 vitest
-cd src-tauri && cargo test                   # Rust 测试
-pnpm smoke                                   # Windows 集成冒烟测试（PowerShell）
-
-# 生产构建
-pnpm build                                   # tsc + vite build
-pnpm tauri build                             # 完整打包（含 Rust 编译）
-pnpm tauri:build:macos                       # macOS universal DMG（Intel + Apple Silicon）
-
-# VS Code 侧边栏扩展（详见 docs/vscode-sidebar-build-publish.md）
-pnpm package:vscode-sidebar
-pnpm publish:vscode-sidebar
+# 校验
+python ../tools/android/verify-apk.py app/build/outputs/apk/debug/app-debug.apk debug
+python ../tools/android/verify-apk.py app/build/outputs/apk/release/app-release-unsigned.apk release
 ```
 
-## 架构概览
+### Windows 交叉编译注意
 
-### 前后端通信
+- rustc 链接大 crate 可能 `0xc0000409`：必须 codegen-units=1 + 关增量。
+- 默认 `target/` 被占用时用 `CARGO_TARGET_DIR=target-tests`（仓库内，勿新建其他 target-*）。
+- 禁止 `pnpm tauri android init/build`；APK 走本地 cargo 交叉编译 + gradle。
+
+## 架构
+
+### 通信
 
 ```
-Vue 组件 → invokeTauri() → Tauri invoke() → Rust #[tauri::command] → 返回 Result
-流式消息: Rust 通过 tauri::Channel<T> 向前端推送 delta 事件
+Kotlin → NativeRpcClient.call(method, params) → PaiNative.call(JSON) → Rust native_bridge → 响应
+Rust → push_native_delta_event → NATIVE_DELTA_QUEUE → Kotlin NativeEventPump.pollEvents → notifications
 ```
 
-### Rust 后端 — include! 单入口模式
+- 事件顺序：单一队列 + 顺序 tryEmit；**禁止**并发 launch emit / collectLatest（流式 delta 会乱序）。
+- 请求超时：普通 15s；长任务（migration/workspace/rootfs）callLong 600s 或任务状态机。
+- 方法名唯一来源 `contracts/native-rpc/methods.json`；Rust dispatch 与 Kotlin service 必须一致。
 
-`src-tauri/src/main.rs` 通过 `include!()` 宏将所有模块拉入同一编译单元：
+### Kotlin 分层
 
-| include 文件 | 职责 |
-|---|---|
-| `features/core/domain.rs` | 数据模型、常量、响应风格 |
-| `features/config/storage_and_stt.rs` | 配置读写 (TOML)、本地/远程 STT |
-| `features/chat/conversation.rs` | 对话生命周期、自动归档逻辑 |
-| `features/chat/model_runtime.rs` | LLM 多供应商适配 (OpenAI/Gemini/Anthropic)，使用 rig-core |
-| `features/chat/model_runtime/provider_and_stream.rs` | 供应商具体实现与流式处理 |
-| `features/chat/model_runtime/tools_and_builtin.rs` | 工具执行（内置 + MCP） |
-| `features/system/commands.rs` | Tauri 命令处理入口，分拆至 commands/*.rs |
-| `features/system/tools.rs` | 桌面工具基础设施 (screenshot/wait/operate) |
-| `features/system/updater.rs` | GitHub Release 自动更新、便携版 helper、staging/回滚 |
-| `features/system/windowing.rs` | 窗口定位、显示、隐藏、托盘 |
-| `features/memory/matcher.rs` | 记忆搜索与匹配 |
+- `bridge/`：NativeRpcClient / NativeEventPump / NativeError / PaiNative(JNI)
+- `service/`：ChatService 等 RPC 门面
+- `model/`：RpcModels / ChatModels / SettingsModels / WorkspaceModels
+- `viewmodel/`：AppViewModel（拆分 Chat/Settings/Workspace/RemoteIm 进行中）
+- `ui/`：Compose（app/chat/settings/workspace/remoteim/common）
+- `platform/`：PaiForegroundService / LiveUpdate / AudioRecorder / FileProvider
 
-### Vue 前端 — Composable 驱动
+### Rust 分层（迁移目标）
 
-前端无全局状态库（无 Vuex/Pinia），状态通过 Vue Composition API 的 reactive refs 管理。核心逻辑封装在 composables 中，组件层很薄。
+- `pai-protocol`：RPC 类型 + 契约（零平台依赖）
+- `pai-backend`：平台无关业务（不依赖 tauri/jni/Android/NativeAppHandle）
+- `pai-android-bridge`：JNI / runtime / dispatch / event queue / 任务句柄
+- `pai-android-platform`：workspace / rootfs / proot / TLS / 沙盒
 
-关键 composable 分组：
-- **shell/**: `use-app-bootstrap` (初始化)、`use-app-theme`、`use-window-shell`、`use-app-lifecycle`、`use-github-update`
-- **chat/**: `use-chat-flow` (流式缓冲与 delta 处理)、`use-chat-runtime` (会话持久化)、`use-chat-turns` (上下文窗口计算)、`use-chat-media` (图片/音频)、`use-speech-recording` (本地+远程 STT)
-- **config/**: `use-config-persistence` (加载/保存)、`use-config-runtime` (模型列表刷新)、`use-config-core` / `use-config-editors` (供应商与模型配置编辑)
+## 数据持久化
 
-### VS Code 侧边栏扩展
-
-- `src/entries/sidebar.html` 是 Vite 多入口源码之一，`pnpm build` 时和主应用前端一起产出到仓库根 `dist/`
-- `src/features/sidebar/extension/` 只是 VS Code 扩展壳；打 `.vsix` 前必须先把仓库根 `dist/` 同步到该目录下的 `dist/`
-- 本地调试时扩展会优先读取 `src/features/sidebar/extension/dist/`，找不到才回退到仓库根 `dist/`；但 VSIX 打包只会收录扩展目录自己的 `dist/**`
-- 打包和发布步骤不要再手敲长命令，统一走 `pnpm package:vscode-sidebar` / `pnpm publish:vscode-sidebar`；详细说明放在 `docs/vscode-sidebar-build-publish.md`
-
-### 多窗口
-
-Tauri 管理 3 个无边框窗口：`main`（配置，900×900）、`chat`（对话，618×1000）、`archives`（归档，900×900）。`App.vue` 根据窗口 label 切换视图模式。
-
-### 数据持久化
-
-默认情况下，配置与运行数据存储在 `ProjectDirs` 配置目录；若可执行文件同级存在 `PORTABLE` 标记文件，则切换到可执行文件同级 `data/` 目录（无数据库）。
-
-当前主要文件/目录：
-- `app_config.toml` — 配置、API 供应商、热键、工具开关
-- `app_data.json` — 会话、人格、任务、Todo、缓存布局主数据
-- `avatars/`、`media/`、`exports/` — 资源目录
-- `llm-workspace/` — Shell / Skills / MCP 等运行工作区
-
-### 支持的 API 格式
-
-`openai`（OpenAI/DeepSeek/Kimi）、`anthropic`（Claude）、`gemini`（Google）、`openai_tts`（远程 STT）
+- 数据目录：`<dataDir>`（= `/data/user/0/com.whitemoon319.pai`）
+- `config/app_config.toml`、`config/agents.json`
+- `memory/memory_store.db`（SQLite + FTS5）
+- `state/runtime_state.json`（含 messageStoreMigrationVersion）
+- `chat/`、`llm-workspace/`、`runtime/android-workspace/`
 
 ## 开发约定
 
-### Rust 规则
+- **禁止恢复 Tauri/WebView/Vue/桌面**：不引入 tauri crate、不重建 WebView、不写桌面打包。
+- 禁止 `unwrap()`/`expect()`（测试除外），统一 `Result` 传递可读错误。
+- 禁止返回假成功/假"暂不支持"；失败必须走 JSON-RPC error 结构。
+- 配置保存用 `patch_config` 局部更新（全量 save_config 会覆盖丢配置）。
+- 消息读取默认禁止整读 `Conversation.messages`；用轻量路径（metadata/recent/block）。
+- 路径访问必须经 Android 沙盒与 symlink 防护；rootfs 解压拒绝绝对路径/`..`/非法 link。
+- 新增 RPC 方法/事件：同步更新 `contracts/native-rpc/` + Rust dispatch + Kotlin service + 契约测试。
+- 文件 < 1500 行，函数 < 100 行；超过需评审。
+- 提交信息用 Conventional Commits（中文描述）；改动用户可见行为时补"未发布" changelog。
 
-- 禁止 `unwrap()` / `expect()`（测试除外），统一使用 `Result` 传递可读错误
-- 网络与 I/O 走异步，不阻塞 UI
-- 改动后优先保证 `cargo check` 通过
-- 文件 < 1500 行，函数 < 100 行，用注释分区（`// ========== xxx ==========`）
+## 验证与测试
 
-### 前端规则
+- 改动后跑最小必要检查：`cargo check --target aarch64-linux-android` + 相关单测。
+- 提交前必须通过：`git diff --check`、受影响测试、APK 构建（如改动 Kotlin）。
+- 禁止用 `|| true` 吞构建失败；CI workflow 失败必须失败。
+- APK 必须含 5 个 native libs（libeasy_call_ai_lib / libproot_exec / libproot_loader /
+  libtalloc / libandroid-shmem）；release 必须 usesCleartextTraffic=false。
+- 不默认跑 `cargo fmt` 全仓格式化；不反复跑无关全量测试。
 
-- DaisyUI 组件优先，避免手写重复样式
-- 配置页"有改动才允许保存"，保存后状态立即回写
-- 不要默认引入 watch/autosave；当前配置页以显式保存为主
-- APP 与 Web/VS Code 的传输差异只能收敛在 `tauri-api`；会改变会话、轮次或消息状态的运行时流程不得按宿主分支或复制实现。
-- 主题、设置按钮、文件路径和能力显隐可以按宿主变化，但评审时必须确认它们不改变聊天运行时语义；新增宿主入口必须复用 `main-chat`。
-- 对话窗口保持极简，外链走系统浏览器
+## 保活 / live update
 
-### 验证与测试规则
+- `app.keepAlive {active}` → `PaiForegroundService.start/stop`（API 34+ specialUse）。
+- 通知不依赖 POST_NOTIFICATIONS（无权限时前台服务仍保活，通知不显示）。
+- Android 13+ 运行时请求 POST_NOTIFICATIONS。
 
-- 禁止无用测试：测试必须和本次改动的影响范围、风险等级直接相关，不要为了“安心”反复跑无关测试或全量测试。
-- 开发过程中只进行最小相关测试；跨模块、公共类型、持久化、启动链路、构建配置等高风险改动，也只扩大到能覆盖本次风险的最小必要范围。
-- 只有在准备提交时才进行全量测试或全量检查；不要在阶段开发过程中反复跑全量测试。
-- 不要在每个小步骤后重复执行同一组耗时检查；除非中间改动触及了已验证路径，否则不重复测试。
-- 不要默认运行 `cargo fmt` 或全仓格式化；只有用户明确要求、或当前改动本身需要格式化且不会制造无关 diff 时才执行。
-- 当默认 `target/` 被运行中的进程占用、需要使用临时 Cargo 构建目录做验证时，统一使用仓库内的 `src-tauri/target-tests` 作为临时 `CARGO_TARGET_DIR`；不要再新建其他 `target-*` 目录。
-- 执行 Cargo 验证时，如果 `workdir` 已经是 `src-tauri/`，则 `CARGO_TARGET_DIR` 只能写相对路径 `target-tests`；严禁再写成 `src-tauri/target-tests`，否则会错误生成嵌套目录 `src-tauri/src-tauri/target-tests`。若误建了该目录，必须立刻删除并改回仓库约定路径。
-- `cargo test` 位置参数一次只能直接接收一个测试名；需要跑多个离散测试时，必须分别执行多条命令，或改用能同时覆盖目标的单个过滤模式，不能把多个测试名直接并列写在同一条 `cargo test` 后面。
-- 本地 Cargo 缓存清理优先使用 `cargo-reclaim` trim（只回收过期 incremental/deps/build 缓存，保留最终二进制与热构建产物）；轻量清 `incremental` 仍可用 `pnpm clean:cargo-cache`，整目录删除用 `pnpm clean:cargo-cache:all`；不要手搓其他 `target-*` 清理路径。
-- 与用户沟通时不要主动暴露本机硬盘绝对路径，优先使用仓库内相对路径表述。
-- 提交前仍必须修复并跑通本次改动影响到的必要测试；“禁止无用测试”不等于跳过必要验证。
+## 迁移状态
 
-### 更新与发布规则
-
-- 当前仅支持 Windows 应用内自动更新；Linux 与 macOS 仍维护发布构建链路
-- `src-tauri/tauri.conf.json` 中的 `plugins.updater.pubkey` 只是启动期占位，真正使用的公钥由构建时 `TAURI_UPDATER_PUBLIC_KEY` 注入并在 Rust 侧覆盖
-- 便携版通过 `PORTABLE` 标记识别，自动更新走 `zip -> staging -> helper 替换 -> 备份回滚`
-- 修改版本号时，必须同步更新以下文件：`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.lock`，并新增/更新对应的 `docs/changelog/releases/vX.Y.Z.md` 后执行 `pnpm changelog:build`
-- 每次提升版本号时，默认先清理一次本地 Cargo 构建缓存，避免增量缓存长期膨胀：先退出正在运行的应用，再执行 `cargo-reclaim src-tauri --all --yes`（trim，只回收过期产物，保留热缓存）；若缓存异常或磁盘紧张，再用 `pnpm clean:cargo-cache:all`
-- 日常变更更新 changelog 时，永远写入“未发布”条目；只有提升版本号时，才把“未发布”内容改归到对应版本号。
-- 修改 `src-tauri/Cargo.lock` 时，只允许更新本项目包 `easy-call-ai` 的版本条目；禁止使用全局替换批量改第三方依赖版本号，避免引入错误 checksum
-
-### 代码组织原则
-
-- 保持模块拆分，避免超大单文件；`紧凑优先` 是起步策略，不是长期豁免。
-- 文件软阈值：建议单文件 500-800 行、公开函数不超过 20 个；超过后需在评审中说明并跟踪拆分计划。
-- 当文件持续增长超过阈值时，重点关注导航困难、合并冲突、测试回归成本；必要时增加评审频率或补充变更统计。
-- 注释说明意图而非实现。
-
-#### “紧凑优先” 与 “按功能组织” 决策指南
-
-- `紧凑优先` 适用：功能仍集中在一个场景、强耦合且变更总在同一处，使用注释分区（如 `// ==================== 配置管理 ====================`）可快速定位。
-- `按功能组织` 适用：已经出现清晰职责边界，或多人并行开发导致同文件冲突频繁，应按 `features/chat/`、`features/archive/` 等目录分组。
-- 判断标准：
-  - 规模：单文件接近 500-800 行，或公开函数数量接近 20。
-  - 耦合：同文件内出现多个低相关子域（如配置读写、网络调用、视图拼装混在一起）。
-  - 协作：多人经常改同文件、冲突率高。
-  - 可测试性：难以对局部逻辑做独立单测。
-  - 变更成本：每次重构/编译/回归都要牵动大范围代码。
-- 迁移触发器：单文件超过约 800 行或公开函数超过约 20 个，且模块边界已明显分离时，优先拆分。
-- 简单迁移步骤：
-  1. 先抽“纯数据与类型”（如 `models.rs` / `types.ts`）。
-  2. 再抽“稳定服务逻辑”（如 `service.rs` / `use-*.ts`）。
-  3. 最后抽“入口协调层”（如 `controller.rs` / `view glue`），保证外部调用面不变。
-
-#### “适度重复” 的边界与抽取策略
-
-- 可接受重复：同一模块内短小重复（约 <= 20 逻辑行，且重复片段 <= 2 处）可保留，优先保证直观。
-- 触发抽取共享逻辑的条件：
-  - 相同处理步骤出现 >= 3 次；
-  - 相同错误处理/回滚逻辑出现 >= 3 次；
-  - 单段重复超过约 8-10 行且后续仍在增长；
-  - 因重复导致一致性问题或测试成本明显上升。
-- 平衡准则：先保留短小直接实现；当共享逻辑超过阈值，或已经带来一致性/测试负担，再抽成公用函数或基类。
-- 示例（`process_text` / `process_image`）：
-  - 若两者仅在 1-2 个分支不同，保留并排实现更清晰。
-  - 若两者都有相同“预处理 -> 校验 -> 错误映射 -> 收尾”流程，且重复超过阈值，应抽公共 pipeline（如 `process_common`），各自只保留差异步骤。
-
-### 新增字段链路追踪
-
-给数据结构加字段时，追踪全链路：
-- 后端：结构体 → Default → 所有构造字面量 → 序列化 → 测试 fixture
-- 前端：类型 → composable → persistence（含输入校验） → 组件 → i18n
-- 运行时缓存若依赖该字段，须处理配置热更新时的失效/重建
-
-### 消息读取特别警告
-
-- 聊天消息读取默认禁止直接整读 `Conversation.messages` 或 `state_read_conversation_cached`；新增功能必须先按“只读当前所需最小消息子集”设计，优先使用 metadata、recent page、message by id、before/after anchor、block page 等轻量路径。
-- 只有在需求天然依赖完整消息集时，才允许整读；实现前必须先明确写出“为什么轻量读取不成立”，否则视为未完成设计。
-- 任何“先直接整读，后面再优化”的做法默认不允许；如果缺少所需原子接口，应先补接口、记入 backlog 或停止扩张需求范围，不能把整读当临时方案长期留下。
-- 新增或修改消息相关功能后，必须反向扫描调用链，确认没有顺手引入新的整读入口；不能只修当前点位，而放任后续功能继续复制整读写法。
-
-### 多字段关联的 UI 设计
-
-多个字段表达同一用户意图时，用一个控件统一表达，通过 encode/decode 转换 UI 状态与数据模型，避免无效状态组合。
-
-### 提交信息规范
-- 采用约定式提交（Conventional Commits），推荐格式：`type(scope): 简要中文描述`。
-- 提交信息默认使用中文，便于与现有项目历史保持一致。
-- 常用类型：`feat`、`fix`、`perf`、`refactor`、`docs`、`chore`。
-- Changelog 采用“版本明细为源、脚本生成汇总”的方式维护：`docs/changelog/releases/*.md` 是唯一手工维护来源；`CHANGELOG.md`、`docs/changelog/latest.md`、`docs/changelog/remote.md`、`docs/changelog/index.json` 都由 `pnpm changelog:build` 生成，默认不要手改生成文件。
-- 每次 `git commit` 前默认跳过 changelog；只有当本次改动改变用户可见行为、或新增/删除面向用户的能力时，才补“未发布”changelog 条目。纯开发改动（测试修复、重构、内部接口收敛、脚手架、文档、规则调整等）只进 commit，不进 changelog。不要把新变更追加到既有版本号文件；未提升版本号时，禁止执行 `pnpm changelog:build` 或更新生成文件；只有提升版本号、并把“未发布”内容改归到对应的 `docs/changelog/releases/vX.Y.Z.md` 时，才执行 `pnpm changelog:build`。
-- Changelog 文案必须是用户视角的行为变化，禁止搬运 commit 的技术描述（变量名、函数名、机制细节）。commit 是给程序员看的日志，changelog 是给用户看的；同一改动可保留两套表述。
-- 每次 `git commit` 前必须先修复并跑通本次改动影响到的全部测试；存在失败项时禁止提交。
-- 不要把测试留到最后一次性再跑；开发过程中应边改边验证，尽早发现并修复失败。
-
-### 计划与归档流程
-- 仅在以下情况才生成计划文档：
-  - 重构（大规模模块拆分、架构调整、技术栈迁移）
-  - 全新功能域设计（涉及多模块、跨前后端、接口协议或数据模型设计）
-  - 用户明确要求写计划
-- 常规功能迭代、简单 UI 改动、文档更新、小修小补等日常工作，直接实现，不需要生成计划。
-- 计划必须先得到用户明确确认后，才可进入实现阶段。
-- 归档判定以用户结论为准，不以开发者自测或主观判断替代。
-- 归档需要根据最新实现情况修正计划书，进行归档报告。
-- 归档文件命名必须带日期，如 `20260220_重启FTS5混合检索计划.md`
-
-### 日志等级与用法
-
-| 等级 | 函数 | 适用场景 |
-|---|---|---|
-| error | `runtime_log_error` | 操作失败、非预期异常 |
-| warn | `runtime_log_warn` | 降级、兜底、跳过、重试 |
-| info | `runtime_log_info` | 正常流程节点、服务状态切换、用户可见行为变化 |
-| debug | `runtime_log_debug` | 开发者排查细节、变量值、状态快照 |
-| trace | 无函数，仅 `[TRACE]` 前缀触发 | 执行追踪 |
-
-#### 实际行为
-
-- `eprintln!` 宏在 `main.rs:29-33` 被重定义为 `runtime_log_info`，约 532 处调用全部走 info 级别。**新增日志不要用 `eprintln!` 打非 info 级别的内容，直接用对应 `runtime_log_*` 函数。**
-- `normalize_runtime_log`（`debug_log_commands.rs:343`）会从消息前缀自动提升级别：`[ERROR]`→error、`[WARN]`→warn、`[INFO]`→info、`[DEBUG]`→debug、`[TRACE]`→trace。
-
-### 日志约定
-- 日志文案默认使用中文，避免中英混杂；仅在必要时保留英文标识（如集合名、配置键名、异常类名）。
-- 任务型日志统一前缀：`[睡眠维护]`、`[睡眠]`、`[简单记忆回灌]`，便于平台日志检索。
-- 状态表达统一使用：`开始`、`完成`、`跳过`、`失败`，不要再使用 `status=success/failed/skipped` 风格。
-- 日志内容应包含可排障字段：任务名、触发条件（如供应商变化/模式）、关键计数（如写入条数/失败条数）、耗时毫秒。
-- 异常日志必须带异常信息（Rust 使用 `{:?}` 或 `Display`，TypeScript 包含 `error.message` 和必要的 `error.stack`），避免只打印"失败"无上下文。
-- 高频循环日志仅输出聚合信息，避免每条记录都打印 info/warn 级别日志；明细使用 debug 级别。
+- ✅ apps/android、pai-protocol、contracts、tools、CI、docs
+- 🚧 Rust include!() → module → crates 拆分（阶段 3-6）
+- 🗑️ src-tauri/ 与桌面内容：验证完成后删除（阶段 12）

@@ -1,0 +1,17 @@
+{
+  "name": "proot",
+  "version": "5.1.107.89",
+  "arch": "aarch64",
+  "source": "https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.1.107.89_aarch64.deb",
+  "files": [
+    { "name": "libproot_exec.so", "from": "usr/bin/proot", "exec": true },
+    { "name": "libproot_loader.so", "from": "usr/libexec/proot/loader", "exec": false }
+  ],
+  "dependencies": [
+    { "name": "libtalloc.so", "from": "libtalloc_2.4.3_aarch64.deb", "soname": "libtalloc.so.2" },
+    { "name": "libandroid-shmem.so", "from": "libandroid-shmem_0.7_aarch64.deb", "soname": "libandroid-shmem.so" }
+  ],
+  "install": "apps/android/app/src/main/jniLibs/arm64-v8a",
+  "rpath": "$ORIGIN",
+  "note": "proot 依赖 libtalloc/libandroid-shmem 需 patchelf 修正 soname 与 rpath，见 .github/workflows/android-release.yml 的 Download proot native libs 步骤。"
+}

@@ -1,0 +1,9 @@
+[package]
+name = "pai-protocol"
+version.workspace = true
+edition.workspace = true
+description = "P-AI 进程内 Rust↔Kotlin JSON-RPC 协议类型与契约"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

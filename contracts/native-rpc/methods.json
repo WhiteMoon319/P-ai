@@ -1,0 +1,26 @@
+{
+  "protocol": "native-rpc",
+  "version": 1,
+  "transport": "JNI JSON-RPC 2.0",
+  "note": "唯一协议来源：Rust dispatcher 与 Kotlin client 必须使用同一方法名。新增方法必须同时更新本文件与 Rust native dispatch；一致性测试在构建/测试阶段校验。",
+  "categories": {
+    "bridge": ["bridge.ping", "webview.ping", "webview_pong", "frontend_ready_start_remote_im_services"],
+    "app": ["get_app_version", "get_project_repository_url", "app.language.set", "set_ui_language", "get_web_access_info", "check_github_update", "set_github_update_method", "set_skipped_github_update_version"],
+    "config": ["load_config", "save_config", "patch_config", "load_chat_settings", "save_chat_settings", "patch_chat_settings", "load_agents", "save_agents", "save_conversation_api_settings", "patch_conversation_api_settings", "set_department_primary_api_config", "convert_private_agent_to_main", "check_tools_status", "list_tool_catalog", "list_terminal_shell_candidates", "list_department_permission_catalog", "test_text_connection"],
+    "conversation": ["conversation.list", "conversation.create", "conversation.delete", "conversation.rename", "conversation.pin", "conversation.compact", "conversation.rewind", "model.list"],
+    "chat": ["chat.send", "chat.stop", "get_prompt_preview"],
+    "archives": ["archives.list", "archives.summary", "archives.delete", "archives.unarchive"],
+    "migration": ["check_message_store_migration", "run_message_store_migration"],
+    "memory": ["list_memories", "delete_memory", "search_memories_recall", "search_memories_mixed", "get_memory_provider_bindings", "save_memory_embedding_binding", "save_memory_rerank_binding", "get_memory_embedding_sync_progress", "get_agent_private_memory_count", "set_agent_private_memory_enabled", "set_agent_memory_recall_mode"],
+    "delegate": ["delegate.conversations.list", "delegate.statuses", "delegate.abort", "delegate.delete", "delegate.submit"],
+    "goal": ["goal.current", "goal.create", "goal.cancel"],
+    "task": ["task_list_tasks", "task_create_task", "task_update_task", "task_delete_task", "task_get_task", "task_list_run_logs", "task_optimize_draft", "task_complete_task"],
+    "mcp": ["mcp_list_servers", "mcp_save_server", "mcp_remove_server", "mcp_deploy_server", "mcp_undeploy_server", "mcp_validate_definition", "mcp_fix_definition", "mcp_list_server_tools", "mcp_list_server_tools_cached", "mcp_list_skills"],
+    "remote_im": ["remote_im_list_channels", "remote_im_list_contacts", "remote_im_get_channel_status", "remote_im_restart_channel", "remote_im_get_channel_logs", "remote_im_get_contact_logs", "remote_im_delete_contact", "remote_im_update_contact_activation", "remote_im_update_contact_allow_send", "remote_im_update_contact_allow_send_files", "remote_im_update_contact_blocked_message_prefixes", "remote_im_update_contact_department_binding", "remote_im_update_contact_processing_mode", "remote_im_update_contact_workspace", "remote_im_weixin_oc_start_login", "remote_im_weixin_oc_get_login_status", "remote_im_weixin_oc_logout", "remote_im_weixin_oc_sync_contacts"],
+    "workspace": ["get_android_workspace_status", "init_android_workspace", "repair_android_workspace_runtime", "reset_android_workspace_runtime", "reset_android_workspace_state", "import_android_workspace_rootfs_archive", "android_workspace.list", "android_workspace.readText", "android_workspace.writeText", "android_workspace.move", "android_workspace.delete", "android_workspace.import", "android_workspace.export", "android_workspace.glob", "android_workspace.grep"],
+    "storage": ["get_storage_usage_overview", "refresh_storage_usage_overview", "cleanup_storage_legacy_items", "get_usage_overview"],
+    "api_config": ["api_config.create", "api_config.update", "api_config.delete"],
+    "media": ["read_chat_image_data_url", "read_avatar_data_url", "stt_transcribe"],
+    "runtime_log": ["list_recent_runtime_logs", "list_runtime_logs_since", "clear_recent_runtime_logs", "append_runtime_log_probe", "list_recent_llm_round_logs", "get_recent_llm_round_log_section", "clear_recent_llm_round_logs"]
+  }
+}

@@ -1,4 +1,4 @@
-name: Android Build (Debug)
+name: Android Debug (APK)
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ on:
       - feat/android-native-no-webview
 
 jobs:
-  build-android:
+  build-android-debug:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -16,15 +16,6 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -42,9 +33,6 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Export Android NDK path
         run: |
           echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
@@ -58,22 +46,18 @@ jobs:
       - name: Copy Android app icons
         run: |
           if [ -d "src-tauri/icons/android" ]; then
-            cp -rf src-tauri/icons/android/* src-tauri/gen/android/app/src/main/res/
-            echo "Custom icons copied to Android res/"
-            ls src-tauri/gen/android/app/src/main/res/mipmap-hdpi/ic_launcher.png || echo "WARNING: icon not found"
+            cp -rf src-tauri/icons/android/* apps/android/app/src/main/res/
+            echo "Custom icons copied to apps/android res/"
+            ls apps/android/app/src/main/res/mipmap-hdpi/ic_launcher.png || echo "WARNING: icon not found"
           else
             echo "No custom Android icons found"
           fi
 
-      - name: Patch Android microphone permissions and safe area
-        run: bash scripts/patch-android-project.sh
-
       - name: Download proot native libs (arm64)
         run: |
-          JNI_DIR="src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
+          JNI_DIR="apps/android/app/src/main/jniLibs/arm64-v8a"
           mkdir -p "$JNI_DIR"
           sudo apt-get update -qq && sudo apt-get install -y -qq patchelf binutils
-          # 从 Termux 官方包仓库下载 proot 及宿主侧动态依赖
           PROOT_URL="https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.1.107.89_aarch64.deb"
           TALLOC_URL="https://packages.termux.dev/apt/termux-main/pool/main/libt/libtalloc/libtalloc_2.4.3_aarch64.deb"
           SHMEM_URL="https://packages.termux.dev/apt/termux-main/pool/main/liba/libandroid-shmem/libandroid-shmem_0.7_aarch64.deb"
@@ -84,8 +68,6 @@ jobs:
             ar x "/tmp/$name" --output="/tmp/extract-$name"
             tar -xf "/tmp/extract-$name/data.tar.xz" -C "/tmp/extract-$name"
           done
-          # proot 二进制（exec + loader，loader 缺失时 guest execve 无法初始化）。
-          # Termux 包中 loader 位于 usr/libexec/proot/loader，按 libproot_loader.so 命名打包。
           cp /tmp/extract-proot_5.1.107.89_aarch64.deb/data/data/com.termux/files/usr/bin/proot "$JNI_DIR/libproot_exec.so"
           chmod +x "$JNI_DIR/libproot_exec.so"
           LOADER_SRC="/tmp/extract-proot_5.1.107.89_aarch64.deb/data/data/com.termux/files/usr/libexec/proot/loader"
@@ -96,10 +78,9 @@ jobs:
             cp "$LOADER_SRC" "$JNI_DIR/libproot_loader.so"
             chmod 0644 "$JNI_DIR/libproot_loader.so"
           else
-            echo "ERROR: libproot_loader.so not found in proot deb (checked usr/libexec/proot/loader and usr/lib); proot guest execve will fail" >&2
+            echo "ERROR: libproot_loader.so not found in proot deb" >&2
             exit 1
           fi
-          # Android native libs 只稳定打包 lib*.so；把 Termux 的 libtalloc.so.2 改名并同步修补 NEEDED。
           cp /tmp/extract-libtalloc_2.4.3_aarch64.deb/data/data/com.termux/files/usr/lib/libtalloc.so.2 "$JNI_DIR/libtalloc.so"
           chmod 0644 "$JNI_DIR/libtalloc.so"
           patchelf --set-soname libtalloc.so "$JNI_DIR/libtalloc.so" || true
@@ -108,14 +89,9 @@ jobs:
           if patchelf --print-needed "$JNI_DIR/libproot_exec.so" | grep -qx 'libtalloc.so.2'; then
             patchelf --replace-needed libtalloc.so.2 libtalloc.so "$JNI_DIR/libproot_exec.so"
           fi
-          # 设置 rpath: Android bionic linker 只识别 DT_RUNPATH，旧式 DT_RPATH 会被忽略并
-          # 在每次加载时打 "unused DT entry: DT_RPATH" 警告；patchelf 默认写 DT_RUNPATH，
-          # $ORIGIN 让动态库在同目录解析（bionic 支持 DT_RUNPATH 中的 $ORIGIN）。
           patchelf --set-rpath '$ORIGIN' "$JNI_DIR/libproot_exec.so"
           echo "proot rpath: $(patchelf --print-rpath "$JNI_DIR/libproot_exec.so")"
           echo "jniLibs: $(ls -lh "$JNI_DIR")"
-          echo "proot info: $(file "$JNI_DIR/libproot_exec.so")"
-          echo "proot deps: $(patchelf --print-needed "$JNI_DIR/libproot_exec.so")"
           rm -rf /tmp/proot_*.deb /tmp/libtalloc_*.deb /tmp/libandroid-shmem_*.deb /tmp/extract-*
 
       - name: Build native .so (aarch64)
@@ -123,26 +99,31 @@ jobs:
           export CC_aarch64_linux_android="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang"
           export AR_aarch64_linux_android="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang"
-          # 构建期版本注入：与 APK versionName 同源（patch-android-version.sh 导出）
           if [[ -n "${PAI_ANDROID_APP_VERSION:-}" ]]; then
             export PAI_ANDROID_APP_VERSION
             echo "cargo 注入版本 PAI_ANDROID_APP_VERSION=$PAI_ANDROID_APP_VERSION"
           fi
           cd src-tauri
           cargo build --target aarch64-linux-android
-          cp target/aarch64-linux-android/debug/libeasy_call_ai_lib.so gen/android/app/src/main/jniLibs/arm64-v8a/libeasy_call_ai_lib.so
+          cp target/aarch64-linux-android/debug/libeasy_call_ai_lib.so \
+            ../apps/android/app/src/main/jniLibs/arm64-v8a/libeasy_call_ai_lib.so
 
       - name: Build Debug APK (aarch64)
         run: |
-          cd src-tauri/gen/android
-          ./gradlew :app:assembleDebug --no-daemon
+          cd apps/android
+          bash gradlew :app:assembleDebug --no-daemon
           mkdir -p app/build/outputs/apk/universal/debug
           cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/universal/debug/
 
-      - name: Rename signed debug APK
+      - name: Verify APK contains required native libs
         run: |
-          APK_DIR="src-tauri/gen/android/app/build/outputs/apk/universal/debug"
-          ls -la "$APK_DIR"
+          APK="$(ls apps/android/app/build/outputs/apk/universal/debug/*.apk | head -n1)"
+          [ -n "$APK" ] || { echo "ERROR: no APK found for native lib verification" >&2; exit 1; }
+          python "$GITHUB_WORKSPACE/tools/android/verify-native-libs.py" "$APK"
+
+      - name: Rename debug APK
+        run: |
+          APK_DIR="apps/android/app/build/outputs/apk/universal/debug"
           TAG="${GITHUB_REF_NAME:-dev}"
           for apk in "$APK_DIR"/*.apk; do
             [ -e "$apk" ] || { echo "No APK found in $APK_DIR" >&2; exit 1; }
@@ -150,23 +131,9 @@ jobs:
             echo "Renamed to P-ai-${TAG}-aarch64.apk"
           done
 
-      - name: Verify APK contains required native libs
-        run: |
-          APK="$(ls src-tauri/gen/android/app/build/outputs/apk/universal/debug/*.apk | head -n1)"
-          [ -n "$APK" ] || { echo "ERROR: no APK found for native lib verification" >&2; exit 1; }
-          for lib in libeasy_call_ai_lib.so libproot_exec.so libproot_loader.so libtalloc.so libandroid-shmem.so; do
-            if unzip -l "$APK" | grep -q "lib/arm64-v8a/$lib"; then
-              echo "OK: $lib present"
-            else
-              echo "ERROR: $lib missing from APK" >&2
-              exit 1
-            fi
-          done
-          unzip -l "$APK" | grep -E "lib/arm64-v8a/" || true
-
       - name: Upload APK artifact
         uses: actions/upload-artifact@v6
         with:
           name: p-ai-android-debug
-          path: src-tauri/gen/android/app/build/outputs/apk/universal/debug/*.apk
+          path: apps/android/app/build/outputs/apk/universal/debug/*.apk
           if-no-files-found: error

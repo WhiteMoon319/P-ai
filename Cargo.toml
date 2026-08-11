@@ -1,0 +1,22 @@
+# P-AI Android-only 单仓库 Cargo workspace。
+# src-tauri 是迁移期间保留的旧 Rust 工程（阶段 12 删除），显式排除避免自动纳入。
+# crates/* 为新的 Android 后端拆分（pai-protocol / pai-backend / pai-android-bridge / pai-android-platform）。
+[workspace]
+resolver = "2"
+members = [
+    "crates/pai-protocol",
+    # 阶段 4-6 依次加入：
+    # "crates/pai-backend",
+    # "crates/pai-android-bridge",
+    # "crates/pai-android-platform",
+]
+exclude = ["src-tauri"]
+
+[workspace.package]
+version = "0.57.0"
+edition = "2021"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1.52.1", features = ["rt-multi-thread", "sync", "time"] }

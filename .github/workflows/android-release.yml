@@ -16,15 +16,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
@@ -41,9 +32,6 @@ jobs:
         with:
           workspaces: src-tauri
 
-      - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Export Android NDK path
         run: |
           echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
@@ -57,9 +45,9 @@ jobs:
       - name: Copy Android app icons
         run: |
           if [ -d "src-tauri/icons/android" ]; then
-            cp -rf src-tauri/icons/android/* src-tauri/gen/android/app/src/main/res/
-            echo "Custom icons copied to Android res/"
-            ls src-tauri/gen/android/app/src/main/res/mipmap-hdpi/ic_launcher.png || echo "WARNING: icon not found"
+            cp -rf src-tauri/icons/android/* apps/android/app/src/main/res/
+            echo "Custom icons copied to apps/android res/"
+            ls apps/android/app/src/main/res/mipmap-hdpi/ic_launcher.png || echo "WARNING: icon not found"
           else
             echo "No custom Android icons found"
           fi
@@ -69,7 +57,7 @@ jobs:
 
       - name: Download proot native libs (arm64)
         run: |
-          JNI_DIR="src-tauri/gen/android/app/src/main/jniLibs/arm64-v8a"
+          JNI_DIR="apps/android/app/src/main/jniLibs/arm64-v8a"
           mkdir -p "$JNI_DIR"
           sudo apt-get update -qq && sudo apt-get install -y -qq patchelf binutils
           # 从 Termux 官方包仓库下载 proot 及宿主侧动态依赖
@@ -134,16 +122,16 @@ jobs:
           fi
           cd src-tauri
           cargo build --release --target aarch64-linux-android
-          cp target/aarch64-linux-android/release/libeasy_call_ai_lib.so gen/android/app/src/main/jniLibs/arm64-v8a/libeasy_call_ai_lib.so
+          cp target/aarch64-linux-android/release/libeasy_call_ai_lib.so ../apps/android/app/src/main/jniLibs/arm64-v8a/libeasy_call_ai_lib.so
 
       - name: Build Release APK (aarch64)
         run: |
-          cd src-tauri/gen/android
-          ./gradlew :app:assembleRelease --no-daemon
+          cd apps/android
+          bash gradlew :app:assembleRelease --no-daemon
 
       - name: Locate release APK
         run: |
-          APK_DIR="src-tauri/gen/android/app/build/outputs/apk/release"
+          APK_DIR="apps/android/app/build/outputs/apk/release"
           ls -la "$APK_DIR"
           # 保持 CI 后续步骤的 universal/release 路径约定
           mkdir -p "$APK_DIR/universal/release" 2>/dev/null || true
@@ -160,7 +148,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME/build-tools/"* | sort -V | tail -n 1)
-          APK_DIR="src-tauri/gen/android/app/build/outputs/apk/universal/release"
+          APK_DIR="apps/android/app/build/outputs/apk/universal/release"
           ls -la "$APK_DIR"
           for apk in "$APK_DIR"/*-unsigned.apk; do
             [ -e "$apk" ] || { echo "No unsigned APK found in $APK_DIR" >&2; exit 1; }
@@ -177,14 +165,14 @@ jobs:
       - name: Verify APK signature
         run: |
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME/build-tools/"* | sort -V | tail -n 1)
-          APK_DIR="src-tauri/gen/android/app/build/outputs/apk/universal/release"
+          APK_DIR="apps/android/app/build/outputs/apk/universal/release"
           for apk in "$APK_DIR"/*-signed.apk; do
             "$BUILD_TOOLS/apksigner" verify "$apk"
           done
 
       - name: Rename signed APK
         run: |
-          APK_DIR="src-tauri/gen/android/app/build/outputs/apk/universal/release"
+          APK_DIR="apps/android/app/build/outputs/apk/universal/release"
           TAG="${GITHUB_REF_NAME:-dev}"
           for apk in "$APK_DIR"/*-signed.apk; do
             mv "$apk" "$APK_DIR/P-ai-${TAG}-aarch64.apk"
@@ -193,7 +181,7 @@ jobs:
 
       - name: Verify release APK contains required native libs and cleartext=false
         run: |
-          APK="$(ls src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk | head -n1)"
+          APK="$(ls apps/android/app/build/outputs/apk/universal/release/*.apk | head -n1)"
           [ -n "$APK" ] || { echo "ERROR: no release APK found" >&2; exit 1; }
           for lib in libeasy_call_ai_lib.so libproot_exec.so libproot_loader.so libtalloc.so libandroid-shmem.so; do
             if unzip -l "$APK" | grep -q "lib/arm64-v8a/$lib"; then
@@ -205,7 +193,7 @@ jobs:
           done
           # 静态确认 release Manifest 保持 usesCleartextTraffic=false
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME/build-tools/"* | sort -V | tail -n 1)
-          MERGED="src-tauri/gen/android/app/build/intermediates/merged_manifests/release/processReleaseManifest/AndroidManifest.xml"
+          MERGED="apps/android/app/build/intermediates/merged_manifests/release/processReleaseManifest/AndroidManifest.xml"
           if [ -f "$MERGED" ] && grep -q 'usesCleartextTraffic="true"' "$MERGED"; then
             echo "ERROR: release merged manifest has usesCleartextTraffic=true" >&2
             exit 1
@@ -217,7 +205,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: p-ai-android-release
-          path: src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
+          path: apps/android/app/build/outputs/apk/universal/release/*.apk
           if-no-files-found: error
 
   release:

@@ -1,0 +1,10 @@
+{
+  "name": "ubuntu-base",
+  "version": "ubuntu-base-24.04.3-arm64",
+  "arch": "aarch64",
+  "source": "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-arm64.tar.gz",
+  "file_name": "ubuntu-base-24.04.3-base-arm64.tar.gz",
+  "content_length": 29865086,
+  "sha256": "7b2dced6dd56ad5e4a813fa25c8de307b655fdabc6ea9213175a92c48dabb048",
+  "note": "Android 工作区 Linux 运行环境 rootfs。下载/校验/解压由 Rust pai-android-platform 处理，路径穿越与 symlink 防护见 android_workspace/rootfs_paths.rs。"
+}

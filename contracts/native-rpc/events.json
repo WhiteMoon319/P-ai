@@ -1,0 +1,37 @@
+{
+  "protocol": "native-rpc",
+  "version": 1,
+  "note": "Rust 推送到 native 事件队列、Kotlin pollEvents 消费的事件清单。事件顺序由单一队列保证，禁止并发 emit / collectLatest 打乱顺序。",
+  "events": {
+    "app.keepAlive": {
+      "direction": "rust-to-kotlin",
+      "params": { "active": "boolean" },
+      "description": "后台任务保活：active=true 启动前台服务，false 停止。"
+    },
+    "app.notification": {
+      "direction": "rust-to-kotlin",
+      "params": { "id": "number", "title": "string", "body": "string", "shortText": "string?", "ongoing": "boolean", "promoted": "boolean" },
+      "description": "live update 通知请求，Kotlin 用 NotificationManager 呈现。"
+    },
+    "app.notification.clear": {
+      "direction": "rust-to-kotlin",
+      "params": { "id": "number" },
+      "description": "按 id 取消通知。"
+    },
+    "chat.assistantDelta": {
+      "direction": "rust-to-kotlin",
+      "params": { "conversationId": "string", "event": { "delta": "string", "kind": "string?", "requestId": "string?", "toolName": "string?", "toolStatus": "string?", "message": "string?" } },
+      "description": "流式增量：kind=null/''/stream 为正文，activity_reasoning_delta 为思考，assistant_tool_event/assistant_tool_result/tool_status 为工具，round_completed/round_failed 为回合终态。"
+    },
+    "chat.roundFinished": {
+      "direction": "rust-to-kotlin",
+      "params": { "conversationId": "string", "status": "string", "assistantText": "string?", "assistantMessage": "object?", "error": "string?" },
+      "description": "回合完成/失败终态（emit_round_completed/failed_event 推送）。"
+    },
+    "messageStore.migration.progress": {
+      "direction": "rust-to-kotlin",
+      "params": { "event": "string", "current": "number", "total": "number", "conversationId": "string", "title": "string", "status": "string", "detail": "string?" },
+      "description": "消息存储迁移进度。"
+    }
+  }
+}

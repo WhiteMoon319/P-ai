@@ -1,0 +1,46 @@
+name: Rust Check (workspace)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev
+      - feat/android-native-no-webview
+  pull_request:
+
+jobs:
+  rust-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            src-tauri
+
+      - name: cargo check (workspace crates)
+        run: cargo check --workspace
+
+      - name: cargo test (workspace crates)
+        run: cargo test --workspace
+
+      - name: cargo check (legacy src-tauri, Android target)
+        run: |
+          cd src-tauri
+          export CC_aarch64_linux_android="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang"
+          export AR_aarch64_linux_android="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CC_aarch64_linux_android"
+          export CARGO_PROFILE_DEV_CODEGEN_UNITS=1
+          export CARGO_PROFILE_DEV_INCREMENTAL=false
+          cargo check --target aarch64-linux-android

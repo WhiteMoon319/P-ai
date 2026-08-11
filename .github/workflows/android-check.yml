@@ -1,0 +1,71 @@
+name: Android Check (compile + contract)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev
+      - feat/android-native-no-webview
+  pull_request:
+
+jobs:
+  android-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            src-tauri
+
+      - name: Export Android NDK path
+        run: |
+          echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
+
+      - name: Build native .so (aarch64, legacy src-tauri)
+        run: |
+          export CC_aarch64_linux_android="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang"
+          export AR_aarch64_linux_android="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CC_aarch64_linux_android"
+          export CARGO_PROFILE_DEV_CODEGEN_UNITS=1
+          export CARGO_PROFILE_DEV_INCREMENTAL=false
+          cd src-tauri
+          cargo build --target aarch64-linux-android
+          cp target/aarch64-linux-android/debug/libeasy_call_ai_lib.so \
+            ../apps/android/app/src/main/jniLibs/arm64-v8a/libeasy_call_ai_lib.so
+
+      - name: Compile Kotlin (debug)
+        run: |
+          cd apps/android
+          bash gradlew :app:compileDebugKotlin --no-daemon
+
+      - name: RPC contract consistency test
+        run: cargo test -p pai-protocol
+
+      - name: Verify merged manifest (debug)
+        run: |
+          cd apps/android
+          bash gradlew :app:processDebugMainManifest --no-daemon
+          python "$GITHUB_WORKSPACE/tools/android/verify-manifest.py" \
+            app/build/intermediates/merged_manifests/debug/processDebugMainManifest/AndroidManifest.xml
