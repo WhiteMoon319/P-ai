@@ -13,6 +13,7 @@ pub mod archive_host_selector;
 pub mod archive_summary_parser;
 pub mod core;
 pub mod core_provider_gemini;
+pub mod core_provider_utils;
 pub mod delegate;
 pub mod desktop_tools;
 pub mod image_generation;
@@ -34,6 +35,7 @@ pub mod tool_policy;
 pub mod terminal;
 pub mod provider_resolution;
 pub mod text_codec;
+pub mod tool_arg_types;
 pub mod version_compare;
 
 /// 原生流式事件队列：Kotlin 通过 pollEvents 轮询弹出。

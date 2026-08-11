@@ -8,7 +8,8 @@ include!("tools_and_builtin/core_provider.rs");
 include!("tools_and_builtin/builtin_network.rs");
 include!("tools_and_builtin/builtin_memory.rs");
 include!("tools_and_builtin/builtin_plan.rs");
-include!("tools_and_builtin/tool_arg_types.rs");
+// tool_arg_types 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::tool_arg_types::*;
 include!("tools_and_builtin/builtin_session.rs");
 include!("tools_and_builtin/builtin_meme.rs");
 include!("tools_and_builtin/builtin_local_image.rs");

@@ -1,14 +1,10 @@
-pub(crate) fn debug_value_snippet(value: &Value, max_chars: usize) -> String {
-    let raw = serde_json::to_string(value).unwrap_or_else(|_| "<invalid json>".to_string());
-    if raw.chars().count() <= max_chars {
-        raw
-    } else {
-        let head = raw.chars().take(max_chars).collect::<String>();
-        format!("{head}...")
-    }
-}
+use serde_json::Value;
 
-pub(crate) fn send_tool_status_event(
+use crate::core::domain::types_requests::{AssistantDeltaEvent, DeltaChannel};
+use crate::logging::runtime_log_debug;
+use crate::tool_arg_types::debug_value_snippet;
+
+pub fn send_tool_status_event(
     on_delta: &DeltaChannel,
     tool_name: &str,
     tool_status: &str,
@@ -48,7 +44,7 @@ pub(crate) fn send_tool_status_event(
     ));
 }
 
-pub(crate) fn send_stream_rebind_required_event(
+pub fn send_stream_rebind_required_event(
     on_delta: &DeltaChannel,
     request_id: Option<&str>,
     reason: &str,
@@ -72,14 +68,14 @@ pub(crate) fn send_stream_rebind_required_event(
     });
 }
 
-pub(crate) fn tool_failure_result_text(tool_name: &str, err_text: &str) -> String {
+pub fn tool_failure_result_text(tool_name: &str, err_text: &str) -> String {
     let tool_name = tool_name.trim();
     let err_text = err_text.trim();
     format!("Tool failed: {tool_name}\nError: {err_text}")
 }
 
 #[derive(Debug)]
-pub(crate) struct ToolInvokeError(String);
+pub struct ToolInvokeError(String);
 
 impl std::fmt::Display for ToolInvokeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -95,7 +91,7 @@ impl From<String> for ToolInvokeError {
     }
 }
 
-pub(crate) fn is_image_unsupported_error(err: &str) -> bool {
+pub fn is_image_unsupported_error(err: &str) -> bool {
     let lower = err.to_ascii_lowercase();
     lower.contains("unknown variant `image_url`")
         || lower.contains("expected `text`")
@@ -103,7 +99,7 @@ pub(crate) fn is_image_unsupported_error(err: &str) -> bool {
         || lower.contains("image input")
 }
 
-pub(crate) fn truncate_by_chars(input: &str, max_chars: usize) -> String {
+pub fn truncate_by_chars(input: &str, max_chars: usize) -> String {
     if max_chars == 0 {
         return String::new();
     }
