@@ -293,3 +293,84 @@ async fn ide_chat_remote_im_weixin_oc_sync_contacts_for_web_settings(
     let input = ide_chat_parse_param_field::<WeixinOcLoginStatusInput>(params, "input")?;
     ide_chat_serialize(remote_im_weixin_oc_sync_contacts_inner(state, input)?)
 }
+
+/// 启动/恢复全部 enabled 的远程 IM 渠道（Android 原生启动语义）。
+///
+/// 与桌面端 Vue `afterSafetyGateReady` 调用的 `remoteIm.services.start` 一致：
+/// 遍历配置中 `enabled=true` 的渠道，逐个复用 `remote_im_restart_channel_inner`
+/// 的收敛逻辑（OneBot reconcile + event consumer / 钉钉 / 微信），保证幂等：
+/// - reconcile_channel_runtime 内部先 stop 再按 enabled 决定是否启动，重复调用安全；
+/// - OneBot start_event_consumer 用 restart_serialized 防止重复创建消费任务。
+/// 返回每个渠道的启动结果汇总，失败渠道不吞错误（记录 last_error + 返回明细）。
+pub(crate) async fn start_remote_im_services_inner(
+    state: &AppState,
+) -> Result<serde_json::Value, String> {
+    let config = state_read_config_cached(state).map_err(|e| format!("{e:?}"))?;
+    let enabled_channels = config
+        .remote_im_channels
+        .iter()
+        .filter(|ch| ch.enabled)
+        .map(|ch| ch.id.clone())
+        .collect::<Vec<_>>();
+    runtime_log_info(format!(
+        "[远程IM] 启动全部已启用渠道: enabled_count={}, channels={:?}",
+        enabled_channels.len(),
+        enabled_channels
+    ));
+    if enabled_channels.is_empty() {
+        return Ok(serde_json::json!({
+            "ok": true,
+            "started": 0,
+            "failed": 0,
+            "channels": [],
+        }));
+    }
+
+    let mut results = Vec::<serde_json::Value>::new();
+    let mut started = 0usize;
+    let mut failed = 0usize;
+    for channel_id in enabled_channels {
+        match remote_im_restart_channel_inner(channel_id.clone(), state).await {
+            Ok(status) => {
+                started += 1;
+                results.push(serde_json::json!({
+                    "channelId": channel_id,
+                    "ok": true,
+                    "connected": status.connected,
+                    "statusText": status.status_text,
+                }));
+            }
+            Err(err) => {
+                failed += 1;
+                runtime_log_error(format!(
+                    "[远程IM] 启动渠道失败: channel_id={}, error={}",
+                    channel_id, err
+                ));
+                onebot_v11_ws_manager()
+                    .add_log(
+                        &channel_id,
+                        "error",
+                        &format!("[远程IM] 启动渠道失败: {}", err),
+                    )
+                    .await;
+                results.push(serde_json::json!({
+                    "channelId": channel_id,
+                    "ok": false,
+                    "error": err,
+                }));
+            }
+        }
+    }
+    Ok(serde_json::json!({
+        "ok": true,
+        "started": started,
+        "failed": failed,
+        "channels": results,
+    }))
+}
+
+async fn ide_chat_start_remote_im_services_for_web_settings(
+    state: &AppState,
+) -> Result<Value, String> {
+    ide_chat_serialize(start_remote_im_services_inner(state).await?)
+}

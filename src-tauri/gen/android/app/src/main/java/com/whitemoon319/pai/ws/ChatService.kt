@@ -15,8 +15,16 @@ import com.whitemoon319.pai.model.SubmitChatResult
 /**
  * 聊天相关协议方法门面，直接封装 JSON-RPC 调用。
  * 方法名与 jsonrpc_dispatch.rs 的 ws method 一致。
+ *
+ * 超时语义：普通查询走默认短超时（15s）；聊天发送、迁移、工作区初始化/
+ * 修复/重置、rootfs 导入等长任务走 callLong（600s），避免大文件/深迁移
+ * 在 15s 被误判失败。
  */
 class ChatService(private val client: PaiWsClient) {
+
+    /** 长任务请求（独立超时），供迁移/工作区/rootfs 导入等使用。 */
+    private suspend fun <T> requestLong(method: String, params: Any?, clazz: Class<T>): T =
+        client.requestLong(method, params, clazz)
 
     suspend fun listConversations(): ConversationListResult =
         client.request("conversation.list", emptyMap<String, Any?>(), ConversationListResult::class.java)
@@ -357,6 +365,20 @@ class ChatService(private val client: PaiWsClient) {
     suspend fun patchConfig(input: Map<String, Any?>): com.whitemoon319.pai.model.AppConfig =
         client.request("patch_config", mapOf("input" to input), com.whitemoon319.pai.model.AppConfig::class.java)
 
+    // ---------------- 消息存储迁移（启动门禁） ----------------
+
+    /** 迁移预检：返回 {migrationRequired, totalConversations, canAutoMigrate, ...}。 */
+    suspend fun checkMessageStoreMigration(): Map<String, Any?> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("check_message_store_migration", emptyMap<String, Any?>(), Map::class.java) as Map<String, Any?>
+    }
+
+    /** 执行消息存储迁移；失败抛异常，进度事件走 native 事件队列（messageStore.migration.progress）。 */
+    suspend fun runMessageStoreMigration(): Map<String, Any?> {
+        @Suppress("UNCHECKED_CAST")
+        return requestLong("run_message_store_migration", emptyMap<String, Any?>(), Map::class.java) as Map<String, Any?>
+    }
+
     /** 读取人设/代理列表（load_agents）。 */
     suspend fun loadAgents(): List<com.whitemoon319.pai.model.AgentProfile> =
         client.request(
@@ -548,19 +570,19 @@ class ChatService(private val client: PaiWsClient) {
         client.request("get_android_workspace_status", emptyMap<String, Any?>(), com.whitemoon319.pai.model.AndroidWorkspaceStatus::class.java)
 
     suspend fun initAndroidWorkspace(): com.whitemoon319.pai.model.AndroidWorkspaceStatus =
-        client.request("init_android_workspace", emptyMap<String, Any?>(), com.whitemoon319.pai.model.AndroidWorkspaceStatus::class.java)
+        requestLong("init_android_workspace", emptyMap<String, Any?>(), com.whitemoon319.pai.model.AndroidWorkspaceStatus::class.java)
 
     suspend fun repairAndroidWorkspaceRuntime(): com.whitemoon319.pai.model.AndroidWorkspaceStatus =
-        client.request("repair_android_workspace_runtime", emptyMap<String, Any?>(), com.whitemoon319.pai.model.AndroidWorkspaceStatus::class.java)
+        requestLong("repair_android_workspace_runtime", emptyMap<String, Any?>(), com.whitemoon319.pai.model.AndroidWorkspaceStatus::class.java)
 
     suspend fun resetAndroidWorkspaceRuntime(): com.whitemoon319.pai.model.AndroidWorkspaceStatus =
-        client.request("reset_android_workspace_runtime", emptyMap<String, Any?>(), com.whitemoon319.pai.model.AndroidWorkspaceStatus::class.java)
+        requestLong("reset_android_workspace_runtime", emptyMap<String, Any?>(), com.whitemoon319.pai.model.AndroidWorkspaceStatus::class.java)
 
     suspend fun resetAndroidWorkspaceState(): com.whitemoon319.pai.model.AndroidWorkspaceStatus =
-        client.request("reset_android_workspace_state", emptyMap<String, Any?>(), com.whitemoon319.pai.model.AndroidWorkspaceStatus::class.java)
+        requestLong("reset_android_workspace_state", emptyMap<String, Any?>(), com.whitemoon319.pai.model.AndroidWorkspaceStatus::class.java)
 
     suspend fun importAndroidWorkspaceRootfsArchive(fileName: String, dataBase64: String): com.whitemoon319.pai.model.AndroidWorkspaceStatus =
-        client.request(
+        requestLong(
             "import_android_workspace_rootfs_archive",
             mapOf("fileName" to fileName, "dataBase64" to dataBase64),
             com.whitemoon319.pai.model.AndroidWorkspaceStatus::class.java,

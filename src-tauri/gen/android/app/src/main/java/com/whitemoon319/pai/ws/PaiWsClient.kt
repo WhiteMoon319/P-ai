@@ -100,16 +100,22 @@ class PaiWsClient(private val scope: CoroutineScope) {
         }
     }
 
+    /** 默认短超时：普通查询（会话/配置/文件列表等）防后端未就绪时永久挂起。 */
+    private val defaultTimeoutMs = 15_000L
+
+    /** 长任务超时：聊天发送、迁移、工作区初始化/修复/重置、rootfs 导入等。 */
+    private val longTimeoutMs = 600_000L
+
     /** 执行 JSON-RPC 请求：JNI 同步调用 + 超时兜底（防后端未就绪时永久挂起）。 */
-    suspend fun call(method: String, params: Any? = null): RpcResponse {
+    suspend fun call(method: String, params: Any? = null, timeoutMs: Long = defaultTimeoutMs): RpcResponse {
         val id = idCounter.getAndIncrement()
         val body = RpcRequest(jsonrpc = "2.0", id = id, method = method, params = params ?: emptyMap<String, Any?>())
         return withContext(Dispatchers.IO) {
-            val raw = withTimeoutOrNull(15_000) {
+            val raw = withTimeoutOrNull(timeoutMs) {
                 runCatching { PaiNative.call(gson.toJson(body)) }.getOrNull()
             }
             if (raw == null || raw.isBlank()) {
-                RpcResponse(jsonrpc = "2.0", id = id, error = RpcError(-32001, "native call 超时或失败（后端未就绪?） $method"))
+                RpcResponse(jsonrpc = "2.0", id = id, error = RpcError(-32001, "native call 超时（${timeoutMs}ms）或失败（后端未就绪?） $method"))
             } else {
                 val resp = try {
                     gson.fromJson(raw, RpcResponse::class.java)
@@ -123,6 +129,20 @@ class PaiWsClient(private val scope: CoroutineScope) {
                 }
             }
         }
+    }
+
+    /** 长任务请求：聊天发送、迁移、工作区初始化等可能远超 15s 的操作。 */
+    suspend fun callLong(method: String, params: Any? = null): RpcResponse =
+        call(method, params, longTimeoutMs)
+
+    /** 长任务请求并解析到指定类型；失败抛异常（独立超时，不占普通查询短超时）。 */
+    suspend fun <T> requestLong(method: String, params: Any?, clazz: Class<T>): T {
+        val resp = callLong(method, params)
+        if (resp.error != null) {
+            throw IllegalStateException("$method 失败: ${resp.error.code} ${resp.error.message}")
+        }
+        val result = resp.result ?: throw IllegalStateException("$method 无 result")
+        return gson.fromJson(result, clazz)
     }
 
     /** 请求并解析到指定类型；失败抛异常。 */

@@ -344,7 +344,18 @@ async fn ide_chat_handle_jsonrpc_request(
         }
         "list_tool_catalog" => ide_chat_list_tool_catalog_for_web_settings(state).await,
         "list_department_permission_catalog" => ide_chat_list_department_permission_catalog_for_web_settings(state).await,
-        "get_app_version" => Ok(serde_json::json!(env!("CARGO_PKG_VERSION").to_string())),
+        "get_app_version" => {
+            // Android 原生模式使用统一版本来源（CI 注入 PAI_ANDROID_APP_VERSION），
+            // 与 APK versionName / updater current_version 同源；桌面保持 Cargo 版本。
+            #[cfg(target_os = "android")]
+            {
+                Ok(serde_json::json!(android_current_app_version()))
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                Ok(serde_json::json!(env!("CARGO_PKG_VERSION").to_string()))
+            }
+        }
         "stt_transcribe" => ide_chat_stt_transcribe_for_web_settings(state, request.params).await,
         "get_project_repository_url" => Ok(serde_json::json!(GITHUB_REPO_PAGE.to_string())),
         "fetch_project_changelog_markdown" => fetch_project_changelog_markdown().await.and_then(ide_chat_serialize),
@@ -578,8 +589,12 @@ async fn ide_chat_handle_jsonrpc_request(
         "remoteIm.conversation.blockPage" => ide_chat_remote_im_block_page_command(state, request.params),
         "remote_im_clear_contact_conversation" => ide_chat_remote_im_clear_conversation_command(state, request.params),
         "remoteIm.conversation.clear" => ide_chat_remote_im_clear_conversation_command(state, request.params),
-        "frontend_ready_start_remote_im_services" => Err("Android 原生模式在启动时自动拉起远程 IM 服务".to_string()),
-        "remoteIm.services.start" => Err("Android 原生模式在启动时自动拉起远程 IM 服务".to_string()),
+        "frontend_ready_start_remote_im_services" => {
+            ide_chat_start_remote_im_services_for_web_settings(state).await
+        }
+        "remoteIm.services.start" => {
+            ide_chat_start_remote_im_services_for_web_settings(state).await
+        }
         "forward_unarchived_conversation_selection" => ide_chat_forward_selection_command(state, request.params),
         "forward_selection_to_remote_im_contact" => ide_chat_forward_remote_contact_command(state, request.params),
         "rename_unarchived_conversation" => ide_chat_rename_conversation_command(state, request.params),

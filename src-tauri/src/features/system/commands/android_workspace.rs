@@ -661,6 +661,18 @@ fn import_file_to_android_workspace_ws_inner(
                 .map_err(|err| format!("创建 Android 工作区导入目录失败 ({}): {err}", parent.display()))?;
         }
         let safe_name = android_workspace_sanitize_file_name(&file_name);
+        // decode 前预检：按 base64 长度估算原始字节数，超限直接拒绝，避免先分配完整内存。
+        let estimated_bytes = data_base64
+            .trim()
+            .len()
+            .saturating_mul(3)
+            .saturating_div(4);
+        if estimated_bytes as u64 > ANDROID_WORKSPACE_FILE_TRANSFER_MAX_BYTES {
+            return Err(format!(
+                "导入文件过大：约 {} bytes，当前 Android 文件管理器单文件上限为 {} bytes。",
+                estimated_bytes, ANDROID_WORKSPACE_FILE_TRANSFER_MAX_BYTES
+            ));
+        }
         let bytes = B64
             .decode(data_base64.trim())
             .map_err(|err| format!("解析导入文件失败: {err}"))?;
@@ -821,6 +833,23 @@ pub(crate) async fn import_android_workspace_rootfs_archive_ws_inner(
         android_workspace_set_status(state, app, importing)?;
         match ensure_android_workspace_layout(&root) {
             Ok(()) => {
+                // decode 前预检：rootfs 压缩包约 29.8MB，允许导入上限与普通文件一致
+                // （64MiB），超限直接拒绝，避免先分配完整内存再报错。
+                let estimated_bytes = data_base64
+                    .trim()
+                    .len()
+                    .saturating_mul(3)
+                    .saturating_div(4);
+                if estimated_bytes as u64 > ANDROID_WORKSPACE_FILE_TRANSFER_MAX_BYTES {
+                    let error = format!(
+                        "导入 Linux 运行环境压缩包过大：约 {} bytes，上限为 {} bytes。",
+                        estimated_bytes, ANDROID_WORKSPACE_FILE_TRANSFER_MAX_BYTES
+                    );
+                    let mut failed = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &root);
+                    failed.last_error = Some(error.clone());
+                    let _ = android_workspace_set_status(state, app, failed);
+                    return Err(error);
+                }
                 let bytes = match B64.decode(data_base64.trim()) {
                     Ok(bytes) => bytes,
                     Err(err) => {

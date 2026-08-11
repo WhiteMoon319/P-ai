@@ -66,6 +66,25 @@ fn emit_message_store_migration_progress(
     app: &NativeAppHandle,
     payload: MessageStoreMigrationProgressPayload,
 ) {
+    // Android 原生模式：app.emit 为 noop，进度事件必须直接进 native 事件队列，
+    // Kotlin pollEvents 消费后更新迁移进度 UI；否则迁移期间前端无任何反馈。
+    // 在 emit 之前构造（payload 在 emit 中被 move）。
+    #[cfg(target_os = "android")]
+    {
+        let progress_event = serde_json::json!({
+            "method": "messageStore.migration.progress",
+            "params": {
+                "event": MESSAGE_STORE_MIGRATION_PROGRESS_EVENT,
+                "current": payload.current,
+                "total": payload.total,
+                "conversationId": payload.conversation_id,
+                "title": payload.title,
+                "status": payload.status,
+                "detail": payload.detail,
+            },
+        });
+        crate::push_native_delta_event(progress_event);
+    }
     if let Err(err) = app.emit(MESSAGE_STORE_MIGRATION_PROGRESS_EVENT, payload) {
         runtime_log_error(format!(
             "[消息存储迁移] 进度事件发送失败：event={}，error={:?}",

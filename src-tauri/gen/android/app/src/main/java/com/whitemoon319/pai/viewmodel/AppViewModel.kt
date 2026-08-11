@@ -59,6 +59,8 @@ class AppViewModel(
      */
     val activitySteps = MutableStateFlow<List<ActivityStep>>(emptyList())
     val isStreaming = MutableStateFlow(false)
+    /** 消息存储迁移门禁：true=迁移进行中（聊天读取/发送应被阻止），null=尚未检查。 */
+    val migrationState = MutableStateFlow<MigrationState>(MigrationState.NotChecked)
     val isRecording = MutableStateFlow(false)
     val recognizedText = MutableStateFlow<String?>(null)
     /** 当前待发送的附件（摄取后的 receipt）。 */
@@ -91,6 +93,15 @@ class AppViewModel(
                 .collect {
                     withContext(Dispatchers.IO) { refreshConversations() }
                     refreshConnectedState()
+                }
+        }
+        // 消息存储迁移门禁：连接建立后先检查/执行迁移，完成前阻止聊天读写。
+        // 失败暴露可读错误（migrationState=Failed），不静默继续。
+        scope.launch(Dispatchers.IO) {
+            client.connectionState
+                .filter { it == ConnectionStatus.Connected }
+                .collect {
+                    runMigrationGate()
                 }
         }
     }
@@ -894,6 +905,17 @@ class AppViewModel(
             "app.keepAlive" -> {
                 handleNativeKeepAlive(params)
             }
+            "messageStore.migration.progress" -> {
+                try {
+                    val obj = params?.asJsonObject
+                    if (obj != null) {
+                        val current = obj.get("current")?.takeIf { !it.isJsonNull }?.asInt ?: 0
+                        val total = obj.get("total")?.takeIf { !it.isJsonNull }?.asInt ?: 0
+                        migrationState.value = MigrationState.Running(current, total)
+                    }
+                } catch (_: Exception) {
+                }
+            }
         }
     }
 
@@ -949,13 +971,20 @@ class AppViewModel(
     }
 
     private fun handleNativeKeepAlive(params: JsonElement?) {
-        // 保活通知：维持/移除前台服务感知的常驻通知。
-        // 当前实现与普通通知共用通道；active=false 时由前端自行决定是否清空常驻通知。
+        // 保活事件：active=true 启动前台服务（提升进程为前台，防 Doze/回收），
+        // active=false 停止。Rust live_update 侧在回复轮次/目标激活时推送。
+        // 前台服务不依赖 POST_NOTIFICATIONS（API 33+ 无权限时通知不显示但保活仍生效）。
         try {
             val obj = params?.asJsonObject ?: return
             val active = obj.get("active")?.takeIf { !it.isJsonNull }?.asBoolean ?: false
             android.util.Log.d("PaiNotify", "keepAlive active=$active")
-        } catch (_: Exception) {
+            if (active) {
+                com.whitemoon319.pai.service.PaiForegroundService.start(appContext)
+            } else {
+                com.whitemoon319.pai.service.PaiForegroundService.stop(appContext)
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("PaiNotify", "keepAlive 处理失败: ${e.message}")
         }
     }
 
@@ -1923,4 +1952,54 @@ class AppViewModel(
             }
         }
     }
+
+    // ---------------- 消息存储迁移门禁 ----------------
+
+    /**
+     * 启动迁移门禁：与 Vue afterSafetyGateReady 语义一致——
+     * 先 check，若需要迁移则 run，完成前阻止聊天数据读取/发送。
+     * 失败必须暴露可读错误，不能静默继续。
+     */
+    suspend fun runMigrationGate() {
+        if (migrationState.value is MigrationState.Completed || migrationState.value is MigrationState.Running) {
+            return
+        }
+        migrationState.value = MigrationState.Checking
+        try {
+            val check = withContext(Dispatchers.IO) { service.checkMessageStoreMigration() }
+            val required = (check["migrationRequired"] as? Boolean) ?: false
+            if (!required) {
+                migrationState.value = MigrationState.Completed
+                return
+            }
+            migrationState.value = MigrationState.Running(0, (check["totalConversations"] as? Number)?.toInt() ?: 0)
+            val report = withContext(Dispatchers.IO) { service.runMessageStoreMigration() }
+            val failed = (report["failedCount"] as? Number)?.toInt() ?: 0
+            val migrated = (report["migratedCount"] as? Number)?.toInt() ?: 0
+            if (failed > 0) {
+                migrationState.value = MigrationState.Failed("迁移完成但 $failed 个会话失败")
+            } else {
+                migrationState.value = MigrationState.Completed
+                android.util.Log.d("PaiNotify", "migration completed migrated=$migrated")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("PaiNotify", "migration failed: ${e.message}", e)
+            migrationState.value = MigrationState.Failed("消息存储迁移失败: ${e.message}")
+        }
+    }
+
+    /** 是否禁止聊天读取/发送（迁移检查中或进行中）。 */
+    fun migrationBlocksChat(): Boolean = when (migrationState.value) {
+        is MigrationState.NotChecked, is MigrationState.Checking, is MigrationState.Running -> true
+        is MigrationState.Completed, is MigrationState.Failed -> false
+    }
+}
+
+/** 消息存储迁移状态。 */
+sealed class MigrationState {
+    data object NotChecked : MigrationState()
+    data object Checking : MigrationState()
+    data class Running(val current: Int, val total: Int) : MigrationState()
+    data object Completed : MigrationState()
+    data class Failed(val message: String) : MigrationState()
 }

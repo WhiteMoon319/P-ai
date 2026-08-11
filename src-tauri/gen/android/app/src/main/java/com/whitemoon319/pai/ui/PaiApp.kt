@@ -5,6 +5,7 @@ import com.whitemoon319.pai.model.ChatMessage
 import com.whitemoon319.pai.model.ConversationSummary
 import com.whitemoon319.pai.model.buildActivityStepsFromMessage
 import com.whitemoon319.pai.viewmodel.AppViewModel
+import com.whitemoon319.pai.viewmodel.MigrationState
 import com.whitemoon319.pai.ws.ConnectionStatus
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -1189,6 +1190,24 @@ fun ChatScreen(
                 CircularProgressIndicator()
             }
         } else {
+            // 消息存储迁移门禁：迁移检查/进行中时阻止聊天读写并显示进度
+            val migration = vm.migrationState.collectAsState().value
+            if (migration is MigrationState.Checking || migration is MigrationState.Running || migration is MigrationState.NotChecked) {
+                Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = when (migration) {
+                                is MigrationState.Checking -> "正在检查消息存储…"
+                                is MigrationState.Running -> "正在迁移消息存储（${migration.current}/${migration.total}）…"
+                                else -> "正在初始化消息存储…"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            } else {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -1225,6 +1244,7 @@ fun ChatScreen(
                         }
                     }
                 }
+            }
             }
             // 已选附件条：显示待发送附件，可移除
             val pendingAttachment by vm.pendingAttachment.collectAsState()
@@ -1414,14 +1434,18 @@ fun ChatScreen(
                         Icon(Icons.Default.Clear, contentDescription = "停止")
                     }
                 } else {
-                    IconButton(onClick = {
-                        val text = input
-                        val hasAttachment = pendingAttachment != null
-                        if (text.isNotBlank() || hasAttachment) {
-                            input = ""
-                            scope.launch { vm.sendMessage(text) }
-                        }
-                    }) {
+                    IconButton(
+                        onClick = {
+                            if (vm.migrationBlocksChat()) return@IconButton
+                            val text = input
+                            val hasAttachment = pendingAttachment != null
+                            if (text.isNotBlank() || hasAttachment) {
+                                input = ""
+                                scope.launch { vm.sendMessage(text) }
+                            }
+                        },
+                        enabled = !vm.migrationBlocksChat(),
+                    ) {
                         Icon(Icons.Default.Send, contentDescription = "发送")
                     }
                 }
@@ -4150,7 +4174,7 @@ private fun WorkspaceFileManagerScreen(
     var searching by remember { mutableStateOf(false) }
     var menuFor by remember { mutableStateOf<com.whitemoon319.pai.model.WorkspaceFileEntry?>(null) }
 
-    // 导入：SAF 文件选择
+    // 导入：SAF 文件选择（先查文件大小预检，超限拒绝，避免 readBytes 分配大内存）
     val filePicker = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -4159,6 +4183,14 @@ private fun WorkspaceFileManagerScreen(
                 try {
                     val name = androidx.documentfile.provider.DocumentFile.fromSingleUri(context, uri)?.name
                         ?: "import.bin"
+                    // 大小预检：64MiB 上限与 Rust 侧 ANDROID_WORKSPACE_FILE_TRANSFER_MAX_BYTES 一致
+                    val size = context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { fd ->
+                        fd.length
+                    } ?: -1L
+                    if (size > 64L * 1024 * 1024) {
+                        vm.error.value = "导入文件过大：$size bytes，上限 64MiB。"
+                        return@launch
+                    }
                     val bytes = context.contentResolver.openInputStream(uri)?.readBytes()
                     if (bytes != null) {
                         val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)

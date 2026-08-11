@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - dev
+      - feat/android-native-no-webview
 
 jobs:
   build-android:
@@ -50,13 +51,6 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
           echo "$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
-
-      - name: Enable cleartext traffic for WebView WebSocket
-        run: |
-          GRADLE="src-tauri/gen/android/app/build.gradle.kts"
-          sed -i 's/manifestPlaceholders\["usesCleartextTraffic"\] = "false"/manifestPlaceholders["usesCleartextTraffic"] = "true"/g' "$GRADLE"
-          echo "Updated $GRADLE:"
-          grep -n 'usesCleartextTraffic' "$GRADLE" || true
 
       - name: Inject git-based version
         run: bash scripts/patch-android-version.sh
@@ -129,6 +123,11 @@ jobs:
           export CC_aarch64_linux_android="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang"
           export AR_aarch64_linux_android="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang"
+          # 构建期版本注入：与 APK versionName 同源（patch-android-version.sh 导出）
+          if [[ -n "${PAI_ANDROID_APP_VERSION:-}" ]]; then
+            export PAI_ANDROID_APP_VERSION
+            echo "cargo 注入版本 PAI_ANDROID_APP_VERSION=$PAI_ANDROID_APP_VERSION"
+          fi
           cd src-tauri
           cargo build --target aarch64-linux-android
           cp target/aarch64-linux-android/debug/libeasy_call_ai_lib.so gen/android/app/src/main/jniLibs/arm64-v8a/libeasy_call_ai_lib.so
@@ -150,6 +149,20 @@ jobs:
             mv "$apk" "$APK_DIR/P-ai-${TAG}-aarch64.apk"
             echo "Renamed to P-ai-${TAG}-aarch64.apk"
           done
+
+      - name: Verify APK contains required native libs
+        run: |
+          APK="$(ls src-tauri/gen/android/app/build/outputs/apk/universal/debug/*.apk | head -n1)"
+          [ -n "$APK" ] || { echo "ERROR: no APK found for native lib verification" >&2; exit 1; }
+          for lib in libeasy_call_ai_lib.so libproot_exec.so libproot_loader.so libtalloc.so libandroid-shmem.so; do
+            if unzip -l "$APK" | grep -q "lib/arm64-v8a/$lib"; then
+              echo "OK: $lib present"
+            else
+              echo "ERROR: $lib missing from APK" >&2
+              exit 1
+            fi
+          done
+          unzip -l "$APK" | grep -E "lib/arm64-v8a/" || true
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v6

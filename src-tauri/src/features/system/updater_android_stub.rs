@@ -1,6 +1,11 @@
 // Android 平台的应用内更新 stub：移动端不支持 GitHub 自更新，
 // 保留与 updater.rs 相同的对外签名，命令返回友好错误或空状态。
 
+mod android_version_compare {
+    include!("version_compare.rs");
+}
+use android_version_compare::*;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct GithubUpdateInfo {
@@ -43,11 +48,15 @@ const ANDROID_UPDATE_RELEASE_API: &str =
 const ANDROID_UPDATE_CHANGELOG_RAW: &str =
     "https://raw.githubusercontent.com/WhiteMoon319/P-ai/main/docs/changelog/latest.md";
 
-fn normalize_android_release_version(raw: &str) -> String {
-    raw.trim()
-        .trim_start_matches('v')
-        .trim_start_matches('V')
-        .to_string()
+/// Android 应用当前版本：优先使用构建期注入的 `PAI_ANDROID_APP_VERSION`
+/// （CI 由 patch-android-version.sh 从 git describe 派生，与 APK versionName 同源），
+/// 本地构建未注入时回退到 Cargo.toml 版本。禁止运行时读取外部版本文件。
+pub(crate) fn android_current_app_version() -> String {
+    option_env!("PAI_ANDROID_APP_VERSION")
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string())
 }
 
 /// 拉取 GitHub 上的最新 changelog（供前端「关于」页展示版本更新说明）。
@@ -90,7 +99,7 @@ async fn check_github_update_android(
     _update_method: Option<String>,
     _respect_cooldown: Option<bool>,
 ) -> Result<GithubUpdateInfo, String> {
-    let current_version = env!("CARGO_PKG_VERSION").to_string();
+    let current_version = android_current_app_version();
     let client_builder = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15));
     let client = android_workspace_apply_static_webpki_roots(client_builder)?
@@ -140,7 +149,8 @@ async fn check_github_update_android(
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let has_update = !latest_version.is_empty() && latest_version != current_version;
+    // 版本比较必须处理 v 前缀 / 预发布 / 大小关系，不能只做字符串不等判断。
+    let has_update = !latest_version.is_empty() && android_version_is_newer(&latest_version, &current_version);
     let info = GithubUpdateInfo {
         current_version: current_version.clone(),
         latest_version: latest_version.clone(),

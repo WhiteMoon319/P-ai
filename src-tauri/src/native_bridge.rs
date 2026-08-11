@@ -89,6 +89,26 @@ fn init_native_runtime(app_root: std::path::PathBuf) -> Result<(), String> {
             runtime_log_error(format!("[启动] 会话持久化 worker 启动失败: {err}"));
         }
     });
+    // Android 原生模式：启动时自动拉起配置中 enabled 的远程 IM 渠道。
+    // 等价桌面 Vue afterSafetyGateReady 调用的 remoteIm.services.start；
+    // 幂等（reconcile 先停后按 enabled 启动），失败记录日志不阻塞初始化。
+    let remote_im_state = state.clone();
+    let remote_im_runtime = runtime.handle().clone();
+    remote_im_runtime.spawn(async move {
+        match start_remote_im_services_inner(&remote_im_state).await {
+            Ok(value) => {
+                let started = value.get("started").and_then(serde_json::Value::as_u64).unwrap_or(0);
+                let failed = value.get("failed").and_then(serde_json::Value::as_u64).unwrap_or(0);
+                runtime_log_info(format!(
+                    "[远程IM] 启动完成: started={}, failed={}",
+                    started, failed
+                ));
+            }
+            Err(err) => {
+                runtime_log_error(format!("[远程IM] 启动全部渠道失败: {err}"));
+            }
+        }
+    });
     // Android 原生模式：按配置拉起 Web 访问服务（远程连接）。
     // 等价桌面 run_deferred_setup 的 start_web_access_server；配置关闭时服务自动跳过。
     let native_app = NativeAppHandle::noop();
@@ -238,18 +258,8 @@ async fn native_dispatch(
     // 原生桥单会话模式：resumeSubscription 登记到固定 client_id，流式事件后续走事件队列。
     let mut opened_conversation_id: Option<String> = None;
 
-    // 需要 NativeAppHandle 的方法（写配置/事件推送等）本轮返回暂不支持，后续轮次迁移。
-        // 尚未接入原生通道的方法（工作区初始化/迁移等，后续轮次迁移）。
-    let app_dependent = [
-        "frontend_ready_start_remote_im_services",
-        "run_message_store_migration",
-        "check_message_store_migration",
-    ];
-    if app_dependent.contains(&method.as_str()) {
-        return Err(format!(
-            "原生桥暂不支持需要原生事件通道的方法: {method}（后续轮次迁移）"
-        ));
-    }
+    // Android 原生模式无额外 app_dependent 拦截：migration check/run 已接入
+    // （run 需要 native_app 占位句柄 + 进度事件走 native 队列）。
 
     match method.as_str() {
         "bridge.ping" => Ok(serde_json::json!({
@@ -319,6 +329,13 @@ async fn native_dispatch(
         "chat.send" => ide_chat_send_message(state, params).await,
         "chat.stop" => ide_chat_stop_conversation(state, params),
         "load_config" => ide_chat_load_config_for_web_settings(state),
+        "check_message_store_migration" | "messageStore.migration.check" => {
+            check_message_store_migration_inner(state).and_then(ide_chat_serialize)
+        }
+        "run_message_store_migration" | "messageStore.migration.run" => {
+            let input = ide_chat_parse_workspace_params::<RunMessageStoreMigrationInput>(params)?;
+            run_message_store_migration_inner(&native_app, state, input).and_then(ide_chat_serialize)
+        }
         "load_chat_settings" => ide_chat_load_chat_settings_for_web_settings(state),
         "save_config" => ide_chat_save_config_for_web_settings(state, &native_app, ide_context_runtime, params),
         "patch_config" => ide_chat_patch_config_for_web_settings(state, &native_app, ide_context_runtime, params),
@@ -424,6 +441,12 @@ async fn native_dispatch(
         "remote_im_weixin_oc_get_login_status" => ide_chat_remote_im_weixin_oc_get_login_status_for_web_settings(state, params).await,
         "remote_im_weixin_oc_logout" => ide_chat_remote_im_weixin_oc_logout_for_web_settings(state, params).await,
         "remote_im_weixin_oc_sync_contacts" => ide_chat_remote_im_weixin_oc_sync_contacts_for_web_settings(state, params).await,
+        "frontend_ready_start_remote_im_services" => {
+            ide_chat_start_remote_im_services_for_web_settings(state).await
+        }
+        "remoteIm.services.start" => {
+            ide_chat_start_remote_im_services_for_web_settings(state).await
+        }
         "get_android_workspace_status" => ide_chat_serialize(get_android_workspace_status_ws_inner(state)?),
         "init_android_workspace" => ide_chat_serialize(init_android_workspace_ws_inner(state, Some(&native_app)).await?),
         "repair_android_workspace_runtime" => ide_chat_serialize(repair_android_workspace_runtime_ws_inner(state, Some(&native_app))?),
@@ -484,7 +507,7 @@ async fn native_dispatch(
             state,
             params.get("path").and_then(Value::as_str).unwrap_or_default().to_string(),
         )?),
-        "get_app_version" => Ok(serde_json::json!(env!("CARGO_PKG_VERSION").to_string())),
+        "get_app_version" => Ok(serde_json::json!(android_current_app_version())),
         "get_project_repository_url" => Ok(serde_json::json!(GITHUB_REPO_PAGE.to_string())),
         "list_terminal_shell_candidates" => ide_chat_list_terminal_shell_candidates_for_web_settings(state),
         "list_tool_catalog" => ide_chat_list_tool_catalog_for_web_settings(state).await,

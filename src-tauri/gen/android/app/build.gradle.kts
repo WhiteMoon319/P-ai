@@ -33,6 +33,9 @@ android {
             }
         }
         getByName("release") {
+            // 安全约束：release 必须保持 cleartext=false（defaultConfig 默认 false，
+            // 显式声明防止任何 buildType 覆盖逻辑误改）。
+            manifestPlaceholders["usesCleartextTraffic"] = "false"
             isMinifyEnabled = true
             proguardFiles(
                 *fileTree(".") { include("**/*.pro") }
