@@ -595,6 +595,17 @@ class AppViewModel(
         }
     }
 
+    /** 读取人设头像 data URL。 */
+    suspend fun readAvatarDataUrl(path: String): String? {
+        return withContext(Dispatchers.IO) {
+            try {
+                service.readAvatarDataUrl(path)
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
     /** 当前会话提示词预览：返回 (标题, 内容)。 */
     suspend fun promptPreviewForCurrent(): Pair<String, String>? {
         val conversationId = currentConversationId.value ?: return null

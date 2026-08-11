@@ -9,7 +9,9 @@ import com.whitemoon319.pai.ws.ConnectionStatus
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -1790,6 +1792,49 @@ fun MessageBubble(
                 .padding(horizontal = 12.dp, vertical = 4.dp),
             horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
         ) {
+            // 头像（对齐 Vue ChatBubbleShell）：助手左侧、用户右侧
+            val agent = vm.agents.collectAsState().value
+                ?.firstOrNull { it.id == message.speakerAgentId }
+            var agentAvatar by remember(agent?.avatarPath) { mutableStateOf<android.graphics.Bitmap?>(null) }
+            LaunchedEffect(agent?.avatarPath) {
+                val path = agent?.avatarPath?.takeIf { it.isNotBlank() }
+                if (path != null) {
+                    val dataUrl = vm.readAvatarDataUrl(path)
+                    if (dataUrl != null) {
+                        val base64 = dataUrl.substringAfter("base64,", "")
+                        runCatching {
+                            val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        }.getOrNull()?.let { agentAvatar = it }
+                    }
+                }
+            }
+            if (!isUser) {
+                if (agentAvatar != null) {
+                    Image(
+                        bitmap = agentAvatar!!.asImageBitmap(),
+                        contentDescription = agentName,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape),
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            agentName?.firstOrNull()?.toString() ?: "P",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Spacer(Modifier.width(6.dp))
+            }
             Surface(
                 color = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                 shape = MaterialTheme.shapes.medium,
@@ -1826,6 +1871,20 @@ fun MessageBubble(
                     if (textContent.isNotBlank()) {
                         Text(textContent)
                     }
+                }
+                Spacer(Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "我",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
                 }
             } else {
                 Column(Modifier.padding(10.dp)) {

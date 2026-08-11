@@ -277,6 +277,13 @@ class ChatService(private val client: PaiWsClient) {
         return result["dataUrl"] as? String
     }
 
+    /** 读取人设头像为 data URL（read_avatar_data_url）。 */
+    suspend fun readAvatarDataUrl(path: String): String? {
+        @Suppress("UNCHECKED_CAST")
+        val result = client.request("read_avatar_data_url", mapOf("input" to mapOf("path" to path)), Map::class.java) as Map<String, Any?>
+        return result["dataUrl"] as? String
+    }
+
     /** 会话可用模型列表（model.list，Vue 模型切换语义）。 */
     suspend fun modelList(conversationId: String): List<Map<String, Any?>> {
         @Suppress("UNCHECKED_CAST")
