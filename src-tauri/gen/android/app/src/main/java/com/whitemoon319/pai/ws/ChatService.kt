@@ -307,10 +307,11 @@ class ChatService(private val client: PaiWsClient) {
         return result["dataUrl"] as? String
     }
 
-    /** 会话可用模型列表（model.list，Vue 模型切换语义）。 */
+    /** 会话可用模型列表（model.list，Vue 模型切换语义）。返回 chatModelOptions 数组。 */
     suspend fun modelList(conversationId: String): List<Map<String, Any?>> {
         @Suppress("UNCHECKED_CAST")
-        return client.request("model.list", mapOf("conversationId" to conversationId), List::class.java) as List<Map<String, Any?>>
+        val result = client.request("model.list", mapOf("conversationId" to conversationId), Map::class.java) as Map<String, Any?>
+        return (result["chatModelOptions"] as? List<Map<String, Any?>>) ?: emptyList()
     }
 
     suspend fun batchArchiveConversations(conversationIds: List<String>, reflectionApiConfigId: String? = null): Boolean {
