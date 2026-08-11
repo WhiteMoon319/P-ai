@@ -879,6 +879,12 @@ fun ChatScreen(
     val chatContext = LocalContext.current
     var showPromptPreview by remember { mutableStateOf(false) }
     var promptPreviewText by remember { mutableStateOf("") }
+    var showDelegateDialog by remember { mutableStateOf(false) }
+    var delegateGoal by remember { mutableStateOf("") }
+    var delegateWhy by remember { mutableStateOf("") }
+    var delegateTodo by remember { mutableStateOf("") }
+    var delegateTargetDept by remember { mutableStateOf("") }
+    var delegateTargetAgent by remember { mutableStateOf("") }
 
     // 消息/流式输出/活动步骤变化时自动滚动到最底部
     LaunchedEffect(messages.size, streaming.length, activitySteps.size) {
@@ -1072,6 +1078,11 @@ fun ChatScreen(
                     maxLines = 4,
                 )
                 Spacer(Modifier.width(4.dp))
+                // 委托任务：提交当前会话给下级代理
+                IconButton(onClick = { showDelegateDialog = true }) {
+                    Icon(Icons.Default.SwapHoriz, contentDescription = "委托任务")
+                }
+                Spacer(Modifier.width(4.dp))
                 // 附件：文件选择 → 复制到沙盒 → 摄取 → 随消息发送
                 val ctx = LocalContext.current
                 val attaching by vm.attaching.collectAsState()
@@ -1187,6 +1198,84 @@ fun ChatScreen(
             confirmButton = {
                 TextButton(onClick = { showPromptPreview = false }) { Text("关闭") }
             },
+        )
+    }
+
+    if (showDelegateDialog) {
+        AlertDialog(
+            onDismissRequest = { showDelegateDialog = false },
+            title = { Text("提交委托任务") },
+            text = {
+                Column {
+                    Text(
+                        "把当前会话委托给下级代理执行。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = delegateGoal,
+                        onValueChange = { delegateGoal = it },
+                        label = { Text("目标（goal）") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = delegateWhy,
+                        onValueChange = { delegateWhy = it },
+                        label = { Text("原因（why）") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = delegateTodo,
+                        onValueChange = { delegateTodo = it },
+                        label = { Text("待办（todo）") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = delegateTargetDept,
+                        onValueChange = { delegateTargetDept = it },
+                        label = { Text("目标部门 ID") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = delegateTargetAgent,
+                        onValueChange = { delegateTargetAgent = it },
+                        label = { Text("目标代理 ID（可空）") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = delegateGoal.isNotBlank(),
+                    onClick = {
+                        showDelegateDialog = false
+                        val convId = vm.currentConversationId.value
+                        if (convId != null) {
+                            scope.launch {
+                                val ok = vm.submitDelegate(
+                                    conversationId = convId,
+                                    targetDepartmentId = delegateTargetDept.trim().ifBlank { "assistant" },
+                                    targetAgentId = delegateTargetAgent.trim().takeIf { it.isNotBlank() },
+                                    goal = delegateGoal,
+                                    why = delegateWhy,
+                                    todo = delegateTodo,
+                                )
+                                if (ok) {
+                                    android.widget.Toast.makeText(chatContext, "委托已提交", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    },
+                ) { Text("提交") }
+            },
+            dismissButton = { TextButton(onClick = { showDelegateDialog = false }) { Text("取消") } },
         )
     }
 }
