@@ -101,6 +101,28 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PaiApp(vm: AppViewModel) {
+    // 品牌配色（对齐 PAI 桌面端蓝色主题）
+    val brandScheme = androidx.compose.material3.lightColorScheme(
+        primary = androidx.compose.ui.graphics.Color(0xFF3B82F6),
+        onPrimary = androidx.compose.ui.graphics.Color.White,
+        primaryContainer = androidx.compose.ui.graphics.Color(0xFFDBEAFE),
+        onPrimaryContainer = androidx.compose.ui.graphics.Color(0xFF1E3A8A),
+        secondary = androidx.compose.ui.graphics.Color(0xFF64748B),
+        onSecondary = androidx.compose.ui.graphics.Color.White,
+        secondaryContainer = androidx.compose.ui.graphics.Color(0xFFE2E8F0),
+        onSecondaryContainer = androidx.compose.ui.graphics.Color(0xFF1E293B),
+        surface = androidx.compose.ui.graphics.Color(0xFFF8FAFC),
+        surfaceVariant = androidx.compose.ui.graphics.Color(0xFFF1F5F9),
+        background = androidx.compose.ui.graphics.Color(0xFFF8FAFC),
+    )
+    MaterialTheme(colorScheme = brandScheme) {
+        PaiAppContent(vm)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PaiAppContent(vm: AppViewModel) {
     DisposableEffect(Unit) {
         vm.start()
         onDispose { vm.stop() }

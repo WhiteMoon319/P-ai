@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -99,14 +100,16 @@ class PaiWsClient(private val scope: CoroutineScope) {
         }
     }
 
-    /** 执行 JSON-RPC 请求：JNI 同步调用 + 超时兜底。 */
+    /** 执行 JSON-RPC 请求：JNI 同步调用 + 超时兜底（防后端未就绪时永久挂起）。 */
     suspend fun call(method: String, params: Any? = null): RpcResponse {
         val id = idCounter.getAndIncrement()
         val body = RpcRequest(jsonrpc = "2.0", id = id, method = method, params = params ?: emptyMap<String, Any?>())
         return withContext(Dispatchers.IO) {
-            val raw = runCatching { PaiNative.call(gson.toJson(body)) }.getOrNull()
+            val raw = withTimeoutOrNull(15_000) {
+                runCatching { PaiNative.call(gson.toJson(body)) }.getOrNull()
+            }
             if (raw == null || raw.isBlank()) {
-                RpcResponse(jsonrpc = "2.0", id = id, error = RpcError(-32000, "native call failed (后端未就绪?) $method"))
+                RpcResponse(jsonrpc = "2.0", id = id, error = RpcError(-32001, "native call 超时或失败（后端未就绪?） $method"))
             } else {
                 val resp = try {
                     gson.fromJson(raw, RpcResponse::class.java)
