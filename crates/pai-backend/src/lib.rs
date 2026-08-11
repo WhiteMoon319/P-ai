@@ -20,6 +20,7 @@ pub mod json_extractor;
 pub mod logging;
 pub mod mcp;
 pub mod memory;
+pub mod model_runtime;
 pub mod message_store;
 pub mod multilingual;
 pub mod share_export;
@@ -28,6 +29,7 @@ pub mod task;
 pub mod tool_loop;
 pub mod tool_policy;
 pub mod terminal;
+pub mod provider_resolution;
 pub mod text_codec;
 pub mod version_compare;
 

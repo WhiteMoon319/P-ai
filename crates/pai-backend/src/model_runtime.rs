@@ -1,3 +1,7 @@
+use serde::{Deserialize, Serialize};
+
+use serde_json::Value;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProviderToolDefinition {
     pub name: String,
@@ -6,7 +10,7 @@ pub struct ProviderToolDefinition {
 }
 
 impl ProviderToolDefinition {
-    pub(crate) fn new(
+    pub fn new(
         name: impl Into<String>,
         description: impl Into<String>,
         parameters: Value,
@@ -20,18 +24,18 @@ impl ProviderToolDefinition {
 }
 
 #[allow(dead_code)]
-pub(crate) trait RuntimeToolMetadata {
+pub trait RuntimeToolMetadata {
     fn provider_tool_definition(&self) -> ProviderToolDefinition;
 }
 
-pub(crate) type RuntimeToolCallFuture<'a> = std::pin::Pin<
+pub type RuntimeToolCallFuture<'a> = std::pin::Pin<
     Box<dyn std::future::Future<Output = Result<ProviderToolResult, String>> + Send + 'a>,
 >;
-pub(crate) type RuntimeToolValueFuture<'a, E> = std::pin::Pin<
+pub type RuntimeToolValueFuture<'a, E> = std::pin::Pin<
     Box<dyn std::future::Future<Output = Result<Value, E>> + Send + 'a>,
 >;
 
-pub(crate) trait RuntimeToolDyn: Send + Sync {
+pub trait RuntimeToolDyn: Send + Sync {
     fn name(&self) -> String;
     fn timeout_override(&self, _args_json: &str) -> Option<std::time::Duration> {
         None
@@ -42,7 +46,7 @@ pub(crate) trait RuntimeToolDyn: Send + Sync {
     fn call_json(&self, args_json: String) -> RuntimeToolCallFuture<'_>;
 }
 
-pub(crate) trait RuntimeValueTool: RuntimeToolMetadata + Send + Sync {
+pub trait RuntimeValueTool: RuntimeToolMetadata + Send + Sync {
     const NAME: &'static str;
     type Args: for<'de> Deserialize<'de> + Send;
     type Error: std::fmt::Display + Send;
@@ -54,7 +58,7 @@ pub(crate) trait RuntimeValueTool: RuntimeToolMetadata + Send + Sync {
     fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error>;
 }
 
-pub(crate) fn tool_value_scalar_text(value: &Value) -> String {
+pub fn tool_value_scalar_text(value: &Value) -> String {
     match value {
         Value::Null => "null".to_string(),
         Value::Bool(value) => value.to_string(),
@@ -64,7 +68,7 @@ pub(crate) fn tool_value_scalar_text(value: &Value) -> String {
     }
 }
 
-pub(crate) fn push_tool_value_lines(value: &Value, indent: usize, lines: &mut Vec<String>) {
+pub fn push_tool_value_lines(value: &Value, indent: usize, lines: &mut Vec<String>) {
     let prefix = "  ".repeat(indent);
     match value {
         Value::Array(items) => {
@@ -108,7 +112,7 @@ pub(crate) fn push_tool_value_lines(value: &Value, indent: usize, lines: &mut Ve
     }
 }
 
-pub(crate) fn tool_value_readable_text(value: &Value) -> String {
+pub fn tool_value_readable_text(value: &Value) -> String {
     if let Value::String(text) = value {
         return text.clone();
     }
@@ -117,11 +121,11 @@ pub(crate) fn tool_value_readable_text(value: &Value) -> String {
     lines.join("\n")
 }
 
-pub(crate) fn value_string(value: &Value, key: &str) -> Option<String> {
+pub fn value_string(value: &Value, key: &str) -> Option<String> {
     value.get(key).and_then(Value::as_str).map(str::trim).filter(|text| !text.is_empty()).map(ToOwned::to_owned)
 }
 
-pub(crate) fn provider_tool_metadata_from_value(tool_name: &str, value: &Value) -> ProviderToolMetadata {
+pub fn provider_tool_metadata_from_value(tool_name: &str, value: &Value) -> ProviderToolMetadata {
     let mut metadata = ProviderToolMetadata {
         backup_record_id: value_string(value, "backupRecordId"),
         ..ProviderToolMetadata::default()
@@ -168,7 +172,7 @@ pub(crate) fn provider_tool_metadata_from_value(tool_name: &str, value: &Value) 
     metadata
 }
 
-pub(crate) fn provider_tool_output_from_value(tool_name: &str, value: &Value) -> String {
+pub fn provider_tool_output_from_value(tool_name: &str, value: &Value) -> String {
     match tool_name {
         "exec" => {
             if let Some(aggregated_output) = value
@@ -217,8 +221,53 @@ pub(crate) fn provider_tool_output_from_value(tool_name: &str, value: &Value) ->
     }
 }
 
-pub(crate) fn provider_tool_result_from_value(tool_name: &str, mut value: Value) -> ProviderToolResult {
-    let metadata = provider_tool_metadata_from_value(tool_name, &value);
+/// 提取转发图片（简化版，从 src-tauri screenshot_cache.rs 迁入）。
+pub fn extract_forward_images_from_value(value: &Value) -> Vec<ForwardImagePayload> {
+    let mut images = Vec::<ForwardImagePayload>::new();
+    if let Some(image_b64) = value
+        .get("imageBase64")
+        .and_then(Value::as_str)
+        .or_else(|| value.get("image_base64").and_then(Value::as_str))
+    {
+        images.push(ForwardImagePayload {
+            mime: "image/webp".to_string(),
+            base64: image_b64.trim().to_string(),
+            width: 0,
+            height: 0,
+        });
+    }
+    images
+}
+
+/// 转发图片载荷（从 src-tauri screenshot_cache.rs 迁入）。
+#[derive(Debug, Clone)]
+pub struct ForwardImagePayload {
+    pub mime: String,
+    pub base64: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// 移除内联媒体（从 src-tauri mcp/runtime_manager.rs 迁入）。
+pub fn remove_inline_media_from_tool_value(value: &mut Value) {
+    match value {
+        Value::Array(items) => {
+            for item in items {
+                remove_inline_media_from_tool_value(item);
+            }
+        }
+        Value::Object(map) => {
+            map.remove("imageBase64");
+            map.remove("image_base64");
+            for item in map.values_mut() {
+                remove_inline_media_from_tool_value(item);
+            }
+        }
+        _ => {}
+    }
+}
+
+pub fn provider_tool_result_from_value(tool_name: &str, mut value: Value) -> ProviderToolResult {    let metadata = provider_tool_metadata_from_value(tool_name, &value);
     let images = if tool_name == "operate" {
         let payload = value.get("data").unwrap_or(&value);
         extract_forward_images_from_value(payload)
@@ -245,7 +294,7 @@ pub(crate) fn provider_tool_result_from_value(tool_name: &str, mut value: Value)
     }
 }
 
-pub(crate) fn remove_top_level_internal_tool_fields(value: &mut Value) {
+pub fn remove_top_level_internal_tool_fields(value: &mut Value) {
     let Value::Object(map) = value else {
         return;
     };
@@ -270,7 +319,7 @@ pub(crate) fn remove_top_level_internal_tool_fields(value: &mut Value) {
     }
 }
 
-pub(crate) fn parse_runtime_tool_args<T>(args_json: &str) -> Result<T, String>
+pub fn parse_runtime_tool_args<T>(args_json: &str) -> Result<T, String>
 where
     T: for<'de> Deserialize<'de>,
 {
@@ -309,16 +358,16 @@ where
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub(crate) struct ProviderToolCallRequest {
-    pub(crate) invocation_id: String,
-    pub(crate) provider_call_id: Option<String>,
-    pub(crate) tool_name: String,
-    pub(crate) arguments: Value,
+pub struct ProviderToolCallRequest {
+    pub invocation_id: String,
+    pub provider_call_id: Option<String>,
+    pub tool_name: String,
+    pub arguments: Value,
 }
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub(crate) enum ProviderToolResultPart {
+pub enum ProviderToolResultPart {
     Text {
         text: String,
     },
@@ -341,43 +390,43 @@ pub(crate) enum ProviderToolResultPart {
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub(crate) struct ProviderToolResult {
-    pub(crate) output: String,
-    pub(crate) metadata: ProviderToolMetadata,
-    pub(crate) parts: Vec<ProviderToolResultPart>,
-    pub(crate) is_error: bool,
+pub struct ProviderToolResult {
+    pub output: String,
+    pub metadata: ProviderToolMetadata,
+    pub parts: Vec<ProviderToolResultPart>,
+    pub is_error: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub(crate) struct ProviderToolMetadata {
+pub struct ProviderToolMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) exit_code: Option<i64>,
+    pub exit_code: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) wall_time_ms: Option<u64>,
+    pub wall_time_ms: Option<u64>,
     #[serde(skip_serializing_if = "bool_is_false")]
-    pub(crate) timed_out: bool,
+    pub timed_out: bool,
     #[serde(skip_serializing_if = "bool_is_false")]
-    pub(crate) truncated: bool,
+    pub truncated: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub(crate) output_paths: Vec<String>,
+    pub output_paths: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) total_output_lines: Option<usize>,
+    pub total_output_lines: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) backup_record_id: Option<String>,
+    pub backup_record_id: Option<String>,
     #[serde(skip_serializing_if = "provider_tool_control_is_none")]
-    pub(crate) control: ProviderToolControl,
+    pub control: ProviderToolControl,
 }
 
-pub(crate) fn bool_is_false(value: &bool) -> bool {
+pub fn bool_is_false(value: &bool) -> bool {
     !*value
 }
 
-pub(crate) fn provider_tool_control_is_none(control: &ProviderToolControl) -> bool {
+pub fn provider_tool_control_is_none(control: &ProviderToolControl) -> bool {
     matches!(control, ProviderToolControl::None)
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub(crate) enum ProviderToolControl {
+pub enum ProviderToolControl {
     #[default]
     None,
     Contact { stop: bool },
@@ -387,7 +436,7 @@ pub(crate) enum ProviderToolControl {
 
 #[allow(dead_code)]
 impl ProviderToolResult {
-    pub(crate) fn text(text: impl Into<String>) -> Self {
+    pub fn text(text: impl Into<String>) -> Self {
         let text = text.into();
         Self {
             output: text.clone(),
@@ -397,7 +446,7 @@ impl ProviderToolResult {
         }
     }
 
-    pub(crate) fn error(text: impl Into<String>) -> Self {
+    pub fn error(text: impl Into<String>) -> Self {
         let text = text.into();
         Self {
             output: text.clone(),
@@ -409,7 +458,7 @@ impl ProviderToolResult {
 }
 
 #[cfg(test)]
-pub(crate) mod runtime_tool_result_tests {
+pub mod runtime_tool_result_tests {
     use super::*;
 
     #[test]

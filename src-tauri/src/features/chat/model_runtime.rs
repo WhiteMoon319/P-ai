@@ -26,9 +26,11 @@ use super::*;
 
 // ==================== 运行时共享抽象 ====================
 
-include!("model_runtime/runtime_abstractions.rs");
 include!("model_runtime/runtime_migration_guard.rs");
-include!("model_runtime/provider_resolution.rs");
+// provider_resolution 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::provider_resolution::*;
+// runtime_abstractions 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::model_runtime::*;
 
 // ==================== 工具定义与内置能力 ====================
 include!("model_runtime/tools_and_builtin.rs");
