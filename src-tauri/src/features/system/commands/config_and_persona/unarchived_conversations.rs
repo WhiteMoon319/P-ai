@@ -73,46 +73,51 @@ fn repair_conversation_preferred_model_for_snapshot_meta(
 }
 
 #[tauri::command]
-fn switch_active_conversation_snapshot(
+async fn switch_active_conversation_snapshot(
     input: SwitchActiveConversationSnapshotInput,
     state: State<'_, AppState>,
 ) -> Result<SwitchActiveConversationSnapshotOutput, String> {
-    let started_at = std::time::Instant::now();
-    let result =
-        conversation_service_v2().switch_active_conversation_snapshot(state.inner(), &input)?;
-    let mut snapshot = result.snapshot;
-    if let Ok(conversation_meta) = conversation_service_v2()
-        .get_conversation_meta(state.inner(), &snapshot.conversation_id)
-    {
-        snapshot.preferred_api_config_id =
-            repair_conversation_preferred_model_for_snapshot_meta(
-                state.inner(),
-                &conversation_meta.id,
-                &conversation_meta.department_id,
-                conversation_meta.preferred_api_config_id.as_deref(),
-            )?;
-    }
-    let unarchived_conversations = result.unarchived_conversations;
-    runtime_log_debug(format!(
-        "[前台重型快照] 完成，conversation_id={}，message_count={}，has_more_history={}，summary_count={}，duration_ms={}",
-        snapshot.conversation_id,
-        snapshot.messages.len(),
-        snapshot.has_more_history,
-        unarchived_conversations.len(),
-        started_at.elapsed().as_millis()
-    ));
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let started_at = std::time::Instant::now();
+        let result =
+            conversation_service_v2().switch_active_conversation_snapshot(&app_state, &input)?;
+        let mut snapshot = result.snapshot;
+        if let Ok(conversation_meta) = conversation_service_v2()
+            .get_conversation_meta(&app_state, &snapshot.conversation_id)
+        {
+            snapshot.preferred_api_config_id =
+                repair_conversation_preferred_model_for_snapshot_meta(
+                    &app_state,
+                    &conversation_meta.id,
+                    &conversation_meta.department_id,
+                    conversation_meta.preferred_api_config_id.as_deref(),
+                )?;
+        }
+        let unarchived_conversations = result.unarchived_conversations;
+        runtime_log_debug(format!(
+            "[前台重型快照] 完成，conversation_id={}，message_count={}，has_more_history={}，summary_count={}，duration_ms={}",
+            snapshot.conversation_id,
+            snapshot.messages.len(),
+            snapshot.has_more_history,
+            unarchived_conversations.len(),
+            started_at.elapsed().as_millis()
+        ));
 
-    Ok(SwitchActiveConversationSnapshotOutput {
-        conversation_id: snapshot.conversation_id,
-        messages: snapshot.messages,
-        has_more_history: snapshot.has_more_history,
-        runtime_state: snapshot.runtime_state,
-        current_todo: snapshot.current_todo,
-        current_todos: snapshot.current_todos,
-        preferred_api_config_id: snapshot.preferred_api_config_id,
-        active_goal: snapshot.active_goal,
-        unarchived_conversations,
+        Ok(SwitchActiveConversationSnapshotOutput {
+            conversation_id: snapshot.conversation_id,
+            messages: snapshot.messages,
+            has_more_history: snapshot.has_more_history,
+            runtime_state: snapshot.runtime_state,
+            current_todo: snapshot.current_todo,
+            current_todos: snapshot.current_todos,
+            preferred_api_config_id: snapshot.preferred_api_config_id,
+            active_goal: snapshot.active_goal,
+            unarchived_conversations,
+        })
     })
+    .await
+    .map_err(|err| format!("切换会话快照任务异常：{err}"))?
 }
 
 #[tauri::command]
@@ -303,18 +308,23 @@ struct MarkConversationReadInput {
 }
 
 #[tauri::command]
-fn mark_conversation_read(
+async fn mark_conversation_read(
     input: MarkConversationReadInput,
     state: State<'_, AppState>,
 ) -> Result<bool, String> {
-    let conversation_id = input.conversation_id.trim();
-    if conversation_id.is_empty() {
-        return Ok(false);
-    }
-    Ok(conversation_service_v2()
-        .mark_conversation_read(state.inner(), conversation_id)?
-        .conversation
-        .is_some())
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let conversation_id = input.conversation_id.trim();
+        if conversation_id.is_empty() {
+            return Ok(false);
+        }
+        Ok(conversation_service_v2()
+            .mark_conversation_read(&app_state, conversation_id)?
+            .conversation
+            .is_some())
+    })
+    .await
+    .map_err(|err| format!("标记会话已读任务异常：{err}"))?
 }
 
 #[tauri::command]
@@ -802,45 +812,6 @@ struct ToggleUnarchivedConversationPinInput {
 struct ToggleUnarchivedConversationPinOutput {
     conversation_id: String,
     is_pinned: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ConversationSectionOrdersOutput {
-    local: Vec<String>,
-    contact: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SaveConversationSectionOrderInput {
-    tab: String,
-    ordered_keys: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SaveConversationSectionOrderOutput {
-    tab: String,
-    ordered_keys: Vec<String>,
-}
-
-fn normalize_conversation_section_order_keys(keys: &[String]) -> Vec<String> {
-    let mut seen = std::collections::HashSet::<String>::new();
-    keys.iter()
-        .map(|item| item.trim())
-        .filter(|item| !item.is_empty())
-        .filter(|item| seen.insert((*item).to_string()))
-        .map(ToOwned::to_owned)
-        .collect()
-}
-
-fn normalize_conversation_section_order_tab(tab: &str) -> Result<&'static str, String> {
-    match tab.trim() {
-        "local" => Ok("local"),
-        "contact" => Ok("contact"),
-        _ => Err("tab 只支持 local 或 contact".to_string()),
-    }
 }
 
 fn trimmed_option(raw: Option<&str>) -> Option<String> {
@@ -1813,55 +1784,6 @@ fn toggle_unarchived_conversation_pin_inner(
 }
 
 #[tauri::command]
-fn get_conversation_section_orders(
-    state: State<'_, AppState>,
-) -> Result<ConversationSectionOrdersOutput, String> {
-    get_conversation_section_orders_inner(state.inner())
-}
-
-fn get_conversation_section_orders_inner(
-    state: &AppState,
-) -> Result<ConversationSectionOrdersOutput, String> {
-    let runtime = state_read_runtime_state_cached(state)?;
-    Ok(ConversationSectionOrdersOutput {
-        local: runtime.conversation_section_orders.local,
-        contact: runtime.conversation_section_orders.contact,
-    })
-}
-
-#[tauri::command]
-fn save_conversation_section_order(
-    input: SaveConversationSectionOrderInput,
-    state: State<'_, AppState>,
-) -> Result<SaveConversationSectionOrderOutput, String> {
-    save_conversation_section_order_inner(input, state.inner())
-}
-
-fn save_conversation_section_order_inner(
-    input: SaveConversationSectionOrderInput,
-    state: &AppState,
-) -> Result<SaveConversationSectionOrderOutput, String> {
-    let tab = normalize_conversation_section_order_tab(&input.tab)?;
-    let ordered_keys = normalize_conversation_section_order_keys(&input.ordered_keys);
-    let mut runtime = state_read_runtime_state_cached(state)?;
-    match tab {
-        "local" => runtime.conversation_section_orders.local = ordered_keys.clone(),
-        "contact" => runtime.conversation_section_orders.contact = ordered_keys.clone(),
-        _ => {}
-    }
-    state_write_runtime_state_cached(state, &runtime)?;
-    runtime_log_info(format!(
-        "[会话分组排序] 完成，任务=保存会话分组顺序，tab={}，group_count={}",
-        tab,
-        ordered_keys.len()
-    ));
-    Ok(SaveConversationSectionOrderOutput {
-        tab: tab.to_string(),
-        ordered_keys,
-    })
-}
-
-#[tauri::command]
 fn list_delegate_conversations(
     state: State<'_, AppState>,
 ) -> Result<Vec<DelegateConversationSummary>, String> {
@@ -2489,15 +2411,20 @@ fn default_recent_unarchived_message_limit() -> usize {
 }
 
 #[tauri::command]
-fn get_unarchived_conversation_messages(
+async fn get_unarchived_conversation_messages(
     input: GetUnarchivedConversationMessagesInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<ChatMessage>, String> {
-    let conversation_id = input.conversation_id.trim();
+    let conversation_id = input.conversation_id.trim().to_string();
     if conversation_id.is_empty() {
         return Err("conversationId is required.".to_string());
     }
-    conversation_service_v2().get_all_messages(state.inner(), conversation_id)
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        conversation_service_v2().get_all_messages(&app_state, &conversation_id)
+    })
+    .await
+    .map_err(|err| format!("读取会话全部消息任务异常：{err}"))?
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2561,86 +2488,108 @@ fn conversation_block_page_output_from_message_store_page(
 }
 
 #[tauri::command]
-fn get_unarchived_conversation_recent_block_messages(
+async fn get_unarchived_conversation_recent_block_messages(
     input: GetUnarchivedConversationRecentBlockMessagesInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<ChatMessage>, String> {
-    let conversation_id = input.conversation_id.trim();
+    let conversation_id = input.conversation_id.trim().to_string();
     if conversation_id.is_empty() {
         return Err("conversationId is required.".to_string());
     }
-    conversation_service_v2().get_recent_block_messages(state.inner(), conversation_id)
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        conversation_service_v2().get_recent_block_messages(&app_state, &conversation_id)
+    })
+    .await
+    .map_err(|err| format!("读取会话最近块消息任务异常：{err}"))?
 }
 
 #[tauri::command]
-fn get_unarchived_conversation_block_page(
+async fn get_unarchived_conversation_block_page(
     input: GetConversationBlockPageInput,
     state: State<'_, AppState>,
 ) -> Result<ConversationBlockPageOutput, String> {
-    let conversation_id = input.conversation_id.trim();
+    let conversation_id = input.conversation_id.trim().to_string();
     if conversation_id.is_empty() {
         return Err("conversationId is required.".to_string());
     }
-    let page = if let Some(block_id) = input.block_id {
-        conversation_service_v2().get_conversation_block(state.inner(), conversation_id, block_id)?
-    } else {
-        conversation_service_v2().get_conversation_last_block(state.inner(), conversation_id)?
-    };
-    Ok(ConversationBlockPageOutput {
-        blocks: page
-            .blocks
-            .into_iter()
-            .map(|item| ConversationBlockSummaryOutput {
-                block_id: item.block_id,
-                message_count: item.message_count,
-                first_message_id: item.first_message_id,
-                last_message_id: item.last_message_id,
-                first_created_at: item.first_created_at,
-                last_created_at: item.last_created_at,
-                is_latest: item.is_latest,
-            })
-            .collect(),
-        selected_block_id: page.selected_block_id,
-        messages: page.messages,
-        has_prev_block: page.has_prev_block,
-        has_next_block: page.has_next_block,
+    let app_state = state.inner().clone();
+    let block_id = input.block_id;
+    tokio::task::spawn_blocking(move || {
+        let page = if let Some(block_id) = block_id {
+            conversation_service_v2().get_conversation_block(&app_state, &conversation_id, block_id)?
+        } else {
+            conversation_service_v2().get_conversation_last_block(&app_state, &conversation_id)?
+        };
+        Ok(ConversationBlockPageOutput {
+            blocks: page
+                .blocks
+                .into_iter()
+                .map(|item| ConversationBlockSummaryOutput {
+                    block_id: item.block_id,
+                    message_count: item.message_count,
+                    first_message_id: item.first_message_id,
+                    last_message_id: item.last_message_id,
+                    first_created_at: item.first_created_at,
+                    last_created_at: item.last_created_at,
+                    is_latest: item.is_latest,
+                })
+                .collect(),
+            selected_block_id: page.selected_block_id,
+            messages: page.messages,
+            has_prev_block: page.has_prev_block,
+            has_next_block: page.has_next_block,
+        })
     })
+    .await
+    .map_err(|err| format!("读取会话块分页任务异常：{err}"))?
 }
 
 #[tauri::command]
-fn get_unarchived_conversation_recent_messages(
+async fn get_unarchived_conversation_recent_messages(
     input: GetUnarchivedConversationRecentMessagesInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<ChatMessage>, String> {
-    let conversation_id = input.conversation_id.trim();
+    let conversation_id = input.conversation_id.trim().to_string();
     if conversation_id.is_empty() {
         return Err("conversationId is required.".to_string());
     }
-    conversation_service_v2().get_recent_messages_for_frontend_display_only(
-        state.inner(),
-        conversation_id,
-        input.limit,
-    )
+    let app_state = state.inner().clone();
+    let limit = input.limit;
+    tokio::task::spawn_blocking(move || {
+        conversation_service_v2().get_recent_messages_for_frontend_display_only(
+            &app_state,
+            &conversation_id,
+            limit,
+        )
+    })
+    .await
+    .map_err(|err| format!("读取会话最近消息任务异常：{err}"))?
 }
 
 #[tauri::command]
-fn get_unarchived_conversation_message_by_id(
+async fn get_unarchived_conversation_message_by_id(
     input: GetUnarchivedConversationMessageByIdInput,
     state: State<'_, AppState>,
 ) -> Result<ChatMessage, String> {
-    let conversation_id = input.conversation_id.trim();
+    let conversation_id = input.conversation_id.trim().to_string();
     if conversation_id.is_empty() {
         return Err("conversationId is required.".to_string());
     }
-    let message_id = input.message_id.trim();
+    let message_id = input.message_id.trim().to_string();
     if message_id.is_empty() {
         return Err("messageId is required.".to_string());
     }
-    conversation_service_v2().get_message_by_id_for_frontend_display_only(
-        state.inner(),
-        conversation_id,
-        message_id,
-    )
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        conversation_service_v2().get_message_by_id_for_frontend_display_only(
+            &app_state,
+            &conversation_id,
+            &message_id,
+        )
+    })
+    .await
+    .map_err(|err| format!("读取会话单条消息任务异常：{err}"))?
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2663,20 +2612,25 @@ struct DeleteDelegateConversationOutput {
 }
 
 #[tauri::command]
-fn get_delegate_conversation_messages(
+async fn get_delegate_conversation_messages(
     input: GetDelegateConversationMessagesInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<ChatMessage>, String> {
-    let conversation_id = input.conversation_id.trim();
+    let conversation_id = input.conversation_id.trim().to_string();
     if conversation_id.is_empty() {
         return Err("conversationId is required.".to_string());
     }
-    let mut messages = delegate_runtime_thread_conversation_get_any(state.inner(), conversation_id)?
-        .map(|conversation| conversation.messages.clone())
-        .ok_or_else(|| "Delegate conversation not found.".to_string())?;
-    materialize_chat_message_parts_from_media_refs(&mut messages, &state.data_path);
-    messages.retain(|message| !remote_im_delegate_message_is_internal(message));
-    Ok(project_messages_for_frontend_display_only(messages))
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let mut messages = delegate_runtime_thread_conversation_get_any(&app_state, &conversation_id)?
+            .map(|conversation| conversation.messages.clone())
+            .ok_or_else(|| "Delegate conversation not found.".to_string())?;
+        materialize_chat_message_parts_from_media_refs(&mut messages, &app_state.data_path);
+        messages.retain(|message| !remote_im_delegate_message_is_internal(message));
+        Ok(project_messages_for_frontend_display_only(messages))
+    })
+    .await
+    .map_err(|err| format!("读取委托会话消息任务异常：{err}"))?
 }
 
 fn remote_im_delegate_message_is_internal(message: &ChatMessage) -> bool {
@@ -2689,11 +2643,16 @@ fn remote_im_delegate_message_is_internal(message: &ChatMessage) -> bool {
 }
 
 #[tauri::command]
-fn get_delegate_conversation_block_page(
+async fn get_delegate_conversation_block_page(
     input: GetConversationBlockPageInput,
     state: State<'_, AppState>,
 ) -> Result<ConversationBlockPageOutput, String> {
-    get_delegate_conversation_block_page_inner(input, state.inner())
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        get_delegate_conversation_block_page_inner(input, &app_state)
+    })
+    .await
+    .map_err(|err| format!("读取委托会话块分页任务异常：{err}"))?
 }
 
 fn get_delegate_conversation_block_page_inner(
@@ -2859,11 +2818,16 @@ fn delete_unarchived_conversation_blocking(
 }
 
 #[tauri::command]
-fn get_active_conversation_messages(
+async fn get_active_conversation_messages(
     input: SessionSelector,
     state: State<'_, AppState>,
 ) -> Result<Vec<ChatMessage>, String> {
-    conversation_service_v2().get_active_conversation_messages(state.inner(), &input)
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        conversation_service_v2().get_active_conversation_messages(&app_state, &input)
+    })
+    .await
+    .map_err(|err| format!("读取活动会话消息任务异常：{err}"))?
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2979,11 +2943,11 @@ fn resolve_unarchived_conversation_messages_after(
 }
 
 #[tauri::command]
-fn get_active_conversation_messages_before(
+async fn get_active_conversation_messages_before(
     input: GetActiveConversationMessagesBeforeInput,
     state: State<'_, AppState>,
 ) -> Result<GetActiveConversationMessagesBeforeOutput, String> {
-    let before_message_id = input.before_message_id.trim();
+    let before_message_id = input.before_message_id.trim().to_string();
     if before_message_id.is_empty() {
         return Err("beforeMessageId is required.".to_string());
     }
@@ -2999,25 +2963,31 @@ fn get_active_conversation_messages_before(
         })
         .map(str::trim)
         .filter(|value| !value.is_empty())
+        .map(str::to_string)
         .ok_or_else(|| "conversationId is required.".to_string())?;
-    let page = conversation_service_v2().get_messages_before(
-        state.inner(),
-        conversation_id,
-        before_message_id,
-        limit,
-    )?;
-    Ok(GetActiveConversationMessagesBeforeOutput {
-        messages: page.messages,
-        has_more: page.has_more,
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let page = conversation_service_v2().get_messages_before(
+            &app_state,
+            &conversation_id,
+            &before_message_id,
+            limit,
+        )?;
+        Ok(GetActiveConversationMessagesBeforeOutput {
+            messages: page.messages,
+            has_more: page.has_more,
+        })
     })
+    .await
+    .map_err(|err| format!("读取活动会话历史消息任务异常：{err}"))?
 }
 
 #[tauri::command]
-fn get_active_conversation_messages_after(
+async fn get_active_conversation_messages_after(
     input: GetActiveConversationMessagesAfterInput,
     state: State<'_, AppState>,
 ) -> Result<GetActiveConversationMessagesAfterOutput, String> {
-    let after_message_id = input.after_message_id.trim();
+    let after_message_id = input.after_message_id.trim().to_string();
     if after_message_id.is_empty() {
         return Err("afterMessageId is required.".to_string());
     }
@@ -3033,16 +3003,22 @@ fn get_active_conversation_messages_after(
         })
         .map(str::trim)
         .filter(|value| !value.is_empty())
+        .map(str::to_string)
         .ok_or_else(|| "conversationId is required.".to_string())?;
-    let page = conversation_service_v2().get_messages_after(
-        state.inner(),
-        conversation_id,
-        after_message_id,
-        limit,
-    )?;
-    Ok(GetActiveConversationMessagesAfterOutput {
-        messages: page.messages,
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        let page = conversation_service_v2().get_messages_after(
+            &app_state,
+            &conversation_id,
+            &after_message_id,
+            limit,
+        )?;
+        Ok(GetActiveConversationMessagesAfterOutput {
+            messages: page.messages,
+        })
     })
+    .await
+    .map_err(|err| format!("读取活动会话后续消息任务异常：{err}"))?
 }
 
 

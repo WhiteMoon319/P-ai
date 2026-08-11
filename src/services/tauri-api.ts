@@ -2,6 +2,7 @@ import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { emit, emitTo, listen, type EventCallback, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import type { AttachmentReceipt } from "./attachment-transfer";
 
 type WebBridgeConfig = {
   chatUrl: string;
@@ -437,6 +438,55 @@ export async function pickTransportAttachments<T>(
   return receipts;
 }
 
+export type TransportAttachmentSource = {
+  id: string;
+  fileName: string;
+  path?: string;
+  file?: File;
+};
+
+/**
+ * 统一附件选择（只取文件描述，不读取内容）。
+ * 业务层先展示“上传中”占位，再对每个 source 调用 ingestTransportAttachmentSource 读取，
+ * 避免大文件读取期间界面无反馈。
+ */
+export async function pickTransportAttachmentSources(
+  options: TransportFileDialogOptions = { multiple: true },
+): Promise<TransportAttachmentSource[]> {
+  if (isTauriRuntimeAvailable()) {
+    const selected = await openTransportFileDialog({ ...options, directory: false });
+    const paths = (Array.isArray(selected) ? selected : [selected])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    return paths.map((path) => {
+      const normalized = path.replace(/\\/g, "/");
+      const fileName = normalized.split("/").pop() || path;
+      return { id: `local:${path}`, fileName, path };
+    });
+  }
+  const files = await pickBrowserTransportFiles({ ...options, directory: false });
+  return files.map((file, index) => ({
+    id: `web:${file.name}:${file.lastModified}:${index}`,
+    fileName: file.name || "attachment",
+    file,
+  }));
+}
+
+/** 统一读取单个已选附件，返回入库回执。 */
+export async function ingestTransportAttachmentSource(
+  source: TransportAttachmentSource,
+): Promise<AttachmentReceipt> {
+  if (source.path) {
+    return await ingestTransportLocalAttachment<AttachmentReceipt>({
+      path: source.path,
+    });
+  }
+  if (source.file) {
+    return await uploadTransportAttachment<AttachmentReceipt>(source.file);
+  }
+  throw new Error("附件来源缺少读取句柄");
+}
+
 type TransportHostMessage = {
   type?: string;
   discovery?: WebBridgeConfig;
@@ -498,6 +548,11 @@ export function canUseTransportHostRuntimeCheck(): boolean {
 
 /** 按住说话录音仅桌面宿主展示；Web 端不提供该能力，业务层直接读语义能力控制显隐。 */
 export function canUseTransportSpeechRecording(): boolean {
+  return isTauriRuntimeAvailable();
+}
+
+/** 是否运行在桌面 Tauri 宿主；Web/VS Code 宿主为 false。业务层用于宿主相关界面形态判定。 */
+export function isDesktopTauriHost(): boolean {
   return isTauriRuntimeAvailable();
 }
 
@@ -1487,8 +1542,6 @@ const TAURI_COMMAND_ALIASES: Record<string, string> = {
   "conversation.archiveSummary": "get_archive_summary",
   "conversation.exportShare": "export_conversation_share_json",
   "conversation.importArchives": "import_archives_from_json",
-  "conversation.sectionOrders.get": "get_conversation_section_orders",
-  "conversation.sectionOrders.save": "save_conversation_section_order",
   "app.bootstrapSnapshot": "load_app_bootstrap_snapshot",
   "app.language.set": "set_ui_language",
   "messageStore.migration.check": "check_message_store_migration",
@@ -1573,7 +1626,6 @@ const TAURI_INPUT_WRAPPED_COMMANDS = new Set([
   "prompt.systemPreview",
   "conversation.exportShare",
   "conversation.importArchives",
-  "conversation.sectionOrders.save",
   "department.primaryApi.set",
   "archives.export",
   "goal.create",
@@ -2725,4 +2777,274 @@ export function uploadTransportAttachment<T>(file: File): Promise<T> {
   return isTauriRuntimeAvailable()
     ? uploadNativeAttachment<T>(file)
     : uploadWebBridgeAttachment<T>(file);
+}
+
+// ==================== Git 面板 ====================
+
+export type GitPanelDetectOutput = {
+  gitAvailable: boolean;
+  repoRoot?: string | null;
+  checked: boolean;
+  error?: string | null;
+};
+
+export type GitPanelRunOutput = {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+};
+
+export type GitPanelStatusEntry = {
+  path: string;
+  stagedStatus: string;
+  unstagedStatus: string;
+};
+
+export type GitPanelStatusOutput = {
+  repoRoot: string;
+  branch: string;
+  entries: GitPanelStatusEntry[];
+};
+
+export type GitPanelDiffOutput = {
+  diff: string;
+};
+
+export type GitPanelCommitFileEntry = {
+  path: string;
+  status: string;
+};
+
+export type GitPanelCommitFilesOutput = {
+  entries: GitPanelCommitFileEntry[];
+};
+
+export type GitPanelBranchEntry = {
+  name: string;
+  isCurrent: boolean;
+  isRemote: boolean;
+};
+
+export type GitPanelRemoteEntry = {
+  name: string;
+  url: string;
+};
+
+export type GitPanelStashEntry = {
+  reference: string;
+  message: string;
+};
+
+export type GitPanelLogEntry = {
+  hash: string;
+  shortHash: string;
+  author: string;
+  date: string;
+  message: string;
+};
+
+export type GitPanelLogOutput = {
+  entries: GitPanelLogEntry[];
+};
+
+function gitPanelWorkspaceArgs(workspacePath: string): Record<string, unknown> {
+  return { input: { workspacePath: String(workspacePath || "").trim() } };
+}
+
+function gitPanelPathsArgs(workspacePath: string, paths: string[]): Record<string, unknown> {
+  const normalizedPaths = Array.isArray(paths)
+    ? paths.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  if (normalizedPaths.length === 0) throw new Error("缺少文件路径");
+  return {
+    input: {
+      workspacePath: String(workspacePath || "").trim(),
+      paths: normalizedPaths,
+    },
+  };
+}
+
+function gitPanelRequiredWorkspace(workspacePath: string): string {
+  const normalized = String(workspacePath || "").trim();
+  if (!normalized) throw new Error("缺少工作区路径");
+  return normalized;
+}
+
+export async function gitPanelDetect(workspacePath: string): Promise<GitPanelDetectOutput> {
+  return invokeTauri<GitPanelDetectOutput>("git_panel_detect", gitPanelWorkspaceArgs(gitPanelRequiredWorkspace(workspacePath)));
+}
+
+export async function gitPanelStatus(workspacePath: string): Promise<GitPanelStatusOutput> {
+  return invokeTauri<GitPanelStatusOutput>("git_panel_status", gitPanelWorkspaceArgs(gitPanelRequiredWorkspace(workspacePath)));
+}
+
+export async function gitPanelDiff(input: {
+  workspacePath: string;
+  path: string;
+  staged?: boolean;
+  hash?: string;
+}): Promise<GitPanelDiffOutput> {
+  const workspacePath = gitPanelRequiredWorkspace(input.workspacePath);
+  const path = String(input.path || "").trim();
+  if (!path) throw new Error("缺少文件路径");
+  return invokeTauri<GitPanelDiffOutput>("git_panel_diff", {
+    input: {
+      workspacePath,
+      path,
+      staged: !!input.staged,
+      hash: String(input.hash || "").trim(),
+    },
+  });
+}
+
+export async function gitPanelStage(workspacePath: string, paths: string[]): Promise<GitPanelRunOutput> {
+  return invokeTauri<GitPanelRunOutput>("git_panel_stage", gitPanelPathsArgs(gitPanelRequiredWorkspace(workspacePath), paths));
+}
+
+export async function gitPanelUnstage(workspacePath: string, paths: string[]): Promise<GitPanelRunOutput> {
+  return invokeTauri<GitPanelRunOutput>("git_panel_unstage", gitPanelPathsArgs(gitPanelRequiredWorkspace(workspacePath), paths));
+}
+
+export async function gitPanelCommit(workspacePath: string, message: string, amend = false): Promise<GitPanelRunOutput> {
+  const normalizedWorkspace = gitPanelRequiredWorkspace(workspacePath);
+  const normalizedMessage = String(message || "").trim();
+  if (!normalizedMessage) throw new Error("提交信息不能为空");
+  return invokeTauri<GitPanelRunOutput>("git_panel_commit", {
+    input: { workspacePath: normalizedWorkspace, message: normalizedMessage, amend: !!amend },
+  });
+}
+
+export async function gitPanelDiscard(workspacePath: string, paths: string[]): Promise<GitPanelRunOutput> {
+  return invokeTauri<GitPanelRunOutput>("git_panel_discard", gitPanelPathsArgs(gitPanelRequiredWorkspace(workspacePath), paths));
+}
+
+export async function gitPanelStashList(workspacePath: string): Promise<GitPanelStashEntry[]> {
+  return invokeTauri<GitPanelStashEntry[]>("git_panel_stash_list", gitPanelWorkspaceArgs(gitPanelRequiredWorkspace(workspacePath)));
+}
+
+export async function gitPanelStashFiles(workspacePath: string, stashRef: string): Promise<GitPanelCommitFilesOutput> {
+  const normalizedWorkspace = gitPanelRequiredWorkspace(workspacePath);
+  const normalizedRef = String(stashRef || "").trim();
+  if (!normalizedRef) throw new Error("缺少存储引用");
+  return invokeTauri<GitPanelCommitFilesOutput>("git_panel_stash_files", {
+    input: { workspacePath: normalizedWorkspace, stashRef: normalizedRef },
+  });
+}
+
+export async function gitPanelStashCreate(workspacePath: string, message = ""): Promise<GitPanelRunOutput> {
+  return invokeTauri<GitPanelRunOutput>("git_panel_stash_create", {
+    input: { workspacePath: gitPanelRequiredWorkspace(workspacePath), message: String(message || "").trim() },
+  });
+}
+
+export async function gitPanelStashApply(workspacePath: string, stashRef: string): Promise<GitPanelRunOutput> {
+  return invokeTauri<GitPanelRunOutput>("git_panel_stash_apply", {
+    input: { workspacePath: gitPanelRequiredWorkspace(workspacePath), stashRef: String(stashRef || "").trim() },
+  });
+}
+
+export async function gitPanelStashPop(workspacePath: string, stashRef: string): Promise<GitPanelRunOutput> {
+  return invokeTauri<GitPanelRunOutput>("git_panel_stash_pop", {
+    input: { workspacePath: gitPanelRequiredWorkspace(workspacePath), stashRef: String(stashRef || "").trim() },
+  });
+}
+
+export async function gitPanelStashDrop(workspacePath: string, stashRef: string): Promise<GitPanelRunOutput> {
+  return invokeTauri<GitPanelRunOutput>("git_panel_stash_drop", {
+    input: { workspacePath: gitPanelRequiredWorkspace(workspacePath), stashRef: String(stashRef || "").trim() },
+  });
+}
+
+export async function gitPanelBranchList(workspacePath: string): Promise<GitPanelBranchEntry[]> {
+  return invokeTauri<GitPanelBranchEntry[]>("git_panel_branch_list", gitPanelWorkspaceArgs(gitPanelRequiredWorkspace(workspacePath)));
+}
+
+export async function gitPanelBranchCreate(workspacePath: string, name: string, startPoint = ""): Promise<GitPanelRunOutput> {
+  const normalizedWorkspace = gitPanelRequiredWorkspace(workspacePath);
+  const normalizedName = String(name || "").trim();
+  if (!normalizedName) throw new Error("分支名不能为空");
+  return invokeTauri<GitPanelRunOutput>("git_panel_branch_create", {
+    input: { workspacePath: normalizedWorkspace, name: normalizedName, startPoint: String(startPoint || "").trim() },
+  });
+}
+
+export async function gitPanelBranchDelete(workspacePath: string, name: string): Promise<GitPanelRunOutput> {
+  const normalizedWorkspace = gitPanelRequiredWorkspace(workspacePath);
+  const normalizedName = String(name || "").trim();
+  if (!normalizedName) throw new Error("分支名不能为空");
+  return invokeTauri<GitPanelRunOutput>("git_panel_branch_delete", {
+    input: { workspacePath: normalizedWorkspace, name: normalizedName, startPoint: "" },
+  });
+}
+
+export async function gitPanelCheckout(workspacePath: string, reference: string): Promise<GitPanelRunOutput> {
+  const normalizedWorkspace = gitPanelRequiredWorkspace(workspacePath);
+  const normalizedReference = String(reference || "").trim();
+  if (!normalizedReference) throw new Error("引用不能为空");
+  return invokeTauri<GitPanelRunOutput>("git_panel_checkout", {
+    input: { workspacePath: normalizedWorkspace, reference: normalizedReference },
+  });
+}
+
+export type GitPanelCheckoutCheckOutput = {
+  dirtyPaths: string[];
+  changedPaths: string[];
+  conflictingPaths: string[];
+};
+
+export async function gitPanelCheckoutCheck(workspacePath: string, reference: string): Promise<GitPanelCheckoutCheckOutput> {
+  const normalizedWorkspace = gitPanelRequiredWorkspace(workspacePath);
+  const normalizedReference = String(reference || "").trim();
+  if (!normalizedReference) throw new Error("引用不能为空");
+  return invokeTauri<GitPanelCheckoutCheckOutput>("git_panel_checkout_check", {
+    input: { workspacePath: normalizedWorkspace, reference: normalizedReference },
+  });
+}
+
+export async function gitPanelRemoteList(workspacePath: string): Promise<GitPanelRemoteEntry[]> {
+  return invokeTauri<GitPanelRemoteEntry[]>("git_panel_remote_list", gitPanelWorkspaceArgs(gitPanelRequiredWorkspace(workspacePath)));
+}
+
+export async function gitPanelFetch(workspacePath: string): Promise<GitPanelRunOutput> {
+  return invokeTauri<GitPanelRunOutput>("git_panel_fetch", gitPanelWorkspaceArgs(gitPanelRequiredWorkspace(workspacePath)));
+}
+
+export async function gitPanelPull(workspacePath: string): Promise<GitPanelRunOutput> {
+  return invokeTauri<GitPanelRunOutput>("git_panel_pull", gitPanelWorkspaceArgs(gitPanelRequiredWorkspace(workspacePath)));
+}
+
+export async function gitPanelPush(workspacePath: string): Promise<GitPanelRunOutput> {
+  return invokeTauri<GitPanelRunOutput>("git_panel_push", gitPanelWorkspaceArgs(gitPanelRequiredWorkspace(workspacePath)));
+}
+
+export async function gitPanelSync(workspacePath: string): Promise<GitPanelRunOutput> {
+  return invokeTauri<GitPanelRunOutput>("git_panel_sync", gitPanelWorkspaceArgs(gitPanelRequiredWorkspace(workspacePath)));
+}
+
+export async function gitPanelLog(workspacePath: string, limit?: number, skip?: number): Promise<GitPanelLogOutput> {
+  return invokeTauri<GitPanelLogOutput>("git_panel_log", {
+    input: {
+      workspacePath: gitPanelRequiredWorkspace(workspacePath),
+      limit: Number(limit) || undefined,
+      skip: Number(skip) || undefined,
+    },
+  });
+}
+
+export async function gitPanelShow(workspacePath: string, hash: string, path = ""): Promise<GitPanelDiffOutput> {
+  const normalizedWorkspace = gitPanelRequiredWorkspace(workspacePath);
+  const normalizedHash = String(hash || "").trim();
+  if (!normalizedHash) throw new Error("缺少提交哈希");
+  return invokeTauri<GitPanelDiffOutput>("git_panel_show", {
+    input: { workspacePath: normalizedWorkspace, hash: normalizedHash, path: String(path || "").trim() },
+  });
+}
+
+export async function gitPanelCommitFiles(workspacePath: string, hash: string): Promise<GitPanelCommitFilesOutput> {
+  const normalizedWorkspace = gitPanelRequiredWorkspace(workspacePath);
+  const normalizedHash = String(hash || "").trim();
+  if (!normalizedHash) throw new Error("缺少提交哈希");
+  return invokeTauri<GitPanelCommitFilesOutput>("git_panel_commit_files", {
+    input: { workspacePath: normalizedWorkspace, hash: normalizedHash },
+  });
 }

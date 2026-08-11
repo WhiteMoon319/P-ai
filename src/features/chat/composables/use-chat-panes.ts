@@ -12,6 +12,8 @@ export const PANE_WIDTH_LIMITS = {
 
 export const PANE_CENTER_MIN_WIDTH = 350;
 export const PANE_OVERLAY_VISIBLE_MARGIN = 56;
+/** 窄容器（手机竖屏等）下浮层侧边栏直接全屏覆盖，不再保留主区缝隙。 */
+const NARROW_CONTAINER_BREAKPOINT_PX = 768;
 export const PANE_WIDTH_STORAGE_KEYS = {
   left: "easy_call.chat_left_sidebar_width.v1",
   right: "easy_call.chat_right_sidebar_width.v1",
@@ -77,12 +79,14 @@ export function useChatPanes(options: UseChatPanesOptions) {
   function overlayVisibleWidth(side: PaneResizeSide): number {
     const width = effectivePaneWidth(side);
     if (containerWidth.value <= 0) return width;
+    if (containerWidth.value < NARROW_CONTAINER_BREAKPOINT_PX) return containerWidth.value;
     return Math.min(width, Math.max(PANE_WIDTH_LIMITS[side].min, containerWidth.value - PANE_OVERLAY_VISIBLE_MARGIN));
   }
 
   function overlayMaxWidth(side: PaneResizeSide): number {
     const limits = PANE_WIDTH_LIMITS[side];
     if (containerWidth.value <= 0) return limits.max;
+    if (containerWidth.value < NARROW_CONTAINER_BREAKPOINT_PX) return containerWidth.value;
     return Math.min(limits.max, Math.max(limits.min, containerWidth.value - PANE_OVERLAY_VISIBLE_MARGIN));
   }
 

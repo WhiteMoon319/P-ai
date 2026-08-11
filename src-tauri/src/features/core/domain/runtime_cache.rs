@@ -291,7 +291,10 @@ fn sync_cached_app_data_conversation_metadata(
         sanitize_runtime_cached_app_data(data);
     }
     drop(cached);
-    sync_cached_app_data_signature(state)
+    // 不在此处重算磁盘签名：本路径只改内存元数据（未落盘），磁盘文件未变，
+    // 签名必然与之前相同；且调用方随后会 refresh_cached_app_data_dirty 置脏，
+    // 读路径走 dirty_cache_hit 不比较签名。落盘完成后 persist worker 会重算。
+    Ok(())
 }
 
 fn sync_cached_app_data_conversation_deleted(

@@ -80,9 +80,14 @@
         :key="file.id"
         class="badge badge-ghost gap-1 py-3"
       >
-        <FileText class="h-3.5 w-3.5" />
+        <span v-if="file.pending" class="loading loading-spinner loading-xs"></span>
+        <FileText v-else class="h-3.5 w-3.5" />
         <span class="text-xs">{{ file.fileName }}</span>
-        <button class="btn btn-ghost btn-sm btn-square" @click="emit('removeQueuedAttachmentNotice', idx)">
+        <button
+          v-if="!file.pending"
+          class="btn btn-ghost btn-sm btn-square"
+          @click="emit('removeQueuedAttachmentNotice', idx)"
+        >
           <X class="h-3 w-3" />
         </button>
       </div>
@@ -151,6 +156,193 @@
           {{ t("chat.noInstructionPresets") }}
         </div>
       </div>
+      <div v-if="mobileViewport" class="flex flex-col gap-1.5">
+        <div class="flex items-center gap-1.5">
+          <button
+            v-if="isMobileCompact"
+            type="button"
+            class="btn btn-sm btn-circle btn-ghost shrink-0"
+            :title="t('common.expand')"
+            @click="expandMobileComposer"
+          >
+            <CircleChevronUp class="h-4 w-4" />
+          </button>
+          <button
+            v-else
+            type="button"
+            class="btn btn-sm btn-circle btn-ghost shrink-0"
+            :title="t('common.collapse')"
+            @click="mobileComposerExpanded = false"
+          >
+            <CircleChevronDown class="h-4 w-4" />
+          </button>
+          <div class="min-w-0 flex-1 rounded-2xl bg-base-200 px-3 py-1.5">
+            <div v-if="clipboardImages.length > 0" class="ecall-chat-composer-image-previews mb-1.5">
+              <div
+                v-for="(img, idx) in clipboardImages"
+                :key="`${img.mime}-${idx}`"
+                class="ecall-chat-composer-image-preview"
+              >
+                <img
+                  v-if="clipboardImagePreviewSrc(img)"
+                  class="ecall-chat-composer-image-preview-media"
+                  :src="clipboardImagePreviewSrc(img)"
+                  :alt="t('chat.image', { index: idx + 1 })"
+                  draggable="false"
+                />
+                <div v-else class="ecall-chat-composer-file-preview">
+                  <FileText class="h-5 w-5" />
+                  <span class="text-xs">{{ isPdfMime(img.mime) ? `PDF ${idx + 1}` : t("chat.image", { index: idx + 1 }) }}</span>
+                </div>
+                <button
+                  type="button"
+                  class="ecall-chat-composer-image-remove"
+                  aria-label="删除图片"
+                  @mousedown.prevent
+                  @click.stop="removeClipboardImageAt(idx)"
+                >
+                  <X class="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+            <textarea
+              ref="chatInputRef"
+              v-model="localChatInput"
+              class="block w-full resize-none overflow-y-auto bg-transparent text-sm leading-6 outline-none chat-input-no-focus"
+              rows="1"
+              :placeholder="effectiveChatInputPlaceholder"
+              @input="handleChatInputInput"
+              @compositionstart="handleChatInputCompositionStart"
+              @compositionend="handleChatInputCompositionEnd"
+              @keydown="handleChatInputKeydown"
+              @focus="handleChatInputFocus"
+              @blur="handleChatInputBlur"
+            ></textarea>
+          </div>
+          <button
+            v-if="showConversationActions"
+            type="button"
+            class="btn btn-sm btn-circle btn-ghost shrink-0"
+            :title="t('chat.attach')"
+            @click="emit('pickAttachments')"
+          >
+            <Paperclip class="h-3.5 w-3.5" />
+          </button>
+          <button
+            v-if="showStopAction"
+            type="button"
+            class="btn btn-sm btn-circle shrink-0 btn-error"
+            :disabled="frozen || busy || !!stopChatDisabled"
+            :title="`${t('chat.stop')} / ${t('chat.stopReplying')}`"
+            @click="emit('stopChat')"
+          >
+            <Square class="h-3.5 w-3.5 fill-current" />
+          </button>
+          <div v-else class="relative flex shrink-0">
+            <button
+              type="button"
+              class="btn btn-sm btn-circle shrink-0"
+              :class="composerInputBlank ? 'bg-base-200' : 'btn-success'"
+              :disabled="!composerInputBlank && (frozen || busy)"
+              :title="composerInputBlank ? t('chat.sendModeMenu') : t('chat.send')"
+              @click="composerInputBlank ? (sendModeMenuOpen = !sendModeMenuOpen) : handleSendChat()"
+              @contextmenu.prevent="sendModeMenuOpen = !sendModeMenuOpen"
+            >
+              <ArrowUp class="h-3.5 w-3.5" />
+            </button>
+            <div
+              v-if="sendModeMenuOpen"
+              class="absolute bottom-full right-0 z-50 mb-1.5 min-w-52 overflow-hidden rounded-box border border-base-300 bg-base-100 text-base-content shadow-xl"
+            >
+              <div class="flex flex-col p-1">
+                <button
+                  type="button"
+                  class="flex min-h-8 w-full items-center justify-between gap-3 rounded-lg px-2.5 text-left text-sm transition-colors hover:bg-base-200"
+                  @click="setSendMode('enter')"
+                >
+                  <span>{{ t("chat.sendModeEnter") }}</span>
+                  <Check v-if="sendMode === 'enter'" class="h-4 w-4 shrink-0 text-primary" />
+                </button>
+                <button
+                  type="button"
+                  class="flex min-h-8 w-full items-center justify-between gap-3 rounded-lg px-2.5 text-left text-sm transition-colors hover:bg-base-200"
+                  @click="setSendMode('ctrl_enter')"
+                >
+                  <span>{{ t("chat.sendModeCtrlEnter") }}</span>
+                  <Check v-if="sendMode === 'ctrl_enter'" class="h-4 w-4 shrink-0 text-primary" />
+                </button>
+                <div class="px-2.5 pt-1 pb-0.5 text-xs opacity-50">{{ t("chat.sendModeAltS") }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-if="!isMobileCompact" class="flex items-center justify-between">
+          <div class="flex items-center">
+            <div
+              :class="supervisionActive ? 'aura aura-rainbow aura-sm' : undefined"
+              :style="supervisionActive ? { '--aura-radius': '9999px' } : undefined"
+            >
+              <button
+                class="btn btn-sm btn-circle shrink-0"
+                :class="supervisionActive ? 'btn-primary' : 'btn-ghost'"
+                :disabled="frozen || supervisionDisabled"
+                :title="supervisionTitle || t('chat.supervision.buttonTitle')"
+                @click="emit('openSupervisionTask')"
+              >
+                <Target class="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <button
+              v-if="showConversationActions && canUseTransportSpeechRecording()"
+              class="btn btn-sm btn-circle shrink-0"
+              :class="recording ? 'btn-error' : 'btn-ghost'"
+              :disabled="!canRecord"
+              :title="recording ? t('chat.recording', { seconds: Math.max(1, Math.round(recordingMs / 1000)) }) : t('chat.holdRecord', { hotkey: recordHotkey })"
+              @mousedown.prevent="emit('startRecording')"
+              @mouseup.prevent="emit('stopRecording')"
+              @mouseleave.prevent="recording && emit('stopRecording')"
+              @touchstart.prevent="emit('startRecording')"
+              @touchend.prevent="emit('stopRecording')"
+            >
+              <Mic class="h-3.5 w-3.5" />
+            </button>
+            <div v-if="normalizedChatModelOptions.length > 0" ref="modelDropdownRef" class="relative min-w-0">
+              <button
+                ref="modelDropdownTriggerRef"
+                type="button"
+                class="btn btn-sm h-8 min-h-8 w-auto min-w-28 max-w-56 justify-between border-0 shadow-none bg-base-100 text-base-content hover:bg-base-200 max-md:min-w-0"
+                :disabled="normalizedChatModelOptions.length === 0"
+                :title="selectedModelTitle"
+                @click="modelDropdownOpen = !modelDropdownOpen"
+              >
+                <span class="truncate">{{ selectedModelName }}</span>
+                <ChevronDown class="h-3 w-3 shrink-0 opacity-50 rotate-180" :class="{ 'rotate-0': modelDropdownOpen }" />
+              </button>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="planModeEnabled"
+              type="button"
+              class="inline-flex h-8 min-h-8 shrink-0 select-none items-center rounded-full bg-info px-3 text-xs font-medium leading-none text-info-content"
+              :title="`Shift+Tab ${t('chat.plan.mode')}`"
+              @click="togglePlanMode()"
+            >
+              {{ t("chat.plan.mode") }}
+            </button>
+            <button
+              v-else-if="planSuggestionVisible"
+              type="button"
+              class="inline-flex h-8 min-h-8 shrink-0 select-none items-center rounded-full bg-base-200 px-3 text-xs font-medium leading-none text-base-content"
+              :title="`Shift+Tab ${t('chat.plan.mode')}`"
+              @click="togglePlanMode()"
+            >
+              {{ t("chat.plan.mode") }}
+            </button>
+          </div>
+        </div>
+      </div>
+      <template v-else>
       <div class="relative">
         <div
           class="ecall-chat-composer-input-shell w-full"
@@ -200,72 +392,6 @@
         </div>
         <FloatingScrollbar v-if="chatInputRef" :target="chatInputRef" />
       </div>
-      <Teleport to="body">
-        <div
-          v-if="mentionPanelOpen"
-          class="fixed z-1200"
-          :data-theme="teleportTheme"
-          :style="mentionPanelStyle"
-        >
-          <div
-            ref="mentionPanelScrollRef"
-            class="dropdown-content max-h-[min(56vh,24rem)] w-max max-w-[min(80vw,20rem)] overflow-y-auto overscroll-contain rounded-box border border-base-300 bg-base-100 p-1 text-base-content shadow-xl"
-          >
-            <ul class="flex flex-col gap-1">
-              <li
-                v-for="(item, index) in filteredMentionOptions"
-                :key="`${item.agentId}:${item.departmentId}`"
-              >
-                <button
-                  type="button"
-                  :data-mention-option-index="index"
-                  class="flex min-h-0 w-full items-start gap-2 rounded-xl px-2 py-1.5 text-left text-base-content transition-colors"
-                  :class="[
-                    mentionFocusIndex === index ? 'bg-base-200' : '',
-                    item.mentionable ? 'hover:bg-base-200/80' : 'opacity-65',
-                  ]"
-                  :disabled="!item.mentionable"
-                  @click="applyMention(item)"
-                >
-                  <div class="indicator shrink-0">
-                    <span
-                      v-if="isMentionSelected(item)"
-                      class="indicator-item inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-micro font-bold text-primary-content"
-                    >
-                      @
-                    </span>
-                    <div class="avatar">
-                      <div class="w-7 rounded-full">
-                        <img
-                          v-if="item.avatarUrl"
-                          :src="item.avatarUrl"
-                          :alt="item.agentName"
-                          class="w-7 h-7 rounded-full object-cover"
-                        />
-                        <div v-else class="bg-neutral text-neutral-content w-7 h-7 rounded-full flex items-center justify-center text-caption">
-                          {{ avatarInitial(item.agentName) }}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="min-w-0 flex-1 pr-0.5">
-                    <div class="truncate text-sm leading-5">@{{ mentionDisplayLabel(item) }}</div>
-                    <div
-                      v-if="!item.mentionable && item.unavailableReason"
-                      class="truncate text-xs leading-4 text-base-content/60"
-                    >
-                      {{ item.unavailableReason }}
-                    </div>
-                  </div>
-                </button>
-              </li>
-            </ul>
-            <div v-if="filteredMentionOptions.length === 0" class="px-2.5 py-2 text-sm opacity-60">
-              {{ t("chat.noMentionCandidates") }}
-            </div>
-          </div>
-        </div>
-      </Teleport>
       <div class="flex items-center justify-between">
         <div class="flex items-center">
           <div
@@ -355,7 +481,7 @@
               @click="composerInputBlank ? (sendModeMenuOpen = !sendModeMenuOpen) : handleSendChat()"
               @contextmenu.prevent="sendModeMenuOpen = !sendModeMenuOpen"
             >
-              <CornerRightUp class="h-3.5 w-3.5" />
+              <ArrowUp class="h-3.5 w-3.5" />
             </button>
             <div
               v-if="sendModeMenuOpen"
@@ -384,6 +510,73 @@
           </div>
         </div>
       </div>
+      </template>
+      <Teleport to="body">
+        <div
+          v-if="mentionPanelOpen"
+          class="fixed z-1200"
+          :data-theme="teleportTheme"
+          :style="mentionPanelStyle"
+        >
+          <div
+            ref="mentionPanelScrollRef"
+            class="dropdown-content max-h-[min(56vh,24rem)] w-max max-w-[min(80vw,20rem)] overflow-y-auto overscroll-contain rounded-box border border-base-300 bg-base-100 p-1 text-base-content shadow-xl"
+          >
+            <ul class="flex flex-col gap-1">
+              <li
+                v-for="(item, index) in filteredMentionOptions"
+                :key="`${item.agentId}:${item.departmentId}`"
+              >
+                <button
+                  type="button"
+                  :data-mention-option-index="index"
+                  class="flex min-h-0 w-full items-start gap-2 rounded-xl px-2 py-1.5 text-left text-base-content transition-colors"
+                  :class="[
+                    mentionFocusIndex === index ? 'bg-base-200' : '',
+                    item.mentionable ? 'hover:bg-base-200/80' : 'opacity-65',
+                  ]"
+                  :disabled="!item.mentionable"
+                  @click="applyMention(item)"
+                >
+                  <div class="indicator shrink-0">
+                    <span
+                      v-if="isMentionSelected(item)"
+                      class="indicator-item inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-micro font-bold text-primary-content"
+                    >
+                      @
+                    </span>
+                    <div class="avatar">
+                      <div class="w-7 rounded-full">
+                        <img
+                          v-if="item.avatarUrl"
+                          :src="item.avatarUrl"
+                          :alt="item.agentName"
+                          class="w-7 h-7 rounded-full object-cover"
+                        />
+                        <div v-else class="bg-neutral text-neutral-content w-7 h-7 rounded-full flex items-center justify-center text-caption">
+                          {{ avatarInitial(item.agentName) }}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="min-w-0 flex-1 pr-0.5">
+                    <div class="truncate text-sm leading-5">@{{ mentionDisplayLabel(item) }}</div>
+                    <div
+                      v-if="!item.mentionable && item.unavailableReason"
+                      class="truncate text-xs leading-4 text-base-content/60"
+                    >
+                      {{ item.unavailableReason }}
+                    </div>
+                  </div>
+                </button>
+              </li>
+            </ul>
+            <div v-if="filteredMentionOptions.length === 0" class="px-2.5 py-2 text-sm opacity-60">
+              {{ t("chat.noMentionCandidates") }}
+            </div>
+          </div>
+        </div>
+      </Teleport>
     </div>
     </template>
     </template>
@@ -415,7 +608,7 @@
 <script setup lang="ts">
 import { Teleport, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { CalendarPlus, Check, ChevronDown, ClipboardList, CornerRightUp, FileText, History, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X } from "@lucide/vue";
+import { ArrowUp, CalendarPlus, Check, ChevronDown, CircleChevronDown, CircleChevronUp, ClipboardList, FileText, History, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption } from "../../../types/app";
 import ChatQueuePreview from "./ChatQueuePreview.vue";
 import ChatSelectionActionPanel from "./ChatSelectionActionPanel.vue";
@@ -433,7 +626,7 @@ import { isMobileTouchViewport } from "../utils/chat-input-focus";
 import { canUseTransportSpeechRecording } from "../../../services/tauri-api";
 
 type BinaryAttachment = { mime: string; bytesBase64: string; previewDataUrl?: string };
-type QueuedAttachmentNotice = { id: string; fileName: string; path: string; mime: string };
+type QueuedAttachmentNotice = { id: string; fileName: string; path: string; mime: string; pending?: boolean };
 type ConversationDepartmentOption = DepartmentPersonaOption;
 type MentionOptionView = {
   agentId: string;
@@ -442,6 +635,7 @@ type MentionOptionView = {
   departmentName: string;
   avatarUrl?: string;
   mentionable: boolean;
+  hidden?: boolean;
   unavailableReason?: string;
 };
 
@@ -569,9 +763,12 @@ const teleportTheme = computed(() => {
 
 function openCreateConversationDialog() {
   if (typeof window === "undefined") {
-    const defaultOption = props.createConversationDepartmentOptions.find((option) =>
+    const options = props.createConversationDepartmentOptions.filter(
+      (option) => !option.personaMissing && !!String(option.agentId || "").trim(),
+    );
+    const defaultOption = options.find((option) =>
       String(option.departmentId || "").trim() === String(props.defaultCreateConversationDepartmentId || "").trim()
-    ) || props.createConversationDepartmentOptions[0];
+    ) || options[0];
     emit("createConversation", {
       departmentId: String(defaultOption?.departmentId || props.defaultCreateConversationDepartmentId || "").trim(),
       agentId: String(defaultOption?.agentId || "").trim() || undefined,
@@ -662,6 +859,44 @@ const chatInputCompositionEndedAt = ref(0);
 const sendMode = ref<SendMode>("enter");
 const sendModeMenuOpen = ref(false);
 const sendModeMenuRef = ref<HTMLDivElement | null>(null);
+
+/** 手机窄屏（触摸）下的单行输入条：默认收起为单行，展开为完整输入模式。 */
+const mobileViewport = ref(isMobileTouchViewport());
+const mobileComposerExpanded = ref(false);
+const isMobileCompact = computed(() => mobileViewport.value && !mobileComposerExpanded.value);
+
+function syncMobileViewport() {
+  mobileViewport.value = isMobileTouchViewport();
+  if (!mobileViewport.value) {
+    mobileComposerExpanded.value = false;
+  }
+}
+
+/** 手机模式下软键盘收起时（输入框仍聚焦），收回完整输入为单行。 */
+let mobileKeyboardVisible = false;
+function handleVisualViewportResize() {
+  const vv = window.visualViewport;
+  if (!vv || !mobileViewport.value) return;
+  const keyboardVisible = vv.height < window.innerHeight * 0.85;
+  if (mobileKeyboardVisible && !keyboardVisible && mobileComposerExpanded.value) {
+    mobileComposerExpanded.value = false;
+  }
+  mobileKeyboardVisible = keyboardVisible;
+}
+
+function expandMobileComposer() {
+  mobileComposerExpanded.value = true;
+  void nextTick(() => {
+    chatInputRef.value?.focus();
+    scheduleResizeChatInput();
+  });
+}
+
+watch(isMobileCompact, (compact) => {
+  if (compact && chatInputRef.value) {
+    chatInputRef.value.style.height = "";
+  }
+});
 
 function loadSendMode() {
   try {
@@ -805,7 +1040,8 @@ function ideContextReferenceTitle(item: IdeContextReferenceItem): string {
 }
 
 const showStopAction = computed(() =>
-  props.chatting || ["queued", "waiting", "streaming"].includes(String(props.frontendRoundPhase || "idle")),
+  (props.chatting || ["queued", "waiting", "streaming"].includes(String(props.frontendRoundPhase || "idle")))
+  && composerInputBlank.value,
 );
 const selectedMentions = computed(() =>
   (Array.isArray(props.selectedMentions) ? props.selectedMentions : [])
@@ -828,9 +1064,10 @@ const filteredMentionOptions = computed<MentionOptionView[]>(() => {
       departmentName: String(item?.departmentName || "").trim(),
       avatarUrl: String(item?.avatarUrl || "").trim() || undefined,
       mentionable: !!item?.mentionable,
+      hidden: !!item?.hidden,
       unavailableReason: String(item?.unavailableReason || "").trim() || undefined,
     }))
-    .filter((item) => !!item.agentId && !!item.agentName && !!item.mentionable)
+    .filter((item) => !!item.agentId && !!item.agentName && !item.hidden)
     .filter((item) => {
       if (!query) return true;
       if (item.agentName.toLowerCase().includes(query)) return true;
@@ -1005,15 +1242,21 @@ function selectMentionByIndex(index: number) {
   const list = filteredMentionOptions.value;
   if (list.length === 0) return;
   const nextIndex = Math.max(0, Math.min(list.length - 1, index));
+  const target = list[nextIndex];
+  if (!target.mentionable) return;
   mentionFocusIndex.value = nextIndex;
-  applyMention(list[nextIndex]);
+  applyMention(target);
 }
 
 function moveMentionFocus(delta: number) {
   const list = filteredMentionOptions.value;
   if (list.length === 0) return;
-  const next = mentionFocusIndex.value + delta;
-  mentionFocusIndex.value = Math.max(0, Math.min(list.length - 1, next));
+  let next = mentionFocusIndex.value + delta;
+  while (next >= 0 && next < list.length && !list[next].mentionable) {
+    next += delta;
+  }
+  if (next < 0 || next >= list.length) return;
+  mentionFocusIndex.value = next;
   scrollMentionFocusIntoView();
 }
 
@@ -1046,7 +1289,8 @@ function updateMentionState() {
   mentionRange.value = { start: atStart, end: cursor };
   refreshMentionPanelPosition();
   mentionPanelOpen.value = true;
-  mentionFocusIndex.value = 0;
+  const firstMentionable = filteredMentionOptions.value.findIndex((item) => item.mentionable);
+  mentionFocusIndex.value = firstMentionable >= 0 ? firstMentionable : 0;
 }
 
 const modelDropdownOpen = ref(false);
@@ -1163,7 +1407,12 @@ function togglePlanMode() {
 function resizeChatInput() {
   const el = chatInputRef.value;
   if (!el) return;
-  const minHeight = 48;
+  if (isMobileCompact.value) {
+    el.style.height = "";
+    el.style.overflowY = "auto";
+    return;
+  }
+  const minHeight = mobileViewport.value ? 24 : 48;
   const maxHeight = 160;
   el.style.height = "auto";
   const nextHeight = Math.max(Math.min(el.scrollHeight, maxHeight), minHeight);
@@ -1255,6 +1504,7 @@ function handleSendChat() {
   const plainText = String(localChatInput.value || "").trim();
   if (isMobileTouchViewport()) {
     chatInputRef.value?.blur();
+    mobileComposerExpanded.value = false;
   }
   emit("sendChat");
   recordSentTextIfNeeded(plainText);
@@ -1280,10 +1530,14 @@ function handleChatInputFocus() {
   }
 }
 
-function handleChatInputBlur() {
+function handleChatInputBlur(event: FocusEvent) {
   if (props.composerScope) {
     clearChatComposerFocus(props.composerScope);
   }
+  if (!mobileViewport.value) return;
+  const nextTarget = event.relatedTarget as Node | null;
+  if (nextTarget && composerRootRef.value?.contains(nextTarget)) return;
+  mobileComposerExpanded.value = false;
 }
 
 function handleChatInputKeydown(event: KeyboardEvent) {
@@ -1456,11 +1710,14 @@ defineExpose({
 onMounted(() => {
   loadChatInputHistory();
   loadSendMode();
+  syncMobileViewport();
   window.addEventListener("keydown", handleWindowKeydown);
   window.addEventListener("resize", refreshMentionPanelPosition);
   window.addEventListener("scroll", refreshMentionPanelPosition, true);
   window.addEventListener("resize", refreshModelDropdownPosition);
   window.addEventListener("scroll", refreshModelDropdownPosition, true);
+  window.addEventListener("resize", syncMobileViewport);
+  window.visualViewport?.addEventListener("resize", handleVisualViewportResize);
   nextTick(() => {
     resizeChatInput();
     refreshMentionPanelPosition();
@@ -1473,6 +1730,8 @@ onBeforeUnmount(() => {
   window.removeEventListener("scroll", refreshMentionPanelPosition, true);
   window.removeEventListener("resize", refreshModelDropdownPosition);
   window.removeEventListener("scroll", refreshModelDropdownPosition, true);
+  window.removeEventListener("resize", syncMobileViewport);
+  window.visualViewport?.removeEventListener("resize", handleVisualViewportResize);
   document.removeEventListener("click", handleModelDropdownClickOutside);
   if (resizeInputRaf.value) {
     cancelAnimationFrame(resizeInputRaf.value);

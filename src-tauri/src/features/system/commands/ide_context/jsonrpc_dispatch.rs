@@ -124,7 +124,7 @@ async fn ide_chat_handle_jsonrpc_request(
         "webview_pong" => Ok(serde_json::json!(true)),
         "conversation.list" => ide_chat_conversation_list(state, &sidebar_viewer_id),
         "conversation.changedSince" => ide_chat_conversation_changed_since(state, request.params).await,
-        "conversation.blockPage" => ide_chat_conversation_block_page(state, request.params),
+        "conversation.blockPage" => ide_chat_conversation_block_page(state, request.params).await,
         "conversation.fastRequestTurns" => ide_chat_conversation_fast_request_turns(state, request.params),
         "conversation.runtimeSnapshot" => ide_chat_conversation_runtime_snapshot(state, request.params),
         "conversation.resumeSubscription" => ide_chat_resume_sidebar_subscription(
@@ -135,9 +135,9 @@ async fn ide_chat_handle_jsonrpc_request(
         ),
         "conversation.streamProbe" => ide_chat_stream_probe(request.params, client_id, opened_conversation_id),
         "conversation.freshnessSnapshot" => ide_chat_conversation_freshness_snapshot(state, request.params).await,
-        "conversation.markRead" => ide_chat_mark_conversation_read(state, request.params),
-        "conversation.messageById" => ide_chat_conversation_message_by_id_command(state, request.params),
-        "conversation.messagesBefore" => ide_chat_conversation_messages_before_command(state, request.params),
+        "conversation.markRead" => ide_chat_mark_conversation_read(state, request.params).await,
+        "conversation.messageById" => ide_chat_conversation_message_by_id_command(state, request.params).await,
+        "conversation.messagesBefore" => ide_chat_conversation_messages_before_command(state, request.params).await,
         "conversation.messagesAfterAsync" =>
             ide_chat_parse_param_field::<RequestConversationMessagesAfterAsyncInput>(
                 request.params,
@@ -186,7 +186,7 @@ async fn ide_chat_handle_jsonrpc_request(
             }),
         "workspace.layout.save" => ide_chat_workspace_layout_save(state, request.params),
         "workspace.list" => ide_chat_workspace_list(state, request.params),
-        "workspace.directory.list" => ide_chat_workspace_directory_list(request.params),
+        "workspace.directory.list" => ide_chat_workspace_directory_list(request.params).await,
         "workspace.gitRootCheck" => ide_chat_workspace_git_root_check(request.params).await,
         // 旧命令保留为兼容别名，但必须落到同一套工作区实现；不再将其视为
         // Web 不可用的 App 专属能力。
@@ -197,9 +197,9 @@ async fn ide_chat_handle_jsonrpc_request(
             .and_then(|input| update_chat_shell_workspace_layout_inner(input, state))
             .and_then(ide_chat_serialize),
         "check_git_workspace_root" => ide_chat_workspace_git_root_check(request.params).await,
-        "fileReader.directory.list" => ide_chat_file_reader_directory_list(request.params),
-        "fileReader.readFile" => ide_chat_file_reader_read(request.params),
-        "fileReader.readFileBlock" => ide_chat_file_reader_read_block(request.params),
+        "fileReader.directory.list" => ide_chat_file_reader_directory_list(request.params).await,
+        "fileReader.readFile" => ide_chat_file_reader_read(request.params).await,
+        "fileReader.readFileBlock" => ide_chat_file_reader_read_block(request.params).await,
         "conversation.delete" => ide_chat_delete_conversation(state, request.params).await,
         "conversation.batchArchive" => ide_chat_batch_archive_conversations(state, request.params).await,
         "conversation.rebindRecipient" => ide_chat_rebind_conversation_recipient(state, request.params),
@@ -225,22 +225,6 @@ async fn ide_chat_handle_jsonrpc_request(
         "prompt.preview" => ide_chat_get_prompt_preview_for_web_settings(state, request.params).await,
         "get_system_prompt_preview" => ide_chat_get_system_prompt_preview_for_web_settings(state, request.params).await,
         "prompt.systemPreview" => ide_chat_get_system_prompt_preview_for_web_settings(state, request.params).await,
-        "get_conversation_section_orders" => (|| -> Result<Value, String> {
-            ide_chat_serialize(get_conversation_section_orders_inner(state)?)
-        })(),
-        "conversation.sectionOrders.get" => (|| -> Result<Value, String> {
-            ide_chat_serialize(get_conversation_section_orders_inner(state)?)
-        })(),
-        "save_conversation_section_order" => (|| -> Result<Value, String> {
-            let input =
-                ide_chat_parse_param_field::<SaveConversationSectionOrderInput>(request.params, "input")?;
-            ide_chat_serialize(save_conversation_section_order_inner(input, state)?)
-        })(),
-        "conversation.sectionOrders.save" => (|| -> Result<Value, String> {
-            let input =
-                ide_chat_parse_param_field::<SaveConversationSectionOrderInput>(request.params, "input")?;
-            ide_chat_serialize(save_conversation_section_order_inner(input, state)?)
-        })(),
         "delegate.statuses" => ide_chat_delegate_statuses(state, request.params),
         "delegate.abort" => ide_chat_delegate_abort(state, request.params),
         "delegate.blockPage" => ide_chat_delegate_block_page(state, request.params),
@@ -277,13 +261,13 @@ async fn ide_chat_handle_jsonrpc_request(
         "conversation.plan.readFile" => ide_chat_read_plan_file(state, request.params),
         "conversation.rewindPreview" => ide_chat_preview_rewind_conversation(state, request.params).await,
         "conversation.archiveList" => ide_chat_list_archives_command(state),
-        "conversation.archiveBlockPage" => ide_chat_archive_block_page_command(state, request.params),
-        "conversation.archiveSummary" => ide_chat_archive_summary_command(state, request.params),
+        "conversation.archiveBlockPage" => ide_chat_archive_block_page_command(state, request.params).await,
+        "conversation.archiveSummary" => ide_chat_archive_summary_command(state, request.params).await,
         "conversation.deleteArchive" => ide_chat_delete_archive_command(state, request.params),
         "conversation.unarchive" => ide_chat_unarchive_command(state, request.params),
         "archives.list" => ide_chat_list_archives_command(state),
-        "archives.blockPage" => ide_chat_archive_block_page_command(state, request.params),
-        "archives.summary" => ide_chat_archive_summary_command(state, request.params),
+        "archives.blockPage" => ide_chat_archive_block_page_command(state, request.params).await,
+        "archives.summary" => ide_chat_archive_summary_command(state, request.params).await,
         "archives.delete" => ide_chat_delete_archive_command(state, request.params),
         "archives.unarchive" => ide_chat_unarchive_command(state, request.params),
         "is_backend_ready" => Ok(serde_json::json!(state.backend_ready.load(std::sync::atomic::Ordering::Acquire))),
@@ -527,9 +511,9 @@ async fn ide_chat_handle_jsonrpc_request(
             ide_chat_conversation_light_snapshot_command(state, request.params).await
         }
         "get_foreground_conversation_freshness_snapshot" => ide_chat_conversation_freshness_snapshot_command(state, request.params).await,
-        "get_unarchived_conversation_block_page" => ide_chat_conversation_block_page_command(state, request.params),
-        "get_unarchived_conversation_message_by_id" => ide_chat_conversation_message_by_id_command(state, request.params),
-        "get_active_conversation_messages_before" => ide_chat_conversation_messages_before_command(state, request.params),
+        "get_unarchived_conversation_block_page" => ide_chat_conversation_block_page_command(state, request.params).await,
+        "get_unarchived_conversation_message_by_id" => ide_chat_conversation_message_by_id_command(state, request.params).await,
+        "get_active_conversation_messages_before" => ide_chat_conversation_messages_before_command(state, request.params).await,
         "request_conversation_messages_after_async" =>
             ide_chat_parse_param_field::<RequestConversationMessagesAfterAsyncInput>(
                 request.params,
@@ -537,7 +521,7 @@ async fn ide_chat_handle_jsonrpc_request(
             )
             .and_then(|input| request_conversation_messages_after_async_inner(input, state))
             .and_then(ide_chat_serialize),
-        "mark_conversation_read" => ide_chat_mark_conversation_read_command(state, request.params),
+        "mark_conversation_read" => ide_chat_mark_conversation_read_command(state, request.params).await,
         "set_active_unarchived_conversation" => ide_chat_set_active_conversation_command(state, request.params),
         "rebind_unarchived_conversation_recipient" => ide_chat_rebind_conversation_command(state, request.params),
         "rewind_conversation_from_message" => ide_chat_rewind_conversation_command(state, request.params).await,
@@ -553,8 +537,8 @@ async fn ide_chat_handle_jsonrpc_request(
         "goal_cancel_goal" => ide_chat_goal_cancel_command(state, request.params),
         "query_ide_context_references" => ide_chat_query_ide_context_command(request.params, ide_context_runtime),
         "list_archives" => ide_chat_list_archives_command(state),
-        "get_archive_block_page" => ide_chat_archive_block_page_command(state, request.params),
-        "get_archive_summary" => ide_chat_archive_summary_command(state, request.params),
+        "get_archive_block_page" => ide_chat_archive_block_page_command(state, request.params).await,
+        "get_archive_summary" => ide_chat_archive_summary_command(state, request.params).await,
         "delete_archive" => ide_chat_delete_archive_command(state, request.params),
         "unarchive_archive" => ide_chat_unarchive_command(state, request.params),
         "conversation.archive" => {
@@ -580,8 +564,8 @@ async fn ide_chat_handle_jsonrpc_request(
         "import_archives_from_json" => ide_chat_import_archives_command(state, request.params),
         "conversation.importArchives" => ide_chat_import_archives_command(state, request.params),
         "import_agent_memories" => ide_chat_import_agent_memories_command(state, request.params),
-        "remote_im_get_contact_conversation_block_page" => ide_chat_remote_im_block_page_command(state, request.params),
-        "remoteIm.conversation.blockPage" => ide_chat_remote_im_block_page_command(state, request.params),
+        "remote_im_get_contact_conversation_block_page" => ide_chat_remote_im_block_page_command(state, request.params).await,
+        "remoteIm.conversation.blockPage" => ide_chat_remote_im_block_page_command(state, request.params).await,
         "remote_im_clear_contact_conversation" => ide_chat_remote_im_clear_conversation_command(state, request.params),
         "remoteIm.conversation.clear" => ide_chat_remote_im_clear_conversation_command(state, request.params),
         "frontend_ready_start_remote_im_services" => ide_chat_frontend_ready_remote_im_command(app).await,

@@ -92,15 +92,6 @@ struct PromptCommandPreset {
     prompt: String,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ConversationSectionOrders {
-    #[serde(default)]
-    local: Vec<String>,
-    #[serde(default)]
-    contact: Vec<String>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AppData {
@@ -137,8 +128,6 @@ struct AppData {
     main_conversation_id: Option<String>,
     #[serde(default)]
     pinned_conversation_ids: Vec<String>,
-    #[serde(default)]
-    conversation_section_orders: ConversationSectionOrders,
     conversations: Vec<Conversation>,
     #[serde(default)]
     image_text_cache: Vec<ImageTextCacheEntry>,
@@ -175,7 +164,6 @@ impl Default for AppData {
             instruction_presets: Vec::new(),
             main_conversation_id: None,
             pinned_conversation_ids: Vec::new(),
-            conversation_section_orders: ConversationSectionOrders::default(),
             conversations: Vec::new(),
             image_text_cache: Vec::new(),
             pdf_text_cache: Vec::new(),

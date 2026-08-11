@@ -1647,6 +1647,11 @@ async fn builtin_shell_exec(
     let stdout = terminal_decode_output_bytes(&stdout_bytes);
     let stderr = terminal_decode_output_bytes(&stderr_bytes);
     let aggregated_output = String::from_utf8_lossy(&aggregated_bytes).into_owned();
+    let permission_hint = if ok {
+        None
+    } else {
+        macos_tcc_permission_hint(&ui_language, &aggregated_output, None)
+    };
 
     Ok(serde_json::json!({
         "ok": ok,
@@ -1658,7 +1663,8 @@ async fn builtin_shell_exec(
         "timedOut": false,
         "truncated": stdout_truncated || stderr_truncated || aggregate_truncated,
         "stdoutTruncated": stdout_truncated,
-        "stderrTruncated": stderr_truncated
+        "stderrTruncated": stderr_truncated,
+        "permissionHint": permission_hint
     }))
 }
 

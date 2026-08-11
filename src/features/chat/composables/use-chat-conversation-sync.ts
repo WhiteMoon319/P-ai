@@ -480,10 +480,40 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     }
   }
 
+  function conversationOverviewItemSignature(item: Record<string, any>): string {
+    return [
+      String(item.conversationId || "").trim(),
+      String(item.updatedAt || "").trim(),
+      String(item.lastMessageAt || "").trim(),
+      String(item.runtimeState || "").trim(),
+      String(item.title || "").trim(),
+      String(item.summary || "").trim(),
+      String(item.currentTodo || "").trim(),
+      Math.max(0, Number(item.unreadCount || 0)),
+      !!item.isPinned,
+      !!item.isSystemNotificationConversation,
+    ].join("|");
+  }
+
+  function conversationOverviewOrderKey(item: Record<string, any>): string {
+    return [
+      !!item.isSystemNotificationConversation,
+      !!item.isPinned,
+      Number.isFinite(Number(item.pinIndex)) ? Number(item.pinIndex) : Number.MAX_SAFE_INTEGER,
+      String(item.lastMessageAt || item.updatedAt || "").trim(),
+    ].join("|");
+  }
+
   function applyConversationOverviewItemUpdated(payload?: Record<string, any> | null) {
     const conversation = payload?.conversation;
     const conversationId = String(conversation?.conversationId || "").trim();
     if (!conversationId) return;
+    const existing = bindings.unarchivedConversations.value.find(
+      (item: any) => String(item?.conversationId || "").trim() === conversationId,
+    );
+    if (existing && conversationOverviewItemSignature(existing) === conversationOverviewItemSignature(conversation)) {
+      return;
+    }
     let replaced = false;
     const nextItems = bindings.unarchivedConversations.value.map((item: any) => {
       if (String(item.conversationId || "").trim() !== conversationId) {
@@ -495,7 +525,12 @@ export function useChatConversationSync(bindings: Record<string, any>) {
     if (!replaced) {
       nextItems.push(conversation);
     }
-    bindings.unarchivedConversations.value = sortUnarchivedConversationOverviewItems(nextItems);
+    // 排序键（置顶/最近活动时间）没变时保持原位替换，避免切换会话等场景全量重排整个列表
+    const orderChanged = !existing
+      || conversationOverviewOrderKey(existing) !== conversationOverviewOrderKey(conversation);
+    bindings.unarchivedConversations.value = orderChanged
+      ? sortUnarchivedConversationOverviewItems(nextItems)
+      : nextItems;
     const serverTime = String(payload?.serverTime || "").trim();
     if (serverTime && bindings.lastOverviewSyncAt) {
       bindings.lastOverviewSyncAt.value = serverTime;

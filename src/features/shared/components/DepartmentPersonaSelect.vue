@@ -62,7 +62,13 @@
                   <div class="absolute -top-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap bg-base-100 px-2 text-center text-xs font-semibold text-base-content/70">
                     {{ group.departmentName }}
                   </div>
-                  <div class="grid grid-cols-3 gap-1 sm:flex sm:flex-wrap sm:justify-center">
+                  <div
+                    v-if="group.agents.every((option) => option.personaMissing)"
+                    class="w-full px-2 py-4 text-center text-xs text-base-content/60"
+                  >
+                    {{ t("chat.departmentNoAvailableAgent") }}
+                  </div>
+                  <div v-else class="grid grid-cols-3 gap-1 sm:flex sm:flex-wrap sm:justify-center">
                     <button
                       v-for="option in group.agents"
                       :key="option.id"
@@ -93,8 +99,14 @@
                       <span class="max-w-full truncate text-center text-xs leading-tight">
                         {{ option.agentName }}
                       </span>
-                      <span v-if="option.unavailable" class="text-caption leading-none text-warning">
-                        已移除
+                      <span v-if="option.personaMissing" class="text-caption leading-none text-warning">
+                        {{ t("chat.personaRemoved") }}
+                      </span>
+                      <span v-else-if="option.modelMissing" class="text-caption leading-none text-warning">
+                        {{ t("chat.personaModelNotConfigured") }}
+                      </span>
+                      <span v-else-if="option.unavailable" class="text-caption leading-none text-warning">
+                        {{ t("chat.personaRemoved") }}
                       </span>
                     </button>
                   </div>
@@ -120,6 +132,7 @@
 <script setup lang="ts">
 import { ChevronDown } from "@lucide/vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import type { ApiConfigItem, DepartmentConfig, PersonaProfile } from "../../../types/app";
 import ChatConversationFloatingScroll from "../../chat/components/ChatConversationFloatingScroll.vue";
 import ApiConfigTreeSelect from "../../config/components/ApiConfigTreeSelect.vue";
@@ -163,6 +176,8 @@ const emit = defineEmits<{
   "update:apiConfigId": [value: string];
   change: [value: { departmentId: string; agentId: string; option: DepartmentPersonaOption | null }];
 }>();
+
+const { t } = useI18n();
 
 type AgentGroup = {
   departmentId: string;
@@ -217,7 +232,7 @@ function buildCurrentMissingOption(departmentId: string, agentId: string): Depar
     agentId,
     departmentName,
     agentName,
-    label: `${departmentName} / ${agentName} (已移除)`,
+    label: `${departmentName} / ${agentName} (${t("chat.personaRemoved")})`,
     name: departmentName,
     ownerAgentId: agentId,
     ownerName: agentName,
@@ -383,9 +398,12 @@ watch(
   () => {
     if (!props.autoSelectFirst) return;
     if (selectedValue.value || normalizedOptions.value.length === 0) return;
-    const firstAvailable = normalizedOptions.value.find((option) => !option.unavailable) || normalizedOptions.value[0];
-    emitSelection(firstAvailable || null);
-    const configId = String(firstAvailable?.apiConfigId || "").trim();
+    const firstAvailable = normalizedOptions.value.find(
+      (option) => !option.unavailable && !option.personaMissing && !!String(option.agentId || "").trim(),
+    );
+    if (!firstAvailable) return;
+    emitSelection(firstAvailable);
+    const configId = String(firstAvailable.apiConfigId || "").trim();
     if (configId) {
       emit("update:apiConfigId", configId);
     }

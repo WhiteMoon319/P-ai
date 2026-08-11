@@ -18,7 +18,7 @@ export type UseChatFlowOptions = {
   chatInput: Ref<string>;
   selectedMentions?: Ref<ChatMentionTarget[]>;
   clipboardImages: Ref<Array<{ mime: string; bytesBase64: string; savedPath?: string }>>;
-  queuedAttachmentNotices?: Ref<Array<{ id: string; fileName: string; path: string; mime: string }>>;
+  queuedAttachmentNotices?: Ref<Array<{ id: string; fileName: string; path: string; mime: string; pending?: boolean }>>;
   latestUserText: Ref<string>;
   latestUserImages: Ref<Array<{ mime: string; bytesBase64: string }>>;
   latestAssistantText: Ref<string>;

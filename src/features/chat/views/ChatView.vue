@@ -243,7 +243,7 @@
           </div>
         </Transition>
 
-        <div ref="composerContainer" class="relative shrink-0 border-t border-base-300 bg-base-100 px-2 pt-2 pb-1.5">
+        <div ref="composerContainer" class="relative shrink-0 border-t border-base-300 bg-base-100 px-2 pt-1.5 pb-1.5">
           <div
             v-if="activeConversationIsRemoteContact"
             class="absolute bottom-full left-1/2 z-20 mb-3 -translate-x-1/2"
@@ -308,17 +308,26 @@
           />
           <div
             v-else-if="activeConversationRecipientMissing"
-            class="rounded-box border border-warning/30 bg-warning/10 p-3 text-sm"
+            class="rounded-box border border-warning/30 bg-warning/10 p-4 text-sm"
           >
-            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div class="min-w-0">
-                <div class="font-medium">{{ t("chat.recipientMissingTitle") }}</div>
-                <div class="mt-1 text-xs opacity-70">
-                  {{ t("chat.recipientMissingHint") }}
+            <div class="flex flex-col gap-4">
+              <!-- 信息区：图标锚点 + 标题 + 说明，独立成块不被操作区挤压 -->
+              <div class="flex items-start gap-3">
+                <div
+                  class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning"
+                >
+                  <CircleAlert class="h-5 w-5" />
+                </div>
+                <div class="min-w-0">
+                  <div class="font-semibold">{{ t("chat.recipientMissingTitle") }}</div>
+                  <div class="mt-1 text-xs leading-relaxed opacity-70">
+                    {{ t("chat.recipientMissingHint") }}
+                  </div>
                 </div>
               </div>
-              <div class="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
-                <div class="w-full min-w-64 sm:w-72">
+              <!-- 操作区：选择器占剩余宽度，按钮组固定 -->
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div class="min-w-0 flex-1">
                   <DepartmentPersonaSelect
                     v-model:department-id="repairRecipientDepartmentId"
                     v-model:agent-id="repairRecipientAgentId"
@@ -329,24 +338,26 @@
                     :preserve-current="false"
                   />
                 </div>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-primary gap-2"
-                  :disabled="conversationInteractionBusy || !repairRecipientSelectedOption"
-                  @click="handleRebindConversationRecipient"
-                >
-                  <Check class="h-3.5 w-3.5" />
-                  <span>{{ t("chat.recipientMissingApply") }}</span>
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-error gap-2"
-                  :disabled="conversationInteractionBusy"
-                  @click="handleConversationDelete(activeConversationId)"
-                >
-                  <Trash2 class="h-3.5 w-3.5" />
-                  <span>{{ t("common.delete") }}</span>
-                </button>
+                <div class="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-primary gap-2"
+                    :disabled="conversationInteractionBusy || !repairRecipientSelectedOption"
+                    @click="handleRebindConversationRecipient"
+                  >
+                    <Check class="h-3.5 w-3.5" />
+                    <span>{{ t("chat.recipientMissingApply") }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-error btn-outline gap-2"
+                    :disabled="conversationInteractionBusy"
+                    @click="handleConversationDelete(activeConversationId)"
+                  >
+                    <Trash2 class="h-3.5 w-3.5" />
+                    <span>{{ t("common.delete") }}</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -602,7 +613,7 @@ import {
   useChatComposerAppearance,
   visibleChatComposerContextGroups,
 } from "../../shell/composables/use-chat-composer-appearance";
-import { ArrowDownToLine, Check, ChevronsDown, ChevronsUp, Copy, History, Inbox, ListTodo, Network, Trash2, Undo2, Wrench, X } from "@lucide/vue";
+import { ArrowDownToLine, Check, ChevronsDown, ChevronsUp, CircleAlert, Copy, History, Inbox, ListTodo, Network, Trash2, Undo2, Wrench, X } from "@lucide/vue";
 import {
   copyTransportChatImageToClipboard,
   invokeTauri,
@@ -639,6 +650,7 @@ import { useChatMessageActions } from "../composables/use-chat-message-actions";
 import { useChatScrollLayout } from "../composables/use-chat-scroll-layout";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
 import { isAbsoluteLocalPath, isAssistantSpacePath, normalizeLocalLinkHref, parseLocalFileReference } from "../utils/local-link";
+import { buildConversationSections, type ConversationSection } from "../utils/conversation-sections";
 import { type ChatRenderItem, isRightAlignedMessage, canOpenInFileReader, fileExtensionFromPath } from "../utils/chat-render";
 import { clearFileReaderContextCandidates } from "../utils/file-reader-context-tags";
 import { useIdeContext } from "../composables/use-ide-context";
@@ -671,7 +683,7 @@ const props = defineProps<{
   submitPending?: boolean;
   toolStatusText: string; toolStatusState: "running" | "done" | "failed" | "";
   chatErrorText: string; clipboardImages: Array<{ mime: string; bytesBase64: string; previewDataUrl?: string }>;
-  queuedAttachmentNotices: Array<{ id: string; fileName: string; path: string; mime: string }>;
+  queuedAttachmentNotices: Array<{ id: string; fileName: string; path: string; mime: string; pending?: boolean }>;
   chatInput: string; instructionPresets: PromptCommandPreset[];
   canRecord: boolean; recording: boolean; recordingMs: number; transcribing: boolean; recordHotkey: string;
   conversationCallPrimaryApiConfigId: string; preferredChatModelId?: string; toolReviewApiConfigId?: string; toolReviewRefreshTick: number; chatModelOptions: ApiConfigItem[];
@@ -767,7 +779,7 @@ const emit = defineEmits<{
 
 // ==================== basic state ====================
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const chatReaderPanelRef = ref<InstanceType<typeof FileReaderPanel> | null>(null);
 const chatScrollbarRef = ref<InstanceType<typeof FloatingScrollbar> | null>(null);
 const linkOpenErrorText = ref("");
@@ -919,6 +931,7 @@ function findRecipientOption(departmentId: string, agentId: string): DepartmentP
   return repairRecipientOptions.value.find((option) =>
     String(option.departmentId || "").trim() === normalizedDepartmentId
     && String(option.agentId || "").trim() === normalizedAgentId
+    && !option.personaMissing
   ) || null;
 }
 
@@ -939,9 +952,12 @@ const repairRecipientSelectedOption = computed(() =>
 
 function defaultRepairRecipientOption(): DepartmentPersonaOption | null {
   const defaultDepartmentId = String(props.defaultCreateConversationDepartmentId || "").trim();
+  const hasValidPersona = (option: DepartmentPersonaOption) => !option.personaMissing;
   return repairRecipientOptions.value.find((option) =>
-    defaultDepartmentId && String(option.departmentId || "").trim() === defaultDepartmentId
-  ) || repairRecipientOptions.value[0] || null;
+    hasValidPersona(option)
+    && defaultDepartmentId && String(option.departmentId || "").trim() === defaultDepartmentId
+  ) || repairRecipientOptions.value.find(hasValidPersona)
+    || repairRecipientOptions.value[0] || null;
 }
 
 watch(
@@ -1465,6 +1481,7 @@ const {
   currentDepartmentId: toRef(props, "currentDepartmentId"),
   departmentOptions: toolReviewDepartmentOptions,
   initialPanelOpen: toRef(props, "initialToolReviewPanelOpen"),
+  activeTab: toolReviewSidebarActiveTab,
   t, syncViewportMetrics,
   onRefreshMessage: (payload) => emit("refreshToolReviewMessage", payload),
   onToolReviewPanelOpenChange: (open) => emit("toolReviewPanelOpenChange", open),
@@ -1534,9 +1551,8 @@ const {
   openDelegateArchiveDetail, abortDelegate,
 } = useDelegateStatus({
   activeConversationId: toRef(props, "activeConversationId"),
-  panelOpen: computed(() => effectiveToolReviewPanelOpen.value
-    && props.chatRightPanelMode === "monitor"
-    && props.chatMonitorPanelMode === "delegate"),
+  // 委托状态：打开会话即拉取（工作区 bar 常驻展示活跃委托，不依赖监控面板 delegate tab）
+  panelOpen: computed(() => !!String(props.activeConversationId || "").trim()),
   enabled: computed(() => true),
 });
 
@@ -1848,16 +1864,33 @@ function handleRebindConversationRecipient() {
   emit("rebindConversationRecipient", { conversationId, departmentId, agentId });
 }
 
+const conversationDisplaySections = computed<ConversationSection[]>(() => {
+  const sections = buildConversationSections(props.conversationItems || props.unarchivedConversationItems || [], {
+    tab: props.chatLeftPanelMode,
+    titles: {
+      recent: t("chat.recentConversations"),
+      pinned: t("chat.pinnedConversations"),
+      other: t("chat.otherConversations"),
+      defaultWorkspace: t("chat.defaultWorkspace"),
+    },
+    locale: locale.value,
+  });
+  // Shift+滚轮跳过「最近会话」区：其中的会话在工作区/频道区会重复出现，
+  // 滚动时同一会话滚两遍，顺序对不上列表直觉。
+  return sections.filter((section) => section.key !== "recent");
+});
+
 function handleShiftWheel(event: WheelEvent) {
   if (!event.shiftKey) return;
   event.preventDefault();
-  const items = props.conversationItems || props.unarchivedConversationItems;
-  if (!items || items.length === 0) return;
+  const sections = conversationDisplaySections.value;
+  const orderedItems = sections.flatMap((section) => section.items);
+  if (orderedItems.length === 0) return;
   const currentId = String(props.activeConversationId || "").trim();
-  const currentIndex = items.findIndex((item) => String(item.conversationId || "").trim() === currentId);
+  const currentIndex = orderedItems.findIndex((item) => String(item.conversationId || "").trim() === currentId);
   if (currentIndex < 0) return;
   const direction = event.deltaY > 0 ? 1 : -1;
-  const target = items[currentIndex + direction];
+  const target = orderedItems[currentIndex + direction];
   if (!target) return;
   emit("switchConversation", {
     conversationId: String(target.conversationId || "").trim(),

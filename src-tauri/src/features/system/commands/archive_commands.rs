@@ -336,11 +336,16 @@ fn list_archives_inner(state: &AppState) -> Result<Vec<ArchiveSummary>, String> 
 }
 
 #[tauri::command]
-fn get_archive_messages(
+async fn get_archive_messages(
     archive_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<ChatMessage>, String> {
-    conversation_service_v2().get_archive_messages(state.inner(), &archive_id)
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        conversation_service_v2().get_archive_messages(&app_state, &archive_id)
+    })
+    .await
+    .map_err(|err| format!("读取归档消息任务异常：{err}"))?
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -376,11 +381,14 @@ struct ArchiveBlockPageOutput {
 }
 
 #[tauri::command]
-fn get_archive_block_page(
+async fn get_archive_block_page(
     input: GetArchiveBlockPageInput,
     state: State<'_, AppState>,
 ) -> Result<ArchiveBlockPageOutput, String> {
-    get_archive_block_page_inner(input, state.inner())
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || get_archive_block_page_inner(input, &app_state))
+        .await
+        .map_err(|err| format!("读取归档块分页任务异常：{err}"))?
 }
 
 fn get_archive_block_page_inner(
@@ -418,8 +426,11 @@ fn get_archive_block_page_inner(
 }
 
 #[tauri::command]
-fn get_archive_summary(archive_id: String, state: State<'_, AppState>) -> Result<String, String> {
-    get_archive_summary_inner(state.inner(), &archive_id)
+async fn get_archive_summary(archive_id: String, state: State<'_, AppState>) -> Result<String, String> {
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || get_archive_summary_inner(&app_state, &archive_id))
+        .await
+        .map_err(|err| format!("读取归档摘要任务异常：{err}"))?
 }
 
 fn get_archive_summary_inner(state: &AppState, archive_id: &str) -> Result<String, String> {

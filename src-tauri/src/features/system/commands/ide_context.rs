@@ -325,11 +325,16 @@ fn save_conversation_workspace_layout(
 }
 
 #[tauri::command]
-fn list_conversation_workspaces(
+async fn list_conversation_workspaces(
     input: Value,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
-    ide_chat_workspace_list(state.inner(), input)
+    let app_state = state.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        ide_chat_workspace_list(&app_state, input)
+    })
+    .await
+    .map_err(|err| format!("读取会话工作区列表任务异常：{err}"))?
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -142,34 +142,40 @@ async fn ide_chat_conversation_changed_since(state: &AppState, params: Value) ->
     .map_err(|err| format!("读取未归档会话列表差量任务异常：{err}"))?
 }
 
-fn ide_chat_conversation_block_page(state: &AppState, params: Value) -> Result<Value, String> {
+async fn ide_chat_conversation_block_page(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatConversationBlockPageInput>(params)?;
-    let conversation_id = input.conversation_id.trim();
+    let conversation_id = input.conversation_id.trim().to_string();
     if conversation_id.is_empty() {
         return Err("conversationId is required".to_string());
     }
-    let page = if let Some(block_id) = input.block_id {
-        conversation_service_v2().get_conversation_block(state, conversation_id, block_id)?
-    } else {
-        conversation_service_v2().get_conversation_last_block(state, conversation_id)?
-    };
-    Ok(serde_json::json!({
-        "blocks": page.blocks.into_iter().map(|item| {
-            serde_json::json!({
-                "blockId": item.block_id,
-                "messageCount": item.message_count,
-                "firstMessageId": item.first_message_id,
-                "lastMessageId": item.last_message_id,
-                "firstCreatedAt": item.first_created_at,
-                "lastCreatedAt": item.last_created_at,
-                "isLatest": item.is_latest,
-            })
-        }).collect::<Vec<_>>(),
-        "selectedBlockId": page.selected_block_id,
-        "messages": page.messages,
-        "hasPrevBlock": page.has_prev_block,
-        "hasNextBlock": page.has_next_block,
-    }))
+    let block_id = input.block_id;
+    let app_state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        let page = if let Some(block_id) = block_id {
+            conversation_service_v2().get_conversation_block(&app_state, &conversation_id, block_id)?
+        } else {
+            conversation_service_v2().get_conversation_last_block(&app_state, &conversation_id)?
+        };
+        Ok(serde_json::json!({
+            "blocks": page.blocks.into_iter().map(|item| {
+                serde_json::json!({
+                    "blockId": item.block_id,
+                    "messageCount": item.message_count,
+                    "firstMessageId": item.first_message_id,
+                    "lastMessageId": item.last_message_id,
+                    "firstCreatedAt": item.first_created_at,
+                    "lastCreatedAt": item.last_created_at,
+                    "isLatest": item.is_latest,
+                })
+            }).collect::<Vec<_>>(),
+            "selectedBlockId": page.selected_block_id,
+            "messages": page.messages,
+            "hasPrevBlock": page.has_prev_block,
+            "hasNextBlock": page.has_next_block,
+        }))
+    })
+    .await
+    .map_err(|err| format!("读取会话块分页任务异常：{err}"))?
 }
 
 fn ide_chat_conversation_fast_request_turns(state: &AppState, params: Value) -> Result<Value, String> {
@@ -191,40 +197,47 @@ fn ide_chat_conversation_fast_request_turns_command(
     )
 }
 
-fn ide_chat_conversation_block_page_command(
+async fn ide_chat_conversation_block_page_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<GetConversationBlockPageInput>(params, "input")?;
-    ide_chat_conversation_block_page(state, ide_chat_serialize(input)?)
+    ide_chat_conversation_block_page(state, ide_chat_serialize(input)?).await
 }
 
-fn ide_chat_mark_conversation_read_command(
+async fn ide_chat_mark_conversation_read_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<MarkConversationReadInput>(params, "input")?;
-    ide_chat_mark_conversation_read(state, ide_chat_serialize(input)?)
+    ide_chat_mark_conversation_read(state, ide_chat_serialize(input)?).await
 }
 
-fn ide_chat_conversation_message_by_id_command(
+async fn ide_chat_conversation_message_by_id_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<GetUnarchivedConversationMessageByIdInput>(params, "input")?;
-    ide_chat_serialize(conversation_service_v2().get_message_by_id_for_frontend_display_only(
-        state,
-        input.conversation_id.trim(),
-        input.message_id.trim(),
-    )?)
+    let conversation_id = input.conversation_id.trim().to_string();
+    let message_id = input.message_id.trim().to_string();
+    let app_state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        ide_chat_serialize(conversation_service_v2().get_message_by_id_for_frontend_display_only(
+            &app_state,
+            &conversation_id,
+            &message_id,
+        )?)
+    })
+    .await
+    .map_err(|err| format!("读取会话单条消息任务异常：{err}"))?
 }
 
-fn ide_chat_conversation_messages_before_command(
+async fn ide_chat_conversation_messages_before_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<GetActiveConversationMessagesBeforeInput>(params, "input")?;
-    let before_message_id = input.before_message_id.trim();
+    let before_message_id = input.before_message_id.trim().to_string();
     if before_message_id.is_empty() {
         return Err("beforeMessageId is required.".to_string());
     }
@@ -234,17 +247,24 @@ fn ide_chat_conversation_messages_before_command(
         .or_else(|| input.session.as_ref().and_then(|session| session.conversation_id.as_deref()))
         .map(str::trim)
         .filter(|value| !value.is_empty())
+        .map(str::to_string)
         .ok_or_else(|| "conversationId is required.".to_string())?;
-    let page = conversation_service_v2().get_messages_before(
-        state,
-        conversation_id,
-        before_message_id,
-        input.limit.clamp(1, 100),
-    )?;
-    ide_chat_serialize(GetActiveConversationMessagesBeforeOutput {
-        messages: page.messages,
-        has_more: page.has_more,
+    let limit = input.limit.clamp(1, 100);
+    let app_state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        let page = conversation_service_v2().get_messages_before(
+            &app_state,
+            &conversation_id,
+            &before_message_id,
+            limit,
+        )?;
+        ide_chat_serialize(GetActiveConversationMessagesBeforeOutput {
+            messages: page.messages,
+            has_more: page.has_more,
+        })
     })
+    .await
+    .map_err(|err| format!("读取活动会话历史消息任务异常：{err}"))?
 }
 
 async fn ide_chat_conversation_light_snapshot_command(
@@ -372,14 +392,24 @@ fn ide_chat_list_archives_command(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(list_archives_inner(state)?)
 }
 
-fn ide_chat_archive_block_page_command(state: &AppState, params: Value) -> Result<Value, String> {
+async fn ide_chat_archive_block_page_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<GetArchiveBlockPageInput>(params, "input")?;
-    ide_chat_serialize(get_archive_block_page_inner(input, state)?)
+    let app_state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        ide_chat_serialize(get_archive_block_page_inner(input, &app_state)?)
+    })
+    .await
+    .map_err(|err| format!("读取归档块分页任务异常：{err}"))?
 }
 
-fn ide_chat_archive_summary_command(state: &AppState, params: Value) -> Result<Value, String> {
+async fn ide_chat_archive_summary_command(state: &AppState, params: Value) -> Result<Value, String> {
     let archive_id = ide_chat_parse_param_field::<String>(params, "archiveId")?;
-    ide_chat_serialize(get_archive_summary_inner(state, &archive_id)?)
+    let app_state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        ide_chat_serialize(get_archive_summary_inner(&app_state, &archive_id)?)
+    })
+    .await
+    .map_err(|err| format!("读取归档摘要任务异常：{err}"))?
 }
 
 fn ide_chat_delete_archive_command(state: &AppState, params: Value) -> Result<Value, String> {
@@ -465,9 +495,14 @@ fn ide_chat_import_agent_memories_command(state: &AppState, params: Value) -> Re
     ide_chat_serialize(import_agent_memories_inner(input, state)?)
 }
 
-fn ide_chat_remote_im_block_page_command(state: &AppState, params: Value) -> Result<Value, String> {
+async fn ide_chat_remote_im_block_page_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<RemoteImContactConversationBlockPageInput>(params, "input")?;
-    ide_chat_serialize(remote_im_get_contact_conversation_block_page_inner(input, state)?)
+    let app_state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        ide_chat_serialize(remote_im_get_contact_conversation_block_page_inner(input, &app_state)?)
+    })
+    .await
+    .map_err(|err| format!("读取远程 IM 联系人会话块分页任务异常：{err}"))?
 }
 
 fn ide_chat_remote_im_clear_conversation_command(
@@ -627,19 +662,24 @@ async fn ide_chat_conversation_freshness_snapshot(state: &AppState, params: Valu
     .map_err(|err| format!("读取前台 freshness 快照任务异常：{err}"))?
 }
 
-fn ide_chat_mark_conversation_read(state: &AppState, params: Value) -> Result<Value, String> {
+async fn ide_chat_mark_conversation_read(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<MarkConversationReadInput>(params)?;
-    let conversation_id = input.conversation_id.trim();
+    let conversation_id = input.conversation_id.trim().to_string();
     if conversation_id.is_empty() {
         return Err("conversationId is required".to_string());
     }
-    serde_json::to_value(
-        conversation_service_v2()
-            .mark_conversation_read(state, conversation_id)?
-            .conversation
-            .is_some(),
-    )
+    let app_state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        serde_json::to_value(
+            conversation_service_v2()
+                .mark_conversation_read(&app_state, &conversation_id)?
+                .conversation
+                .is_some(),
+        )
         .map_err(|err| format!("Serialize mark conversation read result failed: {err}"))
+    })
+    .await
+    .map_err(|err| format!("标记会话已读任务异常：{err}"))?
 }
 
 async fn ide_chat_create_conversation(state: &AppState, params: Value) -> Result<Value, String> {

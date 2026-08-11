@@ -5,6 +5,8 @@
 
 ## 最近版本
 
+- [v0.59.0](docs/changelog/releases/v0.59.0.md) - 文件阅读器新增 Git 面板：可在「文件/Git」之间切换，查看工作区与暂存区改动、查看 diff、暂存与取消暂存、丢弃改动、提交、储藏、切换/新建/删除分支、抓取/拉取/推送/同步，以及浏览提交历史与提交图；点击历史提交可直接查看该次提交的改动。
+- [v0.58.0](docs/changelog/releases/v0.58.0.md) - 委托状态在打开会话时立即刷新，会话工作区栏的活跃委托展示不再依赖监控面板的委托标签页是否打开。
 - [v0.57.0](docs/changelog/releases/v0.57.0.md) - 会话列表的聚合旧会话条目新增摘要预览：未读或 7 天内有更新的条目默认展开显示最近消息摘要，其余条目悬停时展开；移除悬停时的系统默认提示气泡
 - [v0.56.2](docs/changelog/releases/v0.56.2.md) - 修复 i18n 文案缺失：补全三语（zh-CN/zh-TW/en-US）中 welcome 卡片、工具页、远程前端密码等 63 处静态引用缺失的翻译 key，并补齐 zh-TW 热键发送方式的 4 处缺口。
 - [v0.56.1](docs/changelog/releases/v0.56.1.md) - Android 工作区导出改用原生 FileProvider + ACTION_SEND 系统分享：把沙盒工作区文件通过系统分享面板导出到其他应用，Kotlin shareFromDevice 改用模板 authority `${packageName}.fileprovider`，patch-android-project.sh 向模板 file_paths.xml 追加 root-path 覆盖沙盒根 app_data_dir()。

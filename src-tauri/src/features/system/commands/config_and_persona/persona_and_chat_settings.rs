@@ -244,14 +244,21 @@ fn save_agents_inner(
     for dept in &mut runtime_config.departments {
         let original_agent_ids = dept.agent_ids.clone();
         dept.agent_ids.retain(|id| valid_agent_ids.contains(id));
+        let assistant_agent_valid = !data.assistant_department_agent_id.trim().is_empty()
+            && valid_agent_ids.contains(&data.assistant_department_agent_id);
         if dept.id == ASSISTANT_DEPARTMENT_ID
-            && !data.assistant_department_agent_id.trim().is_empty()
-            && valid_agent_ids.contains(&data.assistant_department_agent_id)
+            && assistant_agent_valid
             && !dept
                 .agent_ids
                 .iter()
                 .any(|id| id.trim() == data.assistant_department_agent_id)
         {
+            dept.agent_ids.push(data.assistant_department_agent_id.clone());
+        } else if !original_agent_ids.is_empty()
+            && dept.agent_ids.is_empty()
+            && assistant_agent_valid
+        {
+            // 部门人格被删空时回退到助理人格，避免部门从选项列表消失
             dept.agent_ids.push(data.assistant_department_agent_id.clone());
         }
         if dept.agent_ids != original_agent_ids {

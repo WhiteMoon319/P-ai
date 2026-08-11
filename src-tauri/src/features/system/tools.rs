@@ -11,6 +11,7 @@ include!("tools/operate_runner.rs");
 include!("tools/desktop_only_android_stub.rs");
 include!("tools/operate_mcp.rs");
 include!("tools/screenshot_mcp.rs");
+include!("tools/macos_tcc.rs");
 include!("tools/terminal.rs");
 include!("tools/text_codec.rs");
 include!("tools/patch.rs");

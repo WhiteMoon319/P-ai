@@ -51,6 +51,16 @@ fn ensure_ready_message_store_from_legacy_conversation(
     if normalized_conversation_id.is_empty() {
         return Err("conversationId is required.".to_string());
     }
+    // 快路径：无锁检查就绪状态。已就绪直接返回，不抢写锁，避免主线程与落库排队。
+    // 注意：read_ready_message_store_status 并非纯文件读——v3 路径走 SQLite 查询，
+    // v2 路径含快照完整性校验，可能触发 blocks 重建比对。校验失败会得到 Err，
+    // 不命中本分支，回落写锁恢复路径（锁内二次检查，防止竞态重复恢复）。
+    if matches!(
+        message_store::read_ready_message_store_status(store_paths),
+        Ok(Some(_))
+    ) {
+        return Ok(());
+    }
     let recovery = with_conversation_mutation(
         state,
         normalized_conversation_id,

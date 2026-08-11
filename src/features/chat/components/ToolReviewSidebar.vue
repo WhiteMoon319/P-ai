@@ -24,6 +24,7 @@
                       v-if="segment.diffLines.length > 0"
                       :lines="segment.diffLines"
                       :diff-only="true"
+                      :lang="resolveShikiLanguage(extensionFromPath(segment.path))"
                       :title="segmentActionLabel(segment)"
                       :collapsed="isSegmentCollapsed(group.key, idx)"
                       class="mt-1 rounded-lg"
@@ -209,7 +210,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, useAttrs } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useAttrs, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../services/tauri-api";
 import type { ArchiveBlockPage, ChatMessage, ConversationDelegateStatusSummary, ShellWorkspace } from "../../../types/app";
@@ -224,6 +225,7 @@ import DelegateCard from "./DelegateCard.vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import CollapsibleGroup from "./CollapsibleGroup.vue";
 import TerminalApprovalPatchSample from "../../shell/components/TerminalApprovalPatchSample.vue";
+import { resolveShikiLanguage, extensionFromPath } from "../../file-reader/utils";
 import TaskListItem from "./TaskListItem.vue";
 import TaskCreateCard from "./dialogs/TaskCreateCard.vue";
 import FastRequestTurnsPanel from "./FastRequestTurnsPanel.vue";
@@ -791,12 +793,22 @@ function canShowDelegateResult(delegate: ConversationDelegateStatusSummary) {
 }
 
 onMounted(() => {
-  void loadConversationTasks();
   window.addEventListener("easy-call:task-created", handleTaskRefreshEvent);
   window.addEventListener("easy-call:task-updated", handleTaskRefreshEvent);
   window.addEventListener("easy-call:task-completed", handleTaskRefreshEvent);
   window.addEventListener("easy-call:task-deleted", handleTaskRefreshEvent);
 });
+
+// 任务列表懒加载：只有切到 tasks 标签才拉取，避免监控面板挂载时白读全局任务
+watch(
+  () => props.activeTab,
+  (tab) => {
+    if (tab === "tasks") {
+      void loadConversationTasks();
+    }
+  },
+  { immediate: true },
+);
 
 onBeforeUnmount(() => {
   window.removeEventListener("easy-call:task-created", handleTaskRefreshEvent);
