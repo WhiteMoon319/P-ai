@@ -971,6 +971,7 @@ private enum class SettingsEntry(
     Mcp("MCP", "MCP 服务器与技能", group = "模型"),
     Persona("人设", "人设与代理管理", group = "组织"),
     Department("部门", "部门结构", group = "组织"),
+    DepartmentTree("部门树", "部门层级关系", group = "组织"),
     Memory("记忆", "记忆管理", group = "数据"),
     Task("任务", "定时任务与运行日志", group = "数据"),
     Logs("日志", "运行日志", group = "数据"),
@@ -1074,6 +1075,7 @@ fun SettingsScreen(
             SettingsEntry.Mcp -> McpSettingsTab(vm = vm)
             SettingsEntry.Persona -> PersonaSettingsTab(vm = vm)
             SettingsEntry.Department -> DepartmentSettingsTab(vm = vm)
+            SettingsEntry.DepartmentTree -> DepartmentTreeSettingsTab(vm = vm)
             SettingsEntry.Memory -> MemorySettingsTab(vm = vm)
             SettingsEntry.Task -> TaskSettingsTab(vm = vm)
             SettingsEntry.Logs -> LogsSettingsTab(vm = vm)
@@ -1834,6 +1836,69 @@ private fun DepartmentSettingsTab(vm: AppViewModel) {
                 }
             }
         }
+    }
+}
+
+/** 部门树设置（对齐 Vue DepartmentTreeTab：只读层级展示）。 */
+@Composable
+private fun DepartmentTreeSettingsTab(vm: AppViewModel) {
+    val appConfig by vm.appConfig.collectAsState()
+    val departments = appConfig?.departments.orEmpty()
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Text("部门树", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "部门之间的层级关系（只读）。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        if (departments.isEmpty()) {
+            Text(
+                "暂无部门",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            // 只展示顶层部门（无父部门引用的）
+            val topLevel = departments.filter { d ->
+                !departments.any { it.childDepartmentIds.contains(d.id) }
+            }
+            if (topLevel.isEmpty()) {
+                // 无明确根时全部平铺
+                departments.forEach { dept -> DeptTreeNode(dept, departments, 0) }
+            } else {
+                topLevel.forEach { dept -> DeptTreeNode(dept, departments, 0) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeptTreeNode(
+    dept: com.whitemoon319.pai.model.DepartmentConfig,
+    all: List<com.whitemoon319.pai.model.DepartmentConfig>,
+    depth: Int,
+) {
+    val children = all.filter { dept.childDepartmentIds.contains(it.id) }
+    Card(Modifier.fillMaxWidth().padding(start = (depth * 16).dp, top = 3.dp, bottom = 3.dp)) {
+        Column(Modifier.padding(10.dp)) {
+            Text(
+                dept.name ?: "未命名",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            if (!dept.summary.isNullOrBlank()) {
+                Text(
+                    dept.summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                )
+            }
+        }
+    }
+    children.forEach { child ->
+        DeptTreeNode(child, all, depth + 1)
     }
 }
 
