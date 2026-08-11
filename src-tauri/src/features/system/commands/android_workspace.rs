@@ -17,6 +17,8 @@ pub(crate) use pai_android_platform::android_workspace::rootfs_paths::*;
 #[cfg(target_os = "android")]
 pub(crate) mod android_workspace_rootfs_installer {
     include!("android_workspace/rootfs_installer.rs");
+    // android_workspace_apply_static_webpki_roots 已迁至 crates/pai-android-platform（阶段 5）。
+    pub(crate) use pai_android_platform::tls::android_workspace_apply_static_webpki_roots;
 }
 #[cfg(target_os = "android")]
 use android_workspace_rootfs_installer::*;

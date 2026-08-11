@@ -3516,11 +3516,13 @@ dependencies = [
  "infer",
  "pai-backend",
  "regex",
+ "reqwest",
  "serde",
  "serde_json",
  "tokio",
  "tokio-util",
  "uuid",
+ "webpki-root-certs",
 ]
 
 [[package]]

@@ -10,19 +10,8 @@ pub(crate) fn android_workspace_rootfs_staging_root(root: &std::path::Path) -> P
     android_workspace_runtime_base(root).join("tmp").join("rootfs-staging")
 }
 
-#[cfg(target_os = "android")]
-pub(crate) fn android_workspace_apply_static_webpki_roots(
-    builder: reqwest::ClientBuilder,
-) -> Result<reqwest::ClientBuilder, String> {
-    let mut roots = Vec::with_capacity(webpki_root_certs::TLS_SERVER_ROOT_CERTS.len());
-    for der in webpki_root_certs::TLS_SERVER_ROOT_CERTS.iter() {
-        roots.push(
-            reqwest::tls::Certificate::from_der(der.as_ref())
-                .map_err(|err| format!("加载 Android 静态 TLS 根证书失败: {err}"))?,
-        );
-    }
-    Ok(builder.tls_certs_only(roots))
-}
+// android_workspace_apply_static_webpki_roots 已迁至 crates/pai-android-platform
+// （阶段 5），通过 crate 根重导出生效。
 
 pub(crate) fn android_workspace_update_download_progress(
     state: &AppState,
