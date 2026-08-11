@@ -1,8 +1,10 @@
 // ---- 共享类型 ----
-include!("provider_and_stream/types.rs");
+// types.rs 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::screenshot_cache_types::*;
 
 // ---- 截图缓存基础设施 ----
-include!("provider_and_stream/screenshot_cache.rs");
+// screenshot_cache 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::screenshot_cache::*;
 
 // ---- 内置工具统一策略表 ----
 // tool_policy 已迁至 crates/pai-backend（阶段 4）。

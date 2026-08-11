@@ -1,4 +1,13 @@
-pub(crate) fn screenshot_artifact_cache(
+use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
+
+use serde_json::Value;
+use uuid::Uuid;
+
+use crate::model_runtime::{ProviderToolResult, ProviderToolResultPart};
+use crate::screenshot_cache_types::{SCREENSHOT_ARTIFACT_MAX_ITEMS, ScreenshotArtifactEntry, ScreenshotForwardImagePayload, ScreenshotForwardPayload};
+
+pub fn screenshot_artifact_cache(
 ) -> &'static std::sync::Mutex<std::collections::HashMap<String, ScreenshotArtifactEntry>> {
     static CACHE: OnceLock<
         std::sync::Mutex<std::collections::HashMap<String, ScreenshotArtifactEntry>>,
@@ -6,12 +15,12 @@ pub(crate) fn screenshot_artifact_cache(
     CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
 }
 
-pub(crate) fn next_screenshot_artifact_seq() -> u64 {
+pub fn next_screenshot_artifact_seq() -> u64 {
     static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
-pub(crate) fn screenshot_artifact_cache_put(payload: &ScreenshotForwardPayload) -> String {
+pub fn screenshot_artifact_cache_put(payload: &ScreenshotForwardPayload) -> String {
     let artifact_id = Uuid::new_v4().to_string();
     let entry = ScreenshotArtifactEntry {
         images: payload.images.clone(),
@@ -33,19 +42,19 @@ pub(crate) fn screenshot_artifact_cache_put(payload: &ScreenshotForwardPayload) 
     artifact_id
 }
 
-pub(crate) fn screenshot_artifact_cache_get(artifact_id: &str) -> Option<ScreenshotArtifactEntry> {
+pub fn screenshot_artifact_cache_get(artifact_id: &str) -> Option<ScreenshotArtifactEntry> {
     let cache = screenshot_artifact_cache();
     let guard = cache.lock().ok()?;
     guard.get(artifact_id).cloned()
 }
 
-pub(crate) fn clear_screenshot_artifact_cache() {
+pub fn clear_screenshot_artifact_cache() {
     if let Ok(mut guard) = screenshot_artifact_cache().lock() {
         guard.clear();
     }
 }
 
-pub(crate) fn normalize_tool_image_data(raw: &str) -> String {
+pub fn normalize_tool_image_data(raw: &str) -> String {
     let s = raw.trim();
     if let Some(idx) = s.find("base64,") {
         return s[(idx + "base64,".len())..].to_string();
@@ -53,7 +62,7 @@ pub(crate) fn normalize_tool_image_data(raw: &str) -> String {
     s.to_string()
 }
 
-pub(crate) fn extract_forward_images_from_value(value: &Value) -> Vec<ScreenshotForwardImagePayload> {
+pub fn extract_forward_images_from_value(value: &Value) -> Vec<ScreenshotForwardImagePayload> {
     let mut images = Vec::<ScreenshotForwardImagePayload>::new();
 
     if let Some(image_b64) = value
@@ -131,7 +140,7 @@ pub(crate) fn extract_forward_images_from_value(value: &Value) -> Vec<Screenshot
     images
 }
 
-pub(crate) fn extract_image_mime_from_value(value: &Value) -> Option<String> {
+pub fn extract_image_mime_from_value(value: &Value) -> Option<String> {
     value
         .get("imageMime")
         .and_then(Value::as_str)
@@ -206,7 +215,7 @@ pub(crate) fn extract_image_mime_from_value(value: &Value) -> Option<String> {
         })
 }
 
-pub(crate) fn enrich_screenshot_tool_result_with_cache(
+pub fn enrich_screenshot_tool_result_with_cache(
     _tool_name: &str,
     tool_result: &ProviderToolResult,
     projected_text: &str,
@@ -233,7 +242,7 @@ pub(crate) fn enrich_screenshot_tool_result_with_cache(
     (text, Some((payload, artifact_id)))
 }
 
-pub(crate) fn screenshot_forward_notice(payload: &ScreenshotForwardPayload) -> String {
+pub fn screenshot_forward_notice(payload: &ScreenshotForwardPayload) -> String {
     if payload.images.len() > 1 {
         format!(
             "工具已执行，以下 {} 张图片来自工具结果，将作为用户消息转发，请注意鉴别。",
@@ -255,7 +264,7 @@ pub(crate) fn screenshot_forward_notice(payload: &ScreenshotForwardPayload) -> S
 
 #[cfg(test)]
 #[test]
-pub(crate) fn screenshot_value_boundary_should_extract_multiple_images() {
+pub fn screenshot_value_boundary_should_extract_multiple_images() {
     let value = serde_json::json!({
         "parts": [
             {"type": "image", "mimeType": "image/webp", "data": "aaa", "width": 100, "height": 80},

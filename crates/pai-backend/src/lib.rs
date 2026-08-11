@@ -24,6 +24,8 @@ pub mod model_runtime;
 pub mod message_store;
 pub mod multilingual;
 pub mod share_export;
+pub mod screenshot_cache;
+pub mod screenshot_cache_types;
 pub mod skill;
 pub mod task;
 pub mod tool_loop;

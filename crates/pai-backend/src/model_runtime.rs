@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use serde_json::Value;
 
+use crate::screenshot_cache::extract_forward_images_from_value;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProviderToolDefinition {
     pub name: String,
@@ -221,33 +223,6 @@ pub fn provider_tool_output_from_value(tool_name: &str, value: &Value) -> String
     }
 }
 
-/// 提取转发图片（简化版，从 src-tauri screenshot_cache.rs 迁入）。
-pub fn extract_forward_images_from_value(value: &Value) -> Vec<ForwardImagePayload> {
-    let mut images = Vec::<ForwardImagePayload>::new();
-    if let Some(image_b64) = value
-        .get("imageBase64")
-        .and_then(Value::as_str)
-        .or_else(|| value.get("image_base64").and_then(Value::as_str))
-    {
-        images.push(ForwardImagePayload {
-            mime: "image/webp".to_string(),
-            base64: image_b64.trim().to_string(),
-            width: 0,
-            height: 0,
-        });
-    }
-    images
-}
-
-/// 转发图片载荷（从 src-tauri screenshot_cache.rs 迁入）。
-#[derive(Debug, Clone)]
-pub struct ForwardImagePayload {
-    pub mime: String,
-    pub base64: String,
-    pub width: u32,
-    pub height: u32,
-}
-
 /// 移除内联媒体（从 src-tauri mcp/runtime_manager.rs 迁入）。
 pub fn remove_inline_media_from_tool_value(value: &mut Value) {
     match value {
@@ -267,7 +242,8 @@ pub fn remove_inline_media_from_tool_value(value: &mut Value) {
     }
 }
 
-pub fn provider_tool_result_from_value(tool_name: &str, mut value: Value) -> ProviderToolResult {    let metadata = provider_tool_metadata_from_value(tool_name, &value);
+pub fn provider_tool_result_from_value(tool_name: &str, mut value: Value) -> ProviderToolResult {
+    let metadata = provider_tool_metadata_from_value(tool_name, &value);
     let images = if tool_name == "operate" {
         let payload = value.get("data").unwrap_or(&value);
         extract_forward_images_from_value(payload)
