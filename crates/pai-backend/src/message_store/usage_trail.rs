@@ -29,7 +29,7 @@ pub fn parse_api_endpoint_id(endpoint_id: &str) -> Option<(String, String)> {
     }
     Some((provider_id, model_id))
 }
-use super::active_plan::chat_metadata_store_open;
+use super::sqlite::chat_metadata_store_open;
 
 /// 迁移是否完成（简化版：检查迁移状态表，从 src-tauri sqlite.rs 迁入）。
 fn chat_metadata_store_migration_is_completed(

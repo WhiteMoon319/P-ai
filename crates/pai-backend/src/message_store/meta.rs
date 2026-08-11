@@ -16,7 +16,7 @@ use crate::core::domain::types_config::{
 use crate::core::domain::types_chat::ConversationCumulativeUsage;
 use crate::memory::store::clean_text;
 /// 附件类型判断（从 src-tauri message_attachment_projection.rs 迁入）。
-fn message_attachment_kind(mime: &str) -> &'static str {
+pub(crate) fn message_attachment_kind(mime: &str) -> &'static str {
     let normalized = mime.trim().to_ascii_lowercase();
     if normalized.starts_with("image/") {
         "image"
@@ -32,7 +32,7 @@ fn message_attachment_kind(mime: &str) -> &'static str {
 use super::*;
 
 /// 摘要上下文标题（简化版：直接读 provider_meta.message_meta.title，从 conversation.rs 迁入）。
-fn summary_context_message_title(message: &ChatMessage) -> Option<String> {
+pub(crate) fn summary_context_message_title(message: &ChatMessage) -> Option<String> {
     let meta = message.provider_meta.as_ref()?;
     meta.get("message_meta")
         .and_then(|value| value.get("title"))
@@ -1261,7 +1261,7 @@ pub fn conversation_message_has_attachment(message: &ChatMessage) -> bool {
 #[cfg(test)]
 pub mod message_store_meta_tests {
 /// 附件类型判断（从 src-tauri message_attachment_projection.rs 迁入）。
-fn message_attachment_kind(mime: &str) -> &'static str {
+pub(crate) fn message_attachment_kind(mime: &str) -> &'static str {
     let normalized = mime.trim().to_ascii_lowercase();
     if normalized.starts_with("image/") {
         "image"
@@ -1277,7 +1277,7 @@ fn message_attachment_kind(mime: &str) -> &'static str {
     use super::*;
 
 /// 摘要上下文标题（简化版：直接读 provider_meta.message_meta.title，从 conversation.rs 迁入）。
-fn summary_context_message_title(message: &ChatMessage) -> Option<String> {
+pub(crate) fn summary_context_message_title(message: &ChatMessage) -> Option<String> {
     let meta = message.provider_meta.as_ref()?;
     meta.get("message_meta")
         .and_then(|value| value.get("title"))

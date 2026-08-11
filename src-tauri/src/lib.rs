@@ -73,6 +73,8 @@ pub(crate) use pai_backend::message_store::meta::{
     build_conversation_preview_text, conversation_message_has_attachment,
     conversation_latest_summary_title, ConversationMetaPreviewMessage, ConversationMetaView,
 };
+// crates/pai-backend message_store::sqlite（阶段 4）。
+pub(crate) use pai_backend::message_store::sqlite::ChatIndexConversationItem;
 #[path = "features/chat/message_store/mod.rs"]
 mod features_chat_message_store_mod;
 pub(crate) use features_chat_message_store_mod::message_store;

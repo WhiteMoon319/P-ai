@@ -43,8 +43,9 @@ pub(crate) mod message_store {
     pub(crate) use pai_backend::message_store::meta::*;
     // usage_trail 已迁至 crates/pai-backend（阶段 4）。
     pub(crate) use pai_backend::message_store::usage_trail::*;
-    include!("sqlite.rs");
-    include!("store.rs");
-    include!("persist.rs");
-    include!("migration.rs");
+    // sqlite/store/persist/migration 已迁至 crates/pai-backend（阶段 4）。
+    pub(crate) use pai_backend::message_store::sqlite::*;
+    pub(crate) use pai_backend::message_store::store::*;
+    pub(crate) use pai_backend::message_store::persist::*;
+    pub(crate) use pai_backend::message_store::migration::*;
 }

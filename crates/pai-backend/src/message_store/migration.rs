@@ -1,20 +1,37 @@
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
+use time::OffsetDateTime;
+use uuid::Uuid;
+
+use crate::core::domain::types_chat::{ChatMessage, Conversation, MessagePart};
+use crate::core::domain::constants::{ASSISTANT_DEPARTMENT_ID, DEFAULT_AGENT_ID};
+use crate::core::domain::types_chat::ConversationCumulativeUsage;
+use crate::core::domain::types_config::{default_shell_work_mode, AppConfig};
+use crate::core::time_semantics::{now_iso, to_local_datetime};
+use crate::logging::{runtime_log_error, runtime_log_info, runtime_log_warn};
+use super::*;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct MessageStoreMigrationPlan {
-    pub(crate) conversation_id: String,
-    pub(crate) source_message_count: usize,
-    pub(crate) source_last_message_id: String,
-    pub(crate) target_store_kind: MessageStoreKind,
-    pub(crate) dry_run: bool,
+pub struct MessageStoreMigrationPlan {
+    pub conversation_id: String,
+    pub source_message_count: usize,
+    pub source_last_message_id: String,
+    pub target_store_kind: MessageStoreKind,
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct MessageStoreMigrationOutcome {
-    pub(crate) conversation_id: String,
-    pub(crate) manifest: MessageStoreManifest,
-    pub(crate) wrote_files: bool,
+pub struct MessageStoreMigrationOutcome {
+    pub conversation_id: String,
+    pub manifest: MessageStoreManifest,
+    pub wrote_files: bool,
 }
 
-pub(crate) fn plan_message_store_jsonl_snapshot_migration(
+pub fn plan_message_store_jsonl_snapshot_migration(
     conversation: &Conversation,
     dry_run: bool,
 ) -> Result<MessageStoreMigrationPlan, String> {
@@ -35,7 +52,7 @@ pub(crate) fn plan_message_store_jsonl_snapshot_migration(
     })
 }
 
-pub(crate) fn build_jsonl_snapshot_migration_artifacts(
+pub fn build_jsonl_snapshot_migration_artifacts(
     conversation: &Conversation,
 ) -> Result<(String, MessageStoreManifest, MessageStoreIndexFile), String> {
     let plan = plan_message_store_jsonl_snapshot_migration(conversation, false)?;
@@ -50,7 +67,7 @@ pub(crate) fn build_jsonl_snapshot_migration_artifacts(
     Ok((content, manifest, report.index))
 }
 
-pub(crate) fn run_jsonl_snapshot_migration(
+pub fn run_jsonl_snapshot_migration(
     paths: &MessageStorePaths,
     conversation: &Conversation,
     dry_run: bool,
@@ -75,7 +92,7 @@ pub(crate) fn run_jsonl_snapshot_migration(
     })
 }
 
-pub(crate) fn read_message_store_manifest_for_resume(
+pub fn read_message_store_manifest_for_resume(
     paths: &MessageStorePaths,
 ) -> Result<Option<MessageStoreManifest>, String> {
     if !paths.manifest_file.exists() {
@@ -106,7 +123,7 @@ pub(crate) fn read_message_store_manifest_for_resume(
     }
 }
 
-pub(crate) fn backup_corrupt_message_store_manifest(
+pub fn backup_corrupt_message_store_manifest(
     paths: &MessageStorePaths,
     raw: &str,
 ) -> Result<PathBuf, String> {
@@ -123,7 +140,7 @@ pub(crate) fn backup_corrupt_message_store_manifest(
     Ok(backup_path)
 }
 
-pub(crate) fn resume_jsonl_snapshot_migration(
+pub fn resume_jsonl_snapshot_migration(
     paths: &MessageStorePaths,
     conversation: &Conversation,
 ) -> Result<MessageStoreMigrationOutcome, String> {
@@ -170,7 +187,7 @@ pub(crate) fn resume_jsonl_snapshot_migration(
     }
 }
 
-pub(crate) fn recover_ready_jsonl_snapshot_manifest_from_directory(
+pub fn recover_ready_jsonl_snapshot_manifest_from_directory(
     paths: &MessageStorePaths,
 ) -> Result<Option<MessageStoreManifest>, String> {
     let Some(manifest) = read_message_store_manifest(&paths.manifest_file)? else {
@@ -211,7 +228,7 @@ pub(crate) fn recover_ready_jsonl_snapshot_manifest_from_directory(
     Ok(Some(ready_manifest))
 }
 
-pub(crate) fn rollback_jsonl_snapshot_migration(
+pub fn rollback_jsonl_snapshot_migration(
     paths: &MessageStorePaths,
     conversation: &Conversation,
 ) -> Result<MessageStoreManifest, String> {
@@ -221,7 +238,7 @@ pub(crate) fn rollback_jsonl_snapshot_migration(
     Ok(manifest)
 }
 
-pub(crate) fn rollback_message_store_manifest(
+pub fn rollback_message_store_manifest(
     paths: &MessageStorePaths,
     mut manifest: MessageStoreManifest,
 ) -> Result<MessageStoreManifest, String> {
@@ -235,7 +252,7 @@ pub(crate) fn rollback_message_store_manifest(
 }
 
 #[cfg(test)]
-pub(crate) mod message_store_tests {
+pub mod message_store_tests {
     use super::*;
 
     fn test_message(id: &str, role: &str) -> ChatMessage {

@@ -1,11 +1,48 @@
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct MessageStoreDirectorySnapshotWrite {
-    manifest: MessageStoreManifest,
-    message_count: usize,
-    last_message_id: String,
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
+use time::OffsetDateTime;
+use uuid::Uuid;
+
+use crate::core::domain::types_chat::{ChatMessage, Conversation, MessagePart};
+use crate::core::domain::constants::{ASSISTANT_DEPARTMENT_ID, DEFAULT_AGENT_ID};
+use crate::core::domain::types_chat::ConversationCumulativeUsage;
+use crate::core::domain::types_config::{default_shell_work_mode, AppConfig};
+use crate::core::time_semantics::{now_iso, to_local_datetime};
+use crate::logging::{runtime_log_error, runtime_log_info, runtime_log_warn};
+use super::*;
+
+/// 消息附件路径规范化（简化版：跳过磁盘规范化，保留原样；从 src-tauri 迁入）。
+pub fn canonicalize_message_parts_for_persistence(
+    _parts: &mut Vec<MessagePart>,
+    _data_path: &PathBuf,
+) -> bool {
+    false
 }
 
-pub(crate) fn write_jsonl_snapshot_directory_shard(
+/// 移除 provider_meta 中的 legacy attachments（从 src-tauri attachments_io.rs 迁入）。
+pub fn provider_meta_without_legacy_attachments(provider_meta: Option<Value>) -> Option<Value> {
+    let mut meta = provider_meta?;
+    if let Some(object) = meta.as_object_mut() {
+        object.remove("attachments");
+        if object.is_empty() {
+            return None;
+        }
+    }
+    Some(meta)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MessageStoreDirectorySnapshotWrite {
+    pub manifest: MessageStoreManifest,
+    pub message_count: usize,
+    pub last_message_id: String,
+}
+
+pub fn write_jsonl_snapshot_directory_shard(
     paths: &MessageStorePaths,
     conversation: &Conversation,
 ) -> Result<MessageStoreDirectorySnapshotWrite, String> {
@@ -34,7 +71,7 @@ pub(crate) fn write_jsonl_snapshot_directory_shard(
     write_jsonl_snapshot_directory_shard_full(paths, &normalized_conversation)
 }
 
-pub(crate) fn write_jsonl_snapshot_directory_shard_if_changed(
+pub fn write_jsonl_snapshot_directory_shard_if_changed(
     paths: &MessageStorePaths,
     conversation: &Conversation,
 ) -> Result<bool, String> {
@@ -66,19 +103,18 @@ pub(crate) fn write_jsonl_snapshot_directory_shard_if_changed(
     Ok(true)
 }
 
-pub(crate) fn normalize_conversation_media_refs_for_message_store(
+pub fn normalize_conversation_media_refs_for_message_store(
     paths: &MessageStorePaths,
     conversation: &Conversation,
 ) -> Conversation {
     let mut next = conversation.clone();
     for message in &mut next.messages {
         canonicalize_message_parts_for_persistence(&mut message.parts, &paths.data_path);
-        message.provider_meta = provider_meta_without_legacy_attachments(message.provider_meta.take());
-    }
+        message.provider_meta = provider_meta_without_legacy_attachments(message.provider_meta.take());    }
     next
 }
 
-pub(crate) fn write_jsonl_snapshot_directory_shard_full(
+pub fn write_jsonl_snapshot_directory_shard_full(
     paths: &MessageStorePaths,
     conversation: &Conversation,
 ) -> Result<MessageStoreDirectorySnapshotWrite, String> {
@@ -116,7 +152,7 @@ pub(crate) fn write_jsonl_snapshot_directory_shard_full(
     })
 }
 
-pub(crate) fn jsonl_snapshot_directory_incremental_fallback_reason(
+pub fn jsonl_snapshot_directory_incremental_fallback_reason(
     paths: &MessageStorePaths,
     manifest: &MessageStoreManifest,
 ) -> Option<String> {
@@ -143,7 +179,7 @@ pub(crate) fn jsonl_snapshot_directory_incremental_fallback_reason(
     None
 }
 
-pub(crate) fn write_jsonl_snapshot_directory_shard_incremental(
+pub fn write_jsonl_snapshot_directory_shard_incremental(
     paths: &MessageStorePaths,
     conversation: &Conversation,
 ) -> Result<MessageStoreDirectorySnapshotWrite, String> {
@@ -272,7 +308,7 @@ pub(crate) fn write_jsonl_snapshot_directory_shard_incremental(
     })
 }
 
-pub(crate) fn ordered_message_store_index_block_ids(index: &MessageStoreIndexFile) -> Vec<u32> {
+pub fn ordered_message_store_index_block_ids(index: &MessageStoreIndexFile) -> Vec<u32> {
     let mut out = Vec::<u32>::new();
     for item in &index.items {
         let Some(block_id) = item.block_id else {
@@ -286,7 +322,7 @@ pub(crate) fn ordered_message_store_index_block_ids(index: &MessageStoreIndexFil
     out
 }
 
-pub(crate) fn cleanup_stale_conversation_block_files(
+pub fn cleanup_stale_conversation_block_files(
     paths: &MessageStorePaths,
     source_blocks: &[ConversationBlockMessageRefs<'_>],
 ) -> Result<(), String> {
@@ -297,7 +333,7 @@ pub(crate) fn cleanup_stale_conversation_block_files(
     cleanup_stale_conversation_block_files_by_names(paths, &expected_block_files)
 }
 
-pub(crate) fn cleanup_stale_conversation_block_files_by_names(
+pub fn cleanup_stale_conversation_block_files_by_names(
     paths: &MessageStorePaths,
     expected_block_files: &std::collections::HashSet<String>,
 ) -> Result<(), String> {
@@ -324,7 +360,7 @@ pub(crate) fn cleanup_stale_conversation_block_files_by_names(
     Ok(())
 }
 
-pub(crate) fn write_jsonl_snapshot_truncated_directory_shard(
+pub fn write_jsonl_snapshot_truncated_directory_shard(
     paths: &MessageStorePaths,
     conversation: &Conversation,
     keep_count: usize,
@@ -481,7 +517,7 @@ pub(crate) fn write_jsonl_snapshot_truncated_directory_shard(
     })
 }
 
-pub(crate) fn write_conversation_directory_meta_shard(
+pub fn write_conversation_directory_meta_shard(
     paths: &MessageStorePaths,
     meta: &ConversationPersistMeta,
 ) -> Result<(), String> {
@@ -492,7 +528,7 @@ pub(crate) fn write_conversation_directory_meta_shard(
     write_conversation_shard_meta_atomic(&paths.meta_file, &shard_meta)
 }
 
-pub(crate) fn write_conversation_directory_meta_for_conversation(
+pub fn write_conversation_directory_meta_for_conversation(
     data_path: &PathBuf,
     conversation: &Conversation,
 ) -> Result<(), String> {
@@ -505,7 +541,7 @@ pub(crate) fn write_conversation_directory_meta_for_conversation(
     write_conversation_directory_meta_shard(&paths, &meta)
 }
 
-pub(crate) fn write_jsonl_snapshot_messages_shard(
+pub fn write_jsonl_snapshot_messages_shard(
     paths: &MessageStorePaths,
     snapshot: &ConversationPersistMessagesSnapshot,
 ) -> Result<MessageStoreDirectorySnapshotWrite, String> {
@@ -545,7 +581,7 @@ pub(crate) fn write_jsonl_snapshot_messages_shard(
     })
 }
 
-pub(crate) fn write_jsonl_snapshot_conversation_blocks(
+pub fn write_jsonl_snapshot_conversation_blocks(
     paths: &MessageStorePaths,
     blocks: &JsonlSnapshotConversationBlocks,
 ) -> Result<(), String> {
@@ -578,7 +614,7 @@ pub(crate) fn write_jsonl_snapshot_conversation_blocks(
     Ok(())
 }
 
-pub(crate) fn write_jsonl_snapshot_appended_message_shard(
+pub fn write_jsonl_snapshot_appended_message_shard(
     paths: &MessageStorePaths,
     meta: &ConversationPersistMeta,
     message: &ChatMessage,
@@ -586,7 +622,7 @@ pub(crate) fn write_jsonl_snapshot_appended_message_shard(
     write_jsonl_snapshot_appended_messages_shard(paths, &[(meta, message)], Some(meta))
 }
 
-pub(crate) fn write_jsonl_snapshot_appended_messages_shard_from_meta(
+pub fn write_jsonl_snapshot_appended_messages_shard_from_meta(
     paths: &MessageStorePaths,
     meta: &ConversationShardMeta,
     messages: &[ChatMessage],
@@ -599,7 +635,7 @@ pub(crate) fn write_jsonl_snapshot_appended_messages_shard_from_meta(
     write_jsonl_snapshot_appended_messages_shard(paths, &entries, Some(&persist_meta))
 }
 
-pub(crate) fn write_jsonl_snapshot_appended_messages_shard(
+pub fn write_jsonl_snapshot_appended_messages_shard(
     paths: &MessageStorePaths,
     entries: &[(&ConversationPersistMeta, &ChatMessage)],
     final_meta: Option<&ConversationPersistMeta>,
@@ -803,18 +839,18 @@ pub(crate) fn write_jsonl_snapshot_appended_messages_shard(
     })
 }
 
-pub(crate) struct AppendedMessageBlockPlan {
-    pub(crate) continue_last_block: bool,
-    pub(crate) groups: Vec<Vec<ChatMessage>>,
+pub struct AppendedMessageBlockPlan {
+    pub continue_last_block: bool,
+    pub groups: Vec<Vec<ChatMessage>>,
 }
 
-pub(crate) fn appended_message_starts_new_block(
+pub fn appended_message_starts_new_block(
     next_message: &ChatMessage,
 ) -> bool {
     message_store_compaction_kind(next_message).is_some()
 }
 
-pub(crate) fn plan_appended_message_blocks(
+pub fn plan_appended_message_blocks(
     last_existing_message: Option<&ChatMessage>,
     entries: &[(&ConversationPersistMeta, &ChatMessage)],
 ) -> AppendedMessageBlockPlan {
@@ -846,7 +882,7 @@ pub(crate) fn plan_appended_message_blocks(
     }
 }
 
-pub(crate) fn write_jsonl_snapshot_truncated_messages_shard(
+pub fn write_jsonl_snapshot_truncated_messages_shard(
     paths: &MessageStorePaths,
     meta: &ConversationPersistMeta,
     keep_count: usize,
@@ -854,7 +890,7 @@ pub(crate) fn write_jsonl_snapshot_truncated_messages_shard(
     write_jsonl_snapshot_truncated_messages_shard_with_persist_meta(paths, meta, keep_count)
 }
 
-pub(crate) fn write_jsonl_snapshot_truncated_messages_shard_from_meta(
+pub fn write_jsonl_snapshot_truncated_messages_shard_from_meta(
     paths: &MessageStorePaths,
     meta: &ConversationShardMeta,
     keep_count: usize,
@@ -863,7 +899,7 @@ pub(crate) fn write_jsonl_snapshot_truncated_messages_shard_from_meta(
     write_jsonl_snapshot_truncated_messages_shard_with_persist_meta(paths, &persist_meta, keep_count)
 }
 
-pub(crate) fn write_jsonl_snapshot_truncated_messages_shard_with_persist_meta(
+pub fn write_jsonl_snapshot_truncated_messages_shard_with_persist_meta(
     paths: &MessageStorePaths,
     meta: &ConversationPersistMeta,
     keep_count: usize,
@@ -975,7 +1011,7 @@ pub(crate) fn write_jsonl_snapshot_truncated_messages_shard_with_persist_meta(
     })
 }
 
-pub(crate) fn write_jsonl_snapshot_replaced_message_shard(
+pub fn write_jsonl_snapshot_replaced_message_shard(
     paths: &MessageStorePaths,
     meta: &ConversationPersistMeta,
     message: &ChatMessage,
@@ -1016,7 +1052,7 @@ pub(crate) fn write_jsonl_snapshot_replaced_message_shard(
     write_jsonl_snapshot_messages_shard(paths, &snapshot)
 }
 
-pub(crate) fn write_jsonl_snapshot_replaced_messages_shard(
+pub fn write_jsonl_snapshot_replaced_messages_shard(
     paths: &MessageStorePaths,
     meta: &ConversationPersistMeta,
     messages: &[ChatMessage],
@@ -1038,7 +1074,7 @@ pub(crate) fn write_jsonl_snapshot_replaced_messages_shard(
     result.ok_or_else(|| format!("批量替换 JSONL 消息失败：消息为空，conversation_id={}", paths.conversation_id))
 }
 
-pub(crate) fn write_jsonl_snapshot_spliced_messages_shard(
+pub fn write_jsonl_snapshot_spliced_messages_shard(
     paths: &MessageStorePaths,
     meta: &ConversationPersistMeta,
     start_index: usize,
@@ -1106,7 +1142,7 @@ pub(crate) fn write_jsonl_snapshot_spliced_messages_shard(
     write_jsonl_snapshot_messages_shard(paths, &snapshot)
 }
 
-pub(crate) fn should_write_jsonl_snapshot_directory_shard(
+pub fn should_write_jsonl_snapshot_directory_shard(
     paths: &MessageStorePaths,
 ) -> Result<bool, String> {
     Ok(read_message_store_manifest(&paths.manifest_file)?
@@ -1114,7 +1150,7 @@ pub(crate) fn should_write_jsonl_snapshot_directory_shard(
         .unwrap_or(false))
 }
 
-pub(crate) fn write_jsonl_snapshot_building_manifest(
+pub fn write_jsonl_snapshot_building_manifest(
     paths: &MessageStorePaths,
     conversation: &Conversation,
 ) -> Result<(), String> {
@@ -1125,7 +1161,7 @@ pub(crate) fn write_jsonl_snapshot_building_manifest(
 }
 
 #[cfg(test)]
-pub(crate) mod message_store_persist_tests {
+pub mod message_store_persist_tests {
     use super::*;
 
     fn test_message(id: &str) -> ChatMessage {

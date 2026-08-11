@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::core::time_semantics::now_iso;
 use super::*;
+use super::sqlite::{chat_metadata_store_db_path, chat_metadata_store_open};
 
 /// 会话变更互斥（简化版：全局 key→锁，从 runtime_lock.rs 迁入）。
 fn with_conversation_mutation_for_data_path<T, F>(
@@ -32,34 +33,6 @@ where
     };
     let _guard = gate.lock().unwrap_or_else(|poison| poison.into_inner());
     f()
-}
-
-/// 打开聊天元数据 DB（精简版：仅确保 active_plan_records 表存在，
-/// 完整 schema 由 src-tauri sqlite.rs 建立；此处只补充缺失表）。
-pub(crate) fn chat_metadata_store_open(data_path: &PathBuf) -> Result<rusqlite::Connection, String> {
-    let db_path = chat_metadata_store_db_path(data_path);
-    if let Some(parent) = db_path.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            format!("创建聊天元数据数据库目录失败，path={}，error={err}", parent.display())
-        })?;
-    }
-    let conn = rusqlite::Connection::open(&db_path)
-        .map_err(|err| format!("打开聊天元数据数据库失败，path={}，error={err}", db_path.display()))?;
-    conn.execute_batch(
-        "PRAGMA journal_mode=WAL;
-         PRAGMA synchronous=NORMAL;
-         PRAGMA foreign_keys=ON;
-         PRAGMA busy_timeout=10000;
-         CREATE TABLE IF NOT EXISTS active_plan_records (
-           id INTEGER PRIMARY KEY AUTOINCREMENT,
-           conversation_id TEXT NOT NULL,
-           plan_id TEXT NOT NULL,
-           record_json TEXT NOT NULL,
-           created_at TEXT NOT NULL DEFAULT ''
-         );",
-    )
-    .map_err(|err| format!("初始化聊天元数据数据库失败: {err}"))?;
-    Ok(conn)
 }
 
 /// 读取活跃计划（SQLite 版，从 src-tauri sqlite.rs 迁入）。

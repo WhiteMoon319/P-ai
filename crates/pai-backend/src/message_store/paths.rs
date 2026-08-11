@@ -25,15 +25,7 @@ pub fn app_layout_chat_conversation_path(path: &PathBuf, conversation_id: &str) 
     app_layout_chat_conversations_dir(path).join(format!("{conversation_id}.json"))
 }
 
-/// 会话元数据 DB 路径（从 src-tauri message_store/sqlite.rs 迁入）。
-pub fn chat_metadata_store_db_path(data_path: &PathBuf) -> PathBuf {
-    app_layout_chat_dir(data_path).join(CHAT_METADATA_DB_FILE_NAME)
-}
-
-/// 会话元数据 DB 是否就绪（简化版：DB 文件存在即就绪）。
-pub fn chat_metadata_store_is_ready(data_path: &PathBuf) -> Result<bool, String> {
-    Ok(chat_metadata_store_db_path(data_path).exists())
-}
+// chat_metadata_store_db_path / chat_metadata_store_is_ready 由 sqlite.rs 提供（权威版）。
 
 pub const MESSAGE_STORE_MANIFEST_FILE_NAME: &str = "manifest.json";
 pub const MESSAGE_STORE_META_FILE_NAME: &str = "meta.json";
@@ -58,7 +50,7 @@ pub struct MessageStorePaths {
     pub active_plans_file: PathBuf,
     pub index_file: PathBuf,
     pub blocks_dir: PathBuf,
-    blobs_dir: PathBuf,
+    pub blobs_dir: PathBuf,
 }
 
 impl MessageStorePaths {

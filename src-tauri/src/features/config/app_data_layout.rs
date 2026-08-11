@@ -235,17 +235,8 @@ impl Default for RuntimeStateFile {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ChatIndexConversationItem {
-    pub(crate) id: String,
-    pub(crate) updated_at: String,
-    pub(crate) status: String,
-    #[serde(default)]
-    pub(crate) summary: String,
-    #[serde(default)]
-    pub(crate) archived_at: Option<String>,
-}
+// ChatIndexConversationItem 已迁至 crates/pai-backend message_store::sqlite
+// （阶段 4），通过 crate 根重导出生效。
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
