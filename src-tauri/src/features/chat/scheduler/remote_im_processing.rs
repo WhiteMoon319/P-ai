@@ -19,14 +19,8 @@ pub(crate) fn remote_im_activation_source_from_sender(
     }
 }
 
-pub(crate) fn resolve_bound_remote_im_activation_source(
-    sources: &[RemoteImActivationSource],
-) -> Option<RemoteImActivationSource> {
-    if sources.len() == 1 {
-        return sources.first().cloned();
-    }
-    None
-}
+// resolve_bound_remote_im_activation_source 已迁至 crates/pai-backend tool_policy
+// （阶段 4），通过 crate 根重导出生效。
 
 pub(crate) fn set_conversation_remote_im_activation_sources(
     state: &AppState,

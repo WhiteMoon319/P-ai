@@ -25,6 +25,7 @@ pub mod multilingual;
 pub mod share_export;
 pub mod skill;
 pub mod task;
+pub mod tool_policy;
 pub mod terminal;
 pub mod text_codec;
 pub mod version_compare;

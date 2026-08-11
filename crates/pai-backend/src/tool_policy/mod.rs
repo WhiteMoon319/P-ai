@@ -1,7 +1,19 @@
 // ==================== 内置工具统一策略表 ====================
 
+use crate::core::domain::types_chat::RemoteImActivationSource;
+
+/// 解析绑定的远程 IM 激活源（从 src-tauri scheduler/remote_im_processing.rs 迁入）。
+pub fn resolve_bound_remote_im_activation_source(
+    sources: &[RemoteImActivationSource],
+) -> Option<RemoteImActivationSource> {
+    if sources.len() == 1 {
+        return sources.first().cloned();
+    }
+    None
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum BuiltinToolPermissionClass {
+pub enum BuiltinToolPermissionClass {
     DepartmentControlled,
     SystemExempt,
     LocalConversationExempt,
@@ -9,7 +21,7 @@ pub(crate) enum BuiltinToolPermissionClass {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum BuiltinToolRuntimeScope {
+pub enum BuiltinToolRuntimeScope {
     Any,
     LocalConversation,
     ResolvedTaskConversation,
@@ -19,7 +31,7 @@ pub(crate) enum BuiltinToolRuntimeScope {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RuntimeToolOriginScope {
+pub enum RuntimeToolOriginScope {
     Local,
     RemotePrivate,
     RemoteGroup,
@@ -34,15 +46,15 @@ impl Default for RuntimeToolOriginScope {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct BuiltinToolPolicy {
-    pub(crate) id: &'static str,
-    pub(crate) permission_class: BuiltinToolPermissionClass,
-    pub(crate) runtime_scope: BuiltinToolRuntimeScope,
-    pub(crate) prompt_rule_id: Option<&'static str>,
-    pub(crate) visible_in_department_permissions: bool,
+pub struct BuiltinToolPolicy {
+    pub id: &'static str,
+    pub permission_class: BuiltinToolPermissionClass,
+    pub runtime_scope: BuiltinToolRuntimeScope,
+    pub prompt_rule_id: Option<&'static str>,
+    pub visible_in_department_permissions: bool,
 }
 
-pub(crate) const DEFAULT_BUILTIN_TOOL_POLICY: BuiltinToolPolicy = BuiltinToolPolicy {
+pub const DEFAULT_BUILTIN_TOOL_POLICY: BuiltinToolPolicy = BuiltinToolPolicy {
     id: "",
     permission_class: BuiltinToolPermissionClass::DepartmentControlled,
     runtime_scope: BuiltinToolRuntimeScope::Any,
@@ -50,7 +62,7 @@ pub(crate) const DEFAULT_BUILTIN_TOOL_POLICY: BuiltinToolPolicy = BuiltinToolPol
     visible_in_department_permissions: true,
 };
 
-pub(crate) const BUILTIN_TOOL_POLICY_TABLE: &[BuiltinToolPolicy] = &[
+pub const BUILTIN_TOOL_POLICY_TABLE: &[BuiltinToolPolicy] = &[
     BuiltinToolPolicy {
         id: "fetch",
         ..DEFAULT_BUILTIN_TOOL_POLICY
@@ -209,7 +221,7 @@ pub(crate) const BUILTIN_TOOL_POLICY_TABLE: &[BuiltinToolPolicy] = &[
     },
 ];
 
-pub(crate) fn builtin_tool_policy(tool_id: &str) -> BuiltinToolPolicy {
+pub fn builtin_tool_policy(tool_id: &str) -> BuiltinToolPolicy {
     let normalized = tool_id.trim();
     BUILTIN_TOOL_POLICY_TABLE
         .iter()
@@ -219,7 +231,7 @@ pub(crate) fn builtin_tool_policy(tool_id: &str) -> BuiltinToolPolicy {
 }
 
 #[cfg(test)]
-pub(crate) fn builtin_tool_policy_is_explicit(tool_id: &str) -> bool {
+pub fn builtin_tool_policy_is_explicit(tool_id: &str) -> bool {
     let normalized = tool_id.trim();
     !normalized.is_empty()
         && BUILTIN_TOOL_POLICY_TABLE
@@ -227,31 +239,31 @@ pub(crate) fn builtin_tool_policy_is_explicit(tool_id: &str) -> bool {
             .any(|policy| policy.id == normalized)
 }
 
-pub(crate) fn builtin_tool_is_fixed_system_from_policy(tool_id: &str) -> bool {
+pub fn builtin_tool_is_fixed_system_from_policy(tool_id: &str) -> bool {
     builtin_tool_policy(tool_id).permission_class == BuiltinToolPermissionClass::SystemExempt
 }
 
-pub(crate) fn builtin_tool_is_local_conversation_fixed_from_policy(tool_id: &str) -> bool {
+pub fn builtin_tool_is_local_conversation_fixed_from_policy(tool_id: &str) -> bool {
     builtin_tool_policy(tool_id).permission_class
         == BuiltinToolPermissionClass::LocalConversationExempt
 }
 
-pub(crate) fn builtin_tool_is_contact_only_hidden_from_policy(tool_id: &str) -> bool {
+pub fn builtin_tool_is_contact_only_hidden_from_policy(tool_id: &str) -> bool {
     builtin_tool_policy(tool_id).permission_class
         == BuiltinToolPermissionClass::ContactCapabilityExempt
 }
 
-pub(crate) fn builtin_tool_is_department_controlled_from_policy(tool_id: &str) -> bool {
+pub fn builtin_tool_is_department_controlled_from_policy(tool_id: &str) -> bool {
     !tool_id.trim().is_empty()
         && builtin_tool_policy(tool_id).permission_class
             == BuiltinToolPermissionClass::DepartmentControlled
 }
 
-pub(crate) fn builtin_tool_visible_in_department_permissions_from_policy(tool_id: &str) -> bool {
+pub fn builtin_tool_visible_in_department_permissions_from_policy(tool_id: &str) -> bool {
     builtin_tool_policy(tool_id).visible_in_department_permissions
 }
 
-pub(crate) fn runtime_tool_origin_scope_from_contact_type(contact_type: &str) -> RuntimeToolOriginScope {
+pub fn runtime_tool_origin_scope_from_contact_type(contact_type: &str) -> RuntimeToolOriginScope {
     match contact_type.trim().to_ascii_lowercase().as_str() {
         "group" => RuntimeToolOriginScope::RemoteGroup,
         "private" | "direct" | "single" => RuntimeToolOriginScope::RemotePrivate,
@@ -259,14 +271,14 @@ pub(crate) fn runtime_tool_origin_scope_from_contact_type(contact_type: &str) ->
     }
 }
 
-pub(crate) fn runtime_tool_origin_scope_from_activation_sources(
+pub fn runtime_tool_origin_scope_from_activation_sources(
     sources: &[RemoteImActivationSource],
 ) -> Option<RuntimeToolOriginScope> {
     resolve_bound_remote_im_activation_source(sources)
         .map(|source| runtime_tool_origin_scope_from_contact_type(&source.remote_contact_type))
 }
 
-pub(crate) fn builtin_tool_runtime_unavailable_reason(
+pub fn builtin_tool_runtime_unavailable_reason(
     tool_id: &str,
     origin_scope: RuntimeToolOriginScope,
     conversation_resolved: bool,
@@ -310,7 +322,7 @@ pub(crate) fn builtin_tool_runtime_unavailable_reason(
     }
 }
 
-pub(crate) fn builtin_tool_prompt_rule_allowed_in_origin(
+pub fn builtin_tool_prompt_rule_allowed_in_origin(
     prompt_rule_id: &str,
     origin_scope: RuntimeToolOriginScope,
 ) -> bool {
@@ -325,7 +337,7 @@ pub(crate) fn builtin_tool_prompt_rule_allowed_in_origin(
     )
 }
 
-pub(crate) fn builtin_tool_prompt_rule_allowed_in_runtime(
+pub fn builtin_tool_prompt_rule_allowed_in_runtime(
     prompt_rule_id: &str,
     origin_scope: RuntimeToolOriginScope,
     conversation_resolved: bool,
@@ -349,7 +361,7 @@ pub(crate) fn builtin_tool_prompt_rule_allowed_in_runtime(
     })
 }
 
-pub(crate) fn builtin_tool_ids_for_prompt_rule(prompt_rule_id: &str) -> Vec<&'static str> {
+pub fn builtin_tool_ids_for_prompt_rule(prompt_rule_id: &str) -> Vec<&'static str> {
     BUILTIN_TOOL_POLICY_TABLE
         .iter()
         .filter(|policy| policy.prompt_rule_id == Some(prompt_rule_id))
@@ -357,7 +369,7 @@ pub(crate) fn builtin_tool_ids_for_prompt_rule(prompt_rule_id: &str) -> Vec<&'st
         .collect()
 }
 
-pub(crate) fn builtin_tool_requires_execution_reauthorization(tool_id: &str) -> bool {
+pub fn builtin_tool_requires_execution_reauthorization(tool_id: &str) -> bool {
     builtin_tool_is_department_controlled_from_policy(tool_id)
         || !matches!(
             builtin_tool_policy(tool_id).runtime_scope,

@@ -5,7 +5,8 @@ include!("provider_and_stream/types.rs");
 include!("provider_and_stream/screenshot_cache.rs");
 
 // ---- 内置工具统一策略表 ----
-include!("provider_and_stream/tool_policy.rs");
+// tool_policy 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::tool_policy::*;
 
 // ---- 流式收集 ----
 include!("provider_and_stream/stream_collect.rs");
