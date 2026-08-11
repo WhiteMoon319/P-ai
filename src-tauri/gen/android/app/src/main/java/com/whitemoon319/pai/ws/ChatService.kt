@@ -335,10 +335,8 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("archives.blockPage", mapOf("input" to input), Map::class.java) as Map<String, Any?>
     }
 
-    suspend fun archiveSummary(archiveId: String): Map<String, Any?> {
-        @Suppress("UNCHECKED_CAST")
-        return client.request("archives.summary", mapOf("archiveId" to archiveId), Map::class.java) as Map<String, Any?>
-    }
+    suspend fun archiveSummary(archiveId: String): String =
+        client.request("archives.summary", mapOf("archiveId" to archiveId), String::class.java)
 
     suspend fun deleteArchive(archiveId: String): Boolean =
         client.request("archives.delete", mapOf("archiveId" to archiveId), Boolean::class.java)
@@ -382,9 +380,9 @@ class ChatService(private val client: PaiWsClient) {
 
     // ---------------- Vue 设置页对齐：记忆 / 存储 / 用量 / 日志 / MCP / 任务 ----------------
 
-    suspend fun listMemories(): Map<String, Any?> {
+    suspend fun listMemories(): List<Map<String, Any?>> {
         @Suppress("UNCHECKED_CAST")
-        return client.request("list_memories", emptyMap<String, Any?>(), Map::class.java) as Map<String, Any?>
+        return client.request("list_memories", emptyMap<String, Any?>(), List::class.java) as List<Map<String, Any?>>
     }
 
     suspend fun deleteMemory(memoryId: String): Boolean {

@@ -1242,9 +1242,7 @@ class AppViewModel(
         withContext(Dispatchers.IO) {
             memoryLoading.value = true
             try {
-                val result = service.listMemories()
-                @Suppress("UNCHECKED_CAST")
-                memories.value = (result["memories"] as? List<Map<String, Any?>>) ?: emptyList()
+                memories.value = service.listMemories()
             } catch (e: Exception) {
                 error.value = "读取记忆失败: ${e.message}"
             } finally {
