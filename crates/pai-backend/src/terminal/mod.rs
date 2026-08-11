@@ -1,10 +1,12 @@
 //! 终端输出格式化与命令分析（纯逻辑，无平台依赖）。
 
 pub mod analyzer;
+pub mod guards;
 pub mod matcher;
 pub mod output;
 
 pub use analyzer::*;
+pub use guards::*;
 pub use matcher::*;
 pub use output::*;
 

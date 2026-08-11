@@ -1,4 +1,10 @@
-pub(crate) fn terminal_is_powershell_encoded_command(command: &str) -> bool {
+use crate::terminal::analyzer::terminal_split_simple_commands;
+use crate::terminal::matcher::{terminal_tokenize, terminal_unquote_token};
+
+/// 终端输出字节上限（从 src-tauri terminal.rs 迁入）。
+pub const TERMINAL_MAX_OUTPUT_BYTES: usize = 256 * 1024;
+
+pub fn terminal_is_powershell_encoded_command(command: &str) -> bool {
     let tokens = terminal_tokenize(command);
     if tokens.is_empty() {
         return false;
@@ -31,7 +37,7 @@ pub(crate) fn terminal_is_powershell_encoded_command(command: &str) -> bool {
     saw_powershell && saw_encoded_flag
 }
 
-pub(crate) fn terminal_git_dangerous_block_reason(command: &str) -> Option<&'static str> {
+pub fn terminal_git_dangerous_block_reason(command: &str) -> Option<&'static str> {
     for simple in terminal_split_simple_commands(command) {
         let Some(first) = simple.argv.first() else {
             continue;
@@ -65,7 +71,7 @@ pub(crate) fn terminal_git_dangerous_block_reason(command: &str) -> Option<&'sta
     None
 }
 
-pub(crate) fn terminal_command_block_reason(command: &str) -> Option<&'static str> {
+pub fn terminal_command_block_reason(command: &str) -> Option<&'static str> {
     if terminal_is_powershell_encoded_command(command) {
         return Some("encoded command is blocked");
     }
@@ -88,7 +94,7 @@ pub(crate) fn terminal_command_block_reason(command: &str) -> Option<&'static st
     None
 }
 
-pub(crate) fn terminal_decode_with_encoding(
+pub fn terminal_decode_with_encoding(
     bytes: &[u8],
     encoding: &'static encoding_rs::Encoding,
 ) -> Option<String> {
@@ -100,7 +106,7 @@ pub(crate) fn terminal_decode_with_encoding(
 }
 
 #[cfg(target_os = "windows")]
-pub(crate) fn terminal_windows_system_encoding() -> Option<&'static encoding_rs::Encoding> {
+pub fn terminal_windows_system_encoding() -> Option<&'static encoding_rs::Encoding> {
     use windows_sys::Win32::Globalization::GetACP;
 
     let label = match unsafe { GetACP() } {
@@ -127,14 +133,14 @@ pub(crate) fn terminal_windows_system_encoding() -> Option<&'static encoding_rs:
     encoding_rs::Encoding::for_label(label)
 }
 
-pub(crate) fn terminal_detect_output_encoding(bytes: &[u8]) -> Option<&'static encoding_rs::Encoding> {
+pub fn terminal_detect_output_encoding(bytes: &[u8]) -> Option<&'static encoding_rs::Encoding> {
     let mut detector = chardetng::EncodingDetector::new(chardetng::Iso2022JpDetection::Allow);
     detector.feed(bytes, true);
     let encoding = detector.guess(None, chardetng::Utf8Detection::Allow);
     Some(encoding)
 }
 
-pub(crate) fn terminal_decode_output_bytes(bytes: &[u8]) -> String {
+pub fn terminal_decode_output_bytes(bytes: &[u8]) -> String {
     if let Ok(text) = std::str::from_utf8(bytes) {
         return text.to_owned();
     }
@@ -162,7 +168,7 @@ pub(crate) fn terminal_decode_output_bytes(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).to_string()
 }
 
-pub(crate) fn truncate_terminal_output(bytes: &[u8]) -> (String, bool) {
+pub fn truncate_terminal_output(bytes: &[u8]) -> (String, bool) {
     if bytes.len() <= TERMINAL_MAX_OUTPUT_BYTES {
         return (terminal_decode_output_bytes(bytes), false);
     }
@@ -172,7 +178,7 @@ pub(crate) fn truncate_terminal_output(bytes: &[u8]) -> (String, bool) {
     )
 }
 
-pub(crate) fn terminal_is_timeout_error(err: &str) -> bool {
+pub fn terminal_is_timeout_error(err: &str) -> bool {
     err.to_ascii_lowercase().contains("timed out after")
 }
 

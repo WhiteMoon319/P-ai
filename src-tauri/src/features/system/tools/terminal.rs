@@ -14,6 +14,7 @@ include!("terminal/workspace.rs");
 
 include!("terminal/approval.rs");
 
-include!("terminal/guards.rs");
+// terminal/guards.rs 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::terminal::guards::*;
 
 include!("terminal/exec.rs");
