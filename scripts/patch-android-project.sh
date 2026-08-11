@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="${1:-.}"
 ANDROID_APP_DIR="$ROOT_DIR/src-tauri/gen/android/app"
-ACTIVITY="$ANDROID_APP_DIR/src/main/java/ai/easycall/app/MainActivity.kt"
+ACTIVITY="$ANDROID_APP_DIR/src/main/java/com/whitemoon319/pai/MainActivity.kt"
 MANIFEST="$ANDROID_APP_DIR/src/main/AndroidManifest.xml"
 NOTIFICATION_ICON_SRC="$ROOT_DIR/src-tauri/icons/android/drawable/ic_stat_pai.png"
 NOTIFICATION_ICON_DST="$ANDROID_APP_DIR/src/main/res/drawable/ic_stat_pai.png"
@@ -30,31 +30,48 @@ mkdir -p "$(dirname "$ACTIVITY")"
 # 防止覆盖导致 Compose 界面丢失。
 if ! grep -q 'PaiApp' "$ACTIVITY" 2>/dev/null; then
   cat > "$ACTIVITY" <<'KOTLIN'
-package ai.easycall.app
+package com.whitemoon319.pai
 
 import android.os.Bundle
-import android.webkit.WebSettings
-import android.webkit.WebView
-import androidx.core.view.WindowCompat
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import com.whitemoon319.pai.native.PaiNative
+import com.whitemoon319.pai.ui.PaiApp
+import com.whitemoon319.pai.viewmodel.AppViewModel
+import android.widget.Toast
 
-class MainActivity : TauriActivity() {
+/**
+ * P-AI Android 原生入口（Compose，无 WebView）。
+ * Rust 后端以纯原生 .so 加载（PaiNative.init），前后端通过 JNI 通信。
+ */
+class MainActivity : ComponentActivity() {
+
+    private lateinit var viewModel: AppViewModel
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        viewModel = (application as PaiApplication).viewModel
+        val initResult = runCatching { PaiNative.init(dataDir.absolutePath) }.getOrElse { it.message }
+        if (initResult != "ok") {
+            Toast.makeText(this, "原生后端初始化失败: $initResult", Toast.LENGTH_LONG).show()
+        }
+        viewModel.start()
+
+        setContent {
+            PaiApp(viewModel)
+        }
     }
 
-    // 远程前端模式：壳层 origin 为 https://tauri.localhost（满足电脑端桥接的 https 校验），
-    // 但嵌入的电脑 PAI iframe 是 http://<电脑IP>:8429/sidebar。https 页面加载 http 子资源
-    // 会触发 Android WebView 的 Mixed Content 默认拦截（MIXED_CONTENT_NEVER_ALLOW），导致
-    // 电脑页面整体加载失败（PC 端显示无连接、设置页打不开）。
-    // 这里放开混合内容，让 http 电脑 iframe 能在 https 壳层内正常加载。
-    override fun onWebViewCreate(webView: WebView) {
-        super.onWebViewCreate(webView)
-        webView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+    override fun onDestroy() {
+        viewModel.stop()
+        super.onDestroy()
     }
 }
 KOTLIN
-  echo "Wrote default WebView MainActivity (no Compose found)"
+  echo "Wrote default Compose MainActivity"
 else
   echo "MainActivity already contains Compose (PaiApp); keeping it"
 fi
