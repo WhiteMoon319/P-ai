@@ -918,7 +918,14 @@ fun MessageBubble(message: ChatMessage, agentName: String? = null) {
             shape = MaterialTheme.shapes.medium,
             modifier = Modifier.widthIn(max = 320.dp),
         ) {
-            val text = message.parts.joinToString("\n") { it.displayText }
+            val text = message.parts.joinToString("\n") { part ->
+                when (part.type) {
+                    "Attachment" -> "📎 ${part.name?.takeIf { it.isNotBlank() } ?: part.text?.takeIf { it.isNotBlank() } ?: "附件"}"
+                    "Image" -> "🖼 ${part.name?.takeIf { it.isNotBlank() } ?: "图片"}"
+                    "Audio" -> "🎵 ${part.name?.takeIf { it.isNotBlank() } ?: "音频"}"
+                    else -> part.displayText
+                }
+            }
             if (isUser) {
                 Column(Modifier.padding(10.dp)) {
                     Text(
