@@ -377,6 +377,55 @@ class AppViewModel(
         }
     }
 
+    // ---------------- 归档会话管理 ----------------
+
+    val archives = MutableStateFlow<List<Map<String, Any?>>?>(null)
+    val archivesLoading = MutableStateFlow(false)
+
+    suspend fun loadArchives() {
+        withContext(Dispatchers.IO) {
+            archivesLoading.value = true
+            try {
+                archives.value = service.listArchives()
+            } catch (e: Exception) {
+                error.value = "读取归档失败: ${e.message}"
+            } finally {
+                archivesLoading.value = false
+            }
+        }
+    }
+
+    /** 从归档恢复会话（unarchive 后刷新列表）。 */
+    suspend fun unarchive(archiveId: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val ok = service.unarchiveArchive(archiveId)
+                if (ok) {
+                    loadArchives()
+                    refreshConversations()
+                }
+                ok
+            } catch (e: Exception) {
+                error.value = "恢复归档失败: ${e.message}"
+                false
+            }
+        }
+    }
+
+    /** 删除归档。 */
+    suspend fun deleteArchive(archiveId: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val ok = service.deleteArchive(archiveId)
+                if (ok) loadArchives()
+                ok
+            } catch (e: Exception) {
+                error.value = "删除归档失败: ${e.message}"
+                false
+            }
+        }
+    }
+
     private fun handleNotification(method: String, params: JsonElement?) {
         // 诊断：确认下行事件是否到达 Kotlin，及正文/思考/工具各自到达情况
         android.util.Log.d("PaiNotify", "method=$method convId=${params?.asJsonObject?.get("conversationId")} curr=${currentConversationId.value}")

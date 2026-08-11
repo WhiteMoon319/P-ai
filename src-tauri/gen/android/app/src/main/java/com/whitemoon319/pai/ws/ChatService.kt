@@ -149,6 +149,30 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("conversation.batchArchive", mapOf("input" to input), Boolean::class.java)
     }
 
+    // ---------------- 归档会话管理（对齐 Vue ArchivesWindow） ----------------
+
+    suspend fun listArchives(): List<Map<String, Any?>> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("archives.list", emptyMap<String, Any?>(), List::class.java) as List<Map<String, Any?>>
+    }
+
+    suspend fun archiveBlockPage(archiveId: String, blockId: Int? = null): Map<String, Any?> {
+        val input = mapOf("archiveId" to archiveId, "blockId" to blockId)
+        @Suppress("UNCHECKED_CAST")
+        return client.request("archives.blockPage", mapOf("input" to input), Map::class.java) as Map<String, Any?>
+    }
+
+    suspend fun archiveSummary(archiveId: String): Map<String, Any?> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("archives.summary", mapOf("archiveId" to archiveId), Map::class.java) as Map<String, Any?>
+    }
+
+    suspend fun deleteArchive(archiveId: String): Boolean =
+        client.request("archives.delete", mapOf("archiveId" to archiveId), Boolean::class.java)
+
+    suspend fun unarchiveArchive(archiveId: String): Boolean =
+        client.request("archives.unarchive", mapOf("archiveId" to archiveId), Boolean::class.java)
+
     // ---------------- 设置 ----------------
 
     suspend fun loadConfig(): com.whitemoon319.pai.model.AppConfig =

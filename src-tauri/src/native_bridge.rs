@@ -279,6 +279,12 @@ async fn native_dispatch(
         "conversation.pin" => ide_chat_toggle_pin_command(state, params),
         "conversation.delete" => ide_chat_delete_conversation(state, params).await,
         "conversation.batchArchive" => ide_chat_batch_archive_conversations(state, params).await,
+        // ---- 归档会话管理（对齐 Vue ArchivesWindow）----
+        "archives.list" => ide_chat_list_archives_command(state),
+        "archives.blockPage" => ide_chat_archive_block_page_command(state, params),
+        "archives.summary" => ide_chat_archive_summary_command(state, params),
+        "archives.delete" => ide_chat_delete_archive_command(state, params),
+        "archives.unarchive" => ide_chat_unarchive_command(state, params),
         "conversation.runtimeSnapshot" => ide_chat_conversation_runtime_snapshot(state, params),
         "conversation.fastRequestTurns" => ide_chat_conversation_fast_request_turns(state, params),
         "conversation.freshnessSnapshot" => ide_chat_conversation_freshness_snapshot(state, params).await,

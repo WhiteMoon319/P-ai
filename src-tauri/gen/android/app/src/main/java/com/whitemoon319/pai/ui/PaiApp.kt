@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Create
@@ -113,9 +114,16 @@ fun PaiApp(vm: AppViewModel) {
         var inChat by remember { mutableStateOf(false) }
         var title by remember { mutableStateOf("会话") }
         var showSettings by remember { mutableStateOf(false) }
+        var showArchives by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
 
         when {
+            showArchives -> {
+                ArchivesScreen(
+                    vm = vm,
+                    onBack = { showArchives = false },
+                )
+            }
             showSettings -> {
                 SettingsScreen(
                     vm = vm,
@@ -157,6 +165,7 @@ fun PaiApp(vm: AppViewModel) {
                         inChat = true
                     },
                     onSettings = { showSettings = true },
+                    onArchives = { showArchives = true },
                 )
             }
         }
@@ -187,8 +196,9 @@ fun ConversationListScreen(
     onNew: () -> Unit,
     onCreated: (String) -> Unit = {},
     onSettings: () -> Unit = {},
+    onArchives: () -> Unit = {},
 ) {
-    ConversationListScreenImpl(vm = vm, onOpen = onOpen, onNew = onNew, onCreated = onCreated, onSettings = onSettings)
+    ConversationListScreenImpl(vm = vm, onOpen = onOpen, onNew = onNew, onCreated = onCreated, onSettings = onSettings, onArchives = onArchives)
 }
 
 /**
@@ -202,6 +212,7 @@ private fun ConversationListScreenImpl(
     onNew: () -> Unit,
     onCreated: (String) -> Unit,
     onSettings: () -> Unit,
+    onArchives: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val conversations by vm.conversations.collectAsState()
@@ -246,6 +257,9 @@ private fun ConversationListScreenImpl(
                 }
             },
             actions = {
+                IconButton(onClick = { onArchives() }) {
+                    Icon(Icons.Default.Archive, contentDescription = "归档")
+                }
                 IconButton(onClick = { onSettings() }) {
                     Icon(Icons.Default.Settings, contentDescription = "设置")
                 }
@@ -379,6 +393,102 @@ private fun ConversationListScreenImpl(
             dismissButton = {
                 TextButton(onClick = { showNewDialog = false }) { Text("取消") }
             },
+        )
+    }
+}
+
+/** 归档会话列表（对齐 Vue ArchivesWindow）：查看/恢复/删除。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ArchivesScreen(
+    vm: AppViewModel,
+    onBack: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val archives by vm.archives.collectAsState()
+    val loading by vm.archivesLoading.collectAsState()
+    var pendingDelete by remember { mutableStateOf<Map<String, Any?>?>(null) }
+
+    LaunchedEffect(Unit) { vm.loadArchives() }
+
+    Column(Modifier.fillMaxSize()) {
+        TopAppBar(
+            title = { Text("归档会话") },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                }
+            },
+            actions = {
+                IconButton(onClick = { scope.launch { vm.loadArchives() } }) {
+                    Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                }
+            },
+        )
+        when {
+            loading && archives.isNullOrEmpty() -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+            archives.isNullOrEmpty() -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("暂无归档会话", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            else -> {
+                LazyColumn(Modifier.fillMaxSize()) {
+                    items(archives!!.size, key = { it }) { index ->
+                        val item = archives!![index]
+                        val archiveId = (item["archiveId"] as? String) ?: ""
+                        val title = (item["title"] as? String) ?: "无标题"
+                        val archivedAt = (item["archivedAt"] as? String) ?: ""
+                        val messageCount = (item["messageCount"] as? Number)?.toInt() ?: 0
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                        ) {
+                            Row(
+                                Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(title, style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        "${messageCount} 条消息 · ${archivedAt.take(16)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                TextButton(
+                                    onClick = {
+                                        scope.launch { vm.unarchive(archiveId) }
+                                    },
+                                ) { Text("恢复") }
+                                TextButton(
+                                    onClick = { pendingDelete = item },
+                                ) { Text("删除") }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pendingDelete?.let { item ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("删除归档") },
+            text = { Text("确定删除「${item["title"] ?: "无标题"}」吗？此操作不可恢复。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        vm.deleteArchive((item["archiveId"] as? String) ?: "")
+                        pendingDelete = null
+                    }
+                }) { Text("删除") }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("取消") } },
         )
     }
 }
