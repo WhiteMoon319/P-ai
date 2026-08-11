@@ -973,7 +973,11 @@ fn memory_mixed_ranked_items(
         if let Some(provider) = rerank_provider.as_ref() {
             match memory_rerank_scores(provider.as_ref(), &effective_query_text, &candidate_memories) {
                 Ok(map) => {
-                    rerank_available = true;
+                    // 候选 <=1 条时 memory_rerank_scores 直接跳过 rerank 调用返回空 map
+                    // （单条无重排意义）。此时不能标记 rerank 可用：否则所有候选
+                    // rerank_score 视为 0，会被调用方的 rerank_min_score 绝对阈值滤空，
+                    // 导致仅有少量记忆时检索永远返回空结果。空 map 视为降级不重排。
+                    rerank_available = !map.is_empty();
                     rerank_map = map;
                 }
                 Err(err) => {
