@@ -51,9 +51,6 @@ jobs:
           echo "ANDROID_NDK_ROOT=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
           echo "$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
 
-      - name: Initialize Android project
-        run: pnpm tauri android init --ci
-
       - name: Enable cleartext traffic for WebView WebSocket
         run: |
           GRADLE="src-tauri/gen/android/app/build.gradle.kts"
@@ -127,8 +124,21 @@ jobs:
           echo "proot deps: $(patchelf --print-needed "$JNI_DIR/libproot_exec.so")"
           rm -rf /tmp/proot_*.deb /tmp/libtalloc_*.deb /tmp/libandroid-shmem_*.deb /tmp/extract-*
 
+      - name: Build native .so (aarch64)
+        run: |
+          export CC_aarch64_linux_android="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang"
+          export AR_aarch64_linux_android="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang"
+          cd src-tauri
+          cargo build --target aarch64-linux-android
+          cp target/aarch64-linux-android/debug/libeasy_call_ai_lib.so gen/android/app/src/main/jniLibs/arm64-v8a/libeasy_call_ai_lib.so
+
       - name: Build Debug APK (aarch64)
-        run: pnpm tauri android build --apk --target aarch64 --debug
+        run: |
+          cd src-tauri/gen/android
+          ./gradlew :app:assembleDebug --no-daemon
+          mkdir -p app/build/outputs/apk/universal/debug
+          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/universal/debug/
 
       - name: Rename signed debug APK
         run: |

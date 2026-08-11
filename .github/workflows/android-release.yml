@@ -51,9 +51,6 @@ jobs:
           echo "ANDROID_NDK_ROOT=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
           echo "$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
 
-      - name: Initialize Android project
-        run: pnpm tauri android init --ci
-
       - name: Enable cleartext traffic for WebView WebSocket
         run: |
           GRADLE="src-tauri/gen/android/app/build.gradle.kts"
@@ -132,8 +129,31 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
           ls -la "$RUNNER_TEMP/release.jks"
 
+      - name: Build native .so (aarch64)
+        run: |
+          export CC_aarch64_linux_android="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang"
+          export AR_aarch64_linux_android="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang"
+          cd src-tauri
+          cargo build --release --target aarch64-linux-android
+          cp target/aarch64-linux-android/release/libeasy_call_ai_lib.so gen/android/app/src/main/jniLibs/arm64-v8a/libeasy_call_ai_lib.so
+
       - name: Build Release APK (aarch64)
-        run: pnpm tauri android build --apk --target aarch64
+        run: |
+          cd src-tauri/gen/android
+          ./gradlew :app:assembleRelease --no-daemon
+
+      - name: Locate release APK
+        run: |
+          APK_DIR="src-tauri/gen/android/app/build/outputs/apk/release"
+          ls -la "$APK_DIR"
+          # 保持 CI 后续步骤的 universal/release 路径约定
+          mkdir -p "$APK_DIR/universal/release" 2>/dev/null || true
+          for apk in "$APK_DIR"/*-release-unsigned.apk "$APK_DIR"/*-unsigned.apk; do
+            [ -e "$apk" ] || continue
+            cp "$apk" "$APK_DIR/universal/release/$(basename "$apk")"
+          done
+          ls -la "$APK_DIR/universal/release" || true
 
       - name: Sign APK with release keystore
         env:
