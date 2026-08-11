@@ -262,6 +262,23 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("mcp_list_servers", emptyMap<String, Any?>(), List::class.java) as List<Map<String, Any?>>
     }
 
+    /** 保存/更新 MCP 服务器。 */
+    suspend fun mcpSaveServer(id: String, name: String, enabled: Boolean, definitionJson: String): Boolean {
+        val input = mapOf(
+            "id" to id,
+            "name" to name,
+            "enabled" to enabled,
+            "definitionJson" to definitionJson,
+        )
+        return client.request("mcp_save_server", mapOf("input" to input), Boolean::class.java)
+    }
+
+    /** 删除 MCP 服务器。 */
+    suspend fun mcpRemoveServer(serverId: String): Boolean {
+        val input = mapOf("serverId" to serverId)
+        return client.request("mcp_remove_server", mapOf("input" to input), Boolean::class.java)
+    }
+
     suspend fun taskListTasks(): List<Map<String, Any?>> {
         @Suppress("UNCHECKED_CAST")
         return client.request("task_list_tasks", emptyMap<String, Any?>(), List::class.java) as List<Map<String, Any?>>

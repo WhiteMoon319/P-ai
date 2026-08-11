@@ -1062,6 +1062,34 @@ class AppViewModel(
         }
     }
 
+    /** 保存/更新 MCP 服务器（成功后刷新列表）。 */
+    suspend fun saveMcpServer(id: String, name: String, enabled: Boolean, definitionJson: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val ok = service.mcpSaveServer(id, name, enabled, definitionJson)
+                if (ok) loadMcpServers()
+                ok
+            } catch (e: Exception) {
+                error.value = "保存 MCP 服务器失败: ${e.message}"
+                false
+            }
+        }
+    }
+
+    /** 删除 MCP 服务器。 */
+    suspend fun removeMcpServer(serverId: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val ok = service.mcpRemoveServer(serverId)
+                if (ok) loadMcpServers()
+                ok
+            } catch (e: Exception) {
+                error.value = "删除 MCP 服务器失败: ${e.message}"
+                false
+            }
+        }
+    }
+
     val tasks = MutableStateFlow<List<Map<String, Any?>>?>(null)
     val tasksLoading = MutableStateFlow(false)
 

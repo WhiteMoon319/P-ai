@@ -2508,6 +2508,12 @@ private fun McpSettingsTab(vm: AppViewModel) {
     val scope = rememberCoroutineScope()
     val servers by vm.mcpServers.collectAsState()
     val loading by vm.mcpLoading.collectAsState()
+    var showEditor by remember { mutableStateOf(false) }
+    var editingId by remember { mutableStateOf<String?>(null) }
+    var editName by remember { mutableStateOf("") }
+    var editEnabled by remember { mutableStateOf(true) }
+    var editDefinition by remember { mutableStateOf("") }
+    var pendingDelete by remember { mutableStateOf<Map<String, Any?>?>(null) }
 
     LaunchedEffect(Unit) { vm.loadMcpServers() }
 
@@ -2515,6 +2521,13 @@ private fun McpSettingsTab(vm: AppViewModel) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("MCP 服务器", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             TextButton(onClick = { scope.launch { vm.loadMcpServers() } }, enabled = !loading) { Text(if (loading) "加载中…" else "刷新") }
+            Button(onClick = {
+                editingId = null
+                editName = ""
+                editEnabled = true
+                editDefinition = ""
+                showEditor = true
+            }) { Text("新增") }
         }
         if (servers.isNullOrEmpty()) {
             Text(
@@ -2529,10 +2542,21 @@ private fun McpSettingsTab(vm: AppViewModel) {
                     val server = servers!![index]
                     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                         Column(Modifier.padding(12.dp)) {
-                            Text(
-                                server["name"] as? String ?: "未命名",
-                                style = MaterialTheme.typography.titleSmall,
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    server["name"] as? String ?: "未命名",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                TextButton(onClick = {
+                                    editingId = server["id"] as? String ?: ""
+                                    editName = server["name"] as? String ?: ""
+                                    editEnabled = server["enabled"] as? Boolean ?: true
+                                    editDefinition = (server["definitionJson"] as? String) ?: ""
+                                    showEditor = true
+                                }) { Text("编辑") }
+                                TextButton(onClick = { pendingDelete = server }) { Text("删除") }
+                            }
                             val command = server["command"] as? String ?: ""
                             val url = server["url"] as? String ?: ""
                             Text(
@@ -2545,6 +2569,64 @@ private fun McpSettingsTab(vm: AppViewModel) {
                 }
             }
         }
+    }
+
+    if (showEditor) {
+        AlertDialog(
+            onDismissRequest = { showEditor = false },
+            title = { Text(if (editingId.isNullOrBlank()) "新增 MCP 服务器" else "编辑 MCP 服务器") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = editName,
+                        onValueChange = { editName = it },
+                        label = { Text("名称") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("启用", style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.width(8.dp))
+                        Switch(checked = editEnabled, onCheckedChange = { editEnabled = it })
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = editDefinition,
+                        onValueChange = { editDefinition = it },
+                        label = { Text("配置 JSON（definitionJson）") },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showEditor = false
+                    val id = editingId ?: "mcp-${System.currentTimeMillis()}"
+                    scope.launch {
+                        vm.saveMcpServer(id, editName.trim(), editEnabled, editDefinition)
+                    }
+                }) { Text("保存") }
+            },
+            dismissButton = { TextButton(onClick = { showEditor = false }) { Text("取消") } },
+        )
+    }
+
+    pendingDelete?.let { server ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("删除 MCP 服务器") },
+            text = { Text("确定删除「${server["name"] ?: "未命名"}」吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        vm.removeMcpServer((server["id"] as? String) ?: "")
+                        pendingDelete = null
+                    }
+                }) { Text("删除") }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("取消") } },
+        )
     }
 }
 
