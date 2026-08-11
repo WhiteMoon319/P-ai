@@ -900,8 +900,8 @@ pub(crate) fn repair_android_workspace_runtime_ws_inner(
                 .map_err(|err| format!("创建 Android proot 临时目录失败 ({}): {err}", temp_dir.display()))?;
             let (native_dir, _, _) = features_system_sandbox::android_rootfs_runner::android_proot_binary_paths()?;
             let _ = features_system_sandbox::android_rootfs_runner::android_proot_ensure_libs_dir(&native_dir, &temp_dir)?;
-            features_system_sandbox::android_rootfs_patcher::android_proot_ensure_host_pai_layout(&root)?;
-            features_system_sandbox::android_rootfs_patcher::android_proot_patch_rootfs(&runtime_root)?;
+            pai_android_platform::sandbox::android_rootfs::patcher::android_proot_ensure_host_pai_layout(&root)?;
+            pai_android_platform::sandbox::android_rootfs::patcher::android_proot_patch_rootfs(&runtime_root)?;
             write_android_workspace_rootfs_marker(&runtime_root)?;
             if !android_workspace_runtime_ready(&root) {
                 return Err("Android Linux 运行环境修复后仍未通过就绪检查。".to_string());

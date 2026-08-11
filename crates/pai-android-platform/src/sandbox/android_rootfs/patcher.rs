@@ -1,6 +1,6 @@
 use super::*;
 
-pub(crate) fn android_proot_current_group_ids() -> Vec<u64> {
+pub fn android_proot_current_group_ids() -> Vec<u64> {
     let Ok(status) = std::fs::read_to_string("/proc/self/status") else {
         return Vec::new();
     };
@@ -14,7 +14,7 @@ pub(crate) fn android_proot_current_group_ids() -> Vec<u64> {
         .collect()
 }
 
-pub(crate) fn android_proot_write_if_missing(path: &std::path::Path, content: &str) -> Result<(), String> {
+pub fn android_proot_write_if_missing(path: &std::path::Path, content: &str) -> Result<(), String> {
     if path.is_file()
         && std::fs::read_to_string(path)
             .map(|text| !text.trim().is_empty())
@@ -30,7 +30,7 @@ pub(crate) fn android_proot_write_if_missing(path: &std::path::Path, content: &s
         .map_err(|err| format!("写入 Android rootfs 配置失败 ({}): {err}", path.display()))
 }
 
-pub(crate) fn android_proot_patch_resolv_conf(etc_dir: &std::path::Path) -> Result<(), String> {
+pub fn android_proot_patch_resolv_conf(etc_dir: &std::path::Path) -> Result<(), String> {
     let path = etc_dir.join("resolv.conf");
     let should_write = match std::fs::symlink_metadata(&path) {
         Ok(metadata) if metadata.file_type().is_symlink() => true,
@@ -60,7 +60,7 @@ pub(crate) fn android_proot_patch_resolv_conf(etc_dir: &std::path::Path) -> Resu
     .map_err(|err| format!("写入 Android rootfs DNS 配置失败 ({}): {err}", path.display()))
 }
 
-pub(crate) fn android_proot_patch_group_file(etc_dir: &std::path::Path) -> Result<(), String> {
+pub fn android_proot_patch_group_file(etc_dir: &std::path::Path) -> Result<(), String> {
     let path = etc_dir.join("group");
     if !path.exists() {
         android_proot_write_if_missing(&path, "root:x:0:\n")?;
@@ -90,7 +90,7 @@ pub(crate) fn android_proot_patch_group_file(etc_dir: &std::path::Path) -> Resul
         .map_err(|err| format!("写入 Android rootfs group 配置失败 ({}): {err}", path.display()))
 }
 
-pub(crate) fn android_proot_set_path_mode(path: &std::path::Path, mode: u32) {
+pub fn android_proot_set_path_mode(path: &std::path::Path, mode: u32) {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt as _;
@@ -103,11 +103,11 @@ pub(crate) fn android_proot_set_path_mode(path: &std::path::Path, mode: u32) {
     }
 }
 
-pub(crate) fn android_proot_set_dir_mode(path: &std::path::Path, mode: u32) {
+pub fn android_proot_set_dir_mode(path: &std::path::Path, mode: u32) {
     android_proot_set_path_mode(path, mode);
 }
 
-pub(crate) fn android_proot_ensure_host_pai_layout(root: &std::path::Path) -> Result<(), String> {
+pub fn android_proot_ensure_host_pai_layout(root: &std::path::Path) -> Result<(), String> {
     for relative in [
         ".pai",
         ".pai/plan",
@@ -122,7 +122,7 @@ pub(crate) fn android_proot_ensure_host_pai_layout(root: &std::path::Path) -> Re
     Ok(())
 }
 
-pub(crate) fn android_proot_ensure_root_pai_layout(runtime_root: &std::path::Path) -> Result<(), String> {
+pub fn android_proot_ensure_root_pai_layout(runtime_root: &std::path::Path) -> Result<(), String> {
     for relative in [
         "root/.pai",
         "root/.pai/skills",
@@ -137,7 +137,7 @@ pub(crate) fn android_proot_ensure_root_pai_layout(runtime_root: &std::path::Pat
     Ok(())
 }
 
-pub(crate) fn android_proot_rootfs_normalize_path(path: &std::path::Path) -> std::path::PathBuf {
+pub fn android_proot_rootfs_normalize_path(path: &std::path::Path) -> std::path::PathBuf {
     let mut normalized = std::path::PathBuf::new();
     for component in path.components() {
         match component {
@@ -153,7 +153,7 @@ pub(crate) fn android_proot_rootfs_normalize_path(path: &std::path::Path) -> std
     normalized
 }
 
-pub(crate) fn android_proot_resolve_rootfs_symlink_target(
+pub fn android_proot_resolve_rootfs_symlink_target(
     runtime_root: &std::path::Path,
     link_path: &std::path::Path,
     link_target: &std::path::Path,
@@ -180,7 +180,7 @@ pub(crate) fn android_proot_resolve_rootfs_symlink_target(
     resolved.starts_with(&runtime_root).then_some(resolved)
 }
 
-pub(crate) fn android_proot_relative_rootfs_symlink_target(
+pub fn android_proot_relative_rootfs_symlink_target(
     runtime_root: &std::path::Path,
     link_path: &std::path::Path,
     link_target: &std::path::Path,
@@ -217,7 +217,7 @@ pub(crate) fn android_proot_relative_rootfs_symlink_target(
     Some(if relative.is_empty() { ".".to_string() } else { relative.join("/") })
 }
 
-pub(crate) fn android_proot_repair_rootfs_symlink_if_needed(
+pub fn android_proot_repair_rootfs_symlink_if_needed(
     runtime_root: &std::path::Path,
     relative_path: &str,
 ) -> Result<(), String> {
@@ -249,7 +249,7 @@ pub(crate) fn android_proot_repair_rootfs_symlink_if_needed(
     Ok(())
 }
 
-pub(crate) fn android_proot_container_file_issue(
+pub fn android_proot_container_file_issue(
     runtime_root: &std::path::Path,
     relative_path: &str,
 ) -> Option<String> {
@@ -261,7 +261,7 @@ pub(crate) fn android_proot_container_file_issue(
     android_proot_container_file_issue_inner(&root, &path, &mut std::collections::HashSet::new())
 }
 
-pub(crate) fn android_proot_container_file_issue_inner(
+pub fn android_proot_container_file_issue_inner(
     runtime_root: &std::path::Path,
     path: &std::path::Path,
     visited: &mut std::collections::HashSet<std::path::PathBuf>,
@@ -293,7 +293,7 @@ pub(crate) fn android_proot_container_file_issue_inner(
     None
 }
 
-pub(crate) fn android_proot_replace_with_file_copy(
+pub fn android_proot_replace_with_file_copy(
     source: &std::path::Path,
     target: &std::path::Path,
     context: &str,
@@ -313,7 +313,7 @@ pub(crate) fn android_proot_replace_with_file_copy(
     Ok(())
 }
 
-pub(crate) fn android_proot_ensure_rootfs_entrypoints(runtime_root: &std::path::Path) -> Result<(), String> {
+pub fn android_proot_ensure_rootfs_entrypoints(runtime_root: &std::path::Path) -> Result<(), String> {
     for relative in ["bin", "sbin", "lib", "lib64"] {
         android_proot_repair_rootfs_symlink_if_needed(runtime_root, relative)?;
     }
@@ -360,7 +360,7 @@ pub(crate) fn android_proot_ensure_rootfs_entrypoints(runtime_root: &std::path::
     Ok(())
 }
 
-pub(crate) fn android_proot_patch_rootfs(runtime_root: &std::path::Path) -> Result<(), String> {
+pub fn android_proot_patch_rootfs(runtime_root: &std::path::Path) -> Result<(), String> {
     android_proot_ensure_rootfs_entrypoints(runtime_root)?;
     android_proot_ensure_root_pai_layout(runtime_root)?;
     let etc_dir = runtime_root.join("etc");

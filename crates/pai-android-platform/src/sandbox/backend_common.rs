@@ -2,7 +2,9 @@
 // 各后端统一通过本函数执行子进程：支持可选 stdin 写入、超时中断与取消中断。
 // 取消/超时路径依赖各后端 command_builder 上设置的 kill_on_drop(true) 回收进程。
 
-pub(crate) async fn sandbox_collect_output(
+use pai_backend::logging::runtime_log_warn;
+
+pub async fn sandbox_collect_output(
     mut command_builder: tokio::process::Command,
     stdin: Option<Vec<u8>>,
     timeout_ms: u64,
