@@ -467,14 +467,5 @@ pub(crate) fn app_root_from_data_path(data_path: &PathBuf) -> PathBuf {
     parent
 }
 
-pub(crate) fn now_utc() -> OffsetDateTime {
-    OffsetDateTime::now_utc()
-}
-
-pub(crate) fn now_iso() -> String {
-    now_utc_rfc3339()
-}
-
-pub(crate) fn parse_iso(value: &str) -> Option<OffsetDateTime> {
-    parse_rfc3339_time(value)
-}
+// now_utc / now_iso / parse_iso 已迁移至 crates/pai-backend 的 time_semantics（阶段 4），
+// 通过 src-tauri lib.rs 的 pub(crate) use pai_backend::core::time_semantics::* 生效。

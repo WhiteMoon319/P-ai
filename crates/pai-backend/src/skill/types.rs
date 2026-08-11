@@ -12,7 +12,7 @@ pub struct WorkspaceLoadError {
 }
 
 impl WorkspaceLoadError {
-    pub(crate) fn with_hint(
+    pub fn with_hint(
         item: impl Into<String>,
         error: impl Into<String>,
         hint: impl Into<String>,

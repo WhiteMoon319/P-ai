@@ -1,263 +1,272 @@
-pub(crate) const TASK_DB_FILE_NAME: &str = "task_store.db";
-pub(crate) const TASK_STATE_ACTIVE: &str = "active";
-pub(crate) const TASK_STATE_COMPLETED: &str = "completed";
-pub(crate) const TASK_STATE_FAILED_COMPLETED: &str = "failed_completed";
-pub(crate) const TASK_SCHEDULER_FALLBACK_SECONDS: u64 = 60;
-pub(crate) const TASK_MAX_BOARD_ITEMS: usize = 4;
-pub(crate) const TASK_TARGET_SCOPE_DESKTOP: &str = "desktop";
-pub(crate) const TASK_TARGET_SCOPE_CONTACT: &str = "contact";
-pub(crate) const TASK_BOUND_CONVERSATION_MISSING_CONCLUSION: &str = "绑定会话不存在，任务已终止。";
-pub(crate) const TASK_BOUND_OWNER_UNAVAILABLE_CONCLUSION: &str = "任务负责人不可用，任务已终止。";
+pub const TASK_DB_FILE_NAME: &str = "task_store.db";
+pub const TASK_STATE_ACTIVE: &str = "active";
+pub const TASK_STATE_COMPLETED: &str = "completed";
+pub const TASK_STATE_FAILED_COMPLETED: &str = "failed_completed";
+pub const TASK_SCHEDULER_FALLBACK_SECONDS: u64 = 60;
+pub const TASK_MAX_BOARD_ITEMS: usize = 4;
+pub const TASK_TARGET_SCOPE_DESKTOP: &str = "desktop";
+pub const TASK_TARGET_SCOPE_CONTACT: &str = "contact";
+pub const TASK_BOUND_CONVERSATION_MISSING_CONCLUSION: &str = "绑定会话不存在，任务已终止。";
+pub const TASK_BOUND_OWNER_UNAVAILABLE_CONCLUSION: &str = "任务负责人不可用，任务已终止。";
+
+use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
+
+use crate::core::domain::constants::SYSTEM_NOTIFICATION_CONVERSATION_ID;
+use crate::core::time_semantics::{
+    format_utc_storage_time_to_local_rfc3339, normalize_time_for_utc_storage, now_utc,
+    parse_rfc3339_time, to_local_datetime,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct TaskTriggerInputLocal {
+pub struct TaskTriggerInputLocal {
     #[serde(
         default,
         alias = "runAt",
         alias = "runAtLocal",
         alias = "run_at_local"
     )]
-    pub(crate) run_at: Option<String>,
+    pub run_at: Option<String>,
     #[serde(default, alias = "cronExpression")]
-    pub(crate) cron_expression: Option<String>,
+    pub cron_expression: Option<String>,
     #[serde(
         default,
         alias = "endAt",
         alias = "endAtLocal",
         alias = "end_at_local"
     )]
-    pub(crate) end_at: Option<String>,
+    pub end_at: Option<String>,
     #[serde(default, alias = "everyMinutes", alias = "every_minutes", skip_serializing)]
-    pub(crate) legacy_every_minutes: Option<f64>,
+    pub legacy_every_minutes: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct TaskTriggerView {
+pub struct TaskTriggerView {
     #[serde(default, alias = "runAt", alias = "runAtLocal")]
-    pub(crate) run_at: Option<String>,
+    pub run_at: Option<String>,
     #[serde(default, alias = "cronExpression")]
-    pub(crate) cron_expression: Option<String>,
+    pub cron_expression: Option<String>,
     #[serde(default, alias = "everyMinutes")]
-    pub(crate) every_minutes: Option<f64>,
+    pub every_minutes: Option<f64>,
     #[serde(default, alias = "endAt", alias = "endAtLocal")]
-    pub(crate) end_at: Option<String>,
+    pub end_at: Option<String>,
     #[serde(default, alias = "nextRunAt", alias = "nextRunAtLocal")]
-    pub(crate) next_run_at: Option<String>,
+    pub next_run_at: Option<String>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct TaskTriggerStored {
-    pub(crate) run_at_utc: Option<String>,
-    pub(crate) cron_expression: Option<String>,
-    pub(crate) legacy_every_minutes: Option<f64>,
-    pub(crate) end_at_utc: Option<String>,
-    pub(crate) next_run_at_utc: Option<String>,
+pub struct TaskTriggerStored {
+    pub run_at_utc: Option<String>,
+    pub cron_expression: Option<String>,
+    pub legacy_every_minutes: Option<f64>,
+    pub end_at_utc: Option<String>,
+    pub next_run_at_utc: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskProgressNoteView {
+pub struct TaskProgressNoteView {
     #[serde(default)]
-    pub(crate) at_local: String,
-    pub(crate) note: String,
+    pub at_local: String,
+    pub note: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskProgressNoteStored {
+pub struct TaskProgressNoteStored {
     #[serde(alias = "at", alias = "atUtc")]
-    pub(crate) at_utc: String,
-    pub(crate) note: String,
+    pub at_utc: String,
+    pub note: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskEntry {
-    pub(crate) task_id: String,
+pub struct TaskEntry {
+    pub task_id: String,
     #[serde(default)]
-    pub(crate) conversation_id: Option<String>,
+    pub conversation_id: Option<String>,
     #[serde(default)]
-    pub(crate) department_id: Option<String>,
+    pub department_id: Option<String>,
     #[serde(default)]
-    pub(crate) agent_id: Option<String>,
-    pub(crate) order_index: i64,
-    pub(crate) goal: String,
-    pub(crate) why: String,
-    pub(crate) todo: String,
-    pub(crate) completion_state: String,
+    pub agent_id: Option<String>,
+    pub order_index: i64,
+    pub goal: String,
+    pub why: String,
+    pub todo: String,
+    pub completion_state: String,
     #[serde(default)]
-    pub(crate) completion_conclusion: String,
-    pub(crate) progress_notes: Vec<TaskProgressNoteView>,
-    pub(crate) trigger: TaskTriggerView,
-    pub(crate) created_at_local: String,
-    pub(crate) updated_at_local: String,
+    pub completion_conclusion: String,
+    pub progress_notes: Vec<TaskProgressNoteView>,
+    pub trigger: TaskTriggerView,
+    pub created_at_local: String,
+    pub updated_at_local: String,
     #[serde(default)]
-    pub(crate) last_triggered_at_local: Option<String>,
+    pub last_triggered_at_local: Option<String>,
     #[serde(default)]
-    pub(crate) completed_at_local: Option<String>,
+    pub completed_at_local: Option<String>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct TaskRecordStored {
-    pub(crate) task_id: String,
-    pub(crate) conversation_id: Option<String>,
-    pub(crate) department_id: Option<String>,
-    pub(crate) agent_id: Option<String>,
-    pub(crate) target_scope: String,
-    pub(crate) order_index: i64,
-    pub(crate) title: String,
-    pub(crate) cause: String,
-    pub(crate) goal: String,
-    pub(crate) flow: String,
-    pub(crate) todos: Vec<String>,
-    pub(crate) status_summary: String,
-    pub(crate) completion_state: String,
-    pub(crate) completion_conclusion: String,
-    pub(crate) progress_notes: Vec<TaskProgressNoteStored>,
-    pub(crate) stage_key: String,
-    pub(crate) stage_updated_at_utc: Option<String>,
-    pub(crate) trigger: TaskTriggerStored,
-    pub(crate) created_at_utc: String,
-    pub(crate) updated_at_utc: String,
-    pub(crate) last_triggered_at_utc: Option<String>,
-    pub(crate) completed_at_utc: Option<String>,
+pub struct TaskRecordStored {
+    pub task_id: String,
+    pub conversation_id: Option<String>,
+    pub department_id: Option<String>,
+    pub agent_id: Option<String>,
+    pub target_scope: String,
+    pub order_index: i64,
+    pub title: String,
+    pub cause: String,
+    pub goal: String,
+    pub flow: String,
+    pub todos: Vec<String>,
+    pub status_summary: String,
+    pub completion_state: String,
+    pub completion_conclusion: String,
+    pub progress_notes: Vec<TaskProgressNoteStored>,
+    pub stage_key: String,
+    pub stage_updated_at_utc: Option<String>,
+    pub trigger: TaskTriggerStored,
+    pub created_at_utc: String,
+    pub updated_at_utc: String,
+    pub last_triggered_at_utc: Option<String>,
+    pub completed_at_utc: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskBoardSnapshot {
-    pub(crate) tasks: Vec<TaskEntry>,
+pub struct TaskBoardSnapshot {
+    pub tasks: Vec<TaskEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskRunLogEntry {
-    pub(crate) id: i64,
-    pub(crate) task_id: String,
-    pub(crate) triggered_at_local: String,
-    pub(crate) outcome: String,
-    pub(crate) note: String,
+pub struct TaskRunLogEntry {
+    pub id: i64,
+    pub task_id: String,
+    pub triggered_at_local: String,
+    pub outcome: String,
+    pub note: String,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct TaskRunLogStored {
-    pub(crate) id: i64,
-    pub(crate) task_id: String,
-    pub(crate) triggered_at_utc: String,
-    pub(crate) outcome: String,
-    pub(crate) note: String,
+pub struct TaskRunLogStored {
+    pub id: i64,
+    pub task_id: String,
+    pub triggered_at_utc: String,
+    pub outcome: String,
+    pub note: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskRunLogListInput {
+pub struct TaskRunLogListInput {
     #[serde(default)]
-    pub(crate) task_id: Option<String>,
+    pub task_id: Option<String>,
     #[serde(default)]
-    pub(crate) limit: Option<usize>,
+    pub limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskCreateInput {
-    pub(crate) goal: String,
+pub struct TaskCreateInput {
+    pub goal: String,
     #[serde(default)]
-    pub(crate) conversation_id: Option<String>,
+    pub conversation_id: Option<String>,
     #[serde(default)]
-    pub(crate) department_id: Option<String>,
+    pub department_id: Option<String>,
     #[serde(default)]
-    pub(crate) agent_id: Option<String>,
+    pub agent_id: Option<String>,
     #[serde(default)]
-    pub(crate) target_scope: Option<String>,
+    pub target_scope: Option<String>,
     #[serde(default)]
-    pub(crate) why: String,
+    pub why: String,
     #[serde(default)]
-    pub(crate) todo: String,
-    pub(crate) trigger: TaskTriggerInputLocal,
+    pub todo: String,
+    pub trigger: TaskTriggerInputLocal,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskUpdateInput {
-    pub(crate) task_id: String,
+pub struct TaskUpdateInput {
+    pub task_id: String,
     #[serde(default)]
-    pub(crate) conversation_id: Option<String>,
+    pub conversation_id: Option<String>,
     #[serde(default)]
-    pub(crate) department_id: Option<String>,
+    pub department_id: Option<String>,
     #[serde(default)]
-    pub(crate) agent_id: Option<String>,
+    pub agent_id: Option<String>,
     #[serde(default)]
-    pub(crate) target_scope: Option<String>,
+    pub target_scope: Option<String>,
     #[serde(default)]
-    pub(crate) goal: Option<String>,
+    pub goal: Option<String>,
     #[serde(default)]
-    pub(crate) why: Option<String>,
+    pub why: Option<String>,
     #[serde(default)]
-    pub(crate) todo: Option<String>,
+    pub todo: Option<String>,
     #[serde(default)]
-    pub(crate) trigger: Option<TaskTriggerInputLocal>,
+    pub trigger: Option<TaskTriggerInputLocal>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskCompleteInput {
-    pub(crate) task_id: String,
-    pub(crate) completion_state: String,
+pub struct TaskCompleteInput {
+    pub task_id: String,
+    pub completion_state: String,
     #[serde(default)]
-    pub(crate) completion_conclusion: String,
+    pub completion_conclusion: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskDeleteInput {
-    pub(crate) task_id: String,
+pub struct TaskDeleteInput {
+    pub task_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskOptimizeDraftInput {
+pub struct TaskOptimizeDraftInput {
     #[serde(default)]
-    pub(crate) conversation_id: Option<String>,
+    pub conversation_id: Option<String>,
     #[serde(default)]
-    pub(crate) title: String,
-    pub(crate) content: String,
+    pub title: String,
+    pub content: String,
     #[serde(default)]
-    pub(crate) schedule_mode: String,
+    pub schedule_mode: String,
     #[serde(default)]
-    pub(crate) run_at: String,
+    pub run_at: String,
     #[serde(default)]
-    pub(crate) repeat_every: String,
+    pub repeat_every: String,
     #[serde(default)]
-    pub(crate) repeat_unit: String,
+    pub repeat_unit: String,
     #[serde(default)]
-    pub(crate) end_at: String,
+    pub end_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskOptimizeDraftOutput {
-    pub(crate) title: String,
-    pub(crate) content: String,
-    pub(crate) schedule_mode: String,
-    pub(crate) run_at: String,
-    pub(crate) repeat_every: String,
-    pub(crate) repeat_unit: String,
-    pub(crate) end_at: String,
+pub struct TaskOptimizeDraftOutput {
+    pub title: String,
+    pub content: String,
+    pub schedule_mode: String,
+    pub run_at: String,
+    pub repeat_every: String,
+    pub repeat_unit: String,
+    pub end_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskGetInput {
-    pub(crate) task_id: String,
+pub struct TaskGetInput {
+    pub task_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct TaskDispatchNowInput {
-    pub(crate) task_id: String,
+pub struct TaskDispatchNowInput {
+    pub task_id: String,
 }
 
-pub(crate) fn task_trigger_view_from_stored(trigger: &TaskTriggerStored) -> TaskTriggerView {
+pub fn task_trigger_view_from_stored(trigger: &TaskTriggerStored) -> TaskTriggerView {
     TaskTriggerView {
         run_at: trigger
             .run_at_utc
@@ -276,14 +285,14 @@ pub(crate) fn task_trigger_view_from_stored(trigger: &TaskTriggerStored) -> Task
     }
 }
 
-pub(crate) fn task_progress_note_view_from_stored(note: &TaskProgressNoteStored) -> TaskProgressNoteView {
+pub fn task_progress_note_view_from_stored(note: &TaskProgressNoteStored) -> TaskProgressNoteView {
     TaskProgressNoteView {
         at_local: format_utc_storage_time_to_local_rfc3339(&note.at_utc),
         note: note.note.clone(),
     }
 }
 
-pub(crate) fn task_weekday_number_from_local(dt: OffsetDateTime) -> u8 {
+pub fn task_weekday_number_from_local(dt: OffsetDateTime) -> u8 {
     match dt.weekday() {
         time::Weekday::Sunday => 0,
         time::Weekday::Monday => 1,
@@ -295,7 +304,7 @@ pub(crate) fn task_weekday_number_from_local(dt: OffsetDateTime) -> u8 {
     }
 }
 
-pub(crate) fn task_month_name_to_number(value: &str) -> Option<u8> {
+pub fn task_month_name_to_number(value: &str) -> Option<u8> {
     match value.trim().to_ascii_lowercase().as_str() {
         "jan" => Some(1),
         "feb" => Some(2),
@@ -313,7 +322,7 @@ pub(crate) fn task_month_name_to_number(value: &str) -> Option<u8> {
     }
 }
 
-pub(crate) fn task_weekday_name_to_number(value: &str) -> Option<u8> {
+pub fn task_weekday_name_to_number(value: &str) -> Option<u8> {
     match value.trim().to_ascii_lowercase().as_str() {
         "sun" => Some(0),
         "mon" => Some(1),
@@ -326,7 +335,7 @@ pub(crate) fn task_weekday_name_to_number(value: &str) -> Option<u8> {
     }
 }
 
-pub(crate) fn task_cron_field_value_from_token(
+pub fn task_cron_field_value_from_token(
     token: &str,
     min: u8,
     max: u8,
@@ -358,7 +367,7 @@ pub(crate) fn task_cron_field_value_from_token(
     Ok(normalized)
 }
 
-pub(crate) fn task_cron_expand_part(
+pub fn task_cron_expand_part(
     part: &str,
     min: u8,
     max: u8,
@@ -435,7 +444,7 @@ pub(crate) fn task_cron_expand_part(
     Ok(values)
 }
 
-pub(crate) fn task_cron_parse_field(
+pub fn task_cron_parse_field(
     field: &str,
     min: u8,
     max: u8,
@@ -475,18 +484,18 @@ pub(crate) fn task_cron_parse_field(
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct TaskCronSchedule {
-    pub(crate) minutes: Vec<bool>,
-    pub(crate) hours: Vec<bool>,
-    pub(crate) days_of_month: Vec<bool>,
-    pub(crate) months: Vec<bool>,
-    pub(crate) days_of_week: Vec<bool>,
-    pub(crate) dom_unrestricted: bool,
-    pub(crate) dow_unrestricted: bool,
-    pub(crate) normalized: String,
+pub struct TaskCronSchedule {
+    pub minutes: Vec<bool>,
+    pub hours: Vec<bool>,
+    pub days_of_month: Vec<bool>,
+    pub months: Vec<bool>,
+    pub days_of_week: Vec<bool>,
+    pub dom_unrestricted: bool,
+    pub dow_unrestricted: bool,
+    pub normalized: String,
 }
 
-pub(crate) fn task_parse_cron_expression(expression: &str) -> Result<TaskCronSchedule, String> {
+pub fn task_parse_cron_expression(expression: &str) -> Result<TaskCronSchedule, String> {
     let normalized = expression.split_whitespace().collect::<Vec<_>>().join(" ");
     let parts = normalized.split(' ').collect::<Vec<_>>();
     if parts.len() != 5 {
@@ -532,7 +541,7 @@ pub(crate) fn task_parse_cron_expression(expression: &str) -> Result<TaskCronSch
     })
 }
 
-pub(crate) fn task_cron_matches_local(schedule: &TaskCronSchedule, local: OffsetDateTime) -> bool {
+pub fn task_cron_matches_local(schedule: &TaskCronSchedule, local: OffsetDateTime) -> bool {
     let minute = local.minute() as usize;
     let hour = local.hour() as usize;
     let day = local.day() as usize;
@@ -569,7 +578,7 @@ pub(crate) fn task_cron_matches_local(schedule: &TaskCronSchedule, local: Offset
     dom_match || dow_match
 }
 
-pub(crate) fn task_cron_next_after_local(
+pub fn task_cron_next_after_local(
     base_local: OffsetDateTime,
     schedule: &TaskCronSchedule,
 ) -> Option<OffsetDateTime> {
@@ -589,11 +598,11 @@ pub(crate) fn task_cron_next_after_local(
     None
 }
 
-pub(crate) fn task_normalize_cron_expression(value: &str) -> Result<String, String> {
+pub fn task_normalize_cron_expression(value: &str) -> Result<String, String> {
     Ok(task_parse_cron_expression(value)?.normalized)
 }
 
-pub(crate) fn task_legacy_every_minutes_normalized(value: f64) -> Option<f64> {
+pub fn task_legacy_every_minutes_normalized(value: f64) -> Option<f64> {
     if !value.is_finite() || value <= 0.0 {
         return None;
     }
@@ -603,7 +612,7 @@ pub(crate) fn task_legacy_every_minutes_normalized(value: f64) -> Option<f64> {
     Some(value)
 }
 
-pub(crate) fn task_exact_cron_expression_from_legacy_every_minutes(
+pub fn task_exact_cron_expression_from_legacy_every_minutes(
     run_at_utc: Option<&str>,
     every_minutes: f64,
 ) -> Option<String> {
@@ -648,7 +657,7 @@ pub(crate) fn task_exact_cron_expression_from_legacy_every_minutes(
     None
 }
 
-pub(crate) fn task_compute_next_run_at_from_legacy_every_minutes_raw(
+pub fn task_compute_next_run_at_from_legacy_every_minutes_raw(
     run_at_utc: Option<&str>,
     legacy_every_minutes: f64,
     end_at_utc: Option<&str>,
@@ -689,7 +698,7 @@ pub(crate) fn task_compute_next_run_at_from_legacy_every_minutes_raw(
     normalize_time_for_utc_storage(next_dt).ok()
 }
 
-pub(crate) fn task_compute_next_run_at_utc_raw(
+pub fn task_compute_next_run_at_utc_raw(
     run_at_utc: Option<&str>,
     cron_expression: Option<&str>,
     legacy_every_minutes: Option<f64>,
@@ -754,7 +763,7 @@ pub(crate) fn task_compute_next_run_at_utc_raw(
     normalize_time_for_utc_storage(run_at).ok()
 }
 
-pub(crate) fn task_goal_from_legacy_fields(title: &str, goal: &str) -> String {
+pub fn task_goal_from_legacy_fields(title: &str, goal: &str) -> String {
     let normalized_goal = goal.trim();
     if !normalized_goal.is_empty() {
         return normalized_goal.to_string();
@@ -762,7 +771,7 @@ pub(crate) fn task_goal_from_legacy_fields(title: &str, goal: &str) -> String {
     title.trim().to_string()
 }
 
-pub(crate) fn task_why_from_legacy_record(record: &TaskRecordStored) -> String {
+pub fn task_why_from_legacy_record(record: &TaskRecordStored) -> String {
     let normalized_goal = task_goal_from_legacy_fields(&record.title, &record.goal);
     let normalized_title = record.title.trim();
     let mut parts = Vec::<String>::new();
@@ -781,7 +790,7 @@ pub(crate) fn task_why_from_legacy_record(record: &TaskRecordStored) -> String {
     parts.join("\n")
 }
 
-pub(crate) fn task_todo_from_legacy_fields(status_summary: &str, todos: &[String]) -> String {
+pub fn task_todo_from_legacy_fields(status_summary: &str, todos: &[String]) -> String {
     let normalized_status = status_summary.trim();
     let normalized_todos = todos
         .iter()
@@ -806,23 +815,23 @@ pub(crate) fn task_todo_from_legacy_fields(status_summary: &str, todos: &[String
     parts.join("\n")
 }
 
-pub(crate) fn task_legacy_title_from_goal(goal: &str) -> String {
+pub fn task_legacy_title_from_goal(goal: &str) -> String {
     goal.trim().to_string()
 }
 
-pub(crate) fn task_legacy_goal_from_goal(goal: &str) -> String {
+pub fn task_legacy_goal_from_goal(goal: &str) -> String {
     goal.trim().to_string()
 }
 
-pub(crate) fn task_legacy_cause_from_why(why: &str) -> String {
+pub fn task_legacy_cause_from_why(why: &str) -> String {
     why.trim().to_string()
 }
 
-pub(crate) fn task_legacy_flow_from_why(_why: &str) -> String {
+pub fn task_legacy_flow_from_why(_why: &str) -> String {
     String::new()
 }
 
-pub(crate) fn task_legacy_todos_from_todo(todo: &str) -> Vec<String> {
+pub fn task_legacy_todos_from_todo(todo: &str) -> Vec<String> {
     let normalized = todo.trim();
     if normalized.is_empty() {
         return Vec::new();
@@ -830,22 +839,22 @@ pub(crate) fn task_legacy_todos_from_todo(todo: &str) -> Vec<String> {
     vec![normalized.to_string()]
 }
 
-pub(crate) fn task_legacy_status_summary_from_todo(todo: &str) -> String {
+pub fn task_legacy_status_summary_from_todo(todo: &str) -> String {
     todo.trim().to_string()
 }
 
-pub(crate) fn task_target_scope_normalized(value: &str) -> &'static str {
+pub fn task_target_scope_normalized(value: &str) -> &'static str {
     match value.trim() {
         TASK_TARGET_SCOPE_CONTACT => TASK_TARGET_SCOPE_CONTACT,
         _ => TASK_TARGET_SCOPE_DESKTOP,
     }
 }
 
-pub(crate) fn task_conversation_id_is_system_notification(conversation_id: &str) -> bool {
+pub fn task_conversation_id_is_system_notification(conversation_id: &str) -> bool {
     conversation_id.trim() == SYSTEM_NOTIFICATION_CONVERSATION_ID
 }
 
-pub(crate) fn task_trigger_is_one_time(trigger: &TaskTriggerStored) -> bool {
+pub fn task_trigger_is_one_time(trigger: &TaskTriggerStored) -> bool {
     trigger
         .cron_expression
         .as_deref()
@@ -855,11 +864,11 @@ pub(crate) fn task_trigger_is_one_time(trigger: &TaskTriggerStored) -> bool {
         && trigger.legacy_every_minutes.is_none()
 }
 
-pub(crate) fn task_record_is_one_time(task: &TaskRecordStored) -> bool {
+pub fn task_record_is_one_time(task: &TaskRecordStored) -> bool {
     task_trigger_is_one_time(&task.trigger)
 }
 
-pub(crate) fn task_normalize_bound_conversation_id(value: Option<&str>) -> String {
+pub fn task_normalize_bound_conversation_id(value: Option<&str>) -> String {
     value
         .map(str::trim)
         .filter(|item| !item.is_empty())
@@ -867,7 +876,7 @@ pub(crate) fn task_normalize_bound_conversation_id(value: Option<&str>) -> Strin
         .to_string()
 }
 
-pub(crate) fn task_entry_view_from_stored(record: &TaskRecordStored) -> TaskEntry {
+pub fn task_entry_view_from_stored(record: &TaskRecordStored) -> TaskEntry {
     TaskEntry {
         task_id: record.task_id.clone(),
         conversation_id: Some(task_normalize_bound_conversation_id(
@@ -900,7 +909,7 @@ pub(crate) fn task_entry_view_from_stored(record: &TaskRecordStored) -> TaskEntr
     }
 }
 
-pub(crate) fn task_run_log_view_from_stored(record: &TaskRunLogStored) -> TaskRunLogEntry {
+pub fn task_run_log_view_from_stored(record: &TaskRunLogStored) -> TaskRunLogEntry {
     TaskRunLogEntry {
         id: record.id,
         task_id: record.task_id.clone(),

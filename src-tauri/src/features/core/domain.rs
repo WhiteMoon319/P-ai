@@ -21,9 +21,10 @@ use uuid::Uuid;
 use super::*;
 // Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
 
+// 核心常量与远端客服默认文案已迁移至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::core::domain::constants::*;
+pub(crate) use pai_backend::core::domain::remote_customer_service_defaults::*;
 
-include!("domain/constants.rs");
-include!("domain/remote_customer_service_defaults.rs");
 include!("domain/http_identity.rs");
 include!("domain/types.rs");
 include!("domain/runtime.rs");

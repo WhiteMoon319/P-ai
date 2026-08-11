@@ -54,9 +54,8 @@ fn bytes_to_lower_hex(bytes: impl AsRef<[u8]>) -> String {
 #[path = "features/core/domain.rs"]
 mod features_core_domain;
 pub(crate) use features_core_domain::*;
-#[path = "features/core/time_semantics.rs"]
-mod features_core_time_semantics;
-pub(crate) use features_core_time_semantics::*;
+// 时间语义已迁移至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::core::time_semantics::*;
 
 // ==================== 配置与存储 ====================
 #[path = "features/config/storage_and_stt.rs"]

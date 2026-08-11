@@ -1,33 +1,25 @@
-use std::{
-    fs,
-    io::Cursor,
-    path::PathBuf,
-    sync::{Arc, Mutex, OnceLock},
-};
+//! 时间语义统一（纯逻辑，无平台依赖）。
+//! 当地时间（local）：用户/LLM/UI 可见时间。
+//! 真实时间（UTC）：数据层存储、调度比较、跨时区稳定时间。
 
-use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
-use directories::ProjectDirs;
-use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
-use image::ImageFormat;
-use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
-use rmcp::{schemars, ServiceExt};
-use scraper::{Html, Selector};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
-use uuid::Uuid;
 
+/// 当前 UTC 时刻（从 src-tauri runtime_state::now_utc 迁入）。
+pub fn now_utc() -> OffsetDateTime {
+    OffsetDateTime::now_utc()
+}
 
-use super::*;
-// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
+/// 当前 UTC 时刻的 RFC3339 文本（与 now_utc_rfc3339 同义，从 runtime_state 迁入）。
+pub fn now_iso() -> String {
+    now_utc_rfc3339()
+}
 
-// ========== 时间语义统一 ==========
-// 当地时间（local）：用户/LLM/UI 可见时间。
-// 真实时间（UTC）：数据层存储、调度比较、跨时区稳定时间。
+/// 解析 RFC3339 文本为 UTC 时刻（从 runtime_state 迁入）。
+pub fn parse_iso(value: &str) -> Option<OffsetDateTime> {
+    parse_rfc3339_time(value)
+}
 
-
-
-pub(crate) fn now_utc_rfc3339() -> String {
+pub fn now_utc_rfc3339() -> String {
     now_utc()
         .replace_nanosecond(0)
         .ok()
@@ -35,11 +27,11 @@ pub(crate) fn now_utc_rfc3339() -> String {
         .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string())
 }
 
-pub(crate) fn parse_rfc3339_time(value: &str) -> Option<OffsetDateTime> {
+pub fn parse_rfc3339_time(value: &str) -> Option<OffsetDateTime> {
     OffsetDateTime::parse(value.trim(), &Rfc3339).ok()
 }
 
-pub(crate) fn normalize_time_for_utc_storage(dt: OffsetDateTime) -> Result<String, String> {
+pub fn normalize_time_for_utc_storage(dt: OffsetDateTime) -> Result<String, String> {
     dt.to_offset(UtcOffset::UTC)
         .replace_nanosecond(0)
         .map_err(|err| format!("Normalize UTC time failed: {err}"))?
@@ -47,7 +39,7 @@ pub(crate) fn normalize_time_for_utc_storage(dt: OffsetDateTime) -> Result<Strin
         .map_err(|err| format!("Format UTC time failed: {err}"))
 }
 
-pub(crate) fn normalize_rfc3339_to_utc_storage(field_name: &str, value: &str) -> Result<String, String> {
+pub fn normalize_rfc3339_to_utc_storage(field_name: &str, value: &str) -> Result<String, String> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return Err(format!("{field_name} must not be empty"));
@@ -60,19 +52,17 @@ pub(crate) fn normalize_rfc3339_to_utc_storage(field_name: &str, value: &str) ->
     normalize_time_for_utc_storage(parsed)
 }
 
-pub(crate) fn local_utc_offset() -> Option<UtcOffset> {
+pub fn local_utc_offset() -> Option<UtcOffset> {
     match UtcOffset::current_local_offset() {
         Ok(offset) => Some(offset),
         Err(err) => {
-            runtime_log_error(format!(
-                "[时间语义] 获取本地 UTC 偏移失败，回退为 UTC 显示: {err}"
-            ));
+            eprintln!("[时间语义] 获取本地 UTC 偏移失败，回退为 UTC 显示: {err}");
             None
         }
     }
 }
 
-pub(crate) fn to_local_datetime(dt: OffsetDateTime) -> OffsetDateTime {
+pub fn to_local_datetime(dt: OffsetDateTime) -> OffsetDateTime {
     if let Some(offset) = local_utc_offset() {
         dt.to_offset(offset)
     } else {
@@ -80,7 +70,7 @@ pub(crate) fn to_local_datetime(dt: OffsetDateTime) -> OffsetDateTime {
     }
 }
 
-pub(crate) fn format_offset_datetime_to_local_text(dt: OffsetDateTime) -> String {
+pub fn format_offset_datetime_to_local_text(dt: OffsetDateTime) -> String {
     let local = to_local_datetime(dt);
     format!(
         "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
@@ -93,7 +83,7 @@ pub(crate) fn format_offset_datetime_to_local_text(dt: OffsetDateTime) -> String
     )
 }
 
-pub(crate) fn format_offset_datetime_to_local_rfc3339(dt: OffsetDateTime) -> String {
+pub fn format_offset_datetime_to_local_rfc3339(dt: OffsetDateTime) -> String {
     to_local_datetime(dt)
         .replace_nanosecond(0)
         .ok()
@@ -101,11 +91,11 @@ pub(crate) fn format_offset_datetime_to_local_rfc3339(dt: OffsetDateTime) -> Str
         .unwrap_or_else(|| format_offset_datetime_to_local_text(dt))
 }
 
-pub(crate) fn now_local_rfc3339() -> String {
+pub fn now_local_rfc3339() -> String {
     format_offset_datetime_to_local_rfc3339(now_utc())
 }
 
-pub(crate) fn format_utc_storage_time_to_local_rfc3339(raw: &str) -> String {
+pub fn format_utc_storage_time_to_local_rfc3339(raw: &str) -> String {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return String::new();
@@ -116,7 +106,7 @@ pub(crate) fn format_utc_storage_time_to_local_rfc3339(raw: &str) -> String {
     trimmed.to_string()
 }
 
-pub(crate) fn format_utc_storage_time_to_local_text(raw: &str) -> String {
+pub fn format_utc_storage_time_to_local_text(raw: &str) -> String {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return String::new();
@@ -139,7 +129,7 @@ pub(crate) fn format_utc_storage_time_to_local_text(raw: &str) -> String {
 }
 
 // 与前端 ChatView 的时间分隔标签规则保持一致。
-pub(crate) fn format_offset_datetime_to_local_relative_label(dt: OffsetDateTime) -> String {
+pub fn format_offset_datetime_to_local_relative_label(dt: OffsetDateTime) -> String {
     let now = now_utc();
     let local = to_local_datetime(dt);
     let now_local = to_local_datetime(now);
@@ -165,7 +155,7 @@ pub(crate) fn format_offset_datetime_to_local_relative_label(dt: OffsetDateTime)
     format!("{:04}-{month_day} {clock}", local.year())
 }
 
-pub(crate) fn format_utc_storage_time_to_local_relative_label(raw: &str) -> String {
+pub fn format_utc_storage_time_to_local_relative_label(raw: &str) -> String {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return String::new();
@@ -174,4 +164,32 @@ pub(crate) fn format_utc_storage_time_to_local_relative_label(raw: &str) -> Stri
         return format_offset_datetime_to_local_relative_label(dt);
     }
     trimmed.to_string()
+}
+
+#[cfg(test)]
+pub(crate) mod time_semantics_tests {
+    use super::*;
+
+    #[test]
+    fn parse_and_normalize_roundtrip() {
+        let raw = "2026-03-10T09:30:00+08:00";
+        let dt = parse_rfc3339_time(raw).expect("parse");
+        let normalized = normalize_time_for_utc_storage(dt).expect("normalize");
+        assert_eq!(normalized, "2026-03-10T01:30:00Z");
+    }
+
+    #[test]
+    fn local_rfc3339_preserves_offset() {
+        let dt = parse_rfc3339_time("2026-03-10T09:30:00+08:00").expect("parse");
+        let formatted = format_offset_datetime_to_local_rfc3339(dt);
+        assert!(formatted.starts_with("2026-03-10T"));
+        assert!(formatted.contains('+') || formatted.ends_with('Z'));
+    }
+
+    #[test]
+    fn storage_text_fallback_handles_non_rfc3339() {
+        let raw = "2026-03-10 09:30:00.123";
+        let text = format_utc_storage_time_to_local_text(raw);
+        assert!(text.starts_with("2026-03-10 09:30:00"));
+    }
 }

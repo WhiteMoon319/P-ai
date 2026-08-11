@@ -9,3 +9,4 @@ pai-protocol = { path = "../pai-protocol" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
+time = { version = "0.3.53", features = ["local-offset", "formatting", "parsing"] }

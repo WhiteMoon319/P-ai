@@ -23,7 +23,7 @@ use uuid::Uuid;
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use std::collections::{HashSet};
 use super::*;
-include!("task/domain.rs");
+pub(crate) use pai_backend::task::domain::*;
 include!("task/migration.rs");
 include!("task/store.rs");
 include!("task/scheduler.rs");

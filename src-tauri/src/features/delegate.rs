@@ -24,7 +24,7 @@ use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use super::*;
-include!("delegate/domain.rs");
+pub(crate) use pai_backend::delegate::domain::*;
 include!("delegate/store.rs");
 include!("delegate/conversation_store.rs");
 include!("delegate/runtime.rs");

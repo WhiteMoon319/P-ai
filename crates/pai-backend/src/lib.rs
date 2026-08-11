@@ -7,4 +7,8 @@
 //! 迁移策略：从 src-tauri 逐步搬入零平台依赖的纯逻辑模块，
 //! 每个模块迁移后保持 `cargo check -p pai-backend` 与 Android 交叉编译通过。
 
+pub mod core;
+pub mod delegate;
+pub mod skill;
+pub mod task;
 pub mod version_compare;

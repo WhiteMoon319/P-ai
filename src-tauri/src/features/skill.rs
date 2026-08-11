@@ -19,8 +19,6 @@ use uuid::Uuid;
 
 // Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
 
-#[path = "skill/types.rs"]
-mod types;
 #[path = "skill/presets.rs"]
 mod presets;
 #[path = "skill/workspace.rs"]
@@ -32,7 +30,7 @@ pub(crate) mod commands;
 
 use super::*;
 
-pub(crate) use types::*;
+pub(crate) use pai_backend::skill::types::*;
 pub(crate) use presets::*;
 pub(crate) use private_org::*;
 pub(crate) use workspace::*;
