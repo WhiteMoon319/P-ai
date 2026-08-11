@@ -1,6 +1,6 @@
-pub(crate) const ANDROID_WORKSPACE_STATE_FILE: &str = "android_workspace_state.json";
+pub const ANDROID_WORKSPACE_STATE_FILE: &str = "android_workspace_state.json";
 
-pub(crate) fn android_workspace_runtime_base(root: &std::path::Path) -> std::path::PathBuf {
+pub fn android_workspace_runtime_base(root: &std::path::Path) -> std::path::PathBuf {
     root.parent()
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| root.to_path_buf())
@@ -9,23 +9,23 @@ pub(crate) fn android_workspace_runtime_base(root: &std::path::Path) -> std::pat
         .join("default")
 }
 
-pub(crate) fn android_workspace_runtime_root(root: &std::path::Path) -> std::path::PathBuf {
+pub fn android_workspace_runtime_root(root: &std::path::Path) -> std::path::PathBuf {
     android_workspace_runtime_base(root).join("linux")
 }
 
 #[cfg(any(target_os = "android", test))]
-pub(crate) fn android_workspace_tool_requires_linux_runtime(tool_name: &str, is_mcp_tool: bool) -> bool {
+pub fn android_workspace_tool_requires_linux_runtime(tool_name: &str, is_mcp_tool: bool) -> bool {
     is_mcp_tool || tool_name.trim() == "exec"
 }
 
-pub(crate) fn android_workspace_guest_path_suffix<'a>(path_text: &'a str, guest_prefix: &str) -> Option<&'a str> {
+pub fn android_workspace_guest_path_suffix<'a>(path_text: &'a str, guest_prefix: &str) -> Option<&'a str> {
     if path_text == guest_prefix {
         return Some("");
     }
     path_text.strip_prefix(&format!("{guest_prefix}/"))
 }
 
-pub(crate) fn android_workspace_join_guest_suffix(host_base: &std::path::Path, suffix: &str) -> std::path::PathBuf {
+pub fn android_workspace_join_guest_suffix(host_base: &std::path::Path, suffix: &str) -> std::path::PathBuf {
     let mut out = host_base.to_path_buf();
     for part in suffix.split('/') {
         if !part.is_empty() {
@@ -35,7 +35,7 @@ pub(crate) fn android_workspace_join_guest_suffix(host_base: &std::path::Path, s
     out
 }
 
-pub(crate) fn android_workspace_map_guest_path_to_host(
+pub fn android_workspace_map_guest_path_to_host(
     root: &std::path::Path,
     raw: &std::path::Path,
 ) -> std::path::PathBuf {
@@ -51,7 +51,7 @@ pub(crate) fn android_workspace_map_guest_path_to_host(
     raw.to_path_buf()
 }
 
-pub(crate) fn android_workspace_root_name_is_reserved_for_file_tools(name: &str) -> bool {
+pub fn android_workspace_root_name_is_reserved_for_file_tools(name: &str) -> bool {
     matches!(
         name,
         ".pai"
@@ -67,7 +67,7 @@ pub(crate) fn android_workspace_root_name_is_reserved_for_file_tools(name: &str)
     )
 }
 
-pub(crate) fn android_workspace_relative_path_is_tool_visible(
+pub fn android_workspace_relative_path_is_tool_visible(
     relative: &std::path::Path,
     allow_root: bool,
 ) -> bool {
@@ -89,7 +89,7 @@ pub(crate) fn android_workspace_relative_path_is_tool_visible(
 }
 
 #[cfg(test)]
-pub(crate) fn android_workspace_normalize_path_input(raw: &str) -> String {
+pub fn android_workspace_normalize_path_input(raw: &str) -> String {
     let trimmed = raw.trim();
     if trimmed.len() >= 2 {
         let bytes = trimmed.as_bytes();
@@ -103,11 +103,43 @@ pub(crate) fn android_workspace_normalize_path_input(raw: &str) -> String {
 }
 
 #[cfg(not(test))]
-pub(crate) fn android_workspace_normalize_path_input(raw: &str) -> String {
-    normalize_terminal_path_input_for_current_platform(raw)
+pub fn android_workspace_normalize_path_input(raw: &str) -> String {
+    // 简化实现（从 src-tauri storage_and_stt.rs normalize 链迁入）：
+    // 去引号 + home 展开 + windows 反斜杠归一化。
+    let unquoted = raw.trim();
+    let unquoted = if unquoted.len() >= 2 {
+        let bytes = unquoted.as_bytes();
+        if (bytes[0] == b'"' && bytes[unquoted.len() - 1] == b'"')
+            || (bytes[0] == b'\'' && bytes[unquoted.len() - 1] == b'\'')
+        {
+            &unquoted[1..unquoted.len() - 1]
+        } else {
+            unquoted
+        }
+    } else {
+        unquoted
+    };
+    if unquoted.is_empty() {
+        return String::new();
+    }
+    let expanded = if unquoted == "~" {
+        std::env::var("HOME").unwrap_or_default()
+    } else if let Some(rest) = unquoted.strip_prefix("~/").or_else(|| unquoted.strip_prefix("~\\")) {
+        format!("{}/{}", std::env::var("HOME").unwrap_or_default(), rest)
+    } else {
+        unquoted.to_string()
+    };
+    #[cfg(target_os = "windows")]
+    {
+        expanded.replace('/', "\\")
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        expanded
+    }
 }
 
-pub(crate) fn android_workspace_clean_relative_input(raw: &str) -> Result<std::path::PathBuf, String> {
+pub fn android_workspace_clean_relative_input(raw: &str) -> Result<std::path::PathBuf, String> {
     let normalized = android_workspace_normalize_path_input(raw.trim());
     if normalized.trim().is_empty() {
         return Ok(std::path::PathBuf::new());
@@ -132,7 +164,7 @@ pub(crate) fn android_workspace_clean_relative_input(raw: &str) -> Result<std::p
     Ok(out)
 }
 
-pub(crate) fn android_workspace_root_name_is_reserved_for_file_manager(name: &str) -> bool {
+pub fn android_workspace_root_name_is_reserved_for_file_manager(name: &str) -> bool {
     matches!(
         name,
         "runtime"
@@ -148,7 +180,7 @@ pub(crate) fn android_workspace_root_name_is_reserved_for_file_manager(name: &st
     )
 }
 
-pub(crate) fn android_workspace_relative_path_is_user_visible(
+pub fn android_workspace_relative_path_is_user_visible(
     relative: &std::path::Path,
     allow_root: bool,
 ) -> bool {
@@ -169,7 +201,7 @@ pub(crate) fn android_workspace_relative_path_is_user_visible(
     index > 0 || allow_root
 }
 
-pub(crate) fn android_workspace_glob_to_regex(pattern: &str) -> Result<regex::Regex, String> {
+pub fn android_workspace_glob_to_regex(pattern: &str) -> Result<regex::Regex, String> {
     if pattern.trim().is_empty() {
         return Err("glob pattern 不能为空".to_string());
     }
@@ -204,6 +236,6 @@ pub(crate) fn android_workspace_glob_to_regex(pattern: &str) -> Result<regex::Re
     regex::Regex::new(&out).map_err(|err| format!("glob pattern 无效：{err}"))
 }
 
-pub(crate) fn android_workspace_relative_matches_glob(relative_path: &str, pattern: &str) -> Result<bool, String> {
+pub fn android_workspace_relative_matches_glob(relative_path: &str, pattern: &str) -> Result<bool, String> {
     Ok(android_workspace_glob_to_regex(pattern)?.is_match(relative_path))
 }

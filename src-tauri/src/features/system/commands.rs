@@ -45,7 +45,8 @@ include!("commands/prompt_assembly.rs");
 include!("commands/debug_log_commands.rs");
 
 // ==================== Android 沙盒工作区 ====================
-include!("commands/android_workspace_paths.rs");
+// android_workspace_paths 已迁至 crates/pai-android-platform（阶段 5）。
+pub(crate) use pai_android_platform::android_workspace::paths::*;
 include!("commands/android_workspace.rs");
 
 // ==================== 分享导出命令 ====================

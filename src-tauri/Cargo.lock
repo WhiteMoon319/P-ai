@@ -3514,6 +3514,7 @@ name = "pai-android-platform"
 version = "0.57.0"
 dependencies = [
  "pai-backend",
+ "regex",
  "serde",
  "serde_json",
  "tokio",
