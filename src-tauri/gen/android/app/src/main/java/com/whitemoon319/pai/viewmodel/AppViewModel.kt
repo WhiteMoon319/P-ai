@@ -395,6 +395,21 @@ class AppViewModel(
         }
     }
 
+    /** 压缩当前会话（compact：汇总旧消息释放上下文）。 */
+    suspend fun compactCurrentConversation(): Boolean {
+        val conversationId = currentConversationId.value ?: return false
+        return withContext(Dispatchers.IO) {
+            try {
+                val result = service.compactConversation(conversationId)
+                refreshMessages()
+                true
+            } catch (e: Exception) {
+                error.value = "压缩会话失败: ${e.message}"
+                false
+            }
+        }
+    }
+
     /** 归档会话。 */
     suspend fun archiveConversation(conversationId: String): Boolean {
         return withContext(Dispatchers.IO) {

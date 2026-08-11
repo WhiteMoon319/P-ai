@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Compress
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
@@ -633,6 +634,7 @@ fun ChatScreen(
     val listState = rememberLazyListState(
         initialFirstVisibleItemIndex = Int.MAX_VALUE // 首帧即锚定列表末尾，避免顶部闪现/滑动
     )
+    val chatContext = LocalContext.current
 
     // 消息/流式输出/活动步骤变化时自动滚动到最底部
     LaunchedEffect(messages.size, streaming.length, activitySteps.size) {
@@ -659,6 +661,20 @@ fun ChatScreen(
                 }
             },
             actions = {
+                IconButton(onClick = {
+                    scope.launch {
+                        val ok = vm.compactCurrentConversation()
+                        if (ok) {
+                            android.widget.Toast.makeText(
+                                chatContext,
+                                "会话已压缩",
+                                android.widget.Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                    }
+                }) {
+                    Icon(Icons.Default.Compress, contentDescription = "压缩会话")
+                }
                 IconButton(onClick = onSettings) {
                     Icon(Icons.Default.Settings, contentDescription = "设置")
                 }

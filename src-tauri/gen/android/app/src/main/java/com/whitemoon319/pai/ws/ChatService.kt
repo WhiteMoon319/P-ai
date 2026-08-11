@@ -159,6 +159,12 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("conversation.rewind", mapOf("input" to input), Map::class.java) as Map<String, Any?>
     }
 
+    /** 压缩会话（compact：汇总旧消息释放上下文）。 */
+    suspend fun compactConversation(conversationId: String): Map<String, Any?> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("conversation.compact", mapOf("conversationId" to conversationId), Map::class.java) as Map<String, Any?>
+    }
+
     suspend fun batchArchiveConversations(conversationIds: List<String>): Boolean {
         val input = mapOf("conversationIds" to conversationIds)
         return client.request("conversation.batchArchive", mapOf("input" to input), Boolean::class.java)
