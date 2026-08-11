@@ -580,6 +580,8 @@ pub(crate) struct DeltaChannel {
     inner: Option<tauri::ipc::Channel<AssistantDeltaEvent>>,
     #[cfg(target_os = "android")]
     _android: std::marker::PhantomData<()>,
+    #[cfg(target_os = "android")]
+    conversation_id: Option<String>,
 }
 
 impl DeltaChannel {
@@ -589,12 +591,43 @@ impl DeltaChannel {
     pub(crate) fn noop() -> Self {
         Self {
             _android: std::marker::PhantomData,
+            conversation_id: None,
+        }
+    }
+
+    /// Android 原生模式：绑定会话 id，send 时把 delta 包装成原生事件队列通知。
+    #[cfg(target_os = "android")]
+    pub(crate) fn native_queue(conversation_id: String) -> Self {
+        Self {
+            _android: std::marker::PhantomData,
+            conversation_id: Some(conversation_id),
         }
     }
 
 
     #[cfg(target_os = "android")]
-    pub(crate) fn send(&self, _event: AssistantDeltaEvent) -> Result<(), String> {
+    pub(crate) fn send(&self, event: AssistantDeltaEvent) -> Result<(), String> {
+        let Some(conversation_id) = self.conversation_id.as_deref() else {
+            return Ok(());
+        };
+        // 与 dispatch_assistant_delta_to_active_view 的 Android 分支相同格式：
+        // push 原生事件队列，Kotlin pollEvents 消费。
+        let delta_event = serde_json::json!({
+            "delta": event.delta,
+            "kind": event.kind,
+            "requestId": event.request_id,
+            "toolName": event.tool_name,
+            "toolStatus": event.tool_status,
+            "message": event.message,
+        });
+        let notification = serde_json::json!({
+            "method": "chat.assistantDelta",
+            "params": {
+                "conversationId": conversation_id.trim(),
+                "event": delta_event,
+            },
+        });
+        crate::push_native_delta_event(notification);
         Ok(())
     }
 }

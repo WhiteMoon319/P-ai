@@ -1585,7 +1585,7 @@ async fn activate_main_assistant(
         },
     ));
     #[cfg(target_os = "android")]
-    let active_channel: DeltaChannel = DeltaChannel::noop();
+    let active_channel: DeltaChannel = DeltaChannel::native_queue(conversation_id.to_string());
 
     // 调用 send_chat_message_inner
     let result = send_chat_message_inner(request, state, &active_channel).await;
