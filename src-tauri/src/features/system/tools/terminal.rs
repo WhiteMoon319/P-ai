@@ -4,7 +4,8 @@ pub(crate) const TERMINAL_DEFAULT_TIMEOUT_MS: u64 = 300_000;
 
 include!("terminal/runtime.rs");
 
-include!("terminal/output.rs");
+// terminal/output.rs 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::terminal::output::*;
 
 include!("terminal/workspace.rs");
 

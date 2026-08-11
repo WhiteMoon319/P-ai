@@ -1,17 +1,19 @@
-pub(crate) const DEFAULT_OUTPUT_BYTES_CAP: usize = 1024 * 1024;
-pub(crate) const APPROX_BYTES_PER_TOKEN: usize = 4;
-pub(crate) const DEFAULT_TOOL_OUTPUT_TOKENS: usize = 10_000;
-pub(crate) const NON_SHELL_TOOL_OUTPUT_POLICY_MULTIPLIER: f64 = 1.2;
+use std::time::Duration;
+
+pub const DEFAULT_OUTPUT_BYTES_CAP: usize = 1024 * 1024;
+pub const APPROX_BYTES_PER_TOKEN: usize = 4;
+pub const DEFAULT_TOOL_OUTPUT_TOKENS: usize = 10_000;
+pub const NON_SHELL_TOOL_OUTPUT_POLICY_MULTIPLIER: f64 = 1.2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(dead_code)]
-pub(crate) enum TruncationPolicy {
+pub enum TruncationPolicy {
     Bytes(usize),
     Tokens(usize),
 }
 
 impl TruncationPolicy {
-    pub(crate) fn byte_budget(self) -> usize {
+    pub fn byte_budget(self) -> usize {
         match self {
             Self::Bytes(bytes) => bytes,
             Self::Tokens(tokens) => approx_bytes_for_tokens(tokens),
@@ -30,15 +32,15 @@ impl std::ops::Mul<f64> for TruncationPolicy {
     }
 }
 
-pub(crate) fn default_tool_output_truncation_policy() -> TruncationPolicy {
+pub fn default_tool_output_truncation_policy() -> TruncationPolicy {
     TruncationPolicy::Tokens(DEFAULT_TOOL_OUTPUT_TOKENS)
 }
 
-pub(crate) fn default_non_shell_tool_output_truncation_policy() -> TruncationPolicy {
+pub fn default_non_shell_tool_output_truncation_policy() -> TruncationPolicy {
     default_tool_output_truncation_policy() * NON_SHELL_TOOL_OUTPUT_POLICY_MULTIPLIER
 }
 
-pub(crate) fn prefix_cap(mut buffer: Vec<u8>, max_bytes: Option<usize>) -> Vec<u8> {
+pub fn prefix_cap(mut buffer: Vec<u8>, max_bytes: Option<usize>) -> Vec<u8> {
     if let Some(max_bytes) = max_bytes {
         if buffer.len() > max_bytes {
             buffer.truncate(max_bytes);
@@ -47,7 +49,7 @@ pub(crate) fn prefix_cap(mut buffer: Vec<u8>, max_bytes: Option<usize>) -> Vec<u
     buffer
 }
 
-pub(crate) fn aggregate_output(stdout: &[u8], stderr: &[u8], max_bytes: Option<usize>) -> Vec<u8> {
+pub fn aggregate_output(stdout: &[u8], stderr: &[u8], max_bytes: Option<usize>) -> Vec<u8> {
     let Some(max_bytes) = max_bytes else {
         let mut output = Vec::with_capacity(stdout.len().saturating_add(stderr.len()));
         output.extend_from_slice(stdout);
@@ -75,7 +77,7 @@ pub(crate) fn aggregate_output(stdout: &[u8], stderr: &[u8], max_bytes: Option<u
     output
 }
 
-pub(crate) fn build_content_with_timeout(
+pub fn build_content_with_timeout(
     timed_out: bool,
     duration: std::time::Duration,
     aggregated_output: &str,
@@ -91,7 +93,7 @@ pub(crate) fn build_content_with_timeout(
     }
 }
 
-pub(crate) fn format_exec_output_for_model(
+pub fn format_exec_output_for_model(
     exit_code: i32,
     duration: std::time::Duration,
     timed_out: bool,
@@ -115,7 +117,7 @@ pub(crate) fn format_exec_output_for_model(
     sections.join("\n")
 }
 
-pub(crate) fn truncate_text(content: &str, policy: TruncationPolicy) -> String {
+pub fn truncate_text(content: &str, policy: TruncationPolicy) -> String {
     if content.len() <= policy.byte_budget() {
         return content.to_string();
     }
@@ -125,11 +127,11 @@ pub(crate) fn truncate_text(content: &str, policy: TruncationPolicy) -> String {
     }
 }
 
-pub(crate) fn truncate_middle_chars(text: &str, max_bytes: usize) -> String {
+pub fn truncate_middle_chars(text: &str, max_bytes: usize) -> String {
     truncate_with_byte_estimate(text, max_bytes, false)
 }
 
-pub(crate) fn truncate_middle_with_token_budget(text: &str, max_tokens: usize) -> (String, Option<u64>) {
+pub fn truncate_middle_with_token_budget(text: &str, max_tokens: usize) -> (String, Option<u64>) {
     if text.is_empty() {
         return (String::new(), None);
     }
@@ -150,7 +152,7 @@ pub(crate) fn truncate_middle_with_token_budget(text: &str, max_tokens: usize) -
     }
 }
 
-pub(crate) fn truncate_with_byte_estimate(text: &str, max_bytes: usize, use_tokens: bool) -> String {
+pub fn truncate_with_byte_estimate(text: &str, max_bytes: usize, use_tokens: bool) -> String {
     if text.is_empty() {
         return String::new();
     }
@@ -179,23 +181,23 @@ pub(crate) fn truncate_with_byte_estimate(text: &str, max_bytes: usize, use_toke
     format!("{prefix}{marker}{suffix}")
 }
 
-pub(crate) fn approx_token_count(text: &str) -> usize {
+pub fn approx_token_count(text: &str) -> usize {
     text.len()
         .saturating_add(APPROX_BYTES_PER_TOKEN.saturating_sub(1))
         / APPROX_BYTES_PER_TOKEN
 }
 
-pub(crate) fn approx_bytes_for_tokens(tokens: usize) -> usize {
+pub fn approx_bytes_for_tokens(tokens: usize) -> usize {
     tokens.saturating_mul(APPROX_BYTES_PER_TOKEN)
 }
 
-pub(crate) fn approx_tokens_from_byte_count(bytes: usize) -> u64 {
+pub fn approx_tokens_from_byte_count(bytes: usize) -> u64 {
     let bytes = bytes as u64;
     bytes.saturating_add((APPROX_BYTES_PER_TOKEN as u64).saturating_sub(1))
         / APPROX_BYTES_PER_TOKEN as u64
 }
 
-pub(crate) fn split_string(text: &str, beginning_bytes: usize, end_bytes: usize) -> (usize, &str, &str) {
+pub fn split_string(text: &str, beginning_bytes: usize, end_bytes: usize) -> (usize, &str, &str) {
     if text.is_empty() {
         return (0, "", "");
     }
@@ -228,12 +230,12 @@ pub(crate) fn split_string(text: &str, beginning_bytes: usize, end_bytes: usize)
     (removed_chars, &text[..prefix_end], &text[suffix_start..])
 }
 
-pub(crate) fn split_budget(budget: usize) -> (usize, usize) {
+pub fn split_budget(budget: usize) -> (usize, usize) {
     let left = budget / 2;
     (left, budget - left)
 }
 
-pub(crate) fn format_truncation_marker(use_tokens: bool, removed_count: u64) -> String {
+pub fn format_truncation_marker(use_tokens: bool, removed_count: u64) -> String {
     if use_tokens {
         format!("…{removed_count} tokens truncated…")
     } else {
@@ -241,7 +243,7 @@ pub(crate) fn format_truncation_marker(use_tokens: bool, removed_count: u64) -> 
     }
 }
 
-pub(crate) fn removed_units(use_tokens: bool, removed_bytes: usize, removed_chars: usize) -> u64 {
+pub fn removed_units(use_tokens: bool, removed_bytes: usize, removed_chars: usize) -> u64 {
     if use_tokens {
         approx_tokens_from_byte_count(removed_bytes)
     } else {
