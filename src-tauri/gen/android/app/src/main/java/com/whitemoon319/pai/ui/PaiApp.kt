@@ -234,6 +234,7 @@ private fun ConversationListScreenImpl(
     val loading by vm.loading.collectAsState()
     var autoPushTargetConvId by remember { mutableStateOf<String?>(null) }
     val autoPushContacts = vm.remoteImContacts.collectAsState().value
+    var conversationSearchQuery by remember { mutableStateOf("") }
     var showNewDialog by remember { mutableStateOf(false) }
     var fullOptions by remember { mutableStateOf<com.whitemoon319.pai.model.CreateConversationOptions>(com.whitemoon319.pai.model.CreateConversationOptions()) }
     var optionsLoading by remember { mutableStateOf(false) }
@@ -300,17 +301,41 @@ private fun ConversationListScreenImpl(
                 }
             }
             else -> {
-                LazyColumn(Modifier.fillMaxSize()) {
-                    items(conversations, key = { it.conversationId }) { conv ->
-                        ConversationRow(
-                            conv = conv,
-                            onClick = { onOpen(conv) },
-                            onRename = { title ->
-                                scope.launch { vm.renameConversation(conv.conversationId, title) }
-                            },
-                            onTogglePin = { pinned ->
-                                scope.launch { vm.toggleConversationPin(conv.conversationId, pinned) }
-                            },
+                Column(Modifier.fillMaxSize()) {
+                    // 会话搜索（对齐 Vue 侧边栏搜索框，本地过滤）
+                    OutlinedTextField(
+                        value = conversationSearchQuery,
+                        onValueChange = { conversationSearchQuery = it },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                        placeholder = { Text("搜索会话…") },
+                        singleLine = true,
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = "搜索") },
+                    )
+                    val query = conversationSearchQuery.trim()
+                    val filtered = if (query.isBlank()) {
+                        conversations
+                    } else {
+                        conversations.filter { conv ->
+                            (conv.title ?: "").contains(query, ignoreCase = true) ||
+                                (conv.previewMessages?.lastOrNull()?.textPreview ?: "").contains(query, ignoreCase = true)
+                        }
+                    }
+                    if (filtered.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("无匹配会话", style = MaterialTheme.typography.bodySmall)
+                        }
+                    } else {
+                        LazyColumn(Modifier.fillMaxSize()) {
+                            items(filtered, key = { it.conversationId }) { conv ->
+                                ConversationRow(
+                                    conv = conv,
+                                    onClick = { onOpen(conv) },
+                                    onRename = { title ->
+                                        scope.launch { vm.renameConversation(conv.conversationId, title) }
+                                    },
+                                    onTogglePin = { pinned ->
+                                        scope.launch { vm.toggleConversationPin(conv.conversationId, pinned) }
+                                    },
                             onArchive = {
                                 scope.launch { vm.archiveConversation(conv.conversationId) }
                             },
@@ -335,7 +360,9 @@ private fun ConversationListScreenImpl(
                             },
                         )
                         HorizontalDivider()
+                        }
                     }
+                }
                 }
             }
         }
