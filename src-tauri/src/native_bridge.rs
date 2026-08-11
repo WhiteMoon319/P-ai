@@ -336,18 +336,11 @@ async fn native_dispatch(
         "convert_private_agent_to_main" => ide_chat_convert_private_agent_to_main_for_web_settings(state, &native_app, params),
         "set_agent_private_memory_enabled" => ide_chat_set_agent_private_memory_enabled_for_web_settings(state, params),
         "set_agent_memory_recall_mode" => ide_chat_set_agent_memory_recall_mode_for_web_settings(state, params),
-        "check_github_update" => Ok(serde_json::json!({
-            "currentVersion": env!("CARGO_PKG_VERSION"),
-            "latestVersion": env!("CARGO_PKG_VERSION"),
-            "hasUpdate": false,
-            "releaseUrl": "",
-            "updateSource": "apk",
-            "accessMode": "none",
-            "releaseNotes": "",
-            "publishedAt": null,
-            "runtimeKind": "android",
-            "canForceUpdate": false,
-        })),
+        "check_github_update" => ide_chat_serialize(check_github_update_android(
+            &native_app,
+            params.get("updateMethod").and_then(Value::as_str).map(str::to_string),
+            params.get("respectCooldown").and_then(Value::as_bool),
+        ).await?),
         "test_text_connection" => ide_chat_serialize(test_text_connection_inner(
             ide_chat_parse_param_field::<ApiConfig>(params, "input")?, state).await?),
         "api_config.create" => ide_chat_serialize(api_config_create_inner(

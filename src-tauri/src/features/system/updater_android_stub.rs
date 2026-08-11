@@ -84,8 +84,93 @@ fn cleanup_portable_update_temp_artifacts_for_current_runtime() -> Result<(), St
 
 fn start_github_auto_update_worker(_app: NativeAppHandle) {}
 
-
-
+/// 检查 GitHub Release 是否有新版本（真实 API 调用，替代硬编码 hasUpdate=false）。
+async fn check_github_update_android(
+    _app: &NativeAppHandle,
+    _update_method: Option<String>,
+    _respect_cooldown: Option<bool>,
+) -> Result<GithubUpdateInfo, String> {
+    let current_version = env!("CARGO_PKG_VERSION").to_string();
+    let client_builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15));
+    let client = android_workspace_apply_static_webpki_roots(client_builder)?
+        .build()
+        .map_err(|err| format!("构建更新检查客户端失败: {err}"))?;
+    let resp = client
+        .get(ANDROID_UPDATE_RELEASE_API)
+        .header("User-Agent", "P-ai-Android-Updater")
+        .send()
+        .await
+        .map_err(|err| format!("检查更新失败: {err}"))?;
+    if !resp.status().is_success() {
+        return Ok(GithubUpdateInfo {
+            current_version: current_version.clone(),
+            latest_version: current_version.clone(),
+            has_update: false,
+            release_url: String::new(),
+            update_source: "unsupported".to_string(),
+            access_mode: "direct".to_string(),
+            release_notes: String::new(),
+            published_at: None,
+            runtime_kind: "android".to_string(),
+            can_force_update: false,
+        });
+    }
+    let payload: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|err| format!("解析更新信息失败: {err}"))?;
+    let latest_tag = payload
+        .get("tag_name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let latest_version = normalize_android_release_version(&latest_tag);
+    let release_url = payload
+        .get("html_url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let published_at = payload
+        .get("published_at")
+        .and_then(|v| v.as_str())
+        .map(ToOwned::to_owned);
+    let release_notes = payload
+        .get("body")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let has_update = !latest_version.is_empty() && latest_version != current_version;
+    let info = GithubUpdateInfo {
+        current_version: current_version.clone(),
+        latest_version: latest_version.clone(),
+        has_update,
+        release_url: release_url.clone(),
+        update_source: "github".to_string(),
+        access_mode: "direct".to_string(),
+        release_notes: release_notes.clone(),
+        published_at: published_at.clone(),
+        runtime_kind: "android".to_string(),
+        can_force_update: false,
+    };
+    let _ = ANDROID_LAST_CHECK.set(info);
+    runtime_log_info(format!(
+        "[远程更新] Android 检查完成，current={}，latest={}，has_update={}，url={}",
+        current_version, latest_version, has_update, release_url
+    ));
+    Ok(GithubUpdateInfo {
+        current_version,
+        latest_version,
+        has_update,
+        release_url,
+        update_source: "github".to_string(),
+        access_mode: "direct".to_string(),
+        release_notes,
+        published_at,
+        runtime_kind: "android".to_string(),
+        can_force_update: false,
+    })
+}
 
 fn maybe_run_portable_update_helper_from_args() -> Result<bool, String> {
     Ok(false)
