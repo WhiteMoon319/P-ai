@@ -6,6 +6,7 @@ import com.whitemoon319.pai.model.ConversationSummary
 import com.whitemoon319.pai.model.buildActivityStepsFromMessage
 import com.whitemoon319.pai.viewmodel.AppViewModel
 import com.whitemoon319.pai.ws.ConnectionStatus
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -378,6 +379,7 @@ private fun ConversationListScreenImpl(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ConversationRow(
     conv: ConversationSummary,
@@ -2073,6 +2075,7 @@ private fun RemoteImSettingsTab(vm: AppViewModel) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ToolsSettingsTab(
     vm: AppViewModel,
