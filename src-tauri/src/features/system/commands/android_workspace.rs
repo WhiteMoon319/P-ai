@@ -233,12 +233,35 @@ pub(crate) mod android_workspace_manager {
 }
 use android_workspace_manager::*;
 
+// file_system 已迁至 crates/pai-android-platform（阶段 5）。
 #[cfg(target_os = "android")]
-pub(crate) mod android_workspace_file_system {
-    include!("android_workspace/file_system.rs");
+pub(crate) use pai_android_platform::android_workspace::file_system::*;
+
+/// 文件管理路径解析（state 包装，从 state 取 root 后调平台版）。
+#[cfg(target_os = "android")]
+pub(crate) fn android_workspace_resolve_file_manager_existing_path_state(
+    state: &AppState,
+    raw_path: &str,
+    allow_root: bool,
+) -> Result<PathBuf, String> {
+    let Some(root) = android_workspace_canonical_root(state)? else {
+        return Err("Android 工作区文件管理仅在 Android 端可用。".to_string());
+    };
+    android_workspace_resolve_file_manager_existing_path(&root, raw_path, allow_root)
 }
+
+/// 文件管理目标路径解析（state 包装）。
 #[cfg(target_os = "android")]
-use android_workspace_file_system::*;
+pub(crate) fn android_workspace_resolve_file_manager_target_path_state(
+    state: &AppState,
+    raw_path: &str,
+    allow_root: bool,
+) -> Result<PathBuf, String> {
+    let Some(root) = android_workspace_canonical_root(state)? else {
+        return Err("Android 工作区文件管理仅在 Android 端可用。".to_string());
+    };
+    android_workspace_resolve_file_manager_target_path(&root, raw_path, allow_root)
+}
 
 
 /// ws 端调用版。
@@ -249,7 +272,7 @@ pub(crate) fn list_android_workspace_files_ws_inner(
     #[cfg(target_os = "android")]
     {
         let raw_path = path.unwrap_or_default();
-        let target = android_workspace_resolve_file_manager_existing_path(state, &raw_path, true)?;
+        let target = android_workspace_resolve_file_manager_existing_path_state(state, &raw_path, true)?;
         let metadata = fs::metadata(&target)
             .map_err(|err| format!("读取 Android 工作区文件夹失败 ({}): {err}", target.display()))?;
         if !metadata.is_dir() {
@@ -296,7 +319,7 @@ pub(crate) fn read_android_workspace_text_ws_inner(
 ) -> Result<AndroidWorkspaceTextResult, String> {
     #[cfg(target_os = "android")]
     {
-        let target = android_workspace_resolve_file_manager_existing_path(state, &path, false)?;
+        let target = android_workspace_resolve_file_manager_existing_path_state(state, &path, false)?;
         let root = android_workspace_root(state)
             .canonicalize()
             .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
@@ -332,7 +355,7 @@ pub(crate) fn write_android_workspace_text_ws_inner(
 ) -> Result<AndroidWorkspaceWriteResult, String> {
     #[cfg(target_os = "android")]
     {
-        let target = android_workspace_resolve_file_manager_target_path(state, &path, false)?;
+        let target = android_workspace_resolve_file_manager_target_path_state(state, &path, false)?;
         let bytes = text.as_bytes();
         if bytes.len() > ANDROID_WORKSPACE_TEXT_WRITE_MAX_BYTES {
             return Err(format!(
@@ -377,8 +400,8 @@ pub(crate) fn move_android_workspace_file_ws_inner(
 ) -> Result<AndroidWorkspaceMoveResult, String> {
     #[cfg(target_os = "android")]
     {
-        let source_path = android_workspace_resolve_file_manager_existing_path(state, &source, false)?;
-        let target_path = android_workspace_resolve_file_manager_target_path(state, &target, false)?;
+        let source_path = android_workspace_resolve_file_manager_existing_path_state(state, &source, false)?;
+        let target_path = android_workspace_resolve_file_manager_target_path_state(state, &target, false)?;
         let source_metadata = fs::symlink_metadata(&source_path)
             .map_err(|err| format!("读取 Android 工作区移动源失败 ({}): {err}", source_path.display()))?;
         if source_metadata.file_type().is_symlink() {
@@ -430,7 +453,7 @@ pub(crate) fn glob_android_workspace_files_ws_inner(
     #[cfg(target_os = "android")]
     {
         let matcher = android_workspace_glob_to_regex(&pattern)?;
-        let start = android_workspace_resolve_file_manager_existing_path(state, path.as_deref().unwrap_or_default(), true)?;
+        let start = android_workspace_resolve_file_manager_existing_path_state(state, path.as_deref().unwrap_or_default(), true)?;
         let metadata = fs::metadata(&start)
             .map_err(|err| format!("读取 Android 工作区 glob 起点失败 ({}): {err}", start.display()))?;
         if !metadata.is_dir() {
@@ -482,7 +505,7 @@ pub(crate) fn grep_android_workspace_files_ws_inner(
             .filter(|value| !value.is_empty())
             .map(android_workspace_glob_to_regex)
             .transpose()?;
-        let start = android_workspace_resolve_file_manager_existing_path(state, path.as_deref().unwrap_or_default(), true)?;
+        let start = android_workspace_resolve_file_manager_existing_path_state(state, path.as_deref().unwrap_or_default(), true)?;
         let root = android_workspace_root(state)
             .canonicalize()
             .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
@@ -707,7 +730,7 @@ pub(crate) fn export_file_from_android_workspace_ws_inner(
 ) -> Result<AndroidWorkspaceExportResult, String> {
     #[cfg(target_os = "android")]
     {
-        let target = android_workspace_resolve_file_manager_existing_path(state, &path, false)?;
+        let target = android_workspace_resolve_file_manager_existing_path_state(state, &path, false)?;
         let root = android_workspace_root(state)
             .canonicalize()
             .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
@@ -754,7 +777,7 @@ pub(crate) fn delete_file_from_android_workspace_ws_inner(
 ) -> Result<AndroidWorkspaceDeleteResult, String> {
     #[cfg(target_os = "android")]
     {
-        let target = android_workspace_resolve_file_manager_existing_path(state, &path, false)?;
+        let target = android_workspace_resolve_file_manager_existing_path_state(state, &path, false)?;
         let root = android_workspace_root(state)
             .canonicalize()
             .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;

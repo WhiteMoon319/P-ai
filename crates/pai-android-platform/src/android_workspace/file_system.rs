@@ -2,7 +2,24 @@ use super::*;
 use std::{fs, path::PathBuf};
 use uuid::Uuid;
 
-pub(crate) fn android_workspace_sanitize_file_name(raw: &str) -> String {
+use pai_backend::terminal::{
+    android_sandbox_path_is_within, android_workspace_normalize_path_lexically,
+    normalize_terminal_path_input_for_current_platform, terminal_normalize_for_access_check,
+};
+
+/// 查找最近的已存在祖先路径（从 src-tauri android_workspace/manager.rs 迁入）。
+pub fn android_workspace_existing_ancestor(path: &std::path::Path) -> Option<PathBuf> {
+    let mut current = Some(path);
+    while let Some(candidate) = current {
+        if candidate.exists() {
+            return Some(candidate.to_path_buf());
+        }
+        current = candidate.parent();
+    }
+    None
+}
+
+pub fn android_workspace_sanitize_file_name(raw: &str) -> String {
     let name = std::path::Path::new(raw.trim())
         .file_name()
         .and_then(|value| value.to_str())
@@ -24,7 +41,7 @@ pub(crate) fn android_workspace_sanitize_file_name(raw: &str) -> String {
     }
 }
 
-pub(crate) fn android_workspace_unique_sibling_path(candidate: &std::path::Path) -> PathBuf {
+pub fn android_workspace_unique_sibling_path(candidate: &std::path::Path) -> PathBuf {
     if !candidate.exists() {
         return candidate.to_path_buf();
     }
@@ -50,11 +67,11 @@ pub(crate) fn android_workspace_unique_sibling_path(candidate: &std::path::Path)
     parent.join(format!("{}-{}", Uuid::new_v4(), file_name))
 }
 
-pub(crate) fn android_workspace_unique_import_path(imports_dir: &std::path::Path, file_name: &str) -> PathBuf {
+pub fn android_workspace_unique_import_path(imports_dir: &std::path::Path, file_name: &str) -> PathBuf {
     android_workspace_unique_sibling_path(&imports_dir.join(file_name))
 }
 
-pub(crate) fn android_workspace_resolve_import_target_path(
+pub fn android_workspace_resolve_import_target_path(
     root: &std::path::Path,
     file_name: &str,
     target_path: Option<&str>,
@@ -79,14 +96,14 @@ pub(crate) fn android_workspace_resolve_import_target_path(
     Ok(target)
 }
 
-pub(crate) fn android_workspace_relative_display(root: &std::path::Path, path: &std::path::Path) -> String {
+pub fn android_workspace_relative_display(root: &std::path::Path, path: &std::path::Path) -> String {
     path.strip_prefix(root)
         .unwrap_or(path)
         .to_string_lossy()
         .replace('\\', "/")
 }
 
-pub(crate) fn android_workspace_ensure_user_file_manager_path(
+pub fn android_workspace_ensure_user_file_manager_path(
     root: &std::path::Path,
     target: &std::path::Path,
     allow_root: bool,
@@ -120,52 +137,46 @@ pub(crate) fn android_workspace_ensure_user_file_manager_path(
     Ok(())
 }
 
-pub(crate) fn android_workspace_resolve_file_manager_existing_path(
-    state: &AppState,
+pub fn android_workspace_resolve_file_manager_existing_path(
+    root: &std::path::Path,
     raw_path: &str,
     allow_root: bool,
 ) -> Result<PathBuf, String> {
-    let Some(root) = android_workspace_canonical_root(state)? else {
-        return Err("Android 工作区文件管理仅在 Android 端可用。".to_string());
-    };
     let relative = android_workspace_clean_relative_input(raw_path)?;
     if !android_workspace_relative_path_is_user_visible(&relative, allow_root) {
         return Err("文件管理不允许访问系统目录。".to_string());
     }
     let target = root.join(&relative);
-    android_workspace_ensure_user_file_manager_path(&root, &target, allow_root)?;
+    android_workspace_ensure_user_file_manager_path(root, &target, allow_root)?;
     let canonical = target
         .canonicalize()
         .map_err(|_| format!("文件不存在：{}", target.display()))?;
-    android_workspace_ensure_user_file_manager_path(&root, &canonical, allow_root)?;
+    android_workspace_ensure_user_file_manager_path(root, &canonical, allow_root)?;
     Ok(canonical)
 }
 
-pub(crate) fn android_workspace_resolve_file_manager_target_path(
-    state: &AppState,
+pub fn android_workspace_resolve_file_manager_target_path(
+    root: &std::path::Path,
     raw_path: &str,
     allow_root: bool,
 ) -> Result<PathBuf, String> {
-    let Some(root) = android_workspace_canonical_root(state)? else {
-        return Err("Android 工作区文件管理仅在 Android 端可用。".to_string());
-    };
     let relative = android_workspace_clean_relative_input(raw_path)?;
     if !android_workspace_relative_path_is_user_visible(&relative, allow_root) {
         return Err("文件管理不允许访问系统目录。".to_string());
     }
     let target = root.join(&relative);
-    android_workspace_ensure_user_file_manager_path(&root, &target, allow_root)?;
+    android_workspace_ensure_user_file_manager_path(root, &target, allow_root)?;
     Ok(target)
 }
 
-pub(crate) fn android_workspace_mime_from_path(path: &std::path::Path) -> String {
+pub fn android_workspace_mime_from_path(path: &std::path::Path) -> String {
     fs::read(path)
         .ok()
         .and_then(|bytes| infer::get(&bytes).map(|kind| kind.mime_type().to_string()))
         .unwrap_or_else(|| "application/octet-stream".to_string())
 }
 
-pub(crate) fn android_workspace_file_entry(root: &std::path::Path, path: PathBuf) -> Option<AndroidWorkspaceFileEntry> {
+pub fn android_workspace_file_entry(root: &std::path::Path, path: PathBuf) -> Option<AndroidWorkspaceFileEntry> {
     let metadata = fs::symlink_metadata(&path).ok()?;
     let file_type = metadata.file_type();
     if file_type.is_symlink() || (!file_type.is_file() && !file_type.is_dir()) {
