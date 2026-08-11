@@ -2801,12 +2801,23 @@ private fun RemoteImSettingsTab(vm: AppViewModel) {
             LazyColumn(Modifier.weight(1f)) {
                 items(channels!!.size) { index ->
                     val channel = channels!![index]
+                    val channelId = (channel["id"] as? String) ?: (channel["channelId"] as? String) ?: ""
                     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                         Column(Modifier.padding(12.dp)) {
-                            Text(
-                                channel["name"] as? String ?: channel["platform"] as? String ?: "未命名",
-                                style = MaterialTheme.typography.titleSmall,
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    channel["name"] as? String ?: channel["platform"] as? String ?: "未命名",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                if (channelId.isNotBlank()) {
+                                    TextButton(
+                                        onClick = {
+                                            scope.launch { vm.restartRemoteImChannel(channelId) }
+                                        },
+                                    ) { Text("重启") }
+                                }
+                            }
                             val platform = channel["platform"] as? String ?: ""
                             val enabled = channel["enabled"] as? Boolean ?: false
                             Text(

@@ -1159,6 +1159,21 @@ class AppViewModel(
         }
     }
 
+    /** 重启远程 IM 通道。 */
+    suspend fun restartRemoteImChannel(channelId: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val result = service.remoteImRestartChannel(channelId)
+                loadRemoteImChannels()
+                val ok = result["ok"] as? Boolean ?: result.isNotEmpty()
+                ok
+            } catch (e: Exception) {
+                error.value = "重启通道失败: ${e.message}"
+                false
+            }
+        }
+    }
+
     /** 加载设置页全部数据（配置/聊天设置/工具状态/关于）。agentId 用于工具状态。 */
     suspend fun loadSettings(agentId: String?) {
         withContext(Dispatchers.IO) {
