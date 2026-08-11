@@ -253,7 +253,7 @@ class AppViewModel(
         isStreaming.value = true
         withContext(Dispatchers.IO) {
             try {
-                if (attachment != null) {
+                val result = if (attachment != null) {
                     service.sendWithAttachments(
                         conversationId, departmentId, agent, trimmed,
                         listOf(com.whitemoon319.pai.model.AttachmentMeta(
@@ -264,6 +264,11 @@ class AppViewModel(
                     )
                 } else {
                     service.send(conversationId, departmentId, agent, trimmed)
+                }
+                if (!result.accepted) {
+                    val reason = if (result.duplicate) "重复提交" else (result.ingress ?: "未受理")
+                    error.value = "发送未受理（$reason），请重试或检查模型配置"
+                    isStreaming.value = false
                 }
             } catch (e: Exception) {
                 error.value = "发送失败: ${e.message}"
