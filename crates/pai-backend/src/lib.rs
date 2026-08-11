@@ -13,6 +13,7 @@ pub mod core;
 pub mod delegate;
 pub mod desktop_tools;
 pub mod image_generation;
+pub mod logging;
 pub mod mcp;
 pub mod skill;
 pub mod task;

@@ -380,37 +380,7 @@ pub(crate) fn normalize_runtime_log(level: &str, message: String) -> (String, St
 }
 
 pub(crate) fn runtime_log_push(level: &str, message: String) {
-    let _ = std::io::Write::write_all(&mut std::io::stderr(), format!("{message}\n").as_bytes());
-    let (normalized_level, normalized_message) = normalize_runtime_log(level, message);
-    append_backend_log_line(&normalized_level, &normalized_message);
-    let created_at = now_log_local_rfc3339();
-    let Ok(mut buf) = runtime_log_buffer().lock() else {
-        return;
-    };
-    if let Some(last) = buf.entries.back_mut() {
-        if last.level == normalized_level && last.message == normalized_message {
-            last.repeat = last.repeat.saturating_add(1);
-            last.created_at = created_at;
-            return;
-        }
-    }
-    let entry = RuntimeLogEntry {
-        id: Uuid::new_v4().to_string(),
-        created_at,
-        level: normalized_level,
-        message: normalized_message,
-        repeat: 1,
-    };
-    let entry_bytes = entry.created_at.len() + entry.level.len() + entry.message.len();
-    buf.total_bytes = buf.total_bytes.saturating_add(entry_bytes);
-    buf.entries.push_back(entry);
-    while buf.total_bytes > RUNTIME_LOG_MAX_BYTES {
-        let Some(old) = buf.entries.pop_front() else {
-            break;
-        };
-        let old_bytes = old.created_at.len() + old.level.len() + old.message.len();
-        buf.total_bytes = buf.total_bytes.saturating_sub(old_bytes);
-    }
+    pai_backend::logging::runtime_log_push(level, message);
 }
 
 pub(crate) fn runtime_log_info(message: String) {
