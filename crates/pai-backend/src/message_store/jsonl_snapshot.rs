@@ -1,8 +1,11 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
+use uuid::Uuid;
 
-use crate::core::domain::types_chat::{ChatMessage, Conversation, MessagePart};
+use crate::core::domain::constants::CONVERSATION_KIND_REMOTE_IM_CONTACT;
+use crate::core::domain::types_chat::{ChatMessage, Conversation, ConversationCumulativeUsage, MessagePart};
+use crate::core::domain::types_config::default_shell_work_mode;
 
 /// 远程 IM 来源元数据（从 src-tauri conversation.rs 迁入）。
 fn remote_im_origin_from_message(message: &ChatMessage) -> Option<&Value> {
