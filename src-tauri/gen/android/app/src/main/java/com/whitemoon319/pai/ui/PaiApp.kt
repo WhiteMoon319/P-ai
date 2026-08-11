@@ -1063,14 +1063,22 @@ fun ChatScreen(
 
     // 消息/流式输出/活动步骤变化时自动滚动到最底部
     LaunchedEffect(messages.size, streaming.length, activitySteps.size) {
-        if (!loading && messages.isNotEmpty()) {
-            val last = listState.layoutInfo.totalItemsCount - 1
-            if (last >= 0) {
-                // 流式输出中用平滑动画，其余（进入/加载完成/追加消息）瞬移到最底部，避免滑动过程
-                if (isStreaming) {
-                    listState.animateScrollToItem(last)
-                } else {
-                    listState.scrollToItem(last)
+        if (!loading && messages.isNotEmpty() && !vm.loadingMoreMessages.value) {
+            // 仅当用户位于底部附近时自动滚动（避免打断上滑查看历史/加载更早）
+            val info = listState.layoutInfo
+            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: Int.MAX_VALUE
+            val total = info.totalItemsCount
+            val nearBottom = lastVisible >= total - 3
+            val atInitialBottom = info.totalItemsCount == 0
+            if (nearBottom || atInitialBottom) {
+                val last = total - 1
+                if (last >= 0) {
+                    // 流式输出中用平滑动画，其余（进入/加载完成/追加消息）瞬移到最底部，避免滑动过程
+                    if (isStreaming) {
+                        listState.animateScrollToItem(last)
+                    } else {
+                        listState.scrollToItem(last)
+                    }
                 }
             }
         }
