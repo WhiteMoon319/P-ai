@@ -178,6 +178,58 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("conversation.autoPush", mapOf("input" to input), Map::class.java) as Map<String, Any?>
     }
 
+    // ---------------- 委托任务（delegate） ----------------
+
+    /** 委托会话列表。 */
+    suspend fun delegateConversationsList(): List<Map<String, Any?>> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("delegate.conversations.list", emptyMap<String, Any?>(), List::class.java) as List<Map<String, Any?>>
+    }
+
+    /** 委托状态列表。 */
+    suspend fun delegateStatuses(conversationId: String?): List<Map<String, Any?>> {
+        val input = mapOf("conversationId" to conversationId)
+        @Suppress("UNCHECKED_CAST")
+        return client.request("delegate.statuses", mapOf("input" to input), List::class.java) as List<Map<String, Any?>>
+    }
+
+    /** 中止委托。 */
+    suspend fun delegateAbort(conversationId: String, delegateId: String?): Boolean {
+        val input = mapOf("conversationId" to conversationId, "delegateId" to delegateId)
+        return client.request("delegate.abort", mapOf("input" to input), Boolean::class.java)
+    }
+
+    /** 删除委托会话。 */
+    suspend fun delegateDelete(conversationId: String): Boolean {
+        val input = mapOf("conversationId" to conversationId)
+        return client.request("delegate.delete", mapOf("input" to input), Boolean::class.java)
+    }
+
+    /** 提交委托任务。 */
+    suspend fun delegateSubmit(
+        conversationId: String,
+        targetDepartmentId: String,
+        targetAgentId: String? = null,
+        goal: String? = null,
+        why: String? = null,
+        todo: String? = null,
+        background: String? = null,
+        question: String? = null,
+    ): Map<String, Any?> {
+        val input = mutableMapOf<String, Any?>(
+            "conversationId" to conversationId,
+            "targetDepartmentId" to targetDepartmentId,
+            "targetAgentId" to targetAgentId,
+            "goal" to goal,
+            "why" to why,
+            "todo" to todo,
+            "background" to background,
+            "question" to question,
+        )
+        @Suppress("UNCHECKED_CAST")
+        return client.request("delegate.submit", mapOf("input" to input), Map::class.java) as Map<String, Any?>
+    }
+
     /** 当前会话提示词预览（get_prompt_preview）。 */
     suspend fun promptPreview(
         conversationId: String,

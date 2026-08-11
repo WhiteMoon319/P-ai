@@ -445,6 +445,98 @@ class AppViewModel(
         }
     }
 
+    // ---------------- 委托任务（delegate） ----------------
+
+    val delegateConversations = MutableStateFlow<List<Map<String, Any?>>?>(null)
+    val delegateStatuses = MutableStateFlow<List<Map<String, Any?>>?>(null)
+    val delegateLoading = MutableStateFlow(false)
+
+    suspend fun loadDelegateConversations() {
+        withContext(Dispatchers.IO) {
+            delegateLoading.value = true
+            try {
+                delegateConversations.value = service.delegateConversationsList()
+            } catch (e: Exception) {
+                error.value = "读取委托会话失败: ${e.message}"
+            } finally {
+                delegateLoading.value = false
+            }
+        }
+    }
+
+    suspend fun loadDelegateStatuses(conversationId: String? = null) {
+        withContext(Dispatchers.IO) {
+            delegateLoading.value = true
+            try {
+                delegateStatuses.value = service.delegateStatuses(conversationId)
+            } catch (e: Exception) {
+                error.value = "读取委托状态失败: ${e.message}"
+            } finally {
+                delegateLoading.value = false
+            }
+        }
+    }
+
+    /** 中止委托。 */
+    suspend fun abortDelegate(conversationId: String, delegateId: String?): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val ok = service.delegateAbort(conversationId, delegateId)
+                if (ok) loadDelegateStatuses()
+                ok
+            } catch (e: Exception) {
+                error.value = "中止委托失败: ${e.message}"
+                false
+            }
+        }
+    }
+
+    /** 删除委托会话。 */
+    suspend fun deleteDelegateConversation(conversationId: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val ok = service.delegateDelete(conversationId)
+                if (ok) loadDelegateConversations()
+                ok
+            } catch (e: Exception) {
+                error.value = "删除委托会话失败: ${e.message}"
+                false
+            }
+        }
+    }
+
+    /** 提交委托任务。 */
+    suspend fun submitDelegate(
+        conversationId: String,
+        targetDepartmentId: String,
+        targetAgentId: String?,
+        goal: String?,
+        why: String?,
+        todo: String?,
+    ): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val result = service.delegateSubmit(
+                    conversationId = conversationId,
+                    targetDepartmentId = targetDepartmentId,
+                    targetAgentId = targetAgentId,
+                    goal = goal,
+                    why = why,
+                    todo = todo,
+                )
+                val ok = result.isNotEmpty()
+                if (ok) {
+                    loadDelegateStatuses(conversationId)
+                    loadDelegateConversations()
+                }
+                ok
+            } catch (e: Exception) {
+                error.value = "提交委托失败: ${e.message}"
+                false
+            }
+        }
+    }
+
     /** 当前会话提示词预览：返回 (标题, 内容)。 */
     suspend fun promptPreviewForCurrent(): Pair<String, String>? {
         val conversationId = currentConversationId.value ?: return null

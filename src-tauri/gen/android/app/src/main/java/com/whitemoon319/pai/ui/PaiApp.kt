@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -117,9 +118,16 @@ fun PaiApp(vm: AppViewModel) {
         var title by remember { mutableStateOf("会话") }
         var showSettings by remember { mutableStateOf(false) }
         var showArchives by remember { mutableStateOf(false) }
+        var showDelegate by remember { mutableStateOf(false) }
         val scope = rememberCoroutineScope()
 
         when {
+            showDelegate -> {
+                DelegateScreen(
+                    vm = vm,
+                    onBack = { showDelegate = false },
+                )
+            }
             showArchives -> {
                 ArchivesScreen(
                     vm = vm,
@@ -168,6 +176,7 @@ fun PaiApp(vm: AppViewModel) {
                     },
                     onSettings = { showSettings = true },
                     onArchives = { showArchives = true },
+                    onDelegate = { showDelegate = true },
                 )
             }
         }
@@ -199,8 +208,9 @@ fun ConversationListScreen(
     onCreated: (String) -> Unit = {},
     onSettings: () -> Unit = {},
     onArchives: () -> Unit = {},
+    onDelegate: () -> Unit = {},
 ) {
-    ConversationListScreenImpl(vm = vm, onOpen = onOpen, onNew = onNew, onCreated = onCreated, onSettings = onSettings, onArchives = onArchives)
+    ConversationListScreenImpl(vm = vm, onOpen = onOpen, onNew = onNew, onCreated = onCreated, onSettings = onSettings, onArchives = onArchives, onDelegate = onDelegate)
 }
 
 /**
@@ -215,6 +225,7 @@ private fun ConversationListScreenImpl(
     onCreated: (String) -> Unit,
     onSettings: () -> Unit,
     onArchives: () -> Unit = {},
+    onDelegate: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -262,6 +273,9 @@ private fun ConversationListScreenImpl(
                 }
             },
             actions = {
+                IconButton(onClick = { onDelegate() }) {
+                    Icon(Icons.Default.SwapHoriz, contentDescription = "委托")
+                }
                 IconButton(onClick = { onArchives() }) {
                     Icon(Icons.Default.Archive, contentDescription = "归档")
                 }
@@ -470,6 +484,142 @@ private fun ConversationListScreenImpl(
             dismissButton = {
                 TextButton(onClick = { autoPushTargetConvId = null }) { Text("取消") }
             },
+        )
+    }
+}
+
+/** 委托任务列表（对齐 Vue DelegateStatusSidebar）：会话/状态/中止/删除。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DelegateScreen(
+    vm: AppViewModel,
+    onBack: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val conversations by vm.delegateConversations.collectAsState()
+    val statuses by vm.delegateStatuses.collectAsState()
+    val loading by vm.delegateLoading.collectAsState()
+    var pendingDelete by remember { mutableStateOf<Map<String, Any?>?>(null) }
+
+    LaunchedEffect(Unit) {
+        vm.loadDelegateConversations()
+        vm.loadDelegateStatuses()
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        TopAppBar(
+            title = { Text("委托任务") },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                }
+            },
+            actions = {
+                IconButton(onClick = {
+                    scope.launch {
+                        vm.loadDelegateConversations()
+                        vm.loadDelegateStatuses()
+                    }
+                }) {
+                    Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                }
+            },
+        )
+        when {
+            loading && conversations.isNullOrEmpty() && statuses.isNullOrEmpty() -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+            conversations.isNullOrEmpty() && statuses.isNullOrEmpty() -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("暂无委托任务", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            else -> {
+                LazyColumn(Modifier.fillMaxSize()) {
+                    // 委托会话
+                    conversations?.forEach { conv ->
+                        val convId = (conv["conversationId"] as? String) ?: ""
+                        val title = (conv["title"] as? String) ?: convId
+                        item(key = "conv_$convId") {
+                            Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(title, style = MaterialTheme.typography.titleSmall)
+                                        Text(
+                                            "委托会话",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    TextButton(onClick = { pendingDelete = conv }) { Text("删除") }
+                                }
+                            }
+                        }
+                    }
+                    // 委托状态
+                    statuses?.forEach { status ->
+                        val delegateId = (status["delegateId"] as? String) ?: ""
+                        val state = (status["state"] as? String) ?: (status["status"] as? String) ?: ""
+                        val goal = (status["goal"] as? String) ?: ""
+                        item(key = "st_$delegateId") {
+                            Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+                                Column(Modifier.padding(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            goal.take(40).ifBlank { "委托任务" },
+                                            style = MaterialTheme.typography.titleSmall,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        Text(
+                                            when (state) {
+                                                "running", "in_progress" -> "进行中"
+                                                "completed", "done" -> "已完成"
+                                                "failed" -> "失败"
+                                                "aborted", "cancelled" -> "已中止"
+                                                else -> state
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = when (state) {
+                                                "running", "in_progress" -> MaterialTheme.colorScheme.primary
+                                                "completed", "done" -> MaterialTheme.colorScheme.tertiary
+                                                "failed" -> MaterialTheme.colorScheme.error
+                                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                        )
+                                    }
+                                    val convId = (status["conversationId"] as? String) ?: ""
+                                    if (state == "running" || state == "in_progress") {
+                                        TextButton(
+                                            onClick = {
+                                                scope.launch { vm.abortDelegate(convId, delegateId) }
+                                            },
+                                        ) { Text("中止") }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    pendingDelete?.let { conv ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("删除委托会话") },
+            text = { Text("确定删除这个委托会话吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        vm.deleteDelegateConversation((conv["conversationId"] as? String) ?: "")
+                        pendingDelete = null
+                    }
+                }) { Text("删除") }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("取消") } },
         )
     }
 }
