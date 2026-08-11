@@ -267,19 +267,21 @@ impl ConversationServiceV2 {
         state: &AppState,
         conversation_id: &str,
     ) -> Result<ConversationBlockPageResult, String> {
-        self.get_conversation_block(state, conversation_id, 0)
+        // 传 None 让 store 自动选择最新 block（summaries.last()）。
+        // 此前传 Some(0) 会命中历史 block 0，导致最新消息（新 block）不显示。
+        self.get_conversation_block(state, conversation_id, None)
     }
 
     fn get_conversation_block(
         &self,
         state: &AppState,
         conversation_id: &str,
-        block_id: u32,
+        block_id: Option<u32>,
     ) -> Result<ConversationBlockPageResult, String> {
         self.with_unarchived_conversation_by_id_fast(state, conversation_id, |conversation| {
             let store_paths = message_store::message_store_paths(&state.data_path, &conversation.id)?;
             if let Some(page) =
-                message_store::read_ready_message_store_block_page(&store_paths, Some(block_id))?
+                message_store::read_ready_message_store_block_page(&store_paths, block_id)?
             {
                 let mut messages = page.messages;
                 materialize_chat_message_parts_from_media_refs(&mut messages, &state.data_path);

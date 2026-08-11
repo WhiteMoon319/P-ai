@@ -148,11 +148,11 @@ fn ide_chat_conversation_block_page(state: &AppState, params: Value) -> Result<V
     if conversation_id.is_empty() {
         return Err("conversationId is required".to_string());
     }
-    let page = if let Some(block_id) = input.block_id {
-        conversation_service_v2().get_conversation_block(state, conversation_id, block_id)?
-    } else {
-        conversation_service_v2().get_conversation_last_block(state, conversation_id)?
-    };
+    let page = conversation_service_v2().get_conversation_block(
+        state,
+        conversation_id,
+        input.block_id,
+    )?;
     Ok(serde_json::json!({
         "blocks": page.blocks.into_iter().map(|item| {
             serde_json::json!({
