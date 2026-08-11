@@ -1,7 +1,25 @@
-pub(crate) struct FeishuSdk;
+use serde_json::Value;
+use base64::Engine as _;
+
+use std::future::Future;
+use std::pin::Pin;
+
+use pai_backend::core::domain::types_config::{RemoteImChannelConfig, RemoteImPlatform};
+use pai_backend::core::domain::types_storage::RemoteImContact;
+use pai_backend::logging::runtime_log_info;
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use crate::tls::android_workspace_apply_static_webpki_roots;
+use crate::remote_im_sdk::{
+    remote_im_content_item_bytes, remote_im_content_item_mime, remote_im_content_item_name,
+    remote_im_credential_text, remote_im_http_rejection_error, remote_im_is_group_contact,
+    remote_im_log, remote_im_payload_content_items, remote_im_payload_media_summary,
+    RemoteImSdk, RemoteImSdkSendError,
+};
+
+pub struct FeishuSdk;
 
 impl FeishuSdk {
-    pub(crate) async fn tenant_access_token(&self, channel: &RemoteImChannelConfig) -> Result<String, String> {
+    pub async fn tenant_access_token(&self, channel: &RemoteImChannelConfig) -> Result<String, String> {
         let started = std::time::Instant::now();
         remote_im_log(
             "INFO",
@@ -30,7 +48,7 @@ impl FeishuSdk {
             .timeout(std::time::Duration::from_secs(12));
         #[cfg(target_os = "android")]
         {
-            client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)?;
+            client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
         }
         let client = client_builder
             .build()
@@ -115,7 +133,7 @@ impl FeishuSdk {
         Ok(token.to_string())
     }
 
-    pub(crate) async fn send_message(
+    pub async fn send_message(
         &self,
         client: &reqwest::Client,
         token: &str,
@@ -169,7 +187,7 @@ impl FeishuSdk {
             .to_string())
     }
 
-    pub(crate) async fn upload_image_key(
+    pub async fn upload_image_key(
         &self,
         client: &reqwest::Client,
         token: &str,
@@ -207,7 +225,7 @@ impl FeishuSdk {
         Ok(image_key)
     }
 
-    pub(crate) async fn upload_file_key(
+    pub async fn upload_file_key(
         &self,
         client: &reqwest::Client,
         token: &str,
@@ -309,7 +327,7 @@ impl RemoteImSdk for FeishuSdk {
                 .timeout(std::time::Duration::from_secs(12));
             #[cfg(target_os = "android")]
             {
-                client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)
+                client_builder = android_workspace_apply_static_webpki_roots(client_builder)
                     .map_err(RemoteImSdkSendError::definitely_not_sent)?;
             }
             let client = client_builder

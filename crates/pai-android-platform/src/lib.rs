@@ -6,5 +6,7 @@
 //! 迁移策略：从 src-tauri 逐步搬入零 tauri 依赖的平台模块。
 
 pub mod android_workspace;
+pub mod remote_im;
+pub mod remote_im_sdk;
 pub mod sandbox;
 pub mod tls;

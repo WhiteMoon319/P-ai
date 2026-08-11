@@ -6,9 +6,10 @@ description = "P-AI Android 平台能力（workspace/rootfs/proot/TLS/沙盒）"
 
 [dependencies]
 pai-backend = { path = "../pai-backend" }
+base64 = "0.22"
 infer = "0.19.0"
 regex = "1"
-reqwest = { version = "0.13.4", default-features = false, features = ["json", "query", "rustls"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["json", "multipart", "query", "rustls"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { version = "1.52.1", features = ["rt-multi-thread", "sync", "time", "process", "io-util", "macros"] }

@@ -1674,6 +1674,7 @@ dependencies = [
 name = "pai-android-platform"
 version = "0.57.0"
 dependencies = [
+ "base64 0.22.1",
  "infer",
  "pai-backend",
  "regex",
@@ -2015,6 +2016,7 @@ dependencies = [
  "js-sys",
  "log",
  "mime",
+ "mime_guess",
  "percent-encoding",
  "pin-project-lite",
  "quinn",

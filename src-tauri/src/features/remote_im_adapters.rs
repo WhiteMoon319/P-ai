@@ -3,64 +3,15 @@ use std::{future::Future, pin::Pin};
 use std::path::Path;
 use super::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RemoteImSdkSendErrorKind {
-    DefinitelyNotSent,
-    Uncertain,
-}
+// RemoteImSdkSendError / RemoteImSdkSendErrorKind / remote_im_http_rejection_error
+// 已迁至 crates/pai-android-platform remote_im_sdk（阶段 5）。
+pub(crate) use pai_android_platform::remote_im_sdk::{
+    remote_im_http_rejection_error, RemoteImSdkSendError, RemoteImSdkSendErrorKind,
+};
 
-#[derive(Debug, Clone)]
-pub(crate) struct RemoteImSdkSendError {
-    pub(crate) kind: RemoteImSdkSendErrorKind,
-    pub(crate) message: String,
-}
-
-impl RemoteImSdkSendError {
-    pub(crate) fn definitely_not_sent(message: impl Into<String>) -> Self {
-        Self {
-            kind: RemoteImSdkSendErrorKind::DefinitelyNotSent,
-            message: message.into(),
-        }
-    }
-
-    pub(crate) fn uncertain(message: impl Into<String>) -> Self {
-        Self {
-            kind: RemoteImSdkSendErrorKind::Uncertain,
-            message: message.into(),
-        }
-    }
-
-    pub(crate) fn after_confirmed_partial_delivery(mut self, delivered_any: bool) -> Self {
-        if delivered_any {
-            self.kind = RemoteImSdkSendErrorKind::Uncertain;
-        }
-        self
-    }
-}
-
-pub(crate) fn remote_im_http_rejection_error(
-    status: reqwest::StatusCode,
-    message: impl Into<String>,
-) -> RemoteImSdkSendError {
-    let message = message.into();
-    if status == reqwest::StatusCode::REQUEST_TIMEOUT || status.is_server_error() {
-        RemoteImSdkSendError::uncertain(message)
-    } else {
-        RemoteImSdkSendError::definitely_not_sent(message)
-    }
-}
-
-pub(crate) trait RemoteImSdk: Send + Sync {
-    #[allow(dead_code)] // 在测试中使用
-    fn platform(&self) -> RemoteImPlatform;
-    fn validate_channel(&self, channel: &RemoteImChannelConfig) -> Result<(), String>;
-    fn send_outbound<'a>(
-        &'a self,
-        channel: &'a RemoteImChannelConfig,
-        contact: &'a RemoteImContact,
-        payload: &'a Value,
-    ) -> Pin<Box<dyn Future<Output = Result<String, RemoteImSdkSendError>> + Send + 'a>>;
-}
+// RemoteImSdk trait 已迁至 crates/pai-android-platform remote_im_sdk（阶段 5），
+// 通过 pub(crate) use 引入。
+pub(crate) use pai_android_platform::remote_im_sdk::RemoteImSdk;
 
 pub(crate) fn remote_im_payload_text(payload: &Value) -> String {
     payload
@@ -288,7 +239,8 @@ pub(crate) fn remote_im_log(level: &str, event: &str, fields: Value) {
     ));
 }
 
-include!("remote_im/feishu_sdk.rs");
+// feishu_sdk 已迁至 crates/pai-android-platform remote_im（阶段 5）。
+pub(crate) use pai_android_platform::remote_im::feishu_sdk::*;
 
 pub(crate) struct DingtalkSdk;
 
