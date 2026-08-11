@@ -1,12 +1,12 @@
 #[derive(Debug, Clone)]
-struct RuntimeOrganizationSnapshot {
-    config: AppConfig,
-    agents: Vec<AgentProfile>,
-    departments_by_id: std::collections::HashMap<String, DepartmentConfig>,
-    department_ids_by_agent: std::collections::HashMap<String, String>,
+pub(crate) struct RuntimeOrganizationSnapshot {
+    pub(crate) config: AppConfig,
+    pub(crate) agents: Vec<AgentProfile>,
+    pub(crate) departments_by_id: std::collections::HashMap<String, DepartmentConfig>,
+    pub(crate) department_ids_by_agent: std::collections::HashMap<String, String>,
 }
 
-fn normalize_runtime_organization_department_children(config: &mut AppConfig) {
+pub(crate) fn normalize_runtime_organization_department_children(config: &mut AppConfig) {
     let valid_department_ids = config
         .departments
         .iter()
@@ -37,7 +37,7 @@ fn normalize_runtime_organization_department_children(config: &mut AppConfig) {
     }
 }
 
-fn build_runtime_organization_snapshot_from_parts(
+pub(crate) fn build_runtime_organization_snapshot_from_parts(
     data_path: &PathBuf,
     base_config: &AppConfig,
     base_agents: &[AgentProfile],
@@ -77,7 +77,7 @@ fn build_runtime_organization_snapshot_from_parts(
     })
 }
 
-fn load_runtime_organization_snapshot(
+pub(crate) fn load_runtime_organization_snapshot(
     state: &AppState,
 ) -> Result<RuntimeOrganizationSnapshot, String> {
     let config = state_read_config_cached(state)?;
@@ -85,7 +85,7 @@ fn load_runtime_organization_snapshot(
     build_runtime_organization_snapshot_from_parts(&state.data_path, &config, &agents)
 }
 
-fn runtime_department_by_id<'a>(
+pub(crate) fn runtime_department_by_id<'a>(
     snapshot: &'a RuntimeOrganizationSnapshot,
     department_id: &str,
 ) -> Option<&'a DepartmentConfig> {
@@ -96,7 +96,7 @@ fn runtime_department_by_id<'a>(
     snapshot.departments_by_id.get(department_id)
 }
 
-fn runtime_department_for_agent<'a>(
+pub(crate) fn runtime_department_for_agent<'a>(
     snapshot: &'a RuntimeOrganizationSnapshot,
     agent_id: &str,
 ) -> Option<&'a DepartmentConfig> {

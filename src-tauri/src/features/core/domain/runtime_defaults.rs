@@ -1,12 +1,12 @@
-fn format_message_time_rfc3339_local(raw: &str) -> String {
+pub(crate) fn format_message_time_rfc3339_local(raw: &str) -> String {
     format_utc_storage_time_to_local_rfc3339(raw)
 }
 
-fn format_message_time_text(raw: &str) -> String {
+pub(crate) fn format_message_time_text(raw: &str) -> String {
     format_utc_storage_time_to_local_text(raw)
 }
 
-fn default_agent() -> AgentProfile {
+pub(crate) fn default_agent() -> AgentProfile {
     let now = now_iso();
     AgentProfile {
         id: DEFAULT_AGENT_ID.to_string(),
@@ -27,7 +27,7 @@ fn default_agent() -> AgentProfile {
 }
 
 #[allow(dead_code)]
-fn default_deputy_agent() -> AgentProfile {
+pub(crate) fn default_deputy_agent() -> AgentProfile {
     let now = now_iso();
     AgentProfile {
         id: DEPUTY_AGENT_ID.to_string(),
@@ -47,7 +47,7 @@ fn default_deputy_agent() -> AgentProfile {
     }
 }
 
-fn default_user_persona() -> AgentProfile {
+pub(crate) fn default_user_persona() -> AgentProfile {
     let now = now_iso();
     AgentProfile {
         id: USER_PERSONA_ID.to_string(),
@@ -67,7 +67,7 @@ fn default_user_persona() -> AgentProfile {
     }
 }
 
-fn default_system_persona() -> AgentProfile {
+pub(crate) fn default_system_persona() -> AgentProfile {
     let now = now_iso();
     AgentProfile {
         id: SYSTEM_PERSONA_ID.to_string(),
@@ -87,7 +87,7 @@ fn default_system_persona() -> AgentProfile {
     }
 }
 
-fn normalize_agent_tools(agent: &mut AgentProfile) -> bool {
+pub(crate) fn normalize_agent_tools(agent: &mut AgentProfile) -> bool {
     let defaults = default_agent_tools();
     let mut next = Vec::<ApiToolConfig>::new();
     for default in defaults {
@@ -130,7 +130,7 @@ fn normalize_agent_tools(agent: &mut AgentProfile) -> bool {
     changed
 }
 
-fn ensure_required_builtin_agents_in_list(agents: &mut Vec<AgentProfile>) -> bool {
+pub(crate) fn ensure_required_builtin_agents_in_list(agents: &mut Vec<AgentProfile>) -> bool {
     let mut changed = false;
     if !agents.iter().any(|agent| agent.id == DEFAULT_AGENT_ID) {
         agents.push(default_agent());
@@ -151,11 +151,11 @@ fn ensure_required_builtin_agents_in_list(agents: &mut Vec<AgentProfile>) -> boo
     changed
 }
 
-fn ensure_required_builtin_agents(data: &mut AppData) -> bool {
+pub(crate) fn ensure_required_builtin_agents(data: &mut AppData) -> bool {
     ensure_required_builtin_agents_in_list(&mut data.agents)
 }
 
-fn fill_missing_conversation_message_speaker_agent_ids(conversation: &mut Conversation) -> bool {
+pub(crate) fn fill_missing_conversation_message_speaker_agent_ids(conversation: &mut Conversation) -> bool {
     fn provider_meta_speaker_agent_id(message: &ChatMessage) -> Option<String> {
         let meta = message.provider_meta.as_ref()?;
         let object = meta.as_object()?;
@@ -207,7 +207,7 @@ fn fill_missing_conversation_message_speaker_agent_ids(conversation: &mut Conver
     changed
 }
 
-fn fill_missing_conversation_metadata(data: &mut AppData) -> bool {
+pub(crate) fn fill_missing_conversation_metadata(data: &mut AppData) -> bool {
     let mut changed = false;
     for conversation in &mut data.conversations {
         if conversation.conversation_kind.trim().is_empty() {

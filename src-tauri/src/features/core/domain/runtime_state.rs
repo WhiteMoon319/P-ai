@@ -1,34 +1,34 @@
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct IdeContextReference {
-    id: String,
-    file_path: String,
+pub(crate) struct IdeContextReference {
+    pub(crate) id: String,
+    pub(crate) file_path: String,
     #[serde(default)]
-    start_line: Option<u32>,
+    pub(crate) start_line: Option<u32>,
     #[serde(default)]
-    end_line: Option<u32>,
-    content: String,
+    pub(crate) end_line: Option<u32>,
+    pub(crate) content: String,
     #[serde(default)]
-    language_id: Option<String>,
-    source: String,
-    captured_at: String,
+    pub(crate) language_id: Option<String>,
+    pub(crate) source: String,
+    pub(crate) captured_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct IdeContextSnapshot {
-    client_id: String,
-    editor: String,
-    workspace_roots: Vec<String>,
-    references: Vec<IdeContextReference>,
-    updated_at: String,
+pub(crate) struct IdeContextSnapshot {
+    pub(crate) client_id: String,
+    pub(crate) editor: String,
+    pub(crate) workspace_roots: Vec<String>,
+    pub(crate) references: Vec<IdeContextReference>,
+    pub(crate) updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct RecentLlmRoundLogs {
-    pipeline_logs: std::collections::VecDeque<LlmRoundLogEntry>,
-    other_logs: std::collections::VecDeque<LlmRoundLogEntry>,
+pub(crate) struct RecentLlmRoundLogs {
+    pub(crate) pipeline_logs: std::collections::VecDeque<LlmRoundLogEntry>,
+    pub(crate) other_logs: std::collections::VecDeque<LlmRoundLogEntry>,
 }
 
 /// 非 tauri 应用句柄抽象：桌面端包装 tauri::AppHandle（事件广播/路径解析），
@@ -39,7 +39,7 @@ pub(crate) struct NativeAppHandle {
     #[cfg(not(target_os = "android"))]
     pub(crate) inner: Option<tauri::AppHandle>,
     #[cfg(target_os = "android")]
-    _android: std::marker::PhantomData<()>,
+    pub(crate) _android: std::marker::PhantomData<()>,
 }
 
 impl NativeAppHandle {
@@ -79,61 +79,61 @@ impl NativeAppHandle {
 }
 
 #[derive(Clone)]
-struct AppState {
-    app_handle: Arc<Mutex<Option<NativeAppHandle>>>,
-    config_path: PathBuf,
-    data_path: PathBuf,
-    llm_workspace_path: PathBuf,
-    shared_http_client: reqwest::Client,
-    terminal_shell: TerminalShellProfile,
-    terminal_shell_candidates: Vec<TerminalShellProfile>,
-    conversation_lock: Arc<ConversationDomainLock>,
-    memory_lock: Arc<Mutex<()>>,
-    cached_config: Arc<Mutex<Option<AppConfig>>>,
-    cached_config_mtime: Arc<Mutex<Option<std::time::SystemTime>>>,
-    cached_agents: Arc<Mutex<Option<Vec<AgentProfile>>>>,
-    cached_agents_mtime: Arc<Mutex<Option<std::time::SystemTime>>>,
-    cached_runtime_state: Arc<Mutex<Option<RuntimeStateFile>>>,
-    cached_runtime_state_mtime: Arc<Mutex<Option<std::time::SystemTime>>>,
-    cached_chat_index: Arc<Mutex<Option<ChatIndexFile>>>,
-    cached_conversation_metadata:
+pub(crate) struct AppState {
+    pub(crate) app_handle: Arc<Mutex<Option<NativeAppHandle>>>,
+    pub(crate) config_path: PathBuf,
+    pub(crate) data_path: PathBuf,
+    pub(crate) llm_workspace_path: PathBuf,
+    pub(crate) shared_http_client: reqwest::Client,
+    pub(crate) terminal_shell: TerminalShellProfile,
+    pub(crate) terminal_shell_candidates: Vec<TerminalShellProfile>,
+    pub(crate) conversation_lock: Arc<ConversationDomainLock>,
+    pub(crate) memory_lock: Arc<Mutex<()>>,
+    pub(crate) cached_config: Arc<Mutex<Option<AppConfig>>>,
+    pub(crate) cached_config_mtime: Arc<Mutex<Option<std::time::SystemTime>>>,
+    pub(crate) cached_agents: Arc<Mutex<Option<Vec<AgentProfile>>>>,
+    pub(crate) cached_agents_mtime: Arc<Mutex<Option<std::time::SystemTime>>>,
+    pub(crate) cached_runtime_state: Arc<Mutex<Option<RuntimeStateFile>>>,
+    pub(crate) cached_runtime_state_mtime: Arc<Mutex<Option<std::time::SystemTime>>>,
+    pub(crate) cached_chat_index: Arc<Mutex<Option<ChatIndexFile>>>,
+    pub(crate) cached_conversation_metadata:
         Arc<Mutex<std::collections::HashMap<String, message_store::ConversationShardMeta>>>,
-    cached_conversation_field_metadata_ids:
+    pub(crate) cached_conversation_field_metadata_ids:
         Arc<Mutex<std::collections::HashSet<String>>>,
-    cached_conversation_mtimes:
+    pub(crate) cached_conversation_mtimes:
         Arc<Mutex<std::collections::HashMap<String, Option<std::time::SystemTime>>>>,
-    cached_app_data: Arc<Mutex<Option<AppData>>>,
-    cached_app_data_signature: Arc<Mutex<Option<AppDataCacheSignature>>>,
-    cached_app_data_dirty: Arc<std::sync::atomic::AtomicBool>,
-    app_data_persist_pending: Arc<Mutex<Option<PendingAppDataPersist>>>,
-    app_data_persist_notify: Arc<tokio::sync::Notify>,
-    app_data_persist_started: Arc<std::sync::atomic::AtomicBool>,
-    app_data_persist_latest_seq: Arc<std::sync::atomic::AtomicU64>,
-    conversation_persist_pending: Arc<Mutex<Option<PendingConversationPersist>>>,
-    conversation_persist_notify: Arc<tokio::sync::Notify>,
-    conversation_persist_started: Arc<std::sync::atomic::AtomicBool>,
-    conversation_persist_latest_seq: Arc<std::sync::atomic::AtomicU64>,
-    cached_conversation_dirty_ids: Arc<Mutex<std::collections::HashSet<String>>>,
-    cached_deleted_conversation_ids: Arc<Mutex<std::collections::HashSet<String>>>,
-    app_data_persist_write_lock: Arc<Mutex<()>>,
-    last_panic_snapshot: Arc<Mutex<Option<String>>>,
-    inflight_chat_abort_handles: Arc<Mutex<std::collections::HashMap<String, AbortHandle>>>,
-    inflight_tool_abort_handles: Arc<Mutex<std::collections::HashMap<String, AbortHandle>>>,
-    inflight_completed_tool_history:
+    pub(crate) cached_app_data: Arc<Mutex<Option<AppData>>>,
+    pub(crate) cached_app_data_signature: Arc<Mutex<Option<AppDataCacheSignature>>>,
+    pub(crate) cached_app_data_dirty: Arc<std::sync::atomic::AtomicBool>,
+    pub(crate) app_data_persist_pending: Arc<Mutex<Option<PendingAppDataPersist>>>,
+    pub(crate) app_data_persist_notify: Arc<tokio::sync::Notify>,
+    pub(crate) app_data_persist_started: Arc<std::sync::atomic::AtomicBool>,
+    pub(crate) app_data_persist_latest_seq: Arc<std::sync::atomic::AtomicU64>,
+    pub(crate) conversation_persist_pending: Arc<Mutex<Option<PendingConversationPersist>>>,
+    pub(crate) conversation_persist_notify: Arc<tokio::sync::Notify>,
+    pub(crate) conversation_persist_started: Arc<std::sync::atomic::AtomicBool>,
+    pub(crate) conversation_persist_latest_seq: Arc<std::sync::atomic::AtomicU64>,
+    pub(crate) cached_conversation_dirty_ids: Arc<Mutex<std::collections::HashSet<String>>>,
+    pub(crate) cached_deleted_conversation_ids: Arc<Mutex<std::collections::HashSet<String>>>,
+    pub(crate) app_data_persist_write_lock: Arc<Mutex<()>>,
+    pub(crate) last_panic_snapshot: Arc<Mutex<Option<String>>>,
+    pub(crate) inflight_chat_abort_handles: Arc<Mutex<std::collections::HashMap<String, AbortHandle>>>,
+    pub(crate) inflight_tool_abort_handles: Arc<Mutex<std::collections::HashMap<String, AbortHandle>>>,
+    pub(crate) inflight_completed_tool_history:
         Arc<Mutex<std::collections::HashMap<String, Vec<Value>>>>,
-    terminal_session_roots: Arc<Mutex<std::collections::HashMap<String, String>>>,
-    terminal_live_sessions: Arc<
+    pub(crate) terminal_session_roots: Arc<Mutex<std::collections::HashMap<String, String>>>,
+    pub(crate) terminal_live_sessions: Arc<
         tokio::sync::Mutex<std::collections::HashMap<String, TerminalLiveShellSessionHandle>>,
     >,
-    terminal_pending_approvals:
+    pub(crate) terminal_pending_approvals:
         Arc<Mutex<std::collections::HashMap<String, PendingTerminalApprovalRequest>>>,
-    llm_round_logs: Arc<Mutex<RecentLlmRoundLogs>>,
-    conversation_runtime_slots:
+    pub(crate) llm_round_logs: Arc<Mutex<RecentLlmRoundLogs>>,
+    pub(crate) conversation_runtime_slots:
         Arc<Mutex<std::collections::HashMap<String, ConversationRuntimeSlot>>>,
-    conversation_processing_claims: Arc<Mutex<std::collections::HashSet<String>>>,
-    goal_continue_suppressed_conversation_ids:
+    pub(crate) conversation_processing_claims: Arc<Mutex<std::collections::HashSet<String>>>,
+    pub(crate) goal_continue_suppressed_conversation_ids:
         Arc<Mutex<std::collections::HashSet<String>>>,
-    pending_chat_result_senders: Arc<
+    pub(crate) pending_chat_result_senders: Arc<
         Mutex<
             std::collections::HashMap<
                 String,
@@ -141,39 +141,39 @@ struct AppState {
             >,
         >,
     >,
-    pending_chat_delta_channels:
+    pub(crate) pending_chat_delta_channels:
         Arc<Mutex<std::collections::HashMap<String, DeltaChannel>>>,
-    accepted_submit_trace_ids: Arc<Mutex<std::collections::VecDeque<String>>>,
-    active_chat_view_bindings:
+    pub(crate) accepted_submit_trace_ids: Arc<Mutex<std::collections::VecDeque<String>>>,
+    pub(crate) active_chat_view_bindings:
         Arc<Mutex<std::collections::HashMap<String, ActiveChatViewBinding>>>,
-    conversation_list_activity_marks:
+    pub(crate) conversation_list_activity_marks:
         Arc<Mutex<std::collections::HashMap<String, ConversationListActivityMark>>>,
-    dequeue_lock: Arc<Mutex<()>>,
-    task_scheduler_notify: Arc<tokio::sync::Notify>,
-    delegate_runtime_threads:
+    pub(crate) dequeue_lock: Arc<Mutex<()>>,
+    pub(crate) task_scheduler_notify: Arc<tokio::sync::Notify>,
+    pub(crate) delegate_runtime_threads:
         Arc<Mutex<std::collections::HashMap<String, DelegateRuntimeThread>>>,
-    delegate_recent_threads:
+    pub(crate) delegate_recent_threads:
         Arc<Mutex<std::collections::VecDeque<DelegateRuntimeThread>>>,
-    provider_streaming_disabled_keys: Arc<Mutex<std::collections::HashMap<String, i64>>>,
-    provider_system_message_user_fallback_keys:
+    pub(crate) provider_streaming_disabled_keys: Arc<Mutex<std::collections::HashMap<String, i64>>>,
+    pub(crate) provider_system_message_user_fallback_keys:
         Arc<Mutex<std::collections::HashSet<String>>>,
-    provider_request_gates:
+    pub(crate) provider_request_gates:
         Arc<tokio::sync::Mutex<std::collections::HashMap<String, Arc<ProviderRequestGate>>>>,
-    remote_im_contact_runtime_states:
+    pub(crate) remote_im_contact_runtime_states:
         Arc<Mutex<std::collections::HashMap<String, RemoteImContactRuntimeState>>>,
-    remote_im_reply_delegate_runtimes:
+    pub(crate) remote_im_reply_delegate_runtimes:
         Arc<Mutex<std::collections::HashMap<String, RemoteImReplyDelegateRuntime>>>,
-    remote_im_reply_delegate_semaphore: Arc<tokio::sync::Semaphore>,
-    remote_im_channel_state_write_locks:
+    pub(crate) remote_im_reply_delegate_semaphore: Arc<tokio::sync::Semaphore>,
+    pub(crate) remote_im_channel_state_write_locks:
         Arc<Mutex<std::collections::HashMap<String, Arc<Mutex<()>>>>>,
-    hidden_skill_snapshot_cache: Arc<Mutex<String>>,
-    preferred_release_source: Arc<Mutex<String>>,
-    migration_preview_dirs: Arc<Mutex<std::collections::HashMap<String, String>>>,
+    pub(crate) hidden_skill_snapshot_cache: Arc<Mutex<String>>,
+    pub(crate) preferred_release_source: Arc<Mutex<String>>,
+    pub(crate) migration_preview_dirs: Arc<Mutex<std::collections::HashMap<String, String>>>,
     /// 当前活跃的委托线程 conversation_id 集合。
     /// 工具审批链路通过查表判断当前是否应跳过弹窗（有委托活跃 → 不弹窗，默认拒绝）。
-    delegate_active_ids: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    pub(crate) delegate_active_ids: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
     /// 后端 setup 完成标记，前端在此标记为 true 之前不应发起数据加载。
-    backend_ready: Arc<std::sync::atomic::AtomicBool>,
+    pub(crate) backend_ready: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl std::fmt::Debug for AppState {
@@ -188,21 +188,21 @@ impl std::fmt::Debug for AppState {
     }
 }
 
-fn current_exe_dir() -> Option<PathBuf> {
+pub(crate) fn current_exe_dir() -> Option<PathBuf> {
     std::env::current_exe()
         .ok()
         .and_then(|path| path.parent().map(Path::to_path_buf))
 }
 
-fn portable_marker_path_from_exe_dir(exe_dir: &Path) -> PathBuf {
+pub(crate) fn portable_marker_path_from_exe_dir(exe_dir: &Path) -> PathBuf {
     exe_dir.join("PORTABLE")
 }
 
-fn portable_data_root_from_exe_dir(exe_dir: &Path) -> PathBuf {
+pub(crate) fn portable_data_root_from_exe_dir(exe_dir: &Path) -> PathBuf {
     exe_dir.join("data")
 }
 
-fn detect_portable_runtime_root() -> Option<PathBuf> {
+pub(crate) fn detect_portable_runtime_root() -> Option<PathBuf> {
     let exe_dir = current_exe_dir()?;
     if portable_marker_path_from_exe_dir(&exe_dir).exists() {
         Some(portable_data_root_from_exe_dir(&exe_dir))
@@ -211,7 +211,7 @@ fn detect_portable_runtime_root() -> Option<PathBuf> {
     }
 }
 
-fn resolve_standard_config_dirs() -> Result<(PathBuf, PathBuf), String> {
+pub(crate) fn resolve_standard_config_dirs() -> Result<(PathBuf, PathBuf), String> {
     let legacy_project_dirs = ProjectDirs::from("ai", "easycall", "easy-call-ai")
         .ok_or_else(|| "Failed to resolve legacy config directory".to_string())?;
     let next_project_dirs = ProjectDirs::from("ai", "easycall", "p-ai")
@@ -222,7 +222,7 @@ fn resolve_standard_config_dirs() -> Result<(PathBuf, PathBuf), String> {
     ))
 }
 
-fn resolve_standard_config_dir() -> Result<(PathBuf, PathBuf), String> {
+pub(crate) fn resolve_standard_config_dir() -> Result<(PathBuf, PathBuf), String> {
     let (legacy_config_dir, next_config_dir) = resolve_standard_config_dirs()?;
     let legacy_exists = legacy_config_dir.exists();
     let next_exists = next_config_dir.exists();
@@ -260,7 +260,7 @@ fn resolve_standard_config_dir() -> Result<(PathBuf, PathBuf), String> {
 }
 
 impl AppState {
-    fn new() -> Result<Self, String> {
+    pub(crate) fn new() -> Result<Self, String> {
         let (config_dir, _legacy_config_dir, app_root, legacy_app_root) =
             if let Some(portable_root) = detect_portable_runtime_root() {
                 let config_dir = portable_root.join("config");
@@ -291,7 +291,7 @@ impl AppState {
     /// Android / embedded entry point: construct AppState from a caller-supplied root directory,
     /// skipping portable detection and `ProjectDirs` resolution (which depends on `$HOME`/XDG,
     /// not reliably set on Android).
-    fn new_with_root(app_root: PathBuf) -> Result<Self, String> {
+    pub(crate) fn new_with_root(app_root: PathBuf) -> Result<Self, String> {
         let config_dir = app_root.join("config");
         fs::create_dir_all(&config_dir).map_err(|err| {
             format!(
@@ -304,7 +304,7 @@ impl AppState {
         Self::init_from_dirs(config_dir, app_root, legacy_app_root)
     }
 
-    fn init_from_dirs(
+    pub(crate) fn init_from_dirs(
         config_dir: PathBuf,
         app_root: PathBuf,
         legacy_app_root: PathBuf,
@@ -448,7 +448,7 @@ impl AppState {
     }
 }
 
-fn app_root_from_data_path(data_path: &PathBuf) -> PathBuf {
+pub(crate) fn app_root_from_data_path(data_path: &PathBuf) -> PathBuf {
     let parent = data_path
         .parent()
         .map(ToOwned::to_owned)
@@ -466,14 +466,14 @@ fn app_root_from_data_path(data_path: &PathBuf) -> PathBuf {
     parent
 }
 
-fn now_utc() -> OffsetDateTime {
+pub(crate) fn now_utc() -> OffsetDateTime {
     OffsetDateTime::now_utc()
 }
 
-fn now_iso() -> String {
+pub(crate) fn now_iso() -> String {
     now_utc_rfc3339()
 }
 
-fn parse_iso(value: &str) -> Option<OffsetDateTime> {
+pub(crate) fn parse_iso(value: &str) -> Option<OffsetDateTime> {
     parse_rfc3339_time(value)
 }

@@ -1,27 +1,27 @@
-const SHELL_WORKSPACE_LEVEL_SYSTEM: &str = "system";
-const SHELL_WORKSPACE_LEVEL_MAIN: &str = "main";
-const SHELL_WORKSPACE_LEVEL_SECONDARY: &str = "secondary";
-const SHELL_WORK_MODE_DIRECTORY: &str = "directory";
-const SHELL_WORK_MODE_ISOLATED_WORKTREE: &str = "isolated_worktree";
-const SHELL_WORK_MODE_INDEPENDENT_WORKTREE: &str = "independent_worktree";
+pub(crate) const SHELL_WORKSPACE_LEVEL_SYSTEM: &str = "system";
+pub(crate) const SHELL_WORKSPACE_LEVEL_MAIN: &str = "main";
+pub(crate) const SHELL_WORKSPACE_LEVEL_SECONDARY: &str = "secondary";
+pub(crate) const SHELL_WORK_MODE_DIRECTORY: &str = "directory";
+pub(crate) const SHELL_WORK_MODE_ISOLATED_WORKTREE: &str = "isolated_worktree";
+pub(crate) const SHELL_WORK_MODE_INDEPENDENT_WORKTREE: &str = "independent_worktree";
 
-const SHELL_WORKSPACE_ACCESS_APPROVAL: &str = "approval";
-const SHELL_WORKSPACE_ACCESS_FULL_ACCESS: &str = "full_access";
-const SHELL_WORKSPACE_ACCESS_READ_ONLY: &str = "read_only";
+pub(crate) const SHELL_WORKSPACE_ACCESS_APPROVAL: &str = "approval";
+pub(crate) const SHELL_WORKSPACE_ACCESS_FULL_ACCESS: &str = "full_access";
+pub(crate) const SHELL_WORKSPACE_ACCESS_READ_ONLY: &str = "read_only";
 
-fn default_shell_workspace_level() -> String {
+pub(crate) fn default_shell_workspace_level() -> String {
     SHELL_WORKSPACE_LEVEL_SECONDARY.to_string()
 }
 
-fn default_shell_workspace_access() -> String {
+pub(crate) fn default_shell_workspace_access() -> String {
     SHELL_WORKSPACE_ACCESS_READ_ONLY.to_string()
 }
 
-fn default_shell_work_mode() -> String {
+pub(crate) fn default_shell_work_mode() -> String {
     SHELL_WORK_MODE_DIRECTORY.to_string()
 }
 
-fn normalize_shell_work_mode_text(raw: &str) -> String {
+pub(crate) fn normalize_shell_work_mode_text(raw: &str) -> String {
     match raw.trim().to_ascii_lowercase().as_str() {
         SHELL_WORK_MODE_ISOLATED_WORKTREE => SHELL_WORK_MODE_ISOLATED_WORKTREE.to_string(),
         SHELL_WORK_MODE_INDEPENDENT_WORKTREE => SHELL_WORK_MODE_INDEPENDENT_WORKTREE.to_string(),
@@ -29,25 +29,25 @@ fn normalize_shell_work_mode_text(raw: &str) -> String {
     }
 }
 
-fn shell_work_mode_requires_git_root(mode: &str) -> bool {
+pub(crate) fn shell_work_mode_requires_git_root(mode: &str) -> bool {
     matches!(
         normalize_shell_work_mode_text(mode).as_str(),
         SHELL_WORK_MODE_ISOLATED_WORKTREE | SHELL_WORK_MODE_INDEPENDENT_WORKTREE
     )
 }
 
-const CODEX_AUTH_MODE_READ_LOCAL: &str = "read_local";
-const CODEX_AUTH_MODE_MANAGED_OAUTH: &str = "managed_oauth";
-const CODEX_AUTH_MODE_CUSTOM_URL: &str = "custom_url";
-const DEFAULT_CODEX_BASE_URL: &str = "https://chatgpt.com/backend-api/codex";
-const MODEL_ROLE_EXPERT_API_CONFIG_ID: &str = "role:expert";
-const MODEL_ROLE_QUICK_API_CONFIG_ID: &str = "role:quick";
+pub(crate) const CODEX_AUTH_MODE_READ_LOCAL: &str = "read_local";
+pub(crate) const CODEX_AUTH_MODE_MANAGED_OAUTH: &str = "managed_oauth";
+pub(crate) const CODEX_AUTH_MODE_CUSTOM_URL: &str = "custom_url";
+pub(crate) const DEFAULT_CODEX_BASE_URL: &str = "https://chatgpt.com/backend-api/codex";
+pub(crate) const MODEL_ROLE_EXPERT_API_CONFIG_ID: &str = "role:expert";
+pub(crate) const MODEL_ROLE_QUICK_API_CONFIG_ID: &str = "role:quick";
 
-fn default_codex_auth_mode() -> String {
+pub(crate) fn default_codex_auth_mode() -> String {
     CODEX_AUTH_MODE_READ_LOCAL.to_string()
 }
 
-fn normalize_codex_auth_mode(value: &str) -> String {
+pub(crate) fn normalize_codex_auth_mode(value: &str) -> String {
     match value.trim() {
         CODEX_AUTH_MODE_MANAGED_OAUTH => CODEX_AUTH_MODE_MANAGED_OAUTH.to_string(),
         CODEX_AUTH_MODE_CUSTOM_URL => CODEX_AUTH_MODE_CUSTOM_URL.to_string(),
@@ -55,19 +55,19 @@ fn normalize_codex_auth_mode(value: &str) -> String {
     }
 }
 
-fn default_codex_originator() -> String {
+pub(crate) fn default_codex_originator() -> String {
     "codex-tui".to_string()
 }
 
-fn default_codex_local_auth_path() -> String {
+pub(crate) fn default_codex_local_auth_path() -> String {
     "~/.codex/auth.json".to_string()
 }
 
-fn default_reasoning_effort() -> String {
+pub(crate) fn default_reasoning_effort() -> String {
     "medium".to_string()
 }
 
-fn normalize_reasoning_effort(value: &str) -> String {
+pub(crate) fn normalize_reasoning_effort(value: &str) -> String {
     let normalized = value.trim().to_ascii_lowercase();
     if normalized == "default"
         || normalized == "low"
@@ -85,77 +85,77 @@ fn normalize_reasoning_effort(value: &str) -> String {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ShellWorkspaceConfig {
+pub(crate) struct ShellWorkspaceConfig {
     #[serde(default)]
-    id: String,
-    name: String,
-    path: String,
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) path: String,
     #[serde(default = "default_shell_workspace_level", alias = "role")]
-    level: String,
+    pub(crate) level: String,
     #[serde(default = "default_shell_workspace_access")]
-    access: String,
+    pub(crate) access: String,
     #[serde(default)]
-    built_in: bool,
+    pub(crate) built_in: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct McpToolPolicy {
-    tool_name: String,
+pub(crate) struct McpToolPolicy {
+    pub(crate) tool_name: String,
     #[serde(default = "default_true")]
-    enabled: bool,
+    pub(crate) enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct McpCachedTool {
-    tool_name: String,
+pub(crate) struct McpCachedTool {
+    pub(crate) tool_name: String,
     #[serde(default)]
-    description: String,
+    pub(crate) description: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct McpServerConfig {
-    id: String,
-    name: String,
+pub(crate) struct McpServerConfig {
+    pub(crate) id: String,
+    pub(crate) name: String,
     #[serde(default = "default_true")]
-    enabled: bool,
+    pub(crate) enabled: bool,
     #[serde(default)]
-    definition_json: String,
+    pub(crate) definition_json: String,
     #[serde(default)]
-    tool_policies: Vec<McpToolPolicy>,
+    pub(crate) tool_policies: Vec<McpToolPolicy>,
     #[serde(default)]
-    cached_tools: Vec<McpCachedTool>,
+    pub(crate) cached_tools: Vec<McpCachedTool>,
     #[serde(default)]
-    last_status: String,
+    pub(crate) last_status: String,
     #[serde(default)]
-    last_error: String,
+    pub(crate) last_error: String,
     #[serde(default)]
-    updated_at: String,
+    pub(crate) updated_at: String,
 }
 
-fn default_mcp_servers() -> Vec<McpServerConfig> {
+pub(crate) fn default_mcp_servers() -> Vec<McpServerConfig> {
     Vec::new()
 }
 
-fn default_department_permission_mode() -> String {
+pub(crate) fn default_department_permission_mode() -> String {
     "blacklist".to_string()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DepartmentPermissionControl {
+pub(crate) struct DepartmentPermissionControl {
     #[serde(default)]
-    enabled: bool,
+    pub(crate) enabled: bool,
     #[serde(default = "default_department_permission_mode")]
-    mode: String,
+    pub(crate) mode: String,
     #[serde(default)]
-    builtin_tool_names: Vec<String>,
+    pub(crate) builtin_tool_names: Vec<String>,
     #[serde(default)]
-    skill_names: Vec<String>,
+    pub(crate) skill_names: Vec<String>,
     #[serde(default)]
-    mcp_tool_names: Vec<String>,
+    pub(crate) mcp_tool_names: Vec<String>,
 }
 
 impl Default for DepartmentPermissionControl {
@@ -170,7 +170,7 @@ impl Default for DepartmentPermissionControl {
     }
 }
 
-fn department_whitelist_permission_control(
+pub(crate) fn department_whitelist_permission_control(
     builtin_tool_names: &[&str],
     skill_names: &[&str],
 ) -> DepartmentPermissionControl {
@@ -189,7 +189,7 @@ fn department_whitelist_permission_control(
     }
 }
 
-fn explorer_department_permission_control() -> DepartmentPermissionControl {
+pub(crate) fn explorer_department_permission_control() -> DepartmentPermissionControl {
     department_whitelist_permission_control(
         &["read", "read_media", "exec", "fetch", "websearch"],
         &[
@@ -201,14 +201,14 @@ fn explorer_department_permission_control() -> DepartmentPermissionControl {
     )
 }
 
-fn reviewer_department_permission_control() -> DepartmentPermissionControl {
+pub(crate) fn reviewer_department_permission_control() -> DepartmentPermissionControl {
     department_whitelist_permission_control(
         &["read", "read_media", "fetch", "websearch", "exec"],
         &["code-review", "memory-generation"],
     )
 }
 
-fn saddler_department_permission_control() -> DepartmentPermissionControl {
+pub(crate) fn saddler_department_permission_control() -> DepartmentPermissionControl {
     department_whitelist_permission_control(
         &["read", "write", "update", "exec"],
         &[
@@ -220,14 +220,14 @@ fn saddler_department_permission_control() -> DepartmentPermissionControl {
     )
 }
 
-fn leader_department_permission_control() -> DepartmentPermissionControl {
+pub(crate) fn leader_department_permission_control() -> DepartmentPermissionControl {
     department_whitelist_permission_control(
         &["read", "read_media", "exec", "fetch", "websearch", "delegate"],
         &["memory-generation"],
     )
 }
 
-fn remote_customer_service_department_permission_control() -> DepartmentPermissionControl {
+pub(crate) fn remote_customer_service_department_permission_control() -> DepartmentPermissionControl {
     department_whitelist_permission_control(
         &[
             "read",
@@ -244,68 +244,68 @@ fn remote_customer_service_department_permission_control() -> DepartmentPermissi
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DepartmentConfig {
+pub(crate) struct DepartmentConfig {
     #[serde(default)]
-    id: String,
+    pub(crate) id: String,
     #[serde(default)]
-    name: String,
+    pub(crate) name: String,
     #[serde(default)]
-    summary: String,
+    pub(crate) summary: String,
     #[serde(default)]
-    guide: String,
+    pub(crate) guide: String,
     #[serde(default)]
-    api_config_ids: Vec<String>,
+    pub(crate) api_config_ids: Vec<String>,
     #[serde(default)]
-    api_config_id: String,
+    pub(crate) api_config_id: String,
     #[serde(default)]
-    model_failure_fallback_enabled: bool,
+    pub(crate) model_failure_fallback_enabled: bool,
     #[serde(default)]
-    agent_ids: Vec<String>,
+    pub(crate) agent_ids: Vec<String>,
     #[serde(default)]
-    child_department_ids: Vec<String>,
+    pub(crate) child_department_ids: Vec<String>,
     #[serde(default)]
-    created_at: String,
+    pub(crate) created_at: String,
     #[serde(default)]
-    updated_at: String,
+    pub(crate) updated_at: String,
     #[serde(default)]
-    order_index: i64,
+    pub(crate) order_index: i64,
     #[serde(default)]
-    is_built_in_assistant: bool,
+    pub(crate) is_built_in_assistant: bool,
     #[serde(default, skip_serializing)]
-    is_deputy: bool,
+    pub(crate) is_deputy: bool,
     #[serde(default = "default_main_source")]
-    source: String,
+    pub(crate) source: String,
     #[serde(default = "default_global_scope")]
-    scope: String,
+    pub(crate) scope: String,
     #[serde(default)]
-    permission_control: DepartmentPermissionControl,
+    pub(crate) permission_control: DepartmentPermissionControl,
 }
 
-fn default_main_source() -> String {
+pub(crate) fn default_main_source() -> String {
     "main_config".to_string()
 }
 
-fn default_private_workspace_source() -> String {
+pub(crate) fn default_private_workspace_source() -> String {
     "private_workspace".to_string()
 }
 
-fn is_private_workspace_department(department: &DepartmentConfig) -> bool {
+pub(crate) fn is_private_workspace_department(department: &DepartmentConfig) -> bool {
     department.source.trim() == default_private_workspace_source()
 }
 
-fn department_model_failure_fallback_enabled(department: &DepartmentConfig) -> bool {
+pub(crate) fn department_model_failure_fallback_enabled(department: &DepartmentConfig) -> bool {
     department.model_failure_fallback_enabled && !is_private_workspace_department(department)
 }
 
-fn default_global_scope() -> String {
+pub(crate) fn default_global_scope() -> String {
     "global".to_string()
 }
 
-fn default_assistant_private_scope() -> String {
+pub(crate) fn default_assistant_private_scope() -> String {
     "assistant_private".to_string()
 }
 
-fn default_assistant_department(api_config_id: &str) -> DepartmentConfig {
+pub(crate) fn default_assistant_department(api_config_id: &str) -> DepartmentConfig {
     let now = now_iso();
     let api_config_id = api_config_id.trim().to_string();
     DepartmentConfig {
@@ -333,7 +333,7 @@ fn default_assistant_department(api_config_id: &str) -> DepartmentConfig {
     }
 }
 
-fn default_leader_department(api_config_id: &str) -> DepartmentConfig {
+pub(crate) fn default_leader_department(api_config_id: &str) -> DepartmentConfig {
     let now = now_iso();
     let api_config_id = api_config_id.trim().to_string();
     DepartmentConfig {
@@ -378,7 +378,7 @@ fn default_leader_department(api_config_id: &str) -> DepartmentConfig {
 }
 
 #[allow(dead_code)]
-fn default_deputy_department(api_config_id: &str) -> DepartmentConfig {
+pub(crate) fn default_deputy_department(api_config_id: &str) -> DepartmentConfig {
     let now = now_iso();
     let api_config_id = api_config_id.trim().to_string();
     DepartmentConfig {
@@ -406,7 +406,7 @@ fn default_deputy_department(api_config_id: &str) -> DepartmentConfig {
     }
 }
 
-fn default_reviewer_department(api_config_id: &str) -> DepartmentConfig {
+pub(crate) fn default_reviewer_department(api_config_id: &str) -> DepartmentConfig {
     let now = now_iso();
     let api_config_id = api_config_id.trim().to_string();
     DepartmentConfig {
@@ -439,7 +439,7 @@ fn default_reviewer_department(api_config_id: &str) -> DepartmentConfig {
     }
 }
 
-fn default_saddler_department(api_config_id: &str) -> DepartmentConfig {
+pub(crate) fn default_saddler_department(api_config_id: &str) -> DepartmentConfig {
     let now = now_iso();
     let api_config_id = api_config_id.trim().to_string();
     DepartmentConfig {
@@ -471,7 +471,7 @@ fn default_saddler_department(api_config_id: &str) -> DepartmentConfig {
     }
 }
 
-fn default_remote_customer_service_department(api_config_id: &str) -> DepartmentConfig {
+pub(crate) fn default_remote_customer_service_department(api_config_id: &str) -> DepartmentConfig {
     let now = now_iso();
     let api_config_id = api_config_id.trim().to_string();
     DepartmentConfig {
@@ -499,7 +499,7 @@ fn default_remote_customer_service_department(api_config_id: &str) -> Department
     }
 }
 
-fn default_assistant_department_name(ui_language: &str) -> String {
+pub(crate) fn default_assistant_department_name(ui_language: &str) -> String {
     match ui_language.trim() {
         "en-US" => "Assistant Department".to_string(),
         "zh-TW" => "助理部門".to_string(),
@@ -507,7 +507,7 @@ fn default_assistant_department_name(ui_language: &str) -> String {
     }
 }
 
-fn built_in_department_rank(id: &str) -> i32 {
+pub(crate) fn built_in_department_rank(id: &str) -> i32 {
     match id.trim() {
         ASSISTANT_DEPARTMENT_ID => 0,
         LEADER_DEPARTMENT_ID => 1,
@@ -519,7 +519,7 @@ fn built_in_department_rank(id: &str) -> i32 {
     }
 }
 
-fn preset_assistant_child_department_ids() -> Vec<String> {
+pub(crate) fn preset_assistant_child_department_ids() -> Vec<String> {
     vec![
         DEPUTY_DEPARTMENT_ID.to_string(),
         REVIEWER_DEPARTMENT_ID.to_string(),
@@ -527,7 +527,7 @@ fn preset_assistant_child_department_ids() -> Vec<String> {
     ]
 }
 
-fn default_departments(api_config_id: &str) -> Vec<DepartmentConfig> {
+pub(crate) fn default_departments(api_config_id: &str) -> Vec<DepartmentConfig> {
     let default_api_config_id = if api_config_id.trim().is_empty() {
         ""
     } else {
@@ -548,7 +548,7 @@ fn default_departments(api_config_id: &str) -> Vec<DepartmentConfig> {
     ]
 }
 
-fn default_department_draft(
+pub(crate) fn default_department_draft(
     department_id: &str,
     ui_language: &str,
 ) -> Result<DepartmentConfig, String> {
@@ -572,14 +572,14 @@ fn default_department_draft(
     Ok(department)
 }
 
-fn is_model_role_api_config_id(api_config_id: &str) -> bool {
+pub(crate) fn is_model_role_api_config_id(api_config_id: &str) -> bool {
     matches!(
         api_config_id.trim(),
         MODEL_ROLE_EXPERT_API_CONFIG_ID | MODEL_ROLE_QUICK_API_CONFIG_ID
     )
 }
 
-fn resolve_model_role_api_config_id(app_config: &AppConfig, api_config_id: &str) -> Option<String> {
+pub(crate) fn resolve_model_role_api_config_id(app_config: &AppConfig, api_config_id: &str) -> Option<String> {
     let api_config_id = api_config_id.trim();
     match api_config_id {
         MODEL_ROLE_EXPERT_API_CONFIG_ID => {
@@ -597,7 +597,7 @@ fn resolve_model_role_api_config_id(app_config: &AppConfig, api_config_id: &str)
     }
 }
 
-fn normalize_department_child_ids(values: &[String], self_id: &str) -> Vec<String> {
+pub(crate) fn normalize_department_child_ids(values: &[String], self_id: &str) -> Vec<String> {
     let self_id = self_id.trim();
     let mut out = Vec::<String>::new();
     let mut seen = std::collections::HashSet::<String>::new();
@@ -613,7 +613,7 @@ fn normalize_department_child_ids(values: &[String], self_id: &str) -> Vec<Strin
     out
 }
 
-fn department_child_path_exists(
+pub(crate) fn department_child_path_exists(
     adjacency: &std::collections::BTreeMap<String, Vec<String>>,
     start_id: &str,
     target_id: &str,
@@ -648,7 +648,7 @@ fn department_child_path_exists(
     false
 }
 
-fn remove_cyclic_department_child_ids(
+pub(crate) fn remove_cyclic_department_child_ids(
     departments: &mut [DepartmentConfig],
 ) -> Vec<(String, String)> {
     let mut adjacency = departments
@@ -698,7 +698,7 @@ fn remove_cyclic_department_child_ids(
     removed
 }
 
-fn department_api_config_ids(department: &DepartmentConfig) -> Vec<String> {
+pub(crate) fn department_api_config_ids(department: &DepartmentConfig) -> Vec<String> {
     let mut out = Vec::<String>::new();
     let mut seen = std::collections::HashSet::<String>::new();
     for api_id in &department.api_config_ids {
@@ -721,14 +721,14 @@ fn department_api_config_ids(department: &DepartmentConfig) -> Vec<String> {
     out
 }
 
-fn department_primary_api_config_id(department: &DepartmentConfig) -> String {
+pub(crate) fn department_primary_api_config_id(department: &DepartmentConfig) -> String {
     department_api_config_ids(department)
         .into_iter()
         .next()
         .unwrap_or_else(|| department.api_config_id.trim().to_string())
 }
 
-fn resolve_department_chat_api_config_id(
+pub(crate) fn resolve_department_chat_api_config_id(
     app_config: &AppConfig,
     raw_api_config_id: &str,
 ) -> Option<String> {
@@ -740,14 +740,14 @@ fn resolve_department_chat_api_config_id(
         .then_some(resolved_id)
 }
 
-fn department_primary_chat_api_config_id(
+pub(crate) fn department_primary_chat_api_config_id(
     app_config: &AppConfig,
     department: &DepartmentConfig,
 ) -> Option<String> {
     resolve_department_chat_api_config_id(app_config, &department_primary_api_config_id(department))
 }
 
-fn department_effective_chat_api_config_ids(
+pub(crate) fn department_effective_chat_api_config_ids(
     app_config: &AppConfig,
     department: &DepartmentConfig,
 ) -> Vec<String> {
@@ -772,33 +772,33 @@ fn department_effective_chat_api_config_ids(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ApiModelConfig {
-    id: String,
-    model: String,
+pub(crate) struct ApiModelConfig {
+    pub(crate) id: String,
+    pub(crate) model: String,
     #[serde(default)]
-    display_name: String,
+    pub(crate) display_name: String,
     #[serde(default)]
-    deprecated: bool,
+    pub(crate) deprecated: bool,
     #[serde(default = "default_false")]
-    enable_image: bool,
+    pub(crate) enable_image: bool,
     #[serde(default = "default_false")]
-    enable_audio: bool,
+    pub(crate) enable_audio: bool,
     #[serde(default = "default_false")]
-    enable_video: bool,
+    pub(crate) enable_video: bool,
     #[serde(default = "default_true")]
-    enable_tools: bool,
+    pub(crate) enable_tools: bool,
     #[serde(default = "default_reasoning_effort")]
-    reasoning_effort: String,
+    pub(crate) reasoning_effort: String,
     #[serde(default = "default_api_temperature")]
-    temperature: f64,
+    pub(crate) temperature: f64,
     #[serde(default = "default_false")]
-    custom_temperature_enabled: bool,
+    pub(crate) custom_temperature_enabled: bool,
     #[serde(default = "default_context_window_tokens")]
-    context_window_tokens: u32,
+    pub(crate) context_window_tokens: u32,
     #[serde(default = "default_max_output_tokens")]
-    max_output_tokens: u32,
+    pub(crate) max_output_tokens: u32,
     #[serde(default = "default_false")]
-    custom_max_output_tokens_enabled: bool,
+    pub(crate) custom_max_output_tokens_enabled: bool,
 }
 
 impl Default for ApiModelConfig {
@@ -824,52 +824,52 @@ impl Default for ApiModelConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ApiProviderConfig {
-    id: String,
-    name: String,
+pub(crate) struct ApiProviderConfig {
+    pub(crate) id: String,
+    pub(crate) name: String,
     #[serde(default)]
-    deprecated: bool,
+    pub(crate) deprecated: bool,
     #[serde(default = "default_request_format")]
-    request_format: RequestFormat,
+    pub(crate) request_format: RequestFormat,
     #[serde(default = "default_false")]
-    allow_concurrent_requests: bool,
+    pub(crate) allow_concurrent_requests: bool,
     #[serde(default)]
-    max_concurrent_requests: Option<u32>,
+    pub(crate) max_concurrent_requests: Option<u32>,
     #[serde(default = "default_true")]
-    enable_text: bool,
+    pub(crate) enable_text: bool,
     #[serde(default = "default_false")]
-    enable_image: bool,
+    pub(crate) enable_image: bool,
     #[serde(default = "default_false")]
-    enable_audio: bool,
+    pub(crate) enable_audio: bool,
     #[serde(default = "default_false")]
-    enable_video: bool,
+    pub(crate) enable_video: bool,
     #[serde(default = "default_true")]
-    enable_tools: bool,
+    pub(crate) enable_tools: bool,
     #[serde(default = "default_api_tools")]
-    tools: Vec<ApiToolConfig>,
-    base_url: String,
+    pub(crate) tools: Vec<ApiToolConfig>,
+    pub(crate) base_url: String,
     #[serde(default = "default_codex_auth_mode")]
-    codex_auth_mode: String,
+    pub(crate) codex_auth_mode: String,
     #[serde(default = "default_codex_local_auth_path")]
-    codex_local_auth_path: String,
+    pub(crate) codex_local_auth_path: String,
     #[serde(default)]
-    codex_custom_url: Option<String>,
+    pub(crate) codex_custom_url: Option<String>,
     #[serde(default)]
-    codex_custom_api_key: Option<String>,
+    pub(crate) codex_custom_api_key: Option<String>,
     #[serde(default = "default_codex_originator")]
-    codex_originator: String,
+    pub(crate) codex_originator: String,
     #[serde(default)]
-    codex_residency_requirement: Option<String>,
+    pub(crate) codex_residency_requirement: Option<String>,
     #[serde(default)]
-    api_keys: Vec<String>,
+    pub(crate) api_keys: Vec<String>,
     #[serde(default)]
-    key_cursor: u32,
+    pub(crate) key_cursor: u32,
     #[serde(default)]
-    cached_model_options: Vec<String>,
+    pub(crate) cached_model_options: Vec<String>,
     #[serde(default)]
-    models: Vec<ApiModelConfig>,
+    pub(crate) models: Vec<ApiModelConfig>,
     #[serde(default = "default_failure_retry_count")]
-    failure_retry_count: u32,
+    pub(crate) failure_retry_count: u32,
 }
 
 impl Default for ApiProviderConfig {
@@ -903,142 +903,142 @@ impl Default for ApiProviderConfig {
     }
 }
 
-fn default_api_providers() -> Vec<ApiProviderConfig> {
+pub(crate) fn default_api_providers() -> Vec<ApiProviderConfig> {
     vec![ApiProviderConfig::default()]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ApiConfig {
-    id: String,
-    name: String,
+pub(crate) struct ApiConfig {
+    pub(crate) id: String,
+    pub(crate) name: String,
     #[serde(default = "default_request_format")]
-    request_format: RequestFormat,
+    pub(crate) request_format: RequestFormat,
     #[serde(default = "default_false")]
-    allow_concurrent_requests: bool,
+    pub(crate) allow_concurrent_requests: bool,
     #[serde(default)]
-    max_concurrent_requests: Option<u32>,
+    pub(crate) max_concurrent_requests: Option<u32>,
     #[serde(default = "default_true")]
-    enable_text: bool,
+    pub(crate) enable_text: bool,
     #[serde(default = "default_false")]
-    enable_image: bool,
+    pub(crate) enable_image: bool,
     #[serde(default = "default_false")]
-    enable_audio: bool,
+    pub(crate) enable_audio: bool,
     #[serde(default = "default_false")]
-    enable_video: bool,
+    pub(crate) enable_video: bool,
     #[serde(default = "default_true")]
-    enable_tools: bool,
+    pub(crate) enable_tools: bool,
     #[serde(default = "default_api_tools")]
-    tools: Vec<ApiToolConfig>,
-    base_url: String,
-    api_key: String,
+    pub(crate) tools: Vec<ApiToolConfig>,
+    pub(crate) base_url: String,
+    pub(crate) api_key: String,
     #[serde(default = "default_codex_auth_mode")]
-    codex_auth_mode: String,
+    pub(crate) codex_auth_mode: String,
     #[serde(default = "default_codex_local_auth_path")]
-    codex_local_auth_path: String,
+    pub(crate) codex_local_auth_path: String,
     #[serde(default)]
-    codex_custom_url: Option<String>,
+    pub(crate) codex_custom_url: Option<String>,
     #[serde(default)]
-    codex_custom_api_key: Option<String>,
+    pub(crate) codex_custom_api_key: Option<String>,
     #[serde(default = "default_codex_originator")]
-    codex_originator: String,
+    pub(crate) codex_originator: String,
     #[serde(default)]
-    codex_residency_requirement: Option<String>,
-    model: String,
+    pub(crate) codex_residency_requirement: Option<String>,
+    pub(crate) model: String,
     #[serde(default = "default_reasoning_effort")]
-    reasoning_effort: String,
+    pub(crate) reasoning_effort: String,
     #[serde(default = "default_api_temperature")]
-    temperature: f64,
+    pub(crate) temperature: f64,
     #[serde(default = "default_false")]
-    custom_temperature_enabled: bool,
+    pub(crate) custom_temperature_enabled: bool,
     #[serde(default = "default_context_window_tokens")]
-    context_window_tokens: u32,
+    pub(crate) context_window_tokens: u32,
     #[serde(default = "default_max_output_tokens")]
-    max_output_tokens: u32,
+    pub(crate) max_output_tokens: u32,
     #[serde(default = "default_false")]
-    custom_max_output_tokens_enabled: bool,
+    pub(crate) custom_max_output_tokens_enabled: bool,
     #[serde(default = "default_failure_retry_count")]
-    failure_retry_count: u32,
+    pub(crate) failure_retry_count: u32,
 }
 
-fn default_true() -> bool {
+pub(crate) fn default_true() -> bool {
     true
 }
 
-fn default_record_hotkey() -> String {
+pub(crate) fn default_record_hotkey() -> String {
     "CapsLock".to_string()
 }
 
-fn default_min_record_seconds() -> u32 {
+pub(crate) fn default_min_record_seconds() -> u32 {
     1
 }
 
-fn default_max_record_seconds() -> u32 {
+pub(crate) fn default_max_record_seconds() -> u32 {
     60
 }
 
-fn default_tool_max_iterations() -> u32 {
+pub(crate) fn default_tool_max_iterations() -> u32 {
     10
 }
 
-fn default_llm_round_log_capacity() -> u32 {
+pub(crate) fn default_llm_round_log_capacity() -> u32 {
     3
 }
 
-fn default_failure_retry_count() -> u32 {
+pub(crate) fn default_failure_retry_count() -> u32 {
     0
 }
 
-fn default_provider_non_stream_base_urls() -> Vec<String> {
+pub(crate) fn default_provider_non_stream_base_urls() -> Vec<String> {
     Vec::new()
 }
 
-fn default_record_background_wake_enabled() -> bool {
+pub(crate) fn default_record_background_wake_enabled() -> bool {
     false
 }
 
-fn default_message_notification_enabled() -> bool {
+pub(crate) fn default_message_notification_enabled() -> bool {
     true
 }
 
-fn default_message_notification_sound_enabled() -> bool {
+pub(crate) fn default_message_notification_sound_enabled() -> bool {
     false
 }
 
-fn default_desktop_operation_notice_enabled() -> bool {
+pub(crate) fn default_desktop_operation_notice_enabled() -> bool {
     true
 }
 
-fn default_ui_language() -> String {
+pub(crate) fn default_ui_language() -> String {
     "zh-CN".to_string()
 }
 
-fn default_ui_font() -> String {
+pub(crate) fn default_ui_font() -> String {
     "auto".to_string()
 }
 
-fn default_ui_size_scale() -> u16 {
+pub(crate) fn default_ui_size_scale() -> u16 {
     100
 }
 
-fn default_web_access_port() -> u16 {
+pub(crate) fn default_web_access_port() -> u16 {
     8429
 }
 
-fn default_web_access_enabled() -> bool {
+pub(crate) fn default_web_access_enabled() -> bool {
     true
 }
 
-fn default_web_access_password() -> String {
+pub(crate) fn default_web_access_password() -> String {
     String::new()
 }
 
-fn generate_web_access_password() -> String {
+pub(crate) fn generate_web_access_password() -> String {
     let raw = Uuid::new_v4().simple().to_string().to_uppercase();
     format!("{}-{}", &raw[0..4], &raw[4..8])
 }
 
-fn normalize_web_access_password(value: &str) -> String {
+pub(crate) fn normalize_web_access_password(value: &str) -> String {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return generate_web_access_password();
@@ -1046,7 +1046,7 @@ fn normalize_web_access_password(value: &str) -> String {
     trimmed.chars().take(64).collect::<String>()
 }
 
-fn normalize_web_access_port(value: u16) -> u16 {
+pub(crate) fn normalize_web_access_port(value: u16) -> u16 {
     if (1024..=65535).contains(&value) {
         value
     } else {
@@ -1054,37 +1054,37 @@ fn normalize_web_access_port(value: u16) -> u16 {
     }
 }
 
-fn default_github_update_method() -> String {
+pub(crate) fn default_github_update_method() -> String {
     "auto".to_string()
 }
 
-fn normalize_github_update_method(value: &str) -> String {
+pub(crate) fn normalize_github_update_method(value: &str) -> String {
     match value.trim() {
         "direct" | "proxy" => value.trim().to_string(),
         _ => default_github_update_method(),
     }
 }
 
-fn default_skipped_github_update_version() -> String {
+pub(crate) fn default_skipped_github_update_version() -> String {
     String::new()
 }
 
-fn normalize_skipped_github_update_version(value: &str) -> String {
+pub(crate) fn normalize_skipped_github_update_version(value: &str) -> String {
     value.trim().to_string()
 }
 
-fn normalize_ui_size_scale(value: u16) -> u16 {
+pub(crate) fn normalize_ui_size_scale(value: u16) -> u16 {
     value.clamp(75, 150)
 }
 
 #[derive(Deserialize)]
 #[serde(untagged)]
-enum UiSizeScaleValue {
+pub(crate) enum UiSizeScaleValue {
     Scale(u16),
     LegacyPreset(String),
 }
 
-fn deserialize_ui_size_scale<'de, D>(deserializer: D) -> Result<u16, D::Error>
+pub(crate) fn deserialize_ui_size_scale<'de, D>(deserializer: D) -> Result<u16, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -1102,27 +1102,27 @@ where
     Ok(normalize_ui_size_scale(scale))
 }
 
-fn default_terminal_shell_kind() -> String {
+pub(crate) fn default_terminal_shell_kind() -> String {
     "auto".to_string()
 }
 
-fn default_simple_setup_mode() -> bool {
+pub(crate) fn default_simple_setup_mode() -> bool {
     false
 }
 
-fn default_api_temperature() -> f64 {
+pub(crate) fn default_api_temperature() -> f64 {
     1.0
 }
 
-fn default_context_window_tokens() -> u32 {
+pub(crate) fn default_context_window_tokens() -> u32 {
     128_000
 }
 
-fn default_codex_context_window_tokens() -> u32 {
+pub(crate) fn default_codex_context_window_tokens() -> u32 {
     262_144
 }
 
-fn codex_context_window_tokens_for_model(model_id: &str) -> u32 {
+pub(crate) fn codex_context_window_tokens_for_model(model_id: &str) -> u32 {
     match model_id.trim().to_ascii_lowercase().as_str() {
         "gpt-5.6-sol"
         | "gpt-5.6-terra"
@@ -1136,7 +1136,7 @@ fn codex_context_window_tokens_for_model(model_id: &str) -> u32 {
     }
 }
 
-fn default_max_output_tokens() -> u32 {
+pub(crate) fn default_max_output_tokens() -> u32 {
     4_096
 }
 
@@ -1176,7 +1176,7 @@ impl Default for ApiConfig {
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-enum RemoteImPlatform {
+pub(crate) enum RemoteImPlatform {
     Feishu,
     Dingtalk,
     #[serde(rename = "onebot_v11", alias = "napcat")]
@@ -1209,114 +1209,114 @@ impl<'de> serde::Deserialize<'de> for RemoteImPlatform {
     }
 }
 
-fn default_remote_im_channel_receive_files() -> bool {
+pub(crate) fn default_remote_im_channel_receive_files() -> bool {
     true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImChannelConfig {
-    id: String,
-    name: String,
-    platform: RemoteImPlatform,
+pub(crate) struct RemoteImChannelConfig {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) platform: RemoteImPlatform,
     #[serde(default = "default_true")]
-    enabled: bool,
+    pub(crate) enabled: bool,
     #[serde(default)]
-    credentials: Value,
+    pub(crate) credentials: Value,
     #[serde(default = "default_remote_im_channel_receive_files")]
-    receive_files: bool,
+    pub(crate) receive_files: bool,
     #[serde(default)]
-    streaming_send: bool,
+    pub(crate) streaming_send: bool,
     #[serde(default)]
-    show_tool_calls: bool,
+    pub(crate) show_tool_calls: bool,
     #[serde(default)]
-    filter_markdown: bool,
+    pub(crate) filter_markdown: bool,
     #[serde(default)]
-    allow_send_files: bool,
+    pub(crate) allow_send_files: bool,
     #[serde(default)]
-    behavior_settings: RemoteImChannelBehaviorSettings,
+    pub(crate) behavior_settings: RemoteImChannelBehaviorSettings,
 }
 
-fn default_remote_im_channels() -> Vec<RemoteImChannelConfig> {
+pub(crate) fn default_remote_im_channels() -> Vec<RemoteImChannelConfig> {
     Vec::new()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AppConfig {
-    hotkey: String,
+pub(crate) struct AppConfig {
+    pub(crate) hotkey: String,
     #[serde(default = "default_ui_language")]
-    ui_language: String,
+    pub(crate) ui_language: String,
     #[serde(default = "default_ui_font")]
-    ui_font: String,
+    pub(crate) ui_font: String,
     #[serde(
         default = "default_ui_size_scale",
         alias = "uiSizePreset",
         alias = "ui_size_preset",
         deserialize_with = "deserialize_ui_size_scale"
     )]
-    ui_size_scale: u16,
+    pub(crate) ui_size_scale: u16,
     #[serde(default = "default_web_access_port")]
-    web_access_port: u16,
+    pub(crate) web_access_port: u16,
     #[serde(default = "default_web_access_enabled")]
-    web_access_enabled: bool,
+    pub(crate) web_access_enabled: bool,
     #[serde(default = "default_web_access_password")]
-    web_access_password: String,
+    pub(crate) web_access_password: String,
     #[serde(default = "default_github_update_method")]
-    github_update_method: String,
+    pub(crate) github_update_method: String,
     #[serde(default = "default_skipped_github_update_version")]
-    skipped_github_update_version: String,
+    pub(crate) skipped_github_update_version: String,
     #[serde(default = "default_record_hotkey")]
-    record_hotkey: String,
+    pub(crate) record_hotkey: String,
     #[serde(default = "default_record_background_wake_enabled")]
-    record_background_wake_enabled: bool,
+    pub(crate) record_background_wake_enabled: bool,
     #[serde(default = "default_min_record_seconds")]
-    min_record_seconds: u32,
+    pub(crate) min_record_seconds: u32,
     #[serde(default = "default_max_record_seconds")]
-    max_record_seconds: u32,
+    pub(crate) max_record_seconds: u32,
     #[serde(default = "default_tool_max_iterations")]
-    tool_max_iterations: u32,
+    pub(crate) tool_max_iterations: u32,
     #[serde(default = "default_llm_round_log_capacity")]
-    llm_round_log_capacity: u32,
+    pub(crate) llm_round_log_capacity: u32,
     #[serde(default = "default_message_notification_enabled")]
-    message_notification_enabled: bool,
+    pub(crate) message_notification_enabled: bool,
     #[serde(default = "default_message_notification_sound_enabled")]
-    message_notification_sound_enabled: bool,
+    pub(crate) message_notification_sound_enabled: bool,
     #[serde(default = "default_desktop_operation_notice_enabled")]
-    desktop_operation_notice_enabled: bool,
-    selected_api_config_id: String,
+    pub(crate) desktop_operation_notice_enabled: bool,
+    pub(crate) selected_api_config_id: String,
     #[serde(default, alias = "chatApiConfigId")]
-    assistant_department_api_config_id: String,
+    pub(crate) assistant_department_api_config_id: String,
     #[serde(default)]
-    vision_api_config_id: Option<String>,
+    pub(crate) vision_api_config_id: Option<String>,
     #[serde(default)]
-    tool_review_api_config_id: Option<String>,
+    pub(crate) tool_review_api_config_id: Option<String>,
     #[serde(default)]
-    stt_api_config_id: Option<String>,
+    pub(crate) stt_api_config_id: Option<String>,
     #[serde(default)]
-    image_generation_model_id: Option<String>,
+    pub(crate) image_generation_model_id: Option<String>,
     #[serde(default)]
-    stt_auto_send: bool,
+    pub(crate) stt_auto_send: bool,
     #[serde(default = "default_terminal_shell_kind")]
-    terminal_shell_kind: String,
+    pub(crate) terminal_shell_kind: String,
     #[serde(default = "default_simple_setup_mode")]
-    simple_setup_mode: bool,
+    pub(crate) simple_setup_mode: bool,
     #[serde(default)]
-    shell_workspaces: Vec<ShellWorkspaceConfig>,
+    pub(crate) shell_workspaces: Vec<ShellWorkspaceConfig>,
     #[serde(default = "default_mcp_servers")]
-    mcp_servers: Vec<McpServerConfig>,
+    pub(crate) mcp_servers: Vec<McpServerConfig>,
     #[serde(default = "default_remote_im_channels")]
-    remote_im_channels: Vec<RemoteImChannelConfig>,
+    pub(crate) remote_im_channels: Vec<RemoteImChannelConfig>,
     #[serde(default)]
-    departments: Vec<DepartmentConfig>,
+    pub(crate) departments: Vec<DepartmentConfig>,
     #[serde(default = "default_provider_non_stream_base_urls")]
-    provider_non_stream_base_urls: Vec<String>,
+    pub(crate) provider_non_stream_base_urls: Vec<String>,
     #[serde(default)]
-    api_providers: Vec<ApiProviderConfig>,
+    pub(crate) api_providers: Vec<ApiProviderConfig>,
     #[serde(default = "default_image_generation_providers")]
-    image_providers: Vec<ImageGenerationProviderConfig>,
+    pub(crate) image_providers: Vec<ImageGenerationProviderConfig>,
     #[serde(default)]
-    api_configs: Vec<ApiConfig>,
+    pub(crate) api_configs: Vec<ApiConfig>,
 }
 
 impl Default for AppConfig {
@@ -1364,13 +1364,13 @@ impl Default for AppConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DebugApiConfig {
-    request_format: Option<RequestFormat>,
-    base_url: String,
-    api_key: String,
-    model: String,
-    temperature: Option<f64>,
-    enabled: Option<bool>,
+pub(crate) struct DebugApiConfig {
+    pub(crate) request_format: Option<RequestFormat>,
+    pub(crate) base_url: String,
+    pub(crate) api_key: String,
+    pub(crate) model: String,
+    pub(crate) temperature: Option<f64>,
+    pub(crate) enabled: Option<bool>,
 }
 
 #[cfg(test)]

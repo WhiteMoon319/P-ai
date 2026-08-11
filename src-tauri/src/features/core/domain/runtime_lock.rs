@@ -1,17 +1,17 @@
-static LAST_PANIC_SNAPSHOT_SLOT: OnceLock<Arc<Mutex<Option<String>>>> = OnceLock::new();
+pub(crate) static LAST_PANIC_SNAPSHOT_SLOT: OnceLock<Arc<Mutex<Option<String>>>> = OnceLock::new();
 
-fn init_last_panic_snapshot_slot(slot: Arc<Mutex<Option<String>>>) {
+pub(crate) fn init_last_panic_snapshot_slot(slot: Arc<Mutex<Option<String>>>) {
     let _ = LAST_PANIC_SNAPSHOT_SLOT.set(slot);
 }
 
-fn last_panic_snapshot_text() -> String {
+pub(crate) fn last_panic_snapshot_text() -> String {
     LAST_PANIC_SNAPSHOT_SLOT
         .get()
         .and_then(|slot| slot.lock().ok().and_then(|v| v.clone()))
         .unwrap_or_default()
 }
 
-fn state_lock_error_with_panic(
+pub(crate) fn state_lock_error_with_panic(
     file: &str,
     line: u32,
     module_path: &str,
@@ -30,7 +30,7 @@ fn state_lock_error_with_panic(
     )
 }
 
-fn named_lock_error(
+pub(crate) fn named_lock_error(
     lock_name: &str,
     file: &str,
     line: u32,
@@ -43,26 +43,26 @@ fn named_lock_error(
     )
 }
 
-const CONVERSATION_LOCK_SLOW_WAIT_MS: u128 = 20;
-const CONVERSATION_LOCK_SLOW_HOLD_MS: u128 = 20;
-const CONVERSATION_LOCK_WAIT_LOG_FIRST_MS: u128 = 200;
-const CONVERSATION_LOCK_WAIT_LOG_REPEAT_MS: u128 = 1000;
-const CONVERSATION_LOCK_MAX_WAIT_MS: u128 = 3000;
+pub(crate) const CONVERSATION_LOCK_SLOW_WAIT_MS: u128 = 20;
+pub(crate) const CONVERSATION_LOCK_SLOW_HOLD_MS: u128 = 20;
+pub(crate) const CONVERSATION_LOCK_WAIT_LOG_FIRST_MS: u128 = 200;
+pub(crate) const CONVERSATION_LOCK_WAIT_LOG_REPEAT_MS: u128 = 1000;
+pub(crate) const CONVERSATION_LOCK_MAX_WAIT_MS: u128 = 3000;
 
 #[derive(Clone)]
-struct ConversationLockOwnerSnapshot {
-    task_name: String,
-    acquired_at: std::time::Instant,
-    thread: String,
+pub(crate) struct ConversationLockOwnerSnapshot {
+    pub(crate) task_name: String,
+    pub(crate) acquired_at: std::time::Instant,
+    pub(crate) thread: String,
 }
 
-struct ConversationDomainLock {
-    inner: Mutex<()>,
-    owner: Mutex<Option<ConversationLockOwnerSnapshot>>,
+pub(crate) struct ConversationDomainLock {
+    pub(crate) inner: Mutex<()>,
+    pub(crate) owner: Mutex<Option<ConversationLockOwnerSnapshot>>,
 }
 
 impl ConversationDomainLock {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             inner: Mutex::new(()),
             owner: Mutex::new(None),
@@ -70,13 +70,13 @@ impl ConversationDomainLock {
     }
 
     #[track_caller]
-    fn lock(&self) -> Result<TimedConversationLockGuard<'_>, String> {
+    pub(crate) fn lock(&self) -> Result<TimedConversationLockGuard<'_>, String> {
         let location = std::panic::Location::caller();
         let task_name = format!("{}:{}", location.file(), location.line());
         self.lock_named(&task_name)
     }
 
-    fn lock_named(&self, task_name: &str) -> Result<TimedConversationLockGuard<'_>, String> {
+    pub(crate) fn lock_named(&self, task_name: &str) -> Result<TimedConversationLockGuard<'_>, String> {
         let wait_started_at = std::time::Instant::now();
         let waiter_thread = current_thread_descriptor();
         let mut next_wait_log_ms = CONVERSATION_LOCK_WAIT_LOG_FIRST_MS;
@@ -171,7 +171,7 @@ impl ConversationDomainLock {
         }
     }
 
-    fn build_guard<'a>(
+    pub(crate) fn build_guard<'a>(
         &'a self,
         guard: std::sync::MutexGuard<'a, ()>,
         task_name: String,
@@ -194,26 +194,26 @@ impl ConversationDomainLock {
     }
 }
 
-struct TimedConversationLockGuard<'a> {
-    task_name: String,
-    acquired_at: std::time::Instant,
-    thread: String,
-    lock: &'a ConversationDomainLock,
-    _guard: std::sync::MutexGuard<'a, ()>,
+pub(crate) struct TimedConversationLockGuard<'a> {
+    pub(crate) task_name: String,
+    pub(crate) acquired_at: std::time::Instant,
+    pub(crate) thread: String,
+    pub(crate) lock: &'a ConversationDomainLock,
+    pub(crate) _guard: std::sync::MutexGuard<'a, ()>,
 }
 
-static CONVERSATION_MUTATION_GATES: OnceLock<Mutex<std::collections::HashMap<String, std::sync::Weak<ConversationMutationGate>>>> = OnceLock::new();
+pub(crate) static CONVERSATION_MUTATION_GATES: OnceLock<Mutex<std::collections::HashMap<String, std::sync::Weak<ConversationMutationGate>>>> = OnceLock::new();
 
-struct ConversationMutationGate {
-    inner: parking_lot::ReentrantMutex<()>,
+pub(crate) struct ConversationMutationGate {
+    pub(crate) inner: parking_lot::ReentrantMutex<()>,
 }
 
 impl ConversationMutationGate {
-    fn lock(&self) -> Result<parking_lot::ReentrantMutexGuard<'_, ()>, String> {
+    pub(crate) fn lock(&self) -> Result<parking_lot::ReentrantMutexGuard<'_, ()>, String> {
         Ok(self.inner.lock())
     }
 
-    fn lock_named<'a>(
+    pub(crate) fn lock_named<'a>(
         &'a self,
         conversation_id: &str,
         task_name: &str,
@@ -251,12 +251,12 @@ impl ConversationMutationGate {
     }
 }
 
-struct TimedConversationMutationGuard<'a> {
-    task_name: String,
-    conversation_id: String,
-    acquired_at: std::time::Instant,
-    thread: String,
-    _guard: parking_lot::ReentrantMutexGuard<'a, ()>,
+pub(crate) struct TimedConversationMutationGuard<'a> {
+    pub(crate) task_name: String,
+    pub(crate) conversation_id: String,
+    pub(crate) acquired_at: std::time::Instant,
+    pub(crate) thread: String,
+    pub(crate) _guard: parking_lot::ReentrantMutexGuard<'a, ()>,
 }
 
 impl Drop for TimedConversationMutationGuard<'_> {
@@ -271,7 +271,7 @@ impl Drop for TimedConversationMutationGuard<'_> {
     }
 }
 
-fn with_conversation_mutation_for_data_path<T, F>(
+pub(crate) fn with_conversation_mutation_for_data_path<T, F>(
     data_path: &std::path::PathBuf,
     conversation_id: &str,
     task_name: &str,
@@ -286,7 +286,7 @@ where
     f()
 }
 
-fn with_conversation_mutation<T, F>(
+pub(crate) fn with_conversation_mutation<T, F>(
     state: &AppState,
     conversation_id: &str,
     task_name: &str,
@@ -298,7 +298,7 @@ where
     with_conversation_mutation_for_data_path(&state.data_path, conversation_id, task_name, f)
 }
 
-fn conversation_mutation_gate(
+pub(crate) fn conversation_mutation_gate(
     data_path: &std::path::PathBuf,
     conversation_id: &str,
 ) -> Result<std::sync::Arc<ConversationMutationGate>, String> {
@@ -338,14 +338,14 @@ impl Drop for TimedConversationLockGuard<'_> {
     }
 }
 
-fn current_thread_descriptor() -> String {
+pub(crate) fn current_thread_descriptor() -> String {
     let thread = std::thread::current();
     let name = thread.name().unwrap_or("unnamed");
     format!("{}:{:?}", name, thread.id())
 }
 
 #[track_caller]
-fn lock_conversation_with_metrics<'a>(
+pub(crate) fn lock_conversation_with_metrics<'a>(
     state: &'a AppState,
     task_name: &str,
 ) -> Result<TimedConversationLockGuard<'a>, String> {

@@ -1,20 +1,20 @@
 #[derive(Debug, Clone, Default)]
-struct CacheReadDetail {
-    source: String,
-    dirty_fast_path: bool,
-    mtime_before_ms: u64,
-    cache_lookup_ms: u64,
-    disk_read_ms: u64,
-    mtime_after_ms: u64,
-    cache_write_ms: u64,
-    total_ms: u64,
+pub(crate) struct CacheReadDetail {
+    pub(crate) source: String,
+    pub(crate) dirty_fast_path: bool,
+    pub(crate) mtime_before_ms: u64,
+    pub(crate) cache_lookup_ms: u64,
+    pub(crate) disk_read_ms: u64,
+    pub(crate) mtime_after_ms: u64,
+    pub(crate) cache_write_ms: u64,
+    pub(crate) total_ms: u64,
 }
 
-fn path_modified_time(path: &PathBuf) -> Option<std::time::SystemTime> {
+pub(crate) fn path_modified_time(path: &PathBuf) -> Option<std::time::SystemTime> {
     fs::metadata(path).ok()?.modified().ok()
 }
 
-fn state_read_config_cached_with_detail(
+pub(crate) fn state_read_config_cached_with_detail(
     state: &AppState,
 ) -> Result<(AppConfig, CacheReadDetail), String> {
     let total_started = std::time::Instant::now();
@@ -102,11 +102,11 @@ fn state_read_config_cached_with_detail(
     Ok((config, detail))
 }
 
-fn state_read_config_cached(state: &AppState) -> Result<AppConfig, String> {
+pub(crate) fn state_read_config_cached(state: &AppState) -> Result<AppConfig, String> {
     state_read_config_cached_with_detail(state).map(|(config, _detail)| config)
 }
 
-fn state_write_config_cached(state: &AppState, config: &AppConfig) -> Result<(), String> {
+pub(crate) fn state_write_config_cached(state: &AppState, config: &AppConfig) -> Result<(), String> {
     write_config(&state.config_path, config)?;
     let disk_mtime = path_modified_time(&state.config_path);
     *state
@@ -121,7 +121,7 @@ fn state_write_config_cached(state: &AppState, config: &AppConfig) -> Result<(),
     Ok(())
 }
 
-fn sync_cached_app_data_signature(state: &AppState) -> Result<(), String> {
+pub(crate) fn sync_cached_app_data_signature(state: &AppState) -> Result<(), String> {
     *state
         .cached_app_data_signature
         .lock()
@@ -132,17 +132,17 @@ fn sync_cached_app_data_signature(state: &AppState) -> Result<(), String> {
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatIndexStorageMeta {
-    id: String,
-    updated_at: String,
-    status: String,
+pub(crate) struct ChatIndexStorageMeta {
+    pub(crate) id: String,
+    pub(crate) updated_at: String,
+    pub(crate) status: String,
     #[serde(default)]
-    summary: String,
+    pub(crate) summary: String,
     #[serde(default)]
-    archived_at: Option<String>,
+    pub(crate) archived_at: Option<String>,
 }
 
-fn build_chat_index_item_from_storage_meta(
+pub(crate) fn build_chat_index_item_from_storage_meta(
     meta: &ChatIndexStorageMeta,
 ) -> ChatIndexConversationItem {
     ChatIndexConversationItem {
@@ -154,7 +154,7 @@ fn build_chat_index_item_from_storage_meta(
     }
 }
 
-fn sort_chat_index_items(items: &mut Vec<ChatIndexConversationItem>) {
+pub(crate) fn sort_chat_index_items(items: &mut Vec<ChatIndexConversationItem>) {
     items.sort_by(|a, b| {
         a.updated_at
             .cmp(&b.updated_at)
@@ -162,7 +162,7 @@ fn sort_chat_index_items(items: &mut Vec<ChatIndexConversationItem>) {
     });
 }
 
-fn collect_chat_index_items_from_storage(
+pub(crate) fn collect_chat_index_items_from_storage(
     data_path: &PathBuf,
 ) -> Result<Vec<ChatIndexConversationItem>, String> {
     if let Some(items) = message_store::chat_metadata_store_list_chat_index(data_path)? {
@@ -219,7 +219,7 @@ fn collect_chat_index_items_from_storage(
     Ok(items.into_values().collect())
 }
 
-fn sync_cached_app_data_agents(state: &AppState, agents: &[AgentProfile]) -> Result<(), String> {
+pub(crate) fn sync_cached_app_data_agents(state: &AppState, agents: &[AgentProfile]) -> Result<(), String> {
     let mut cached = state
         .cached_app_data
         .lock()
@@ -231,11 +231,11 @@ fn sync_cached_app_data_agents(state: &AppState, agents: &[AgentProfile]) -> Res
     sync_cached_app_data_signature(state)
 }
 
-fn sanitize_runtime_cached_app_data(data: &mut AppData) {
+pub(crate) fn sanitize_runtime_cached_app_data(data: &mut AppData) {
     data.conversations.clear();
 }
 
-fn sync_cached_app_data_runtime_best_effort(state: &AppState, runtime: &RuntimeStateFile) {
+pub(crate) fn sync_cached_app_data_runtime_best_effort(state: &AppState, runtime: &RuntimeStateFile) {
     let mut cached = match state.cached_app_data.lock() {
         Ok(guard) => guard,
         Err(poisoned) => {
@@ -264,7 +264,7 @@ fn sync_cached_app_data_runtime_best_effort(state: &AppState, runtime: &RuntimeS
     *signature = Some(app_data_cache_signature(&state.data_path));
 }
 
-fn sync_cached_app_data_conversation(
+pub(crate) fn sync_cached_app_data_conversation(
     state: &AppState,
     _conversation: &Conversation,
 ) -> Result<(), String> {
@@ -279,7 +279,7 @@ fn sync_cached_app_data_conversation(
     sync_cached_app_data_signature(state)
 }
 
-fn sync_cached_app_data_conversation_metadata(
+pub(crate) fn sync_cached_app_data_conversation_metadata(
     state: &AppState,
     _conversation: &Conversation,
 ) -> Result<(), String> {
@@ -294,7 +294,7 @@ fn sync_cached_app_data_conversation_metadata(
     sync_cached_app_data_signature(state)
 }
 
-fn sync_cached_app_data_conversation_deleted(
+pub(crate) fn sync_cached_app_data_conversation_deleted(
     state: &AppState,
     _conversation_id: &str,
 ) -> Result<(), String> {
@@ -309,7 +309,7 @@ fn sync_cached_app_data_conversation_deleted(
     sync_cached_app_data_signature(state)
 }
 
-fn sync_cached_conversation_metadata(
+pub(crate) fn sync_cached_conversation_metadata(
     state: &AppState,
     conversation: &Conversation,
 ) -> Result<(), String> {
@@ -324,7 +324,7 @@ fn sync_cached_conversation_metadata(
     Ok(())
 }
 
-fn lock_cached_conversation_field_metadata_ids(
+pub(crate) fn lock_cached_conversation_field_metadata_ids(
     state: &AppState,
 ) -> std::sync::MutexGuard<'_, std::collections::HashSet<String>> {
     match state.cached_conversation_field_metadata_ids.lock() {
@@ -339,7 +339,7 @@ fn lock_cached_conversation_field_metadata_ids(
     }
 }
 
-fn conversation_meta_needs_message_derived_repair(
+pub(crate) fn conversation_meta_needs_message_derived_repair(
     meta: &message_store::ConversationShardMeta,
 ) -> bool {
     if meta.message_count() > 0 && meta.preview_messages().is_empty() {
@@ -356,7 +356,7 @@ fn conversation_meta_needs_message_derived_repair(
             .is_none()
 }
 
-fn repair_conversation_metadata_message_derived_fields_if_needed(
+pub(crate) fn repair_conversation_metadata_message_derived_fields_if_needed(
     state: &AppState,
     conversation_id: &str,
     meta: &message_store::ConversationShardMeta,
@@ -404,7 +404,7 @@ fn repair_conversation_metadata_message_derived_fields_if_needed(
     Ok(ready_meta)
 }
 
-fn remove_cached_conversation_metadata(
+pub(crate) fn remove_cached_conversation_metadata(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<(), String> {
@@ -418,7 +418,7 @@ fn remove_cached_conversation_metadata(
     Ok(())
 }
 
-fn apply_cached_conversation_metadata(
+pub(crate) fn apply_cached_conversation_metadata(
     state: &AppState,
     conversation: &mut Conversation,
 ) -> Result<(), String> {
@@ -432,7 +432,7 @@ fn apply_cached_conversation_metadata(
     Ok(())
 }
 
-fn state_read_conversation_metadata_cached(
+pub(crate) fn state_read_conversation_metadata_cached(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<message_store::ConversationShardMeta, String> {
@@ -548,7 +548,7 @@ fn state_read_conversation_metadata_cached(
 }
 
 #[cfg(test)]
-fn state_mark_conversation_direct_persisted(
+pub(crate) fn state_mark_conversation_direct_persisted(
     state: &AppState,
     conversation: &Conversation,
 ) -> Result<(), String> {
@@ -600,7 +600,7 @@ fn state_mark_conversation_direct_persisted(
     Ok(())
 }
 
-fn state_mark_conversation_metadata_direct_persisted(
+pub(crate) fn state_mark_conversation_metadata_direct_persisted(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<message_store::ConversationShardMeta, String> {
@@ -666,7 +666,7 @@ fn state_mark_conversation_metadata_direct_persisted(
 
 /// 用最终确定的元数据覆盖内存缓存（不改变 dirty/pending/seq 状态）。
 /// 用于 replace 提交路径：统一派生规则重算摘要标题后，缓存必须与持久化输入一致。
-fn state_override_conversation_metadata_cached(
+pub(crate) fn state_override_conversation_metadata_cached(
     state: &AppState,
     conversation_id: &str,
     meta: &message_store::ConversationShardMeta,
@@ -679,7 +679,7 @@ fn state_override_conversation_metadata_cached(
     Ok(())
 }
 
-fn state_mark_conversation_metadata_cached_persisted_unlocked(
+pub(crate) fn state_mark_conversation_metadata_cached_persisted_unlocked(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<(), String> {
@@ -728,7 +728,7 @@ fn state_mark_conversation_metadata_cached_persisted_unlocked(
     Ok(())
 }
 
-fn state_update_conversation_metadata_cached<T>(
+pub(crate) fn state_update_conversation_metadata_cached<T>(
     state: &AppState,
     conversation_id: &str,
     updater: impl FnOnce(&mut Conversation) -> Result<T, String>,
@@ -744,7 +744,7 @@ fn state_update_conversation_metadata_cached<T>(
     state_update_conversation_metadata_cached_unlocked(state, normalized_conversation_id, updater)
 }
 
-fn state_update_conversation_metadata_cached_unlocked<T>(
+pub(crate) fn state_update_conversation_metadata_cached_unlocked<T>(
     state: &AppState,
     normalized_conversation_id: &str,
     updater: impl FnOnce(&mut Conversation) -> Result<T, String>,
@@ -816,7 +816,7 @@ fn state_update_conversation_metadata_cached_unlocked<T>(
     Ok((conversation, result, seq))
 }
 
-fn state_update_conversation_meta_cached_unlocked<T>(
+pub(crate) fn state_update_conversation_meta_cached_unlocked<T>(
     state: &AppState,
     normalized_conversation_id: &str,
     updater: impl FnOnce(&mut message_store::ConversationShardMeta) -> Result<T, String>,
@@ -890,7 +890,7 @@ fn state_update_conversation_meta_cached_unlocked<T>(
     Ok((conversation_meta, result, seq))
 }
 
-fn has_pending_app_data_persist(state: &AppState) -> bool {
+pub(crate) fn has_pending_app_data_persist(state: &AppState) -> bool {
     state
         .app_data_persist_pending
         .lock()
@@ -898,7 +898,7 @@ fn has_pending_app_data_persist(state: &AppState) -> bool {
         .unwrap_or(true)
 }
 
-fn has_pending_conversation_persist(state: &AppState) -> bool {
+pub(crate) fn has_pending_conversation_persist(state: &AppState) -> bool {
     let has_pending_slot = state
         .conversation_persist_pending
         .lock()
@@ -917,14 +917,14 @@ fn has_pending_conversation_persist(state: &AppState) -> bool {
     has_pending_slot || has_dirty_conversations || has_deleted_conversations
 }
 
-fn refresh_cached_app_data_dirty(state: &AppState) {
+pub(crate) fn refresh_cached_app_data_dirty(state: &AppState) {
     let dirty = has_pending_app_data_persist(state) || has_pending_conversation_persist(state);
     state
         .cached_app_data_dirty
         .store(dirty, std::sync::atomic::Ordering::Release);
 }
 
-fn conversation_shard_modified_time(
+pub(crate) fn conversation_shard_modified_time(
     data_path: &PathBuf,
     conversation_id: &str,
 ) -> Option<std::time::SystemTime> {
@@ -933,7 +933,7 @@ fn conversation_shard_modified_time(
         .and_then(|paths| message_store::message_store_shard_modified_time(&paths))
 }
 
-fn state_read_conversation_cached(
+pub(crate) fn state_read_conversation_cached(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<Conversation, String> {
@@ -979,7 +979,7 @@ fn state_read_conversation_cached(
     Ok(conversation)
 }
 
-fn state_read_chat_index_cached(state: &AppState) -> Result<ChatIndexFile, String> {
+pub(crate) fn state_read_chat_index_cached(state: &AppState) -> Result<ChatIndexFile, String> {
     {
         let cached = state
             .cached_chat_index
@@ -999,7 +999,7 @@ fn state_read_chat_index_cached(state: &AppState) -> Result<ChatIndexFile, Strin
     Ok(index)
 }
 
-fn state_upsert_chat_index_conversation_cached(
+pub(crate) fn state_upsert_chat_index_conversation_cached(
     state: &AppState,
     conversation: &Conversation,
 ) -> Result<(), String> {
@@ -1013,7 +1013,7 @@ fn state_upsert_chat_index_conversation_cached(
     Ok(())
 }
 
-fn state_remove_chat_index_conversation_cached(
+pub(crate) fn state_remove_chat_index_conversation_cached(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<(), String> {
@@ -1026,7 +1026,7 @@ fn state_remove_chat_index_conversation_cached(
     Ok(())
 }
 
-fn preserve_field_level_conversation_metadata(
+pub(crate) fn preserve_field_level_conversation_metadata(
     target: &mut Conversation,
     source: &Conversation,
 ) {
@@ -1063,7 +1063,7 @@ fn preserve_field_level_conversation_metadata(
 }
 
 #[allow(dead_code)]
-fn state_write_conversation_cached(
+pub(crate) fn state_write_conversation_cached(
     state: &AppState,
     conversation: &Conversation,
 ) -> Result<(), String> {
@@ -1114,7 +1114,7 @@ fn state_write_conversation_cached(
 }
 
 #[allow(dead_code)]
-fn state_delete_conversation_cached(
+pub(crate) fn state_delete_conversation_cached(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<(), String> {
@@ -1163,7 +1163,7 @@ fn state_delete_conversation_cached(
     Ok(())
 }
 
-fn state_read_agents_cached(state: &AppState) -> Result<Vec<AgentProfile>, String> {
+pub(crate) fn state_read_agents_cached(state: &AppState) -> Result<Vec<AgentProfile>, String> {
     let disk_mtime = path_modified_time(&app_layout_agents_path(&state.data_path));
     {
         let cached = state
@@ -1196,7 +1196,7 @@ fn state_read_agents_cached(state: &AppState) -> Result<Vec<AgentProfile>, Strin
     Ok(agents)
 }
 
-fn state_write_agents_cached(state: &AppState, agents: &[AgentProfile]) -> Result<(), String> {
+pub(crate) fn state_write_agents_cached(state: &AppState, agents: &[AgentProfile]) -> Result<(), String> {
     let mut normalized_agents = agents.to_vec();
     ensure_required_builtin_agents_in_list(&mut normalized_agents);
     let seq = state
@@ -1231,7 +1231,7 @@ fn state_write_agents_cached(state: &AppState, agents: &[AgentProfile]) -> Resul
     Ok(())
 }
 
-fn state_read_runtime_state_cached(state: &AppState) -> Result<RuntimeStateFile, String> {
+pub(crate) fn state_read_runtime_state_cached(state: &AppState) -> Result<RuntimeStateFile, String> {
     let disk_mtime = path_modified_time(&app_layout_runtime_state_path(&state.data_path));
     {
         let cached = state
@@ -1262,7 +1262,7 @@ fn state_read_runtime_state_cached(state: &AppState) -> Result<RuntimeStateFile,
     Ok(runtime)
 }
 
-fn state_write_runtime_state_cached(
+pub(crate) fn state_write_runtime_state_cached(
     state: &AppState,
     runtime: &RuntimeStateFile,
 ) -> Result<(), String> {
@@ -1282,7 +1282,7 @@ fn state_write_runtime_state_cached(
     state_commit_runtime_state_cached_locked(state, runtime.clone(), seq, true)
 }
 
-fn state_mutate_runtime_state_cached<T>(
+pub(crate) fn state_mutate_runtime_state_cached<T>(
     state: &AppState,
     mutate: impl FnOnce(&mut RuntimeStateFile) -> Result<T, String>,
 ) -> Result<T, String> {
@@ -1305,7 +1305,7 @@ fn state_mutate_runtime_state_cached<T>(
     Ok(output)
 }
 
-fn state_commit_runtime_state_cached_locked(
+pub(crate) fn state_commit_runtime_state_cached_locked(
     state: &AppState,
     mut next_runtime: RuntimeStateFile,
     seq: u64,
@@ -1386,7 +1386,7 @@ fn state_commit_runtime_state_cached_locked(
     Ok(())
 }
 
-fn merge_atomic_remote_im_checkpoint_fields(
+pub(crate) fn merge_atomic_remote_im_checkpoint_fields(
     existing_runtime: &RuntimeStateFile,
     next_runtime: &mut RuntimeStateFile,
 ) {
@@ -1444,7 +1444,7 @@ fn merge_atomic_remote_im_checkpoint_fields(
     next_runtime.remote_im_contact_checkpoints.extend(missing);
 }
 
-fn state_read_agents_runtime_snapshot(state: &AppState) -> Result<AppData, String> {
+pub(crate) fn state_read_agents_runtime_snapshot(state: &AppState) -> Result<AppData, String> {
     let agents = state_read_agents_cached(state)?;
     let runtime = state_read_runtime_state_cached(state)?;
     let mut data = AppData::default();
@@ -1454,7 +1454,7 @@ fn state_read_agents_runtime_snapshot(state: &AppState) -> Result<AppData, Strin
 }
 
 #[cfg(test)]
-fn state_read_app_data_cached_with_detail(
+pub(crate) fn state_read_app_data_cached_with_detail(
     state: &AppState,
 ) -> Result<(AppData, CacheReadDetail), String> {
     let (data, detail) = ensure_app_data_cache_ready_inner(state, true)?;
@@ -1463,12 +1463,12 @@ fn state_read_app_data_cached_with_detail(
 }
 
 #[cfg(test)]
-fn state_read_app_data_cached(state: &AppState) -> Result<AppData, String> {
+pub(crate) fn state_read_app_data_cached(state: &AppState) -> Result<AppData, String> {
     state_read_app_data_cached_with_detail(state).map(|(data, _detail)| data)
 }
 
 #[cfg(test)]
-fn ensure_app_data_cache_ready_inner(
+pub(crate) fn ensure_app_data_cache_ready_inner(
     state: &AppState,
     return_data: bool,
 ) -> Result<(Option<AppData>, CacheReadDetail), String> {
@@ -1630,7 +1630,7 @@ fn ensure_app_data_cache_ready_inner(
 
 #[cfg(test)]
 #[allow(dead_code)]
-fn state_write_app_data_cached(state: &AppState, data: &AppData) -> Result<(), String> {
+pub(crate) fn state_write_app_data_cached(state: &AppState, data: &AppData) -> Result<(), String> {
     let seq = state
         .app_data_persist_latest_seq
         .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
@@ -1674,7 +1674,7 @@ fn state_write_app_data_cached(state: &AppState, data: &AppData) -> Result<(), S
 
 #[cfg(test)]
 #[allow(dead_code)]
-fn state_schedule_app_data_persist(state: &AppState, data: &AppData) -> Result<u64, String> {
+pub(crate) fn state_schedule_app_data_persist(state: &AppState, data: &AppData) -> Result<u64, String> {
     let seq = state
         .app_data_persist_latest_seq
         .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
@@ -1703,7 +1703,7 @@ fn state_schedule_app_data_persist(state: &AppState, data: &AppData) -> Result<u
     Ok(seq)
 }
 
-fn state_schedule_conversation_persist(
+pub(crate) fn state_schedule_conversation_persist(
     state: &AppState,
     conversation: &Conversation,
 ) -> Result<u64, String> {
@@ -1790,7 +1790,7 @@ fn state_schedule_conversation_persist(
     Ok(seq)
 }
 
-fn state_schedule_conversation_delete(
+pub(crate) fn state_schedule_conversation_delete(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<u64, String> {
@@ -1862,7 +1862,7 @@ fn state_schedule_conversation_delete(
 /// - 同步阻塞执行（退出链路本就 `block_on`），不依赖 tokio 调度，规避运行时已开始关闭的竞态。
 ///
 /// 返回是否实际写出了内容（用于日志），错误不向上传播为致命，调用方记录即可。
-fn flush_pending_persists_blocking(state: &AppState) -> Result<bool, String> {
+pub(crate) fn flush_pending_persists_blocking(state: &AppState) -> Result<bool, String> {
     // 只用 app-data gate 原子地取走队列；本地 chat 的文件 I/O 必须再按会话 gate 协调，
     // 不能因为退出 flush 把不同会话串行化。
     let (pending_conversations, pending_app_data) = {
@@ -2028,7 +2028,7 @@ fn flush_pending_persists_blocking(state: &AppState) -> Result<bool, String> {
     Ok(wrote_anything)
 }
 
-fn start_app_data_persist_worker(state: &AppState) -> Result<(), String> {
+pub(crate) fn start_app_data_persist_worker(state: &AppState) -> Result<(), String> {
     let started = state.app_data_persist_started.compare_exchange(
         false,
         true,
@@ -2124,7 +2124,7 @@ fn start_app_data_persist_worker(state: &AppState) -> Result<(), String> {
     Ok(())
 }
 
-fn start_conversation_persist_worker(state: &AppState) -> Result<(), String> {
+pub(crate) fn start_conversation_persist_worker(state: &AppState) -> Result<(), String> {
     let started = state.conversation_persist_started.compare_exchange(
         false,
         true,

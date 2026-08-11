@@ -1,31 +1,31 @@
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct BinaryPart {
-    mime: String,
-    bytes_base64: String,
+pub(crate) struct BinaryPart {
+    pub(crate) mime: String,
+    pub(crate) bytes_base64: String,
     #[serde(default)]
-    saved_path: Option<String>,
+    pub(crate) saved_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatInputPayload {
-    text: Option<String>,
+pub(crate) struct ChatInputPayload {
+    pub(crate) text: Option<String>,
     #[serde(default)]
-    display_text: Option<String>,
+    pub(crate) display_text: Option<String>,
     #[serde(default)]
-    parts: Option<Vec<ChatIngressPart>>,
-    images: Option<Vec<BinaryPart>>,
-    audios: Option<Vec<BinaryPart>>,
+    pub(crate) parts: Option<Vec<ChatIngressPart>>,
+    pub(crate) images: Option<Vec<BinaryPart>>,
+    pub(crate) audios: Option<Vec<BinaryPart>>,
     #[serde(default)]
-    attachments: Option<Vec<AttachmentMetaInput>>,
-    model: Option<String>,
+    pub(crate) attachments: Option<Vec<AttachmentMetaInput>>,
+    pub(crate) model: Option<String>,
     #[serde(default)]
-    extra_text_blocks: Option<Vec<String>>,
+    pub(crate) extra_text_blocks: Option<Vec<String>>,
     #[serde(default)]
-    mentions: Option<Vec<UserMentionTargetInput>>,
+    pub(crate) mentions: Option<Vec<UserMentionTargetInput>>,
     #[serde(default)]
-    provider_meta: Option<Value>,
+    pub(crate) provider_meta: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,7 +34,7 @@ struct ChatInputPayload {
     rename_all_fields = "camelCase",
     tag = "type"
 )]
-enum ChatIngressPart {
+pub(crate) enum ChatIngressPart {
     Text {
         text: String,
     },
@@ -52,189 +52,189 @@ enum ChatIngressPart {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct UserMentionTargetInput {
-    agent_id: String,
+pub(crate) struct UserMentionTargetInput {
+    pub(crate) agent_id: String,
     #[serde(default)]
-    agent_name: Option<String>,
-    department_id: String,
+    pub(crate) agent_name: Option<String>,
+    pub(crate) department_id: String,
     #[serde(default)]
-    department_name: Option<String>,
+    pub(crate) department_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AttachmentMetaInput {
-    file_name: String,
+pub(crate) struct AttachmentMetaInput {
+    pub(crate) file_name: String,
     #[serde(default, alias = "relativePath")]
-    path: String,
+    pub(crate) path: String,
     #[serde(default)]
-    mime: String,
+    pub(crate) mime: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SendChatRequest {
-    payload: ChatInputPayload,
+pub(crate) struct SendChatRequest {
+    pub(crate) payload: ChatInputPayload,
     #[serde(default)]
-    session: Option<SessionSelector>,
+    pub(crate) session: Option<SessionSelector>,
     #[serde(default)]
-    speaker_agent_id: Option<String>,
+    pub(crate) speaker_agent_id: Option<String>,
     #[serde(default)]
-    trace_id: Option<String>,
+    pub(crate) trace_id: Option<String>,
     #[serde(default)]
-    assistant_message_id: Option<String>,
+    pub(crate) assistant_message_id: Option<String>,
     #[serde(default)]
-    oldest_queue_created_at: Option<String>,
+    pub(crate) oldest_queue_created_at: Option<String>,
     #[serde(default)]
-    remote_im_activation_sources: Vec<RemoteImActivationSource>,
+    pub(crate) remote_im_activation_sources: Vec<RemoteImActivationSource>,
     #[serde(default)]
-    runtime_context: Option<RuntimeContext>,
+    pub(crate) runtime_context: Option<RuntimeContext>,
     #[serde(default)]
-    trigger_only: bool,
+    pub(crate) trigger_only: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct StopChatRequest {
-    session: SessionSelector,
+pub(crate) struct StopChatRequest {
+    pub(crate) session: SessionSelector,
     #[serde(default)]
-    partial_assistant_text: String,
+    pub(crate) partial_assistant_text: String,
     #[serde(default)]
-    partial_stream_blocks: Vec<AssistantStreamBlock>,
+    pub(crate) partial_stream_blocks: Vec<AssistantStreamBlock>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImReplyTarget {
-    channel_id: String,
-    contact_id: String,
+pub(crate) struct RemoteImReplyTarget {
+    pub(crate) channel_id: String,
+    pub(crate) contact_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SubmitChatResult {
-    accepted: bool,
-    duplicate: bool,
-    event_id: String,
-    conversation_id: String,
-    trace_id: String,
-    ingress: String,
+pub(crate) struct SubmitChatResult {
+    pub(crate) accepted: bool,
+    pub(crate) duplicate: bool,
+    pub(crate) event_id: String,
+    pub(crate) conversation_id: String,
+    pub(crate) trace_id: String,
+    pub(crate) ingress: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    user_message_id: Option<String>,
+    pub(crate) user_message_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    assistant_message_id: Option<String>,
+    pub(crate) assistant_message_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct SendChatResult {
-    conversation_id: String,
-    latest_user_text: String,
-    assistant_text: String,
+pub(crate) struct SendChatResult {
+    pub(crate) conversation_id: String,
+    pub(crate) latest_user_text: String,
+    pub(crate) assistant_text: String,
     #[serde(default)]
-    final_response_text: String,
-    archived_before_send: bool,
+    pub(crate) final_response_text: String,
+    pub(crate) archived_before_send: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    assistant_message: Option<ChatMessage>,
+    pub(crate) assistant_message: Option<ChatMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    provider_prompt_tokens: Option<u64>,
+    pub(crate) provider_prompt_tokens: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    estimated_prompt_tokens: Option<u64>,
+    pub(crate) estimated_prompt_tokens: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    effective_prompt_tokens: Option<u64>,
+    pub(crate) effective_prompt_tokens: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    effective_prompt_source: Option<String>,
+    pub(crate) effective_prompt_source: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    context_window_tokens: Option<u32>,
+    pub(crate) context_window_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    max_output_tokens: Option<u32>,
+    pub(crate) max_output_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    context_usage_percent: Option<u32>,
+    pub(crate) context_usage_percent: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    remote_im_reply_decision: Option<String>,
+    pub(crate) remote_im_reply_decision: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    remote_im_reply_target: Option<RemoteImReplyTarget>,
+    pub(crate) remote_im_reply_target: Option<RemoteImReplyTarget>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct StopChatResult {
-    aborted: bool,
-    persisted: bool,
-    conversation_id: Option<String>,
+pub(crate) struct StopChatResult {
+    pub(crate) aborted: bool,
+    pub(crate) persisted: bool,
+    pub(crate) conversation_id: Option<String>,
     #[serde(default)]
-    assistant_text: String,
+    pub(crate) assistant_text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    assistant_message: Option<ChatMessage>,
+    pub(crate) assistant_message: Option<ChatMessage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SessionSelector {
-    api_config_id: Option<String>,
+pub(crate) struct SessionSelector {
+    pub(crate) api_config_id: Option<String>,
     #[serde(default)]
-    department_id: Option<String>,
-    agent_id: String,
+    pub(crate) department_id: Option<String>,
+    pub(crate) agent_id: String,
     #[serde(default)]
-    conversation_id: Option<String>,
+    pub(crate) conversation_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct RuntimeContext {
+pub(crate) struct RuntimeContext {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    request_id: Option<String>,
+    pub(crate) request_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    dispatch_id: Option<String>,
+    pub(crate) dispatch_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    origin_conversation_id: Option<String>,
+    pub(crate) origin_conversation_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    target_conversation_id: Option<String>,
+    pub(crate) target_conversation_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    root_conversation_id: Option<String>,
+    pub(crate) root_conversation_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    executor_agent_id: Option<String>,
+    pub(crate) executor_agent_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    executor_department_id: Option<String>,
+    pub(crate) executor_department_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    model_config_id: Option<String>,
+    pub(crate) model_config_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    event_source: Option<String>,
+    pub(crate) event_source: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    dispatch_reason: Option<String>,
+    pub(crate) dispatch_reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    trusted_prompt_usage: Option<TrustedPromptUsage>,
+    pub(crate) trusted_prompt_usage: Option<TrustedPromptUsage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    bound_remote_im_activation_source: Option<RemoteImActivationSource>,
+    pub(crate) bound_remote_im_activation_source: Option<RemoteImActivationSource>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    remote_im_reply_delegate_id: Option<String>,
+    pub(crate) remote_im_reply_delegate_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    remote_im_reply_trigger_message_id: Option<String>,
+    pub(crate) remote_im_reply_trigger_message_id: Option<String>,
     /// 仅在进程内传递，不能序列化进任务或持久化状态。
     #[serde(skip)]
-    remote_im_reply_prompt_snapshot_messages: Option<Vec<ChatMessage>>,
+    pub(crate) remote_im_reply_prompt_snapshot_messages: Option<Vec<ChatMessage>>,
     /// 压缩保留消息：仅进程内传递；压缩完成后置为 ready，新调度 bootstrap 才能消费。
     #[serde(skip)]
-    compaction_preserved_messages: Option<CompactionPreservedMessages>,
+    pub(crate) compaction_preserved_messages: Option<CompactionPreservedMessages>,
     #[serde(skip)]
-    compaction_preserved_messages_ready: bool,
+    pub(crate) compaction_preserved_messages_ready: bool,
     #[serde(default)]
-    remote_im_dynamic_boundary: bool,
+    pub(crate) remote_im_dynamic_boundary: bool,
     /// 远程应答委托多轮执行时，禁止 core_send 在每一轮结束后立即外发。
     #[serde(default)]
-    remote_im_defer_auto_send: bool,
+    pub(crate) remote_im_defer_auto_send: bool,
 }
 
 /// 压缩保留消息：一轮已完成但未写入旧段的 assistant 正文/思维链/工具事件。
 #[derive(Debug, Clone, PartialEq)]
-struct CompactionPreservedMessages {
-    assistant_text: String,
-    activity_reasoning_text: String,
-    tool_history_events: Vec<Value>,
+pub(crate) struct CompactionPreservedMessages {
+    pub(crate) assistant_text: String,
+    pub(crate) activity_reasoning_text: String,
+    pub(crate) tool_history_events: Vec<Value>,
 }
 
 impl CompactionPreservedMessages {
-    fn new(
+    pub(crate) fn new(
         assistant_text: impl Into<String>,
         activity_reasoning_text: impl Into<String>,
         tool_history_events: Vec<Value>,
@@ -247,7 +247,7 @@ impl CompactionPreservedMessages {
     }
 
     /// 复用现有 `estimated_tokens_for_text`，只估本组消息本身。
-    fn token_usage(&self) -> u64 {
+    pub(crate) fn token_usage(&self) -> u64 {
         let mut total = 0.0f64;
         total += estimated_tokens_for_text(self.assistant_text.trim());
         // 与 prepare 估算一致：reasoning 不计入 prompt 输入。
@@ -290,21 +290,21 @@ impl CompactionPreservedMessages {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-struct TrustedPromptUsage {
-    effective_prompt_tokens: u64,
-    context_usage_ratio: f64,
+pub(crate) struct TrustedPromptUsage {
+    pub(crate) effective_prompt_tokens: u64,
+    pub(crate) context_usage_ratio: f64,
     #[serde(default)]
-    estimated: bool,
+    pub(crate) estimated: bool,
 }
 
-fn runtime_context_trimmed(value: Option<&str>) -> Option<String> {
+pub(crate) fn runtime_context_trimmed(value: Option<&str>) -> Option<String> {
     value
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
 }
 
-fn runtime_context_new(event_source: &str, dispatch_reason: &str) -> RuntimeContext {
+pub(crate) fn runtime_context_new(event_source: &str, dispatch_reason: &str) -> RuntimeContext {
     RuntimeContext {
         event_source: runtime_context_trimmed(Some(event_source)),
         dispatch_reason: runtime_context_trimmed(Some(dispatch_reason)),
@@ -312,7 +312,7 @@ fn runtime_context_new(event_source: &str, dispatch_reason: &str) -> RuntimeCont
     }
 }
 
-fn runtime_context_request_id_or_new(
+pub(crate) fn runtime_context_request_id_or_new(
     runtime_context: Option<&RuntimeContext>,
     trace_id: Option<&str>,
     prefix: &str,
@@ -328,247 +328,247 @@ fn runtime_context_request_id_or_new(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatSnapshot {
-    conversation_id: String,
-    latest_user: Option<ChatMessage>,
-    latest_assistant: Option<ChatMessage>,
-    active_message_count: usize,
+pub(crate) struct ChatSnapshot {
+    pub(crate) conversation_id: String,
+    pub(crate) latest_user: Option<ChatMessage>,
+    pub(crate) latest_assistant: Option<ChatMessage>,
+    pub(crate) active_message_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PromptPreview {
-    preamble: String,
-    latest_user_text: String,
-    latest_images: usize,
-    latest_audios: usize,
-    request_body_json: String,
+pub(crate) struct PromptPreview {
+    pub(crate) preamble: String,
+    pub(crate) latest_user_text: String,
+    pub(crate) latest_images: usize,
+    pub(crate) latest_audios: usize,
+    pub(crate) request_body_json: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SystemPromptPreview {
-    system_prompt: String,
+pub(crate) struct SystemPromptPreview {
+    pub(crate) system_prompt: String,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RefreshModelsInput {
-    base_url: String,
-    api_key: String,
-    request_format: RequestFormat,
+pub(crate) struct RefreshModelsInput {
+    pub(crate) base_url: String,
+    pub(crate) api_key: String,
+    pub(crate) request_format: RequestFormat,
     #[serde(default)]
-    provider_id: Option<String>,
+    pub(crate) provider_id: Option<String>,
     #[serde(default = "default_codex_auth_mode")]
-    codex_auth_mode: String,
+    pub(crate) codex_auth_mode: String,
     #[serde(default = "default_codex_local_auth_path")]
-    codex_local_auth_path: String,
+    pub(crate) codex_local_auth_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct QuickGenaiChatInput {
-    base_url: String,
-    api_key: String,
-    request_format: RequestFormat,
-    model: String,
-    prompt: String,
+pub(crate) struct QuickGenaiChatInput {
+    pub(crate) base_url: String,
+    pub(crate) api_key: String,
+    pub(crate) request_format: RequestFormat,
+    pub(crate) model: String,
+    pub(crate) prompt: String,
     #[serde(default)]
-    provider_id: Option<String>,
+    pub(crate) provider_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct FetchModelMetadataInput {
-    request_format: RequestFormat,
-    model: String,
+pub(crate) struct FetchModelMetadataInput {
+    pub(crate) request_format: RequestFormat,
+    pub(crate) model: String,
     #[serde(default)]
-    base_url: String,
+    pub(crate) base_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct FetchModelMetadataOutput {
-    found: bool,
-    matched_model_id: Option<String>,
-    context_window_tokens: Option<u32>,
-    max_output_tokens: Option<u32>,
-    enable_image: Option<bool>,
-    enable_tools: Option<bool>,
-    enable_audio: Option<bool>,
-    enable_video: Option<bool>,
-    reasoning: Option<bool>,
+pub(crate) struct FetchModelMetadataOutput {
+    pub(crate) found: bool,
+    pub(crate) matched_model_id: Option<String>,
+    pub(crate) context_window_tokens: Option<u32>,
+    pub(crate) max_output_tokens: Option<u32>,
+    pub(crate) enable_image: Option<bool>,
+    pub(crate) enable_tools: Option<bool>,
+    pub(crate) enable_audio: Option<bool>,
+    pub(crate) enable_video: Option<bool>,
+    pub(crate) reasoning: Option<bool>,
     #[serde(default)]
-    reasoning_effort_options: Vec<String>,
-    documentation_url: Option<String>,
+    pub(crate) reasoning_effort_options: Vec<String>,
+    pub(crate) documentation_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TestEmbeddingConnectionInput {
-    base_url: String,
-    api_key: String,
-    request_format: RequestFormat,
-    model: String,
+pub(crate) struct TestEmbeddingConnectionInput {
+    pub(crate) base_url: String,
+    pub(crate) api_key: String,
+    pub(crate) request_format: RequestFormat,
+    pub(crate) model: String,
     #[serde(default)]
-    text: Option<String>,
+    pub(crate) text: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TestEmbeddingConnectionResult {
-    vector_dim: usize,
-    elapsed_ms: u128,
+pub(crate) struct TestEmbeddingConnectionResult {
+    pub(crate) vector_dim: usize,
+    pub(crate) elapsed_ms: u128,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TestRerankConnectionInput {
-    base_url: String,
-    api_key: String,
-    request_format: RequestFormat,
-    model: String,
+pub(crate) struct TestRerankConnectionInput {
+    pub(crate) base_url: String,
+    pub(crate) api_key: String,
+    pub(crate) request_format: RequestFormat,
+    pub(crate) model: String,
     #[serde(default)]
-    query: Option<String>,
+    pub(crate) query: Option<String>,
     #[serde(default)]
-    documents: Option<Vec<String>>,
+    pub(crate) documents: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TestRerankConnectionResult {
-    result_count: usize,
-    elapsed_ms: u128,
+pub(crate) struct TestRerankConnectionResult {
+    pub(crate) result_count: usize,
+    pub(crate) elapsed_ms: u128,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TestVoiceConnectionInput {
-    base_url: String,
-    api_key: String,
-    request_format: RequestFormat,
+pub(crate) struct TestVoiceConnectionInput {
+    pub(crate) base_url: String,
+    pub(crate) api_key: String,
+    pub(crate) request_format: RequestFormat,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TestVoiceConnectionResult {
-    elapsed_ms: u128,
+pub(crate) struct TestVoiceConnectionResult {
+    pub(crate) elapsed_ms: u128,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CheckToolsStatusInput {
+pub(crate) struct CheckToolsStatusInput {
     #[serde(default)]
-    agent_id: Option<String>,
+    pub(crate) agent_id: Option<String>,
     #[serde(default)]
-    api_config_id: Option<String>,
+    pub(crate) api_config_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToolLoadStatus {
-    id: String,
-    status: String,
-    detail: String,
+pub(crate) struct ToolLoadStatus {
+    pub(crate) id: String,
+    pub(crate) status: String,
+    pub(crate) detail: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DepartmentPermissionCatalogItem {
-    name: String,
-    description: String,
+pub(crate) struct DepartmentPermissionCatalogItem {
+    pub(crate) name: String,
+    pub(crate) description: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DepartmentPermissionCatalog {
-    builtin_tools: Vec<DepartmentPermissionCatalogItem>,
-    skills: Vec<DepartmentPermissionCatalogItem>,
-    mcp_tools: Vec<DepartmentPermissionCatalogItem>,
+pub(crate) struct DepartmentPermissionCatalog {
+    pub(crate) builtin_tools: Vec<DepartmentPermissionCatalogItem>,
+    pub(crate) skills: Vec<DepartmentPermissionCatalogItem>,
+    pub(crate) mcp_tools: Vec<DepartmentPermissionCatalogItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct FrontendToolFunctionDefinition {
-    name: String,
-    description: String,
-    parameters: Value,
+pub(crate) struct FrontendToolFunctionDefinition {
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) parameters: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct FrontendToolDefinition {
+pub(crate) struct FrontendToolDefinition {
     #[serde(rename = "type")]
-    kind: String,
-    function: FrontendToolFunctionDefinition,
+    pub(crate) kind: String,
+    pub(crate) function: FrontendToolFunctionDefinition,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ImageTextCacheStats {
-    entries: usize,
-    total_chars: usize,
-    latest_updated_at: Option<String>,
+pub(crate) struct ImageTextCacheStats {
+    pub(crate) entries: usize,
+    pub(crate) total_chars: usize,
+    pub(crate) latest_updated_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct OpenAIModelListItem {
-    id: String,
+pub(crate) struct OpenAIModelListItem {
+    pub(crate) id: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct OpenAIModelListResponse {
-    data: Vec<OpenAIModelListItem>,
+pub(crate) struct OpenAIModelListResponse {
+    pub(crate) data: Vec<OpenAIModelListItem>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct GeminiNativeModelListItem {
-    name: String,
+pub(crate) struct GeminiNativeModelListItem {
+    pub(crate) name: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct GeminiNativeModelListResponse {
+pub(crate) struct GeminiNativeModelListResponse {
     #[serde(default)]
-    models: Vec<GeminiNativeModelListItem>,
+    pub(crate) models: Vec<GeminiNativeModelListItem>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct AnthropicModelListItem {
-    id: String,
+pub(crate) struct AnthropicModelListItem {
+    pub(crate) id: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct AnthropicModelListResponse {
+pub(crate) struct AnthropicModelListResponse {
     #[serde(default)]
-    data: Vec<AnthropicModelListItem>,
+    pub(crate) data: Vec<AnthropicModelListItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AssistantDeltaEvent {
-    delta: String,
+pub(crate) struct AssistantDeltaEvent {
+    pub(crate) delta: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    kind: Option<String>,
+    pub(crate) kind: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    request_id: Option<String>,
+    pub(crate) request_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    activation_id: Option<String>,
+    pub(crate) activation_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    phase_id: Option<String>,
+    pub(crate) phase_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    reason: Option<String>,
+    pub(crate) reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_name: Option<String>,
+    pub(crate) tool_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_call_id: Option<String>,
+    pub(crate) tool_call_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_status: Option<String>,
+    pub(crate) tool_status: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_args: Option<String>,
+    pub(crate) tool_args: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    message: Option<String>,
+    pub(crate) message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default, skip_deserializing)]
-    stream_cache: Option<ConversationStreamRuntimeCacheSnapshot>,
+    pub(crate) stream_cache: Option<ConversationStreamRuntimeCacheSnapshot>,
 }
 
 /// 流式 delta 通道抽象：桌面端包装 tauri::ipc::Channel 回显给前端窗口；
@@ -577,11 +577,11 @@ struct AssistantDeltaEvent {
 #[derive(Clone)]
 pub(crate) struct DeltaChannel {
     #[cfg(not(target_os = "android"))]
-    inner: Option<tauri::ipc::Channel<AssistantDeltaEvent>>,
+    pub(crate) inner: Option<tauri::ipc::Channel<AssistantDeltaEvent>>,
     #[cfg(target_os = "android")]
-    _android: std::marker::PhantomData<()>,
+    pub(crate) _android: std::marker::PhantomData<()>,
     #[cfg(target_os = "android")]
-    conversation_id: Option<String>,
+    pub(crate) conversation_id: Option<String>,
 }
 
 impl DeltaChannel {
@@ -632,7 +632,7 @@ impl DeltaChannel {
     }
 }
 
-fn round_completed_delta_event(
+pub(crate) fn round_completed_delta_event(
     conversation_id: &str,
     request_id: Option<&str>,
     assistant_text: &str,
@@ -668,18 +668,18 @@ fn round_completed_delta_event(
 }
 
 #[derive(Clone)]
-struct ActiveChatViewBinding {
-    window_label: String,
-    binding_id: String,
-    conversation_id: String,
-    delta_channel: DeltaChannel,
+pub(crate) struct ActiveChatViewBinding {
+    pub(crate) window_label: String,
+    pub(crate) binding_id: String,
+    pub(crate) conversation_id: String,
+    pub(crate) delta_channel: DeltaChannel,
 }
 
 #[derive(Debug, Clone)]
-struct ConversationListActivityMark {
-    activity: String,
-    failed_message: Option<String>,
-    completed_at: Option<String>,
+pub(crate) struct ConversationListActivityMark {
+    pub(crate) activity: String,
+    pub(crate) failed_message: Option<String>,
+    pub(crate) completed_at: Option<String>,
 }
 
 #[cfg(test)]

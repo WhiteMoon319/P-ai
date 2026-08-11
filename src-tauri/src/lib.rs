@@ -51,7 +51,9 @@ fn bytes_to_lower_hex(bytes: impl AsRef<[u8]>) -> String {
 }
 
 // ==================== 核心领域模型 ====================
-include!("features/core/domain.rs");
+#[path = "features/core/domain.rs"]
+mod features_core_domain;
+pub(crate) use features_core_domain::*;
 include!("features/core/time_semantics.rs");
 
 // ==================== 配置与存储 ====================

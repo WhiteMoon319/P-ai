@@ -1,5 +1,5 @@
 
-fn app_http_user_agent() -> String {
+pub(crate) fn app_http_user_agent() -> String {
     format!(
         "{}/{} ({}; tauri)",
         APP_HTTP_ORIGINATOR,
@@ -8,7 +8,7 @@ fn app_http_user_agent() -> String {
     )
 }
 
-fn app_identity_headers() -> reqwest::header::HeaderMap {
+pub(crate) fn app_identity_headers() -> reqwest::header::HeaderMap {
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
         reqwest::header::HeaderName::from_static("originator"),
@@ -22,7 +22,7 @@ fn app_identity_headers() -> reqwest::header::HeaderMap {
     headers
 }
 
-fn app_identity_genai_headers() -> genai::Headers {
+pub(crate) fn app_identity_genai_headers() -> genai::Headers {
     genai::Headers::from([
         ("originator".to_string(), APP_HTTP_ORIGINATOR.to_string()),
         ("user-agent".to_string(), app_http_user_agent()),

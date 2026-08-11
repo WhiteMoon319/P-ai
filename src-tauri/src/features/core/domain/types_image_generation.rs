@@ -1,6 +1,6 @@
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-enum ImageGenerationProviderKind {
+pub(crate) enum ImageGenerationProviderKind {
     Comfyui,
     Codex,
     Openai,
@@ -9,8 +9,8 @@ enum ImageGenerationProviderKind {
     Gemini,
 }
 
-const CODEX_IMAGE_MAIN_MODEL: &str = "gpt-5.6-luna";
-const CODEX_IMAGE_TOOL_MODEL: &str = "gpt-image-2";
+pub(crate) const CODEX_IMAGE_MAIN_MODEL: &str = "gpt-5.6-luna";
+pub(crate) const CODEX_IMAGE_TOOL_MODEL: &str = "gpt-image-2";
 
 impl Default for ImageGenerationProviderKind {
     fn default() -> Self {
@@ -19,7 +19,7 @@ impl Default for ImageGenerationProviderKind {
 }
 
 impl ImageGenerationProviderKind {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Comfyui => "comfyui",
             Self::Codex => "codex",
@@ -33,20 +33,20 @@ impl ImageGenerationProviderKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ImageGenerationModelConfig {
-    id: String,
-    name: String,
-    model: String,
+pub(crate) struct ImageGenerationModelConfig {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) model: String,
     #[serde(default = "default_true")]
-    enabled: bool,
+    pub(crate) enabled: bool,
     #[serde(default)]
-    deprecated: bool,
+    pub(crate) deprecated: bool,
     #[serde(default)]
-    default_size: Option<String>,
+    pub(crate) default_size: Option<String>,
     #[serde(default)]
-    default_aspect_ratio: Option<String>,
+    pub(crate) default_aspect_ratio: Option<String>,
     #[serde(default)]
-    default_quality: Option<String>,
+    pub(crate) default_quality: Option<String>,
 }
 
 impl Default for ImageGenerationModelConfig {
@@ -66,15 +66,15 @@ impl Default for ImageGenerationModelConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-struct ComfyUiNodeInputMapping {
+pub(crate) struct ComfyUiNodeInputMapping {
     #[serde(default)]
-    node_ids: Vec<String>,
+    pub(crate) node_ids: Vec<String>,
     #[serde(default)]
-    input_key: String,
+    pub(crate) input_key: String,
 }
 
 impl ComfyUiNodeInputMapping {
-    fn with_input_key(input_key: &str) -> Self {
+    pub(crate) fn with_input_key(input_key: &str) -> Self {
         Self {
             node_ids: Vec::new(),
             input_key: input_key.to_string(),
@@ -90,62 +90,62 @@ impl Default for ComfyUiNodeInputMapping {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-struct ComfyUiWorkflowMapping {
+pub(crate) struct ComfyUiWorkflowMapping {
     #[serde(default = "default_comfyui_prompt_mapping")]
-    prompt: ComfyUiNodeInputMapping,
+    pub(crate) prompt: ComfyUiNodeInputMapping,
     #[serde(default = "default_comfyui_negative_prompt_mapping")]
-    negative_prompt: ComfyUiNodeInputMapping,
+    pub(crate) negative_prompt: ComfyUiNodeInputMapping,
     #[serde(default = "default_comfyui_model_mapping")]
-    model: ComfyUiNodeInputMapping,
+    pub(crate) model: ComfyUiNodeInputMapping,
     #[serde(default = "default_comfyui_width_mapping")]
-    width: ComfyUiNodeInputMapping,
+    pub(crate) width: ComfyUiNodeInputMapping,
     #[serde(default = "default_comfyui_height_mapping")]
-    height: ComfyUiNodeInputMapping,
+    pub(crate) height: ComfyUiNodeInputMapping,
     #[serde(default = "default_comfyui_seed_mapping")]
-    seed: ComfyUiNodeInputMapping,
+    pub(crate) seed: ComfyUiNodeInputMapping,
     #[serde(default = "default_comfyui_steps_mapping")]
-    steps: ComfyUiNodeInputMapping,
+    pub(crate) steps: ComfyUiNodeInputMapping,
     #[serde(default = "default_comfyui_input_image_mapping")]
-    input_image: ComfyUiNodeInputMapping,
+    pub(crate) input_image: ComfyUiNodeInputMapping,
     #[serde(default = "default_comfyui_mask_image_mapping")]
-    mask_image: ComfyUiNodeInputMapping,
+    pub(crate) mask_image: ComfyUiNodeInputMapping,
     #[serde(default)]
-    output_node_ids: Vec<String>,
+    pub(crate) output_node_ids: Vec<String>,
 }
 
-fn default_comfyui_prompt_mapping() -> ComfyUiNodeInputMapping {
+pub(crate) fn default_comfyui_prompt_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("text")
 }
 
-fn default_comfyui_negative_prompt_mapping() -> ComfyUiNodeInputMapping {
+pub(crate) fn default_comfyui_negative_prompt_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("text")
 }
 
-fn default_comfyui_model_mapping() -> ComfyUiNodeInputMapping {
+pub(crate) fn default_comfyui_model_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("ckpt_name")
 }
 
-fn default_comfyui_width_mapping() -> ComfyUiNodeInputMapping {
+pub(crate) fn default_comfyui_width_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("width")
 }
 
-fn default_comfyui_height_mapping() -> ComfyUiNodeInputMapping {
+pub(crate) fn default_comfyui_height_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("height")
 }
 
-fn default_comfyui_seed_mapping() -> ComfyUiNodeInputMapping {
+pub(crate) fn default_comfyui_seed_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("seed")
 }
 
-fn default_comfyui_steps_mapping() -> ComfyUiNodeInputMapping {
+pub(crate) fn default_comfyui_steps_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("steps")
 }
 
-fn default_comfyui_input_image_mapping() -> ComfyUiNodeInputMapping {
+pub(crate) fn default_comfyui_input_image_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("image")
 }
 
-fn default_comfyui_mask_image_mapping() -> ComfyUiNodeInputMapping {
+pub(crate) fn default_comfyui_mask_image_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("image")
 }
 
@@ -166,38 +166,38 @@ impl Default for ComfyUiWorkflowMapping {
     }
 }
 
-fn default_image_generation_timeout_seconds() -> u32 {
+pub(crate) fn default_image_generation_timeout_seconds() -> u32 {
     600
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ImageGenerationProviderConfig {
-    id: String,
-    name: String,
+pub(crate) struct ImageGenerationProviderConfig {
+    pub(crate) id: String,
+    pub(crate) name: String,
     #[serde(default)]
-    provider_type: ImageGenerationProviderKind,
+    pub(crate) provider_type: ImageGenerationProviderKind,
     #[serde(default = "default_true")]
-    enabled: bool,
+    pub(crate) enabled: bool,
     #[serde(default)]
-    deprecated: bool,
-    base_url: String,
+    pub(crate) deprecated: bool,
+    pub(crate) base_url: String,
     #[serde(default)]
-    api_keys: Vec<String>,
+    pub(crate) api_keys: Vec<String>,
     #[serde(default)]
-    codex_api_provider_id: Option<String>,
+    pub(crate) codex_api_provider_id: Option<String>,
     #[serde(default)]
-    key_cursor: u32,
+    pub(crate) key_cursor: u32,
     #[serde(default = "default_image_generation_timeout_seconds")]
-    timeout_seconds: u32,
+    pub(crate) timeout_seconds: u32,
     #[serde(default)]
-    watermark: bool,
+    pub(crate) watermark: bool,
     #[serde(default)]
-    models: Vec<ImageGenerationModelConfig>,
+    pub(crate) models: Vec<ImageGenerationModelConfig>,
     #[serde(default)]
-    comfyui_workflow_json: String,
+    pub(crate) comfyui_workflow_json: String,
     #[serde(default)]
-    comfyui_mapping: ComfyUiWorkflowMapping,
+    pub(crate) comfyui_mapping: ComfyUiWorkflowMapping,
 }
 
 impl Default for ImageGenerationProviderConfig {
@@ -221,6 +221,6 @@ impl Default for ImageGenerationProviderConfig {
     }
 }
 
-fn default_image_generation_providers() -> Vec<ImageGenerationProviderConfig> {
+pub(crate) fn default_image_generation_providers() -> Vec<ImageGenerationProviderConfig> {
     Vec::new()
 }
