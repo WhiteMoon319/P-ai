@@ -376,6 +376,12 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("remote_im_restart_channel", mapOf("channelId" to channelId), Map::class.java) as Map<String, Any?>
     }
 
+    /** 远程 IM 联系人列表。 */
+    suspend fun remoteImListContacts(): List<Map<String, Any?>> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("remote_im_list_contacts", emptyMap<String, Any?>(), List::class.java) as List<Map<String, Any?>>
+    }
+
     suspend fun setDepartmentPrimaryApiConfig(departmentId: String, apiConfigId: String): com.whitemoon319.pai.model.AppConfig {
         val input = com.whitemoon319.pai.model.SetDepartmentPrimaryApiConfigInput(departmentId = departmentId, apiConfigId = apiConfigId)
         return client.request("set_department_primary_api_config", mapOf("input" to input), com.whitemoon319.pai.model.AppConfig::class.java)

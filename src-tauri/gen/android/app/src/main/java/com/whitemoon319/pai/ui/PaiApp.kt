@@ -2880,13 +2880,69 @@ private fun RemoteImSettingsTab(vm: AppViewModel) {
     val scope = rememberCoroutineScope()
     val channels by vm.remoteImChannels.collectAsState()
     val loading by vm.remoteImLoading.collectAsState()
+    val contacts by vm.remoteImContacts.collectAsState()
+    val contactsLoading by vm.remoteImContactsLoading.collectAsState()
+    var showContacts by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { vm.loadRemoteImChannels() }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("远程 IM", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = { scope.launch { vm.loadRemoteImChannels() } }, enabled = !loading) { Text(if (loading) "加载中…" else "刷新") }
+            Text(if (showContacts) "远程 IM 联系人" else "远程 IM", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = {
+                scope.launch {
+                    if (showContacts) vm.loadRemoteImContacts() else vm.loadRemoteImChannels()
+                }
+            }, enabled = !(if (showContacts) contactsLoading else loading)) {
+                Text(if ((if (showContacts) contactsLoading else loading)) "加载中…" else "刷新")
+            }
+            TextButton(onClick = {
+                showContacts = !showContacts
+                if (showContacts) {
+                    scope.launch { vm.loadRemoteImContacts() }
+                }
+            }) { Text(if (showContacts) "通道" else "联系人") }
+        }
+        if (showContacts) {
+            if (contacts.isNullOrEmpty()) {
+                Text(
+                    if (contactsLoading) "加载中…" else "暂无远程 IM 联系人",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(16.dp),
+                )
+            } else {
+                LazyColumn(Modifier.weight(1f)) {
+                    items(contacts!!.size) { index ->
+                        val contact = contacts!![index]
+                        Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text(
+                                    contact["displayName"] as? String
+                                        ?: contact["name"] as? String
+                                        ?: contact["id"] as? String
+                                        ?: "未命名",
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                val platform = contact["platform"] as? String ?: ""
+                                val allowSend = contact["allowSend"] as? Boolean
+                                val bits = buildList {
+                                    if (platform.isNotBlank()) add(platform)
+                                    if (allowSend != null) add(if (allowSend) "允许发送" else "禁发")
+                                }
+                                if (bits.isNotEmpty()) {
+                                    Text(
+                                        bits.joinToString(" · "),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return@Column
         }
         if (channels.isNullOrEmpty()) {
             Text(

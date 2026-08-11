@@ -1234,6 +1234,8 @@ class AppViewModel(
 
     val remoteImChannels = MutableStateFlow<List<Map<String, Any?>>?>(null)
     val remoteImLoading = MutableStateFlow(false)
+    val remoteImContacts = MutableStateFlow<List<Map<String, Any?>>?>(null)
+    val remoteImContactsLoading = MutableStateFlow(false)
 
     suspend fun loadRemoteImChannels() {
         withContext(Dispatchers.IO) {
@@ -1259,6 +1261,20 @@ class AppViewModel(
             } catch (e: Exception) {
                 error.value = "重启通道失败: ${e.message}"
                 false
+            }
+        }
+    }
+
+    /** 加载远程 IM 联系人列表。 */
+    suspend fun loadRemoteImContacts() {
+        withContext(Dispatchers.IO) {
+            remoteImContactsLoading.value = true
+            try {
+                remoteImContacts.value = service.remoteImListContacts()
+            } catch (e: Exception) {
+                error.value = "读取远程 IM 联系人失败: ${e.message}"
+            } finally {
+                remoteImContactsLoading.value = false
             }
         }
     }
