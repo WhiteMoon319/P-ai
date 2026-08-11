@@ -2117,7 +2117,10 @@ fun SettingsScreen(
                     }
                 }
             }
-            SettingsEntry.Welcome -> WelcomeSettingsTab(vm = vm)
+            SettingsEntry.Welcome -> WelcomeSettingsTab(
+                vm = vm,
+                onNavigate = { target -> current = target },
+            )
             SettingsEntry.Chat -> ChatSettingsTab(settings = chatSettings, vm = vm)
             SettingsEntry.Notification -> NotificationSettingsTab(vm = vm)
             SettingsEntry.Network -> NetworkSettingsTab(vm = vm)
@@ -2702,7 +2705,10 @@ private fun NetworkSettingsTab(vm: AppViewModel) {
 
 /** 欢迎页（对齐 Vue WelcomeTab：状态摘要卡）。 */
 @Composable
-private fun WelcomeSettingsTab(vm: AppViewModel) {
+private fun WelcomeSettingsTab(
+    vm: AppViewModel,
+    onNavigate: (SettingsEntry) -> Unit = {},
+) {
     val appConfig by vm.appConfig.collectAsState()
     val toolStatus by vm.toolStatus.collectAsState()
     val workspace by vm.workspaceStatus.collectAsState()
@@ -2716,10 +2722,13 @@ private fun WelcomeSettingsTab(vm: AppViewModel) {
         )
         Spacer(Modifier.height(16.dp))
 
-        // 模型供应商状态卡
-        Card(Modifier.fillMaxWidth()) {
+        // 模型供应商状态卡（点击跳转配置）
+        Card(Modifier.fillMaxWidth().clickable { onNavigate(SettingsEntry.Api) }) {
             Column(Modifier.padding(14.dp)) {
-                Text("模型与供应商", style = MaterialTheme.typography.titleSmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("模型与供应商", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    Text("›", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Spacer(Modifier.height(6.dp))
                 val configs = appConfig?.apiConfigs.orEmpty()
                 if (configs.isEmpty()) {
@@ -2754,10 +2763,13 @@ private fun WelcomeSettingsTab(vm: AppViewModel) {
         }
         Spacer(Modifier.height(10.dp))
 
-        // 工具状态卡
-        Card(Modifier.fillMaxWidth()) {
+        // 工具状态卡（点击跳转工具页）
+        Card(Modifier.fillMaxWidth().clickable { onNavigate(SettingsEntry.Tools) }) {
             Column(Modifier.padding(14.dp)) {
-                Text("工具状态", style = MaterialTheme.typography.titleSmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("工具状态", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    Text("›", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Spacer(Modifier.height(6.dp))
                 if (toolStatus.isEmpty()) {
                     Text(
@@ -2787,10 +2799,13 @@ private fun WelcomeSettingsTab(vm: AppViewModel) {
         }
         Spacer(Modifier.height(10.dp))
 
-        // 工作区状态卡
-        Card(Modifier.fillMaxWidth()) {
+        // 工作区状态卡（点击跳转工具页）
+        Card(Modifier.fillMaxWidth().clickable { onNavigate(SettingsEntry.Tools) }) {
             Column(Modifier.padding(14.dp)) {
-                Text("Android 工作区", style = MaterialTheme.typography.titleSmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Android 工作区", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    Text("›", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Spacer(Modifier.height(6.dp))
                 val state = workspace?.state
                 Text(
