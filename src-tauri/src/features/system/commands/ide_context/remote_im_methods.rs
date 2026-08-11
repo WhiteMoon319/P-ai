@@ -170,8 +170,9 @@ pub(crate) async fn remote_im_get_contact_logs_inner(
     state: &AppState,
     input: RemoteImContactLogsInput,
 ) -> Result<Vec<ChannelLogEntry>, String> {
+    let runtime = state_read_runtime_state_cached(state)?;
     let (channel_id, contact_marker) =
-        remote_im_resolve_contact_log_query(state, &input.contact_id)?;
+        remote_im_resolve_contact_log_query(&runtime.remote_im_contacts, &input.contact_id)?;
     let logs = get_remote_im_channel_logs(state, channel_id).await?;
     Ok(remote_im_filter_channel_logs_for_contact(logs, &contact_marker))
 }

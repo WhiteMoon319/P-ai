@@ -139,6 +139,7 @@ pub(crate) use features_remote_im_maintenance::*;
 #[path = "features/remote_im_adapters.rs"]
 mod features_remote_im_adapters;
 pub(crate) use features_remote_im_adapters::*;
+pub(crate) use pai_android_platform::remote_im::message_routing::*;
 
 // ==================== 系统窗口与命令 ====================
 #[path = "features/system/windowing.rs"]

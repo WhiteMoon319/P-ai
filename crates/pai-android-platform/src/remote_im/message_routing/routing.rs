@@ -1,4 +1,6 @@
-pub(crate) fn remote_im_contact_display_name(contact: &RemoteImContact) -> String {
+use super::*;
+
+pub fn remote_im_contact_display_name(contact: &RemoteImContact) -> String {
     let remark = contact.remark_name.trim();
     if !remark.is_empty() {
         return remark.to_string();
@@ -11,33 +13,33 @@ pub(crate) fn remote_im_contact_display_name(contact: &RemoteImContact) -> Strin
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct RemoteImOutboundContentDigest {
-    pub(crate) text_preview: String,
-    pub(crate) text_count: usize,
-    pub(crate) image_count: usize,
-    pub(crate) file_count: usize,
-    pub(crate) other_count: usize,
+pub struct RemoteImOutboundContentDigest {
+    pub text_preview: String,
+    pub text_count: usize,
+    pub image_count: usize,
+    pub file_count: usize,
+    pub other_count: usize,
 }
 
-pub(crate) fn remote_im_presence_state_label(state: RemoteImPresenceState) -> &'static str {
+pub fn remote_im_presence_state_label(state: RemoteImPresenceState) -> &'static str {
     match state {
         RemoteImPresenceState::Away => "离场",
         RemoteImPresenceState::Present => "在场",
     }
 }
 
-pub(crate) fn remote_im_work_state_label(state: RemoteImWorkState) -> &'static str {
+pub fn remote_im_work_state_label(state: RemoteImWorkState) -> &'static str {
     match state {
         RemoteImWorkState::Idle => "空闲",
         RemoteImWorkState::Busy => "忙碌",
     }
 }
 
-pub(crate) fn remote_im_yes_no(value: bool) -> &'static str {
+pub fn remote_im_yes_no(value: bool) -> &'static str {
     if value { "是" } else { "否" }
 }
 
-pub(crate) fn remote_im_preview_text(text: &str, max_chars: usize) -> String {
+pub fn remote_im_preview_text(text: &str, max_chars: usize) -> String {
     let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
     if normalized.is_empty() {
         return "（无文本）".to_string();
@@ -51,15 +53,41 @@ pub(crate) fn remote_im_preview_text(text: &str, max_chars: usize) -> String {
     )
 }
 
-pub(crate) fn remote_im_contact_log_label(contact: &RemoteImContact) -> String {
+pub fn remote_im_contact_log_label(contact: &RemoteImContact) -> String {
     remote_im_contact_display_name(contact)
 }
 
-pub(crate) fn remote_im_contact_log_marker(contact: &RemoteImContact) -> String {
+pub fn remote_im_contact_log_marker(contact: &RemoteImContact) -> String {
     contact.id.trim().to_string()
 }
 
-pub(crate) fn remote_im_contact_downloads_segment(value: &str, fallback: &str) -> String {
+fn sanitize_download_file_name(name: &str) -> String {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return format!("attachment-{}", Uuid::new_v4());
+    }
+    let mut out = String::with_capacity(trimmed.len());
+    for ch in trimmed.chars() {
+        let blocked = matches!(ch, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|');
+        if blocked || ch.is_control() {
+            out.push('_');
+        } else {
+            out.push(ch);
+        }
+    }
+    let normalized = out.trim().trim_matches('.').trim().to_string();
+    if normalized.is_empty() {
+        return format!("attachment-{}", Uuid::new_v4());
+    }
+    if normalized.len() > 128 {
+        let mut cut = normalized.chars().take(128).collect::<String>();
+        cut.push_str("...");
+        return cut;
+    }
+    normalized
+}
+
+pub fn remote_im_contact_downloads_segment(value: &str, fallback: &str) -> String {
     let sanitized = sanitize_download_file_name(value);
     let trimmed = sanitized.trim();
     if trimmed.is_empty() {
@@ -69,7 +97,7 @@ pub(crate) fn remote_im_contact_downloads_segment(value: &str, fallback: &str) -
     }
 }
 
-pub(crate) fn remote_im_contact_downloads_subdir_parts(
+pub fn remote_im_contact_downloads_subdir_parts(
     channel_id: &str,
     contact_type: &str,
     contact_id: &str,
@@ -82,7 +110,7 @@ pub(crate) fn remote_im_contact_downloads_subdir_parts(
     )
 }
 
-pub(crate) fn remote_im_contact_downloads_subdir(contact: &RemoteImContact) -> String {
+pub fn remote_im_contact_downloads_subdir(contact: &RemoteImContact) -> String {
     remote_im_contact_downloads_subdir_parts(
         &contact.channel_id,
         &contact.remote_contact_type,
@@ -90,11 +118,11 @@ pub(crate) fn remote_im_contact_downloads_subdir(contact: &RemoteImContact) -> S
     )
 }
 
-pub(crate) fn remote_im_contact_downloads_relative_dir(contact: &RemoteImContact) -> String {
+pub fn remote_im_contact_downloads_relative_dir(contact: &RemoteImContact) -> String {
     format!("downloads/{}", remote_im_contact_downloads_subdir(contact))
 }
 
-pub(crate) fn remote_im_activation_source_log_label(source: &RemoteImActivationSource) -> String {
+pub fn remote_im_activation_source_log_label(source: &RemoteImActivationSource) -> String {
     let display_name = source.remote_contact_name.trim();
     if display_name.is_empty() {
         "未知联系人".to_string()
@@ -103,7 +131,7 @@ pub(crate) fn remote_im_activation_source_log_label(source: &RemoteImActivationS
     }
 }
 
-pub(crate) fn remote_im_outbound_content_digest(content: &[Value]) -> RemoteImOutboundContentDigest {
+pub fn remote_im_outbound_content_digest(content: &[Value]) -> RemoteImOutboundContentDigest {
     let mut text_count = 0usize;
     let mut image_count = 0usize;
     let mut file_count = 0usize;
@@ -170,7 +198,7 @@ pub(crate) fn remote_im_outbound_content_digest(content: &[Value]) -> RemoteImOu
 }
 
 #[cfg(not(test))]
-pub(crate) fn remote_im_append_channel_log(channel_id: &str, level: &str, message: String) {
+pub fn remote_im_append_channel_log(channel_id: &str, level: &str, message: String) {
     let channel_id = channel_id.trim().to_string();
     let level = level.trim().to_string();
     let message = message.trim().to_string();
@@ -185,12 +213,12 @@ pub(crate) fn remote_im_append_channel_log(channel_id: &str, level: &str, messag
 }
 
 #[cfg(test)]
-pub(crate) fn remote_im_append_channel_log(channel_id: &str, level: &str, message: String) {
+pub fn remote_im_append_channel_log(channel_id: &str, level: &str, message: String) {
     let _ = (channel_id, level, message);
 }
 
 #[cfg(not(test))]
-pub(crate) fn remote_im_append_contact_log(contact: &RemoteImContact, level: &str, message: String) {
+pub fn remote_im_append_contact_log(contact: &RemoteImContact, level: &str, message: String) {
     let channel_id = contact.channel_id.trim().to_string();
     let contact_record_id = contact.id.trim().to_string();
     let level = level.trim().to_string();
@@ -225,12 +253,12 @@ pub(crate) fn remote_im_append_contact_log(contact: &RemoteImContact, level: &st
 }
 
 #[cfg(test)]
-pub(crate) fn remote_im_append_contact_log(contact: &RemoteImContact, level: &str, message: String) {
+pub fn remote_im_append_contact_log(contact: &RemoteImContact, level: &str, message: String) {
     let _ = (contact, level, message);
 }
 
 #[cfg(not(test))]
-pub(crate) async fn remote_im_append_contact_log_async(
+pub async fn remote_im_append_contact_log_async(
     contact: &RemoteImContact,
     level: &str,
     message: String,
@@ -262,7 +290,7 @@ pub(crate) async fn remote_im_append_contact_log_async(
 }
 
 #[cfg(test)]
-pub(crate) async fn remote_im_append_contact_log_async(
+pub async fn remote_im_append_contact_log_async(
     contact: &RemoteImContact,
     level: &str,
     message: String,
@@ -270,17 +298,15 @@ pub(crate) async fn remote_im_append_contact_log_async(
     let _ = (contact, level, message);
 }
 
-pub(crate) fn remote_im_resolve_contact_log_query(
-    state: &AppState,
+pub fn remote_im_resolve_contact_log_query(
+    contacts: &[RemoteImContact],
     contact_id: &str,
 ) -> Result<(String, String), String> {
     let normalized_contact_id = contact_id.trim();
     if normalized_contact_id.is_empty() {
         return Err("contact_id 为必填项。".to_string());
     }
-    let runtime = state_read_runtime_state_cached(state)?;
-    let contact = runtime
-        .remote_im_contacts
+    let contact = contacts
         .iter()
         .find(|item| item.id == normalized_contact_id)
         .ok_or_else(|| format!("未找到远程联系人：{normalized_contact_id}"))?;
@@ -290,7 +316,7 @@ pub(crate) fn remote_im_resolve_contact_log_query(
     ))
 }
 
-pub(crate) fn remote_im_filter_channel_logs_for_contact(
+pub fn remote_im_filter_channel_logs_for_contact(
     logs: Vec<ChannelLogEntry>,
     contact_record_id: &str,
 ) -> Vec<ChannelLogEntry> {
@@ -305,18 +331,18 @@ pub(crate) fn remote_im_filter_channel_logs_for_contact(
         .collect()
 }
 
-pub(crate) fn remote_im_resolve_effective_route_mode(
+pub fn remote_im_resolve_effective_route_mode(
     _config: &AppConfig,
     _contact: &RemoteImContact,
 ) -> String {
     "dedicated_contact_conversation".to_string()
 }
 
-pub(crate) fn remote_im_contact_conversation_title(contact: &RemoteImContact) -> String {
+pub fn remote_im_contact_conversation_title(contact: &RemoteImContact) -> String {
     format!("联系人 · {}", remote_im_contact_display_name(contact))
 }
 
-pub(crate) fn remote_im_contact_conversation_key_parts(
+pub fn remote_im_contact_conversation_key_parts(
     channel_id: &str,
     remote_contact_type: &str,
     remote_contact_id: &str,
@@ -329,7 +355,7 @@ pub(crate) fn remote_im_contact_conversation_key_parts(
     )
 }
 
-pub(crate) fn remote_im_contact_conversation_key(contact: &RemoteImContact) -> String {
+pub fn remote_im_contact_conversation_key(contact: &RemoteImContact) -> String {
     remote_im_contact_conversation_key_parts(
         &contact.channel_id,
         &contact.remote_contact_type,
@@ -337,7 +363,7 @@ pub(crate) fn remote_im_contact_conversation_key(contact: &RemoteImContact) -> S
     )
 }
 
-pub(crate) fn remote_im_set_sender_origin_meta(
+pub fn remote_im_set_sender_origin_meta(
     input: &RemoteImEnqueueInput,
     conversation_id: &str,
     contact_record_id: &str,
@@ -361,7 +387,7 @@ pub(crate) fn remote_im_set_sender_origin_meta(
     })
 }
 
-pub(crate) fn origin_value_string<'a>(origin: &'a Value, key: &str) -> Option<&'a str> {
+pub fn origin_value_string<'a>(origin: &'a Value, key: &str) -> Option<&'a str> {
     origin
         .get(key)?
         .as_str()
@@ -369,13 +395,13 @@ pub(crate) fn origin_value_string<'a>(origin: &'a Value, key: &str) -> Option<&'
         .filter(|value| !value.is_empty())
 }
 
-pub(crate) fn message_origin_string<'a>(message: &'a ChatMessage, key: &str) -> Option<&'a str> {
+pub fn message_origin_string<'a>(message: &'a ChatMessage, key: &str) -> Option<&'a str> {
     let origin = message.provider_meta.as_ref()?.get("origin")?;
     origin_value_string(origin, key)
 }
 
 #[cfg(test)]
-pub(crate) fn message_has_remote_im_platform_message(
+pub fn message_has_remote_im_platform_message(
     message: &ChatMessage,
     channel_id: &str,
     remote_contact_type: &str,
@@ -389,10 +415,10 @@ pub(crate) fn message_has_remote_im_platform_message(
         && message_origin_string(message, "platform_message_id") == Some(platform_message_id)
 }
 
-pub(crate) struct ValidatedEnqueueInput {
-    pub(crate) text: String,
-    pub(crate) images: Vec<BinaryPart>,
-    pub(crate) audios: Vec<BinaryPart>,
-    pub(crate) attachments: Vec<AttachmentMetaInput>,
-    pub(crate) channel: RemoteImChannelConfig,
+pub struct ValidatedEnqueueInput {
+    pub text: String,
+    pub images: Vec<BinaryPart>,
+    pub audios: Vec<BinaryPart>,
+    pub attachments: Vec<AttachmentMetaInput>,
+    pub channel: RemoteImChannelConfig,
 }

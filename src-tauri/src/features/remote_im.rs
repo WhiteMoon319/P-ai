@@ -852,8 +852,6 @@ include!("remote_im/secretary_decision.rs");
 
 include!("remote_im/round_completion.rs");
 
-include!("remote_im/message_routing.rs");
-
 include!("remote_im/inbound_message.rs");
 
 include!("remote_im/contact_commands.rs");
