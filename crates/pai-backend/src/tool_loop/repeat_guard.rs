@@ -1,11 +1,27 @@
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct ToolRepeatGuard {
-    pub(crate) last_tool_name: String,
-    pub(crate) last_args_signature: String,
-    pub(crate) same_call_streak: usize,
+use serde_json::Value;
+
+/// 模型回复（从 src-tauri core_provider_calls.rs 迁入）。
+#[derive(Debug, Clone)]
+pub struct ModelReply {
+    pub assistant_text: String,
+    pub final_response_text: String,
+    pub activity_reasoning_text: String,
+    pub assistant_provider_meta: Option<Value>,
+    pub tool_history_events: Vec<Value>,
+    pub suppress_assistant_message: bool,
+    pub trusted_input_tokens: Option<u64>,
+    pub usage: Option<Value>,
+    pub round_logs_recorded_internally: bool,
 }
 
-pub(crate) fn canonical_json_signature(value: &Value) -> String {
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ToolRepeatGuard {
+    pub last_tool_name: String,
+    pub last_args_signature: String,
+    pub same_call_streak: usize,
+}
+
+pub fn canonical_json_signature(value: &Value) -> String {
     match value {
         Value::Null => "null".to_string(),
         Value::Bool(flag) => flag.to_string(),
@@ -40,7 +56,7 @@ pub(crate) fn canonical_json_signature(value: &Value) -> String {
     }
 }
 
-pub(crate) fn normalized_tool_args_signature(tool_args: &str) -> String {
+pub fn normalized_tool_args_signature(tool_args: &str) -> String {
     let trimmed = tool_args.trim();
     if trimmed.is_empty() {
         return String::new();
@@ -51,7 +67,7 @@ pub(crate) fn normalized_tool_args_signature(tool_args: &str) -> String {
     }
 }
 
-pub(crate) fn tool_args_effectively_empty(tool_args: &str) -> bool {
+pub fn tool_args_effectively_empty(tool_args: &str) -> bool {
     let trimmed = tool_args.trim();
     if trimmed.is_empty() {
         return true;
@@ -65,7 +81,7 @@ pub(crate) fn tool_args_effectively_empty(tool_args: &str) -> bool {
     }
 }
 
-pub(crate) fn repeated_tool_call_block_message(tool_name: &str, tool_args: &str, repeat_streak: usize) -> String {
+pub fn repeated_tool_call_block_message(tool_name: &str, tool_args: &str, repeat_streak: usize) -> String {
     if tool_args_effectively_empty(tool_args) {
         format!(
             "工具调用已被系统停止：{} 连续 {} 次使用空参数调用。请直接向用户说明缺少必要参数，不要继续调用该工具。",
@@ -79,7 +95,7 @@ pub(crate) fn repeated_tool_call_block_message(tool_name: &str, tool_args: &str,
     }
 }
 
-pub(crate) fn register_tool_repeat_attempt(
+pub fn register_tool_repeat_attempt(
     guard: &mut ToolRepeatGuard,
     tool_name: &str,
     tool_args: &str,
@@ -95,7 +111,7 @@ pub(crate) fn register_tool_repeat_attempt(
     guard.same_call_streak
 }
 
-pub(crate) fn register_tool_repeat_attempt_once_per_batch(
+pub fn register_tool_repeat_attempt_once_per_batch(
     guard: &mut ToolRepeatGuard,
     batch_registered_signatures: &mut std::collections::HashSet<(String, String)>,
     tool_name: &str,
@@ -109,7 +125,7 @@ pub(crate) fn register_tool_repeat_attempt_once_per_batch(
     register_tool_repeat_attempt(guard, tool_name, tool_args)
 }
 
-pub(crate) fn repeated_tool_call_block_reply(
+pub fn repeated_tool_call_block_reply(
     full_activity_reasoning_text: String,
     tool_history_events: Vec<Value>,
     trusted_input_tokens: Option<u64>,

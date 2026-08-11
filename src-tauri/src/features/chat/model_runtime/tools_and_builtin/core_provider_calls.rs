@@ -1,15 +1,5 @@
-#[derive(Debug, Clone)]
-pub(crate) struct ModelReply {
-    pub(crate) assistant_text: String,
-    pub(crate) final_response_text: String,
-    pub(crate) activity_reasoning_text: String,
-    pub(crate) assistant_provider_meta: Option<Value>,
-    pub(crate) tool_history_events: Vec<Value>,
-    pub(crate) suppress_assistant_message: bool,
-    pub(crate) trusted_input_tokens: Option<u64>,
-    pub(crate) usage: Option<Value>,
-    pub(crate) round_logs_recorded_internally: bool,
-}
+// ModelReply 已迁至 crates/pai-backend tool_loop::repeat_guard（阶段 4），
+// 通过 crate 根重导出生效。
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]

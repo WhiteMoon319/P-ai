@@ -51,7 +51,8 @@ pub(crate) fn tool_result_history_event(
     event
 }
 
-include!("tool_loop/repeat_guard.rs");
+// repeat_guard 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::tool_loop::repeat_guard::*;
 include!("tool_loop/tool_output_store.rs");
 
 pub(crate) fn tool_loop_round_tool_calls_json(tool_calls: &[genai::chat::ToolCall]) -> Vec<Value> {

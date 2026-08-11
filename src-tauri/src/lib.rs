@@ -75,6 +75,8 @@ pub(crate) use pai_backend::message_store::meta::{
 };
 // crates/pai-backend message_store::sqlite（阶段 4）。
 pub(crate) use pai_backend::message_store::sqlite::ChatIndexConversationItem;
+// crates/pai-backend tool_loop（阶段 4）。
+pub(crate) use pai_backend::tool_loop::repeat_guard::ModelReply;
 #[path = "features/chat/message_store/mod.rs"]
 mod features_chat_message_store_mod;
 pub(crate) use features_chat_message_store_mod::message_store;
