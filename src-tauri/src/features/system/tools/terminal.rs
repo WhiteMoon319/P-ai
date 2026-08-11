@@ -6,12 +6,11 @@ include!("terminal/runtime.rs");
 
 // terminal/output.rs 已迁至 crates/pai-backend（阶段 4）。
 pub(crate) use pai_backend::terminal::output::*;
+// terminal/matcher.rs 与 terminal/analyzer.rs 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::terminal::matcher::*;
+pub(crate) use pai_backend::terminal::analyzer::*;
 
 include!("terminal/workspace.rs");
-
-include!("terminal/matcher.rs");
-
-include!("terminal/analyzer.rs");
 
 include!("terminal/approval.rs");
 
