@@ -1,4 +1,4 @@
-fn validate_ws_token_from_query(query: Option<&str>, headers: &axum::http::HeaderMap, expected: Option<&str>) -> bool {
+pub(crate) fn validate_ws_token_from_query(query: Option<&str>, headers: &axum::http::HeaderMap, expected: Option<&str>) -> bool {
     let Some(expect) = expected else {
         return true; // 无 token 要求，直接通过
     };
@@ -25,7 +25,7 @@ fn validate_ws_token_from_query(query: Option<&str>, headers: &axum::http::Heade
     false
 }
 
-async fn append_channel_log(
+pub(crate) async fn append_channel_log(
     port_service: &Arc<LocalPortServiceCore>,
     channel_id: &str,
     level: &str,
@@ -34,7 +34,7 @@ async fn append_channel_log(
     port_service.add_log(channel_id, level, &message).await;
 }
 
-async fn route_onebot_ws_payload(
+pub(crate) async fn route_onebot_ws_payload(
     payload: &str,
     pending_responses: &Arc<RwLock<HashMap<String, oneshot::Sender<OneBotApiResponse>>>>,
     event_tx: &broadcast::Sender<Value>,
@@ -52,7 +52,7 @@ async fn route_onebot_ws_payload(
     }
 }
 
-async fn run_message_loop(
+pub(crate) async fn run_message_loop(
     mut ws_sender: AxumWsSender,
     mut ws_receiver: AxumWsReceiver,
     mut cmd_rx: broadcast::Receiver<String>,

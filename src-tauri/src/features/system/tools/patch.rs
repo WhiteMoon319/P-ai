@@ -1,63 +1,64 @@
+use sha2::Digest;
 #[derive(Debug, Clone)]
-enum ApplyPatchSafetyCheck {
+pub(crate) enum ApplyPatchSafetyCheck {
     AutoApprove,
     AskUser { existing_paths: Vec<PathBuf> },
     Reject { reason: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ApplyPatchToolArgs {
-    operations: Vec<ApplyPatchToolOpArgs>,
+pub(crate) struct ApplyPatchToolArgs {
+    pub(crate) operations: Vec<ApplyPatchToolOpArgs>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct WriteFileToolArgs {
-    path: String,
-    content: String,
+pub(crate) struct WriteFileToolArgs {
+    pub(crate) path: String,
+    pub(crate) content: String,
     #[serde(default)]
-    overwrite: bool,
+    pub(crate) overwrite: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct DeleteFileToolArgs {
-    path: String,
+pub(crate) struct DeleteFileToolArgs {
+    pub(crate) path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct UpdateFileToolArgs {
-    path: String,
+pub(crate) struct UpdateFileToolArgs {
+    pub(crate) path: String,
     #[serde(alias = "oldString")]
-    old_string: String,
+    pub(crate) old_string: String,
     #[serde(alias = "newString")]
-    new_string: String,
+    pub(crate) new_string: String,
     #[serde(default, alias = "replaceAll")]
-    replace_all: Option<bool>,
+    pub(crate) replace_all: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct MoveFileToolArgs {
-    path: String,
-    to: String,
+pub(crate) struct MoveFileToolArgs {
+    pub(crate) path: String,
+    pub(crate) to: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ApplyPatchToolOpArgs {
-    action: String,
-    path: String,
+pub(crate) struct ApplyPatchToolOpArgs {
+    pub(crate) action: String,
+    pub(crate) path: String,
     #[serde(default)]
-    content: Option<String>,
+    pub(crate) content: Option<String>,
     #[serde(default, alias = "oldString")]
-    old_string: Option<String>,
+    pub(crate) old_string: Option<String>,
     #[serde(default, alias = "newString")]
-    new_string: Option<String>,
+    pub(crate) new_string: Option<String>,
     #[serde(default, alias = "replaceAll")]
-    replace_all: Option<bool>,
+    pub(crate) replace_all: Option<bool>,
     #[serde(default)]
-    to: Option<String>,
+    pub(crate) to: Option<String>,
 }
 
 #[derive(Debug, Clone)]
-enum ApplyPatchOp {
+pub(crate) enum ApplyPatchOp {
     Add { path: String, content: String },
     Delete { path: String },
     Update { path: String, old_string: String, new_string: String, replace_all: bool },
@@ -65,35 +66,35 @@ enum ApplyPatchOp {
 }
 
 #[derive(Debug, Clone)]
-enum ApplyPatchResolvedOp {
+pub(crate) enum ApplyPatchResolvedOp {
     Add { path: PathBuf, content: String },
     Delete { path: PathBuf },
     Update { from: PathBuf, to: Option<PathBuf>, old_string: String, new_string: String, replace_all: bool },
 }
 
 #[derive(Debug, Clone)]
-struct ApplyPatchExecutionFailure {
-    index: usize,
-    op: String,
-    path: Option<String>,
-    message: String,
+pub(crate) struct ApplyPatchExecutionFailure {
+    pub(crate) index: usize,
+    pub(crate) op: String,
+    pub(crate) path: Option<String>,
+    pub(crate) message: String,
 }
 
 #[derive(Debug, Clone)]
-struct ApplyPatchExecutionOutcome {
-    changed: Vec<Value>,
-    failure: Option<ApplyPatchExecutionFailure>,
+pub(crate) struct ApplyPatchExecutionOutcome {
+    pub(crate) changed: Vec<Value>,
+    pub(crate) failure: Option<ApplyPatchExecutionFailure>,
 }
 
 #[derive(Debug, Clone)]
-struct ApplyPatchUpdateResult {
-    content: String,
-    match_line_ranges: Vec<(usize, usize)>,
+pub(crate) struct ApplyPatchUpdateResult {
+    pub(crate) content: String,
+    pub(crate) match_line_ranges: Vec<(usize, usize)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-enum ApplyPatchBackupKind {
+pub(crate) enum ApplyPatchBackupKind {
     Add,
     Delete,
     Update,
@@ -102,43 +103,43 @@ enum ApplyPatchBackupKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ApplyPatchBackupEntry {
-    kind: ApplyPatchBackupKind,
-    path: String,
+pub(crate) struct ApplyPatchBackupEntry {
+    pub(crate) kind: ApplyPatchBackupKind,
+    pub(crate) path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    from_path: Option<String>,
+    pub(crate) from_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    to_path: Option<String>,
+    pub(crate) to_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    expected_current_content: Option<String>,
+    pub(crate) expected_current_content: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    backup_blob_file: Option<String>,
+    pub(crate) backup_blob_file: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ApplyPatchBackupRecord {
-    record_id: String,
-    session_id: String,
-    cwd: String,
-    fingerprint: String,
-    created_at: String,
-    entries: Vec<ApplyPatchBackupEntry>,
+pub(crate) struct ApplyPatchBackupRecord {
+    pub(crate) record_id: String,
+    pub(crate) session_id: String,
+    pub(crate) cwd: String,
+    pub(crate) fingerprint: String,
+    pub(crate) created_at: String,
+    pub(crate) entries: Vec<ApplyPatchBackupEntry>,
 }
 
-fn apply_patch_temp_root(data_path: &PathBuf) -> PathBuf {
+pub(crate) fn apply_patch_temp_root(data_path: &PathBuf) -> PathBuf {
     app_root_from_data_path(data_path).join("temp").join("apply_patch")
 }
 
-fn apply_patch_temp_records_dir(data_path: &PathBuf) -> PathBuf {
+pub(crate) fn apply_patch_temp_records_dir(data_path: &PathBuf) -> PathBuf {
     apply_patch_temp_root(data_path).join("records")
 }
 
-fn apply_patch_temp_blobs_dir(data_path: &PathBuf) -> PathBuf {
+pub(crate) fn apply_patch_temp_blobs_dir(data_path: &PathBuf) -> PathBuf {
     apply_patch_temp_root(data_path).join("blobs")
 }
 
-fn apply_patch_fingerprint(session_id: &str, cwd: &Path, input: &str) -> String {
+pub(crate) fn apply_patch_fingerprint(session_id: &str, cwd: &Path, input: &str) -> String {
     let mut hasher = sha2::Sha256::new();
     sha2::Digest::update(&mut hasher, session_id.as_bytes());
     sha2::Digest::update(&mut hasher, b"\n");
@@ -151,16 +152,16 @@ fn apply_patch_fingerprint(session_id: &str, cwd: &Path, input: &str) -> String 
         .collect::<String>()
 }
 
-fn apply_patch_record_path(data_path: &PathBuf, record_id: &str) -> PathBuf {
+pub(crate) fn apply_patch_record_path(data_path: &PathBuf, record_id: &str) -> PathBuf {
     apply_patch_temp_records_dir(data_path).join(format!("{record_id}.json"))
 }
 
-fn apply_patch_blob_path(data_path: &PathBuf, blob_file: &str) -> PathBuf {
+pub(crate) fn apply_patch_blob_path(data_path: &PathBuf, blob_file: &str) -> PathBuf {
     apply_patch_temp_blobs_dir(data_path).join(blob_file)
 }
 
 #[cfg(test)]
-fn apply_patch_prepare_backup_record(
+pub(crate) fn apply_patch_prepare_backup_record(
     data_path: &PathBuf,
     session_id: &str,
     cwd: &Path,
@@ -188,7 +189,7 @@ fn apply_patch_prepare_backup_record(
     })
 }
 
-fn apply_patch_empty_backup_record(
+pub(crate) fn apply_patch_empty_backup_record(
     data_path: &PathBuf,
     session_id: &str,
     cwd: &Path,
@@ -208,7 +209,7 @@ fn apply_patch_empty_backup_record(
     })
 }
 
-fn apply_patch_prepare_backup_entry(
+pub(crate) fn apply_patch_prepare_backup_entry(
     data_path: &PathBuf,
     op: &ApplyPatchResolvedOp,
 ) -> Result<ApplyPatchBackupEntry, String> {
@@ -287,7 +288,7 @@ fn apply_patch_prepare_backup_entry(
     }
 }
 
-fn apply_patch_store_backup_record(
+pub(crate) fn apply_patch_store_backup_record(
     state: &AppState,
     record: &ApplyPatchBackupRecord,
 ) -> Result<PathBuf, String> {
@@ -300,7 +301,7 @@ fn apply_patch_store_backup_record(
     Ok(path)
 }
 
-fn apply_patch_cleanup_backup_record_by_value(
+pub(crate) fn apply_patch_cleanup_backup_record_by_value(
     data_path: &PathBuf,
     record: &ApplyPatchBackupRecord,
 ) -> Result<(), String> {
@@ -323,7 +324,7 @@ fn apply_patch_cleanup_backup_record_by_value(
     Ok(())
 }
 
-fn apply_patch_cleanup_backup_entry(
+pub(crate) fn apply_patch_cleanup_backup_entry(
     data_path: &PathBuf,
     entry: &ApplyPatchBackupEntry,
 ) -> Result<(), String> {
@@ -338,18 +339,18 @@ fn apply_patch_cleanup_backup_entry(
     Ok(())
 }
 
-fn apply_patch_read_backup_record(path: &Path) -> Result<ApplyPatchBackupRecord, String> {
+pub(crate) fn apply_patch_read_backup_record(path: &Path) -> Result<ApplyPatchBackupRecord, String> {
     let raw = std::fs::read_to_string(path)
         .map_err(|err| format!("读取 apply_patch 恢复记录失败（{}）：{err}", path.to_string_lossy()))?;
     serde_json::from_str::<ApplyPatchBackupRecord>(&raw)
         .map_err(|err| format!("解析 apply_patch 恢复记录失败（{}）：{err}", path.to_string_lossy()))
 }
 
-fn apply_patch_read_text_file(path: &Path) -> Result<String, String> {
+pub(crate) fn apply_patch_read_text_file(path: &Path) -> Result<String, String> {
     decode_text_file_from_path(path).map(|decoded| decoded.text)
 }
 
-fn apply_patch_write_parent_dir(path: &Path) -> Result<(), String> {
+pub(crate) fn apply_patch_write_parent_dir(path: &Path) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|err| format!("创建目录失败（{}）：{err}", terminal_path_for_user(parent)))?;
@@ -359,7 +360,7 @@ fn apply_patch_write_parent_dir(path: &Path) -> Result<(), String> {
 
 /// 恢复备份记录中的所有文件。
 /// 无论文件当前状态如何都强制恢复，返回 (恢复文件数, 有非LLM修改被覆盖的文件列表)。
-fn apply_patch_restore_backup_record(
+pub(crate) fn apply_patch_restore_backup_record(
     data_path: &PathBuf,
     record: &ApplyPatchBackupRecord,
 ) -> Result<(usize, Vec<String>), String> {
@@ -511,7 +512,7 @@ fn apply_patch_restore_backup_record(
     Ok((restored, overwritten_files))
 }
 
-fn clear_apply_patch_temp(data_path: &PathBuf) -> Result<(usize, usize), String> {
+pub(crate) fn clear_apply_patch_temp(data_path: &PathBuf) -> Result<(usize, usize), String> {
     let records_dir = apply_patch_temp_records_dir(data_path);
     let blobs_dir = apply_patch_temp_blobs_dir(data_path);
     let mut removed_records = 0usize;
@@ -545,15 +546,15 @@ fn clear_apply_patch_temp(data_path: &PathBuf) -> Result<(usize, usize), String>
     Ok((removed_records, removed_blobs))
 }
 
-fn apply_patch_tool_args_to_raw_json(args: &ApplyPatchToolArgs) -> Result<String, String> {
+pub(crate) fn apply_patch_tool_args_to_raw_json(args: &ApplyPatchToolArgs) -> Result<String, String> {
     serde_json::to_string(args).map_err(|err| format!("apply_patch 参数序列化失败：{err}"))
 }
 
-fn apply_patch_json_example() -> &'static str {
+pub(crate) fn apply_patch_json_example() -> &'static str {
     r#"{"operations":[{"action":"update","path":"src/example.ts","old_string":"before","new_string":"after"}]}"#
 }
 
-fn apply_patch_ops_from_tool_args(args: ApplyPatchToolArgs) -> Result<Vec<ApplyPatchOp>, String> {
+pub(crate) fn apply_patch_ops_from_tool_args(args: ApplyPatchToolArgs) -> Result<Vec<ApplyPatchOp>, String> {
     if args.operations.is_empty() {
         return Err(apply_patch_format_error(
             "apply_patch 操作列表为空。至少需要一项操作。",
@@ -635,7 +636,7 @@ fn apply_patch_ops_from_tool_args(args: ApplyPatchToolArgs) -> Result<Vec<ApplyP
     Ok(ops)
 }
 
-fn apply_patch_operation_example(action: &str) -> &'static str {
+pub(crate) fn apply_patch_operation_example(action: &str) -> &'static str {
     match action {
         "add" => r#"{"action":"add","path":"src/new.ts","content":"export const value = 1;\n"}"#,
         "update" => r#"{"action":"update","path":"src/example.ts","old_string":"before","new_string":"after","replace_all":false}"#,
@@ -645,7 +646,7 @@ fn apply_patch_operation_example(action: &str) -> &'static str {
     }
 }
 
-fn apply_patch_format_error(message: impl AsRef<str>) -> String {
+pub(crate) fn apply_patch_format_error(message: impl AsRef<str>) -> String {
     format!(
         "{}\n\napply_patch 只支持 JSON 格式，不支持标准 git diff / unified diff。\n顶层格式示例：\n{}",
         message.as_ref(),
@@ -653,22 +654,22 @@ fn apply_patch_format_error(message: impl AsRef<str>) -> String {
     )
 }
 
-fn apply_patch_preview_text(input: &str, max_chars: usize) -> String {
+pub(crate) fn apply_patch_preview_text(input: &str, max_chars: usize) -> String {
     input.chars().take(max_chars).collect()
 }
 
 
 #[cfg(target_os = "windows")]
-fn apply_patch_has_windows_drive_prefix(path: &str) -> bool {
+pub(crate) fn apply_patch_has_windows_drive_prefix(path: &str) -> bool {
     terminal_has_windows_drive_prefix(path)
 }
 
 #[cfg(not(target_os = "windows"))]
-fn apply_patch_has_windows_drive_prefix(_path: &str) -> bool {
+pub(crate) fn apply_patch_has_windows_drive_prefix(_path: &str) -> bool {
     false
 }
 
-fn apply_patch_resolve_path(base: &Path, raw: &str) -> Result<PathBuf, String> {
+pub(crate) fn apply_patch_resolve_path(base: &Path, raw: &str) -> Result<PathBuf, String> {
     let normalized = normalize_terminal_path_input_for_current_platform(raw.trim());
     if normalized.is_empty() {
         return Err("补丁路径为空。".to_string());
@@ -682,7 +683,7 @@ fn apply_patch_resolve_path(base: &Path, raw: &str) -> Result<PathBuf, String> {
     Ok(terminal_normalize_for_access_check(&joined))
 }
 
-fn apply_patch_resolve_ops(base: &Path, ops: Vec<ApplyPatchOp>) -> Result<Vec<ApplyPatchResolvedOp>, String> {
+pub(crate) fn apply_patch_resolve_ops(base: &Path, ops: Vec<ApplyPatchOp>) -> Result<Vec<ApplyPatchResolvedOp>, String> {
     let mut out = Vec::<ApplyPatchResolvedOp>::new();
     for op in ops {
         match op {
@@ -711,7 +712,7 @@ fn apply_patch_resolve_ops(base: &Path, ops: Vec<ApplyPatchOp>) -> Result<Vec<Ap
 }
 
 
-fn apply_patch_collect_existing_paths(ops: &[ApplyPatchResolvedOp]) -> Vec<PathBuf> {
+pub(crate) fn apply_patch_collect_existing_paths(ops: &[ApplyPatchResolvedOp]) -> Vec<PathBuf> {
     let mut out = Vec::<PathBuf>::new();
     for op in ops {
         match op {
@@ -728,7 +729,7 @@ fn apply_patch_collect_existing_paths(ops: &[ApplyPatchResolvedOp]) -> Vec<PathB
     terminal_dedup_paths(out)
 }
 
-fn apply_patch_collect_target_paths(ops: &[ApplyPatchResolvedOp]) -> Vec<PathBuf> {
+pub(crate) fn apply_patch_collect_target_paths(ops: &[ApplyPatchResolvedOp]) -> Vec<PathBuf> {
     let mut out = Vec::<PathBuf>::new();
     for op in ops {
         match op {
@@ -746,7 +747,7 @@ fn apply_patch_collect_target_paths(ops: &[ApplyPatchResolvedOp]) -> Vec<PathBuf
     terminal_dedup_paths(out)
 }
 
-fn apply_patch_operation_summary(ops: &[ApplyPatchResolvedOp]) -> String {
+pub(crate) fn apply_patch_operation_summary(ops: &[ApplyPatchResolvedOp]) -> String {
     let mut add_count = 0usize;
     let mut delete_count = 0usize;
     let mut update_count = 0usize;
@@ -785,7 +786,7 @@ fn apply_patch_operation_summary(ops: &[ApplyPatchResolvedOp]) -> String {
     }
 }
 
-fn apply_patch_assess_safety(
+pub(crate) fn apply_patch_assess_safety(
     state: &AppState,
     _session_id: &str,
     _cwd: &Path,
@@ -849,7 +850,7 @@ fn apply_patch_assess_safety(
     Ok(ApplyPatchSafetyCheck::AutoApprove)
 }
 
-fn apply_patch_apply_update(
+pub(crate) fn apply_patch_apply_update(
     content: &str,
     old_string: &str,
     new_string: &str,
@@ -918,7 +919,7 @@ fn apply_patch_apply_update(
     })
 }
 
-fn apply_patch_apply_update_with_line_ending_fallback(
+pub(crate) fn apply_patch_apply_update_with_line_ending_fallback(
     content: &str,
     old_string: &str,
     new_string: &str,
@@ -942,7 +943,7 @@ fn apply_patch_apply_update_with_line_ending_fallback(
     }
 }
 
-fn apply_patch_prepare_line_ending_fallback(
+pub(crate) fn apply_patch_prepare_line_ending_fallback(
     content: &str,
     old_string: &str,
     new_string: &str,
@@ -969,11 +970,11 @@ fn apply_patch_prepare_line_ending_fallback(
     ))
 }
 
-fn apply_patch_normalize_to_lf(value: &str) -> String {
+pub(crate) fn apply_patch_normalize_to_lf(value: &str) -> String {
     value.replace("\r\n", "\n").replace('\r', "\n")
 }
 
-fn apply_patch_normalized_lf_to_newline(value: &str, newline: &str) -> String {
+pub(crate) fn apply_patch_normalized_lf_to_newline(value: &str, newline: &str) -> String {
     if newline == "\n" {
         value.to_string()
     } else {
@@ -981,7 +982,7 @@ fn apply_patch_normalized_lf_to_newline(value: &str, newline: &str) -> String {
     }
 }
 
-fn apply_patch_line_number_at_byte(content: &str, offset: usize) -> usize {
+pub(crate) fn apply_patch_line_number_at_byte(content: &str, offset: usize) -> usize {
     content
         .as_bytes()
         .get(..offset.min(content.len()))
@@ -992,7 +993,7 @@ fn apply_patch_line_number_at_byte(content: &str, offset: usize) -> usize {
         .saturating_add(1)
 }
 
-fn apply_patch_match_line_range(content: &str, start: usize, len: usize) -> (usize, usize) {
+pub(crate) fn apply_patch_match_line_range(content: &str, start: usize, len: usize) -> (usize, usize) {
     let end = start.saturating_add(len).min(content.len());
     let adjusted_end = if end > start && content.as_bytes().get(end.saturating_sub(1)) == Some(&b'\n') {
         end.saturating_sub(1)
@@ -1005,7 +1006,7 @@ fn apply_patch_match_line_range(content: &str, start: usize, len: usize) -> (usi
     )
 }
 
-fn apply_patch_format_line_range((start, end): (usize, usize)) -> String {
+pub(crate) fn apply_patch_format_line_range((start, end): (usize, usize)) -> String {
     if start == end {
         format!("line {start}")
     } else {
@@ -1013,14 +1014,14 @@ fn apply_patch_format_line_range((start, end): (usize, usize)) -> String {
     }
 }
 
-fn apply_patch_exact_match_ranges(content: &str, needle: &str) -> Vec<(usize, usize)> {
+pub(crate) fn apply_patch_exact_match_ranges(content: &str, needle: &str) -> Vec<(usize, usize)> {
     content
         .match_indices(needle)
         .map(|(start, _)| apply_patch_match_line_range(content, start, needle.len()))
         .collect()
 }
 
-fn apply_patch_format_ranges_limited(ranges: Vec<(usize, usize)>, limit: usize) -> String {
+pub(crate) fn apply_patch_format_ranges_limited(ranges: Vec<(usize, usize)>, limit: usize) -> String {
     let total = ranges.len();
     let mut out = ranges
         .into_iter()
@@ -1034,7 +1035,7 @@ fn apply_patch_format_ranges_limited(ranges: Vec<(usize, usize)>, limit: usize) 
     out
 }
 
-fn apply_patch_compact_line_summary(value: &str, limit: usize) -> String {
+pub(crate) fn apply_patch_compact_line_summary(value: &str, limit: usize) -> String {
     let compact = value
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -1045,7 +1046,7 @@ fn apply_patch_compact_line_summary(value: &str, limit: usize) -> String {
     apply_patch_preview_text(&compact, limit)
 }
 
-fn apply_patch_normalize_for_similarity(value: &str) -> String {
+pub(crate) fn apply_patch_normalize_for_similarity(value: &str) -> String {
     value
         .lines()
         .map(str::trim)
@@ -1055,7 +1056,7 @@ fn apply_patch_normalize_for_similarity(value: &str) -> String {
         .to_lowercase()
 }
 
-fn apply_patch_levenshtein_distance(left: &str, right: &str) -> usize {
+pub(crate) fn apply_patch_levenshtein_distance(left: &str, right: &str) -> usize {
     let left_chars = left.chars().collect::<Vec<_>>();
     let right_chars = right.chars().collect::<Vec<_>>();
     if left_chars.is_empty() {
@@ -1077,7 +1078,7 @@ fn apply_patch_levenshtein_distance(left: &str, right: &str) -> usize {
     prev[right_chars.len()]
 }
 
-fn apply_patch_similarity_score(left: &str, right: &str) -> f64 {
+pub(crate) fn apply_patch_similarity_score(left: &str, right: &str) -> f64 {
     let left = apply_patch_normalize_for_similarity(left);
     let right = apply_patch_normalize_for_similarity(right);
     let max_len = left.chars().count().max(right.chars().count());
@@ -1088,7 +1089,7 @@ fn apply_patch_similarity_score(left: &str, right: &str) -> f64 {
     1.0 - (distance as f64 / max_len as f64)
 }
 
-fn apply_patch_similar_line_ranges(content: &str, old_string: &str, limit: usize) -> Vec<(usize, usize, String)> {
+pub(crate) fn apply_patch_similar_line_ranges(content: &str, old_string: &str, limit: usize) -> Vec<(usize, usize, String)> {
     const MAX_FILE_LINES_FOR_SIMILARITY: usize = 5000;
     const MIN_LINE_OVERLAP_RATIO: f64 = 0.9;
 
@@ -1135,7 +1136,7 @@ fn apply_patch_similar_line_ranges(content: &str, old_string: &str, limit: usize
         .collect()
 }
 
-fn apply_patch_preview_lines(prefix: &str, text: &str, max_chars: usize) -> Vec<String> {
+pub(crate) fn apply_patch_preview_lines(prefix: &str, text: &str, max_chars: usize) -> Vec<String> {
     let preview = apply_patch_preview_text(text, max_chars);
     if preview.is_empty() {
         return Vec::new();
@@ -1146,7 +1147,7 @@ fn apply_patch_preview_lines(prefix: &str, text: &str, max_chars: usize) -> Vec<
         .collect()
 }
 
-fn apply_patch_build_preview(ops: &[ApplyPatchResolvedOp]) -> Result<String, String> {
+pub(crate) fn apply_patch_build_preview(ops: &[ApplyPatchResolvedOp]) -> Result<String, String> {
     let mut lines = Vec::<String>::new();
     lines.push("*** Begin Patch".to_string());
     for op in ops {
@@ -1182,7 +1183,7 @@ fn apply_patch_build_preview(ops: &[ApplyPatchResolvedOp]) -> Result<String, Str
     Ok(lines.join("\n"))
 }
 
-fn apply_patch_op_name(op: &ApplyPatchResolvedOp) -> &'static str {
+pub(crate) fn apply_patch_op_name(op: &ApplyPatchResolvedOp) -> &'static str {
     match op {
         ApplyPatchResolvedOp::Add { .. } => "add",
         ApplyPatchResolvedOp::Delete { .. } => "delete",
@@ -1196,7 +1197,7 @@ fn apply_patch_op_name(op: &ApplyPatchResolvedOp) -> &'static str {
     }
 }
 
-fn apply_patch_op_path(op: &ApplyPatchResolvedOp) -> Option<String> {
+pub(crate) fn apply_patch_op_path(op: &ApplyPatchResolvedOp) -> Option<String> {
     match op {
         ApplyPatchResolvedOp::Add { path, .. } => Some(terminal_path_for_user(path)),
         ApplyPatchResolvedOp::Delete { path } => Some(terminal_path_for_user(path)),
@@ -1204,7 +1205,7 @@ fn apply_patch_op_path(op: &ApplyPatchResolvedOp) -> Option<String> {
     }
 }
 
-async fn apply_patch_execute_single_op(op: &ApplyPatchResolvedOp) -> Result<Value, String> {
+pub(crate) async fn apply_patch_execute_single_op(op: &ApplyPatchResolvedOp) -> Result<Value, String> {
     match op {
         ApplyPatchResolvedOp::Add { path, content } => {
             if path.exists() {
@@ -1292,7 +1293,7 @@ async fn apply_patch_execute_single_op(op: &ApplyPatchResolvedOp) -> Result<Valu
     }
 }
 
-async fn apply_patch_execute_ops(
+pub(crate) async fn apply_patch_execute_ops(
     data_path: &PathBuf,
     record: &mut ApplyPatchBackupRecord,
     ops: &[ApplyPatchResolvedOp],
@@ -1339,7 +1340,7 @@ async fn apply_patch_execute_ops(
     Ok(ApplyPatchExecutionOutcome { changed, failure: None })
 }
 
-async fn builtin_apply_patch_with_name(
+pub(crate) async fn builtin_apply_patch_with_name(
     state: &AppState,
     session_id: &str,
     tool_name: &str,
@@ -1354,7 +1355,7 @@ async fn builtin_apply_patch_with_name(
     let resolved = apply_patch_resolve_ops(&cwd, parsed)?;
     let preview = apply_patch_build_preview(&resolved)?;
     let target_paths = apply_patch_collect_target_paths(&resolved);
-    android_workspace_ensure_paths_within_sandbox(state, &target_paths)?;
+    features_system_commands::android_workspace_manager::android_workspace_ensure_paths_within_sandbox(state, &target_paths)?;
     let existing_paths = apply_patch_collect_existing_paths(&resolved);
     let summary = apply_patch_operation_summary(&resolved);
 
@@ -1736,7 +1737,7 @@ async fn builtin_apply_patch_with_name(
     }))
 }
 
-async fn builtin_write_file(
+pub(crate) async fn builtin_write_file(
     state: &AppState,
     session_id: &str,
     args: WriteFileToolArgs,
@@ -1773,7 +1774,7 @@ async fn builtin_write_file(
     .await
 }
 
-async fn builtin_delete_file(
+pub(crate) async fn builtin_delete_file(
     state: &AppState,
     session_id: &str,
     args: DeleteFileToolArgs,
@@ -1797,7 +1798,7 @@ async fn builtin_delete_file(
     .await
 }
 
-async fn builtin_update_file(
+pub(crate) async fn builtin_update_file(
     state: &AppState,
     session_id: &str,
     args: UpdateFileToolArgs,
@@ -1821,7 +1822,7 @@ async fn builtin_update_file(
     .await
 }
 
-async fn builtin_move_file(
+pub(crate) async fn builtin_move_file(
     state: &AppState,
     session_id: &str,
     args: MoveFileToolArgs,
@@ -1846,7 +1847,7 @@ async fn builtin_move_file(
 }
 
 #[cfg(test)]
-mod apply_patch_tool_tests {
+pub(crate) mod apply_patch_tool_tests {
     use super::*;
 
     fn absolute_user_path(path: &Path) -> String {

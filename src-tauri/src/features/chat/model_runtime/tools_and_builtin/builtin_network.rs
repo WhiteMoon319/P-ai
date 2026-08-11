@@ -112,7 +112,7 @@ pub(crate) fn build_fetch_client(
     }
     #[cfg(target_os = "android")]
     {
-        client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+        client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)?;
     }
     client_builder
         .build()

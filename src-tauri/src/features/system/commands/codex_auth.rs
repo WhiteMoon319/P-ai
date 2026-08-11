@@ -1,185 +1,185 @@
-const CODEX_OAUTH_CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
-const CODEX_OAUTH_AUTHORIZE_URL: &str = "https://auth.openai.com/oauth/authorize";
-const CODEX_OAUTH_TOKEN_URL: &str = "https://auth.openai.com/oauth/token";
-const CODEX_OAUTH_CALLBACK_PORT: u16 = 1455;
-const CODEX_OAUTH_CALLBACK_PATH: &str = "/auth/callback";
-const CODEX_OAUTH_REDIRECT_URI: &str = "http://localhost:1455/auth/callback";
-const CODEX_OAUTH_SCOPE: &str = "openid profile email offline_access";
-const CODEX_OAUTH_ORIGINATOR: &str = "cline";
-const CODEX_REFRESH_LEAD_MS: i64 = 5 * 24 * 60 * 60 * 1000;
-const CODEX_OAUTH_HTML_SUCCESS: &str = r#"<!DOCTYPE html><html><head><meta charset="utf-8"><title>Codex 登录成功</title></head><body style="font-family:Segoe UI,Arial,sans-serif;padding:32px;"><h2>Codex 登录成功</h2><p>可以关闭这个窗口，返回应用继续使用。</p><script>setTimeout(()=>window.close(),2000)</script></body></html>"#;
-const CODEX_OAUTH_HTML_ERROR: &str = r#"<!DOCTYPE html><html><head><meta charset="utf-8"><title>Codex 登录失败</title></head><body style="font-family:Segoe UI,Arial,sans-serif;padding:32px;"><h2>Codex 登录失败</h2><p>请回到应用查看错误信息后重试。</p></body></html>"#;
+pub(crate) const CODEX_OAUTH_CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
+pub(crate) const CODEX_OAUTH_AUTHORIZE_URL: &str = "https://auth.openai.com/oauth/authorize";
+pub(crate) const CODEX_OAUTH_TOKEN_URL: &str = "https://auth.openai.com/oauth/token";
+pub(crate) const CODEX_OAUTH_CALLBACK_PORT: u16 = 1455;
+pub(crate) const CODEX_OAUTH_CALLBACK_PATH: &str = "/auth/callback";
+pub(crate) const CODEX_OAUTH_REDIRECT_URI: &str = "http://localhost:1455/auth/callback";
+pub(crate) const CODEX_OAUTH_SCOPE: &str = "openid profile email offline_access";
+pub(crate) const CODEX_OAUTH_ORIGINATOR: &str = "cline";
+pub(crate) const CODEX_REFRESH_LEAD_MS: i64 = 5 * 24 * 60 * 60 * 1000;
+pub(crate) const CODEX_OAUTH_HTML_SUCCESS: &str = r#"<!DOCTYPE html><html><head><meta charset="utf-8"><title>Codex 登录成功</title></head><body style="font-family:Segoe UI,Arial,sans-serif;padding:32px;"><h2>Codex 登录成功</h2><p>可以关闭这个窗口，返回应用继续使用。</p><script>setTimeout(()=>window.close(),2000)</script></body></html>"#;
+pub(crate) const CODEX_OAUTH_HTML_ERROR: &str = r#"<!DOCTYPE html><html><head><meta charset="utf-8"><title>Codex 登录失败</title></head><body style="font-family:Segoe UI,Arial,sans-serif;padding:32px;"><h2>Codex 登录失败</h2><p>请回到应用查看错误信息后重试。</p></body></html>"#;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CodexStoredCredential {
-    access_token: String,
+pub(crate) struct CodexStoredCredential {
+    pub(crate) access_token: String,
     #[serde(default)]
-    refresh_token: String,
+    pub(crate) refresh_token: String,
     #[serde(default)]
-    id_token: String,
+    pub(crate) id_token: String,
     #[serde(default)]
-    account_id: String,
+    pub(crate) account_id: String,
     #[serde(default)]
-    email: String,
+    pub(crate) email: String,
     #[serde(default)]
-    expires_at_ms: i64,
+    pub(crate) expires_at_ms: i64,
     #[serde(default)]
-    updated_at: String,
+    pub(crate) updated_at: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
-struct CodexJwtApiClaims {
+pub(crate) struct CodexJwtApiClaims {
     #[serde(default)]
-    chatgpt_account_id: String,
+    pub(crate) chatgpt_account_id: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
-struct CodexJwtOrganization {
+pub(crate) struct CodexJwtOrganization {
     #[serde(default)]
-    id: String,
+    pub(crate) id: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
-struct CodexJwtClaims {
+pub(crate) struct CodexJwtClaims {
     #[serde(default)]
-    exp: i64,
+    pub(crate) exp: i64,
     #[serde(default)]
-    email: String,
+    pub(crate) email: String,
     #[serde(default)]
-    chatgpt_account_id: String,
+    pub(crate) chatgpt_account_id: String,
     #[serde(default)]
-    organizations: Vec<CodexJwtOrganization>,
+    pub(crate) organizations: Vec<CodexJwtOrganization>,
     #[serde(rename = "https://api.openai.com/auth", default)]
-    api_auth: CodexJwtApiClaims,
+    pub(crate) api_auth: CodexJwtApiClaims,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
-struct CodexLocalAuthTokens {
+pub(crate) struct CodexLocalAuthTokens {
     #[serde(default, alias = "accessToken")]
-    access_token: String,
+    pub(crate) access_token: String,
     #[serde(default, alias = "refreshToken")]
-    refresh_token: String,
+    pub(crate) refresh_token: String,
     #[serde(default, alias = "idToken")]
-    id_token: String,
+    pub(crate) id_token: String,
     #[serde(default, alias = "accountId")]
-    account_id: String,
+    pub(crate) account_id: String,
     #[serde(default)]
-    email: String,
+    pub(crate) email: String,
     #[serde(default, alias = "expiresAtMs")]
-    expires_at_ms: Option<i64>,
+    pub(crate) expires_at_ms: Option<i64>,
     #[serde(default, alias = "expiresAt")]
-    expires_at: String,
+    pub(crate) expires_at: String,
     #[serde(default)]
-    expired: String,
+    pub(crate) expired: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct CodexLocalAuthFile {
+pub(crate) struct CodexLocalAuthFile {
     #[serde(default)]
-    _auth_mode: String,
+    pub(crate) _auth_mode: String,
     #[serde(default, rename = "OPENAI_API_KEY")]
-    _openai_api_key: Option<String>,
+    pub(crate) _openai_api_key: Option<String>,
     #[serde(default)]
-    last_refresh: String,
+    pub(crate) last_refresh: String,
     #[serde(default, alias = "updatedAt")]
-    updated_at: String,
+    pub(crate) updated_at: String,
     #[serde(default)]
-    tokens: Option<CodexLocalAuthTokens>,
+    pub(crate) tokens: Option<CodexLocalAuthTokens>,
     #[serde(flatten)]
-    flat_tokens: CodexLocalAuthTokens,
+    pub(crate) flat_tokens: CodexLocalAuthTokens,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct CodexManagedAuthFile {
-    auth_mode: String,
+pub(crate) struct CodexManagedAuthFile {
+    pub(crate) auth_mode: String,
     #[serde(rename = "OPENAI_API_KEY")]
-    openai_api_key: Option<String>,
-    tokens: CodexManagedAuthTokens,
-    last_refresh: String,
+    pub(crate) openai_api_key: Option<String>,
+    pub(crate) tokens: CodexManagedAuthTokens,
+    pub(crate) last_refresh: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct CodexManagedAuthTokens {
-    id_token: String,
-    access_token: String,
-    refresh_token: String,
-    account_id: String,
+pub(crate) struct CodexManagedAuthTokens {
+    pub(crate) id_token: String,
+    pub(crate) access_token: String,
+    pub(crate) refresh_token: String,
+    pub(crate) account_id: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct CodexOAuthTokenResponse {
-    access_token: String,
+pub(crate) struct CodexOAuthTokenResponse {
+    pub(crate) access_token: String,
     #[serde(default)]
-    refresh_token: String,
+    pub(crate) refresh_token: String,
     #[serde(default)]
-    id_token: String,
+    pub(crate) id_token: String,
     #[serde(default)]
-    expires_in: i64,
+    pub(crate) expires_in: i64,
     #[serde(default)]
-    email: String,
+    pub(crate) email: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CodexAuthStatusInput {
-    provider_id: String,
+pub(crate) struct CodexAuthStatusInput {
+    pub(crate) provider_id: String,
     #[serde(default = "default_codex_auth_mode")]
-    auth_mode: String,
+    pub(crate) auth_mode: String,
     #[serde(default = "default_codex_local_auth_path")]
-    local_auth_path: String,
+    pub(crate) local_auth_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CodexStartOAuthLoginInput {
-    provider_id: String,
+pub(crate) struct CodexStartOAuthLoginInput {
+    pub(crate) provider_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CodexLogoutInput {
-    provider_id: String,
+pub(crate) struct CodexLogoutInput {
+    pub(crate) provider_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CodexAuthStatus {
-    provider_id: String,
-    auth_mode: String,
-    authenticated: bool,
-    status: String,
-    message: String,
+pub(crate) struct CodexAuthStatus {
+    pub(crate) provider_id: String,
+    pub(crate) auth_mode: String,
+    pub(crate) authenticated: bool,
+    pub(crate) status: String,
+    pub(crate) message: String,
     #[serde(default)]
-    email: String,
+    pub(crate) email: String,
     #[serde(default)]
-    account_id: String,
+    pub(crate) account_id: String,
     #[serde(default)]
-    access_token_preview: String,
+    pub(crate) access_token_preview: String,
     #[serde(default)]
-    local_auth_path: String,
+    pub(crate) local_auth_path: String,
     #[serde(default)]
-    managed_auth_path: String,
+    pub(crate) managed_auth_path: String,
     #[serde(default)]
-    expires_at: String,
+    pub(crate) expires_at: String,
 }
 
 #[derive(Debug, Clone)]
-struct CodexOAuthSession {
-    status: String,
-    message: String,
-    error: String,
-    email: String,
-    account_id: String,
+pub(crate) struct CodexOAuthSession {
+    pub(crate) status: String,
+    pub(crate) message: String,
+    pub(crate) error: String,
+    pub(crate) email: String,
+    pub(crate) account_id: String,
 }
 
-fn codex_oauth_sessions() -> &'static Mutex<std::collections::HashMap<String, CodexOAuthSession>> {
+pub(crate) fn codex_oauth_sessions() -> &'static Mutex<std::collections::HashMap<String, CodexOAuthSession>> {
     static SESSIONS: OnceLock<Mutex<std::collections::HashMap<String, CodexOAuthSession>>> =
         OnceLock::new();
     SESSIONS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
-fn codex_refresh_locks(
+pub(crate) fn codex_refresh_locks(
 ) -> &'static Mutex<std::collections::HashMap<String, std::sync::Arc<tokio::sync::Mutex<()>>>> {
     static LOCKS: OnceLock<
         Mutex<std::collections::HashMap<String, std::sync::Arc<tokio::sync::Mutex<()>>>>,
@@ -187,13 +187,13 @@ fn codex_refresh_locks(
     LOCKS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
-fn codex_runtime_auth_cache() -> &'static Mutex<std::collections::HashMap<String, CodexStoredCredential>> {
+pub(crate) fn codex_runtime_auth_cache() -> &'static Mutex<std::collections::HashMap<String, CodexStoredCredential>> {
     static CACHE: OnceLock<Mutex<std::collections::HashMap<String, CodexStoredCredential>>> =
         OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
-fn codex_runtime_auth_cache_key(provider_id: &str, auth_mode: &str, local_auth_path: &str) -> String {
+pub(crate) fn codex_runtime_auth_cache_key(provider_id: &str, auth_mode: &str, local_auth_path: &str) -> String {
     format!(
         "{}\n{}\n{}",
         provider_id.trim(),
@@ -202,7 +202,7 @@ fn codex_runtime_auth_cache_key(provider_id: &str, auth_mode: &str, local_auth_p
     )
 }
 
-fn codex_refresh_lock_for_provider(provider_id: &str) -> std::sync::Arc<tokio::sync::Mutex<()>> {
+pub(crate) fn codex_refresh_lock_for_provider(provider_id: &str) -> std::sync::Arc<tokio::sync::Mutex<()>> {
     let key = provider_id.trim().to_string();
     let mut guard = codex_refresh_locks().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     guard
@@ -211,7 +211,7 @@ fn codex_refresh_lock_for_provider(provider_id: &str) -> std::sync::Arc<tokio::s
         .clone()
 }
 
-fn codex_runtime_auth_cache_get(
+pub(crate) fn codex_runtime_auth_cache_get(
     provider_id: &str,
     auth_mode: &str,
     local_auth_path: &str,
@@ -223,7 +223,7 @@ fn codex_runtime_auth_cache_get(
         .and_then(|guard| guard.get(&key).cloned())
 }
 
-fn codex_runtime_auth_cache_set(
+pub(crate) fn codex_runtime_auth_cache_set(
     provider_id: &str,
     auth_mode: &str,
     local_auth_path: &str,
@@ -235,7 +235,7 @@ fn codex_runtime_auth_cache_set(
     }
 }
 
-fn codex_pick_newer_credential(
+pub(crate) fn codex_pick_newer_credential(
     current: CodexStoredCredential,
     candidate: CodexStoredCredential,
 ) -> CodexStoredCredential {
@@ -248,26 +248,26 @@ fn codex_pick_newer_credential(
     current
 }
 
-fn codex_session_get(provider_id: &str) -> Option<CodexOAuthSession> {
+pub(crate) fn codex_session_get(provider_id: &str) -> Option<CodexOAuthSession> {
     codex_oauth_sessions()
         .lock()
         .ok()
         .and_then(|guard| guard.get(provider_id.trim()).cloned())
 }
 
-fn codex_session_set(provider_id: &str, session: CodexOAuthSession) {
+pub(crate) fn codex_session_set(provider_id: &str, session: CodexOAuthSession) {
     if let Ok(mut guard) = codex_oauth_sessions().lock() {
         guard.insert(provider_id.trim().to_string(), session);
     }
 }
 
-fn codex_session_remove(provider_id: &str) {
+pub(crate) fn codex_session_remove(provider_id: &str) {
     if let Ok(mut guard) = codex_oauth_sessions().lock() {
         guard.remove(provider_id.trim());
     }
 }
 
-fn codex_auth_storage_root() -> Result<PathBuf, String> {
+pub(crate) fn codex_auth_storage_root() -> Result<PathBuf, String> {
     if let Some(portable_root) = detect_portable_runtime_root() {
         return Ok(portable_root.join("auth").join("codex"));
     }
@@ -277,7 +277,7 @@ fn codex_auth_storage_root() -> Result<PathBuf, String> {
         .join("codex"))
 }
 
-fn managed_codex_auth_path(provider_id: &str) -> Result<PathBuf, String> {
+pub(crate) fn managed_codex_auth_path(provider_id: &str) -> Result<PathBuf, String> {
     let safe = provider_id
         .trim()
         .chars()
@@ -286,7 +286,7 @@ fn managed_codex_auth_path(provider_id: &str) -> Result<PathBuf, String> {
     Ok(codex_auth_storage_root()?.join(format!("{safe}.json")))
 }
 
-fn codex_parse_jwt_claims(token: &str) -> Option<CodexJwtClaims> {
+pub(crate) fn codex_parse_jwt_claims(token: &str) -> Option<CodexJwtClaims> {
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     let mut parts = token.trim().split('.');
     let _ = parts.next()?;
@@ -295,7 +295,7 @@ fn codex_parse_jwt_claims(token: &str) -> Option<CodexJwtClaims> {
     serde_json::from_slice::<CodexJwtClaims>(&decoded).ok()
 }
 
-fn codex_extract_account_id(claims: &CodexJwtClaims) -> String {
+pub(crate) fn codex_extract_account_id(claims: &CodexJwtClaims) -> String {
     if !claims.chatgpt_account_id.trim().is_empty() {
         return claims.chatgpt_account_id.trim().to_string();
     }
@@ -309,7 +309,7 @@ fn codex_extract_account_id(claims: &CodexJwtClaims) -> String {
         .unwrap_or_default()
 }
 
-fn codex_token_preview(token: &str) -> String {
+pub(crate) fn codex_token_preview(token: &str) -> String {
     let trimmed = token.trim();
     if trimmed.len() <= 12 {
         return trimmed.to_string();
@@ -317,7 +317,7 @@ fn codex_token_preview(token: &str) -> String {
     format!("{}...{}", &trimmed[..6], &trimmed[trimmed.len() - 4..])
 }
 
-fn codex_pkce_code_verifier() -> String {
+pub(crate) fn codex_pkce_code_verifier() -> String {
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     let mut seed = [0u8; 32];
     seed[..16].copy_from_slice(Uuid::new_v4().as_bytes());
@@ -325,13 +325,13 @@ fn codex_pkce_code_verifier() -> String {
     URL_SAFE_NO_PAD.encode(seed)
 }
 
-fn codex_pkce_code_challenge(verifier: &str) -> String {
+pub(crate) fn codex_pkce_code_challenge(verifier: &str) -> String {
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use sha2::{Digest, Sha256};
     URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
 }
 
-fn codex_build_authorize_url(code_challenge: &str, state: &str) -> String {
+pub(crate) fn codex_build_authorize_url(code_challenge: &str, state: &str) -> String {
     let params = [
         ("client_id", CODEX_OAUTH_CLIENT_ID),
         ("redirect_uri", CODEX_OAUTH_REDIRECT_URI),
@@ -351,7 +351,7 @@ fn codex_build_authorize_url(code_challenge: &str, state: &str) -> String {
     format!("{CODEX_OAUTH_AUTHORIZE_URL}?{query}")
 }
 
-fn codex_expiry_iso(expires_at_ms: i64) -> String {
+pub(crate) fn codex_expiry_iso(expires_at_ms: i64) -> String {
     if expires_at_ms <= 0 {
         return String::new();
     }
@@ -361,7 +361,7 @@ fn codex_expiry_iso(expires_at_ms: i64) -> String {
         .unwrap_or_default()
 }
 
-fn codex_is_token_expired(expires_at_ms: i64) -> bool {
+pub(crate) fn codex_is_token_expired(expires_at_ms: i64) -> bool {
     if expires_at_ms <= 0 {
         return false;
     }
@@ -369,7 +369,7 @@ fn codex_is_token_expired(expires_at_ms: i64) -> bool {
     now_ms >= i128::from(expires_at_ms.saturating_sub(CODEX_REFRESH_LEAD_MS))
 }
 
-fn codex_parse_expiry_ms(value: &str) -> Option<i64> {
+pub(crate) fn codex_parse_expiry_ms(value: &str) -> Option<i64> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return None;
@@ -386,7 +386,7 @@ fn codex_parse_expiry_ms(value: &str) -> Option<i64> {
         .map(|value| (value.unix_timestamp_nanos() / 1_000_000).min(i128::from(i64::MAX)) as i64)
 }
 
-fn codex_pick_first_non_empty(values: &[&str]) -> String {
+pub(crate) fn codex_pick_first_non_empty(values: &[&str]) -> String {
     values
         .iter()
         .map(|value| value.trim())
@@ -395,7 +395,7 @@ fn codex_pick_first_non_empty(values: &[&str]) -> String {
         .to_string()
 }
 
-fn codex_credential_from_token_response(
+pub(crate) fn codex_credential_from_token_response(
     response: CodexOAuthTokenResponse,
     fallback: Option<&CodexStoredCredential>,
 ) -> Result<CodexStoredCredential, String> {
@@ -454,7 +454,7 @@ fn codex_credential_from_token_response(
     })
 }
 
-async fn codex_exchange_code_for_tokens(
+pub(crate) async fn codex_exchange_code_for_tokens(
     code: &str,
     code_verifier: &str,
 ) -> Result<CodexStoredCredential, String> {
@@ -462,7 +462,7 @@ async fn codex_exchange_code_for_tokens(
         .timeout(std::time::Duration::from_secs(30));
     #[cfg(target_os = "android")]
     {
-        client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+        client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)?;
     }
     let client = client_builder
         .build()
@@ -492,7 +492,7 @@ async fn codex_exchange_code_for_tokens(
     codex_credential_from_token_response(payload, None)
 }
 
-async fn codex_refresh_credential(
+pub(crate) async fn codex_refresh_credential(
     credential: &CodexStoredCredential,
 ) -> Result<CodexStoredCredential, String> {
     if credential.refresh_token.trim().is_empty() {
@@ -502,7 +502,7 @@ async fn codex_refresh_credential(
         .timeout(std::time::Duration::from_secs(30));
     #[cfg(target_os = "android")]
     {
-        client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+        client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)?;
     }
     let client = client_builder
         .build()
@@ -530,7 +530,7 @@ async fn codex_refresh_credential(
     codex_credential_from_token_response(payload, Some(credential))
 }
 
-fn codex_parse_local_auth_file(path: &str) -> Result<CodexStoredCredential, String> {
+pub(crate) fn codex_parse_local_auth_file(path: &str) -> Result<CodexStoredCredential, String> {
     let normalized = normalize_terminal_path_input_for_current_platform(path);
     if normalized.trim().is_empty() {
         return Err("本地 Codex 凭证路径为空".to_string());
@@ -541,7 +541,7 @@ fn codex_parse_local_auth_file(path: &str) -> Result<CodexStoredCredential, Stri
         .map_err(|err| format!("解析本地 Codex 凭证失败 ({}): {err}", normalized))
 }
 
-fn codex_parse_local_auth_json(content: &str) -> Result<CodexStoredCredential, String> {
+pub(crate) fn codex_parse_local_auth_json(content: &str) -> Result<CodexStoredCredential, String> {
     let payload = serde_json::from_str::<CodexLocalAuthFile>(content)
         .map_err(|err| format!("JSON 结构无效: {err}"))?;
     let tokens = payload.tokens.unwrap_or(payload.flat_tokens);
@@ -593,7 +593,7 @@ fn codex_parse_local_auth_json(content: &str) -> Result<CodexStoredCredential, S
     })
 }
 
-fn read_managed_codex_auth(provider_id: &str) -> Result<CodexStoredCredential, String> {
+pub(crate) fn read_managed_codex_auth(provider_id: &str) -> Result<CodexStoredCredential, String> {
     let path = managed_codex_auth_path(provider_id)?;
     let body = fs::read_to_string(&path)
         .map_err(|err| format!("读取托管 Codex 凭证失败 ({}): {err}", path.display()))?;
@@ -601,7 +601,7 @@ fn read_managed_codex_auth(provider_id: &str) -> Result<CodexStoredCredential, S
         .map_err(|err| format!("解析托管 Codex 凭证失败 ({}): {err}", path.display()))
 }
 
-fn write_managed_codex_auth(
+pub(crate) fn write_managed_codex_auth(
     provider_id: &str,
     credential: &CodexStoredCredential,
 ) -> Result<(), String> {
@@ -630,7 +630,7 @@ fn write_managed_codex_auth(
         .map_err(|err| format!("写入 Codex 托管凭证失败 ({}): {err}", path.display()))
 }
 
-fn delete_managed_codex_auth(provider_id: &str) -> Result<(), String> {
+pub(crate) fn delete_managed_codex_auth(provider_id: &str) -> Result<(), String> {
     let path = managed_codex_auth_path(provider_id)?;
     if !path.exists() {
         return Ok(());
@@ -639,7 +639,7 @@ fn delete_managed_codex_auth(provider_id: &str) -> Result<(), String> {
         .map_err(|err| format!("删除 Codex 托管凭证失败 ({}): {err}", path.display()))
 }
 
-fn build_codex_runtime_auth(
+pub(crate) fn build_codex_runtime_auth(
     provider_id: &str,
     auth_mode: &str,
     local_auth_path: &str,
@@ -658,7 +658,7 @@ fn build_codex_runtime_auth(
     }
 }
 
-fn read_codex_runtime_auth_snapshot(
+pub(crate) fn read_codex_runtime_auth_snapshot(
     provider_id: &str,
     auth_mode: &str,
     local_auth_path: &str,
@@ -691,7 +691,7 @@ fn read_codex_runtime_auth_snapshot(
     ))
 }
 
-async fn ensure_codex_runtime_auth_fresh(
+pub(crate) async fn ensure_codex_runtime_auth_fresh(
     auth: &CodexRuntimeAuth,
 ) -> Result<CodexRuntimeAuth, String> {
     let expires_at_ms = auth.expires_at_ms.unwrap_or_default();
@@ -701,7 +701,7 @@ async fn ensure_codex_runtime_auth_fresh(
     codex_refresh_runtime_auth_with_trigger(auth, "token_expired").await
 }
 
-async fn codex_refresh_runtime_auth_with_trigger(
+pub(crate) async fn codex_refresh_runtime_auth_with_trigger(
     auth: &CodexRuntimeAuth,
     trigger: &str,
 ) -> Result<CodexRuntimeAuth, String> {
@@ -781,7 +781,7 @@ async fn codex_refresh_runtime_auth_with_trigger(
     ))
 }
 
-fn codex_status_from_runtime_auth(auth: &CodexRuntimeAuth) -> CodexAuthStatus {
+pub(crate) fn codex_status_from_runtime_auth(auth: &CodexRuntimeAuth) -> CodexAuthStatus {
     let managed_auth_path = managed_codex_auth_path(&auth.provider_id)
         .map(|path| path.to_string_lossy().to_string())
         .unwrap_or_default();
@@ -812,7 +812,7 @@ fn codex_status_from_runtime_auth(auth: &CodexRuntimeAuth) -> CodexAuthStatus {
     }
 }
 
-fn codex_write_callback_html(stream: &mut std::net::TcpStream, status: &str, body: &str) {
+pub(crate) fn codex_write_callback_html(stream: &mut std::net::TcpStream, status: &str, body: &str) {
     let response = format!(
         "{status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         body.len(),
@@ -822,7 +822,7 @@ fn codex_write_callback_html(stream: &mut std::net::TcpStream, status: &str, bod
     let _ = std::io::Write::flush(stream);
 }
 
-fn codex_auth_log_info(
+pub(crate) fn codex_auth_log_info(
     task: &str,
     trigger: &str,
     provider_id: &str,
@@ -854,7 +854,7 @@ fn codex_auth_log_info(
 
 // ========== OAuth 回调辅助 ==========
 
-fn handle_oauth_callback_request(
+pub(crate) fn handle_oauth_callback_request(
     request: &str,
     expected_state: &str,
 ) -> Result<(String, reqwest::Url), (&'static str, String)> {
@@ -899,7 +899,7 @@ fn handle_oauth_callback_request(
     Ok((code, url))
 }
 
-fn process_oauth_code_exchange(
+pub(crate) fn process_oauth_code_exchange(
     provider_id: &str,
     code: &str,
     code_verifier: &str,
@@ -910,7 +910,7 @@ fn process_oauth_code_exchange(
     Ok(credential)
 }
 
-fn send_callback_response(
+pub(crate) fn send_callback_response(
     provider_id: &str,
     stream: &mut std::net::TcpStream,
     status_line: &str,
@@ -923,7 +923,7 @@ fn send_callback_response(
     }
 }
 
-fn handle_oauth_callback_connection(
+pub(crate) fn handle_oauth_callback_connection(
     provider_id: &str,
     code_verifier: &str,
     state: &str,
@@ -1019,7 +1019,7 @@ fn handle_oauth_callback_connection(
     false
 }
 
-fn codex_start_listener_thread(provider_id: String, code_verifier: String, state: String) {
+pub(crate) fn codex_start_listener_thread(provider_id: String, code_verifier: String, state: String) {
     std::thread::spawn(move || {
         // ========== 初始化 ==========
         let listener = match std::net::TcpListener::bind(("127.0.0.1", CODEX_OAUTH_CALLBACK_PORT)) {
@@ -1120,7 +1120,7 @@ fn codex_start_listener_thread(provider_id: String, code_verifier: String, state
 
 
 #[cfg(test)]
-mod codex_auth_tests {
+pub(crate) mod codex_auth_tests {
     use super::*;
 
     #[test]

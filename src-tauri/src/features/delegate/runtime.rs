@@ -1,21 +1,21 @@
-const DELEGATE_RECENT_THREAD_LIMIT: usize = 10;
-const DELEGATE_STATUS_UPDATED_EVENT: &str = "easy-call:conversation-delegate-status-updated";
+pub(crate) const DELEGATE_RECENT_THREAD_LIMIT: usize = 10;
+pub(crate) const DELEGATE_STATUS_UPDATED_EVENT: &str = "easy-call:conversation-delegate-status-updated";
 
-static DELETED_DELEGATE_CONVERSATION_IDS: OnceLock<
+pub(crate) static DELETED_DELEGATE_CONVERSATION_IDS: OnceLock<
     Mutex<std::collections::HashSet<String>>,
 > = OnceLock::new();
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationDelegateStatusUpdatedPayload {
-    root_conversation_id: String,
-    delegate_id: String,
-    status: String,
+pub(crate) struct ConversationDelegateStatusUpdatedPayload {
+    pub(crate) root_conversation_id: String,
+    pub(crate) delegate_id: String,
+    pub(crate) status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    summary: Option<ConversationDelegateStatusSummary>,
+    pub(crate) summary: Option<ConversationDelegateStatusSummary>,
 }
 
-fn emit_conversation_delegate_status_updated(
+pub(crate) fn emit_conversation_delegate_status_updated(
     app_state: &AppState,
     root_conversation_id: &str,
     delegate_id: &str,
@@ -48,7 +48,7 @@ fn emit_conversation_delegate_status_updated(
     Ok(())
 }
 
-fn conversation_delegate_status_summary_for_event(
+pub(crate) fn conversation_delegate_status_summary_for_event(
     app_state: &AppState,
     delegate_id: &str,
     status: &str,
@@ -86,14 +86,14 @@ fn conversation_delegate_status_summary_for_event(
     Some(summary)
 }
 
-fn deleted_delegate_conversation_ids(
+pub(crate) fn deleted_delegate_conversation_ids(
 ) -> &'static Mutex<std::collections::HashSet<String>> {
     DELETED_DELEGATE_CONVERSATION_IDS.get_or_init(|| {
         Mutex::new(std::collections::HashSet::new())
     })
 }
 
-fn delegate_runtime_thread_is_deleted(delegate_id: &str) -> Result<bool, String> {
+pub(crate) fn delegate_runtime_thread_is_deleted(delegate_id: &str) -> Result<bool, String> {
     let normalized_delegate_id = delegate_id.trim();
     if normalized_delegate_id.is_empty() {
         return Ok(false);
@@ -104,7 +104,7 @@ fn delegate_runtime_thread_is_deleted(delegate_id: &str) -> Result<bool, String>
     Ok(deleted.contains(normalized_delegate_id))
 }
 
-fn delegate_conversation_store_write_if_not_deleted(
+pub(crate) fn delegate_conversation_store_write_if_not_deleted(
     app_state: &AppState,
     delegate_id: &str,
     conversation: &Conversation,
@@ -124,7 +124,7 @@ fn delegate_conversation_store_write_if_not_deleted(
     Ok(true)
 }
 
-fn delegate_conversation_store_delete_with_tombstone(
+pub(crate) fn delegate_conversation_store_delete_with_tombstone(
     app_state: &AppState,
     delegate_id: &str,
 ) -> Result<bool, String> {
@@ -139,7 +139,7 @@ fn delegate_conversation_store_delete_with_tombstone(
     delegate_conversation_store_delete(&app_state.data_path, normalized_delegate_id)
 }
 
-fn delegate_parent_shell_workspace(
+pub(crate) fn delegate_parent_shell_workspace(
     app_state: &AppState,
     root_conversation_id: &str,
     parent_chat_session_key: Option<&str>,
@@ -193,14 +193,14 @@ fn delegate_parent_shell_workspace(
 }
 
 #[derive(Debug, Clone)]
-struct DelegateWorkspaceSnapshot {
-    shell_workspace_path: Option<String>,
-    shell_workspaces: Vec<ShellWorkspaceConfig>,
-    shell_autonomous_mode: bool,
-    shell_work_mode: String,
+pub(crate) struct DelegateWorkspaceSnapshot {
+    pub(crate) shell_workspace_path: Option<String>,
+    pub(crate) shell_workspaces: Vec<ShellWorkspaceConfig>,
+    pub(crate) shell_autonomous_mode: bool,
+    pub(crate) shell_work_mode: String,
 }
 
-fn delegate_workspace_snapshot_from_conversation(
+pub(crate) fn delegate_workspace_snapshot_from_conversation(
     conversation: &Conversation,
 ) -> Option<DelegateWorkspaceSnapshot> {
     let has_locked_root = conversation
@@ -225,7 +225,7 @@ fn delegate_workspace_snapshot_from_conversation(
     })
 }
 
-fn delegate_capture_workspace_snapshot(
+pub(crate) fn delegate_capture_workspace_snapshot(
     app_state: &AppState,
     root_conversation_id: &str,
     parent_chat_session_key: Option<&str>,
@@ -252,7 +252,7 @@ fn delegate_capture_workspace_snapshot(
     snapshot
 }
 
-fn delegate_runtime_thread_build(
+pub(crate) fn delegate_runtime_thread_build(
     delegate: &DelegateEntry,
     target_api_config_id: &str,
     workspace_snapshot: Option<DelegateWorkspaceSnapshot>,
@@ -303,7 +303,7 @@ fn delegate_runtime_thread_build(
     }
 }
 
-fn delegate_runtime_thread_create(
+pub(crate) fn delegate_runtime_thread_create(
     app_state: &AppState,
     delegate: &DelegateEntry,
     target_api_config_id: &str,
@@ -377,7 +377,7 @@ fn delegate_runtime_thread_create(
     Ok(thread_id)
 }
 
-fn delegate_runtime_thread_get(
+pub(crate) fn delegate_runtime_thread_get(
     app_state: &AppState,
     delegate_id: &str,
 ) -> Result<Option<DelegateRuntimeThread>, String> {
@@ -388,7 +388,7 @@ fn delegate_runtime_thread_get(
     Ok(guard.get(delegate_id.trim()).cloned())
 }
 
-fn delegate_runtime_thread_apply_persisted_conversation(
+pub(crate) fn delegate_runtime_thread_apply_persisted_conversation(
     mut thread: DelegateRuntimeThread,
     app_state: &AppState,
 ) -> Result<DelegateRuntimeThread, String> {
@@ -407,7 +407,7 @@ fn delegate_runtime_thread_apply_persisted_conversation(
     Ok(thread)
 }
 
-fn delegate_runtime_thread_modify<T, F>(
+pub(crate) fn delegate_runtime_thread_modify<T, F>(
     app_state: &AppState,
     delegate_id: &str,
     modify: F,
@@ -425,7 +425,7 @@ where
     modify(thread)
 }
 
-fn delegate_runtime_thread_list(app_state: &AppState) -> Result<Vec<DelegateRuntimeThread>, String> {
+pub(crate) fn delegate_runtime_thread_list(app_state: &AppState) -> Result<Vec<DelegateRuntimeThread>, String> {
     let guard = app_state
         .delegate_runtime_threads
         .lock()
@@ -433,7 +433,7 @@ fn delegate_runtime_thread_list(app_state: &AppState) -> Result<Vec<DelegateRunt
     Ok(guard.values().cloned().collect())
 }
 
-fn delegate_recent_thread_list(app_state: &AppState) -> Result<Vec<DelegateRuntimeThread>, String> {
+pub(crate) fn delegate_recent_thread_list(app_state: &AppState) -> Result<Vec<DelegateRuntimeThread>, String> {
     let guard = app_state
         .delegate_recent_threads
         .lock()
@@ -445,7 +445,7 @@ fn delegate_recent_thread_list(app_state: &AppState) -> Result<Vec<DelegateRunti
         .collect()
 }
 
-fn delegate_runtime_thread_archive(
+pub(crate) fn delegate_runtime_thread_archive(
     app_state: &AppState,
     delegate_id: &str,
     archived_at: &str,
@@ -492,7 +492,7 @@ fn delegate_runtime_thread_archive(
     Ok(())
 }
 
-fn abort_delegate_runtime_thread(
+pub(crate) fn abort_delegate_runtime_thread(
     app_state: &AppState,
     delegate_id: &str,
     reason: &str,
@@ -581,7 +581,7 @@ fn abort_delegate_runtime_thread(
     Ok(true)
 }
 
-fn delegate_runtime_thread_get_any(
+pub(crate) fn delegate_runtime_thread_get_any(
     app_state: &AppState,
     delegate_id: &str,
 ) -> Result<Option<DelegateRuntimeThread>, String> {
@@ -621,7 +621,7 @@ fn delegate_runtime_thread_get_any(
     Ok(None)
 }
 
-fn delegate_runtime_thread_conversation_get(
+pub(crate) fn delegate_runtime_thread_conversation_get(
     app_state: &AppState,
     delegate_id: &str,
 ) -> Result<Option<Conversation>, String> {
@@ -634,7 +634,7 @@ fn delegate_runtime_thread_conversation_get(
     )
 }
 
-fn delegate_runtime_thread_conversation_get_any(
+pub(crate) fn delegate_runtime_thread_conversation_get_any(
     app_state: &AppState,
     delegate_id: &str,
 ) -> Result<Option<Conversation>, String> {
@@ -644,7 +644,7 @@ fn delegate_runtime_thread_conversation_get_any(
     )
 }
 
-fn delegate_runtime_thread_conversation_mutation_lock(
+pub(crate) fn delegate_runtime_thread_conversation_mutation_lock(
     app_state: &AppState,
     delegate_id: &str,
 ) -> Arc<Mutex<()>> {
@@ -669,7 +669,7 @@ fn delegate_runtime_thread_conversation_mutation_lock(
         .clone()
 }
 
-fn delegate_runtime_thread_conversation_update_unlocked(
+pub(crate) fn delegate_runtime_thread_conversation_update_unlocked(
     app_state: &AppState,
     delegate_id: &str,
     conversation: Conversation,
@@ -703,7 +703,7 @@ fn delegate_runtime_thread_conversation_update_unlocked(
     Ok(())
 }
 
-fn delegate_runtime_thread_conversation_update(
+pub(crate) fn delegate_runtime_thread_conversation_update(
     app_state: &AppState,
     delegate_id: &str,
     conversation: Conversation,
@@ -724,7 +724,7 @@ fn delegate_runtime_thread_conversation_update(
 
 // 群聊长度门改写（默认禁用，保留待重新启用）。
 #[allow(dead_code)]
-fn delegate_runtime_thread_append_fast_request(
+pub(crate) fn delegate_runtime_thread_append_fast_request(
     app_state: &AppState,
     delegate_id: &str,
     turn: FastRequestTurn,
@@ -767,7 +767,7 @@ fn delegate_runtime_thread_append_fast_request(
     Ok(true)
 }
 
-fn delegate_runtime_thread_conversation_append_if_absent(
+pub(crate) fn delegate_runtime_thread_conversation_append_if_absent(
     app_state: &AppState,
     delegate_id: &str,
     message: ChatMessage,
@@ -798,7 +798,7 @@ fn delegate_runtime_thread_conversation_append_if_absent(
     Ok(true)
 }
 
-fn delegate_runtime_thread_conversation_delete(
+pub(crate) fn delegate_runtime_thread_conversation_delete(
     app_state: &AppState,
     delegate_id: &str,
 ) -> Result<bool, String> {
@@ -849,7 +849,7 @@ fn delegate_runtime_thread_conversation_delete(
     delegate_conversation_store_delete_with_tombstone(app_state, normalized_delegate_id)
 }
 
-fn delegate_runtime_thread_conversation_delete_by_root(
+pub(crate) fn delegate_runtime_thread_conversation_delete_by_root(
     app_state: &AppState,
     root_conversation_id: &str,
 ) -> Result<usize, String> {
@@ -881,13 +881,13 @@ fn delegate_runtime_thread_conversation_delete_by_root(
     Ok(deleted_count)
 }
 
-fn delegate_persisted_conversation_summary_list(
+pub(crate) fn delegate_persisted_conversation_summary_list(
     app_state: &AppState,
 ) -> Result<Vec<DelegateConversationSnapshot>, String> {
     delegate_snapshot_cache_list(&app_state.data_path)
 }
 
-fn delegate_persisted_snapshot_list_by_root(
+pub(crate) fn delegate_persisted_snapshot_list_by_root(
     app_state: &AppState,
     root_conversation_id: &str,
 ) -> Result<Vec<DelegateConversationSnapshot>, String> {

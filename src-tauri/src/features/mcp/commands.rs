@@ -1,4 +1,4 @@
-fn normalized_mcp_member_names(definition_json: &str) -> Result<std::collections::HashSet<String>, String> {
+pub(crate) fn normalized_mcp_member_names(definition_json: &str) -> Result<std::collections::HashSet<String>, String> {
     let parsed = parse_mcp_definition_servers(definition_json)
         .map_err(|err| err.message.clone())?;
     Ok(parsed
@@ -8,7 +8,7 @@ fn normalized_mcp_member_names(definition_json: &str) -> Result<std::collections
         .collect())
 }
 
-fn ensure_mcp_member_names_are_unique_across_servers(
+pub(crate) fn ensure_mcp_member_names_are_unique_across_servers(
     next: &McpServerConfig,
     existing_servers: &[McpServerConfig],
 ) -> Result<(), String> {
@@ -24,7 +24,7 @@ fn ensure_mcp_member_names_are_unique_across_servers(
     Ok(())
 }
 
-fn normalize_mcp_server_input(input: McpServerInput) -> Result<McpServerConfig, String> {
+pub(crate) fn normalize_mcp_server_input(input: McpServerInput) -> Result<McpServerConfig, String> {
     let id = input.id.trim().to_string();
     if id.is_empty() {
         return Err("MCP server id is required".to_string());
@@ -60,7 +60,7 @@ fn normalize_mcp_server_input(input: McpServerInput) -> Result<McpServerConfig, 
     })
 }
 
-fn overlay_runtime_state_on_server(mut server: McpServerConfig) -> McpServerConfig {
+pub(crate) fn overlay_runtime_state_on_server(mut server: McpServerConfig) -> McpServerConfig {
     if let Some(runtime) = mcp_runtime_state_get(&server.id) {
         server.enabled = runtime.deployed;
         server.last_status = runtime.last_status;
@@ -78,14 +78,14 @@ fn overlay_runtime_state_on_server(mut server: McpServerConfig) -> McpServerConf
     server
 }
 
-fn load_server_by_id(state: &AppState, server_id: &str) -> Result<McpServerConfig, String> {
+pub(crate) fn load_server_by_id(state: &AppState, server_id: &str) -> Result<McpServerConfig, String> {
     load_workspace_mcp_servers(state)?
         .into_iter()
         .find(|s| s.id == server_id)
         .ok_or_else(|| format!("MCP server '{}' not found", server_id))
 }
 
-fn list_tools_from_runtime_or_policy(server: &McpServerConfig) -> Vec<McpToolDescriptor> {
+pub(crate) fn list_tools_from_runtime_or_policy(server: &McpServerConfig) -> Vec<McpToolDescriptor> {
     let runtime_tools = list_tools_from_runtime(server);
     if !runtime_tools.is_empty() {
         return runtime_tools;
@@ -105,7 +105,7 @@ fn list_tools_from_runtime_or_policy(server: &McpServerConfig) -> Vec<McpToolDes
         .collect()
 }
 
-fn list_tools_from_runtime(server: &McpServerConfig) -> Vec<McpToolDescriptor> {
+pub(crate) fn list_tools_from_runtime(server: &McpServerConfig) -> Vec<McpToolDescriptor> {
     if let Some(runtime) = mcp_runtime_state_get(&server.id) {
         return runtime
             .tools
@@ -120,24 +120,24 @@ fn list_tools_from_runtime(server: &McpServerConfig) -> Vec<McpToolDescriptor> {
     Vec::new()
 }
 
-const MCP_SUPERVISOR_STDIO_CONCURRENCY: usize = 3;
-const MCP_SUPERVISOR_REMOTE_CONCURRENCY: usize = 20;
+pub(crate) const MCP_SUPERVISOR_STDIO_CONCURRENCY: usize = 3;
+pub(crate) const MCP_SUPERVISOR_REMOTE_CONCURRENCY: usize = 20;
 
-fn mcp_supervisor_stdio_semaphore() -> Arc<tokio::sync::Semaphore> {
+pub(crate) fn mcp_supervisor_stdio_semaphore() -> Arc<tokio::sync::Semaphore> {
     static SEMAPHORE: OnceLock<Arc<tokio::sync::Semaphore>> = OnceLock::new();
     SEMAPHORE
         .get_or_init(|| Arc::new(tokio::sync::Semaphore::new(MCP_SUPERVISOR_STDIO_CONCURRENCY)))
         .clone()
 }
 
-fn mcp_supervisor_remote_semaphore() -> Arc<tokio::sync::Semaphore> {
+pub(crate) fn mcp_supervisor_remote_semaphore() -> Arc<tokio::sync::Semaphore> {
     static SEMAPHORE: OnceLock<Arc<tokio::sync::Semaphore>> = OnceLock::new();
     SEMAPHORE
         .get_or_init(|| Arc::new(tokio::sync::Semaphore::new(MCP_SUPERVISOR_REMOTE_CONCURRENCY)))
         .clone()
 }
 
-fn mcp_supervisor_semaphore_for_server(server: &McpServerConfig) -> Arc<tokio::sync::Semaphore> {
+pub(crate) fn mcp_supervisor_semaphore_for_server(server: &McpServerConfig) -> Arc<tokio::sync::Semaphore> {
     // 组内任一成员为远程（streamable HTTP / SSE）时按远程并发控制
     let has_remote = parse_mcp_group_definitions(server)
         .map(|members| {
@@ -156,18 +156,18 @@ fn mcp_supervisor_semaphore_for_server(server: &McpServerConfig) -> Arc<tokio::s
     }
 }
 
-fn mcp_runtime_state_mark_starting(server: &McpServerConfig) {
+pub(crate) fn mcp_runtime_state_mark_starting(server: &McpServerConfig) {
     let cached_tools = list_tools_from_runtime(server);
     mcp_runtime_state_set(&server.id, true, "starting", "", cached_tools);
 }
 
-fn mcp_runtime_state_mark_probe_failure(server: &McpServerConfig, status: &str, error: &str) {
+pub(crate) fn mcp_runtime_state_mark_probe_failure(server: &McpServerConfig, status: &str, error: &str) {
     let cached_tools = list_tools_from_runtime(server);
     let effective_status = if cached_tools.is_empty() { status } else { "stale" };
     mcp_runtime_state_set(&server.id, true, effective_status, error, cached_tools);
 }
 
-fn mcp_current_server_matches_probe(
+pub(crate) fn mcp_current_server_matches_probe(
     state: &AppState,
     probe_server: &McpServerConfig,
     trigger: &str,
@@ -200,7 +200,7 @@ fn mcp_current_server_matches_probe(
     }
 }
 
-fn mcp_status_from_runtime_error(error: &str) -> &'static str {
+pub(crate) fn mcp_status_from_runtime_error(error: &str) -> &'static str {
     if error.to_ascii_lowercase().contains("timed out") || error.contains("超时") {
         "timeout"
     } else {
@@ -208,7 +208,7 @@ fn mcp_status_from_runtime_error(error: &str) -> &'static str {
     }
 }
 
-fn mcp_start_supervisor_probe_for_server(state: AppState, server: McpServerConfig, trigger: &'static str) {
+pub(crate) fn mcp_start_supervisor_probe_for_server(state: AppState, server: McpServerConfig, trigger: &'static str) {
     let semaphore = mcp_supervisor_semaphore_for_server(&server);
     tokio::spawn(async move {
         let permit = match semaphore.acquire_owned().await {
@@ -226,7 +226,7 @@ fn mcp_start_supervisor_probe_for_server(state: AppState, server: McpServerConfi
     });
 }
 
-fn mcp_start_supervisor_probe_all_from_policy(state: AppState, trigger: &'static str) -> Result<(), String> {
+pub(crate) fn mcp_start_supervisor_probe_all_from_policy(state: AppState, trigger: &'static str) -> Result<(), String> {
     let servers = load_workspace_mcp_servers(&state)?;
     let mut started = 0usize;
     for server in servers.into_iter() {
@@ -248,7 +248,7 @@ fn mcp_start_supervisor_probe_all_from_policy(state: AppState, trigger: &'static
     Ok(())
 }
 
-async fn mcp_probe_server_tools_background(
+pub(crate) async fn mcp_probe_server_tools_background(
     state: AppState,
     server: McpServerConfig,
     trigger: &'static str,
@@ -340,7 +340,7 @@ async fn mcp_probe_server_tools_background(
 }
 
 
-fn mcp_list_servers_inner(state: &AppState) -> Result<Vec<McpServerConfig>, String> {
+pub(crate) fn mcp_list_servers_inner(state: &AppState) -> Result<Vec<McpServerConfig>, String> {
     let mut out = load_workspace_mcp_servers(state)?;
     for item in &mut out {
         *item = overlay_runtime_state_on_server(item.clone());
@@ -349,7 +349,7 @@ fn mcp_list_servers_inner(state: &AppState) -> Result<Vec<McpServerConfig>, Stri
 }
 
 
-fn mcp_validate_definition_inner(
+pub(crate) fn mcp_validate_definition_inner(
     input: McpDefinitionValidateInput,
 ) -> Result<McpDefinitionValidateResult, String> {
     let _schema = mcp_definition_json_schema();
@@ -411,7 +411,7 @@ fn mcp_validate_definition_inner(
 }
 
 
-fn mcp_save_server_inner(
+pub(crate) fn mcp_save_server_inner(
     input: McpServerInput,
     state: &AppState,
 ) -> Result<McpServerConfig, String> {
@@ -426,7 +426,7 @@ fn mcp_save_server_inner(
 }
 
 
-async fn mcp_remove_server_inner(
+pub(crate) async fn mcp_remove_server_inner(
     input: McpServerIdInput,
     state: &AppState,
 ) -> Result<bool, String> {
@@ -443,7 +443,7 @@ async fn mcp_remove_server_inner(
 }
 
 
-async fn mcp_list_server_tools_inner(
+pub(crate) async fn mcp_list_server_tools_inner(
     input: McpServerIdInput,
     state: &AppState,
 ) -> Result<McpListServerToolsResult, String> {
@@ -496,7 +496,7 @@ async fn mcp_list_server_tools_inner(
 }
 
 
-fn mcp_list_server_tools_cached_inner(
+pub(crate) fn mcp_list_server_tools_cached_inner(
     input: McpServerIdInput,
     state: &AppState,
 ) -> Result<McpListServerToolsResult, String> {
@@ -521,7 +521,7 @@ fn mcp_list_server_tools_cached_inner(
 }
 
 
-async fn mcp_deploy_server_inner(
+pub(crate) async fn mcp_deploy_server_inner(
     input: McpServerIdInput,
     state: &AppState,
 ) -> Result<McpListServerToolsResult, String> {
@@ -566,7 +566,7 @@ async fn mcp_deploy_server_inner(
 }
 
 
-async fn mcp_undeploy_server_inner(
+pub(crate) async fn mcp_undeploy_server_inner(
     input: McpServerIdInput,
     state: &AppState,
 ) -> Result<McpServerConfig, String> {
@@ -587,7 +587,7 @@ async fn mcp_undeploy_server_inner(
 }
 
 
-fn mcp_set_tool_enabled_inner(
+pub(crate) fn mcp_set_tool_enabled_inner(
     input: McpSetToolEnabledInput,
     state: &AppState,
 ) -> Result<McpServerConfig, String> {
@@ -627,10 +627,10 @@ fn mcp_set_tool_enabled_inner(
 
 // ========== AI 修复 MCP 格式（专家模型 + 脱敏还原） ==========
 
-const MCP_FIX_REDACTED_PREFIX: &str = "__PAI_REDACTED_";
+pub(crate) const MCP_FIX_REDACTED_PREFIX: &str = "__PAI_REDACTED_";
 
 /// 把 definitionJson 中敏感字段值替换为占位符，返回 (脱敏文本, 占位符→原值映射)
-fn redact_mcp_definition_sensitive_values(definition_json: &str) -> (String, Vec<(String, String)>) {
+pub(crate) fn redact_mcp_definition_sensitive_values(definition_json: &str) -> (String, Vec<(String, String)>) {
     let mut mapping = Vec::<(String, String)>::new();
     let Ok(mut value) = serde_json::from_str::<Value>(definition_json) else {
         return (definition_json.to_string(), mapping);
@@ -641,7 +641,7 @@ fn redact_mcp_definition_sensitive_values(definition_json: &str) -> (String, Vec
     (text, mapping)
 }
 
-fn redact_mcp_value(
+pub(crate) fn redact_mcp_value(
     value: &mut Value,
     counter: &mut usize,
     mapping: &mut Vec<(String, String)>,
@@ -667,7 +667,7 @@ fn redact_mcp_value(
     }
 }
 
-fn restore_mcp_definition_sensitive_values(
+pub(crate) fn restore_mcp_definition_sensitive_values(
     fixed_json: &str,
     mapping: &[(String, String)],
 ) -> String {
@@ -678,7 +678,7 @@ fn restore_mcp_definition_sensitive_values(
     text
 }
 
-fn build_mcp_fix_prompt(definition_json: &str, issues: &[McpValidationIssue]) -> String {
+pub(crate) fn build_mcp_fix_prompt(definition_json: &str, issues: &[McpValidationIssue]) -> String {
     let mut issue_lines = String::new();
     for issue in issues {
         let server = issue
@@ -705,7 +705,7 @@ fn build_mcp_fix_prompt(definition_json: &str, issues: &[McpValidationIssue]) ->
 }
 
 
-async fn mcp_fix_definition_inner(
+pub(crate) async fn mcp_fix_definition_inner(
     input: McpFixDefinitionInput,
     state: &AppState,
 ) -> Result<McpFixDefinitionResult, String> {

@@ -1125,7 +1125,7 @@ pub(crate) fn write_jsonl_snapshot_building_manifest(
 }
 
 #[cfg(test)]
-mod message_store_persist_tests {
+pub(crate) mod message_store_persist_tests {
     use super::*;
 
     fn test_message(id: &str) -> ChatMessage {

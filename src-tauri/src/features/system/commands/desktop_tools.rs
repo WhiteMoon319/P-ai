@@ -1,4 +1,4 @@
-fn native_notification_text_excerpt(raw: &str, max_chars: usize) -> String {
+pub(crate) fn native_notification_text_excerpt(raw: &str, max_chars: usize) -> String {
     let normalized = raw
         .lines()
         .map(str::trim)
@@ -22,7 +22,7 @@ fn native_notification_text_excerpt(raw: &str, max_chars: usize) -> String {
 
 
 #[cfg(target_os = "android")]
-fn send_native_notification(
+pub(crate) fn send_native_notification(
     _app: &NativeAppHandle,
     _title: &str,
     _body: &str,
@@ -35,13 +35,13 @@ fn send_native_notification(
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct XcapToolInput {
-    method: String,
+pub(crate) struct XcapToolInput {
+    pub(crate) method: String,
     #[serde(default)]
-    args: Value,
+    pub(crate) args: Value,
 }
 
-fn command_exists_in_path(name: &str) -> bool {
+pub(crate) fn command_exists_in_path(name: &str) -> bool {
     let raw = name.trim();
     if raw.is_empty() {
         return false;
@@ -81,7 +81,7 @@ fn command_exists_in_path(name: &str) -> bool {
     false
 }
 
-fn host_runtime_prerequisite_installed(kind: &str) -> Result<bool, String> {
+pub(crate) fn host_runtime_prerequisite_installed(kind: &str) -> Result<bool, String> {
     match kind.trim().to_ascii_lowercase().as_str() {
         "git" => {
             if command_exists_in_path("git") {
@@ -128,7 +128,7 @@ fn host_runtime_prerequisite_installed(kind: &str) -> Result<bool, String> {
 
 
 #[cfg(target_os = "android")]
-fn resolve_chat_tool_session_id(
+pub(crate) fn resolve_chat_tool_session_id(
     state: &AppState,
     api_config_id: &str,
     agent_id: &str,
@@ -203,7 +203,7 @@ fn resolve_chat_tool_session_id(
     Ok(normalize_terminal_tool_session_id(&session_id))
 }
 
-fn resolve_chat_workspace_conversation_id(
+pub(crate) fn resolve_chat_workspace_conversation_id(
     state: &AppState,
     agent_id: &str,
     conversation_id: Option<&str>,
@@ -221,7 +221,7 @@ fn resolve_chat_workspace_conversation_id(
         })
 }
 
-fn apply_conversation_chat_workspace_changes(
+pub(crate) fn apply_conversation_chat_workspace_changes(
     state: &AppState,
     conversation_id: &str,
     shell_workspace_path: Option<Option<String>>,
@@ -283,7 +283,7 @@ fn apply_conversation_chat_workspace_changes(
     Ok(updated)
 }
 
-fn workspace_name_from_path(path: &Path) -> String {
+pub(crate) fn workspace_name_from_path(path: &Path) -> String {
     path.file_name()
         .and_then(|v| v.to_str())
         .map(str::trim)
@@ -292,7 +292,7 @@ fn workspace_name_from_path(path: &Path) -> String {
         .unwrap_or_else(|| path.to_string_lossy().to_string())
 }
 
-fn resolve_workspace_display_name_for_conversation(
+pub(crate) fn resolve_workspace_display_name_for_conversation(
     state: &AppState,
     conversation: Option<&Conversation>,
     root: &Path,
@@ -308,7 +308,7 @@ fn resolve_workspace_display_name_for_conversation(
     workspace_name_from_path(root)
 }
 
-fn build_chat_shell_workspace_list(
+pub(crate) fn build_chat_shell_workspace_list(
     state: &AppState,
     conversation: Option<&Conversation>,
 ) -> Vec<ShellWorkspaceConfig> {
@@ -326,7 +326,7 @@ fn build_chat_shell_workspace_list(
         .collect()
 }
 
-fn build_chat_shell_workspace_output(
+pub(crate) fn build_chat_shell_workspace_output(
     state: &AppState,
     session_id: String,
     conversation: Option<&Conversation>,
@@ -344,7 +344,7 @@ fn build_chat_shell_workspace_output(
     }
 }
 
-fn shell_workspace_display_path(path: &Path) -> String {
+pub(crate) fn shell_workspace_display_path(path: &Path) -> String {
     #[cfg(target_os = "windows")]
     {
         let raw = path.to_string_lossy();
@@ -367,7 +367,7 @@ fn shell_workspace_display_path(path: &Path) -> String {
 
 
 
-fn get_chat_shell_workspace_inner(
+pub(crate) fn get_chat_shell_workspace_inner(
     input: ChatShellWorkspaceInput,
     state: &AppState,
 ) -> Result<ChatShellWorkspaceOutput, String> {
@@ -389,7 +389,7 @@ fn get_chat_shell_workspace_inner(
 }
 
 
-fn update_chat_shell_workspace_layout_inner(
+pub(crate) fn update_chat_shell_workspace_layout_inner(
     input: SaveChatShellWorkspacesInput,
     state: &AppState,
 ) -> Result<ChatShellWorkspaceOutput, String> {
@@ -434,49 +434,49 @@ fn update_chat_shell_workspace_layout_inner(
 
 
 
-const NATIVE_NOTIFICATION_BODY_MAX_CHARS: usize = 180;
+pub(crate) const NATIVE_NOTIFICATION_BODY_MAX_CHARS: usize = 180;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ResolveTerminalApprovalInput {
-    request_id: String,
-    approved: bool,
+pub(crate) struct ResolveTerminalApprovalInput {
+    pub(crate) request_id: String,
+    pub(crate) approved: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatShellWorkspaceInput {
+pub(crate) struct ChatShellWorkspaceInput {
     #[serde(default)]
-    api_config_id: String,
+    pub(crate) api_config_id: String,
     #[serde(default)]
-    agent_id: String,
+    pub(crate) agent_id: String,
     #[serde(default)]
-    conversation_id: Option<String>,
+    pub(crate) conversation_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SaveChatShellWorkspacesInput {
+pub(crate) struct SaveChatShellWorkspacesInput {
     #[serde(default)]
-    api_config_id: String,
+    pub(crate) api_config_id: String,
     #[serde(default)]
-    agent_id: String,
-    conversation_id: Option<String>,
+    pub(crate) agent_id: String,
+    pub(crate) conversation_id: Option<String>,
     #[serde(default)]
-    workspaces: Vec<ShellWorkspaceConfig>,
+    pub(crate) workspaces: Vec<ShellWorkspaceConfig>,
     #[serde(default)]
-    autonomous_mode: Option<bool>,
+    pub(crate) autonomous_mode: Option<bool>,
     #[serde(default)]
-    shell_work_mode: Option<String>,
+    pub(crate) shell_work_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatShellWorkspaceOutput {
-    session_id: String,
-    workspace_name: String,
-    root_path: String,
-    workspaces: Vec<ShellWorkspaceConfig>,
-    autonomous_mode: bool,
-    shell_work_mode: String,
+pub(crate) struct ChatShellWorkspaceOutput {
+    pub(crate) session_id: String,
+    pub(crate) workspace_name: String,
+    pub(crate) root_path: String,
+    pub(crate) workspaces: Vec<ShellWorkspaceConfig>,
+    pub(crate) autonomous_mode: bool,
+    pub(crate) shell_work_mode: String,
 }

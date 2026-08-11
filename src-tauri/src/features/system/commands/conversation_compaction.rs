@@ -1,5 +1,5 @@
 
-fn compact_conversation_preview_inner(
+pub(crate) fn compact_conversation_preview_inner(
     input: &ConversationIdOnlyInput,
     state: &AppState,
 ) -> Result<TrimCompactionPreviewResult, String> {
@@ -15,7 +15,7 @@ fn compact_conversation_preview_inner(
     build_trim_compaction_preview_result(state, &selected_api, &source)
 }
 
-async fn compact_conversation_inner(
+pub(crate) async fn compact_conversation_inner(
     input: ConversationIdOnlyInput,
     state: &AppState,
 ) -> Result<ConversationCommandStatus, String> {
@@ -50,7 +50,7 @@ async fn compact_conversation_inner(
     Ok(ConversationCommandStatus { success: true })
 }
 
-fn build_trim_compaction_preview_result(
+pub(crate) fn build_trim_compaction_preview_result(
     state: &AppState,
     selected_api: &ApiConfig,
     source: &Conversation,
@@ -145,7 +145,7 @@ pub(crate) async fn run_context_compaction_pipeline(
     result
 }
 
-async fn run_context_compaction_pipeline_inner(
+pub(crate) async fn run_context_compaction_pipeline_inner(
     state: &AppState,
     selected_api: &ApiConfig,
     resolved_api: &ResolvedApiConfig,

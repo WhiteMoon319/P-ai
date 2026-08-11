@@ -1,6 +1,6 @@
 use super::*;
 
-fn insert_test_session(
+pub(crate) fn insert_test_session(
     transfer_id: &str,
     owner: &str,
     staging_path: PathBuf,
@@ -27,7 +27,7 @@ fn insert_test_session(
 }
 
 #[test]
-fn attachment_files_equal_should_compare_without_loading_whole_file() {
+pub(crate) fn attachment_files_equal_should_compare_without_loading_whole_file() {
     let root = std::env::temp_dir().join(format!("pai-attachment-equal-{}", Uuid::new_v4()));
     std::fs::create_dir_all(&root).expect("create temp dir");
     let left = root.join("left.bin");
@@ -41,7 +41,7 @@ fn attachment_files_equal_should_compare_without_loading_whole_file() {
 }
 
 #[test]
-fn attachment_transfer_should_not_expire_closed_session() {
+pub(crate) fn attachment_transfer_should_not_expire_closed_session() {
     let session = AttachmentTransferSession {
         file_name: "test.bin".to_string(),
         mime: "application/octet-stream".to_string(),
@@ -55,7 +55,7 @@ fn attachment_transfer_should_not_expire_closed_session() {
 }
 
 #[tokio::test]
-async fn attachment_chunk_should_enforce_owner_and_sequential_offset() {
+pub(crate) async fn attachment_chunk_should_enforce_owner_and_sequential_offset() {
     let root = std::env::temp_dir().join(format!("pai-attachment-chunk-{}", Uuid::new_v4()));
     std::fs::create_dir_all(&root).expect("create temp dir");
     let staging_path = root.join("upload.part");

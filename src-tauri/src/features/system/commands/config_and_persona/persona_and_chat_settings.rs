@@ -1,5 +1,5 @@
 
-fn load_agents_inner(state: &AppState) -> Result<Vec<AgentProfile>, String> {
+pub(crate) fn load_agents_inner(state: &AppState) -> Result<Vec<AgentProfile>, String> {
     let config = state_read_config_cached(&state)?;
     let data = state_read_agents_runtime_snapshot(&state)?;
     build_runtime_organization_snapshot_from_parts(&state.data_path, &config, &data.agents)
@@ -9,12 +9,12 @@ fn load_agents_inner(state: &AppState) -> Result<Vec<AgentProfile>, String> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConvertPrivateAgentToMainInput {
-    agent_id: String,
+pub(crate) struct ConvertPrivateAgentToMainInput {
+    pub(crate) agent_id: String,
 }
 
 
-fn convert_private_agent_to_main_inner(
+pub(crate) fn convert_private_agent_to_main_inner(
     input: ConvertPrivateAgentToMainInput,
     app: &NativeAppHandle,
     state: &AppState,
@@ -46,7 +46,7 @@ fn convert_private_agent_to_main_inner(
     )
 }
 
-fn save_agents_inner(
+pub(crate) fn save_agents_inner(
     input: SaveAgentsInput,
     app: &NativeAppHandle,
     state: &AppState,
@@ -261,91 +261,91 @@ fn save_agents_inner(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ImportAgentMemoriesInput {
-    agent_id: String,
-    memories: Vec<MemoryEntry>,
+pub(crate) struct ImportAgentMemoriesInput {
+    pub(crate) agent_id: String,
+    pub(crate) memories: Vec<MemoryEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ImportAgentMemoriesResult {
-    imported_count: usize,
-    created_count: usize,
-    merged_count: usize,
-    total_count: usize,
+pub(crate) struct ImportAgentMemoriesResult {
+    pub(crate) imported_count: usize,
+    pub(crate) created_count: usize,
+    pub(crate) merged_count: usize,
+    pub(crate) total_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AgentPrivateMemoryCountInput {
-    agent_id: String,
+pub(crate) struct AgentPrivateMemoryCountInput {
+    pub(crate) agent_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AgentPrivateMemoryCountResult {
-    count: usize,
+pub(crate) struct AgentPrivateMemoryCountResult {
+    pub(crate) count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SetAgentPrivateMemoryEnabledInput {
-    agent_id: String,
-    enabled: bool,
+pub(crate) struct SetAgentPrivateMemoryEnabledInput {
+    pub(crate) agent_id: String,
+    pub(crate) enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SetAgentPrivateMemoryEnabledResult {
-    agent_id: String,
-    enabled: bool,
-    exported_count: usize,
-    deleted_count: usize,
-    export_path: Option<String>,
+pub(crate) struct SetAgentPrivateMemoryEnabledResult {
+    pub(crate) agent_id: String,
+    pub(crate) enabled: bool,
+    pub(crate) exported_count: usize,
+    pub(crate) deleted_count: usize,
+    pub(crate) export_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SetAgentMemoryRecallModeInput {
-    agent_id: String,
-    mode: String,
+pub(crate) struct SetAgentMemoryRecallModeInput {
+    pub(crate) agent_id: String,
+    pub(crate) mode: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SetAgentMemoryRecallModeResult {
-    agent_id: String,
-    mode: String,
+pub(crate) struct SetAgentMemoryRecallModeResult {
+    pub(crate) agent_id: String,
+    pub(crate) mode: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ExportAgentPrivateMemoriesInput {
-    agent_id: String,
+pub(crate) struct ExportAgentPrivateMemoriesInput {
+    pub(crate) agent_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ExportAgentPrivateMemoriesResult {
-    count: usize,
-    path: String,
+pub(crate) struct ExportAgentPrivateMemoriesResult {
+    pub(crate) count: usize,
+    pub(crate) path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DisableAgentPrivateMemoryInput {
-    agent_id: String,
+pub(crate) struct DisableAgentPrivateMemoryInput {
+    pub(crate) agent_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DisableAgentPrivateMemoryResult {
-    agent_id: String,
-    enabled: bool,
-    deleted_count: usize,
+pub(crate) struct DisableAgentPrivateMemoryResult {
+    pub(crate) agent_id: String,
+    pub(crate) enabled: bool,
+    pub(crate) deleted_count: usize,
 }
 
-fn get_agent_private_memory_count_inner(
+pub(crate) fn get_agent_private_memory_count_inner(
     input: AgentPrivateMemoryCountInput,
     state: &AppState,
 ) -> Result<AgentPrivateMemoryCountResult, String> {
@@ -365,7 +365,7 @@ fn get_agent_private_memory_count_inner(
     })
 }
 
-fn set_agent_memory_recall_mode_inner(
+pub(crate) fn set_agent_memory_recall_mode_inner(
     input: SetAgentMemoryRecallModeInput,
     state: &AppState,
 ) -> Result<SetAgentMemoryRecallModeResult, String> {
@@ -406,7 +406,7 @@ fn set_agent_memory_recall_mode_inner(
     })
 }
 
-fn set_agent_private_memory_enabled_inner(
+pub(crate) fn set_agent_private_memory_enabled_inner(
     input: SetAgentPrivateMemoryEnabledInput,
     state: &AppState,
 ) -> Result<SetAgentPrivateMemoryEnabledResult, String> {
@@ -465,7 +465,7 @@ fn set_agent_private_memory_enabled_inner(
     })
 }
 
-fn export_agent_private_memories_inner(
+pub(crate) fn export_agent_private_memories_inner(
     input: ExportAgentPrivateMemoriesInput,
     state: &AppState,
 ) -> Result<ExportAgentPrivateMemoriesResult, String> {
@@ -487,7 +487,7 @@ fn export_agent_private_memories_inner(
     })
 }
 
-fn disable_agent_private_memory_inner(
+pub(crate) fn disable_agent_private_memory_inner(
     input: DisableAgentPrivateMemoryInput,
     state: &AppState,
 ) -> Result<DisableAgentPrivateMemoryResult, String> {
@@ -534,7 +534,7 @@ fn disable_agent_private_memory_inner(
 
 
 
-fn import_agent_memories_inner(
+pub(crate) fn import_agent_memories_inner(
     input: ImportAgentMemoriesInput,
     state: &AppState,
 ) -> Result<ImportAgentMemoriesResult, String> {
@@ -568,7 +568,7 @@ fn import_agent_memories_inner(
 }
 
 
-fn load_chat_settings_inner(state: &AppState) -> Result<ChatSettings, String> {
+pub(crate) fn load_chat_settings_inner(state: &AppState) -> Result<ChatSettings, String> {
     let config = read_config(&state.config_path)?;
     let mut data = state_read_agents_runtime_snapshot(&state)?;
     let assistant_agent_id = assistant_department_agent_id(&config).unwrap_or_else(default_assistant_department_agent_id);
@@ -599,24 +599,24 @@ fn load_chat_settings_inner(state: &AppState) -> Result<ChatSettings, String> {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct ChatSettingsPatch {
+pub(crate) struct ChatSettingsPatch {
     #[serde(default)]
-    assistant_department_agent_id: Option<String>,
+    pub(crate) assistant_department_agent_id: Option<String>,
     #[serde(default)]
-    user_alias: Option<String>,
+    pub(crate) user_alias: Option<String>,
     #[serde(default)]
-    response_style_id: Option<String>,
+    pub(crate) response_style_id: Option<String>,
     #[serde(default)]
-    pdf_read_mode: Option<String>,
+    pub(crate) pdf_read_mode: Option<String>,
     #[serde(default)]
-    background_voice_screenshot_keywords: Option<String>,
+    pub(crate) background_voice_screenshot_keywords: Option<String>,
     #[serde(default)]
-    background_voice_screenshot_mode: Option<String>,
+    pub(crate) background_voice_screenshot_mode: Option<String>,
     #[serde(default)]
-    instruction_presets: Option<Vec<PromptCommandPreset>>,
+    pub(crate) instruction_presets: Option<Vec<PromptCommandPreset>>,
 }
 
-fn build_chat_settings_payload(state: &AppState, data: &AppData, config: &AppConfig) -> Result<ChatSettings, String> {
+pub(crate) fn build_chat_settings_payload(state: &AppState, data: &AppData, config: &AppConfig) -> Result<ChatSettings, String> {
     let runtime_snapshot =
         build_runtime_organization_snapshot_from_parts(&state.data_path, config, &data.agents)?;
     let mut runtime_data = data.clone();
@@ -632,7 +632,7 @@ fn build_chat_settings_payload(state: &AppState, data: &AppData, config: &AppCon
     })
 }
 
-fn apply_chat_settings_patch(
+pub(crate) fn apply_chat_settings_patch(
     state: &AppState,
     agents: &mut Vec<AgentProfile>,
     runtime: &mut RuntimeStateFile,
@@ -738,7 +738,7 @@ fn apply_chat_settings_patch(
 
 
 
-fn patch_chat_settings_inner(
+pub(crate) fn patch_chat_settings_inner(
     input: ChatSettingsPatch,
     app: &NativeAppHandle,
     state: &AppState,
@@ -756,49 +756,49 @@ fn patch_chat_settings_inner(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SaveAgentAvatarInput {
-    agent_id: String,
-    mime: String,
-    bytes_base64: String,
+pub(crate) struct SaveAgentAvatarInput {
+    pub(crate) agent_id: String,
+    pub(crate) mime: String,
+    pub(crate) bytes_base64: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ClearAgentAvatarInput {
-    agent_id: String,
+pub(crate) struct ClearAgentAvatarInput {
+    pub(crate) agent_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AvatarDataPathInput {
-    path: String,
+pub(crate) struct AvatarDataPathInput {
+    pub(crate) path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SyncTrayIconInput {
+pub(crate) struct SyncTrayIconInput {
     #[serde(default)]
-    agent_id: Option<String>,
+    pub(crate) agent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AvatarMeta {
-    path: String,
-    updated_at: String,
+pub(crate) struct AvatarMeta {
+    pub(crate) path: String,
+    pub(crate) updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AvatarDataUrlOutput {
-    data_url: String,
+pub(crate) struct AvatarDataUrlOutput {
+    pub(crate) data_url: String,
 }
 
-fn avatar_storage_dir(state: &AppState) -> Result<PathBuf, String> {
+pub(crate) fn avatar_storage_dir(state: &AppState) -> Result<PathBuf, String> {
     Ok(app_root_from_data_path(&state.data_path).join("avatars"))
 }
 
-fn sanitize_avatar_key(value: &str) -> String {
+pub(crate) fn sanitize_avatar_key(value: &str) -> String {
     let trimmed = value.trim();
     let mut out = String::with_capacity(trimmed.len());
     for ch in trimmed.chars() {
@@ -816,7 +816,7 @@ fn sanitize_avatar_key(value: &str) -> String {
     }
 }
 
-fn normalize_avatar_bytes_to_webp(raw: &[u8]) -> Result<Vec<u8>, String> {
+pub(crate) fn normalize_avatar_bytes_to_webp(raw: &[u8]) -> Result<Vec<u8>, String> {
     let image = image::load_from_memory(raw)
         .map_err(|err| format!("Decode avatar image failed: {err}"))?;
     let resized = image.resize_to_fill(128, 128, image::imageops::FilterType::Lanczos3);
@@ -829,7 +829,7 @@ fn normalize_avatar_bytes_to_webp(raw: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 
-fn save_agent_avatar_inner(
+pub(crate) fn save_agent_avatar_inner(
     input: SaveAgentAvatarInput,
     state: &AppState,
 ) -> Result<AvatarMeta, String> {
@@ -894,7 +894,7 @@ fn save_agent_avatar_inner(
 }
 
 
-fn clear_agent_avatar_inner(
+pub(crate) fn clear_agent_avatar_inner(
     input: ClearAgentAvatarInput,
     state: &AppState,
 ) -> Result<(), String> {
@@ -943,7 +943,7 @@ fn clear_agent_avatar_inner(
 }
 
 
-fn read_avatar_data_url_inner(
+pub(crate) fn read_avatar_data_url_inner(
     input: AvatarDataPathInput,
     state: &AppState,
 ) -> Result<AvatarDataUrlOutput, String> {
@@ -993,19 +993,19 @@ fn read_avatar_data_url_inner(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatImageDataUrlInput {
-    media_ref: String,
-    mime: String,
+pub(crate) struct ChatImageDataUrlInput {
+    pub(crate) media_ref: String,
+    pub(crate) mime: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatImageDataUrlOutput {
-    data_url: String,
+pub(crate) struct ChatImageDataUrlOutput {
+    pub(crate) data_url: String,
 }
 
 
-fn read_chat_image_data_url_inner(
+pub(crate) fn read_chat_image_data_url_inner(
     input: ChatImageDataUrlInput,
     state: &AppState,
 ) -> Result<ChatImageDataUrlOutput, String> {
@@ -1031,20 +1031,20 @@ fn read_chat_image_data_url_inner(
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct ConversationApiSettingsPatch {
+pub(crate) struct ConversationApiSettingsPatch {
     #[serde(default)]
-    assistant_department_api_config_id: Option<String>,
+    pub(crate) assistant_department_api_config_id: Option<String>,
     #[serde(default, deserialize_with = "deserialize_nullable_string_patch")]
-    vision_api_config_id: Option<Option<String>>,
+    pub(crate) vision_api_config_id: Option<Option<String>>,
     #[serde(default, deserialize_with = "deserialize_nullable_string_patch")]
-    tool_review_api_config_id: Option<Option<String>>,
+    pub(crate) tool_review_api_config_id: Option<Option<String>>,
     #[serde(default, deserialize_with = "deserialize_nullable_string_patch")]
-    stt_api_config_id: Option<Option<String>>,
+    pub(crate) stt_api_config_id: Option<Option<String>>,
     #[serde(default)]
-    stt_auto_send: Option<bool>,
+    pub(crate) stt_auto_send: Option<bool>,
 }
 
-fn deserialize_nullable_string_patch<'de, D>(
+pub(crate) fn deserialize_nullable_string_patch<'de, D>(
     deserializer: D,
 ) -> Result<Option<Option<String>>, D::Error>
 where
@@ -1105,12 +1105,12 @@ mod conversation_api_settings_patch_tests {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SetDepartmentPrimaryApiConfigInput {
-    department_id: String,
-    api_config_id: String,
+pub(crate) struct SetDepartmentPrimaryApiConfigInput {
+    pub(crate) department_id: String,
+    pub(crate) api_config_id: String,
 }
 
-fn build_conversation_api_settings_payload(config: &AppConfig) -> ConversationApiSettings {
+pub(crate) fn build_conversation_api_settings_payload(config: &AppConfig) -> ConversationApiSettings {
     ConversationApiSettings {
         assistant_department_api_config_id: config.assistant_department_api_config_id.clone(),
         vision_api_config_id: config.vision_api_config_id.clone(),
@@ -1120,7 +1120,7 @@ fn build_conversation_api_settings_payload(config: &AppConfig) -> ConversationAp
     }
 }
 
-fn apply_conversation_api_settings_patch(config: &mut AppConfig, input: ConversationApiSettingsPatch) {
+pub(crate) fn apply_conversation_api_settings_patch(config: &mut AppConfig, input: ConversationApiSettingsPatch) {
     if let Some(assistant_department_api_config_id) = input.assistant_department_api_config_id {
         config.assistant_department_api_config_id = assistant_department_api_config_id;
     }
@@ -1140,7 +1140,7 @@ fn apply_conversation_api_settings_patch(config: &mut AppConfig, input: Conversa
 
 
 
-fn patch_conversation_api_settings_inner(
+pub(crate) fn patch_conversation_api_settings_inner(
     input: ConversationApiSettingsPatch,
     app: &NativeAppHandle,
     state: &AppState,
@@ -1159,7 +1159,7 @@ fn patch_conversation_api_settings_inner(
 }
 
 
-fn set_department_primary_api_config_inner(
+pub(crate) fn set_department_primary_api_config_inner(
     input: SetDepartmentPrimaryApiConfigInput,
     app: &NativeAppHandle,
     state: &AppState,

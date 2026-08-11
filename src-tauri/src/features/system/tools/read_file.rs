@@ -1,25 +1,25 @@
-const READ_FILE_TEXT_LIMIT_CHARS: usize = 30_000;
-const READ_TOOL_NAME: &str = "read";
-const READ_MEDIA_TOOL_NAME: &str = "read_media";
-const READ_MEDIA_IMAGE_HTTP_TIMEOUT_SECS: u64 = 60;
-const READ_MEDIA_AUDIO_HTTP_TIMEOUT_SECS: u64 = 3 * 60;
-const READ_MEDIA_VIDEO_HTTP_TIMEOUT_SECS: u64 = 8 * 60;
-const GEMINI_INLINE_AUDIO_LIMIT_BYTES: usize = 20 * 1024 * 1024;
-const GEMINI_INLINE_VIDEO_LIMIT_BYTES: usize = 100 * 1024 * 1024;
-const OPENAI_FAMILY_VIDEO_DATA_URL_LIMIT_BYTES: usize = 50 * 1024 * 1024;
-const QWEN_MEDIA_DATA_URL_LIMIT_BYTES: usize = 50 * 1024 * 1024;
-const MIMO_VIDEO_BASE64_LIMIT_BYTES: usize = 50 * 1024 * 1024;
-const MINIMAX_VIDEO_BASE64_LIMIT_BYTES: usize = 50 * 1024 * 1024;
+pub(crate) const READ_FILE_TEXT_LIMIT_CHARS: usize = 30_000;
+pub(crate) const READ_TOOL_NAME: &str = "read";
+pub(crate) const READ_MEDIA_TOOL_NAME: &str = "read_media";
+pub(crate) const READ_MEDIA_IMAGE_HTTP_TIMEOUT_SECS: u64 = 60;
+pub(crate) const READ_MEDIA_AUDIO_HTTP_TIMEOUT_SECS: u64 = 3 * 60;
+pub(crate) const READ_MEDIA_VIDEO_HTTP_TIMEOUT_SECS: u64 = 8 * 60;
+pub(crate) const GEMINI_INLINE_AUDIO_LIMIT_BYTES: usize = 20 * 1024 * 1024;
+pub(crate) const GEMINI_INLINE_VIDEO_LIMIT_BYTES: usize = 100 * 1024 * 1024;
+pub(crate) const OPENAI_FAMILY_VIDEO_DATA_URL_LIMIT_BYTES: usize = 50 * 1024 * 1024;
+pub(crate) const QWEN_MEDIA_DATA_URL_LIMIT_BYTES: usize = 50 * 1024 * 1024;
+pub(crate) const MIMO_VIDEO_BASE64_LIMIT_BYTES: usize = 50 * 1024 * 1024;
+pub(crate) const MINIMAX_VIDEO_BASE64_LIMIT_BYTES: usize = 50 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ReadMediaDetectedType {
+pub(crate) enum ReadMediaDetectedType {
     Image,
     Audio,
     Video,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ReadMediaRouteFamily {
+pub(crate) enum ReadMediaRouteFamily {
     Qwen,
     OpenAI,
     Gemini,
@@ -29,7 +29,7 @@ enum ReadMediaRouteFamily {
 }
 
 impl ReadMediaRouteFamily {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Qwen => "Qwen",
             Self::OpenAI => "OpenAI",
@@ -42,7 +42,7 @@ impl ReadMediaRouteFamily {
 }
 
 impl ReadMediaDetectedType {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Image => "image",
             Self::Audio => "audio",
@@ -51,7 +51,7 @@ impl ReadMediaDetectedType {
     }
 }
 
-fn resolve_read_media_route_family(
+pub(crate) fn resolve_read_media_route_family(
     request_format: RequestFormat,
     base_url: &str,
     model_name: &str,
@@ -80,14 +80,14 @@ fn resolve_read_media_route_family(
     }
 }
 
-fn should_use_opencode_qwen_read_media_compat(base_url: &str, model_name: &str) -> bool {
+pub(crate) fn should_use_opencode_qwen_read_media_compat(base_url: &str, model_name: &str) -> bool {
     is_qwen_model_name(model_name)
         && resolve_adapter_kind_from_base_url(base_url)
             == Some(genai::adapter::AdapterKind::OpenCodeGo)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ReadFileDetectedType {
+pub(crate) enum ReadFileDetectedType {
     Text,
     Image,
     Pdf,
@@ -108,7 +108,7 @@ enum ReadFileDetectedType {
 }
 
 impl ReadFileDetectedType {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Text => "text",
             Self::Image => "image",
@@ -132,26 +132,26 @@ impl ReadFileDetectedType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ReadFileRequest {
+pub(crate) struct ReadFileRequest {
     #[serde(alias = "absolute_path", alias = "absolutePath")]
-    path: String,
+    pub(crate) path: String,
     #[serde(default)]
     #[serde(alias = "start")]
-    offset: Option<usize>,
+    pub(crate) offset: Option<usize>,
     #[serde(default)]
     #[serde(alias = "count")]
-    limit: Option<usize>,
+    pub(crate) limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ReadMediaRequest {
+pub(crate) struct ReadMediaRequest {
     #[serde(alias = "absolute_path", alias = "absolutePath")]
-    path: String,
+    pub(crate) path: String,
     #[serde(default)]
-    description: Option<String>,
+    pub(crate) description: Option<String>,
 }
 
-trait ReadFileReader {
+pub(crate) trait ReadFileReader {
     fn reader_kind(&self) -> &'static str;
     fn supports(&self, detected: ReadFileDetectedType) -> bool;
     fn read(
@@ -164,14 +164,14 @@ trait ReadFileReader {
     ) -> Result<Value, String>;
 }
 
-fn read_file_ext(path: &std::path::Path) -> String {
+pub(crate) fn read_file_ext(path: &std::path::Path) -> String {
     path.extension()
         .and_then(|v| v.to_str())
         .map(|v| v.trim().to_ascii_lowercase())
         .unwrap_or_default()
 }
 
-fn detect_read_file_type(path: &std::path::Path) -> ReadFileDetectedType {
+pub(crate) fn detect_read_file_type(path: &std::path::Path) -> ReadFileDetectedType {
     match read_file_ext(path).as_str() {
         "txt" | "md" | "rs" | "ts" | "tsx" | "js" | "jsx" | "json" | "toml" | "yaml" | "yml"
         | "vue" | "html" | "css" | "scss" | "less" | "xml" | "csv" | "log" | "ini" | "conf"
@@ -196,7 +196,7 @@ fn detect_read_file_type(path: &std::path::Path) -> ReadFileDetectedType {
     }
 }
 
-fn detect_read_media_type(path: &std::path::Path) -> Option<ReadMediaDetectedType> {
+pub(crate) fn detect_read_media_type(path: &std::path::Path) -> Option<ReadMediaDetectedType> {
     match read_file_ext(path).as_str() {
         "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" => Some(ReadMediaDetectedType::Image),
         "mp3" | "wav" | "wave" | "m4a" | "aac" | "ogg" | "flac" | "webm" => {
@@ -218,12 +218,12 @@ fn detect_read_media_type(path: &std::path::Path) -> Option<ReadMediaDetectedTyp
     }
 }
 
-fn read_file_conversation_cache_key(session_id: &str) -> String {
+pub(crate) fn read_file_conversation_cache_key(session_id: &str) -> String {
     delegate_session_conversation_id(session_id)
         .unwrap_or_else(|| session_id.trim().to_string())
 }
 
-fn read_file_log_target(path: &std::path::Path) -> String {
+pub(crate) fn read_file_log_target(path: &std::path::Path) -> String {
     let file_name = path.file_name().and_then(|v| v.to_str()).unwrap_or_default();
     let ext = path.extension().and_then(|v| v.to_str()).unwrap_or_default();
     if !file_name.is_empty() {
@@ -239,7 +239,7 @@ fn read_file_log_target(path: &std::path::Path) -> String {
     }
 }
 
-fn ensure_absolute_file_path(request: &ReadFileRequest) -> Result<std::path::PathBuf, String> {
+pub(crate) fn ensure_absolute_file_path(request: &ReadFileRequest) -> Result<std::path::PathBuf, String> {
     let trimmed = request.path.trim();
     if trimmed.is_empty() {
         return Err("path 不能为空".to_string());
@@ -261,7 +261,7 @@ fn ensure_absolute_file_path(request: &ReadFileRequest) -> Result<std::path::Pat
     Ok(path)
 }
 
-fn ensure_absolute_media_path(request: &ReadMediaRequest) -> Result<std::path::PathBuf, String> {
+pub(crate) fn ensure_absolute_media_path(request: &ReadMediaRequest) -> Result<std::path::PathBuf, String> {
     let trimmed = request.path.trim();
     if trimmed.is_empty() {
         return Err("path 不能为空".to_string());
@@ -280,8 +280,8 @@ fn ensure_absolute_media_path(request: &ReadMediaRequest) -> Result<std::path::P
     Ok(path)
 }
 
-fn ensure_file_path_for_read(state: &AppState, request: &ReadFileRequest) -> Result<std::path::PathBuf, String> {
-    if let Some(path) = android_workspace_resolve_existing_file_path(state, &request.path)? {
+pub(crate) fn ensure_file_path_for_read(state: &AppState, request: &ReadFileRequest) -> Result<std::path::PathBuf, String> {
+    if let Some(path) = features_system_commands::android_workspace_manager::android_workspace_resolve_existing_file_path(state, &request.path)? {
         if matches!(request.limit, Some(0)) {
             return Err("limit 必须大于等于 1".to_string());
         }
@@ -294,8 +294,8 @@ fn ensure_file_path_for_read(state: &AppState, request: &ReadFileRequest) -> Res
     ensure_absolute_file_path(request)
 }
 
-fn ensure_media_path_for_read(state: &AppState, request: &ReadMediaRequest) -> Result<std::path::PathBuf, String> {
-    if let Some(path) = android_workspace_resolve_existing_file_path(state, &request.path)? {
+pub(crate) fn ensure_media_path_for_read(state: &AppState, request: &ReadMediaRequest) -> Result<std::path::PathBuf, String> {
+    if let Some(path) = features_system_commands::android_workspace_manager::android_workspace_resolve_existing_file_path(state, &request.path)? {
         let metadata = std::fs::metadata(&path).map_err(|err| format!("读取文件信息失败: {err}"))?;
         if !metadata.is_file() {
             return Err(format!("目标不是文件：{}", path.display()));
@@ -305,7 +305,7 @@ fn ensure_media_path_for_read(state: &AppState, request: &ReadMediaRequest) -> R
     ensure_absolute_media_path(request)
 }
 
-fn paginate_lines(lines: &[String], start: usize, count: Option<usize>) -> (Vec<String>, Option<usize>) {
+pub(crate) fn paginate_lines(lines: &[String], start: usize, count: Option<usize>) -> (Vec<String>, Option<usize>) {
     if start >= lines.len() {
         return (Vec::new(), None);
     }
@@ -317,7 +317,7 @@ fn paginate_lines(lines: &[String], start: usize, count: Option<usize>) -> (Vec<
     (chunk, next_start)
 }
 
-fn paginate_window(total: usize, start: usize, count: Option<usize>) -> (usize, usize, Option<usize>) {
+pub(crate) fn paginate_window(total: usize, start: usize, count: Option<usize>) -> (usize, usize, Option<usize>) {
     if start >= total {
         return (start, start, None);
     }
@@ -328,7 +328,7 @@ fn paginate_window(total: usize, start: usize, count: Option<usize>) -> (usize, 
     (start, end, next_start)
 }
 
-fn truncate_text_for_read_file(text: &str) -> (String, bool) {
+pub(crate) fn truncate_text_for_read_file(text: &str) -> (String, bool) {
     let total = text.chars().count();
     if total <= READ_FILE_TEXT_LIMIT_CHARS {
         return (text.to_string(), false);
@@ -339,7 +339,7 @@ fn truncate_text_for_read_file(text: &str) -> (String, bool) {
     )
 }
 
-fn detect_read_file_line_ending(text: &str) -> &'static str {
+pub(crate) fn detect_read_file_line_ending(text: &str) -> &'static str {
     let has_crlf = text.contains("\r\n");
     let without_crlf = text.replace("\r\n", "");
     let has_cr = without_crlf.contains('\r');
@@ -353,11 +353,11 @@ fn detect_read_file_line_ending(text: &str) -> &'static str {
     }
 }
 
-fn normalize_text_line_endings_for_read_file(text: &str) -> String {
+pub(crate) fn normalize_text_line_endings_for_read_file(text: &str) -> String {
     text.replace("\r\n", "\n").replace('\r', "\n")
 }
 
-fn normalize_office_text_for_read_file(input: &str) -> String {
+pub(crate) fn normalize_office_text_for_read_file(input: &str) -> String {
     let normalized = normalize_text_line_endings_for_read_file(input);
     let mut out = String::with_capacity(normalized.len());
     let mut last_was_newline = false;
@@ -383,7 +383,7 @@ fn normalize_office_text_for_read_file(input: &str) -> String {
     out.trim().to_string()
 }
 
-fn build_text_read_result(
+pub(crate) fn build_text_read_result(
     path: &std::path::Path,
     detected: ReadFileDetectedType,
     reader_kind: &str,
@@ -439,7 +439,7 @@ fn build_text_read_result(
     })
 }
 
-fn resolve_pdf_image_mode(state: &AppState, api_config_id: &str) -> Result<bool, String> {
+pub(crate) fn resolve_pdf_image_mode(state: &AppState, api_config_id: &str) -> Result<bool, String> {
     let app_config = state_read_config_cached(state)?;
     let selected_api = resolve_selected_api_config(&app_config, Some(api_config_id))
         .or_else(|| resolve_selected_api_config(&app_config, None))
@@ -448,7 +448,7 @@ fn resolve_pdf_image_mode(state: &AppState, api_config_id: &str) -> Result<bool,
     Ok(selected_api.enable_image)
 }
 
-fn build_pdf_image_read_result(
+pub(crate) fn build_pdf_image_read_result(
     path: &std::path::Path,
     detected: ReadFileDetectedType,
     structured: &PdfExtractStructuredResult,
@@ -513,7 +513,7 @@ fn build_pdf_image_read_result(
     })
 }
 
-fn read_file_media_cache_lookup(
+pub(crate) fn read_file_media_cache_lookup(
     runtime: &RuntimeStateFile,
     hash: &str,
     model_api_id: &str,
@@ -532,7 +532,7 @@ fn read_file_media_cache_lookup(
         .map(|entry| entry.text.clone())
 }
 
-fn read_file_media_cache_upsert(
+pub(crate) fn read_file_media_cache_upsert(
     runtime: &mut RuntimeStateFile,
     hash: &str,
     model_api_id: &str,
@@ -575,7 +575,7 @@ fn read_file_media_cache_upsert(
     }
 }
 
-fn build_read_media_prepared_prompt(
+pub(crate) fn build_read_media_prepared_prompt(
     media_type: ReadMediaDetectedType,
     mime: &str,
     content_base64: &str,
@@ -613,7 +613,7 @@ fn build_read_media_prepared_prompt(
     }
 }
 
-fn build_read_media_user_text(
+pub(crate) fn build_read_media_user_text(
     media_type: ReadMediaDetectedType,
     description: &str,
 ) -> String {
@@ -629,7 +629,7 @@ fn build_read_media_user_text(
     }
 }
 
-fn mimo_chat_completions_url(base_url: &str) -> String {
+pub(crate) fn mimo_chat_completions_url(base_url: &str) -> String {
     let trimmed = base_url.trim().trim_end_matches('/');
     if trimmed.ends_with("/chat/completions") {
         trimmed.to_string()
@@ -638,22 +638,22 @@ fn mimo_chat_completions_url(base_url: &str) -> String {
     }
 }
 
-fn openai_family_chat_completions_url(base_url: &str) -> String {
+pub(crate) fn openai_family_chat_completions_url(base_url: &str) -> String {
     let normalized = normalize_openai_genai_base_url(base_url);
     format!("{}chat/completions", normalized)
 }
 
-fn gemini_generate_content_url(base_url: &str, model_name: &str) -> String {
+pub(crate) fn gemini_generate_content_url(base_url: &str, model_name: &str) -> String {
     let normalized = normalize_gemini_genai_base_url(base_url);
     format!("{normalized}models/{model_name}:generateContent")
 }
 
-fn minimax_messages_url(base_url: &str) -> String {
+pub(crate) fn minimax_messages_url(base_url: &str) -> String {
     let normalized = normalize_minimax_genai_base_url(base_url);
     format!("{normalized}messages")
 }
 
-fn openai_input_audio_format_from_mime_for_read_media(mime: &str) -> String {
+pub(crate) fn openai_input_audio_format_from_mime_for_read_media(mime: &str) -> String {
     let normalized = mime.trim().to_ascii_lowercase();
     match normalized.as_str() {
         "audio/wav" | "audio/wave" | "audio/x-wav" => "wav".to_string(),
@@ -668,7 +668,7 @@ fn openai_input_audio_format_from_mime_for_read_media(mime: &str) -> String {
     }
 }
 
-fn apply_extra_headers(
+pub(crate) fn apply_extra_headers(
     mut request_builder: reqwest::RequestBuilder,
     headers: &[(String, String)],
 ) -> reqwest::RequestBuilder {
@@ -678,7 +678,7 @@ fn apply_extra_headers(
     request_builder
 }
 
-fn read_media_http_timeout(media_type: ReadMediaDetectedType) -> std::time::Duration {
+pub(crate) fn read_media_http_timeout(media_type: ReadMediaDetectedType) -> std::time::Duration {
     let timeout_secs = match media_type {
         ReadMediaDetectedType::Image => READ_MEDIA_IMAGE_HTTP_TIMEOUT_SECS,
         ReadMediaDetectedType::Audio => READ_MEDIA_AUDIO_HTTP_TIMEOUT_SECS,
@@ -687,14 +687,14 @@ fn read_media_http_timeout(media_type: ReadMediaDetectedType) -> std::time::Dura
     std::time::Duration::from_secs(timeout_secs)
 }
 
-fn apply_read_media_timeout(
+pub(crate) fn apply_read_media_timeout(
     request_builder: reqwest::RequestBuilder,
     media_type: ReadMediaDetectedType,
 ) -> reqwest::RequestBuilder {
     request_builder.timeout(read_media_http_timeout(media_type))
 }
 
-fn read_media_request_error(context: &str, err: &reqwest::Error) -> String {
+pub(crate) fn read_media_request_error(context: &str, err: &reqwest::Error) -> String {
     if err.is_timeout() {
         "解析超时".to_string()
     } else {
@@ -702,7 +702,7 @@ fn read_media_request_error(context: &str, err: &reqwest::Error) -> String {
     }
 }
 
-fn read_media_response_error(context: &str, err: &reqwest::Error) -> String {
+pub(crate) fn read_media_response_error(context: &str, err: &reqwest::Error) -> String {
     if err.is_timeout() {
         "解析超时".to_string()
     } else {
@@ -710,7 +710,7 @@ fn read_media_response_error(context: &str, err: &reqwest::Error) -> String {
     }
 }
 
-fn extract_text_from_json_value(value: &serde_json::Value) -> String {
+pub(crate) fn extract_text_from_json_value(value: &serde_json::Value) -> String {
     match value {
         serde_json::Value::String(text) => text.trim().to_string(),
         serde_json::Value::Array(items) => items
@@ -736,7 +736,7 @@ fn extract_text_from_json_value(value: &serde_json::Value) -> String {
     }
 }
 
-fn extract_openai_family_message_text(payload: &serde_json::Value) -> String {
+pub(crate) fn extract_openai_family_message_text(payload: &serde_json::Value) -> String {
     payload
         .get("choices")
         .and_then(serde_json::Value::as_array)
@@ -747,7 +747,7 @@ fn extract_openai_family_message_text(payload: &serde_json::Value) -> String {
         .unwrap_or_default()
 }
 
-fn extract_gemini_text(payload: &serde_json::Value) -> String {
+pub(crate) fn extract_gemini_text(payload: &serde_json::Value) -> String {
     payload
         .get("candidates")
         .and_then(serde_json::Value::as_array)
@@ -767,7 +767,7 @@ fn extract_gemini_text(payload: &serde_json::Value) -> String {
         .unwrap_or_default()
 }
 
-fn extract_anthropic_text(payload: &serde_json::Value) -> String {
+pub(crate) fn extract_anthropic_text(payload: &serde_json::Value) -> String {
     payload
         .get("content")
         .and_then(serde_json::Value::as_array)
@@ -784,7 +784,7 @@ fn extract_anthropic_text(payload: &serde_json::Value) -> String {
         .unwrap_or_default()
 }
 
-fn format_reqwest_error_diagnostics(err: &reqwest::Error) -> String {
+pub(crate) fn format_reqwest_error_diagnostics(err: &reqwest::Error) -> String {
     let mut parts = Vec::<String>::new();
     parts.push(err.to_string());
     if let Some(url) = err.url() {
@@ -822,7 +822,7 @@ fn format_reqwest_error_diagnostics(err: &reqwest::Error) -> String {
     parts.join(" | ")
 }
 
-async fn describe_openai_family_media_with_multimodal_api(
+pub(crate) async fn describe_openai_family_media_with_multimodal_api(
     state: &AppState,
     resolved_api: &ResolvedApiConfig,
     selected_api: &ApiConfig,
@@ -934,7 +934,7 @@ async fn describe_openai_family_media_with_multimodal_api(
 
 include!("read_media_qwen.rs");
 
-async fn describe_gemini_media_with_multimodal_api(
+pub(crate) async fn describe_gemini_media_with_multimodal_api(
     state: &AppState,
     resolved_api: &ResolvedApiConfig,
     selected_api: &ApiConfig,
@@ -1018,7 +1018,7 @@ async fn describe_gemini_media_with_multimodal_api(
     Ok(text)
 }
 
-async fn describe_minimax_video_with_multimodal_api(
+pub(crate) async fn describe_minimax_video_with_multimodal_api(
     state: &AppState,
     resolved_api: &ResolvedApiConfig,
     selected_api: &ApiConfig,
@@ -1095,7 +1095,7 @@ async fn describe_minimax_video_with_multimodal_api(
     Ok(text)
 }
 
-async fn describe_mimo_video_with_multimodal_api(
+pub(crate) async fn describe_mimo_video_with_multimodal_api(
     state: &AppState,
     resolved_api: &ResolvedApiConfig,
     selected_api: &ApiConfig,
@@ -1200,7 +1200,7 @@ async fn describe_mimo_video_with_multimodal_api(
     Ok(text)
 }
 
-async fn describe_media_with_multimodal_api(
+pub(crate) async fn describe_media_with_multimodal_api(
     state: &AppState,
     resolved_api: &ResolvedApiConfig,
     selected_api: &ApiConfig,
@@ -1272,7 +1272,7 @@ async fn describe_media_with_multimodal_api(
     Ok(reply.assistant_text.trim().to_string())
 }
 
-async fn builtin_read_media(
+pub(crate) async fn builtin_read_media(
     state: &AppState,
     request: ReadMediaRequest,
 ) -> Result<Value, String> {
@@ -1526,7 +1526,7 @@ async fn builtin_read_media(
     }))
 }
 
-struct TextFileReader;
+pub(crate) struct TextFileReader;
 
 impl ReadFileReader for TextFileReader {
     fn reader_kind(&self) -> &'static str {
@@ -1560,7 +1560,7 @@ impl ReadFileReader for TextFileReader {
     }
 }
 
-struct PdfFileReader;
+pub(crate) struct PdfFileReader;
 
 impl ReadFileReader for PdfFileReader {
     fn reader_kind(&self) -> &'static str {
@@ -1658,7 +1658,7 @@ impl ReadFileReader for PdfFileReader {
     }
 }
 
-struct OfficeLitchiReader;
+pub(crate) struct OfficeLitchiReader;
 
 impl ReadFileReader for OfficeLitchiReader {
     fn reader_kind(&self) -> &'static str {
@@ -1755,7 +1755,7 @@ impl ReadFileReader for OfficeLitchiReader {
     }
 }
 
-async fn builtin_read_file(
+pub(crate) async fn builtin_read_file(
     state: &AppState,
     session_id: &str,
     api_config_id: &str,
@@ -1843,7 +1843,7 @@ async fn builtin_read_file(
 }
 
 #[cfg(test)]
-fn test_read_file_state() -> AppState {
+pub(crate) fn test_read_file_state() -> AppState {
         let root = std::env::temp_dir().join(format!("eca-read-file-test-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("create temp test root");
         std::fs::create_dir_all(root.join("llm-workspace")).expect("create temp llm workspace");
@@ -1934,7 +1934,7 @@ fn test_read_file_state() -> AppState {
 
 #[cfg(test)]
 #[test]
-fn read_file_request_should_accept_new_and_legacy_argument_names() {
+pub(crate) fn read_file_request_should_accept_new_and_legacy_argument_names() {
         let current: ReadFileRequest = serde_json::from_str(
             r#"{"path":"E:\\docs\\a.md","offset":2,"limit":5}"#,
         )
@@ -1954,7 +1954,7 @@ fn read_file_request_should_accept_new_and_legacy_argument_names() {
 
 #[cfg(test)]
 #[test]
-fn read_file_conversation_cache_key_should_strip_remote_reply_delegate_runtime_tag() {
+pub(crate) fn read_file_conversation_cache_key_should_strip_remote_reply_delegate_runtime_tag() {
         let session_id = "agent-a::conversation-sub::remote_reply_delegate:delegate-a";
 
         assert_eq!(
@@ -1965,7 +1965,7 @@ fn read_file_conversation_cache_key_should_strip_remote_reply_delegate_runtime_t
 
 #[cfg(test)]
 #[test]
-fn detect_read_file_type_should_classify_common_formats() {
+pub(crate) fn detect_read_file_type_should_classify_common_formats() {
         assert_eq!(
             detect_read_file_type(std::path::Path::new("a.txt")),
             ReadFileDetectedType::Text
@@ -1994,7 +1994,7 @@ fn detect_read_file_type_should_classify_common_formats() {
 
 #[cfg(test)]
 #[test]
-fn detect_read_media_type_should_classify_common_formats() {
+pub(crate) fn detect_read_media_type_should_classify_common_formats() {
         assert_eq!(
             detect_read_media_type(std::path::Path::new("a.png")),
             Some(ReadMediaDetectedType::Image)
@@ -2012,7 +2012,7 @@ fn detect_read_media_type_should_classify_common_formats() {
 
 #[cfg(test)]
 #[test]
-fn read_media_timeout_should_follow_detected_type() {
+pub(crate) fn read_media_timeout_should_follow_detected_type() {
         assert_eq!(
             read_media_http_timeout(ReadMediaDetectedType::Image),
             std::time::Duration::from_secs(READ_MEDIA_IMAGE_HTTP_TIMEOUT_SECS)
@@ -2029,7 +2029,7 @@ fn read_media_timeout_should_follow_detected_type() {
 
 #[cfg(test)]
 #[test]
-fn resolve_read_media_route_family_should_follow_request_format_or_auto_fallback() {
+pub(crate) fn resolve_read_media_route_family_should_follow_request_format_or_auto_fallback() {
         assert_eq!(
             resolve_read_media_route_family(
                 RequestFormat::Gemini,
@@ -2123,7 +2123,7 @@ fn resolve_read_media_route_family_should_follow_request_format_or_auto_fallback
 
 #[cfg(test)]
 #[test]
-fn build_qwen_media_block_should_use_qwen_media_payloads_for_all_media_types() {
+pub(crate) fn build_qwen_media_block_should_use_qwen_media_payloads_for_all_media_types() {
     let image = build_qwen_media_block(ReadMediaDetectedType::Image, "image/png", "AAAA")
         .expect("build qwen image block");
     assert_eq!(
@@ -2152,7 +2152,7 @@ fn build_qwen_media_block_should_use_qwen_media_payloads_for_all_media_types() {
 
 #[cfg(test)]
 #[test]
-fn image_mime_from_bytes_should_detect_common_images_without_extension() {
+pub(crate) fn image_mime_from_bytes_should_detect_common_images_without_extension() {
         assert_eq!(
             image_mime_from_bytes(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]),
             Some("image/png")
@@ -2166,7 +2166,7 @@ fn image_mime_from_bytes_should_detect_common_images_without_extension() {
 
 #[cfg(test)]
 #[test]
-fn normalize_office_text_should_drop_control_chars() {
+pub(crate) fn normalize_office_text_should_drop_control_chars() {
         let input = "a\u{0001}b\r\n\r\nc\t\u{0004}d";
         let output = normalize_office_text_for_read_file(input);
         assert_eq!(output, "ab\nc\td");
@@ -2174,7 +2174,7 @@ fn normalize_office_text_should_drop_control_chars() {
 
 #[cfg(test)]
 #[test]
-fn build_text_read_result_should_normalize_crlf_to_lf_and_report_source_line_ending() {
+pub(crate) fn build_text_read_result_should_normalize_crlf_to_lf_and_report_source_line_ending() {
         let path = std::path::Path::new("sample.txt");
         let value = build_text_read_result(
             path,
@@ -2202,7 +2202,7 @@ fn build_text_read_result_should_normalize_crlf_to_lf_and_report_source_line_end
 
 #[cfg(test)]
 #[test]
-fn build_text_read_result_should_normalize_lone_cr_to_lf() {
+pub(crate) fn build_text_read_result_should_normalize_lone_cr_to_lf() {
         let path = std::path::Path::new("sample.txt");
         let value = build_text_read_result(
             path,
@@ -2226,7 +2226,7 @@ fn build_text_read_result_should_normalize_lone_cr_to_lf() {
 
 #[cfg(test)]
 #[test]
-fn builtin_read_file_should_paginate_text_file() {
+pub(crate) fn builtin_read_file_should_paginate_text_file() {
         let root = std::env::temp_dir().join(format!("eca-read-file-page-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("create temp dir");
         let file = root.join("sample.txt");
@@ -2257,7 +2257,7 @@ fn builtin_read_file_should_paginate_text_file() {
 
 #[cfg(test)]
 #[test]
-fn builtin_read_file_should_decode_gbk_text_file() {
+pub(crate) fn builtin_read_file_should_decode_gbk_text_file() {
         let root = std::env::temp_dir().join(format!("eca-read-file-gbk-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("create temp dir");
         let file = root.join("sample.txt");
@@ -2283,7 +2283,7 @@ fn builtin_read_file_should_decode_gbk_text_file() {
 
 #[cfg(test)]
 #[test]
-fn builtin_read_file_should_redirect_image_input_to_read_media() {
+pub(crate) fn builtin_read_file_should_redirect_image_input_to_read_media() {
         let root = std::env::temp_dir().join(format!("eca-read-file-image-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("create temp dir");
         let file = root.join("sample.png");
@@ -2366,7 +2366,7 @@ fn builtin_read_file_should_redirect_image_input_to_read_media() {
 
 #[cfg(test)]
 #[test]
-fn builtin_read_media_should_reject_non_media_file() {
+pub(crate) fn builtin_read_media_should_reject_non_media_file() {
         let root = std::env::temp_dir().join(format!("eca-read-media-text-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("create temp dir");
         let file = root.join("sample.txt");
@@ -2390,7 +2390,7 @@ fn builtin_read_media_should_reject_non_media_file() {
 
 #[cfg(test)]
 #[test]
-fn builtin_read_media_should_fail_when_audio_capability_is_disabled() {
+pub(crate) fn builtin_read_media_should_fail_when_audio_capability_is_disabled() {
         let root = std::env::temp_dir().join(format!("eca-read-media-audio-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("create temp dir");
         let file = root.join("sample.mp3");
@@ -2451,7 +2451,7 @@ fn builtin_read_media_should_fail_when_audio_capability_is_disabled() {
 
 #[cfg(test)]
 #[test]
-fn builtin_read_file_should_prefix_truncation_notice_only_when_truncated() {
+pub(crate) fn builtin_read_file_should_prefix_truncation_notice_only_when_truncated() {
         let root = std::env::temp_dir().join(format!("eca-read-file-trunc-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("create temp dir");
         let file = root.join("big.txt");
@@ -2479,7 +2479,7 @@ fn builtin_read_file_should_prefix_truncation_notice_only_when_truncated() {
 
 #[cfg(test)]
 #[test]
-fn build_pdf_image_read_result_should_paginate_by_page_start() {
+pub(crate) fn build_pdf_image_read_result_should_paginate_by_page_start() {
         let path = std::path::PathBuf::from("E:\\docs\\sample.pdf");
         let structured = PdfExtractStructuredResult {
             file_name: "sample.pdf".to_string(),

@@ -1,59 +1,59 @@
 
-fn list_memories_inner(state: &AppState) -> Result<Vec<MemoryEntry>, String> {
+pub(crate) fn list_memories_inner(state: &AppState) -> Result<Vec<MemoryEntry>, String> {
     memory_store_list_memories(&state.data_path)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-struct AngelMemoryExportPayload {
-    schema_version: u32,
-    exported_at: i64,
-    records: Vec<AngelMemoryExportRecord>,
-    global_tags: Vec<AngelMemoryExportTag>,
-    memory_tag_rel: Vec<AngelMemoryExportRelation>,
+pub(crate) struct AngelMemoryExportPayload {
+    pub(crate) schema_version: u32,
+    pub(crate) exported_at: i64,
+    pub(crate) records: Vec<AngelMemoryExportRecord>,
+    pub(crate) global_tags: Vec<AngelMemoryExportTag>,
+    pub(crate) memory_tag_rel: Vec<AngelMemoryExportRelation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-struct AngelMemoryExportRecord {
-    id: String,
-    memory_type: String,
-    judgment: String,
-    reasoning: String,
-    strength: i64,
-    is_active: i64,
-    useful_count: i64,
-    useful_score: f64,
-    last_recalled_at: f64,
-    last_decay_at: f64,
-    memory_scope: String,
-    created_at: f64,
-    updated_at: f64,
+pub(crate) struct AngelMemoryExportRecord {
+    pub(crate) id: String,
+    pub(crate) memory_type: String,
+    pub(crate) judgment: String,
+    pub(crate) reasoning: String,
+    pub(crate) strength: i64,
+    pub(crate) is_active: i64,
+    pub(crate) useful_count: i64,
+    pub(crate) useful_score: f64,
+    pub(crate) last_recalled_at: f64,
+    pub(crate) last_decay_at: f64,
+    pub(crate) memory_scope: String,
+    pub(crate) created_at: f64,
+    pub(crate) updated_at: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-struct AngelMemoryExportTag {
-    id: i64,
-    name: String,
+pub(crate) struct AngelMemoryExportTag {
+    pub(crate) id: i64,
+    pub(crate) name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-struct AngelMemoryExportRelation {
-    memory_id: String,
-    tag_id: i64,
+pub(crate) struct AngelMemoryExportRelation {
+    pub(crate) memory_id: String,
+    pub(crate) tag_id: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-enum AngelMemoryTagId {
+pub(crate) enum AngelMemoryTagId {
     Integer(i64),
     String(String),
 }
 
 impl AngelMemoryTagId {
-    fn lookup_key(&self) -> String {
+    pub(crate) fn lookup_key(&self) -> String {
         match self {
             Self::Integer(value) => value.to_string(),
             Self::String(value) => value.trim().to_string(),
@@ -63,144 +63,144 @@ impl AngelMemoryTagId {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-struct AngelMemoryImportPayload {
+pub(crate) struct AngelMemoryImportPayload {
     #[serde(default)]
-    schema_version: u32,
+    pub(crate) schema_version: u32,
     #[serde(default)]
-    exported_at: i64,
+    pub(crate) exported_at: i64,
     #[serde(default)]
-    records: Vec<AngelMemoryImportRecord>,
+    pub(crate) records: Vec<AngelMemoryImportRecord>,
     #[serde(default)]
-    global_tags: Vec<AngelMemoryImportTag>,
+    pub(crate) global_tags: Vec<AngelMemoryImportTag>,
     #[serde(default)]
-    memory_tag_rel: Vec<AngelMemoryImportRelation>,
+    pub(crate) memory_tag_rel: Vec<AngelMemoryImportRelation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-struct AngelMemoryImportRecord {
-    id: String,
+pub(crate) struct AngelMemoryImportRecord {
+    pub(crate) id: String,
     #[serde(default)]
-    memory_type: String,
+    pub(crate) memory_type: String,
     #[serde(default, alias = "content")]
-    judgment: String,
+    pub(crate) judgment: String,
     #[serde(default)]
-    reasoning: String,
+    pub(crate) reasoning: String,
     #[serde(default)]
-    strength: i64,
+    pub(crate) strength: i64,
     #[serde(default)]
-    is_active: i64,
+    pub(crate) is_active: i64,
     #[serde(default)]
-    useful_count: i64,
+    pub(crate) useful_count: i64,
     #[serde(default)]
-    useful_score: f64,
+    pub(crate) useful_score: f64,
     #[serde(default)]
-    last_recalled_at: f64,
+    pub(crate) last_recalled_at: f64,
     #[serde(default)]
-    last_decay_at: f64,
+    pub(crate) last_decay_at: f64,
     #[serde(default)]
-    memory_scope: String,
+    pub(crate) memory_scope: String,
     #[serde(default)]
-    created_at: f64,
+    pub(crate) created_at: f64,
     #[serde(default)]
-    updated_at: f64,
+    pub(crate) updated_at: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-struct AngelMemoryImportTag {
-    id: AngelMemoryTagId,
-    name: String,
+pub(crate) struct AngelMemoryImportTag {
+    pub(crate) id: AngelMemoryTagId,
+    pub(crate) name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-struct AngelMemoryImportRelation {
-    memory_id: String,
-    tag_id: AngelMemoryTagId,
+pub(crate) struct AngelMemoryImportRelation {
+    pub(crate) memory_id: String,
+    pub(crate) tag_id: AngelMemoryTagId,
 }
 
 #[derive(Debug, Clone)]
-struct AngelNormalizedMemoryRecord {
-    id: String,
-    memory_type: String,
-    judgment: String,
-    reasoning: String,
-    tags: Vec<String>,
-    strength: i64,
-    is_active: i64,
-    useful_count: i64,
-    useful_score: f64,
-    last_recalled_at: Option<String>,
-    last_decay_at: Option<String>,
-    memory_scope: String,
-    created_at: String,
-    updated_at: String,
+pub(crate) struct AngelNormalizedMemoryRecord {
+    pub(crate) id: String,
+    pub(crate) memory_type: String,
+    pub(crate) judgment: String,
+    pub(crate) reasoning: String,
+    pub(crate) tags: Vec<String>,
+    pub(crate) strength: i64,
+    pub(crate) is_active: i64,
+    pub(crate) useful_count: i64,
+    pub(crate) useful_score: f64,
+    pub(crate) last_recalled_at: Option<String>,
+    pub(crate) last_decay_at: Option<String>,
+    pub(crate) memory_scope: String,
+    pub(crate) created_at: String,
+    pub(crate) updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PreviewImportAngelMemoriesInput {
-    payload: String,
+pub(crate) struct PreviewImportAngelMemoriesInput {
+    pub(crate) payload: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PreviewImportAngelMemoriesSample {
-    id: String,
-    memory_scope: String,
-    memory_type: String,
-    judgment: String,
-    reasoning: String,
-    tags: Vec<String>,
-    created_at: String,
-    updated_at: String,
+pub(crate) struct PreviewImportAngelMemoriesSample {
+    pub(crate) id: String,
+    pub(crate) memory_scope: String,
+    pub(crate) memory_type: String,
+    pub(crate) judgment: String,
+    pub(crate) reasoning: String,
+    pub(crate) tags: Vec<String>,
+    pub(crate) created_at: String,
+    pub(crate) updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PreviewImportAngelMemoriesScopeItem {
-    scope: String,
-    count: usize,
+pub(crate) struct PreviewImportAngelMemoriesScopeItem {
+    pub(crate) scope: String,
+    pub(crate) count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PreviewImportAngelMemoriesResult {
-    total_count: usize,
-    scopes: Vec<PreviewImportAngelMemoriesScopeItem>,
-    samples: Vec<PreviewImportAngelMemoriesSample>,
+pub(crate) struct PreviewImportAngelMemoriesResult {
+    pub(crate) total_count: usize,
+    pub(crate) scopes: Vec<PreviewImportAngelMemoriesScopeItem>,
+    pub(crate) samples: Vec<PreviewImportAngelMemoriesSample>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PreviewExportMemoriesScopeItem {
-    scope: String,
-    count: usize,
+pub(crate) struct PreviewExportMemoriesScopeItem {
+    pub(crate) scope: String,
+    pub(crate) count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PreviewExportMemoriesResult {
-    total_count: usize,
-    scopes: Vec<PreviewExportMemoriesScopeItem>,
+pub(crate) struct PreviewExportMemoriesResult {
+    pub(crate) total_count: usize,
+    pub(crate) scopes: Vec<PreviewExportMemoriesScopeItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ImportAngelMemoriesScopeMapping {
-    scope: String,
-    agent_id: String,
+pub(crate) struct ImportAngelMemoriesScopeMapping {
+    pub(crate) scope: String,
+    pub(crate) agent_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ImportAngelMemoriesInput {
-    payload: String,
-    scope_agent_mappings: Vec<ImportAngelMemoriesScopeMapping>,
+pub(crate) struct ImportAngelMemoriesInput {
+    pub(crate) payload: String,
+    pub(crate) scope_agent_mappings: Vec<ImportAngelMemoriesScopeMapping>,
 }
 
-fn memory_internal_type_to_angel(raw: &str) -> Result<String, String> {
+pub(crate) fn memory_internal_type_to_angel(raw: &str) -> Result<String, String> {
     let normalized = raw.trim().to_ascii_lowercase();
     match normalized.as_str() {
         "knowledge" | "" => Ok("知识记忆".to_string()),
@@ -211,7 +211,7 @@ fn memory_internal_type_to_angel(raw: &str) -> Result<String, String> {
     }
 }
 
-fn memory_angel_type_to_internal(raw: &str) -> Result<String, String> {
+pub(crate) fn memory_angel_type_to_internal(raw: &str) -> Result<String, String> {
     let trimmed = raw.trim();
     let normalized = trimmed.to_ascii_lowercase();
     match normalized.as_str() {
@@ -231,7 +231,7 @@ fn memory_angel_type_to_internal(raw: &str) -> Result<String, String> {
     }
 }
 
-fn memory_iso_to_unix_seconds(value: &str) -> Result<f64, String> {
+pub(crate) fn memory_iso_to_unix_seconds(value: &str) -> Result<f64, String> {
     let text = value.trim();
     if text.is_empty() {
         return Ok(0.0);
@@ -240,7 +240,7 @@ fn memory_iso_to_unix_seconds(value: &str) -> Result<f64, String> {
     Ok((parsed.unix_timestamp_nanos() as f64) / 1_000_000_000.0)
 }
 
-fn memory_timestamp_to_iso_required(value: f64) -> Result<String, String> {
+pub(crate) fn memory_timestamp_to_iso_required(value: f64) -> Result<String, String> {
     if !value.is_finite() || value <= 0.0 {
         return Ok(now_iso());
     }
@@ -250,14 +250,14 @@ fn memory_timestamp_to_iso_required(value: f64) -> Result<String, String> {
         .map_err(|err| format!("格式化记忆时间失败: {err}"))
 }
 
-fn memory_timestamp_to_iso_optional(value: f64) -> Result<Option<String>, String> {
+pub(crate) fn memory_timestamp_to_iso_optional(value: f64) -> Result<Option<String>, String> {
     if !value.is_finite() || value <= 0.0 {
         return Ok(None);
     }
     Ok(Some(memory_timestamp_to_iso_required(value)?))
 }
 
-fn agent_memory_scope_label(agent: &AgentProfile) -> String {
+pub(crate) fn agent_memory_scope_label(agent: &AgentProfile) -> String {
     let name = agent.name.trim();
     if !name.is_empty() {
         return name.to_string();
@@ -269,7 +269,7 @@ fn agent_memory_scope_label(agent: &AgentProfile) -> String {
     agent.id.trim().to_string()
 }
 
-fn load_importable_agent_scope_labels(
+pub(crate) fn load_importable_agent_scope_labels(
     state: &AppState,
 ) -> Result<std::collections::HashMap<String, String>, String> {
     let agents = state_read_agents_cached(state)?;
@@ -293,7 +293,7 @@ fn load_importable_agent_scope_labels(
     Ok(out)
 }
 
-fn effective_memory_export_scope(
+pub(crate) fn effective_memory_export_scope(
     owner_agent_id: Option<&str>,
     memory_scope: &str,
     owner_scope_by_agent: &std::collections::HashMap<String, String>,
@@ -311,7 +311,7 @@ fn effective_memory_export_scope(
         })
 }
 
-fn build_memory_exchange_payload(
+pub(crate) fn build_memory_exchange_payload(
     data_path: &PathBuf,
     owner_scope_by_agent: &std::collections::HashMap<String, String>,
     selected_scopes: Option<&std::collections::HashSet<String>>,
@@ -464,7 +464,7 @@ fn build_memory_exchange_payload(
     })
 }
 
-fn parse_angel_memory_payload(payload: &str) -> Result<Vec<AngelNormalizedMemoryRecord>, String> {
+pub(crate) fn parse_angel_memory_payload(payload: &str) -> Result<Vec<AngelNormalizedMemoryRecord>, String> {
     let parsed: AngelMemoryImportPayload =
         serde_json::from_str(payload).map_err(|err| format!("解析记忆备份 JSON 失败: {err}"))?;
     if parsed.records.is_empty() {
@@ -548,7 +548,7 @@ fn parse_angel_memory_payload(payload: &str) -> Result<Vec<AngelNormalizedMemory
     Ok(out)
 }
 
-fn sampled_angel_memory_preview_items(
+pub(crate) fn sampled_angel_memory_preview_items(
     items: &[AngelNormalizedMemoryRecord],
     limit: usize,
 ) -> Vec<PreviewImportAngelMemoriesSample> {
@@ -605,7 +605,7 @@ fn sampled_angel_memory_preview_items(
         .collect()
 }
 
-fn build_preview_scope_items(
+pub(crate) fn build_preview_scope_items(
     items: &[AngelNormalizedMemoryRecord],
 ) -> Vec<PreviewImportAngelMemoriesScopeItem> {
     let mut counts = std::collections::HashMap::<String, usize>::new();
@@ -620,7 +620,7 @@ fn build_preview_scope_items(
     out
 }
 
-fn build_export_scope_items(
+pub(crate) fn build_export_scope_items(
     data_path: &PathBuf,
     owner_scope_by_agent: &std::collections::HashMap<String, String>,
 ) -> Result<Vec<PreviewExportMemoriesScopeItem>, String> {
@@ -659,7 +659,7 @@ fn build_export_scope_items(
     Ok(out)
 }
 
-fn normalize_selected_export_scopes(
+pub(crate) fn normalize_selected_export_scopes(
     scopes: &[String],
 ) -> Result<std::collections::HashSet<String>, String> {
     let selected = scopes
@@ -673,7 +673,7 @@ fn normalize_selected_export_scopes(
     Ok(selected)
 }
 
-fn resolve_import_scope_targets(
+pub(crate) fn resolve_import_scope_targets(
     state: &AppState,
     items: &[AngelNormalizedMemoryRecord],
     mappings: &[ImportAngelMemoriesScopeMapping],
@@ -711,7 +711,7 @@ fn resolve_import_scope_targets(
     Ok(out)
 }
 
-fn import_angel_memories_by_scope(
+pub(crate) fn import_angel_memories_by_scope(
     data_path: &PathBuf,
     items: &[AngelNormalizedMemoryRecord],
     scope_targets: &std::collections::HashMap<String, (String, String)>,
@@ -869,72 +869,72 @@ fn import_angel_memories_by_scope(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DeleteMemoryInput {
-    memory_id: String,
+pub(crate) struct DeleteMemoryInput {
+    pub(crate) memory_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DeleteMemoryResult {
-    status: String,
+pub(crate) struct DeleteMemoryResult {
+    pub(crate) status: String,
 }
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ImportMemoriesInput {
-    memories: Vec<MemoryEntry>,
+pub(crate) struct ImportMemoriesInput {
+    pub(crate) memories: Vec<MemoryEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ImportMemoriesResult {
-    imported_count: usize,
-    created_count: usize,
-    merged_count: usize,
-    total_count: usize,
+pub(crate) struct ImportMemoriesResult {
+    pub(crate) imported_count: usize,
+    pub(crate) created_count: usize,
+    pub(crate) merged_count: usize,
+    pub(crate) total_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SearchMemoriesMixedInput {
-    query: String,
+pub(crate) struct SearchMemoriesMixedInput {
+    pub(crate) query: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SearchMemoriesMixedResult {
-    memories: Vec<SearchMemoriesMixedHit>,
-    elapsed_ms: u128,
+pub(crate) struct SearchMemoriesMixedResult {
+    pub(crate) memories: Vec<SearchMemoriesMixedHit>,
+    pub(crate) elapsed_ms: u128,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SearchMemoriesMixedHit {
-    memory: MemoryEntry,
-    bm25_score: f64,
-    bm25_raw_score: f64,
-    vector_score: f64,
-    rerank_score: f64,
-    final_score: f64,
+pub(crate) struct SearchMemoriesMixedHit {
+    pub(crate) memory: MemoryEntry,
+    pub(crate) bm25_score: f64,
+    pub(crate) bm25_raw_score: f64,
+    pub(crate) vector_score: f64,
+    pub(crate) rerank_score: f64,
+    pub(crate) final_score: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ExportMemoriesFileResult {
-    path: String,
-    count: usize,
+pub(crate) struct ExportMemoriesFileResult {
+    pub(crate) path: String,
+    pub(crate) count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ExportMemoriesToPathInput {
-    path: String,
+pub(crate) struct ExportMemoriesToPathInput {
+    pub(crate) path: String,
     #[serde(default)]
-    scopes: Vec<String>,
+    pub(crate) scopes: Vec<String>,
 }
 
-fn delete_memory_inner(
+pub(crate) fn delete_memory_inner(
     state: &AppState,
     input: DeleteMemoryInput,
 ) -> Result<DeleteMemoryResult, String> {
@@ -944,7 +944,7 @@ fn delete_memory_inner(
     })
 }
 
-fn export_memories_inner(
+pub(crate) fn export_memories_inner(
     state: &AppState,
     selected_scopes: Option<Vec<String>>,
 ) -> Result<AngelMemoryExportPayload, String> {
@@ -960,7 +960,7 @@ fn export_memories_inner(
     )
 }
 
-fn preview_export_memories_inner(state: &AppState) -> Result<PreviewExportMemoriesResult, String> {
+pub(crate) fn preview_export_memories_inner(state: &AppState) -> Result<PreviewExportMemoriesResult, String> {
     let owner_scope_by_agent = load_importable_agent_scope_labels(state)?;
     let scopes = build_export_scope_items(&state.data_path, &owner_scope_by_agent)?;
     Ok(PreviewExportMemoriesResult {
@@ -969,7 +969,7 @@ fn preview_export_memories_inner(state: &AppState) -> Result<PreviewExportMemori
     })
 }
 
-fn import_memories_inner(
+pub(crate) fn import_memories_inner(
     state: &AppState,
     input: ImportMemoriesInput,
 ) -> Result<ImportMemoriesResult, String> {
@@ -982,7 +982,7 @@ fn import_memories_inner(
     })
 }
 
-fn preview_import_angel_memories_inner(
+pub(crate) fn preview_import_angel_memories_inner(
     input: PreviewImportAngelMemoriesInput,
 ) -> Result<PreviewImportAngelMemoriesResult, String> {
     let parsed = parse_angel_memory_payload(&input.payload)?;
@@ -993,7 +993,7 @@ fn preview_import_angel_memories_inner(
     })
 }
 
-fn import_angel_memories_inner(
+pub(crate) fn import_angel_memories_inner(
     state: &AppState,
     input: ImportAngelMemoriesInput,
 ) -> Result<ImportMemoriesResult, String> {
@@ -1009,7 +1009,7 @@ fn import_angel_memories_inner(
     })
 }
 
-fn search_memories_mixed_inner(
+pub(crate) fn search_memories_mixed_inner(
     state: &AppState,
     input: SearchMemoriesMixedInput,
 ) -> Result<SearchMemoriesMixedResult, String> {
@@ -1081,31 +1081,31 @@ fn search_memories_mixed_inner(
 // 目标: 给定 (agentId, query) 输出与对话实际召回逐字一致的结果, 不靠模仿靠复用。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SearchMemoriesRecallInput {
-    agent_id: String,
-    query: String,
-    mode: String,
+pub(crate) struct SearchMemoriesRecallInput {
+    pub(crate) agent_id: String,
+    pub(crate) query: String,
+    pub(crate) mode: String,
     #[serde(default)]
-    time: Option<String>,
+    pub(crate) time: Option<String>,
     #[serde(default)]
-    offset: Option<usize>,
+    pub(crate) offset: Option<usize>,
     #[serde(default)]
-    limit: Option<usize>,
+    pub(crate) limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SearchMemoriesRecallResult {
-    memories: Vec<SearchMemoriesMixedHit>,
-    elapsed_ms: u128,
-    mode: String,
-    total: usize,
-    offset: usize,
-    limit: usize,
+pub(crate) struct SearchMemoriesRecallResult {
+    pub(crate) memories: Vec<SearchMemoriesMixedHit>,
+    pub(crate) elapsed_ms: u128,
+    pub(crate) mode: String,
+    pub(crate) total: usize,
+    pub(crate) offset: usize,
+    pub(crate) limit: usize,
 }
 
 
-fn search_memories_recall_inner(
+pub(crate) fn search_memories_recall_inner(
     input: SearchMemoriesRecallInput,
     state: &AppState,
 ) -> Result<SearchMemoriesRecallResult, String> {
@@ -1267,7 +1267,7 @@ fn search_memories_recall_inner(
 
 
 #[cfg(test)]
-mod memory_exchange_tests {
+pub(crate) mod memory_exchange_tests {
     use super::*;
 
     fn temp_data_path(name: &str) -> PathBuf {

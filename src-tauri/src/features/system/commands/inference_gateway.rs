@@ -1,38 +1,38 @@
 #[derive(Debug, Clone)]
-struct CallPolicy {
-    scene: &'static str,
-    timeout_secs: Option<u64>,
-    json_only: bool,
+pub(crate) struct CallPolicy {
+    pub(crate) scene: &'static str,
+    pub(crate) timeout_secs: Option<u64>,
+    pub(crate) json_only: bool,
 }
 
 #[derive(Debug, Clone)]
-struct ModelCallLogParts {
-    scene: &'static str,
-    request_format: RequestFormat,
-    provider_name: String,
-    model_name: String,
-    base_url: String,
-    headers: Vec<LlmRoundLogHeader>,
-    tools: Option<Value>,
-    response: Option<Value>,
-    error: Option<String>,
-    elapsed_ms: u64,
-    timeline: Option<Vec<LlmRoundLogStage>>,
+pub(crate) struct ModelCallLogParts {
+    pub(crate) scene: &'static str,
+    pub(crate) request_format: RequestFormat,
+    pub(crate) provider_name: String,
+    pub(crate) model_name: String,
+    pub(crate) base_url: String,
+    pub(crate) headers: Vec<LlmRoundLogHeader>,
+    pub(crate) tools: Option<Value>,
+    pub(crate) response: Option<Value>,
+    pub(crate) error: Option<String>,
+    pub(crate) elapsed_ms: u64,
+    pub(crate) timeline: Option<Vec<LlmRoundLogStage>>,
 }
 
 #[derive(Debug, Clone)]
-struct ModelCallExecutionResult {
-    result: Result<ModelReply, String>,
-    log_parts: ModelCallLogParts,
+pub(crate) struct ModelCallExecutionResult {
+    pub(crate) result: Result<ModelReply, String>,
+    pub(crate) log_parts: ModelCallLogParts,
     /// 压缩重启时交给外层调度上下文的压缩保留消息；仅重启路径使用。
-    compaction_preserved_messages: Option<CompactionPreservedMessages>,
+    pub(crate) compaction_preserved_messages: Option<CompactionPreservedMessages>,
 }
 
-struct ProviderConcurrencyGuard {
-    provider_id: String,
-    model_name: String,
-    acquired_at: std::time::Instant,
-    _permit: tokio::sync::OwnedSemaphorePermit,
+pub(crate) struct ProviderConcurrencyGuard {
+    pub(crate) provider_id: String,
+    pub(crate) model_name: String,
+    pub(crate) acquired_at: std::time::Instant,
+    pub(crate) _permit: tokio::sync::OwnedSemaphorePermit,
 }
 
 impl Drop for ProviderConcurrencyGuard {
@@ -49,7 +49,7 @@ impl Drop for ProviderConcurrencyGuard {
     }
 }
 
-fn push_model_call_log_parts(state: Option<&AppState>, execution: &ModelCallExecutionResult) {
+pub(crate) fn push_model_call_log_parts(state: Option<&AppState>, execution: &ModelCallExecutionResult) {
     push_llm_round_log(
         state,
         None,
@@ -68,14 +68,14 @@ fn push_model_call_log_parts(state: Option<&AppState>, execution: &ModelCallExec
     );
 }
 
-fn elapsed_ms_u64(started_at: std::time::Instant) -> u64 {
+pub(crate) fn elapsed_ms_u64(started_at: std::time::Instant) -> u64 {
     started_at
         .elapsed()
         .as_millis()
         .min(u128::from(u64::MAX)) as u64
 }
 
-fn fast_request_response_text_from_reply(reply: &ModelReply) -> String {
+pub(crate) fn fast_request_response_text_from_reply(reply: &ModelReply) -> String {
     let final_response_text = reply.final_response_text.trim();
     if !final_response_text.is_empty() {
         return final_response_text.to_string();
@@ -83,7 +83,7 @@ fn fast_request_response_text_from_reply(reply: &ModelReply) -> String {
     reply.assistant_text.trim().to_string()
 }
 
-fn prepared_prompt_to_fast_request_text(prepared: &PreparedPrompt) -> String {
+pub(crate) fn prepared_prompt_to_fast_request_text(prepared: &PreparedPrompt) -> String {
     let mut blocks = Vec::<String>::new();
     if !prepared.preamble.trim().is_empty() {
         blocks.push(format!("system:\n{}", prepared.preamble.trim()));
@@ -134,7 +134,7 @@ fn prepared_prompt_to_fast_request_text(prepared: &PreparedPrompt) -> String {
     blocks.join("\n\n---\n\n")
 }
 
-fn build_fast_request_turn(
+pub(crate) fn build_fast_request_turn(
     kind: &str,
     request_text: &str,
     response_text: &str,
@@ -160,7 +160,7 @@ fn build_fast_request_turn(
     }
 }
 
-fn record_fast_request_turn_best_effort(
+pub(crate) fn record_fast_request_turn_best_effort(
     state: &AppState,
     conversation_id: &str,
     turn: FastRequestTurn,
@@ -188,13 +188,13 @@ fn record_fast_request_turn_best_effort(
 }
 
 #[derive(Debug, Clone)]
-struct FastRequestRecordTarget {
-    conversation_id: String,
-    kind: &'static str,
+pub(crate) struct FastRequestRecordTarget {
+    pub(crate) conversation_id: String,
+    pub(crate) kind: &'static str,
 }
 
 impl CallPolicy {
-    fn archive_json(timeout_secs: u64) -> Self {
+    pub(crate) fn archive_json(timeout_secs: u64) -> Self {
         Self {
             scene: "Archive summary",
             timeout_secs: Some(timeout_secs),
@@ -203,13 +203,13 @@ impl CallPolicy {
     }
 }
 
-const PROVIDER_STREAMING_DISABLED_TTL_SECS: i64 = 10 * 60;
+pub(crate) const PROVIDER_STREAMING_DISABLED_TTL_SECS: i64 = 10 * 60;
 
-fn provider_base_url_cache_key(base_url: &str) -> String {
+pub(crate) fn provider_base_url_cache_key(base_url: &str) -> String {
     base_url.trim().trim_end_matches('/').to_string()
 }
 
-fn provider_streaming_cache_key(
+pub(crate) fn provider_streaming_cache_key(
     request_format: RequestFormat,
     base_url: &str,
     model_name: &str,
@@ -224,14 +224,14 @@ fn provider_streaming_cache_key(
     )
 }
 
-fn prune_expired_provider_streaming_disabled_cache(
+pub(crate) fn prune_expired_provider_streaming_disabled_cache(
     cache: &mut std::collections::HashMap<String, i64>,
 ) {
     let now_ts = now_utc().unix_timestamp();
     cache.retain(|_, expires_at| *expires_at > now_ts);
 }
 
-fn provider_streaming_disabled_cached(
+pub(crate) fn provider_streaming_disabled_cached(
     state: Option<&AppState>,
     request_format: RequestFormat,
     base_url: &str,
@@ -248,7 +248,7 @@ fn provider_streaming_disabled_cached(
     cache.contains_key(&key)
 }
 
-fn provider_streaming_disabled(
+pub(crate) fn provider_streaming_disabled(
     state: Option<&AppState>,
     request_format: RequestFormat,
     base_url: &str,
@@ -257,7 +257,7 @@ fn provider_streaming_disabled(
     provider_streaming_disabled_cached(state, request_format, base_url, model_name)
 }
 
-fn provider_mark_streaming_disabled(
+pub(crate) fn provider_mark_streaming_disabled(
     state: Option<&AppState>,
     request_format: RequestFormat,
     base_url: &str,
@@ -278,7 +278,7 @@ fn provider_mark_streaming_disabled(
     Ok(())
 }
 
-fn provider_clear_streaming_disabled(
+pub(crate) fn provider_clear_streaming_disabled(
     state: Option<&AppState>,
     request_format: RequestFormat,
     base_url: &str,
@@ -296,7 +296,7 @@ fn provider_clear_streaming_disabled(
     Ok(())
 }
 
-fn provider_system_message_user_fallback_cached(state: Option<&AppState>, base_url: &str) -> bool {
+pub(crate) fn provider_system_message_user_fallback_cached(state: Option<&AppState>, base_url: &str) -> bool {
     let Some(app_state) = state else {
         return false;
     };
@@ -307,11 +307,11 @@ fn provider_system_message_user_fallback_cached(state: Option<&AppState>, base_u
     cache.contains(&key)
 }
 
-fn provider_system_message_user_fallback(state: Option<&AppState>, base_url: &str) -> bool {
+pub(crate) fn provider_system_message_user_fallback(state: Option<&AppState>, base_url: &str) -> bool {
     provider_system_message_user_fallback_cached(state, base_url)
 }
 
-async fn maybe_acquire_provider_concurrency_guard(
+pub(crate) async fn maybe_acquire_provider_concurrency_guard(
     state: Option<&AppState>,
     resolved_api: &ResolvedApiConfig,
     model_name: &str,
@@ -377,7 +377,7 @@ async fn maybe_acquire_provider_concurrency_guard(
     }))
 }
 
-fn provider_mark_system_message_user_fallback(
+pub(crate) fn provider_mark_system_message_user_fallback(
     state: Option<&AppState>,
     base_url: &str,
 ) -> Result<(), String> {
@@ -392,13 +392,13 @@ fn provider_mark_system_message_user_fallback(
     Ok(())
 }
 
-fn is_system_message_not_allowed_error(err: &str) -> bool {
+pub(crate) fn is_system_message_not_allowed_error(err: &str) -> bool {
     let normalized = err.to_ascii_lowercase();
     normalized.contains("system messages are not allowed")
         || normalized.contains("system message is not allowed")
 }
 
-fn move_system_preamble_to_user_prompt(prepared: &mut PreparedPrompt) -> bool {
+pub(crate) fn move_system_preamble_to_user_prompt(prepared: &mut PreparedPrompt) -> bool {
     let preamble = prepared.preamble.trim().to_string();
     if preamble.is_empty() {
         return false;
@@ -409,7 +409,7 @@ fn move_system_preamble_to_user_prompt(prepared: &mut PreparedPrompt) -> bool {
     true
 }
 
-fn is_streaming_request_payload_format_error(err: &str) -> bool {
+pub(crate) fn is_streaming_request_payload_format_error(err: &str) -> bool {
     let normalized = err.to_ascii_lowercase();
     (normalized.contains("request body")
         || normalized.contains("invalid request body")
@@ -425,11 +425,11 @@ fn is_streaming_request_payload_format_error(err: &str) -> bool {
         && !normalized.contains("status code '5")
 }
 
-fn request_format_supports_non_stream_fallback(format: RequestFormat) -> bool {
+pub(crate) fn request_format_supports_non_stream_fallback(format: RequestFormat) -> bool {
     format.is_genai_chat() || format.is_auto()
 }
 
-async fn invoke_model_by_format(
+pub(crate) async fn invoke_model_by_format(
     resolved_api: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
@@ -457,7 +457,7 @@ async fn invoke_model_by_format(
     ))
 }
 
-async fn invoke_model_non_stream_by_format(
+pub(crate) async fn invoke_model_non_stream_by_format(
     resolved_api: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
@@ -482,7 +482,7 @@ async fn invoke_model_non_stream_by_format(
     invoke_model_by_format(resolved_api, model_name, prepared, app_state, tool_definitions).await
 }
 
-async fn invoke_model_by_format_with_timeout(
+pub(crate) async fn invoke_model_by_format_with_timeout(
     resolved_api: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
@@ -506,7 +506,7 @@ async fn invoke_model_by_format_with_timeout(
     })?
 }
 
-async fn invoke_model_non_stream_by_format_with_timeout(
+pub(crate) async fn invoke_model_non_stream_by_format_with_timeout(
     resolved_api: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
@@ -536,7 +536,7 @@ async fn invoke_model_non_stream_by_format_with_timeout(
     })?
 }
 
-async fn invoke_model_with_policy(
+pub(crate) async fn invoke_model_with_policy(
     resolved_api: &ResolvedApiConfig,
     model_name: &str,
     prepared: PreparedPrompt,
@@ -764,7 +764,7 @@ async fn invoke_model_with_policy(
     }
 }
 
-fn quick_json_prepared_prompt(prompt: &str) -> PreparedPrompt {
+pub(crate) fn quick_json_prepared_prompt(prompt: &str) -> PreparedPrompt {
     PreparedPrompt {
         preamble: "只返回一个 JSON 对象，不要解释，不要 Markdown，不要代码块。".to_string(),
         history_messages: Vec::new(),
@@ -777,7 +777,7 @@ fn quick_json_prepared_prompt(prompt: &str) -> PreparedPrompt {
     }
 }
 
-fn parse_quick_model_json_response(
+pub(crate) fn parse_quick_model_json_response(
     raw: &str,
     required_fields: &[&str],
     optional_fields: &[&str],
@@ -815,7 +815,7 @@ fn parse_quick_model_json_response(
         })
 }
 
-fn resolved_model_name_for_quick_request(
+pub(crate) fn resolved_model_name_for_quick_request(
     selected_api: &ApiConfig,
     resolved_api: &ResolvedApiConfig,
 ) -> String {
@@ -826,7 +826,7 @@ fn resolved_model_name_for_quick_request(
     }
 }
 
-fn quick_request_adapter_kind(
+pub(crate) fn quick_request_adapter_kind(
     resolved_api: &ResolvedApiConfig,
     model_name: &str,
 ) -> genai::adapter::AdapterKind {
@@ -848,23 +848,23 @@ fn quick_request_adapter_kind(
 }
 
 #[derive(Debug, Clone)]
-struct QuickModelJsonCallOutput {
-    value: Value,
-    raw_text: String,
-    model_name: String,
-    duration_ms: u64,
+pub(crate) struct QuickModelJsonCallOutput {
+    pub(crate) value: Value,
+    pub(crate) raw_text: String,
+    pub(crate) model_name: String,
+    pub(crate) duration_ms: u64,
 }
 
 #[derive(Debug, Clone)]
-struct QuickModelJsonCallError {
-    message: String,
-    raw_text: Option<String>,
-    model_name: Option<String>,
-    duration_ms: Option<u64>,
+pub(crate) struct QuickModelJsonCallError {
+    pub(crate) message: String,
+    pub(crate) raw_text: Option<String>,
+    pub(crate) model_name: Option<String>,
+    pub(crate) duration_ms: Option<u64>,
 }
 
 impl QuickModelJsonCallError {
-    fn from_message(message: impl Into<String>) -> Self {
+    pub(crate) fn from_message(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
             raw_text: None,
@@ -874,7 +874,7 @@ impl QuickModelJsonCallError {
     }
 }
 
-async fn invoke_quick_model_reply_with_prepared_prompt(
+pub(crate) async fn invoke_quick_model_reply_with_prepared_prompt(
     state: &AppState,
     api_config_id: &str,
     prepared: PreparedPrompt,
@@ -930,7 +930,7 @@ async fn invoke_quick_model_reply_with_prepared_prompt(
     }
 }
 
-async fn invoke_quick_model_json_result_with_prepared_prompt(
+pub(crate) async fn invoke_quick_model_json_result_with_prepared_prompt(
     state: &AppState,
     scene: &'static str,
     prepared: PreparedPrompt,
@@ -953,7 +953,7 @@ async fn invoke_quick_model_json_result_with_prepared_prompt(
     .await
 }
 
-async fn invoke_model_json_result_with_api_config_id(
+pub(crate) async fn invoke_model_json_result_with_api_config_id(
     state: &AppState,
     api_config_id: &str,
     scene: &'static str,
@@ -1004,7 +1004,7 @@ async fn invoke_model_json_result_with_api_config_id(
 }
 
 #[allow(dead_code)]
-async fn invoke_quick_model_json_with_prepared_prompt(
+pub(crate) async fn invoke_quick_model_json_with_prepared_prompt(
     state: &AppState,
     scene: &'static str,
     prepared: PreparedPrompt,
@@ -1025,7 +1025,7 @@ async fn invoke_quick_model_json_with_prepared_prompt(
     .map_err(|err| err.message)
 }
 
-async fn invoke_quick_model_json_result(
+pub(crate) async fn invoke_quick_model_json_result(
     state: &AppState,
     scene: &'static str,
     prompt: &str,
@@ -1050,7 +1050,7 @@ async fn invoke_quick_model_json_result(
 }
 
 #[allow(dead_code)]
-async fn invoke_quick_model_json(
+pub(crate) async fn invoke_quick_model_json(
     state: &AppState,
     scene: &'static str,
     prompt: &str,
@@ -1073,7 +1073,7 @@ async fn invoke_quick_model_json(
 }
 
 /// 用专家模型（对话设置中的专家模型）做一次 JSON 输出请求
-async fn invoke_expert_model_json_result(
+pub(crate) async fn invoke_expert_model_json_result(
     state: &AppState,
     scene: &'static str,
     prompt: &str,
@@ -1106,7 +1106,7 @@ async fn invoke_expert_model_json_result(
     .await
 }
 
-async fn call_archive_summary_model_with_timeout(
+pub(crate) async fn call_archive_summary_model_with_timeout(
     state: &AppState,
     resolved_api: &ResolvedApiConfig,
     selected_api: &ApiConfig,
@@ -1126,7 +1126,7 @@ async fn call_archive_summary_model_with_timeout(
 }
 
 #[cfg(test)]
-mod inference_gateway_tests {
+pub(crate) mod inference_gateway_tests {
     use super::*;
 
     #[test]

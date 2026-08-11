@@ -1,4 +1,4 @@
-fn weixin_oc_contact_display_name(
+pub(crate) fn weixin_oc_contact_display_name(
     channel: &RemoteImChannelConfig,
     user_id: &str,
 ) -> String {
@@ -13,7 +13,7 @@ fn weixin_oc_contact_display_name(
     "个人微信".to_string()
 }
 
-async fn handle_weixin_oc_inbound_message(
+pub(crate) async fn handle_weixin_oc_inbound_message(
     channel: &RemoteImChannelConfig,
     state: &AppState,
     msg: WeixinOcInboundMessage,
@@ -127,7 +127,7 @@ async fn handle_weixin_oc_inbound_message(
     Ok(())
 }
 
-async fn run_single_weixin_oc_poll_cycle(
+pub(crate) async fn run_single_weixin_oc_poll_cycle(
     channel_id: &str,
     state: &AppState,
 ) -> Result<(), String> {
@@ -204,7 +204,7 @@ async fn run_single_weixin_oc_poll_cycle(
     Ok(())
 }
 
-fn upsert_weixin_oc_contact(
+pub(crate) fn upsert_weixin_oc_contact(
     runtime: &mut RuntimeStateFile,
     channel: &RemoteImChannelConfig,
     user_id: &str,
@@ -263,7 +263,7 @@ fn upsert_weixin_oc_contact(
 }
 
 #[cfg(test)]
-mod weixin_oc_inbound_tests {
+pub(crate) mod weixin_oc_inbound_tests {
     use super::*;
 
     #[test]
@@ -288,7 +288,7 @@ mod weixin_oc_inbound_tests {
     }
 }
 
-fn sync_weixin_oc_contact_from_user_id(
+pub(crate) fn sync_weixin_oc_contact_from_user_id(
     state: &AppState,
     channel: &RemoteImChannelConfig,
     user_id: &str,
@@ -407,7 +407,7 @@ pub(crate) async fn weixin_oc_send_message_items(
 
 
 
-fn remote_im_weixin_oc_sync_contacts_inner(
+pub(crate) fn remote_im_weixin_oc_sync_contacts_inner(
     state: &AppState,
     input: WeixinOcLoginStatusInput,
 ) -> Result<WeixinOcSyncContactsResult, String> {

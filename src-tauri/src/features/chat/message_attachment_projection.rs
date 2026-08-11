@@ -20,6 +20,7 @@ use uuid::Uuid;
 // Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
 
 
+use std::path::Path;
 use super::*;
 
 pub(crate) const PROMPT_MESSAGE_ABSTRACT_SCHEMA_VERSION: u32 = 1;
@@ -905,7 +906,7 @@ pub(crate) fn canonicalize_message_parts_for_persistence(
 }
 
 #[cfg(test)]
-mod message_attachment_projection_tests {
+pub(crate) mod message_attachment_projection_tests {
 
     fn test_message(parts: Vec<MessagePart>) -> ChatMessage {
         ChatMessage {

@@ -1,12 +1,12 @@
 #[derive(Debug, Clone)]
-struct RemoteImGroupReplyGate {
-    allowed: bool,
-    max_chars: u32,
-    energy: f64,
-    reason: String,
+pub(crate) struct RemoteImGroupReplyGate {
+    pub(crate) allowed: bool,
+    pub(crate) max_chars: u32,
+    pub(crate) energy: f64,
+    pub(crate) reason: String,
 }
 
-fn effective_remote_im_group_reply_pacing(
+pub(crate) fn effective_remote_im_group_reply_pacing(
     state: &AppState,
     contact: &RemoteImContact,
 ) -> RemoteImGroupReplyPacing {
@@ -50,7 +50,7 @@ fn effective_remote_im_group_reply_pacing(
     pacing
 }
 
-fn remote_im_group_energy_at(
+pub(crate) fn remote_im_group_energy_at(
     checkpoint: Option<&RemoteImContactCheckpoint>,
     pacing: &RemoteImGroupReplyPacing,
     now: OffsetDateTime,
@@ -69,11 +69,11 @@ fn remote_im_group_energy_at(
         .clamp(-pacing.maximum_energy, pacing.maximum_energy)
 }
 
-fn remote_im_bump_checkpoint_atomic_revision(checkpoint: &mut RemoteImContactCheckpoint) {
+pub(crate) fn remote_im_bump_checkpoint_atomic_revision(checkpoint: &mut RemoteImContactCheckpoint) {
     checkpoint.atomic_revision = checkpoint.atomic_revision.saturating_add(1).max(1);
 }
 
-fn remote_im_reset_contact_checkpoint_atomic_in_list(
+pub(crate) fn remote_im_reset_contact_checkpoint_atomic_in_list(
     checkpoints: &mut Vec<RemoteImContactCheckpoint>,
     contact_id: &str,
 ) {
@@ -87,11 +87,11 @@ fn remote_im_reset_contact_checkpoint_atomic_in_list(
     };
 }
 
-fn remote_im_group_energy_can_reply(energy: f64) -> bool {
+pub(crate) fn remote_im_group_energy_can_reply(energy: f64) -> bool {
     energy.is_finite() && energy > 0.0
 }
 
-fn remote_im_group_reply_gate(
+pub(crate) fn remote_im_group_reply_gate(
     state: &AppState,
     contact: &RemoteImContact,
     focus: bool,
@@ -175,7 +175,7 @@ fn remote_im_group_reply_gate(
     })
 }
 
-fn remote_im_group_inbound_batch_delta(
+pub(crate) fn remote_im_group_inbound_batch_delta(
     messages: &[ChatMessage],
     pacing: &RemoteImGroupReplyPacing,
 ) -> f64 {
@@ -205,7 +205,7 @@ fn remote_im_group_inbound_batch_delta(
         + (negative_hits as f64 * pacing.negative_energy_delta).max(-cap)
 }
 
-fn remote_im_apply_group_energy_for_messages(
+pub(crate) fn remote_im_apply_group_energy_for_messages(
     state: &AppState,
     contact: &RemoteImContact,
     messages: &[ChatMessage],
@@ -239,7 +239,7 @@ fn remote_im_apply_group_energy_for_messages(
 }
 
 #[cfg(test)]
-fn remote_im_apply_inbound_group_energy(
+pub(crate) fn remote_im_apply_inbound_group_energy(
     state: &AppState,
     contact: &RemoteImContact,
     _sender_id: &str,
@@ -263,7 +263,7 @@ fn remote_im_apply_inbound_group_energy(
     remote_im_apply_group_energy_for_messages(state, contact, std::slice::from_ref(&message))
 }
 
-fn remote_im_prepare_group_reply_delivery(
+pub(crate) fn remote_im_prepare_group_reply_delivery(
     state: &AppState,
     contact: &RemoteImContact,
     generation: u64,
@@ -330,7 +330,7 @@ fn remote_im_prepare_group_reply_delivery(
     })
 }
 
-fn remote_im_cancel_prepared_group_reply_delivery(
+pub(crate) fn remote_im_cancel_prepared_group_reply_delivery(
     state: &AppState,
     contact_id: &str,
     marker: &RemoteImGroupReplyDeliveryMarker,
@@ -363,7 +363,7 @@ fn remote_im_cancel_prepared_group_reply_delivery(
     Ok(())
 }
 
-fn remote_im_persist_group_reply_settlement(
+pub(crate) fn remote_im_persist_group_reply_settlement(
     state: &AppState,
     contact: &RemoteImContact,
     settlement: &RemoteImGroupReplySettlement,
@@ -473,7 +473,7 @@ fn remote_im_persist_group_reply_settlement(
     Ok(())
 }
 
-fn remote_im_recover_group_reply_delivery_marker(
+pub(crate) fn remote_im_recover_group_reply_delivery_marker(
     state: &AppState,
     contact: &RemoteImContact,
 ) -> Result<(), String> {
@@ -538,7 +538,7 @@ fn remote_im_recover_group_reply_delivery_marker(
     )
 }
 
-fn remote_im_recover_all_group_reply_delivery_markers(
+pub(crate) fn remote_im_recover_all_group_reply_delivery_markers(
     state: &AppState,
 ) -> Result<(usize, usize), String> {
     let runtime = state_read_runtime_state_cached(state)?;
@@ -582,7 +582,7 @@ fn remote_im_recover_all_group_reply_delivery_markers(
 }
 
 #[cfg(test)]
-mod remote_im_group_reply_energy_tests {
+pub(crate) mod remote_im_group_reply_energy_tests {
     use super::*;
 
     #[test]

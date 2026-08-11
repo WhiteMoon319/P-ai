@@ -1,6 +1,6 @@
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-enum DesktopToolErrorCode {
+pub(crate) enum DesktopToolErrorCode {
     InvalidParams,
     Timeout,
     TargetNotFound,
@@ -9,15 +9,15 @@ enum DesktopToolErrorCode {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DesktopToolError {
-    code: DesktopToolErrorCode,
-    message: String,
+pub(crate) struct DesktopToolError {
+    pub(crate) code: DesktopToolErrorCode,
+    pub(crate) message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    details: Option<Value>,
+    pub(crate) details: Option<Value>,
 }
 
 impl DesktopToolError {
-    fn invalid_params(message: impl Into<String>) -> Self {
+    pub(crate) fn invalid_params(message: impl Into<String>) -> Self {
         Self {
             code: DesktopToolErrorCode::InvalidParams,
             message: message.into(),
@@ -25,7 +25,7 @@ impl DesktopToolError {
         }
     }
 
-    fn internal_error(message: impl Into<String>) -> Self {
+    pub(crate) fn internal_error(message: impl Into<String>) -> Self {
         Self {
             code: DesktopToolErrorCode::InternalError,
             message: message.into(),
@@ -34,15 +34,15 @@ impl DesktopToolError {
     }
 }
 
-type DesktopToolResult<T> = Result<T, DesktopToolError>;
+pub(crate) type DesktopToolResult<T> = Result<T, DesktopToolError>;
 
-fn to_tool_err_string(err: &DesktopToolError) -> String {
+pub(crate) fn to_tool_err_string(err: &DesktopToolError) -> String {
     serde_json::to_string(err).unwrap_or_else(|_| err.message.clone())
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-enum ScreenshotMode {
+pub(crate) enum ScreenshotMode {
     Desktop,
     Monitor,
     Region,
@@ -50,58 +50,58 @@ enum ScreenshotMode {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ScreenBounds {
-    x: i32,
-    y: i32,
-    width: u32,
-    height: u32,
+pub(crate) struct ScreenBounds {
+    pub(crate) x: i32,
+    pub(crate) y: i32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ScreenshotRequest {
+pub(crate) struct ScreenshotRequest {
     #[serde(default = "default_screenshot_mode")]
-    mode: ScreenshotMode,
+    pub(crate) mode: ScreenshotMode,
     #[serde(default)]
-    monitor_id: Option<u32>,
+    pub(crate) monitor_id: Option<u32>,
     #[serde(default)]
-    region: Option<ScreenBounds>,
+    pub(crate) region: Option<ScreenBounds>,
     #[serde(default)]
-    save_path: Option<String>,
+    pub(crate) save_path: Option<String>,
     #[serde(default = "default_webp_quality")]
-    webp_quality: f32,
+    pub(crate) webp_quality: f32,
     #[serde(default = "default_include_screenshot_base64")]
-    include_base64: bool,
+    pub(crate) include_base64: bool,
 }
 
-fn default_screenshot_mode() -> ScreenshotMode {
+pub(crate) fn default_screenshot_mode() -> ScreenshotMode {
     ScreenshotMode::Desktop
 }
 
-fn default_webp_quality() -> f32 {
+pub(crate) fn default_webp_quality() -> f32 {
     75.0
 }
 
-fn default_include_screenshot_base64() -> bool {
+pub(crate) fn default_include_screenshot_base64() -> bool {
     true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ScreenshotResponse {
-    ok: bool,
+pub(crate) struct ScreenshotResponse {
+    pub(crate) ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    path: Option<String>,
-    image_mime: String,
+    pub(crate) path: Option<String>,
+    pub(crate) image_mime: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    image_base64: Option<String>,
-    width: u32,
-    height: u32,
-    bounds: ScreenBounds,
-    elapsed_ms: u64,
-    capture_ms: u64,
-    encode_ms: u64,
+    pub(crate) image_base64: Option<String>,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) bounds: ScreenBounds,
+    pub(crate) elapsed_ms: u64,
+    pub(crate) capture_ms: u64,
+    pub(crate) encode_ms: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    save_ms: Option<u64>,
-    timestamp: String,
+    pub(crate) save_ms: Option<u64>,
+    pub(crate) timestamp: String,
 }

@@ -1,4 +1,4 @@
-fn resolve_archive_owner_agent_id(
+pub(crate) fn resolve_archive_owner_agent_id(
     config: &AppConfig,
     agents: &[AgentProfile],
     source: &Conversation,
@@ -42,7 +42,7 @@ fn resolve_archive_owner_agent_id(
 }
 
 #[cfg(test)]
-mod archive_host_selection_tests {
+pub(crate) mod archive_host_selection_tests {
     use super::*;
 
     fn mk_agent(id: &str) -> AgentProfile {

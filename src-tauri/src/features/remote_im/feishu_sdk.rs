@@ -1,7 +1,7 @@
-struct FeishuSdk;
+pub(crate) struct FeishuSdk;
 
 impl FeishuSdk {
-    async fn tenant_access_token(&self, channel: &RemoteImChannelConfig) -> Result<String, String> {
+    pub(crate) async fn tenant_access_token(&self, channel: &RemoteImChannelConfig) -> Result<String, String> {
         let started = std::time::Instant::now();
         remote_im_log(
             "INFO",
@@ -30,7 +30,7 @@ impl FeishuSdk {
             .timeout(std::time::Duration::from_secs(12));
         #[cfg(target_os = "android")]
         {
-            client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+            client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)?;
         }
         let client = client_builder
             .build()
@@ -115,7 +115,7 @@ impl FeishuSdk {
         Ok(token.to_string())
     }
 
-    async fn send_message(
+    pub(crate) async fn send_message(
         &self,
         client: &reqwest::Client,
         token: &str,
@@ -169,7 +169,7 @@ impl FeishuSdk {
             .to_string())
     }
 
-    async fn upload_image_key(
+    pub(crate) async fn upload_image_key(
         &self,
         client: &reqwest::Client,
         token: &str,
@@ -207,7 +207,7 @@ impl FeishuSdk {
         Ok(image_key)
     }
 
-    async fn upload_file_key(
+    pub(crate) async fn upload_file_key(
         &self,
         client: &reqwest::Client,
         token: &str,
@@ -309,7 +309,7 @@ impl RemoteImSdk for FeishuSdk {
                 .timeout(std::time::Duration::from_secs(12));
             #[cfg(target_os = "android")]
             {
-                client_builder = android_workspace_apply_static_webpki_roots(client_builder)
+                client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)
                     .map_err(RemoteImSdkSendError::definitely_not_sent)?;
             }
             let client = client_builder

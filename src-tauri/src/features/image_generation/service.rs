@@ -248,7 +248,7 @@ pub(crate) async fn generate_images(
 }
 
 #[cfg(test)]
-mod image_generation_service_tests {
+pub(crate) mod image_generation_service_tests {
     use super::*;
 
     #[test]

@@ -1,33 +1,36 @@
 use std::{future::Future, pin::Pin};
 
+use std::path::Path;
+use super::*;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RemoteImSdkSendErrorKind {
+pub(crate) enum RemoteImSdkSendErrorKind {
     DefinitelyNotSent,
     Uncertain,
 }
 
 #[derive(Debug, Clone)]
-struct RemoteImSdkSendError {
-    kind: RemoteImSdkSendErrorKind,
-    message: String,
+pub(crate) struct RemoteImSdkSendError {
+    pub(crate) kind: RemoteImSdkSendErrorKind,
+    pub(crate) message: String,
 }
 
 impl RemoteImSdkSendError {
-    fn definitely_not_sent(message: impl Into<String>) -> Self {
+    pub(crate) fn definitely_not_sent(message: impl Into<String>) -> Self {
         Self {
             kind: RemoteImSdkSendErrorKind::DefinitelyNotSent,
             message: message.into(),
         }
     }
 
-    fn uncertain(message: impl Into<String>) -> Self {
+    pub(crate) fn uncertain(message: impl Into<String>) -> Self {
         Self {
             kind: RemoteImSdkSendErrorKind::Uncertain,
             message: message.into(),
         }
     }
 
-    fn after_confirmed_partial_delivery(mut self, delivered_any: bool) -> Self {
+    pub(crate) fn after_confirmed_partial_delivery(mut self, delivered_any: bool) -> Self {
         if delivered_any {
             self.kind = RemoteImSdkSendErrorKind::Uncertain;
         }
@@ -35,7 +38,7 @@ impl RemoteImSdkSendError {
     }
 }
 
-fn remote_im_http_rejection_error(
+pub(crate) fn remote_im_http_rejection_error(
     status: reqwest::StatusCode,
     message: impl Into<String>,
 ) -> RemoteImSdkSendError {
@@ -47,7 +50,7 @@ fn remote_im_http_rejection_error(
     }
 }
 
-trait RemoteImSdk: Send + Sync {
+pub(crate) trait RemoteImSdk: Send + Sync {
     #[allow(dead_code)] // 在测试中使用
     fn platform(&self) -> RemoteImPlatform;
     fn validate_channel(&self, channel: &RemoteImChannelConfig) -> Result<(), String>;
@@ -59,7 +62,7 @@ trait RemoteImSdk: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Result<String, RemoteImSdkSendError>> + Send + 'a>>;
 }
 
-fn remote_im_payload_text(payload: &Value) -> String {
+pub(crate) fn remote_im_payload_text(payload: &Value) -> String {
     payload
         .get("content")
         .and_then(Value::as_array)
@@ -76,7 +79,7 @@ fn remote_im_payload_text(payload: &Value) -> String {
         .unwrap_or_default()
 }
 
-fn remote_im_onebot_message_segments(payload: &Value) -> Vec<Value> {
+pub(crate) fn remote_im_onebot_message_segments(payload: &Value) -> Vec<Value> {
     let mut out = Vec::<Value>::new();
     let Some(items) = payload.get("content").and_then(Value::as_array) else {
         return out;
@@ -149,7 +152,7 @@ fn remote_im_onebot_message_segments(payload: &Value) -> Vec<Value> {
     out
 }
 
-fn remote_im_payload_content_items(payload: &Value) -> Vec<Value> {
+pub(crate) fn remote_im_payload_content_items(payload: &Value) -> Vec<Value> {
     payload
         .get("content")
         .and_then(Value::as_array)
@@ -157,13 +160,13 @@ fn remote_im_payload_content_items(payload: &Value) -> Vec<Value> {
         .unwrap_or_default()
 }
 
-fn remote_im_payload_has_non_text_items(payload: &Value) -> bool {
+pub(crate) fn remote_im_payload_has_non_text_items(payload: &Value) -> bool {
     remote_im_payload_content_items(payload)
         .iter()
         .any(|item| item.get("type").and_then(Value::as_str).unwrap_or("") != "text")
 }
 
-fn remote_im_payload_media_summary(payload: &Value) -> Value {
+pub(crate) fn remote_im_payload_media_summary(payload: &Value) -> Value {
     let items = remote_im_payload_content_items(payload);
     let mut text_count = 0usize;
     let mut image_count = 0usize;
@@ -199,7 +202,7 @@ fn remote_im_payload_media_summary(payload: &Value) -> Value {
     })
 }
 
-fn remote_im_content_item_name(item: &Value, default_name: &str) -> String {
+pub(crate) fn remote_im_content_item_name(item: &Value, default_name: &str) -> String {
     item.get("name")
         .and_then(Value::as_str)
         .map(str::trim)
@@ -208,7 +211,7 @@ fn remote_im_content_item_name(item: &Value, default_name: &str) -> String {
         .to_string()
 }
 
-fn remote_im_content_item_mime(item: &Value, default_mime: &str) -> String {
+pub(crate) fn remote_im_content_item_mime(item: &Value, default_mime: &str) -> String {
     item.get("mime")
         .and_then(Value::as_str)
         .map(str::trim)
@@ -217,7 +220,7 @@ fn remote_im_content_item_mime(item: &Value, default_mime: &str) -> String {
         .to_string()
 }
 
-async fn remote_im_content_item_bytes(item: &Value) -> Result<Vec<u8>, String> {
+pub(crate) async fn remote_im_content_item_bytes(item: &Value) -> Result<Vec<u8>, String> {
     if let Some(b64) = item
         .get("bytesBase64")
         .and_then(Value::as_str)
@@ -239,7 +242,7 @@ async fn remote_im_content_item_bytes(item: &Value) -> Result<Vec<u8>, String> {
         .map_err(|err| format!("读取内容项文件失败: path={path}, err={err}"))
 }
 
-fn remote_im_file_ext_from_name(file_name: &str) -> String {
+pub(crate) fn remote_im_file_ext_from_name(file_name: &str) -> String {
     std::path::Path::new(file_name)
         .extension()
         .and_then(|v| v.to_str())
@@ -249,7 +252,7 @@ fn remote_im_file_ext_from_name(file_name: &str) -> String {
         .to_ascii_lowercase()
 }
 
-fn remote_im_credential_text(credentials: &Value, key: &str) -> String {
+pub(crate) fn remote_im_credential_text(credentials: &Value, key: &str) -> String {
     credentials
         .get(key)
         .and_then(Value::as_str)
@@ -258,11 +261,11 @@ fn remote_im_credential_text(credentials: &Value, key: &str) -> String {
         .to_string()
 }
 
-fn remote_im_is_group_contact(contact: &RemoteImContact) -> bool {
+pub(crate) fn remote_im_is_group_contact(contact: &RemoteImContact) -> bool {
     contact.remote_contact_type.trim().eq_ignore_ascii_case("group")
 }
 
-fn remote_im_json_or_text(response_text: &str) -> Value {
+pub(crate) fn remote_im_json_or_text(response_text: &str) -> Value {
     serde_json::from_str::<Value>(response_text).unwrap_or_else(|_| {
         serde_json::json!({
             "raw": response_text
@@ -270,11 +273,11 @@ fn remote_im_json_or_text(response_text: &str) -> Value {
     })
 }
 
-fn remote_im_is_dingtalk_private_target_likely_conversation_id(remote_contact_id: &str) -> bool {
+pub(crate) fn remote_im_is_dingtalk_private_target_likely_conversation_id(remote_contact_id: &str) -> bool {
     remote_contact_id.trim().starts_with("cid")
 }
 
-fn remote_im_log(level: &str, event: &str, fields: Value) {
+pub(crate) fn remote_im_log(level: &str, event: &str, fields: Value) {
     runtime_log_info(format!(
         "{}",
         serde_json::json!({
@@ -287,10 +290,10 @@ fn remote_im_log(level: &str, event: &str, fields: Value) {
 
 include!("remote_im/feishu_sdk.rs");
 
-struct DingtalkSdk;
+pub(crate) struct DingtalkSdk;
 
 impl DingtalkSdk {
-    async fn access_token(&self, channel: &RemoteImChannelConfig) -> Result<String, String> {
+    pub(crate) async fn access_token(&self, channel: &RemoteImChannelConfig) -> Result<String, String> {
         let started = std::time::Instant::now();
         remote_im_log(
             "INFO",
@@ -324,7 +327,7 @@ impl DingtalkSdk {
             .timeout(std::time::Duration::from_secs(12));
         #[cfg(target_os = "android")]
         {
-            client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+            client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)?;
         }
         let client = client_builder
             .build()
@@ -430,7 +433,7 @@ impl DingtalkSdk {
     }
 
     // ========== input validation ==========
-    fn validate_and_get_text(&self, payload: &Value) -> Result<String, String> {
+    pub(crate) fn validate_and_get_text(&self, payload: &Value) -> Result<String, String> {
         let text = remote_im_payload_text(payload);
         if text.trim().is_empty() {
             return Err("dingtalk outbound text is empty".to_string());
@@ -439,14 +442,14 @@ impl DingtalkSdk {
     }
 
     // ========== auth ==========
-    async fn access_token_for_channel(
+    pub(crate) async fn access_token_for_channel(
         &self,
         channel: &RemoteImChannelConfig,
     ) -> Result<String, String> {
         self.access_token(channel).await
     }
 
-    fn get_robot_code(&self, channel: &RemoteImChannelConfig) -> Option<String> {
+    pub(crate) fn get_robot_code(&self, channel: &RemoteImChannelConfig) -> Option<String> {
         let robot_code = remote_im_credential_text(&channel.credentials, "robotCode");
         if !robot_code.is_empty() {
             return Some(robot_code);
@@ -458,7 +461,7 @@ impl DingtalkSdk {
         Some(client_id)
     }
 
-    fn session_webhook_from_contact(&self, contact: &RemoteImContact) -> Option<String> {
+    pub(crate) fn session_webhook_from_contact(&self, contact: &RemoteImContact) -> Option<String> {
         contact
             .dingtalk_session_webhook
             .as_deref()
@@ -467,7 +470,7 @@ impl DingtalkSdk {
             .map(ToString::to_string)
     }
 
-    fn session_webhook_expired(&self, contact: &RemoteImContact) -> bool {
+    pub(crate) fn session_webhook_expired(&self, contact: &RemoteImContact) -> bool {
         let Some(expired_ms) = contact.dingtalk_session_webhook_expired_time else {
             return false;
         };
@@ -475,7 +478,7 @@ impl DingtalkSdk {
         now_ms >= expired_ms
     }
 
-    fn validate_target_is_private(&self, contact: &RemoteImContact) -> Result<(), String> {
+    pub(crate) fn validate_target_is_private(&self, contact: &RemoteImContact) -> Result<(), String> {
         let is_group = contact.remote_contact_type.trim().eq_ignore_ascii_case("group");
         if !is_group
             && remote_im_is_dingtalk_private_target_likely_conversation_id(
@@ -488,7 +491,7 @@ impl DingtalkSdk {
     }
 
     // ========== request build ==========
-    fn build_request_body(
+    pub(crate) fn build_request_body(
         &self,
         is_group: bool,
         contact: &RemoteImContact,
@@ -519,7 +522,7 @@ impl DingtalkSdk {
         }
     }
 
-    async fn upload_media_id(
+    pub(crate) async fn upload_media_id(
         &self,
         client: &reqwest::Client,
         token: &str,
@@ -561,7 +564,7 @@ impl DingtalkSdk {
     }
 
     // ========== http send/parse ==========
-    async fn send_and_parse(
+    pub(crate) async fn send_and_parse(
         &self,
         client: &reqwest::Client,
         url: String,
@@ -607,7 +610,7 @@ impl DingtalkSdk {
         Ok(parsed)
     }
 
-    async fn send_via_session_webhook(
+    pub(crate) async fn send_via_session_webhook(
         &self,
         client: &reqwest::Client,
         webhook: &str,
@@ -661,7 +664,7 @@ impl DingtalkSdk {
         Ok(parsed)
     }
 
-    fn process_query_key_from_response(&self, body: &Value) -> String {
+    pub(crate) fn process_query_key_from_response(&self, body: &Value) -> String {
         body.get("processQueryKey")
             .and_then(Value::as_str)
             .or_else(|| {
@@ -673,7 +676,7 @@ impl DingtalkSdk {
             .to_string()
     }
 
-    fn log_outcome(
+    pub(crate) fn log_outcome(
         &self,
         level: &str,
         channel: &RemoteImChannelConfig,
@@ -793,7 +796,7 @@ impl RemoteImSdk for DingtalkSdk {
                 .timeout(std::time::Duration::from_secs(12));
             #[cfg(target_os = "android")]
             {
-                client_builder = android_workspace_apply_static_webpki_roots(client_builder)
+                client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)
                     .map_err(RemoteImSdkSendError::definitely_not_sent)?;
             }
             let client = match client_builder.build()
@@ -1070,7 +1073,7 @@ impl RemoteImSdk for DingtalkSdk {
     }
 }
 
-struct OnebotV11Sdk;
+pub(crate) struct OnebotV11Sdk;
 
 impl RemoteImSdk for OnebotV11Sdk {
     fn platform(&self) -> RemoteImPlatform {
@@ -1192,7 +1195,7 @@ impl RemoteImSdk for OnebotV11Sdk {
     }
 }
 
-struct WeixinOcSdk;
+pub(crate) struct WeixinOcSdk;
 
 impl RemoteImSdk for WeixinOcSdk {
     fn platform(&self) -> RemoteImPlatform {
@@ -1506,7 +1509,7 @@ impl RemoteImSdk for WeixinOcSdk {
     }
 }
 
-fn remote_im_sdk_for_platform(platform: &RemoteImPlatform) -> Box<dyn RemoteImSdk> {
+pub(crate) fn remote_im_sdk_for_platform(platform: &RemoteImPlatform) -> Box<dyn RemoteImSdk> {
     match platform {
         RemoteImPlatform::Feishu => Box::new(FeishuSdk),
         RemoteImPlatform::Dingtalk => Box::new(DingtalkSdk),
@@ -1515,7 +1518,7 @@ fn remote_im_sdk_for_platform(platform: &RemoteImPlatform) -> Box<dyn RemoteImSd
     }
 }
 
-fn remote_im_payload_with_channel_markdown_filtered(
+pub(crate) fn remote_im_payload_with_channel_markdown_filtered(
     channel: &RemoteImChannelConfig,
     payload: &Value,
 ) -> Value {
@@ -1532,7 +1535,7 @@ fn remote_im_payload_with_channel_markdown_filtered(
 }
 
 #[cfg(test)]
-fn remote_im_mock_send_via_sdk(
+pub(crate) fn remote_im_mock_send_via_sdk(
     channel: &RemoteImChannelConfig,
     contact: &RemoteImContact,
     payload: &Value,
@@ -1576,7 +1579,7 @@ fn remote_im_mock_send_via_sdk(
     )))
 }
 
-async fn remote_im_send_via_sdk(
+pub(crate) async fn remote_im_send_via_sdk(
     channel: &RemoteImChannelConfig,
     contact: &RemoteImContact,
     payload: &Value,
@@ -1595,7 +1598,7 @@ async fn remote_im_send_via_sdk(
 }
 
 #[cfg(test)]
-mod remote_im_adapter_tests {
+pub(crate) mod remote_im_adapter_tests {
     use super::*;
 
     fn mock_channel(platform: RemoteImPlatform, credentials: Value) -> RemoteImChannelConfig {

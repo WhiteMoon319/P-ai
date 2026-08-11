@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, Copy)]
-enum SandboxBackendKind {
+pub(crate) enum SandboxBackendKind {
     #[cfg(target_os = "android")]
     AndroidProotBackend,
     #[cfg(target_os = "windows")]
@@ -13,12 +13,12 @@ enum SandboxBackendKind {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct SandboxManager {
-    backend: SandboxBackendKind,
+pub(crate) struct SandboxManager {
+    pub(crate) backend: SandboxBackendKind,
 }
 
 impl SandboxManager {
-    fn from_state(_state: &AppState) -> Self {
+    pub(crate) fn from_state(_state: &AppState) -> Self {
         #[cfg(target_os = "android")]
         {
             return Self {
@@ -53,7 +53,7 @@ impl SandboxManager {
         }
     }
 
-    async fn run(
+    pub(crate) async fn run(
         &self,
         state: &AppState,
         request: SandboxRequest,
@@ -90,7 +90,7 @@ impl SandboxManager {
     }
 }
 
-async fn sandbox_execute_command(
+pub(crate) async fn sandbox_execute_command(
     state: &AppState,
     session_id: &str,
     command: &str,

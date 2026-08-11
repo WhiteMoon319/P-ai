@@ -1,4 +1,4 @@
-fn remote_im_is_reply_decision_action(action: &str) -> bool {
+pub(crate) fn remote_im_is_reply_decision_action(action: &str) -> bool {
     matches!(
         action.trim().to_ascii_lowercase().as_str(),
         "reply_async" | "send_async"
@@ -6,18 +6,18 @@ fn remote_im_is_reply_decision_action(action: &str) -> bool {
 }
 
 #[derive(Debug, Clone)]
-struct RemoteImReplyDecisionSummary {
-    action: String,
-    target: Option<RemoteImReplyTarget>,
+pub(crate) struct RemoteImReplyDecisionSummary {
+    pub(crate) action: String,
+    pub(crate) target: Option<RemoteImReplyTarget>,
 }
 
-fn remote_im_extract_reply_decision_from_tool_history(
+pub(crate) fn remote_im_extract_reply_decision_from_tool_history(
     _events: &[Value],
 ) -> Option<RemoteImReplyDecisionSummary> {
     None
 }
 
-fn remote_im_message_has_reply_decision(message: &ChatMessage) -> bool {
+pub(crate) fn remote_im_message_has_reply_decision(message: &ChatMessage) -> bool {
     if let Some(action) = message
         .provider_meta
         .as_ref()
@@ -37,7 +37,7 @@ fn remote_im_message_has_reply_decision(message: &ChatMessage) -> bool {
         .is_some()
 }
 
-fn remote_im_latest_idle_boundary_message_at(
+pub(crate) fn remote_im_latest_idle_boundary_message_at(
     conversation: &Conversation,
     ignore_trailing_user_message: bool,
 ) -> Option<&str> {
@@ -54,7 +54,7 @@ fn remote_im_latest_idle_boundary_message_at(
         .find(|value| !value.is_empty())
 }
 
-fn remote_im_idle_seconds_since_latest_message(
+pub(crate) fn remote_im_idle_seconds_since_latest_message(
     conversation: &Conversation,
     ignore_trailing_user_message: bool,
 ) -> Option<i64> {
@@ -70,7 +70,7 @@ fn remote_im_idle_seconds_since_latest_message(
     (elapsed_seconds >= 0).then_some(elapsed_seconds)
 }
 
-fn remote_im_auto_compaction_idle_hours_if_due(
+pub(crate) fn remote_im_auto_compaction_idle_hours_if_due(
     conversation: &Conversation,
     ignore_trailing_user_message: bool,
 ) -> Option<i64> {
@@ -83,7 +83,7 @@ fn remote_im_auto_compaction_idle_hours_if_due(
     Some(elapsed_seconds / 3600)
 }
 
-fn remote_im_activation_source_summary_line(source: &RemoteImActivationSource) -> String {
+pub(crate) fn remote_im_activation_source_summary_line(source: &RemoteImActivationSource) -> String {
     let mut parts = vec![
         format!("channel_id={}", source.channel_id.trim()),
         format!("contact_id={}", source.remote_contact_id.trim()),
@@ -97,7 +97,7 @@ fn remote_im_activation_source_summary_line(source: &RemoteImActivationSource) -
     parts.join(" | ")
 }
 
-fn build_remote_im_activation_runtime_block(
+pub(crate) fn build_remote_im_activation_runtime_block(
     sources: &[RemoteImActivationSource],
     ui_language: &str,
 ) -> Option<String> {
@@ -138,7 +138,7 @@ fn build_remote_im_activation_runtime_block(
     Some(prompt_xml_block("remote im runtime activation", block))
 }
 
-fn resolve_remote_im_auto_send_target(
+pub(crate) fn resolve_remote_im_auto_send_target(
     assistant_text: &str,
     activation_sources: &[RemoteImActivationSource],
     is_remote_reply_delegate: bool,
@@ -158,7 +158,7 @@ fn resolve_remote_im_auto_send_target(
     Ok(activation_sources.first().cloned())
 }
 
-fn remote_im_reply_delegate_visible_texts(request_messages: &[Value]) -> Vec<String> {
+pub(crate) fn remote_im_reply_delegate_visible_texts(request_messages: &[Value]) -> Vec<String> {
     request_messages
         .iter()
         .filter(|message| {
@@ -173,7 +173,7 @@ fn remote_im_reply_delegate_visible_texts(request_messages: &[Value]) -> Vec<Str
         .collect()
 }
 
-fn remote_im_reply_delegate_stage_provider_meta(
+pub(crate) fn remote_im_reply_delegate_stage_provider_meta(
     delegate_id: &str,
     trigger_message_id: &str,
     output_stage: &str,
@@ -187,7 +187,7 @@ fn remote_im_reply_delegate_stage_provider_meta(
     })
 }
 
-fn effective_bound_remote_im_activation_source(
+pub(crate) fn effective_bound_remote_im_activation_source(
     runtime_context: Option<&RuntimeContext>,
     activation_sources: &[RemoteImActivationSource],
 ) -> Option<RemoteImActivationSource> {
@@ -196,7 +196,7 @@ fn effective_bound_remote_im_activation_source(
         .or_else(|| resolve_bound_remote_im_activation_source(activation_sources))
 }
 
-fn remote_im_trim_conversation_for_qa_mode(conversation: &Conversation) -> Conversation {
+pub(crate) fn remote_im_trim_conversation_for_qa_mode(conversation: &Conversation) -> Conversation {
     let last_processed_index = conversation
         .messages
         .iter()
@@ -224,7 +224,7 @@ fn remote_im_trim_conversation_for_qa_mode(conversation: &Conversation) -> Conve
     trimmed
 }
 
-fn conversation_upsert_final_assistant_message(
+pub(crate) fn conversation_upsert_final_assistant_message(
     conversation: &mut Conversation,
     current_agent_id: &str,
     assistant_message: ChatMessage,
@@ -281,14 +281,14 @@ fn conversation_upsert_final_assistant_message(
     Ok(existing.clone())
 }
 
-fn remote_im_find_contact_by_conversation<'a>(
+pub(crate) fn remote_im_find_contact_by_conversation<'a>(
     data: &'a AppData,
     conversation_id: &str,
 ) -> Option<&'a RemoteImContact> {
     conversation_service_v2().find_remote_im_contact_by_conversation_in_data(data, conversation_id)
 }
 
-fn remote_im_auto_send_source_for_contact_conversation(
+pub(crate) fn remote_im_auto_send_source_for_contact_conversation(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<Option<RemoteImActivationSource>, String> {
@@ -317,7 +317,7 @@ fn remote_im_auto_send_source_for_contact_conversation(
         }))
 }
 
-fn resolve_remote_im_auto_send_source(
+pub(crate) fn resolve_remote_im_auto_send_source(
     state: &AppState,
     conversation_id: &str,
     is_remote_im_contact_conversation: bool,
@@ -342,7 +342,7 @@ fn resolve_remote_im_auto_send_source(
     Ok(None)
 }
 
-fn remote_im_contact_tool_history_events(
+pub(crate) fn remote_im_contact_tool_history_events(
     tool_name: &str,
     args_value: Value,
     tool_result: &str,
@@ -371,11 +371,11 @@ fn remote_im_contact_tool_history_events(
 
 // ==================== 图像回退 ====================
 
-const IMAGE_FALLBACK_RECENT_USER_MESSAGE_LIMIT: usize = 7;
+pub(crate) const IMAGE_FALLBACK_RECENT_USER_MESSAGE_LIMIT: usize = 7;
 
 // 群聊长度门改写（默认禁用，保留待重新启用）。
 #[allow(dead_code)]
-fn remote_im_record_reply_rewrite_fast_request(
+pub(crate) fn remote_im_record_reply_rewrite_fast_request(
     state: &AppState,
     delegate_id: &str,
     request_text: &str,
@@ -409,7 +409,7 @@ fn remote_im_record_reply_rewrite_fast_request(
 
 // 群聊长度门改写（默认禁用，保留待重新启用）。
 #[allow(dead_code)]
-fn remote_im_group_reply_rewrite_prompt(text: &str, max_units: u32) -> PreparedPrompt {
+pub(crate) fn remote_im_group_reply_rewrite_prompt(text: &str, max_units: u32) -> PreparedPrompt {
     let count = count_remote_im_multilingual_text_units(text);
     let preamble = if count.contains_japanese_kana {
         format!(
@@ -438,7 +438,7 @@ fn remote_im_group_reply_rewrite_prompt(text: &str, max_units: u32) -> PreparedP
 
 // 群聊长度门改写（默认禁用，保留待重新启用）。
 #[allow(dead_code)]
-async fn remote_im_reply_delegate_finalize_group_reply_draft(
+pub(crate) async fn remote_im_reply_delegate_finalize_group_reply_draft(
     state: &AppState,
     delegate_id: &str,
     text: &str,
@@ -586,7 +586,7 @@ async fn remote_im_reply_delegate_finalize_group_reply_draft(
     }
 }
 
-async fn remote_im_auto_send_assistant_reply_to_source(
+pub(crate) async fn remote_im_auto_send_assistant_reply_to_source(
     state: &AppState,
     source: &RemoteImActivationSource,
     assistant_text: &str,
@@ -764,7 +764,7 @@ async fn remote_im_auto_send_assistant_reply_to_source(
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum RemoteImAutoSendExecutionOutcome {
+pub(crate) enum RemoteImAutoSendExecutionOutcome {
     SkippedEmptyReply,
     SkippedMuted,
     Sent { action: String },
@@ -772,23 +772,23 @@ enum RemoteImAutoSendExecutionOutcome {
     PreflightDeferred { error: String },
 }
 
-fn remote_im_auto_send_error_is_muted_gate(error: &str) -> bool {
+pub(crate) fn remote_im_auto_send_error_is_muted_gate(error: &str) -> bool {
     error.contains("联系人处于闭嘴状态")
 }
 
-fn remote_im_auto_send_error_is_delivery_uncertain(error: &str) -> bool {
+pub(crate) fn remote_im_auto_send_error_is_delivery_uncertain(error: &str) -> bool {
     error.starts_with("[GROUP_DELIVERY_UNCERTAIN]")
 }
 
-fn remote_im_auto_send_error_is_preflight_deferred(error: &str) -> bool {
+pub(crate) fn remote_im_auto_send_error_is_preflight_deferred(error: &str) -> bool {
     error.starts_with("[GROUP_SEND_PREFLIGHT]")
 }
 
-fn remote_im_should_auto_send_after_core_round(runtime_context: &RuntimeContext) -> bool {
+pub(crate) fn remote_im_should_auto_send_after_core_round(runtime_context: &RuntimeContext) -> bool {
     !runtime_context.remote_im_defer_auto_send
 }
 
-async fn remote_im_auto_send_and_record_decision(
+pub(crate) async fn remote_im_auto_send_and_record_decision(
     state: &AppState,
     activation_source: &RemoteImActivationSource,
     conversation_id: &str,
@@ -880,7 +880,7 @@ async fn remote_im_auto_send_and_record_decision(
     }
 }
 
-fn remote_im_auto_send_log_labels(
+pub(crate) fn remote_im_auto_send_log_labels(
     state: &AppState,
     source: &RemoteImActivationSource,
 ) -> (String, String) {
@@ -913,7 +913,7 @@ fn remote_im_auto_send_log_labels(
     (channel_label, contact_label)
 }
 
-fn remote_im_append_contact_log_for_activation_source(
+pub(crate) fn remote_im_append_contact_log_for_activation_source(
     state: &AppState,
     source: &RemoteImActivationSource,
     level: &str,
@@ -936,7 +936,7 @@ fn remote_im_append_contact_log_for_activation_source(
     }
 }
 
-fn spawn_remote_im_auto_send_contact_assistant_reply(
+pub(crate) fn spawn_remote_im_auto_send_contact_assistant_reply(
     state: AppState,
     activation_source: RemoteImActivationSource,
     conversation_id: String,
@@ -1095,7 +1095,7 @@ fn spawn_remote_im_auto_send_contact_assistant_reply(
     });
 }
 
-fn update_remote_im_reply_decision_for_message(
+pub(crate) fn update_remote_im_reply_decision_for_message(
     state: &AppState,
     conversation_id: &str,
     assistant_message_id: Option<&str>,

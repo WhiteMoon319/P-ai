@@ -1,172 +1,172 @@
-const RUNTIME_LOG_MAX_BYTES: usize = 10 * 1024 * 1024;
-const BACKEND_LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
-const BACKEND_LOG_MAX_FILES: usize = 20;
-const BACKEND_LOG_ARCHIVE_MAX_BYTES: u64 = 25 * 1024 * 1024;
-const BACKEND_LOG_FILE_NAME: &str = "backend.log";
-const DEFAULT_LLM_ROUND_LOG_CAPACITY: usize = 3;
+pub(crate) const RUNTIME_LOG_MAX_BYTES: usize = 10 * 1024 * 1024;
+pub(crate) const BACKEND_LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
+pub(crate) const BACKEND_LOG_MAX_FILES: usize = 20;
+pub(crate) const BACKEND_LOG_ARCHIVE_MAX_BYTES: u64 = 25 * 1024 * 1024;
+pub(crate) const BACKEND_LOG_FILE_NAME: &str = "backend.log";
+pub(crate) const DEFAULT_LLM_ROUND_LOG_CAPACITY: usize = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct LlmRoundLogHeader {
-    name: String,
-    value: String,
+pub(crate) struct LlmRoundLogHeader {
+    pub(crate) name: String,
+    pub(crate) value: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct LlmRoundLogStage {
-    stage: String,
-    elapsed_ms: u64,
-    since_prev_ms: u64,
+pub(crate) struct LlmRoundLogStage {
+    pub(crate) stage: String,
+    pub(crate) elapsed_ms: u64,
+    pub(crate) since_prev_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct LlmRoundLogEntry {
-    id: String,
-    created_at: String,
+pub(crate) struct LlmRoundLogEntry {
+    pub(crate) id: String,
+    pub(crate) created_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    trace_id: Option<String>,
-    scene: String,
-    request_format: String,
-    provider: String,
-    model: String,
-    base_url: String,
-    headers: Vec<LlmRoundLogHeader>,
-    tools: Option<Value>,
-    response: Option<Value>,
-    error: Option<String>,
-    elapsed_ms: u64,
+    pub(crate) trace_id: Option<String>,
+    pub(crate) scene: String,
+    pub(crate) request_format: String,
+    pub(crate) provider: String,
+    pub(crate) model: String,
+    pub(crate) base_url: String,
+    pub(crate) headers: Vec<LlmRoundLogHeader>,
+    pub(crate) tools: Option<Value>,
+    pub(crate) response: Option<Value>,
+    pub(crate) error: Option<String>,
+    pub(crate) elapsed_ms: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    timeline: Option<Vec<LlmRoundLogStage>>,
+    pub(crate) timeline: Option<Vec<LlmRoundLogStage>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    round_count: Option<usize>,
+    pub(crate) round_count: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_call_count: Option<usize>,
+    pub(crate) tool_call_count: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    rounds: Option<Vec<LlmRoundLogEntry>>,
-    success: bool,
+    pub(crate) rounds: Option<Vec<LlmRoundLogEntry>>,
+    pub(crate) success: bool,
 }
 
 #[derive(Debug, Default)]
-struct PendingChatRoundBuffer {
-    rounds_by_chat_session: std::collections::HashMap<String, Vec<LlmRoundLogEntry>>,
+pub(crate) struct PendingChatRoundBuffer {
+    pub(crate) rounds_by_chat_session: std::collections::HashMap<String, Vec<LlmRoundLogEntry>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RuntimeLogEntry {
-    id: String,
-    created_at: String,
-    level: String,
-    message: String,
-    repeat: usize,
+pub(crate) struct RuntimeLogEntry {
+    pub(crate) id: String,
+    pub(crate) created_at: String,
+    pub(crate) level: String,
+    pub(crate) message: String,
+    pub(crate) repeat: usize,
 }
 
 #[derive(Debug, Default)]
-struct RuntimeLogBuffer {
-    entries: std::collections::VecDeque<RuntimeLogEntry>,
-    total_bytes: usize,
+pub(crate) struct RuntimeLogBuffer {
+    pub(crate) entries: std::collections::VecDeque<RuntimeLogEntry>,
+    pub(crate) total_bytes: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct MemoryConversationStat {
-    conversation_id: String,
-    title: String,
-    message_count: usize,
-    estimated_json_bytes: usize,
+pub(crate) struct MemoryConversationStat {
+    pub(crate) conversation_id: String,
+    pub(crate) title: String,
+    pub(crate) message_count: usize,
+    pub(crate) estimated_json_bytes: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct MemoryCacheStats {
-    generated_at: String,
-    pid: u32,
-    cached_conversations: usize,
-    cached_conversations_message_count: usize,
-    cached_conversations_estimated_json_bytes: usize,
-    cached_conversation_metadata: usize,
-    cached_conversation_metadata_estimated_json_bytes: usize,
-    cached_chat_index_conversation_count: usize,
-    cached_chat_index_estimated_json_bytes: usize,
-    cached_app_data_loaded: bool,
-    cached_app_data_image_text_cache_entries: usize,
-    cached_app_data_pdf_text_cache_entries: usize,
-    cached_app_data_pdf_image_cache_entries: usize,
-    cached_app_data_estimated_json_bytes: usize,
-    cached_conversation_dirty_ids: usize,
-    cached_deleted_conversation_ids: usize,
-    inflight_chat_abort_handles: usize,
-    inflight_tool_abort_handles: usize,
-    inflight_completed_tool_sessions: usize,
-    inflight_completed_tool_event_count: usize,
-    terminal_live_sessions: usize,
-    terminal_session_roots: usize,
-    terminal_pending_approvals: usize,
-    llm_round_logs: usize,
-    llm_round_logs_estimated_json_bytes: usize,
-    pending_chat_round_sessions: usize,
-    pending_chat_round_entries: usize,
-    pending_chat_round_estimated_json_bytes: usize,
-    conversation_runtime_slots: usize,
-    conversation_runtime_stream_block_count: usize,
-    pending_chat_result_senders: usize,
-    pending_chat_delta_channels: usize,
-    active_chat_view_bindings: usize,
-    conversation_list_activity_marks: usize,
-    delegate_runtime_threads: usize,
-    delegate_runtime_thread_message_count: usize,
-    delegate_runtime_threads_estimated_json_bytes: usize,
-    delegate_recent_threads: usize,
-    delegate_recent_thread_message_count: usize,
-    delegate_recent_threads_estimated_json_bytes: usize,
-    remote_im_contact_runtime_states: usize,
-    provider_streaming_disabled_keys: usize,
-    provider_system_message_user_fallback_keys: usize,
-    provider_request_gates: usize,
-    message_store_block_cache_entries: usize,
-    message_store_block_cache_message_count: usize,
-    message_store_block_cache_estimated_json_bytes: usize,
-    message_store_index_cache_entries: usize,
-    message_store_index_cache_item_count: usize,
-    message_store_index_cache_estimated_json_bytes: usize,
-    prompt_final_cache_entries: usize,
-    prompt_department_cache_entries: usize,
-    prompt_environment_cache_entries: usize,
-    abstract_message_projection_cache_entries: usize,
-    abstract_message_projection_message_count: usize,
-    screenshot_artifact_cache_entries: usize,
-    screenshot_artifact_image_count: usize,
-    tool_schema_cache_count: usize,
-    mcp_cached_clients: usize,
-    mcp_runtime_states: usize,
-    mcp_runtime_tool_count: usize,
-    ide_context_chat_clients: usize,
-    top_cached_conversations: Vec<MemoryConversationStat>,
-    top_metadata_conversations: Vec<MemoryConversationStat>,
-    top_delegate_runtime_threads: Vec<MemoryConversationStat>,
-    notes: Vec<String>,
+pub(crate) struct MemoryCacheStats {
+    pub(crate) generated_at: String,
+    pub(crate) pid: u32,
+    pub(crate) cached_conversations: usize,
+    pub(crate) cached_conversations_message_count: usize,
+    pub(crate) cached_conversations_estimated_json_bytes: usize,
+    pub(crate) cached_conversation_metadata: usize,
+    pub(crate) cached_conversation_metadata_estimated_json_bytes: usize,
+    pub(crate) cached_chat_index_conversation_count: usize,
+    pub(crate) cached_chat_index_estimated_json_bytes: usize,
+    pub(crate) cached_app_data_loaded: bool,
+    pub(crate) cached_app_data_image_text_cache_entries: usize,
+    pub(crate) cached_app_data_pdf_text_cache_entries: usize,
+    pub(crate) cached_app_data_pdf_image_cache_entries: usize,
+    pub(crate) cached_app_data_estimated_json_bytes: usize,
+    pub(crate) cached_conversation_dirty_ids: usize,
+    pub(crate) cached_deleted_conversation_ids: usize,
+    pub(crate) inflight_chat_abort_handles: usize,
+    pub(crate) inflight_tool_abort_handles: usize,
+    pub(crate) inflight_completed_tool_sessions: usize,
+    pub(crate) inflight_completed_tool_event_count: usize,
+    pub(crate) terminal_live_sessions: usize,
+    pub(crate) terminal_session_roots: usize,
+    pub(crate) terminal_pending_approvals: usize,
+    pub(crate) llm_round_logs: usize,
+    pub(crate) llm_round_logs_estimated_json_bytes: usize,
+    pub(crate) pending_chat_round_sessions: usize,
+    pub(crate) pending_chat_round_entries: usize,
+    pub(crate) pending_chat_round_estimated_json_bytes: usize,
+    pub(crate) conversation_runtime_slots: usize,
+    pub(crate) conversation_runtime_stream_block_count: usize,
+    pub(crate) pending_chat_result_senders: usize,
+    pub(crate) pending_chat_delta_channels: usize,
+    pub(crate) active_chat_view_bindings: usize,
+    pub(crate) conversation_list_activity_marks: usize,
+    pub(crate) delegate_runtime_threads: usize,
+    pub(crate) delegate_runtime_thread_message_count: usize,
+    pub(crate) delegate_runtime_threads_estimated_json_bytes: usize,
+    pub(crate) delegate_recent_threads: usize,
+    pub(crate) delegate_recent_thread_message_count: usize,
+    pub(crate) delegate_recent_threads_estimated_json_bytes: usize,
+    pub(crate) remote_im_contact_runtime_states: usize,
+    pub(crate) provider_streaming_disabled_keys: usize,
+    pub(crate) provider_system_message_user_fallback_keys: usize,
+    pub(crate) provider_request_gates: usize,
+    pub(crate) message_store_block_cache_entries: usize,
+    pub(crate) message_store_block_cache_message_count: usize,
+    pub(crate) message_store_block_cache_estimated_json_bytes: usize,
+    pub(crate) message_store_index_cache_entries: usize,
+    pub(crate) message_store_index_cache_item_count: usize,
+    pub(crate) message_store_index_cache_estimated_json_bytes: usize,
+    pub(crate) prompt_final_cache_entries: usize,
+    pub(crate) prompt_department_cache_entries: usize,
+    pub(crate) prompt_environment_cache_entries: usize,
+    pub(crate) abstract_message_projection_cache_entries: usize,
+    pub(crate) abstract_message_projection_message_count: usize,
+    pub(crate) screenshot_artifact_cache_entries: usize,
+    pub(crate) screenshot_artifact_image_count: usize,
+    pub(crate) tool_schema_cache_count: usize,
+    pub(crate) mcp_cached_clients: usize,
+    pub(crate) mcp_runtime_states: usize,
+    pub(crate) mcp_runtime_tool_count: usize,
+    pub(crate) ide_context_chat_clients: usize,
+    pub(crate) top_cached_conversations: Vec<MemoryConversationStat>,
+    pub(crate) top_metadata_conversations: Vec<MemoryConversationStat>,
+    pub(crate) top_delegate_runtime_threads: Vec<MemoryConversationStat>,
+    pub(crate) notes: Vec<String>,
 }
 
-fn runtime_log_buffer() -> &'static Mutex<RuntimeLogBuffer> {
+pub(crate) fn runtime_log_buffer() -> &'static Mutex<RuntimeLogBuffer> {
     static RUNTIME_LOGS: OnceLock<Mutex<RuntimeLogBuffer>> = OnceLock::new();
     RUNTIME_LOGS.get_or_init(|| Mutex::new(RuntimeLogBuffer::default()))
 }
 
-fn pending_chat_round_buffer() -> &'static Mutex<PendingChatRoundBuffer> {
+pub(crate) fn pending_chat_round_buffer() -> &'static Mutex<PendingChatRoundBuffer> {
     static PENDING_CHAT_ROUNDS: OnceLock<Mutex<PendingChatRoundBuffer>> = OnceLock::new();
     PENDING_CHAT_ROUNDS.get_or_init(|| Mutex::new(PendingChatRoundBuffer::default()))
 }
 
-fn backend_log_write_lock() -> &'static Mutex<()> {
+pub(crate) fn backend_log_write_lock() -> &'static Mutex<()> {
     static BACKEND_LOG_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     BACKEND_LOG_WRITE_LOCK.get_or_init(|| Mutex::new(()))
 }
 
 
 #[cfg(target_os = "android")]
-fn backend_log_path() -> Option<PathBuf> {
+pub(crate) fn backend_log_path() -> Option<PathBuf> {
     static ANDROID_BACKEND_LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
     if let Some(path) = ANDROID_BACKEND_LOG_PATH.get() {
         return Some(path.clone());
@@ -178,14 +178,14 @@ fn backend_log_path() -> Option<PathBuf> {
     Some(path)
 }
 
-static ANDROID_LOG_ROOT: OnceLock<PathBuf> = OnceLock::new();
+pub(crate) static ANDROID_LOG_ROOT: OnceLock<PathBuf> = OnceLock::new();
 
 pub fn set_android_log_root(root: PathBuf) {
     let _ = ANDROID_LOG_ROOT.set(root);
 }
 
 #[cfg(target_os = "android")]
-fn resolve_backend_log_path() -> Option<PathBuf> {
+pub(crate) fn resolve_backend_log_path() -> Option<PathBuf> {
     let root = ANDROID_LOG_ROOT.get()?;
     let log_dir = root.join("logs");
     if fs::create_dir_all(&log_dir).is_err() {
@@ -195,7 +195,7 @@ fn resolve_backend_log_path() -> Option<PathBuf> {
 }
 
 
-fn backend_log_archive_path(path: &PathBuf) -> PathBuf {
+pub(crate) fn backend_log_archive_path(path: &PathBuf) -> PathBuf {
     let ts = now_utc().unix_timestamp();
     let pid = std::process::id();
     for index in 0..100_u32 {
@@ -212,14 +212,14 @@ fn backend_log_archive_path(path: &PathBuf) -> PathBuf {
     path.with_file_name(format!("backend.{ts}.{pid}.fallback.log"))
 }
 
-fn is_backend_log_archive(path: &PathBuf) -> bool {
+pub(crate) fn is_backend_log_archive(path: &PathBuf) -> bool {
     let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
         return false;
     };
     name.starts_with("backend.") && name.ends_with(".log") && name != BACKEND_LOG_FILE_NAME
 }
 
-fn prune_backend_log_archives(path: &PathBuf) {
+pub(crate) fn prune_backend_log_archives(path: &PathBuf) {
     let Some(dir) = path.parent() else {
         return;
     };
@@ -252,7 +252,7 @@ fn prune_backend_log_archives(path: &PathBuf) {
     }
 }
 
-fn archive_backend_log(path: &PathBuf) {
+pub(crate) fn archive_backend_log(path: &PathBuf) {
     let Ok(metadata) = fs::metadata(path) else {
         return;
     };
@@ -268,7 +268,7 @@ fn archive_backend_log(path: &PathBuf) {
     prune_backend_log_archives(path);
 }
 
-fn rotate_backend_log_if_needed(path: &PathBuf, pending_bytes: u64) {
+pub(crate) fn rotate_backend_log_if_needed(path: &PathBuf, pending_bytes: u64) {
     let current_bytes = fs::metadata(path).map(|meta| meta.len()).unwrap_or(0);
     if current_bytes.saturating_add(pending_bytes) <= BACKEND_LOG_MAX_BYTES {
         return;
@@ -276,7 +276,7 @@ fn rotate_backend_log_if_needed(path: &PathBuf, pending_bytes: u64) {
     archive_backend_log(path);
 }
 
-fn now_log_local_rfc3339() -> String {
+pub(crate) fn now_log_local_rfc3339() -> String {
     let now = now_utc();
     UtcOffset::current_local_offset()
         .ok()
@@ -288,7 +288,7 @@ fn now_log_local_rfc3339() -> String {
         .unwrap_or_else(now_utc_rfc3339)
 }
 
-fn append_backend_log_line(level: &str, message: &str) {
+pub(crate) fn append_backend_log_line(level: &str, message: &str) {
     let Some(path) = backend_log_path() else {
         return;
     };
@@ -307,7 +307,7 @@ fn append_backend_log_line(level: &str, message: &str) {
     }
 }
 
-fn init_backend_file_logging() {
+pub(crate) fn init_backend_file_logging() {
     let Some(path) = backend_log_path() else {
         return;
     };
@@ -317,7 +317,7 @@ fn init_backend_file_logging() {
     append_backend_log_line("info", "========== 本次启动开始 ==========");
 }
 
-fn install_backend_file_panic_hook() {
+pub(crate) fn install_backend_file_panic_hook() {
     static BACKEND_FILE_PANIC_HOOK_INSTALLED: OnceLock<()> = OnceLock::new();
     if BACKEND_FILE_PANIC_HOOK_INSTALLED.set(()).is_err() {
         return;
@@ -351,7 +351,7 @@ fn install_backend_file_panic_hook() {
     }));
 }
 
-fn normalize_runtime_log(level: &str, message: String) -> (String, String) {
+pub(crate) fn normalize_runtime_log(level: &str, message: String) -> (String, String) {
     let mut current_level = level.to_string();
     let mut text = message.trim().to_string();
     let mappings = [
@@ -379,7 +379,7 @@ fn normalize_runtime_log(level: &str, message: String) -> (String, String) {
     (current_level, text)
 }
 
-fn runtime_log_push(level: &str, message: String) {
+pub(crate) fn runtime_log_push(level: &str, message: String) {
     let _ = std::io::Write::write_all(&mut std::io::stderr(), format!("{message}\n").as_bytes());
     let (normalized_level, normalized_message) = normalize_runtime_log(level, message);
     append_backend_log_line(&normalized_level, &normalized_message);
@@ -413,23 +413,23 @@ fn runtime_log_push(level: &str, message: String) {
     }
 }
 
-fn runtime_log_info(message: String) {
+pub(crate) fn runtime_log_info(message: String) {
     runtime_log_push("info", message);
 }
 
-fn runtime_log_warn(message: String) {
+pub(crate) fn runtime_log_warn(message: String) {
     runtime_log_push("warn", message);
 }
 
-fn runtime_log_error(message: String) {
+pub(crate) fn runtime_log_error(message: String) {
     runtime_log_push("error", message);
 }
 
-fn runtime_log_debug(message: String) {
+pub(crate) fn runtime_log_debug(message: String) {
     runtime_log_push("debug", message);
 }
 
-fn mask_secret_keep_edges(value: &str) -> String {
+pub(crate) fn mask_secret_keep_edges(value: &str) -> String {
     let trimmed = value.trim();
     let chars = trimmed.chars().collect::<Vec<_>>();
     if chars.len() <= 4 {
@@ -447,7 +447,7 @@ fn mask_secret_keep_edges(value: &str) -> String {
     format!("{head}***{tail}")
 }
 
-fn masked_auth_headers(api_key: &str) -> Vec<LlmRoundLogHeader> {
+pub(crate) fn masked_auth_headers(api_key: &str) -> Vec<LlmRoundLogHeader> {
     let masked = mask_secret_keep_edges(api_key);
     vec![
         LlmRoundLogHeader {
@@ -461,7 +461,7 @@ fn masked_auth_headers(api_key: &str) -> Vec<LlmRoundLogHeader> {
     ]
 }
 
-fn openai_input_audio_format_from_mime(mime: &str) -> String {
+pub(crate) fn openai_input_audio_format_from_mime(mime: &str) -> String {
     let normalized = mime.trim().to_ascii_lowercase();
     match normalized.as_str() {
         "audio/wav" | "audio/wave" | "audio/x-wav" => "wav".to_string(),
@@ -476,7 +476,7 @@ fn openai_input_audio_format_from_mime(mime: &str) -> String {
     }
 }
 
-fn normalize_user_content(content: &Value) -> Value {
+pub(crate) fn normalize_user_content(content: &Value) -> Value {
     let Value::Array(items) = content else {
         return content.clone();
     };
@@ -504,7 +504,7 @@ fn normalize_user_content(content: &Value) -> Value {
     content.clone()
 }
 
-fn normalize_prepared_prompt_messages(messages: &mut [Value]) {
+pub(crate) fn normalize_prepared_prompt_messages(messages: &mut [Value]) {
     for msg in messages.iter_mut() {
         let Value::Object(obj) = msg else {
             continue;
@@ -519,11 +519,11 @@ fn normalize_prepared_prompt_messages(messages: &mut [Value]) {
     }
 }
 
-fn prepared_prompt_latest_user_text_blocks_for_json(prepared: &PreparedPrompt) -> Vec<String> {
+pub(crate) fn prepared_prompt_latest_user_text_blocks_for_json(prepared: &PreparedPrompt) -> Vec<String> {
     prepared_prompt_latest_user_text_blocks(prepared)
 }
 
-fn prepared_prompt_to_messages_json(prepared: &PreparedPrompt) -> Vec<Value> {
+pub(crate) fn prepared_prompt_to_messages_json(prepared: &PreparedPrompt) -> Vec<Value> {
     let mut messages = Vec::<Value>::new();
     if !prepared.preamble.trim().is_empty() {
         messages.push(serde_json::json!({
@@ -692,18 +692,18 @@ fn prepared_prompt_to_messages_json(prepared: &PreparedPrompt) -> Vec<Value> {
     messages
 }
 
-fn log_text_len(text: &str) -> usize {
+pub(crate) fn log_text_len(text: &str) -> usize {
     text.chars().count()
 }
 
-fn push_unique_log_name(names: &mut Vec<String>, raw: &str) {
+pub(crate) fn push_unique_log_name(names: &mut Vec<String>, raw: &str) {
     let name = raw.trim();
     if !name.is_empty() && !names.iter().any(|existing| existing == name) {
         names.push(name.to_string());
     }
 }
 
-fn log_tool_call_name(call: &Value) -> Option<&str> {
+pub(crate) fn log_tool_call_name(call: &Value) -> Option<&str> {
     call.get("function")
         .and_then(|function| function.get("name"))
         .and_then(Value::as_str)
@@ -711,11 +711,11 @@ fn log_tool_call_name(call: &Value) -> Option<&str> {
         .or_else(|| call.get("name").and_then(Value::as_str))
 }
 
-fn log_tool_call_names_value(names: Vec<String>) -> Value {
+pub(crate) fn log_tool_call_names_value(names: Vec<String>) -> Value {
     Value::Array(names.into_iter().map(Value::String).collect())
 }
 
-fn tool_calls_summary_from_value(value: Option<&Value>) -> (usize, Vec<String>) {
+pub(crate) fn tool_calls_summary_from_value(value: Option<&Value>) -> (usize, Vec<String>) {
     let Some(calls) = value.and_then(Value::as_array) else {
         return (0, Vec::new());
     };
@@ -728,7 +728,7 @@ fn tool_calls_summary_from_value(value: Option<&Value>) -> (usize, Vec<String>) 
     (calls.len(), names)
 }
 
-fn tool_history_summary_from_events(events: &[Value]) -> (usize, Vec<String>) {
+pub(crate) fn tool_history_summary_from_events(events: &[Value]) -> (usize, Vec<String>) {
     let mut count = 0usize;
     let mut names = Vec::<String>::new();
     for event in events {
@@ -745,14 +745,14 @@ fn tool_history_summary_from_events(events: &[Value]) -> (usize, Vec<String>) {
     (count, names)
 }
 
-fn tool_history_summary_from_value(value: Option<&Value>) -> (usize, Vec<String>) {
+pub(crate) fn tool_history_summary_from_value(value: Option<&Value>) -> (usize, Vec<String>) {
     let Some(events) = value.and_then(Value::as_array) else {
         return (0, Vec::new());
     };
     tool_history_summary_from_events(events)
 }
 
-fn model_reply_to_log_value(reply: &ModelReply) -> Value {
+pub(crate) fn model_reply_to_log_value(reply: &ModelReply) -> Value {
     let mut value = serde_json::json!({
         "assistantText": reply.assistant_text,
         "activityReasoningText": reply.activity_reasoning_text,
@@ -766,7 +766,7 @@ fn model_reply_to_log_value(reply: &ModelReply) -> Value {
     value
 }
 
-fn build_llm_round_log_entry(
+pub(crate) fn build_llm_round_log_entry(
     trace_id: Option<String>,
     scene: &str,
     request_format: RequestFormat,
@@ -803,7 +803,7 @@ fn build_llm_round_log_entry(
     }
 }
 
-fn llm_round_log_group_key(
+pub(crate) fn llm_round_log_group_key(
     scene: &str,
     trace_id: Option<&str>,
     group_key: Option<&str>,
@@ -833,7 +833,7 @@ fn llm_round_log_group_key(
     }
 }
 
-fn log_entry_tool_call_count(entry: &LlmRoundLogEntry) -> usize {
+pub(crate) fn log_entry_tool_call_count(entry: &LlmRoundLogEntry) -> usize {
     let Some(response) = entry.response.as_ref() else {
         return 0;
     };
@@ -860,7 +860,7 @@ fn log_entry_tool_call_count(entry: &LlmRoundLogEntry) -> usize {
         .sum()
 }
 
-fn compact_log_tools_value(tools: &Value) -> Option<Value> {
+pub(crate) fn compact_log_tools_value(tools: &Value) -> Option<Value> {
     let items = tools.as_array()?;
     let mut names = Vec::<String>::new();
     for item in items {
@@ -883,7 +883,7 @@ fn compact_log_tools_value(tools: &Value) -> Option<Value> {
     }
 }
 
-fn compact_log_response_value(response: &Value) -> Value {
+pub(crate) fn compact_log_response_value(response: &Value) -> Value {
     let Some(source) = response.as_object() else {
         return response.clone();
     };
@@ -944,7 +944,7 @@ fn compact_log_response_value(response: &Value) -> Value {
     Value::Object(compact)
 }
 
-fn compact_llm_round_log_entry_for_ui(entry: &LlmRoundLogEntry) -> LlmRoundLogEntry {
+pub(crate) fn compact_llm_round_log_entry_for_ui(entry: &LlmRoundLogEntry) -> LlmRoundLogEntry {
     LlmRoundLogEntry {
         id: entry.id.clone(),
         created_at: entry.created_at.clone(),
@@ -973,19 +973,19 @@ fn compact_llm_round_log_entry_for_ui(entry: &LlmRoundLogEntry) -> LlmRoundLogEn
 }
 
 #[derive(Default)]
-struct LlmRoundUsageTotals {
-    prompt_tokens: i64,
-    completion_tokens: i64,
-    total_tokens: i64,
-    cached_tokens: i64,
-    cache_creation_tokens: i64,
-    cache_creation_5m_tokens: i64,
-    cache_creation_1h_tokens: i64,
-    reasoning_tokens: i64,
-    round_count: usize,
+pub(crate) struct LlmRoundUsageTotals {
+    pub(crate) prompt_tokens: i64,
+    pub(crate) completion_tokens: i64,
+    pub(crate) total_tokens: i64,
+    pub(crate) cached_tokens: i64,
+    pub(crate) cache_creation_tokens: i64,
+    pub(crate) cache_creation_5m_tokens: i64,
+    pub(crate) cache_creation_1h_tokens: i64,
+    pub(crate) reasoning_tokens: i64,
+    pub(crate) round_count: usize,
 }
 
-fn usage_value_i64(usage: &Value, key: &str) -> i64 {
+pub(crate) fn usage_value_i64(usage: &Value, key: &str) -> i64 {
     usage
         .get(key)
         .and_then(Value::as_i64)
@@ -993,7 +993,7 @@ fn usage_value_i64(usage: &Value, key: &str) -> i64 {
         .unwrap_or(0)
 }
 
-fn aggregate_round_usage(rounds: &[LlmRoundLogEntry]) -> Option<Value> {
+pub(crate) fn aggregate_round_usage(rounds: &[LlmRoundLogEntry]) -> Option<Value> {
     let mut totals = LlmRoundUsageTotals::default();
     for round in rounds {
         let Some(usage) = round.response.as_ref().and_then(|response| response.get("usage")) else {
@@ -1030,7 +1030,7 @@ fn aggregate_round_usage(rounds: &[LlmRoundLogEntry]) -> Option<Value> {
     }))
 }
 
-fn normalize_llm_round_log_capacity(value: u32) -> usize {
+pub(crate) fn normalize_llm_round_log_capacity(value: u32) -> usize {
     match value {
         1 => 1,
         3 => 3,
@@ -1042,13 +1042,13 @@ fn normalize_llm_round_log_capacity(value: u32) -> usize {
     }
 }
 
-fn llm_round_log_capacity_for_state(state: &AppState) -> usize {
+pub(crate) fn llm_round_log_capacity_for_state(state: &AppState) -> usize {
     state_read_config_cached(state)
         .map(|config| normalize_llm_round_log_capacity(config.llm_round_log_capacity))
         .unwrap_or(DEFAULT_LLM_ROUND_LOG_CAPACITY)
 }
 
-fn trim_display_llm_logs(
+pub(crate) fn trim_display_llm_logs(
     logs: &mut std::collections::VecDeque<LlmRoundLogEntry>,
     capacity: usize,
 ) {
@@ -1057,7 +1057,7 @@ fn trim_display_llm_logs(
     }
 }
 
-fn push_display_llm_log(
+pub(crate) fn push_display_llm_log(
     logs: &mut std::collections::VecDeque<LlmRoundLogEntry>,
     entry: LlmRoundLogEntry,
     capacity: usize,
@@ -1066,11 +1066,11 @@ fn push_display_llm_log(
     trim_display_llm_logs(logs, capacity);
 }
 
-fn llm_round_log_is_pipeline_scene(scene: &str) -> bool {
+pub(crate) fn llm_round_log_is_pipeline_scene(scene: &str) -> bool {
     scene == "chat_pipeline"
 }
 
-fn llm_round_log_bucket_mut<'a>(
+pub(crate) fn llm_round_log_bucket_mut<'a>(
     logs: &'a mut RecentLlmRoundLogs,
     scene: &str,
 ) -> &'a mut std::collections::VecDeque<LlmRoundLogEntry> {
@@ -1081,7 +1081,7 @@ fn llm_round_log_bucket_mut<'a>(
     }
 }
 
-fn recent_llm_round_logs_for_ui(logs: &RecentLlmRoundLogs, capacity: usize) -> Vec<LlmRoundLogEntry> {
+pub(crate) fn recent_llm_round_logs_for_ui(logs: &RecentLlmRoundLogs, capacity: usize) -> Vec<LlmRoundLogEntry> {
     let mut items = Vec::new();
     items.extend(
         logs.pipeline_logs
@@ -1098,15 +1098,15 @@ fn recent_llm_round_logs_for_ui(logs: &RecentLlmRoundLogs, capacity: usize) -> V
     items
 }
 
-fn recent_llm_round_logs_total_count(logs: &RecentLlmRoundLogs) -> usize {
+pub(crate) fn recent_llm_round_logs_total_count(logs: &RecentLlmRoundLogs) -> usize {
     logs.pipeline_logs.len().saturating_add(logs.other_logs.len())
 }
 
-fn recent_llm_round_logs_estimated_json_bytes(logs: &RecentLlmRoundLogs) -> usize {
+pub(crate) fn recent_llm_round_logs_estimated_json_bytes(logs: &RecentLlmRoundLogs) -> usize {
     estimate_json_bytes(logs)
 }
 
-fn push_llm_round_log(
+pub(crate) fn push_llm_round_log(
     state: Option<&AppState>,
     trace_id: Option<String>,
     group_key: Option<String>,
@@ -1202,7 +1202,7 @@ fn push_llm_round_log(
     push_display_llm_log(llm_round_log_bucket_mut(&mut logs, scene), entry, capacity);
 }
 
-fn latest_chat_round_headers_and_tools(
+pub(crate) fn latest_chat_round_headers_and_tools(
     state: &AppState,
     chat_session_key: Option<&str>,
     request_format: RequestFormat,
@@ -1256,7 +1256,7 @@ fn latest_chat_round_headers_and_tools(
 }
 
 
-fn list_recent_llm_round_logs_inner(state: &AppState) -> Result<Vec<LlmRoundLogEntry>, String> {
+pub(crate) fn list_recent_llm_round_logs_inner(state: &AppState) -> Result<Vec<LlmRoundLogEntry>, String> {
     let capacity = llm_round_log_capacity_for_state(state);
     let logs = state
         .llm_round_logs
@@ -1265,7 +1265,7 @@ fn list_recent_llm_round_logs_inner(state: &AppState) -> Result<Vec<LlmRoundLogE
     Ok(recent_llm_round_logs_for_ui(&logs, capacity))
 }
 
-fn find_llm_round_log_entry_by_id<'a>(
+pub(crate) fn find_llm_round_log_entry_by_id<'a>(
     entry: &'a LlmRoundLogEntry,
     id: &str,
 ) -> Option<&'a LlmRoundLogEntry> {
@@ -1279,7 +1279,7 @@ fn find_llm_round_log_entry_by_id<'a>(
     })
 }
 
-fn log_response_text_field(response: Option<&Value>, keys: &[&str]) -> String {
+pub(crate) fn log_response_text_field(response: Option<&Value>, keys: &[&str]) -> String {
     let Some(response) = response else {
         return String::new();
     };
@@ -1289,7 +1289,7 @@ fn log_response_text_field(response: Option<&Value>, keys: &[&str]) -> String {
         .to_string()
 }
 
-fn log_response_usage_section(response: Option<&Value>) -> Option<Value> {
+pub(crate) fn log_response_usage_section(response: Option<&Value>) -> Option<Value> {
     let response = response?;
     let mut usage = serde_json::Map::<String, Value>::new();
     if let Some(value) = response.get("usage") {
@@ -1305,7 +1305,7 @@ fn log_response_usage_section(response: Option<&Value>) -> Option<Value> {
     }
 }
 
-fn llm_round_log_section_value(entry: &LlmRoundLogEntry, section: &str) -> Option<Value> {
+pub(crate) fn llm_round_log_section_value(entry: &LlmRoundLogEntry, section: &str) -> Option<Value> {
     let response = entry.response.as_ref();
     match section.trim() {
         "answer" => {
@@ -1364,7 +1364,7 @@ fn llm_round_log_section_value(entry: &LlmRoundLogEntry, section: &str) -> Optio
 }
 
 
-fn get_recent_llm_round_log_section_inner(
+pub(crate) fn get_recent_llm_round_log_section_inner(
     state: &AppState,
     id: String,
     section: String,
@@ -1389,7 +1389,7 @@ fn get_recent_llm_round_log_section_inner(
 }
 
 
-fn clear_recent_llm_round_logs_inner(state: &AppState) -> Result<bool, String> {
+pub(crate) fn clear_recent_llm_round_logs_inner(state: &AppState) -> Result<bool, String> {
     let mut logs = state
         .llm_round_logs
         .lock()
@@ -1408,14 +1408,14 @@ fn clear_recent_llm_round_logs_inner(state: &AppState) -> Result<bool, String> {
 
 
 
-fn list_recent_runtime_logs() -> Result<Vec<RuntimeLogEntry>, String> {
+pub(crate) fn list_recent_runtime_logs() -> Result<Vec<RuntimeLogEntry>, String> {
     let logs = runtime_log_buffer()
         .lock()
         .map_err(|_| "Failed to lock runtime logs".to_string())?;
     Ok(logs.entries.iter().cloned().collect::<Vec<_>>())
 }
 
-fn list_runtime_logs_since(since_created_at: Option<String>) -> Result<Vec<RuntimeLogEntry>, String> {
+pub(crate) fn list_runtime_logs_since(since_created_at: Option<String>) -> Result<Vec<RuntimeLogEntry>, String> {
     let logs = runtime_log_buffer()
         .lock()
         .map_err(|_| "Failed to lock runtime logs".to_string())?;
@@ -1435,7 +1435,7 @@ fn list_runtime_logs_since(since_created_at: Option<String>) -> Result<Vec<Runti
         .collect())
 }
 
-fn clear_recent_runtime_logs() -> Result<bool, String> {
+pub(crate) fn clear_recent_runtime_logs() -> Result<bool, String> {
     let mut logs = runtime_log_buffer()
         .lock()
         .map_err(|_| "Failed to lock runtime logs".to_string())?;
@@ -1444,7 +1444,7 @@ fn clear_recent_runtime_logs() -> Result<bool, String> {
     Ok(true)
 }
 
-fn append_runtime_log_probe(message: Option<String>) -> Result<bool, String> {
+pub(crate) fn append_runtime_log_probe(message: Option<String>) -> Result<bool, String> {
     let msg = message
         .as_deref()
         .map(str::trim)
@@ -1454,11 +1454,11 @@ fn append_runtime_log_probe(message: Option<String>) -> Result<bool, String> {
     Ok(true)
 }
 
-fn estimate_json_bytes<T: Serialize>(value: &T) -> usize {
+pub(crate) fn estimate_json_bytes<T: Serialize>(value: &T) -> usize {
     serde_json::to_vec(value).map(|raw| raw.len()).unwrap_or(0)
 }
 
-fn build_memory_conversation_stats<'a, I>(items: I, limit: usize) -> Vec<MemoryConversationStat>
+pub(crate) fn build_memory_conversation_stats<'a, I>(items: I, limit: usize) -> Vec<MemoryConversationStat>
 where
     I: IntoIterator<Item = &'a Conversation>,
 {
@@ -1480,7 +1480,7 @@ where
     stats
 }
 
-fn build_memory_conversation_meta_stats<'a, I>(items: I, limit: usize) -> Vec<MemoryConversationStat>
+pub(crate) fn build_memory_conversation_meta_stats<'a, I>(items: I, limit: usize) -> Vec<MemoryConversationStat>
 where
     I: IntoIterator<Item = &'a message_store::ConversationShardMeta>,
 {
@@ -1503,7 +1503,7 @@ where
 }
 
 
-fn dump_memory_cache_stats_inner(state: &AppState) -> Result<MemoryCacheStats, String> {
+pub(crate) fn dump_memory_cache_stats_inner(state: &AppState) -> Result<MemoryCacheStats, String> {
     let cached_conversations_count = 0;
     let cached_conversations_message_count = 0;
     let cached_conversations_estimated_json_bytes = 0;

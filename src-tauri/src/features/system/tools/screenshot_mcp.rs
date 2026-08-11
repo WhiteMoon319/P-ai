@@ -1,20 +1,20 @@
-const MCP_SCREENSHOT_SERVER_FLAG: &str = "--mcp-screenshot-server";
+pub(crate) const MCP_SCREENSHOT_SERVER_FLAG: &str = "--mcp-screenshot-server";
 
 #[derive(Debug, Clone, serde::Deserialize, rmcp::schemars::JsonSchema)]
-struct McpDesktopScreenshotArgs {
+pub(crate) struct McpDesktopScreenshotArgs {
     #[serde(default)]
     #[serde(rename = "note")]
     #[schemars(description = "Optional note for the screenshot request. Ignored by the tool runtime.")]
-    _note: Option<String>,
+    pub(crate) _note: Option<String>,
 }
 
 #[derive(Debug, Clone)]
-struct DesktopScreenshotMcpServer {
-    tool_router: rmcp::handler::server::router::tool::ToolRouter<Self>,
+pub(crate) struct DesktopScreenshotMcpServer {
+    pub(crate) tool_router: rmcp::handler::server::router::tool::ToolRouter<Self>,
 }
 
 impl DesktopScreenshotMcpServer {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             tool_router: Self::tool_router(),
         }
@@ -27,7 +27,7 @@ impl DesktopScreenshotMcpServer {
         name = "desktop_screenshot",
         description = "Capture current full desktop screenshot and return metadata + image base64."
     )]
-    async fn desktop_screenshot(
+    pub(crate) async fn desktop_screenshot(
         &self,
         rmcp::handler::server::wrapper::Parameters(_args): rmcp::handler::server::wrapper::Parameters<
             McpDesktopScreenshotArgs,
@@ -86,7 +86,7 @@ impl rmcp::ServerHandler for DesktopScreenshotMcpServer {
     }
 }
 
-fn run_desktop_screenshot_mcp_server() -> Result<(), String> {
+pub(crate) fn run_desktop_screenshot_mcp_server() -> Result<(), String> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()

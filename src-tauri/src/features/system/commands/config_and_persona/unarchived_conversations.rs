@@ -1,9 +1,9 @@
-mod git_ghost_snapshot;
+pub(crate) mod git_ghost_snapshot;
 
 use git_ghost_snapshot::read_git_snapshot_record_from_provider_meta;
 use git_ghost_snapshot::restore_main_workspace_from_git_ghost_snapshot;
 
-fn conversation_preferred_model_repair_candidate(
+pub(crate) fn conversation_preferred_model_repair_candidate(
     config: &AppConfig,
     department_id: &str,
     preferred_api_config_id: Option<&str>,
@@ -29,7 +29,7 @@ fn conversation_preferred_model_repair_candidate(
         .filter(|resolved_id| config.api_configs.iter().any(|api| api.id == *resolved_id && is_text_chat_api(api)))
 }
 
-fn repair_conversation_preferred_model_for_snapshot(
+pub(crate) fn repair_conversation_preferred_model_for_snapshot(
     state: &AppState,
     conversation: &Conversation,
 ) -> Result<Option<String>, String> {
@@ -41,7 +41,7 @@ fn repair_conversation_preferred_model_for_snapshot(
     )
 }
 
-fn repair_conversation_preferred_model_for_snapshot_meta(
+pub(crate) fn repair_conversation_preferred_model_for_snapshot_meta(
     state: &AppState,
     conversation_id: &str,
     department_id: &str,
@@ -75,7 +75,7 @@ fn repair_conversation_preferred_model_for_snapshot_meta(
 
 
 
-fn get_foreground_conversation_freshness_snapshot_blocking(
+pub(crate) fn get_foreground_conversation_freshness_snapshot_blocking(
     input: ForegroundConversationFreshnessInput,
     state: &AppState,
 ) -> Result<ForegroundConversationFreshnessOutput, String> {
@@ -105,7 +105,7 @@ fn get_foreground_conversation_freshness_snapshot_blocking(
     })
 }
 
-fn get_foreground_conversation_light_snapshot_blocking(
+pub(crate) fn get_foreground_conversation_light_snapshot_blocking(
     input: ForegroundConversationLightSnapshotInput,
     state: &AppState,
 ) -> Result<ForegroundConversationLightSnapshotOutput, String> {
@@ -168,7 +168,7 @@ fn get_foreground_conversation_light_snapshot_blocking(
     })
 }
 
-fn foreground_runtime_snapshot_should_bind(snapshot: &ConversationRuntimeSnapshot) -> bool {
+pub(crate) fn foreground_runtime_snapshot_should_bind(snapshot: &ConversationRuntimeSnapshot) -> bool {
     snapshot.runtime_state == MainSessionState::AssistantStreaming
         && !snapshot.stream_cache.persisted_assistant_message_id.trim().is_empty()
 }
@@ -232,13 +232,13 @@ mod foreground_resume_projection_tests {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MarkConversationReadInput {
-    conversation_id: String,
+pub(crate) struct MarkConversationReadInput {
+    pub(crate) conversation_id: String,
 }
 
 
 
-fn set_conversation_plan_mode_inner(
+pub(crate) fn set_conversation_plan_mode_inner(
     input: SetConversationPlanModeInput,
     state: &AppState,
 ) -> Result<SetConversationPlanModeOutput, String> {
@@ -271,7 +271,7 @@ fn set_conversation_plan_mode_inner(
 }
 
 
-fn set_conversation_preferred_model_inner(
+pub(crate) fn set_conversation_preferred_model_inner(
     input: SetConversationPreferredModelInput,
     state: &AppState,
 ) -> Result<SetConversationPreferredModelOutput, String> {
@@ -334,7 +334,7 @@ fn set_conversation_preferred_model_inner(
 }
 
 
-fn set_conversation_auto_push_remote_contact_inner(
+pub(crate) fn set_conversation_auto_push_remote_contact_inner(
     input: SetConversationAutoPushRemoteContactInput,
     state: &AppState,
 ) -> Result<SetConversationAutoPushRemoteContactOutput, String> {
@@ -399,49 +399,49 @@ fn set_conversation_auto_push_remote_contact_inner(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CreateUnarchivedConversationInput {
+pub(crate) struct CreateUnarchivedConversationInput {
     #[serde(default)]
-    api_config_id: Option<String>,
+    pub(crate) api_config_id: Option<String>,
     #[serde(default)]
-    agent_id: Option<String>,
+    pub(crate) agent_id: Option<String>,
     #[serde(default)]
-    department_id: Option<String>,
+    pub(crate) department_id: Option<String>,
     #[serde(default)]
-    title: Option<String>,
+    pub(crate) title: Option<String>,
     #[serde(default)]
-    copy_source_conversation_id: Option<String>,
+    pub(crate) copy_source_conversation_id: Option<String>,
     #[serde(default)]
-    shell_workspaces: Option<Vec<ShellWorkspaceConfig>>,
+    pub(crate) shell_workspaces: Option<Vec<ShellWorkspaceConfig>>,
     #[serde(default)]
-    shell_work_mode: Option<String>,
+    pub(crate) shell_work_mode: Option<String>,
     #[serde(default)]
-    shell_autonomous_mode: Option<bool>,
+    pub(crate) shell_autonomous_mode: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CreateUnarchivedConversationOutput {
-    conversation_id: String,
-    unarchived_conversations: Vec<UnarchivedConversationSummary>,
+pub(crate) struct CreateUnarchivedConversationOutput {
+    pub(crate) conversation_id: String,
+    pub(crate) unarchived_conversations: Vec<UnarchivedConversationSummary>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CreateSideChatConversationInput {
-    parent_conversation_id: String,
+pub(crate) struct CreateSideChatConversationInput {
+    pub(crate) parent_conversation_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CreateSideChatConversationOutput {
-    conversation_id: String,
-    parent_conversation_id: String,
-    conversation_kind: String,
-    title: String,
+pub(crate) struct CreateSideChatConversationOutput {
+    pub(crate) conversation_id: String,
+    pub(crate) parent_conversation_id: String,
+    pub(crate) conversation_kind: String,
+    pub(crate) title: String,
 }
 
 
-fn create_side_chat_conversation_blocking(
+pub(crate) fn create_side_chat_conversation_blocking(
     input: CreateSideChatConversationInput,
     state: &AppState,
 ) -> Result<CreateSideChatConversationOutput, String> {
@@ -531,188 +531,188 @@ fn create_side_chat_conversation_blocking(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ExportConversationShareInput {
-    conversation_id: String,
+pub(crate) struct ExportConversationShareInput {
+    pub(crate) conversation_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ExportConversationShareOutput {
-    file_name: String,
-    payload_json: String,
+pub(crate) struct ExportConversationShareOutput {
+    pub(crate) file_name: String,
+    pub(crate) payload_json: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ImportConversationShareFromFileInput {
-    path: String,
+pub(crate) struct ImportConversationShareFromFileInput {
+    pub(crate) path: String,
     #[serde(default)]
-    agent_id: Option<String>,
+    pub(crate) agent_id: Option<String>,
     #[serde(default)]
-    department_id: Option<String>,
+    pub(crate) department_id: Option<String>,
     #[serde(default)]
-    title: Option<String>,
+    pub(crate) title: Option<String>,
     #[serde(default)]
-    shell_workspaces: Option<Vec<ShellWorkspaceConfig>>,
+    pub(crate) shell_workspaces: Option<Vec<ShellWorkspaceConfig>>,
     #[serde(default)]
-    shell_work_mode: Option<String>,
+    pub(crate) shell_work_mode: Option<String>,
     #[serde(default)]
-    shell_autonomous_mode: Option<bool>,
+    pub(crate) shell_autonomous_mode: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationShareSource {
+pub(crate) struct ConversationShareSource {
     #[serde(default)]
-    conversation_id: String,
+    pub(crate) conversation_id: String,
     #[serde(default)]
-    department_id: String,
+    pub(crate) department_id: String,
     #[serde(default)]
-    agent_id: String,
+    pub(crate) agent_id: String,
     #[serde(default)]
-    user_id: String,
+    pub(crate) user_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationSharePayload {
+pub(crate) struct ConversationSharePayload {
     #[serde(rename = "type")]
-    payload_type: String,
-    version: u32,
-    exported_at: String,
+    pub(crate) payload_type: String,
+    pub(crate) version: u32,
+    pub(crate) exported_at: String,
     #[serde(default)]
-    title: String,
+    pub(crate) title: String,
     #[serde(default)]
-    source: Option<ConversationShareSource>,
+    pub(crate) source: Option<ConversationShareSource>,
     #[serde(default)]
-    messages: Vec<ChatMessage>,
+    pub(crate) messages: Vec<ChatMessage>,
     #[serde(default)]
-    current_todos: Vec<ConversationTodoItem>,
+    pub(crate) current_todos: Vec<ConversationTodoItem>,
     #[serde(default)]
-    plan_mode_enabled: bool,
+    pub(crate) plan_mode_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct BranchUnarchivedConversationFromSelectionInput {
-    source_conversation_id: String,
-    selected_message_ids: Vec<String>,
+pub(crate) struct BranchUnarchivedConversationFromSelectionInput {
+    pub(crate) source_conversation_id: String,
+    pub(crate) selected_message_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CreateConversationBranchFromMessageInput {
-    source_conversation_id: String,
-    turn_message_id: String,
+pub(crate) struct CreateConversationBranchFromMessageInput {
+    pub(crate) source_conversation_id: String,
+    pub(crate) turn_message_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct BranchUnarchivedConversationFromSelectionOutput {
-    conversation_id: String,
-    title: String,
+pub(crate) struct BranchUnarchivedConversationFromSelectionOutput {
+    pub(crate) conversation_id: String,
+    pub(crate) title: String,
     #[serde(default)]
-    warning: Option<String>,
+    pub(crate) warning: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ForwardUnarchivedConversationSelectionInput {
-    source_conversation_id: String,
-    target_conversation_id: String,
-    selected_message_ids: Vec<String>,
+pub(crate) struct ForwardUnarchivedConversationSelectionInput {
+    pub(crate) source_conversation_id: String,
+    pub(crate) target_conversation_id: String,
+    pub(crate) selected_message_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ForwardUnarchivedConversationSelectionOutput {
-    target_conversation_id: String,
-    forwarded_count: usize,
+pub(crate) struct ForwardUnarchivedConversationSelectionOutput {
+    pub(crate) target_conversation_id: String,
+    pub(crate) forwarded_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ForwardSelectionToRemoteImContactInput {
-    source_conversation_id: String,
-    target_conversation_id: String,
-    remote_contact_id: String,
-    selected_message_ids: Vec<String>,
+pub(crate) struct ForwardSelectionToRemoteImContactInput {
+    pub(crate) source_conversation_id: String,
+    pub(crate) target_conversation_id: String,
+    pub(crate) remote_contact_id: String,
+    pub(crate) selected_message_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ForwardSelectionToRemoteImContactOutput {
-    target_conversation_id: String,
-    remote_contact_id: String,
-    forwarded_count: usize,
+pub(crate) struct ForwardSelectionToRemoteImContactOutput {
+    pub(crate) target_conversation_id: String,
+    pub(crate) remote_contact_id: String,
+    pub(crate) forwarded_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RenameUnarchivedConversationInput {
-    conversation_id: String,
-    title: String,
+pub(crate) struct RenameUnarchivedConversationInput {
+    pub(crate) conversation_id: String,
+    pub(crate) title: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RenameUnarchivedConversationOutput {
-    conversation_id: String,
-    title: String,
+pub(crate) struct RenameUnarchivedConversationOutput {
+    pub(crate) conversation_id: String,
+    pub(crate) title: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RebindUnarchivedConversationRecipientInput {
-    conversation_id: String,
-    department_id: String,
-    agent_id: String,
+pub(crate) struct RebindUnarchivedConversationRecipientInput {
+    pub(crate) conversation_id: String,
+    pub(crate) department_id: String,
+    pub(crate) agent_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RebindUnarchivedConversationRecipientOutput {
-    conversation_id: String,
-    department_id: String,
-    agent_id: String,
-    preferred_api_config_id: Option<String>,
+pub(crate) struct RebindUnarchivedConversationRecipientOutput {
+    pub(crate) conversation_id: String,
+    pub(crate) department_id: String,
+    pub(crate) agent_id: String,
+    pub(crate) preferred_api_config_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToggleUnarchivedConversationPinInput {
-    conversation_id: String,
+pub(crate) struct ToggleUnarchivedConversationPinInput {
+    pub(crate) conversation_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToggleUnarchivedConversationPinOutput {
-    conversation_id: String,
-    is_pinned: bool,
+pub(crate) struct ToggleUnarchivedConversationPinOutput {
+    pub(crate) conversation_id: String,
+    pub(crate) is_pinned: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationSectionOrdersOutput {
-    local: Vec<String>,
-    contact: Vec<String>,
+pub(crate) struct ConversationSectionOrdersOutput {
+    pub(crate) local: Vec<String>,
+    pub(crate) contact: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SaveConversationSectionOrderInput {
-    tab: String,
-    ordered_keys: Vec<String>,
+pub(crate) struct SaveConversationSectionOrderInput {
+    pub(crate) tab: String,
+    pub(crate) ordered_keys: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SaveConversationSectionOrderOutput {
-    tab: String,
-    ordered_keys: Vec<String>,
+pub(crate) struct SaveConversationSectionOrderOutput {
+    pub(crate) tab: String,
+    pub(crate) ordered_keys: Vec<String>,
 }
 
-fn normalize_conversation_section_order_keys(keys: &[String]) -> Vec<String> {
+pub(crate) fn normalize_conversation_section_order_keys(keys: &[String]) -> Vec<String> {
     let mut seen = std::collections::HashSet::<String>::new();
     keys.iter()
         .map(|item| item.trim())
@@ -722,7 +722,7 @@ fn normalize_conversation_section_order_keys(keys: &[String]) -> Vec<String> {
         .collect()
 }
 
-fn normalize_conversation_section_order_tab(tab: &str) -> Result<&'static str, String> {
+pub(crate) fn normalize_conversation_section_order_tab(tab: &str) -> Result<&'static str, String> {
     match tab.trim() {
         "local" => Ok("local"),
         "contact" => Ok("contact"),
@@ -730,13 +730,13 @@ fn normalize_conversation_section_order_tab(tab: &str) -> Result<&'static str, S
     }
 }
 
-fn trimmed_option(raw: Option<&str>) -> Option<String> {
+pub(crate) fn trimmed_option(raw: Option<&str>) -> Option<String> {
     raw.map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
 }
 
-fn clone_chat_message_for_copied_conversation(message: &ChatMessage) -> ChatMessage {
+pub(crate) fn clone_chat_message_for_copied_conversation(message: &ChatMessage) -> ChatMessage {
     ChatMessage {
         id: Uuid::new_v4().to_string(),
         role: message.role.clone(),
@@ -751,7 +751,7 @@ fn clone_chat_message_for_copied_conversation(message: &ChatMessage) -> ChatMess
     }
 }
 
-fn sanitize_conversation_share_file_name(title: &str, conversation_id: &str) -> String {
+pub(crate) fn sanitize_conversation_share_file_name(title: &str, conversation_id: &str) -> String {
     let base = title
         .trim()
         .chars()
@@ -777,7 +777,7 @@ fn sanitize_conversation_share_file_name(title: &str, conversation_id: &str) -> 
     format!("{name}.json")
 }
 
-fn normalize_imported_conversation_share_message(
+pub(crate) fn normalize_imported_conversation_share_message(
     message: &ChatMessage,
     target_agent_id: &str,
 ) -> ChatMessage {
@@ -812,7 +812,7 @@ fn normalize_imported_conversation_share_message(
     }
 }
 
-fn clone_foreground_conversation_for_copy(
+pub(crate) fn clone_foreground_conversation_for_copy(
     source: &Conversation,
     agent_id: &str,
     department_id: &str,
@@ -852,7 +852,7 @@ fn clone_foreground_conversation_for_copy(
     conversation
 }
 
-fn build_branch_conversation_summary_title(
+pub(crate) fn build_branch_conversation_summary_title(
     source_title: &str,
     source_summary_title: Option<&str>,
     first_selected_ordinal: usize,
@@ -872,7 +872,7 @@ fn build_branch_conversation_summary_title(
     format!("{prefix}[会话分支自第{first_selected_ordinal}条对话]")
 }
 
-fn resolve_branch_from_message_target_index(
+pub(crate) fn resolve_branch_from_message_target_index(
     messages: &[ChatMessage],
     turn_message_id: &str,
 ) -> Option<usize> {
@@ -885,7 +885,7 @@ fn resolve_branch_from_message_target_index(
         .position(|message| message.id.trim() == normalized_turn_message_id)
 }
 
-fn visible_message_ordinal_for_index(messages: &[ChatMessage], target_index: usize) -> usize {
+pub(crate) fn visible_message_ordinal_for_index(messages: &[ChatMessage], target_index: usize) -> usize {
     let mut visible_ordinal = 0usize;
     for (index, message) in messages.iter().enumerate() {
         if archive_pipeline_is_context_compaction_message(message) {
@@ -899,7 +899,7 @@ fn visible_message_ordinal_for_index(messages: &[ChatMessage], target_index: usi
     0
 }
 
-fn collect_selected_messages_for_branch(
+pub(crate) fn collect_selected_messages_for_branch(
     source: &Conversation,
     selected_message_ids: &[String],
 ) -> (Vec<ChatMessage>, usize) {
@@ -928,7 +928,7 @@ fn collect_selected_messages_for_branch(
 }
 
 #[cfg(test)]
-fn branch_conversation_settings_agent_id(
+pub(crate) fn branch_conversation_settings_agent_id(
     agents: &[AgentProfile],
     department: &DepartmentConfig,
     requested_agent_id: &str,
@@ -948,7 +948,7 @@ fn branch_conversation_settings_agent_id(
 }
 
 #[cfg(test)]
-fn build_branch_conversation_record_from_selection(
+pub(crate) fn build_branch_conversation_record_from_selection(
     data_path: &PathBuf,
     data: &AppData,
     source: &Conversation,
@@ -1027,7 +1027,7 @@ fn build_branch_conversation_record_from_selection(
 }
 
 #[cfg(test)]
-fn latest_compaction_message_for_branch(source: &Conversation) -> Option<ChatMessage> {
+pub(crate) fn latest_compaction_message_for_branch(source: &Conversation) -> Option<ChatMessage> {
     source
         .messages
         .iter()
@@ -1037,7 +1037,7 @@ fn latest_compaction_message_for_branch(source: &Conversation) -> Option<ChatMes
 }
 
 
-async fn create_unarchived_conversation_inner(
+pub(crate) async fn create_unarchived_conversation_inner(
     input: CreateUnarchivedConversationInput,
     state: &AppState,
 ) -> Result<CreateUnarchivedConversationOutput, String> {
@@ -1051,7 +1051,7 @@ async fn create_unarchived_conversation_inner(
     Ok(output)
 }
 
-fn create_unarchived_conversation_blocking(
+pub(crate) fn create_unarchived_conversation_blocking(
     input: CreateUnarchivedConversationInput,
     state: &AppState,
 ) -> Result<(CreateUnarchivedConversationOutput, UnarchivedConversationOverviewUpdatedPayload), String> {
@@ -1097,7 +1097,7 @@ fn create_unarchived_conversation_blocking(
 }
 
 
-fn export_conversation_share_json_inner(
+pub(crate) fn export_conversation_share_json_inner(
     input: ExportConversationShareInput,
     state: &AppState,
 ) -> Result<ExportConversationShareOutput, String> {
@@ -1144,7 +1144,7 @@ fn export_conversation_share_json_inner(
 
 
 
-async fn create_conversation_branch_from_message_internal(
+pub(crate) async fn create_conversation_branch_from_message_internal(
     input: CreateConversationBranchFromMessageInput,
     state: &AppState,
 ) -> Result<BranchUnarchivedConversationFromSelectionOutput, String> {
@@ -1262,7 +1262,7 @@ async fn create_conversation_branch_from_message_internal(
     })
 }
 
-async fn branch_unarchived_conversation_from_selection_internal(
+pub(crate) async fn branch_unarchived_conversation_from_selection_internal(
     input: BranchUnarchivedConversationFromSelectionInput,
     state: &AppState,
 ) -> Result<BranchUnarchivedConversationFromSelectionOutput, String> {
@@ -1303,7 +1303,7 @@ async fn branch_unarchived_conversation_from_selection_internal(
 }
 
 
-fn forward_unarchived_conversation_selection_inner(
+pub(crate) fn forward_unarchived_conversation_selection_inner(
     input: ForwardUnarchivedConversationSelectionInput,
     state: &AppState,
 ) -> Result<ForwardUnarchivedConversationSelectionOutput, String> {
@@ -1350,7 +1350,7 @@ fn forward_unarchived_conversation_selection_inner(
 }
 
 
-fn forward_selection_to_remote_im_contact_inner(
+pub(crate) fn forward_selection_to_remote_im_contact_inner(
     input: ForwardSelectionToRemoteImContactInput,
     state: &AppState,
 ) -> Result<ForwardSelectionToRemoteImContactOutput, String> {
@@ -1404,7 +1404,7 @@ fn forward_selection_to_remote_im_contact_inner(
 }
 
 
-fn rename_unarchived_conversation_inner(
+pub(crate) fn rename_unarchived_conversation_inner(
     input: RenameUnarchivedConversationInput,
     state: &AppState,
 ) -> Result<RenameUnarchivedConversationOutput, String> {
@@ -1431,7 +1431,7 @@ fn rename_unarchived_conversation_inner(
     })
 }
 
-fn rebind_unarchived_conversation_recipient_inner(
+pub(crate) fn rebind_unarchived_conversation_recipient_inner(
     input: RebindUnarchivedConversationRecipientInput,
     state: &AppState,
 ) -> Result<RebindUnarchivedConversationRecipientOutput, String> {
@@ -1507,7 +1507,7 @@ fn rebind_unarchived_conversation_recipient_inner(
 
 
 
-fn toggle_unarchived_conversation_pin_inner(
+pub(crate) fn toggle_unarchived_conversation_pin_inner(
     input: ToggleUnarchivedConversationPinInput,
     state: &AppState,
 ) -> Result<ToggleUnarchivedConversationPinOutput, String> {
@@ -1535,7 +1535,7 @@ fn toggle_unarchived_conversation_pin_inner(
 }
 
 
-fn get_conversation_section_orders_inner(
+pub(crate) fn get_conversation_section_orders_inner(
     state: &AppState,
 ) -> Result<ConversationSectionOrdersOutput, String> {
     let runtime = state_read_runtime_state_cached(state)?;
@@ -1546,7 +1546,7 @@ fn get_conversation_section_orders_inner(
 }
 
 
-fn save_conversation_section_order_inner(
+pub(crate) fn save_conversation_section_order_inner(
     input: SaveConversationSectionOrderInput,
     state: &AppState,
 ) -> Result<SaveConversationSectionOrderOutput, String> {
@@ -1571,7 +1571,7 @@ fn save_conversation_section_order_inner(
 }
 
 
-fn list_delegate_conversations_inner(
+pub(crate) fn list_delegate_conversations_inner(
     state: &AppState,
 ) -> Result<Vec<DelegateConversationSummary>, String> {
     let mut threads = delegate_runtime_thread_list(state)?;
@@ -1630,7 +1630,7 @@ fn list_delegate_conversations_inner(
     Ok(summaries)
 }
 
-fn clean_delegate_display_title(value: &str) -> String {
+pub(crate) fn clean_delegate_display_title(value: &str) -> String {
     let collapsed = value
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -1650,14 +1650,14 @@ fn clean_delegate_display_title(value: &str) -> String {
     }
 }
 
-fn delegate_title_is_generic(value: &str) -> bool {
+pub(crate) fn delegate_title_is_generic(value: &str) -> bool {
     matches!(
         value.trim(),
         "" | "未命名委托" | "委托" | "委托任务" | "新委托" | "任务"
     )
 }
 
-fn delegate_display_title_parts(title: &str, goal: &str, todo: &str, why: &str) -> String {
+pub(crate) fn delegate_display_title_parts(title: &str, goal: &str, todo: &str, why: &str) -> String {
     let explicit_title = clean_delegate_display_title(title);
     if !delegate_title_is_generic(&explicit_title) {
         return explicit_title;
@@ -1675,7 +1675,7 @@ fn delegate_display_title_parts(title: &str, goal: &str, todo: &str, why: &str) 
     })
 }
 
-fn delegate_display_title_from_snapshot(snapshot: &DelegateConversationSnapshot) -> String {
+pub(crate) fn delegate_display_title_from_snapshot(snapshot: &DelegateConversationSnapshot) -> String {
     delegate_display_title_parts(
         &snapshot.title,
         &snapshot.goal,
@@ -1684,7 +1684,7 @@ fn delegate_display_title_from_snapshot(snapshot: &DelegateConversationSnapshot)
     )
 }
 
-fn delegate_display_title_from_id(
+pub(crate) fn delegate_display_title_from_id(
     app_state: &AppState,
     delegate_id: &str,
     conversation: Option<&Conversation>,
@@ -1712,49 +1712,49 @@ fn delegate_display_title_from_id(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ListConversationDelegateStatusesInput {
-    conversation_id: String,
+pub(crate) struct ListConversationDelegateStatusesInput {
+    pub(crate) conversation_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationDelegateStatusSummary {
-    delegate_id: String,
-    kind: String,
-    conversation_id: String,
-    root_conversation_id: String,
-    title: String,
-    status: String,
-    active: bool,
-    started_at: String,
-    updated_at: String,
+pub(crate) struct ConversationDelegateStatusSummary {
+    pub(crate) delegate_id: String,
+    pub(crate) kind: String,
+    pub(crate) conversation_id: String,
+    pub(crate) root_conversation_id: String,
+    pub(crate) title: String,
+    pub(crate) status: String,
+    pub(crate) active: bool,
+    pub(crate) started_at: String,
+    pub(crate) updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    completed_at: Option<String>,
+    pub(crate) completed_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    archived_at: Option<String>,
-    elapsed_ms: u64,
-    request_count: usize,
-    tool_call_count: usize,
-    last_tool_name: String,
-    token_count: u64,
-    input_token_count: u64,
-    output_token_count: u64,
-    cache_read_token_count: u64,
-    cache_write_token_count: u64,
+    pub(crate) archived_at: Option<String>,
+    pub(crate) elapsed_ms: u64,
+    pub(crate) request_count: usize,
+    pub(crate) tool_call_count: usize,
+    pub(crate) last_tool_name: String,
+    pub(crate) token_count: u64,
+    pub(crate) input_token_count: u64,
+    pub(crate) output_token_count: u64,
+    pub(crate) cache_read_token_count: u64,
+    pub(crate) cache_write_token_count: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    target_agent_id: Option<String>,
+    pub(crate) target_agent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
-struct DelegateConversationStats {
-    request_count: usize,
-    tool_call_count: usize,
-    last_tool_name: String,
-    token_count: u64,
-    cumulative_usage: ConversationCumulativeUsage,
+pub(crate) struct DelegateConversationStats {
+    pub(crate) request_count: usize,
+    pub(crate) tool_call_count: usize,
+    pub(crate) last_tool_name: String,
+    pub(crate) token_count: u64,
+    pub(crate) cumulative_usage: ConversationCumulativeUsage,
 }
 
-fn conversation_delegate_effective_prompt_tokens(message: &ChatMessage) -> Option<u64> {
+pub(crate) fn conversation_delegate_effective_prompt_tokens(message: &ChatMessage) -> Option<u64> {
     message
         .provider_meta
         .as_ref()?
@@ -1762,7 +1762,7 @@ fn conversation_delegate_effective_prompt_tokens(message: &ChatMessage) -> Optio
         .as_u64()
 }
 
-fn conversation_delegate_compaction_kind(message: &ChatMessage) -> Option<String> {
+pub(crate) fn conversation_delegate_compaction_kind(message: &ChatMessage) -> Option<String> {
     let kind = message
         .provider_meta
         .as_ref()?
@@ -1778,7 +1778,7 @@ fn conversation_delegate_compaction_kind(message: &ChatMessage) -> Option<String
     }
 }
 
-fn conversation_delegate_token_count(messages: &[ChatMessage]) -> u64 {
+pub(crate) fn conversation_delegate_token_count(messages: &[ChatMessage]) -> u64 {
     let mut total = 0u64;
     let mut latest_segment_usage = None::<u64>;
     for message in messages {
@@ -1797,12 +1797,12 @@ fn conversation_delegate_token_count(messages: &[ChatMessage]) -> u64 {
     total
 }
 
-fn conversation_delegate_text_message_has_content(message: &ChatMessage) -> bool {
+pub(crate) fn conversation_delegate_text_message_has_content(message: &ChatMessage) -> bool {
     !render_prompt_message_text(message).trim().is_empty()
         || message.extra_text_blocks.iter().any(|item| !item.trim().is_empty())
 }
 
-fn conversation_delegate_stats_from_conversation(
+pub(crate) fn conversation_delegate_stats_from_conversation(
     conversation: &Conversation,
     inflight_tool_history: &[Value],
 ) -> DelegateConversationStats {
@@ -1895,7 +1895,7 @@ fn conversation_delegate_stats_from_conversation(
     stats
 }
 
-fn conversation_delegate_status_from_entry(
+pub(crate) fn conversation_delegate_status_from_entry(
     app_state: &AppState,
     delegate_id: &str,
     active: bool,
@@ -1920,7 +1920,7 @@ fn conversation_delegate_status_from_entry(
     }
 }
 
-fn conversation_delegate_summary_from_thread(
+pub(crate) fn conversation_delegate_summary_from_thread(
     app_state: &AppState,
     thread: &DelegateRuntimeThread,
     active: bool,
@@ -1998,7 +1998,7 @@ fn conversation_delegate_summary_from_thread(
     })
 }
 
-fn conversation_delegate_summary_from_snapshot(
+pub(crate) fn conversation_delegate_summary_from_snapshot(
     app_state: &AppState,
     snapshot: &DelegateConversationSnapshot,
 ) -> Result<ConversationDelegateStatusSummary, String> {
@@ -2036,7 +2036,7 @@ fn conversation_delegate_summary_from_snapshot(
 }
 
 
-fn list_conversation_delegate_statuses_inner(
+pub(crate) fn list_conversation_delegate_statuses_inner(
     input: ListConversationDelegateStatusesInput,
     state: &AppState,
 ) -> Result<Vec<ConversationDelegateStatusSummary>, String> {
@@ -2128,18 +2128,18 @@ fn list_conversation_delegate_statuses_inner(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AbortDelegateConversationInput {
-    delegate_id: String,
+pub(crate) struct AbortDelegateConversationInput {
+    pub(crate) delegate_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AbortDelegateConversationResult {
-    aborted: bool,
+pub(crate) struct AbortDelegateConversationResult {
+    pub(crate) aborted: bool,
 }
 
 
-fn abort_delegate_conversation_inner(
+pub(crate) fn abort_delegate_conversation_inner(
     input: AbortDelegateConversationInput,
     state: &AppState,
 ) -> Result<AbortDelegateConversationResult, String> {
@@ -2154,67 +2154,67 @@ fn abort_delegate_conversation_inner(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GetUnarchivedConversationMessagesInput {
-    conversation_id: String,
+pub(crate) struct GetUnarchivedConversationMessagesInput {
+    pub(crate) conversation_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GetUnarchivedConversationRecentMessagesInput {
-    conversation_id: String,
+pub(crate) struct GetUnarchivedConversationRecentMessagesInput {
+    pub(crate) conversation_id: String,
     #[serde(default = "default_recent_unarchived_message_limit")]
-    limit: usize,
+    pub(crate) limit: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GetUnarchivedConversationMessageByIdInput {
-    conversation_id: String,
-    message_id: String,
+pub(crate) struct GetUnarchivedConversationMessageByIdInput {
+    pub(crate) conversation_id: String,
+    pub(crate) message_id: String,
 }
 
-fn default_recent_unarchived_message_limit() -> usize {
+pub(crate) fn default_recent_unarchived_message_limit() -> usize {
     5
 }
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GetUnarchivedConversationRecentBlockMessagesInput {
-    conversation_id: String,
+pub(crate) struct GetUnarchivedConversationRecentBlockMessagesInput {
+    pub(crate) conversation_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GetConversationBlockPageInput {
-    conversation_id: String,
+pub(crate) struct GetConversationBlockPageInput {
+    pub(crate) conversation_id: String,
     #[serde(default)]
-    block_id: Option<u32>,
+    pub(crate) block_id: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationBlockSummaryOutput {
-    block_id: u32,
-    message_count: usize,
-    first_message_id: String,
-    last_message_id: String,
-    first_created_at: Option<String>,
-    last_created_at: Option<String>,
-    is_latest: bool,
+pub(crate) struct ConversationBlockSummaryOutput {
+    pub(crate) block_id: u32,
+    pub(crate) message_count: usize,
+    pub(crate) first_message_id: String,
+    pub(crate) last_message_id: String,
+    pub(crate) first_created_at: Option<String>,
+    pub(crate) last_created_at: Option<String>,
+    pub(crate) is_latest: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationBlockPageOutput {
-    blocks: Vec<ConversationBlockSummaryOutput>,
-    selected_block_id: u32,
-    messages: Vec<ChatMessage>,
-    has_prev_block: bool,
-    has_next_block: bool,
+pub(crate) struct ConversationBlockPageOutput {
+    pub(crate) blocks: Vec<ConversationBlockSummaryOutput>,
+    pub(crate) selected_block_id: u32,
+    pub(crate) messages: Vec<ChatMessage>,
+    pub(crate) has_prev_block: bool,
+    pub(crate) has_next_block: bool,
 }
 
-fn conversation_block_page_output_from_message_store_page(
+pub(crate) fn conversation_block_page_output_from_message_store_page(
     page: message_store::MessageStoreBlockPage,
 ) -> ConversationBlockPageOutput {
     ConversationBlockPageOutput {
@@ -2244,25 +2244,25 @@ fn conversation_block_page_output_from_message_store_page(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GetDelegateConversationMessagesInput {
-    conversation_id: String,
+pub(crate) struct GetDelegateConversationMessagesInput {
+    pub(crate) conversation_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DeleteDelegateConversationInput {
-    conversation_id: String,
+pub(crate) struct DeleteDelegateConversationInput {
+    pub(crate) conversation_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DeleteDelegateConversationOutput {
-    deleted_conversation_id: String,
-    deleted: bool,
+pub(crate) struct DeleteDelegateConversationOutput {
+    pub(crate) deleted_conversation_id: String,
+    pub(crate) deleted: bool,
 }
 
 
-fn remote_im_delegate_message_is_internal(message: &ChatMessage) -> bool {
+pub(crate) fn remote_im_delegate_message_is_internal(message: &ChatMessage) -> bool {
     message
         .provider_meta
         .as_ref()
@@ -2272,7 +2272,7 @@ fn remote_im_delegate_message_is_internal(message: &ChatMessage) -> bool {
 }
 
 
-fn get_delegate_conversation_block_page_inner(
+pub(crate) fn get_delegate_conversation_block_page_inner(
     input: GetConversationBlockPageInput,
     state: &AppState,
 ) -> Result<ConversationBlockPageOutput, String> {
@@ -2293,7 +2293,7 @@ fn get_delegate_conversation_block_page_inner(
 }
 
 
-fn delete_delegate_conversation_inner(
+pub(crate) fn delete_delegate_conversation_inner(
     input: DeleteDelegateConversationInput,
     state: &AppState,
 ) -> Result<DeleteDelegateConversationOutput, String> {
@@ -2314,20 +2314,20 @@ fn delete_delegate_conversation_inner(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DeleteUnarchivedConversationInput {
-    conversation_id: String,
+pub(crate) struct DeleteUnarchivedConversationInput {
+    pub(crate) conversation_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DeleteUnarchivedConversationOutput {
-    deleted_conversation_id: String,
-    active_conversation_id: String,
-    unarchived_conversations: Vec<UnarchivedConversationSummary>,
+pub(crate) struct DeleteUnarchivedConversationOutput {
+    pub(crate) deleted_conversation_id: String,
+    pub(crate) active_conversation_id: String,
+    pub(crate) unarchived_conversations: Vec<UnarchivedConversationSummary>,
 }
 
 
-async fn delete_unarchived_conversation_inner(
+pub(crate) async fn delete_unarchived_conversation_inner(
     input: DeleteUnarchivedConversationInput,
     state: &AppState,
 ) -> Result<DeleteUnarchivedConversationOutput, String> {
@@ -2341,7 +2341,7 @@ async fn delete_unarchived_conversation_inner(
     Ok(output)
 }
 
-fn delete_unarchived_conversation_blocking(
+pub(crate) fn delete_unarchived_conversation_blocking(
     input: DeleteUnarchivedConversationInput,
     state: &AppState,
 ) -> Result<(DeleteUnarchivedConversationOutput, UnarchivedConversationOverviewUpdatedPayload), String> {
@@ -2423,76 +2423,76 @@ fn delete_unarchived_conversation_blocking(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GetActiveConversationMessagesBeforeInput {
+pub(crate) struct GetActiveConversationMessagesBeforeInput {
     #[serde(default)]
-    conversation_id: Option<String>,
+    pub(crate) conversation_id: Option<String>,
     #[serde(default)]
-    session: Option<SessionSelector>,
-    before_message_id: String,
-    limit: usize,
+    pub(crate) session: Option<SessionSelector>,
+    pub(crate) before_message_id: String,
+    pub(crate) limit: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GetActiveConversationMessagesBeforeOutput {
-    messages: Vec<ChatMessage>,
-    has_more: bool,
+pub(crate) struct GetActiveConversationMessagesBeforeOutput {
+    pub(crate) messages: Vec<ChatMessage>,
+    pub(crate) has_more: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GetActiveConversationMessagesAfterInput {
+pub(crate) struct GetActiveConversationMessagesAfterInput {
     #[serde(default)]
-    conversation_id: Option<String>,
+    pub(crate) conversation_id: Option<String>,
     #[serde(default)]
-    session: Option<SessionSelector>,
-    after_message_id: String,
+    pub(crate) session: Option<SessionSelector>,
+    pub(crate) after_message_id: String,
     #[serde(default = "default_message_page_limit")]
-    limit: usize,
+    pub(crate) limit: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GetActiveConversationMessagesAfterOutput {
-    messages: Vec<ChatMessage>,
+pub(crate) struct GetActiveConversationMessagesAfterOutput {
+    pub(crate) messages: Vec<ChatMessage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RequestConversationMessagesAfterAsyncInput {
-    conversation_id: String,
+pub(crate) struct RequestConversationMessagesAfterAsyncInput {
+    pub(crate) conversation_id: String,
     #[serde(default)]
-    after_message_id: Option<String>,
+    pub(crate) after_message_id: Option<String>,
     #[serde(default = "default_recent_unarchived_message_limit")]
-    fallback_limit: usize,
+    pub(crate) fallback_limit: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RequestConversationMessagesAfterAsyncOutput {
-    accepted: bool,
-    request_id: String,
+pub(crate) struct RequestConversationMessagesAfterAsyncOutput {
+    pub(crate) accepted: bool,
+    pub(crate) request_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationMessagesAfterAsyncPayload {
-    request_id: String,
-    conversation_id: String,
+pub(crate) struct ConversationMessagesAfterAsyncPayload {
+    pub(crate) request_id: String,
+    pub(crate) conversation_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    after_message_id: Option<String>,
-    messages: Vec<ChatMessage>,
+    pub(crate) after_message_id: Option<String>,
+    pub(crate) messages: Vec<ChatMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    fallback_mode: Option<String>,
+    pub(crate) fallback_mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
+    pub(crate) error: Option<String>,
 }
 
-fn default_message_page_limit() -> usize {
+pub(crate) fn default_message_page_limit() -> usize {
     100
 }
 
-fn clone_messages_after_page(
+pub(crate) fn clone_messages_after_page(
     messages: &[ChatMessage],
     after_message_id: &str,
     limit: usize,
@@ -2505,7 +2505,7 @@ fn clone_messages_after_page(
     Ok(messages[(after_idx + 1)..end].to_vec())
 }
 
-fn clone_messages_before_page(
+pub(crate) fn clone_messages_before_page(
     messages: &[ChatMessage],
     before_message_id: &str,
     limit: usize,
@@ -2519,7 +2519,7 @@ fn clone_messages_before_page(
     Ok((messages[start..before_idx].to_vec(), has_more))
 }
 
-fn resolve_unarchived_conversation_messages_after(
+pub(crate) fn resolve_unarchived_conversation_messages_after(
     state: &AppState,
     conversation_id: &str,
     after_message_id: Option<&str>,
@@ -2536,7 +2536,7 @@ fn resolve_unarchived_conversation_messages_after(
 
 
 
-fn request_conversation_messages_after_async_inner(
+pub(crate) fn request_conversation_messages_after_async_inner(
     input: RequestConversationMessagesAfterAsyncInput,
     state: &AppState,
 ) -> Result<RequestConversationMessagesAfterAsyncOutput, String> {
@@ -2636,31 +2636,31 @@ fn request_conversation_messages_after_async_inner(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RewindConversationInput {
-    session: SessionSelector,
-    message_id: String,
+pub(crate) struct RewindConversationInput {
+    pub(crate) session: SessionSelector,
+    pub(crate) message_id: String,
     #[serde(default)]
-    undo_apply_patch: bool,
+    pub(crate) undo_apply_patch: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RewindConversationResult {
-    removed_count: usize,
-    remaining_count: usize,
+pub(crate) struct RewindConversationResult {
+    pub(crate) removed_count: usize,
+    pub(crate) remaining_count: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
-    recalled_user_message: Option<ChatMessage>,
+    pub(crate) recalled_user_message: Option<ChatMessage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RewindConversationPreviewResultPayload {
-    conversation_id: String,
-    can_undo_patch: bool,
-    hint: String,
+pub(crate) struct RewindConversationPreviewResultPayload {
+    pub(crate) conversation_id: String,
+    pub(crate) can_undo_patch: bool,
+    pub(crate) hint: String,
 }
 
-fn validate_rewind_input(
+pub(crate) fn validate_rewind_input(
     input: &RewindConversationInput,
     started_at: &std::time::Instant,
 ) -> Result<String, String> {
@@ -2688,7 +2688,7 @@ fn validate_rewind_input(
 }
 
 #[cfg(test)]
-fn persist_rewind_conversation_state(
+pub(crate) fn persist_rewind_conversation_state(
     conversation: &mut Conversation,
     remove_from: usize,
 ) -> Result<(usize, usize, Option<String>, Vec<ConversationTodoItem>), String> {
@@ -2716,7 +2716,7 @@ fn persist_rewind_conversation_state(
     ))
 }
 
-fn latest_todos_from_message_tool_history(
+pub(crate) fn latest_todos_from_message_tool_history(
     message: &ChatMessage,
 ) -> Result<Option<Vec<ConversationTodoItem>>, String> {
     for event in normalize_message_tool_history_events(message, MessageToolHistoryView::Display)
@@ -2751,7 +2751,7 @@ fn latest_todos_from_message_tool_history(
 }
 
 #[cfg(test)]
-fn restore_conversation_todos_after_rewind(conversation: &mut Conversation) -> Result<(), String> {
+pub(crate) fn restore_conversation_todos_after_rewind(conversation: &mut Conversation) -> Result<(), String> {
     let mut restored = None::<Vec<ConversationTodoItem>>;
     for message in conversation.messages.iter().rev() {
         if let Some(todos) = latest_todos_from_message_tool_history(message)? {
@@ -2764,7 +2764,7 @@ fn restore_conversation_todos_after_rewind(conversation: &mut Conversation) -> R
 }
 
 
-async fn preview_rewind_conversation_from_message_inner(
+pub(crate) async fn preview_rewind_conversation_from_message_inner(
     input: RewindConversationInput,
     state: &AppState,
 ) -> Result<RewindConversationPreviewResultPayload, String> {
@@ -2793,7 +2793,7 @@ async fn preview_rewind_conversation_from_message_inner(
 }
 
 
-async fn rewind_conversation_from_message_inner(
+pub(crate) async fn rewind_conversation_from_message_inner(
     input: RewindConversationInput,
     state: &AppState,
 ) -> Result<RewindConversationResult, String> {

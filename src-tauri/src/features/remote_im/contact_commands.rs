@@ -1,10 +1,10 @@
-fn remote_im_list_channels_inner(state: &AppState) -> Result<Vec<RemoteImChannelConfig>, String> {
+pub(crate) fn remote_im_list_channels_inner(state: &AppState) -> Result<Vec<RemoteImChannelConfig>, String> {
     let config = state_read_config_cached(state)?;
     Ok(config.remote_im_channels)
 }
 
 
-fn remote_im_list_contacts_inner(state: &AppState) -> Result<Vec<RemoteImContact>, String> {
+pub(crate) fn remote_im_list_contacts_inner(state: &AppState) -> Result<Vec<RemoteImContact>, String> {
     let runtime = state_read_runtime_state_cached(state)?;
     let mut contacts = runtime.remote_im_contacts;
     contacts.sort_by(|a, b| {
@@ -16,7 +16,7 @@ fn remote_im_list_contacts_inner(state: &AppState) -> Result<Vec<RemoteImContact
     Ok(contacts)
 }
 
-fn remote_im_mutate_contact<T>(
+pub(crate) fn remote_im_mutate_contact<T>(
     state: &AppState,
     contact_id: &str,
     mutate: impl FnOnce(&mut RemoteImContact) -> Result<T, String>,
@@ -31,7 +31,7 @@ fn remote_im_mutate_contact<T>(
     })
 }
 
-fn remote_im_get_contact_by_id(
+pub(crate) fn remote_im_get_contact_by_id(
     state: &AppState,
     contact_id: &str,
 ) -> Result<RemoteImContact, String> {
@@ -44,19 +44,19 @@ fn remote_im_get_contact_by_id(
 
 // ========== 远程入站瞬时去重 ==========
 
-const REMOTE_IM_INBOUND_RECENT_PLATFORM_MESSAGE_ID_LIMIT: usize = 10;
+pub(crate) const REMOTE_IM_INBOUND_RECENT_PLATFORM_MESSAGE_ID_LIMIT: usize = 10;
 
-static REMOTE_IM_INBOUND_RECENT_PLATFORM_MESSAGE_IDS: OnceLock<
+pub(crate) static REMOTE_IM_INBOUND_RECENT_PLATFORM_MESSAGE_IDS: OnceLock<
     Mutex<std::collections::HashMap<String, std::collections::VecDeque<String>>>,
 > = OnceLock::new();
 
-fn remote_im_inbound_recent_platform_message_ids(
+pub(crate) fn remote_im_inbound_recent_platform_message_ids(
 ) -> &'static Mutex<std::collections::HashMap<String, std::collections::VecDeque<String>>> {
     REMOTE_IM_INBOUND_RECENT_PLATFORM_MESSAGE_IDS
         .get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
-fn remote_im_remember_inbound_platform_message_id(
+pub(crate) fn remote_im_remember_inbound_platform_message_id(
     channel_id: &str,
     platform_message_id: Option<&str>,
 ) -> Result<bool, String> {
@@ -88,21 +88,21 @@ fn remote_im_remember_inbound_platform_message_id(
 
 // ========== 远程会话能量仪表盘 ==========
 
-const REMOTE_IM_CONTACT_DASHBOARD_UPDATED_EVENT: &str =
+pub(crate) const REMOTE_IM_CONTACT_DASHBOARD_UPDATED_EVENT: &str =
     "easy-call:remote-im-contact-dashboard-updated";
-const REMOTE_IM_CONTACT_DASHBOARD_PUSH_INTERVAL_SECONDS: u64 = 3;
+pub(crate) const REMOTE_IM_CONTACT_DASHBOARD_PUSH_INTERVAL_SECONDS: u64 = 3;
 
 #[derive(Default)]
-struct RemoteImContactDashboardSubscriptions {
-    contact_ids_by_window: std::collections::HashMap<String, String>,
-    push_worker_running: bool,
+pub(crate) struct RemoteImContactDashboardSubscriptions {
+    pub(crate) contact_ids_by_window: std::collections::HashMap<String, String>,
+    pub(crate) push_worker_running: bool,
 }
 
-static REMOTE_IM_CONTACT_DASHBOARD_SUBSCRIPTIONS: OnceLock<
+pub(crate) static REMOTE_IM_CONTACT_DASHBOARD_SUBSCRIPTIONS: OnceLock<
     Mutex<RemoteImContactDashboardSubscriptions>,
 > = OnceLock::new();
 
-fn remote_im_contact_dashboard_subscriptions(
+pub(crate) fn remote_im_contact_dashboard_subscriptions(
 ) -> &'static Mutex<RemoteImContactDashboardSubscriptions> {
     REMOTE_IM_CONTACT_DASHBOARD_SUBSCRIPTIONS
         .get_or_init(|| Mutex::new(RemoteImContactDashboardSubscriptions::default()))
@@ -110,41 +110,41 @@ fn remote_im_contact_dashboard_subscriptions(
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactDashboardSnapshot {
-    contact_id: String,
-    energy: f64,
-    maximum_energy: f64,
-    energy_percent: f64,
-    energy_recovery_per_second: f64,
-    presence: String,
-    last_presence_at: Option<String>,
-    watermark: String,
-    updated_at: String,
+pub(crate) struct RemoteImContactDashboardSnapshot {
+    pub(crate) contact_id: String,
+    pub(crate) energy: f64,
+    pub(crate) maximum_energy: f64,
+    pub(crate) energy_percent: f64,
+    pub(crate) energy_recovery_per_second: f64,
+    pub(crate) presence: String,
+    pub(crate) last_presence_at: Option<String>,
+    pub(crate) watermark: String,
+    pub(crate) updated_at: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactDashboardInput {
-    contact_id: String,
+pub(crate) struct RemoteImContactDashboardInput {
+    pub(crate) contact_id: String,
     #[serde(default)]
-    known_watermark: Option<String>,
+    pub(crate) known_watermark: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactDashboardSyncResult {
-    snapshot: RemoteImContactDashboardSnapshot,
-    changed: bool,
+pub(crate) struct RemoteImContactDashboardSyncResult {
+    pub(crate) snapshot: RemoteImContactDashboardSnapshot,
+    pub(crate) changed: bool,
 }
 
-fn remote_im_contact_dashboard_presence_label(state: RemoteImPresenceState) -> &'static str {
+pub(crate) fn remote_im_contact_dashboard_presence_label(state: RemoteImPresenceState) -> &'static str {
     match state {
         RemoteImPresenceState::Away => "away",
         RemoteImPresenceState::Present => "present",
     }
 }
 
-fn remote_im_contact_dashboard_snapshot_inner(
+pub(crate) fn remote_im_contact_dashboard_snapshot_inner(
     state: &AppState,
     contact_id: &str,
 ) -> Result<RemoteImContactDashboardSnapshot, String> {
@@ -196,7 +196,7 @@ fn remote_im_contact_dashboard_snapshot_inner(
     })
 }
 
-fn remote_im_emit_contact_dashboard_snapshot(state: &AppState, contact_id: &str) {
+pub(crate) fn remote_im_emit_contact_dashboard_snapshot(state: &AppState, contact_id: &str) {
     let (has_subscription, web_client_ids) = remote_im_contact_dashboard_subscriptions()
         .lock()
         .map(|subscriptions| {
@@ -252,7 +252,7 @@ fn remote_im_emit_contact_dashboard_snapshot(state: &AppState, contact_id: &str)
     }
 }
 
-fn remote_im_start_contact_dashboard_push_worker(state: &AppState) {
+pub(crate) fn remote_im_start_contact_dashboard_push_worker(state: &AppState) {
     let should_start = match remote_im_contact_dashboard_subscriptions().lock() {
         Ok(mut subscriptions) => {
             if subscriptions.push_worker_running {
@@ -298,7 +298,7 @@ fn remote_im_start_contact_dashboard_push_worker(state: &AppState) {
 
 
 
-fn remote_im_subscribe_contact_dashboard_for_web(
+pub(crate) fn remote_im_subscribe_contact_dashboard_for_web(
     state: &AppState,
     params: serde_json::Value,
     client_id: &str,
@@ -320,7 +320,7 @@ fn remote_im_subscribe_contact_dashboard_for_web(
     serde_json::to_value(snapshot).map_err(|err| format!("序列化远程联系人仪表盘快照失败：{err}"))
 }
 
-fn remote_im_sync_contact_dashboard_for_web(
+pub(crate) fn remote_im_sync_contact_dashboard_for_web(
     state: &AppState,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
@@ -335,7 +335,7 @@ fn remote_im_sync_contact_dashboard_for_web(
     .map_err(|err| format!("序列化远程联系人仪表盘同步结果失败：{err}"))
 }
 
-fn remote_im_unsubscribe_contact_dashboard_for_web(
+pub(crate) fn remote_im_unsubscribe_contact_dashboard_for_web(
     params: serde_json::Value,
     client_id: &str,
 ) -> Result<serde_json::Value, String> {
@@ -355,14 +355,14 @@ fn remote_im_unsubscribe_contact_dashboard_for_web(
 }
 
 #[derive(Clone)]
-struct RemoteImContactBindingSnapshot {
-    bound_department_id: Option<String>,
-    bound_agent_id: Option<String>,
-    bound_conversation_id: Option<String>,
-    route_mode: String,
+pub(crate) struct RemoteImContactBindingSnapshot {
+    pub(crate) bound_department_id: Option<String>,
+    pub(crate) bound_agent_id: Option<String>,
+    pub(crate) bound_conversation_id: Option<String>,
+    pub(crate) route_mode: String,
 }
 
-fn remote_im_contact_binding_snapshot(
+pub(crate) fn remote_im_contact_binding_snapshot(
     contact: &RemoteImContact,
 ) -> RemoteImContactBindingSnapshot {
     RemoteImContactBindingSnapshot {
@@ -373,7 +373,7 @@ fn remote_im_contact_binding_snapshot(
     }
 }
 
-fn remote_im_contact_binding_matches(
+pub(crate) fn remote_im_contact_binding_matches(
     contact: &RemoteImContact,
     snapshot: &RemoteImContactBindingSnapshot,
 ) -> bool {
@@ -383,7 +383,7 @@ fn remote_im_contact_binding_matches(
         && contact.route_mode == snapshot.route_mode
 }
 
-fn remote_im_apply_contact_binding_snapshot(
+pub(crate) fn remote_im_apply_contact_binding_snapshot(
     contact: &mut RemoteImContact,
     snapshot: &RemoteImContactBindingSnapshot,
 ) {
@@ -393,7 +393,7 @@ fn remote_im_apply_contact_binding_snapshot(
     contact.route_mode = snapshot.route_mode.clone();
 }
 
-fn remote_im_resolve_contact_session_target_atomic(
+pub(crate) fn remote_im_resolve_contact_session_target_atomic(
     state: &AppState,
     contact_id: &str,
     mut candidate: RemoteImContact,
@@ -503,7 +503,7 @@ fn remote_im_resolve_contact_session_target_atomic(
     ))
 }
 
-fn remote_im_resolve_contact_session_target_fail_soft(
+pub(crate) fn remote_im_resolve_contact_session_target_fail_soft(
     state: &AppState,
     input: &RemoteImEnqueueInput,
     contact_id: &str,
@@ -628,7 +628,7 @@ fn remote_im_resolve_contact_session_target_fail_soft(
 
 
 
-fn remote_im_update_contact_allow_send_inner(
+pub(crate) fn remote_im_update_contact_allow_send_inner(
     state: &AppState,
     input: RemoteImContactAllowSendUpdateInput,
 ) -> Result<RemoteImContact, String> {
@@ -640,7 +640,7 @@ fn remote_im_update_contact_allow_send_inner(
 }
 
 
-fn remote_im_update_contact_allow_send_files_inner(
+pub(crate) fn remote_im_update_contact_allow_send_files_inner(
     state: &AppState,
     input: RemoteImContactAllowSendFilesUpdateInput,
 ) -> Result<RemoteImContact, String> {
@@ -651,7 +651,7 @@ fn remote_im_update_contact_allow_send_files_inner(
 }
 
 
-fn remote_im_update_contact_blocked_message_prefixes_inner(
+pub(crate) fn remote_im_update_contact_blocked_message_prefixes_inner(
     state: &AppState,
     input: RemoteImContactBlockedMessagePrefixesUpdateInput,
 ) -> Result<RemoteImContact, String> {
@@ -664,7 +664,7 @@ fn remote_im_update_contact_blocked_message_prefixes_inner(
 }
 
 
-fn remote_im_update_contact_behavior_inner(
+pub(crate) fn remote_im_update_contact_behavior_inner(
     state: &AppState,
     input: RemoteImContactBehaviorUpdateInput,
 ) -> Result<RemoteImContact, String> {
@@ -679,12 +679,12 @@ fn remote_im_update_contact_behavior_inner(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImChannelBehaviorReconfigureResult {
-    reconfigured_contacts: usize,
-    skipped_contacts: usize,
+pub(crate) struct RemoteImChannelBehaviorReconfigureResult {
+    pub(crate) reconfigured_contacts: usize,
+    pub(crate) skipped_contacts: usize,
 }
 
-fn remote_im_reconfigure_channel_behavior_inner(
+pub(crate) fn remote_im_reconfigure_channel_behavior_inner(
     state: &AppState,
     channel_id: &str,
 ) -> RemoteImChannelBehaviorReconfigureResult {
@@ -740,7 +740,7 @@ fn remote_im_reconfigure_channel_behavior_inner(
 }
 
 
-fn remote_im_patch_contact_settings_inner(
+pub(crate) fn remote_im_patch_contact_settings_inner(
     state: &AppState,
     input: RemoteImContactSettingsPatchInput,
 ) -> Result<RemoteImContact, String> {
@@ -869,7 +869,7 @@ fn remote_im_patch_contact_settings_inner(
 
 
 
-fn remote_im_update_contact_activation_inner(
+pub(crate) fn remote_im_update_contact_activation_inner(
     state: &AppState,
     input: RemoteImContactActivationUpdateInput,
 ) -> Result<RemoteImContact, String> {
@@ -890,7 +890,7 @@ fn remote_im_update_contact_activation_inner(
 
 
 
-fn remote_im_update_contact_department_binding_inner(
+pub(crate) fn remote_im_update_contact_department_binding_inner(
     state: &AppState,
     input: RemoteImContactDepartmentBindingUpdateInput,
 ) -> Result<RemoteImContact, String> {
@@ -993,7 +993,7 @@ fn remote_im_update_contact_department_binding_inner(
 }
 
 
-fn remote_im_update_contact_processing_mode_inner(
+pub(crate) fn remote_im_update_contact_processing_mode_inner(
     state: &AppState,
     input: RemoteImContactProcessingModeUpdateInput,
 ) -> Result<RemoteImContact, String> {
@@ -1004,7 +1004,7 @@ fn remote_im_update_contact_processing_mode_inner(
 }
 
 
-fn remote_im_update_contact_workspace_inner(
+pub(crate) fn remote_im_update_contact_workspace_inner(
     state: &AppState,
     input: RemoteImContactWorkspaceUpdateInput,
 ) -> Result<RemoteImContact, String> {
@@ -1028,36 +1028,36 @@ fn remote_im_update_contact_workspace_inner(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactConversationBlockPageInput {
-    contact_id: String,
+pub(crate) struct RemoteImContactConversationBlockPageInput {
+    pub(crate) contact_id: String,
     #[serde(default)]
-    block_id: Option<u32>,
+    pub(crate) block_id: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactConversationBlockSummaryOutput {
-    block_id: u32,
-    message_count: usize,
-    first_message_id: String,
-    last_message_id: String,
-    first_created_at: Option<String>,
-    last_created_at: Option<String>,
-    is_latest: bool,
+pub(crate) struct RemoteImContactConversationBlockSummaryOutput {
+    pub(crate) block_id: u32,
+    pub(crate) message_count: usize,
+    pub(crate) first_message_id: String,
+    pub(crate) last_message_id: String,
+    pub(crate) first_created_at: Option<String>,
+    pub(crate) last_created_at: Option<String>,
+    pub(crate) is_latest: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactConversationBlockPageOutput {
-    blocks: Vec<RemoteImContactConversationBlockSummaryOutput>,
-    selected_block_id: u32,
-    messages: Vec<ChatMessage>,
-    has_prev_block: bool,
-    has_next_block: bool,
+pub(crate) struct RemoteImContactConversationBlockPageOutput {
+    pub(crate) blocks: Vec<RemoteImContactConversationBlockSummaryOutput>,
+    pub(crate) selected_block_id: u32,
+    pub(crate) messages: Vec<ChatMessage>,
+    pub(crate) has_prev_block: bool,
+    pub(crate) has_next_block: bool,
 }
 
 
-fn remote_im_get_contact_conversation_block_page_inner(
+pub(crate) fn remote_im_get_contact_conversation_block_page_inner(
     input: RemoteImContactConversationBlockPageInput,
     state: &AppState,
 ) -> Result<RemoteImContactConversationBlockPageOutput, String> {
@@ -1106,7 +1106,7 @@ fn remote_im_get_contact_conversation_block_page_inner(
     })
 }
 
-fn remote_im_delete_contact_inner(
+pub(crate) fn remote_im_delete_contact_inner(
     state: &AppState,
     input: RemoteImContactDeleteInput,
 ) -> Result<bool, String> {
@@ -1150,7 +1150,7 @@ fn remote_im_delete_contact_inner(
 
 
 
-fn remote_im_clear_contact_conversation_inner(
+pub(crate) fn remote_im_clear_contact_conversation_inner(
     input: RemoteImContactDeleteInput,
     state: &AppState,
 ) -> Result<bool, String> {
@@ -1174,7 +1174,7 @@ fn remote_im_clear_contact_conversation_inner(
 }
 
 
-fn remote_im_stale_cached_config_best_effort(state: &AppState) -> Option<AppConfig> {
+pub(crate) fn remote_im_stale_cached_config_best_effort(state: &AppState) -> Option<AppConfig> {
     match state.cached_config.lock() {
         Ok(cached) => cached.clone(),
         Err(poisoned) => {

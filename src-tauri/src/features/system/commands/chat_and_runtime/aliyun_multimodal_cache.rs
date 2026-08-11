@@ -1,47 +1,47 @@
-const ALIYUN_MULTIMODAL_CACHE_META_KEY: &str = "aliyunMultimodalCache";
-const ALIYUN_MULTIMODAL_CACHE_ITEM_KIND_IMAGE: &str = "image";
-const ALIYUN_MULTIMODAL_CACHE_ITEM_KIND_AUDIO: &str = "audio";
-const ALIYUN_OSS_RESOLVE_HEADER_KEY: &str = "X-DashScope-OssResourceResolve";
-const ALIYUN_OSS_RESOLVE_HEADER_VALUE: &str = "enable";
-const ALIYUN_TEMP_URL_TTL_MS: i64 = 48 * 60 * 60 * 1000;
+pub(crate) const ALIYUN_MULTIMODAL_CACHE_META_KEY: &str = "aliyunMultimodalCache";
+pub(crate) const ALIYUN_MULTIMODAL_CACHE_ITEM_KIND_IMAGE: &str = "image";
+pub(crate) const ALIYUN_MULTIMODAL_CACHE_ITEM_KIND_AUDIO: &str = "audio";
+pub(crate) const ALIYUN_OSS_RESOLVE_HEADER_KEY: &str = "X-DashScope-OssResourceResolve";
+pub(crate) const ALIYUN_OSS_RESOLVE_HEADER_VALUE: &str = "enable";
+pub(crate) const ALIYUN_TEMP_URL_TTL_MS: i64 = 48 * 60 * 60 * 1000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AliyunMultimodalCacheEnvelope {
+pub(crate) struct AliyunMultimodalCacheEnvelope {
     #[serde(default)]
-    items: Vec<AliyunMultimodalCacheItem>,
+    pub(crate) items: Vec<AliyunMultimodalCacheItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AliyunMultimodalCacheItem {
-    kind: String,
-    mime: String,
-    content_hash: String,
-    model: String,
-    url: String,
-    expires_at_ms: i64,
+pub(crate) struct AliyunMultimodalCacheItem {
+    pub(crate) kind: String,
+    pub(crate) mime: String,
+    pub(crate) content_hash: String,
+    pub(crate) model: String,
+    pub(crate) url: String,
+    pub(crate) expires_at_ms: i64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
-struct AliyunUploadPolicyResponse {
-    data: AliyunUploadPolicy,
+pub(crate) struct AliyunUploadPolicyResponse {
+    pub(crate) data: AliyunUploadPolicy,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
-struct AliyunUploadPolicy {
-    upload_host: String,
-    upload_dir: String,
-    oss_access_key_id: String,
-    signature: String,
-    policy: String,
-    x_oss_object_acl: String,
-    x_oss_forbid_overwrite: String,
+pub(crate) struct AliyunUploadPolicy {
+    pub(crate) upload_host: String,
+    pub(crate) upload_dir: String,
+    pub(crate) oss_access_key_id: String,
+    pub(crate) signature: String,
+    pub(crate) policy: String,
+    pub(crate) x_oss_object_acl: String,
+    pub(crate) x_oss_forbid_overwrite: String,
 }
 
-fn is_aliyun_dashscope_base_url(base_url: &str) -> bool {
+pub(crate) fn is_aliyun_dashscope_base_url(base_url: &str) -> bool {
     let Ok(parsed) = reqwest::Url::parse(base_url.trim()) else {
         return false;
     };
@@ -51,7 +51,7 @@ fn is_aliyun_dashscope_base_url(base_url: &str) -> bool {
     host.to_ascii_lowercase().contains("aliyuncs")
 }
 
-fn is_aliyun_dashscope_coding_base_url(base_url: &str) -> bool {
+pub(crate) fn is_aliyun_dashscope_coding_base_url(base_url: &str) -> bool {
     let Ok(parsed) = reqwest::Url::parse(base_url.trim()) else {
         return false;
     };
@@ -64,7 +64,7 @@ fn is_aliyun_dashscope_coding_base_url(base_url: &str) -> bool {
         || (host.contains("dashscope.aliyuncs.com") && parsed.path().contains("/coding"))
 }
 
-fn decode_prepared_binary_payload_base64(
+pub(crate) fn decode_prepared_binary_payload_base64(
     data_path: &PathBuf,
     entry: &mut PreparedBinaryPayload,
 ) -> Result<(), String> {
@@ -74,7 +74,7 @@ fn decode_prepared_binary_payload_base64(
     Ok(())
 }
 
-fn decode_prepared_binary_payloads_base64(
+pub(crate) fn decode_prepared_binary_payloads_base64(
     data_path: &PathBuf,
     entries: &mut [PreparedBinaryPayload],
 ) -> Result<(), String> {
@@ -87,7 +87,7 @@ fn decode_prepared_binary_payloads_base64(
     Ok(())
 }
 
-fn decode_prepared_prompt_binaries_base64(
+pub(crate) fn decode_prepared_prompt_binaries_base64(
     data_path: &PathBuf,
     prepared_prompt: &mut PreparedPrompt,
 ) -> Result<(), String> {
@@ -100,7 +100,7 @@ fn decode_prepared_prompt_binaries_base64(
     Ok(())
 }
 
-fn aliyun_multimodal_uploads_url(base_url: &str) -> Result<String, String> {
+pub(crate) fn aliyun_multimodal_uploads_url(base_url: &str) -> Result<String, String> {
     let mut parsed =
         reqwest::Url::parse(base_url.trim()).map_err(|err| format!("解析百炼 base_url 失败: {err}"))?;
     parsed.set_path("/api/v1/uploads");
@@ -108,7 +108,7 @@ fn aliyun_multimodal_uploads_url(base_url: &str) -> Result<String, String> {
     Ok(parsed.to_string())
 }
 
-fn is_remote_binary_url(value: &str) -> bool {
+pub(crate) fn is_remote_binary_url(value: &str) -> bool {
     let trimmed = value.trim();
     trimmed.starts_with("oss://")
         || trimmed.starts_with("http://")
@@ -116,7 +116,7 @@ fn is_remote_binary_url(value: &str) -> bool {
         || trimmed.starts_with("data:")
 }
 
-fn aliyun_multimodal_kind_for_mime(mime: &str) -> Option<&'static str> {
+pub(crate) fn aliyun_multimodal_kind_for_mime(mime: &str) -> Option<&'static str> {
     let lower = mime.trim().to_ascii_lowercase();
     if lower.starts_with("image/") {
         Some(ALIYUN_MULTIMODAL_CACHE_ITEM_KIND_IMAGE)
@@ -127,7 +127,7 @@ fn aliyun_multimodal_kind_for_mime(mime: &str) -> Option<&'static str> {
     }
 }
 
-fn aliyun_multimodal_supports_urlization(request_format: RequestFormat, mime: &str) -> bool {
+pub(crate) fn aliyun_multimodal_supports_urlization(request_format: RequestFormat, mime: &str) -> bool {
     match aliyun_multimodal_kind_for_mime(mime) {
         Some(ALIYUN_MULTIMODAL_CACHE_ITEM_KIND_IMAGE) => true,
         Some(ALIYUN_MULTIMODAL_CACHE_ITEM_KIND_AUDIO) => {
@@ -137,21 +137,21 @@ fn aliyun_multimodal_supports_urlization(request_format: RequestFormat, mime: &s
     }
 }
 
-fn media_hash_from_raw(raw: &[u8]) -> String {
+pub(crate) fn media_hash_from_raw(raw: &[u8]) -> String {
     let mut hasher = sha2::Sha256::new();
     use sha2::Digest as _;
     hasher.update(&raw);
     format!("sha256:{}", crate::bytes_to_lower_hex(hasher.finalize()))
 }
 
-fn media_hash_from_base64(base64_value: &str) -> Result<String, String> {
+pub(crate) fn media_hash_from_base64(base64_value: &str) -> Result<String, String> {
     let raw = B64
         .decode(base64_value.trim())
         .map_err(|err| format!("解析媒体 base64 失败: {err}"))?;
     Ok(media_hash_from_raw(&raw))
 }
 
-fn aliyun_multimodal_cache_lookup_key(kind: &str, model: &str, content_hash: &str) -> String {
+pub(crate) fn aliyun_multimodal_cache_lookup_key(kind: &str, model: &str, content_hash: &str) -> String {
     format!(
         "{}|{}|{}",
         kind.trim().to_ascii_lowercase(),
@@ -160,14 +160,14 @@ fn aliyun_multimodal_cache_lookup_key(kind: &str, model: &str, content_hash: &st
     )
 }
 
-fn aliyun_multimodal_cache_item_is_fresh(item: &AliyunMultimodalCacheItem, now_ms: i64) -> bool {
+pub(crate) fn aliyun_multimodal_cache_item_is_fresh(item: &AliyunMultimodalCacheItem, now_ms: i64) -> bool {
     !item.url.trim().is_empty()
         && item.expires_at_ms > now_ms
         && !item.model.trim().is_empty()
         && !item.content_hash.trim().is_empty()
 }
 
-fn aliyun_multimodal_cache_items_from_meta(
+pub(crate) fn aliyun_multimodal_cache_items_from_meta(
     provider_meta: Option<&Value>,
 ) -> Vec<AliyunMultimodalCacheItem> {
     provider_meta
@@ -178,7 +178,7 @@ fn aliyun_multimodal_cache_items_from_meta(
         .unwrap_or_default()
 }
 
-fn upsert_aliyun_multimodal_cache_item(
+pub(crate) fn upsert_aliyun_multimodal_cache_item(
     provider_meta: &mut Option<Value>,
     next_item: AliyunMultimodalCacheItem,
 ) {
@@ -203,7 +203,7 @@ fn upsert_aliyun_multimodal_cache_item(
     *provider_meta = Some(meta);
 }
 
-fn upsert_api_extra_header(api_config: &mut ResolvedApiConfig, key: &str, value: &str) {
+pub(crate) fn upsert_api_extra_header(api_config: &mut ResolvedApiConfig, key: &str, value: &str) {
     api_config
         .extra_headers
         .retain(|(existing_key, _)| !existing_key.eq_ignore_ascii_case(key));
@@ -212,7 +212,7 @@ fn upsert_api_extra_header(api_config: &mut ResolvedApiConfig, key: &str, value:
         .push((key.to_string(), value.to_string()));
 }
 
-fn aliyun_media_extension_from_mime(mime: &str) -> &'static str {
+pub(crate) fn aliyun_media_extension_from_mime(mime: &str) -> &'static str {
     match mime.trim().to_ascii_lowercase().as_str() {
         "image/png" => "png",
         "image/jpeg" | "image/jpg" => "jpg",
@@ -232,7 +232,7 @@ fn aliyun_media_extension_from_mime(mime: &str) -> &'static str {
     }
 }
 
-fn resolve_message_part_binary_base64_for_hash(
+pub(crate) fn resolve_message_part_binary_base64_for_hash(
     data_path: &PathBuf,
     bytes_base64: &str,
 ) -> Result<String, String> {
@@ -243,7 +243,7 @@ fn resolve_message_part_binary_base64_for_hash(
     }
 }
 
-fn collect_aliyun_multimodal_cache_lookup(
+pub(crate) fn collect_aliyun_multimodal_cache_lookup(
     conversation: &Conversation,
 ) -> std::collections::HashMap<String, AliyunMultimodalCacheItem> {
     let mut lookup = std::collections::HashMap::<String, AliyunMultimodalCacheItem>::new();
@@ -266,7 +266,7 @@ fn collect_aliyun_multimodal_cache_lookup(
     lookup
 }
 
-async fn get_aliyun_upload_policy(
+pub(crate) async fn get_aliyun_upload_policy(
     state: &AppState,
     api_key: &str,
     base_url: &str,
@@ -298,7 +298,7 @@ async fn get_aliyun_upload_policy(
         .map_err(|err| format!("解析百炼上传凭证失败: {err}"))
 }
 
-async fn upload_media_to_aliyun_temp_url(
+pub(crate) async fn upload_media_to_aliyun_temp_url(
     state: &AppState,
     api_key: &str,
     base_url: &str,
@@ -358,7 +358,7 @@ async fn upload_media_to_aliyun_temp_url(
     Ok(format!("oss://{object_key}"))
 }
 
-fn persist_aliyun_multimodal_cache_conversation_update(
+pub(crate) fn persist_aliyun_multimodal_cache_conversation_update(
     state: &AppState,
     conversation: &Conversation,
     is_runtime_conversation: bool,
@@ -393,7 +393,7 @@ fn persist_aliyun_multimodal_cache_conversation_update(
     })
 }
 
-fn workspace_absolute_path_from_relative(state: &AppState, relative_or_absolute: &str) -> PathBuf {
+pub(crate) fn workspace_absolute_path_from_relative(state: &AppState, relative_or_absolute: &str) -> PathBuf {
     let trimmed = relative_or_absolute.trim();
     let candidate = PathBuf::from(trimmed);
     if candidate.is_absolute() {
@@ -404,7 +404,7 @@ fn workspace_absolute_path_from_relative(state: &AppState, relative_or_absolute:
     workspace_root.join(trimmed.replace('/', "\\"))
 }
 
-async fn prepared_binary_raw_bytes_for_aliyun(
+pub(crate) async fn prepared_binary_raw_bytes_for_aliyun(
     state: &AppState,
     payload: &PreparedBinaryPayload,
 ) -> Result<Vec<u8>, String> {
@@ -429,7 +429,7 @@ async fn prepared_binary_raw_bytes_for_aliyun(
         .map_err(|err| format!("解析百炼多模态 base64 失败: {err}"))
 }
 
-fn apply_aliyun_multimodal_cache_items_to_conversation(
+pub(crate) fn apply_aliyun_multimodal_cache_items_to_conversation(
     conversation: &mut Conversation,
     data_path: &PathBuf,
     items: &[AliyunMultimodalCacheItem],
@@ -511,7 +511,7 @@ fn apply_aliyun_multimodal_cache_items_to_conversation(
     }
 }
 
-async fn ensure_aliyun_multimodal_urls_for_entries(
+pub(crate) async fn ensure_aliyun_multimodal_urls_for_entries(
     state: &AppState,
     request_format: RequestFormat,
     base_url: &str,
@@ -590,7 +590,7 @@ async fn ensure_aliyun_multimodal_urls_for_entries(
     Ok((hit_count, upload_count, used_url_count))
 }
 
-async fn maybe_prepare_aliyun_multimodal_urls_for_candidate(
+pub(crate) async fn maybe_prepare_aliyun_multimodal_urls_for_candidate(
     state: &AppState,
     selected_api: &ApiConfig,
     resolved_api: &mut ResolvedApiConfig,

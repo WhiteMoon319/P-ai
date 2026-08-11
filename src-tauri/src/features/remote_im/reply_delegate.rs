@@ -1,4 +1,4 @@
-fn lock_remote_im_reply_delegate_runtimes(
+pub(crate) fn lock_remote_im_reply_delegate_runtimes(
     state: &AppState,
 ) -> Result<
     std::sync::MutexGuard<'_, std::collections::HashMap<String, RemoteImReplyDelegateRuntime>>,
@@ -15,7 +15,7 @@ fn lock_remote_im_reply_delegate_runtimes(
     }
 }
 
-fn remote_im_reply_delegate_register(
+pub(crate) fn remote_im_reply_delegate_register(
     state: &AppState,
     contact_id: &str,
     conversation_id: &str,
@@ -145,7 +145,7 @@ fn remote_im_reply_delegate_register(
     Ok(delegate_id)
 }
 
-fn remote_im_reply_delegate_group_policy(
+pub(crate) fn remote_im_reply_delegate_group_policy(
     state: &AppState,
     delegate_id: &str,
 ) -> Option<(String, RemoteImGroupReplyDispatchPolicy)> {
@@ -164,14 +164,14 @@ fn remote_im_reply_delegate_group_policy(
         })
 }
 
-fn remote_im_reply_delegate_prepend_system_reminder(
+pub(crate) fn remote_im_reply_delegate_prepend_system_reminder(
     trigger_message: &mut ChatMessage,
     system_reminder: String,
 ) {
     trigger_message.extra_text_blocks.insert(0, system_reminder);
 }
 
-fn build_remote_im_reply_delegate_system_reminder(
+pub(crate) fn build_remote_im_reply_delegate_system_reminder(
     state: &AppState,
     contact_id: &str,
     conversation_id: &str,
@@ -237,7 +237,7 @@ fn build_remote_im_reply_delegate_system_reminder(
     reminder
 }
 
-fn remote_im_reply_delegate_processing_message_speaker(
+pub(crate) fn remote_im_reply_delegate_processing_message_speaker(
     message: &ChatMessage,
     fallback: &str,
 ) -> String {
@@ -252,7 +252,7 @@ fn remote_im_reply_delegate_processing_message_speaker(
         .to_string()
 }
 
-fn build_remote_im_reply_delegate_processing_reminder(
+pub(crate) fn build_remote_im_reply_delegate_processing_reminder(
     processing_messages: &[String],
 ) -> Option<String> {
     if processing_messages.is_empty() {
@@ -264,7 +264,7 @@ fn build_remote_im_reply_delegate_processing_reminder(
     ))
 }
 
-fn build_remote_im_assistant_work_ledger(
+pub(crate) fn build_remote_im_assistant_work_ledger(
     state: &AppState,
     contact_id: &str,
     conversation_id: &str,
@@ -304,7 +304,7 @@ fn build_remote_im_assistant_work_ledger(
     })
 }
 
-fn remote_im_reply_delegate_prompt_messages(
+pub(crate) fn remote_im_reply_delegate_prompt_messages(
     state: &AppState,
     delegate_id: &str,
 ) -> Result<Vec<ChatMessage>, String> {
@@ -320,7 +320,7 @@ fn remote_im_reply_delegate_prompt_messages(
     Ok(messages)
 }
 
-fn remote_im_reply_delegate_is_active(state: &AppState, delegate_id: &str) -> bool {
+pub(crate) fn remote_im_reply_delegate_is_active(state: &AppState, delegate_id: &str) -> bool {
     lock_remote_im_reply_delegate_runtimes(state)
         .ok()
         .and_then(|runtimes| runtimes.get(delegate_id).cloned())
@@ -328,7 +328,7 @@ fn remote_im_reply_delegate_is_active(state: &AppState, delegate_id: &str) -> bo
         .unwrap_or(false)
 }
 
-fn remote_im_reply_delegate_enqueue_guidance(
+pub(crate) fn remote_im_reply_delegate_enqueue_guidance(
     state: &AppState,
     delegate_id: &str,
     mut message: ChatMessage,
@@ -396,7 +396,7 @@ fn remote_im_reply_delegate_enqueue_guidance(
 
 /// 在同一把锁内消费引导，或在确认队列为空时注销委托。
 /// 这样秘书不会在“最后一次读空”和“删除运行态”之间塞入一条永远不会被消费的消息。
-fn remote_im_reply_delegate_take_guidance_or_finish(
+pub(crate) fn remote_im_reply_delegate_take_guidance_or_finish(
     state: &AppState,
     delegate_id: &str,
 ) -> Result<RemoteImReplyDelegateNext, String> {
@@ -425,13 +425,13 @@ fn remote_im_reply_delegate_take_guidance_or_finish(
     }
 }
 
-enum RemoteImReplyDelegateNext {
+pub(crate) enum RemoteImReplyDelegateNext {
     Guidance(Vec<ChatMessage>),
     Completed(RemoteImReplyDelegateRuntime),
     Ended,
 }
 
-fn remote_im_reply_delegate_active_ids_for_contact(
+pub(crate) fn remote_im_reply_delegate_active_ids_for_contact(
     state: &AppState,
     contact_id: &str,
 ) -> Result<Vec<String>, String> {
@@ -455,7 +455,7 @@ fn remote_im_reply_delegate_active_ids_for_contact(
         .collect())
 }
 
-fn abort_remote_im_reply_delegates_for_contact(
+pub(crate) fn abort_remote_im_reply_delegates_for_contact(
     state: &AppState,
     contact_id: &str,
     reason: &str,
@@ -490,7 +490,7 @@ fn abort_remote_im_reply_delegates_for_contact(
     Ok(aborted)
 }
 
-fn remote_im_reply_delegate_finish(
+pub(crate) fn remote_im_reply_delegate_finish(
     state: &AppState,
     delegate_id: &str,
     status: &str,
@@ -513,7 +513,7 @@ fn remote_im_reply_delegate_finish(
     Ok(true)
 }
 
-fn remote_im_reply_delegate_finalize(
+pub(crate) fn remote_im_reply_delegate_finalize(
     state: &AppState,
     runtime: RemoteImReplyDelegateRuntime,
     status: &str,
@@ -585,7 +585,7 @@ fn remote_im_reply_delegate_finalize(
     Ok(())
 }
 
-fn remote_im_reschedule_presence_timeout_after_delegate(
+pub(crate) fn remote_im_reschedule_presence_timeout_after_delegate(
     state: &AppState,
     contact_id: &str,
 ) -> Result<(), String> {
@@ -605,7 +605,7 @@ fn remote_im_reschedule_presence_timeout_after_delegate(
     )
 }
 
-fn abort_remote_im_reply_delegate(
+pub(crate) fn abort_remote_im_reply_delegate(
     state: &AppState,
     delegate_id: &str,
     reason: &str,
@@ -680,7 +680,7 @@ fn abort_remote_im_reply_delegate(
     Ok(true)
 }
 
-fn remote_im_reply_delegate_mirror_message(
+pub(crate) fn remote_im_reply_delegate_mirror_message(
     state: &AppState,
     delegate_id: &str,
     mut message: ChatMessage,
@@ -700,7 +700,7 @@ fn remote_im_reply_delegate_mirror_message(
     delegate_runtime_thread_conversation_append_if_absent(state, delegate_id, message).map(|_| ())
 }
 
-fn remote_im_reply_delegate_mirror_internal_messages(
+pub(crate) fn remote_im_reply_delegate_mirror_internal_messages(
     state: &AppState,
     delegate_id: &str,
     kind: &str,
@@ -714,7 +714,7 @@ fn remote_im_reply_delegate_mirror_internal_messages(
     Ok(())
 }
 
-fn spawn_remote_im_reply_delegate(
+pub(crate) fn spawn_remote_im_reply_delegate(
     state: &AppState,
     contact_id: &str,
     conversation_id: &str,

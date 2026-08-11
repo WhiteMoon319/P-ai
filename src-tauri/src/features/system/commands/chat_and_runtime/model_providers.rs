@@ -1,15 +1,15 @@
-const MODELS_DEV_CACHE_FILE_NAME: &str = "models_dev_api_cache.json";
-const MODELS_DEV_CACHE_MAX_AGE_MS: i64 = 24 * 60 * 60 * 1000;
-const MODELS_DEV_API_URL: &str = "https://models.dev/api.json";
+pub(crate) const MODELS_DEV_CACHE_FILE_NAME: &str = "models_dev_api_cache.json";
+pub(crate) const MODELS_DEV_CACHE_MAX_AGE_MS: i64 = 24 * 60 * 60 * 1000;
+pub(crate) const MODELS_DEV_API_URL: &str = "https://models.dev/api.json";
 
 // Android 上 reqwest 无法访问系统根证书，必须注入 webpki 静态根证书，
 // 否则 HTTPS 模型列表请求会因证书校验失败（与 Linux rootfs 下载同因）。
-fn build_models_refresh_http_client() -> Result<reqwest::Client, String> {
+pub(crate) fn build_models_refresh_http_client() -> Result<reqwest::Client, String> {
     let mut builder = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(20));
     #[cfg(target_os = "android")]
     {
-        builder = android_workspace_apply_static_webpki_roots(builder)?;
+        builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(builder)?;
     }
     builder
         .build()
@@ -18,13 +18,13 @@ fn build_models_refresh_http_client() -> Result<reqwest::Client, String> {
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ModelsDevCacheFile {
-    updated_at: String,
-    fetched_at_ms: i64,
-    root: Value,
+pub(crate) struct ModelsDevCacheFile {
+    pub(crate) updated_at: String,
+    pub(crate) fetched_at_ms: i64,
+    pub(crate) root: Value,
 }
 
-fn models_dev_cache_path(state: &AppState) -> std::path::PathBuf {
+pub(crate) fn models_dev_cache_path(state: &AppState) -> std::path::PathBuf {
     state
         .config_path
         .parent()
@@ -33,7 +33,7 @@ fn models_dev_cache_path(state: &AppState) -> std::path::PathBuf {
         .join(MODELS_DEV_CACHE_FILE_NAME)
 }
 
-fn read_models_dev_cache_file(state: &AppState) -> Result<Option<ModelsDevCacheFile>, String> {
+pub(crate) fn read_models_dev_cache_file(state: &AppState) -> Result<Option<ModelsDevCacheFile>, String> {
     let path = models_dev_cache_path(state);
     if !path.exists() {
         return Ok(None);
@@ -45,7 +45,7 @@ fn read_models_dev_cache_file(state: &AppState) -> Result<Option<ModelsDevCacheF
     Ok(Some(cache))
 }
 
-fn write_models_dev_cache_file(
+pub(crate) fn write_models_dev_cache_file(
     state: &AppState,
     root: &Value,
 ) -> Result<ModelsDevCacheFile, String> {
@@ -70,12 +70,12 @@ fn write_models_dev_cache_file(
     Ok(cache)
 }
 
-fn models_dev_cache_is_stale(cache: &ModelsDevCacheFile) -> bool {
+pub(crate) fn models_dev_cache_is_stale(cache: &ModelsDevCacheFile) -> bool {
     let age_ms = chrono::Utc::now().timestamp_millis() - cache.fetched_at_ms;
     age_ms > MODELS_DEV_CACHE_MAX_AGE_MS
 }
 
-async fn fetch_models_dev_root(state: &AppState) -> Result<Value, String> {
+pub(crate) async fn fetch_models_dev_root(state: &AppState) -> Result<Value, String> {
     let resp = state
         .shared_http_client
         .get(MODELS_DEV_API_URL)
@@ -95,7 +95,7 @@ async fn fetch_models_dev_root(state: &AppState) -> Result<Value, String> {
         .map_err(|err| format!("Parse models.dev metadata failed: {err}"))
 }
 
-async fn ensure_models_dev_cache_current(state: &AppState) -> Result<ModelsDevCacheFile, String> {
+pub(crate) async fn ensure_models_dev_cache_current(state: &AppState) -> Result<ModelsDevCacheFile, String> {
     let cached = read_models_dev_cache_file(state)?;
     match cached {
         Some(cache) if !models_dev_cache_is_stale(&cache) => Ok(cache),
@@ -116,11 +116,11 @@ async fn ensure_models_dev_cache_current(state: &AppState) -> Result<ModelsDevCa
     }
 }
 
-fn read_models_dev_cache_only(state: &AppState) -> Result<Option<ModelsDevCacheFile>, String> {
+pub(crate) fn read_models_dev_cache_only(state: &AppState) -> Result<Option<ModelsDevCacheFile>, String> {
     read_models_dev_cache_file(state)
 }
 
-async fn fetch_models_gemini_native(input: &RefreshModelsInput) -> Result<Vec<String>, String> {
+pub(crate) async fn fetch_models_gemini_native(input: &RefreshModelsInput) -> Result<Vec<String>, String> {
     let base = input.base_url.trim().trim_end_matches('/');
     let has_version_path = base.contains("/v1beta") || base.contains("/v1/");
     let base_with_version = if has_version_path {
@@ -176,7 +176,7 @@ async fn fetch_models_gemini_native(input: &RefreshModelsInput) -> Result<Vec<St
     Ok(models)
 }
 
-async fn fetch_models_anthropic(input: &RefreshModelsInput) -> Result<Vec<String>, String> {
+pub(crate) async fn fetch_models_anthropic(input: &RefreshModelsInput) -> Result<Vec<String>, String> {
     let base = input.base_url.trim().trim_end_matches('/');
     let base_with_version = if base.ends_with("/v1") {
         base.to_string()
@@ -233,7 +233,7 @@ async fn fetch_models_anthropic(input: &RefreshModelsInput) -> Result<Vec<String
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ModelRefreshStrategy {
+pub(crate) enum ModelRefreshStrategy {
     OpenAi,
     GeminiNative,
     AnthropicNative,
@@ -241,7 +241,7 @@ enum ModelRefreshStrategy {
     GenaiAdapter(genai::adapter::AdapterKind),
 }
 
-fn codex_builtin_models() -> Vec<String> {
+pub(crate) fn codex_builtin_models() -> Vec<String> {
     vec![
         "gpt-5.6-sol".to_string(),
         "gpt-5.6-terra".to_string(),
@@ -253,7 +253,7 @@ fn codex_builtin_models() -> Vec<String> {
     ]
 }
 
-fn push_unique_refresh_strategy(
+pub(crate) fn push_unique_refresh_strategy(
     strategies: &mut Vec<ModelRefreshStrategy>,
     strategy: ModelRefreshStrategy,
 ) {
@@ -262,7 +262,7 @@ fn push_unique_refresh_strategy(
     }
 }
 
-fn inferred_model_refresh_strategy_from_base_url(base_url: &str) -> Option<ModelRefreshStrategy> {
+pub(crate) fn inferred_model_refresh_strategy_from_base_url(base_url: &str) -> Option<ModelRefreshStrategy> {
     let adapter_kind = resolve_adapter_kind_from_base_url(base_url)?;
     Some(match adapter_kind {
         genai::adapter::AdapterKind::OpenAIResp => ModelRefreshStrategy::CodexBuiltin,
@@ -275,7 +275,7 @@ fn inferred_model_refresh_strategy_from_base_url(base_url: &str) -> Option<Model
     })
 }
 
-fn model_refresh_strategies(input: &RefreshModelsInput) -> Vec<ModelRefreshStrategy> {
+pub(crate) fn model_refresh_strategies(input: &RefreshModelsInput) -> Vec<ModelRefreshStrategy> {
     let mut strategies = Vec::<ModelRefreshStrategy>::new();
     let inferred = inferred_model_refresh_strategy_from_base_url(&input.base_url);
     match input.request_format {
@@ -327,7 +327,7 @@ fn model_refresh_strategies(input: &RefreshModelsInput) -> Vec<ModelRefreshStrat
     strategies
 }
 
-async fn fetch_models_with_strategy(
+pub(crate) async fn fetch_models_with_strategy(
     input: &RefreshModelsInput,
     strategy: ModelRefreshStrategy,
 ) -> Result<Vec<String>, String> {
@@ -340,7 +340,7 @@ async fn fetch_models_with_strategy(
     }
 }
 
-async fn fetch_models_genai(
+pub(crate) async fn fetch_models_genai(
     input: &RefreshModelsInput,
     adapter_kind: genai::adapter::AdapterKind,
 ) -> Result<Vec<String>, String> {
@@ -374,7 +374,7 @@ async fn fetch_models_genai(
     Ok(models)
 }
 
-fn model_id_exact_match(requested_model: &str, candidate_model: &str) -> bool {
+pub(crate) fn model_id_exact_match(requested_model: &str, candidate_model: &str) -> bool {
     let requested = requested_model.trim();
     let candidate = candidate_model.trim();
     if requested.is_empty() || candidate.is_empty() {
@@ -410,7 +410,7 @@ fn model_id_exact_match(requested_model: &str, candidate_model: &str) -> bool {
     false
 }
 
-fn normalize_model_id(input: &str) -> String {
+pub(crate) fn normalize_model_id(input: &str) -> String {
     input
         .chars()
         .filter(|ch| ch.is_ascii_alphanumeric())
@@ -419,21 +419,21 @@ fn normalize_model_id(input: &str) -> String {
 }
 
 #[derive(Debug, Clone)]
-struct ModelMetadataCandidate {
-    provider_api: String,
-    model_id: String,
-    context_window_tokens: Option<u32>,
-    max_output_tokens: Option<u32>,
-    enable_image: bool,
-    enable_tools: bool,
-    enable_audio: bool,
-    enable_video: bool,
-    reasoning: Option<bool>,
-    reasoning_effort_options: Vec<String>,
-    documentation_url: Option<String>,
+pub(crate) struct ModelMetadataCandidate {
+    pub(crate) provider_api: String,
+    pub(crate) model_id: String,
+    pub(crate) context_window_tokens: Option<u32>,
+    pub(crate) max_output_tokens: Option<u32>,
+    pub(crate) enable_image: bool,
+    pub(crate) enable_tools: bool,
+    pub(crate) enable_audio: bool,
+    pub(crate) enable_video: bool,
+    pub(crate) reasoning: Option<bool>,
+    pub(crate) reasoning_effort_options: Vec<String>,
+    pub(crate) documentation_url: Option<String>,
 }
 
-fn normalize_model_metadata_base_url(value: &str) -> String {
+pub(crate) fn normalize_model_metadata_base_url(value: &str) -> String {
     let raw = value.trim();
     let Ok(mut parsed) = reqwest::Url::parse(raw) else {
         return raw
@@ -455,7 +455,7 @@ fn normalize_model_metadata_base_url(value: &str) -> String {
     parsed.to_string().trim_end_matches('/').to_string()
 }
 
-fn select_model_metadata_candidates<'a>(
+pub(crate) fn select_model_metadata_candidates<'a>(
     candidates: &'a [ModelMetadataCandidate],
     requested_base_url: &str,
 ) -> (Vec<&'a ModelMetadataCandidate>, Vec<&'a ModelMetadataCandidate>, &'static str) {
@@ -473,7 +473,7 @@ fn select_model_metadata_candidates<'a>(
     }
 }
 
-fn parse_documentation_url(model_obj: &serde_json::Map<String, Value>) -> Option<String> {
+pub(crate) fn parse_documentation_url(model_obj: &serde_json::Map<String, Value>) -> Option<String> {
     for key in [
         "documentation_url",
         "documentationUrl",
@@ -497,7 +497,7 @@ fn parse_documentation_url(model_obj: &serde_json::Map<String, Value>) -> Option
     None
 }
 
-fn parse_reasoning_effort_options(model_obj: &serde_json::Map<String, Value>) -> Vec<String> {
+pub(crate) fn parse_reasoning_effort_options(model_obj: &serde_json::Map<String, Value>) -> Vec<String> {
     let mut values = Vec::<String>::new();
     let Some(items) = model_obj.get("reasoning_options").and_then(Value::as_array) else {
         return values;
@@ -536,7 +536,7 @@ fn parse_reasoning_effort_options(model_obj: &serde_json::Map<String, Value>) ->
     values
 }
 
-fn merge_reasoning_flag(selected_candidates: &[&ModelMetadataCandidate]) -> Option<bool> {
+pub(crate) fn merge_reasoning_flag(selected_candidates: &[&ModelMetadataCandidate]) -> Option<bool> {
     if selected_candidates.iter().any(|candidate| candidate.reasoning == Some(true)) {
         Some(true)
     } else if selected_candidates
@@ -549,7 +549,7 @@ fn merge_reasoning_flag(selected_candidates: &[&ModelMetadataCandidate]) -> Opti
     }
 }
 
-fn merge_reasoning_effort_options(selected_candidates: &[&ModelMetadataCandidate]) -> Vec<String> {
+pub(crate) fn merge_reasoning_effort_options(selected_candidates: &[&ModelMetadataCandidate]) -> Vec<String> {
     let mut merged = Vec::<String>::new();
     for candidate in selected_candidates {
         for value in &candidate.reasoning_effort_options {
@@ -562,7 +562,7 @@ fn merge_reasoning_effort_options(selected_candidates: &[&ModelMetadataCandidate
     merged
 }
 
-fn merge_documentation_url(selected_candidates: &[&ModelMetadataCandidate]) -> Option<String> {
+pub(crate) fn merge_documentation_url(selected_candidates: &[&ModelMetadataCandidate]) -> Option<String> {
     selected_candidates
         .iter()
         .filter_map(|candidate| candidate.documentation_url.as_ref())
@@ -571,7 +571,7 @@ fn merge_documentation_url(selected_candidates: &[&ModelMetadataCandidate]) -> O
         .map(|value| value.to_string())
 }
 
-fn merge_model_metadata_candidates(
+pub(crate) fn merge_model_metadata_candidates(
     selected_candidates: &[&ModelMetadataCandidate],
     documentation_candidates: &[&ModelMetadataCandidate],
 ) -> FetchModelMetadataOutput {
@@ -599,7 +599,7 @@ fn merge_model_metadata_candidates(
 }
 
 
-async fn fetch_model_metadata_inner(
+pub(crate) async fn fetch_model_metadata_inner(
     state: &AppState,
     input: FetchModelMetadataInput,
 ) -> Result<FetchModelMetadataOutput, String> {
@@ -717,7 +717,7 @@ async fn fetch_model_metadata_inner(
 }
 
 
-async fn refresh_models_inner(
+pub(crate) async fn refresh_models_inner(
     state: &AppState,
     input: RefreshModelsInput,
 ) -> Result<Vec<String>, String> {
@@ -771,7 +771,7 @@ async fn refresh_models_inner(
 }
 
 
-async fn quick_genai_chat_inner(
+pub(crate) async fn quick_genai_chat_inner(
     state: &AppState,
     input: QuickGenaiChatInput,
 ) -> Result<String, String> {
@@ -863,7 +863,7 @@ async fn quick_genai_chat_inner(
     Ok(text)
 }
 
-fn resolve_model_adapter_kind_label(
+pub(crate) fn resolve_model_adapter_kind_label(
     request_format: RequestFormat,
     base_url: &str,
     model_name: &str,
@@ -905,7 +905,7 @@ mod model_adapter_kind_tests {
 }
 
 
-async fn test_embedding_connection_inner(
+pub(crate) async fn test_embedding_connection_inner(
     input: TestEmbeddingConnectionInput,
 ) -> Result<TestEmbeddingConnectionResult, String> {
     let base_url = input.base_url.trim();
@@ -961,7 +961,7 @@ async fn test_embedding_connection_inner(
 }
 
 
-async fn test_rerank_connection_inner(
+pub(crate) async fn test_rerank_connection_inner(
     input: TestRerankConnectionInput,
 ) -> Result<TestRerankConnectionResult, String> {
     let base_url = input.base_url.trim();
@@ -1021,7 +1021,7 @@ async fn test_rerank_connection_inner(
 }
 
 
-async fn test_voice_connection_inner(input: TestVoiceConnectionInput) -> Result<TestVoiceConnectionResult, String> {
+pub(crate) async fn test_voice_connection_inner(input: TestVoiceConnectionInput) -> Result<TestVoiceConnectionResult, String> {
     let base_url = input.base_url.trim();
     let api_key = input.api_key.trim();
     if base_url.is_empty() {
@@ -1058,7 +1058,7 @@ async fn test_voice_connection_inner(input: TestVoiceConnectionInput) -> Result<
         .timeout(std::time::Duration::from_secs(15));
     #[cfg(target_os = "android")]
     {
-        client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+        client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)?;
     }
     let client = client_builder
         .build()

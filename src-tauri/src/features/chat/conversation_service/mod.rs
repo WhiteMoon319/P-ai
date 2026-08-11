@@ -18,6 +18,8 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
 use uuid::Uuid;
 
 
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use super::*;
 // Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
 

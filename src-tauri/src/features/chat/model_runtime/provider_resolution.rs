@@ -216,7 +216,7 @@ pub(crate) fn resolve_model_protocol(
 }
 
 #[cfg(test)]
-mod provider_resolution_tests {
+pub(crate) mod provider_resolution_tests {
     use super::*;
 
     #[test]

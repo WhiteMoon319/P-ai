@@ -1,4 +1,4 @@
-async fn ide_attachment_transfer_begin(
+pub(crate) async fn ide_attachment_transfer_begin(
     state: &AppState,
     client_id: &str,
     params: Value,
@@ -7,7 +7,7 @@ async fn ide_attachment_transfer_begin(
     ide_chat_serialize(attachment_transfer_begin_inner(input, state, client_id.trim(), true).await?)
 }
 
-async fn ide_attachment_transfer_complete(
+pub(crate) async fn ide_attachment_transfer_complete(
     state: &AppState,
     client_id: &str,
     params: Value,
@@ -18,12 +18,12 @@ async fn ide_attachment_transfer_complete(
     )
 }
 
-async fn ide_attachment_transfer_abort(client_id: &str, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_attachment_transfer_abort(client_id: &str, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<AttachmentTransferIdInput>(params)?;
     attachment_transfer_abort_inner(&input.transfer_id, client_id.trim()).await
 }
 
-fn attachment_transfer_decode_websocket_frame(
+pub(crate) fn attachment_transfer_decode_websocket_frame(
     data: &[u8],
 ) -> Result<(String, u64, Vec<u8>), String> {
     const HEADER_BYTES: usize = 1 + 16 + 8 + 4;
@@ -74,7 +74,7 @@ fn attachment_transfer_decode_websocket_frame(
     Ok((transfer_id, offset, data[HEADER_BYTES..].to_vec()))
 }
 
-async fn ide_attachment_transfer_binary_chunk(
+pub(crate) async fn ide_attachment_transfer_binary_chunk(
     client_id: &str,
     data: &[u8],
 ) -> Result<Value, String> {

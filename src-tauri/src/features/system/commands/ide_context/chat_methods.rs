@@ -1,21 +1,21 @@
-fn ide_chat_runtime_for_conversation(
+pub(crate) fn ide_chat_runtime_for_conversation(
     state: &AppState,
     conversation_id: &str,
 ) -> Option<ConversationRuntimeSnapshot> {
     read_conversation_runtime_snapshot(state, conversation_id).ok()
 }
 
-fn ide_chat_sidebar_window_label(client_id: &str) -> String {
+pub(crate) fn ide_chat_sidebar_window_label(client_id: &str) -> String {
     format!("vscode-sidebar:{}", client_id.trim())
 }
 
-fn ide_chat_emit_overview_updated(state: &AppState) -> Result<(), String> {
+pub(crate) fn ide_chat_emit_overview_updated(state: &AppState) -> Result<(), String> {
     let overview_payload = conversation_service_v2().refresh_unarchived_conversation_overview(state)?;
     emit_unarchived_conversation_overview_updated_payload(state, &overview_payload);
     Ok(())
 }
 
-fn ide_chat_release_sidebar_conversation(
+pub(crate) fn ide_chat_release_sidebar_conversation(
     state: &AppState,
     sidebar_label: &str,
 ) -> Result<(), String> {
@@ -30,7 +30,7 @@ fn ide_chat_release_sidebar_conversation(
     Ok(())
 }
 
-fn ide_chat_register_sidebar_conversation(
+pub(crate) fn ide_chat_register_sidebar_conversation(
     state: &AppState,
     conversation_id: &str,
     sidebar_label: &str,
@@ -69,7 +69,7 @@ fn ide_chat_register_sidebar_conversation(
     Ok(())
 }
 
-fn ide_chat_ensure_sidebar_workspace(
+pub(crate) fn ide_chat_ensure_sidebar_workspace(
     state: &AppState,
     conversation_id: &str,
     workspace_path: &str,
@@ -107,7 +107,7 @@ fn ide_chat_ensure_sidebar_workspace(
     Ok(())
 }
 
-fn ide_chat_conversation_list(state: &AppState, current_viewer_id: &str) -> Result<Value, String> {
+pub(crate) fn ide_chat_conversation_list(state: &AppState, current_viewer_id: &str) -> Result<Value, String> {
     let viewer_id = current_viewer_id.trim();
     let summaries = conversation_service_v2()
         .list_unarchived_conversation_summaries(state)?
@@ -131,7 +131,7 @@ fn ide_chat_conversation_list(state: &AppState, current_viewer_id: &str) -> Resu
     }))
 }
 
-async fn ide_chat_conversation_changed_since(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_conversation_changed_since(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ListUnarchivedConversationsChangedSinceInput>(params)?;
     let app_state = state.clone();
     tokio::task::spawn_blocking(move || {
@@ -142,7 +142,7 @@ async fn ide_chat_conversation_changed_since(state: &AppState, params: Value) ->
     .map_err(|err| format!("读取未归档会话列表差量任务异常：{err}"))?
 }
 
-fn ide_chat_conversation_block_page(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_conversation_block_page(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatConversationBlockPageInput>(params)?;
     let conversation_id = input.conversation_id.trim();
     if conversation_id.is_empty() {
@@ -172,7 +172,7 @@ fn ide_chat_conversation_block_page(state: &AppState, params: Value) -> Result<V
     }))
 }
 
-fn ide_chat_conversation_fast_request_turns(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_conversation_fast_request_turns(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<GetConversationFastRequestTurnsInput>(params)?;
     serde_json::to_value(
         conversation_service_v2()
@@ -181,7 +181,7 @@ fn ide_chat_conversation_fast_request_turns(state: &AppState, params: Value) -> 
     .map_err(|err| format!("Serialize fast request turns failed: {err}"))
 }
 
-fn ide_chat_conversation_fast_request_turns_command(
+pub(crate) fn ide_chat_conversation_fast_request_turns_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -191,7 +191,7 @@ fn ide_chat_conversation_fast_request_turns_command(
     )
 }
 
-fn ide_chat_conversation_block_page_command(
+pub(crate) fn ide_chat_conversation_block_page_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -199,7 +199,7 @@ fn ide_chat_conversation_block_page_command(
     ide_chat_conversation_block_page(state, ide_chat_serialize(input)?)
 }
 
-fn ide_chat_mark_conversation_read_command(
+pub(crate) fn ide_chat_mark_conversation_read_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -207,7 +207,7 @@ fn ide_chat_mark_conversation_read_command(
     ide_chat_mark_conversation_read(state, ide_chat_serialize(input)?)
 }
 
-fn ide_chat_conversation_message_by_id_command(
+pub(crate) fn ide_chat_conversation_message_by_id_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -219,7 +219,7 @@ fn ide_chat_conversation_message_by_id_command(
     )?)
 }
 
-fn ide_chat_conversation_messages_before_command(
+pub(crate) fn ide_chat_conversation_messages_before_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -247,7 +247,7 @@ fn ide_chat_conversation_messages_before_command(
     })
 }
 
-async fn ide_chat_conversation_light_snapshot_command(
+pub(crate) async fn ide_chat_conversation_light_snapshot_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -261,7 +261,7 @@ async fn ide_chat_conversation_light_snapshot_command(
     ide_chat_serialize(output)
 }
 
-async fn ide_chat_conversation_freshness_snapshot_command(
+pub(crate) async fn ide_chat_conversation_freshness_snapshot_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -275,7 +275,7 @@ async fn ide_chat_conversation_freshness_snapshot_command(
     ide_chat_serialize(output)
 }
 
-fn ide_chat_set_active_conversation_command(
+pub(crate) fn ide_chat_set_active_conversation_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -284,12 +284,12 @@ fn ide_chat_set_active_conversation_command(
     ide_chat_serialize(SetActiveUnarchivedConversationOutput { conversation_id })
 }
 
-fn ide_chat_rebind_conversation_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_rebind_conversation_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<RebindUnarchivedConversationRecipientInput>(params, "input")?;
     ide_chat_serialize(rebind_unarchived_conversation_recipient_inner(input, state)?)
 }
 
-async fn ide_chat_rewind_conversation_command(
+pub(crate) async fn ide_chat_rewind_conversation_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -297,25 +297,25 @@ async fn ide_chat_rewind_conversation_command(
     ide_chat_rewind_conversation(state, ide_chat_serialize(input)?).await
 }
 
-fn ide_chat_set_plan_mode_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_set_plan_mode_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<SetConversationPlanModeInput>(params, "input")?;
     ide_chat_serialize(set_conversation_plan_mode_inner(input, state)?)
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatReadPlanFileInput {
-    conversation_id: String,
-    path: String,
+pub(crate) struct IdeChatReadPlanFileInput {
+    pub(crate) conversation_id: String,
+    pub(crate) path: String,
 }
 
-fn ide_chat_read_plan_file(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_read_plan_file(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatReadPlanFileInput>(params)?;
     let content = read_plan_file_content_inner(&input.conversation_id, &input.path, state)?;
     Ok(serde_json::json!({ "content": content }))
 }
 
-async fn ide_chat_preview_rewind_conversation(
+pub(crate) async fn ide_chat_preview_rewind_conversation(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -326,17 +326,17 @@ async fn ide_chat_preview_rewind_conversation(
     ide_chat_serialize(preview)
 }
 
-fn ide_chat_set_preferred_model_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_set_preferred_model_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<SetConversationPreferredModelInput>(params, "input")?;
     ide_chat_serialize(set_conversation_preferred_model_inner(input, state)?)
 }
 
-async fn ide_chat_confirm_plan_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_confirm_plan_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<ConfirmPlanAndContinueInput>(params, "input")?;
     ide_chat_serialize(confirm_plan_and_continue_inner(state, &input).await?)
 }
 
-fn ide_chat_resolve_terminal_approval_command(
+pub(crate) fn ide_chat_resolve_terminal_approval_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -345,22 +345,22 @@ fn ide_chat_resolve_terminal_approval_command(
     ide_chat_serialize(())
 }
 
-fn ide_chat_goal_current_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_goal_current_command(state: &AppState, params: Value) -> Result<Value, String> {
     let conversation_id = ide_chat_parse_param_field::<String>(params, "conversationId")?;
     ide_chat_serialize(goal_get_current_inner(state, &conversation_id)?)
 }
 
-fn ide_chat_goal_create_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_goal_create_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<GoalCreateInput>(params, "input")?;
     ide_chat_serialize(goal_create_goal_inner(state, &input.conversation_id, &input.objective)?)
 }
 
-fn ide_chat_goal_cancel_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_goal_cancel_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<GoalCancelInput>(params, "input")?;
     ide_chat_serialize(goal_cancel_goal_inner(state, &input.conversation_id)?)
 }
 
-fn ide_chat_query_ide_context_command(
+pub(crate) fn ide_chat_query_ide_context_command(
     params: Value,
     ide_context_runtime: &IdeContextRuntime,
 ) -> Result<Value, String> {
@@ -368,33 +368,33 @@ fn ide_chat_query_ide_context_command(
     ide_chat_serialize(query_ide_context_references_internal(input, ide_context_runtime)?)
 }
 
-fn ide_chat_list_archives_command(state: &AppState) -> Result<Value, String> {
+pub(crate) fn ide_chat_list_archives_command(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(list_archives_inner(state)?)
 }
 
-fn ide_chat_archive_block_page_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_archive_block_page_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<GetArchiveBlockPageInput>(params, "input")?;
     ide_chat_serialize(get_archive_block_page_inner(input, state)?)
 }
 
-fn ide_chat_archive_summary_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_archive_summary_command(state: &AppState, params: Value) -> Result<Value, String> {
     let archive_id = ide_chat_parse_param_field::<String>(params, "archiveId")?;
     ide_chat_serialize(get_archive_summary_inner(state, &archive_id)?)
 }
 
-fn ide_chat_delete_archive_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_delete_archive_command(state: &AppState, params: Value) -> Result<Value, String> {
     let archive_id = ide_chat_parse_param_field::<String>(params, "archiveId")?;
     delete_archive_inner(state, &archive_id)?;
     ide_chat_serialize(())
 }
 
-fn ide_chat_unarchive_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_unarchive_command(state: &AppState, params: Value) -> Result<Value, String> {
     let archive_id = ide_chat_parse_param_field::<String>(params, "archiveId")?;
     unarchive_archive_inner(state, &archive_id)?;
     ide_chat_serialize(())
 }
 
-async fn ide_chat_archive_conversation_command(
+pub(crate) async fn ide_chat_archive_conversation_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -402,52 +402,52 @@ async fn ide_chat_archive_conversation_command(
     ide_chat_serialize(archive_conversation_inner(input, state).await?)
 }
 
-async fn ide_chat_batch_archive_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_batch_archive_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<BatchArchiveConversationsInput>(params, "input")?;
     ide_chat_serialize(batch_archive_conversations_inner(state, input).await?)
 }
 
-fn ide_chat_delegate_statuses_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_delegate_statuses_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<ListConversationDelegateStatusesInput>(params, "input")?;
     ide_chat_serialize(list_conversation_delegate_statuses_inner(input, state)?)
 }
 
-fn ide_chat_delegate_abort_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_delegate_abort_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<AbortDelegateConversationInput>(params, "input")?;
     ide_chat_serialize(abort_delegate_conversation_inner(input, state)?)
 }
 
-fn ide_chat_delegate_block_page_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_delegate_block_page_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<GetConversationBlockPageInput>(params, "input")?;
     ide_chat_serialize(get_delegate_conversation_block_page_inner(input, state)?)
 }
 
-fn ide_chat_delete_delegate_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_delete_delegate_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<DeleteDelegateConversationInput>(params, "input")?;
     ide_chat_serialize(delete_delegate_conversation_inner(input, state)?)
 }
 
-async fn ide_chat_branch_selection_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_branch_selection_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<BranchUnarchivedConversationFromSelectionInput>(params, "input")?;
     ide_chat_serialize(branch_unarchived_conversation_from_selection_internal(input, state).await?)
 }
 
-async fn ide_chat_branch_message_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_branch_message_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<CreateConversationBranchFromMessageInput>(params, "input")?;
     ide_chat_serialize(create_conversation_branch_from_message_internal(input, state).await?)
 }
 
-async fn ide_chat_submit_delegate_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_submit_delegate_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<SubmitUserAsyncDelegateInput>(params, "input")?;
     ide_chat_serialize(submit_user_async_delegate_internal(input, state).await?)
 }
 
-async fn ide_chat_delete_unarchived_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_delete_unarchived_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<DeleteUnarchivedConversationInput>(params, "input")?;
     ide_chat_serialize(delete_unarchived_conversation_inner(input, state).await?)
 }
 
-fn ide_chat_export_conversation_share_command(
+pub(crate) fn ide_chat_export_conversation_share_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -455,22 +455,22 @@ fn ide_chat_export_conversation_share_command(
     ide_chat_serialize(export_conversation_share_json_inner(input, state)?)
 }
 
-fn ide_chat_import_archives_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_import_archives_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<ImportArchivesFromJsonInput>(params, "input")?;
     ide_chat_serialize(import_archives_from_json_inner(input, state)?)
 }
 
-fn ide_chat_import_agent_memories_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_import_agent_memories_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<ImportAgentMemoriesInput>(params, "input")?;
     ide_chat_serialize(import_agent_memories_inner(input, state)?)
 }
 
-fn ide_chat_remote_im_block_page_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_remote_im_block_page_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<RemoteImContactConversationBlockPageInput>(params, "input")?;
     ide_chat_serialize(remote_im_get_contact_conversation_block_page_inner(input, state)?)
 }
 
-fn ide_chat_remote_im_clear_conversation_command(
+pub(crate) fn ide_chat_remote_im_clear_conversation_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -479,38 +479,38 @@ fn ide_chat_remote_im_clear_conversation_command(
 }
 
 
-fn ide_chat_forward_selection_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_forward_selection_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<ForwardUnarchivedConversationSelectionInput>(params, "input")?;
     ide_chat_serialize(forward_unarchived_conversation_selection_inner(input, state)?)
 }
 
-fn ide_chat_forward_remote_contact_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_forward_remote_contact_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<ForwardSelectionToRemoteImContactInput>(params, "input")?;
     ide_chat_serialize(forward_selection_to_remote_im_contact_inner(input, state)?)
 }
 
-fn ide_chat_rename_conversation_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_rename_conversation_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<RenameUnarchivedConversationInput>(params, "input")?;
     ide_chat_serialize(rename_unarchived_conversation_inner(input, state)?)
 }
 
-fn ide_chat_toggle_pin_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_toggle_pin_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<ToggleUnarchivedConversationPinInput>(params, "input")?;
     ide_chat_serialize(toggle_unarchived_conversation_pin_inner(input, state)?)
 }
 
-fn ide_chat_set_auto_push_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_set_auto_push_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<SetConversationAutoPushRemoteContactInput>(params, "input")?;
     ide_chat_serialize(set_conversation_auto_push_remote_contact_inner(input, state)?)
 }
 
 
 
-fn ide_chat_dump_memory_cache_stats_command(state: &AppState) -> Result<Value, String> {
+pub(crate) fn ide_chat_dump_memory_cache_stats_command(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(dump_memory_cache_stats_inner(state)?)
 }
 
-async fn ide_chat_conversation_changed_since_command(
+pub(crate) async fn ide_chat_conversation_changed_since_command(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -524,12 +524,12 @@ async fn ide_chat_conversation_changed_since_command(
     ide_chat_serialize(output)
 }
 
-fn ide_chat_search_memories_recall_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_search_memories_recall_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<SearchMemoriesRecallInput>(params, "input")?;
     ide_chat_serialize(search_memories_recall_inner(input, state)?)
 }
 
-fn ide_chat_conversation_runtime_snapshot(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_conversation_runtime_snapshot(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatConversationInput>(params)?;
     let conversation_id = input.conversation_id.trim();
     if conversation_id.is_empty() {
@@ -539,7 +539,7 @@ fn ide_chat_conversation_runtime_snapshot(state: &AppState, params: Value) -> Re
         .map_err(|err| format!("Serialize conversation runtime snapshot failed: {err}"))
 }
 
-fn ide_chat_resume_sidebar_subscription(
+pub(crate) fn ide_chat_resume_sidebar_subscription(
     state: &AppState,
     params: Value,
     client_id: &str,
@@ -564,7 +564,7 @@ fn ide_chat_resume_sidebar_subscription(
     }))
 }
 
-fn ide_chat_stream_probe(
+pub(crate) fn ide_chat_stream_probe(
     params: Value,
     client_id: &str,
     opened_conversation_id: &Option<String>,
@@ -597,7 +597,7 @@ fn ide_chat_stream_probe(
     Ok(serde_json::json!({ "delivered": delivered }))
 }
 
-async fn ide_chat_conversation_freshness_snapshot(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_conversation_freshness_snapshot(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ForegroundConversationFreshnessInput>(params)?;
     let app_state = state.clone();
     tokio::task::spawn_blocking(move || {
@@ -608,7 +608,7 @@ async fn ide_chat_conversation_freshness_snapshot(state: &AppState, params: Valu
     .map_err(|err| format!("读取前台 freshness 快照任务异常：{err}"))?
 }
 
-fn ide_chat_mark_conversation_read(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_mark_conversation_read(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<MarkConversationReadInput>(params)?;
     let conversation_id = input.conversation_id.trim();
     if conversation_id.is_empty() {
@@ -623,12 +623,12 @@ fn ide_chat_mark_conversation_read(state: &AppState, params: Value) -> Result<Va
         .map_err(|err| format!("Serialize mark conversation read result failed: {err}"))
 }
 
-async fn ide_chat_create_conversation(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_create_conversation(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<CreateUnarchivedConversationInput>(params)?;
     ide_chat_serialize(create_unarchived_conversation_inner(input, state).await?)
 }
 
-async fn ide_chat_create_side_chat_conversation(
+pub(crate) async fn ide_chat_create_side_chat_conversation(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -642,13 +642,13 @@ async fn ide_chat_create_side_chat_conversation(
     ide_chat_serialize(output)
 }
 
-async fn ide_chat_delete_conversation(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_delete_conversation(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<DeleteUnarchivedConversationInput>(params)?;
     ide_chat_serialize(delete_unarchived_conversation_inner(input, state).await?)
 }
 
 /// 切换会话首选模型（model.select），复用 set_conversation_preferred_model_inner。
-fn ide_chat_select_model(
+pub(crate) fn ide_chat_select_model(
     state: &AppState,
     _app: &NativeAppHandle,
     params: Value,
@@ -669,7 +669,7 @@ fn ide_chat_select_model(
     ide_chat_model_payload_for_conversation(state, &updated_conversation)
 }
 
-async fn ide_chat_batch_archive_conversations(
+pub(crate) async fn ide_chat_batch_archive_conversations(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -678,12 +678,12 @@ async fn ide_chat_batch_archive_conversations(
     ide_chat_serialize(output)
 }
 
-fn ide_chat_rebind_conversation_recipient(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_rebind_conversation_recipient(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<RebindUnarchivedConversationRecipientInput>(params)?;
     ide_chat_serialize(rebind_unarchived_conversation_recipient_inner(input, state)?)
 }
 
-async fn ide_chat_queue_attachment(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_queue_attachment(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<QueueInlineFileAttachmentInput>(params)?;
     let app_state = state.clone();
     tokio::task::spawn_blocking(move || {
@@ -693,7 +693,7 @@ async fn ide_chat_queue_attachment(state: &AppState, params: Value) -> Result<Va
     .map_err(|err| format!("Web 内联附件兼容摄取任务异常：{err}"))?
 }
 
-async fn ide_chat_queue_inline_attachment(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_queue_inline_attachment(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<QueueInlineFileAttachmentInput>(params, "input")?;
     let app_state = state.clone();
     tokio::task::spawn_blocking(move || {
@@ -703,17 +703,17 @@ async fn ide_chat_queue_inline_attachment(state: &AppState, params: Value) -> Re
     .map_err(|err| format!("Web 内联附件兼容摄取任务异常：{err}"))?
 }
 
-async fn ide_chat_submit_message_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_submit_message_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<SendChatRequest>(params, "input")?;
     ide_chat_serialize(submit_chat_message_inner(input, state, None).await?)
 }
 
-fn ide_chat_stop_message_command(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_stop_message_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<StopChatRequest>(params, "input")?;
     ide_chat_serialize(stop_chat_message_inner(input, state)?)
 }
 
-async fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<SendChatRequest>(params)?;
     let output = submit_chat_message_inner(input, state, None).await?;
     ide_chat_serialize(output)
@@ -721,21 +721,21 @@ async fn ide_chat_send_message(state: &AppState, params: Value) -> Result<Value,
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatQueueEventInput {
-    event_id: String,
+pub(crate) struct IdeChatQueueEventInput {
+    pub(crate) event_id: String,
 }
 
-fn ide_chat_queue_snapshot(state: &AppState) -> Result<Value, String> {
+pub(crate) fn ide_chat_queue_snapshot(state: &AppState) -> Result<Value, String> {
     let snapshot = get_queue_snapshot(state)?;
     serde_json::to_value(snapshot).map_err(|err| format!("serialize queue snapshot failed: {err}"))
 }
 
-fn ide_chat_session_state_snapshot(state: &AppState) -> Result<Value, String> {
+pub(crate) fn ide_chat_session_state_snapshot(state: &AppState) -> Result<Value, String> {
     let snapshot = get_main_session_state(state)?;
     serde_json::to_value(snapshot).map_err(|err| format!("serialize session state failed: {err}"))
 }
 
-fn ide_chat_recall_queue_event(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_recall_queue_event(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatQueueEventInput>(params)?;
     let event_id = input.event_id.trim();
     if event_id.is_empty() {
@@ -744,7 +744,7 @@ fn ide_chat_recall_queue_event(state: &AppState, params: Value) -> Result<Value,
     ide_chat_serialize(recall_chat_queue_event_inner(event_id, state)?)
 }
 
-fn ide_chat_mark_queue_event_guided(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_mark_queue_event_guided(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatQueueEventInput>(params)?;
     let event_id = input.event_id.trim();
     if event_id.is_empty() {
@@ -753,7 +753,7 @@ fn ide_chat_mark_queue_event_guided(state: &AppState, params: Value) -> Result<V
     ide_chat_serialize(mark_chat_queue_event_guided_inner(event_id, state)?)
 }
 
-fn ide_chat_stop_conversation(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_stop_conversation(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<StopChatRequest>(params)?;
     let stop_result = stop_chat_message_inner(input, state)?;
     let conversation_id = stop_result.conversation_id.clone().unwrap_or_default();
@@ -777,7 +777,7 @@ fn ide_chat_stop_conversation(state: &AppState, params: Value) -> Result<Value, 
     }))
 }
 
-async fn ide_chat_rewind_conversation(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_rewind_conversation(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<RewindConversationInput>(params)?;
     if input.undo_apply_patch {
         return Err(ide_chat_web_native_only_error(
@@ -791,17 +791,17 @@ async fn ide_chat_rewind_conversation(state: &AppState, params: Value) -> Result
     ide_chat_serialize(result)
 }
 
-fn ide_chat_compact_preview(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_compact_preview(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ConversationIdOnlyInput>(params)?;
     ide_chat_serialize(compact_conversation_preview_inner(&input, state)?)
 }
 
-async fn ide_chat_compact_conversation(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_compact_conversation(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ConversationIdOnlyInput>(params)?;
     ide_chat_serialize(compact_conversation_inner(input, state).await?)
 }
 
-fn ide_chat_model_list(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_model_list(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatConversationInput>(params)?;
     let conversation_meta =
         conversation_service_v2().get_conversation_meta(state, input.conversation_id.trim())?;
@@ -810,7 +810,7 @@ fn ide_chat_model_list(state: &AppState, params: Value) -> Result<Value, String>
 }
 
 
-fn ide_chat_resolve_terminal_approval(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_resolve_terminal_approval(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatResolveTerminalApprovalInput>(params)?;
     let resolved = resolve_terminal_approval_request(
         state,
@@ -820,7 +820,7 @@ fn ide_chat_resolve_terminal_approval(state: &AppState, params: Value) -> Result
     Ok(serde_json::json!({ "resolved": resolved }))
 }
 
-fn ide_chat_approve_terminal_approval_for_session(
+pub(crate) fn ide_chat_approve_terminal_approval_for_session(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -829,7 +829,7 @@ fn ide_chat_approve_terminal_approval_for_session(
     Ok(serde_json::json!({ "approved": approved }))
 }
 
-fn ide_chat_approve_terminal_approval_for_workspace(
+pub(crate) fn ide_chat_approve_terminal_approval_for_workspace(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -839,42 +839,42 @@ fn ide_chat_approve_terminal_approval_for_workspace(
     Ok(serde_json::json!({ "approved": approved }))
 }
 
-fn ide_chat_set_conversation_plan_mode(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_set_conversation_plan_mode(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<SetConversationPlanModeInput>(params)?;
     ide_chat_serialize(set_conversation_plan_mode_inner(input, state)?)
 }
 
-async fn ide_chat_confirm_plan(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_confirm_plan(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ConfirmPlanAndContinueInput>(params)?;
     let continued = confirm_plan_and_continue_inner(state, &input).await?;
     Ok(serde_json::json!({ "continued": continued }))
 }
 
-fn ide_chat_tool_review_reports(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_tool_review_reports(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ToolReviewConversationInput>(params)?;
     serde_json::to_value(list_tool_review_reports_internal(input, state)?)
         .map_err(|err| format!("Serialize tool review reports failed: {err}"))
 }
 
-fn ide_chat_tool_review_delete_report(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_tool_review_delete_report(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<DeleteToolReviewReportInput>(params)?;
     delete_tool_review_report_internal(input, state)?;
     Ok(serde_json::json!({ "deleted": true }))
 }
 
-async fn ide_chat_tool_review_commit_options(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_tool_review_commit_options(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ToolReviewCommitPageInput>(params)?;
     serde_json::to_value(list_tool_review_commit_options_internal_command(input, state).await?)
         .map_err(|err| format!("Serialize tool review commit options failed: {err}"))
 }
 
-async fn ide_chat_tool_review_submit_code(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_tool_review_submit_code(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ToolReviewCodeReviewInput>(params)?;
     serde_json::to_value(submit_tool_review_code_internal(input, state).await?)
         .map_err(|err| format!("Serialize tool review submit result failed: {err}"))
 }
 
-fn ide_chat_tool_review_batches(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_tool_review_batches(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ToolReviewConversationInput>(params)?;
     let conversation_id = input.conversation_id.trim();
     if conversation_id.is_empty() {
@@ -904,7 +904,7 @@ fn ide_chat_tool_review_batches(state: &AppState, params: Value) -> Result<Value
     .map_err(|err| format!("Serialize tool review batches failed: {err}"))
 }
 
-fn ide_chat_tool_review_item_detail(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_tool_review_item_detail(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ToolReviewCallInput>(params)?;
     let conversation_id = input.conversation_id.trim();
     let call_id = input.call_id.trim();
@@ -919,7 +919,7 @@ fn ide_chat_tool_review_item_detail(state: &AppState, params: Value) -> Result<V
         .map_err(|err| format!("Serialize tool review item detail failed: {err}"))
 }
 
-async fn ide_chat_tool_review_item_review(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_tool_review_item_review(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ToolReviewCallInput>(params)?;
     let conversation_id = input.conversation_id.trim();
     let call_id = input.call_id.trim();
@@ -930,7 +930,7 @@ async fn ide_chat_tool_review_item_review(state: &AppState, params: Value) -> Re
         .map_err(|err| format!("Serialize tool review item result failed: {err}"))
 }
 
-fn ide_chat_tool_review_item_decision(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_tool_review_item_decision(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ToolReviewSetUserDecisionInput>(params)?;
     let conversation_id = input.conversation_id.trim().to_string();
     let call_id = input.call_id.trim().to_string();
@@ -961,7 +961,7 @@ fn ide_chat_tool_review_item_decision(state: &AppState, params: Value) -> Result
         .map_err(|err| format!("Serialize tool review decision result failed: {err}"))
 }
 
-async fn ide_chat_tool_review_batch_review(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_tool_review_batch_review(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ToolReviewBatchActionInput>(params)?;
     let conversation_id = input.conversation_id.trim();
     if conversation_id.is_empty() {
@@ -979,13 +979,13 @@ async fn ide_chat_tool_review_batch_review(state: &AppState, params: Value) -> R
     .map_err(|err| format!("Serialize tool review batch result failed: {err}"))
 }
 
-async fn ide_chat_branch_conversation(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_branch_conversation(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<BranchUnarchivedConversationFromSelectionInput>(params)?;
     serde_json::to_value(branch_unarchived_conversation_from_selection_internal(input, state).await?)
         .map_err(|err| format!("Serialize branch conversation result failed: {err}"))
 }
 
-async fn ide_chat_branch_conversation_from_message(
+pub(crate) async fn ide_chat_branch_conversation_from_message(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -994,48 +994,48 @@ async fn ide_chat_branch_conversation_from_message(
         .map_err(|err| format!("Serialize branch conversation from message result failed: {err}"))
 }
 
-async fn ide_chat_submit_delegate(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_submit_delegate(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<SubmitUserAsyncDelegateInput>(params)?;
     serde_json::to_value(submit_user_async_delegate_internal(input, state).await?)
         .map_err(|err| format!("Serialize delegate submit result failed: {err}"))
 }
 
-fn ide_chat_task_create(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_task_create(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<TaskCreateInput>(params)?;
     ide_chat_serialize(task_create_task_inner(input, state)?)
 }
 
-fn ide_chat_task_update(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_task_update(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<TaskUpdateInput>(params)?;
     ide_chat_serialize(task_update_task_inner(input, state)?)
 }
 
-fn ide_chat_task_delete(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_task_delete(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<TaskDeleteInput>(params)?;
     ide_chat_serialize(task_delete_task_inner(input, state)?)
 }
 
-fn ide_chat_task_list(state: &AppState) -> Result<Value, String> {
+pub(crate) fn ide_chat_task_list(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(task_list_tasks_inner(state)?)
 }
 
-async fn ide_chat_task_optimize_draft(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_task_optimize_draft(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<TaskOptimizeDraftInput>(params)?;
     ide_chat_serialize(task_optimize_draft_internal(input, state).await?)
 }
 
-async fn ide_chat_task_dispatch_now(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_task_dispatch_now(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<TaskDispatchNowInput>(params)?;
     ide_chat_serialize(task_dispatch_task_now_inner(input, state).await?)
 }
 
-fn ide_chat_goal_current(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_goal_current(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<GoalCancelInput>(params)?;
     serde_json::to_value(goal_get_current_inner(state, &input.conversation_id)?)
         .map_err(|err| format!("Serialize goal current result failed: {err}"))
 }
 
-fn ide_chat_goal_create(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_goal_create(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<GoalCreateInput>(params)?;
     serde_json::to_value(goal_create_goal_inner(
         state,
@@ -1045,13 +1045,13 @@ fn ide_chat_goal_create(state: &AppState, params: Value) -> Result<Value, String
     .map_err(|err| format!("Serialize goal create result failed: {err}"))
 }
 
-fn ide_chat_goal_cancel(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_goal_cancel(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<GoalCancelInput>(params)?;
     serde_json::to_value(goal_cancel_goal_inner(state, &input.conversation_id)?)
         .map_err(|err| format!("Serialize goal cancel result failed: {err}"))
 }
 
-fn ide_chat_set_department_primary_api_command(
+pub(crate) fn ide_chat_set_department_primary_api_command(
     state: &AppState,
     app: &NativeAppHandle,
     params: Value,
@@ -1060,7 +1060,7 @@ fn ide_chat_set_department_primary_api_command(
     ide_chat_serialize(set_department_primary_api_config_inner(input, app, state)?)
 }
 
-fn ide_chat_set_ui_language_command(
+pub(crate) fn ide_chat_set_ui_language_command(
     state: &AppState,
     app: &NativeAppHandle,
     params: Value,

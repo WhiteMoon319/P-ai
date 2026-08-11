@@ -5,6 +5,8 @@ use std::collections::{HashMap as StdHashMap, HashSet as StdHashSet};
 // TODO(memory/store): 将 runtime_state 键收敛为常量枚举，减少字符串散落。
 // TODO(memory/store): 为 provider 索引与维护流程补充更细粒度单测分组。
 
+
+use super::*;
 include!("store/types.rs");
 include!("store/db.rs");
 include!("store/crud.rs");

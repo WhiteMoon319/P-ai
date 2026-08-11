@@ -1,4 +1,4 @@
-fn mark_tasks_as_session_lost(data_path: &PathBuf, conversation_id: &str) {
+pub(crate) fn mark_tasks_as_session_lost(data_path: &PathBuf, conversation_id: &str) {
     let Ok(tasks) = task_store_list_task_records(data_path) else {
         runtime_log_error(format!(
             "[TASK-CLEANUP] 查询任务列表失败: conversation_id={}",
@@ -30,25 +30,25 @@ fn mark_tasks_as_session_lost(data_path: &PathBuf, conversation_id: &str) {
 }
 
 #[derive(Debug, Clone, Default)]
-struct PreparedArchiveMemoryDraft {
-    input: Option<MemoryDraftInput>,
-    is_profile: bool,
-    skipped_profile: bool,
+pub(crate) struct PreparedArchiveMemoryDraft {
+    pub(crate) input: Option<MemoryDraftInput>,
+    pub(crate) is_profile: bool,
+    pub(crate) skipped_profile: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-struct AppliedArchiveMemoryStats {
-    merged_memories: usize,
-    merged_groups: usize,
-    applied_profile_memories: usize,
-    skipped_profile_memories: usize,
+pub(crate) struct AppliedArchiveMemoryStats {
+    pub(crate) merged_memories: usize,
+    pub(crate) merged_groups: usize,
+    pub(crate) applied_profile_memories: usize,
+    pub(crate) skipped_profile_memories: usize,
 }
 
-fn archive_memory_draft_is_profile_candidate(tags: &[String]) -> bool {
+pub(crate) fn archive_memory_draft_is_profile_candidate(tags: &[String]) -> bool {
     tags.iter().any(|tag| memory_tag_is_user_profile_category_tag(tag))
 }
 
-fn prepare_archive_memory_draft(
+pub(crate) fn prepare_archive_memory_draft(
     draft: &ArchiveMemoryDraft,
     owner_agent_id: Option<&str>,
 ) -> PreparedArchiveMemoryDraft {
@@ -87,7 +87,7 @@ fn prepare_archive_memory_draft(
     }
 }
 
-fn upsert_archive_memory_draft_with_ids(
+pub(crate) fn upsert_archive_memory_draft_with_ids(
     data_path: &PathBuf,
     draft: &ArchiveMemoryDraft,
     owner_agent_id: Option<&str>,
@@ -107,7 +107,7 @@ fn upsert_archive_memory_draft_with_ids(
     ))
 }
 
-fn apply_memory_actions_into_store(
+pub(crate) fn apply_memory_actions_into_store(
     data_path: &PathBuf,
     actions: &[ArchiveMemoryActionDraft],
     owner_agent_id: Option<&str>,
@@ -175,7 +175,7 @@ fn apply_memory_actions_into_store(
     Ok(stats)
 }
 
-fn resolve_archive_owner_context(
+pub(crate) fn resolve_archive_owner_context(
     state: &AppState,
     source: &Conversation,
 ) -> Result<(AgentProfile, String, String), String> {
@@ -207,7 +207,7 @@ fn resolve_archive_owner_context(
     Ok((owner_agent, owner_agent_id, user_alias))
 }
 
-fn archive_profile_memory_type_allowed(raw: &str) -> bool {
+pub(crate) fn archive_profile_memory_type_allowed(raw: &str) -> bool {
     matches!(
         raw.trim().to_ascii_lowercase().as_str(),
         "knowledge" | "skill" | "event"
@@ -216,44 +216,44 @@ fn archive_profile_memory_type_allowed(raw: &str) -> bool {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ForceArchiveResult {
-    archived: bool,
-    archive_id: Option<String>,
+pub(crate) struct ForceArchiveResult {
+    pub(crate) archived: bool,
+    pub(crate) archive_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    active_conversation_id: Option<String>,
+    pub(crate) active_conversation_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    compaction_message: Option<ChatMessage>,
-    summary: String,
-    merged_memories: usize,
+    pub(crate) compaction_message: Option<ChatMessage>,
+    pub(crate) summary: String,
+    pub(crate) merged_memories: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
-    warning: Option<String>,
+    pub(crate) warning: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    reason_code: Option<String>,
+    pub(crate) reason_code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    elapsed_ms: Option<u64>,
+    pub(crate) elapsed_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    memory_feedback: Option<MemoryArchiveFeedbackReport>,
+    pub(crate) memory_feedback: Option<MemoryArchiveFeedbackReport>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    merge_groups: Option<usize>,
+    pub(crate) merge_groups: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TrimCompactionPreviewResult {
-    conversation_id: String,
-    can_compact: bool,
-    message_count: usize,
-    has_assistant_reply: bool,
-    is_empty: bool,
-    context_usage_percent: u32,
+pub(crate) struct TrimCompactionPreviewResult {
+    pub(crate) conversation_id: String,
+    pub(crate) can_compact: bool,
+    pub(crate) message_count: usize,
+    pub(crate) has_assistant_reply: bool,
+    pub(crate) is_empty: bool,
+    pub(crate) context_usage_percent: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    compaction_disabled_reason: Option<String>,
+    pub(crate) compaction_disabled_reason: Option<String>,
 }
 
-const ARCHIVE_MIN_BODY_MESSAGE_COUNT: usize = 3;
-const ARCHIVE_REFLECTION_MIN_BODY_TOKENS: f64 = 1_000.0;
+pub(crate) const ARCHIVE_MIN_BODY_MESSAGE_COUNT: usize = 3;
+pub(crate) const ARCHIVE_REFLECTION_MIN_BODY_TOKENS: f64 = 1_000.0;
 
-fn build_archive_reporting_conversation(
+pub(crate) fn build_archive_reporting_conversation(
     source: &Conversation,
 ) -> std::borrow::Cow<'_, Conversation> {
     let Some(fork_cursor) = source
@@ -281,7 +281,7 @@ fn build_archive_reporting_conversation(
     std::borrow::Cow::Owned(reporting)
 }
 
-fn archive_message_body_text(message: &ChatMessage) -> String {
+pub(crate) fn archive_message_body_text(message: &ChatMessage) -> String {
     message
         .parts
         .iter()
@@ -294,7 +294,7 @@ fn archive_message_body_text(message: &ChatMessage) -> String {
         .join("\n")
 }
 
-fn archive_message_memory_block(
+pub(crate) fn archive_message_memory_block(
     message: &ChatMessage,
     memories: &[MemoryEntry],
     seen_memory_ids: &mut HashSet<String>,
@@ -306,7 +306,7 @@ fn archive_message_memory_block(
     build_memory_board_xml_from_recall_ids(memories, &inject_ids, false)
 }
 
-fn archive_message_stored_memory_blocks(message: &ChatMessage) -> Vec<String> {
+pub(crate) fn archive_message_stored_memory_blocks(message: &ChatMessage) -> Vec<String> {
     message
         .extra_text_blocks
         .iter()
@@ -329,7 +329,7 @@ fn archive_message_stored_memory_blocks(message: &ChatMessage) -> Vec<String> {
         .collect()
 }
 
-fn build_archive_body_reporting_conversation(
+pub(crate) fn build_archive_body_reporting_conversation(
     source: &Conversation,
     memories: &[MemoryEntry],
 ) -> Conversation {
@@ -381,7 +381,7 @@ fn build_archive_body_reporting_conversation(
     reporting
 }
 
-fn archive_body_token_count(source: &Conversation) -> f64 {
+pub(crate) fn archive_body_token_count(source: &Conversation) -> f64 {
     source
         .messages
         .iter()
@@ -391,14 +391,14 @@ fn archive_body_token_count(source: &Conversation) -> f64 {
         .sum()
 }
 
-fn resolve_archive_request_conversation_by_id(
+pub(crate) fn resolve_archive_request_conversation_by_id(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<(ApiConfig, ResolvedApiConfig, Conversation, String), String> {
     conversation_service_v2().resolve_archive_request_conversation_by_id(state, conversation_id)
 }
 
-fn log_manual_archive_failure(conversation_id: &str, reason: String) -> String {
+pub(crate) fn log_manual_archive_failure(conversation_id: &str, reason: String) -> String {
     let reason = decorate_manual_archive_failure_reason(reason);
     runtime_log_warn(format!(
         "[归档] 失败，任务=手动归档，conversation_id={}，error={}",
@@ -408,7 +408,7 @@ fn log_manual_archive_failure(conversation_id: &str, reason: String) -> String {
     reason
 }
 
-fn decorate_manual_archive_failure_reason(reason: String) -> String {
+pub(crate) fn decorate_manual_archive_failure_reason(reason: String) -> String {
     if !should_suggest_deleting_unrepairable_conversation(&reason) {
         return reason;
     }
@@ -421,7 +421,7 @@ fn decorate_manual_archive_failure_reason(reason: String) -> String {
     )
 }
 
-fn should_suggest_deleting_unrepairable_conversation(reason: &str) -> bool {
+pub(crate) fn should_suggest_deleting_unrepairable_conversation(reason: &str) -> bool {
     let trimmed = reason.trim();
     (trimmed.contains("消息存储")
         || trimmed.contains("会话块")
@@ -437,7 +437,7 @@ fn should_suggest_deleting_unrepairable_conversation(reason: &str) -> bool {
             || trimmed.contains("缺少"))
 }
 
-fn instant_archive_conversation(
+pub(crate) fn instant_archive_conversation(
     state: &AppState,
     selected_api: &ApiConfig,
     source: &Conversation,
@@ -450,7 +450,7 @@ fn instant_archive_conversation(
     )
 }
 
-fn archive_pipeline_message_count_for_delete(source: &Conversation) -> usize {
+pub(crate) fn archive_pipeline_message_count_for_delete(source: &Conversation) -> usize {
     source
         .messages
         .iter()
@@ -463,7 +463,7 @@ fn archive_pipeline_message_count_for_delete(source: &Conversation) -> usize {
         .count()
 }
 
-fn archive_reflection_skip_reason(source: &Conversation) -> Option<String> {
+pub(crate) fn archive_reflection_skip_reason(source: &Conversation) -> Option<String> {
     let message_count = archive_pipeline_message_count_for_delete(source);
     if message_count > ARCHIVE_MIN_BODY_MESSAGE_COUNT {
         return None;
@@ -474,7 +474,7 @@ fn archive_reflection_skip_reason(source: &Conversation) -> Option<String> {
     ))
 }
 
-fn archive_pipeline_has_assistant_reply(source: &Conversation) -> bool {
+pub(crate) fn archive_pipeline_has_assistant_reply(source: &Conversation) -> bool {
     source
         .messages
         .iter()
@@ -482,14 +482,14 @@ fn archive_pipeline_has_assistant_reply(source: &Conversation) -> bool {
 }
 
 #[derive(Debug, Clone)]
-enum SummaryContextModelError {
+pub(crate) enum SummaryContextModelError {
     EmptyReply(String),
     InvalidJson(String),
     NonRetryable(String),
 }
 
 impl SummaryContextModelError {
-    fn is_invalid_json(&self) -> bool {
+    pub(crate) fn is_invalid_json(&self) -> bool {
         matches!(self, SummaryContextModelError::InvalidJson(_))
     }
 }
@@ -510,7 +510,7 @@ impl From<String> for SummaryContextModelError {
     }
 }
 
-async fn assemble_compaction_tool_definitions(
+pub(crate) async fn assemble_compaction_tool_definitions(
     state: &AppState,
     app_config: &AppConfig,
     selected_api: &ApiConfig,
@@ -534,7 +534,7 @@ async fn assemble_compaction_tool_definitions(
     assembly.tool_definitions
 }
 
-async fn summarize_archived_conversation_with_model_v2(
+pub(crate) async fn summarize_archived_conversation_with_model_v2(
     state: &AppState,
     resolved_api: &ResolvedApiConfig,
     selected_api: &ApiConfig,
@@ -669,12 +669,12 @@ async fn summarize_archived_conversation_with_model_v2(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SummaryContextScene {
+pub(crate) enum SummaryContextScene {
     Compaction,
     Archive,
 }
 
-fn summary_context_prompt_template(scene: SummaryContextScene) -> &'static str {
+pub(crate) fn summary_context_prompt_template(scene: SummaryContextScene) -> &'static str {
     match scene {
         SummaryContextScene::Compaction => {
             include_str!("../../../../resources/prompts/summary-context.md")
@@ -685,7 +685,7 @@ fn summary_context_prompt_template(scene: SummaryContextScene) -> &'static str {
     }
 }
 
-fn extract_prompt_xml_block(raw: &str, tag: &str) -> Option<String> {
+pub(crate) fn extract_prompt_xml_block(raw: &str, tag: &str) -> Option<String> {
     let open = format!("<{}>", tag);
     let close = format!("</{}>", tag);
     let start = raw.find(&open)?;
@@ -694,17 +694,17 @@ fn extract_prompt_xml_block(raw: &str, tag: &str) -> Option<String> {
     Some(raw[start..end + close.len()].trim().to_string())
 }
 
-fn build_summary_context_requirement_block(scene: SummaryContextScene) -> String {
+pub(crate) fn build_summary_context_requirement_block(scene: SummaryContextScene) -> String {
     extract_prompt_xml_block(summary_context_prompt_template(scene), "summary_requirement")
         .unwrap_or_default()
 }
 
-fn build_summary_context_system_remind_block(scene: SummaryContextScene) -> String {
+pub(crate) fn build_summary_context_system_remind_block(scene: SummaryContextScene) -> String {
     extract_prompt_xml_block(summary_context_prompt_template(scene), "system_remind")
         .unwrap_or_default()
 }
 
-fn build_summary_context_memory_block(
+pub(crate) fn build_summary_context_memory_block(
     scene: SummaryContextScene,
     agent: &AgentProfile,
     user_alias: &str,
@@ -716,7 +716,7 @@ fn build_summary_context_memory_block(
         .replace("{{memory_generation_rules}}", memory_generation_rules_body())
 }
 
-fn build_summary_context_json_contract_block(scene: SummaryContextScene) -> String {
+pub(crate) fn build_summary_context_json_contract_block(scene: SummaryContextScene) -> String {
     let json_example = match scene {
         SummaryContextScene::Compaction => memory_curation_example_output_block(),
         SummaryContextScene::Archive => archive_reflection_example_output_block(),
@@ -727,7 +727,7 @@ fn build_summary_context_json_contract_block(scene: SummaryContextScene) -> Stri
 }
 
 #[cfg(test)]
-fn archive_pipeline_message_plain_text(message: &ChatMessage) -> String {
+pub(crate) fn archive_pipeline_message_plain_text(message: &ChatMessage) -> String {
     let mut blocks = Vec::<String>::new();
     if message.role.trim().eq_ignore_ascii_case("assistant") {
         for event in message.tool_call.iter().flatten() {
@@ -766,7 +766,7 @@ fn archive_pipeline_message_plain_text(message: &ChatMessage) -> String {
     clean_text(blocks.join("\n").trim())
 }
 
-fn archive_pipeline_is_context_compaction_message(message: &ChatMessage) -> bool {
+pub(crate) fn archive_pipeline_is_context_compaction_message(message: &ChatMessage) -> bool {
     if message.role.trim() != "user" {
         return false;
     }
@@ -782,7 +782,7 @@ fn archive_pipeline_is_context_compaction_message(message: &ChatMessage) -> bool
     )
 }
 
-fn archive_pipeline_dedup_recall_table(recall_table: &[String]) -> Vec<String> {
+pub(crate) fn archive_pipeline_dedup_recall_table(recall_table: &[String]) -> Vec<String> {
     let mut seen = HashSet::<String>::new();
     let mut deduped = Vec::<String>::new();
     for id in recall_table
@@ -797,7 +797,7 @@ fn archive_pipeline_dedup_recall_table(recall_table: &[String]) -> Vec<String> {
     deduped
 }
 
-fn memory_curation_id_alias_map(memories: &[MemoryEntry]) -> HashMap<String, String> {
+pub(crate) fn memory_curation_id_alias_map(memories: &[MemoryEntry]) -> HashMap<String, String> {
     let mut map = HashMap::<String, String>::new();
     for memory in memories {
         let canonical_id = memory.id.trim();
@@ -814,7 +814,7 @@ fn memory_curation_id_alias_map(memories: &[MemoryEntry]) -> HashMap<String, Str
     map
 }
 
-fn resolve_memory_curation_ids(
+pub(crate) fn resolve_memory_curation_ids(
     items: &[String],
     id_alias_map: &HashMap<String, String>,
 ) -> Vec<String> {
@@ -836,7 +836,7 @@ fn resolve_memory_curation_ids(
     out
 }
 
-fn resolve_memory_action_drafts(
+pub(crate) fn resolve_memory_action_drafts(
     drafts: &[ArchiveMemoryActionDraft],
     id_alias_map: &HashMap<String, String>,
 ) -> Vec<ArchiveMemoryActionDraft> {
@@ -850,7 +850,7 @@ fn resolve_memory_action_drafts(
         .collect::<Vec<_>>()
 }
 
-fn compose_summary_context_summary(
+pub(crate) fn compose_summary_context_summary(
     summary: &str,
     open_loops: &[String],
     scene: SummaryContextScene,
@@ -875,7 +875,7 @@ fn compose_summary_context_summary(
 }
 
 #[allow(dead_code)]
-fn emit_archive_history_flushed_event(
+pub(crate) fn emit_archive_history_flushed_event(
     state: &AppState,
     source_conversation_id: &str,
     active_conversation_id: &str,
@@ -921,7 +921,7 @@ fn emit_archive_history_flushed_event(
     }
 }
 
-fn emit_compaction_history_flushed_event(
+pub(crate) fn emit_compaction_history_flushed_event(
     state: &AppState,
     conversation_id: &str,
     boundary_messages: &[ChatMessage],
@@ -967,7 +967,7 @@ fn emit_compaction_history_flushed_event(
     }
 }
 
-fn build_compaction_history_flushed_messages(
+pub(crate) fn build_compaction_history_flushed_messages(
     boundary_messages: &[ChatMessage],
     compression_message: &ChatMessage,
 ) -> Vec<ChatMessage> {
@@ -987,7 +987,7 @@ fn build_compaction_history_flushed_messages(
     messages
 }
 
-fn emit_deleted_history_flushed_event(
+pub(crate) fn emit_deleted_history_flushed_event(
     state: &AppState,
     deleted_conversation_id: &str,
     active_conversation_id: &str,
@@ -1025,7 +1025,7 @@ fn emit_deleted_history_flushed_event(
     }
 }
 
-fn delete_main_conversation_and_activate_latest(
+pub(crate) fn delete_main_conversation_and_activate_latest(
     state: &AppState,
     selected_api: &ApiConfig,
     source: &Conversation,
@@ -1033,7 +1033,7 @@ fn delete_main_conversation_and_activate_latest(
     conversation_service_v2().delete_main_conversation_and_activate_latest(state, selected_api, source)
 }
 
-fn build_compaction_message(
+pub(crate) fn build_compaction_message(
     summary: &str,
     title: Option<&str>,
     compaction_reason: &str,
@@ -1089,7 +1089,7 @@ fn build_compaction_message(
     }
 }
 
-fn normalize_multiline_block(input: &str) -> String {
+pub(crate) fn normalize_multiline_block(input: &str) -> String {
     input
         .lines()
         .map(str::trim)
@@ -1098,7 +1098,7 @@ fn normalize_multiline_block(input: &str) -> String {
         .join("\n")
 }
 
-fn normalize_markdown_block(input: &str) -> String {
+pub(crate) fn normalize_markdown_block(input: &str) -> String {
     let normalized = input.replace("\r\n", "\n").replace('\r', "\n");
     let mut lines = normalized
         .lines()
@@ -1113,7 +1113,7 @@ fn normalize_markdown_block(input: &str) -> String {
     lines.join("\n")
 }
 
-fn clean_compaction_summary_text(input: &str) -> String {
+pub(crate) fn clean_compaction_summary_text(input: &str) -> String {
     let trimmed = input.trim();
     if let Some((summary, active_plans)) = trimmed.split_once("<active_plans>") {
         let cleaned_summary = normalize_markdown_block(summary);
@@ -1126,7 +1126,7 @@ fn clean_compaction_summary_text(input: &str) -> String {
     normalize_markdown_block(trimmed)
 }
 
-fn build_initial_summary_context_message(
+pub(crate) fn build_initial_summary_context_message(
     current_todos: Option<&[ConversationTodoItem]>,
     title: Option<&str>,
 ) -> ChatMessage {
@@ -1166,15 +1166,15 @@ fn build_initial_summary_context_message(
 }
 
 #[derive(Debug, Clone, Default)]
-struct SummaryContextApplyReport {
-    merged_memories: usize,
-    merged_groups: usize,
-    applied_profile_memories: usize,
-    skipped_profile_memories: usize,
-    memory_feedback: MemoryArchiveFeedbackReport,
+pub(crate) struct SummaryContextApplyReport {
+    pub(crate) merged_memories: usize,
+    pub(crate) merged_groups: usize,
+    pub(crate) applied_profile_memories: usize,
+    pub(crate) skipped_profile_memories: usize,
+    pub(crate) memory_feedback: MemoryArchiveFeedbackReport,
 }
 
-fn apply_summary_context_result(
+pub(crate) fn apply_summary_context_result(
     data_path: &PathBuf,
     host_agent: &AgentProfile,
     recall_ids: &[String],
@@ -1198,7 +1198,7 @@ fn apply_summary_context_result(
     })
 }
 
-async fn summarize_archive_summary_with_fallback(
+pub(crate) async fn summarize_archive_summary_with_fallback(
     state: &AppState,
     resolved_api: &ResolvedApiConfig,
     selected_api: &ApiConfig,
@@ -1275,13 +1275,13 @@ async fn summarize_archive_summary_with_fallback(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CompactionSummaryModelRole {
+pub(crate) enum CompactionSummaryModelRole {
     Conversation,
     Quick,
 }
 
 impl CompactionSummaryModelRole {
-    fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             CompactionSummaryModelRole::Conversation => "会话模型",
             CompactionSummaryModelRole::Quick => "快速模型",
@@ -1289,7 +1289,7 @@ impl CompactionSummaryModelRole {
     }
 }
 
-fn empty_memory_curation_draft() -> MemoryCurationDraft {
+pub(crate) fn empty_memory_curation_draft() -> MemoryCurationDraft {
     MemoryCurationDraft {
         title: String::new(),
         summary: String::new(),
@@ -1299,7 +1299,7 @@ fn empty_memory_curation_draft() -> MemoryCurationDraft {
     }
 }
 
-fn resolve_context_compaction_primary_model_from_config(
+pub(crate) fn resolve_context_compaction_primary_model_from_config(
     app_config: &AppConfig,
     source: &Conversation,
     fallback_api: &ApiConfig,
@@ -1326,7 +1326,7 @@ fn resolve_context_compaction_primary_model_from_config(
         .ok_or_else(|| format!("会话模型不可用于文本对话：{}", preferred_api_config_id))
 }
 
-fn resolve_context_compaction_primary_model(
+pub(crate) fn resolve_context_compaction_primary_model(
     state: &AppState,
     selected_api: &ApiConfig,
     resolved_api: &ResolvedApiConfig,
@@ -1357,7 +1357,7 @@ fn resolve_context_compaction_primary_model(
     Ok((primary_api, primary_resolved_api))
 }
 
-fn resolve_compaction_quick_model_from_config(
+pub(crate) fn resolve_compaction_quick_model_from_config(
     app_config: &AppConfig,
     quick_api_config_id: Option<&str>,
     conversation_api_id: &str,
@@ -1383,7 +1383,7 @@ fn resolve_compaction_quick_model_from_config(
     Ok(Some(selected_api))
 }
 
-fn resolve_compaction_quick_model(
+pub(crate) fn resolve_compaction_quick_model(
     state: &AppState,
     conversation_api_id: &str,
 ) -> Result<Option<(ApiConfig, ResolvedApiConfig)>, String> {
@@ -1400,7 +1400,7 @@ fn resolve_compaction_quick_model(
     Ok(Some((selected_api, resolved_api)))
 }
 
-async fn summarize_compaction_with_model_attempt(
+pub(crate) async fn summarize_compaction_with_model_attempt(
     state: &AppState,
     selected_api: &ApiConfig,
     resolved_api: &ResolvedApiConfig,
@@ -1483,7 +1483,7 @@ async fn summarize_compaction_with_model_attempt(
     ))
 }
 
-async fn summarize_compaction_with_fallback(
+pub(crate) async fn summarize_compaction_with_fallback(
     state: &AppState,
     selected_api: &ApiConfig,
     resolved_api: &ResolvedApiConfig,
@@ -1589,7 +1589,7 @@ async fn summarize_compaction_with_fallback(
 }
 
 #[cfg(test)]
-mod archive_pipeline_tests {
+pub(crate) mod archive_pipeline_tests {
     use super::*;
 
     fn test_message(id: &str, role: &str, text: &str) -> ChatMessage {

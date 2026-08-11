@@ -1,13 +1,13 @@
-const MCP_OPERATE_SERVER_FLAG: &str = "--mcp-operate-server";
-const MCP_OPERATE_TOOL_NAME: &str = "operate";
+pub(crate) const MCP_OPERATE_SERVER_FLAG: &str = "--mcp-operate-server";
+pub(crate) const MCP_OPERATE_TOOL_NAME: &str = "operate";
 
 #[derive(Debug, Clone)]
-struct OperateMcpServer {
-    tool_router: rmcp::handler::server::router::tool::ToolRouter<Self>,
+pub(crate) struct OperateMcpServer {
+    pub(crate) tool_router: rmcp::handler::server::router::tool::ToolRouter<Self>,
 }
 
 impl OperateMcpServer {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             tool_router: Self::tool_router(),
         }
@@ -20,7 +20,7 @@ impl OperateMcpServer {
         name = "operate",
         description = "统一桌面脚本工具。入参只有 script:string，一行一个动作。\n可用语法：\nmouse <button> click @x,y [repeat=n] [delay=s] [pre_delay=s] [press=s]\nmouse scroll_up [repeat=n] [delay=s] [pre_delay=s]\nmouse scroll_down [repeat=n] [delay=s] [pre_delay=s]\nkey <combo> [repeat=n] [delay=s] [pre_delay=s] [press=s]\ntext \"内容\" [repeat=n] [delay=s] [pre_delay=s]\nwait <seconds>\nscreenshot [focused_window] [region=@x,y,w,h] [save=\"绝对路径\"] [quality=1..100]\n参数说明：button=left|right|middle|back|forward；combo 用 + 连接按键，如 Control+L、Control+Shift+P、Enter；x/y/w/h 为 0~1 百分比坐标；repeat=1~100；delay/pre_delay/press=0~300 秒；save 必须是绝对路径；quality 默认 75。规则：screenshot 对模型只保留最新一张，旧画面视为已经离去。"
     )]
-    async fn operate(
+    pub(crate) async fn operate(
         &self,
         rmcp::handler::server::wrapper::Parameters(args): rmcp::handler::server::wrapper::Parameters<
             OperateRequest,
@@ -72,7 +72,7 @@ impl rmcp::ServerHandler for OperateMcpServer {
     }
 }
 
-fn run_operate_mcp_server() -> Result<(), String> {
+pub(crate) fn run_operate_mcp_server() -> Result<(), String> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()

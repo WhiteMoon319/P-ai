@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum TerminalWriteRisk {
+pub(crate) enum TerminalWriteRisk {
     None,
     NewOnly { count: usize },
     Existing { paths: Vec<PathBuf> },
@@ -7,7 +7,7 @@ enum TerminalWriteRisk {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TerminalPathIntent {
+pub(crate) enum TerminalPathIntent {
     Read,
     Write,
     Create,
@@ -16,30 +16,30 @@ enum TerminalPathIntent {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct TerminalPathAccess {
-    path: PathBuf,
-    is_absolute: bool,
-    intent: TerminalPathIntent,
+pub(crate) struct TerminalPathAccess {
+    pub(crate) path: PathBuf,
+    pub(crate) is_absolute: bool,
+    pub(crate) intent: TerminalPathIntent,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TerminalShellFamily {
+pub(crate) enum TerminalShellFamily {
     Posix,
     PowerShell,
     Other,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct TerminalCommandAnalysis {
-    accesses: Vec<TerminalPathAccess>,
-    write_risk: TerminalWriteRisk,
-    has_directory_change: bool,
-    has_output_redirection: bool,
-    unresolved_write_targets: bool,
+pub(crate) struct TerminalCommandAnalysis {
+    pub(crate) accesses: Vec<TerminalPathAccess>,
+    pub(crate) write_risk: TerminalWriteRisk,
+    pub(crate) has_directory_change: bool,
+    pub(crate) has_output_redirection: bool,
+    pub(crate) unresolved_write_targets: bool,
 }
 
 impl TerminalCommandAnalysis {
-    fn path_candidates(&self) -> Vec<TerminalCommandPathCandidate> {
+    pub(crate) fn path_candidates(&self) -> Vec<TerminalCommandPathCandidate> {
         let mut deduped = Vec::<TerminalCommandPathCandidate>::new();
         let mut seen = std::collections::HashSet::<String>::new();
         for access in &self.accesses {
@@ -54,7 +54,7 @@ impl TerminalCommandAnalysis {
         deduped
     }
 
-    fn write_target_paths(&self) -> Vec<PathBuf> {
+    pub(crate) fn write_target_paths(&self) -> Vec<PathBuf> {
         let mut out = Vec::<PathBuf>::new();
         let mut seen = std::collections::HashSet::<String>::new();
         for access in &self.accesses {
@@ -72,7 +72,7 @@ impl TerminalCommandAnalysis {
         out
     }
 
-    fn final_execution_cwd(&self, initial_cwd: &Path) -> PathBuf {
+    pub(crate) fn final_execution_cwd(&self, initial_cwd: &Path) -> PathBuf {
         self.accesses
             .iter()
             .rev()
@@ -83,19 +83,19 @@ impl TerminalCommandAnalysis {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct TerminalSimpleCommand {
-    argv: Vec<String>,
-    output_redirections: Vec<TerminalRedirection>,
+pub(crate) struct TerminalSimpleCommand {
+    pub(crate) argv: Vec<String>,
+    pub(crate) output_redirections: Vec<TerminalRedirection>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct TerminalRedirection {
-    target: String,
-    append: bool,
-    fd: Option<u8>,
+pub(crate) struct TerminalRedirection {
+    pub(crate) target: String,
+    pub(crate) append: bool,
+    pub(crate) fd: Option<u8>,
 }
 
-fn terminal_shell_family(shell_kind: &str) -> TerminalShellFamily {
+pub(crate) fn terminal_shell_family(shell_kind: &str) -> TerminalShellFamily {
     let lower = shell_kind.trim().to_ascii_lowercase();
     if matches!(lower.as_str(), "git-bash" | "bash" | "zsh" | "sh") {
         return TerminalShellFamily::Posix;
@@ -106,7 +106,7 @@ fn terminal_shell_family(shell_kind: &str) -> TerminalShellFamily {
     TerminalShellFamily::Other
 }
 
-fn terminal_lex_command(command: &str) -> Vec<String> {
+pub(crate) fn terminal_lex_command(command: &str) -> Vec<String> {
     let mut tokens = Vec::<String>::new();
     let mut current = String::new();
     let mut quote: Option<char> = None;
@@ -177,11 +177,11 @@ fn terminal_lex_command(command: &str) -> Vec<String> {
     tokens
 }
 
-fn terminal_is_command_separator(token: &str) -> bool {
+pub(crate) fn terminal_is_command_separator(token: &str) -> bool {
     matches!(token, "|" | "||" | "&&" | ";" | "&")
 }
 
-fn terminal_split_simple_commands(command: &str) -> Vec<TerminalSimpleCommand> {
+pub(crate) fn terminal_split_simple_commands(command: &str) -> Vec<TerminalSimpleCommand> {
     let tokens = terminal_lex_command(command);
     if tokens.is_empty() {
         return Vec::new();
@@ -228,7 +228,7 @@ fn terminal_split_simple_commands(command: &str) -> Vec<TerminalSimpleCommand> {
     commands
 }
 
-fn terminal_parse_redirection_token(
+pub(crate) fn terminal_parse_redirection_token(
     tokens: &[String],
     idx: usize,
 ) -> Option<(TerminalRedirection, usize)> {
@@ -251,7 +251,7 @@ fn terminal_parse_redirection_token(
     ))
 }
 
-fn terminal_parse_embedded_redirection_token(raw: &str) -> Option<(TerminalRedirection, usize)> {
+pub(crate) fn terminal_parse_embedded_redirection_token(raw: &str) -> Option<(TerminalRedirection, usize)> {
     let token = terminal_unquote_token(raw);
     if token.is_empty() {
         return None;
@@ -284,7 +284,7 @@ fn terminal_parse_embedded_redirection_token(raw: &str) -> Option<(TerminalRedir
     ))
 }
 
-fn terminal_redirection_target_is_sink(target: &str, shell_kind: &str) -> bool {
+pub(crate) fn terminal_redirection_target_is_sink(target: &str, shell_kind: &str) -> bool {
     let token = terminal_unquote_token(target);
     if token.is_empty() {
         return false;
@@ -292,7 +292,7 @@ fn terminal_redirection_target_is_sink(target: &str, shell_kind: &str) -> bool {
     terminal_is_virtual_sink_path(&token, shell_kind)
 }
 
-fn terminal_is_assignment_like(token: &str) -> bool {
+pub(crate) fn terminal_is_assignment_like(token: &str) -> bool {
     let trimmed = token.trim();
     if trimmed.is_empty() || trimmed.starts_with('-') {
         return false;
@@ -308,7 +308,7 @@ fn terminal_is_assignment_like(token: &str) -> bool {
         .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
 }
 
-fn terminal_skip_bash_wrappers(argv: &[String]) -> usize {
+pub(crate) fn terminal_skip_bash_wrappers(argv: &[String]) -> usize {
     let mut idx = 0usize;
     while idx < argv.len() && terminal_is_assignment_like(&terminal_unquote_token(&argv[idx])) {
         idx += 1;
@@ -354,7 +354,7 @@ fn terminal_skip_bash_wrappers(argv: &[String]) -> usize {
     }
 }
 
-fn terminal_push_access(
+pub(crate) fn terminal_push_access(
     accesses: &mut Vec<TerminalPathAccess>,
     cwd: &Path,
     raw: &str,
@@ -370,7 +370,7 @@ fn terminal_push_access(
     });
 }
 
-fn terminal_nonflag_args(args: &[String]) -> Vec<String> {
+pub(crate) fn terminal_nonflag_args(args: &[String]) -> Vec<String> {
     args.iter()
         .filter_map(|arg| {
             let token = terminal_unquote_token(arg);
@@ -382,7 +382,7 @@ fn terminal_nonflag_args(args: &[String]) -> Vec<String> {
         .collect()
 }
 
-fn terminal_extract_bash_read_paths(base_cmd: &str, args: &[String]) -> Vec<String> {
+pub(crate) fn terminal_extract_bash_read_paths(base_cmd: &str, args: &[String]) -> Vec<String> {
     let nonflag = terminal_nonflag_args(args);
     match base_cmd {
         "ls" | "dir" | "cat" | "head" | "tail" | "sort" | "uniq" | "wc" | "less"
@@ -394,7 +394,7 @@ fn terminal_extract_bash_read_paths(base_cmd: &str, args: &[String]) -> Vec<Stri
     }
 }
 
-fn terminal_analyze_bash_simple_command(
+pub(crate) fn terminal_analyze_bash_simple_command(
     shell_kind: &str,
     cwd: &mut PathBuf,
     simple: &TerminalSimpleCommand,
@@ -539,7 +539,7 @@ fn terminal_analyze_bash_simple_command(
     }
 }
 
-fn terminal_powershell_alias_base<'a>(base_cmd: &'a str) -> &'a str {
+pub(crate) fn terminal_powershell_alias_base<'a>(base_cmd: &'a str) -> &'a str {
     match base_cmd {
         "cd" | "chdir" | "sl" | "set-location" => "set-location",
         "ls" | "dir" | "gci" | "get-childitem" => "get-childitem",
@@ -555,7 +555,7 @@ fn terminal_powershell_alias_base<'a>(base_cmd: &'a str) -> &'a str {
     }
 }
 
-fn terminal_collect_powershell_param_map(args: &[String]) -> (Vec<String>, std::collections::HashMap<String, Vec<String>>) {
+pub(crate) fn terminal_collect_powershell_param_map(args: &[String]) -> (Vec<String>, std::collections::HashMap<String, Vec<String>>) {
     let mut positional = Vec::<String>::new();
     let mut params = std::collections::HashMap::<String, Vec<String>>::new();
     let mut idx = 0usize;
@@ -591,7 +591,7 @@ fn terminal_collect_powershell_param_map(args: &[String]) -> (Vec<String>, std::
     (positional, params)
 }
 
-fn terminal_push_powershell_param_paths(
+pub(crate) fn terminal_push_powershell_param_paths(
     accesses: &mut Vec<TerminalPathAccess>,
     cwd: &Path,
     params: &std::collections::HashMap<String, Vec<String>>,
@@ -607,7 +607,7 @@ fn terminal_push_powershell_param_paths(
     }
 }
 
-fn terminal_analyze_powershell_simple_command(
+pub(crate) fn terminal_analyze_powershell_simple_command(
     shell_kind: &str,
     cwd: &mut PathBuf,
     simple: &TerminalSimpleCommand,
@@ -767,7 +767,7 @@ fn terminal_analyze_powershell_simple_command(
     }
 }
 
-fn terminal_derive_write_risk(
+pub(crate) fn terminal_derive_write_risk(
     accesses: &[TerminalPathAccess],
     unresolved_write_targets: bool,
 ) -> TerminalWriteRisk {
@@ -814,7 +814,7 @@ fn terminal_derive_write_risk(
     TerminalWriteRisk::Unknown
 }
 
-fn terminal_analyze_command(
+pub(crate) fn terminal_analyze_command(
     cwd: &Path,
     command: &str,
     shell_kind: &str,

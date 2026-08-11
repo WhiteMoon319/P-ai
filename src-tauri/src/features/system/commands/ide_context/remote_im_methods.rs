@@ -1,4 +1,4 @@
-async fn remote_im_get_channel_status_inner(
+pub(crate) async fn remote_im_get_channel_status_inner(
     state: &AppState,
     channel_id: String,
 ) -> Result<ChannelConnectionStatus, String> {
@@ -32,7 +32,7 @@ async fn remote_im_get_channel_status_inner(
     get_channel_connection_status(channel_id).await
 }
 
-async fn ide_chat_remote_im_get_channel_status_for_web_settings(
+pub(crate) async fn ide_chat_remote_im_get_channel_status_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -47,7 +47,7 @@ async fn ide_chat_remote_im_get_channel_status_for_web_settings(
     ide_chat_serialize(remote_im_get_channel_status_inner(state, channel_id).await?)
 }
 
-async fn remote_im_restart_channel_inner(
+pub(crate) async fn remote_im_restart_channel_inner(
     channel_id: String,
     state: &AppState,
 ) -> Result<ChannelConnectionStatus, String> {
@@ -125,7 +125,7 @@ async fn remote_im_restart_channel_inner(
     }
 }
 
-async fn ide_chat_remote_im_restart_channel_for_web_settings(
+pub(crate) async fn ide_chat_remote_im_restart_channel_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -140,7 +140,7 @@ async fn ide_chat_remote_im_restart_channel_for_web_settings(
     ide_chat_serialize(remote_im_restart_channel_inner(channel_id, state).await?)
 }
 
-async fn ide_chat_remote_im_get_channel_logs_for_web_settings(
+pub(crate) async fn ide_chat_remote_im_get_channel_logs_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -155,7 +155,7 @@ async fn ide_chat_remote_im_get_channel_logs_for_web_settings(
     ide_chat_serialize(get_remote_im_channel_logs(state, channel_id).await?)
 }
 
-async fn ide_chat_remote_im_get_contact_logs_for_web_settings(
+pub(crate) async fn ide_chat_remote_im_get_contact_logs_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -163,7 +163,7 @@ async fn ide_chat_remote_im_get_contact_logs_for_web_settings(
     ide_chat_serialize(remote_im_get_contact_logs_inner(state, input).await?)
 }
 
-async fn remote_im_get_contact_logs_inner(
+pub(crate) async fn remote_im_get_contact_logs_inner(
     state: &AppState,
     input: RemoteImContactLogsInput,
 ) -> Result<Vec<ChannelLogEntry>, String> {
@@ -173,7 +173,7 @@ async fn remote_im_get_contact_logs_inner(
     Ok(remote_im_filter_channel_logs_for_contact(logs, &contact_marker))
 }
 
-async fn get_remote_im_channel_logs(
+pub(crate) async fn get_remote_im_channel_logs(
     state: &AppState,
     channel_id: String,
 ) -> Result<Vec<ChannelLogEntry>, String> {
@@ -187,15 +187,15 @@ async fn get_remote_im_channel_logs(
     }
 }
 
-fn ide_chat_remote_im_list_channels_for_web_settings(state: &AppState) -> Result<Value, String> {
+pub(crate) fn ide_chat_remote_im_list_channels_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(remote_im_list_channels_inner(state)?)
 }
 
-fn ide_chat_remote_im_list_contacts_for_web_settings(state: &AppState) -> Result<Value, String> {
+pub(crate) fn ide_chat_remote_im_list_contacts_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(remote_im_list_contacts_inner(state)?)
 }
 
-fn ide_chat_remote_im_update_contact_allow_send_for_web_settings(
+pub(crate) fn ide_chat_remote_im_update_contact_allow_send_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -203,7 +203,7 @@ fn ide_chat_remote_im_update_contact_allow_send_for_web_settings(
     ide_chat_serialize(remote_im_update_contact_allow_send_inner(state, input)?)
 }
 
-fn ide_chat_remote_im_update_contact_allow_send_files_for_web_settings(
+pub(crate) fn ide_chat_remote_im_update_contact_allow_send_files_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -211,7 +211,7 @@ fn ide_chat_remote_im_update_contact_allow_send_files_for_web_settings(
     ide_chat_serialize(remote_im_update_contact_allow_send_files_inner(state, input)?)
 }
 
-fn ide_chat_remote_im_update_contact_blocked_message_prefixes_for_web_settings(
+pub(crate) fn ide_chat_remote_im_update_contact_blocked_message_prefixes_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -219,7 +219,7 @@ fn ide_chat_remote_im_update_contact_blocked_message_prefixes_for_web_settings(
     ide_chat_serialize(remote_im_update_contact_blocked_message_prefixes_inner(state, input)?)
 }
 
-fn ide_chat_remote_im_update_contact_activation_for_web_settings(
+pub(crate) fn ide_chat_remote_im_update_contact_activation_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -227,7 +227,7 @@ fn ide_chat_remote_im_update_contact_activation_for_web_settings(
     ide_chat_serialize(remote_im_update_contact_activation_inner(state, input)?)
 }
 
-fn ide_chat_remote_im_update_contact_department_binding_for_web_settings(
+pub(crate) fn ide_chat_remote_im_update_contact_department_binding_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -235,7 +235,7 @@ fn ide_chat_remote_im_update_contact_department_binding_for_web_settings(
     ide_chat_serialize(remote_im_update_contact_department_binding_inner(state, input)?)
 }
 
-fn ide_chat_remote_im_update_contact_processing_mode_for_web_settings(
+pub(crate) fn ide_chat_remote_im_update_contact_processing_mode_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -243,7 +243,7 @@ fn ide_chat_remote_im_update_contact_processing_mode_for_web_settings(
     ide_chat_serialize(remote_im_update_contact_processing_mode_inner(state, input)?)
 }
 
-fn ide_chat_remote_im_update_contact_workspace_for_web_settings(
+pub(crate) fn ide_chat_remote_im_update_contact_workspace_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -251,7 +251,7 @@ fn ide_chat_remote_im_update_contact_workspace_for_web_settings(
     ide_chat_serialize(remote_im_update_contact_workspace_inner(state, input)?)
 }
 
-fn ide_chat_remote_im_delete_contact_for_web_settings(
+pub(crate) fn ide_chat_remote_im_delete_contact_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -259,7 +259,7 @@ fn ide_chat_remote_im_delete_contact_for_web_settings(
     ide_chat_serialize(remote_im_delete_contact_inner(state, input)?)
 }
 
-async fn ide_chat_remote_im_weixin_oc_start_login_for_web_settings(
+pub(crate) async fn ide_chat_remote_im_weixin_oc_start_login_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -267,7 +267,7 @@ async fn ide_chat_remote_im_weixin_oc_start_login_for_web_settings(
     ide_chat_serialize(weixin_oc_manager().start_login(state, input).await?)
 }
 
-async fn ide_chat_remote_im_weixin_oc_get_login_status_for_web_settings(
+pub(crate) async fn ide_chat_remote_im_weixin_oc_get_login_status_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -275,7 +275,7 @@ async fn ide_chat_remote_im_weixin_oc_get_login_status_for_web_settings(
     ide_chat_serialize(weixin_oc_manager().poll_login_status(state, input).await?)
 }
 
-async fn ide_chat_remote_im_weixin_oc_logout_for_web_settings(
+pub(crate) async fn ide_chat_remote_im_weixin_oc_logout_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -286,7 +286,7 @@ async fn ide_chat_remote_im_weixin_oc_logout_for_web_settings(
     ide_chat_serialize(true)
 }
 
-async fn ide_chat_remote_im_weixin_oc_sync_contacts_for_web_settings(
+pub(crate) async fn ide_chat_remote_im_weixin_oc_sync_contacts_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -369,7 +369,7 @@ pub(crate) async fn start_remote_im_services_inner(
     }))
 }
 
-async fn ide_chat_start_remote_im_services_for_web_settings(
+pub(crate) async fn ide_chat_start_remote_im_services_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
     ide_chat_serialize(start_remote_im_services_inner(state).await?)

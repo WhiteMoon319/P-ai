@@ -18,6 +18,7 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
 use uuid::Uuid;
 
 
+use std::collections::{HashSet};
 use super::*;
 // Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
 
@@ -1463,7 +1464,7 @@ pub(crate) fn write_app_data(path: &PathBuf, data: &AppData) -> Result<(), Strin
 }
 
 #[cfg(test)]
-mod conversation_section_orders_runtime_tests {
+pub(crate) mod conversation_section_orders_runtime_tests {
 
     #[test]
     fn build_runtime_state_file_should_preserve_conversation_section_orders() {

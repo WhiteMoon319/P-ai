@@ -1,19 +1,19 @@
-const TODO_TOOL_NAME: &str = "todo";
+pub(crate) const TODO_TOOL_NAME: &str = "todo";
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-struct TodoWriteRequest {
-    todos: Vec<TodoWireItem>,
+pub(crate) struct TodoWriteRequest {
+    pub(crate) todos: Vec<TodoWireItem>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
-struct TodoWireItem {
-    content: String,
-    status: String,
+pub(crate) struct TodoWireItem {
+    pub(crate) content: String,
+    pub(crate) status: String,
 }
 
-fn todo_status_normalized(raw: &str) -> Option<&'static str> {
+pub(crate) fn todo_status_normalized(raw: &str) -> Option<&'static str> {
     match raw.trim().to_ascii_lowercase().as_str() {
         "pending" => Some("pending"),
         "in_progress" => Some("in_progress"),
@@ -22,7 +22,7 @@ fn todo_status_normalized(raw: &str) -> Option<&'static str> {
     }
 }
 
-fn todo_items_normalized(items: &[TodoWireItem]) -> Result<Vec<ConversationTodoItem>, String> {
+pub(crate) fn todo_items_normalized(items: &[TodoWireItem]) -> Result<Vec<ConversationTodoItem>, String> {
     let mut normalized = Vec::<ConversationTodoItem>::new();
     let mut in_progress_count = 0usize;
     for item in items {
@@ -47,7 +47,7 @@ fn todo_items_normalized(items: &[TodoWireItem]) -> Result<Vec<ConversationTodoI
 }
 
 #[cfg(test)]
-fn todo_items_normalized_from_tool_args(
+pub(crate) fn todo_items_normalized_from_tool_args(
     tool_args: &str,
 ) -> Result<Vec<ConversationTodoItem>, String> {
     let request = serde_json::from_str::<TodoWriteRequest>(tool_args)
@@ -55,7 +55,7 @@ fn todo_items_normalized_from_tool_args(
     todo_items_normalized(&request.todos)
 }
 
-fn todo_provider_tool_definition() -> ProviderToolDefinition {
+pub(crate) fn todo_provider_tool_definition() -> ProviderToolDefinition {
     ProviderToolDefinition::new(
         TODO_TOOL_NAME,
         "会话内 Todo 步骤追踪工具。入参为完整 todos 列表，每次调用都会全量覆盖当前会话的 Todo。仅在复杂任务或多要求任务时使用；步骤数优先保持在 3~7 步；同一时刻只允许一个 in_progress；全部完成后应直接向用户汇报。",
@@ -84,11 +84,11 @@ fn todo_provider_tool_definition() -> ProviderToolDefinition {
     )
 }
 
-fn todo_items_all_completed(items: &[ConversationTodoItem]) -> bool {
+pub(crate) fn todo_items_all_completed(items: &[ConversationTodoItem]) -> bool {
     !items.is_empty() && items.iter().all(|item| item.status == "completed")
 }
 
-fn todo_status_marker(status: &str) -> &'static str {
+pub(crate) fn todo_status_marker(status: &str) -> &'static str {
     match status.trim() {
         "completed" => "✓",
         "in_progress" => "→",
@@ -96,7 +96,7 @@ fn todo_status_marker(status: &str) -> &'static str {
     }
 }
 
-fn todo_response_text(items: &[ConversationTodoItem]) -> String {
+pub(crate) fn todo_response_text(items: &[ConversationTodoItem]) -> String {
     if items.is_empty() {
         return "已经完成了所有步骤，请向用户进行汇报".to_string();
     }
@@ -115,7 +115,7 @@ fn todo_response_text(items: &[ConversationTodoItem]) -> String {
     lines.join("\n")
 }
 
-fn todo_markdown_block(items: &[ConversationTodoItem]) -> Option<String> {
+pub(crate) fn todo_markdown_block(items: &[ConversationTodoItem]) -> Option<String> {
     if items.is_empty() {
         return None;
     }
@@ -130,7 +130,7 @@ fn todo_markdown_block(items: &[ConversationTodoItem]) -> Option<String> {
     Some(lines.join("\n"))
 }
 
-fn build_conversation_todo_board_block(conversation: &Conversation) -> Option<String> {
+pub(crate) fn build_conversation_todo_board_block(conversation: &Conversation) -> Option<String> {
     if conversation.current_todos.is_empty() {
         return None;
     }
@@ -145,7 +145,7 @@ fn build_conversation_todo_board_block(conversation: &Conversation) -> Option<St
     Some(prompt_xml_block("todo board", lines.join("\n")))
 }
 
-fn build_todo_guide_block() -> String {
+pub(crate) fn build_todo_guide_block() -> String {
     prompt_xml_block(
         "todo guide",
         "todo 是当前复杂任务的步骤追踪器，不是长期任务系统。\n\
@@ -165,12 +165,12 @@ fn build_todo_guide_block() -> String {
     )
 }
 
-fn todo_target_conversation_id(session_id: &str) -> Result<String, String> {
+pub(crate) fn todo_target_conversation_id(session_id: &str) -> Result<String, String> {
     delegate_session_conversation_id(session_id)
         .ok_or_else(|| "todo 工具缺少 conversation_id，无法定位当前会话".to_string())
 }
 
-fn builtin_todo(
+pub(crate) fn builtin_todo(
     app_state: &AppState,
     session_id: &str,
     args: TodoWriteRequest,
@@ -183,7 +183,7 @@ fn builtin_todo(
 }
 
 #[cfg(test)]
-fn conversation_todo_list(state: &AppState, conversation_id: &str) -> Result<Vec<ConversationTodoItem>, String> {
+pub(crate) fn conversation_todo_list(state: &AppState, conversation_id: &str) -> Result<Vec<ConversationTodoItem>, String> {
     if let Some(conversation) = delegate_runtime_thread_conversation_get(state, conversation_id)? {
         return Ok(conversation.current_todos);
     }
@@ -194,7 +194,7 @@ fn conversation_todo_list(state: &AppState, conversation_id: &str) -> Result<Vec
 }
 
 #[cfg(test)]
-fn conversation_todo_replace(
+pub(crate) fn conversation_todo_replace(
     state: &AppState,
     conversation_id: &str,
     todos: Vec<ConversationTodoItem>,

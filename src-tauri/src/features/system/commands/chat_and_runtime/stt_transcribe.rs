@@ -1,4 +1,4 @@
-fn candidate_stt_urls(base_url: &str) -> Vec<String> {
+pub(crate) fn candidate_stt_urls(base_url: &str) -> Vec<String> {
     let base = base_url.trim().trim_end_matches('/');
     if base.is_empty() {
         return Vec::new();
@@ -18,7 +18,7 @@ fn candidate_stt_urls(base_url: &str) -> Vec<String> {
     urls
 }
 
-fn candidate_mimo_asr_urls(base_url: &str) -> Vec<String> {
+pub(crate) fn candidate_mimo_asr_urls(base_url: &str) -> Vec<String> {
     let base = base_url.trim().trim_end_matches('/');
     if base.is_empty() {
         return Vec::new();
@@ -38,7 +38,7 @@ fn candidate_mimo_asr_urls(base_url: &str) -> Vec<String> {
     urls
 }
 
-async fn call_openai_stt_transcribe(
+pub(crate) async fn call_openai_stt_transcribe(
     api_config: &ApiConfig,
     resolved_api: &ResolvedApiConfig,
     mime: &str,
@@ -61,7 +61,7 @@ async fn call_openai_stt_transcribe(
         .timeout(std::time::Duration::from_secs(60));
     #[cfg(target_os = "android")]
     {
-        client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+        client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)?;
     }
     let client = client_builder
         .build()
@@ -121,7 +121,7 @@ async fn call_openai_stt_transcribe(
     ))
 }
 
-async fn call_mimo_asr_transcribe(
+pub(crate) async fn call_mimo_asr_transcribe(
     api_config: &ApiConfig,
     resolved_api: &ResolvedApiConfig,
     mime: &str,
@@ -144,7 +144,7 @@ async fn call_mimo_asr_transcribe(
         .timeout(std::time::Duration::from_secs(60));
     #[cfg(target_os = "android")]
     {
-        client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+        client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)?;
     }
     let client = client_builder
         .build()
@@ -238,7 +238,7 @@ async fn call_mimo_asr_transcribe(
 }
 
 
-async fn stt_transcribe_inner(
+pub(crate) async fn stt_transcribe_inner(
     input: SttTranscribeInput,
     state: &AppState,
 ) -> Result<SttTranscribeOutput, String> {

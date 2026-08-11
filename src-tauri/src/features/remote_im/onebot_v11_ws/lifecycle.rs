@@ -35,7 +35,7 @@ impl Default for OnebotV11WsManager {
 }
 
 /// 全局 OneBot v11 WebSocket 管理器
-static ONEBOT_V11_WS_MANAGER: once_cell::sync::Lazy<Arc<OnebotV11WsManager>> =
+pub(crate) static ONEBOT_V11_WS_MANAGER: once_cell::sync::Lazy<Arc<OnebotV11WsManager>> =
     once_cell::sync::Lazy::new(|| Arc::new(OnebotV11WsManager::new()));
 
 pub fn onebot_v11_ws_manager() -> Arc<OnebotV11WsManager> {

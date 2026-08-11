@@ -510,7 +510,7 @@ pub(crate) fn tool_history_markdown_lines_from_message(message: &ChatMessage) ->
 }
 
 #[cfg(test)]
-mod message_semantics_tests {
+pub(crate) mod message_semantics_tests {
 
     fn test_message(role: &str, text: &str, created_at: &str) -> ChatMessage {
         ChatMessage {

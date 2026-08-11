@@ -296,7 +296,7 @@ impl ConversationServiceV2 {
 }
 
 #[cfg(test)]
-mod preserved_dialogue_tests {
+pub(crate) mod preserved_dialogue_tests {
     use super::*;
 
     fn text_message(id: &str, role: &str, text: &str) -> ChatMessage {

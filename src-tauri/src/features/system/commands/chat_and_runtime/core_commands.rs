@@ -1,4 +1,4 @@
-fn normalize_payload_image_attachments(
+pub(crate) fn normalize_payload_image_attachments(
     raw: Option<&Vec<BinaryPart>>,
 ) -> Vec<serde_json::Value> {
     let mut out = Vec::<serde_json::Value>::new();
@@ -37,7 +37,7 @@ fn normalize_payload_image_attachments(
     out
 }
 
-fn normalize_payload_mentions(
+pub(crate) fn normalize_payload_mentions(
     raw: Option<&Vec<UserMentionTargetInput>>,
 ) -> Vec<serde_json::Value> {
     let Some(items) = raw else {
@@ -65,7 +65,7 @@ fn normalize_payload_mentions(
     out
 }
 
-fn build_user_message_provider_meta(
+pub(crate) fn build_user_message_provider_meta(
     input_provider_meta: Option<Value>,
     attachments: &[serde_json::Value],
     mentions: &[serde_json::Value],
@@ -102,7 +102,7 @@ fn build_user_message_provider_meta(
     Some(Value::Object(root))
 }
 
-fn attachment_display_name(input: &AttachmentMetaInput) -> Option<String> {
+pub(crate) fn attachment_display_name(input: &AttachmentMetaInput) -> Option<String> {
     let file_name = input.file_name.trim();
     if !file_name.is_empty() {
         return Some(file_name.to_string());
@@ -119,7 +119,7 @@ fn attachment_display_name(input: &AttachmentMetaInput) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn build_attachment_only_display_text(
+pub(crate) fn build_attachment_only_display_text(
     raw_display_text: Option<&str>,
     raw_text: Option<&str>,
     images: &[BinaryPart],
@@ -173,16 +173,16 @@ fn build_attachment_only_display_text(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConfirmPlanAndContinueInput {
-    conversation_id: String,
-    plan_message_id: String,
+pub(crate) struct ConfirmPlanAndContinueInput {
+    pub(crate) conversation_id: String,
+    pub(crate) plan_message_id: String,
     #[serde(default)]
-    department_id: Option<String>,
+    pub(crate) department_id: Option<String>,
     #[serde(default)]
-    agent_id: Option<String>,
+    pub(crate) agent_id: Option<String>,
 }
 
-fn plan_path_from_message_provider_meta(message: &ChatMessage) -> Option<String> {
+pub(crate) fn plan_path_from_message_provider_meta(message: &ChatMessage) -> Option<String> {
     message
         .provider_meta
         .as_ref()
@@ -195,7 +195,7 @@ fn plan_path_from_message_provider_meta(message: &ChatMessage) -> Option<String>
         .map(ToOwned::to_owned)
 }
 
-fn resolve_plan_file_for_conversation_id(
+pub(crate) fn resolve_plan_file_for_conversation_id(
     state: &AppState,
     conversation_id: &str,
     raw_path: &str,
@@ -207,14 +207,14 @@ fn resolve_plan_file_for_conversation_id(
     resolve_plan_file_for_conversation(&base_root, raw_path)
 }
 
-fn plan_continue_prompt_block(plan_path: &str) -> String {
+pub(crate) fn plan_continue_prompt_block(plan_path: &str) -> String {
     format!(
         "<active_plans>\n以下为用户刚刚同意执行的计划文件。请读取该文件并开始执行；完成后调用 plan(action=complete) 并传入对应 path。\n<active_plan index=\"1\">\n{}\n</active_plan>\n</active_plans>",
         plan_path.trim()
     )
 }
 
-fn plan_continue_confirmation_message(plan_path: &str) -> ChatMessage {
+pub(crate) fn plan_continue_confirmation_message(plan_path: &str) -> ChatMessage {
     ChatMessage {
         id: Uuid::new_v4().to_string(),
         role: "user".to_string(),
@@ -238,7 +238,7 @@ fn plan_continue_confirmation_message(plan_path: &str) -> ChatMessage {
     }
 }
 
-fn resolve_runtime_control_department_and_agent(
+pub(crate) fn resolve_runtime_control_department_and_agent(
     state: &AppState,
     requested_department_id: Option<&str>,
     requested_agent_id: Option<&str>,
@@ -303,14 +303,14 @@ fn resolve_runtime_control_department_and_agent(
     Ok((department.id.clone(), agent_id))
 }
 
-fn plan_confirm_context_usage_ratio(source: &Conversation, selected_api: &ApiConfig) -> f64 {
+pub(crate) fn plan_confirm_context_usage_ratio(source: &Conversation, selected_api: &ApiConfig) -> f64 {
     conversation_prompt_service()
         .latest_real_prompt_usage(source, selected_api)
         .map(|usage| usage.usage_ratio.max(0.0))
         .unwrap_or(0.0)
 }
 
-async fn confirm_plan_and_continue_inner(
+pub(crate) async fn confirm_plan_and_continue_inner(
     state: &AppState,
     input: &ConfirmPlanAndContinueInput,
 ) -> Result<bool, String> {
@@ -473,7 +473,7 @@ async fn confirm_plan_and_continue_inner(
 
 
 
-fn read_plan_file_content_inner(
+pub(crate) fn read_plan_file_content_inner(
     conversation_id: &str,
     path: &str,
     state: &AppState,
@@ -491,79 +491,79 @@ fn read_plan_file_content_inner(
 }
 
 #[derive(Debug, Clone)]
-struct UserMentionPlan {
-    root_conversation_id: String,
-    source_department_id: String,
-    source_agent_id: String,
-    target_department_id: String,
-    target_agent_id: String,
-    target_agent_name: String,
-    instruction: String,
-    background: String,
-    target_api_config_ids: Vec<String>,
+pub(crate) struct UserMentionPlan {
+    pub(crate) root_conversation_id: String,
+    pub(crate) source_department_id: String,
+    pub(crate) source_agent_id: String,
+    pub(crate) target_department_id: String,
+    pub(crate) target_agent_id: String,
+    pub(crate) target_agent_name: String,
+    pub(crate) instruction: String,
+    pub(crate) background: String,
+    pub(crate) target_api_config_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
-struct UserMentionFailurePlan {
-    root_conversation_id: String,
-    source_agent_id: String,
-    target_department_id: String,
-    target_agent_id: String,
-    target_agent_name: String,
-    reason: String,
+pub(crate) struct UserMentionFailurePlan {
+    pub(crate) root_conversation_id: String,
+    pub(crate) source_agent_id: String,
+    pub(crate) target_department_id: String,
+    pub(crate) target_agent_id: String,
+    pub(crate) target_agent_name: String,
+    pub(crate) reason: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SubmitUserAsyncDelegateInput {
-    conversation_id: String,
-    target_department_id: String,
+pub(crate) struct SubmitUserAsyncDelegateInput {
+    pub(crate) conversation_id: String,
+    pub(crate) target_department_id: String,
     #[serde(default)]
-    target_agent_id: Option<String>,
+    pub(crate) target_agent_id: Option<String>,
     #[serde(default)]
-    preset_id: Option<String>,
+    pub(crate) preset_id: Option<String>,
     #[serde(default)]
-    why: Option<String>,
+    pub(crate) why: Option<String>,
     #[serde(default)]
-    goal: Option<String>,
+    pub(crate) goal: Option<String>,
     #[serde(default)]
-    todo: Option<String>,
+    pub(crate) todo: Option<String>,
     #[serde(default)]
-    background: Option<String>,
+    pub(crate) background: Option<String>,
     #[serde(default)]
-    question: Option<String>,
+    pub(crate) question: Option<String>,
     #[serde(default)]
-    focus: Option<String>,
+    pub(crate) focus: Option<String>,
     #[serde(default)]
-    selected_message_ids: Vec<String>,
+    pub(crate) selected_message_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct SubmitUserAsyncDelegateOutput {
-    delegate_id: String,
-    conversation_id: String,
-    target_agent_id: String,
-    target_agent_name: String,
-    selected_message_count: usize,
+pub(crate) struct SubmitUserAsyncDelegateOutput {
+    pub(crate) delegate_id: String,
+    pub(crate) conversation_id: String,
+    pub(crate) target_agent_id: String,
+    pub(crate) target_agent_name: String,
+    pub(crate) selected_message_count: usize,
 }
 
 #[derive(Debug, Clone)]
-struct UserAsyncDelegatePlan {
-    root_conversation_id: String,
-    source_department_id: String,
-    source_agent_id: String,
-    target_department_id: String,
-    target_agent_id: String,
-    target_agent_name: String,
-    title: String,
-    goal: String,
-    why: String,
-    todo: String,
-    target_api_config_ids: Vec<String>,
+pub(crate) struct UserAsyncDelegatePlan {
+    pub(crate) root_conversation_id: String,
+    pub(crate) source_department_id: String,
+    pub(crate) source_agent_id: String,
+    pub(crate) target_department_id: String,
+    pub(crate) target_agent_id: String,
+    pub(crate) target_agent_name: String,
+    pub(crate) title: String,
+    pub(crate) goal: String,
+    pub(crate) why: String,
+    pub(crate) todo: String,
+    pub(crate) target_api_config_ids: Vec<String>,
 }
 
-fn build_user_mention_context_snapshot_from_messages(
+pub(crate) fn build_user_mention_context_snapshot_from_messages(
     messages: &[ChatMessage],
     agents: &[AgentProfile],
     latest_user_text: &str,
@@ -608,7 +608,7 @@ fn build_user_mention_context_snapshot_from_messages(
     lines.join("\n")
 }
 
-fn read_user_mention_context_snapshot(
+pub(crate) fn read_user_mention_context_snapshot(
     state: &AppState,
     conversation_meta: &ConversationMetaView,
     agents: &[AgentProfile],
@@ -632,7 +632,7 @@ fn read_user_mention_context_snapshot(
     ))
 }
 
-fn build_user_mention_dispatch_plans(
+pub(crate) fn build_user_mention_dispatch_plans(
     app_config: &AppConfig,
     root_conversation_id: &str,
     mention_background: &str,
@@ -751,7 +751,7 @@ fn build_user_mention_dispatch_plans(
     Ok((mention_plans, mention_failures))
 }
 
-fn user_async_delegate_message_text(message: &ChatMessage) -> String {
+pub(crate) fn user_async_delegate_message_text(message: &ChatMessage) -> String {
     if message.role.trim() != "user" && message.role.trim() != "assistant" {
         return String::new();
     }
@@ -767,7 +767,7 @@ fn user_async_delegate_message_text(message: &ChatMessage) -> String {
     chunks.join("\n").trim().to_string()
 }
 
-fn user_async_delegate_speaker_name(message: &ChatMessage, agents: &[AgentProfile]) -> String {
+pub(crate) fn user_async_delegate_speaker_name(message: &ChatMessage, agents: &[AgentProfile]) -> String {
     if message.role.trim() == "user" {
         return "用户".to_string();
     }
@@ -785,7 +785,7 @@ fn user_async_delegate_speaker_name(message: &ChatMessage, agents: &[AgentProfil
         .unwrap_or_else(|| "助理".to_string())
 }
 
-fn user_async_delegate_truncate_chars(text: &str, max_chars: usize) -> String {
+pub(crate) fn user_async_delegate_truncate_chars(text: &str, max_chars: usize) -> String {
     if text.chars().count() <= max_chars {
         return text.to_string();
     }
@@ -793,7 +793,7 @@ fn user_async_delegate_truncate_chars(text: &str, max_chars: usize) -> String {
     format!("{head}\n[内容过长，已截断]")
 }
 
-fn build_user_async_delegate_selected_context(
+pub(crate) fn build_user_async_delegate_selected_context(
     conversation: &Conversation,
     agents: &[AgentProfile],
     selected_message_ids: &[String],
@@ -819,7 +819,7 @@ fn build_user_async_delegate_selected_context(
     (user_async_delegate_truncate_chars(joined.trim(), 30000), count)
 }
 
-fn normalize_user_async_delegate_why(raw_why: &str) -> String {
+pub(crate) fn normalize_user_async_delegate_why(raw_why: &str) -> String {
     let trimmed = raw_why.trim();
     if trimmed.eq_ignore_ascii_case("请使用review skill")
         || trimmed.eq_ignore_ascii_case("请使用 review skill")
@@ -829,7 +829,7 @@ fn normalize_user_async_delegate_why(raw_why: &str) -> String {
     trimmed.to_string()
 }
 
-fn build_user_async_delegate_why(
+pub(crate) fn build_user_async_delegate_why(
     raw_why: &str,
     selected_context: &str,
 ) -> String {
@@ -845,7 +845,7 @@ fn build_user_async_delegate_why(
     parts.join("\n\n")
 }
 
-fn user_async_delegate_title(goal: &str, preset_id: Option<&str>) -> String {
+pub(crate) fn user_async_delegate_title(goal: &str, preset_id: Option<&str>) -> String {
     let prefix = match preset_id.map(str::trim).filter(|value| !value.is_empty()) {
         Some("review") => "审查委托",
         Some(_) => "异步委托",
@@ -865,7 +865,7 @@ fn user_async_delegate_title(goal: &str, preset_id: Option<&str>) -> String {
     }
 }
 
-fn resolve_user_async_delegate_plan(
+pub(crate) fn resolve_user_async_delegate_plan(
     app_state: &AppState,
     input: &SubmitUserAsyncDelegateInput,
 ) -> Result<(UserAsyncDelegatePlan, usize), String> {
@@ -978,7 +978,7 @@ fn resolve_user_async_delegate_plan(
     ))
 }
 
-fn enqueue_user_mention_result_message(
+pub(crate) fn enqueue_user_mention_result_message(
     app_state: &AppState,
     root_conversation_id: &str,
     source_agent_id: &str,
@@ -1022,12 +1022,12 @@ fn enqueue_user_mention_result_message(
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationMessageAppendedPayload {
-    conversation_id: String,
-    message: ChatMessage,
+pub(crate) struct ConversationMessageAppendedPayload {
+    pub(crate) conversation_id: String,
+    pub(crate) message: ChatMessage,
 }
 
-fn emit_conversation_message_appended_event(
+pub(crate) fn emit_conversation_message_appended_event(
     app_state: &AppState,
     conversation_id: &str,
     message: &ChatMessage,
@@ -1064,7 +1064,7 @@ fn emit_conversation_message_appended_event(
     }
 }
 
-fn append_delegate_result_message_and_emit(
+pub(crate) fn append_delegate_result_message_and_emit(
     app_state: &AppState,
     conversation_id: &str,
     message: &ChatMessage,
@@ -1115,7 +1115,7 @@ fn append_delegate_result_message_and_emit(
     Ok(())
 }
 
-fn spawn_user_mention_failure_message(app_state: AppState, failure: UserMentionFailurePlan) {
+pub(crate) fn spawn_user_mention_failure_message(app_state: AppState, failure: UserMentionFailurePlan) {
     tokio::spawn(async move {
         let text = format!("《用户@委托：{}》执行失败：{}", failure.target_agent_name.trim(), failure.reason.trim());
         if let Err(err) = enqueue_user_mention_result_message(
@@ -1145,7 +1145,7 @@ fn spawn_user_mention_failure_message(app_state: AppState, failure: UserMentionF
     });
 }
 
-fn spawn_user_async_delegate(app_state: AppState, plan: UserAsyncDelegatePlan) -> Result<String, String> {
+pub(crate) fn spawn_user_async_delegate(app_state: AppState, plan: UserAsyncDelegatePlan) -> Result<String, String> {
     let delegate = delegate_create_record(
         &app_state,
         DELEGATE_TOOL_KIND_USER_MENTION,
@@ -1265,7 +1265,7 @@ fn spawn_user_async_delegate(app_state: AppState, plan: UserAsyncDelegatePlan) -
     Ok(delegate_id)
 }
 
-fn spawn_user_mention_delegate(app_state: AppState, plan: UserMentionPlan) {
+pub(crate) fn spawn_user_mention_delegate(app_state: AppState, plan: UserMentionPlan) {
     tokio::spawn(async move {
         let delegate = match delegate_create_record(
             &app_state,
@@ -1378,7 +1378,7 @@ fn spawn_user_mention_delegate(app_state: AppState, plan: UserMentionPlan) {
     });
 }
 
-fn spawn_user_mention_after_message_flushed(
+pub(crate) fn spawn_user_mention_after_message_flushed(
     app_state: AppState,
     event_id: String,
     result_rx: tokio::sync::oneshot::Receiver<Result<SendChatResult, String>>,
@@ -1411,9 +1411,9 @@ fn spawn_user_mention_after_message_flushed(
     });
 }
 
-const ACCEPTED_SUBMIT_TRACE_ID_LIMIT: usize = 5000;
+pub(crate) const ACCEPTED_SUBMIT_TRACE_ID_LIMIT: usize = 5000;
 
-fn normalize_send_extra_text_blocks(payload: &ChatInputPayload) -> Vec<String> {
+pub(crate) fn normalize_send_extra_text_blocks(payload: &ChatInputPayload) -> Vec<String> {
     payload
         .extra_text_blocks
         .as_ref()
@@ -1427,7 +1427,7 @@ fn normalize_send_extra_text_blocks(payload: &ChatInputPayload) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn claim_submit_trace_id(state: &AppState, trace_id: &str) -> Result<bool, String> {
+pub(crate) fn claim_submit_trace_id(state: &AppState, trace_id: &str) -> Result<bool, String> {
     let trace_id = trace_id.trim();
     if trace_id.is_empty() {
         return Ok(true);
@@ -1446,7 +1446,7 @@ fn claim_submit_trace_id(state: &AppState, trace_id: &str) -> Result<bool, Strin
     Ok(true)
 }
 
-fn release_submit_trace_id(state: &AppState, trace_id: &str) {
+pub(crate) fn release_submit_trace_id(state: &AppState, trace_id: &str) {
     let trace_id = trace_id.trim();
     if trace_id.is_empty() {
         return;
@@ -1458,7 +1458,7 @@ fn release_submit_trace_id(state: &AppState, trace_id: &str) {
     }
 }
 
-async fn submit_chat_message_inner(
+pub(crate) async fn submit_chat_message_inner(
     input: SendChatRequest,
     state: &AppState,
     on_delta: Option<DeltaChannel>,
@@ -1726,7 +1726,7 @@ async fn submit_chat_message_inner(
 
 
 
-async fn submit_user_async_delegate_internal(
+pub(crate) async fn submit_user_async_delegate_internal(
     input: SubmitUserAsyncDelegateInput,
     state: &AppState,
 ) -> Result<SubmitUserAsyncDelegateOutput, String> {
@@ -1754,28 +1754,28 @@ async fn submit_user_async_delegate_internal(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct BindActiveChatViewStreamInput {
+pub(crate) struct BindActiveChatViewStreamInput {
     #[serde(default)]
-    binding_id: String,
+    pub(crate) binding_id: String,
     #[serde(default)]
-    conversation_id: Option<String>,
+    pub(crate) conversation_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct UnbindActiveChatViewStreamInput {
+pub(crate) struct UnbindActiveChatViewStreamInput {
     #[serde(default)]
-    binding_id: String,
+    pub(crate) binding_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ProbeActiveChatViewStreamInput {
+pub(crate) struct ProbeActiveChatViewStreamInput {
     #[serde(default)]
-    binding_id: String,
+    pub(crate) binding_id: String,
     #[serde(default)]
-    conversation_id: Option<String>,
-    probe_id: String,
+    pub(crate) conversation_id: Option<String>,
+    pub(crate) probe_id: String,
 }
 
 
@@ -1783,7 +1783,7 @@ struct ProbeActiveChatViewStreamInput {
 
 
 
-fn stop_chat_message_inner(
+pub(crate) fn stop_chat_message_inner(
     input: StopChatRequest,
     state: &AppState,
 ) -> Result<StopChatResult, String> {
@@ -1861,13 +1861,13 @@ fn stop_chat_message_inner(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GetConversationFastRequestTurnsInput {
-    conversation_id: String,
+pub(crate) struct GetConversationFastRequestTurnsInput {
+    pub(crate) conversation_id: String,
 }
 
 
 
-fn recall_chat_queue_event_inner(
+pub(crate) fn recall_chat_queue_event_inner(
     event_id: &str,
     state: &AppState,
 ) -> Result<ChatQueueRecallResult, String> {
@@ -1890,7 +1890,7 @@ fn recall_chat_queue_event_inner(
 }
 
 
-fn mark_chat_queue_event_guided_inner(event_id: &str, state: &AppState) -> Result<bool, String> {
+pub(crate) fn mark_chat_queue_event_guided_inner(event_id: &str, state: &AppState) -> Result<bool, String> {
     let conversation_id = mark_queue_event_guided(state, event_id)?;
     if let Some(conversation_id) = conversation_id {
         trigger_guided_queue_processing(state, &conversation_id);
@@ -1901,14 +1901,14 @@ fn mark_chat_queue_event_guided_inner(event_id: &str, state: &AppState) -> Resul
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct InterruptConversationRuntimeResult {
-    aborted: bool,
-    cleared_queue_count: usize,
+pub(crate) struct InterruptConversationRuntimeResult {
+    pub(crate) aborted: bool,
+    pub(crate) cleared_queue_count: usize,
 }
 
 
 
-fn assistant_text_from_stream_blocks(blocks: &[AssistantStreamBlock]) -> String {
+pub(crate) fn assistant_text_from_stream_blocks(blocks: &[AssistantStreamBlock]) -> String {
     blocks
         .iter()
         .map(|block| block.text.as_str())
@@ -1916,7 +1916,7 @@ fn assistant_text_from_stream_blocks(blocks: &[AssistantStreamBlock]) -> String 
         .join("")
 }
 
-fn reasoning_text_from_stream_blocks(blocks: &[AssistantStreamBlock]) -> String {
+pub(crate) fn reasoning_text_from_stream_blocks(blocks: &[AssistantStreamBlock]) -> String {
     blocks
         .iter()
         .map(|block| block.reasoning.trim())

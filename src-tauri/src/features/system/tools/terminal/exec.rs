@@ -1,4 +1,4 @@
-fn terminal_workspace_access_rank(access: &str) -> i32 {
+pub(crate) fn terminal_workspace_access_rank(access: &str) -> i32 {
     match access {
         SHELL_WORKSPACE_ACCESS_READ_ONLY => 3,
         SHELL_WORKSPACE_ACCESS_APPROVAL => 2,
@@ -6,15 +6,15 @@ fn terminal_workspace_access_rank(access: &str) -> i32 {
     }
 }
 
-const TERMINAL_EXEC_COMMITMENT_TEXT: &str = "用户已经充分理解本命令的危险性并且批准本次执行";
+pub(crate) const TERMINAL_EXEC_COMMITMENT_TEXT: &str = "用户已经充分理解本命令的危险性并且批准本次执行";
 
-fn terminal_commitment_approves(commitment: Option<&str>) -> bool {
+pub(crate) fn terminal_commitment_approves(commitment: Option<&str>) -> bool {
     commitment
         .map(|value| value.trim() == TERMINAL_EXEC_COMMITMENT_TEXT)
         .unwrap_or(false)
 }
 
-fn terminal_output_only_command_is_read_only(base_cmd: &str) -> bool {
+pub(crate) fn terminal_output_only_command_is_read_only(base_cmd: &str) -> bool {
     matches!(
         base_cmd,
         "echo"
@@ -31,13 +31,13 @@ fn terminal_output_only_command_is_read_only(base_cmd: &str) -> bool {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct TerminalReadWhitelistSimpleCommand {
-    command: String,
-    allowed: bool,
-    reason: String,
+pub(crate) struct TerminalReadWhitelistSimpleCommand {
+    pub(crate) command: String,
+    pub(crate) allowed: bool,
+    pub(crate) reason: String,
 }
 
-fn terminal_simple_command_text(simple: &TerminalSimpleCommand) -> String {
+pub(crate) fn terminal_simple_command_text(simple: &TerminalSimpleCommand) -> String {
     let mut parts = simple.argv.clone();
     for redirection in &simple.output_redirections {
         let operator = if redirection.append { ">>" } else { ">" };
@@ -46,7 +46,7 @@ fn terminal_simple_command_text(simple: &TerminalSimpleCommand) -> String {
     parts.join(" ")
 }
 
-fn terminal_read_whitelist_base_command(simple: &TerminalSimpleCommand, family: TerminalShellFamily) -> Option<(String, usize)> {
+pub(crate) fn terminal_read_whitelist_base_command(simple: &TerminalSimpleCommand, family: TerminalShellFamily) -> Option<(String, usize)> {
     match family {
         TerminalShellFamily::PowerShell => {
             let first = simple.argv.first()?;
@@ -64,7 +64,7 @@ fn terminal_read_whitelist_base_command(simple: &TerminalSimpleCommand, family: 
     }
 }
 
-fn terminal_simple_command_read_whitelist_allowed(
+pub(crate) fn terminal_simple_command_read_whitelist_allowed(
     simple: &TerminalSimpleCommand,
     family: TerminalShellFamily,
 ) -> bool {
@@ -130,7 +130,7 @@ fn terminal_simple_command_read_whitelist_allowed(
     }
 }
 
-fn terminal_read_whitelist_simple_commands(
+pub(crate) fn terminal_read_whitelist_simple_commands(
     command: &str,
     shell_kind: &str,
     analysis: &TerminalCommandAnalysis,
@@ -178,7 +178,7 @@ fn terminal_read_whitelist_simple_commands(
         .collect()
 }
 
-fn terminal_read_whitelist_diagnostics_value(
+pub(crate) fn terminal_read_whitelist_diagnostics_value(
     command: &str,
     shell_kind: &str,
     analysis: &TerminalCommandAnalysis,
@@ -203,7 +203,7 @@ fn terminal_read_whitelist_diagnostics_value(
     })
 }
 
-fn terminal_read_whitelist_diagnostics_message(
+pub(crate) fn terminal_read_whitelist_diagnostics_message(
     command: &str,
     shell_kind: &str,
     analysis: &TerminalCommandAnalysis,
@@ -235,11 +235,11 @@ fn terminal_read_whitelist_diagnostics_message(
     lines.join("\n")
 }
 
-fn terminal_read_whitelist_usage_hint() -> &'static str {
+pub(crate) fn terminal_read_whitelist_usage_hint() -> &'static str {
     "只读命令白名单不受目录权限影响。若只是读取、查询、检查，请优先使用常见只读命令，例如 git status、git diff、git log、git show、git branch、git grep、rg、grep、ls、cat。"
 }
 
-fn terminal_strictest_workspace_access(accesses: &[String]) -> String {
+pub(crate) fn terminal_strictest_workspace_access(accesses: &[String]) -> String {
     accesses
         .iter()
         .max_by_key(|access| terminal_workspace_access_rank(access))
@@ -247,7 +247,7 @@ fn terminal_strictest_workspace_access(accesses: &[String]) -> String {
         .unwrap_or_else(|| SHELL_WORKSPACE_ACCESS_FULL_ACCESS.to_string())
 }
 
-fn terminal_is_python_like_command(command: &str) -> bool {
+pub(crate) fn terminal_is_python_like_command(command: &str) -> bool {
     let tokens = terminal_tokenize(command);
     let Some(first) = tokens.first() else {
         return false;
@@ -261,7 +261,7 @@ fn terminal_is_python_like_command(command: &str) -> bool {
     matches!(exe.as_str(), "python" | "python.exe" | "py" | "py.exe")
 }
 
-fn terminal_git_read_only_subcommand(subcommand: &str) -> bool {
+pub(crate) fn terminal_git_read_only_subcommand(subcommand: &str) -> bool {
     matches!(
         subcommand,
         "log"
@@ -280,16 +280,16 @@ fn terminal_git_read_only_subcommand(subcommand: &str) -> bool {
     )
 }
 
-fn terminal_git_read_whitelist_allowed(subcommand: &str, argv: &[String], arg_start_idx: usize) -> bool {
+pub(crate) fn terminal_git_read_whitelist_allowed(subcommand: &str, argv: &[String], arg_start_idx: usize) -> bool {
     let args = argv.get(arg_start_idx.saturating_add(1)..).unwrap_or(&[]);
     terminal_git_subcommand_is_read_only_with_args(subcommand, args)
 }
 
-fn terminal_git_arg_lower(arg: &str) -> String {
+pub(crate) fn terminal_git_arg_lower(arg: &str) -> String {
     terminal_unquote_token(arg).to_ascii_lowercase()
 }
 
-fn terminal_git_subcommand_is_read_only_with_args(subcommand: &str, args: &[String]) -> bool {
+pub(crate) fn terminal_git_subcommand_is_read_only_with_args(subcommand: &str, args: &[String]) -> bool {
     match subcommand {
         "branch" => terminal_git_branch_is_read_only(args),
         "tag" => terminal_git_tag_is_read_only(args),
@@ -298,7 +298,7 @@ fn terminal_git_subcommand_is_read_only_with_args(subcommand: &str, args: &[Stri
     }
 }
 
-fn terminal_git_branch_is_read_only(args: &[String]) -> bool {
+pub(crate) fn terminal_git_branch_is_read_only(args: &[String]) -> bool {
     let mut positional_count = 0usize;
     for raw in args {
         let arg = terminal_git_arg_lower(raw);
@@ -313,7 +313,7 @@ fn terminal_git_branch_is_read_only(args: &[String]) -> bool {
     })
 }
 
-fn terminal_git_tag_is_read_only(args: &[String]) -> bool {
+pub(crate) fn terminal_git_tag_is_read_only(args: &[String]) -> bool {
     let mut positional_count = 0usize;
     for raw in args {
         let arg = terminal_git_arg_lower(raw);
@@ -328,7 +328,7 @@ fn terminal_git_tag_is_read_only(args: &[String]) -> bool {
     })
 }
 
-fn terminal_git_config_is_read_only(args: &[String]) -> bool {
+pub(crate) fn terminal_git_config_is_read_only(args: &[String]) -> bool {
     let mut has_read_mode = false;
     let mut pending_read_option_value = false;
     for raw in args {
@@ -353,7 +353,7 @@ fn terminal_git_config_is_read_only(args: &[String]) -> bool {
     has_read_mode
 }
 
-fn terminal_check_command_is_read_only(base_cmd: &str, args: &[String]) -> bool {
+pub(crate) fn terminal_check_command_is_read_only(base_cmd: &str, args: &[String]) -> bool {
     match base_cmd {
         "pnpm" | "pnpm.cmd" | "npm" | "npm.cmd" | "yarn" | "yarn.cmd" => args
             .iter()
@@ -370,22 +370,22 @@ fn terminal_check_command_is_read_only(base_cmd: &str, args: &[String]) -> bool 
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct TerminalSmartReviewReply {
+pub(crate) struct TerminalSmartReviewReply {
     #[serde(default)]
-    allow: bool,
+    pub(crate) allow: bool,
     #[serde(default)]
-    review_opinion: String,
+    pub(crate) review_opinion: String,
 }
 
 #[derive(Debug, Clone)]
-struct TerminalSmartReviewDecision {
-    allow: bool,
-    review_opinion: String,
-    model_name: String,
+pub(crate) struct TerminalSmartReviewDecision {
+    pub(crate) allow: bool,
+    pub(crate) review_opinion: String,
+    pub(crate) model_name: String,
 }
 
 #[derive(Debug, Clone)]
-enum TerminalSmartReviewOutcome {
+pub(crate) enum TerminalSmartReviewOutcome {
     Decision(TerminalSmartReviewDecision),
     RawJson {
         raw_json: String,
@@ -393,7 +393,7 @@ enum TerminalSmartReviewOutcome {
     },
 }
 
-fn terminal_localized_text(ui_language: &str, zh_cn: &str, zh_tw: &str, en: &str) -> String {
+pub(crate) fn terminal_localized_text(ui_language: &str, zh_cn: &str, zh_tw: &str, en: &str) -> String {
     match ui_language.trim() {
         "en-US" => en.to_string(),
         "zh-TW" => zh_tw.to_string(),
@@ -401,11 +401,11 @@ fn terminal_localized_text(ui_language: &str, zh_cn: &str, zh_tw: &str, en: &str
     }
 }
 
-fn terminal_local_rule_model_name(ui_language: &str) -> String {
+pub(crate) fn terminal_local_rule_model_name(ui_language: &str) -> String {
     terminal_localized_text(ui_language, "本地规则", "本地規則", "Local rules")
 }
 
-fn terminal_local_review_value(ui_language: &str, review_opinion: impl Into<String>) -> Value {
+pub(crate) fn terminal_local_review_value(ui_language: &str, review_opinion: impl Into<String>) -> Value {
     serde_json::json!({
         "kind": "local_rule",
         "allow": false,
@@ -414,7 +414,7 @@ fn terminal_local_review_value(ui_language: &str, review_opinion: impl Into<Stri
     })
 }
 
-fn terminal_local_rule_reason_message(ui_language: &str, reason: &str) -> String {
+pub(crate) fn terminal_local_rule_reason_message(ui_language: &str, reason: &str) -> String {
     match reason {
         "encoded command is blocked" => terminal_localized_text(
             ui_language,
@@ -533,7 +533,7 @@ fn terminal_local_rule_reason_message(ui_language: &str, reason: &str) -> String
     }
 }
 
-fn terminal_command_is_read_whitelist(
+pub(crate) fn terminal_command_is_read_whitelist(
     command: &str,
     shell_kind: &str,
     analysis: &TerminalCommandAnalysis,
@@ -564,7 +564,7 @@ fn terminal_command_is_read_whitelist(
     true
 }
 
-fn terminal_read_whitelist_cwd_from_command(
+pub(crate) fn terminal_read_whitelist_cwd_from_command(
     command: &str,
     shell_kind: &str,
     fallback_cwd: &Path,
@@ -606,7 +606,7 @@ fn terminal_read_whitelist_cwd_from_command(
     cwd
 }
 
-fn terminal_read_whitelist_cwd_for_execution(
+pub(crate) fn terminal_read_whitelist_cwd_for_execution(
     command: &str,
     shell_kind: &str,
     fallback_cwd: &Path,
@@ -616,7 +616,7 @@ fn terminal_read_whitelist_cwd_for_execution(
         .unwrap_or_else(|_| fallback_cwd.to_path_buf())
 }
 
-fn terminal_smart_review_language(ui_language: &str) -> &'static str {
+pub(crate) fn terminal_smart_review_language(ui_language: &str) -> &'static str {
     match ui_language.trim() {
         "en-US" => "English",
         "zh-TW" => "繁體中文",
@@ -624,7 +624,7 @@ fn terminal_smart_review_language(ui_language: &str) -> &'static str {
     }
 }
 
-fn terminal_smart_review_extract_json(raw: &str) -> &str {
+pub(crate) fn terminal_smart_review_extract_json(raw: &str) -> &str {
     let trimmed = raw.trim();
     if let Some(stripped) = trimmed.strip_prefix("```json") {
         return stripped.trim().trim_end_matches("```").trim();
@@ -635,7 +635,7 @@ fn terminal_smart_review_extract_json(raw: &str) -> &str {
     trimmed
 }
 
-fn terminal_smart_review_local_risk_label(write_risk: &TerminalWriteRisk) -> &'static str {
+pub(crate) fn terminal_smart_review_local_risk_label(write_risk: &TerminalWriteRisk) -> &'static str {
     match write_risk {
         TerminalWriteRisk::None => "none",
         TerminalWriteRisk::NewOnly { .. } => "new_write",
@@ -644,7 +644,7 @@ fn terminal_smart_review_local_risk_label(write_risk: &TerminalWriteRisk) -> &'s
     }
 }
 
-fn terminal_smart_review_local_risk_summary(write_risk: &TerminalWriteRisk) -> String {
+pub(crate) fn terminal_smart_review_local_risk_summary(write_risk: &TerminalWriteRisk) -> String {
     match write_risk {
         TerminalWriteRisk::None => "No local write risk was detected.".to_string(),
         TerminalWriteRisk::NewOnly { count } => format!(
@@ -661,7 +661,7 @@ fn terminal_smart_review_local_risk_summary(write_risk: &TerminalWriteRisk) -> S
     }
 }
 
-fn terminal_smart_review_paths(paths: &[PathBuf]) -> Vec<String> {
+pub(crate) fn terminal_smart_review_paths(paths: &[PathBuf]) -> Vec<String> {
     paths
         .iter()
         .take(8)
@@ -669,7 +669,7 @@ fn terminal_smart_review_paths(paths: &[PathBuf]) -> Vec<String> {
         .collect()
 }
 
-fn tool_safety_review_system_prompt(language: &str) -> String {
+pub(crate) fn tool_safety_review_system_prompt(language: &str) -> String {
     format!(
         "请使用{language}完成工具执行评估。\n\
 你负责判断当前工具执行结果是否可以直接放行，还是必须先交给用户确认。\n\
@@ -687,11 +687,11 @@ JSON 只能包含这些字段：allow, review_opinion。\n\
     )
 }
 
-fn build_tool_safety_review_user_prompt(tool_name: &str, context: &Value) -> String {
+pub(crate) fn build_tool_safety_review_user_prompt(tool_name: &str, context: &Value) -> String {
     format!("当前待评估工具：{tool_name}\n请评估以下内容：\n{context}")
 }
 
-fn current_tool_review_api_config_id(state: &AppState) -> Result<Option<String>, String> {
+pub(crate) fn current_tool_review_api_config_id(state: &AppState) -> Result<Option<String>, String> {
     let app_config = state_read_config_cached(state)?;
     Ok(app_config
         .tool_review_api_config_id
@@ -701,7 +701,7 @@ fn current_tool_review_api_config_id(state: &AppState) -> Result<Option<String>,
         .map(ToString::to_string))
 }
 
-async fn run_tool_smart_review(
+pub(crate) async fn run_tool_smart_review(
     state: &AppState,
     review_api_config_id: &str,
     tool_name: &str,
@@ -829,7 +829,7 @@ async fn run_tool_smart_review(
     }))
 }
 
-async fn terminal_run_smart_review(
+pub(crate) async fn terminal_run_smart_review(
     state: &AppState,
     review_api_config_id: &str,
     cwd: &Path,
@@ -859,7 +859,7 @@ async fn terminal_run_smart_review(
     .await
 }
 
-async fn builtin_shell_exec(
+pub(crate) async fn builtin_shell_exec(
     state: &AppState,
     session_id: &str,
     action: &str,

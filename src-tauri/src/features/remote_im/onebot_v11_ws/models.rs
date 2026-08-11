@@ -52,17 +52,17 @@ pub struct OnebotV11WsCredentials {
     pub ws_token: Option<String>,
 }
 
-fn default_ws_host() -> String {
+pub(crate) fn default_ws_host() -> String {
     "0.0.0.0".to_string()
 }
 
-fn default_ws_port() -> u16 {
+pub(crate) fn default_ws_port() -> u16 {
     6199
 }
 
-const NAPCAT_RECONNECT_INTERVAL_SECS: u64 = 30;
-const NAPCAT_MAX_MEDIA_DOWNLOAD_SIZE_BYTES: u64 = 20 * 1024 * 1024;
-const NAPCAT_ACTIVE_CONNECTION_REPLACE_TIMEOUT_MS: u64 = 1500;
+pub(crate) const NAPCAT_RECONNECT_INTERVAL_SECS: u64 = 30;
+pub(crate) const NAPCAT_MAX_MEDIA_DOWNLOAD_SIZE_BYTES: u64 = 20 * 1024 * 1024;
+pub(crate) const NAPCAT_ACTIVE_CONNECTION_REPLACE_TIMEOUT_MS: u64 = 1500;
 
 impl OnebotV11WsCredentials {
     pub fn from_credentials(credentials: &Value) -> Self {
@@ -82,56 +82,56 @@ impl Default for OnebotV11WsCredentials {
 
 /// OneBot v11 API 请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct OneBotApiRequest {
-    action: String,
-    params: Value,
+pub(crate) struct OneBotApiRequest {
+    pub(crate) action: String,
+    pub(crate) params: Value,
     #[serde(default)]
-    echo: Option<Value>,
+    pub(crate) echo: Option<Value>,
 }
 
 /// OneBot v11 API 响应
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct OneBotApiResponse {
-    status: String,
-    retcode: i64,
-    data: Value,
+pub(crate) struct OneBotApiResponse {
+    pub(crate) status: String,
+    pub(crate) retcode: i64,
+    pub(crate) data: Value,
     #[serde(default)]
-    echo: Option<Value>,
+    pub(crate) echo: Option<Value>,
 }
 
 /// WebSocket 连接信息
-struct WsConnection {
+pub(crate) struct WsConnection {
     /// 发送请求的通道
-    tx: broadcast::Sender<String>,
+    pub(crate) tx: broadcast::Sender<String>,
     /// 等待响应的 oneshot 映射: echo -> sender
-    pending_responses: Arc<RwLock<HashMap<String, oneshot::Sender<OneBotApiResponse>>>>,
+    pub(crate) pending_responses: Arc<RwLock<HashMap<String, oneshot::Sender<OneBotApiResponse>>>>,
     /// 连接的对端地址
-    peer_addr: Option<String>,
+    pub(crate) peer_addr: Option<String>,
     /// 连接时间
-    connected_at: Option<DateTime<Utc>>,
+    pub(crate) connected_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Clone)]
-struct OnebotChannelRuntime {
+pub(crate) struct OnebotChannelRuntime {
     #[allow(dead_code)] // 用于测试中的 runtime 匹配验证
-    id: String,
-    cancel: CancellationToken,
-    tasks: TaskTracker,
+    pub(crate) id: String,
+    pub(crate) cancel: CancellationToken,
+    pub(crate) tasks: TaskTracker,
 }
 
 /// axum WebSocket handler 所需的共享状态
 #[derive(Clone)]
-struct OnebotAxumState {
-    channel_id: String,
-    expected_token: Option<String>,
-    conn_tx: broadcast::Sender<String>,
-    pending_responses: Arc<RwLock<HashMap<String, oneshot::Sender<OneBotApiResponse>>>>,
-    event_tx: broadcast::Sender<Value>,
-    connections: Arc<RwLock<HashMap<String, WsConnection>>>,
-    connection_stop_senders: Arc<RwLock<HashMap<String, watch::Sender<bool>>>>,
-    port_service: Arc<LocalPortServiceCore>,
-    active_connection_gate: Arc<std::sync::atomic::AtomicBool>,
-    cancel: CancellationToken,
+pub(crate) struct OnebotAxumState {
+    pub(crate) channel_id: String,
+    pub(crate) expected_token: Option<String>,
+    pub(crate) conn_tx: broadcast::Sender<String>,
+    pub(crate) pending_responses: Arc<RwLock<HashMap<String, oneshot::Sender<OneBotApiResponse>>>>,
+    pub(crate) event_tx: broadcast::Sender<Value>,
+    pub(crate) connections: Arc<RwLock<HashMap<String, WsConnection>>>,
+    pub(crate) connection_stop_senders: Arc<RwLock<HashMap<String, watch::Sender<bool>>>>,
+    pub(crate) port_service: Arc<LocalPortServiceCore>,
+    pub(crate) active_connection_gate: Arc<std::sync::atomic::AtomicBool>,
+    pub(crate) cancel: CancellationToken,
 }
 
 /// OneBot v11 WebSocket 服务器管理器
@@ -155,5 +155,5 @@ pub struct OnebotV11WsManager {
     event_consumer_tasks: Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
 }
 
-type AxumWsSender = SplitSink<WebSocket, AxumWsMessage>;
-type AxumWsReceiver = SplitStream<WebSocket>;
+pub(crate) type AxumWsSender = SplitSink<WebSocket, AxumWsMessage>;
+pub(crate) type AxumWsReceiver = SplitStream<WebSocket>;

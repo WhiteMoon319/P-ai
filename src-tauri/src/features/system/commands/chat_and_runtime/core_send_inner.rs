@@ -1,5 +1,5 @@
 include!("core_send_inner/user_message_memory.rs");
-fn trim_conversation_for_prompt_request(conversation: &Conversation) -> Conversation {
+pub(crate) fn trim_conversation_for_prompt_request(conversation: &Conversation) -> Conversation {
     let mut trimmed = conversation.clone();
     if trimmed.messages.is_empty() {
         return trimmed;
@@ -16,7 +16,7 @@ fn trim_conversation_for_prompt_request(conversation: &Conversation) -> Conversa
     trimmed
 }
 
-fn conversation_current_segment_is_compaction_summary_only(conversation: &Conversation) -> bool {
+pub(crate) fn conversation_current_segment_is_compaction_summary_only(conversation: &Conversation) -> bool {
     let Some(segment_start) = conversation.messages.iter().rposition(|message| {
         is_context_compaction_message(message, message.role.trim())
     }) else {
@@ -29,10 +29,10 @@ fn conversation_current_segment_is_compaction_summary_only(conversation: &Conver
     )
 }
 
-const REMOTE_IM_AUTO_COMPACTION_IDLE_HOURS: i64 = 10;
-const REMOTE_IM_AUTO_COMPACTION_MIN_MESSAGES: usize = 7;
+pub(crate) const REMOTE_IM_AUTO_COMPACTION_IDLE_HOURS: i64 = 10;
+pub(crate) const REMOTE_IM_AUTO_COMPACTION_MIN_MESSAGES: usize = 7;
 
-fn find_runtime_image_text_cache(
+pub(crate) fn find_runtime_image_text_cache(
     runtime: &RuntimeStateFile,
     hash: &str,
     vision_api_id: &str,
@@ -49,7 +49,7 @@ fn find_runtime_image_text_cache(
         .map(|entry| entry.text.clone())
 }
 
-fn upsert_runtime_image_text_cache(
+pub(crate) fn upsert_runtime_image_text_cache(
     runtime: &mut RuntimeStateFile,
     hash: &str,
     vision_api_id: &str,
@@ -92,7 +92,7 @@ fn upsert_runtime_image_text_cache(
     runtime.image_text_cache.remove(oldest_idx);
 }
 
-fn plan_mode_prompt_block() -> &'static str {
+pub(crate) fn plan_mode_prompt_block() -> &'static str {
     "<plan mode>\n先理解用户目标，调查当前上下文或代码。计划阶段是你和我之间的双向拷问，不是你独自思考后直接写计划。\n\n把计划拆成设计决策树：从根目标开始，沿范围、取舍、架构、数据、交互、风险、验收等分支逐一访谈我；只有父决策已达成共识，才能进入依赖它的子决策。每次只问一个当前最关键的问题，同时给出你的推荐答案、理由、证据和主要替代方案；不要静默替我选择目标、偏好、优先级、可接受风险或验收取舍。\n\n问题可由代码、配置、文档或工具回答时，必须先探索并带着结果继续访谈，不能把可自行查证的工作转嫁给我。我可以回答、补充、否定前提，也可以反过来拷问你的推荐、证据或替代方案；你必须直接回答我的反问，再回到下一个尚未收敛的决策。不要回避质疑，也不要为维护旧方案而辩护。\n\n除非我明确说‘不再追问’或‘直接出计划’，否则在我们确认设计树中会实质改变目标、边界、风险、成本或验收的分支均已收敛前，不得调用 plan.present。对我展示问题、回答、已确认结论和待决定分叉；不要展示内部逐字推理。当目标、约束、现状已清楚后，计划用于对齐需求、边界、风险、术语、测试和最终呈现。得到我明确确认后，再开始修改代码或实施。\n</plan mode>"
 }
 
@@ -112,7 +112,7 @@ mod plan_mode_prompt_tests {
     }
 }
 
-fn conversation_latest_user_has_plan_mode_block(
+pub(crate) fn conversation_latest_user_has_plan_mode_block(
     conversation: &Conversation,
     effective_agent_id: &str,
 ) -> bool {
@@ -134,7 +134,7 @@ fn conversation_latest_user_has_plan_mode_block(
 include!("core_send_inner/remote_im_auto_send.rs");
 include!("core_send_inner/image_fallback.rs");
 include!("core_send_inner/auto_title.rs");
-fn prepend_required_chat_api_id(
+pub(crate) fn prepend_required_chat_api_id(
     api_id: Option<&str>,
     candidate_api_ids: &mut Vec<String>,
     app_config: &AppConfig,
@@ -177,7 +177,7 @@ fn prepend_required_chat_api_id(
     Ok(())
 }
 
-fn prepend_optional_preferred_chat_api_id(
+pub(crate) fn prepend_optional_preferred_chat_api_id(
     preferred_api_id: Option<&str>,
     candidate_api_ids: &mut Vec<String>,
     app_config: &AppConfig,
@@ -221,7 +221,7 @@ fn prepend_optional_preferred_chat_api_id(
     Ok(true)
 }
 
-fn build_chat_candidate_api_ids(
+pub(crate) fn build_chat_candidate_api_ids(
     app_config: &AppConfig,
     effective_department: &DepartmentConfig,
     requested_api_config_id: Option<&str>,
@@ -248,7 +248,7 @@ fn build_chat_candidate_api_ids(
 }
 
 include!("core_send_inner/stream_failure_persistence.rs");
-fn main_assistant_activation_should_reject_latest_message(
+pub(crate) fn main_assistant_activation_should_reject_latest_message(
     latest_message: &ChatMessage,
     assistant_agent_id: &str,
 ) -> bool {
@@ -259,7 +259,7 @@ fn main_assistant_activation_should_reject_latest_message(
         == Some(assistant_agent_id.trim())
 }
 
-fn restart_dispatch_round_after_context_compaction(
+pub(crate) fn restart_dispatch_round_after_context_compaction(
     state: &AppState,
     runtime_context: &mut RuntimeContext,
     conversation_id: &str,
@@ -331,7 +331,7 @@ fn restart_dispatch_round_after_context_compaction(
     Ok(assistant_message_id)
 }
 
-fn latest_canonical_user_prompt_text(
+pub(crate) fn latest_canonical_user_prompt_text(
     conversation: &Conversation,
     current_agent_id: &str,
 ) -> Option<String> {
@@ -346,7 +346,7 @@ fn latest_canonical_user_prompt_text(
         .filter(|text| !text.trim().is_empty())
 }
 
-fn legacy_attachment_relative_paths_for_prompt(
+pub(crate) fn legacy_attachment_relative_paths_for_prompt(
     payload: &ChatInputPayload,
     used_canonical_latest_user_text: bool,
 ) -> Vec<String> {
@@ -357,7 +357,7 @@ fn legacy_attachment_relative_paths_for_prompt(
     }
 }
 
-async fn send_chat_message_inner(
+pub(crate) async fn send_chat_message_inner(
     input: SendChatRequest,
     state: &AppState,
     on_delta: &DeltaChannel,
@@ -755,17 +755,17 @@ async fn send_chat_message_inner(
 
     #[derive(Clone)]
     struct ConversationPrepareSnapshot {
-        agents: Vec<AgentProfile>,
-        response_style_id: String,
-        user_name: String,
-        user_intro: String,
-        last_archive_summary: Option<String>,
-        storage_conversation_before: Conversation,
-        prompt_conversation_before: Conversation,
-        is_remote_im_contact_conversation: bool,
-        remote_im_contact_processing_mode: String,
-        is_runtime_conversation: bool,
-        runtime_conversation_id: Option<String>,
+        pub(crate) agents: Vec<AgentProfile>,
+        pub(crate) response_style_id: String,
+        pub(crate) user_name: String,
+        pub(crate) user_intro: String,
+        pub(crate) last_archive_summary: Option<String>,
+        pub(crate) storage_conversation_before: Conversation,
+        pub(crate) prompt_conversation_before: Conversation,
+        pub(crate) is_remote_im_contact_conversation: bool,
+        pub(crate) remote_im_contact_processing_mode: String,
+        pub(crate) is_runtime_conversation: bool,
+        pub(crate) runtime_conversation_id: Option<String>,
     }
 
     let runtime_conversation_id = requested_conversation_id
@@ -3067,7 +3067,7 @@ async fn send_chat_message_inner(
     final_result
 }
 
-fn should_create_assistant_provider_meta(
+pub(crate) fn should_create_assistant_provider_meta(
     request_format: &RequestFormat,
     assistant_provider_meta_override: Option<&Value>,
     trusted_input_tokens: Option<u64>,

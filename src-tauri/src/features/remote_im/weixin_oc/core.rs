@@ -1,118 +1,118 @@
-const WEIXIN_OC_DEFAULT_BASE_URL: &str = "https://ilinkai.weixin.qq.com";
-const WEIXIN_OC_DEFAULT_CDN_BASE_URL: &str = "https://novac2c.cdn.weixin.qq.com/c2c";
-const WEIXIN_OC_DEFAULT_LONG_POLL_TIMEOUT_MS: u64 = 35_000;
-const WEIXIN_OC_DEFAULT_API_TIMEOUT_MS: u64 = 15_000;
-const WEIXIN_OC_DEFAULT_BOT_TYPE: &str = "3";
-const WEIXIN_OC_LOGIN_TTL_SECS: i64 = 5 * 60;
-const WEIXIN_OC_TEXT_ITEM_TYPE: i64 = 1;
-const WEIXIN_OC_IMAGE_ITEM_TYPE: i64 = 2;
-const WEIXIN_OC_FILE_ITEM_TYPE: i64 = 4;
-const WEIXIN_OC_VIDEO_ITEM_TYPE: i64 = 5;
-const WEIXIN_OC_IMAGE_UPLOAD_TYPE: i64 = 1;
-const WEIXIN_OC_FILE_UPLOAD_TYPE: i64 = 3;
+pub(crate) const WEIXIN_OC_DEFAULT_BASE_URL: &str = "https://ilinkai.weixin.qq.com";
+pub(crate) const WEIXIN_OC_DEFAULT_CDN_BASE_URL: &str = "https://novac2c.cdn.weixin.qq.com/c2c";
+pub(crate) const WEIXIN_OC_DEFAULT_LONG_POLL_TIMEOUT_MS: u64 = 35_000;
+pub(crate) const WEIXIN_OC_DEFAULT_API_TIMEOUT_MS: u64 = 15_000;
+pub(crate) const WEIXIN_OC_DEFAULT_BOT_TYPE: &str = "3";
+pub(crate) const WEIXIN_OC_LOGIN_TTL_SECS: i64 = 5 * 60;
+pub(crate) const WEIXIN_OC_TEXT_ITEM_TYPE: i64 = 1;
+pub(crate) const WEIXIN_OC_IMAGE_ITEM_TYPE: i64 = 2;
+pub(crate) const WEIXIN_OC_FILE_ITEM_TYPE: i64 = 4;
+pub(crate) const WEIXIN_OC_VIDEO_ITEM_TYPE: i64 = 5;
+pub(crate) const WEIXIN_OC_IMAGE_UPLOAD_TYPE: i64 = 1;
+pub(crate) const WEIXIN_OC_FILE_UPLOAD_TYPE: i64 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct WeixinOcLoginSession {
-    session_key: String,
-    qrcode: String,
-    qrcode_img_content: String,
-    started_at: String,
-    status: String,
+pub(crate) struct WeixinOcLoginSession {
+    pub(crate) session_key: String,
+    pub(crate) qrcode: String,
+    pub(crate) qrcode_img_content: String,
+    pub(crate) started_at: String,
+    pub(crate) status: String,
     #[serde(default)]
-    error: String,
+    pub(crate) error: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct WeixinOcLoginStartInput {
-    channel_id: String,
+pub(crate) struct WeixinOcLoginStartInput {
+    pub(crate) channel_id: String,
     #[serde(default)]
-    force_refresh: bool,
+    pub(crate) force_refresh: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct WeixinOcLoginStatusInput {
-    channel_id: String,
+pub(crate) struct WeixinOcLoginStatusInput {
+    pub(crate) channel_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct WeixinOcLoginStartResult {
-    channel_id: String,
-    session_key: String,
-    qrcode: String,
-    qrcode_img_content: String,
-    status: String,
-    message: String,
+pub(crate) struct WeixinOcLoginStartResult {
+    pub(crate) channel_id: String,
+    pub(crate) session_key: String,
+    pub(crate) qrcode: String,
+    pub(crate) qrcode_img_content: String,
+    pub(crate) status: String,
+    pub(crate) message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct WeixinOcLoginStatusResult {
-    channel_id: String,
-    connected: bool,
-    status: String,
-    message: String,
+pub(crate) struct WeixinOcLoginStatusResult {
+    pub(crate) channel_id: String,
+    pub(crate) connected: bool,
+    pub(crate) status: String,
+    pub(crate) message: String,
     #[serde(default)]
-    session_key: String,
+    pub(crate) session_key: String,
     #[serde(default)]
-    qrcode: String,
+    pub(crate) qrcode: String,
     #[serde(default)]
-    qrcode_img_content: String,
+    pub(crate) qrcode_img_content: String,
     #[serde(default)]
-    account_id: String,
+    pub(crate) account_id: String,
     #[serde(default)]
-    user_id: String,
+    pub(crate) user_id: String,
     #[serde(default)]
-    base_url: String,
+    pub(crate) base_url: String,
     #[serde(default)]
-    last_error: String,
+    pub(crate) last_error: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct WeixinOcSyncContactsResult {
-    channel_id: String,
-    synced_count: usize,
-    message: String,
+pub(crate) struct WeixinOcSyncContactsResult {
+    pub(crate) channel_id: String,
+    pub(crate) synced_count: usize,
+    pub(crate) message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct WeixinOcCredentials {
+pub(crate) struct WeixinOcCredentials {
     #[serde(default)]
-    base_url: String,
+    pub(crate) base_url: String,
     #[serde(default)]
-    cdn_base_url: String,
+    pub(crate) cdn_base_url: String,
     #[serde(default)]
-    bot_type: String,
-    #[serde(default)]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    qr_poll_interval: Option<u64>,
+    pub(crate) bot_type: String,
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    long_poll_timeout_ms: Option<u64>,
+    pub(crate) qr_poll_interval: Option<u64>,
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    api_timeout_ms: Option<u64>,
+    pub(crate) long_poll_timeout_ms: Option<u64>,
     #[serde(default)]
-    token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) api_timeout_ms: Option<u64>,
     #[serde(default)]
-    account_id: String,
+    pub(crate) token: String,
     #[serde(default)]
-    user_id: String,
+    pub(crate) account_id: String,
     #[serde(default)]
-    sync_buf: String,
+    pub(crate) user_id: String,
+    #[serde(default)]
+    pub(crate) sync_buf: String,
 }
 
 impl WeixinOcCredentials {
-    fn from_value(value: &Value) -> Self {
+    pub(crate) fn from_value(value: &Value) -> Self {
         serde_json::from_value(value.clone()).unwrap_or_default()
     }
 
-    fn normalized_base_url(&self) -> String {
+    pub(crate) fn normalized_base_url(&self) -> String {
         let base = self.base_url.trim().trim_end_matches('/');
         if base.is_empty() {
             WEIXIN_OC_DEFAULT_BASE_URL.to_string()
@@ -121,7 +121,7 @@ impl WeixinOcCredentials {
         }
     }
 
-    fn normalized_cdn_base_url(&self) -> String {
+    pub(crate) fn normalized_cdn_base_url(&self) -> String {
         let base = self.cdn_base_url.trim().trim_end_matches('/');
         if base.is_empty() {
             WEIXIN_OC_DEFAULT_CDN_BASE_URL.to_string()
@@ -130,7 +130,7 @@ impl WeixinOcCredentials {
         }
     }
 
-    fn normalized_bot_type(&self) -> String {
+    pub(crate) fn normalized_bot_type(&self) -> String {
         let out = self.bot_type.trim();
         if out.is_empty() {
             WEIXIN_OC_DEFAULT_BOT_TYPE.to_string()
@@ -139,13 +139,13 @@ impl WeixinOcCredentials {
         }
     }
 
-    fn normalized_long_poll_timeout_ms(&self) -> u64 {
+    pub(crate) fn normalized_long_poll_timeout_ms(&self) -> u64 {
         self.long_poll_timeout_ms
             .unwrap_or(WEIXIN_OC_DEFAULT_LONG_POLL_TIMEOUT_MS)
             .clamp(5_000, 60_000)
     }
 
-    fn normalized_api_timeout_ms(&self) -> u64 {
+    pub(crate) fn normalized_api_timeout_ms(&self) -> u64 {
         self.api_timeout_ms
             .unwrap_or(WEIXIN_OC_DEFAULT_API_TIMEOUT_MS)
             .clamp(5_000, 60_000)
@@ -153,106 +153,106 @@ impl WeixinOcCredentials {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct WeixinOcGetBotQrCodeResp {
-    qrcode: Option<String>,
-    qrcode_img_content: Option<String>,
+pub(crate) struct WeixinOcGetBotQrCodeResp {
+    pub(crate) qrcode: Option<String>,
+    pub(crate) qrcode_img_content: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct WeixinOcQrStatusResp {
-    ret: Option<i64>,
-    errcode: Option<i64>,
-    errmsg: Option<String>,
-    status: Option<String>,
+pub(crate) struct WeixinOcQrStatusResp {
+    pub(crate) ret: Option<i64>,
+    pub(crate) errcode: Option<i64>,
+    pub(crate) errmsg: Option<String>,
+    pub(crate) status: Option<String>,
     #[serde(alias = "botToken")]
-    bot_token: Option<String>,
+    pub(crate) bot_token: Option<String>,
     #[serde(alias = "ilinkBotId")]
-    ilink_bot_id: Option<String>,
+    pub(crate) ilink_bot_id: Option<String>,
     #[serde(alias = "ilinkUserId")]
-    ilink_user_id: Option<String>,
+    pub(crate) ilink_user_id: Option<String>,
     #[serde(alias = "baseUrl")]
-    baseurl: Option<String>,
+    pub(crate) baseurl: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct WeixinOcGetUpdatesResp {
-    ret: Option<i64>,
-    errcode: Option<i64>,
-    errmsg: Option<String>,
-    msgs: Option<Vec<WeixinOcInboundMessage>>,
-    get_updates_buf: Option<String>,
+pub(crate) struct WeixinOcGetUpdatesResp {
+    pub(crate) ret: Option<i64>,
+    pub(crate) errcode: Option<i64>,
+    pub(crate) errmsg: Option<String>,
+    pub(crate) msgs: Option<Vec<WeixinOcInboundMessage>>,
+    pub(crate) get_updates_buf: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct WeixinOcInboundMessage {
-    message_id: Option<Value>,
-    msg_id: Option<Value>,
-    from_user_id: Option<String>,
-    context_token: Option<String>,
-    item_list: Option<Vec<WeixinOcMessageItem>>,
+pub(crate) struct WeixinOcInboundMessage {
+    pub(crate) message_id: Option<Value>,
+    pub(crate) msg_id: Option<Value>,
+    pub(crate) from_user_id: Option<String>,
+    pub(crate) context_token: Option<String>,
+    pub(crate) item_list: Option<Vec<WeixinOcMessageItem>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct WeixinOcMessageItem {
+pub(crate) struct WeixinOcMessageItem {
     #[serde(rename = "type")]
-    item_type: Option<i64>,
-    text_item: Option<WeixinOcTextItem>,
-    image_item: Option<WeixinOcImageItem>,
-    voice_item: Option<WeixinOcVoiceItem>,
-    file_item: Option<WeixinOcFileItem>,
-    video_item: Option<WeixinOcVideoItem>,
+    pub(crate) item_type: Option<i64>,
+    pub(crate) text_item: Option<WeixinOcTextItem>,
+    pub(crate) image_item: Option<WeixinOcImageItem>,
+    pub(crate) voice_item: Option<WeixinOcVoiceItem>,
+    pub(crate) file_item: Option<WeixinOcFileItem>,
+    pub(crate) video_item: Option<WeixinOcVideoItem>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct WeixinOcTextItem {
-    text: Option<String>,
+pub(crate) struct WeixinOcTextItem {
+    pub(crate) text: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct WeixinOcImageItem {
-    media: Option<WeixinOcMediaPayload>,
-    aeskey: Option<String>,
+pub(crate) struct WeixinOcImageItem {
+    pub(crate) media: Option<WeixinOcMediaPayload>,
+    pub(crate) aeskey: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct WeixinOcMediaPayload {
-    encrypt_query_param: Option<String>,
-    aes_key: Option<String>,
+pub(crate) struct WeixinOcMediaPayload {
+    pub(crate) encrypt_query_param: Option<String>,
+    pub(crate) aes_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct WeixinOcVoiceItem {
-    media: Option<WeixinOcMediaPayload>,
+pub(crate) struct WeixinOcVoiceItem {
+    pub(crate) media: Option<WeixinOcMediaPayload>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct WeixinOcFileItem {
-    media: Option<WeixinOcMediaPayload>,
-    file_name: Option<String>,
+pub(crate) struct WeixinOcFileItem {
+    pub(crate) media: Option<WeixinOcMediaPayload>,
+    pub(crate) file_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct WeixinOcVideoItem {
-    media: Option<WeixinOcMediaPayload>,
+pub(crate) struct WeixinOcVideoItem {
+    pub(crate) media: Option<WeixinOcMediaPayload>,
 }
 
 #[derive(Debug, Clone)]
-struct WeixinOcCollectedMedia {
-    parts: Vec<ChatIngressPart>,
+pub(crate) struct WeixinOcCollectedMedia {
+    pub(crate) parts: Vec<ChatIngressPart>,
 }
 
 #[derive(Debug, Clone)]
-struct WeixinOcRuntimeState {
-    connected: bool,
-    connected_at: Option<chrono::DateTime<chrono::Utc>>,
-    base_url: String,
-    account_id: String,
-    user_id: String,
-    session_key: String,
-    qrcode: String,
-    qrcode_img_content: String,
-    login_status: String,
-    last_error: String,
+pub(crate) struct WeixinOcRuntimeState {
+    pub(crate) connected: bool,
+    pub(crate) connected_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub(crate) base_url: String,
+    pub(crate) account_id: String,
+    pub(crate) user_id: String,
+    pub(crate) session_key: String,
+    pub(crate) qrcode: String,
+    pub(crate) qrcode_img_content: String,
+    pub(crate) login_status: String,
+    pub(crate) last_error: String,
 }
 
 impl Default for WeixinOcRuntimeState {
@@ -272,21 +272,21 @@ impl Default for WeixinOcRuntimeState {
     }
 }
 
-const WEIXIN_OC_TYPING_TICKET_TTL_SECS: u64 = 60;
+pub(crate) const WEIXIN_OC_TYPING_TICKET_TTL_SECS: u64 = 60;
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-struct WeixinOcTypingTicketState {
-    ilink_user_id: String,
-    typing_ticket: String,
-    ticket_context_token: String,
-    ticket_refresh_after: std::time::Instant,
+pub(crate) struct WeixinOcTypingTicketState {
+    pub(crate) ilink_user_id: String,
+    pub(crate) typing_ticket: String,
+    pub(crate) ticket_context_token: String,
+    pub(crate) ticket_refresh_after: std::time::Instant,
 }
 
 #[derive(Debug)]
-struct WeixinOcTypingState {
-    ticket_state: WeixinOcTypingTicketState,
-    cancel_tx: tokio::sync::oneshot::Sender<()>,
+pub(crate) struct WeixinOcTypingState {
+    pub(crate) ticket_state: WeixinOcTypingTicketState,
+    pub(crate) cancel_tx: tokio::sync::oneshot::Sender<()>,
 }
 
 pub struct WeixinOcManager {
@@ -333,14 +333,14 @@ impl Default for WeixinOcManager {
     }
 }
 
-static WEIXIN_OC_MANAGER: once_cell::sync::Lazy<std::sync::Arc<WeixinOcManager>> =
+pub(crate) static WEIXIN_OC_MANAGER: once_cell::sync::Lazy<std::sync::Arc<WeixinOcManager>> =
     once_cell::sync::Lazy::new(|| std::sync::Arc::new(WeixinOcManager::new()));
 
-fn weixin_oc_manager() -> std::sync::Arc<WeixinOcManager> {
+pub(crate) fn weixin_oc_manager() -> std::sync::Arc<WeixinOcManager> {
     WEIXIN_OC_MANAGER.clone()
 }
 
-fn login_session_is_fresh(login: &WeixinOcLoginSession) -> bool {
+pub(crate) fn login_session_is_fresh(login: &WeixinOcLoginSession) -> bool {
     chrono::DateTime::parse_from_rfc3339(login.started_at.trim())
         .map(|ts| {
             chrono::Utc::now()

@@ -1,9 +1,9 @@
-fn conversation_has_visible_title(conversation: &Conversation) -> bool {
+pub(crate) fn conversation_has_visible_title(conversation: &Conversation) -> bool {
     !conversation.title.trim().is_empty()
         || conversation_has_auto_title_blocking_summary_title(conversation)
 }
 
-fn conversation_has_visible_title_from_store(
+pub(crate) fn conversation_has_visible_title_from_store(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<bool, String> {
@@ -25,7 +25,7 @@ fn conversation_has_visible_title_from_store(
         .is_some_and(summary_context_message_title_blocks_auto_title))
 }
 
-fn auto_title_generation_inflight(
+pub(crate) fn auto_title_generation_inflight(
 ) -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
     static INFLIGHT: std::sync::OnceLock<
         std::sync::Mutex<std::collections::HashSet<String>>,
@@ -33,7 +33,7 @@ fn auto_title_generation_inflight(
     INFLIGHT.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
 }
 
-fn auto_title_generation_try_mark_inflight(conversation_id: &str) -> bool {
+pub(crate) fn auto_title_generation_try_mark_inflight(conversation_id: &str) -> bool {
     let normalized_id = conversation_id.trim();
     if normalized_id.is_empty() {
         return false;
@@ -44,13 +44,13 @@ fn auto_title_generation_try_mark_inflight(conversation_id: &str) -> bool {
     }
 }
 
-fn auto_title_generation_clear_inflight(conversation_id: &str) {
+pub(crate) fn auto_title_generation_clear_inflight(conversation_id: &str) {
     if let Ok(mut guard) = auto_title_generation_inflight().lock() {
         guard.remove(conversation_id.trim());
     }
 }
 
-fn should_schedule_conversation_auto_title_generation(
+pub(crate) fn should_schedule_conversation_auto_title_generation(
     conversation: &Conversation,
     latest_user_text: &str,
 ) -> bool {
@@ -60,7 +60,7 @@ fn should_schedule_conversation_auto_title_generation(
         && (10..=100).contains(&char_count)
 }
 
-fn build_auto_conversation_title_prompt(user_message: &str) -> String {
+pub(crate) fn build_auto_conversation_title_prompt(user_message: &str) -> String {
     format!(
         "你是会话话题探测器。只根据本次用户发言判断是否能提取明确话题。\
 只能输出 JSON，不要解释，不要 Markdown。\
@@ -72,12 +72,12 @@ title 尽量 10 个汉字以内，绝不超过 20 个字，不要引号外文本
 }
 
 #[cfg(test)]
-fn parse_auto_conversation_title_probe_result(raw: &str) -> Option<String> {
+pub(crate) fn parse_auto_conversation_title_probe_result(raw: &str) -> Option<String> {
     let value = parse_quick_model_json_response(raw, &["has_topic"], &["title"]).ok()?;
     parse_auto_conversation_title_probe_value(&value)
 }
 
-fn parse_auto_conversation_title_probe_value(value: &Value) -> Option<String> {
+pub(crate) fn parse_auto_conversation_title_probe_value(value: &Value) -> Option<String> {
     let has_topic = value
         .get("has_topic")
         .or_else(|| value.get("hasTopic"))
@@ -92,7 +92,7 @@ fn parse_auto_conversation_title_probe_value(value: &Value) -> Option<String> {
         .and_then(normalize_summary_context_title)
 }
 
-fn sync_codex_conversation_request_key(
+pub(crate) fn sync_codex_conversation_request_key(
     resolved_api: &mut ResolvedApiConfig,
     conversation_id: &str,
 ) {
@@ -108,7 +108,7 @@ fn sync_codex_conversation_request_key(
     }
 }
 
-async fn run_auto_conversation_title_generation(
+pub(crate) async fn run_auto_conversation_title_generation(
     state: &AppState,
     conversation_id: &str,
     user_message: &str,
@@ -162,7 +162,7 @@ async fn run_auto_conversation_title_generation(
     title.ok_or_else(|| error.unwrap_or_else(|| "快速模型未返回有效标题".to_string()))
 }
 
-fn spawn_conversation_auto_title_generation(
+pub(crate) fn spawn_conversation_auto_title_generation(
     state: AppState,
     conversation_id: String,
     user_message: String,

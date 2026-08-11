@@ -1,49 +1,49 @@
 #[derive(Debug)]
-struct PendingTerminalApprovalRequest {
-    sender: tokio::sync::oneshot::Sender<bool>,
-    session_id: String,
-    workspace_path: Option<String>,
+pub(crate) struct PendingTerminalApprovalRequest {
+    pub(crate) sender: tokio::sync::oneshot::Sender<bool>,
+    pub(crate) session_id: String,
+    pub(crate) workspace_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct TerminalApprovalRequestPayload {
-    request_id: String,
-    title: String,
-    message: String,
-    approval_kind: String,
-    session_id: String,
+pub(crate) struct TerminalApprovalRequestPayload {
+    pub(crate) request_id: String,
+    pub(crate) title: String,
+    pub(crate) message: String,
+    pub(crate) approval_kind: String,
+    pub(crate) session_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_name: Option<String>,
+    pub(crate) tool_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    summary: Option<String>,
+    pub(crate) summary: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    call_preview: Option<String>,
+    pub(crate) call_preview: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    cwd: Option<String>,
+    pub(crate) cwd: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    command: Option<String>,
+    pub(crate) command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    requested_path: Option<String>,
+    pub(crate) requested_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    reason: Option<String>,
+    pub(crate) reason: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    existing_paths: Vec<String>,
+    pub(crate) existing_paths: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    target_paths: Vec<String>,
+    pub(crate) target_paths: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    review_opinion: Option<String>,
+    pub(crate) review_opinion: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    review_model_name: Option<String>,
+    pub(crate) review_model_name: Option<String>,
     #[serde(default)]
-    can_remember_workspace: bool,
+    pub(crate) can_remember_workspace: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    workspace_name: Option<String>,
+    pub(crate) workspace_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    workspace_path: Option<String>,
+    pub(crate) workspace_path: Option<String>,
 }
 
-fn approval_workspace_memory_target(
+pub(crate) fn approval_workspace_memory_target(
     state: &AppState,
     session_id: &str,
     requested_path: Option<&Path>,
@@ -87,7 +87,7 @@ fn approval_workspace_memory_target(
     None
 }
 
-fn remember_terminal_workspace_without_approval(
+pub(crate) fn remember_terminal_workspace_without_approval(
     state: &AppState,
     session_id: &str,
     workspace_path: &str,
@@ -133,7 +133,7 @@ fn remember_terminal_workspace_without_approval(
     Ok(())
 }
 
-fn remember_terminal_conversation_autonomous_mode(
+pub(crate) fn remember_terminal_conversation_autonomous_mode(
     state: &AppState,
     session_id: &str,
 ) -> Result<(), String> {
@@ -156,7 +156,7 @@ fn remember_terminal_conversation_autonomous_mode(
     Ok(())
 }
 
-async fn terminal_request_user_approval(
+pub(crate) async fn terminal_request_user_approval(
     state: &AppState,
     title: &str,
     message: &str,
@@ -283,7 +283,7 @@ async fn terminal_request_user_approval(
     }
 }
 
-fn resolve_terminal_approval_request(
+pub(crate) fn resolve_terminal_approval_request(
     state: &AppState,
     request_id: &str,
     approved: bool,
@@ -319,7 +319,7 @@ fn resolve_terminal_approval_request(
     Ok(true)
 }
 
-fn approve_terminal_approval_for_session_request(
+pub(crate) fn approve_terminal_approval_for_session_request(
     state: &AppState,
     request_id: &str,
 ) -> Result<bool, String> {
@@ -341,7 +341,7 @@ fn approve_terminal_approval_for_session_request(
     resolve_terminal_approval_request(state, trimmed, true)
 }
 
-fn approve_terminal_approval_for_workspace_request(
+pub(crate) fn approve_terminal_approval_for_workspace_request(
     state: &AppState,
     request_id: &str,
 ) -> Result<bool, String> {

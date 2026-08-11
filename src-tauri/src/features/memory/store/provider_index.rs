@@ -1,4 +1,4 @@
-fn memory_store_collect_doc_texts(conn: &Connection) -> Result<StdHashMap<String, String>, String> {
+pub(crate) fn memory_store_collect_doc_texts(conn: &Connection) -> Result<StdHashMap<String, String>, String> {
     let mut stmt = conn
         .prepare("SELECT id, judgment FROM memory_record")
         .map_err(|err| format!("Prepare collect doc texts failed: {err}"))?;
@@ -13,7 +13,7 @@ fn memory_store_collect_doc_texts(conn: &Connection) -> Result<StdHashMap<String
     Ok(out)
 }
 
-fn memory_store_normalize_model_id(raw: &str) -> Result<String, String> {
+pub(crate) fn memory_store_normalize_model_id(raw: &str) -> Result<String, String> {
     let mut out = String::new();
     for ch in raw.trim().chars() {
         if ch.is_ascii_alphanumeric() {
@@ -32,14 +32,14 @@ fn memory_store_normalize_model_id(raw: &str) -> Result<String, String> {
     Ok(out)
 }
 
-fn memory_store_model_store_db_path(data_path: &PathBuf, model_name: &str) -> Result<PathBuf, String> {
+pub(crate) fn memory_store_model_store_db_path(data_path: &PathBuf, model_name: &str) -> Result<PathBuf, String> {
     let norm = memory_store_normalize_model_id(model_name)?;
     Ok(app_root_from_data_path(data_path)
         .join("memory")
         .join(format!("{norm}_embedding_store.db")))
 }
 
-fn memory_store_validate_table_name(table: &str) -> Result<&str, String> {
+pub(crate) fn memory_store_validate_table_name(table: &str) -> Result<&str, String> {
     let trimmed = table.trim();
     if trimmed.is_empty()
         || !trimmed
@@ -51,7 +51,7 @@ fn memory_store_validate_table_name(table: &str) -> Result<&str, String> {
     Ok(trimmed)
 }
 
-fn memory_store_provider_table(_provider_id: &str) -> Result<String, String> {
+pub(crate) fn memory_store_provider_table(_provider_id: &str) -> Result<String, String> {
     let table = "memory_vector";
     debug_assert!(
         table
@@ -61,7 +61,7 @@ fn memory_store_provider_table(_provider_id: &str) -> Result<String, String> {
     Ok(table.to_string())
 }
 
-fn memory_store_open_provider_vector_db(
+pub(crate) fn memory_store_open_provider_vector_db(
     data_path: &PathBuf,
     provider_id: &str,
 ) -> Result<Connection, String> {
@@ -71,7 +71,7 @@ fn memory_store_open_provider_vector_db(
     memory_store_open_provider_vector_db_with_model(data_path, &model)
 }
 
-fn memory_store_open_provider_vector_db_with_model(
+pub(crate) fn memory_store_open_provider_vector_db_with_model(
     data_path: &PathBuf,
     model_name: &str,
 ) -> Result<Connection, String> {
@@ -96,7 +96,7 @@ fn memory_store_open_provider_vector_db_with_model(
     Ok(conn)
 }
 
-fn memory_store_provider_index_ids(conn: &Connection, table: &str) -> Result<StdHashSet<String>, String> {
+pub(crate) fn memory_store_provider_index_ids(conn: &Connection, table: &str) -> Result<StdHashSet<String>, String> {
     let table = memory_store_validate_table_name(table)?;
     let mut stmt = conn
         .prepare(&format!("SELECT chunk_id FROM {table}"))
@@ -111,7 +111,7 @@ fn memory_store_provider_index_ids(conn: &Connection, table: &str) -> Result<Std
     Ok(out)
 }
 
-fn memory_store_delete_provider_entries(
+pub(crate) fn memory_store_delete_provider_entries(
     vector_tx: &rusqlite::Transaction,
     table: &str,
     to_delete: &[String],
@@ -127,7 +127,7 @@ fn memory_store_delete_provider_entries(
     Ok(deleted)
 }
 
-fn memory_store_batch_embed_and_insert<F>(
+pub(crate) fn memory_store_batch_embed_and_insert<F>(
     vector_tx: &rusqlite::Transaction,
     table: &str,
     doc_map: &StdHashMap<String, String>,
@@ -188,7 +188,7 @@ where
     Ok((added, batch_count, dimension))
 }
 
-fn memory_store_update_provider_metadata(
+pub(crate) fn memory_store_update_provider_metadata(
     tx: &rusqlite::Transaction,
     new_provider_id: &str,
     model_name: &str,
@@ -213,7 +213,7 @@ fn memory_store_update_provider_metadata(
     Ok(())
 }
 
-fn memory_store_sync_provider_index<F>(
+pub(crate) fn memory_store_sync_provider_index<F>(
     data_path: &PathBuf,
     new_provider_id: &str,
     model_name: &str,

@@ -1,7 +1,7 @@
 // ========== apply_patch rewind (by backupRecordId) ==========
 
 /// 从被移除的消息中提取所有 backupRecordId，用于恢复或清理。
-fn collect_backup_record_ids_from_messages(messages: &[ChatMessage]) -> Vec<String> {
+pub(crate) fn collect_backup_record_ids_from_messages(messages: &[ChatMessage]) -> Vec<String> {
     let mut ids = Vec::<String>::new();
     for message in messages {
         let Some(events) = message.tool_call.as_ref() else {
@@ -26,7 +26,7 @@ fn collect_backup_record_ids_from_messages(messages: &[ChatMessage]) -> Vec<Stri
     ids
 }
 
-fn collect_tool_result_diagnostics_from_messages(
+pub(crate) fn collect_tool_result_diagnostics_from_messages(
     messages: &[ChatMessage],
 ) -> (usize, usize, usize, usize, usize) {
     let mut message_count_with_tool_call = 0usize;
@@ -80,7 +80,7 @@ fn collect_tool_result_diagnostics_from_messages(
 
 /// 按 backupRecordId 列表恢复文件（逆序执行，最后的补丁先撤回）。
 /// 返回 (恢复文件总数, 有非LLM修改被覆盖的文件列表)。
-fn try_undo_apply_patch_from_removed_messages(
+pub(crate) fn try_undo_apply_patch_from_removed_messages(
     state: &AppState,
     removed_messages: &[ChatMessage],
 ) -> Result<(usize, Vec<String>), String> {
@@ -151,7 +151,7 @@ fn try_undo_apply_patch_from_removed_messages(
 
 /// 按 backupRecordId 列表清理备份文件（不恢复，仅删除记录和 blob）。
 /// 用于归档/裁剪/删除会话时清理不再需要的备份。
-fn cleanup_backup_records_by_ids(data_path: &PathBuf, ids: &[String]) -> Result<usize, String> {
+pub(crate) fn cleanup_backup_records_by_ids(data_path: &PathBuf, ids: &[String]) -> Result<usize, String> {
     let mut cleaned = 0usize;
     for record_id in ids {
         let record_path = apply_patch_record_path(data_path, record_id);
@@ -181,7 +181,7 @@ fn cleanup_backup_records_by_ids(data_path: &PathBuf, ids: &[String]) -> Result<
 }
 
 /// 从消息中提取 backupRecordId 并清理对应备份（归档/裁剪/删除时调用）。
-fn cleanup_backup_records_from_messages(
+pub(crate) fn cleanup_backup_records_from_messages(
     data_path: &PathBuf,
     messages: &[ChatMessage],
 ) -> Result<usize, String> {
@@ -198,7 +198,7 @@ fn cleanup_backup_records_from_messages(
 }
 
 #[cfg(test)]
-mod rewind_apply_patch_tests {
+pub(crate) mod rewind_apply_patch_tests {
     use super::*;
     use serde_json::json;
 

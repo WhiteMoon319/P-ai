@@ -1,22 +1,23 @@
-const MEMORY_DECAY_TIER0_THRESHOLD: f64 = 3.0;
-const MEMORY_DECAY_TIER1_THRESHOLD: f64 = 10.0;
-const MEMORY_DECAY_CONSOLIDATE_SPEED: f64 = 2.5;
-const MEMORY_DECAY_USEFUL_BOOST: i64 = 1;
-const MEMORY_DECAY_CYCLE_TIER0_DAYS: i64 = 3;
+use std::collections::HashSet;
+pub(crate) const MEMORY_DECAY_TIER0_THRESHOLD: f64 = 3.0;
+pub(crate) const MEMORY_DECAY_TIER1_THRESHOLD: f64 = 10.0;
+pub(crate) const MEMORY_DECAY_CONSOLIDATE_SPEED: f64 = 2.5;
+pub(crate) const MEMORY_DECAY_USEFUL_BOOST: i64 = 1;
+pub(crate) const MEMORY_DECAY_CYCLE_TIER0_DAYS: i64 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct MemoryArchiveFeedbackReport {
-    recalled_count: usize,
-    useful_requested_count: usize,
-    useful_accepted_count: usize,
-    useful_rejected_count: usize,
-    boosted_count: usize,
-    penalized_count: usize,
-    natural_decay_count: usize,
+pub(crate) struct MemoryArchiveFeedbackReport {
+    pub(crate) recalled_count: usize,
+    pub(crate) useful_requested_count: usize,
+    pub(crate) useful_accepted_count: usize,
+    pub(crate) useful_rejected_count: usize,
+    pub(crate) boosted_count: usize,
+    pub(crate) penalized_count: usize,
+    pub(crate) natural_decay_count: usize,
 }
 
-fn memory_decay_tier_of(useful_score: f64) -> i32 {
+pub(crate) fn memory_decay_tier_of(useful_score: f64) -> i32 {
     if useful_score >= MEMORY_DECAY_TIER1_THRESHOLD {
         2
     } else if useful_score >= MEMORY_DECAY_TIER0_THRESHOLD {
@@ -26,7 +27,7 @@ fn memory_decay_tier_of(useful_score: f64) -> i32 {
     }
 }
 
-fn memory_decay_parse_time_or_epoch(raw: Option<&str>) -> OffsetDateTime {
+pub(crate) fn memory_decay_parse_time_or_epoch(raw: Option<&str>) -> OffsetDateTime {
     let text = raw.unwrap_or("").trim();
     if text.is_empty() {
         return OffsetDateTime::UNIX_EPOCH;
@@ -35,7 +36,7 @@ fn memory_decay_parse_time_or_epoch(raw: Option<&str>) -> OffsetDateTime {
 }
 
 // ========== apply_useful_boost ==========
-fn apply_useful_boost(
+pub(crate) fn apply_useful_boost(
     tx: &rusqlite::Transaction,
     useful_accepted: &[String],
     now: &str,
@@ -67,7 +68,7 @@ fn apply_useful_boost(
 }
 
 // ========== apply_useless_penalty ==========
-fn apply_useless_penalty(
+pub(crate) fn apply_useless_penalty(
     tx: &rusqlite::Transaction,
     recalled_existing: &[String],
     useful_accepted_set: &HashSet<String>,
@@ -107,7 +108,7 @@ fn apply_useless_penalty(
 }
 
 // ========== apply_natural_decay ==========
-fn apply_natural_decay(
+pub(crate) fn apply_natural_decay(
     tx: &rusqlite::Transaction,
     decay_candidates: &[String],
     useful_accepted_set: &HashSet<String>,
@@ -180,7 +181,7 @@ fn apply_natural_decay(
 }
 
 // ========== main flow ==========
-fn memory_store_apply_archive_feedback(
+pub(crate) fn memory_store_apply_archive_feedback(
     data_path: &PathBuf,
     recalled_ids: &[String],
     useful_ids: &[String],

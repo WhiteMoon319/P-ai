@@ -1,187 +1,187 @@
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeContextReferenceInput {
-    id: String,
-    file_path: String,
+pub(crate) struct IdeContextReferenceInput {
+    pub(crate) id: String,
+    pub(crate) file_path: String,
     #[serde(default)]
-    start_line: Option<u32>,
+    pub(crate) start_line: Option<u32>,
     #[serde(default)]
-    end_line: Option<u32>,
+    pub(crate) end_line: Option<u32>,
     #[serde(default)]
-    content: String,
+    pub(crate) content: String,
     #[serde(default)]
-    language_id: Option<String>,
-    source: String,
-    captured_at: String,
+    pub(crate) language_id: Option<String>,
+    pub(crate) source: String,
+    pub(crate) captured_at: String,
 }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct UpsertIdeContextSnapshotInput {
-    client_id: String,
+pub(crate) struct UpsertIdeContextSnapshotInput {
+    pub(crate) client_id: String,
     #[serde(default)]
-    auth_token: Option<String>,
+    pub(crate) auth_token: Option<String>,
     #[serde(default)]
-    editor: String,
+    pub(crate) editor: String,
     #[serde(default)]
-    workspace_roots: Vec<String>,
+    pub(crate) workspace_roots: Vec<String>,
     #[serde(default)]
-    references: Vec<IdeContextReferenceInput>,
+    pub(crate) references: Vec<IdeContextReferenceInput>,
     #[serde(default)]
-    updated_at: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct IdeContextWorkspaceQueryInput {
-    #[serde(default)]
-    workspaces: Vec<IdeContextWorkspaceInput>,
+    pub(crate) updated_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeContextWorkspaceInput {
-    path: String,
+pub(crate) struct IdeContextWorkspaceQueryInput {
     #[serde(default)]
-    name: Option<String>,
+    pub(crate) workspaces: Vec<IdeContextWorkspaceInput>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct IdeContextWorkspaceInput {
+    pub(crate) path: String,
+    #[serde(default)]
+    pub(crate) name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeContextReferenceItemOutput {
-    id: String,
-    workspace_path: String,
-    workspace_name: String,
-    file_path: String,
-    file_name: String,
-    relative_path: String,
+pub(crate) struct IdeContextReferenceItemOutput {
+    pub(crate) id: String,
+    pub(crate) workspace_path: String,
+    pub(crate) workspace_name: String,
+    pub(crate) file_path: String,
+    pub(crate) file_name: String,
+    pub(crate) relative_path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    start_line: Option<u32>,
+    pub(crate) start_line: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    end_line: Option<u32>,
-    display_label: String,
-    content: String,
+    pub(crate) end_line: Option<u32>,
+    pub(crate) display_label: String,
+    pub(crate) content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    language_id: Option<String>,
-    source: String,
-    captured_at: String,
-    text_block: String,
+    pub(crate) language_id: Option<String>,
+    pub(crate) source: String,
+    pub(crate) captured_at: String,
+    pub(crate) text_block: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeContextWorkspaceGroupOutput {
-    workspace_path: String,
-    workspace_name: String,
-    references: Vec<IdeContextReferenceItemOutput>,
+pub(crate) struct IdeContextWorkspaceGroupOutput {
+    pub(crate) workspace_path: String,
+    pub(crate) workspace_name: String,
+    pub(crate) references: Vec<IdeContextReferenceItemOutput>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeContextQueryResultOutput {
-    groups: Vec<IdeContextWorkspaceGroupOutput>,
-    updated_at: String,
+pub(crate) struct IdeContextQueryResultOutput {
+    pub(crate) groups: Vec<IdeContextWorkspaceGroupOutput>,
+    pub(crate) updated_at: String,
 }
 
-const IDE_CONTEXT_BRIDGE_HOST: &str = "127.0.0.1";
-const IDE_CONTEXT_BRIDGE_BIND_HOST: &str = "0.0.0.0";
+pub(crate) const IDE_CONTEXT_BRIDGE_HOST: &str = "127.0.0.1";
+pub(crate) const IDE_CONTEXT_BRIDGE_BIND_HOST: &str = "0.0.0.0";
 #[cfg(test)]
-const IDE_CONTEXT_BRIDGE_BASE_PORT: u16 = 8429;
-const IDE_CONTEXT_BRIDGE_PATH: &str = "/ide-context";
-const IDE_CONTEXT_CHAT_BRIDGE_PATH: &str = "/chat";
-const IDE_CONTEXT_BRIDGE_DISCOVERY_FILE: &str = "p-ai-ide-context-bridge.json";
-const IDE_CONTEXT_SNAPSHOT_TTL_SECS: i64 = 30;
-const IDE_CONTEXT_AUTH_TOKEN_TTL_SECS: i64 = 90 * 24 * 60 * 60;
-const IDE_CONTEXT_MAX_AUTH_TOKENS: usize = 128;
-const WEB_ACCESS_SERVICE_ID: &str = "web_access";
-static IDE_CONTEXT_BRIDGE_STARTED: AtomicBool = AtomicBool::new(false);
-static IDE_CONTEXT_BRIDGE_SHUTDOWN: OnceLock<
+pub(crate) const IDE_CONTEXT_BRIDGE_BASE_PORT: u16 = 8429;
+pub(crate) const IDE_CONTEXT_BRIDGE_PATH: &str = "/ide-context";
+pub(crate) const IDE_CONTEXT_CHAT_BRIDGE_PATH: &str = "/chat";
+pub(crate) const IDE_CONTEXT_BRIDGE_DISCOVERY_FILE: &str = "p-ai-ide-context-bridge.json";
+pub(crate) const IDE_CONTEXT_SNAPSHOT_TTL_SECS: i64 = 30;
+pub(crate) const IDE_CONTEXT_AUTH_TOKEN_TTL_SECS: i64 = 90 * 24 * 60 * 60;
+pub(crate) const IDE_CONTEXT_MAX_AUTH_TOKENS: usize = 128;
+pub(crate) const WEB_ACCESS_SERVICE_ID: &str = "web_access";
+pub(crate) static IDE_CONTEXT_BRIDGE_STARTED: AtomicBool = AtomicBool::new(false);
+pub(crate) static IDE_CONTEXT_BRIDGE_SHUTDOWN: OnceLock<
     Arc<Mutex<Option<tokio_util::sync::CancellationToken>>>,
 > = OnceLock::new();
-static IDE_CONTEXT_BRIDGE_SERVER_TASK: OnceLock<
+pub(crate) static IDE_CONTEXT_BRIDGE_SERVER_TASK: OnceLock<
     Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
 > = OnceLock::new();
-static IDE_CONTEXT_PORT_SERVICE_CORE: OnceLock<Arc<LocalPortServiceCore>> = OnceLock::new();
-static IDE_CONTEXT_CHAT_CLIENTS: OnceLock<
+pub(crate) static IDE_CONTEXT_PORT_SERVICE_CORE: OnceLock<Arc<LocalPortServiceCore>> = OnceLock::new();
+pub(crate) static IDE_CONTEXT_CHAT_CLIENTS: OnceLock<
     Arc<Mutex<std::collections::HashMap<String, tokio::sync::mpsc::UnboundedSender<serde_json::Value>>>>,
 > = OnceLock::new();
-static IDE_CONTEXT_CHAT_CLIENT_CONVERSATIONS: OnceLock<
+pub(crate) static IDE_CONTEXT_CHAT_CLIENT_CONVERSATIONS: OnceLock<
     Arc<Mutex<std::collections::HashMap<String, String>>>,
 > = OnceLock::new();
-static WEB_ACCESS_CONNECTIONS: OnceLock<
+pub(crate) static WEB_ACCESS_CONNECTIONS: OnceLock<
     Arc<Mutex<std::collections::HashMap<String, WebAccessConnectionEntry>>>,
 > = OnceLock::new();
 
 #[derive(Debug, Clone)]
-struct IdeContextRuntime {
-    snapshots: Arc<Mutex<std::collections::HashMap<String, IdeContextSnapshot>>>,
-    bridge_auth: Arc<Mutex<IdeContextBridgeAuthRuntime>>,
-    current_port: Arc<Mutex<Option<u16>>>,
-    web_access_cache: Arc<Mutex<IdeContextWebAccessCache>>,
+pub(crate) struct IdeContextRuntime {
+    pub(crate) snapshots: Arc<Mutex<std::collections::HashMap<String, IdeContextSnapshot>>>,
+    pub(crate) bridge_auth: Arc<Mutex<IdeContextBridgeAuthRuntime>>,
+    pub(crate) current_port: Arc<Mutex<Option<u16>>>,
+    pub(crate) web_access_cache: Arc<Mutex<IdeContextWebAccessCache>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct WebAccessConnectionSummary {
-    id: String,
-    path: String,
-    peer_addr: String,
-    local: bool,
-    authenticated: bool,
-    connected_at: String,
-    client_id: String,
+pub(crate) struct WebAccessConnectionSummary {
+    pub(crate) id: String,
+    pub(crate) path: String,
+    pub(crate) peer_addr: String,
+    pub(crate) local: bool,
+    pub(crate) authenticated: bool,
+    pub(crate) connected_at: String,
+    pub(crate) client_id: String,
 }
 
 #[derive(Debug, Clone)]
-struct WebAccessConnectionEntry {
-    id: String,
-    path: String,
-    peer_addr: String,
-    local: bool,
-    authenticated: bool,
-    connected_at: String,
-    client_id: String,
+pub(crate) struct WebAccessConnectionEntry {
+    pub(crate) id: String,
+    pub(crate) path: String,
+    pub(crate) peer_addr: String,
+    pub(crate) local: bool,
+    pub(crate) authenticated: bool,
+    pub(crate) connected_at: String,
+    pub(crate) client_id: String,
 }
 
 #[derive(Debug, Default)]
-struct IdeContextBridgeAuthRuntime {
-    valid_tokens: std::collections::HashMap<String, OffsetDateTime>,
-    remote_password: String,
+pub(crate) struct IdeContextBridgeAuthRuntime {
+    pub(crate) valid_tokens: std::collections::HashMap<String, OffsetDateTime>,
+    pub(crate) remote_password: String,
 }
 
 #[derive(Debug, Default)]
-struct IdeContextWebAccessCache {
-    lan_hosts: Option<Vec<String>>,
+pub(crate) struct IdeContextWebAccessCache {
+    pub(crate) lan_hosts: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct GetWebAccessInfoInput {
+pub(crate) struct GetWebAccessInfoInput {
     #[serde(default)]
-    force_refresh: bool,
+    pub(crate) force_refresh: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct IdeContextPersistedBridgeToken {
+pub(crate) struct IdeContextPersistedBridgeToken {
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
-    token: String,
+    pub(crate) token: String,
     #[serde(default)]
     #[serde(skip_serializing_if = "String::is_empty")]
-    expires_at: String,
+    pub(crate) expires_at: String,
     #[serde(default)]
-    tokens: Vec<IdeContextPersistedBridgeTokenEntry>,
+    pub(crate) tokens: Vec<IdeContextPersistedBridgeTokenEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeContextPersistedBridgeTokenEntry {
-    token: String,
-    expires_at: String,
+pub(crate) struct IdeContextPersistedBridgeTokenEntry {
+    pub(crate) token: String,
+    pub(crate) expires_at: String,
 }
 
 impl IdeContextPersistedBridgeToken {
-    fn normalized_entries(self) -> Vec<IdeContextPersistedBridgeTokenEntry> {
+    pub(crate) fn normalized_entries(self) -> Vec<IdeContextPersistedBridgeTokenEntry> {
         if !self.tokens.is_empty() {
             return self.tokens;
         }
@@ -196,7 +196,7 @@ impl IdeContextPersistedBridgeToken {
 }
 
 impl IdeContextRuntime {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let mut bridge_auth = IdeContextBridgeAuthRuntime::default();
         bridge_auth.remote_password = ide_context_generate_remote_password();
         Self {
@@ -210,80 +210,80 @@ impl IdeContextRuntime {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeContextUpdatedEvent {
-    client_id: String,
-    updated_at: String,
+pub(crate) struct IdeContextUpdatedEvent {
+    pub(crate) client_id: String,
+    pub(crate) updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeContextBridgeDiscovery {
-    url: String,
-    bridge_url: String,
-    chat_url: String,
-    host: String,
-    bind_host: String,
-    port: u16,
-    path: String,
-    chat_path: String,
-    pid: u32,
-    updated_at: String,
+pub(crate) struct IdeContextBridgeDiscovery {
+    pub(crate) url: String,
+    pub(crate) bridge_url: String,
+    pub(crate) chat_url: String,
+    pub(crate) host: String,
+    pub(crate) bind_host: String,
+    pub(crate) port: u16,
+    pub(crate) path: String,
+    pub(crate) chat_path: String,
+    pub(crate) pid: u32,
+    pub(crate) updated_at: String,
     #[serde(default)]
-    token: String,
-    remote_password: String,
+    pub(crate) token: String,
+    pub(crate) remote_password: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct WebAccessInfoOutput {
-    running: bool,
-    enabled: bool,
-    configured_port: u16,
-    port: u16,
+pub(crate) struct WebAccessInfoOutput {
+    pub(crate) running: bool,
+    pub(crate) enabled: bool,
+    pub(crate) configured_port: u16,
+    pub(crate) port: u16,
     #[serde(default)]
-    listen_addr: String,
+    pub(crate) listen_addr: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    status_text: Option<String>,
+    pub(crate) status_text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    last_error: Option<String>,
-    local_url: String,
-    remote_urls: Vec<String>,
-    remote_password: String,
-    active_connections: Vec<WebAccessConnectionSummary>,
+    pub(crate) last_error: Option<String>,
+    pub(crate) local_url: String,
+    pub(crate) remote_urls: Vec<String>,
+    pub(crate) remote_password: String,
+    pub(crate) active_connections: Vec<WebAccessConnectionSummary>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatJsonRpcRequest {
+pub(crate) struct IdeChatJsonRpcRequest {
     #[serde(default)]
-    jsonrpc: String,
+    pub(crate) jsonrpc: String,
     #[serde(default)]
-    id: Option<Value>,
-    method: String,
+    pub(crate) id: Option<Value>,
+    pub(crate) method: String,
     #[serde(default)]
-    params: Value,
+    pub(crate) params: Value,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatJsonRpcError {
-    code: i32,
-    message: String,
+pub(crate) struct IdeChatJsonRpcError {
+    pub(crate) code: i32,
+    pub(crate) message: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatAuthLoginInput {
+pub(crate) struct IdeChatAuthLoginInput {
     #[serde(default)]
-    password: String,
+    pub(crate) password: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatConversationInput {
-    conversation_id: String,
-    workspace_path: Option<String>,
-    workspace_name: Option<String>,
+pub(crate) struct IdeChatConversationInput {
+    pub(crate) conversation_id: String,
+    pub(crate) workspace_path: Option<String>,
+    pub(crate) workspace_name: Option<String>,
 }
 
 // ========== 统一传输协议的桌面入口 ==========
@@ -298,41 +298,41 @@ struct IdeChatConversationInput {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatStreamProbeInput {
-    conversation_id: String,
-    probe_id: String,
+pub(crate) struct IdeChatStreamProbeInput {
+    pub(crate) conversation_id: String,
+    pub(crate) probe_id: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatConversationBlockPageInput {
-    conversation_id: String,
+pub(crate) struct IdeChatConversationBlockPageInput {
+    pub(crate) conversation_id: String,
     #[serde(default)]
-    block_id: Option<u32>,
+    pub(crate) block_id: Option<u32>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatSelectModelInput {
-    conversation_id: String,
+pub(crate) struct IdeChatSelectModelInput {
+    pub(crate) conversation_id: String,
     #[serde(default)]
-    api_config_id: String,
+    pub(crate) api_config_id: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatResolveTerminalApprovalInput {
-    request_id: String,
-    approved: bool,
+pub(crate) struct IdeChatResolveTerminalApprovalInput {
+    pub(crate) request_id: String,
+    pub(crate) approved: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatTerminalApprovalRequestIdInput {
-    request_id: String,
+pub(crate) struct IdeChatTerminalApprovalRequestIdInput {
+    pub(crate) request_id: String,
 }
 
-fn ide_chat_avatar_data_url(state: &AppState, path: Option<&str>) -> String {
+pub(crate) fn ide_chat_avatar_data_url(state: &AppState, path: Option<&str>) -> String {
     let Some(path) = path.map(str::trim).filter(|value| !value.is_empty()) else {
         return String::new();
     };
@@ -370,7 +370,7 @@ fn ide_chat_avatar_data_url(state: &AppState, path: Option<&str>) -> String {
     format!("data:{mime};base64,{}", B64.encode(bytes))
 }
 
-fn ide_chat_persona_payload(state: &AppState, active_agent_id: Option<&str>) -> Result<Value, String> {
+pub(crate) fn ide_chat_persona_payload(state: &AppState, active_agent_id: Option<&str>) -> Result<Value, String> {
     let runtime = state_read_runtime_state_cached(state)?;
     let runtime_org = load_runtime_organization_snapshot(state)?;
     let agents = runtime_org.agents;
@@ -425,7 +425,7 @@ fn ide_chat_persona_payload(state: &AppState, active_agent_id: Option<&str>) -> 
     }))
 }
 
-fn ide_chat_model_payload_for_conversation(state: &AppState, conversation: &Conversation) -> Result<Value, String> {
+pub(crate) fn ide_chat_model_payload_for_conversation(state: &AppState, conversation: &Conversation) -> Result<Value, String> {
     let config = state_read_config_cached(state)?;
     let department_primary_id = config
         .departments
@@ -464,7 +464,7 @@ fn ide_chat_model_payload_for_conversation(state: &AppState, conversation: &Conv
     }))
 }
 
-fn ide_chat_conversation_from_meta_view(conversation_meta: &ConversationMetaView) -> Conversation {
+pub(crate) fn ide_chat_conversation_from_meta_view(conversation_meta: &ConversationMetaView) -> Conversation {
     Conversation {
         id: conversation_meta.id.clone(),
         title: conversation_meta.title.clone(),
@@ -502,25 +502,25 @@ fn ide_chat_conversation_from_meta_view(conversation_meta: &ConversationMetaView
     }
 }
 
-fn ide_chat_delegate_statuses(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_delegate_statuses(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ListConversationDelegateStatusesInput>(params)?;
     serde_json::to_value(list_conversation_delegate_statuses_inner(input, state)?)
         .map_err(|err| format!("Serialize delegate statuses failed: {err}"))
 }
 
-fn ide_chat_delegate_abort(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_delegate_abort(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<AbortDelegateConversationInput>(params)?;
     serde_json::to_value(abort_delegate_conversation_inner(input, state)?)
         .map_err(|err| format!("Serialize delegate abort result failed: {err}"))
 }
 
-fn ide_chat_delegate_block_page(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_delegate_block_page(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<GetConversationBlockPageInput>(params)?;
     serde_json::to_value(get_delegate_conversation_block_page_inner(input, state)?)
         .map_err(|err| format!("Serialize delegate block page failed: {err}"))
 }
 
-fn ide_chat_create_conversation_options(state: &AppState) -> Result<Value, String> {
+pub(crate) fn ide_chat_create_conversation_options(state: &AppState) -> Result<Value, String> {
     let runtime_org = load_runtime_organization_snapshot(state)?;
     let config = runtime_org.config;
     let agents = runtime_org.agents;
@@ -605,7 +605,7 @@ include!("ide_context/jsonrpc_dispatch.rs");
 include!("ide_context/bridge_server.rs");
 
 #[cfg(test)]
-mod ide_context_tests {
+pub(crate) mod ide_context_tests {
     use super::*;
     static IDE_CONTEXT_TEST_MUTEX: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
 

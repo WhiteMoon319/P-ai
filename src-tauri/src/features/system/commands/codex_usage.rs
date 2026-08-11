@@ -1,141 +1,141 @@
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CodexGetRateLimitsInput {
-    provider_id: String,
+pub(crate) struct CodexGetRateLimitsInput {
+    pub(crate) provider_id: String,
     #[serde(default = "default_codex_auth_mode")]
-    auth_mode: String,
+    pub(crate) auth_mode: String,
     #[serde(default = "default_codex_local_auth_path")]
-    local_auth_path: String,
+    pub(crate) local_auth_path: String,
     #[serde(default = "default_codex_usage_base_url")]
-    base_url: String,
+    pub(crate) base_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CodexRateLimitWindow {
-    used_percent: i32,
-    window_duration_mins: Option<i64>,
-    resets_at: Option<i64>,
+pub(crate) struct CodexRateLimitWindow {
+    pub(crate) used_percent: i32,
+    pub(crate) window_duration_mins: Option<i64>,
+    pub(crate) resets_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CodexCreditsSnapshot {
-    has_credits: bool,
-    unlimited: bool,
-    balance: Option<String>,
+pub(crate) struct CodexCreditsSnapshot {
+    pub(crate) has_credits: bool,
+    pub(crate) unlimited: bool,
+    pub(crate) balance: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CodexRateLimitSnapshot {
-    limit_id: String,
-    limit_name: String,
-    primary: Option<CodexRateLimitWindow>,
-    secondary: Option<CodexRateLimitWindow>,
-    credits: Option<CodexCreditsSnapshot>,
-    plan_type: String,
-    rate_limit_reached_type: String,
+pub(crate) struct CodexRateLimitSnapshot {
+    pub(crate) limit_id: String,
+    pub(crate) limit_name: String,
+    pub(crate) primary: Option<CodexRateLimitWindow>,
+    pub(crate) secondary: Option<CodexRateLimitWindow>,
+    pub(crate) credits: Option<CodexCreditsSnapshot>,
+    pub(crate) plan_type: String,
+    pub(crate) rate_limit_reached_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CodexRateLimitQueryResult {
-    usage_url: String,
-    preferred_snapshot: Option<CodexRateLimitSnapshot>,
-    snapshots: Vec<CodexRateLimitSnapshot>,
-    rate_limit_reset_credit_count: i64,
+pub(crate) struct CodexRateLimitQueryResult {
+    pub(crate) usage_url: String,
+    pub(crate) preferred_snapshot: Option<CodexRateLimitSnapshot>,
+    pub(crate) snapshots: Vec<CodexRateLimitSnapshot>,
+    pub(crate) rate_limit_reset_credit_count: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CodexConsumeRateLimitResetCreditResult {
-    outcome: String,
+pub(crate) struct CodexConsumeRateLimitResetCreditResult {
+    pub(crate) outcome: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct CodexUsagePayload {
+pub(crate) struct CodexUsagePayload {
     #[serde(default)]
-    plan_type: String,
+    pub(crate) plan_type: String,
     #[serde(default)]
-    rate_limit: Option<CodexUsageRateLimitDetails>,
+    pub(crate) rate_limit: Option<CodexUsageRateLimitDetails>,
     #[serde(default)]
-    credits: Option<CodexUsageCreditsDetails>,
+    pub(crate) credits: Option<CodexUsageCreditsDetails>,
     #[serde(default)]
-    additional_rate_limits: Option<Vec<CodexUsageAdditionalRateLimitDetails>>,
+    pub(crate) additional_rate_limits: Option<Vec<CodexUsageAdditionalRateLimitDetails>>,
     #[serde(default)]
-    rate_limit_reached_type: Option<CodexUsageRateLimitReachedType>,
+    pub(crate) rate_limit_reached_type: Option<CodexUsageRateLimitReachedType>,
     #[serde(default)]
-    rate_limit_reset_credits: Option<CodexUsageRateLimitResetCredits>,
+    pub(crate) rate_limit_reset_credits: Option<CodexUsageRateLimitResetCredits>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct CodexUsageRateLimitResetCredits {
+pub(crate) struct CodexUsageRateLimitResetCredits {
     #[serde(default)]
-    available_count: i64,
+    pub(crate) available_count: i64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct CodexUsageRateLimitDetails {
+pub(crate) struct CodexUsageRateLimitDetails {
     #[serde(default)]
-    primary_window: Option<CodexUsageWindowSnapshot>,
+    pub(crate) primary_window: Option<CodexUsageWindowSnapshot>,
     #[serde(default)]
-    secondary_window: Option<CodexUsageWindowSnapshot>,
+    pub(crate) secondary_window: Option<CodexUsageWindowSnapshot>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct CodexUsageWindowSnapshot {
+pub(crate) struct CodexUsageWindowSnapshot {
     #[serde(default)]
-    used_percent: i32,
+    pub(crate) used_percent: i32,
     #[serde(default)]
-    limit_window_seconds: i32,
+    pub(crate) limit_window_seconds: i32,
     #[serde(default)]
-    reset_at: i32,
+    pub(crate) reset_at: i32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct CodexUsageCreditsDetails {
+pub(crate) struct CodexUsageCreditsDetails {
     #[serde(default)]
-    has_credits: bool,
+    pub(crate) has_credits: bool,
     #[serde(default)]
-    unlimited: bool,
+    pub(crate) unlimited: bool,
     #[serde(default)]
-    balance: Option<String>,
+    pub(crate) balance: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct CodexUsageAdditionalRateLimitDetails {
+pub(crate) struct CodexUsageAdditionalRateLimitDetails {
     #[serde(default)]
-    limit_name: String,
+    pub(crate) limit_name: String,
     #[serde(default)]
-    metered_feature: String,
+    pub(crate) metered_feature: String,
     #[serde(default)]
-    rate_limit: Option<CodexUsageRateLimitDetails>,
+    pub(crate) rate_limit: Option<CodexUsageRateLimitDetails>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct CodexUsageRateLimitReachedType {
+pub(crate) struct CodexUsageRateLimitReachedType {
     #[serde(rename = "type", default)]
-    kind: String,
+    pub(crate) kind: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CodexUsagePathStyle {
+pub(crate) enum CodexUsagePathStyle {
     ChatGptApi,
     CodexApi,
 }
 
 #[derive(Debug)]
-struct CodexUsageRequestError {
-    status_code: Option<u16>,
-    message: String,
+pub(crate) struct CodexUsageRequestError {
+    pub(crate) status_code: Option<u16>,
+    pub(crate) message: String,
 }
 
-fn default_codex_usage_base_url() -> String {
+pub(crate) fn default_codex_usage_base_url() -> String {
     DEFAULT_CODEX_BASE_URL.to_string()
 }
 
-fn codex_usage_log_info(
+pub(crate) fn codex_usage_log_info(
     provider_id: &str,
     status: &str,
     trigger: &str,
@@ -163,7 +163,7 @@ fn codex_usage_log_info(
     ));
 }
 
-fn codex_usage_resolve_base_url(base_url: &str) -> (String, CodexUsagePathStyle) {
+pub(crate) fn codex_usage_resolve_base_url(base_url: &str) -> (String, CodexUsagePathStyle) {
     let trimmed = {
         let candidate = base_url.trim().trim_end_matches('/');
         if candidate.is_empty() {
@@ -203,7 +203,7 @@ fn codex_usage_resolve_base_url(base_url: &str) -> (String, CodexUsagePathStyle)
     (trimmed, CodexUsagePathStyle::CodexApi)
 }
 
-fn codex_usage_endpoint(base_url: &str) -> String {
+pub(crate) fn codex_usage_endpoint(base_url: &str) -> String {
     let (resolved_base, path_style) = codex_usage_resolve_base_url(base_url);
     match path_style {
         CodexUsagePathStyle::ChatGptApi => format!("{resolved_base}/wham/usage"),
@@ -211,7 +211,7 @@ fn codex_usage_endpoint(base_url: &str) -> String {
     }
 }
 
-fn codex_rate_limit_reset_consume_endpoint(base_url: &str) -> String {
+pub(crate) fn codex_rate_limit_reset_consume_endpoint(base_url: &str) -> String {
     let (resolved_base, path_style) = codex_usage_resolve_base_url(base_url);
     match path_style {
         CodexUsagePathStyle::ChatGptApi => {
@@ -223,7 +223,7 @@ fn codex_rate_limit_reset_consume_endpoint(base_url: &str) -> String {
     }
 }
 
-fn codex_window_duration_mins(limit_window_seconds: i32) -> Option<i64> {
+pub(crate) fn codex_window_duration_mins(limit_window_seconds: i32) -> Option<i64> {
     if limit_window_seconds <= 0 {
         return None;
     }
@@ -231,7 +231,7 @@ fn codex_window_duration_mins(limit_window_seconds: i32) -> Option<i64> {
     Some((seconds + 59) / 60)
 }
 
-fn codex_rate_limit_window_from_usage(
+pub(crate) fn codex_rate_limit_window_from_usage(
     window: Option<CodexUsageWindowSnapshot>,
 ) -> Option<CodexRateLimitWindow> {
     let snapshot = window?;
@@ -242,7 +242,7 @@ fn codex_rate_limit_window_from_usage(
     })
 }
 
-fn codex_credits_snapshot_from_usage(
+pub(crate) fn codex_credits_snapshot_from_usage(
     credits: Option<CodexUsageCreditsDetails>,
 ) -> Option<CodexCreditsSnapshot> {
     let details = credits?;
@@ -256,7 +256,7 @@ fn codex_credits_snapshot_from_usage(
     })
 }
 
-fn codex_rate_limit_snapshot_from_usage(
+pub(crate) fn codex_rate_limit_snapshot_from_usage(
     limit_id: Option<String>,
     limit_name: Option<String>,
     rate_limit: Option<CodexUsageRateLimitDetails>,
@@ -289,7 +289,7 @@ fn codex_rate_limit_snapshot_from_usage(
     }
 }
 
-fn codex_rate_limit_snapshots_from_payload(
+pub(crate) fn codex_rate_limit_snapshots_from_payload(
     payload: CodexUsagePayload,
 ) -> Vec<CodexRateLimitSnapshot> {
     let CodexUsagePayload {
@@ -328,7 +328,7 @@ fn codex_rate_limit_snapshots_from_payload(
     snapshots
 }
 
-async fn codex_fetch_usage_payload(
+pub(crate) async fn codex_fetch_usage_payload(
     url: &str,
     auth: &CodexRuntimeAuth,
 ) -> Result<(CodexUsagePayload, String), CodexUsageRequestError> {
@@ -336,7 +336,7 @@ async fn codex_fetch_usage_payload(
         .timeout(std::time::Duration::from_secs(30));
     #[cfg(target_os = "android")]
     {
-        client_builder = android_workspace_apply_static_webpki_roots(client_builder)
+        client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)
             .map_err(|err| CodexUsageRequestError {
                 status_code: None,
                 message: err,
@@ -382,7 +382,7 @@ async fn codex_fetch_usage_payload(
     Ok((payload, body))
 }
 
-async fn codex_consume_rate_limit_reset_credit_request(
+pub(crate) async fn codex_consume_rate_limit_reset_credit_request(
     url: &str,
     auth: &CodexRuntimeAuth,
 ) -> Result<CodexConsumeRateLimitResetCreditResult, CodexUsageRequestError> {
@@ -390,7 +390,7 @@ async fn codex_consume_rate_limit_reset_credit_request(
         .timeout(std::time::Duration::from_secs(30));
     #[cfg(target_os = "android")]
     {
-        client_builder = android_workspace_apply_static_webpki_roots(client_builder)
+        client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)
             .map_err(|err| CodexUsageRequestError {
                 status_code: None,
                 message: err,
@@ -431,7 +431,7 @@ async fn codex_consume_rate_limit_reset_credit_request(
 
 
 #[cfg(test)]
-mod codex_usage_tests {
+pub(crate) mod codex_usage_tests {
     use super::*;
 
     #[test]

@@ -1,4 +1,4 @@
-fn memory_store_import_memories(
+pub(crate) fn memory_store_import_memories(
     data_path: &PathBuf,
     incoming: &[MemoryEntry],
 ) -> Result<MemoryStoreImportStats, String> {

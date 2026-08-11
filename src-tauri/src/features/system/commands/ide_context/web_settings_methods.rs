@@ -1,8 +1,8 @@
-fn ide_chat_load_config_for_web_settings(state: &AppState) -> Result<Value, String> {
+pub(crate) fn ide_chat_load_config_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(load_config_inner(state)?)
 }
 
-fn ide_chat_get_department_default_draft_for_web_settings(
+pub(crate) fn ide_chat_get_department_default_draft_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -10,16 +10,16 @@ fn ide_chat_get_department_default_draft_for_web_settings(
     ide_chat_serialize(get_department_default_draft_inner(state, &department_id)?)
 }
 
-fn ide_chat_load_app_bootstrap_snapshot_for_web_settings(state: &AppState) -> Result<Value, String> {
+pub(crate) fn ide_chat_load_app_bootstrap_snapshot_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(read_app_bootstrap_snapshot(state)?)
 }
 
 
-fn ide_chat_load_agents_for_web_settings(state: &AppState) -> Result<Value, String> {
+pub(crate) fn ide_chat_load_agents_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(load_agents_inner(state)?)
 }
 
-async fn ide_chat_stt_transcribe_for_web_settings(
+pub(crate) async fn ide_chat_stt_transcribe_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -27,7 +27,7 @@ async fn ide_chat_stt_transcribe_for_web_settings(
     ide_chat_serialize(stt_transcribe_inner(input, state).await?)
 }
 
-async fn ide_chat_list_unarchived_conversations_for_web_settings(
+pub(crate) async fn ide_chat_list_unarchived_conversations_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
     let app_state = state.clone();
@@ -37,19 +37,19 @@ async fn ide_chat_list_unarchived_conversations_for_web_settings(
     ide_chat_serialize(summaries)
 }
 
-fn ide_chat_remote_im_list_contact_conversations_for_web_settings(
+pub(crate) fn ide_chat_remote_im_list_contact_conversations_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
     ide_chat_serialize(conversation_service_v2().list_remote_im_contact_conversations(state)?)
 }
 
-fn ide_chat_list_delegate_conversations_for_web_settings(
+pub(crate) fn ide_chat_list_delegate_conversations_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
     ide_chat_serialize(list_delegate_conversations_inner(state)?)
 }
 
-async fn ide_chat_get_prompt_preview_for_web_settings(
+pub(crate) async fn ide_chat_get_prompt_preview_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -58,7 +58,7 @@ async fn ide_chat_get_prompt_preview_for_web_settings(
     ide_chat_serialize(get_prompt_preview_inner(input, preview_mode, state).await?)
 }
 
-async fn ide_chat_get_system_prompt_preview_for_web_settings(
+pub(crate) async fn ide_chat_get_system_prompt_preview_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -71,7 +71,7 @@ async fn ide_chat_get_system_prompt_preview_for_web_settings(
 }
 
 
-fn ide_chat_load_chat_settings_for_web_settings(state: &AppState) -> Result<Value, String> {
+pub(crate) fn ide_chat_load_chat_settings_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(load_chat_settings_inner(state)?)
 }
 
@@ -79,7 +79,7 @@ fn ide_chat_load_chat_settings_for_web_settings(state: &AppState) -> Result<Valu
 
 
 
-async fn ide_chat_refresh_models_for_web_settings(
+pub(crate) async fn ide_chat_refresh_models_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -87,7 +87,7 @@ async fn ide_chat_refresh_models_for_web_settings(
     ide_chat_serialize(refresh_models_inner(state, input).await?)
 }
 
-async fn ide_chat_quick_genai_chat_for_web_settings(
+pub(crate) async fn ide_chat_quick_genai_chat_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -95,7 +95,7 @@ async fn ide_chat_quick_genai_chat_for_web_settings(
     ide_chat_serialize(quick_genai_chat_inner(state, input).await?)
 }
 
-async fn ide_chat_fetch_model_metadata_for_web_settings(
+pub(crate) async fn ide_chat_fetch_model_metadata_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -103,22 +103,22 @@ async fn ide_chat_fetch_model_metadata_for_web_settings(
     ide_chat_serialize(fetch_model_metadata_inner(state, input).await?)
 }
 
-async fn ide_chat_test_embedding_connection_for_web_settings(params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_test_embedding_connection_for_web_settings(params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<TestEmbeddingConnectionInput>(params, "input")?;
     ide_chat_serialize(test_embedding_connection_inner(input).await?)
 }
 
-async fn ide_chat_test_rerank_connection_for_web_settings(params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_test_rerank_connection_for_web_settings(params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<TestRerankConnectionInput>(params, "input")?;
     ide_chat_serialize(test_rerank_connection_inner(input).await?)
 }
 
-async fn ide_chat_test_voice_connection_for_web_settings(params: Value) -> Result<Value, String> {
+pub(crate) async fn ide_chat_test_voice_connection_for_web_settings(params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<TestVoiceConnectionInput>(params, "input")?;
     ide_chat_serialize(test_voice_connection_inner(input).await?)
 }
 
-fn ide_chat_resolve_model_adapter_kind_for_web_settings(params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_resolve_model_adapter_kind_for_web_settings(params: Value) -> Result<Value, String> {
     let (model_name, base_url, request_format) = match params {
         Value::Object(mut map) => {
             let model_name = map
@@ -147,19 +147,19 @@ fn ide_chat_resolve_model_adapter_kind_for_web_settings(params: Value) -> Result
     ))
 }
 
-fn ide_chat_get_image_text_cache_stats_for_web_settings(state: &AppState) -> Result<Value, String> {
+pub(crate) fn ide_chat_get_image_text_cache_stats_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(get_image_text_cache_stats_inner(state)?)
 }
 
-fn ide_chat_clear_image_text_cache_for_web_settings(state: &AppState) -> Result<Value, String> {
+pub(crate) fn ide_chat_clear_image_text_cache_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(clear_image_text_cache_inner(state)?)
 }
 
-async fn ide_chat_list_tool_catalog_for_web_settings(state: &AppState) -> Result<Value, String> {
+pub(crate) async fn ide_chat_list_tool_catalog_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(list_tool_catalog_inner(state).await?)
 }
 
-async fn ide_chat_list_department_permission_catalog_for_web_settings(
+pub(crate) async fn ide_chat_list_department_permission_catalog_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
     ide_chat_serialize(list_department_permission_catalog_inner(state).await?)
@@ -168,11 +168,11 @@ async fn ide_chat_list_department_permission_catalog_for_web_settings(
 
 include!("memory_methods.rs");
 
-fn ide_chat_task_list_tasks_for_web_settings(state: &AppState) -> Result<Value, String> {
+pub(crate) fn ide_chat_task_list_tasks_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(task_list_tasks_inner(state)?)
 }
 
-fn ide_chat_task_get_task_for_web_settings(
+pub(crate) fn ide_chat_task_get_task_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -180,7 +180,7 @@ fn ide_chat_task_get_task_for_web_settings(
     ide_chat_serialize(task_get_task_inner(input, state)?)
 }
 
-fn ide_chat_task_create_task_for_web_settings(
+pub(crate) fn ide_chat_task_create_task_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -188,7 +188,7 @@ fn ide_chat_task_create_task_for_web_settings(
     ide_chat_serialize(task_create_task_inner(input, state)?)
 }
 
-fn ide_chat_task_update_task_for_web_settings(
+pub(crate) fn ide_chat_task_update_task_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -196,7 +196,7 @@ fn ide_chat_task_update_task_for_web_settings(
     ide_chat_serialize(task_update_task_inner(input, state)?)
 }
 
-fn ide_chat_task_complete_task_for_web_settings(
+pub(crate) fn ide_chat_task_complete_task_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -204,7 +204,7 @@ fn ide_chat_task_complete_task_for_web_settings(
     ide_chat_serialize(task_complete_task_inner(input, state)?)
 }
 
-fn ide_chat_task_delete_task_for_web_settings(
+pub(crate) fn ide_chat_task_delete_task_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -212,7 +212,7 @@ fn ide_chat_task_delete_task_for_web_settings(
     ide_chat_serialize(task_delete_task_inner(input, state)?)
 }
 
-fn ide_chat_task_list_run_logs_for_web_settings(
+pub(crate) fn ide_chat_task_list_run_logs_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -220,7 +220,7 @@ fn ide_chat_task_list_run_logs_for_web_settings(
     ide_chat_serialize(task_list_run_logs_inner(Some(input), state)?)
 }
 
-async fn ide_chat_task_optimize_draft_for_web_settings(
+pub(crate) async fn ide_chat_task_optimize_draft_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -230,15 +230,15 @@ async fn ide_chat_task_optimize_draft_for_web_settings(
 
 include!("mcp_methods.rs");
 
-async fn ide_chat_get_usage_overview_for_web_settings(state: &AppState) -> Result<Value, String> {
+pub(crate) async fn ide_chat_get_usage_overview_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(start_usage_overview_refresh_if_needed(state.clone(), false).await)
 }
 
-async fn ide_chat_refresh_usage_overview_for_web_settings(state: &AppState) -> Result<Value, String> {
+pub(crate) async fn ide_chat_refresh_usage_overview_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(start_usage_overview_refresh_if_needed(state.clone(), true).await)
 }
 
-async fn ide_chat_get_usage_trail_for_web_settings(
+pub(crate) async fn ide_chat_get_usage_trail_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -264,13 +264,13 @@ async fn ide_chat_get_usage_trail_for_web_settings(
     ide_chat_serialize(result)
 }
 
-fn ide_chat_list_recent_llm_round_logs_for_web_settings(
+pub(crate) fn ide_chat_list_recent_llm_round_logs_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
     ide_chat_serialize(list_recent_llm_round_logs_inner(state)?)
 }
 
-fn ide_chat_get_recent_llm_round_log_section_for_web_settings(
+pub(crate) fn ide_chat_get_recent_llm_round_log_section_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -291,7 +291,7 @@ fn ide_chat_get_recent_llm_round_log_section_for_web_settings(
     ide_chat_serialize(get_recent_llm_round_log_section_inner(state, id, section)?)
 }
 
-fn ide_chat_clear_recent_llm_round_logs_for_web_settings(
+pub(crate) fn ide_chat_clear_recent_llm_round_logs_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
     ide_chat_serialize(clear_recent_llm_round_logs_inner(state)?)
@@ -299,7 +299,7 @@ fn ide_chat_clear_recent_llm_round_logs_for_web_settings(
 
 
 
-fn ide_chat_set_agent_private_memory_enabled_for_web_settings(
+pub(crate) fn ide_chat_set_agent_private_memory_enabled_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -307,7 +307,7 @@ fn ide_chat_set_agent_private_memory_enabled_for_web_settings(
     ide_chat_serialize(set_agent_private_memory_enabled_inner(input, state)?)
 }
 
-fn ide_chat_save_agent_avatar_for_web_settings(
+pub(crate) fn ide_chat_save_agent_avatar_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -315,7 +315,7 @@ fn ide_chat_save_agent_avatar_for_web_settings(
     ide_chat_serialize(save_agent_avatar_inner(input, state)?)
 }
 
-fn ide_chat_clear_agent_avatar_for_web_settings(
+pub(crate) fn ide_chat_clear_agent_avatar_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -325,7 +325,7 @@ fn ide_chat_clear_agent_avatar_for_web_settings(
 }
 
 
-fn ide_chat_check_tools_status_for_web_settings(
+pub(crate) fn ide_chat_check_tools_status_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -333,7 +333,7 @@ fn ide_chat_check_tools_status_for_web_settings(
     ide_chat_serialize(check_tools_status_inner(input, state)?)
 }
 
-fn ide_chat_list_terminal_shell_candidates_for_web_settings(
+pub(crate) fn ide_chat_list_terminal_shell_candidates_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
     let (preferred_kind, current, options) = terminal_shell_candidates_for_ui(state);
@@ -345,7 +345,7 @@ fn ide_chat_list_terminal_shell_candidates_for_web_settings(
     }))
 }
 
-async fn ide_chat_generate_image_for_web_settings(
+pub(crate) async fn ide_chat_generate_image_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -353,19 +353,19 @@ async fn ide_chat_generate_image_for_web_settings(
     ide_chat_serialize(generate_images(state, request).await?)
 }
 
-async fn ide_chat_get_storage_usage_overview_for_web_settings(
+pub(crate) async fn ide_chat_get_storage_usage_overview_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
     ide_chat_serialize(start_storage_overview_refresh_if_needed(state.clone(), false).await)
 }
 
-async fn ide_chat_refresh_storage_usage_overview_for_web_settings(
+pub(crate) async fn ide_chat_refresh_storage_usage_overview_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
     ide_chat_serialize(start_storage_overview_refresh_if_needed(state.clone(), true).await)
 }
 
-fn ide_chat_cleanup_storage_legacy_items_for_web_settings(
+pub(crate) fn ide_chat_cleanup_storage_legacy_items_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -378,11 +378,11 @@ fn ide_chat_cleanup_storage_legacy_items_for_web_settings(
 
 
 
-fn ide_chat_remote_im_default_group_response_guidance_for_web_settings() -> Result<Value, String> {
+pub(crate) fn ide_chat_remote_im_default_group_response_guidance_for_web_settings() -> Result<Value, String> {
     ide_chat_serialize(default_remote_im_contact_response_guidance())
 }
 
-fn ide_chat_remote_im_patch_contact_settings_for_web_settings(
+pub(crate) fn ide_chat_remote_im_patch_contact_settings_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -390,7 +390,7 @@ fn ide_chat_remote_im_patch_contact_settings_for_web_settings(
     ide_chat_serialize(remote_im_patch_contact_settings_inner(state, input)?)
 }
 
-fn ide_chat_remote_im_reconfigure_channel_behavior_for_web_settings(
+pub(crate) fn ide_chat_remote_im_reconfigure_channel_behavior_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -405,8 +405,8 @@ fn ide_chat_remote_im_reconfigure_channel_behavior_for_web_settings(
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ApiConfigDeleteInput {
-    id: String,
+pub(crate) struct ApiConfigDeleteInput {
+    pub(crate) id: String,
 }
 
 /// 新增供应商：校验 id 唯一后 push 到 config.api_configs 并全量保存（基于当前配置增量修改，不覆盖其他字段）。
@@ -416,7 +416,7 @@ struct ApiConfigDeleteInput {
 /// 删除供应商：按 id 移除并清理 departments/会话中对该 id 的引用（复用 save_config_inner 的引用清理）。
 
 /// 文本连接测试：用 ApiConfig 字段直接发一条极短聊天请求验证连通性。
-async fn test_text_connection_inner(
+pub(crate) async fn test_text_connection_inner(
     input: ApiConfig,
     state: &AppState,
 ) -> Result<String, String> {
@@ -435,7 +435,7 @@ async fn test_text_connection_inner(
     .await
 }
 
-async fn ide_chat_web_access_info_for_web_settings(
+pub(crate) async fn ide_chat_web_access_info_for_web_settings(
     app: &NativeAppHandle,
     state: &AppState,
     ide_context_runtime: &IdeContextRuntime,
@@ -445,7 +445,7 @@ async fn ide_chat_web_access_info_for_web_settings(
 
 include!("remote_im_methods.rs");
 
-fn ide_chat_save_chat_settings_for_web_settings(
+pub(crate) fn ide_chat_save_chat_settings_for_web_settings(
     state: &AppState,
     app: &NativeAppHandle,
     params: Value,
@@ -463,7 +463,7 @@ fn ide_chat_save_chat_settings_for_web_settings(
     ide_chat_serialize(patch_chat_settings_inner(patch, app, state)?)
 }
 
-fn ide_chat_save_conversation_api_settings_for_web_settings(
+pub(crate) fn ide_chat_save_conversation_api_settings_for_web_settings(
     state: &AppState,
     app: &NativeAppHandle,
     params: Value,
@@ -479,7 +479,7 @@ fn ide_chat_save_conversation_api_settings_for_web_settings(
     ide_chat_serialize(patch_conversation_api_settings_inner(patch, app, state)?)
 }
 
-fn ide_chat_set_github_update_method_for_web_settings(
+pub(crate) fn ide_chat_set_github_update_method_for_web_settings(
     state: &AppState,
     app: &NativeAppHandle,
     params: Value,
@@ -495,7 +495,7 @@ fn ide_chat_set_github_update_method_for_web_settings(
     ide_chat_serialize(set_github_update_method_inner(update_method, app, state)?)
 }
 
-fn ide_chat_set_skipped_github_update_version_for_web_settings(
+pub(crate) fn ide_chat_set_skipped_github_update_version_for_web_settings(
     state: &AppState,
     app: &NativeAppHandle,
     params: Value,
@@ -510,7 +510,7 @@ fn ide_chat_set_skipped_github_update_version_for_web_settings(
     ide_chat_serialize(set_skipped_github_update_version_inner(version, app, state)?)
 }
 
-fn ide_chat_convert_private_agent_to_main_for_web_settings(
+pub(crate) fn ide_chat_convert_private_agent_to_main_for_web_settings(
     state: &AppState,
     app: &NativeAppHandle,
     params: Value,
@@ -519,7 +519,7 @@ fn ide_chat_convert_private_agent_to_main_for_web_settings(
     ide_chat_serialize(convert_private_agent_to_main_inner(input, app, state)?)
 }
 
-fn api_config_create_inner(
+pub(crate) fn api_config_create_inner(
     input: ApiConfig,
     app: &NativeAppHandle,
     state: &AppState,
@@ -537,7 +537,7 @@ fn api_config_create_inner(
     save_config_inner(config, app, state, ide_context_runtime)
 }
 
-fn api_config_update_inner(
+pub(crate) fn api_config_update_inner(
     input: ApiConfig,
     app: &NativeAppHandle,
     state: &AppState,
@@ -557,7 +557,7 @@ fn api_config_update_inner(
     save_config_inner(config, app, state, ide_context_runtime)
 }
 
-fn api_config_delete_inner(
+pub(crate) fn api_config_delete_inner(
     input: ApiConfigDeleteInput,
     app: &NativeAppHandle,
     state: &AppState,
@@ -598,7 +598,7 @@ fn api_config_delete_inner(
     save_config_inner(config, app, state, ide_context_runtime)
 }
 
-fn ide_chat_save_config_for_web_settings(
+pub(crate) fn ide_chat_save_config_for_web_settings(
     state: &AppState,
     app: &NativeAppHandle,
     ide_context_runtime: &IdeContextRuntime,
@@ -609,7 +609,7 @@ fn ide_chat_save_config_for_web_settings(
 }
 
 /// 局部更新配置（patch_config）：只更新传入字段，避免全量覆盖丢失其他配置。
-fn ide_chat_patch_config_for_web_settings(
+pub(crate) fn ide_chat_patch_config_for_web_settings(
     state: &AppState,
     app: &NativeAppHandle,
     ide_context_runtime: &IdeContextRuntime,
@@ -619,7 +619,7 @@ fn ide_chat_patch_config_for_web_settings(
     ide_chat_serialize(patch_config_inner(input, app, state, ide_context_runtime)?)
 }
 
-fn ide_chat_save_agents_for_web_settings(
+pub(crate) fn ide_chat_save_agents_for_web_settings(
     state: &AppState,
     app: &NativeAppHandle,
     params: Value,
@@ -628,7 +628,7 @@ fn ide_chat_save_agents_for_web_settings(
     ide_chat_serialize(save_agents_inner(input, app, state)?)
 }
 
-fn ide_chat_patch_chat_settings_for_web_settings(
+pub(crate) fn ide_chat_patch_chat_settings_for_web_settings(
     state: &AppState,
     app: &NativeAppHandle,
     params: Value,
@@ -637,7 +637,7 @@ fn ide_chat_patch_chat_settings_for_web_settings(
     ide_chat_serialize(patch_chat_settings_inner(input, app, state)?)
 }
 
-fn ide_chat_patch_conversation_api_settings_for_web_settings(
+pub(crate) fn ide_chat_patch_conversation_api_settings_for_web_settings(
     state: &AppState,
     app: &NativeAppHandle,
     params: Value,

@@ -1,52 +1,52 @@
-const STORAGE_CLEANUP_LEGACY_CONVERSATIONS: &str = "legacyConversations";
-const STORAGE_CLEANUP_LEGACY_DELEGATE_CONVERSATIONS: &str = "legacyDelegateConversations";
-const STORAGE_CLEANUP_ABNORMAL_CONVERSATIONS: &str = "abnormalConversations";
-const STORAGE_CLEANUP_IMAGE_TEXT_CACHE: &str = "imageTextCache";
+pub(crate) const STORAGE_CLEANUP_LEGACY_CONVERSATIONS: &str = "legacyConversations";
+pub(crate) const STORAGE_CLEANUP_LEGACY_DELEGATE_CONVERSATIONS: &str = "legacyDelegateConversations";
+pub(crate) const STORAGE_CLEANUP_ABNORMAL_CONVERSATIONS: &str = "abnormalConversations";
+pub(crate) const STORAGE_CLEANUP_IMAGE_TEXT_CACHE: &str = "imageTextCache";
 
 #[derive(Debug, Clone, Default)]
-struct StorageSizeStats {
-    bytes: u64,
-    file_count: usize,
-    directory_count: usize,
+pub(crate) struct StorageSizeStats {
+    pub(crate) bytes: u64,
+    pub(crate) file_count: usize,
+    pub(crate) directory_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct StorageUsageOverview {
-    root_path: String,
-    total_bytes: u64,
-    reclaimable_bytes: u64,
-    items: Vec<StorageUsageItem>,
+pub(crate) struct StorageUsageOverview {
+    pub(crate) root_path: String,
+    pub(crate) total_bytes: u64,
+    pub(crate) reclaimable_bytes: u64,
+    pub(crate) items: Vec<StorageUsageItem>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct OverviewStatus {
-    compute_state: String,
-    freshness: String,
-    generated_at: Option<String>,
-    last_error: Option<String>,
+pub(crate) struct OverviewStatus {
+    pub(crate) compute_state: String,
+    pub(crate) freshness: String,
+    pub(crate) generated_at: Option<String>,
+    pub(crate) last_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct OverviewSnapshot<T> {
-    status: OverviewStatus,
-    data: Option<T>,
+pub(crate) struct OverviewSnapshot<T> {
+    pub(crate) status: OverviewStatus,
+    pub(crate) data: Option<T>,
 }
 
 #[derive(Debug, Clone)]
-struct OverviewCacheEntry<T> {
-    computed_at: std::time::Instant,
-    generated_at: String,
-    data: T,
+pub(crate) struct OverviewCacheEntry<T> {
+    pub(crate) computed_at: std::time::Instant,
+    pub(crate) generated_at: String,
+    pub(crate) data: T,
 }
 
 #[derive(Debug, Clone)]
-struct OverviewRuntime<T> {
-    cache: Option<OverviewCacheEntry<T>>,
-    running: bool,
-    last_error: Option<String>,
+pub(crate) struct OverviewRuntime<T> {
+    pub(crate) cache: Option<OverviewCacheEntry<T>>,
+    pub(crate) running: bool,
+    pub(crate) last_error: Option<String>,
 }
 
 impl<T> Default for OverviewRuntime<T> {
@@ -61,157 +61,157 @@ impl<T> Default for OverviewRuntime<T> {
 
 #[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct UsageOverviewTotals {
-    conversation_count: usize,
-    archived_conversation_count: usize,
-    active_conversation_count: usize,
-    delegate_conversation_count: usize,
-    with_usage_conversation_count: usize,
-    weighted_tokens: u64,
-    input_tokens: u64,
-    output_tokens: u64,
-    total_tokens: u64,
-    cache_read_tokens: u64,
-    cache_write_tokens: u64,
-    reasoning_tokens: u64,
+pub(crate) struct UsageOverviewTotals {
+    pub(crate) conversation_count: usize,
+    pub(crate) archived_conversation_count: usize,
+    pub(crate) active_conversation_count: usize,
+    pub(crate) delegate_conversation_count: usize,
+    pub(crate) with_usage_conversation_count: usize,
+    pub(crate) weighted_tokens: u64,
+    pub(crate) input_tokens: u64,
+    pub(crate) output_tokens: u64,
+    pub(crate) total_tokens: u64,
+    pub(crate) cache_read_tokens: u64,
+    pub(crate) cache_write_tokens: u64,
+    pub(crate) reasoning_tokens: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct UsageAggregateItem {
-    key: String,
-    label: String,
-    conversation_count: usize,
-    weighted_tokens: u64,
-    input_tokens: u64,
-    output_tokens: u64,
-    total_tokens: u64,
-    cache_read_tokens: u64,
-    cache_write_tokens: u64,
-    reasoning_tokens: u64,
+pub(crate) struct UsageAggregateItem {
+    pub(crate) key: String,
+    pub(crate) label: String,
+    pub(crate) conversation_count: usize,
+    pub(crate) weighted_tokens: u64,
+    pub(crate) input_tokens: u64,
+    pub(crate) output_tokens: u64,
+    pub(crate) total_tokens: u64,
+    pub(crate) cache_read_tokens: u64,
+    pub(crate) cache_write_tokens: u64,
+    pub(crate) reasoning_tokens: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct UsageProviderModelAggregateItem {
-    key: String,
-    provider_key: String,
-    provider_label: String,
-    model_name: String,
-    conversation_count: usize,
-    weighted_tokens: u64,
-    input_tokens: u64,
-    output_tokens: u64,
-    total_tokens: u64,
-    cache_read_tokens: u64,
-    cache_write_tokens: u64,
-    reasoning_tokens: u64,
+pub(crate) struct UsageProviderModelAggregateItem {
+    pub(crate) key: String,
+    pub(crate) provider_key: String,
+    pub(crate) provider_label: String,
+    pub(crate) model_name: String,
+    pub(crate) conversation_count: usize,
+    pub(crate) weighted_tokens: u64,
+    pub(crate) input_tokens: u64,
+    pub(crate) output_tokens: u64,
+    pub(crate) total_tokens: u64,
+    pub(crate) cache_read_tokens: u64,
+    pub(crate) cache_write_tokens: u64,
+    pub(crate) reasoning_tokens: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct UsageConversationItem {
-    conversation_id: String,
-    title: String,
-    summary_title: Option<String>,
-    updated_at: String,
-    archived_at: Option<String>,
-    agent_id: String,
-    agent_name: String,
-    department_id: String,
-    department_name: String,
-    avatar_path: Option<String>,
-    avatar_updated_at: Option<String>,
-    api_config_id: String,
-    api_config_name: String,
-    model_name: String,
-    conversation_kind: String,
-    is_delegate: bool,
-    is_system_notification_conversation: bool,
-    message_count: usize,
-    weighted_tokens: u64,
-    input_tokens: u64,
-    output_tokens: u64,
-    total_tokens: u64,
-    cache_read_tokens: u64,
-    cache_write_tokens: u64,
-    reasoning_tokens: u64,
+pub(crate) struct UsageConversationItem {
+    pub(crate) conversation_id: String,
+    pub(crate) title: String,
+    pub(crate) summary_title: Option<String>,
+    pub(crate) updated_at: String,
+    pub(crate) archived_at: Option<String>,
+    pub(crate) agent_id: String,
+    pub(crate) agent_name: String,
+    pub(crate) department_id: String,
+    pub(crate) department_name: String,
+    pub(crate) avatar_path: Option<String>,
+    pub(crate) avatar_updated_at: Option<String>,
+    pub(crate) api_config_id: String,
+    pub(crate) api_config_name: String,
+    pub(crate) model_name: String,
+    pub(crate) conversation_kind: String,
+    pub(crate) is_delegate: bool,
+    pub(crate) is_system_notification_conversation: bool,
+    pub(crate) message_count: usize,
+    pub(crate) weighted_tokens: u64,
+    pub(crate) input_tokens: u64,
+    pub(crate) output_tokens: u64,
+    pub(crate) total_tokens: u64,
+    pub(crate) cache_read_tokens: u64,
+    pub(crate) cache_write_tokens: u64,
+    pub(crate) reasoning_tokens: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct UsageOverview {
-    generated_at: String,
-    totals: UsageOverviewTotals,
-    conversations: Vec<UsageConversationItem>,
-    by_provider_model: Vec<UsageProviderModelAggregateItem>,
-    by_model: Vec<UsageAggregateItem>,
-    by_api_config: Vec<UsageAggregateItem>,
-    by_agent: Vec<UsageAggregateItem>,
-    by_department: Vec<UsageAggregateItem>,
-    by_kind: Vec<UsageAggregateItem>,
+pub(crate) struct UsageOverview {
+    pub(crate) generated_at: String,
+    pub(crate) totals: UsageOverviewTotals,
+    pub(crate) conversations: Vec<UsageConversationItem>,
+    pub(crate) by_provider_model: Vec<UsageProviderModelAggregateItem>,
+    pub(crate) by_model: Vec<UsageAggregateItem>,
+    pub(crate) by_api_config: Vec<UsageAggregateItem>,
+    pub(crate) by_agent: Vec<UsageAggregateItem>,
+    pub(crate) by_department: Vec<UsageAggregateItem>,
+    pub(crate) by_kind: Vec<UsageAggregateItem>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct StorageUsageItem {
-    id: String,
-    target_path: String,
-    bytes: u64,
-    file_count: usize,
-    directory_count: usize,
-    cleanable_bytes: u64,
-    cleanable_file_count: usize,
-    cleanup_kind: Option<String>,
+pub(crate) struct StorageUsageItem {
+    pub(crate) id: String,
+    pub(crate) target_path: String,
+    pub(crate) bytes: u64,
+    pub(crate) file_count: usize,
+    pub(crate) directory_count: usize,
+    pub(crate) cleanable_bytes: u64,
+    pub(crate) cleanable_file_count: usize,
+    pub(crate) cleanup_kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CleanupStorageLegacyItemsInput {
-    cleanup_kind: String,
+pub(crate) struct CleanupStorageLegacyItemsInput {
+    pub(crate) cleanup_kind: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct OpenStorageUsageItemDirectoryInput {
-    item_id: String,
+pub(crate) struct OpenStorageUsageItemDirectoryInput {
+    pub(crate) item_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct StorageCleanupResult {
-    deleted_file_count: usize,
-    skipped_file_count: usize,
-    freed_bytes: u64,
+pub(crate) struct StorageCleanupResult {
+    pub(crate) deleted_file_count: usize,
+    pub(crate) skipped_file_count: usize,
+    pub(crate) freed_bytes: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum StorageLegacyConversationScope {
+pub(crate) enum StorageLegacyConversationScope {
     Normal,
     Delegate,
 }
 
 #[derive(Debug, Clone, Default)]
-struct StorageLegacyCleanupScan {
-    total_file_count: usize,
-    cleanable_paths: Vec<PathBuf>,
-    cleanable_bytes: u64,
+pub(crate) struct StorageLegacyCleanupScan {
+    pub(crate) total_file_count: usize,
+    pub(crate) cleanable_paths: Vec<PathBuf>,
+    pub(crate) cleanable_bytes: u64,
 }
 
 #[derive(Debug, Clone)]
-struct StorageAbnormalConversationCandidate {
-    conversation_id: String,
-    shard_dir: PathBuf,
-    stats: StorageSizeStats,
+pub(crate) struct StorageAbnormalConversationCandidate {
+    pub(crate) conversation_id: String,
+    pub(crate) shard_dir: PathBuf,
+    pub(crate) stats: StorageSizeStats,
 }
 
 #[derive(Debug, Clone, Default)]
-struct StorageAbnormalConversationScan {
-    candidates: Vec<StorageAbnormalConversationCandidate>,
-    stats: StorageSizeStats,
+pub(crate) struct StorageAbnormalConversationScan {
+    pub(crate) candidates: Vec<StorageAbnormalConversationCandidate>,
+    pub(crate) stats: StorageSizeStats,
 }
 
-fn storage_usage_item(
+pub(crate) fn storage_usage_item(
     id: &str,
     target_path: PathBuf,
     stats: StorageSizeStats,
@@ -231,7 +231,7 @@ fn storage_usage_item(
     }
 }
 
-fn storage_add_path_stats(path: &PathBuf, stats: &mut StorageSizeStats) -> Result<(), String> {
+pub(crate) fn storage_add_path_stats(path: &PathBuf, stats: &mut StorageSizeStats) -> Result<(), String> {
     if !path.exists() {
         return Ok(());
     }
@@ -259,7 +259,7 @@ fn storage_add_path_stats(path: &PathBuf, stats: &mut StorageSizeStats) -> Resul
     Ok(())
 }
 
-fn storage_stats_for_paths(paths: Vec<PathBuf>) -> Result<StorageSizeStats, String> {
+pub(crate) fn storage_stats_for_paths(paths: Vec<PathBuf>) -> Result<StorageSizeStats, String> {
     let mut stats = StorageSizeStats::default();
     for path in paths {
         storage_add_path_stats(&path, &mut stats)?;
@@ -267,7 +267,7 @@ fn storage_stats_for_paths(paths: Vec<PathBuf>) -> Result<StorageSizeStats, Stri
     Ok(stats)
 }
 
-fn storage_stats_for_directory_entries(
+pub(crate) fn storage_stats_for_directory_entries(
     dir: &PathBuf,
     filter: impl Fn(&PathBuf, &fs::FileType) -> bool,
 ) -> Result<StorageSizeStats, String> {
@@ -296,24 +296,24 @@ fn storage_stats_for_directory_entries(
     Ok(stats)
 }
 
-fn storage_path_file_name_is(path: &PathBuf, name: &str) -> bool {
+pub(crate) fn storage_path_file_name_is(path: &PathBuf, name: &str) -> bool {
     path.file_name().and_then(|value| value.to_str()) == Some(name)
 }
 
-fn storage_path_extension_is(path: &PathBuf, extension: &str) -> bool {
+pub(crate) fn storage_path_extension_is(path: &PathBuf, extension: &str) -> bool {
     path.extension()
         .and_then(|value| value.to_str())
         .is_some_and(|value| value.eq_ignore_ascii_case(extension))
 }
 
-fn storage_conversation_dir(data_path: &PathBuf, scope: StorageLegacyConversationScope) -> PathBuf {
+pub(crate) fn storage_conversation_dir(data_path: &PathBuf, scope: StorageLegacyConversationScope) -> PathBuf {
     match scope {
         StorageLegacyConversationScope::Normal => app_layout_chat_conversations_dir(data_path),
         StorageLegacyConversationScope::Delegate => delegate_conversation_store_dir(data_path),
     }
 }
 
-fn storage_legacy_file_ready_to_cleanup(
+pub(crate) fn storage_legacy_file_ready_to_cleanup(
     data_path: &PathBuf,
     conversation_id: &str,
     scope: StorageLegacyConversationScope,
@@ -331,7 +331,7 @@ fn storage_legacy_file_ready_to_cleanup(
     }
 }
 
-fn storage_scan_legacy_cleanup_candidates(
+pub(crate) fn storage_scan_legacy_cleanup_candidates(
     data_path: &PathBuf,
     scope: StorageLegacyConversationScope,
 ) -> Result<StorageLegacyCleanupScan, String> {
@@ -380,7 +380,7 @@ fn storage_scan_legacy_cleanup_candidates(
     Ok(scan)
 }
 
-fn storage_legacy_conversation_stats(
+pub(crate) fn storage_legacy_conversation_stats(
     data_path: &PathBuf,
     scope: StorageLegacyConversationScope,
 ) -> Result<(StorageSizeStats, StorageLegacyCleanupScan), String> {
@@ -392,7 +392,7 @@ fn storage_legacy_conversation_stats(
     Ok((stats, scan))
 }
 
-fn storage_current_conversation_store_stats(
+pub(crate) fn storage_current_conversation_store_stats(
     data_path: &PathBuf,
     scope: StorageLegacyConversationScope,
 ) -> Result<StorageSizeStats, String> {
@@ -403,7 +403,7 @@ fn storage_current_conversation_store_stats(
     )
 }
 
-fn storage_current_conversation_store_stats_excluding_ids(
+pub(crate) fn storage_current_conversation_store_stats_excluding_ids(
     data_path: &PathBuf,
     scope: StorageLegacyConversationScope,
     excluded_conversation_ids: &std::collections::HashSet<String>,
@@ -423,7 +423,7 @@ fn storage_current_conversation_store_stats_excluding_ids(
     })
 }
 
-fn storage_conversation_other_stats(
+pub(crate) fn storage_conversation_other_stats(
     data_path: &PathBuf,
     scope: StorageLegacyConversationScope,
 ) -> Result<StorageSizeStats, String> {
@@ -433,7 +433,7 @@ fn storage_conversation_other_stats(
     })
 }
 
-fn storage_abnormal_conversation_scan(
+pub(crate) fn storage_abnormal_conversation_scan(
     data_path: &PathBuf,
 ) -> Result<StorageAbnormalConversationScan, String> {
     let runtime = read_runtime_state_shard(data_path)?;
@@ -517,12 +517,12 @@ fn storage_abnormal_conversation_scan(
     Ok(scan)
 }
 
-fn storage_subtract_bytes(mut stats: StorageSizeStats, bytes: u64) -> StorageSizeStats {
+pub(crate) fn storage_subtract_bytes(mut stats: StorageSizeStats, bytes: u64) -> StorageSizeStats {
     stats.bytes = stats.bytes.saturating_sub(bytes);
     stats
 }
 
-fn storage_image_text_cache_estimated_freed_bytes(runtime: &RuntimeStateFile) -> Result<u64, String> {
+pub(crate) fn storage_image_text_cache_estimated_freed_bytes(runtime: &RuntimeStateFile) -> Result<u64, String> {
     if runtime.image_text_cache.is_empty() {
         return Ok(0);
     }
@@ -537,7 +537,7 @@ fn storage_image_text_cache_estimated_freed_bytes(runtime: &RuntimeStateFile) ->
     Ok(before_bytes.saturating_sub(after_bytes))
 }
 
-fn storage_image_text_cache_stats(state: &AppState) -> Result<StorageSizeStats, String> {
+pub(crate) fn storage_image_text_cache_stats(state: &AppState) -> Result<StorageSizeStats, String> {
     let runtime = state_read_runtime_state_cached(state)?;
     let entries = runtime.image_text_cache.len();
     let bytes = storage_image_text_cache_estimated_freed_bytes(&runtime)?;
@@ -548,7 +548,7 @@ fn storage_image_text_cache_stats(state: &AppState) -> Result<StorageSizeStats, 
     })
 }
 
-fn storage_usage_target_path(state: &AppState, item_id: &str) -> Option<PathBuf> {
+pub(crate) fn storage_usage_target_path(state: &AppState, item_id: &str) -> Option<PathBuf> {
     let app_root = app_root_from_data_path(&state.data_path);
     let path = match item_id {
         "configuration" => state
@@ -581,14 +581,14 @@ fn storage_usage_target_path(state: &AppState, item_id: &str) -> Option<PathBuf>
     Some(path)
 }
 
-fn storage_chat_metadata_stats(data_path: &PathBuf) -> Result<StorageSizeStats, String> {
+pub(crate) fn storage_chat_metadata_stats(data_path: &PathBuf) -> Result<StorageSizeStats, String> {
     let chat_dir = app_layout_chat_dir(data_path);
     storage_stats_for_directory_entries(&chat_dir, |path, _file_type| {
         !storage_path_file_name_is(path, LAYOUT_DIR_CHAT_CONVERSATIONS)
     })
 }
 
-fn storage_root_other_stats(state: &AppState) -> Result<StorageSizeStats, String> {
+pub(crate) fn storage_root_other_stats(state: &AppState) -> Result<StorageSizeStats, String> {
     let app_root = app_root_from_data_path(&state.data_path);
     let config_file_name = state
         .config_path
@@ -626,7 +626,7 @@ fn storage_root_other_stats(state: &AppState) -> Result<StorageSizeStats, String
     })
 }
 
-fn build_storage_usage_overview(state: &AppState) -> Result<StorageUsageOverview, String> {
+pub(crate) fn build_storage_usage_overview(state: &AppState) -> Result<StorageUsageOverview, String> {
     let app_root = app_root_from_data_path(&state.data_path);
     let (legacy_conversation_stats, legacy_conversation_scan) =
         storage_legacy_conversation_stats(&state.data_path, StorageLegacyConversationScope::Normal)?;
@@ -861,9 +861,9 @@ fn build_storage_usage_overview(state: &AppState) -> Result<StorageUsageOverview
     })
 }
 
-const OVERVIEW_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+pub(crate) const OVERVIEW_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(10 * 60);
 
-fn overview_freshness<T>(runtime: &OverviewRuntime<T>) -> String {
+pub(crate) fn overview_freshness<T>(runtime: &OverviewRuntime<T>) -> String {
     match runtime.cache.as_ref() {
         None => "never".to_string(),
         Some(entry) if entry.computed_at.elapsed() < OVERVIEW_CACHE_TTL => "fresh".to_string(),
@@ -871,7 +871,7 @@ fn overview_freshness<T>(runtime: &OverviewRuntime<T>) -> String {
     }
 }
 
-fn overview_snapshot<T: Clone>(runtime: &OverviewRuntime<T>) -> OverviewSnapshot<T> {
+pub(crate) fn overview_snapshot<T: Clone>(runtime: &OverviewRuntime<T>) -> OverviewSnapshot<T> {
     OverviewSnapshot {
         status: OverviewStatus {
             compute_state: if runtime.running { "running" } else { "idle" }.to_string(),
@@ -883,13 +883,13 @@ fn overview_snapshot<T: Clone>(runtime: &OverviewRuntime<T>) -> OverviewSnapshot
     }
 }
 
-fn storage_overview_runtime() -> &'static tokio::sync::Mutex<OverviewRuntime<StorageUsageOverview>> {
+pub(crate) fn storage_overview_runtime() -> &'static tokio::sync::Mutex<OverviewRuntime<StorageUsageOverview>> {
     static RUNTIME: std::sync::OnceLock<tokio::sync::Mutex<OverviewRuntime<StorageUsageOverview>>> =
         std::sync::OnceLock::new();
     RUNTIME.get_or_init(|| tokio::sync::Mutex::new(OverviewRuntime::default()))
 }
 
-async fn start_storage_overview_refresh_if_needed(
+pub(crate) async fn start_storage_overview_refresh_if_needed(
     state: AppState,
     force: bool,
 ) -> OverviewSnapshot<StorageUsageOverview> {
@@ -930,7 +930,7 @@ async fn start_storage_overview_refresh_if_needed(
 
 
 
-fn usage_resolve_api_config_id(conversation: &Conversation, config: &AppConfig) -> String {
+pub(crate) fn usage_resolve_api_config_id(conversation: &Conversation, config: &AppConfig) -> String {
     let preferred = conversation
         .preferred_api_config_id
         .as_deref()
@@ -968,7 +968,7 @@ fn usage_resolve_api_config_id(conversation: &Conversation, config: &AppConfig) 
         .unwrap_or_default()
 }
 
-fn usage_kind_key_and_label(conversation: &Conversation) -> (String, String) {
+pub(crate) fn usage_kind_key_and_label(conversation: &Conversation) -> (String, String) {
     if conversation_is_system_notification(conversation) {
         return ("system_notification".to_string(), "系统通知".to_string());
     }
@@ -991,7 +991,7 @@ fn usage_kind_key_and_label(conversation: &Conversation) -> (String, String) {
     ("normal".to_string(), "普通".to_string())
 }
 
-fn usage_aggregate_push(
+pub(crate) fn usage_aggregate_push(
     map: &mut std::collections::HashMap<String, UsageAggregateItem>,
     key: String,
     label: String,
@@ -1012,7 +1012,7 @@ fn usage_aggregate_push(
     entry.reasoning_tokens = entry.reasoning_tokens.saturating_add(item.reasoning_tokens);
 }
 
-fn usage_sort_aggregate_items(items: std::collections::HashMap<String, UsageAggregateItem>) -> Vec<UsageAggregateItem> {
+pub(crate) fn usage_sort_aggregate_items(items: std::collections::HashMap<String, UsageAggregateItem>) -> Vec<UsageAggregateItem> {
     let mut out = items.into_values().collect::<Vec<_>>();
     out.sort_by(|left, right| {
         right
@@ -1025,11 +1025,11 @@ fn usage_sort_aggregate_items(items: std::collections::HashMap<String, UsageAggr
     out
 }
 
-fn usage_provider_model_compound_key(provider_key: &str, model_name: &str) -> String {
+pub(crate) fn usage_provider_model_compound_key(provider_key: &str, model_name: &str) -> String {
     format!("{provider_key}::{model_name}")
 }
 
-fn usage_provider_model_sort_aggregate_items(
+pub(crate) fn usage_provider_model_sort_aggregate_items(
     items: std::collections::HashMap<String, UsageProviderModelAggregateItem>,
 ) -> Vec<UsageProviderModelAggregateItem> {
     let mut out = items.into_values().collect::<Vec<_>>();
@@ -1045,7 +1045,7 @@ fn usage_provider_model_sort_aggregate_items(
     out
 }
 
-fn usage_provider_model_aggregate_push(
+pub(crate) fn usage_provider_model_aggregate_push(
     map: &mut std::collections::HashMap<String, UsageProviderModelAggregateItem>,
     provider_key: String,
     provider_label: String,
@@ -1092,7 +1092,7 @@ fn usage_provider_model_aggregate_push(
         ));
 }
 
-fn usage_provider_label_from_provider_key(
+pub(crate) fn usage_provider_label_from_provider_key(
     provider_key: &str,
     config: &AppConfig,
 ) -> String {
@@ -1111,7 +1111,7 @@ fn usage_provider_label_from_provider_key(
 /// 用量台账统一记账入口：把一次 LLM 调用按小时桶 UPSERT 累加进 usage_trail，
 /// 同时快照会话维度与 provider_label。由 add_conversation_cumulative_usage_delta
 /// 与委托线程 usage 落盘路径调用；失败只告警，不阻塞主流程。
-fn usage_trail_record_conversation_delta(
+pub(crate) fn usage_trail_record_conversation_delta(
     state: &AppState,
     conversation: &Conversation,
     provider_key: Option<&str>,
@@ -1153,7 +1153,7 @@ fn usage_trail_record_conversation_delta(
     }
 }
 
-fn build_usage_overview(state: &AppState) -> Result<UsageOverview, String> {
+pub(crate) fn build_usage_overview(state: &AppState) -> Result<UsageOverview, String> {
     let config = state_read_config_cached(state)?;
     let runtime = state_read_agents_runtime_snapshot(state)?;
     message_store::chat_metadata_store_run_usage_trail_migration(&state.data_path, &config)?;
@@ -1405,7 +1405,7 @@ fn build_usage_overview(state: &AppState) -> Result<UsageOverview, String> {
     })
 }
 
-fn usage_trail_weighted_tokens(tokens: &message_store::UsageTrailTokenDelta) -> u64 {
+pub(crate) fn usage_trail_weighted_tokens(tokens: &message_store::UsageTrailTokenDelta) -> u64 {
     conversation_cumulative_usage_weighted_tokens(&ConversationCumulativeUsage {
         input_tokens: tokens.input_tokens,
         output_tokens: tokens.output_tokens,
@@ -1417,7 +1417,7 @@ fn usage_trail_weighted_tokens(tokens: &message_store::UsageTrailTokenDelta) -> 
     })
 }
 
-fn usage_kind_label_from_key(key: &str) -> String {
+pub(crate) fn usage_kind_label_from_key(key: &str) -> String {
     match key {
         "system_notification" => "系统通知".to_string(),
         "delegate" => "委托".to_string(),
@@ -1428,13 +1428,13 @@ fn usage_kind_label_from_key(key: &str) -> String {
     }
 }
 
-fn usage_overview_runtime() -> &'static tokio::sync::Mutex<OverviewRuntime<UsageOverview>> {
+pub(crate) fn usage_overview_runtime() -> &'static tokio::sync::Mutex<OverviewRuntime<UsageOverview>> {
     static RUNTIME: std::sync::OnceLock<tokio::sync::Mutex<OverviewRuntime<UsageOverview>>> =
         std::sync::OnceLock::new();
     RUNTIME.get_or_init(|| tokio::sync::Mutex::new(OverviewRuntime::default()))
 }
 
-async fn start_usage_overview_refresh_if_needed(
+pub(crate) async fn start_usage_overview_refresh_if_needed(
     state: AppState,
     force: bool,
 ) -> OverviewSnapshot<UsageOverview> {
@@ -1477,70 +1477,70 @@ async fn start_usage_overview_refresh_if_needed(
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct UsageTrailWallQuery {
-    view: String,
-    year: Option<String>,
+pub(crate) struct UsageTrailWallQuery {
+    pub(crate) view: String,
+    pub(crate) year: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct UsageTrailWallView {
-    generated_at: String,
-    view: String,
-    totals: UsageTrailWallTotals,
-    epoch_totals: Option<UsageTrailWallTotals>,
-    hourly: Vec<UsageTrailWallHour>,
-    peak_hour: Option<u8>,
-    year: String,
-    years: Vec<String>,
-    calendar: Vec<UsageTrailWallDay>,
-    top_conversation_label: Option<String>,
-    top_conversation_percent: Option<u64>,
-    active_period_label: Option<String>,
+pub(crate) struct UsageTrailWallView {
+    pub(crate) generated_at: String,
+    pub(crate) view: String,
+    pub(crate) totals: UsageTrailWallTotals,
+    pub(crate) epoch_totals: Option<UsageTrailWallTotals>,
+    pub(crate) hourly: Vec<UsageTrailWallHour>,
+    pub(crate) peak_hour: Option<u8>,
+    pub(crate) year: String,
+    pub(crate) years: Vec<String>,
+    pub(crate) calendar: Vec<UsageTrailWallDay>,
+    pub(crate) top_conversation_label: Option<String>,
+    pub(crate) top_conversation_percent: Option<u64>,
+    pub(crate) active_period_label: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct UsageTrailWallTotals {
-    conversation_count: usize,
-    weighted_tokens: u64,
-    input_tokens: u64,
-    output_tokens: u64,
-    total_tokens: u64,
-    cache_read_tokens: u64,
-    cache_write_tokens: u64,
-    reasoning_tokens: u64,
+pub(crate) struct UsageTrailWallTotals {
+    pub(crate) conversation_count: usize,
+    pub(crate) weighted_tokens: u64,
+    pub(crate) input_tokens: u64,
+    pub(crate) output_tokens: u64,
+    pub(crate) total_tokens: u64,
+    pub(crate) cache_read_tokens: u64,
+    pub(crate) cache_write_tokens: u64,
+    pub(crate) reasoning_tokens: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct UsageTrailWallHour {
-    hour: u8,
-    total_tokens: u64,
-    conversation_count: usize,
-    models: Vec<UsageTrailWallModel>,
+pub(crate) struct UsageTrailWallHour {
+    pub(crate) hour: u8,
+    pub(crate) total_tokens: u64,
+    pub(crate) conversation_count: usize,
+    pub(crate) models: Vec<UsageTrailWallModel>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct UsageTrailWallModel {
-    model: String,
-    tokens: u64,
-    provider_label: String,
-    reasoning_effort: String,
+pub(crate) struct UsageTrailWallModel {
+    pub(crate) model: String,
+    pub(crate) tokens: u64,
+    pub(crate) provider_label: String,
+    pub(crate) reasoning_effort: String,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
-struct UsageTrailWallDay {
-    date: String,
-    total_tokens: u64,
-    conversation_count: usize,
+pub(crate) struct UsageTrailWallDay {
+    pub(crate) date: String,
+    pub(crate) total_tokens: u64,
+    pub(crate) conversation_count: usize,
 }
 
 /// 足迹墙 today 起点：凌晨 4 点分界（当前时刻往前推 4 小时所在分界日的 04:00）。
 /// 0:00-3:59 的使用属于前一个分界日，因此分界日由 now-4h 的日期决定。
-fn usage_trail_wall_today_start(now_local: OffsetDateTime) -> String {
+pub(crate) fn usage_trail_wall_today_start(now_local: OffsetDateTime) -> String {
     let shifted = now_local - time::Duration::hours(4);
     format!(
         "{:04}-{:02}-{:02}T04:00:00",
@@ -1550,7 +1550,7 @@ fn usage_trail_wall_today_start(now_local: OffsetDateTime) -> String {
     )
 }
 
-fn usage_trail_wall_totals_from_rows(rows: &[message_store::UsageTrailRow]) -> UsageTrailWallTotals {
+pub(crate) fn usage_trail_wall_totals_from_rows(rows: &[message_store::UsageTrailRow]) -> UsageTrailWallTotals {
     let mut totals = UsageTrailWallTotals::default();
     let mut seen = std::collections::HashSet::<String>::new();
     for row in rows {
@@ -1576,12 +1576,12 @@ fn usage_trail_wall_totals_from_rows(rows: &[message_store::UsageTrailRow]) -> U
 }
 
 /// 从小时桶字符串解析小时（bucket 格式 YYYY-MM-DDTHH:00:00）。
-fn usage_trail_wall_hour_from_bucket(bucket: &str) -> Option<u8> {
+pub(crate) fn usage_trail_wall_hour_from_bucket(bucket: &str) -> Option<u8> {
     bucket.get(11..13)?.parse::<u8>().ok()
 }
 
 /// 今天视图：24 小时格 + 峰值小时（weighted token 最大）+ 每格按模型拆分。
-fn usage_trail_wall_hourly(
+pub(crate) fn usage_trail_wall_hourly(
     rows: &[message_store::UsageTrailRow],
     config: &AppConfig,
 ) -> (Vec<UsageTrailWallHour>, Option<u8>) {
@@ -1657,7 +1657,7 @@ fn usage_trail_wall_hourly(
 }
 
 /// 历史视图：给定年份的全年日历（1/1~12/31，含无数据日补 0）。
-fn usage_trail_wall_calendar(
+pub(crate) fn usage_trail_wall_calendar(
     year: i32,
     rows: &[message_store::UsageTrailRow],
 ) -> Vec<UsageTrailWallDay> {
@@ -1702,7 +1702,7 @@ fn usage_trail_wall_calendar(
 }
 
 /// 历史视图可用年份（小时桶数据年份，升序）。
-fn usage_trail_wall_years(rows: &[message_store::UsageTrailRow]) -> Vec<String> {
+pub(crate) fn usage_trail_wall_years(rows: &[message_store::UsageTrailRow]) -> Vec<String> {
     let mut years = rows
         .iter()
         .filter_map(|row| {
@@ -1720,7 +1720,7 @@ fn usage_trail_wall_years(rows: &[message_store::UsageTrailRow]) -> Vec<String> 
 }
 
 /// 历史视图 top 会话：按 weighted token 聚合取最大，label 走 title → summary → 未命名 → 已删除 兜底链。
-fn usage_trail_wall_top_conversation(
+pub(crate) fn usage_trail_wall_top_conversation(
     state: &AppState,
     rows: &[message_store::UsageTrailRow],
 ) -> Result<Option<(String, u64)>, String> {
@@ -1770,7 +1770,7 @@ fn usage_trail_wall_top_conversation(
 }
 
 /// 历史视图最活跃时段：凌晨 0-5 / 上午 6-11 / 下午 12-17 / 晚上 18-23，按 weighted token 取最大。
-fn usage_trail_wall_active_period(rows: &[message_store::UsageTrailRow]) -> Option<String> {
+pub(crate) fn usage_trail_wall_active_period(rows: &[message_store::UsageTrailRow]) -> Option<String> {
     let mut buckets = [0_u64; 4];
     for row in rows {
         let Some(hour) = usage_trail_wall_hour_from_bucket(&row.bucket) else {
@@ -1800,7 +1800,7 @@ fn usage_trail_wall_active_period(rows: &[message_store::UsageTrailRow]) -> Opti
     })
 }
 
-fn build_usage_trail_wall(
+pub(crate) fn build_usage_trail_wall(
     state: &AppState,
     query: &UsageTrailWallQuery,
 ) -> Result<UsageTrailWallView, String> {
@@ -1878,7 +1878,7 @@ fn build_usage_trail_wall(
 }
 
 
-fn storage_existing_directory_for_open(path: &PathBuf) -> Result<PathBuf, String> {
+pub(crate) fn storage_existing_directory_for_open(path: &PathBuf) -> Result<PathBuf, String> {
     if path.exists() {
         if path.is_dir() {
             return Ok(path.clone());
@@ -1898,7 +1898,7 @@ fn storage_existing_directory_for_open(path: &PathBuf) -> Result<PathBuf, String
 }
 
 
-fn cleanup_storage_legacy_scope(
+pub(crate) fn cleanup_storage_legacy_scope(
     state: &AppState,
     scope: StorageLegacyConversationScope,
 ) -> Result<StorageCleanupResult, String> {
@@ -1934,7 +1934,7 @@ fn cleanup_storage_legacy_scope(
     })
 }
 
-fn cleanup_storage_abnormal_conversations(state: &AppState) -> Result<StorageCleanupResult, String> {
+pub(crate) fn cleanup_storage_abnormal_conversations(state: &AppState) -> Result<StorageCleanupResult, String> {
     let scan = storage_abnormal_conversation_scan(&state.data_path)?;
     let expected_dir = app_layout_chat_conversations_dir(&state.data_path);
     let mut deleted_file_count = 0;
@@ -1958,7 +1958,7 @@ fn cleanup_storage_abnormal_conversations(state: &AppState) -> Result<StorageCle
     })
 }
 
-fn cleanup_storage_image_text_cache(state: &AppState) -> Result<StorageCleanupResult, String> {
+pub(crate) fn cleanup_storage_image_text_cache(state: &AppState) -> Result<StorageCleanupResult, String> {
     let mut runtime = state_read_runtime_state_cached(state)?;
     let deleted_file_count = runtime.image_text_cache.len();
     let freed_bytes = storage_image_text_cache_estimated_freed_bytes(&runtime)?;
@@ -1972,7 +1972,7 @@ fn cleanup_storage_image_text_cache(state: &AppState) -> Result<StorageCleanupRe
 }
 
 
-fn cleanup_storage_legacy_items_inner(
+pub(crate) fn cleanup_storage_legacy_items_inner(
     state: &AppState,
     input: CleanupStorageLegacyItemsInput,
 ) -> Result<StorageCleanupResult, String> {

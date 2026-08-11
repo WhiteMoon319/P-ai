@@ -1,33 +1,58 @@
+use std::{
+    fs,
+    io::Cursor,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+};
+
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use directories::ProjectDirs;
+use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
+use image::ImageFormat;
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use rmcp::{schemars, ServiceExt};
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
+use uuid::Uuid;
+
+// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
+
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
+use super::*;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImEnqueueInput {
-    channel_id: String,
-    platform: RemoteImPlatform,
-    im_name: String,
-    remote_contact_type: String,
-    remote_contact_id: String,
+pub(crate) struct RemoteImEnqueueInput {
+    pub(crate) channel_id: String,
+    pub(crate) platform: RemoteImPlatform,
+    pub(crate) im_name: String,
+    pub(crate) remote_contact_type: String,
+    pub(crate) remote_contact_id: String,
     #[serde(default)]
-    remote_contact_name: Option<String>,
-    sender_id: String,
-    sender_name: String,
+    pub(crate) remote_contact_name: Option<String>,
+    pub(crate) sender_id: String,
+    pub(crate) sender_name: String,
     #[serde(default)]
-    sender_avatar_url: Option<String>,
+    pub(crate) sender_avatar_url: Option<String>,
     #[serde(default)]
-    platform_message_id: Option<String>,
+    pub(crate) platform_message_id: Option<String>,
     #[serde(default)]
-    dingtalk_session_webhook: Option<String>,
+    pub(crate) dingtalk_session_webhook: Option<String>,
     #[serde(default)]
-    dingtalk_session_webhook_expired_time: Option<i64>,
-    session: SessionSelector,
-    payload: ChatInputPayload,
+    pub(crate) dingtalk_session_webhook_expired_time: Option<i64>,
+    pub(crate) session: SessionSelector,
+    pub(crate) payload: ChatInputPayload,
 }
 
-const FAST_REQUEST_KIND_REMOTE_IM_REPLY_DECISION: &str = "remote_im_reply_decision";
+pub(crate) const FAST_REQUEST_KIND_REMOTE_IM_REPLY_DECISION: &str = "remote_im_reply_decision";
 // 群聊长度门改写（默认禁用，保留待重新启用）。
 #[allow(dead_code)]
-const FAST_REQUEST_KIND_REMOTE_IM_REPLY_REWRITE: &str = "remote_im_reply_rewrite";
+pub(crate) const FAST_REQUEST_KIND_REMOTE_IM_REPLY_REWRITE: &str = "remote_im_reply_rewrite";
 
-fn provider_meta_string(meta: &Option<Value>, key: &str) -> Option<String> {
+pub(crate) fn provider_meta_string(meta: &Option<Value>, key: &str) -> Option<String> {
     meta.as_ref()
         .and_then(|value| value.get(key))
         .and_then(Value::as_str)
@@ -36,7 +61,7 @@ fn provider_meta_string(meta: &Option<Value>, key: &str) -> Option<String> {
         .map(ToString::to_string)
 }
 
-fn provider_meta_i64(meta: &Option<Value>, key: &str) -> Option<i64> {
+pub(crate) fn provider_meta_i64(meta: &Option<Value>, key: &str) -> Option<i64> {
     let value = meta.as_ref().and_then(|item| item.get(key))?;
     if let Some(v) = value.as_i64() {
         return Some(v);
@@ -48,7 +73,7 @@ fn provider_meta_i64(meta: &Option<Value>, key: &str) -> Option<i64> {
         .and_then(|raw| raw.parse::<i64>().ok())
 }
 
-fn resolve_dingtalk_session_webhook(input: &RemoteImEnqueueInput) -> Option<String> {
+pub(crate) fn resolve_dingtalk_session_webhook(input: &RemoteImEnqueueInput) -> Option<String> {
     let direct = input
         .dingtalk_session_webhook
         .as_deref()
@@ -63,7 +88,7 @@ fn resolve_dingtalk_session_webhook(input: &RemoteImEnqueueInput) -> Option<Stri
         .or_else(|| provider_meta_string(&input.payload.provider_meta, "dingtalkSessionWebhook"))
 }
 
-fn resolve_dingtalk_session_webhook_expired_time(input: &RemoteImEnqueueInput) -> Option<i64> {
+pub(crate) fn resolve_dingtalk_session_webhook_expired_time(input: &RemoteImEnqueueInput) -> Option<i64> {
     input.dingtalk_session_webhook_expired_time
         .or_else(|| provider_meta_i64(&input.payload.provider_meta, "sessionWebhookExpiredTime"))
         .or_else(|| {
@@ -76,203 +101,203 @@ fn resolve_dingtalk_session_webhook_expired_time(input: &RemoteImEnqueueInput) -
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImEnqueueResult {
-    event_id: String,
-    conversation_id: String,
-    activate_assistant: bool,
-    contact_id: String,
+pub(crate) struct RemoteImEnqueueResult {
+    pub(crate) event_id: String,
+    pub(crate) conversation_id: String,
+    pub(crate) activate_assistant: bool,
+    pub(crate) contact_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactAllowSendUpdateInput {
-    contact_id: String,
-    allow_send: bool,
+pub(crate) struct RemoteImContactAllowSendUpdateInput {
+    pub(crate) contact_id: String,
+    pub(crate) allow_send: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactAllowSendFilesUpdateInput {
-    contact_id: String,
-    allow_send_files: bool,
+pub(crate) struct RemoteImContactAllowSendFilesUpdateInput {
+    pub(crate) contact_id: String,
+    pub(crate) allow_send_files: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactAllowReceiveUpdateInput {
-    contact_id: String,
-    allow_receive: bool,
+pub(crate) struct RemoteImContactAllowReceiveUpdateInput {
+    pub(crate) contact_id: String,
+    pub(crate) allow_receive: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactBlockedMessagePrefixesUpdateInput {
-    contact_id: String,
+pub(crate) struct RemoteImContactBlockedMessagePrefixesUpdateInput {
+    pub(crate) contact_id: String,
     #[serde(default)]
-    blocked_message_prefixes: Vec<String>,
+    pub(crate) blocked_message_prefixes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactBehaviorUpdateInput {
-    contact_id: String,
+pub(crate) struct RemoteImContactBehaviorUpdateInput {
+    pub(crate) contact_id: String,
     #[serde(default = "default_remote_im_contact_mute_keywords")]
-    mute_keywords: Vec<String>,
+    pub(crate) mute_keywords: Vec<String>,
     #[serde(default = "default_remote_im_contact_unmute_keywords")]
-    unmute_keywords: Vec<String>,
+    pub(crate) unmute_keywords: Vec<String>,
     #[serde(default = "default_remote_im_contact_patience_seconds")]
-    patience_seconds: u64,
+    pub(crate) patience_seconds: u64,
     #[serde(default = "default_remote_im_contact_mute_duration_seconds")]
-    mute_duration_seconds: u64,
+    pub(crate) mute_duration_seconds: u64,
     #[serde(default)]
-    activation_cooldown_seconds: u64,
+    pub(crate) activation_cooldown_seconds: u64,
     #[serde(default = "default_remote_im_contact_blocked_message_prefixes")]
-    blocked_message_prefixes: Vec<String>,
+    pub(crate) blocked_message_prefixes: Vec<String>,
     #[serde(default)]
-    group_reply_pacing: RemoteImGroupReplyPacing,
+    pub(crate) group_reply_pacing: RemoteImGroupReplyPacing,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactSettingsPatchInput {
-    contact_id: String,
+pub(crate) struct RemoteImContactSettingsPatchInput {
+    pub(crate) contact_id: String,
     #[serde(default)]
-    department_id: Option<String>,
+    pub(crate) department_id: Option<String>,
     #[serde(default)]
-    agent_id: Option<String>,
+    pub(crate) agent_id: Option<String>,
     #[serde(default = "default_remote_im_contact_processing_mode")]
-    processing_mode: String,
+    pub(crate) processing_mode: String,
     #[serde(default = "default_remote_im_contact_blocked_message_prefixes")]
-    blocked_message_prefixes: Vec<String>,
+    pub(crate) blocked_message_prefixes: Vec<String>,
     #[serde(default = "default_remote_im_contact_activation_mode")]
-    activation_mode: String,
+    pub(crate) activation_mode: String,
     #[serde(default)]
-    activation_keywords: Vec<String>,
+    pub(crate) activation_keywords: Vec<String>,
     #[serde(default = "default_remote_im_contact_mute_keywords")]
-    mute_keywords: Vec<String>,
+    pub(crate) mute_keywords: Vec<String>,
     #[serde(default = "default_remote_im_contact_unmute_keywords")]
-    unmute_keywords: Vec<String>,
+    pub(crate) unmute_keywords: Vec<String>,
     #[serde(default = "default_remote_im_contact_patience_seconds")]
-    patience_seconds: u64,
+    pub(crate) patience_seconds: u64,
     #[serde(default = "default_remote_im_contact_mute_duration_seconds")]
-    mute_duration_seconds: u64,
+    pub(crate) mute_duration_seconds: u64,
     #[serde(default)]
-    activation_cooldown_seconds: u64,
+    pub(crate) activation_cooldown_seconds: u64,
     #[serde(default)]
-    group_reply_pacing: RemoteImGroupReplyPacing,
+    pub(crate) group_reply_pacing: RemoteImGroupReplyPacing,
     #[serde(default = "default_remote_im_contact_response_strategy")]
-    response_strategy: String,
+    pub(crate) response_strategy: String,
     #[serde(default = "default_remote_im_contact_response_guidance")]
-    response_guidance: String,
+    pub(crate) response_guidance: String,
     #[serde(default)]
-    allow_receive: bool,
+    pub(crate) allow_receive: bool,
     #[serde(default)]
-    allow_send: bool,
+    pub(crate) allow_send: bool,
     #[serde(default)]
-    allow_send_files: bool,
+    pub(crate) allow_send_files: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactActivationUpdateInput {
-    contact_id: String,
-    activation_mode: String,
+pub(crate) struct RemoteImContactActivationUpdateInput {
+    pub(crate) contact_id: String,
+    pub(crate) activation_mode: String,
     #[serde(default)]
-    activation_keywords: Vec<String>,
+    pub(crate) activation_keywords: Vec<String>,
     #[serde(default = "default_remote_im_contact_mute_keywords")]
-    mute_keywords: Vec<String>,
+    pub(crate) mute_keywords: Vec<String>,
     #[serde(default = "default_remote_im_contact_unmute_keywords")]
-    unmute_keywords: Vec<String>,
+    pub(crate) unmute_keywords: Vec<String>,
     #[serde(default = "default_remote_im_contact_patience_seconds")]
-    patience_seconds: u64,
+    pub(crate) patience_seconds: u64,
     #[serde(default = "default_remote_im_contact_mute_duration_seconds")]
-    mute_duration_seconds: u64,
+    pub(crate) mute_duration_seconds: u64,
     #[serde(default)]
-    activation_cooldown_seconds: u64,
+    pub(crate) activation_cooldown_seconds: u64,
     #[serde(default = "default_remote_im_contact_response_strategy")]
-    response_strategy: String,
+    pub(crate) response_strategy: String,
     #[serde(default = "default_remote_im_contact_response_guidance")]
-    response_guidance: String,
+    pub(crate) response_guidance: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactRemarkUpdateInput {
-    contact_id: String,
+pub(crate) struct RemoteImContactRemarkUpdateInput {
+    pub(crate) contact_id: String,
     #[serde(default)]
-    remark_name: String,
+    pub(crate) remark_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactRouteModeUpdateInput {
-    contact_id: String,
-    route_mode: String,
+pub(crate) struct RemoteImContactRouteModeUpdateInput {
+    pub(crate) contact_id: String,
+    pub(crate) route_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactDepartmentBindingUpdateInput {
-    contact_id: String,
+pub(crate) struct RemoteImContactDepartmentBindingUpdateInput {
+    pub(crate) contact_id: String,
     #[serde(default)]
-    department_id: Option<String>,
+    pub(crate) department_id: Option<String>,
     #[serde(default)]
-    agent_id: Option<String>,
+    pub(crate) agent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactProcessingModeUpdateInput {
-    contact_id: String,
-    processing_mode: String,
+pub(crate) struct RemoteImContactProcessingModeUpdateInput {
+    pub(crate) contact_id: String,
+    pub(crate) processing_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactDeleteInput {
-    contact_id: String,
+pub(crate) struct RemoteImContactDeleteInput {
+    pub(crate) contact_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactLogsInput {
-    contact_id: String,
+pub(crate) struct RemoteImContactLogsInput {
+    pub(crate) contact_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactWorkspaceUpdateInput {
-    contact_id: String,
+pub(crate) struct RemoteImContactWorkspaceUpdateInput {
+    pub(crate) contact_id: String,
     #[serde(default)]
-    shell_workspaces: Vec<ShellWorkspaceConfig>,
+    pub(crate) shell_workspaces: Vec<ShellWorkspaceConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactConversationSummary {
-    contact_id: String,
-    conversation_id: String,
-    title: String,
-    updated_at: String,
-    last_message_at: Option<String>,
-    message_count: usize,
-    channel_id: String,
+pub(crate) struct RemoteImContactConversationSummary {
+    pub(crate) contact_id: String,
+    pub(crate) conversation_id: String,
+    pub(crate) title: String,
+    pub(crate) updated_at: String,
+    pub(crate) last_message_at: Option<String>,
+    pub(crate) message_count: usize,
+    pub(crate) channel_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    channel_name: Option<String>,
-    channel_enabled: bool,
-    platform: RemoteImPlatform,
-    contact_display_name: String,
-    bound_department_id: Option<String>,
-    bound_agent_id: Option<String>,
-    processing_mode: String,
+    pub(crate) channel_name: Option<String>,
+    pub(crate) channel_enabled: bool,
+    pub(crate) platform: RemoteImPlatform,
+    pub(crate) contact_display_name: String,
+    pub(crate) bound_department_id: Option<String>,
+    pub(crate) bound_agent_id: Option<String>,
+    pub(crate) processing_mode: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    preview_messages: Vec<ConversationPreviewMessage>,
+    pub(crate) preview_messages: Vec<ConversationPreviewMessage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImContactConversationMessagesInput {
-    contact_id: String,
+pub(crate) struct RemoteImContactConversationMessagesInput {
+    pub(crate) contact_id: String,
 }
 
 pub(crate) fn remote_im_channel_by_id<'a>(
@@ -285,7 +310,7 @@ pub(crate) fn remote_im_channel_by_id<'a>(
         .find(|channel| channel.id == channel_id)
 }
 
-fn remote_im_upsert_contact_for_inbound(
+pub(crate) fn remote_im_upsert_contact_for_inbound(
     runtime: &mut RuntimeStateFile,
     input: &RemoteImEnqueueInput,
     now: &str,
@@ -386,7 +411,7 @@ fn remote_im_upsert_contact_for_inbound(
     contact_id
 }
 
-fn normalize_contact_activation_mode(value: &str) -> String {
+pub(crate) fn normalize_contact_activation_mode(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         "always" | "keyword" => value.trim().to_ascii_lowercase(),
         "never" => "never".to_string(),
@@ -394,7 +419,7 @@ fn normalize_contact_activation_mode(value: &str) -> String {
     }
 }
 
-fn normalize_contact_keyword_list(values: &[String]) -> Vec<String> {
+pub(crate) fn normalize_contact_keyword_list(values: &[String]) -> Vec<String> {
     let mut out = Vec::<String>::new();
     let mut seen = std::collections::HashSet::<String>::new();
     for value in values {
@@ -412,11 +437,11 @@ fn normalize_contact_keyword_list(values: &[String]) -> Vec<String> {
     out
 }
 
-fn normalize_contact_activation_keywords(values: &[String]) -> Vec<String> {
+pub(crate) fn normalize_contact_activation_keywords(values: &[String]) -> Vec<String> {
     normalize_contact_keyword_list(values)
 }
 
-fn normalize_contact_blocked_message_prefixes(values: &[String]) -> Vec<String> {
+pub(crate) fn normalize_contact_blocked_message_prefixes(values: &[String]) -> Vec<String> {
     let mut out = Vec::<String>::new();
     let mut seen = std::collections::HashSet::<String>::new();
     for value in values {
@@ -431,7 +456,7 @@ fn normalize_contact_blocked_message_prefixes(values: &[String]) -> Vec<String> 
     out
 }
 
-fn remote_im_blocked_inbound_message_prefix(
+pub(crate) fn remote_im_blocked_inbound_message_prefix(
     text: &str,
     blocked_prefixes: &[String],
 ) -> Option<String> {
@@ -444,35 +469,35 @@ fn remote_im_blocked_inbound_message_prefix(
         .map(ToOwned::to_owned)
 }
 
-fn normalize_contact_route_mode(value: &str) -> String {
+pub(crate) fn normalize_contact_route_mode(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         "dedicated_contact_conversation" => "dedicated_contact_conversation".to_string(),
         _ => "dedicated_contact_conversation".to_string(),
     }
 }
 
-fn normalize_contact_processing_mode(value: &str) -> String {
+pub(crate) fn normalize_contact_processing_mode(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         "qa" => "qa".to_string(),
         _ => "continuous".to_string(),
     }
 }
 
-fn normalize_contact_response_strategy(value: &str) -> String {
+pub(crate) fn normalize_contact_response_strategy(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         "smart_judge" => "smart_judge".to_string(),
         _ => "always_reply".to_string(),
     }
 }
 
-fn remote_im_contact_is_private(contact: &RemoteImContact) -> bool {
+pub(crate) fn remote_im_contact_is_private(contact: &RemoteImContact) -> bool {
     contact
         .remote_contact_type
         .trim()
         .eq_ignore_ascii_case("private")
 }
 
-fn default_remote_im_contact_response_strategy_for_type(remote_contact_type: &str) -> String {
+pub(crate) fn default_remote_im_contact_response_strategy_for_type(remote_contact_type: &str) -> String {
     if remote_contact_type.trim().eq_ignore_ascii_case("private") {
         "always_reply".to_string()
     } else {
@@ -480,7 +505,7 @@ fn default_remote_im_contact_response_strategy_for_type(remote_contact_type: &st
     }
 }
 
-fn effective_remote_im_contact_response_strategy(contact: &RemoteImContact) -> String {
+pub(crate) fn effective_remote_im_contact_response_strategy(contact: &RemoteImContact) -> String {
     if remote_im_contact_is_private(contact) {
         "always_reply".to_string()
     } else {
@@ -488,7 +513,7 @@ fn effective_remote_im_contact_response_strategy(contact: &RemoteImContact) -> S
     }
 }
 
-fn normalize_remote_im_channel_response_guidance(value: &str) -> String {
+pub(crate) fn normalize_remote_im_channel_response_guidance(value: &str) -> String {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         default_remote_im_contact_response_guidance()
@@ -497,7 +522,7 @@ fn normalize_remote_im_channel_response_guidance(value: &str) -> String {
     }
 }
 
-fn normalize_remote_im_channel_behavior_settings(
+pub(crate) fn normalize_remote_im_channel_behavior_settings(
     value: &RemoteImChannelBehaviorSettings,
 ) -> RemoteImChannelBehaviorSettings {
     let mut normalized = value.clone();
@@ -510,13 +535,13 @@ fn normalize_remote_im_channel_behavior_settings(
     normalized
 }
 
-fn remote_im_channel_behavior_settings_from_channel(
+pub(crate) fn remote_im_channel_behavior_settings_from_channel(
     channel: &RemoteImChannelConfig,
 ) -> RemoteImChannelBehaviorSettings {
     normalize_remote_im_channel_behavior_settings(&channel.behavior_settings)
 }
 
-fn remote_im_channel_behavior_settings_for_contact(
+pub(crate) fn remote_im_channel_behavior_settings_for_contact(
     state: &AppState,
     contact: &RemoteImContact,
 ) -> RemoteImChannelBehaviorSettings {
@@ -545,7 +570,7 @@ fn remote_im_channel_behavior_settings_for_contact(
     }
 }
 
-fn effective_remote_im_channel_response_guidance(
+pub(crate) fn effective_remote_im_channel_response_guidance(
     state: &AppState,
     contact: &RemoteImContact,
 ) -> String {
@@ -566,7 +591,7 @@ include!("remote_im/reply_delegate.rs");
 
 include!("remote_im/presence_lifecycle.rs");
 
-fn remote_im_contact_runtime_state_mut<'a>(
+pub(crate) fn remote_im_contact_runtime_state_mut<'a>(
     states: &'a mut std::collections::HashMap<String, RemoteImContactRuntimeState>,
     contact_id: &str,
 ) -> &'a mut RemoteImContactRuntimeState {
@@ -575,7 +600,7 @@ fn remote_im_contact_runtime_state_mut<'a>(
         .or_insert_with(RemoteImContactRuntimeState::default)
 }
 
-fn remote_im_contact_checkpoint_mut_in_list<'a>(
+pub(crate) fn remote_im_contact_checkpoint_mut_in_list<'a>(
     checkpoints: &'a mut Vec<RemoteImContactCheckpoint>,
     contact_id: &str,
 ) -> &'a mut RemoteImContactCheckpoint {
@@ -593,7 +618,7 @@ fn remote_im_contact_checkpoint_mut_in_list<'a>(
     &mut checkpoints[last_index]
 }
 
-fn remote_im_contact_by_source_in_runtime<'a>(
+pub(crate) fn remote_im_contact_by_source_in_runtime<'a>(
     contacts: &'a [RemoteImContact],
     source: &RemoteImMessageSource,
 ) -> Option<&'a RemoteImContact> {
@@ -604,7 +629,7 @@ fn remote_im_contact_by_source_in_runtime<'a>(
     })
 }
 
-fn remote_im_contact_by_activation_source_in_runtime<'a>(
+pub(crate) fn remote_im_contact_by_activation_source_in_runtime<'a>(
     contacts: &'a [RemoteImContact],
     source: &RemoteImActivationSource,
 ) -> Option<&'a RemoteImContact> {
@@ -615,7 +640,7 @@ fn remote_im_contact_by_activation_source_in_runtime<'a>(
     })
 }
 
-fn remote_im_contact_matches_reply_target(
+pub(crate) fn remote_im_contact_matches_reply_target(
     source: &RemoteImActivationSource,
     target: &RemoteImReplyTarget,
 ) -> bool {
@@ -623,12 +648,12 @@ fn remote_im_contact_matches_reply_target(
         && source.remote_contact_id.trim() == target.contact_id.trim()
 }
 
-fn remote_im_text_contains_keyword(text: &str, keyword: &str) -> bool {
+pub(crate) fn remote_im_text_contains_keyword(text: &str, keyword: &str) -> bool {
     text.to_ascii_lowercase()
         .contains(&keyword.to_ascii_lowercase())
 }
 
-fn remote_im_find_matched_keyword<'a>(text: &str, keywords: &'a [String]) -> Option<&'a str> {
+pub(crate) fn remote_im_find_matched_keyword<'a>(text: &str, keywords: &'a [String]) -> Option<&'a str> {
     keywords
         .iter()
         .map(|item| item.trim())
@@ -636,22 +661,22 @@ fn remote_im_find_matched_keyword<'a>(text: &str, keywords: &'a [String]) -> Opt
         .find(|keyword| remote_im_text_contains_keyword(text, keyword))
 }
 
-fn remote_im_keyword_matched(contact: &RemoteImContact, message_text: &str) -> bool {
+pub(crate) fn remote_im_keyword_matched(contact: &RemoteImContact, message_text: &str) -> bool {
     remote_im_find_matched_keyword(message_text, &contact.activation_keywords).is_some()
 }
 
-fn remote_im_resolve_mute_until(now: time::OffsetDateTime, duration_seconds: u64) -> String {
+pub(crate) fn remote_im_resolve_mute_until(now: time::OffsetDateTime, duration_seconds: u64) -> String {
     normalize_time_for_utc_storage(
         now + time::Duration::seconds(duration_seconds.min(i64::MAX as u64) as i64),
     )
     .unwrap_or_else(|_| now_iso())
 }
 
-fn remote_im_is_mute_expired(mute_until: &str, now: time::OffsetDateTime) -> bool {
+pub(crate) fn remote_im_is_mute_expired(mute_until: &str, now: time::OffsetDateTime) -> bool {
     parse_iso(mute_until).map(|value| value <= now).unwrap_or(true)
 }
 
-fn remote_im_should_enter_group_inspection(
+pub(crate) fn remote_im_should_enter_group_inspection(
     contact: &RemoteImContact,
     message_text: &str,
 ) -> (bool, String) {
@@ -669,7 +694,7 @@ fn remote_im_should_enter_group_inspection(
     }
 }
 
-fn remote_im_prepare_enqueue_runtime_state(
+pub(crate) fn remote_im_prepare_enqueue_runtime_state(
     state: &AppState,
     contact: &RemoteImContact,
     message_text: &str,

@@ -1,8 +1,8 @@
-fn task_store_db_path(data_path: &PathBuf) -> PathBuf {
+pub(crate) fn task_store_db_path(data_path: &PathBuf) -> PathBuf {
     app_root_from_data_path(data_path).join("task").join(TASK_DB_FILE_NAME)
 }
 
-fn task_store_open(data_path: &PathBuf) -> Result<Connection, String> {
+pub(crate) fn task_store_open(data_path: &PathBuf) -> Result<Connection, String> {
     let path = task_store_db_path(data_path);
     let parent = path
         .parent()
@@ -14,7 +14,7 @@ fn task_store_open(data_path: &PathBuf) -> Result<Connection, String> {
     Ok(conn)
 }
 
-fn task_store_init(conn: &Connection) -> Result<(), String> {
+pub(crate) fn task_store_init(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
         "BEGIN;
         CREATE TABLE IF NOT EXISTS task_record (
@@ -63,16 +63,16 @@ fn task_store_init(conn: &Connection) -> Result<(), String> {
     task_store_apply_migrations(conn)
 }
 
-fn task_normalize_run_at(value: &str) -> Result<String, String> {
+pub(crate) fn task_normalize_run_at(value: &str) -> Result<String, String> {
     normalize_rfc3339_to_utc_storage("task.trigger.run_at", value)
 }
 
-fn task_normalize_end_at(value: &str) -> Result<String, String> {
+pub(crate) fn task_normalize_end_at(value: &str) -> Result<String, String> {
     normalize_rfc3339_to_utc_storage("task.trigger.end_at", value)
 }
 
 // ========== 任务时间边界：输入 local，入库 utc ==========
-fn task_trigger_from_local_input(input: &TaskTriggerInputLocal) -> Result<TaskTriggerStored, String> {
+pub(crate) fn task_trigger_from_local_input(input: &TaskTriggerInputLocal) -> Result<TaskTriggerStored, String> {
     let run_at = input
         .run_at
         .as_deref()
@@ -132,7 +132,7 @@ fn task_trigger_from_local_input(input: &TaskTriggerInputLocal) -> Result<TaskTr
     })
 }
 
-fn task_trigger_kind_from_fields(
+pub(crate) fn task_trigger_kind_from_fields(
     run_at_utc: Option<&str>,
     cron_expression: Option<&str>,
     legacy_every_minutes: Option<f64>,
@@ -148,7 +148,7 @@ fn task_trigger_kind_from_fields(
     }
 }
 
-fn task_completion_state_normalized(value: &str) -> Result<String, String> {
+pub(crate) fn task_completion_state_normalized(value: &str) -> Result<String, String> {
     let normalized = value.trim().to_ascii_lowercase();
     match normalized.as_str() {
         TASK_STATE_ACTIVE | TASK_STATE_COMPLETED | TASK_STATE_FAILED_COMPLETED => Ok(normalized),
@@ -156,23 +156,23 @@ fn task_completion_state_normalized(value: &str) -> Result<String, String> {
     }
 }
 
-fn task_list_to_json(items: &[String]) -> Result<String, String> {
+pub(crate) fn task_list_to_json(items: &[String]) -> Result<String, String> {
     serde_json::to_string(items).map_err(|err| format!("Serialize task todos failed: {err}"))
 }
 
-fn task_notes_to_json(items: &[TaskProgressNoteStored]) -> Result<String, String> {
+pub(crate) fn task_notes_to_json(items: &[TaskProgressNoteStored]) -> Result<String, String> {
     serde_json::to_string(items).map_err(|err| format!("Serialize task notes failed: {err}"))
 }
 
-fn task_list_from_json(raw: &str) -> Vec<String> {
+pub(crate) fn task_list_from_json(raw: &str) -> Vec<String> {
     serde_json::from_str(raw).unwrap_or_default()
 }
 
-fn task_notes_from_json(raw: &str) -> Vec<TaskProgressNoteStored> {
+pub(crate) fn task_notes_from_json(raw: &str) -> Vec<TaskProgressNoteStored> {
     serde_json::from_str(raw).unwrap_or_default()
 }
 
-fn task_row_to_record_stored(row: &rusqlite::Row<'_>) -> rusqlite::Result<TaskRecordStored> {
+pub(crate) fn task_row_to_record_stored(row: &rusqlite::Row<'_>) -> rusqlite::Result<TaskRecordStored> {
     let completion_state: String = row.get("completion_state")?;
     let run_at_utc: Option<String> = row.get("run_at_utc")?;
     let cron_expression: Option<String> = row.get("cron_expression")?;
@@ -241,7 +241,7 @@ fn task_row_to_record_stored(row: &rusqlite::Row<'_>) -> rusqlite::Result<TaskRe
 }
 
 // ========== 任务时间边界：读库 utc，对外输出 local ==========
-fn task_store_list_task_records(data_path: &PathBuf) -> Result<Vec<TaskRecordStored>, String> {
+pub(crate) fn task_store_list_task_records(data_path: &PathBuf) -> Result<Vec<TaskRecordStored>, String> {
     let conn = task_store_open(data_path)?;
     let mut stmt = conn
         .prepare("SELECT * FROM task_record ORDER BY order_index ASC")
@@ -256,7 +256,7 @@ fn task_store_list_task_records(data_path: &PathBuf) -> Result<Vec<TaskRecordSto
     Ok(tasks)
 }
 
-fn task_store_get_task_record(data_path: &PathBuf, task_id: &str) -> Result<TaskRecordStored, String> {
+pub(crate) fn task_store_get_task_record(data_path: &PathBuf, task_id: &str) -> Result<TaskRecordStored, String> {
     let conn = task_store_open(data_path)?;
     conn.query_row(
         "SELECT * FROM task_record WHERE task_id = ?1",
@@ -266,17 +266,17 @@ fn task_store_get_task_record(data_path: &PathBuf, task_id: &str) -> Result<Task
     .map_err(|err| format!("Get task record failed: {err}"))
 }
 
-fn task_store_list_tasks(data_path: &PathBuf) -> Result<Vec<TaskEntry>, String> {
+pub(crate) fn task_store_list_tasks(data_path: &PathBuf) -> Result<Vec<TaskEntry>, String> {
     let tasks = task_store_list_task_records(data_path)?;
     Ok(tasks.iter().map(task_entry_view_from_stored).collect())
 }
 
-fn task_store_get_task(data_path: &PathBuf, task_id: &str) -> Result<TaskEntry, String> {
+pub(crate) fn task_store_get_task(data_path: &PathBuf, task_id: &str) -> Result<TaskEntry, String> {
     let task = task_store_get_task_record(data_path, task_id)?;
     Ok(task_entry_view_from_stored(&task))
 }
 
-fn task_store_next_order_index(conn: &Connection) -> Result<i64, String> {
+pub(crate) fn task_store_next_order_index(conn: &Connection) -> Result<i64, String> {
     conn.query_row(
         "SELECT COALESCE(MAX(order_index), 0) FROM task_record",
         [],
@@ -286,7 +286,7 @@ fn task_store_next_order_index(conn: &Connection) -> Result<i64, String> {
     .map_err(|err| format!("Read task order index failed: {err}"))
 }
 
-fn task_store_create_task(data_path: &PathBuf, input: &TaskCreateInput) -> Result<TaskEntry, String> {
+pub(crate) fn task_store_create_task(data_path: &PathBuf, input: &TaskCreateInput) -> Result<TaskEntry, String> {
     let goal = input.goal.trim();
     if goal.is_empty() {
         return Err("task.goal is required".to_string());
@@ -343,7 +343,7 @@ fn task_store_create_task(data_path: &PathBuf, input: &TaskCreateInput) -> Resul
     task_store_get_task(data_path, &task_id)
 }
 
-fn task_store_update_task(data_path: &PathBuf, input: &TaskUpdateInput) -> Result<TaskEntry, String> {
+pub(crate) fn task_store_update_task(data_path: &PathBuf, input: &TaskUpdateInput) -> Result<TaskEntry, String> {
     let existing = task_store_get_task_record(data_path, &input.task_id)?;
     if existing.completion_state != TASK_STATE_ACTIVE {
         return Err("Only active tasks can be updated".to_string());
@@ -461,7 +461,7 @@ fn task_store_update_task(data_path: &PathBuf, input: &TaskUpdateInput) -> Resul
     task_store_get_task(data_path, &input.task_id)
 }
 
-fn task_store_complete_task(data_path: &PathBuf, input: &TaskCompleteInput) -> Result<TaskEntry, String> {
+pub(crate) fn task_store_complete_task(data_path: &PathBuf, input: &TaskCompleteInput) -> Result<TaskEntry, String> {
     let existing = task_store_get_task_record(data_path, &input.task_id)?;
     if existing.completion_state != TASK_STATE_ACTIVE {
         return Err("Task is already completed".to_string());
@@ -497,7 +497,7 @@ fn task_store_complete_task(data_path: &PathBuf, input: &TaskCompleteInput) -> R
     task_store_get_task(data_path, &input.task_id)
 }
 
-fn task_store_complete_one_time_dispatch(
+pub(crate) fn task_store_complete_one_time_dispatch(
     data_path: &PathBuf,
     task_id: &str,
 ) -> Result<bool, String> {
@@ -535,7 +535,7 @@ fn task_store_complete_one_time_dispatch(
     Ok(affected > 0)
 }
 
-fn task_store_fail_active_task(
+pub(crate) fn task_store_fail_active_task(
     data_path: &PathBuf,
     task_id: &str,
     conclusion: &str,
@@ -589,7 +589,7 @@ fn task_store_fail_active_task(
     }
 }
 
-fn task_store_delete_task(data_path: &PathBuf, task_id: &str) -> Result<(), String> {
+pub(crate) fn task_store_delete_task(data_path: &PathBuf, task_id: &str) -> Result<(), String> {
     let normalized_task_id = task_id.trim();
     if normalized_task_id.is_empty() {
         return Err("task.taskId is required".to_string());
@@ -634,7 +634,7 @@ fn task_store_delete_task(data_path: &PathBuf, task_id: &str) -> Result<(), Stri
     Ok(())
 }
 
-fn task_store_mark_triggered(data_path: &PathBuf, task_id: &str) -> Result<(), String> {
+pub(crate) fn task_store_mark_triggered(data_path: &PathBuf, task_id: &str) -> Result<(), String> {
     let conn = task_store_open(data_path)?;
     let now_utc = now_utc_rfc3339();
     conn.execute_batch("BEGIN IMMEDIATE;")
@@ -699,7 +699,7 @@ fn task_store_mark_triggered(data_path: &PathBuf, task_id: &str) -> Result<(), S
     Ok(())
 }
 
-fn task_store_mark_skipped(
+pub(crate) fn task_store_mark_skipped(
     data_path: &PathBuf,
     task_id: &str,
     outcome: &str,
@@ -737,7 +737,7 @@ fn task_store_mark_skipped(
     Ok(())
 }
 
-fn task_store_insert_run_log(data_path: &PathBuf, task_id: &str, outcome: &str, note: &str) -> Result<(), String> {
+pub(crate) fn task_store_insert_run_log(data_path: &PathBuf, task_id: &str, outcome: &str, note: &str) -> Result<(), String> {
     let conn = task_store_open(data_path)?;
     conn.execute(
         "INSERT INTO task_run_log (task_id, triggered_at_utc, outcome, note) VALUES (?1, ?2, ?3, ?4)",
@@ -747,7 +747,7 @@ fn task_store_insert_run_log(data_path: &PathBuf, task_id: &str, outcome: &str, 
     Ok(())
 }
 
-fn task_store_list_run_log_records(
+pub(crate) fn task_store_list_run_log_records(
     data_path: &PathBuf,
     task_id: Option<&str>,
     limit: usize,
@@ -798,7 +798,7 @@ fn task_store_list_run_log_records(
     Ok(out)
 }
 
-fn task_store_list_run_logs(
+pub(crate) fn task_store_list_run_logs(
     data_path: &PathBuf,
     task_id: Option<&str>,
     limit: usize,

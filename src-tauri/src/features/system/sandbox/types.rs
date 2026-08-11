@@ -1,23 +1,23 @@
 #[derive(Debug, Clone)]
-struct SandboxRequest {
-    session_id: String,
-    command: String,
-    cwd: std::path::PathBuf,
-    timeout_ms: u64,
-    cwd_pre_validated: bool,
-    stdin: Option<Vec<u8>>,
-    cancel_token: Option<tokio_util::sync::CancellationToken>,
+pub(crate) struct SandboxRequest {
+    pub(crate) session_id: String,
+    pub(crate) command: String,
+    pub(crate) cwd: std::path::PathBuf,
+    pub(crate) timeout_ms: u64,
+    pub(crate) cwd_pre_validated: bool,
+    pub(crate) stdin: Option<Vec<u8>>,
+    pub(crate) cancel_token: Option<tokio_util::sync::CancellationToken>,
 }
 
 #[derive(Debug, Clone)]
-struct SandboxExecutionResult {
-    ok: bool,
-    exit_code: i32,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-    duration_ms: u64,
+pub(crate) struct SandboxExecutionResult {
+    pub(crate) ok: bool,
+    pub(crate) exit_code: i32,
+    pub(crate) stdout: Vec<u8>,
+    pub(crate) stderr: Vec<u8>,
+    pub(crate) duration_ms: u64,
     #[allow(dead_code)]
-    shell_kind: String,
+    pub(crate) shell_kind: String,
     #[allow(dead_code)]
-    shell_path: String,
+    pub(crate) shell_path: String,
 }

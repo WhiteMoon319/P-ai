@@ -1,8 +1,8 @@
-fn expand(json: &str) -> Result<ParsedMcpDefinition, McpDefinitionValidationError> {
+pub(crate) fn expand(json: &str) -> Result<ParsedMcpDefinition, McpDefinitionValidationError> {
     parse_mcp_definition_servers(json)
 }
 
-fn expand_names(json: &str) -> Vec<String> {
+pub(crate) fn expand_names(json: &str) -> Vec<String> {
     expand(json)
         .expect("expand ok")
         .servers
@@ -11,13 +11,13 @@ fn expand_names(json: &str) -> Vec<String> {
         .collect()
 }
 
-fn parse_single(json: &str) -> ParsedMcpServerDefinition {
+pub(crate) fn parse_single(json: &str) -> ParsedMcpServerDefinition {
     let (_, parsed) = parse_mcp_server_definition(json).expect("parse ok");
     parsed
 }
 
 #[test]
-fn expand_mcp_servers_object_format() {
+pub(crate) fn expand_mcp_servers_object_format() {
     let json = r#"{
         "mcpServers": {
             "context7": { "command": "npx", "args": ["-y", "@upstash/context7-mcp"] },
@@ -28,7 +28,7 @@ fn expand_mcp_servers_object_format() {
 }
 
 #[test]
-fn expand_root_named_object_format() {
+pub(crate) fn expand_root_named_object_format() {
     let json = r#"{
         "context7": { "command": "npx", "args": ["-y", "@upstash/context7-mcp"] },
         "time": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-time"] }
@@ -37,7 +37,7 @@ fn expand_root_named_object_format() {
 }
 
 #[test]
-fn expand_mcp_servers_array_format() {
+pub(crate) fn expand_mcp_servers_array_format() {
     let json = r#"{
         "mcpServers": [
             { "name": "context7", "command": "npx", "args": ["-y", "@upstash/context7-mcp"] },
@@ -48,7 +48,7 @@ fn expand_mcp_servers_array_format() {
 }
 
 #[test]
-fn expand_root_array_format() {
+pub(crate) fn expand_root_array_format() {
     let json = r#"[
         { "name": "context7", "command": "npx", "args": ["-y", "@upstash/context7-mcp"] },
         { "name": "fetch", "url": "https://mcp.example.com/fetch" }
@@ -57,19 +57,19 @@ fn expand_root_array_format() {
 }
 
 #[test]
-fn expand_single_server_direct_fields_backward_compat() {
+pub(crate) fn expand_single_server_direct_fields_backward_compat() {
     let json = r#"{ "command": "npx", "args": ["-y", "@upstash/context7-mcp"] }"#;
     assert_eq!(expand_names(json), vec!["mcp-server"]);
 }
 
 #[test]
-fn expand_single_server_named_backward_compat() {
+pub(crate) fn expand_single_server_named_backward_compat() {
     let json = r#"{ "context7": { "command": "npx" } }"#;
     assert_eq!(expand_names(json), vec!["context7"]);
 }
 
 #[test]
-fn headers_alias_maps_to_http_headers() {
+pub(crate) fn headers_alias_maps_to_http_headers() {
     let json = r#"{
         "mcpServers": {
             "zhihu-search": {
@@ -88,7 +88,7 @@ fn headers_alias_maps_to_http_headers() {
 }
 
 #[test]
-fn headers_and_http_headers_merge() {
+pub(crate) fn headers_and_http_headers_merge() {
     let json = r#"{
         "headers": { "X-A": "1" },
         "httpHeaders": { "X-B": "2" },
@@ -100,7 +100,7 @@ fn headers_and_http_headers_merge() {
 }
 
 #[test]
-fn transport_type_alias_and_omit_inference() {
+pub(crate) fn transport_type_alias_and_omit_inference() {
     let sse = parse_single(r#"{ "type": "sse", "url": "https://x/sse" }"#);
     assert_eq!(sse.transport, McpTransportKind::Sse);
 
@@ -112,7 +112,7 @@ fn transport_type_alias_and_omit_inference() {
 }
 
 #[test]
-fn env_object_value_form_supported() {
+pub(crate) fn env_object_value_form_supported() {
     let json = r#"{
         "env": {
             "PLAIN": "value-a",
@@ -126,7 +126,7 @@ fn env_object_value_form_supported() {
 }
 
 #[test]
-fn missing_transport_reports_structured_issue() {
+pub(crate) fn missing_transport_reports_structured_issue() {
     let json = r#"{
         "mcpServers": {
             "broken": { "args": ["-y", "pkg"] }
@@ -141,7 +141,7 @@ fn missing_transport_reports_structured_issue() {
 }
 
 #[test]
-fn array_missing_name_reports_issue() {
+pub(crate) fn array_missing_name_reports_issue() {
     let json = r#"{
         "mcpServers": [
             { "command": "npx" },
@@ -155,7 +155,7 @@ fn array_missing_name_reports_issue() {
 }
 
 #[test]
-fn array_duplicate_name_reports_issue() {
+pub(crate) fn array_duplicate_name_reports_issue() {
     let json = r#"{
         "mcpServers": [
             { "name": "dup", "command": "npx" },
@@ -169,13 +169,13 @@ fn array_duplicate_name_reports_issue() {
 }
 
 #[test]
-fn invalid_json_reports_issue() {
+pub(crate) fn invalid_json_reports_issue() {
     let err = expand("{ not json").expect_err("should fail");
     assert_eq!(err.issues[0].code, "invalid_json");
 }
 
 #[test]
-fn args_type_error_reports_issue() {
+pub(crate) fn args_type_error_reports_issue() {
     let json = r#"{
         "mcpServers": {
             "bad": { "command": "npx", "args": "not-array" }
@@ -186,7 +186,7 @@ fn args_type_error_reports_issue() {
 }
 
 #[test]
-fn multi_server_definition_parse_first_for_single_api() {
+pub(crate) fn multi_server_definition_parse_first_for_single_api() {
     let json = r#"{
         "mcpServers": {
             "a": { "command": "npx", "args": ["-y", "pkg-a"] },
@@ -200,7 +200,7 @@ fn multi_server_definition_parse_first_for_single_api() {
 
 // ========== 一卡一组：成员解析、前缀与整组保存 ==========
 
-fn test_server_with_definition(definition_json: &str) -> McpServerConfig {
+pub(crate) fn test_server_with_definition(definition_json: &str) -> McpServerConfig {
     McpServerConfig {
         id: "mcp-test".to_string(),
         name: "测试组".to_string(),
@@ -215,7 +215,7 @@ fn test_server_with_definition(definition_json: &str) -> McpServerConfig {
 }
 
 #[test]
-fn tool_prefixed_name_normalizes_member_name_and_preserves_raw_tool_name() {
+pub(crate) fn tool_prefixed_name_normalizes_member_name_and_preserves_raw_tool_name() {
     assert_eq!(mcp_tool_prefixed_name("context7", "search"), "context7_search");
     assert_eq!(
         mcp_tool_prefixed_name("Akasha Terminal", "akasha_search"),
@@ -232,7 +232,7 @@ fn tool_prefixed_name_normalizes_member_name_and_preserves_raw_tool_name() {
 }
 
 #[test]
-fn parse_group_definitions_multi_members() {
+pub(crate) fn parse_group_definitions_multi_members() {
     let server = test_server_with_definition(
         r#"{
             "mcpServers": {
@@ -250,7 +250,7 @@ fn parse_group_definitions_multi_members() {
 }
 
 #[test]
-fn normalized_member_name_collision_across_servers_is_rejected() {
+pub(crate) fn normalized_member_name_collision_across_servers_is_rejected() {
     let next = test_server_with_definition(
         r#"{
             "mcpServers": {
@@ -273,7 +273,7 @@ fn normalized_member_name_collision_across_servers_is_rejected() {
 }
 
 #[test]
-fn normalize_mcp_server_input_allows_multi_server_group() {
+pub(crate) fn normalize_mcp_server_input_allows_multi_server_group() {
     let input = McpServerInput {
         id: "mcp-group".to_string(),
         name: "知乎组".to_string(),
@@ -293,7 +293,7 @@ fn normalize_mcp_server_input_allows_multi_server_group() {
 }
 
 #[test]
-fn definition_tool_filters_are_member_prefixed() {
+pub(crate) fn definition_tool_filters_are_member_prefixed() {
     let server = test_server_with_definition(
         r#"{
             "mcpServers": {
@@ -315,7 +315,7 @@ fn definition_tool_filters_are_member_prefixed() {
 
 // ========== SSE transport 集成测试（本地 mock 服务端） ==========
 
-mod sse_transport_tests {
+pub(crate) mod sse_transport_tests {
     use super::*;
     use std::convert::Infallible;
     use std::sync::Arc;
@@ -330,9 +330,9 @@ mod sse_transport_tests {
 
     #[derive(Clone, Default)]
     struct SseMockState {
-        sse_tx: Arc<Mutex<Option<tokio::sync::mpsc::Sender<Event>>>>,
-        post_headers: Arc<Mutex<Vec<HeaderMap>>>,
-        tool_names: Arc<Vec<String>>,
+        pub(crate) sse_tx: Arc<Mutex<Option<tokio::sync::mpsc::Sender<Event>>>>,
+        pub(crate) post_headers: Arc<Mutex<Vec<HeaderMap>>>,
+        pub(crate) tool_names: Arc<Vec<String>>,
     }
 
     impl SseMockState {

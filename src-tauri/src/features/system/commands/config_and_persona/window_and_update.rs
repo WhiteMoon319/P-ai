@@ -9,33 +9,33 @@
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct UpdateRecordHotkeyInput {
-    record_hotkey: String,
+pub(crate) struct UpdateRecordHotkeyInput {
+    pub(crate) record_hotkey: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct UpdateRecordBackgroundWakeInput {
-    enabled: bool,
+pub(crate) struct UpdateRecordBackgroundWakeInput {
+    pub(crate) enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct RecordHotkeyUpdateResult {
-    record_hotkey: String,
-    record_background_wake_enabled: bool,
-    min_record_seconds: u32,
-    max_record_seconds: u32,
+pub(crate) struct RecordHotkeyUpdateResult {
+    pub(crate) record_hotkey: String,
+    pub(crate) record_background_wake_enabled: bool,
+    pub(crate) min_record_seconds: u32,
+    pub(crate) max_record_seconds: u32,
 }
 
 // 聊天视图前台激活状态：由前端 useChatForegroundActivity 上报
 // （visibility + focus + viewMode==="chat"），所有平台统一存储，
 // Android 无窗口焦点 API，通知等逻辑依赖该状态判断"会话是否在前台可见"。
-static CHAT_VIEW_FOREGROUND_ACTIVE: std::sync::OnceLock<std::sync::atomic::AtomicBool> =
+pub(crate) static CHAT_VIEW_FOREGROUND_ACTIVE: std::sync::OnceLock<std::sync::atomic::AtomicBool> =
     std::sync::OnceLock::new();
 
 #[cfg(target_os = "android")]
-fn chat_view_foreground_active() -> bool {
+pub(crate) fn chat_view_foreground_active() -> bool {
     CHAT_VIEW_FOREGROUND_ACTIVE
         .get()
         .map(|flag| flag.load(std::sync::atomic::Ordering::Relaxed))
@@ -44,7 +44,7 @@ fn chat_view_foreground_active() -> bool {
 
 
 
-fn parse_version_parts(input: &str) -> Vec<u64> {
+pub(crate) fn parse_version_parts(input: &str) -> Vec<u64> {
     let cleaned = input
         .trim()
         .trim_start_matches(['v', 'V'])
@@ -57,7 +57,7 @@ fn parse_version_parts(input: &str) -> Vec<u64> {
         .collect()
 }
 
-fn validate_department_names_unique(config: &AppConfig) -> Result<(), String> {
+pub(crate) fn validate_department_names_unique(config: &AppConfig) -> Result<(), String> {
     let mut seen = std::collections::HashSet::<String>::new();
     for department in &config.departments {
         let name = department.name.trim();
@@ -72,7 +72,7 @@ fn validate_department_names_unique(config: &AppConfig) -> Result<(), String> {
     Ok(())
 }
 
-fn changed_department_ids(old_config: &AppConfig, new_config: &AppConfig) -> Vec<String> {
+pub(crate) fn changed_department_ids(old_config: &AppConfig, new_config: &AppConfig) -> Vec<String> {
     let old_by_id = old_config
         .departments
         .iter()
@@ -93,7 +93,7 @@ fn changed_department_ids(old_config: &AppConfig, new_config: &AppConfig) -> Vec
         .collect::<Vec<_>>()
 }
 
-fn changed_department_tree_ids(old_config: &AppConfig, new_config: &AppConfig) -> Vec<String> {
+pub(crate) fn changed_department_tree_ids(old_config: &AppConfig, new_config: &AppConfig) -> Vec<String> {
     let old_children = old_config
         .departments
         .iter()
@@ -124,7 +124,7 @@ fn changed_department_tree_ids(old_config: &AppConfig, new_config: &AppConfig) -
         .collect::<Vec<_>>()
 }
 
-fn changed_department_content_ids(old_config: &AppConfig, new_config: &AppConfig) -> Vec<String> {
+pub(crate) fn changed_department_content_ids(old_config: &AppConfig, new_config: &AppConfig) -> Vec<String> {
     let strip_tree = |department: &DepartmentConfig| {
         let mut cloned = department.clone();
         cloned.child_department_ids = Vec::new();
@@ -150,7 +150,7 @@ fn changed_department_content_ids(old_config: &AppConfig, new_config: &AppConfig
         .collect::<Vec<_>>()
 }
 
-fn config_provider_domain_changed(old_config: &AppConfig, new_config: &AppConfig) -> bool {
+pub(crate) fn config_provider_domain_changed(old_config: &AppConfig, new_config: &AppConfig) -> bool {
     let old_providers = serde_json::to_string(&old_config.api_providers).unwrap_or_default();
     let new_providers = serde_json::to_string(&new_config.api_providers).unwrap_or_default();
     let old_api_configs = serde_json::to_string(&old_config.api_configs).unwrap_or_default();
@@ -163,27 +163,27 @@ fn config_provider_domain_changed(old_config: &AppConfig, new_config: &AppConfig
         || old_config.selected_api_config_id != new_config.selected_api_config_id
 }
 
-fn ide_chat_broadcast_simple_notification(method: &str) {
+pub(crate) fn ide_chat_broadcast_simple_notification(method: &str) {
     ide_chat_broadcast_notification(method, serde_json::json!({}));
 }
 
-fn broadcast_sidebar_persona_changed() {
+pub(crate) fn broadcast_sidebar_persona_changed() {
     ide_chat_broadcast_simple_notification("persona.changed");
 }
 
-fn broadcast_sidebar_department_changed() {
+pub(crate) fn broadcast_sidebar_department_changed() {
     ide_chat_broadcast_simple_notification("department.changed");
 }
 
-fn broadcast_sidebar_department_tree_changed() {
+pub(crate) fn broadcast_sidebar_department_tree_changed() {
     ide_chat_broadcast_simple_notification("departmentTree.changed");
 }
 
-fn broadcast_sidebar_provider_changed() {
+pub(crate) fn broadcast_sidebar_provider_changed() {
     ide_chat_broadcast_simple_notification("provider.changed");
 }
 
-fn split_main_config_departments(departments: &[DepartmentConfig]) -> Vec<DepartmentConfig> {
+pub(crate) fn split_main_config_departments(departments: &[DepartmentConfig]) -> Vec<DepartmentConfig> {
     departments
         .iter()
         .filter(|item| !is_private_workspace_source(&item.source))
@@ -191,7 +191,7 @@ fn split_main_config_departments(departments: &[DepartmentConfig]) -> Vec<Depart
         .collect::<Vec<_>>()
 }
 
-fn persist_departments_by_source(
+pub(crate) fn persist_departments_by_source(
     state: &AppState,
     runtime_config: &AppConfig,
 ) -> Result<AppConfig, String> {
@@ -206,7 +206,7 @@ fn persist_departments_by_source(
     Ok(main_config)
 }
 
-fn runtime_config_with_private_organization(
+pub(crate) fn runtime_config_with_private_organization(
     state: &AppState,
     config: &AppConfig,
     data: &AppData,
@@ -215,7 +215,7 @@ fn runtime_config_with_private_organization(
         .map(|snapshot| snapshot.config)
 }
 
-fn runtime_agents_with_private_organization(
+pub(crate) fn runtime_agents_with_private_organization(
     state: &AppState,
     config: &AppConfig,
     data: &AppData,
@@ -224,11 +224,11 @@ fn runtime_agents_with_private_organization(
         .map(|snapshot| snapshot.agents)
 }
 
-fn private_agent_operation_error(agent_id: &str) -> String {
+pub(crate) fn private_agent_operation_error(agent_id: &str) -> String {
     format!("当前人格来自私有工作区，不能直接在主配置中修改：{agent_id}")
 }
 
-fn is_newer_version(current: &str, latest: &str) -> bool {
+pub(crate) fn is_newer_version(current: &str, latest: &str) -> bool {
     let a = parse_version_parts(current);
     let b = parse_version_parts(latest);
     let max_len = a.len().max(b.len());
@@ -245,9 +245,9 @@ fn is_newer_version(current: &str, latest: &str) -> bool {
     false
 }
 
-const GITHUB_REPO_PAGE: &str = "https://github.com/kawayiYokami/P-ai";
+pub(crate) const GITHUB_REPO_PAGE: &str = "https://github.com/kawayiYokami/P-ai";
 
-fn set_preferred_release_source(state: &AppState, source: &str) {
+pub(crate) fn set_preferred_release_source(state: &AppState, source: &str) {
     match state.preferred_release_source.lock() {
         Ok(mut slot) => {
             *slot = source.to_string();
@@ -262,13 +262,13 @@ fn set_preferred_release_source(state: &AppState, source: &str) {
     }
 }
 
-async fn probe_release_source_once(state: &AppState) {
+pub(crate) async fn probe_release_source_once(state: &AppState) {
     set_preferred_release_source(state, "github");
 }
 
 
 
-fn set_github_update_method_inner(
+pub(crate) fn set_github_update_method_inner(
     update_method: String,
     app: &NativeAppHandle,
     state: &AppState,
@@ -289,7 +289,7 @@ fn set_github_update_method_inner(
 
 
 
-fn normalize_ui_language(value: &str) -> String {
+pub(crate) fn normalize_ui_language(value: &str) -> String {
     match value.trim() {
         "en-US" => "en-US".to_string(),
         "zh-TW" => "zh-TW".to_string(),
@@ -298,7 +298,7 @@ fn normalize_ui_language(value: &str) -> String {
 }
 
 
-fn set_ui_language_inner(
+pub(crate) fn set_ui_language_inner(
     ui_language: String,
     app: &NativeAppHandle,
     state: &AppState,
@@ -319,7 +319,7 @@ fn set_ui_language_inner(
 
 
 
-fn get_department_default_draft_inner(
+pub(crate) fn get_department_default_draft_inner(
     state: &AppState,
     department_id: &str,
 ) -> Result<DepartmentConfig, String> {
@@ -327,7 +327,7 @@ fn get_department_default_draft_inner(
     default_department_draft(department_id, &config.ui_language)
 }
 
-fn load_config_inner(state: &AppState) -> Result<AppConfig, String> {
+pub(crate) fn load_config_inner(state: &AppState) -> Result<AppConfig, String> {
     let mut result = state_read_config_cached(&state)?;
     let config_changed_by_normalize = normalize_app_config_and_detect_changes(&mut result);
     let workspace_changed = ensure_default_shell_workspace_in_config(&mut result, &state);
@@ -347,7 +347,7 @@ fn load_config_inner(state: &AppState) -> Result<AppConfig, String> {
     Ok(snapshot.config)
 }
 
-fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstrapSnapshot, String> {
+pub(crate) fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstrapSnapshot, String> {
     let mut config = state_read_config_cached(state)?;
     let config_changed_by_normalize = normalize_app_config_and_detect_changes(&mut config);
     let workspace_changed = ensure_default_shell_workspace_in_config(&mut config, state);
@@ -404,7 +404,7 @@ fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstrapSnapshot,
 
 
 
-fn removed_remote_im_channels(
+pub(crate) fn removed_remote_im_channels(
     previous: &AppConfig,
     next: &AppConfig,
 ) -> Vec<RemoteImChannelConfig> {
@@ -421,7 +421,7 @@ fn removed_remote_im_channels(
         .collect()
 }
 
-fn stop_removed_remote_im_channel_runtimes(
+pub(crate) fn stop_removed_remote_im_channel_runtimes(
     state: AppState,
     channels: Vec<RemoteImChannelConfig>,
 ) {
@@ -466,33 +466,33 @@ fn stop_removed_remote_im_channel_runtimes(
 /** 配置局部更新输入：所有字段可空，只更新传入的非空字段（读旧配置 merge，避免覆盖丢失）。 */
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PatchAppConfigInput {
+pub(crate) struct PatchAppConfigInput {
     #[serde(default)]
-    web_access_enabled: Option<bool>,
+    pub(crate) web_access_enabled: Option<bool>,
     #[serde(default)]
-    web_access_port: Option<u16>,
+    pub(crate) web_access_port: Option<u16>,
     #[serde(default)]
-    web_access_password: Option<String>,
+    pub(crate) web_access_password: Option<String>,
     #[serde(default)]
-    ui_language: Option<String>,
+    pub(crate) ui_language: Option<String>,
     #[serde(default)]
-    ui_size_scale: Option<u16>,
+    pub(crate) ui_size_scale: Option<u16>,
     #[serde(default)]
-    message_notification_enabled: Option<bool>,
+    pub(crate) message_notification_enabled: Option<bool>,
     #[serde(default)]
-    message_notification_sound_enabled: Option<bool>,
+    pub(crate) message_notification_sound_enabled: Option<bool>,
     #[serde(default)]
-    desktop_operation_notice_enabled: Option<bool>,
+    pub(crate) desktop_operation_notice_enabled: Option<bool>,
     #[serde(default)]
-    stt_api_config_id: Option<String>,
+    pub(crate) stt_api_config_id: Option<String>,
     #[serde(default)]
-    stt_auto_send: Option<bool>,
+    pub(crate) stt_auto_send: Option<bool>,
     #[serde(default)]
-    api_configs: Option<Vec<ApiConfig>>,
+    pub(crate) api_configs: Option<Vec<ApiConfig>>,
 }
 
 /** 局部更新配置：读当前配置，仅覆盖传入字段，其余保留（修复 saveConfig 全量覆盖丢字段）。 */
-fn patch_config_inner(
+pub(crate) fn patch_config_inner(
     input: PatchAppConfigInput,
     app: &NativeAppHandle,
     state: &AppState,
@@ -514,7 +514,7 @@ fn patch_config_inner(
     save_config_inner(config, app, state, ide_context_runtime)
 }
 
-fn save_config_inner(
+pub(crate) fn save_config_inner(
     config: AppConfig,
     app: &NativeAppHandle,
     state: &AppState,
@@ -617,7 +617,7 @@ fn save_config_inner(
     Ok(runtime_config)
 }
 
-fn set_skipped_github_update_version_inner(
+pub(crate) fn set_skipped_github_update_version_inner(
     version: String,
     app: &NativeAppHandle,
     state: &AppState,

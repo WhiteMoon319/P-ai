@@ -339,7 +339,7 @@ pub(crate) fn write_jsonl_snapshot_atomic(path: &PathBuf, content: &str) -> Resu
 }
 
 #[cfg(test)]
-mod jsonl_snapshot_conversation_block_tests {
+pub(crate) mod jsonl_snapshot_conversation_block_tests {
     use super::*;
 
     fn text_message(id: &str, role: &str, text: &str) -> ChatMessage {

@@ -1,4 +1,4 @@
-fn delegate_store_db_path(data_path: &PathBuf) -> PathBuf {
+pub(crate) fn delegate_store_db_path(data_path: &PathBuf) -> PathBuf {
     app_root_from_data_path(data_path)
         .join("delegate")
         .join(DELEGATE_DB_FILE_NAME)
@@ -6,41 +6,41 @@ fn delegate_store_db_path(data_path: &PathBuf) -> PathBuf {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DelegateConversationSnapshot {
-    delegate_id: String,
-    kind: String,
-    conversation_id: String,
-    root_conversation_id: String,
-    title: String,
-    why: String,
-    goal: String,
-    todo: String,
-    target_department_id: String,
-    target_agent_id: String,
-    status: String,
-    created_at: String,
-    updated_at: String,
+pub(crate) struct DelegateConversationSnapshot {
+    pub(crate) delegate_id: String,
+    pub(crate) kind: String,
+    pub(crate) conversation_id: String,
+    pub(crate) root_conversation_id: String,
+    pub(crate) title: String,
+    pub(crate) why: String,
+    pub(crate) goal: String,
+    pub(crate) todo: String,
+    pub(crate) target_department_id: String,
+    pub(crate) target_agent_id: String,
+    pub(crate) status: String,
+    pub(crate) created_at: String,
+    pub(crate) updated_at: String,
     #[serde(default)]
-    completed_at: Option<String>,
+    pub(crate) completed_at: Option<String>,
     #[serde(default)]
-    archived_at: Option<String>,
+    pub(crate) archived_at: Option<String>,
     #[serde(default)]
-    last_message_at: Option<String>,
-    message_count: usize,
-    step_count: usize,
-    tool_call_count: usize,
-    last_tool_name: String,
-    cumulative_usage: ConversationCumulativeUsage,
+    pub(crate) last_message_at: Option<String>,
+    pub(crate) message_count: usize,
+    pub(crate) step_count: usize,
+    pub(crate) tool_call_count: usize,
+    pub(crate) last_tool_name: String,
+    pub(crate) cumulative_usage: ConversationCumulativeUsage,
 }
 
 #[derive(Debug, Clone, Default)]
-struct DelegateConversationSnapshotCache {
-    by_delegate_id: std::collections::HashMap<String, DelegateConversationSnapshot>,
-    ordered_delegate_ids: Vec<String>,
-    by_root_conversation_id: std::collections::HashMap<String, Vec<String>>,
+pub(crate) struct DelegateConversationSnapshotCache {
+    pub(crate) by_delegate_id: std::collections::HashMap<String, DelegateConversationSnapshot>,
+    pub(crate) ordered_delegate_ids: Vec<String>,
+    pub(crate) by_root_conversation_id: std::collections::HashMap<String, Vec<String>>,
 }
 
-fn delegate_snapshot_cache_store(
+pub(crate) fn delegate_snapshot_cache_store(
 ) -> &'static Mutex<std::collections::HashMap<String, DelegateConversationSnapshotCache>> {
     static CACHE: OnceLock<
         Mutex<std::collections::HashMap<String, DelegateConversationSnapshotCache>>,
@@ -48,11 +48,11 @@ fn delegate_snapshot_cache_store(
     CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
-fn delegate_snapshot_cache_key(data_path: &PathBuf) -> String {
+pub(crate) fn delegate_snapshot_cache_key(data_path: &PathBuf) -> String {
     delegate_store_db_path(data_path).to_string_lossy().to_string()
 }
 
-fn delegate_snapshot_cache_build(
+pub(crate) fn delegate_snapshot_cache_build(
     snapshots: Vec<DelegateConversationSnapshot>,
 ) -> DelegateConversationSnapshotCache {
     let mut by_delegate_id = std::collections::HashMap::new();
@@ -62,7 +62,7 @@ fn delegate_snapshot_cache_build(
     delegate_snapshot_cache_from_map(by_delegate_id)
 }
 
-fn delegate_snapshot_cache_from_map(
+pub(crate) fn delegate_snapshot_cache_from_map(
     by_delegate_id: std::collections::HashMap<String, DelegateConversationSnapshot>,
 ) -> DelegateConversationSnapshotCache {
     let mut ordered = by_delegate_id.keys().cloned().collect::<Vec<_>>();
@@ -93,7 +93,7 @@ fn delegate_snapshot_cache_from_map(
     }
 }
 
-fn delegate_snapshot_sort_key(
+pub(crate) fn delegate_snapshot_sort_key(
     snapshot: Option<&DelegateConversationSnapshot>,
 ) -> (String, String, String) {
     let Some(snapshot) = snapshot else {
@@ -108,7 +108,7 @@ fn delegate_snapshot_sort_key(
     (primary, snapshot.updated_at.clone(), snapshot.delegate_id.clone())
 }
 
-fn delegate_store_open(data_path: &PathBuf) -> Result<Connection, String> {
+pub(crate) fn delegate_store_open(data_path: &PathBuf) -> Result<Connection, String> {
     let path = delegate_store_db_path(data_path);
     let parent = path
         .parent()
@@ -120,7 +120,7 @@ fn delegate_store_open(data_path: &PathBuf) -> Result<Connection, String> {
     Ok(conn)
 }
 
-fn delegate_store_init(conn: &Connection) -> Result<(), String> {
+pub(crate) fn delegate_store_init(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
         "BEGIN;
         CREATE TABLE IF NOT EXISTS delegate_record (
@@ -152,7 +152,7 @@ fn delegate_store_init(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-fn delegate_store_table_columns(conn: &Connection) -> Result<std::collections::HashSet<String>, String> {
+pub(crate) fn delegate_store_table_columns(conn: &Connection) -> Result<std::collections::HashSet<String>, String> {
     let mut stmt = conn
         .prepare("PRAGMA table_info(delegate_record)")
         .map_err(|err| format!("读取委托表结构失败: {err}"))?;
@@ -166,7 +166,7 @@ fn delegate_store_table_columns(conn: &Connection) -> Result<std::collections::H
     Ok(columns)
 }
 
-fn delegate_store_sql_expr_for_column(
+pub(crate) fn delegate_store_sql_expr_for_column(
     columns: &std::collections::HashSet<String>,
     preferred: &str,
     legacy: &[&str],
@@ -187,7 +187,7 @@ fn delegate_store_sql_expr_for_column(
     }
 }
 
-fn delegate_store_migrate_why_goal_todo(conn: &Connection) -> Result<(), String> {
+pub(crate) fn delegate_store_migrate_why_goal_todo(conn: &Connection) -> Result<(), String> {
     let columns = delegate_store_table_columns(conn)?;
     let has_new_columns =
         columns.contains("why") && columns.contains("goal") && columns.contains("todo");
@@ -249,7 +249,7 @@ fn delegate_store_migrate_why_goal_todo(conn: &Connection) -> Result<(), String>
     Ok(())
 }
 
-fn delegate_store_migrate_snapshot_columns(conn: &Connection) -> Result<(), String> {
+pub(crate) fn delegate_store_migrate_snapshot_columns(conn: &Connection) -> Result<(), String> {
     let columns = delegate_store_table_columns(conn)?;
     let mut sql = Vec::<String>::new();
     if !columns.contains("snapshot_conversation_id") {
@@ -340,11 +340,11 @@ fn delegate_store_migrate_snapshot_columns(conn: &Connection) -> Result<(), Stri
     Ok(())
 }
 
-fn delegate_call_stack_to_json(items: &[String]) -> Result<String, String> {
+pub(crate) fn delegate_call_stack_to_json(items: &[String]) -> Result<String, String> {
     serde_json::to_string(items).map_err(|err| format!("序列化委托调用栈失败: {err}"))
 }
 
-fn delegate_call_stack_from_json(raw: &str) -> Vec<String> {
+pub(crate) fn delegate_call_stack_from_json(raw: &str) -> Vec<String> {
     match serde_json::from_str(raw) {
         Ok(items) => items,
         Err(err) => {
@@ -358,7 +358,7 @@ fn delegate_call_stack_from_json(raw: &str) -> Vec<String> {
     }
 }
 
-fn delegate_row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<DelegateEntry> {
+pub(crate) fn delegate_row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<DelegateEntry> {
     Ok(DelegateEntry {
         delegate_id: row.get("delegate_id")?,
         kind: row.get("kind")?,
@@ -382,7 +382,7 @@ fn delegate_row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<DelegateEn
     })
 }
 
-fn delegate_snapshot_row_to_entry(
+pub(crate) fn delegate_snapshot_row_to_entry(
     row: &rusqlite::Row<'_>,
 ) -> rusqlite::Result<DelegateConversationSnapshot> {
     let cumulative_usage_json = row.get::<_, String>("cumulative_usage_json")?;
@@ -428,7 +428,7 @@ fn delegate_snapshot_row_to_entry(
     })
 }
 
-fn delegate_snapshot_stats_from_conversation(
+pub(crate) fn delegate_snapshot_stats_from_conversation(
     conversation: &Conversation,
 ) -> (usize, usize, String, ConversationCumulativeUsage) {
     let cumulative_usage = if conversation.cumulative_usage.is_empty() {
@@ -482,7 +482,7 @@ fn delegate_snapshot_stats_from_conversation(
     (request_count, tool_call_count, last_tool_name, cumulative_usage)
 }
 
-fn delegate_snapshot_effective_prompt_tokens(message: &ChatMessage) -> Option<u64> {
+pub(crate) fn delegate_snapshot_effective_prompt_tokens(message: &ChatMessage) -> Option<u64> {
     message
         .provider_meta
         .as_ref()?
@@ -490,7 +490,7 @@ fn delegate_snapshot_effective_prompt_tokens(message: &ChatMessage) -> Option<u6
         .as_u64()
 }
 
-fn delegate_snapshot_compaction_kind(message: &ChatMessage) -> Option<String> {
+pub(crate) fn delegate_snapshot_compaction_kind(message: &ChatMessage) -> Option<String> {
     let kind = message
         .provider_meta
         .as_ref()?
@@ -506,12 +506,12 @@ fn delegate_snapshot_compaction_kind(message: &ChatMessage) -> Option<String> {
     }
 }
 
-fn delegate_snapshot_text_message_has_content(message: &ChatMessage) -> bool {
+pub(crate) fn delegate_snapshot_text_message_has_content(message: &ChatMessage) -> bool {
     !render_prompt_message_text(message).trim().is_empty()
         || message.extra_text_blocks.iter().any(|item| !item.trim().is_empty())
 }
 
-fn delegate_snapshot_token_count(messages: &[ChatMessage]) -> u64 {
+pub(crate) fn delegate_snapshot_token_count(messages: &[ChatMessage]) -> u64 {
     let mut total = 0u64;
     let mut latest_segment_usage = None::<u64>;
     for message in messages {
@@ -530,7 +530,7 @@ fn delegate_snapshot_token_count(messages: &[ChatMessage]) -> u64 {
     total
 }
 
-fn delegate_snapshot_from_entry_and_conversation(
+pub(crate) fn delegate_snapshot_from_entry_and_conversation(
     entry: &DelegateEntry,
     conversation: &Conversation,
 ) -> DelegateConversationSnapshot {
@@ -576,7 +576,7 @@ fn delegate_snapshot_from_entry_and_conversation(
     }
 }
 
-fn delegate_snapshot_from_entry(
+pub(crate) fn delegate_snapshot_from_entry(
     entry: &DelegateEntry,
     existing: Option<&DelegateConversationSnapshot>,
 ) -> DelegateConversationSnapshot {
@@ -611,7 +611,7 @@ fn delegate_snapshot_from_entry(
     }
 }
 
-fn delegate_snapshot_store_read(
+pub(crate) fn delegate_snapshot_store_read(
     data_path: &PathBuf,
     delegate_id: &str,
 ) -> Result<Option<DelegateConversationSnapshot>, String> {
@@ -652,7 +652,7 @@ fn delegate_snapshot_store_read(
     .map_err(|err| format!("读取委托快照失败: {err}"))
 }
 
-fn delegate_snapshot_store_list_from_db(
+pub(crate) fn delegate_snapshot_store_list_from_db(
     data_path: &PathBuf,
 ) -> Result<Vec<DelegateConversationSnapshot>, String> {
     let conn = delegate_store_open(data_path)?;
@@ -698,7 +698,7 @@ fn delegate_snapshot_store_list_from_db(
         .map_err(|err| format!("解析委托快照列表失败: {err}"))
 }
 
-fn delegate_snapshot_store_is_empty(data_path: &PathBuf) -> Result<bool, String> {
+pub(crate) fn delegate_snapshot_store_is_empty(data_path: &PathBuf) -> Result<bool, String> {
     let conn = delegate_store_open(data_path)?;
     let count = conn
         .query_row(
@@ -710,7 +710,7 @@ fn delegate_snapshot_store_is_empty(data_path: &PathBuf) -> Result<bool, String>
     Ok(count == 0)
 }
 
-fn delegate_snapshot_store_upsert_db(
+pub(crate) fn delegate_snapshot_store_upsert_db(
     data_path: &PathBuf,
     snapshot: &DelegateConversationSnapshot,
 ) -> Result<(), String> {
@@ -760,7 +760,7 @@ fn delegate_snapshot_store_upsert_db(
     Ok(())
 }
 
-fn delegate_snapshot_store_delete_db(
+pub(crate) fn delegate_snapshot_store_delete_db(
     data_path: &PathBuf,
     delegate_id: &str,
 ) -> Result<bool, String> {
@@ -787,7 +787,7 @@ fn delegate_snapshot_store_delete_db(
     Ok(affected > 0)
 }
 
-fn delegate_snapshot_cache_list(
+pub(crate) fn delegate_snapshot_cache_list(
     data_path: &PathBuf,
 ) -> Result<Vec<DelegateConversationSnapshot>, String> {
     delegate_snapshot_cache_ensure_loaded(data_path)?;
@@ -804,7 +804,7 @@ fn delegate_snapshot_cache_list(
         .collect())
 }
 
-fn delegate_snapshot_cache_list_by_root(
+pub(crate) fn delegate_snapshot_cache_list_by_root(
     data_path: &PathBuf,
     root_conversation_id: &str,
 ) -> Result<Vec<DelegateConversationSnapshot>, String> {
@@ -827,7 +827,7 @@ fn delegate_snapshot_cache_list_by_root(
         .collect())
 }
 
-fn delegate_snapshot_cache_get(
+pub(crate) fn delegate_snapshot_cache_get(
     data_path: &PathBuf,
     delegate_id: &str,
 ) -> Result<Option<DelegateConversationSnapshot>, String> {
@@ -840,7 +840,7 @@ fn delegate_snapshot_cache_get(
         .and_then(|snapshot_cache| snapshot_cache.by_delegate_id.get(delegate_id.trim()).cloned()))
 }
 
-fn delegate_snapshot_cache_write(
+pub(crate) fn delegate_snapshot_cache_write(
     data_path: &PathBuf,
     snapshot: DelegateConversationSnapshot,
 ) -> Result<(), String> {
@@ -859,7 +859,7 @@ fn delegate_snapshot_cache_write(
     Ok(())
 }
 
-fn delegate_snapshot_cache_delete(
+pub(crate) fn delegate_snapshot_cache_delete(
     data_path: &PathBuf,
     delegate_id: &str,
 ) -> Result<bool, String> {
@@ -876,7 +876,7 @@ fn delegate_snapshot_cache_delete(
     Ok(deleted)
 }
 
-fn delegate_snapshot_cache_ensure_loaded(data_path: &PathBuf) -> Result<(), String> {
+pub(crate) fn delegate_snapshot_cache_ensure_loaded(data_path: &PathBuf) -> Result<(), String> {
     let key = delegate_snapshot_cache_key(data_path);
     let mut cache = delegate_snapshot_cache_store()
         .lock()
@@ -898,7 +898,7 @@ fn delegate_snapshot_cache_ensure_loaded(data_path: &PathBuf) -> Result<(), Stri
     Ok(())
 }
 
-fn delegate_snapshot_store_rebuild_from_truth_if_empty(data_path: &PathBuf) -> Result<(), String> {
+pub(crate) fn delegate_snapshot_store_rebuild_from_truth_if_empty(data_path: &PathBuf) -> Result<(), String> {
     if !delegate_snapshot_store_is_empty(data_path)? {
         return Ok(());
     }
@@ -921,7 +921,7 @@ fn delegate_snapshot_store_rebuild_from_truth_if_empty(data_path: &PathBuf) -> R
     Ok(())
 }
 
-fn delegate_snapshot_store_sync_from_conversation(
+pub(crate) fn delegate_snapshot_store_sync_from_conversation(
     data_path: &PathBuf,
     conversation: &Conversation,
 ) -> Result<(), String> {
@@ -934,7 +934,7 @@ fn delegate_snapshot_store_sync_from_conversation(
     delegate_snapshot_cache_write(data_path, snapshot)
 }
 
-fn delegate_snapshot_store_sync_from_entry(
+pub(crate) fn delegate_snapshot_store_sync_from_entry(
     data_path: &PathBuf,
     entry: &DelegateEntry,
 ) -> Result<(), String> {
@@ -943,7 +943,7 @@ fn delegate_snapshot_store_sync_from_entry(
     delegate_snapshot_cache_write(data_path, snapshot)
 }
 
-fn delegate_store_create_delegate(
+pub(crate) fn delegate_store_create_delegate(
     data_path: &PathBuf,
     input: &DelegateCreateInput,
 ) -> Result<DelegateEntry, String> {
@@ -1006,7 +1006,7 @@ fn delegate_store_create_delegate(
     Ok(entry)
 }
 
-fn delegate_store_get_delegate(data_path: &PathBuf, delegate_id: &str) -> Result<DelegateEntry, String> {
+pub(crate) fn delegate_store_get_delegate(data_path: &PathBuf, delegate_id: &str) -> Result<DelegateEntry, String> {
     let conn = delegate_store_open(data_path)?;
     conn.query_row(
         "SELECT * FROM delegate_record WHERE delegate_id = ?1",
@@ -1016,7 +1016,7 @@ fn delegate_store_get_delegate(data_path: &PathBuf, delegate_id: &str) -> Result
     .map_err(|err| format!("读取委托记录失败: {err}"))
 }
 
-fn delegate_store_delete_terminal_delegate(data_path: &PathBuf, delegate_id: &str) -> Result<bool, String> {
+pub(crate) fn delegate_store_delete_terminal_delegate(data_path: &PathBuf, delegate_id: &str) -> Result<bool, String> {
     let conn = delegate_store_open(data_path)?;
     let affected = conn.execute(
         "DELETE FROM delegate_record WHERE delegate_id = ?1 AND status IN (?2, ?3)",
@@ -1026,7 +1026,7 @@ fn delegate_store_delete_terminal_delegate(data_path: &PathBuf, delegate_id: &st
     Ok(affected > 0)
 }
 
-fn delegate_store_update_status(
+pub(crate) fn delegate_store_update_status(
     data_path: &PathBuf,
     delegate_id: &str,
     status: &str,
@@ -1062,7 +1062,7 @@ fn delegate_store_update_status(
     Ok(entry)
 }
 
-fn delegate_store_interrupt_unfinished_remote_replies(data_path: &PathBuf) -> Result<Vec<String>, String> {
+pub(crate) fn delegate_store_interrupt_unfinished_remote_replies(data_path: &PathBuf) -> Result<Vec<String>, String> {
     let conn = delegate_store_open(data_path)?;
     let mut statement = conn
         .prepare(
@@ -1095,7 +1095,7 @@ fn delegate_store_interrupt_unfinished_remote_replies(data_path: &PathBuf) -> Re
 }
 
 #[cfg(test)]
-mod delegate_store_tests {
+pub(crate) mod delegate_store_tests {
     use super::*;
     use uuid::Uuid;
 

@@ -1,4 +1,4 @@
-fn build_remote_im_enqueue_input(
+pub(crate) fn build_remote_im_enqueue_input(
     channel_id: &str,
     sender_name: String,
     sender_id: String,
@@ -45,7 +45,7 @@ fn build_remote_im_enqueue_input(
 }
 
 /// 解析 OneBot v11 message 事件并入队
-async fn parse_and_enqueue_onebot_event(
+pub(crate) async fn parse_and_enqueue_onebot_event(
     channel_id: &str,
     event: &Value,
     state: &AppState,
@@ -216,7 +216,7 @@ async fn parse_and_enqueue_onebot_event(
     Ok(result)
 }
 
-async fn napcat_run_event_consumer_loop(
+pub(crate) async fn napcat_run_event_consumer_loop(
     manager: OnebotV11WsManager,
     channel_id: String,
     state: AppState,
@@ -327,7 +327,7 @@ async fn napcat_run_event_consumer_loop(
 }
 
 impl OnebotV11WsManager {
-    async fn stop_event_consumer_inner(&self, channel_id: &str) -> Result<(), String> {
+    pub(crate) async fn stop_event_consumer_inner(&self, channel_id: &str) -> Result<(), String> {
         self.add_log(channel_id, "info", "开始停止事件消费器").await;
         let stop_sender = {
             self.event_consumer_stop_senders

@@ -19,15 +19,17 @@ use uuid::Uuid;
 
 // Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
 
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
+use std::sync::RwLock;
+use super::*;
+
 pub(crate) mod message_store {
     // 第一阶段先建立可独立测试的迁移边界，运行路径接入会在后续阶段完成。
     #![allow(dead_code)]
-
     // 嵌套 mod 内 glob import 不传递，直接引用 crate 根 pub(crate) 项
     use crate::*;
-
-
-use super::*;
     include!("paths.rs");
     include!("manifest.rs");
     include!("meta.rs");

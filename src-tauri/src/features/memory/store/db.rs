@@ -1,10 +1,10 @@
-fn memory_store_db_path(data_path: &PathBuf) -> PathBuf {
+pub(crate) fn memory_store_db_path(data_path: &PathBuf) -> PathBuf {
     app_root_from_data_path(data_path)
         .join("memory")
         .join(MEMORY_DB_FILE_NAME)
 }
 
-fn memory_store_open(data_path: &PathBuf) -> Result<Connection, String> {
+pub(crate) fn memory_store_open(data_path: &PathBuf) -> Result<Connection, String> {
     let db_path = memory_store_db_path(data_path);
     if !db_path.exists() {
         let legacy_parent = data_path
@@ -41,7 +41,7 @@ fn memory_store_open(data_path: &PathBuf) -> Result<Connection, String> {
     Ok(conn)
 }
 
-fn memory_store_normalize_memory_type(raw: &str) -> Result<String, String> {
+pub(crate) fn memory_store_normalize_memory_type(raw: &str) -> Result<String, String> {
     let normalized = raw.trim().to_ascii_lowercase();
     match normalized.as_str() {
         "knowledge" | "skill" | "emotion" | "event" => Ok(normalized),
@@ -54,7 +54,7 @@ fn memory_store_normalize_memory_type(raw: &str) -> Result<String, String> {
 }
 
 // ========== apply_pragmas_and_create_schema ==========
-fn apply_pragmas_and_create_schema(conn: &Connection) -> Result<(), String> {
+pub(crate) fn apply_pragmas_and_create_schema(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
         "PRAGMA journal_mode=WAL;
          PRAGMA synchronous=NORMAL;
@@ -164,7 +164,7 @@ fn apply_pragmas_and_create_schema(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-fn migrate_memory_short_id(conn: &Connection) -> Result<(), String> {
+pub(crate) fn migrate_memory_short_id(conn: &Connection) -> Result<(), String> {
     let has_memory_no_col: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM pragma_table_info('memory_record') WHERE name='memory_no'",
@@ -223,7 +223,7 @@ fn migrate_memory_short_id(conn: &Connection) -> Result<(), String> {
 }
 
 // ========== migrate_owner_agent_col ==========
-fn migrate_owner_agent_col(conn: &Connection) -> Result<(), String> {
+pub(crate) fn migrate_owner_agent_col(conn: &Connection) -> Result<(), String> {
     let has_owner_agent_col: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM pragma_table_info('memory_record') WHERE name='owner_agent_id'",
@@ -245,7 +245,7 @@ fn migrate_owner_agent_col(conn: &Connection) -> Result<(), String> {
 }
 
 // ========== migrate_memory_fts ==========
-fn migrate_memory_fts(conn: &Connection) -> Result<(), String> {
+pub(crate) fn migrate_memory_fts(conn: &Connection) -> Result<(), String> {
     // Migrate memory_fts: drop the old 2-column (tags+judgment) FTS table and recreate
     // as single-column. The judgment column stores concatenated "judgment + tags" text for BM25.
     let col_count: i64 = conn
@@ -283,7 +283,7 @@ fn migrate_memory_fts(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-fn migrate_profile_memory_link(conn: &Connection) -> Result<(), String> {
+pub(crate) fn migrate_profile_memory_link(conn: &Connection) -> Result<(), String> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS profile_memory_link (
             id TEXT PRIMARY KEY,
@@ -300,7 +300,7 @@ fn migrate_profile_memory_link(conn: &Connection) -> Result<(), String> {
 }
 
 // ========== repopulate_fts_if_needed ==========
-fn repopulate_fts_if_needed(conn: &Connection) -> Result<(), String> {
+pub(crate) fn repopulate_fts_if_needed(conn: &Connection) -> Result<(), String> {
     // If memory_fts is empty but memory_record has data, repopulate.
     let fts_count: i64 = conn
         .query_row("SELECT COUNT(1) FROM memory_fts", [], |row| row.get(0))
@@ -329,7 +329,7 @@ fn repopulate_fts_if_needed(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-fn memory_store_init_schema(conn: &Connection) -> Result<(), String> {
+pub(crate) fn memory_store_init_schema(conn: &Connection) -> Result<(), String> {
     apply_pragmas_and_create_schema(conn)?;
     migrate_memory_short_id(conn)?;
     migrate_owner_agent_col(conn)?;
@@ -340,7 +340,7 @@ fn memory_store_init_schema(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-fn memory_store_set_runtime_state(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
+pub(crate) fn memory_store_set_runtime_state(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
     conn.execute(
         "INSERT INTO kb_runtime_state(key, value) VALUES (?1, ?2)
          ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -350,7 +350,7 @@ fn memory_store_set_runtime_state(conn: &Connection, key: &str, value: &str) -> 
     Ok(())
 }
 
-fn memory_store_get_runtime_state(conn: &Connection, key: &str) -> Result<Option<String>, String> {
+pub(crate) fn memory_store_get_runtime_state(conn: &Connection, key: &str) -> Result<Option<String>, String> {
     conn.query_row(
         "SELECT value FROM kb_runtime_state WHERE key=?1",
         params![key],
@@ -360,7 +360,7 @@ fn memory_store_get_runtime_state(conn: &Connection, key: &str) -> Result<Option
     .map_err(|err| format!("Get runtime state failed for '{key}': {err}"))
 }
 
-fn memory_store_provider_model_name(
+pub(crate) fn memory_store_provider_model_name(
     conn: &Connection,
     provider_id: &str,
 ) -> Result<Option<String>, String> {

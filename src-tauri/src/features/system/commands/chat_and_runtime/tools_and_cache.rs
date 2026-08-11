@@ -1,5 +1,5 @@
 
-fn check_tools_status_inner(
+pub(crate) fn check_tools_status_inner(
     input: CheckToolsStatusInput,
     state: &AppState,
 ) -> Result<Vec<ToolLoadStatus>, String> {
@@ -171,7 +171,7 @@ fn check_tools_status_inner(
 }
 
 
-fn get_image_text_cache_stats_inner(state: &AppState) -> Result<ImageTextCacheStats, String> {
+pub(crate) fn get_image_text_cache_stats_inner(state: &AppState) -> Result<ImageTextCacheStats, String> {
     let runtime = state_read_runtime_state_cached(&state)?;
 
     let entries = runtime.image_text_cache.len();
@@ -194,7 +194,7 @@ fn get_image_text_cache_stats_inner(state: &AppState) -> Result<ImageTextCacheSt
 }
 
 
-fn clear_image_text_cache_inner(state: &AppState) -> Result<ImageTextCacheStats, String> {
+pub(crate) fn clear_image_text_cache_inner(state: &AppState) -> Result<ImageTextCacheStats, String> {
     let mut runtime = state_read_runtime_state_cached(&state)?;
     runtime.image_text_cache.clear();
     state_write_runtime_state_cached(&state, &runtime)?;

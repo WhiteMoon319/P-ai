@@ -1,4 +1,4 @@
-fn build_qwen_media_block(
+pub(crate) fn build_qwen_media_block(
     media_type: ReadMediaDetectedType,
     mime: &str,
     content_base64: &str,
@@ -37,7 +37,7 @@ fn build_qwen_media_block(
     })
 }
 
-fn build_qwen_media_data_url(mime: &str, content_base64: &str) -> Result<String, String> {
+pub(crate) fn build_qwen_media_data_url(mime: &str, content_base64: &str) -> Result<String, String> {
     let data_url = format!("data:{mime};base64,{content_base64}");
     if data_url.len() > QWEN_MEDIA_DATA_URL_LIMIT_BYTES {
         return Err(format!(
@@ -49,7 +49,7 @@ fn build_qwen_media_data_url(mime: &str, content_base64: &str) -> Result<String,
     Ok(data_url)
 }
 
-async fn describe_qwen_media_with_multimodal_api(
+pub(crate) async fn describe_qwen_media_with_multimodal_api(
     state: &AppState,
     resolved_api: &ResolvedApiConfig,
     selected_api: &ApiConfig,

@@ -1,4 +1,4 @@
-fn remote_im_group_reply_focus_matches(
+pub(crate) fn remote_im_group_reply_focus_matches(
     state: &AppState,
     contact: &RemoteImContact,
     text: &str,
@@ -11,7 +11,7 @@ fn remote_im_group_reply_focus_matches(
         .any(|phrase| normalized.contains(&phrase.to_lowercase()))
 }
 
-fn build_remote_im_group_reply_length_reminder(focus: bool, max_chars: u32) -> String {
+pub(crate) fn build_remote_im_group_reply_length_reminder(focus: bool, max_chars: u32) -> String {
     let unit_rule = "中文/日文/韩文按可见字形计 1，英语等按 Unicode 单词计 1，数字词和 Emoji 各计 1，标点与空白不计。";
     if focus {
         format!("[系统提醒]\n请认真回答，最多 {max_chars} 个有效文本单位。{unit_rule}")
@@ -20,7 +20,7 @@ fn build_remote_im_group_reply_length_reminder(focus: bool, max_chars: u32) -> S
     }
 }
 
-fn effective_remote_im_group_reply_char_count(text: &str) -> usize {
+pub(crate) fn effective_remote_im_group_reply_char_count(text: &str) -> usize {
     remote_im_strip_simple_markdown(text)
         .chars()
         .filter(|character| !character.is_whitespace())
@@ -28,7 +28,7 @@ fn effective_remote_im_group_reply_char_count(text: &str) -> usize {
 }
 
 #[cfg(test)]
-mod remote_im_group_reply_focus_tests {
+pub(crate) mod remote_im_group_reply_focus_tests {
     use super::*;
 
     #[test]

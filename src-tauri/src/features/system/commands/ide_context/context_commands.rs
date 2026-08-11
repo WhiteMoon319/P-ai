@@ -1,4 +1,4 @@
-fn upsert_ide_context_snapshot_internal(
+pub(crate) fn upsert_ide_context_snapshot_internal(
     input: UpsertIdeContextSnapshotInput,
     runtime: &IdeContextRuntime,
 ) -> Result<(String, String), String> {
@@ -69,7 +69,7 @@ fn upsert_ide_context_snapshot_internal(
     Ok((client_id, updated_at))
 }
 
-fn ide_chat_parse_workspace_params<T: serde::de::DeserializeOwned>(params: Value) -> Result<T, String> {
+pub(crate) fn ide_chat_parse_workspace_params<T: serde::de::DeserializeOwned>(params: Value) -> Result<T, String> {
     match ide_chat_parse_params::<T>(params.clone()) {
         Ok(value) => Ok(value),
         Err(_) => ide_chat_parse_param_field::<T>(params, "input"),
@@ -78,14 +78,14 @@ fn ide_chat_parse_workspace_params<T: serde::de::DeserializeOwned>(params: Value
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatWorkspacePermissionInput {
-    conversation_id: String,
-    access: String,
-    workspace_path: Option<String>,
-    workspace_name: Option<String>,
+pub(crate) struct IdeChatWorkspacePermissionInput {
+    pub(crate) conversation_id: String,
+    pub(crate) access: String,
+    pub(crate) workspace_path: Option<String>,
+    pub(crate) workspace_name: Option<String>,
 }
 
-fn ide_chat_workspace_permission_payload(state: &AppState, conversation: &Conversation) -> Result<Value, String> {
+pub(crate) fn ide_chat_workspace_permission_payload(state: &AppState, conversation: &Conversation) -> Result<Value, String> {
     let workspaces = terminal_allowed_workspaces_for_conversation_canonical(state, Some(conversation))?;
     let main = workspaces.iter().find(|w| w.level == SHELL_WORKSPACE_LEVEL_MAIN)
         .or_else(|| workspaces.iter().find(|w| w.level == SHELL_WORKSPACE_LEVEL_SYSTEM));
@@ -96,13 +96,13 @@ fn ide_chat_workspace_permission_payload(state: &AppState, conversation: &Conver
     }))
 }
 
-fn ide_chat_workspace_permission(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_workspace_permission(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatConversationInput>(params)?;
     let meta = conversation_service_v2().get_conversation_meta(state, input.conversation_id.trim())?;
     ide_chat_workspace_permission_payload(state, &ide_chat_conversation_from_meta_view(&meta))
 }
 
-fn ide_chat_select_workspace_permission(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_select_workspace_permission(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<IdeChatWorkspacePermissionInput>(params)?;
     let conversation_id = input.conversation_id.trim();
     if conversation_id.is_empty() { return Err("conversationId is required".to_string()); }
@@ -124,32 +124,32 @@ fn ide_chat_select_workspace_permission(state: &AppState, params: Value) -> Resu
     ide_chat_workspace_permission_payload(state, &updated)
 }
 
-fn ide_chat_workspace_layout_save(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_workspace_layout_save(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_workspace_params::<SaveChatShellWorkspacesInput>(params)?;
     ide_chat_serialize(update_chat_shell_workspace_layout_inner(input, state)?)
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatWorkspaceDirectoryListInput { path: String }
+pub(crate) struct IdeChatWorkspaceDirectoryListInput { path: String }
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatFileReaderReadInput { path: String }
+pub(crate) struct IdeChatFileReaderReadInput { path: String }
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatFileReaderReadBlockInput { path: String, start_line: usize, line_count: usize }
+pub(crate) struct IdeChatFileReaderReadBlockInput { path: String, start_line: usize, line_count: usize }
 
-fn ide_chat_workspace_list(state: &AppState, params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_workspace_list(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_workspace_params::<ChatShellWorkspaceInput>(params)?;
     ide_chat_serialize(get_chat_shell_workspace_inner(input, state)?)
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct IdeChatWorkspaceGitRootCheckInput {
-    workspace_path: String,
+pub(crate) struct IdeChatWorkspaceGitRootCheckInput {
+    pub(crate) workspace_path: String,
 }
 
 
@@ -157,7 +157,7 @@ struct IdeChatWorkspaceGitRootCheckInput {
 
 
 /// 查询 Web 访问（远程连接）状态；启用且未运行时自动拉起服务。
-async fn get_web_access_info_inner(
+pub(crate) async fn get_web_access_info_inner(
     app: &NativeAppHandle,
     state: &AppState,
     ide_context_runtime: &IdeContextRuntime,
@@ -224,7 +224,7 @@ async fn get_web_access_info_inner(
     })
 }
 
-fn ide_context_get_cached_lan_hosts(
+pub(crate) fn ide_context_get_cached_lan_hosts(
     ide_context_runtime: &IdeContextRuntime,
     force_refresh: bool,
 ) -> Result<Vec<String>, String> {
@@ -242,7 +242,7 @@ fn ide_context_get_cached_lan_hosts(
     Ok(lan_hosts)
 }
 
-fn query_ide_context_references_internal(
+pub(crate) fn query_ide_context_references_internal(
     input: IdeContextWorkspaceQueryInput,
     ide_context_runtime: &IdeContextRuntime,
 ) -> Result<IdeContextQueryResultOutput, String> {

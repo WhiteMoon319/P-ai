@@ -604,7 +604,7 @@ pub(crate) async fn generate_gemini_image_once(
 }
 
 #[cfg(test)]
-mod image_generation_provider_tests {
+pub(crate) mod image_generation_provider_tests {
     use super::*;
 
     fn request() -> ImageGenerationRequest {

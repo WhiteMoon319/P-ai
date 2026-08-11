@@ -1072,7 +1072,7 @@ pub(crate) fn read_conversation_shard_meta(path: &PathBuf) -> Result<Conversatio
 }
 
 #[cfg(test)]
-mod message_store_meta_tests {
+pub(crate) mod message_store_meta_tests {
     use super::*;
 
     fn test_message(id: &str) -> ChatMessage {

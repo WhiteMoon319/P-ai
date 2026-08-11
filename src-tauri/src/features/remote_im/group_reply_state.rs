@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RemoteImGroupReplyPhase {
+pub(crate) enum RemoteImGroupReplyPhase {
     NonMentionScheduled,
     SecretaryJudging,
     MentionScheduled,
@@ -8,72 +8,72 @@ enum RemoteImGroupReplyPhase {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RemoteImGroupReplySettlementStatus {
+pub(crate) enum RemoteImGroupReplySettlementStatus {
     Delivered,
     Uncertain,
 }
 
 #[derive(Clone)]
-struct RemoteImGroupReplySettlement {
-    boundary_message_id: String,
-    final_text: Option<String>,
-    outbound_key: Option<String>,
-    platform_message_id: Option<String>,
-    status: RemoteImGroupReplySettlementStatus,
+pub(crate) struct RemoteImGroupReplySettlement {
+    pub(crate) boundary_message_id: String,
+    pub(crate) final_text: Option<String>,
+    pub(crate) outbound_key: Option<String>,
+    pub(crate) platform_message_id: Option<String>,
+    pub(crate) status: RemoteImGroupReplySettlementStatus,
 }
 
 #[derive(Clone)]
-struct RemoteImGroupReplyState {
-    generation: u64,
-    phase: RemoteImGroupReplyPhase,
-    start_message_id: String,
-    decision_end_message_id: Option<String>,
-    focus: bool,
-    energy_settled: bool,
-    next_round_mention: bool,
-    event: ChatPendingEvent,
-    due_at: std::time::Instant,
-    inspection_kind: RemoteImGroupReplyTimerKind,
-    pending_settlement: Option<RemoteImGroupReplySettlement>,
+pub(crate) struct RemoteImGroupReplyState {
+    pub(crate) generation: u64,
+    pub(crate) phase: RemoteImGroupReplyPhase,
+    pub(crate) start_message_id: String,
+    pub(crate) decision_end_message_id: Option<String>,
+    pub(crate) focus: bool,
+    pub(crate) energy_settled: bool,
+    pub(crate) next_round_mention: bool,
+    pub(crate) event: ChatPendingEvent,
+    pub(crate) due_at: std::time::Instant,
+    pub(crate) inspection_kind: RemoteImGroupReplyTimerKind,
+    pub(crate) pending_settlement: Option<RemoteImGroupReplySettlement>,
 }
 
 #[derive(Default)]
-struct RemoteImGroupReplyStateStore {
-    next_generation: u64,
-    by_contact: std::collections::HashMap<String, RemoteImGroupReplyState>,
+pub(crate) struct RemoteImGroupReplyStateStore {
+    pub(crate) next_generation: u64,
+    pub(crate) by_contact: std::collections::HashMap<String, RemoteImGroupReplyState>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RemoteImGroupReplyTimerKind {
+pub(crate) enum RemoteImGroupReplyTimerKind {
     NonMention,
     Mention,
     Commit,
 }
 
 #[derive(Debug, Clone, Copy)]
-struct RemoteImGroupReplyDispatchPolicy {
-    generation: u64,
-    focus: bool,
-    max_chars: u32,
+pub(crate) struct RemoteImGroupReplyDispatchPolicy {
+    pub(crate) generation: u64,
+    pub(crate) focus: bool,
+    pub(crate) max_chars: u32,
 }
 
 #[derive(Clone)]
-struct RemoteImGroupReplyTimerAction {
-    state_key: String,
-    contact_id: String,
-    generation: u64,
-    kind: RemoteImGroupReplyTimerKind,
-    delay: std::time::Duration,
+pub(crate) struct RemoteImGroupReplyTimerAction {
+    pub(crate) state_key: String,
+    pub(crate) contact_id: String,
+    pub(crate) generation: u64,
+    pub(crate) kind: RemoteImGroupReplyTimerKind,
+    pub(crate) delay: std::time::Duration,
 }
 
-fn remote_im_group_reply_state_store(
+pub(crate) fn remote_im_group_reply_state_store(
 ) -> &'static std::sync::Mutex<RemoteImGroupReplyStateStore> {
     static STORE: std::sync::OnceLock<std::sync::Mutex<RemoteImGroupReplyStateStore>> =
         std::sync::OnceLock::new();
     STORE.get_or_init(|| std::sync::Mutex::new(RemoteImGroupReplyStateStore::default()))
 }
 
-fn lock_remote_im_group_reply_state_store(
+pub(crate) fn lock_remote_im_group_reply_state_store(
 ) -> std::sync::MutexGuard<'static, RemoteImGroupReplyStateStore> {
     match remote_im_group_reply_state_store().lock() {
         Ok(store) => store,
@@ -84,16 +84,16 @@ fn lock_remote_im_group_reply_state_store(
     }
 }
 
-fn remote_im_group_reply_state_key(state: &AppState, contact_id: &str) -> String {
+pub(crate) fn remote_im_group_reply_state_key(state: &AppState, contact_id: &str) -> String {
     format!("{}::{}", state.data_path.to_string_lossy(), contact_id.trim())
 }
 
-fn remote_im_group_reply_next_generation(store: &mut RemoteImGroupReplyStateStore) -> u64 {
+pub(crate) fn remote_im_group_reply_next_generation(store: &mut RemoteImGroupReplyStateStore) -> u64 {
     store.next_generation = store.next_generation.saturating_add(1).max(1);
     store.next_generation
 }
 
-fn remote_im_group_reply_inspection_delay(
+pub(crate) fn remote_im_group_reply_inspection_delay(
     pacing: &RemoteImGroupReplyPacing,
     sample: f64,
 ) -> std::time::Duration {
@@ -104,12 +104,12 @@ fn remote_im_group_reply_inspection_delay(
     std::time::Duration::from_secs_f64(seconds.max(1.0))
 }
 
-fn remote_im_group_reply_random_sample() -> f64 {
+pub(crate) fn remote_im_group_reply_random_sample() -> f64 {
     let value = Uuid::new_v4().as_u128();
     (value as f64 / u128::MAX as f64).clamp(0.0, 1.0)
 }
 
-fn remote_im_group_reply_phase_matches_timer(
+pub(crate) fn remote_im_group_reply_phase_matches_timer(
     phase: RemoteImGroupReplyPhase,
     kind: RemoteImGroupReplyTimerKind,
 ) -> bool {
@@ -128,7 +128,7 @@ fn remote_im_group_reply_phase_matches_timer(
     )
 }
 
-fn remote_im_group_reply_generation_is_current(
+pub(crate) fn remote_im_group_reply_generation_is_current(
     state: &AppState,
     contact_id: &str,
     generation: u64,
@@ -141,7 +141,7 @@ fn remote_im_group_reply_generation_is_current(
         .unwrap_or(false)
 }
 
-fn remote_im_group_reply_has_active_batch(state: &AppState, contact_id: &str) -> bool {
+pub(crate) fn remote_im_group_reply_has_active_batch(state: &AppState, contact_id: &str) -> bool {
     let key = remote_im_group_reply_state_key(state, contact_id);
     lock_remote_im_group_reply_state_store()
         .by_contact
@@ -149,7 +149,7 @@ fn remote_im_group_reply_has_active_batch(state: &AppState, contact_id: &str) ->
 }
 
 #[cfg(test)]
-mod remote_im_group_reply_state_tests {
+pub(crate) mod remote_im_group_reply_state_tests {
     use super::*;
 
     #[test]

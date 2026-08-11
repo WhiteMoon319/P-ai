@@ -1,8 +1,8 @@
-fn remote_im_event_latest_message_id(event: &ChatPendingEvent) -> Option<String> {
+pub(crate) fn remote_im_event_latest_message_id(event: &ChatPendingEvent) -> Option<String> {
     event.messages.last().map(|message| message.id.clone())
 }
 
-fn remote_im_update_checkpoint_latest_seen_in_list(
+pub(crate) fn remote_im_update_checkpoint_latest_seen_in_list(
     checkpoints: &mut Vec<RemoteImContactCheckpoint>,
     contact_id: &str,
     message_id: Option<&str>,
@@ -12,7 +12,7 @@ fn remote_im_update_checkpoint_latest_seen_in_list(
     remote_im_update_checkpoint_latest_seen_in_checkpoint(checkpoint, message_id, now);
 }
 
-fn remote_im_update_checkpoint_latest_seen_in_checkpoint(
+pub(crate) fn remote_im_update_checkpoint_latest_seen_in_checkpoint(
     checkpoint: &mut RemoteImContactCheckpoint,
     message_id: Option<&str>,
     now: &str,
@@ -25,7 +25,7 @@ fn remote_im_update_checkpoint_latest_seen_in_checkpoint(
     checkpoint.updated_at = Some(now.to_string());
 }
 
-fn remote_im_handle_persisted_event_after_history_flush_runtime(
+pub(crate) fn remote_im_handle_persisted_event_after_history_flush_runtime(
     state: &AppState,
     contacts: &[RemoteImContact],
     checkpoints: &mut Vec<RemoteImContactCheckpoint>,
@@ -152,7 +152,7 @@ fn remote_im_handle_persisted_event_after_history_flush_runtime(
     Ok(should_activate)
 }
 
-fn remote_im_finalize_round_completion(
+pub(crate) fn remote_im_finalize_round_completion(
     state: &AppState,
     activated_sources: &[RemoteImActivationSource],
     reply_decision: Option<&str>,
@@ -308,7 +308,7 @@ fn remote_im_finalize_round_completion(
     Ok(follow_up_sources)
 }
 
-fn remote_im_finalize_async_send_result(
+pub(crate) fn remote_im_finalize_async_send_result(
     state: &AppState,
     source: &RemoteImActivationSource,
     send_ok: bool,

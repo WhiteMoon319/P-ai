@@ -1,18 +1,18 @@
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToolReviewConversationInput {
-    conversation_id: String,
+pub(crate) struct ToolReviewConversationInput {
+    pub(crate) conversation_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToolReviewCommitPageInput {
-    conversation_id: String,
-    page: usize,
-    page_size: usize,
+pub(crate) struct ToolReviewCommitPageInput {
+    pub(crate) conversation_id: String,
+    pub(crate) page: usize,
+    pub(crate) page_size: usize,
 }
 
-fn tool_review_delegate_background(scope: &str, target: Option<&str>) -> String {
+pub(crate) fn tool_review_delegate_background(scope: &str, target: Option<&str>) -> String {
     let mut lines = vec![format!("审查范围：{}", scope.trim())];
     if let Some(target) = target.map(str::trim).filter(|value| !value.is_empty()) {
         lines.push(format!("范围参数：{}", target));
@@ -22,7 +22,7 @@ fn tool_review_delegate_background(scope: &str, target: Option<&str>) -> String 
 }
 
 
-async fn list_tool_review_commit_options_internal_command(
+pub(crate) async fn list_tool_review_commit_options_internal_command(
     input: ToolReviewCommitPageInput,
     state: &AppState,
 ) -> Result<ListToolReviewCommitOptionsOutput, String> {
@@ -65,7 +65,7 @@ async fn list_tool_review_commit_options_internal_command(
     Ok(ListToolReviewCommitOptionsOutput { total, page, page_size, commits })
 }
 
-async fn tool_review_list_commit_options_internal(
+pub(crate) async fn tool_review_list_commit_options_internal(
     state: &AppState,
     conversation: &Conversation,
     page: usize,
@@ -164,23 +164,23 @@ async fn tool_review_list_commit_options_internal(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToolReviewCommitOption {
-    hash: String,
-    short_hash: String,
-    subject: String,
-    author_time: String,
+pub(crate) struct ToolReviewCommitOption {
+    pub(crate) hash: String,
+    pub(crate) short_hash: String,
+    pub(crate) subject: String,
+    pub(crate) author_time: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ListToolReviewCommitOptionsOutput {
-    total: usize,
-    page: usize,
-    page_size: usize,
-    commits: Vec<ToolReviewCommitOption>,
+pub(crate) struct ListToolReviewCommitOptionsOutput {
+    pub(crate) total: usize,
+    pub(crate) page: usize,
+    pub(crate) page_size: usize,
+    pub(crate) commits: Vec<ToolReviewCommitOption>,
 }
 
-fn tool_review_command_for_item(item: &ToolReviewCollectedItem) -> Option<String> {
+pub(crate) fn tool_review_command_for_item(item: &ToolReviewCollectedItem) -> Option<String> {
     item.result_value
         .as_ref()
         .and_then(|value| tool_review_json_string_field(value, "command"))
@@ -192,7 +192,7 @@ fn tool_review_command_for_item(item: &ToolReviewCollectedItem) -> Option<String
         .map(ToOwned::to_owned)
 }
 
-fn tool_review_extract_patch_paths_from_text(input: &str) -> Vec<String> {
+pub(crate) fn tool_review_extract_patch_paths_from_text(input: &str) -> Vec<String> {
     let mut out = Vec::<String>::new();
     for line in input.lines() {
         let value = line
@@ -211,7 +211,7 @@ fn tool_review_extract_patch_paths_from_text(input: &str) -> Vec<String> {
     out
 }
 
-fn tool_review_patch_paths_for_item(item: &ToolReviewCollectedItem) -> Vec<String> {
+pub(crate) fn tool_review_patch_paths_for_item(item: &ToolReviewCollectedItem) -> Vec<String> {
     let mut out = Vec::<String>::new();
     if let Some(changed) = item
         .result_value
@@ -247,7 +247,7 @@ fn tool_review_patch_paths_for_item(item: &ToolReviewCollectedItem) -> Vec<Strin
     out
 }
 
-fn tool_review_patch_operation_for_item(item: &ToolReviewCollectedItem) -> Option<String> {
+pub(crate) fn tool_review_patch_operation_for_item(item: &ToolReviewCollectedItem) -> Option<String> {
     let mut operations = Vec::<String>::new();
     if let Some(changed) = item
         .result_value
@@ -311,185 +311,185 @@ fn tool_review_patch_operation_for_item(item: &ToolReviewCollectedItem) -> Optio
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToolReviewCallInput {
-    conversation_id: String,
-    call_id: String,
+pub(crate) struct ToolReviewCallInput {
+    pub(crate) conversation_id: String,
+    pub(crate) call_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToolReviewBatchActionInput {
-    conversation_id: String,
-    batch_index: usize,
+pub(crate) struct ToolReviewBatchActionInput {
+    pub(crate) conversation_id: String,
+    pub(crate) batch_index: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToolReviewCodeReviewInput {
-    conversation_id: String,
-    scope: String,
+pub(crate) struct ToolReviewCodeReviewInput {
+    pub(crate) conversation_id: String,
+    pub(crate) scope: String,
     #[serde(default)]
-    target: Option<String>,
+    pub(crate) target: Option<String>,
     #[serde(default)]
-    department_id: Option<String>,
+    pub(crate) department_id: Option<String>,
     #[serde(default)]
-    agent_id: Option<String>,
+    pub(crate) agent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DeleteToolReviewReportInput {
-    conversation_id: String,
-    report_id: String,
+pub(crate) struct DeleteToolReviewReportInput {
+    pub(crate) conversation_id: String,
+    pub(crate) report_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToolReviewStoredReview {
-    kind: String,
-    allow: bool,
-    review_opinion: String,
-    model_name: String,
+pub(crate) struct ToolReviewStoredReview {
+    pub(crate) kind: String,
+    pub(crate) allow: bool,
+    pub(crate) review_opinion: String,
+    pub(crate) model_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    raw_content: Option<String>,
+    pub(crate) raw_content: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToolReviewItemSummary {
-    call_id: String,
-    tool_name: String,
-    order_index: usize,
-    has_review: bool,
+pub(crate) struct ToolReviewItemSummary {
+    pub(crate) call_id: String,
+    pub(crate) tool_name: String,
+    pub(crate) order_index: usize,
+    pub(crate) has_review: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    review_opinion: Option<String>,
+    pub(crate) review_opinion: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    affected_paths: Vec<String>,
+    pub(crate) affected_paths: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    patch_operation: Option<String>,
+    pub(crate) patch_operation: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    command: Option<String>,
+    pub(crate) command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    finished_at: Option<String>,
+    pub(crate) finished_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToolReviewReportRecord {
-    id: String,
-    conversation_id: String,
+pub(crate) struct ToolReviewReportRecord {
+    pub(crate) id: String,
+    pub(crate) conversation_id: String,
     #[serde(default)]
-    title: String,
-    status: String,
-    scope: String,
-    target: String,
+    pub(crate) title: String,
+    pub(crate) status: String,
+    pub(crate) scope: String,
+    pub(crate) target: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    department_id: Option<String>,
+    pub(crate) department_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    agent_id: Option<String>,
-    workspace_path: String,
-    created_at: String,
-    updated_at: String,
-    report_text: String,
+    pub(crate) agent_id: Option<String>,
+    pub(crate) workspace_path: String,
+    pub(crate) created_at: String,
+    pub(crate) updated_at: String,
+    pub(crate) report_text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    error_text: Option<String>,
+    pub(crate) error_text: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    delegate_id: Option<String>,
+    pub(crate) delegate_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToolReviewBatchSummary {
-    batch_key: String,
-    user_message_id: String,
-    user_message_text: String,
-    item_count: usize,
-    unreviewed_count: usize,
-    items: Vec<ToolReviewItemSummary>,
+pub(crate) struct ToolReviewBatchSummary {
+    pub(crate) batch_key: String,
+    pub(crate) user_message_id: String,
+    pub(crate) user_message_text: String,
+    pub(crate) item_count: usize,
+    pub(crate) unreviewed_count: usize,
+    pub(crate) items: Vec<ToolReviewItemSummary>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ListToolReviewBatchesOutput {
-    batches: Vec<ToolReviewBatchSummary>,
+pub(crate) struct ListToolReviewBatchesOutput {
+    pub(crate) batches: Vec<ToolReviewBatchSummary>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    current_batch_key: Option<String>,
+    pub(crate) current_batch_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToolReviewItemDetail {
-    batch_key: String,
-    call_id: String,
-    message_id: String,
-    tool_name: String,
-    order_index: usize,
-    has_review: bool,
-    preview_kind: String,
-    preview_text: String,
-    result_text: String,
+pub(crate) struct ToolReviewItemDetail {
+    pub(crate) batch_key: String,
+    pub(crate) call_id: String,
+    pub(crate) message_id: String,
+    pub(crate) tool_name: String,
+    pub(crate) order_index: usize,
+    pub(crate) has_review: bool,
+    pub(crate) preview_kind: String,
+    pub(crate) preview_text: String,
+    pub(crate) result_text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    review: Option<ToolReviewStoredReview>,
+    pub(crate) review: Option<ToolReviewStoredReview>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToolReviewSegment {
-    path: String,
-    action: String,
-    diff_lines: Vec<String>,
+pub(crate) struct ToolReviewSegment {
+    pub(crate) path: String,
+    pub(crate) action: String,
+    pub(crate) diff_lines: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToolReviewBatchDetailsOutput {
-    batch_key: String,
-    segments: Vec<ToolReviewSegment>,
+pub(crate) struct ToolReviewBatchDetailsOutput {
+    pub(crate) batch_key: String,
+    pub(crate) segments: Vec<ToolReviewSegment>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RunToolReviewBatchOutput {
-    batch_key: String,
-    reviewed_call_ids: Vec<String>,
+pub(crate) struct RunToolReviewBatchOutput {
+    pub(crate) batch_key: String,
+    pub(crate) reviewed_call_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SubmitToolReviewCodeOutput {
-    report: ToolReviewReportRecord,
+pub(crate) struct SubmitToolReviewCodeOutput {
+    pub(crate) report: ToolReviewReportRecord,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ListToolReviewReportsOutput {
-    reports: Vec<ToolReviewReportRecord>,
+pub(crate) struct ListToolReviewReportsOutput {
+    pub(crate) reports: Vec<ToolReviewReportRecord>,
 }
 
 #[derive(Debug, Clone)]
-struct ToolReviewCollectedItem {
-    batch_key: String,
-    call_id: String,
-    message_id: String,
-    finished_at: Option<String>,
-    tool_name: String,
-    order_index: usize,
-    args_value: Value,
-    args_text: String,
-    result_text: String,
-    result_value: Option<Value>,
-    review_value: Option<Value>,
+pub(crate) struct ToolReviewCollectedItem {
+    pub(crate) batch_key: String,
+    pub(crate) call_id: String,
+    pub(crate) message_id: String,
+    pub(crate) finished_at: Option<String>,
+    pub(crate) tool_name: String,
+    pub(crate) order_index: usize,
+    pub(crate) args_value: Value,
+    pub(crate) args_text: String,
+    pub(crate) result_text: String,
+    pub(crate) result_value: Option<Value>,
+    pub(crate) review_value: Option<Value>,
 }
 
 #[derive(Debug, Clone)]
-struct ToolReviewCollectedBatch {
-    batch_key: String,
-    user_message_id: String,
-    user_message_text: String,
-    items: Vec<ToolReviewCollectedItem>,
+pub(crate) struct ToolReviewCollectedBatch {
+    pub(crate) batch_key: String,
+    pub(crate) user_message_id: String,
+    pub(crate) user_message_text: String,
+    pub(crate) items: Vec<ToolReviewCollectedItem>,
 }
 
-fn tool_review_user_message_text(message: &ChatMessage) -> String {
+pub(crate) fn tool_review_user_message_text(message: &ChatMessage) -> String {
     let text = message
         .parts
         .iter()
@@ -509,11 +509,11 @@ fn tool_review_user_message_text(message: &ChatMessage) -> String {
     }
 }
 
-fn tool_review_json_string_field<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
+pub(crate) fn tool_review_json_string_field<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value.get(key)?.as_str().map(str::trim).filter(|item| !item.is_empty())
 }
 
-fn tool_review_value_to_stored_review(raw: &Value) -> Option<ToolReviewStoredReview> {
+pub(crate) fn tool_review_value_to_stored_review(raw: &Value) -> Option<ToolReviewStoredReview> {
     let object = raw.as_object()?;
     Some(ToolReviewStoredReview {
         kind: object
@@ -548,7 +548,7 @@ fn tool_review_value_to_stored_review(raw: &Value) -> Option<ToolReviewStoredRev
     })
 }
 
-fn tool_review_normalize_review_value(raw: Option<Value>) -> Option<Value> {
+pub(crate) fn tool_review_normalize_review_value(raw: Option<Value>) -> Option<Value> {
     let value = raw?;
     match &value {
         Value::Null => None,
@@ -558,7 +558,7 @@ fn tool_review_normalize_review_value(raw: Option<Value>) -> Option<Value> {
 }
 
 
-fn delete_tool_review_report_internal(
+pub(crate) fn delete_tool_review_report_internal(
     input: DeleteToolReviewReportInput,
     state: &AppState,
 ) -> Result<(), String> {
@@ -584,7 +584,7 @@ fn delete_tool_review_report_internal(
     Ok(())
 }
 
-fn tool_review_patch_operations_summary(args: &Value) -> Option<Vec<Value>> {
+pub(crate) fn tool_review_patch_operations_summary(args: &Value) -> Option<Vec<Value>> {
     let operations = args.get("operations")?.as_array()?;
     let mut out = Vec::<Value>::new();
     for operation in operations {
@@ -616,14 +616,14 @@ fn tool_review_patch_operations_summary(args: &Value) -> Option<Vec<Value>> {
     Some(out)
 }
 
-fn tool_review_prefixed_preview_lines(prefix: &str, text: &str) -> Vec<String> {
+pub(crate) fn tool_review_prefixed_preview_lines(prefix: &str, text: &str) -> Vec<String> {
     apply_patch_preview_text(text, 4_000)
         .lines()
         .map(|line| format!("{prefix}{line}"))
         .collect()
 }
 
-fn tool_review_patch_line_ranges_from_changed_entry(entry: &Value) -> Vec<(usize, usize)> {
+pub(crate) fn tool_review_patch_line_ranges_from_changed_entry(entry: &Value) -> Vec<(usize, usize)> {
     entry
         .get("lineRanges")
         .and_then(Value::as_array)
@@ -650,7 +650,7 @@ fn tool_review_patch_line_ranges_from_changed_entry(entry: &Value) -> Vec<(usize
         .unwrap_or_default()
 }
 
-fn tool_review_patch_line_header(changed_entry: Option<&Value>) -> Option<String> {
+pub(crate) fn tool_review_patch_line_header(changed_entry: Option<&Value>) -> Option<String> {
     let ranges = changed_entry
         .map(tool_review_patch_line_ranges_from_changed_entry)
         .unwrap_or_default();
@@ -665,7 +665,7 @@ fn tool_review_patch_line_header(changed_entry: Option<&Value>) -> Option<String
     Some(format!("@@ {formatted} @@"))
 }
 
-fn tool_review_patch_operations_preview(args: &Value, changed_entries: Option<&[Value]>) -> Option<String> {
+pub(crate) fn tool_review_patch_operations_preview(args: &Value, changed_entries: Option<&[Value]>) -> Option<String> {
     let operations = args.get("operations")?.as_array()?;
     let mut lines = Vec::<String>::new();
     for (index, operation) in operations.iter().enumerate() {
@@ -695,7 +695,7 @@ fn tool_review_patch_operations_preview(args: &Value, changed_entries: Option<&[
     (!lines.is_empty()).then(|| lines.join("\n"))
 }
 
-fn tool_review_single_edit_preview(tool_name: &str, args: &Value, changed_entry: Option<&Value>) -> Option<String> {
+pub(crate) fn tool_review_single_edit_preview(tool_name: &str, args: &Value, changed_entry: Option<&Value>) -> Option<String> {
     let _path = tool_review_json_string_field(args, "path")?;
     let mut lines = Vec::<String>::new();
     match tool_name {
@@ -736,7 +736,7 @@ fn tool_review_single_edit_preview(tool_name: &str, args: &Value, changed_entry:
     (!lines.is_empty()).then(|| lines.join("\n"))
 }
 
-fn tool_review_preview_for_item(item: &ToolReviewCollectedItem) -> (String, String) {
+pub(crate) fn tool_review_preview_for_item(item: &ToolReviewCollectedItem) -> (String, String) {
     match item.tool_name.as_str() {
         "apply_patch" | "write" | "delete" | "update" | "move" => {
             let changed_entries = item
@@ -771,7 +771,7 @@ fn tool_review_preview_for_item(item: &ToolReviewCollectedItem) -> (String, Stri
     }
 }
 
-fn tool_review_git_hunk_header(
+pub(crate) fn tool_review_git_hunk_header(
     old_start: usize,
     old_count: usize,
     new_start: usize,
@@ -780,7 +780,7 @@ fn tool_review_git_hunk_header(
     format!("@@ -{},{} +{},{} @@", old_start, old_count, new_start, new_count)
 }
 
-fn tool_review_prefixed_git_lines(prefix: &str, text: &str) -> Vec<String> {
+pub(crate) fn tool_review_prefixed_git_lines(prefix: &str, text: &str) -> Vec<String> {
     if text.is_empty() {
         return Vec::new();
     }
@@ -789,7 +789,7 @@ fn tool_review_prefixed_git_lines(prefix: &str, text: &str) -> Vec<String> {
         .collect()
 }
 
-fn tool_review_segment_update_lines(
+pub(crate) fn tool_review_segment_update_lines(
     old_start: usize,
     old_string: &str,
     new_string: &str,
@@ -802,7 +802,7 @@ fn tool_review_segment_update_lines(
     lines
 }
 
-fn tool_review_segments_for_apply_patch(item: &ToolReviewCollectedItem) -> Vec<ToolReviewSegment> {
+pub(crate) fn tool_review_segments_for_apply_patch(item: &ToolReviewCollectedItem) -> Vec<ToolReviewSegment> {
     let mut segments = Vec::<ToolReviewSegment>::new();
     let Some(operations) = item.args_value.get("operations").and_then(Value::as_array) else {
         return segments;
@@ -882,7 +882,7 @@ fn tool_review_segments_for_apply_patch(item: &ToolReviewCollectedItem) -> Vec<T
     segments
 }
 
-fn tool_review_segments_for_single_edit(item: &ToolReviewCollectedItem) -> Vec<ToolReviewSegment> {
+pub(crate) fn tool_review_segments_for_single_edit(item: &ToolReviewCollectedItem) -> Vec<ToolReviewSegment> {
     let tool_name = item.tool_name.as_str();
     let path = tool_review_json_string_field(&item.args_value, "path")
         .or_else(|| tool_review_json_string_field(&item.args_value, "to"))
@@ -956,7 +956,7 @@ fn tool_review_segments_for_single_edit(item: &ToolReviewCollectedItem) -> Vec<T
     }
 }
 
-fn tool_review_segments_for_item(item: &ToolReviewCollectedItem) -> Vec<ToolReviewSegment> {
+pub(crate) fn tool_review_segments_for_item(item: &ToolReviewCollectedItem) -> Vec<ToolReviewSegment> {
     match item.tool_name.as_str() {
         "apply_patch" => tool_review_segments_for_apply_patch(item),
         "write" | "update" | "delete" | "move" => tool_review_segments_for_single_edit(item),
@@ -964,7 +964,7 @@ fn tool_review_segments_for_item(item: &ToolReviewCollectedItem) -> Vec<ToolRevi
     }
 }
 
-fn collect_tool_review_batches_internal(conversation: &Conversation) -> Vec<ToolReviewCollectedBatch> {
+pub(crate) fn collect_tool_review_batches_internal(conversation: &Conversation) -> Vec<ToolReviewCollectedBatch> {
     let mut current_batch_key = None::<String>;
     let mut current_user_message_id = None::<String>;
     let mut order_index = 0usize;
@@ -1076,7 +1076,7 @@ fn collect_tool_review_batches_internal(conversation: &Conversation) -> Vec<Tool
         .collect()
 }
 
-fn tool_review_find_batch_by_index(
+pub(crate) fn tool_review_find_batch_by_index(
     conversation: &Conversation,
     batch_index: usize,
 ) -> Result<(usize, ToolReviewCollectedBatch), String> {
@@ -1096,7 +1096,7 @@ fn tool_review_find_batch_by_index(
     Ok((display_number, batch))
 }
 
-fn tool_review_batch_summary_from_collected(batch: &ToolReviewCollectedBatch) -> ToolReviewBatchSummary {
+pub(crate) fn tool_review_batch_summary_from_collected(batch: &ToolReviewCollectedBatch) -> ToolReviewBatchSummary {
     ToolReviewBatchSummary {
         batch_key: batch.batch_key.clone(),
         user_message_id: batch.user_message_id.clone(),
@@ -1142,7 +1142,7 @@ fn tool_review_batch_summary_from_collected(batch: &ToolReviewCollectedBatch) ->
     }
 }
 
-fn tool_review_item_detail_from_collected(item: &ToolReviewCollectedItem) -> ToolReviewItemDetail {
+pub(crate) fn tool_review_item_detail_from_collected(item: &ToolReviewCollectedItem) -> ToolReviewItemDetail {
     let (preview_kind, preview_text) = tool_review_preview_for_item(item);
     ToolReviewItemDetail {
         batch_key: item.batch_key.clone(),
@@ -1161,7 +1161,7 @@ fn tool_review_item_detail_from_collected(item: &ToolReviewCollectedItem) -> Too
     }
 }
 
-fn tool_review_find_item(conversation: &Conversation, call_id: &str) -> Result<ToolReviewCollectedItem, String> {
+pub(crate) fn tool_review_find_item(conversation: &Conversation, call_id: &str) -> Result<ToolReviewCollectedItem, String> {
     collect_tool_review_batches_internal(conversation)
         .into_iter()
         .flat_map(|batch| batch.items.into_iter())
@@ -1169,7 +1169,7 @@ fn tool_review_find_item(conversation: &Conversation, call_id: &str) -> Result<T
         .ok_or_else(|| format!("Tool review item not found: {call_id}"))
 }
 
-fn tool_review_updated_result_content(result_text: &str, review: &Value) -> String {
+pub(crate) fn tool_review_updated_result_content(result_text: &str, review: &Value) -> String {
     let mut object = match serde_json::from_str::<Value>(result_text.trim()) {
         Ok(Value::Object(map)) => map,
         Ok(other) => {
@@ -1191,7 +1191,7 @@ fn tool_review_updated_result_content(result_text: &str, review: &Value) -> Stri
         .unwrap_or_else(|_| serde_json::json!({ "toolReview": review }).to_string())
 }
 
-fn tool_review_write_call_review(
+pub(crate) fn tool_review_write_call_review(
     conversation: &mut Conversation,
     call_id: &str,
     review: &Value,
@@ -1227,7 +1227,7 @@ fn tool_review_write_call_review(
     Err(format!("Tool result event not found for call_id={call_id}"))
 }
 
-fn tool_review_build_context(item: &ToolReviewCollectedItem) -> Value {
+pub(crate) fn tool_review_build_context(item: &ToolReviewCollectedItem) -> Value {
     match item.tool_name.as_str() {
         "apply_patch" | "write" | "delete" | "update" | "move" => {
             let (_, preview_text) = tool_review_preview_for_item(item);
@@ -1254,7 +1254,7 @@ fn tool_review_build_context(item: &ToolReviewCollectedItem) -> Value {
     }
 }
 
-async fn tool_review_run_for_call_internal(
+pub(crate) async fn tool_review_run_for_call_internal(
     state: &AppState,
     conversation_id: &str,
     call_id: &str,
@@ -1317,7 +1317,7 @@ async fn tool_review_run_for_call_internal(
     )
 }
 
-fn tool_review_parse_scope(raw: &str) -> Result<&'static str, String> {
+pub(crate) fn tool_review_parse_scope(raw: &str) -> Result<&'static str, String> {
     match raw.trim() {
         "uncommitted" => Ok("uncommitted"),
         "main" => Ok("main"),
@@ -1327,7 +1327,7 @@ fn tool_review_parse_scope(raw: &str) -> Result<&'static str, String> {
     }
 }
 
-fn tool_review_find_skill_by_name(
+pub(crate) fn tool_review_find_skill_by_name(
     state: &AppState,
     skill_name: &str,
 ) -> Result<SkillSummaryItem, String> {
@@ -1338,7 +1338,7 @@ fn tool_review_find_skill_by_name(
         .ok_or_else(|| format!("未找到 skill：{skill_name}"))
 }
 
-async fn tool_review_exec_git_readonly(
+pub(crate) async fn tool_review_exec_git_readonly(
     state: &AppState,
     conversation_id: &str,
     cwd: &Path,
@@ -1356,11 +1356,11 @@ async fn tool_review_exec_git_readonly(
     Ok(stdout)
 }
 
-fn tool_review_reports_root(data_path: &PathBuf) -> PathBuf {
+pub(crate) fn tool_review_reports_root(data_path: &PathBuf) -> PathBuf {
     app_root_from_data_path(data_path).join("tool-review-reports")
 }
 
-fn tool_review_validate_conversation_id(conversation_id: &str) -> Result<String, String> {
+pub(crate) fn tool_review_validate_conversation_id(conversation_id: &str) -> Result<String, String> {
     let normalized = conversation_id.trim();
     if normalized.is_empty() {
         return Err("会话 ID 为空，无法定位结果记录存储。".to_string());
@@ -1371,14 +1371,14 @@ fn tool_review_validate_conversation_id(conversation_id: &str) -> Result<String,
     Ok(normalized.to_string())
 }
 
-fn tool_review_reports_file_path(data_path: &PathBuf, conversation_id: &str) -> Result<PathBuf, String> {
+pub(crate) fn tool_review_reports_file_path(data_path: &PathBuf, conversation_id: &str) -> Result<PathBuf, String> {
     let normalized = tool_review_validate_conversation_id(conversation_id)?;
     Ok(tool_review_reports_root(data_path)
         .join(normalized)
         .join("reports.jsonl"))
 }
 
-fn tool_review_write_text_atomic(path: &PathBuf, body: &str, label: &str) -> Result<(), String> {
+pub(crate) fn tool_review_write_text_atomic(path: &PathBuf, body: &str, label: &str) -> Result<(), String> {
     ensure_parent_dir(path)?;
     let file_name = path
         .file_name()
@@ -1395,7 +1395,7 @@ fn tool_review_write_text_atomic(path: &PathBuf, body: &str, label: &str) -> Res
     Ok(())
 }
 
-fn emit_tool_review_reports_updated(state: &AppState, conversation_id: &str, report_id: &str, status: &str) {
+pub(crate) fn emit_tool_review_reports_updated(state: &AppState, conversation_id: &str, report_id: &str, status: &str) {
     let app_handle = match state.app_handle.lock() {
         Ok(guard) => guard.as_ref().cloned(),
         Err(_) => None,
@@ -1415,7 +1415,7 @@ fn emit_tool_review_reports_updated(state: &AppState, conversation_id: &str, rep
     let _ = app_handle.emit("easy-call:tool-review-reports-updated", payload);
 }
 
-fn tool_review_read_report_records(
+pub(crate) fn tool_review_read_report_records(
     data_path: &PathBuf,
     conversation_id: &str,
 ) -> Result<Vec<ToolReviewReportRecord>, String> {
@@ -1443,7 +1443,7 @@ fn tool_review_read_report_records(
     Ok(out)
 }
 
-fn tool_review_write_report_records(
+pub(crate) fn tool_review_write_report_records(
     data_path: &PathBuf,
     conversation_id: &str,
     records: &[ToolReviewReportRecord],
@@ -1460,7 +1460,7 @@ fn tool_review_write_report_records(
     tool_review_write_text_atomic(&path, &body, "tool review reports jsonl")
 }
 
-fn tool_review_list_reports_newest_first(
+pub(crate) fn tool_review_list_reports_newest_first(
     data_path: &PathBuf,
     conversation_id: &str,
 ) -> Result<Vec<ToolReviewReportRecord>, String> {
@@ -1469,11 +1469,11 @@ fn tool_review_list_reports_newest_first(
     Ok(records)
 }
 
-fn tool_review_is_legacy_batch_scope(scope: &str) -> bool {
+pub(crate) fn tool_review_is_legacy_batch_scope(scope: &str) -> bool {
     scope.trim().eq_ignore_ascii_case("batch")
 }
 
-fn tool_review_prune_legacy_batch_report_records(
+pub(crate) fn tool_review_prune_legacy_batch_report_records(
     data_path: &PathBuf,
     conversation_id: &str,
 ) -> Result<bool, String> {
@@ -1496,7 +1496,7 @@ fn tool_review_prune_legacy_batch_report_records(
     Ok(true)
 }
 
-fn tool_review_cleanup_legacy_artifacts(
+pub(crate) fn tool_review_cleanup_legacy_artifacts(
     data_path: &PathBuf,
     conversation: &mut Conversation,
 ) -> Result<bool, String> {
@@ -1513,7 +1513,7 @@ fn tool_review_cleanup_legacy_artifacts(
     Ok(removed_legacy_messages || removed_legacy_reports)
 }
 
-fn tool_review_create_pending_report(
+pub(crate) fn tool_review_create_pending_report(
     data_path: &PathBuf,
     conversation_id: &str,
     scope: &str,
@@ -1551,7 +1551,7 @@ fn tool_review_create_pending_report(
     Ok(record)
 }
 
-fn tool_review_update_report_record(
+pub(crate) fn tool_review_update_report_record(
     data_path: &PathBuf,
     conversation_id: &str,
     report_id: &str,
@@ -1591,7 +1591,7 @@ fn tool_review_update_report_record(
     Ok(updated)
 }
 
-fn tool_review_delete_report_record(
+pub(crate) fn tool_review_delete_report_record(
     data_path: &PathBuf,
     conversation_id: &str,
     report_id: &str,
@@ -1606,7 +1606,7 @@ fn tool_review_delete_report_record(
     tool_review_write_report_records(data_path, conversation_id, &records)
 }
 
-fn tool_review_scope_instruction(scope: &str) -> &'static str {
+pub(crate) fn tool_review_scope_instruction(scope: &str) -> &'static str {
     match scope {
         "uncommitted" => "请审查当前工作区未提交改动。",
         "main" => "请审查当前工作区相对主分支的改动。",
@@ -1616,7 +1616,7 @@ fn tool_review_scope_instruction(scope: &str) -> &'static str {
     }
 }
 
-fn tool_review_builtin_json_protocol() -> &'static str {
+pub(crate) fn tool_review_builtin_json_protocol() -> &'static str {
     r#"内置审查 Markdown 输出协议：
 你必须只返回 Markdown 正文，不要输出 JSON，不要包 markdown 代码块，不要解释协议本身。
 
@@ -1661,7 +1661,7 @@ fn tool_review_builtin_json_protocol() -> &'static str {
 - 除以上结构外不要输出多余章节。"#
 }
 
-fn tool_review_render_delegate_instruction(
+pub(crate) fn tool_review_render_delegate_instruction(
     scope: &str,
     target: Option<&str>,
     workspace_path: &str,
@@ -1682,7 +1682,7 @@ fn tool_review_render_delegate_instruction(
     )
 }
 
-fn tool_review_extract_json_object(raw: &str) -> Option<&str> {
+pub(crate) fn tool_review_extract_json_object(raw: &str) -> Option<&str> {
     let trimmed = raw.trim();
     if trimmed.starts_with('{') && trimmed.ends_with('}') {
         return Some(trimmed);
@@ -1726,7 +1726,7 @@ fn tool_review_extract_json_object(raw: &str) -> Option<&str> {
     None
 }
 
-fn tool_review_title_from_json_value(value: &Value) -> String {
+pub(crate) fn tool_review_title_from_json_value(value: &Value) -> String {
     value
         .get("review_title")
         .or_else(|| value.get("reviewTitle"))
@@ -1737,14 +1737,14 @@ fn tool_review_title_from_json_value(value: &Value) -> String {
         .unwrap_or_default()
 }
 
-fn tool_review_title_from_json_text(raw: &str) -> String {
+pub(crate) fn tool_review_title_from_json_text(raw: &str) -> String {
     tool_review_extract_json_object(raw)
         .and_then(|json_text| serde_json::from_str::<Value>(json_text).ok())
         .map(|value| tool_review_title_from_json_value(&value))
         .unwrap_or_default()
 }
 
-fn tool_review_title_from_markdown_text(raw: &str) -> String {
+pub(crate) fn tool_review_title_from_markdown_text(raw: &str) -> String {
     raw.lines()
         .find_map(|line| {
             let trimmed = line.trim();
@@ -1758,7 +1758,7 @@ fn tool_review_title_from_markdown_text(raw: &str) -> String {
         .unwrap_or_default()
 }
 
-fn tool_review_title_from_report_text(raw: &str) -> String {
+pub(crate) fn tool_review_title_from_report_text(raw: &str) -> String {
     let json_title = tool_review_title_from_json_text(raw);
     if !json_title.trim().is_empty() {
         return json_title;
@@ -1766,7 +1766,7 @@ fn tool_review_title_from_report_text(raw: &str) -> String {
     tool_review_title_from_markdown_text(raw)
 }
 
-fn with_tool_review_conversation<T>(
+pub(crate) fn with_tool_review_conversation<T>(
     state: &AppState,
     conversation_id: &str,
     reader: impl FnOnce(&Conversation) -> Result<T, String>,
@@ -1783,7 +1783,7 @@ fn with_tool_review_conversation<T>(
 }
 
 
-fn list_tool_review_reports_internal(
+pub(crate) fn list_tool_review_reports_internal(
     input: ToolReviewConversationInput,
     state: &AppState,
 ) -> Result<ListToolReviewReportsOutput, String> {
@@ -1805,16 +1805,16 @@ fn list_tool_review_reports_internal(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ToolReviewSetUserDecisionInput {
-    conversation_id: String,
-    call_id: String,
-    allow: bool,
+pub(crate) struct ToolReviewSetUserDecisionInput {
+    pub(crate) conversation_id: String,
+    pub(crate) call_id: String,
+    pub(crate) allow: bool,
     #[serde(default)]
-    opinion: String,
+    pub(crate) opinion: String,
 }
 
 
-async fn tool_review_run_missing_reviews_for_batch(
+pub(crate) async fn tool_review_run_missing_reviews_for_batch(
     state: &AppState,
     conversation_id: &str,
     batch: &ToolReviewCollectedBatch,
@@ -1829,7 +1829,7 @@ async fn tool_review_run_missing_reviews_for_batch(
 
 
 
-async fn submit_tool_review_code_internal(
+pub(crate) async fn submit_tool_review_code_internal(
     input: ToolReviewCodeReviewInput,
     state: &AppState,
 ) -> Result<SubmitToolReviewCodeOutput, String> {
@@ -2191,7 +2191,7 @@ async fn submit_tool_review_code_internal(
 }
 
 #[cfg(test)]
-mod tool_review_tests {
+pub(crate) mod tool_review_tests {
     use super::{tool_review_build_context, tool_review_preview_for_item, tool_review_prune_legacy_batch_report_records, tool_review_segments_for_item, ChatMessage, Conversation, MessagePart, ToolReviewCollectedItem, ToolReviewReportRecord};
     use crate::{app_root_from_data_path, ConversationCumulativeUsage, ASSISTANT_DEPARTMENT_ID, DEFAULT_AGENT_ID};
     use std::{env, fs};

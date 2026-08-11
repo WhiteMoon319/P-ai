@@ -1,12 +1,12 @@
 #[derive(Debug, Clone)]
-struct OpenAIEmbeddingProvider {
-    base_url: String,
-    api_key: String,
-    model: String,
+pub(crate) struct OpenAIEmbeddingProvider {
+    pub(crate) base_url: String,
+    pub(crate) api_key: String,
+    pub(crate) model: String,
 }
 
 impl OpenAIEmbeddingProvider {
-    fn endpoint_url(&self) -> String {
+    pub(crate) fn endpoint_url(&self) -> String {
         let base = self.base_url.trim().trim_end_matches('/');
         let lower = base.to_ascii_lowercase();
         if lower.ends_with("/embeddings") {

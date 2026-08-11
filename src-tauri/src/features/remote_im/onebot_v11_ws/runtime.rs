@@ -39,7 +39,7 @@ impl OnebotV11WsManager {
             .await
     }
 
-    async fn stop_onebot_connection_inner(&self, channel_id: &str) -> Result<(), String> {
+    pub(crate) async fn stop_onebot_connection_inner(&self, channel_id: &str) -> Result<(), String> {
         let stop_sender = {
             self.connection_stop_senders
                 .write()
@@ -76,7 +76,7 @@ impl OnebotV11WsManager {
         Ok(())
     }
 
-    async fn stop_channel_runtime_tasks_inner(&self, channel_id: &str) {
+    pub(crate) async fn stop_channel_runtime_tasks_inner(&self, channel_id: &str) {
         let runtime = self.channel_runtimes.write().await.remove(channel_id);
         let Some(runtime) = runtime else {
             return;
@@ -98,7 +98,7 @@ impl OnebotV11WsManager {
         ));
     }
 
-    async fn force_clear_channel_runtime_state(&self, channel_id: &str) {
+    pub(crate) async fn force_clear_channel_runtime_state(&self, channel_id: &str) {
         self.connections.write().await.remove(channel_id);
         self.connection_stop_senders.write().await.remove(channel_id);
         self.port_service.clear_runtime_state(channel_id).await;
@@ -109,7 +109,7 @@ impl OnebotV11WsManager {
         self.event_consumer_tasks.write().await.remove(channel_id);
     }
 
-    async fn channel_runtime_state_is_clear(&self, channel_id: &str) -> bool {
+    pub(crate) async fn channel_runtime_state_is_clear(&self, channel_id: &str) -> bool {
         !self.connections.read().await.contains_key(channel_id)
             && !self.connection_stop_senders.read().await.contains_key(channel_id)
             && !self.channel_event_senders.read().await.contains_key(channel_id)
@@ -120,7 +120,7 @@ impl OnebotV11WsManager {
             && !self.event_consumer_tasks.read().await.contains_key(channel_id)
     }
 
-    async fn stop_channel_inner(&self, channel_id: &str) -> Result<(), String> {
+    pub(crate) async fn stop_channel_inner(&self, channel_id: &str) -> Result<(), String> {
         let started_at = std::time::Instant::now();
         runtime_log_info(format!(
             "[远程IM][OneBot v11 WS] 开始停止渠道: channel_id={}",
@@ -277,7 +277,7 @@ impl OnebotV11WsManager {
         Ok(())
     }
 
-    async fn channel_server_is_running(&self, channel_id: &str) -> bool {
+    pub(crate) async fn channel_server_is_running(&self, channel_id: &str) -> bool {
         self.channel_tasks
             .read()
             .await
@@ -287,7 +287,7 @@ impl OnebotV11WsManager {
     }
 
     /// 核心启动：绑定端口 → 启动 axum serve → 记录状态
-    async fn start_server(
+    pub(crate) async fn start_server(
         &self,
         channel_id: &str,
         credentials: OnebotV11WsCredentials,
@@ -460,7 +460,7 @@ impl OnebotV11WsManager {
 
 // ==================== axum WebSocket handler ====================
 
-async fn onebot_ws_handler(
+pub(crate) async fn onebot_ws_handler(
     ws: axum::extract::WebSocketUpgrade,
     axum::extract::ConnectInfo(peer_addr): axum::extract::ConnectInfo<SocketAddr>,
     axum::extract::State(state): axum::extract::State<OnebotAxumState>,
@@ -489,7 +489,7 @@ async fn onebot_ws_handler(
     ws.on_upgrade(move |socket| handle_ws_connection(socket, peer_addr, state))
 }
 
-async fn handle_ws_connection(socket: WebSocket, peer_addr: SocketAddr, state: OnebotAxumState) {
+pub(crate) async fn handle_ws_connection(socket: WebSocket, peer_addr: SocketAddr, state: OnebotAxumState) {
     let channel_id = state.channel_id.clone();
     let peer_addr_str = peer_addr.to_string();
 
@@ -630,7 +630,7 @@ async fn handle_ws_connection(socket: WebSocket, peer_addr: SocketAddr, state: O
         .store(false, std::sync::atomic::Ordering::SeqCst);
 }
 
-fn onebot_listen_addr_from_credentials(
+pub(crate) fn onebot_listen_addr_from_credentials(
     credentials: &OnebotV11WsCredentials,
 ) -> Result<SocketAddr, String> {
     format!("{}:{}", credentials.ws_host, credentials.ws_port)

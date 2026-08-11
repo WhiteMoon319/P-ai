@@ -1,4 +1,4 @@
-fn sandbox_normalize_path_for_compare(path: &std::path::Path) -> String {
+pub(crate) fn sandbox_normalize_path_for_compare(path: &std::path::Path) -> String {
     let text = path.to_string_lossy().to_string();
     #[cfg(target_os = "windows")]
     {
@@ -10,7 +10,7 @@ fn sandbox_normalize_path_for_compare(path: &std::path::Path) -> String {
     }
 }
 
-fn sandbox_path_is_within(base: &std::path::Path, target: &std::path::Path) -> bool {
+pub(crate) fn sandbox_path_is_within(base: &std::path::Path, target: &std::path::Path) -> bool {
     let base_norm = sandbox_normalize_path_for_compare(base);
     let target_norm = sandbox_normalize_path_for_compare(target);
     let separator = std::path::MAIN_SEPARATOR.to_string();
@@ -20,7 +20,7 @@ fn sandbox_path_is_within(base: &std::path::Path, target: &std::path::Path) -> b
             .is_some()
 }
 
-fn sandbox_sanitize_normalized_path(path: &std::path::Path) -> PathBuf {
+pub(crate) fn sandbox_sanitize_normalized_path(path: &std::path::Path) -> PathBuf {
     let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -56,7 +56,7 @@ fn sandbox_sanitize_normalized_path(path: &std::path::Path) -> PathBuf {
     normalized
 }
 
-fn sandbox_normalize_target_for_access_check(path: &std::path::Path) -> PathBuf {
+pub(crate) fn sandbox_normalize_target_for_access_check(path: &std::path::Path) -> PathBuf {
     if let Ok(canonical) = path.canonicalize() {
         return canonical;
     }
@@ -72,14 +72,14 @@ fn sandbox_normalize_target_for_access_check(path: &std::path::Path) -> PathBuf 
     sanitized
 }
 
-fn sandbox_session_root_canonical(
+pub(crate) fn sandbox_session_root_canonical(
     state: &AppState,
     session_id: &str,
  ) -> Result<PathBuf, String> {
     terminal_session_root_canonical(state, session_id)
 }
 
-fn sandbox_path_allowed(
+pub(crate) fn sandbox_path_allowed(
     state: &AppState,
     session_id: &str,
     target: &std::path::Path,
@@ -92,7 +92,7 @@ fn sandbox_path_allowed(
     Ok(false)
 }
 
-fn sandbox_assert_cwd_allowed(
+pub(crate) fn sandbox_assert_cwd_allowed(
     state: &AppState,
     session_id: &str,
     cwd: &std::path::Path,

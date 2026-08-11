@@ -1,6 +1,6 @@
-const WEB_NATIVE_CAPABILITY_UNAVAILABLE: &str = "WEB_NATIVE_CAPABILITY_UNAVAILABLE";
+pub(crate) const WEB_NATIVE_CAPABILITY_UNAVAILABLE: &str = "WEB_NATIVE_CAPABILITY_UNAVAILABLE";
 
-fn ide_chat_web_native_only_method(method: &str) -> bool {
+pub(crate) fn ide_chat_web_native_only_method(method: &str) -> bool {
     matches!(
         method,
             | "list_file_reader_directory"
@@ -72,14 +72,14 @@ fn ide_chat_web_native_only_method(method: &str) -> bool {
     )
 }
 
-fn ide_chat_web_native_only_error(method: &str) -> String {
+pub(crate) fn ide_chat_web_native_only_error(method: &str) -> String {
     format!(
         "{}: Web 端不支持本机能力：{}",
         WEB_NATIVE_CAPABILITY_UNAVAILABLE, method
     )
 }
 
-fn ide_chat_upsert_ide_context_command(
+pub(crate) fn ide_chat_upsert_ide_context_command(
     state: &AppState,
     params: Value,
     ide_context_runtime: &IdeContextRuntime,
@@ -94,7 +94,7 @@ fn ide_chat_upsert_ide_context_command(
     }))
 }
 
-async fn ide_chat_handle_jsonrpc_request(
+pub(crate) async fn ide_chat_handle_jsonrpc_request(
     request: IdeChatJsonRpcRequest,
     state: &AppState,
     app: &NativeAppHandle,

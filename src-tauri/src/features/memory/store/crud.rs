@@ -1,4 +1,4 @@
-fn memory_store_tag_id_by_name(conn: &Connection, tag: &str) -> Result<String, String> {
+pub(crate) fn memory_store_tag_id_by_name(conn: &Connection, tag: &str) -> Result<String, String> {
     let found = conn
         .query_row(
             "SELECT id FROM global_tag WHERE name=?1",
@@ -19,7 +19,7 @@ fn memory_store_tag_id_by_name(conn: &Connection, tag: &str) -> Result<String, S
     Ok(id)
 }
 
-fn memory_store_sync_tags(conn: &Connection, memory_id: &str, tags: &[String]) -> Result<(), String> {
+pub(crate) fn memory_store_sync_tags(conn: &Connection, memory_id: &str, tags: &[String]) -> Result<(), String> {
     conn.execute(
         "DELETE FROM memory_tag_rel WHERE memory_id=?1",
         params![memory_id],
@@ -37,7 +37,7 @@ fn memory_store_sync_tags(conn: &Connection, memory_id: &str, tags: &[String]) -
     Ok(())
 }
 
-fn memory_store_sync_memory_fts(conn: &Connection, memory_id: &str) -> Result<(), String> {
+pub(crate) fn memory_store_sync_memory_fts(conn: &Connection, memory_id: &str) -> Result<(), String> {
     let judgment = conn
         .query_row(
             "SELECT judgment FROM memory_record WHERE id=?1",
@@ -82,7 +82,7 @@ fn memory_store_sync_memory_fts(conn: &Connection, memory_id: &str) -> Result<()
 }
 
 #[cfg(test)]
-fn memory_store_search_fts_bm25(
+pub(crate) fn memory_store_search_fts_bm25(
     data_path: &PathBuf,
     query_text: &str,
     limit: usize,
@@ -128,7 +128,7 @@ fn memory_store_search_fts_bm25(
     Ok(out)
 }
 
-fn memory_store_upsert_drafts(
+pub(crate) fn memory_store_upsert_drafts(
     data_path: &PathBuf,
     drafts: &[MemoryDraftInput],
 ) -> Result<(Vec<MemorySaveUpsertItemResult>, usize), String> {
@@ -266,7 +266,7 @@ fn memory_store_upsert_drafts(
     Ok((results, total))
 }
 
-fn memory_store_count(data_path: &PathBuf) -> Result<usize, String> {
+pub(crate) fn memory_store_count(data_path: &PathBuf) -> Result<usize, String> {
     let conn = memory_store_open(data_path)?;
     let count = conn
         .query_row("SELECT COUNT(1) FROM memory_record", [], |row| row.get::<_, i64>(0))
@@ -274,7 +274,7 @@ fn memory_store_count(data_path: &PathBuf) -> Result<usize, String> {
     Ok(count.max(0) as usize)
 }
 
-fn memory_store_list_memories(data_path: &PathBuf) -> Result<Vec<MemoryEntry>, String> {
+pub(crate) fn memory_store_list_memories(data_path: &PathBuf) -> Result<Vec<MemoryEntry>, String> {
     let conn = memory_store_open(data_path)?;
 
     let mut stmt = conn
@@ -337,7 +337,7 @@ fn memory_store_list_memories(data_path: &PathBuf) -> Result<Vec<MemoryEntry>, S
     Ok(out)
 }
 
-fn memory_store_list_memories_by_ids(
+pub(crate) fn memory_store_list_memories_by_ids(
     data_path: &PathBuf,
     memory_ids: &[String],
 ) -> Result<Vec<MemoryEntry>, String> {
@@ -418,7 +418,7 @@ fn memory_store_list_memories_by_ids(
     Ok(out)
 }
 
-fn memory_store_delete_memory(data_path: &PathBuf, memory_id: &str) -> Result<(), String> {
+pub(crate) fn memory_store_delete_memory(data_path: &PathBuf, memory_id: &str) -> Result<(), String> {
     let target_id = memory_id.trim();
     if target_id.is_empty() {
         return Err("memory_id is required".to_string());

@@ -134,7 +134,7 @@ pub(crate) async fn sandbox_run_with_android_proot_backend(
     // app 可写前缀，canonicalize 会翻成 /data/data 别名导致 proot chmod glue 失败。
     // rootfs 与 PROOT_TMP_DIR 必须同源。
     let raw_root = android_workspace_root(state);
-    let root = android_workspace_canonical_root_if_ready(state)?
+    let root = features_system_commands::android_workspace_manager::android_workspace_canonical_root_if_ready(state)?
         .ok_or_else(|| ANDROID_WORKSPACE_NOT_READY_MESSAGE.to_string())?;
     let runtime_root = android_workspace_runtime_root(&root);
     if !android_workspace_runtime_ready(&root) {

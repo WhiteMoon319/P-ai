@@ -409,7 +409,7 @@ impl ProviderToolResult {
 }
 
 #[cfg(test)]
-mod runtime_tool_result_tests {
+pub(crate) mod runtime_tool_result_tests {
     use super::*;
 
     #[test]

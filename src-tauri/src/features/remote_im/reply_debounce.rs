@@ -1,4 +1,4 @@
-fn lock_remote_im_contact_runtime_states(
+pub(crate) fn lock_remote_im_contact_runtime_states(
     state: &AppState,
 ) -> Result<std::sync::MutexGuard<'_, std::collections::HashMap<String, RemoteImContactRuntimeState>>, String>
 {
@@ -14,24 +14,24 @@ fn lock_remote_im_contact_runtime_states(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RemoteImReplyInspectionPath {
+pub(crate) enum RemoteImReplyInspectionPath {
     Mention,
     NonMention,
 }
 
 #[derive(Clone)]
-struct RemoteImReplyDebounceReady {
-    contact_id: String,
-    generation: u64,
-    start_message_id: String,
-    end_message_id: String,
-    focus: bool,
-    max_chars: u32,
-    path: RemoteImReplyInspectionPath,
-    event: ChatPendingEvent,
+pub(crate) struct RemoteImReplyDebounceReady {
+    pub(crate) contact_id: String,
+    pub(crate) generation: u64,
+    pub(crate) start_message_id: String,
+    pub(crate) end_message_id: String,
+    pub(crate) focus: bool,
+    pub(crate) max_chars: u32,
+    pub(crate) path: RemoteImReplyInspectionPath,
+    pub(crate) event: ChatPendingEvent,
 }
 
-fn remote_im_event_latest_user_message(event: &ChatPendingEvent) -> Option<&ChatMessage> {
+pub(crate) fn remote_im_event_latest_user_message(event: &ChatPendingEvent) -> Option<&ChatMessage> {
     event
         .messages
         .iter()
@@ -39,14 +39,14 @@ fn remote_im_event_latest_user_message(event: &ChatPendingEvent) -> Option<&Chat
         .find(|message| message.role.trim().eq_ignore_ascii_case("user"))
 }
 
-fn remote_im_event_hits_wake(contact: &RemoteImContact, event: &ChatPendingEvent) -> bool {
+pub(crate) fn remote_im_event_hits_wake(contact: &RemoteImContact, event: &ChatPendingEvent) -> bool {
     let Some(message) = remote_im_event_latest_user_message(event) else {
         return false;
     };
     remote_im_keyword_matched(contact, &render_message_content_for_model(message))
 }
 
-fn remote_im_contact_is_muted(state: &AppState, contact_id: &str) -> Result<bool, String> {
+pub(crate) fn remote_im_contact_is_muted(state: &AppState, contact_id: &str) -> Result<bool, String> {
     let mut runtime_states = lock_remote_im_contact_runtime_states(state)?;
     let Some(runtime) = runtime_states.get_mut(contact_id) else {
         return Ok(false);
@@ -61,7 +61,7 @@ fn remote_im_contact_is_muted(state: &AppState, contact_id: &str) -> Result<bool
     Ok(true)
 }
 
-fn clear_remote_im_debounces_for_contact(
+pub(crate) fn clear_remote_im_debounces_for_contact(
     state: &AppState,
     contact_id: &str,
 ) -> Result<(), String> {
@@ -71,7 +71,7 @@ fn clear_remote_im_debounces_for_contact(
     Ok(())
 }
 
-fn remote_im_group_reply_reconfigure_contact(
+pub(crate) fn remote_im_group_reply_reconfigure_contact(
     state: &AppState,
     contact: &RemoteImContact,
 ) -> Result<(), String> {
@@ -136,7 +136,7 @@ fn remote_im_group_reply_reconfigure_contact(
     Ok(())
 }
 
-fn remote_im_enforce_mute_side_effects(
+pub(crate) fn remote_im_enforce_mute_side_effects(
     state: &AppState,
     contact_id: &str,
     reason: &str,
@@ -163,7 +163,7 @@ fn remote_im_enforce_mute_side_effects(
     ));
 }
 
-fn remote_im_group_reply_schedule_action(
+pub(crate) fn remote_im_group_reply_schedule_action(
     state: &AppState,
     action: RemoteImGroupReplyTimerAction,
 ) {
@@ -178,7 +178,7 @@ fn remote_im_group_reply_schedule_action(
     });
 }
 
-fn remote_im_group_reply_reschedule_non_mention(
+pub(crate) fn remote_im_group_reply_reschedule_non_mention(
     state: &AppState,
     contact: &RemoteImContact,
     generation: u64,
@@ -234,7 +234,7 @@ fn remote_im_group_reply_reschedule_non_mention(
     }
 }
 
-fn remote_im_group_reply_retry_generation(
+pub(crate) fn remote_im_group_reply_retry_generation(
     state: &AppState,
     contact_id: &str,
     generation: u64,
@@ -289,7 +289,7 @@ fn remote_im_group_reply_retry_generation(
     }
 }
 
-fn remote_im_group_reply_advance_after_settlement(
+pub(crate) fn remote_im_group_reply_advance_after_settlement(
     state: &AppState,
     contact: &RemoteImContact,
     generation: u64,
@@ -403,7 +403,7 @@ fn remote_im_group_reply_advance_after_settlement(
     }
 }
 
-fn remote_im_group_reply_settle_generation(
+pub(crate) fn remote_im_group_reply_settle_generation(
     state: &AppState,
     contact: &RemoteImContact,
     generation: u64,
@@ -444,7 +444,7 @@ fn remote_im_group_reply_settle_generation(
     }
 }
 
-fn remote_im_group_reply_finish_generation(
+pub(crate) fn remote_im_group_reply_finish_generation(
     state: &AppState,
     contact: &RemoteImContact,
     generation: u64,
@@ -472,7 +472,7 @@ fn remote_im_group_reply_finish_generation(
     );
 }
 
-fn remote_im_group_reply_retry_after_dispatch_failure(
+pub(crate) fn remote_im_group_reply_retry_after_dispatch_failure(
     state: &AppState,
     contact_id: &str,
     generation: u64,
@@ -549,7 +549,7 @@ fn remote_im_group_reply_retry_after_dispatch_failure(
     }
 }
 
-fn remote_im_group_reply_complete_after_send(
+pub(crate) fn remote_im_group_reply_complete_after_send(
     state: &AppState,
     contact: &RemoteImContact,
     generation: u64,
@@ -571,7 +571,7 @@ fn remote_im_group_reply_complete_after_send(
     );
 }
 
-fn remote_im_group_reply_contact_latest(
+pub(crate) fn remote_im_group_reply_contact_latest(
     state: &AppState,
     contact_id: &str,
 ) -> Result<RemoteImContact, String> {
@@ -582,7 +582,7 @@ fn remote_im_group_reply_contact_latest(
         .ok_or_else(|| format!("群聊联系人已不存在：{contact_id}"))
 }
 
-fn remote_im_group_reply_message_matches_contact(
+pub(crate) fn remote_im_group_reply_message_matches_contact(
     message: &ChatMessage,
     contact: &RemoteImContact,
 ) -> bool {
@@ -594,7 +594,7 @@ fn remote_im_group_reply_message_matches_contact(
         && message_origin_string(message, "contact_id") == Some(contact.remote_contact_id.trim())
 }
 
-fn read_remote_im_group_reply_range_to_latest(
+pub(crate) fn read_remote_im_group_reply_range_to_latest(
     state: &AppState,
     contact: &RemoteImContact,
     conversation_id: &str,
@@ -651,7 +651,7 @@ fn read_remote_im_group_reply_range_to_latest(
     Ok((range, end_message_id, focus))
 }
 
-fn remote_im_group_reply_next_unsettled_start_message_id(
+pub(crate) fn remote_im_group_reply_next_unsettled_start_message_id(
     state: &AppState,
     contact: &RemoteImContact,
     conversation_id: &str,
@@ -685,7 +685,7 @@ fn remote_im_group_reply_next_unsettled_start_message_id(
     }
 }
 
-async fn remote_im_group_reply_handle_timer(
+pub(crate) async fn remote_im_group_reply_handle_timer(
     state: &AppState,
     action: RemoteImGroupReplyTimerAction,
 ) {
@@ -928,7 +928,7 @@ async fn remote_im_group_reply_handle_timer(
     }
 }
 
-fn observe_remote_im_persisted_event(
+pub(crate) fn observe_remote_im_persisted_event(
     state: &AppState,
     contact: &RemoteImContact,
     event: &ChatPendingEvent,

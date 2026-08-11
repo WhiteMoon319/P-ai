@@ -1,4 +1,4 @@
-fn task_store_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool, String> {
+pub(crate) fn task_store_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool, String> {
     let sql = format!("PRAGMA table_info({table})");
     let mut stmt = conn
         .prepare(&sql)
@@ -15,7 +15,7 @@ fn task_store_has_column(conn: &Connection, table: &str, column: &str) -> Result
     Ok(false)
 }
 
-fn task_store_rename_column_if_needed(
+pub(crate) fn task_store_rename_column_if_needed(
     conn: &Connection,
     table: &str,
     legacy_column: &str,
@@ -36,7 +36,7 @@ fn task_store_rename_column_if_needed(
     Ok(())
 }
 
-fn task_store_add_column_if_missing(
+pub(crate) fn task_store_add_column_if_missing(
     conn: &Connection,
     table: &str,
     definition: &str,
@@ -50,7 +50,7 @@ fn task_store_add_column_if_missing(
     Ok(())
 }
 
-fn task_store_apply_migrations(conn: &Connection) -> Result<(), String> {
+pub(crate) fn task_store_apply_migrations(conn: &Connection) -> Result<(), String> {
     conn.execute_batch("BEGIN IMMEDIATE;")
         .map_err(|err| format!("Begin task migration transaction failed: {err}"))?;
 
@@ -93,7 +93,7 @@ fn task_store_apply_migrations(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-fn task_store_migrate_empty_conversation_id_to_system(conn: &Connection) -> Result<(), String> {
+pub(crate) fn task_store_migrate_empty_conversation_id_to_system(conn: &Connection) -> Result<(), String> {
     conn.execute(
         "UPDATE task_record
          SET conversation_id = ?1
@@ -104,7 +104,7 @@ fn task_store_migrate_empty_conversation_id_to_system(conn: &Connection) -> Resu
     Ok(())
 }
 
-fn task_store_migrate_triggered_one_time_tasks_to_completed(conn: &Connection) -> Result<(), String> {
+pub(crate) fn task_store_migrate_triggered_one_time_tasks_to_completed(conn: &Connection) -> Result<(), String> {
     conn.execute(
         "UPDATE task_record
          SET completion_state = ?1,
@@ -135,7 +135,7 @@ fn task_store_migrate_triggered_one_time_tasks_to_completed(conn: &Connection) -
     Ok(())
 }
 
-fn task_store_migrate_legacy_task_triggers(conn: &Connection) -> Result<(), String> {
+pub(crate) fn task_store_migrate_legacy_task_triggers(conn: &Connection) -> Result<(), String> {
     let mut stmt = conn
         .prepare(
             "SELECT task_id, run_at_utc, cron_expression, every_minutes, end_at_utc, last_triggered_at_utc, created_at_utc, updated_at_utc

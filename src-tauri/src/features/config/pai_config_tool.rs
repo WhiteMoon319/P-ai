@@ -2421,7 +2421,7 @@ fn default_permission_mode() -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use uuid::Uuid;
 
 

@@ -439,7 +439,7 @@ pub(crate) async fn edit_gemini_image_once(
 }
 
 #[cfg(test)]
-mod image_edit_provider_tests {
+pub(crate) mod image_edit_provider_tests {
     use super::*;
 
     fn edit_request() -> ImageGenerationRequest {

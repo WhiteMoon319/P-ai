@@ -1,3 +1,4 @@
+use std::path::Path;
 use super::*;
 
 fn hidden_skill_summaries_cache(

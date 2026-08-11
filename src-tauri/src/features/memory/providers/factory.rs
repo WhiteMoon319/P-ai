@@ -1,4 +1,4 @@
-fn memory_provider_kind_from_id(raw: &str) -> MemoryProviderKind {
+pub(crate) fn memory_provider_kind_from_id(raw: &str) -> MemoryProviderKind {
     let id = raw.trim().to_ascii_lowercase();
     if id.contains("deterministic") || id.contains("local") {
         return MemoryProviderKind::DeterministicLocal;
@@ -12,7 +12,7 @@ fn memory_provider_kind_from_id(raw: &str) -> MemoryProviderKind {
     MemoryProviderKind::OpenAIEmbedding
 }
 
-fn memory_provider_matches_kind(kind: MemoryProviderKind, cfg: &ApiConfig) -> bool {
+pub(crate) fn memory_provider_matches_kind(kind: MemoryProviderKind, cfg: &ApiConfig) -> bool {
     match kind {
         MemoryProviderKind::OpenAIEmbedding => {
             matches!(
@@ -30,7 +30,7 @@ fn memory_provider_matches_kind(kind: MemoryProviderKind, cfg: &ApiConfig) -> bo
     }
 }
 
-fn memory_resolve_provider_api_config(
+pub(crate) fn memory_resolve_provider_api_config(
     app: &AppConfig,
     kind: MemoryProviderKind,
     explicit_api_config_id: Option<&str>,
@@ -58,7 +58,7 @@ fn memory_resolve_provider_api_config(
     })
 }
 
-fn memory_create_embedding_provider(
+pub(crate) fn memory_create_embedding_provider(
     kind: MemoryProviderKind,
     cfg: &MemoryProviderApiConfig,
     model_name: Option<&str>,
@@ -91,7 +91,7 @@ fn memory_create_embedding_provider(
     }
 }
 
-fn memory_create_rerank_provider(
+pub(crate) fn memory_create_rerank_provider(
     kind: MemoryProviderKind,
     cfg: &MemoryProviderApiConfig,
     model_name: Option<&str>,
@@ -117,7 +117,7 @@ fn memory_create_rerank_provider(
 /// 从 data_path 推导 config 并构造当前 active embedding provider 的 embedder。
 /// 返回 (provider_id, model_name, embedder)。未绑定 embedding 或构造失败时返回 None。
 /// 供启动期增量同步、记忆增删后增量补向量共用,避免每个调用方各自内联三步。
-fn memory_build_active_embedder(
+pub(crate) fn memory_build_active_embedder(
     data_path: &PathBuf,
 ) -> Option<(String, String, Box<dyn MemoryEmbeddingProvider>)> {
     if !memory_has_embedding_binding(data_path) {
@@ -156,7 +156,7 @@ fn memory_build_active_embedder(
 /// memory_store_sync_provider_index 本身就是增量语义 (only add 缺失 / delete 多余),
 /// provider_id 未变时走 no_op 短路; 未绑定 embedding 时直接返回 no_op。
 /// 用于 run_deferred_setup, 不应阻塞启动。
-fn memory_sync_vectors_on_startup(data_path: &PathBuf) -> Result<MemoryStoreProviderSyncReport, String> {
+pub(crate) fn memory_sync_vectors_on_startup(data_path: &PathBuf) -> Result<MemoryStoreProviderSyncReport, String> {
     let Some((provider_id, model_name, embedder)) = memory_build_active_embedder(data_path)
         else {
         return Ok(MemoryStoreProviderSyncReport {
@@ -180,7 +180,7 @@ fn memory_sync_vectors_on_startup(data_path: &PathBuf) -> Result<MemoryStoreProv
 
 /// 记忆删除后删除向量库中对应的 chunk。失败只记日志, 不影响记忆删除本身
 /// (下次启动的差集同步会兜底清理孤儿 chunk)。chunk_id 即 memory_id。
-fn memory_sync_vectors_after_delete(data_path: &PathBuf, memory_ids: &[String]) -> bool {
+pub(crate) fn memory_sync_vectors_after_delete(data_path: &PathBuf, memory_ids: &[String]) -> bool {
     if memory_ids.is_empty() {
         return true;
     }
@@ -236,7 +236,7 @@ fn memory_sync_vectors_after_delete(data_path: &PathBuf, memory_ids: &[String]) 
 
 /// 记忆 upsert 后增量补向量。对新写入/更新的 memory_id 重新生成 embedding 并 upsert 进向量库。
 /// chunk_id 即 memory_id。失败只记日志, 不影响记忆写入 (下次启动差集同步兜底)。
-fn memory_sync_vectors_after_upsert(data_path: &PathBuf, memory_ids: &[String]) -> bool {
+pub(crate) fn memory_sync_vectors_after_upsert(data_path: &PathBuf, memory_ids: &[String]) -> bool {
     let ids: Vec<String> = memory_ids
         .iter()
         .map(|s| s.trim().to_string())

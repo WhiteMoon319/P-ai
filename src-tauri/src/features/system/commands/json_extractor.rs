@@ -1,4 +1,4 @@
-fn strip_json_code_fences(text: &str) -> String {
+pub(crate) fn strip_json_code_fences(text: &str) -> String {
     text.replace("```json", "")
         .replace("```JSON", "")
         .replace("```", "")
@@ -6,7 +6,7 @@ fn strip_json_code_fences(text: &str) -> String {
         .to_string()
 }
 
-fn find_balanced_json_object_candidates(text: &str) -> Vec<&str> {
+pub(crate) fn find_balanced_json_object_candidates(text: &str) -> Vec<&str> {
     let mut candidates = Vec::new();
     let mut in_string = false;
     let mut escaped = false;
@@ -54,7 +54,7 @@ fn find_balanced_json_object_candidates(text: &str) -> Vec<&str> {
     candidates
 }
 
-fn find_json_object_candidates_from_each_start(text: &str) -> Vec<&str> {
+pub(crate) fn find_json_object_candidates_from_each_start(text: &str) -> Vec<&str> {
     let mut candidates = Vec::new();
     for (start, ch) in text.char_indices() {
         if ch != '{' {
@@ -97,7 +97,7 @@ fn find_json_object_candidates_from_each_start(text: &str) -> Vec<&str> {
     candidates
 }
 
-fn select_best_json_object_candidate(
+pub(crate) fn select_best_json_object_candidate(
     candidates: Vec<&str>,
     required_fields: &[&str],
     optional_fields: &[&str],
@@ -135,7 +135,7 @@ fn select_best_json_object_candidate(
     best.map(|(_, value)| value)
 }
 
-fn extract_best_json_object_value(
+pub(crate) fn extract_best_json_object_value(
     text: &str,
     separator: &str,
     required_fields: &[&str],
@@ -167,7 +167,7 @@ fn extract_best_json_object_value(
 }
 
 #[cfg(test)]
-mod json_extractor_tests {
+pub(crate) mod json_extractor_tests {
     use super::*;
 
     #[test]

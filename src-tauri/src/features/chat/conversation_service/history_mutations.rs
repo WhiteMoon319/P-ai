@@ -233,7 +233,7 @@ impl ConversationServiceV2 {
                 {
                     return Err("不能撤回会话的第一条摘要消息。".to_string());
                 }
-                let git_snapshot = read_git_snapshot_record_from_provider_meta(
+                let git_snapshot = features_system_commands::git_ghost_snapshot::read_git_snapshot_record_from_provider_meta(
                     rewind_state.recalled_user_message.provider_meta.as_ref(),
                 );
                 maybe_undo_rewind_apply_patch(

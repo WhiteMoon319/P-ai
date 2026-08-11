@@ -1,5 +1,7 @@
 use once_cell::sync::Lazy;
 
+use super::*;
+
 pub struct DingtalkStreamManager;
 
 impl DingtalkStreamManager {
@@ -63,7 +65,7 @@ impl Default for DingtalkStreamManager {
     }
 }
 
-static DINGTALK_STREAM_MANAGER: Lazy<Arc<DingtalkStreamManager>> =
+pub(crate) static DINGTALK_STREAM_MANAGER: Lazy<Arc<DingtalkStreamManager>> =
     Lazy::new(|| Arc::new(DingtalkStreamManager::new()));
 
 pub fn dingtalk_stream_manager() -> Arc<DingtalkStreamManager> {

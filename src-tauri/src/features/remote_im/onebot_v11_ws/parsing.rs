@@ -1,61 +1,61 @@
 // ==================== OneBot v11 事件消费 ====================
 
 #[derive(Debug, Clone)]
-enum OnebotInboundMediaKind {
+pub(crate) enum OnebotInboundMediaKind {
     Image,
     File,
 }
 
 #[derive(Debug, Clone)]
-struct OnebotInboundMediaRef {
-    kind: OnebotInboundMediaKind,
-    file_ref: String,
-    file_id: Option<String>,
-    file_name: Option<String>,
-    mime_hint: Option<String>,
+pub(crate) struct OnebotInboundMediaRef {
+    pub(crate) kind: OnebotInboundMediaKind,
+    pub(crate) file_ref: String,
+    pub(crate) file_id: Option<String>,
+    pub(crate) file_name: Option<String>,
+    pub(crate) mime_hint: Option<String>,
 }
 
 #[derive(Debug, Clone)]
-enum OnebotEmbeddedRefKind {
+pub(crate) enum OnebotEmbeddedRefKind {
     Reply,
     Forward,
 }
 
 #[derive(Debug, Clone)]
-struct OnebotEmbeddedRef {
-    kind: OnebotEmbeddedRefKind,
-    id: String,
+pub(crate) struct OnebotEmbeddedRef {
+    pub(crate) kind: OnebotEmbeddedRefKind,
+    pub(crate) id: String,
 }
 
 #[derive(Debug, Clone)]
-struct OnebotMentionRef {
-    qq: String,
-    placeholder: String,
+pub(crate) struct OnebotMentionRef {
+    pub(crate) qq: String,
+    pub(crate) placeholder: String,
 }
 
 #[derive(Debug, Clone)]
-enum OnebotParsedSegment {
+pub(crate) enum OnebotParsedSegment {
     Text(String),
     Media(OnebotInboundMediaRef),
     Embedded(OnebotEmbeddedRef),
 }
 
 #[derive(Debug, Clone, Default)]
-struct OnebotParsedMessage {
-    text: String,
-    media_refs: Vec<OnebotInboundMediaRef>,
-    embedded_refs: Vec<OnebotEmbeddedRef>,
-    mention_refs: Vec<OnebotMentionRef>,
-    ordered_segments: Vec<OnebotParsedSegment>,
+pub(crate) struct OnebotParsedMessage {
+    pub(crate) text: String,
+    pub(crate) media_refs: Vec<OnebotInboundMediaRef>,
+    pub(crate) embedded_refs: Vec<OnebotEmbeddedRef>,
+    pub(crate) mention_refs: Vec<OnebotMentionRef>,
+    pub(crate) ordered_segments: Vec<OnebotParsedSegment>,
 }
 
 impl OnebotParsedMessage {
     #[cfg(test)]
-    fn into_public_parts(self) -> (String, Vec<OnebotInboundMediaRef>, Vec<OnebotEmbeddedRef>) {
+    pub(crate) fn into_public_parts(self) -> (String, Vec<OnebotInboundMediaRef>, Vec<OnebotEmbeddedRef>) {
         (self.text, self.media_refs, self.embedded_refs)
     }
 
-    fn push_text(&mut self, text: &str) {
+    pub(crate) fn push_text(&mut self, text: &str) {
         if !text.is_empty() {
             self.text.push_str(text);
             self.ordered_segments
@@ -63,19 +63,19 @@ impl OnebotParsedMessage {
         }
     }
 
-    fn push_media(&mut self, media_ref: OnebotInboundMediaRef) {
+    pub(crate) fn push_media(&mut self, media_ref: OnebotInboundMediaRef) {
         self.media_refs.push(media_ref.clone());
         self.ordered_segments
             .push(OnebotParsedSegment::Media(media_ref));
     }
 
-    fn push_embedded(&mut self, embedded_ref: OnebotEmbeddedRef) {
+    pub(crate) fn push_embedded(&mut self, embedded_ref: OnebotEmbeddedRef) {
         self.embedded_refs.push(embedded_ref.clone());
         self.ordered_segments
             .push(OnebotParsedSegment::Embedded(embedded_ref));
     }
 
-    fn push_block(&mut self, block: String) {
+    pub(crate) fn push_block(&mut self, block: String) {
         let block = block.trim();
         if block.is_empty() {
             return;
@@ -92,11 +92,11 @@ impl OnebotParsedMessage {
     }
 }
 
-fn onebot_embedded_ref_id(data: Option<&Value>) -> Option<String> {
+pub(crate) fn onebot_embedded_ref_id(data: Option<&Value>) -> Option<String> {
     data.and_then(|d| onebot_read_id_as_string(d, "id"))
 }
 
-fn onebot_scalar_to_trimmed_string(value: &Value) -> Option<String> {
+pub(crate) fn onebot_scalar_to_trimmed_string(value: &Value) -> Option<String> {
     match value {
         Value::String(text) => {
             let trimmed = text.trim();
@@ -111,18 +111,18 @@ fn onebot_scalar_to_trimmed_string(value: &Value) -> Option<String> {
     }
 }
 
-fn onebot_read_id_as_string(value: &Value, key: &str) -> Option<String> {
+pub(crate) fn onebot_read_id_as_string(value: &Value, key: &str) -> Option<String> {
     value
         .get(key)
         .and_then(onebot_scalar_to_trimmed_string)
 }
 
-fn onebot_data_value_as_string(data: Option<&Value>, key: &str) -> Option<String> {
+pub(crate) fn onebot_data_value_as_string(data: Option<&Value>, key: &str) -> Option<String> {
     data.and_then(|d| d.get(key))
         .and_then(onebot_scalar_to_trimmed_string)
 }
 
-fn onebot_read_u64_like(value: &Value, key: &str) -> Option<u64> {
+pub(crate) fn onebot_read_u64_like(value: &Value, key: &str) -> Option<u64> {
     let raw = value.get(key)?;
     if let Some(id) = raw.as_u64() {
         return Some(id);
@@ -136,7 +136,7 @@ fn onebot_read_u64_like(value: &Value, key: &str) -> Option<u64> {
         .and_then(|text| text.parse::<u64>().ok())
 }
 
-fn onebot_truncate_display_text(text: &str, max_chars: usize) -> String {
+pub(crate) fn onebot_truncate_display_text(text: &str, max_chars: usize) -> String {
     let trimmed = text.trim();
     if trimmed.chars().count() <= max_chars {
         return trimmed.to_string();
@@ -146,7 +146,7 @@ fn onebot_truncate_display_text(text: &str, max_chars: usize) -> String {
     out
 }
 
-fn onebot_value_to_display(value: &Value) -> Option<String> {
+pub(crate) fn onebot_value_to_display(value: &Value) -> Option<String> {
     match value {
         Value::Null => None,
         Value::String(text) => {
@@ -165,7 +165,7 @@ fn onebot_value_to_display(value: &Value) -> Option<String> {
     }
 }
 
-fn onebot_collect_segment_fields(data: Option<&Value>, keys: &[&str]) -> Vec<(String, String)> {
+pub(crate) fn onebot_collect_segment_fields(data: Option<&Value>, keys: &[&str]) -> Vec<(String, String)> {
     let Some(data) = data else {
         return Vec::new();
     };
@@ -178,11 +178,11 @@ fn onebot_collect_segment_fields(data: Option<&Value>, keys: &[&str]) -> Vec<(St
         .collect()
 }
 
-fn onebot_format_segment_quote(title: &str, fields: Vec<(String, String)>) -> String {
+pub(crate) fn onebot_format_segment_quote(title: &str, fields: Vec<(String, String)>) -> String {
     onebot_format_segment_quote_with_body(title, fields, None)
 }
 
-fn onebot_format_segment_quote_with_body(
+pub(crate) fn onebot_format_segment_quote_with_body(
     title: &str,
     fields: Vec<(String, String)>,
     body: Option<&str>,
@@ -207,11 +207,11 @@ fn onebot_format_segment_quote_with_body(
     onebot_markdown_quote_block(&lines.join("\n"))
 }
 
-fn onebot_mention_placeholder(index: usize) -> String {
+pub(crate) fn onebot_mention_placeholder(index: usize) -> String {
     format!("[[PAI_ONEBOT_MENTION_{}]]", index)
 }
 
-fn onebot_push_mention(parsed: &mut OnebotParsedMessage, qq: String) {
+pub(crate) fn onebot_push_mention(parsed: &mut OnebotParsedMessage, qq: String) {
     let placeholder = onebot_mention_placeholder(parsed.mention_refs.len());
     parsed.mention_refs.push(OnebotMentionRef {
         qq,
@@ -220,7 +220,7 @@ fn onebot_push_mention(parsed: &mut OnebotParsedMessage, qq: String) {
     parsed.push_block(placeholder);
 }
 
-fn onebot_media_ref_from_segment_data(
+pub(crate) fn onebot_media_ref_from_segment_data(
     seg_type: &str,
     data: Option<&Value>,
 ) -> Option<OnebotInboundMediaRef> {
@@ -251,7 +251,7 @@ fn onebot_media_ref_from_segment_data(
     })
 }
 
-fn onebot_push_unresolved_media_block(
+pub(crate) fn onebot_push_unresolved_media_block(
     parsed: &mut OnebotParsedMessage,
     title: &str,
     data: Option<&Value>,
@@ -263,7 +263,7 @@ fn onebot_push_unresolved_media_block(
     parsed.push_block(onebot_format_segment_quote(title, fields));
 }
 
-fn onebot_merge_nested_message(
+pub(crate) fn onebot_merge_nested_message(
     parsed: &mut OnebotParsedMessage,
     nested: OnebotParsedMessage,
 ) -> String {
@@ -286,7 +286,7 @@ fn onebot_merge_nested_message(
     text
 }
 
-fn onebot_push_node_segment(parsed: &mut OnebotParsedMessage, data: Option<&Value>) {
+pub(crate) fn onebot_push_node_segment(parsed: &mut OnebotParsedMessage, data: Option<&Value>) {
     let Some(data) = data else {
         parsed.push_block(onebot_format_segment_quote("合并转发节点", Vec::new()));
         return;
@@ -306,7 +306,7 @@ fn onebot_push_node_segment(parsed: &mut OnebotParsedMessage, data: Option<&Valu
     parsed.push_block(onebot_format_segment_quote("合并转发节点", fields));
 }
 
-fn onebot_push_info_segment(
+pub(crate) fn onebot_push_info_segment(
     parsed: &mut OnebotParsedMessage,
     seg_type: &str,
     data: Option<&Value>,
@@ -380,13 +380,13 @@ fn onebot_push_info_segment(
 
 /// 从 OneBot v11 message 数组格式中提取文本、媒体引用和嵌入引用
 #[cfg(test)]
-fn parse_onebot_message_array(
+pub(crate) fn parse_onebot_message_array(
     segments: &[Value],
 ) -> (String, Vec<OnebotInboundMediaRef>, Vec<OnebotEmbeddedRef>) {
     parse_onebot_message_array_detail(segments).into_public_parts()
 }
 
-fn parse_onebot_message_array_detail(segments: &[Value]) -> OnebotParsedMessage {
+pub(crate) fn parse_onebot_message_array_detail(segments: &[Value]) -> OnebotParsedMessage {
     let mut parsed = OnebotParsedMessage::default();
     for seg in segments {
         let seg_type = seg.get("type").and_then(|v| v.as_str()).unwrap_or("");
@@ -444,14 +444,14 @@ fn parse_onebot_message_array_detail(segments: &[Value]) -> OnebotParsedMessage 
     parsed
 }
 
-fn onebot_unescape_cq_value(raw: &str) -> String {
+pub(crate) fn onebot_unescape_cq_value(raw: &str) -> String {
     raw.replace("&amp;", "&")
         .replace("&#91;", "[")
         .replace("&#93;", "]")
         .replace("&#44;", ",")
 }
 
-fn onebot_cq_param_value(params: &str, key: &str) -> Option<String> {
+pub(crate) fn onebot_cq_param_value(params: &str, key: &str) -> Option<String> {
     let target = key.trim();
     if target.is_empty() {
         return None;
@@ -472,7 +472,7 @@ fn onebot_cq_param_value(params: &str, key: &str) -> Option<String> {
     None
 }
 
-fn onebot_cq_param_pairs(params: &str) -> Vec<(String, String)> {
+pub(crate) fn onebot_cq_param_pairs(params: &str) -> Vec<(String, String)> {
     params
         .split(',')
         .filter_map(|pair| {
@@ -490,7 +490,7 @@ fn onebot_cq_param_pairs(params: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-fn onebot_cq_fields(params: &str, keys: &[&str]) -> Vec<(String, String)> {
+pub(crate) fn onebot_cq_fields(params: &str, keys: &[&str]) -> Vec<(String, String)> {
     keys.iter()
         .filter_map(|key| {
             onebot_cq_param_value(params, key)
@@ -499,7 +499,7 @@ fn onebot_cq_fields(params: &str, keys: &[&str]) -> Vec<(String, String)> {
         .collect()
 }
 
-fn onebot_media_ref_from_cq(cq_type: &str, params: &str) -> Option<OnebotInboundMediaRef> {
+pub(crate) fn onebot_media_ref_from_cq(cq_type: &str, params: &str) -> Option<OnebotInboundMediaRef> {
     match cq_type.trim() {
         "image" => {
             let file_ref = onebot_cq_param_value(params, "url")
@@ -545,7 +545,7 @@ fn onebot_media_ref_from_cq(cq_type: &str, params: &str) -> Option<OnebotInbound
     }
 }
 
-fn onebot_push_cq_info_segment(parsed: &mut OnebotParsedMessage, cq_type: &str, params: &str) {
+pub(crate) fn onebot_push_cq_info_segment(parsed: &mut OnebotParsedMessage, cq_type: &str, params: &str) {
     match cq_type {
         "at" => {
             if let Some(qq) = onebot_cq_param_value(params, "qq") {
@@ -614,13 +614,13 @@ fn onebot_push_cq_info_segment(parsed: &mut OnebotParsedMessage, cq_type: &str, 
 
 /// 从 CQ 码字符串中提取文本、媒体引用与嵌入引用
 #[cfg(test)]
-fn parse_onebot_cq_string(
+pub(crate) fn parse_onebot_cq_string(
     raw: &str,
 ) -> (String, Vec<OnebotInboundMediaRef>, Vec<OnebotEmbeddedRef>) {
     parse_onebot_cq_string_detail(raw).into_public_parts()
 }
 
-fn parse_onebot_cq_string_detail(raw: &str) -> OnebotParsedMessage {
+pub(crate) fn parse_onebot_cq_string_detail(raw: &str) -> OnebotParsedMessage {
     let mut parsed = OnebotParsedMessage::default();
     let mut cursor = 0usize;
     while cursor < raw.len() {
@@ -685,7 +685,7 @@ fn parse_onebot_cq_string_detail(raw: &str) -> OnebotParsedMessage {
 }
 
 #[cfg(test)]
-fn extract_message_content(
+pub(crate) fn extract_message_content(
     event: &Value,
 ) -> (
     String,
@@ -695,7 +695,7 @@ fn extract_message_content(
     extract_message_content_detail(event).into_public_parts()
 }
 
-fn extract_message_content_detail(event: &Value) -> OnebotParsedMessage {
+pub(crate) fn extract_message_content_detail(event: &Value) -> OnebotParsedMessage {
     let message_field = event.get("message");
     if let Some(arr) = message_field.and_then(|v| v.as_array()) {
         let result = parse_onebot_message_array_detail(arr);
@@ -734,7 +734,7 @@ fn extract_message_content_detail(event: &Value) -> OnebotParsedMessage {
     OnebotParsedMessage::default()
 }
 
-fn onebot_extract_nested_segments(value: &Value) -> Option<&[Value]> {
+pub(crate) fn onebot_extract_nested_segments(value: &Value) -> Option<&[Value]> {
     value
         .get("message")
         .and_then(Value::as_array)
@@ -745,7 +745,7 @@ fn onebot_extract_nested_segments(value: &Value) -> Option<&[Value]> {
         .or_else(|| value.get("data").and_then(|v| v.get("messages")).and_then(Value::as_array).map(Vec::as_slice))
 }
 
-fn onebot_parse_content_value_detail(value: &Value) -> OnebotParsedMessage {
+pub(crate) fn onebot_parse_content_value_detail(value: &Value) -> OnebotParsedMessage {
     if let Some(segments) = value.as_array() {
         return parse_onebot_message_array_detail(segments);
     }
@@ -773,7 +773,7 @@ fn onebot_parse_content_value_detail(value: &Value) -> OnebotParsedMessage {
 }
 
 #[cfg(test)]
-fn onebot_parse_forward_payload(
+pub(crate) fn onebot_parse_forward_payload(
     value: &Value,
 ) -> (
     String,
@@ -783,7 +783,7 @@ fn onebot_parse_forward_payload(
     (parsed.text, parsed.media_refs)
 }
 
-fn onebot_parse_forward_payload_detail(value: &Value) -> OnebotParsedMessage {
+pub(crate) fn onebot_parse_forward_payload_detail(value: &Value) -> OnebotParsedMessage {
     let nodes = value
         .get("messages")
         .or_else(|| value.get("message"))
@@ -821,7 +821,7 @@ fn onebot_parse_forward_payload_detail(value: &Value) -> OnebotParsedMessage {
     parsed
 }
 
-fn onebot_read_sender_name(sender: &Value, prefer_card: bool) -> Option<String> {
+pub(crate) fn onebot_read_sender_name(sender: &Value, prefer_card: bool) -> Option<String> {
     let primary_key = if prefer_card { "card" } else { "nickname" };
     let secondary_key = if prefer_card { "nickname" } else { "card" };
 
@@ -832,7 +832,7 @@ fn onebot_read_sender_name(sender: &Value, prefer_card: bool) -> Option<String> 
         .and_then(onebot_scalar_to_trimmed_string)
 }
 
-fn onebot_resolve_forward_node_sender_name(node: &Value) -> String {
+pub(crate) fn onebot_resolve_forward_node_sender_name(node: &Value) -> String {
     node.get("sender")
         .and_then(|sender| onebot_read_sender_name(sender, false))
         .or_else(|| {
@@ -852,7 +852,7 @@ fn onebot_resolve_forward_node_sender_name(node: &Value) -> String {
         .unwrap_or_else(|| "未知发送者".to_string())
 }
 
-fn onebot_read_sender_display_name(sender: &Value, prefer_card: bool) -> Option<String> {
+pub(crate) fn onebot_read_sender_display_name(sender: &Value, prefer_card: bool) -> Option<String> {
     let primary_key = if prefer_card { "card" } else { "nickname" };
     let secondary_key = if prefer_card { "nickname" } else { "card" };
 
@@ -862,7 +862,7 @@ fn onebot_read_sender_display_name(sender: &Value, prefer_card: bool) -> Option<
         .and_then(onebot_scalar_to_trimmed_string)
 }
 
-fn onebot_read_reply_sender_name(payload: &Value) -> Option<String> {
+pub(crate) fn onebot_read_reply_sender_name(payload: &Value) -> Option<String> {
     payload
         .get("sender")
         .and_then(|sender| onebot_read_sender_display_name(sender, true))
@@ -874,7 +874,7 @@ fn onebot_read_reply_sender_name(payload: &Value) -> Option<String> {
         })
 }
 
-fn onebot_read_reply_sender_id(payload: &Value) -> Option<String> {
+pub(crate) fn onebot_read_reply_sender_id(payload: &Value) -> Option<String> {
     onebot_read_id_as_string(payload, "user_id")
         .or_else(|| {
             payload
@@ -894,7 +894,7 @@ fn onebot_read_reply_sender_id(payload: &Value) -> Option<String> {
         })
 }
 
-fn onebot_markdown_quote_block(text: &str) -> String {
+pub(crate) fn onebot_markdown_quote_block(text: &str) -> String {
     text.trim()
         .lines()
         .map(|line| {
@@ -909,7 +909,7 @@ fn onebot_markdown_quote_block(text: &str) -> String {
         .join("\n")
 }
 
-fn onebot_format_reply_quote_text(sender_name: Option<&str>, text: &str) -> String {
+pub(crate) fn onebot_format_reply_quote_text(sender_name: Option<&str>, text: &str) -> String {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         return String::new();
@@ -926,7 +926,7 @@ fn onebot_format_reply_quote_text(sender_name: Option<&str>, text: &str) -> Stri
     onebot_format_segment_quote_with_body("回复引用", Vec::new(), Some(&quote_text))
 }
 
-async fn onebot_call_action_try_params(
+pub(crate) async fn onebot_call_action_try_params(
     manager: &OnebotV11WsManager,
     channel_id: &str,
     action: &str,
@@ -945,15 +945,15 @@ async fn onebot_call_action_try_params(
     ))
 }
 
-fn onebot_member_data_object(value: &Value) -> &Value {
+pub(crate) fn onebot_member_data_object(value: &Value) -> &Value {
     value.get("data").unwrap_or(value)
 }
 
-fn onebot_member_field(value: &Value, key: &str) -> String {
+pub(crate) fn onebot_member_field(value: &Value, key: &str) -> String {
     onebot_read_id_as_string(onebot_member_data_object(value), key).unwrap_or_default()
 }
 
-fn onebot_first_non_empty(values: &[&str]) -> String {
+pub(crate) fn onebot_first_non_empty(values: &[&str]) -> String {
     values
         .iter()
         .map(|value| value.trim())
@@ -962,7 +962,7 @@ fn onebot_first_non_empty(values: &[&str]) -> String {
         .to_string()
 }
 
-fn onebot_group_member_display_name_from_parts(
+pub(crate) fn onebot_group_member_display_name_from_parts(
     user_id: &str,
     card: &str,
     nickname: &str,
@@ -971,7 +971,7 @@ fn onebot_group_member_display_name_from_parts(
     onebot_first_non_empty(&[card, nickname, fallback.unwrap_or(""), user_id])
 }
 
-fn onebot_group_member_info_from_event_sender(
+pub(crate) fn onebot_group_member_info_from_event_sender(
     event: &Value,
     fallback_sender_name: &str,
     updated_at: &str,
@@ -1001,7 +1001,7 @@ fn onebot_group_member_info_from_event_sender(
     })
 }
 
-fn onebot_group_member_info_from_payload(
+pub(crate) fn onebot_group_member_info_from_payload(
     requested_user_id: &str,
     payload: &Value,
     updated_at: &str,
@@ -1027,7 +1027,7 @@ fn onebot_group_member_info_from_payload(
     })
 }
 
-fn onebot_group_member_display_name(info: &RemoteImGroupMemberInfo) -> String {
+pub(crate) fn onebot_group_member_display_name(info: &RemoteImGroupMemberInfo) -> String {
     onebot_group_member_display_name_from_parts(
         &info.user_id,
         &info.card,
@@ -1036,7 +1036,7 @@ fn onebot_group_member_display_name(info: &RemoteImGroupMemberInfo) -> String {
     )
 }
 
-fn onebot_display_name_if_not_id(user_id: &str, display_name: String) -> Option<String> {
+pub(crate) fn onebot_display_name_if_not_id(user_id: &str, display_name: String) -> Option<String> {
     let user_id = user_id.trim();
     let display_name = display_name.trim();
     if display_name.is_empty() || display_name == user_id {
@@ -1046,7 +1046,7 @@ fn onebot_display_name_if_not_id(user_id: &str, display_name: String) -> Option<
     }
 }
 
-fn onebot_group_member_cache_for_contact(
+pub(crate) fn onebot_group_member_cache_for_contact(
     state: &AppState,
     channel_id: &str,
     group_id: Option<u64>,
@@ -1073,7 +1073,7 @@ fn onebot_group_member_cache_for_contact(
         .collect()
 }
 
-fn onebot_merge_group_member_cache_entry(
+pub(crate) fn onebot_merge_group_member_cache_entry(
     cache: &mut std::collections::HashMap<String, RemoteImGroupMemberInfo>,
     info: RemoteImGroupMemberInfo,
 ) {
@@ -1083,7 +1083,7 @@ fn onebot_merge_group_member_cache_entry(
     }
 }
 
-fn onebot_persist_group_member_cache(
+pub(crate) fn onebot_persist_group_member_cache(
     state: &AppState,
     contact_id: &str,
     members: Vec<RemoteImGroupMemberInfo>,
@@ -1120,7 +1120,7 @@ fn onebot_persist_group_member_cache(
     })
 }
 
-fn onebot_format_mention_quote(qq: &str, display_name: Option<&str>) -> String {
+pub(crate) fn onebot_format_mention_quote(qq: &str, display_name: Option<&str>) -> String {
     let qq = qq.trim();
     if qq.eq_ignore_ascii_case("all") {
         return onebot_format_segment_quote(
@@ -1137,14 +1137,14 @@ fn onebot_format_mention_quote(qq: &str, display_name: Option<&str>) -> String {
 }
 
 #[cfg(test)]
-fn onebot_resolve_reply_sender_display_name(payload: &Value) -> Option<String> {
+pub(crate) fn onebot_resolve_reply_sender_display_name(payload: &Value) -> Option<String> {
     if let Some(name) = onebot_read_reply_sender_name(payload) {
         return Some(name);
     }
     onebot_read_reply_sender_id(payload)
 }
 
-async fn onebot_fetch_group_member_info(
+pub(crate) async fn onebot_fetch_group_member_info(
     manager: &OnebotV11WsManager,
     channel_id: &str,
     group_id: u64,
@@ -1167,7 +1167,7 @@ async fn onebot_fetch_group_member_info(
     onebot_group_member_info_from_payload(user_id, &payload, &now_iso())
 }
 
-async fn onebot_fetch_stranger_display_name(
+pub(crate) async fn onebot_fetch_stranger_display_name(
     manager: &OnebotV11WsManager,
     channel_id: &str,
     user_id: &str,
@@ -1189,7 +1189,7 @@ async fn onebot_fetch_stranger_display_name(
     onebot_display_name_if_not_id(user_id, onebot_member_field(&payload, "nickname"))
 }
 
-async fn onebot_resolve_native_user_display_name(
+pub(crate) async fn onebot_resolve_native_user_display_name(
     manager: &OnebotV11WsManager,
     channel_id: &str,
     group_id: Option<u64>,
@@ -1223,7 +1223,7 @@ async fn onebot_resolve_native_user_display_name(
     onebot_fetch_stranger_display_name(manager, channel_id, user_id).await
 }
 
-async fn onebot_resolve_reply_sender_display_name_with_api(
+pub(crate) async fn onebot_resolve_reply_sender_display_name_with_api(
     manager: &OnebotV11WsManager,
     channel_id: &str,
     group_id: Option<u64>,
@@ -1245,7 +1245,7 @@ async fn onebot_resolve_reply_sender_display_name_with_api(
     .or(Some(sender_id))
 }
 
-async fn onebot_resolve_mentions_in_text(
+pub(crate) async fn onebot_resolve_mentions_in_text(
     manager: &OnebotV11WsManager,
     channel_id: &str,
     group_id: Option<u64>,
@@ -1277,7 +1277,7 @@ async fn onebot_resolve_mentions_in_text(
     out
 }
 
-async fn onebot_expand_embedded_content(
+pub(crate) async fn onebot_expand_embedded_content(
     manager: &OnebotV11WsManager,
     channel_id: &str,
     group_id: Option<u64>,
@@ -1383,7 +1383,7 @@ async fn onebot_expand_embedded_content(
     (text_parts.join("\n").trim().to_string(), media_refs)
 }
 
-async fn resolve_contact_info(
+pub(crate) async fn resolve_contact_info(
     event: &Value,
     manager: &OnebotV11WsManager,
     channel_id: &str,
@@ -1420,7 +1420,7 @@ async fn resolve_contact_info(
     }
 }
 
-fn read_channel_config(
+pub(crate) fn read_channel_config(
     state: &AppState,
     channel_id: &str,
 ) -> Result<Option<RemoteImChannelConfig>, String> {
@@ -1429,7 +1429,7 @@ fn read_channel_config(
     Ok(channel_config)
 }
 
-fn resolve_sender_name(event: &Value) -> String {
+pub(crate) fn resolve_sender_name(event: &Value) -> String {
     event
         .get("sender")
         .and_then(|sender| onebot_read_sender_name(sender, false))
@@ -1437,7 +1437,7 @@ fn resolve_sender_name(event: &Value) -> String {
         .unwrap_or_else(|| "Unknown".to_string())
 }
 
-fn message_field_kind(message_field: Option<&Value>) -> &'static str {
+pub(crate) fn message_field_kind(message_field: Option<&Value>) -> &'static str {
     message_field
         .map(|v| match v {
             Value::Array(_) => "array",

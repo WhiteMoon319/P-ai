@@ -1,59 +1,59 @@
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SttTranscribeInput {
-    mime: String,
-    bytes_base64: String,
+pub(crate) struct SttTranscribeInput {
+    pub(crate) mime: String,
+    pub(crate) bytes_base64: String,
     #[serde(default)]
-    stt_api_config_id: Option<String>,
+    pub(crate) stt_api_config_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SttTranscribeOutput {
-    text: String,
+pub(crate) struct SttTranscribeOutput {
+    pub(crate) text: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ReadLocalBinaryFileInput {
-    path: String,
+pub(crate) struct ReadLocalBinaryFileInput {
+    pub(crate) path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ReadLocalBinaryFileOutput {
-    mime: String,
-    bytes_base64: String,
+pub(crate) struct ReadLocalBinaryFileOutput {
+    pub(crate) mime: String,
+    pub(crate) bytes_base64: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct QueueLocalFileAttachmentInput {
-    path: String,
+pub(crate) struct QueueLocalFileAttachmentInput {
+    pub(crate) path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct QueueInlineFileAttachmentInput {
-    file_name: String,
+pub(crate) struct QueueInlineFileAttachmentInput {
+    pub(crate) file_name: String,
     #[serde(default)]
-    mime: String,
-    bytes_base64: String,
+    pub(crate) mime: String,
+    pub(crate) bytes_base64: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct QueueLocalFileAttachmentOutput {
-    mime: String,
-    file_name: String,
-    saved_path: String,
-    attach_as_media: bool,
+pub(crate) struct QueueLocalFileAttachmentOutput {
+    pub(crate) mime: String,
+    pub(crate) file_name: String,
+    pub(crate) saved_path: String,
+    pub(crate) attach_as_media: bool,
     #[serde(default)]
-    bytes_base64: Option<String>,
-    text_notice: String,
+    pub(crate) bytes_base64: Option<String>,
+    pub(crate) text_notice: String,
 }
 
-fn media_mime_from_path(path: &std::path::Path) -> Option<&'static str> {
+pub(crate) fn media_mime_from_path(path: &std::path::Path) -> Option<&'static str> {
     let ext = path
         .extension()
         .and_then(|v| v.to_str())
@@ -82,20 +82,20 @@ fn media_mime_from_path(path: &std::path::Path) -> Option<&'static str> {
     }
 }
 
-fn image_mime_from_bytes(raw: &[u8]) -> Option<&'static str> {
+pub(crate) fn image_mime_from_bytes(raw: &[u8]) -> Option<&'static str> {
     infer::get(raw)
         .map(|kind| kind.mime_type())
         .filter(|mime| mime.starts_with("image/"))
 }
 
-fn workspace_downloads_dir(state: &AppState) -> PathBuf {
+pub(crate) fn workspace_downloads_dir(state: &AppState) -> PathBuf {
     // downloads 是用户与 LLM 共用的附件落地区；允许 LLM 后续自行清理和管理空间占用。
     configured_workspace_root_path(state)
         .unwrap_or_else(|_| state.llm_workspace_path.clone())
         .join("downloads")
 }
 
-fn media_extension_from_mime_for_download(mime: &str) -> &'static str {
+pub(crate) fn media_extension_from_mime_for_download(mime: &str) -> &'static str {
     match mime.trim().to_ascii_lowercase().as_str() {
         "application/pdf" => "pdf",
         "image/png" => "png",
@@ -119,7 +119,7 @@ fn media_extension_from_mime_for_download(mime: &str) -> &'static str {
     }
 }
 
-fn is_dangerous_executable_extension(ext: &str) -> bool {
+pub(crate) fn is_dangerous_executable_extension(ext: &str) -> bool {
     matches!(
         ext.trim().to_ascii_lowercase().as_str(),
         "bat"
@@ -141,7 +141,7 @@ fn is_dangerous_executable_extension(ext: &str) -> bool {
     )
 }
 
-fn should_force_bin_by_file_name(file_name: &str) -> bool {
+pub(crate) fn should_force_bin_by_file_name(file_name: &str) -> bool {
     std::path::Path::new(file_name.trim())
         .extension()
         .and_then(|v| v.to_str())
@@ -149,7 +149,7 @@ fn should_force_bin_by_file_name(file_name: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn apply_download_extension_policy(file_name: &str, mime: &str) -> String {
+pub(crate) fn apply_download_extension_policy(file_name: &str, mime: &str) -> String {
     let normalized = sanitize_download_file_name(file_name);
     if should_force_bin_by_file_name(&normalized) {
         let stem = std::path::Path::new(&normalized)
@@ -168,7 +168,7 @@ fn apply_download_extension_policy(file_name: &str, mime: &str) -> String {
     }
 }
 
-fn should_append_download_extension(file_name: &str, ext: &str) -> bool {
+pub(crate) fn should_append_download_extension(file_name: &str, ext: &str) -> bool {
     let file_name = file_name.trim();
     if file_name.is_empty() || ext.trim().is_empty() {
         return false;
@@ -188,7 +188,7 @@ fn should_append_download_extension(file_name: &str, ext: &str) -> bool {
         .ends_with(&format!(".{}", ext.to_ascii_lowercase()))
 }
 
-fn sanitize_download_file_name(name: &str) -> String {
+pub(crate) fn sanitize_download_file_name(name: &str) -> String {
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return format!("attachment-{}", Uuid::new_v4());
@@ -210,7 +210,7 @@ fn sanitize_download_file_name(name: &str) -> String {
     }
 }
 
-fn persist_raw_attachment_to_downloads(
+pub(crate) fn persist_raw_attachment_to_downloads(
     state: &AppState,
     suggested_name: &str,
     mime: &str,
@@ -219,7 +219,7 @@ fn persist_raw_attachment_to_downloads(
     persist_raw_attachment_to_downloads_subdir(state, None, suggested_name, mime, raw)
 }
 
-fn persist_raw_attachment_to_downloads_subdir(
+pub(crate) fn persist_raw_attachment_to_downloads_subdir(
     state: &AppState,
     subdir: Option<&str>,
     suggested_name: &str,
@@ -262,7 +262,7 @@ fn persist_raw_attachment_to_downloads_subdir(
     Ok(final_target)
 }
 
-fn existing_file_content_equals_raw(path: &std::path::Path, raw: &[u8]) -> Result<bool, String> {
+pub(crate) fn existing_file_content_equals_raw(path: &std::path::Path, raw: &[u8]) -> Result<bool, String> {
     let meta = fs::metadata(path).map_err(|err| format!("Read existing attachment metadata failed: {err}"))?;
     if meta.len() != raw.len() as u64 {
         return Ok(false);
@@ -285,7 +285,7 @@ fn existing_file_content_equals_raw(path: &std::path::Path, raw: &[u8]) -> Resul
     Ok(true)
 }
 
-fn workspace_relative_path(state: &AppState, absolute: &std::path::Path) -> String {
+pub(crate) fn workspace_relative_path(state: &AppState, absolute: &std::path::Path) -> String {
     let workspace_root = configured_workspace_root_path(state)
         .unwrap_or_else(|_| state.llm_workspace_path.clone());
     absolute
@@ -295,7 +295,7 @@ fn workspace_relative_path(state: &AppState, absolute: &std::path::Path) -> Stri
         .unwrap_or_else(|| absolute.to_string_lossy().replace('\\', "/"))
 }
 
-fn assistant_space_display_path(relative_path: &str) -> String {
+pub(crate) fn assistant_space_display_path(relative_path: &str) -> String {
     let trimmed = relative_path.trim().trim_start_matches(['\\', '/']);
     if trimmed.is_empty() {
         "{Assistant Space}".to_string()
@@ -304,7 +304,7 @@ fn assistant_space_display_path(relative_path: &str) -> String {
     }
 }
 
-fn build_attachment_notice_text(index: usize, relative_path: &str) -> String {
+pub(crate) fn build_attachment_notice_text(index: usize, relative_path: &str) -> String {
     format!(
         "[附件#{}]\npath: {}",
         index + 1,
@@ -312,7 +312,7 @@ fn build_attachment_notice_text(index: usize, relative_path: &str) -> String {
     )
 }
 
-fn queue_attachment_from_raw(
+pub(crate) fn queue_attachment_from_raw(
     state: &AppState,
     file_name_input: &str,
     mime_input: &str,
@@ -377,7 +377,7 @@ fn queue_attachment_from_raw(
     })
 }
 
-fn normalize_payload_attachments(
+pub(crate) fn normalize_payload_attachments(
     raw: Option<&Vec<AttachmentMetaInput>>,
 ) -> Vec<serde_json::Value> {
     let mut out = Vec::<serde_json::Value>::new();
@@ -409,7 +409,7 @@ fn normalize_payload_attachments(
     out
 }
 
-fn provider_meta_without_legacy_attachments(provider_meta: Option<Value>) -> Option<Value> {
+pub(crate) fn provider_meta_without_legacy_attachments(provider_meta: Option<Value>) -> Option<Value> {
     let mut meta = provider_meta?;
     if let Some(object) = meta.as_object_mut() {
         object.remove("attachments");
@@ -420,7 +420,7 @@ fn provider_meta_without_legacy_attachments(provider_meta: Option<Value>) -> Opt
     Some(meta)
 }
 
-fn provider_meta_attachment_relative_paths(meta: &Value) -> Vec<String> {
+pub(crate) fn provider_meta_attachment_relative_paths(meta: &Value) -> Vec<String> {
     let mut out = Vec::<String>::new();
     let Some(attachments) = meta.get("attachments").and_then(Value::as_array) else {
         return out;
@@ -457,7 +457,7 @@ fn provider_meta_attachment_relative_paths(meta: &Value) -> Vec<String> {
 
 
 
-fn queue_inline_file_attachment_inner(
+pub(crate) fn queue_inline_file_attachment_inner(
     input: QueueInlineFileAttachmentInput,
     state: &AppState,
 ) -> Result<QueueLocalFileAttachmentOutput, String> {
@@ -477,33 +477,33 @@ fn queue_inline_file_attachment_inner(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ReadLocalChatImageThumbnailInput {
-    path: String,
+pub(crate) struct ReadLocalChatImageThumbnailInput {
+    pub(crate) path: String,
     #[serde(default)]
-    max_edge: Option<u32>,
+    pub(crate) max_edge: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ReadLocalChatImageOutput {
-    data_url: String,
-    mime: String,
-    width: u32,
-    height: u32,
+pub(crate) struct ReadLocalChatImageOutput {
+    pub(crate) data_url: String,
+    pub(crate) mime: String,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ReadLocalChatImageThumbnailOutput {
-    data_url: String,
-    mime: String,
-    width: u32,
-    height: u32,
-    original_width: u32,
-    original_height: u32,
+pub(crate) struct ReadLocalChatImageThumbnailOutput {
+    pub(crate) data_url: String,
+    pub(crate) mime: String,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) original_width: u32,
+    pub(crate) original_height: u32,
 }
 
-fn assistant_space_relative_image_path(path: &str) -> Result<Option<PathBuf>, String> {
+pub(crate) fn assistant_space_relative_image_path(path: &str) -> Result<Option<PathBuf>, String> {
     const ASSISTANT_SPACE_PREFIX: &str = "{Assistant Space}";
 
     let trimmed = path.trim();
@@ -531,7 +531,7 @@ fn assistant_space_relative_image_path(path: &str) -> Result<Option<PathBuf>, St
     Ok(Some(relative))
 }
 
-fn resolve_local_chat_image_path(state: &AppState, path: &str) -> Result<PathBuf, String> {
+pub(crate) fn resolve_local_chat_image_path(state: &AppState, path: &str) -> Result<PathBuf, String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
         return Err("图片路径为空".to_string());
@@ -555,7 +555,7 @@ fn resolve_local_chat_image_path(state: &AppState, path: &str) -> Result<PathBuf
 }
 
 
-async fn read_local_chat_image_thumbnail_inner(
+pub(crate) async fn read_local_chat_image_thumbnail_inner(
     input: ReadLocalChatImageThumbnailInput,
     state: &AppState,
 ) -> Result<ReadLocalChatImageThumbnailOutput, String> {
@@ -579,7 +579,7 @@ async fn read_local_chat_image_thumbnail_inner(
 }
 
 
-async fn read_local_chat_image_original_inner(
+pub(crate) async fn read_local_chat_image_original_inner(
     input: ReadLocalChatImageThumbnailInput,
     state: &AppState,
 ) -> Result<ReadLocalChatImageOutput, String> {

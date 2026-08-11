@@ -1,5 +1,5 @@
 impl WeixinOcManager {
-    async fn start_login(
+    pub(crate) async fn start_login(
         &self,
         state: &AppState,
         input: WeixinOcLoginStartInput,
@@ -98,7 +98,7 @@ impl WeixinOcManager {
         })
     }
 
-    async fn poll_login_status(
+    pub(crate) async fn poll_login_status(
         &self,
         state: &AppState,
         input: WeixinOcLoginStatusInput,
@@ -313,7 +313,7 @@ impl WeixinOcManager {
         })
     }
 
-    async fn logout(&self, state: &AppState, channel_id: &str) -> Result<(), String> {
+    pub(crate) async fn logout(&self, state: &AppState, channel_id: &str) -> Result<(), String> {
         self.stop_channel(channel_id).await;
         self.login_sessions.write().await.remove(channel_id);
         remote_im_delete_channel_private_state(state, &RemoteImPlatform::WeixinOc, channel_id)?;

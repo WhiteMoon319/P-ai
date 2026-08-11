@@ -2798,7 +2798,7 @@ pub(crate) fn read_compaction_segment_before_from_slice(
 }
 
 #[cfg(test)]
-mod message_store_reader_tests {
+pub(crate) mod message_store_reader_tests {
     use super::*;
 
     fn test_message(id: &str, role: &str) -> ChatMessage {

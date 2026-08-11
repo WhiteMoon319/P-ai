@@ -1,37 +1,69 @@
-const CHAT_HISTORY_SLICE_TARGET_CHARS: usize = 256;
-const CHAT_HISTORY_LONG_MESSAGE_OVERLAP_CHARS: usize = 32;
-const CHAT_HISTORY_INDEX_DIR_NAME: &str = "chat-history-tantivy";
-const CHAT_HISTORY_INDEX_META_FILE_NAME: &str = "metadata.json";
-const CHAT_HISTORY_INDEX_TMP_DIR_NAME: &str = "chat-history-tantivy.tmp";
-const CHAT_HISTORY_FIELD_SLICE_IDX: &str = "slice_idx";
-const CHAT_HISTORY_FIELD_CONTENT: &str = "content";
-const CHAT_HISTORY_FIELD_VISIBLE_AGENT_IDS: &str = "visible_agent_ids";
+use std::{
+    fs,
+    io::Cursor,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+};
+
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use directories::ProjectDirs;
+use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
+use image::ImageFormat;
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use rmcp::{schemars, ServiceExt};
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
+use uuid::Uuid;
+
+// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
+
+use tantivy::{
+    doc,
+    schema::{Field, IndexRecordOption, Schema, TextFieldIndexing, TextOptions, Value as TantivyValue, FAST, STORED},
+    tokenizer::{SimpleTokenizer, TextAnalyzer},
+    Index, Searcher,
+    collector::TopDocs,
+};
+use tantivy::query::QueryParser;
+use sha2::{Digest, Sha256};
+use super::*;
+
+pub(crate) const CHAT_HISTORY_SLICE_TARGET_CHARS: usize = 256;
+pub(crate) const CHAT_HISTORY_LONG_MESSAGE_OVERLAP_CHARS: usize = 32;
+pub(crate) const CHAT_HISTORY_INDEX_DIR_NAME: &str = "chat-history-tantivy";
+pub(crate) const CHAT_HISTORY_INDEX_META_FILE_NAME: &str = "metadata.json";
+pub(crate) const CHAT_HISTORY_INDEX_TMP_DIR_NAME: &str = "chat-history-tantivy.tmp";
+pub(crate) const CHAT_HISTORY_FIELD_SLICE_IDX: &str = "slice_idx";
+pub(crate) const CHAT_HISTORY_FIELD_CONTENT: &str = "content";
+pub(crate) const CHAT_HISTORY_FIELD_VISIBLE_AGENT_IDS: &str = "visible_agent_ids";
 
 #[derive(Clone)]
-struct ChatHistoryIndexFields {
-    slice_idx: tantivy::schema::Field,
-    content: tantivy::schema::Field,
-    visible_agent_ids: tantivy::schema::Field,
+pub(crate) struct ChatHistoryIndexFields {
+    pub(crate) slice_idx: tantivy::schema::Field,
+    pub(crate) content: tantivy::schema::Field,
+    pub(crate) visible_agent_ids: tantivy::schema::Field,
 }
 
-struct CachedChatHistoryIndex {
-    signature: String,
-    slices: Vec<ChatHistorySlice>,
-    stats: ChatHistorySearchStats,
-    index: Index,
-    reader: tantivy::IndexReader,
-    fields: ChatHistoryIndexFields,
+pub(crate) struct CachedChatHistoryIndex {
+    pub(crate) signature: String,
+    pub(crate) slices: Vec<ChatHistorySlice>,
+    pub(crate) stats: ChatHistorySearchStats,
+    pub(crate) index: Index,
+    pub(crate) reader: tantivy::IndexReader,
+    pub(crate) fields: ChatHistoryIndexFields,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatHistoryPersistedIndexMetadata {
-    signature: String,
-    slices: Vec<ChatHistorySlice>,
-    stats: ChatHistorySearchStats,
+pub(crate) struct ChatHistoryPersistedIndexMetadata {
+    pub(crate) signature: String,
+    pub(crate) slices: Vec<ChatHistorySlice>,
+    pub(crate) stats: ChatHistorySearchStats,
 }
 
-fn chat_history_index_cache() -> &'static std::sync::Mutex<Option<CachedChatHistoryIndex>> {
+pub(crate) fn chat_history_index_cache() -> &'static std::sync::Mutex<Option<CachedChatHistoryIndex>> {
     static CACHE: std::sync::OnceLock<std::sync::Mutex<Option<CachedChatHistoryIndex>>> =
         std::sync::OnceLock::new();
     CACHE.get_or_init(|| std::sync::Mutex::new(None))
@@ -39,82 +71,82 @@ fn chat_history_index_cache() -> &'static std::sync::Mutex<Option<CachedChatHist
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatHistorySearchInput {
-    agent_id: String,
-    query: String,
+pub(crate) struct ChatHistorySearchInput {
+    pub(crate) agent_id: String,
+    pub(crate) query: String,
     #[serde(default)]
-    limit: Option<usize>,
+    pub(crate) limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatHistorySearchResult {
-    hits: Vec<ChatHistorySearchHit>,
-    stats: ChatHistorySearchStats,
-    elapsed_ms: u128,
+pub(crate) struct ChatHistorySearchResult {
+    pub(crate) hits: Vec<ChatHistorySearchHit>,
+    pub(crate) stats: ChatHistorySearchStats,
+    pub(crate) elapsed_ms: u128,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatHistorySearchHit {
-    slice: ChatHistorySlice,
-    bm25_score: f64,
-    bm25_normalized_score: f64,
+pub(crate) struct ChatHistorySearchHit {
+    pub(crate) slice: ChatHistorySlice,
+    pub(crate) bm25_score: f64,
+    pub(crate) bm25_normalized_score: f64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatHistorySearchStats {
-    total_slices: usize,
-    visible_slices: usize,
-    index_storage_bytes: u64,
-    cached_slice_bytes: u64,
-    indexed_conversations: usize,
-    skipped_delegate_conversations: usize,
-    skipped_live_blocks: usize,
-    skipped_no_agent_segments: usize,
-    local_conversation_slices: usize,
-    archive_slices: usize,
-    contact_slices: usize,
+pub(crate) struct ChatHistorySearchStats {
+    pub(crate) total_slices: usize,
+    pub(crate) visible_slices: usize,
+    pub(crate) index_storage_bytes: u64,
+    pub(crate) cached_slice_bytes: u64,
+    pub(crate) indexed_conversations: usize,
+    pub(crate) skipped_delegate_conversations: usize,
+    pub(crate) skipped_live_blocks: usize,
+    pub(crate) skipped_no_agent_segments: usize,
+    pub(crate) local_conversation_slices: usize,
+    pub(crate) archive_slices: usize,
+    pub(crate) contact_slices: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ChatHistorySlice {
-    id: String,
-    source_kind: String,
-    source_id: String,
-    source_title: String,
-    segment_id: String,
-    slice_index: usize,
-    content: String,
-    speakers: Vec<String>,
-    visible_agent_ids: Vec<String>,
-    time_start: String,
-    time_end: String,
-    message_start_id: String,
-    message_end_id: String,
+pub(crate) struct ChatHistorySlice {
+    pub(crate) id: String,
+    pub(crate) source_kind: String,
+    pub(crate) source_id: String,
+    pub(crate) source_title: String,
+    pub(crate) segment_id: String,
+    pub(crate) slice_index: usize,
+    pub(crate) content: String,
+    pub(crate) speakers: Vec<String>,
+    pub(crate) visible_agent_ids: Vec<String>,
+    pub(crate) time_start: String,
+    pub(crate) time_end: String,
+    pub(crate) message_start_id: String,
+    pub(crate) message_end_id: String,
 }
 
 #[derive(Debug, Clone)]
-struct ChatHistoryRenderedMessage {
-    message_id: String,
-    speaker_name: String,
-    speaker_agent_id: Option<String>,
-    created_at: String,
-    rendered: String,
+pub(crate) struct ChatHistoryRenderedMessage {
+    pub(crate) message_id: String,
+    pub(crate) speaker_name: String,
+    pub(crate) speaker_agent_id: Option<String>,
+    pub(crate) created_at: String,
+    pub(crate) rendered: String,
 }
 
 #[derive(Debug, Clone)]
-struct ChatHistorySegment {
-    source_kind: String,
-    source_id: String,
-    source_title: String,
-    segment_id: String,
-    messages: Vec<ChatMessage>,
+pub(crate) struct ChatHistorySegment {
+    pub(crate) source_kind: String,
+    pub(crate) source_id: String,
+    pub(crate) source_title: String,
+    pub(crate) segment_id: String,
+    pub(crate) messages: Vec<ChatMessage>,
 }
 
-fn chat_history_index_signature(
+pub(crate) fn chat_history_index_signature(
     chat_index: &ChatIndexFile,
     agents: &[AgentProfile],
     user_alias: &str,
@@ -145,7 +177,7 @@ fn chat_history_index_signature(
     bytes_to_lower_hex(hasher.finalize())
 }
 
-fn chat_history_source_kind(conversation: &Conversation) -> Option<&'static str> {
+pub(crate) fn chat_history_source_kind(conversation: &Conversation) -> Option<&'static str> {
     if conversation_is_delegate(conversation) {
         return None;
     }
@@ -158,7 +190,7 @@ fn chat_history_source_kind(conversation: &Conversation) -> Option<&'static str>
     Some("localConversation")
 }
 
-fn chat_history_source_kind_from_meta(
+pub(crate) fn chat_history_source_kind_from_meta(
     conversation_meta: &ConversationMetaView,
 ) -> Option<&'static str> {
     let kind = conversation_meta.conversation_kind.trim();
@@ -181,7 +213,7 @@ fn chat_history_source_kind_from_meta(
     Some("localConversation")
 }
 
-fn chat_history_message_text(message: &ChatMessage) -> String {
+pub(crate) fn chat_history_message_text(message: &ChatMessage) -> String {
     let mut parts = Vec::<String>::new();
     for part in &message.parts {
         if let MessagePart::Text { text, .. } = part {
@@ -200,7 +232,7 @@ fn chat_history_message_text(message: &ChatMessage) -> String {
     parts.join("\n")
 }
 
-fn chat_history_speaker_name(
+pub(crate) fn chat_history_speaker_name(
     message: &ChatMessage,
     agents: &[AgentProfile],
     user_alias: &str,
@@ -242,7 +274,7 @@ fn chat_history_speaker_name(
     }
 }
 
-fn chat_history_render_message(
+pub(crate) fn chat_history_render_message(
     message: &ChatMessage,
     agents: &[AgentProfile],
     user_alias: &str,
@@ -261,7 +293,7 @@ fn chat_history_render_message(
     })
 }
 
-fn chat_history_unique_push(out: &mut Vec<String>, value: impl Into<String>) {
+pub(crate) fn chat_history_unique_push(out: &mut Vec<String>, value: impl Into<String>) {
     let value = value.into();
     if value.trim().is_empty() || out.iter().any(|item| item == &value) {
         return;
@@ -269,7 +301,7 @@ fn chat_history_unique_push(out: &mut Vec<String>, value: impl Into<String>) {
     out.push(value);
 }
 
-fn chat_history_visible_agent_ids(messages: &[ChatHistoryRenderedMessage]) -> Vec<String> {
+pub(crate) fn chat_history_visible_agent_ids(messages: &[ChatHistoryRenderedMessage]) -> Vec<String> {
     let mut out = Vec::<String>::new();
     for message in messages {
         if let Some(agent_id) = message.speaker_agent_id.as_deref() {
@@ -282,7 +314,7 @@ fn chat_history_visible_agent_ids(messages: &[ChatHistoryRenderedMessage]) -> Ve
     out
 }
 
-fn chat_history_split_long_rendered_message(
+pub(crate) fn chat_history_split_long_rendered_message(
     message: &ChatHistoryRenderedMessage,
 ) -> Vec<String> {
     let chars = message.rendered.chars().collect::<Vec<_>>();
@@ -302,7 +334,7 @@ fn chat_history_split_long_rendered_message(
     out
 }
 
-fn chat_history_build_slice(
+pub(crate) fn chat_history_build_slice(
     segment: &ChatHistorySegment,
     slice_index: usize,
     content: String,
@@ -346,7 +378,7 @@ fn chat_history_build_slice(
     }
 }
 
-fn chat_history_slices_from_segment(
+pub(crate) fn chat_history_slices_from_segment(
     segment: &ChatHistorySegment,
     agents: &[AgentProfile],
     user_alias: &str,
@@ -414,7 +446,7 @@ fn chat_history_slices_from_segment(
     slices
 }
 
-fn chat_history_segments_from_snapshot(conversation: &Conversation) -> Vec<ChatHistorySegment> {
+pub(crate) fn chat_history_segments_from_snapshot(conversation: &Conversation) -> Vec<ChatHistorySegment> {
     conversation
         .messages
         .iter()
@@ -433,7 +465,7 @@ fn chat_history_segments_from_snapshot(conversation: &Conversation) -> Vec<ChatH
         .collect()
 }
 
-fn chat_history_segments_from_message_store(
+pub(crate) fn chat_history_segments_from_message_store(
     data_path: &PathBuf,
     conversation: &Conversation,
 ) -> Result<(Vec<ChatHistorySegment>, usize), String> {
@@ -479,7 +511,7 @@ fn chat_history_segments_from_message_store(
     }
 }
 
-fn chat_history_user_persona_name(agents: &[AgentProfile]) -> String {
+pub(crate) fn chat_history_user_persona_name(agents: &[AgentProfile]) -> String {
     agents
         .iter()
         .find(|agent| agent.id == USER_PERSONA_ID || agent.is_built_in_user)
@@ -488,7 +520,7 @@ fn chat_history_user_persona_name(agents: &[AgentProfile]) -> String {
         .unwrap_or_default()
 }
 
-fn chat_history_collect_slices_for_state(
+pub(crate) fn chat_history_collect_slices_for_state(
     state: &AppState,
 ) -> Result<(String, Vec<ChatHistorySlice>, ChatHistorySearchStats), String> {
     let started_stats = ChatHistorySearchStats::default();
@@ -571,23 +603,23 @@ fn chat_history_collect_slices_for_state(
     Ok((signature, slices, stats))
 }
 
-fn chat_history_index_root(data_path: &PathBuf) -> PathBuf {
+pub(crate) fn chat_history_index_root(data_path: &PathBuf) -> PathBuf {
     app_root_from_data_path(data_path)
         .join("indexes")
         .join(CHAT_HISTORY_INDEX_DIR_NAME)
 }
 
-fn chat_history_index_tmp_root(data_path: &PathBuf) -> PathBuf {
+pub(crate) fn chat_history_index_tmp_root(data_path: &PathBuf) -> PathBuf {
     app_root_from_data_path(data_path)
         .join("indexes")
         .join(CHAT_HISTORY_INDEX_TMP_DIR_NAME)
 }
 
-fn chat_history_index_meta_path(index_root: &PathBuf) -> PathBuf {
+pub(crate) fn chat_history_index_meta_path(index_root: &PathBuf) -> PathBuf {
     index_root.join(CHAT_HISTORY_INDEX_META_FILE_NAME)
 }
 
-fn chat_history_directory_size(path: &PathBuf) -> u64 {
+pub(crate) fn chat_history_directory_size(path: &PathBuf) -> u64 {
     let Ok(metadata) = std::fs::metadata(path) else {
         return 0;
     };
@@ -603,18 +635,18 @@ fn chat_history_directory_size(path: &PathBuf) -> u64 {
         .sum()
 }
 
-fn chat_history_string_bytes(value: &str) -> u64 {
+pub(crate) fn chat_history_string_bytes(value: &str) -> u64 {
     value.as_bytes().len() as u64
 }
 
-fn chat_history_vec_string_bytes(values: &[String]) -> u64 {
+pub(crate) fn chat_history_vec_string_bytes(values: &[String]) -> u64 {
     values
         .iter()
         .map(|value| chat_history_string_bytes(value))
         .sum()
 }
 
-fn chat_history_estimate_slice_cache_bytes(slices: &[ChatHistorySlice]) -> u64 {
+pub(crate) fn chat_history_estimate_slice_cache_bytes(slices: &[ChatHistorySlice]) -> u64 {
     slices
         .iter()
         .map(|slice| {
@@ -634,7 +666,7 @@ fn chat_history_estimate_slice_cache_bytes(slices: &[ChatHistorySlice]) -> u64 {
         .sum()
 }
 
-fn chat_history_build_schema() -> (Schema, ChatHistoryIndexFields) {
+pub(crate) fn chat_history_build_schema() -> (Schema, ChatHistoryIndexFields) {
     let mut schema_builder = Schema::builder();
     let slice_idx_field = schema_builder.add_u64_field(CHAT_HISTORY_FIELD_SLICE_IDX, FAST | STORED);
     let indexing = TextFieldIndexing::default()
@@ -662,7 +694,7 @@ fn chat_history_build_schema() -> (Schema, ChatHistoryIndexFields) {
     )
 }
 
-fn chat_history_fields_from_schema(schema: &Schema) -> Result<ChatHistoryIndexFields, String> {
+pub(crate) fn chat_history_fields_from_schema(schema: &Schema) -> Result<ChatHistoryIndexFields, String> {
     let slice_idx = schema
         .get_field(CHAT_HISTORY_FIELD_SLICE_IDX)
         .map_err(|err| format!("Read chat history slice_idx field failed: {err}"))?;
@@ -679,13 +711,13 @@ fn chat_history_fields_from_schema(schema: &Schema) -> Result<ChatHistoryIndexFi
     })
 }
 
-fn chat_history_register_tokenizers(index: &Index) {
+pub(crate) fn chat_history_register_tokenizers(index: &Index) {
     index
         .tokenizers()
         .register("chat_ws", TextAnalyzer::from(SimpleTokenizer::default()));
 }
 
-fn chat_history_write_index_documents(
+pub(crate) fn chat_history_write_index_documents(
     index: &Index,
     fields: &ChatHistoryIndexFields,
     slices: &[ChatHistorySlice],
@@ -713,7 +745,7 @@ fn chat_history_write_index_documents(
 }
 
 #[cfg(test)]
-fn chat_history_build_tantivy_index(
+pub(crate) fn chat_history_build_tantivy_index(
     slices: &[ChatHistorySlice],
 ) -> Result<(Index, tantivy::IndexReader, ChatHistoryIndexFields), String> {
     let (schema, fields) = chat_history_build_schema();
@@ -726,7 +758,7 @@ fn chat_history_build_tantivy_index(
     Ok((index, reader, fields))
 }
 
-fn chat_history_write_persisted_metadata(
+pub(crate) fn chat_history_write_persisted_metadata(
     index_root: &PathBuf,
     metadata: &ChatHistoryPersistedIndexMetadata,
 ) -> Result<(), String> {
@@ -737,7 +769,7 @@ fn chat_history_write_persisted_metadata(
         .map_err(|err| format!("Write chat history index metadata failed: {err}"))
 }
 
-fn chat_history_read_persisted_metadata(
+pub(crate) fn chat_history_read_persisted_metadata(
     index_root: &PathBuf,
 ) -> Result<ChatHistoryPersistedIndexMetadata, String> {
     let meta_path = chat_history_index_meta_path(index_root);
@@ -747,7 +779,7 @@ fn chat_history_read_persisted_metadata(
         .map_err(|err| format!("Parse chat history index metadata failed: {err}"))
 }
 
-fn chat_history_open_persisted_index(
+pub(crate) fn chat_history_open_persisted_index(
     index_root: &PathBuf,
     expected_signature: &str,
 ) -> Result<CachedChatHistoryIndex, String> {
@@ -772,7 +804,7 @@ fn chat_history_open_persisted_index(
     })
 }
 
-fn chat_history_rebuild_persisted_index(
+pub(crate) fn chat_history_rebuild_persisted_index(
     state: &AppState,
     signature: String,
     slices: Vec<ChatHistorySlice>,
@@ -828,7 +860,7 @@ fn chat_history_rebuild_persisted_index(
     chat_history_open_persisted_index(&index_root, &signature)
 }
 
-fn chat_history_cached_index_for_state(state: &AppState) -> Result<(), String> {
+pub(crate) fn chat_history_cached_index_for_state(state: &AppState) -> Result<(), String> {
     let chat_index = state_read_chat_index_cached(state)?;
     let agents = state_read_agents_cached(state)?;
     let user_alias = chat_history_user_persona_name(&agents);
@@ -867,7 +899,7 @@ fn chat_history_cached_index_for_state(state: &AppState) -> Result<(), String> {
     Ok(())
 }
 
-fn chat_history_tantivy_search(
+pub(crate) fn chat_history_tantivy_search(
     cached: &CachedChatHistoryIndex,
     agent_id: &str,
     query_text: &str,
@@ -924,7 +956,7 @@ fn chat_history_tantivy_search(
     Ok(out)
 }
 
-fn chat_history_search_for_agent(
+pub(crate) fn chat_history_search_for_agent(
     state: &AppState,
     input: &ChatHistorySearchInput,
 ) -> Result<ChatHistorySearchResult, String> {

@@ -1,7 +1,6 @@
-use std::path::Path;
 
-const TERMINAL_MAX_OUTPUT_BYTES: usize = 256 * 1024;
-const TERMINAL_DEFAULT_TIMEOUT_MS: u64 = 300_000;
+pub(crate) const TERMINAL_MAX_OUTPUT_BYTES: usize = 256 * 1024;
+pub(crate) const TERMINAL_DEFAULT_TIMEOUT_MS: u64 = 300_000;
 
 include!("terminal/runtime.rs");
 

@@ -1,57 +1,80 @@
-const GOAL_STATUS_ACTIVE: &str = "active";
-const GOAL_STATUS_COMPLETE: &str = "complete";
-const GOAL_STATUS_BLOCKED: &str = "blocked";
-const GOAL_STATUS_CANCELLED_BY_USER: &str = "cancelled_by_user";
-const GOAL_UPDATED_EVENT: &str = "easy-call:conversation-goal-updated";
-const GOAL_CONTINUATION_PROMPT_TEMPLATE: &str =
+use std::{
+    fs,
+    io::Cursor,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+};
+
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use directories::ProjectDirs;
+use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
+use image::ImageFormat;
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use rmcp::{schemars, ServiceExt};
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
+use uuid::Uuid;
+
+// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
+
+use super::*;
+
+pub(crate) const GOAL_STATUS_ACTIVE: &str = "active";
+pub(crate) const GOAL_STATUS_COMPLETE: &str = "complete";
+pub(crate) const GOAL_STATUS_BLOCKED: &str = "blocked";
+pub(crate) const GOAL_STATUS_CANCELLED_BY_USER: &str = "cancelled_by_user";
+pub(crate) const GOAL_UPDATED_EVENT: &str = "easy-call:conversation-goal-updated";
+pub(crate) const GOAL_CONTINUATION_PROMPT_TEMPLATE: &str =
     include_str!("../../resources/prompts/goal-continuation.md");
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct GoalCreateInput {
-    conversation_id: String,
-    objective: String,
+pub(crate) struct GoalCreateInput {
+    pub(crate) conversation_id: String,
+    pub(crate) objective: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct GoalCancelInput {
-    conversation_id: String,
+pub(crate) struct GoalCancelInput {
+    pub(crate) conversation_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct GoalUsageDelta {
-    input_tokens: u64,
-    output_tokens: u64,
-    cache_read_tokens: u64,
-    cache_write_tokens: u64,
+pub(crate) struct GoalUsageDelta {
+    pub(crate) input_tokens: u64,
+    pub(crate) output_tokens: u64,
+    pub(crate) cache_read_tokens: u64,
+    pub(crate) cache_write_tokens: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct GoalMutationOutput {
-    conversation_id: String,
-    goal: ConversationGoalState,
-    usage_delta: GoalUsageDelta,
+pub(crate) struct GoalMutationOutput {
+    pub(crate) conversation_id: String,
+    pub(crate) goal: ConversationGoalState,
+    pub(crate) usage_delta: GoalUsageDelta,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CreateGoalToolArgs {
-    objective: String,
+pub(crate) struct CreateGoalToolArgs {
+    pub(crate) objective: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-struct UpdateGoalToolArgs {
-    status: String,
+pub(crate) struct UpdateGoalToolArgs {
+    pub(crate) status: String,
     #[serde(default)]
-    evidence: Option<String>,
+    pub(crate) evidence: Option<String>,
     #[serde(default, alias = "blockingCondition")]
-    blocking_condition: Option<String>,
+    pub(crate) blocking_condition: Option<String>,
 }
 
-fn goal_usage_delta(
+pub(crate) fn goal_usage_delta(
     start: &ConversationCumulativeUsage,
     end: &ConversationCumulativeUsage,
 ) -> GoalUsageDelta {
@@ -63,7 +86,7 @@ fn goal_usage_delta(
     }
 }
 
-fn goal_blocked_turn_threshold_met(
+pub(crate) fn goal_blocked_turn_threshold_met(
     conversation: &Conversation,
     goal: &ConversationGoalState,
 ) -> bool {
@@ -72,7 +95,7 @@ fn goal_blocked_turn_threshold_met(
         >= 3
 }
 
-fn goal_output(conversation_id: &str, goal: ConversationGoalState) -> GoalMutationOutput {
+pub(crate) fn goal_output(conversation_id: &str, goal: ConversationGoalState) -> GoalMutationOutput {
     let usage_end = goal
         .usage_end
         .as_ref()
@@ -85,7 +108,7 @@ fn goal_output(conversation_id: &str, goal: ConversationGoalState) -> GoalMutati
     }
 }
 
-fn emit_goal_updated(state: &AppState, conversation_id: &str, goal: Option<&ConversationGoalState>) {
+pub(crate) fn emit_goal_updated(state: &AppState, conversation_id: &str, goal: Option<&ConversationGoalState>) {
     live_update_goal_changed(state, conversation_id, goal);
     let payload = serde_json::json!({
         "conversationId": conversation_id,
@@ -101,14 +124,14 @@ fn emit_goal_updated(state: &AppState, conversation_id: &str, goal: Option<&Conv
     }
 }
 
-fn goal_get_current_inner(
+pub(crate) fn goal_get_current_inner(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<Option<ConversationGoalState>, String> {
     conversation_service_v2().get_active_goal(state, conversation_id)
 }
 
-fn goal_create_goal_inner(
+pub(crate) fn goal_create_goal_inner(
     state: &AppState,
     conversation_id: &str,
     objective: &str,
@@ -162,7 +185,7 @@ fn goal_create_goal_inner(
     Ok(goal_output(normalized_conversation_id, goal))
 }
 
-fn goal_update_terminal_inner(
+pub(crate) fn goal_update_terminal_inner(
     state: &AppState,
     conversation_id: &str,
     status: &str,
@@ -221,7 +244,7 @@ fn goal_update_terminal_inner(
     Ok(goal_output(normalized_conversation_id, goal))
 }
 
-fn goal_cancel_goal_inner(
+pub(crate) fn goal_cancel_goal_inner(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<GoalMutationOutput, String> {
@@ -252,12 +275,12 @@ fn goal_cancel_goal_inner(
     Ok(goal_output(normalized_conversation_id, goal))
 }
 
-fn goal_tool_conversation_id(session_id: &str) -> Result<String, String> {
+pub(crate) fn goal_tool_conversation_id(session_id: &str) -> Result<String, String> {
     delegate_session_conversation_id(session_id)
         .ok_or_else(|| "缺少当前工具调用会话 ID，无法操作 goal。".to_string())
 }
 
-fn goal_create_for_session(
+pub(crate) fn goal_create_for_session(
     state: &AppState,
     session_id: &str,
     args: CreateGoalToolArgs,
@@ -267,7 +290,7 @@ fn goal_create_for_session(
     serde_json::to_value(output).map_err(|err| format!("序列化 goal 创建结果失败: {err}"))
 }
 
-fn goal_update_for_session(
+pub(crate) fn goal_update_for_session(
     state: &AppState,
     session_id: &str,
     args: UpdateGoalToolArgs,
@@ -283,14 +306,14 @@ fn goal_update_for_session(
     serde_json::to_value(output).map_err(|err| format!("序列化 goal 更新结果失败: {err}"))
 }
 
-fn render_goal_continuation_prompt(objective: &str) -> String {
+pub(crate) fn render_goal_continuation_prompt(objective: &str) -> String {
     GOAL_CONTINUATION_PROMPT_TEMPLATE.replace(
         "{{ objective }}",
         &xml_escape_prompt(objective.trim()),
     )
 }
 
-fn format_goal_elapsed_text(started_at: &str, now: &str) -> Option<String> {
+pub(crate) fn format_goal_elapsed_text(started_at: &str, now: &str) -> Option<String> {
     let started = parse_iso(started_at)?;
     let current = parse_iso(now).unwrap_or_else(now_utc);
     let elapsed = current - started;
@@ -307,7 +330,7 @@ fn format_goal_elapsed_text(started_at: &str, now: &str) -> Option<String> {
     }
 }
 
-fn render_goal_continue_hidden_prompt(goal: &ConversationGoalState, now: &str) -> String {
+pub(crate) fn render_goal_continue_hidden_prompt(goal: &ConversationGoalState, now: &str) -> String {
     let objective = goal.objective.trim();
     let status = goal.status.trim();
     let mut lines = Vec::<String>::new();
@@ -327,7 +350,7 @@ fn render_goal_continue_hidden_prompt(goal: &ConversationGoalState, now: &str) -
 
 
 #[cfg(test)]
-mod goal_tests {
+pub(crate) mod goal_tests {
     use super::*;
 
     fn goal_continue_test_message(goal_id: &str, turn: usize) -> ChatMessage {

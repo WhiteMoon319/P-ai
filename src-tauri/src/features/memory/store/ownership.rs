@@ -1,4 +1,5 @@
-fn memory_store_list_memories_visible_for_agent(
+use std::collections::HashMap;
+pub(crate) fn memory_store_list_memories_visible_for_agent(
     data_path: &PathBuf,
     agent_id: &str,
     private_memory_enabled: bool,
@@ -18,7 +19,7 @@ fn memory_store_list_memories_visible_for_agent(
     Ok(filtered)
 }
 
-fn memory_store_list_memories_by_ids_visible_for_agent(
+pub(crate) fn memory_store_list_memories_by_ids_visible_for_agent(
     data_path: &PathBuf,
     memory_ids: &[String],
     agent_id: &str,
@@ -38,7 +39,7 @@ fn memory_store_list_memories_by_ids_visible_for_agent(
     Ok(filtered)
 }
 
-fn memory_store_list_private_memories_by_agent(
+pub(crate) fn memory_store_list_private_memories_by_agent(
     data_path: &PathBuf,
     agent_id: &str,
 ) -> Result<Vec<MemoryEntry>, String> {
@@ -53,7 +54,7 @@ fn memory_store_list_private_memories_by_agent(
         .collect::<Vec<_>>())
 }
 
-fn memory_store_count_private_memories_by_agent(
+pub(crate) fn memory_store_count_private_memories_by_agent(
     data_path: &PathBuf,
     agent_id: &str,
 ) -> Result<usize, String> {
@@ -72,7 +73,7 @@ fn memory_store_count_private_memories_by_agent(
     Ok(count.max(0) as usize)
 }
 
-fn memory_store_delete_memories_by_owner_agent_id(
+pub(crate) fn memory_store_delete_memories_by_owner_agent_id(
     data_path: &PathBuf,
     agent_id: &str,
 ) -> Result<usize, String> {
@@ -102,14 +103,14 @@ fn memory_store_delete_memories_by_owner_agent_id(
     Ok(deleted)
 }
 
-fn memory_entry_allowed_for_profile(memory: &MemoryEntry) -> bool {
+pub(crate) fn memory_entry_allowed_for_profile(memory: &MemoryEntry) -> bool {
     matches!(
         memory.memory_type.trim().to_ascii_lowercase().as_str(),
         "knowledge" | "skill" | "event"
     )
 }
 
-const USER_PROFILE_ATTR_TAGS: [&str; 6] = [
+pub(crate) const USER_PROFILE_ATTR_TAGS: [&str; 6] = [
     "用户别名",
     "事实属性",
     "技能树",
@@ -118,11 +119,11 @@ const USER_PROFILE_ATTR_TAGS: [&str; 6] = [
     "用户要求",
 ];
 
-fn memory_tag_is_user_profile_category_tag(tag: &str) -> bool {
+pub(crate) fn memory_tag_is_user_profile_category_tag(tag: &str) -> bool {
     USER_PROFILE_ATTR_TAGS.iter().any(|item| *item == tag.trim())
 }
 
-fn profile_user_id_tag(user_id: &str) -> Option<String> {
+pub(crate) fn profile_user_id_tag(user_id: &str) -> Option<String> {
     let trimmed = user_id.trim();
     if trimmed.is_empty() {
         None
@@ -131,15 +132,15 @@ fn profile_user_id_tag(user_id: &str) -> Option<String> {
     }
 }
 
-fn memory_has_profile_shape_tags(memory: &MemoryEntry) -> bool {
+pub(crate) fn memory_has_profile_shape_tags(memory: &MemoryEntry) -> bool {
     memory.tags.iter().any(|tag| memory_tag_is_user_profile_category_tag(tag))
 }
 
-fn memory_entry_is_profile_memory(memory: &MemoryEntry) -> bool {
+pub(crate) fn memory_entry_is_profile_memory(memory: &MemoryEntry) -> bool {
     memory_entry_allowed_for_profile(memory) && memory_has_profile_shape_tags(memory)
 }
 
-fn memory_store_list_profile_memories_by_user_id_visible_for_agent(
+pub(crate) fn memory_store_list_profile_memories_by_user_id_visible_for_agent(
     data_path: &PathBuf,
     user_id: &str,
     agent_id: &str,
@@ -275,7 +276,7 @@ fn memory_store_list_profile_memories_by_user_id_visible_for_agent(
 }
 
 #[allow(dead_code)]
-fn memory_store_list_profile_memories_visible_for_agent(
+pub(crate) fn memory_store_list_profile_memories_visible_for_agent(
     data_path: &PathBuf,
     agent_id: &str,
     private_memory_enabled: bool,
@@ -292,12 +293,12 @@ fn memory_store_list_profile_memories_visible_for_agent(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AgentPrivateMemoryExportResult {
-    path: String,
-    count: usize,
+pub(crate) struct AgentPrivateMemoryExportResult {
+    pub(crate) path: String,
+    pub(crate) count: usize,
 }
 
-fn memory_store_export_agent_private_memories(
+pub(crate) fn memory_store_export_agent_private_memories(
     data_path: &PathBuf,
     agent_id: &str,
 ) -> Result<AgentPrivateMemoryExportResult, String> {
@@ -342,7 +343,7 @@ fn memory_store_export_agent_private_memories(
     })
 }
 
-fn memory_store_import_memories_for_agent(
+pub(crate) fn memory_store_import_memories_for_agent(
     data_path: &PathBuf,
     incoming: &[MemoryEntry],
     agent_id: &str,

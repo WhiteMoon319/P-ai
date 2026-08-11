@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 // Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
 
+use std::collections::{HashMap};
 use super::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -391,7 +392,7 @@ pub(crate) fn remote_im_channel_with_effective_credentials(
 }
 
 #[cfg(test)]
-mod remote_im_channel_store_tests {
+pub(crate) mod remote_im_channel_store_tests {
 
     #[test]
     fn weixin_legacy_migration_strips_private_fields_only() {

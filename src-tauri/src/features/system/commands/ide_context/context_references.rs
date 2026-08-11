@@ -1,4 +1,4 @@
-fn ide_context_normalize_time_or_now(field_name: &str, raw: &str) -> String {
+pub(crate) fn ide_context_normalize_time_or_now(field_name: &str, raw: &str) -> String {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return now_iso();
@@ -15,7 +15,7 @@ fn ide_context_normalize_time_or_now(field_name: &str, raw: &str) -> String {
     }
 }
 
-fn ide_context_timestamp_compare_desc(left: &str, right: &str) -> std::cmp::Ordering {
+pub(crate) fn ide_context_timestamp_compare_desc(left: &str, right: &str) -> std::cmp::Ordering {
     match (parse_iso(left), parse_iso(right)) {
         (Some(left_time), Some(right_time)) => right_time.cmp(&left_time),
         (Some(_), None) => std::cmp::Ordering::Less,
@@ -24,14 +24,14 @@ fn ide_context_timestamp_compare_desc(left: &str, right: &str) -> std::cmp::Orde
     }
 }
 
-fn ide_context_timestamp_is_newer(candidate: &str, current: &str) -> bool {
+pub(crate) fn ide_context_timestamp_is_newer(candidate: &str, current: &str) -> bool {
     if current.trim().is_empty() {
         return !candidate.trim().is_empty();
     }
     ide_context_timestamp_compare_desc(candidate, current) == std::cmp::Ordering::Less
 }
 
-fn ide_context_reference_dedup_key(item: &IdeContextReferenceItemOutput) -> String {
+pub(crate) fn ide_context_reference_dedup_key(item: &IdeContextReferenceItemOutput) -> String {
     let file_key = ide_context_compare_key(&item.file_path);
     let source_key = item.source.trim();
     if file_key.is_empty() && source_key.is_empty() {
@@ -45,7 +45,7 @@ fn ide_context_reference_dedup_key(item: &IdeContextReferenceItemOutput) -> Stri
     }
 }
 
-fn ide_context_reference_source_priority(source: &str) -> u8 {
+pub(crate) fn ide_context_reference_source_priority(source: &str) -> u8 {
     match source.trim() {
         "selection" => 3,
         "visible_range" => 2,
@@ -54,7 +54,7 @@ fn ide_context_reference_source_priority(source: &str) -> u8 {
     }
 }
 
-fn ide_context_should_replace_reference(
+pub(crate) fn ide_context_should_replace_reference(
     candidate: &IdeContextReferenceItemOutput,
     existing: &IdeContextReferenceItemOutput,
 ) -> bool {
@@ -80,14 +80,14 @@ fn ide_context_should_replace_reference(
     candidate.display_label < existing.display_label
 }
 
-fn ide_context_snapshot_is_expired(snapshot: &IdeContextSnapshot, now: &OffsetDateTime) -> bool {
+pub(crate) fn ide_context_snapshot_is_expired(snapshot: &IdeContextSnapshot, now: &OffsetDateTime) -> bool {
     match parse_iso(&snapshot.updated_at) {
         Some(updated_at) => updated_at < (*now - time::Duration::seconds(IDE_CONTEXT_SNAPSHOT_TTL_SECS)),
         None => true,
     }
 }
 
-fn ide_context_prune_expired_snapshots(
+pub(crate) fn ide_context_prune_expired_snapshots(
     snapshots: &mut std::collections::HashMap<String, IdeContextSnapshot>,
 ) {
     let now = now_utc();
@@ -104,7 +104,7 @@ fn ide_context_prune_expired_snapshots(
     });
 }
 
-fn emit_ide_context_updated(state: &AppState, client_id: &str, updated_at: &str) {
+pub(crate) fn emit_ide_context_updated(state: &AppState, client_id: &str, updated_at: &str) {
     let app_handle = match state.app_handle.lock() {
         Ok(slot) => slot.clone(),
         Err(_) => None,
@@ -127,7 +127,7 @@ fn emit_ide_context_updated(state: &AppState, client_id: &str, updated_at: &str)
     );
 }
 
-fn ide_context_compare_key(raw: &str) -> String {
+pub(crate) fn ide_context_compare_key(raw: &str) -> String {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return String::new();
@@ -140,7 +140,7 @@ fn ide_context_compare_key(raw: &str) -> String {
         .to_ascii_lowercase()
 }
 
-fn ide_context_display_path(raw: &str) -> String {
+pub(crate) fn ide_context_display_path(raw: &str) -> String {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return String::new();
@@ -151,7 +151,7 @@ fn ide_context_display_path(raw: &str) -> String {
     shell_workspace_display_path(&resolved).replace('\\', "/")
 }
 
-fn ide_context_workspace_name(input: &IdeContextWorkspaceInput) -> String {
+pub(crate) fn ide_context_workspace_name(input: &IdeContextWorkspaceInput) -> String {
     let explicit = input.name.as_deref().map(str::trim).unwrap_or("");
     if !explicit.is_empty() {
         return explicit.to_string();
@@ -166,7 +166,7 @@ fn ide_context_workspace_name(input: &IdeContextWorkspaceInput) -> String {
         .unwrap_or(display_path)
 }
 
-fn ide_context_path_is_within_workspace(file_path: &str, workspace_path: &str) -> bool {
+pub(crate) fn ide_context_path_is_within_workspace(file_path: &str, workspace_path: &str) -> bool {
     let file_key = ide_context_compare_key(file_path);
     let workspace_key = ide_context_compare_key(workspace_path);
     if file_key.is_empty() || workspace_key.is_empty() {
@@ -175,7 +175,7 @@ fn ide_context_path_is_within_workspace(file_path: &str, workspace_path: &str) -
     file_key == workspace_key || file_key.starts_with(&(workspace_key + "/"))
 }
 
-fn ide_context_relative_display_path(file_path: &str, workspace_path: &str) -> String {
+pub(crate) fn ide_context_relative_display_path(file_path: &str, workspace_path: &str) -> String {
     let file_display = ide_context_display_path(file_path);
     let workspace_display = ide_context_display_path(workspace_path);
     let file_key = ide_context_compare_key(&file_display);
@@ -195,7 +195,7 @@ fn ide_context_relative_display_path(file_path: &str, workspace_path: &str) -> S
     file_display
 }
 
-fn ide_context_line_suffix(start_line: Option<u32>, end_line: Option<u32>) -> String {
+pub(crate) fn ide_context_line_suffix(start_line: Option<u32>, end_line: Option<u32>) -> String {
     match (start_line, end_line) {
         (Some(start), Some(end)) if end > start => format!(":{start}-{end}"),
         (Some(start), _) => format!(":{start}"),
@@ -203,9 +203,9 @@ fn ide_context_line_suffix(start_line: Option<u32>, end_line: Option<u32>) -> St
     }
 }
 
-const IDE_CONTEXT_TEXT_BLOCK_CONTENT_LIMIT: usize = 2000;
+pub(crate) const IDE_CONTEXT_TEXT_BLOCK_CONTENT_LIMIT: usize = 2000;
 
-fn ide_context_text_block(file_path: &str, reference: &IdeContextReference) -> String {
+pub(crate) fn ide_context_text_block(file_path: &str, reference: &IdeContextReference) -> String {
     let location = format!(
         "{}{}",
         file_path,

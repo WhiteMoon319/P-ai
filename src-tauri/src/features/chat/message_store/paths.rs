@@ -259,7 +259,7 @@ pub(crate) fn path_to_windows_wide_null(path: &Path) -> Vec<u16> {
 }
 
 #[cfg(test)]
-mod message_store_atomic_write_tests {
+pub(crate) mod message_store_atomic_write_tests {
     use super::*;
 
     #[test]

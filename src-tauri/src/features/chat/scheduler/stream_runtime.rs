@@ -474,7 +474,7 @@ pub(crate) fn apply_assistant_tool_event_to_stream_blocks(
 }
 
 #[cfg(test)]
-mod scheduler_stream_block_tests {
+pub(crate) mod scheduler_stream_block_tests {
     use super::*;
 
     #[test]

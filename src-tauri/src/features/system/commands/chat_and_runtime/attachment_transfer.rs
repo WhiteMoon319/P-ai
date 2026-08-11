@@ -1,98 +1,98 @@
-const ATTACHMENT_TRANSFER_CHUNK_BYTES: usize = 256 * 1024;
-const ATTACHMENT_TRANSFER_WEB_MAX_BYTES: u64 = 50 * 1024 * 1024;
-const ATTACHMENT_TRANSFER_IDLE_TIMEOUT_SECS: u64 = 10 * 60;
-const ATTACHMENT_PREVIEW_MAX_EDGE: u32 = 512;
-const ATTACHMENT_PREVIEW_MAX_BYTES: usize = 512 * 1024;
-const ATTACHMENT_TRANSFER_TAURI_OWNER: &str = "tauri";
+pub(crate) const ATTACHMENT_TRANSFER_CHUNK_BYTES: usize = 256 * 1024;
+pub(crate) const ATTACHMENT_TRANSFER_WEB_MAX_BYTES: u64 = 50 * 1024 * 1024;
+pub(crate) const ATTACHMENT_TRANSFER_IDLE_TIMEOUT_SECS: u64 = 10 * 60;
+pub(crate) const ATTACHMENT_PREVIEW_MAX_EDGE: u32 = 512;
+pub(crate) const ATTACHMENT_PREVIEW_MAX_BYTES: usize = 512 * 1024;
+pub(crate) const ATTACHMENT_TRANSFER_TAURI_OWNER: &str = "tauri";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AttachmentTransferBeginInput {
-    file_name: String,
+pub(crate) struct AttachmentTransferBeginInput {
+    pub(crate) file_name: String,
     #[serde(default)]
-    mime: String,
-    size: u64,
+    pub(crate) mime: String,
+    pub(crate) size: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AttachmentTransferBeginOutput {
-    transfer_id: String,
-    next_offset: u64,
-    chunk_size: usize,
+pub(crate) struct AttachmentTransferBeginOutput {
+    pub(crate) transfer_id: String,
+    pub(crate) next_offset: u64,
+    pub(crate) chunk_size: usize,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    max_bytes: Option<u64>,
+    pub(crate) max_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AttachmentTransferIdInput {
-    transfer_id: String,
+pub(crate) struct AttachmentTransferIdInput {
+    pub(crate) transfer_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AttachmentTransferChunkOutput {
-    transfer_id: String,
-    next_offset: u64,
+pub(crate) struct AttachmentTransferChunkOutput {
+    pub(crate) transfer_id: String,
+    pub(crate) next_offset: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AttachmentIngestLocalPathInput {
-    path: String,
+pub(crate) struct AttachmentIngestLocalPathInput {
+    pub(crate) path: String,
     #[serde(default)]
-    file_name: Option<String>,
+    pub(crate) file_name: Option<String>,
     #[serde(default)]
-    mime: Option<String>,
+    pub(crate) mime: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AttachmentReceipt {
-    id: String,
-    file_name: String,
-    mime: String,
-    size: u64,
-    path: String,
-    attach_as_media: bool,
-    text_notice: String,
+pub(crate) struct AttachmentReceipt {
+    pub(crate) id: String,
+    pub(crate) file_name: String,
+    pub(crate) mime: String,
+    pub(crate) size: u64,
+    pub(crate) path: String,
+    pub(crate) attach_as_media: bool,
+    pub(crate) text_notice: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    preview_data_url: Option<String>,
+    pub(crate) preview_data_url: Option<String>,
 }
 
 #[derive(Debug)]
-struct AttachmentTransferSession {
-    file_name: String,
-    mime: String,
-    declared_size: u64,
-    received_size: u64,
-    staging_path: PathBuf,
-    updated_at: std::time::Instant,
-    closed: bool,
+pub(crate) struct AttachmentTransferSession {
+    pub(crate) file_name: String,
+    pub(crate) mime: String,
+    pub(crate) declared_size: u64,
+    pub(crate) received_size: u64,
+    pub(crate) staging_path: PathBuf,
+    pub(crate) updated_at: std::time::Instant,
+    pub(crate) closed: bool,
 }
 
 #[derive(Clone)]
-struct AttachmentTransferEntry {
-    owner: String,
-    session: Arc<tokio::sync::Mutex<AttachmentTransferSession>>,
+pub(crate) struct AttachmentTransferEntry {
+    pub(crate) owner: String,
+    pub(crate) session: Arc<tokio::sync::Mutex<AttachmentTransferSession>>,
 }
 
 #[derive(Default)]
-struct AttachmentTransferRuntime {
-    sessions: Mutex<std::collections::HashMap<String, AttachmentTransferEntry>>,
+pub(crate) struct AttachmentTransferRuntime {
+    pub(crate) sessions: Mutex<std::collections::HashMap<String, AttachmentTransferEntry>>,
 }
 
-fn attachment_transfer_runtime() -> &'static AttachmentTransferRuntime {
+pub(crate) fn attachment_transfer_runtime() -> &'static AttachmentTransferRuntime {
     static RUNTIME: OnceLock<AttachmentTransferRuntime> = OnceLock::new();
     RUNTIME.get_or_init(AttachmentTransferRuntime::default)
 }
 
-fn attachment_transfer_error(code: &str, message: impl AsRef<str>) -> String {
+pub(crate) fn attachment_transfer_error(code: &str, message: impl AsRef<str>) -> String {
     format!("{}: {}", code.trim(), message.as_ref().trim())
 }
 
-fn attachment_transfer_normalized_mime(file_name: &str, mime: &str) -> String {
+pub(crate) fn attachment_transfer_normalized_mime(file_name: &str, mime: &str) -> String {
     let normalized = mime.trim().to_ascii_lowercase();
     if !normalized.is_empty() {
         return normalized;
@@ -102,11 +102,11 @@ fn attachment_transfer_normalized_mime(file_name: &str, mime: &str) -> String {
         .to_string()
 }
 
-fn attachment_transfer_staging_dir(state: &AppState) -> PathBuf {
+pub(crate) fn attachment_transfer_staging_dir(state: &AppState) -> PathBuf {
     workspace_downloads_dir(state).join(".attachment-staging")
 }
 
-fn attachment_transfer_create_staging_file(
+pub(crate) fn attachment_transfer_create_staging_file(
     state: &AppState,
     transfer_id: &str,
 ) -> Result<PathBuf, String> {
@@ -131,7 +131,7 @@ fn attachment_transfer_create_staging_file(
     Ok(staging_path)
 }
 
-fn attachment_files_equal(left: &std::path::Path, right: &std::path::Path) -> Result<bool, String> {
+pub(crate) fn attachment_files_equal(left: &std::path::Path, right: &std::path::Path) -> Result<bool, String> {
     let left_meta =
         std::fs::metadata(left).map_err(|err| format!("读取已有附件元数据失败：{err}"))?;
     let right_meta =
@@ -162,7 +162,7 @@ fn attachment_files_equal(left: &std::path::Path, right: &std::path::Path) -> Re
     }
 }
 
-fn attachment_chunk_matches_staging(
+pub(crate) fn attachment_chunk_matches_staging(
     staging_path: &std::path::Path,
     offset: u64,
     bytes: &[u8],
@@ -189,7 +189,7 @@ fn attachment_chunk_matches_staging(
     Ok(existing == bytes)
 }
 
-fn attachment_finalize_staging_file(
+pub(crate) fn attachment_finalize_staging_file(
     state: &AppState,
     staging_path: &std::path::Path,
     suggested_name: &str,
@@ -232,7 +232,7 @@ fn attachment_finalize_staging_file(
     Ok(final_target)
 }
 
-fn attachment_preview_data_url(path: &std::path::Path, mime: &str) -> Option<String> {
+pub(crate) fn attachment_preview_data_url(path: &std::path::Path, mime: &str) -> Option<String> {
     if !mime.trim().to_ascii_lowercase().starts_with("image/") {
         return None;
     }
@@ -271,7 +271,7 @@ fn attachment_preview_data_url(path: &std::path::Path, mime: &str) -> Option<Str
     }
 }
 
-fn attachment_receipt_from_saved_path(
+pub(crate) fn attachment_receipt_from_saved_path(
     id: String,
     suggested_name: &str,
     mime: &str,
@@ -308,7 +308,7 @@ fn attachment_receipt_from_saved_path(
     }
 }
 
-fn attachment_transfer_lookup(
+pub(crate) fn attachment_transfer_lookup(
     transfer_id: &str,
     owner: &str,
 ) -> Result<AttachmentTransferEntry, String> {
@@ -335,7 +335,7 @@ fn attachment_transfer_lookup(
     Ok(entry)
 }
 
-fn attachment_transfer_remove_entry(transfer_id: &str, expected: &AttachmentTransferEntry) {
+pub(crate) fn attachment_transfer_remove_entry(transfer_id: &str, expected: &AttachmentTransferEntry) {
     let Ok(mut sessions) = attachment_transfer_runtime().sessions.lock() else {
         return;
     };
@@ -347,7 +347,7 @@ fn attachment_transfer_remove_entry(transfer_id: &str, expected: &AttachmentTran
     }
 }
 
-async fn attachment_transfer_remove_staging(path: PathBuf) {
+pub(crate) async fn attachment_transfer_remove_staging(path: PathBuf) {
     let _ = tokio::task::spawn_blocking(move || {
         if path.exists() {
             let _ = std::fs::remove_file(path);
@@ -356,7 +356,7 @@ async fn attachment_transfer_remove_staging(path: PathBuf) {
     .await;
 }
 
-fn attachment_transfer_session_should_expire(session: &AttachmentTransferSession) -> bool {
+pub(crate) fn attachment_transfer_session_should_expire(session: &AttachmentTransferSession) -> bool {
     if session.closed {
         return false;
     }
@@ -364,7 +364,7 @@ fn attachment_transfer_session_should_expire(session: &AttachmentTransferSession
         >= std::time::Duration::from_secs(ATTACHMENT_TRANSFER_IDLE_TIMEOUT_SECS)
 }
 
-fn attachment_transfer_schedule_expiration(transfer_id: String) {
+pub(crate) fn attachment_transfer_schedule_expiration(transfer_id: String) {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(
@@ -398,7 +398,7 @@ fn attachment_transfer_schedule_expiration(transfer_id: String) {
     });
 }
 
-async fn attachment_transfer_begin_inner(
+pub(crate) async fn attachment_transfer_begin_inner(
     input: AttachmentTransferBeginInput,
     state: &AppState,
     owner: &str,
@@ -464,7 +464,7 @@ async fn attachment_transfer_begin_inner(
     })
 }
 
-async fn attachment_transfer_append_chunk_inner(
+pub(crate) async fn attachment_transfer_append_chunk_inner(
     transfer_id: &str,
     owner: &str,
     offset: u64,
@@ -602,7 +602,7 @@ async fn attachment_transfer_append_chunk_inner(
     })
 }
 
-async fn attachment_transfer_complete_inner(
+pub(crate) async fn attachment_transfer_complete_inner(
     transfer_id: &str,
     state: &AppState,
     owner: &str,
@@ -678,7 +678,7 @@ async fn attachment_transfer_complete_inner(
     }
 }
 
-async fn attachment_transfer_abort_inner(transfer_id: &str, owner: &str) -> Result<Value, String> {
+pub(crate) async fn attachment_transfer_abort_inner(transfer_id: &str, owner: &str) -> Result<Value, String> {
     let entry = attachment_transfer_lookup(transfer_id, owner)?;
     let mut session = entry.session.lock().await;
     session.closed = true;
@@ -689,7 +689,7 @@ async fn attachment_transfer_abort_inner(transfer_id: &str, owner: &str) -> Resu
     Ok(serde_json::json!({ "ok": true }))
 }
 
-async fn attachment_transfer_abort_owner(owner: &str) {
+pub(crate) async fn attachment_transfer_abort_owner(owner: &str) {
     let entries = {
         let Ok(mut sessions) = attachment_transfer_runtime().sessions.lock() else {
             return;
@@ -721,7 +721,7 @@ async fn attachment_transfer_abort_owner(owner: &str) {
     }
 }
 
-async fn attachment_ingest_local_path_inner(
+pub(crate) async fn attachment_ingest_local_path_inner(
     input: AttachmentIngestLocalPathInput,
     state: &AppState,
 ) -> Result<AttachmentReceipt, String> {

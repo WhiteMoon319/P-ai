@@ -181,7 +181,7 @@ pub(crate) fn normalize_image_generation_config(config: &mut AppConfig) {
 }
 
 #[cfg(test)]
-mod image_generation_config_tests {
+pub(crate) mod image_generation_config_tests {
     use super::*;
 
     #[test]

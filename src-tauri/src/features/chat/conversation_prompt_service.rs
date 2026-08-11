@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 // Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
 
+use std::collections::{HashMap, HashSet};
 use super::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

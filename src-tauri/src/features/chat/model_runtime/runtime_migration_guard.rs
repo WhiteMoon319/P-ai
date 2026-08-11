@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod runtime_migration_guard_tests {
+pub(crate) mod runtime_migration_guard_tests {
     use std::{fs, path::Path};
 
     const DISALLOWED_RUNTIME_MARKERS: [&str; 8] = [

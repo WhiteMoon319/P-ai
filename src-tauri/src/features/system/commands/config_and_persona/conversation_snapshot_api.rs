@@ -1,119 +1,119 @@
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationPreviewMessage {
-    message_id: String,
-    role: String,
+pub(crate) struct ConversationPreviewMessage {
+    pub(crate) message_id: String,
+    pub(crate) role: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    speaker_agent_id: Option<String>,
+    pub(crate) speaker_agent_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    created_at: Option<String>,
+    pub(crate) created_at: Option<String>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    text_preview: String,
+    pub(crate) text_preview: String,
     #[serde(default)]
-    has_image: bool,
+    pub(crate) has_image: bool,
     #[serde(default)]
-    has_pdf: bool,
+    pub(crate) has_pdf: bool,
     #[serde(default)]
-    has_audio: bool,
+    pub(crate) has_audio: bool,
     #[serde(default)]
-    has_attachment: bool,
+    pub(crate) has_attachment: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct UnarchivedConversationSummary {
-    conversation_id: String,
-    title: String,
+pub(crate) struct UnarchivedConversationSummary {
+    pub(crate) conversation_id: String,
+    pub(crate) title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    summary_title: Option<String>,
-    updated_at: String,
+    pub(crate) summary_title: Option<String>,
+    pub(crate) updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    last_message_at: Option<String>,
-    message_count: usize,
-    body_message_count: usize,
-    body_text_length: usize,
-    has_assistant_reply: bool,
-    unread_count: usize,
-    agent_id: String,
-    department_id: String,
-    department_name: String,
+    pub(crate) last_message_at: Option<String>,
+    pub(crate) message_count: usize,
+    pub(crate) body_message_count: usize,
+    pub(crate) body_text_length: usize,
+    pub(crate) has_assistant_reply: bool,
+    pub(crate) unread_count: usize,
+    pub(crate) agent_id: String,
+    pub(crate) department_id: String,
+    pub(crate) department_name: String,
     #[serde(default)]
-    conversation_kind: String,
+    pub(crate) conversation_kind: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    child_conversation_ids: Vec<String>,
+    pub(crate) child_conversation_ids: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    child_conversations: Vec<ChildConversationSummary>,
+    pub(crate) child_conversations: Vec<ChildConversationSummary>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    parent_conversation_id: Option<String>,
+    pub(crate) parent_conversation_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    fork_message_cursor: Option<String>,
-    workspace_label: String,
+    pub(crate) fork_message_cursor: Option<String>,
+    pub(crate) workspace_label: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    workspace_root_path: Option<String>,
+    pub(crate) workspace_root_path: Option<String>,
     #[serde(default)]
-    is_active: bool,
+    pub(crate) is_active: bool,
     #[serde(default)]
-    is_system_notification_conversation: bool,
+    pub(crate) is_system_notification_conversation: bool,
     #[serde(default)]
-    is_pinned: bool,
+    pub(crate) is_pinned: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pin_index: Option<usize>,
+    pub(crate) pin_index: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    runtime_state: Option<MainSessionState>,
+    pub(crate) runtime_state: Option<MainSessionState>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    current_todo: Option<String>,
+    pub(crate) current_todo: Option<String>,
     #[serde(default)]
-    plan_mode_enabled: bool,
+    pub(crate) plan_mode_enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    auto_push_remote_contact_id: Option<String>,
+    pub(crate) auto_push_remote_contact_id: Option<String>,
     #[serde(default)]
-    detached_window_open: bool,
+    pub(crate) detached_window_open: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    detached_window_label: Option<String>,
-    state: ConversationListItemState,
+    pub(crate) detached_window_label: Option<String>,
+    pub(crate) state: ConversationListItemState,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    preview_messages: Vec<ConversationPreviewMessage>,
+    pub(crate) preview_messages: Vec<ConversationPreviewMessage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ChildConversationSummary {
-    conversation_id: String,
-    title: String,
-    status: String,
-    conversation_kind: String,
-    parent_conversation_id: Option<String>,
-    updated_at: String,
+pub(crate) struct ChildConversationSummary {
+    pub(crate) conversation_id: String,
+    pub(crate) title: String,
+    pub(crate) status: String,
+    pub(crate) conversation_kind: String,
+    pub(crate) parent_conversation_id: Option<String>,
+    pub(crate) updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationListItemState {
-    activity: String,
-    runtime_state: MainSessionState,
-    unread_count: usize,
-    open_state: String,
+pub(crate) struct ConversationListItemState {
+    pub(crate) activity: String,
+    pub(crate) runtime_state: MainSessionState,
+    pub(crate) unread_count: usize,
+    pub(crate) open_state: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    open_viewer_id: Option<String>,
+    pub(crate) open_viewer_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    current_viewer_id: Option<String>,
+    pub(crate) current_viewer_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    opened_by: Option<String>,
+    pub(crate) opened_by: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    disabled_reason: Option<String>,
+    pub(crate) disabled_reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    failed_message: Option<String>,
+    pub(crate) failed_message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    completed_at: Option<String>,
+    pub(crate) completed_at: Option<String>,
 }
 
-const DESKTOP_CHAT_VIEWER_ID: &str = "desktop:chat";
-const VSCODE_SIDEBAR_WINDOW_LABEL_PREFIX: &str = "vscode-sidebar:";
-const LEGACY_IDE_CHAT_SIDEBAR_WINDOW_LABEL_PREFIX: &str = "ide-chat-sidebar-";
-const CONVERSATION_PREVIEW_TEXT_CHAR_LIMIT: usize = 20;
+pub(crate) const DESKTOP_CHAT_VIEWER_ID: &str = "desktop:chat";
+pub(crate) const VSCODE_SIDEBAR_WINDOW_LABEL_PREFIX: &str = "vscode-sidebar:";
+pub(crate) const LEGACY_IDE_CHAT_SIDEBAR_WINDOW_LABEL_PREFIX: &str = "ide-chat-sidebar-";
+pub(crate) const CONVERSATION_PREVIEW_TEXT_CHAR_LIMIT: usize = 20;
 
-fn chat_viewer_id_for_window_label(label: &str) -> Option<String> {
+pub(crate) fn chat_viewer_id_for_window_label(label: &str) -> Option<String> {
     let window_label = label.trim();
     if window_label.is_empty() {
         return None;
@@ -136,7 +136,7 @@ fn chat_viewer_id_for_window_label(label: &str) -> Option<String> {
     Some(format!("desktop:window:{window_label}"))
 }
 
-fn opened_by_for_window_label(label: &str) -> String {
+pub(crate) fn opened_by_for_window_label(label: &str) -> String {
     let window_label = label.trim();
     if window_label == "chat" || window_label == "main" {
         "main".to_string()
@@ -149,7 +149,7 @@ fn opened_by_for_window_label(label: &str) -> String {
     }
 }
 
-fn conversation_current_todo_text(conversation: &Conversation) -> Option<String> {
+pub(crate) fn conversation_current_todo_text(conversation: &Conversation) -> Option<String> {
     conversation
         .current_todos
         .iter()
@@ -163,7 +163,7 @@ fn conversation_current_todo_text(conversation: &Conversation) -> Option<String>
         .filter(|value| !value.is_empty())
 }
 
-fn conversation_current_todo_text_from_items(
+pub(crate) fn conversation_current_todo_text_from_items(
     todos: &[ConversationTodoItem],
 ) -> Option<String> {
     todos.iter()
@@ -180,23 +180,23 @@ fn conversation_current_todo_text_from_items(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DelegateConversationSummary {
-    conversation_id: String,
-    title: String,
-    updated_at: String,
+pub(crate) struct DelegateConversationSummary {
+    pub(crate) conversation_id: String,
+    pub(crate) title: String,
+    pub(crate) updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    last_message_at: Option<String>,
-    message_count: usize,
-    agent_id: String,
+    pub(crate) last_message_at: Option<String>,
+    pub(crate) message_count: usize,
+    pub(crate) agent_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    delegate_id: Option<String>,
+    pub(crate) delegate_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    root_conversation_id: Option<String>,
+    pub(crate) root_conversation_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    archived_at: Option<String>,
+    pub(crate) archived_at: Option<String>,
 }
 
-fn conversation_preview_title(conversation: &Conversation) -> String {
+pub(crate) fn conversation_preview_title(conversation: &Conversation) -> String {
     let text = conversation
         .messages
         .iter()
@@ -235,7 +235,7 @@ fn conversation_preview_title(conversation: &Conversation) -> String {
     }
 }
 
-fn build_conversation_preview_text(message: &ChatMessage) -> String {
+pub(crate) fn build_conversation_preview_text(message: &ChatMessage) -> String {
     let text = message
         .parts
         .iter()
@@ -249,13 +249,13 @@ fn build_conversation_preview_text(message: &ChatMessage) -> String {
     truncate_conversation_preview_text(&clean_text(text.trim()))
 }
 
-fn truncate_conversation_preview_text(text: &str) -> String {
+pub(crate) fn truncate_conversation_preview_text(text: &str) -> String {
     text.chars()
         .take(CONVERSATION_PREVIEW_TEXT_CHAR_LIMIT)
         .collect()
 }
 
-fn conversation_message_has_attachment(message: &ChatMessage) -> bool {
+pub(crate) fn conversation_message_has_attachment(message: &ChatMessage) -> bool {
     message
         .provider_meta
         .as_ref()
@@ -265,14 +265,14 @@ fn conversation_message_has_attachment(message: &ChatMessage) -> bool {
         .unwrap_or(false)
 }
 
-fn build_conversation_preview_messages(
+pub(crate) fn build_conversation_preview_messages(
     conversation: &Conversation,
     limit: usize,
 ) -> Vec<ConversationPreviewMessage> {
     build_preview_messages_from_chat_messages(&conversation.messages, limit)
 }
 
-fn conversation_workspace_name_fallback(path_text: &str) -> String {
+pub(crate) fn conversation_workspace_name_fallback(path_text: &str) -> String {
     let normalized = path_text.trim().replace('\\', "/");
     normalized
         .trim_end_matches('/')
@@ -284,7 +284,7 @@ fn conversation_workspace_name_fallback(path_text: &str) -> String {
         .unwrap_or_else(|| path_text.trim().to_string())
 }
 
-fn conversation_default_workspace_summary_from_meta_view(
+pub(crate) fn conversation_default_workspace_summary_from_meta_view(
     state: &AppState,
     conversation_meta: &ConversationMetaView,
 ) -> (String, Option<String>) {
@@ -337,7 +337,7 @@ fn conversation_default_workspace_summary_from_meta_view(
     (String::new(), None)
 }
 
-fn resolved_foreground_department_id_for_conversation_meta_view(
+pub(crate) fn resolved_foreground_department_id_for_conversation_meta_view(
     config: &AppConfig,
     conversation_meta: &ConversationMetaView,
     is_main_conversation: bool,
@@ -355,7 +355,7 @@ fn resolved_foreground_department_id_for_conversation_meta_view(
         .unwrap_or_else(|| ASSISTANT_DEPARTMENT_ID.to_string())
 }
 
-fn build_preview_messages_from_chat_messages(
+pub(crate) fn build_preview_messages_from_chat_messages(
     messages: &[ChatMessage],
     limit: usize,
 ) -> Vec<ConversationPreviewMessage> {
@@ -420,7 +420,7 @@ fn build_preview_messages_from_chat_messages(
         .collect()
 }
 
-fn conversation_list_open_state(
+pub(crate) fn conversation_list_open_state(
     state: &AppState,
     conversation_id: &str,
 ) -> (String, Option<String>, Option<String>, Option<String>) {
@@ -458,7 +458,7 @@ fn conversation_list_open_state(
     }
 }
 
-fn conversation_list_activity_mark(
+pub(crate) fn conversation_list_activity_mark(
     state: &AppState,
     conversation_id: &str,
 ) -> Option<ConversationListActivityMark> {
@@ -469,7 +469,7 @@ fn conversation_list_activity_mark(
         .and_then(|marks| marks.get(conversation_id.trim()).cloned())
 }
 
-fn set_conversation_list_activity_mark(
+pub(crate) fn set_conversation_list_activity_mark(
     state: &AppState,
     conversation_id: &str,
     mark: ConversationListActivityMark,
@@ -479,13 +479,13 @@ fn set_conversation_list_activity_mark(
     }
 }
 
-fn clear_conversation_list_activity_mark(state: &AppState, conversation_id: &str) {
+pub(crate) fn clear_conversation_list_activity_mark(state: &AppState, conversation_id: &str) {
     if let Ok(mut marks) = state.conversation_list_activity_marks.lock() {
         marks.remove(conversation_id.trim());
     }
 }
 
-fn build_conversation_list_item_state(
+pub(crate) fn build_conversation_list_item_state(
     state: &AppState,
     conversation_id: &str,
     unread_count: usize,
@@ -524,7 +524,7 @@ fn build_conversation_list_item_state(
     }
 }
 
-fn build_unarchived_conversation_summary_from_meta_view(
+pub(crate) fn build_unarchived_conversation_summary_from_meta_view(
     state: &AppState,
     app_config: &AppConfig,
     main_conversation_id: &str,
@@ -645,7 +645,7 @@ fn build_unarchived_conversation_summary_from_meta_view(
     }
 }
 
-fn conversation_body_text_length(conversation: &Conversation) -> usize {
+pub(crate) fn conversation_body_text_length(conversation: &Conversation) -> usize {
     conversation
         .messages
         .iter()
@@ -664,7 +664,7 @@ fn conversation_body_text_length(conversation: &Conversation) -> usize {
         .sum()
 }
 
-fn conversation_body_message_count(conversation: &Conversation) -> usize {
+pub(crate) fn conversation_body_message_count(conversation: &Conversation) -> usize {
     conversation
         .messages
         .iter()
@@ -677,7 +677,7 @@ fn conversation_body_message_count(conversation: &Conversation) -> usize {
         .count()
 }
 
-fn unarchived_conversation_sort_key(summary: &UnarchivedConversationSummary) -> (&str, &str) {
+pub(crate) fn unarchived_conversation_sort_key(summary: &UnarchivedConversationSummary) -> (&str, &str) {
     (
         summary
             .last_message_at
@@ -687,7 +687,7 @@ fn unarchived_conversation_sort_key(summary: &UnarchivedConversationSummary) -> 
     )
 }
 
-fn sort_unarchived_conversation_summaries(
+pub(crate) fn sort_unarchived_conversation_summaries(
     summaries: Vec<UnarchivedConversationSummary>,
 ) -> Vec<UnarchivedConversationSummary> {
     let mut ordered = summaries;
@@ -717,7 +717,7 @@ fn sort_unarchived_conversation_summaries(
     ordered
 }
 
-fn delegate_conversation_summary_from_runtime_thread(
+pub(crate) fn delegate_conversation_summary_from_runtime_thread(
     thread: &DelegateRuntimeThread,
 ) -> DelegateConversationSummary {
     let last_message_at = thread
@@ -742,7 +742,7 @@ fn delegate_conversation_summary_from_runtime_thread(
     }
 }
 
-fn unarchived_conversation_runtime_state(
+pub(crate) fn unarchived_conversation_runtime_state(
     state: &AppState,
     conversation_id: &str,
 ) -> Option<MainSessionState> {
@@ -759,7 +759,7 @@ fn unarchived_conversation_runtime_state(
     }
 }
 
-fn ensure_unarchived_conversation_not_organizing(
+pub(crate) fn ensure_unarchived_conversation_not_organizing(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<(), String> {
@@ -772,38 +772,38 @@ fn ensure_unarchived_conversation_not_organizing(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ListUnarchivedConversationsChangedSinceInput {
+pub(crate) struct ListUnarchivedConversationsChangedSinceInput {
     #[serde(default)]
-    since: Option<String>,
+    pub(crate) since: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ListUnarchivedConversationsChangedSinceOutput {
-    changed: Vec<UnarchivedConversationSummary>,
+pub(crate) struct ListUnarchivedConversationsChangedSinceOutput {
+    pub(crate) changed: Vec<UnarchivedConversationSummary>,
     #[serde(default)]
-    deleted_ids: Vec<String>,
-    server_time: String,
+    pub(crate) deleted_ids: Vec<String>,
+    pub(crate) server_time: String,
 }
 
 #[derive(Debug, Default)]
-struct OverviewBroadcastWatermarkState {
-    conversation_times: std::collections::HashMap<String, String>,
-    removed_times: std::collections::HashMap<String, String>,
-    known_ids: std::collections::HashSet<String>,
-    known_ids_initialized: bool,
-    last_server_time: String,
+pub(crate) struct OverviewBroadcastWatermarkState {
+    pub(crate) conversation_times: std::collections::HashMap<String, String>,
+    pub(crate) removed_times: std::collections::HashMap<String, String>,
+    pub(crate) known_ids: std::collections::HashSet<String>,
+    pub(crate) known_ids_initialized: bool,
+    pub(crate) last_server_time: String,
 }
 
-static OVERVIEW_BROADCAST_WATERMARK_STATE: OnceLock<Mutex<OverviewBroadcastWatermarkState>> =
+pub(crate) static OVERVIEW_BROADCAST_WATERMARK_STATE: OnceLock<Mutex<OverviewBroadcastWatermarkState>> =
     OnceLock::new();
 
-fn overview_broadcast_watermark_state() -> &'static Mutex<OverviewBroadcastWatermarkState> {
+pub(crate) fn overview_broadcast_watermark_state() -> &'static Mutex<OverviewBroadcastWatermarkState> {
     OVERVIEW_BROADCAST_WATERMARK_STATE
         .get_or_init(|| Mutex::new(OverviewBroadcastWatermarkState::default()))
 }
 
-fn overview_next_server_time_locked(state: &mut OverviewBroadcastWatermarkState) -> String {
+pub(crate) fn overview_next_server_time_locked(state: &mut OverviewBroadcastWatermarkState) -> String {
     let now = now_iso();
     let next = if state.last_server_time.trim().is_empty() || now > state.last_server_time {
         now
@@ -817,7 +817,7 @@ fn overview_next_server_time_locked(state: &mut OverviewBroadcastWatermarkState)
     next
 }
 
-fn overview_reserve_server_time() -> String {
+pub(crate) fn overview_reserve_server_time() -> String {
     match overview_broadcast_watermark_state().lock() {
         Ok(mut guard) => overview_next_server_time_locked(&mut guard),
         Err(err) => {
@@ -830,7 +830,7 @@ fn overview_reserve_server_time() -> String {
     }
 }
 
-fn overview_remember_full_list_at(summaries: &[UnarchivedConversationSummary], server_time: &str) {
+pub(crate) fn overview_remember_full_list_at(summaries: &[UnarchivedConversationSummary], server_time: &str) {
     let ids = summaries
         .iter()
         .map(|item| item.conversation_id.trim().to_string())
@@ -856,7 +856,7 @@ fn overview_remember_full_list_at(summaries: &[UnarchivedConversationSummary], s
     }
 }
 
-fn overview_register_item_watermark(conversation_id: &str) -> String {
+pub(crate) fn overview_register_item_watermark(conversation_id: &str) -> String {
     let cid = conversation_id.trim();
     if cid.is_empty() {
         return overview_reserve_server_time();
@@ -882,7 +882,7 @@ fn overview_register_item_watermark(conversation_id: &str) -> String {
     }
 }
 
-fn overview_register_item_broadcast(
+pub(crate) fn overview_register_item_broadcast(
     state: &AppState,
     payload: &UnarchivedConversationOverviewItemUpdatedPayload,
 ) {
@@ -921,7 +921,7 @@ fn overview_register_item_broadcast(
     }
 }
 
-fn overview_register_missing_item(conversation_id: &str) {
+pub(crate) fn overview_register_missing_item(conversation_id: &str) {
     let cid = conversation_id.trim();
     if cid.is_empty() {
         return;
@@ -946,7 +946,7 @@ fn overview_register_missing_item(conversation_id: &str) {
     }
 }
 
-fn overview_register_full_broadcast(
+pub(crate) fn overview_register_full_broadcast(
     summaries: &[UnarchivedConversationSummary],
 ) -> String {
     let current_ids = summaries
@@ -990,7 +990,7 @@ fn overview_register_full_broadcast(
     }
 }
 
-fn overview_watermark_changes_since(
+pub(crate) fn overview_watermark_changes_since(
     since: &str,
 ) -> (Vec<String>, Vec<String>, String) {
     match overview_broadcast_watermark_state().lock() {
@@ -1020,7 +1020,7 @@ fn overview_watermark_changes_since(
     }
 }
 
-fn overview_updated_payload_with_server_time(
+pub(crate) fn overview_updated_payload_with_server_time(
     payload: &UnarchivedConversationOverviewUpdatedPayload,
     server_time: &str,
 ) -> serde_json::Value {
@@ -1035,7 +1035,7 @@ fn overview_updated_payload_with_server_time(
 }
 
 
-fn list_unarchived_conversations_changed_since_blocking(
+pub(crate) fn list_unarchived_conversations_changed_since_blocking(
     state: &AppState,
     input: &ListUnarchivedConversationsChangedSinceInput,
 ) -> Result<ListUnarchivedConversationsChangedSinceOutput, String> {
@@ -1084,7 +1084,7 @@ fn list_unarchived_conversations_changed_since_blocking(
     })
 }
 
-fn list_unarchived_conversations_blocking(
+pub(crate) fn list_unarchived_conversations_blocking(
     state: &AppState,
 ) -> Result<Vec<UnarchivedConversationSummary>, String> {
     let summaries = conversation_service_v2()
@@ -1120,210 +1120,210 @@ fn list_unarchived_conversations_blocking(
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SetActiveUnarchivedConversationInput {
+pub(crate) struct SetActiveUnarchivedConversationInput {
     #[serde(default)]
-    conversation_id: Option<String>,
+    pub(crate) conversation_id: Option<String>,
     #[serde(default)]
-    agent_id: Option<String>,
+    pub(crate) agent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SetActiveUnarchivedConversationOutput {
-    conversation_id: String,
+pub(crate) struct SetActiveUnarchivedConversationOutput {
+    pub(crate) conversation_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SwitchActiveConversationSnapshotInput {
+pub(crate) struct SwitchActiveConversationSnapshotInput {
     #[serde(default)]
-    conversation_id: Option<String>,
+    pub(crate) conversation_id: Option<String>,
     #[serde(default)]
-    agent_id: Option<String>,
+    pub(crate) agent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ForegroundConversationLightSnapshotInput {
+pub(crate) struct ForegroundConversationLightSnapshotInput {
     #[serde(default)]
-    conversation_id: Option<String>,
+    pub(crate) conversation_id: Option<String>,
     #[serde(default)]
-    agent_id: Option<String>,
+    pub(crate) agent_id: Option<String>,
     #[serde(default)]
-    limit: Option<usize>,
+    pub(crate) limit: Option<usize>,
     #[serde(default)]
-    resume_projection: bool,
+    pub(crate) resume_projection: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SwitchActiveConversationSnapshotOutput {
-    conversation_id: String,
-    messages: Vec<ChatMessage>,
-    has_more_history: bool,
+pub(crate) struct SwitchActiveConversationSnapshotOutput {
+    pub(crate) conversation_id: String,
+    pub(crate) messages: Vec<ChatMessage>,
+    pub(crate) has_more_history: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    runtime_state: Option<MainSessionState>,
+    pub(crate) runtime_state: Option<MainSessionState>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    current_todo: Option<String>,
+    pub(crate) current_todo: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    current_todos: Vec<ConversationTodoItem>,
+    pub(crate) current_todos: Vec<ConversationTodoItem>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    preferred_api_config_id: Option<String>,
+    pub(crate) preferred_api_config_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    active_goal: Option<ConversationGoalState>,
-    unarchived_conversations: Vec<UnarchivedConversationSummary>,
+    pub(crate) active_goal: Option<ConversationGoalState>,
+    pub(crate) unarchived_conversations: Vec<UnarchivedConversationSummary>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ForegroundConversationLightSnapshotOutput {
-    conversation_id: String,
-    messages: Vec<ChatMessage>,
+pub(crate) struct ForegroundConversationLightSnapshotOutput {
+    pub(crate) conversation_id: String,
+    pub(crate) messages: Vec<ChatMessage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    last_message_id: Option<String>,
-    has_more_history: bool,
+    pub(crate) last_message_id: Option<String>,
+    pub(crate) has_more_history: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    runtime_state: Option<MainSessionState>,
+    pub(crate) runtime_state: Option<MainSessionState>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    current_todo: Option<String>,
+    pub(crate) current_todo: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    current_todos: Vec<ConversationTodoItem>,
+    pub(crate) current_todos: Vec<ConversationTodoItem>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    preferred_api_config_id: Option<String>,
+    pub(crate) preferred_api_config_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    active_goal: Option<ConversationGoalState>,
+    pub(crate) active_goal: Option<ConversationGoalState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    conversation: Option<UnarchivedConversationSummary>,
+    pub(crate) conversation: Option<UnarchivedConversationSummary>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    stream_cache: Option<ConversationStreamRuntimeCacheSnapshot>,
+    pub(crate) stream_cache: Option<ConversationStreamRuntimeCacheSnapshot>,
     #[serde(default)]
-    should_bind_stream: bool,
+    pub(crate) should_bind_stream: bool,
     #[serde(default)]
-    resume_projection_authoritative: bool,
+    pub(crate) resume_projection_authoritative: bool,
 }
 
 #[derive(Debug, Clone)]
-struct ForegroundConversationSnapshotCore {
-    conversation_id: String,
-    messages: Vec<ChatMessage>,
-    last_message_id: Option<String>,
-    has_more_history: bool,
-    runtime_state: Option<MainSessionState>,
-    current_todo: Option<String>,
-    current_todos: Vec<ConversationTodoItem>,
-    preferred_api_config_id: Option<String>,
-    active_goal: Option<ConversationGoalState>,
+pub(crate) struct ForegroundConversationSnapshotCore {
+    pub(crate) conversation_id: String,
+    pub(crate) messages: Vec<ChatMessage>,
+    pub(crate) last_message_id: Option<String>,
+    pub(crate) has_more_history: bool,
+    pub(crate) runtime_state: Option<MainSessionState>,
+    pub(crate) current_todo: Option<String>,
+    pub(crate) current_todos: Vec<ConversationTodoItem>,
+    pub(crate) preferred_api_config_id: Option<String>,
+    pub(crate) active_goal: Option<ConversationGoalState>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ForegroundConversationFreshnessInput {
+pub(crate) struct ForegroundConversationFreshnessInput {
     #[serde(default)]
-    conversation_id: Option<String>,
+    pub(crate) conversation_id: Option<String>,
     #[serde(default)]
-    agent_id: Option<String>,
+    pub(crate) agent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ForegroundConversationFreshnessOutput {
-    conversation_id: String,
+pub(crate) struct ForegroundConversationFreshnessOutput {
+    pub(crate) conversation_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    last_message_id: Option<String>,
+    pub(crate) last_message_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    updated_at: Option<String>,
+    pub(crate) updated_at: Option<String>,
 }
 
-const DEFAULT_FOREGROUND_SNAPSHOT_RECENT_LIMIT: usize = 4;
+pub(crate) const DEFAULT_FOREGROUND_SNAPSHOT_RECENT_LIMIT: usize = 4;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SetConversationPlanModeInput {
-    conversation_id: String,
-    plan_mode_enabled: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct SetConversationPlanModeOutput {
-    conversation_id: String,
-    plan_mode_enabled: bool,
+pub(crate) struct SetConversationPlanModeInput {
+    pub(crate) conversation_id: String,
+    pub(crate) plan_mode_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SetConversationPreferredModelInput {
-    conversation_id: String,
+pub(crate) struct SetConversationPlanModeOutput {
+    pub(crate) conversation_id: String,
+    pub(crate) plan_mode_enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SetConversationPreferredModelInput {
+    pub(crate) conversation_id: String,
     #[serde(default)]
-    preferred_api_config_id: Option<String>,
+    pub(crate) preferred_api_config_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SetConversationPreferredModelOutput {
-    conversation_id: String,
+pub(crate) struct SetConversationPreferredModelOutput {
+    pub(crate) conversation_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    preferred_api_config_id: Option<String>,
+    pub(crate) preferred_api_config_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SetConversationAutoPushRemoteContactInput {
-    conversation_id: String,
+pub(crate) struct SetConversationAutoPushRemoteContactInput {
+    pub(crate) conversation_id: String,
     #[serde(default)]
-    remote_contact_id: Option<String>,
+    pub(crate) remote_contact_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SetConversationAutoPushRemoteContactOutput {
-    conversation_id: String,
+pub(crate) struct SetConversationAutoPushRemoteContactOutput {
+    pub(crate) conversation_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    remote_contact_id: Option<String>,
+    pub(crate) remote_contact_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct UnarchivedConversationOverviewUpdatedPayload {
-    unarchived_conversations: Vec<UnarchivedConversationSummary>,
+pub(crate) struct UnarchivedConversationOverviewUpdatedPayload {
+    pub(crate) unarchived_conversations: Vec<UnarchivedConversationSummary>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    preferred_conversation_id: Option<String>,
+    pub(crate) preferred_conversation_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct UnarchivedConversationOverviewItemUpdatedPayload {
-    conversation: UnarchivedConversationSummary,
-    server_time: String,
+pub(crate) struct UnarchivedConversationOverviewItemUpdatedPayload {
+    pub(crate) conversation: UnarchivedConversationSummary,
+    pub(crate) server_time: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationTodosUpdatedPayload {
-    conversation_id: String,
+pub(crate) struct ConversationTodosUpdatedPayload {
+    pub(crate) conversation_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    current_todo: Option<String>,
+    pub(crate) current_todo: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    current_todos: Vec<ConversationTodoItem>,
+    pub(crate) current_todos: Vec<ConversationTodoItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationPinUpdatedPayload {
-    conversation_id: String,
-    is_pinned: bool,
+pub(crate) struct ConversationPinUpdatedPayload {
+    pub(crate) conversation_id: String,
+    pub(crate) is_pinned: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pin_index: Option<usize>,
+    pub(crate) pin_index: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationRuntimeStateUpdatedPayload {
-    conversation_id: String,
-    runtime_state: MainSessionState,
+pub(crate) struct ConversationRuntimeStateUpdatedPayload {
+    pub(crate) conversation_id: String,
+    pub(crate) runtime_state: MainSessionState,
 }
 
-fn emit_unarchived_conversation_overview_updated_payload(
+pub(crate) fn emit_unarchived_conversation_overview_updated_payload(
     state: &AppState,
     payload: &UnarchivedConversationOverviewUpdatedPayload,
 ) {
@@ -1367,14 +1367,14 @@ fn emit_unarchived_conversation_overview_updated_payload(
     ));
 }
 
-fn emit_unarchived_conversation_overview_item_updated_payload(
+pub(crate) fn emit_unarchived_conversation_overview_item_updated_payload(
     state: &AppState,
     payload: &UnarchivedConversationOverviewItemUpdatedPayload,
 ) {
     overview_register_item_broadcast(state, payload);
 }
 
-fn emit_unarchived_conversation_overview_item_updated_from_state(
+pub(crate) fn emit_unarchived_conversation_overview_item_updated_from_state(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<bool, String> {
@@ -1401,7 +1401,7 @@ fn emit_unarchived_conversation_overview_item_updated_from_state(
     Ok(true)
 }
 
-fn emit_conversation_todos_updated_payload(
+pub(crate) fn emit_conversation_todos_updated_payload(
     state: &AppState,
     payload: &ConversationTodosUpdatedPayload,
 ) {
@@ -1422,7 +1422,7 @@ fn emit_conversation_todos_updated_payload(
     }
 }
 
-fn emit_conversation_pin_updated_payload(
+pub(crate) fn emit_conversation_pin_updated_payload(
     state: &AppState,
     payload: &ConversationPinUpdatedPayload,
 ) {
@@ -1442,7 +1442,7 @@ fn emit_conversation_pin_updated_payload(
     }
 }
 
-fn emit_conversation_runtime_state_updated_payload(
+pub(crate) fn emit_conversation_runtime_state_updated_payload(
     state: &AppState,
     payload: &ConversationRuntimeStateUpdatedPayload,
 ) {
@@ -1483,7 +1483,7 @@ fn emit_conversation_runtime_state_updated_payload(
     ));
 }
 
-fn normalize_conversation_todos(
+pub(crate) fn normalize_conversation_todos(
     todos: Vec<ConversationTodoItem>,
 ) -> Vec<ConversationTodoItem> {
     todos
@@ -1502,7 +1502,7 @@ fn normalize_conversation_todos(
         .collect()
 }
 
-fn update_conversation_todos_and_emit(
+pub(crate) fn update_conversation_todos_and_emit(
     state: &AppState,
     conversation_id: &str,
     todos: Vec<ConversationTodoItem>,
@@ -1554,7 +1554,7 @@ fn update_conversation_todos_and_emit(
     Ok(())
 }
 
-fn emit_unarchived_conversation_overview_updated_from_state(state: &AppState) -> Result<(), String> {
+pub(crate) fn emit_unarchived_conversation_overview_updated_from_state(state: &AppState) -> Result<(), String> {
     let total_started_at = std::time::Instant::now();
     let payload_started_at = std::time::Instant::now();
     let payload = conversation_service_v2().refresh_unarchived_conversation_overview(state)?;

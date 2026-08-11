@@ -1,14 +1,14 @@
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
-struct VllmRerankProvider {
-    base_url: String,
-    api_key: Option<String>,
-    model: String,
+pub(crate) struct VllmRerankProvider {
+    pub(crate) base_url: String,
+    pub(crate) api_key: Option<String>,
+    pub(crate) model: String,
 }
 
 impl VllmRerankProvider {
     #[allow(dead_code)]
-    fn endpoint_url(&self) -> String {
+    pub(crate) fn endpoint_url(&self) -> String {
         let base = self.base_url.trim().trim_end_matches('/');
         let lower = base.to_ascii_lowercase();
         if lower.ends_with("/v1/rerank") || lower.ends_with("/rerank") {

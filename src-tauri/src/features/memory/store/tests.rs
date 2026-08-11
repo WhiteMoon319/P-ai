@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod memory_store_tests {
+pub(crate) mod memory_store_tests {
     use super::*;
 
     fn temp_data_path(name: &str) -> PathBuf {

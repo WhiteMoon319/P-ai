@@ -1,3 +1,4 @@
+use std::pin::Pin;
 // ========== MCP over SSE（legacy HTTP+SSE transport） ==========
 //
 // 协议流程（知乎等 SSE MCP 服务）：
@@ -10,10 +11,10 @@ use std::task::{Context, Poll};
 use futures_util::{Sink, Stream};
 use rmcp::model::{ClientJsonRpcMessage, ServerJsonRpcMessage};
 
-const SSE_ENDPOINT_WAIT_TIMEOUT_SECS: u64 = 30;
+pub(crate) const SSE_ENDPOINT_WAIT_TIMEOUT_SECS: u64 = 30;
 
 #[derive(Debug)]
-struct SseClientError(String);
+pub(crate) struct SseClientError(String);
 
 impl std::fmt::Display for SseClientError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -23,11 +24,11 @@ impl std::fmt::Display for SseClientError {
 
 impl std::error::Error for SseClientError {}
 
-fn sse_client_error(text: impl Into<String>) -> SseClientError {
+pub(crate) fn sse_client_error(text: impl Into<String>) -> SseClientError {
     SseClientError(text.into())
 }
 
-fn build_sse_http_headers(parsed: &ParsedMcpServerDefinition) -> Result<reqwest::header::HeaderMap, String> {
+pub(crate) fn build_sse_http_headers(parsed: &ParsedMcpServerDefinition) -> Result<reqwest::header::HeaderMap, String> {
     let mut headers = reqwest::header::HeaderMap::new();
     for (k, v) in &parsed.http_headers {
         let name = reqwest::header::HeaderName::from_bytes(k.as_bytes())
@@ -71,7 +72,7 @@ fn build_sse_http_headers(parsed: &ParsedMcpServerDefinition) -> Result<reqwest:
 }
 
 /// 将 endpoint 事件返回的 message 地址解析为绝对 URL
-fn resolve_message_url(sse_url: &str, endpoint: &str) -> Result<String, String> {
+pub(crate) fn resolve_message_url(sse_url: &str, endpoint: &str) -> Result<String, String> {
     let endpoint = endpoint.trim();
     if endpoint.is_empty() {
         return Err("endpoint 事件返回空 message 地址".to_string());
@@ -88,8 +89,8 @@ fn resolve_message_url(sse_url: &str, endpoint: &str) -> Result<String, String> 
 }
 
 /// Sink 侧：JSON-RPC 消息经后台任务 POST 到 message 地址
-struct SsePostSink {
-    tx: tokio::sync::mpsc::UnboundedSender<serde_json::Value>,
+pub(crate) struct SsePostSink {
+    pub(crate) tx: tokio::sync::mpsc::UnboundedSender<serde_json::Value>,
 }
 
 impl Sink<ClientJsonRpcMessage> for SsePostSink {
@@ -116,8 +117,8 @@ impl Sink<ClientJsonRpcMessage> for SsePostSink {
 }
 
 /// Stream 侧：从 SSE 通道读取 `message` 事件并解析为 JSON-RPC 响应
-struct SseMessageStream {
-    inner: Pin<
+pub(crate) struct SseMessageStream {
+    pub(crate) inner: Pin<
         Box<dyn Stream<Item = Result<sse_stream::Sse, sse_stream::Error>> + Send>,
     >,
 }
@@ -157,7 +158,7 @@ impl Stream for SseMessageStream {
 }
 
 /// 连接 SSE 端点并等待 endpoint 事件，返回 (sink, stream) 供 rmcp serve
-async fn connect_sse_transport(
+pub(crate) async fn connect_sse_transport(
     parsed: &ParsedMcpServerDefinition,
 ) -> Result<(SsePostSink, SseMessageStream), String> {
     let sse_url = parsed
@@ -170,7 +171,7 @@ async fn connect_sse_transport(
         .timeout(std::time::Duration::from_secs(MCP_REQUEST_TIMEOUT_SECS));
     #[cfg(target_os = "android")]
     {
-        client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+        client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)?;
     }
     let client = client_builder
         .build()

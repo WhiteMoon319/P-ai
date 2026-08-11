@@ -1,61 +1,61 @@
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ExportArchiveToFileInput {
-    archive_id: String,
-    format: String,
+pub(crate) struct ExportArchiveToFileInput {
+    pub(crate) archive_id: String,
+    pub(crate) format: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ExportArchiveFileResult {
-    path: String,
-    archive_id: String,
-    format: String,
+pub(crate) struct ExportArchiveFileResult {
+    pub(crate) path: String,
+    pub(crate) archive_id: String,
+    pub(crate) format: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ArchiveExportPayload {
-    version: u32,
-    exported_at: String,
-    archive: ConversationArchive,
+pub(crate) struct ArchiveExportPayload {
+    pub(crate) version: u32,
+    pub(crate) exported_at: String,
+    pub(crate) archive: ConversationArchive,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ImportArchivesFromJsonInput {
-    payload_json: String,
+pub(crate) struct ImportArchivesFromJsonInput {
+    pub(crate) payload_json: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ImportArchivesResult {
-    imported_count: usize,
-    replaced_count: usize,
-    skipped_count: usize,
-    total_count: usize,
-    selected_archive_id: Option<String>,
+pub(crate) struct ImportArchivesResult {
+    pub(crate) imported_count: usize,
+    pub(crate) replaced_count: usize,
+    pub(crate) skipped_count: usize,
+    pub(crate) total_count: usize,
+    pub(crate) selected_archive_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ArchiveImportBatchPayload {
-    archives: Vec<ConversationArchive>,
+pub(crate) struct ArchiveImportBatchPayload {
+    pub(crate) archives: Vec<ConversationArchive>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ArchiveImportAppDataPayload {
-    archived_conversations: Vec<ConversationArchive>,
+pub(crate) struct ArchiveImportAppDataPayload {
+    pub(crate) archived_conversations: Vec<ConversationArchive>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ArchiveImportConversationsPayload {
-    conversations: Vec<Conversation>,
+pub(crate) struct ArchiveImportConversationsPayload {
+    pub(crate) conversations: Vec<Conversation>,
 }
 
-fn parse_archives_for_import(raw: &str) -> Result<Vec<ConversationArchive>, String> {
+pub(crate) fn parse_archives_for_import(raw: &str) -> Result<Vec<ConversationArchive>, String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err("Archive payload is empty".to_string());
@@ -95,7 +95,7 @@ fn parse_archives_for_import(raw: &str) -> Result<Vec<ConversationArchive>, Stri
     Err("Invalid archive payload. Expected exported archive JSON.".to_string())
 }
 
-fn normalize_archive_for_import(archive: &mut ConversationArchive, data_path: &PathBuf) {
+pub(crate) fn normalize_archive_for_import(archive: &mut ConversationArchive, data_path: &PathBuf) {
     if archive.archive_id.trim().is_empty() {
         archive.archive_id = Uuid::new_v4().to_string();
     }
@@ -209,7 +209,7 @@ fn normalize_archive_for_import(archive: &mut ConversationArchive, data_path: &P
     }
 }
 
-fn archive_message_plain_text(message: &ChatMessage) -> String {
+pub(crate) fn archive_message_plain_text(message: &ChatMessage) -> String {
     message
         .parts
         .iter()
@@ -222,7 +222,7 @@ fn archive_message_plain_text(message: &ChatMessage) -> String {
         .join("\n")
 }
 
-fn archive_message_image_count(message: &ChatMessage) -> usize {
+pub(crate) fn archive_message_image_count(message: &ChatMessage) -> usize {
     message
         .parts
         .iter()
@@ -233,7 +233,7 @@ fn archive_message_image_count(message: &ChatMessage) -> usize {
         .count()
 }
 
-fn archive_message_audio_count(message: &ChatMessage) -> usize {
+pub(crate) fn archive_message_audio_count(message: &ChatMessage) -> usize {
     message
         .parts
         .iter()
@@ -244,11 +244,11 @@ fn archive_message_audio_count(message: &ChatMessage) -> usize {
         .count()
 }
 
-fn tool_call_markdown_lines(message: &ChatMessage) -> Vec<String> {
+pub(crate) fn tool_call_markdown_lines(message: &ChatMessage) -> Vec<String> {
     tool_history_markdown_lines_from_message(message)
 }
 
-fn archive_message_markdown_block(message: &ChatMessage) -> String {
+pub(crate) fn archive_message_markdown_block(message: &ChatMessage) -> String {
     let role = match message.role.as_str() {
         "user" => "用户",
         "assistant" => "助手",
@@ -282,7 +282,7 @@ fn archive_message_markdown_block(message: &ChatMessage) -> String {
     lines.join("\n")
 }
 
-fn build_archive_markdown(archive: &ConversationArchive) -> String {
+pub(crate) fn build_archive_markdown(archive: &ConversationArchive) -> String {
     let mut blocks = Vec::<String>::new();
     blocks.push("# 对话归档".to_string());
     blocks.push(format!("- 标题: {}", archive.source_conversation.title));
@@ -307,7 +307,7 @@ fn build_archive_markdown(archive: &ConversationArchive) -> String {
 
 
 
-fn import_archives_from_json_inner(
+pub(crate) fn import_archives_from_json_inner(
     input: ImportArchivesFromJsonInput,
     state: &AppState,
 ) -> Result<ImportArchivesResult, String> {

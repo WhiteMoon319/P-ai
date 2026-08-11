@@ -1,15 +1,40 @@
-const REMOTE_IM_MAINTENANCE_INTERVAL_HOURS: i64 = 24;
+use std::{
+    fs,
+    io::Cursor,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+};
 
-fn remote_im_maintenance_running_keys() -> &'static Mutex<std::collections::HashSet<String>> {
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use directories::ProjectDirs;
+use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
+use image::ImageFormat;
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use rmcp::{schemars, ServiceExt};
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
+use uuid::Uuid;
+
+// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
+
+use std::collections::{HashSet};
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use super::*;
+
+pub(crate) const REMOTE_IM_MAINTENANCE_INTERVAL_HOURS: i64 = 24;
+
+pub(crate) fn remote_im_maintenance_running_keys() -> &'static Mutex<std::collections::HashSet<String>> {
     static KEYS: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
     KEYS.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
 }
 
-fn remote_im_maintenance_key(state: &AppState) -> String {
+pub(crate) fn remote_im_maintenance_key(state: &AppState) -> String {
     state.data_path.to_string_lossy().to_string()
 }
 
-fn remote_im_maintenance_last_started_at(data_path: &PathBuf) -> Result<Option<OffsetDateTime>, String> {
+pub(crate) fn remote_im_maintenance_last_started_at(data_path: &PathBuf) -> Result<Option<OffsetDateTime>, String> {
     let conn = delegate_store_open(data_path)?;
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS remote_im_maintenance_state (state_key TEXT PRIMARY KEY, value TEXT NOT NULL);",
@@ -23,7 +48,7 @@ fn remote_im_maintenance_last_started_at(data_path: &PathBuf) -> Result<Option<O
     Ok(value.and_then(|raw| OffsetDateTime::parse(raw.trim(), &Rfc3339).ok()))
 }
 
-fn remote_im_maintenance_record_started_at(data_path: &PathBuf, started_at: &str) -> Result<(), String> {
+pub(crate) fn remote_im_maintenance_record_started_at(data_path: &PathBuf, started_at: &str) -> Result<(), String> {
     let conn = delegate_store_open(data_path)?;
     conn.execute(
         "INSERT INTO remote_im_maintenance_state (state_key, value) VALUES ('last_started_at', ?1)
@@ -34,13 +59,13 @@ fn remote_im_maintenance_record_started_at(data_path: &PathBuf, started_at: &str
     Ok(())
 }
 
-fn remote_im_maintenance_is_expired_at(value: &str, cutoff: OffsetDateTime) -> bool {
+pub(crate) fn remote_im_maintenance_is_expired_at(value: &str, cutoff: OffsetDateTime) -> bool {
     OffsetDateTime::parse(value.trim(), &Rfc3339)
         .map(|at| at < cutoff)
         .unwrap_or(false)
 }
 
-fn remote_im_request_24h_maintenance(state: AppState) {
+pub(crate) fn remote_im_request_24h_maintenance(state: AppState) {
     let key = remote_im_maintenance_key(&state);
     let should_spawn = remote_im_maintenance_running_keys().lock()
         .map(|mut keys| keys.insert(key.clone()))
@@ -62,7 +87,7 @@ fn remote_im_request_24h_maintenance(state: AppState) {
     });
 }
 
-fn remote_im_request_24h_maintenance_for_conversation(state: AppState, conversation_id: &str) {
+pub(crate) fn remote_im_request_24h_maintenance_for_conversation(state: AppState, conversation_id: &str) {
     let is_remote_contact = conversation_service_v2()
         .get_conversation_meta(&state, conversation_id.trim())
         .map(|meta| meta.is_remote_im_contact)
@@ -72,7 +97,7 @@ fn remote_im_request_24h_maintenance_for_conversation(state: AppState, conversat
     }
 }
 
-fn remote_im_run_24h_maintenance(state: &AppState) -> Result<(), String> {
+pub(crate) fn remote_im_run_24h_maintenance(state: &AppState) -> Result<(), String> {
     let now = OffsetDateTime::now_utc();
     if let Some(last_started) = remote_im_maintenance_last_started_at(&state.data_path)? {
         if now - last_started < time::Duration::hours(REMOTE_IM_MAINTENANCE_INTERVAL_HOURS) {
@@ -130,7 +155,7 @@ fn remote_im_run_24h_maintenance(state: &AppState) -> Result<(), String> {
 }
 
 #[cfg(test)]
-mod remote_im_maintenance_tests {
+pub(crate) mod remote_im_maintenance_tests {
     use super::*;
 
     #[test]

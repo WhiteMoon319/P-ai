@@ -1,10 +1,10 @@
-const DELEGATE_CONVERSATIONS_DIR_NAME: &str = "delegate-conversations";
+pub(crate) const DELEGATE_CONVERSATIONS_DIR_NAME: &str = "delegate-conversations";
 
-fn delegate_conversation_store_dir(data_path: &PathBuf) -> PathBuf {
+pub(crate) fn delegate_conversation_store_dir(data_path: &PathBuf) -> PathBuf {
     app_root_from_data_path(data_path).join(DELEGATE_CONVERSATIONS_DIR_NAME)
 }
 
-fn validate_delegate_conversation_id(conversation_id: &str) -> Result<(), String> {
+pub(crate) fn validate_delegate_conversation_id(conversation_id: &str) -> Result<(), String> {
     if conversation_id.trim().is_empty() {
         return Err("委托会话 ID 不能为空".to_string());
     }
@@ -43,7 +43,7 @@ fn validate_delegate_conversation_id(conversation_id: &str) -> Result<(), String
     Ok(())
 }
 
-fn delegate_conversation_message_store_paths(
+pub(crate) fn delegate_conversation_message_store_paths(
     data_path: &PathBuf,
     conversation_id: &str,
 ) -> Result<message_store::MessageStorePaths, String> {
@@ -58,7 +58,7 @@ fn delegate_conversation_message_store_paths(
     )
 }
 
-fn validate_delegate_conversation_record(
+pub(crate) fn validate_delegate_conversation_record(
     conversation: &Conversation,
     requested_conversation_id: &str,
 ) -> Result<(), String> {
@@ -77,7 +77,7 @@ fn validate_delegate_conversation_record(
     Ok(())
 }
 
-fn validate_delegate_conversation_for_write(conversation: &Conversation) -> Result<(), String> {
+pub(crate) fn validate_delegate_conversation_for_write(conversation: &Conversation) -> Result<(), String> {
     validate_delegate_conversation_id(&conversation.id)?;
     validate_delegate_conversation_record(conversation, &conversation.id)?;
     if conversation
@@ -95,7 +95,7 @@ fn validate_delegate_conversation_for_write(conversation: &Conversation) -> Resu
     Ok(())
 }
 
-fn validate_delegate_conversation_meta(
+pub(crate) fn validate_delegate_conversation_meta(
     meta: &message_store::ConversationShardMeta,
     requested_conversation_id: &str,
 ) -> Result<(), String> {
@@ -116,7 +116,7 @@ fn validate_delegate_conversation_meta(
     Ok(())
 }
 
-fn delegate_conversation_store_read_ready_meta(
+pub(crate) fn delegate_conversation_store_read_ready_meta(
     paths: &message_store::MessageStorePaths,
     conversation_id: &str,
 ) -> Result<Option<message_store::ConversationShardMeta>, String> {
@@ -127,7 +127,7 @@ fn delegate_conversation_store_read_ready_meta(
     Ok(Some(meta))
 }
 
-fn delegate_conversation_store_read(
+pub(crate) fn delegate_conversation_store_read(
     data_path: &PathBuf,
     conversation_id: &str,
 ) -> Result<Option<Conversation>, String> {
@@ -143,7 +143,7 @@ fn delegate_conversation_store_read(
     }
 }
 
-fn delegate_conversation_store_write(
+pub(crate) fn delegate_conversation_store_write(
     data_path: &PathBuf,
     conversation: &Conversation,
 ) -> Result<(), String> {
@@ -167,7 +167,7 @@ fn delegate_conversation_store_write(
     Ok(())
 }
 
-fn delegate_conversation_store_delete(
+pub(crate) fn delegate_conversation_store_delete(
     data_path: &PathBuf,
     conversation_id: &str,
 ) -> Result<bool, String> {
@@ -177,7 +177,7 @@ fn delegate_conversation_store_delete(
     Ok(deleted || deleted_snapshot)
 }
 
-fn delegate_conversation_store_collect_ids(
+pub(crate) fn delegate_conversation_store_collect_ids(
     data_path: &PathBuf,
 ) -> Result<std::collections::BTreeSet<String>, String> {
     let dir = delegate_conversation_store_dir(data_path);
@@ -209,7 +209,7 @@ fn delegate_conversation_store_collect_ids(
     Ok(ids)
 }
 
-fn delegate_conversation_store_list(data_path: &PathBuf) -> Result<Vec<Conversation>, String> {
+pub(crate) fn delegate_conversation_store_list(data_path: &PathBuf) -> Result<Vec<Conversation>, String> {
     let mut conversations = Vec::new();
     for conversation_id in delegate_conversation_store_collect_ids(data_path)? {
         if let Some(conversation) = delegate_conversation_store_read(data_path, &conversation_id)? {
@@ -219,7 +219,7 @@ fn delegate_conversation_store_list(data_path: &PathBuf) -> Result<Vec<Conversat
     Ok(conversations)
 }
 
-fn delegate_conversation_store_read_block_page(
+pub(crate) fn delegate_conversation_store_read_block_page(
     data_path: &PathBuf,
     conversation_id: &str,
     requested_block_id: Option<u32>,
@@ -233,7 +233,7 @@ fn delegate_conversation_store_read_block_page(
 }
 
 #[cfg(test)]
-mod delegate_conversation_store_tests {
+pub(crate) mod delegate_conversation_store_tests {
     use super::*;
 
     fn test_delegate_entry(data_path: &PathBuf) -> DelegateEntry {

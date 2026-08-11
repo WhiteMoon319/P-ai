@@ -1,42 +1,42 @@
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationIdOnlyInput {
-    conversation_id: String,
+pub(crate) struct ConversationIdOnlyInput {
+    pub(crate) conversation_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ConversationCommandStatus {
-    success: bool,
+pub(crate) struct ConversationCommandStatus {
+    pub(crate) success: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct BatchArchiveConversationsInput {
-    conversation_ids: Vec<String>,
+pub(crate) struct BatchArchiveConversationsInput {
+    pub(crate) conversation_ids: Vec<String>,
     #[serde(alias = "apiConfigId")]
-    reflection_api_config_id: String,
+    pub(crate) reflection_api_config_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct BatchArchiveSkippedConversation {
-    conversation_id: String,
-    reason: String,
+pub(crate) struct BatchArchiveSkippedConversation {
+    pub(crate) conversation_id: String,
+    pub(crate) reason: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct BatchArchiveConversationsOutput {
-    success: bool,
-    accepted_conversation_ids: Vec<String>,
-    skipped: Vec<BatchArchiveSkippedConversation>,
+pub(crate) struct BatchArchiveConversationsOutput {
+    pub(crate) success: bool,
+    pub(crate) accepted_conversation_ids: Vec<String>,
+    pub(crate) skipped: Vec<BatchArchiveSkippedConversation>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    active_conversation_id: Option<String>,
+    pub(crate) active_conversation_id: Option<String>,
 }
 
 
-async fn archive_conversation_inner(
+pub(crate) async fn archive_conversation_inner(
     input: ConversationIdOnlyInput,
     state: &AppState,
 ) -> Result<ConversationCommandStatus, String> {
@@ -303,12 +303,12 @@ pub(crate) async fn run_archive_pipeline(
 }
 
 #[derive(Debug, Clone)]
-struct BatchArchiveAcceptedConversation {
-    conversation_id: String,
-    effective_agent_id: String,
+pub(crate) struct BatchArchiveAcceptedConversation {
+    pub(crate) conversation_id: String,
+    pub(crate) effective_agent_id: String,
 }
 
-fn normalize_batch_archive_conversation_ids(values: &[String]) -> Vec<String> {
+pub(crate) fn normalize_batch_archive_conversation_ids(values: &[String]) -> Vec<String> {
     let mut seen = std::collections::HashSet::<String>::new();
     let mut out = Vec::<String>::new();
     for value in values {
@@ -323,7 +323,7 @@ fn normalize_batch_archive_conversation_ids(values: &[String]) -> Vec<String> {
     out
 }
 
-fn resolve_batch_archive_reflection_api_config(
+pub(crate) fn resolve_batch_archive_reflection_api_config(
     state: &AppState,
     reflection_api_config_id: &str,
 ) -> Result<(ApiConfig, ResolvedApiConfig), String> {
@@ -348,7 +348,7 @@ fn resolve_batch_archive_reflection_api_config(
     Ok((selected_api, resolved_api))
 }
 
-fn instant_batch_archive_conversation_metadata_only(
+pub(crate) fn instant_batch_archive_conversation_metadata_only(
     state: &AppState,
     replacement_seed_api: &ApiConfig,
     source: &Conversation,
@@ -361,7 +361,7 @@ fn instant_batch_archive_conversation_metadata_only(
     )
 }
 
-fn prepare_batch_archive_conversation(
+pub(crate) fn prepare_batch_archive_conversation(
     state: &AppState,
     conversation_id: &str,
     main_conversation_id: &str,
@@ -424,7 +424,7 @@ fn prepare_batch_archive_conversation(
     Ok((source, effective_agent_id))
 }
 
-fn resolve_batch_archive_effective_agent_id(
+pub(crate) fn resolve_batch_archive_effective_agent_id(
     runtime_snapshot: &RuntimeOrganizationSnapshot,
     source: &Conversation,
 ) -> String {
@@ -451,7 +451,7 @@ fn resolve_batch_archive_effective_agent_id(
     effective_agent_id.to_string()
 }
 
-fn spawn_batch_archive_pipeline(
+pub(crate) fn spawn_batch_archive_pipeline(
     state: AppState,
     selected_api: ApiConfig,
     resolved_api: ResolvedApiConfig,
@@ -528,7 +528,7 @@ fn spawn_batch_archive_pipeline(
     });
 }
 
-async fn run_archive_pipeline_inner(
+pub(crate) async fn run_archive_pipeline_inner(
     state: &AppState,
     selected_api: &ApiConfig,
     resolved_api: &ResolvedApiConfig,

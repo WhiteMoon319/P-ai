@@ -1,4 +1,4 @@
-fn normalize_terminal_tool_session_id(session_id: &str) -> String {
+pub(crate) fn normalize_terminal_tool_session_id(session_id: &str) -> String {
     let trimmed = session_id.trim();
     if trimmed.is_empty() {
         "default-session".to_string()
@@ -7,7 +7,7 @@ fn normalize_terminal_tool_session_id(session_id: &str) -> String {
     }
 }
 
-fn normalize_shell_workspace_level_text(raw: &str) -> String {
+pub(crate) fn normalize_shell_workspace_level_text(raw: &str) -> String {
     match raw.trim().to_ascii_lowercase().as_str() {
         SHELL_WORKSPACE_LEVEL_SYSTEM => SHELL_WORKSPACE_LEVEL_SYSTEM.to_string(),
         SHELL_WORKSPACE_LEVEL_MAIN => SHELL_WORKSPACE_LEVEL_MAIN.to_string(),
@@ -16,7 +16,7 @@ fn normalize_shell_workspace_level_text(raw: &str) -> String {
     }
 }
 
-fn normalize_shell_workspace_access_text(raw: &str) -> String {
+pub(crate) fn normalize_shell_workspace_access_text(raw: &str) -> String {
     match raw.trim().to_ascii_lowercase().as_str() {
         SHELL_WORKSPACE_ACCESS_APPROVAL => SHELL_WORKSPACE_ACCESS_APPROVAL.to_string(),
         SHELL_WORKSPACE_ACCESS_FULL_ACCESS => SHELL_WORKSPACE_ACCESS_FULL_ACCESS.to_string(),
@@ -25,7 +25,7 @@ fn normalize_shell_workspace_access_text(raw: &str) -> String {
     }
 }
 
-fn shell_workspace_default_access_for_level(level: &str) -> String {
+pub(crate) fn shell_workspace_default_access_for_level(level: &str) -> String {
     match level {
         SHELL_WORKSPACE_LEVEL_SYSTEM => SHELL_WORKSPACE_ACCESS_FULL_ACCESS.to_string(),
         SHELL_WORKSPACE_LEVEL_MAIN => SHELL_WORKSPACE_ACCESS_APPROVAL.to_string(),
@@ -33,7 +33,7 @@ fn shell_workspace_default_access_for_level(level: &str) -> String {
     }
 }
 
-fn shell_workspace_level_rank(level: &str) -> i32 {
+pub(crate) fn shell_workspace_level_rank(level: &str) -> i32 {
     match level {
         SHELL_WORKSPACE_LEVEL_SYSTEM => 0,
         SHELL_WORKSPACE_LEVEL_MAIN => 1,
@@ -41,7 +41,7 @@ fn shell_workspace_level_rank(level: &str) -> i32 {
     }
 }
 
-fn shell_workspace_display_name_fallback(path: &Path) -> String {
+pub(crate) fn shell_workspace_display_name_fallback(path: &Path) -> String {
     path.file_name()
         .and_then(|value| value.to_str())
         .map(str::trim)
@@ -50,7 +50,7 @@ fn shell_workspace_display_name_fallback(path: &Path) -> String {
         .unwrap_or_else(|| path.to_string_lossy().to_string())
 }
 
-fn shell_workspace_display_name_from_input_or_path(raw_name: &str, path: &Path) -> String {
+pub(crate) fn shell_workspace_display_name_from_input_or_path(raw_name: &str, path: &Path) -> String {
     let normalized_name = raw_name.trim();
     if !normalized_name.is_empty() {
         return normalized_name.to_string();
@@ -58,7 +58,7 @@ fn shell_workspace_display_name_from_input_or_path(raw_name: &str, path: &Path) 
     shell_workspace_display_name_fallback(path)
 }
 
-fn shell_workspace_resolve_path_candidate(
+pub(crate) fn shell_workspace_resolve_path_candidate(
     state: &AppState,
     workspace: &ShellWorkspaceConfig,
 ) -> Option<PathBuf> {
@@ -74,7 +74,7 @@ fn shell_workspace_resolve_path_candidate(
     }
 }
 
-fn configured_system_workspace_root_from_shell_workspaces(
+pub(crate) fn configured_system_workspace_root_from_shell_workspaces(
     shell_workspaces: &[ShellWorkspaceConfig],
     state: &AppState,
 ) -> PathBuf {
@@ -89,7 +89,7 @@ fn configured_system_workspace_root_from_shell_workspaces(
     state.llm_workspace_path.clone()
 }
 
-fn terminal_workspace_path_from_conversation(
+pub(crate) fn terminal_workspace_path_from_conversation(
     state: &AppState,
     conversation: &Conversation,
 ) -> Option<PathBuf> {
@@ -113,12 +113,12 @@ fn terminal_workspace_path_from_conversation(
     None
 }
 
-fn terminal_session_conversation_id(session_id: &str) -> Option<String> {
+pub(crate) fn terminal_session_conversation_id(session_id: &str) -> Option<String> {
     let normalized = normalize_terminal_tool_session_id(session_id);
     delegate_session_conversation_id(&normalized)
 }
 
-fn terminal_session_conversation(state: &AppState, session_id: &str) -> Result<Option<Conversation>, String> {
+pub(crate) fn terminal_session_conversation(state: &AppState, session_id: &str) -> Result<Option<Conversation>, String> {
     let Some(conversation_id) = terminal_session_conversation_id(session_id) else {
         return Ok(None);
     };
@@ -128,12 +128,12 @@ fn terminal_session_conversation(state: &AppState, session_id: &str) -> Result<O
     conversation_service_v2().try_get_conversation_snapshot_fast(state, &conversation_id)
 }
 
-fn normalize_terminal_timeout_ms(timeout_ms: Option<u64>) -> u64 {
+pub(crate) fn normalize_terminal_timeout_ms(timeout_ms: Option<u64>) -> u64 {
     let value = timeout_ms.unwrap_or(TERMINAL_DEFAULT_TIMEOUT_MS);
     value.max(1)
 }
 
-fn normalize_terminal_path_for_compare(path: &Path) -> String {
+pub(crate) fn normalize_terminal_path_for_compare(path: &Path) -> String {
     #[cfg(target_os = "windows")]
     {
         let text = path.to_string_lossy().to_string();
@@ -168,7 +168,7 @@ fn normalize_terminal_path_for_compare(path: &Path) -> String {
     }
 }
 
-fn path_is_within(base: &Path, target: &Path) -> bool {
+pub(crate) fn path_is_within(base: &Path, target: &Path) -> bool {
     let base_norm = normalize_terminal_path_for_compare(base);
     let target_norm = normalize_terminal_path_for_compare(target);
     let separator = std::path::MAIN_SEPARATOR.to_string();
@@ -181,7 +181,7 @@ fn path_is_within(base: &Path, target: &Path) -> bool {
         || target_norm.strip_prefix(&base_prefix).is_some()
 }
 
-fn resolve_terminal_path(base_dir: &Path, raw: &str) -> Result<PathBuf, String> {
+pub(crate) fn resolve_terminal_path(base_dir: &Path, raw: &str) -> Result<PathBuf, String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err("Path is empty.".to_string());
@@ -209,46 +209,46 @@ fn resolve_terminal_path(base_dir: &Path, raw: &str) -> Result<PathBuf, String> 
     Ok(canonical)
 }
 
-fn configured_workspace_root_from_config(config: &AppConfig, state: &AppState) -> PathBuf {
+pub(crate) fn configured_workspace_root_from_config(config: &AppConfig, state: &AppState) -> PathBuf {
     configured_system_workspace_root_from_shell_workspaces(&config.shell_workspaces, state)
 }
 
-fn configured_workspace_root_path(state: &AppState) -> Result<PathBuf, String> {
+pub(crate) fn configured_workspace_root_path(state: &AppState) -> Result<PathBuf, String> {
     #[cfg(target_os = "android")]
     {
         return Ok(android_workspace_root(state));
     }
 }
 
-fn configured_workspace_root_canonical(state: &AppState) -> Result<PathBuf, String> {
+pub(crate) fn configured_workspace_root_canonical(state: &AppState) -> Result<PathBuf, String> {
     let root = configured_workspace_root_path(state)?;
     root.canonicalize()
         .map_err(|err| format!("Resolve configured workspace failed: {err}"))
 }
 
-fn ensure_workspace_root_ready(root: &Path) -> Result<PathBuf, String> {
+pub(crate) fn ensure_workspace_root_ready(root: &Path) -> Result<PathBuf, String> {
     fs::create_dir_all(root)
         .map_err(|err| format!("Create workspace root failed ({}): {err}", root.display()))?;
     root.canonicalize()
         .map_err(|err| format!("Resolve workspace root failed ({}): {err}", root.display()))
 }
 
-fn terminal_workspace_canonical(state: &AppState) -> Result<PathBuf, String> {
+pub(crate) fn terminal_workspace_canonical(state: &AppState) -> Result<PathBuf, String> {
     configured_workspace_root_canonical(state)
 }
 
 #[derive(Debug, Clone)]
-struct TerminalWorkspaceResolved {
-    id: String,
-    name: String,
-    level: String,
-    access: String,
-    built_in: bool,
-    path: PathBuf,
+pub(crate) struct TerminalWorkspaceResolved {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) level: String,
+    pub(crate) access: String,
+    pub(crate) built_in: bool,
+    pub(crate) path: PathBuf,
 }
 
-fn android_terminal_workspace_resolved(state: &AppState) -> Result<TerminalWorkspaceResolved, String> {
-    let root = android_workspace_canonical_root_if_ready(state)?
+pub(crate) fn android_terminal_workspace_resolved(state: &AppState) -> Result<TerminalWorkspaceResolved, String> {
+    let root = features_system_commands::android_workspace_manager::android_workspace_canonical_root_if_ready(state)?
         .ok_or_else(|| ANDROID_WORKSPACE_NOT_READY_MESSAGE.to_string())?;
     Ok(TerminalWorkspaceResolved {
         id: "android-sandbox-workspace".to_string(),
@@ -260,7 +260,7 @@ fn android_terminal_workspace_resolved(state: &AppState) -> Result<TerminalWorks
     })
 }
 
-fn terminal_conversation_shell_autonomous_mode(conversation: Option<&Conversation>) -> bool {
+pub(crate) fn terminal_conversation_shell_autonomous_mode(conversation: Option<&Conversation>) -> bool {
     #[cfg(target_os = "android")]
     {
         let _ = conversation;
@@ -268,12 +268,12 @@ fn terminal_conversation_shell_autonomous_mode(conversation: Option<&Conversatio
     }
 }
 
-fn terminal_session_shell_autonomous_mode(state: &AppState, session_id: &str) -> Result<bool, String> {
+pub(crate) fn terminal_session_shell_autonomous_mode(state: &AppState, session_id: &str) -> Result<bool, String> {
     let conversation = terminal_session_conversation(state, session_id)?;
     Ok(terminal_conversation_shell_autonomous_mode(conversation.as_ref()))
 }
 
-fn terminal_autonomous_workspace_for_target(target: &Path) -> TerminalWorkspaceResolved {
+pub(crate) fn terminal_autonomous_workspace_for_target(target: &Path) -> TerminalWorkspaceResolved {
     let normalized = terminal_normalize_for_access_check(target);
     let path = if normalized.is_file() {
         normalized
@@ -293,7 +293,7 @@ fn terminal_autonomous_workspace_for_target(target: &Path) -> TerminalWorkspaceR
     }
 }
 
-fn terminal_paths_match(left: &Path, right: &Path) -> bool {
+pub(crate) fn terminal_paths_match(left: &Path, right: &Path) -> bool {
     if let (Ok(left_canonical), Ok(right_canonical)) = (left.canonicalize(), right.canonicalize()) {
         return normalize_terminal_path_for_compare(&left_canonical)
             == normalize_terminal_path_for_compare(&right_canonical);
@@ -301,7 +301,7 @@ fn terminal_paths_match(left: &Path, right: &Path) -> bool {
     normalize_terminal_path_for_compare(left) == normalize_terminal_path_for_compare(right)
 }
 
-fn legacy_default_shell_workspace_path() -> Option<PathBuf> {
+pub(crate) fn legacy_default_shell_workspace_path() -> Option<PathBuf> {
     ProjectDirs::from("ai", "easycall", "easy-call-ai").map(|dirs| {
         dirs.config_dir()
             .parent()
@@ -311,7 +311,7 @@ fn legacy_default_shell_workspace_path() -> Option<PathBuf> {
     })
 }
 
-fn ensure_default_shell_workspace_in_config(config: &mut AppConfig, state: &AppState) -> bool {
+pub(crate) fn ensure_default_shell_workspace_in_config(config: &mut AppConfig, state: &AppState) -> bool {
     let original_snapshot = serde_json::to_string(&config.shell_workspaces).unwrap_or_default();
     let default_path = terminal_path_for_user(&state.llm_workspace_path);
     let default_path_buf = PathBuf::from(&default_path);
@@ -410,7 +410,7 @@ fn ensure_default_shell_workspace_in_config(config: &mut AppConfig, state: &AppS
     original_snapshot != current_snapshot
 }
 
-fn assistant_workspace_as_conversation_main_workspace(
+pub(crate) fn assistant_workspace_as_conversation_main_workspace(
     state: &AppState,
     config: &AppConfig,
 ) -> ShellWorkspaceConfig {
@@ -435,7 +435,7 @@ fn assistant_workspace_as_conversation_main_workspace(
     }
 }
 
-fn normalize_conversation_shell_workspaces_or_assistant_default(
+pub(crate) fn normalize_conversation_shell_workspaces_or_assistant_default(
     state: &AppState,
     config: &AppConfig,
     raw_entries: &[ShellWorkspaceConfig],
@@ -448,7 +448,7 @@ fn normalize_conversation_shell_workspaces_or_assistant_default(
     }
 }
 
-fn normalize_conversation_shell_workspaces(
+pub(crate) fn normalize_conversation_shell_workspaces(
     state: &AppState,
     raw_entries: &[ShellWorkspaceConfig],
 ) -> Vec<ShellWorkspaceConfig> {
@@ -506,12 +506,12 @@ fn normalize_conversation_shell_workspaces(
 }
 
 #[derive(Debug, Clone)]
-struct TerminalConfigAllowedWorkspacesCacheEntry {
-    signature: String,
-    workspaces: Vec<TerminalWorkspaceResolved>,
+pub(crate) struct TerminalConfigAllowedWorkspacesCacheEntry {
+    pub(crate) signature: String,
+    pub(crate) workspaces: Vec<TerminalWorkspaceResolved>,
 }
 
-fn terminal_config_allowed_workspaces_cache(
+pub(crate) fn terminal_config_allowed_workspaces_cache(
 ) -> &'static std::sync::Mutex<
     std::collections::HashMap<String, TerminalConfigAllowedWorkspacesCacheEntry>,
 > {
@@ -523,11 +523,11 @@ fn terminal_config_allowed_workspaces_cache(
     CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
 }
 
-fn terminal_config_allowed_workspaces_cache_scope_key(state: &AppState) -> String {
+pub(crate) fn terminal_config_allowed_workspaces_cache_scope_key(state: &AppState) -> String {
     normalize_terminal_path_for_compare(&state.config_path)
 }
 
-fn clear_terminal_config_allowed_workspaces_cache_for_state(state: &AppState) {
+pub(crate) fn clear_terminal_config_allowed_workspaces_cache_for_state(state: &AppState) {
     let scope_key = terminal_config_allowed_workspaces_cache_scope_key(state);
     let mut cache = terminal_workspace_cache_lock_recover(
         "terminal_config_allowed_workspaces",
@@ -536,7 +536,7 @@ fn clear_terminal_config_allowed_workspaces_cache_for_state(state: &AppState) {
     cache.remove(&scope_key);
 }
 
-fn terminal_shell_workspaces_cache_signature(
+pub(crate) fn terminal_shell_workspaces_cache_signature(
     state: &AppState,
     shell_workspaces: &[ShellWorkspaceConfig],
 ) -> String {
@@ -558,7 +558,7 @@ fn terminal_shell_workspaces_cache_signature(
     parts.join("||")
 }
 
-fn terminal_workspace_cache_lock_recover<'a, T>(
+pub(crate) fn terminal_workspace_cache_lock_recover<'a, T>(
     label: &str,
     mutex: &'a std::sync::Mutex<T>,
 ) -> std::sync::MutexGuard<'a, T> {
@@ -574,7 +574,7 @@ fn terminal_workspace_cache_lock_recover<'a, T>(
     }
 }
 
-fn terminal_config_allowed_workspaces_canonical(
+pub(crate) fn terminal_config_allowed_workspaces_canonical(
     state: &AppState,
 ) -> Result<Vec<TerminalWorkspaceResolved>, String> {
     let mut config = state_read_config_cached(state)?;
@@ -659,7 +659,7 @@ fn terminal_config_allowed_workspaces_canonical(
 
 /// 从联系人配置中解析该联系人会话对应的工作区列表。
 /// 通过 conversation.id 反查 bound_conversation_id == conversation.id 的联系人。
-fn resolve_contact_workspaces_for_conversation(
+pub(crate) fn resolve_contact_workspaces_for_conversation(
     state: &AppState,
     conversation: &Conversation,
 ) -> Vec<ShellWorkspaceConfig> {
@@ -684,7 +684,7 @@ fn resolve_contact_workspaces_for_conversation(
         .unwrap_or_default()
 }
 
-fn terminal_allowed_workspaces_for_conversation_canonical(
+pub(crate) fn terminal_allowed_workspaces_for_conversation_canonical(
     state: &AppState,
     conversation: Option<&Conversation>,
 ) -> Result<Vec<TerminalWorkspaceResolved>, String> {
@@ -695,7 +695,7 @@ fn terminal_allowed_workspaces_for_conversation_canonical(
     }
 }
 
-fn terminal_allowed_workspaces_canonical(
+pub(crate) fn terminal_allowed_workspaces_canonical(
     state: &AppState,
 ) -> Result<Vec<TerminalWorkspaceResolved>, String> {
     #[cfg(target_os = "android")]
@@ -704,7 +704,7 @@ fn terminal_allowed_workspaces_canonical(
     }
 }
 
-fn terminal_allowed_project_roots_canonical(state: &AppState) -> Result<Vec<PathBuf>, String> {
+pub(crate) fn terminal_allowed_project_roots_canonical(state: &AppState) -> Result<Vec<PathBuf>, String> {
     let mut roots = Vec::<PathBuf>::new();
     let mut seen = std::collections::HashSet::<String>::new();
     for ws in terminal_allowed_workspaces_canonical(state)? {
@@ -722,7 +722,7 @@ fn terminal_allowed_project_roots_canonical(state: &AppState) -> Result<Vec<Path
     Ok(roots)
 }
 
-fn terminal_allowed_project_roots_for_session_canonical(
+pub(crate) fn terminal_allowed_project_roots_for_session_canonical(
     state: &AppState,
     session_id: &str,
 ) -> Result<Vec<PathBuf>, String> {
@@ -742,14 +742,14 @@ fn terminal_allowed_project_roots_for_session_canonical(
     Ok(roots)
 }
 
-fn terminal_system_workspace_resolved(state: &AppState) -> Result<TerminalWorkspaceResolved, String> {
+pub(crate) fn terminal_system_workspace_resolved(state: &AppState) -> Result<TerminalWorkspaceResolved, String> {
     #[cfg(target_os = "android")]
     {
         return android_terminal_workspace_resolved(state);
     }
 }
 
-fn terminal_default_workspace_resolved(state: &AppState) -> Result<TerminalWorkspaceResolved, String> {
+pub(crate) fn terminal_default_workspace_resolved(state: &AppState) -> Result<TerminalWorkspaceResolved, String> {
     let workspaces = terminal_allowed_workspaces_canonical(state)?;
     if let Some(workspace) = workspaces
         .iter()
@@ -763,7 +763,7 @@ fn terminal_default_workspace_resolved(state: &AppState) -> Result<TerminalWorks
         .ok_or_else(|| "No default workspace available".to_string())
 }
 
-fn terminal_default_workspace_for_conversation_resolved(
+pub(crate) fn terminal_default_workspace_for_conversation_resolved(
     state: &AppState,
     conversation: Option<&Conversation>,
 ) -> Result<TerminalWorkspaceResolved, String> {
@@ -780,7 +780,7 @@ fn terminal_default_workspace_for_conversation_resolved(
         .ok_or_else(|| "No default workspace available".to_string())
 }
 
-fn terminal_match_workspace_for_target_in_conversation(
+pub(crate) fn terminal_match_workspace_for_target_in_conversation(
     state: &AppState,
     conversation: Option<&Conversation>,
     target: &Path,
@@ -804,7 +804,7 @@ fn terminal_match_workspace_for_target_in_conversation(
     Ok(best_match)
 }
 
-fn terminal_match_workspace_for_session_target(
+pub(crate) fn terminal_match_workspace_for_session_target(
     state: &AppState,
     session_id: &str,
     target: &Path,
@@ -813,7 +813,7 @@ fn terminal_match_workspace_for_session_target(
     terminal_match_workspace_for_target_in_conversation(state, conversation.as_ref(), target)
 }
 
-fn terminal_worktree_write_rejection(
+pub(crate) fn terminal_worktree_write_rejection(
     state: &AppState,
     session_id: &str,
     targets: &[PathBuf],
@@ -859,7 +859,7 @@ fn terminal_worktree_write_rejection(
     Ok(None)
 }
 
-fn terminal_prompt_trusted_roots_block(
+pub(crate) fn terminal_prompt_trusted_roots_block(
     state: &AppState,
     selected_api: &ApiConfig,
     conversation: Option<&Conversation>,
@@ -967,11 +967,11 @@ fn terminal_prompt_trusted_roots_block(
     Some(blocks.join("\n"))
 }
 
-fn terminal_default_session_root_canonical(state: &AppState) -> Result<PathBuf, String> {
+pub(crate) fn terminal_default_session_root_canonical(state: &AppState) -> Result<PathBuf, String> {
     Ok(terminal_default_workspace_resolved(state)?.path)
 }
 
-fn terminal_session_root_canonical(state: &AppState, session_id: &str) -> Result<PathBuf, String> {
+pub(crate) fn terminal_session_root_canonical(state: &AppState, session_id: &str) -> Result<PathBuf, String> {
     #[cfg(target_os = "android")]
     {
         let _ = session_id;
@@ -979,7 +979,7 @@ fn terminal_session_root_canonical(state: &AppState, session_id: &str) -> Result
     }
 }
 
-fn ensure_terminal_workdir_allowed(
+pub(crate) fn ensure_terminal_workdir_allowed(
     state: &AppState,
     session_id: &str,
     cwd: &Path,
@@ -994,7 +994,7 @@ fn ensure_terminal_workdir_allowed(
     ))
 }
 
-fn resolve_terminal_cwd(
+pub(crate) fn resolve_terminal_cwd(
     state: &AppState,
     session_id: &str,
     requested_cwd: Option<&str>,
@@ -1013,7 +1013,7 @@ fn resolve_terminal_cwd(
     Ok(resolved)
 }
 
-fn terminal_normalize_for_access_check(path: &Path) -> PathBuf {
+pub(crate) fn terminal_normalize_for_access_check(path: &Path) -> PathBuf {
     if let Ok(canonical) = path.canonicalize() {
         return canonical;
     }

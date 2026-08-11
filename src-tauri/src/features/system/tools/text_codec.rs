@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TextFileBom {
+pub(crate) enum TextFileBom {
     None,
     Utf8,
     Utf16Le,
@@ -7,19 +7,19 @@ enum TextFileBom {
 }
 
 #[derive(Debug, Clone)]
-struct DecodedTextFile {
-    text: String,
-    encoding: &'static encoding_rs::Encoding,
-    bom: TextFileBom,
+pub(crate) struct DecodedTextFile {
+    pub(crate) text: String,
+    pub(crate) encoding: &'static encoding_rs::Encoding,
+    pub(crate) bom: TextFileBom,
 }
 
 impl DecodedTextFile {
-    fn encode_like_original(&self, text: &str) -> Result<Vec<u8>, String> {
+    pub(crate) fn encode_like_original(&self, text: &str) -> Result<Vec<u8>, String> {
         encode_text_with_detected_encoding(text, self.encoding, self.bom)
     }
 }
 
-fn decode_text_file_bytes(bytes: &[u8]) -> Result<DecodedTextFile, String> {
+pub(crate) fn decode_text_file_bytes(bytes: &[u8]) -> Result<DecodedTextFile, String> {
     if bytes.is_empty() {
         return Ok(DecodedTextFile {
             text: String::new(),
@@ -61,7 +61,7 @@ fn decode_text_file_bytes(bytes: &[u8]) -> Result<DecodedTextFile, String> {
     Err("无法识别文本编码，已拒绝按有损方式读取".to_string())
 }
 
-fn decode_text_file_from_path(path: &std::path::Path) -> Result<DecodedTextFile, String> {
+pub(crate) fn decode_text_file_from_path(path: &std::path::Path) -> Result<DecodedTextFile, String> {
     let bytes =
         std::fs::read(path).map_err(|err| format!("读取文件失败（{}）：{err}", terminal_path_for_user(path)))?;
     decode_text_file_bytes(&bytes).map_err(|err| {
@@ -73,7 +73,7 @@ fn decode_text_file_from_path(path: &std::path::Path) -> Result<DecodedTextFile,
     })
 }
 
-fn decode_with_encoding(
+pub(crate) fn decode_with_encoding(
     bytes: &[u8],
     encoding: &'static encoding_rs::Encoding,
     bom: TextFileBom,
@@ -89,7 +89,7 @@ fn decode_with_encoding(
     })
 }
 
-fn encode_text_with_detected_encoding(
+pub(crate) fn encode_text_with_detected_encoding(
     text: &str,
     encoding: &'static encoding_rs::Encoding,
     bom: TextFileBom,
@@ -150,7 +150,7 @@ fn encode_text_with_detected_encoding(
 }
 
 #[cfg(test)]
-mod text_codec_tests {
+pub(crate) mod text_codec_tests {
     use super::*;
 
     #[test]

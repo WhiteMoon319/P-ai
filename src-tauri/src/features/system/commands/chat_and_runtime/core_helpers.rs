@@ -1,4 +1,4 @@
-fn inflight_chat_key(
+pub(crate) fn inflight_chat_key(
     department_id: &str,
     conversation_id: Option<&str>,
 ) -> String {
@@ -10,7 +10,7 @@ fn inflight_chat_key(
     }
 }
 
-fn register_inflight_tool_abort_handle(
+pub(crate) fn register_inflight_tool_abort_handle(
     state: &AppState,
     chat_key: &str,
     handle: AbortHandle,
@@ -25,7 +25,7 @@ fn register_inflight_tool_abort_handle(
     Ok(())
 }
 
-fn reset_inflight_completed_tool_history(state: &AppState, chat_key: &str) -> Result<(), String> {
+pub(crate) fn reset_inflight_completed_tool_history(state: &AppState, chat_key: &str) -> Result<(), String> {
     let mut inflight = state
         .inflight_completed_tool_history
         .lock()
@@ -34,7 +34,7 @@ fn reset_inflight_completed_tool_history(state: &AppState, chat_key: &str) -> Re
     Ok(())
 }
 
-fn replace_inflight_completed_tool_history(
+pub(crate) fn replace_inflight_completed_tool_history(
     state: &AppState,
     chat_key: &str,
     events: &[Value],
@@ -47,7 +47,7 @@ fn replace_inflight_completed_tool_history(
     Ok(())
 }
 
-fn inflight_completed_tool_history(
+pub(crate) fn inflight_completed_tool_history(
     state: &AppState,
     chat_key: &str,
 ) -> Result<Vec<Value>, String> {
@@ -58,7 +58,7 @@ fn inflight_completed_tool_history(
     Ok(inflight.get(chat_key).cloned().unwrap_or_default())
 }
 
-fn clear_inflight_completed_tool_history(state: &AppState, chat_key: &str) -> Result<(), String> {
+pub(crate) fn clear_inflight_completed_tool_history(state: &AppState, chat_key: &str) -> Result<(), String> {
     let mut inflight = state
         .inflight_completed_tool_history
         .lock()
@@ -67,7 +67,7 @@ fn clear_inflight_completed_tool_history(state: &AppState, chat_key: &str) -> Re
     Ok(())
 }
 
-fn clear_inflight_tool_abort_handle(state: &AppState, chat_key: &str) -> Result<(), String> {
+pub(crate) fn clear_inflight_tool_abort_handle(state: &AppState, chat_key: &str) -> Result<(), String> {
     let mut inflight = state
         .inflight_tool_abort_handles
         .lock()
@@ -76,7 +76,7 @@ fn clear_inflight_tool_abort_handle(state: &AppState, chat_key: &str) -> Result<
     Ok(())
 }
 
-fn abort_inflight_tool_abort_handle(state: &AppState, chat_key: &str) -> Result<bool, String> {
+pub(crate) fn abort_inflight_tool_abort_handle(state: &AppState, chat_key: &str) -> Result<bool, String> {
     let mut inflight = state
         .inflight_tool_abort_handles
         .lock()
@@ -89,14 +89,14 @@ fn abort_inflight_tool_abort_handle(state: &AppState, chat_key: &str) -> Result<
     }
 }
 
-fn delegate_thread_chat_key(thread: &DelegateRuntimeThread) -> String {
+pub(crate) fn delegate_thread_chat_key(thread: &DelegateRuntimeThread) -> String {
     inflight_chat_key(
         &thread.conversation.department_id,
         Some(&thread.conversation.id),
     )
 }
 
-fn abort_delegate_runtime_descendant_threads(
+pub(crate) fn abort_delegate_runtime_descendant_threads(
     state: &AppState,
     parent_chat_key: &str,
     children: Vec<DelegateRuntimeThread>,
@@ -131,7 +131,7 @@ fn abort_delegate_runtime_descendant_threads(
     Ok(aborted_count)
 }
 
-fn abort_delegate_runtime_descendants_by_parent_session(
+pub(crate) fn abort_delegate_runtime_descendants_by_parent_session(
     state: &AppState,
     parent_chat_key: &str,
 ) -> Result<usize, String> {
@@ -142,7 +142,7 @@ fn abort_delegate_runtime_descendants_by_parent_session(
     abort_delegate_runtime_descendant_threads(state, parent_chat_key, children)
 }
 
-fn abort_delegate_runtime_descendants_by_parent_context(
+pub(crate) fn abort_delegate_runtime_descendants_by_parent_context(
     state: &AppState,
     parent_chat_key: &str,
     root_conversation_id: Option<&str>,
@@ -169,13 +169,13 @@ fn abort_delegate_runtime_descendants_by_parent_context(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ModelReplyContentState {
+pub(crate) enum ModelReplyContentState {
     Visible,
     ReasoningOnly,
     Empty,
 }
 
-fn model_reply_content_state(reply: &ModelReply) -> ModelReplyContentState {
+pub(crate) fn model_reply_content_state(reply: &ModelReply) -> ModelReplyContentState {
     if !reply.assistant_text.trim().is_empty()
         || !reply.final_response_text.trim().is_empty()
         || reply.assistant_provider_meta.is_some()
@@ -190,7 +190,7 @@ fn model_reply_content_state(reply: &ModelReply) -> ModelReplyContentState {
     ModelReplyContentState::Empty
 }
 
-fn effective_prompt_tokens_from_provider(
+pub(crate) fn effective_prompt_tokens_from_provider(
     estimated_prompt_tokens: u64,
     trusted_input_tokens: Option<u64>,
 ) -> (u64, &'static str) {

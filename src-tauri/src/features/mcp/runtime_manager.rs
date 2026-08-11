@@ -1,27 +1,27 @@
-type DynamicMcpClient = rmcp::service::RunningService<rmcp::RoleClient, ()>;
+pub(crate) type DynamicMcpClient = rmcp::service::RunningService<rmcp::RoleClient, ()>;
 
 include!("sse_client.rs");
 
-const MCP_CONNECT_TIMEOUT_SECS: u64 = 30;
-const MCP_REQUEST_TIMEOUT_SECS: u64 = 60;
-const MCP_TOOL_CALL_TIMEOUT_SECS: u64 = 300;
+pub(crate) const MCP_CONNECT_TIMEOUT_SECS: u64 = 30;
+pub(crate) const MCP_REQUEST_TIMEOUT_SECS: u64 = 60;
+pub(crate) const MCP_TOOL_CALL_TIMEOUT_SECS: u64 = 300;
 
-struct McpConnectedClient {
-    client: DynamicMcpClient,
-    process_tree_guard: Option<McpProcessTreeGuard>,
+pub(crate) struct McpConnectedClient {
+    pub(crate) client: DynamicMcpClient,
+    pub(crate) process_tree_guard: Option<McpProcessTreeGuard>,
 }
 
-struct CachedMcpClient {
-    group_definition_json: String,
-    definition_json: String,
-    client: DynamicMcpClient,
-    process_tree_guard: Option<McpProcessTreeGuard>,
+pub(crate) struct CachedMcpClient {
+    pub(crate) group_definition_json: String,
+    pub(crate) definition_json: String,
+    pub(crate) client: DynamicMcpClient,
+    pub(crate) process_tree_guard: Option<McpProcessTreeGuard>,
 }
 
 // ========== 组内成员解析与工具名前缀 ==========
 
 /// 解析卡片（组）内全部成员定义：返回 (成员名, 原始 JSON, 解析结果)
-fn parse_mcp_group_definitions(
+pub(crate) fn parse_mcp_group_definitions(
     server: &McpServerConfig,
 ) -> Result<Vec<(String, String, ParsedMcpServerDefinition)>, String> {
     let parsed = parse_mcp_definition_servers(&server.definition_json)
@@ -40,31 +40,31 @@ fn parse_mcp_group_definitions(
 }
 
 /// 组内成员工具名统一带规范化前缀：{成员名}_{工具名}
-fn mcp_tool_prefixed_name(member_name: &str, tool_name: &str) -> String {
+pub(crate) fn mcp_tool_prefixed_name(member_name: &str, tool_name: &str) -> String {
     format!("{}_{tool_name}", normalized_mcp_member_name_or_original(member_name))
 }
 
-fn mcp_member_name_compatibility_error(member_name: &str) -> Option<String> {
+pub(crate) fn mcp_member_name_compatibility_error(member_name: &str) -> Option<String> {
     normalize_mcp_member_name(member_name).is_none().then(|| {
         "MCP 组成员名规范化后没有可用字符，工具无法挂载".to_string()
     })
 }
 
 #[cfg(target_os = "windows")]
-type McpProcessTreeGuard = WindowsJobGuard;
+pub(crate) type McpProcessTreeGuard = WindowsJobGuard;
 
 #[cfg(not(target_os = "windows"))]
-struct McpProcessTreeGuard;
+pub(crate) struct McpProcessTreeGuard;
 
 #[cfg(target_os = "windows")]
-fn mcp_create_windows_job_kill_on_close(pid: u32) -> Result<McpProcessTreeGuard, String> {
+pub(crate) fn mcp_create_windows_job_kill_on_close(pid: u32) -> Result<McpProcessTreeGuard, String> {
     let job_guard = WindowsJobGuard::create_kill_on_close()?;
     job_guard.assign_process_id(pid)?;
     Ok(job_guard)
 }
 
 #[cfg(target_os = "windows")]
-fn mcp_try_attach_windows_process_tree_guard(
+pub(crate) fn mcp_try_attach_windows_process_tree_guard(
     transport: &rmcp::transport::TokioChildProcess,
     parsed: &ParsedMcpServerDefinition,
 ) -> Option<McpProcessTreeGuard> {
@@ -75,7 +75,7 @@ fn mcp_try_attach_windows_process_tree_guard(
 }
 
 #[cfg(target_os = "windows")]
-fn mcp_try_attach_windows_process_tree_guard_for_label(
+pub(crate) fn mcp_try_attach_windows_process_tree_guard_for_label(
     transport: &rmcp::transport::TokioChildProcess,
     command_label: &str,
 ) -> Option<McpProcessTreeGuard> {
@@ -100,7 +100,7 @@ fn mcp_try_attach_windows_process_tree_guard_for_label(
 }
 
 #[cfg(not(target_os = "windows"))]
-fn mcp_try_attach_windows_process_tree_guard(
+pub(crate) fn mcp_try_attach_windows_process_tree_guard(
     _transport: &rmcp::transport::TokioChildProcess,
     _parsed: &ParsedMcpServerDefinition,
 ) -> Option<McpProcessTreeGuard> {
@@ -108,7 +108,7 @@ fn mcp_try_attach_windows_process_tree_guard(
 }
 
 #[cfg(not(target_os = "windows"))]
-fn mcp_try_attach_windows_process_tree_guard_for_label(
+pub(crate) fn mcp_try_attach_windows_process_tree_guard_for_label(
     _transport: &rmcp::transport::TokioChildProcess,
     _command_label: &str,
 ) -> Option<McpProcessTreeGuard> {
@@ -116,22 +116,22 @@ fn mcp_try_attach_windows_process_tree_guard_for_label(
 }
 
 #[derive(Clone)]
-struct McpRuntimeTool {
-    definition: rmcp::model::Tool,
-    raw_tool_name: String,
-    client: rmcp::service::Peer<rmcp::RoleClient>,
+pub(crate) struct McpRuntimeTool {
+    pub(crate) definition: rmcp::model::Tool,
+    pub(crate) raw_tool_name: String,
+    pub(crate) client: rmcp::service::Peer<rmcp::RoleClient>,
 }
 
 #[derive(Clone)]
-struct CachedMcpRuntimeTool {
-    app_state: AppState,
-    server_id: String,
-    executor_department_id: String,
-    runtime_tool_name: String,
-    definition: rmcp::model::Tool,
+pub(crate) struct CachedMcpRuntimeTool {
+    pub(crate) app_state: AppState,
+    pub(crate) server_id: String,
+    pub(crate) executor_department_id: String,
+    pub(crate) runtime_tool_name: String,
+    pub(crate) definition: rmcp::model::Tool,
 }
 
-fn provider_tool_result_from_mcp_call(
+pub(crate) fn provider_tool_result_from_mcp_call(
     tool_name: &str,
     result: rmcp::model::CallToolResult,
 ) -> ProviderToolResult {
@@ -272,7 +272,7 @@ fn provider_tool_result_from_mcp_call(
     }
 }
 
-fn remove_inline_media_from_tool_value(value: &mut Value) {
+pub(crate) fn remove_inline_media_from_tool_value(value: &mut Value) {
     match value {
         Value::Array(items) => {
             for item in items {
@@ -428,7 +428,7 @@ impl RuntimeToolDyn for CachedMcpRuntimeTool {
     }
 }
 
-fn mcp_client_cache(
+pub(crate) fn mcp_client_cache(
 ) -> &'static tokio::sync::Mutex<
     std::collections::HashMap<String, std::collections::HashMap<String, CachedMcpClient>>,
 > {
@@ -445,7 +445,7 @@ fn mcp_client_cache(
     })
 }
 
-fn mcp_client_connect_locks(
+pub(crate) fn mcp_client_connect_locks(
 ) -> &'static tokio::sync::Mutex<
     std::collections::HashMap<String, std::sync::Arc<tokio::sync::Mutex<()>>>,
 > {
@@ -457,7 +457,7 @@ fn mcp_client_connect_locks(
     LOCKS.get_or_init(|| tokio::sync::Mutex::new(std::collections::HashMap::new()))
 }
 
-async fn mcp_client_connect_lock_for_server(
+pub(crate) async fn mcp_client_connect_lock_for_server(
     server_id: &str,
 ) -> std::sync::Arc<tokio::sync::Mutex<()>> {
     let mut locks = mcp_client_connect_locks().lock().await;
@@ -468,27 +468,27 @@ async fn mcp_client_connect_lock_for_server(
 }
 
 #[derive(Debug, Clone)]
-struct McpRuntimeState {
-    deployed: bool,
-    last_status: String,
-    last_error: String,
-    updated_at: String,
-    tools: Vec<McpToolDescriptor>,
+pub(crate) struct McpRuntimeState {
+    pub(crate) deployed: bool,
+    pub(crate) last_status: String,
+    pub(crate) last_error: String,
+    pub(crate) updated_at: String,
+    pub(crate) tools: Vec<McpToolDescriptor>,
 }
 
-fn mcp_runtime_state_store() -> &'static Mutex<std::collections::HashMap<String, McpRuntimeState>> {
+pub(crate) fn mcp_runtime_state_store() -> &'static Mutex<std::collections::HashMap<String, McpRuntimeState>> {
     static STORE: OnceLock<Mutex<std::collections::HashMap<String, McpRuntimeState>>> = OnceLock::new();
     STORE.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
-fn mcp_runtime_state_get(server_id: &str) -> Option<McpRuntimeState> {
+pub(crate) fn mcp_runtime_state_get(server_id: &str) -> Option<McpRuntimeState> {
     let Ok(guard) = mcp_runtime_state_store().lock() else {
         return None;
     };
     guard.get(server_id).cloned()
 }
 
-fn mcp_runtime_state_set(
+pub(crate) fn mcp_runtime_state_set(
     server_id: &str,
     deployed: bool,
     last_status: &str,
@@ -517,7 +517,7 @@ fn mcp_runtime_state_set(
     );
 }
 
-fn mcp_runtime_state_remove(server_id: &str) {
+pub(crate) fn mcp_runtime_state_remove(server_id: &str) {
     let mut guard = match mcp_runtime_state_store().lock() {
         Ok(guard) => guard,
         Err(poisoned) => {
@@ -531,7 +531,7 @@ fn mcp_runtime_state_remove(server_id: &str) {
     guard.remove(server_id);
 }
 
-fn mcp_runtime_state_update<F>(server_id: &str, update: F)
+pub(crate) fn mcp_runtime_state_update<F>(server_id: &str, update: F)
 where
     F: FnOnce(&mut McpRuntimeState),
 {
@@ -551,7 +551,7 @@ where
     }
 }
 
-fn mcp_runtime_state_set_tool_enabled(server_id: &str, tool_name: &str, enabled: bool) {
+pub(crate) fn mcp_runtime_state_set_tool_enabled(server_id: &str, tool_name: &str, enabled: bool) {
     mcp_runtime_state_update(server_id, |runtime| {
         for tool in &mut runtime.tools {
             if tool.tool_name == tool_name {
@@ -562,11 +562,11 @@ fn mcp_runtime_state_set_tool_enabled(server_id: &str, tool_name: &str, enabled:
 }
 
 #[derive(Clone)]
-struct CustomStreamableHttpClient {
-    client: reqwest::Client,
+pub(crate) struct CustomStreamableHttpClient {
+    pub(crate) client: reqwest::Client,
 }
 
-fn custom_streamable_http_apply_headers(
+pub(crate) fn custom_streamable_http_apply_headers(
     mut request_builder: reqwest::RequestBuilder,
     custom_headers: std::collections::HashMap<http::HeaderName, http::HeaderValue>,
 ) -> reqwest::RequestBuilder {
@@ -787,7 +787,7 @@ impl rmcp::transport::streamable_http_client::StreamableHttpClient for CustomStr
     }
 }
 
-fn mcp_policy_enabled_for_tool(server: &McpServerConfig, tool_name: &str) -> bool {
+pub(crate) fn mcp_policy_enabled_for_tool(server: &McpServerConfig, tool_name: &str) -> bool {
     server
         .tool_policies
         .iter()
@@ -796,7 +796,7 @@ fn mcp_policy_enabled_for_tool(server: &McpServerConfig, tool_name: &str) -> boo
         .unwrap_or(true)
 }
 
-fn mcp_definition_tool_filters(
+pub(crate) fn mcp_definition_tool_filters(
     raw_definition_json: &str,
 ) -> (
     std::collections::HashSet<String>,
@@ -817,7 +817,7 @@ fn mcp_definition_tool_filters(
     (allow, deny)
 }
 
-fn mcp_tool_allowed_by_definition(server: &McpServerConfig, tool_name: &str) -> bool {
+pub(crate) fn mcp_tool_allowed_by_definition(server: &McpServerConfig, tool_name: &str) -> bool {
     let (allow, deny) = mcp_definition_tool_filters(&server.definition_json);
     if deny.contains(tool_name) {
         return false;
@@ -828,7 +828,7 @@ fn mcp_tool_allowed_by_definition(server: &McpServerConfig, tool_name: &str) -> 
     allow.contains(tool_name)
 }
 
-fn mcp_connect_stdio_command(state: Option<&AppState>, parsed: &ParsedMcpServerDefinition) -> Result<tokio::process::Command, String> {
+pub(crate) fn mcp_connect_stdio_command(state: Option<&AppState>, parsed: &ParsedMcpServerDefinition) -> Result<tokio::process::Command, String> {
     let command = parsed
         .command
         .as_deref()
@@ -865,7 +865,7 @@ fn mcp_connect_stdio_command(state: Option<&AppState>, parsed: &ParsedMcpServerD
     }
 
     let cwd_override = match state {
-        Some(state) => android_workspace_canonical_root_if_ready(state)?,
+        Some(state) => features_system_commands::android_workspace_manager::android_workspace_canonical_root_if_ready(state)?,
         None => None,
     };
     if let Some(root) = cwd_override {
@@ -882,7 +882,7 @@ fn mcp_connect_stdio_command(state: Option<&AppState>, parsed: &ParsedMcpServerD
     Ok(cmd)
 }
 
-async fn mcp_connect_client(state: Option<&AppState>, parsed: &ParsedMcpServerDefinition) -> Result<McpConnectedClient, String> {
+pub(crate) async fn mcp_connect_client(state: Option<&AppState>, parsed: &ParsedMcpServerDefinition) -> Result<McpConnectedClient, String> {
     match parsed.transport {
         McpTransportKind::Stdio => {
             let cmd = mcp_connect_stdio_command(state, parsed)?;
@@ -977,7 +977,7 @@ async fn mcp_connect_client(state: Option<&AppState>, parsed: &ParsedMcpServerDe
             }
             #[cfg(target_os = "android")]
             {
-                client_builder = android_workspace_apply_static_webpki_roots(client_builder)?;
+                client_builder = features_system_commands::android_workspace_rootfs_installer::android_workspace_apply_static_webpki_roots(client_builder)?;
             }
             let custom_client = CustomStreamableHttpClient {
                 client: client_builder
@@ -1022,7 +1022,7 @@ async fn mcp_connect_client(state: Option<&AppState>, parsed: &ParsedMcpServerDe
 }
 
 /// 检查卡片（组）所有成员是否都已连接且 definition 未变化
-fn mcp_group_cache_fully_hit(
+pub(crate) fn mcp_group_cache_fully_hit(
     cache_guard: &std::collections::HashMap<String, std::collections::HashMap<String, CachedMcpClient>>,
     server_id: &str,
     members: &[(String, String, ParsedMcpServerDefinition)],
@@ -1041,7 +1041,7 @@ fn mcp_group_cache_fully_hit(
     })
 }
 
-async fn mcp_connect_single_member(
+pub(crate) async fn mcp_connect_single_member(
     state: Option<&AppState>,
     server: &McpServerConfig,
     member_name: &str,
@@ -1090,7 +1090,7 @@ async fn mcp_connect_single_member(
     Ok(())
 }
 
-async fn mcp_get_or_connect_client(state: Option<&AppState>, server: &McpServerConfig) -> Result<(), String> {
+pub(crate) async fn mcp_get_or_connect_client(state: Option<&AppState>, server: &McpServerConfig) -> Result<(), String> {
     let members = parse_mcp_group_definitions(server)?;
     {
         let cache = mcp_client_cache();
@@ -1140,7 +1140,7 @@ async fn mcp_get_or_connect_client(state: Option<&AppState>, server: &McpServerC
     }
 }
 
-async fn mcp_disconnect_cached_client(server_id: &str) {
+pub(crate) async fn mcp_disconnect_cached_client(server_id: &str) {
     let mut old_cached = Vec::<CachedMcpClient>::new();
     let cache = mcp_client_cache();
     let mut guard = cache.lock().await;
@@ -1159,7 +1159,7 @@ async fn mcp_disconnect_cached_client(server_id: &str) {
     }
 }
 
-async fn mcp_disconnect_cached_client_if_definition(server_id: &str, definition_json: &str) {
+pub(crate) async fn mcp_disconnect_cached_client_if_definition(server_id: &str, definition_json: &str) {
     let mut old_cached = Vec::<CachedMcpClient>::new();
     let cache = mcp_client_cache();
     let mut guard = cache.lock().await;
@@ -1189,7 +1189,7 @@ async fn mcp_disconnect_cached_client_if_definition(server_id: &str, definition_
     }
 }
 
-async fn mcp_list_tools_with_peer(
+pub(crate) async fn mcp_list_tools_with_peer(
     state: Option<&AppState>,
     server: &McpServerConfig,
     member_name: &str,
@@ -1224,7 +1224,7 @@ async fn mcp_list_tools_with_peer(
     Ok((peer, tools))
 }
 
-async fn mcp_get_or_connect_peer_for_tool(
+pub(crate) async fn mcp_get_or_connect_peer_for_tool(
     state: Option<&AppState>,
     server: &McpServerConfig,
     tool_name: &str,
@@ -1259,7 +1259,7 @@ async fn mcp_get_or_connect_peer_for_tool(
     Ok((cached.client.peer().clone(), member_name))
 }
 
-async fn mcp_list_server_tools_runtime(state: Option<&AppState>, server: &McpServerConfig) -> Result<Vec<McpToolDescriptor>, String> {
+pub(crate) async fn mcp_list_server_tools_runtime(state: Option<&AppState>, server: &McpServerConfig) -> Result<Vec<McpToolDescriptor>, String> {
     let members = parse_mcp_group_definitions(server)?;
     let mut out = Vec::<McpToolDescriptor>::new();
     let mut seen_names = std::collections::HashSet::<String>::new();

@@ -565,7 +565,7 @@ pub(crate) async fn edit_comfyui_image_once(
 }
 
 #[cfg(test)]
-mod image_generation_comfyui_tests {
+pub(crate) mod image_generation_comfyui_tests {
     use super::*;
 
     fn comfy_provider() -> ImageGenerationProviderConfig {

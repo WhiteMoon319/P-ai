@@ -327,7 +327,7 @@ pub(crate) async fn generate_codex_image_once(
 }
 
 #[cfg(test)]
-mod codex_image_generation_tests {
+pub(crate) mod codex_image_generation_tests {
     use super::*;
 
     fn test_request() -> ImageGenerationRequest {

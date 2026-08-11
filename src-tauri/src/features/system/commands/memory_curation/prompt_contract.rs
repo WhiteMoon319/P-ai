@@ -1,4 +1,4 @@
-fn memory_generation_rules_body() -> &'static str {
+pub(crate) fn memory_generation_rules_body() -> &'static str {
     let raw = include_str!("../../../../../resources/preset-skills/memory-generation/SKILL.md");
     let trimmed = raw.trim_start();
     trimmed
@@ -8,7 +8,7 @@ fn memory_generation_rules_body() -> &'static str {
         .unwrap_or(raw.trim())
 }
 
-fn memory_curation_example_output_block() -> &'static str {
+pub(crate) fn memory_curation_example_output_block() -> &'static str {
     r###"{
   "title": "string",
   "summary": "string",
@@ -48,7 +48,7 @@ fn memory_curation_example_output_block() -> &'static str {
 }"###
 }
 
-fn archive_reflection_example_output_block() -> &'static str {
+pub(crate) fn archive_reflection_example_output_block() -> &'static str {
     r###"{
   "usefulMemoryIds": ["12"],
   "memoryActions": [

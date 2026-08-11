@@ -1,4 +1,4 @@
-fn task_conversation_meta_available_for_dispatch(
+pub(crate) fn task_conversation_meta_available_for_dispatch(
     conversation_meta: &ConversationMetaView,
 ) -> bool {
     conversation_meta.status.trim() != "archived"
@@ -14,44 +14,44 @@ fn task_conversation_meta_available_for_dispatch(
 }
 
 #[derive(Debug, Clone)]
-struct TaskResolvedConversation {
-    conversation_id: String,
-    target_scope: String,
-    system_task: bool,
+pub(crate) struct TaskResolvedConversation {
+    pub(crate) conversation_id: String,
+    pub(crate) target_scope: String,
+    pub(crate) system_task: bool,
 }
 
 #[derive(Debug, Clone)]
-struct TaskDispatchSessionResolved {
-    model_config_id: String,
-    department_id: String,
-    agent_id: String,
-    conversation_id: String,
-    target_scope: String,
-    system_task: bool,
+pub(crate) struct TaskDispatchSessionResolved {
+    pub(crate) model_config_id: String,
+    pub(crate) department_id: String,
+    pub(crate) agent_id: String,
+    pub(crate) conversation_id: String,
+    pub(crate) target_scope: String,
+    pub(crate) system_task: bool,
 }
 
 #[derive(Debug, Clone)]
-struct TaskDispatchCandidate {
-    task: TaskRecordStored,
-    session: TaskDispatchSessionResolved,
+pub(crate) struct TaskDispatchCandidate {
+    pub(crate) task: TaskRecordStored,
+    pub(crate) session: TaskDispatchSessionResolved,
 }
 
 #[derive(Debug, Clone)]
-struct TaskDispatchSkipContext {
-    request_id: String,
-    dispatch_id: String,
-    task_goal: String,
-    conversation_id: String,
-    trigger_label: String,
-    todo_count: usize,
-    has_run_at: bool,
-    cron_expression: String,
-    duration_ms: u128,
-    target_scope: String,
-    system_task: bool,
+pub(crate) struct TaskDispatchSkipContext {
+    pub(crate) request_id: String,
+    pub(crate) dispatch_id: String,
+    pub(crate) task_goal: String,
+    pub(crate) conversation_id: String,
+    pub(crate) trigger_label: String,
+    pub(crate) todo_count: usize,
+    pub(crate) has_run_at: bool,
+    pub(crate) cron_expression: String,
+    pub(crate) duration_ms: u128,
+    pub(crate) target_scope: String,
+    pub(crate) system_task: bool,
 }
 
-fn task_target_scope_for_conversation_meta(
+pub(crate) fn task_target_scope_for_conversation_meta(
     conversation_meta: &ConversationMetaView,
 ) -> &'static str {
     if conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT {
@@ -61,7 +61,7 @@ fn task_target_scope_for_conversation_meta(
     }
 }
 
-fn task_resolve_dispatch_conversation(
+pub(crate) fn task_resolve_dispatch_conversation(
     state: &AppState,
     requested_conversation_id: Option<&str>,
 ) -> Result<Option<TaskResolvedConversation>, String> {
@@ -88,7 +88,7 @@ fn task_resolve_dispatch_conversation(
     Ok(None)
 }
 
-fn task_resolve_dispatch_session(
+pub(crate) fn task_resolve_dispatch_session(
     state: &AppState,
     task: &TaskRecordStored,
 ) -> Result<Option<TaskDispatchSessionResolved>, String> {
@@ -143,7 +143,7 @@ fn task_resolve_dispatch_session(
     }))
 }
 
-fn task_dispatch_block_reason(
+pub(crate) fn task_dispatch_block_reason(
     state: &AppState,
     _conversation_id: &str,
 ) -> Result<Option<&'static str>, String> {
@@ -159,11 +159,11 @@ fn task_dispatch_block_reason(
     Ok(None)
 }
 
-fn task_scheduler_notify_changed(state: &AppState) {
+pub(crate) fn task_scheduler_notify_changed(state: &AppState) {
     state.task_scheduler_notify.notify_one();
 }
 
-fn task_trigger_label(task: &TaskRecordStored) -> &'static str {
+pub(crate) fn task_trigger_label(task: &TaskRecordStored) -> &'static str {
     if task
         .trigger
         .cron_expression
@@ -180,11 +180,11 @@ fn task_trigger_label(task: &TaskRecordStored) -> &'static str {
     }
 }
 
-fn task_dispatch_todo_count(task: &TaskRecordStored) -> usize {
+pub(crate) fn task_dispatch_todo_count(task: &TaskRecordStored) -> usize {
     task_legacy_todos_from_todo(&task_todo_from_legacy_fields(&task.status_summary, &task.todos)).len()
 }
 
-fn build_task_trigger_hidden_prompt(task: &TaskRecordStored) -> String {
+pub(crate) fn build_task_trigger_hidden_prompt(task: &TaskRecordStored) -> String {
     let goal = task_goal_from_legacy_fields(&task.title, &task.goal);
     let why = task_why_from_legacy_record(task);
     let todo = task_todo_from_legacy_fields(&task.status_summary, &task.todos);
@@ -204,7 +204,7 @@ fn build_task_trigger_hidden_prompt(task: &TaskRecordStored) -> String {
     format!("<task_remind>\n{}\n</task_remind>", lines.join("\n"))
 }
 
-fn build_task_trigger_provider_meta(task: &TaskRecordStored) -> Value {
+pub(crate) fn build_task_trigger_provider_meta(task: &TaskRecordStored) -> Value {
     serde_json::json!({
         "messageKind": "task_trigger",
         "hiddenPromptText": build_task_trigger_hidden_prompt(task),
@@ -218,7 +218,7 @@ fn build_task_trigger_provider_meta(task: &TaskRecordStored) -> Value {
     })
 }
 
-fn build_task_trigger_message(task: &TaskRecordStored) -> ChatMessage {
+pub(crate) fn build_task_trigger_message(task: &TaskRecordStored) -> ChatMessage {
     let goal = task_goal_from_legacy_fields(&task.title, &task.goal);
     ChatMessage {
         id: Uuid::new_v4().to_string(),
@@ -237,14 +237,14 @@ fn build_task_trigger_message(task: &TaskRecordStored) -> ChatMessage {
     }
 }
 
-fn task_conversation_is_ready_for_immediate_dispatch(
+pub(crate) fn task_conversation_is_ready_for_immediate_dispatch(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<bool, String> {
     conversation_is_idle_for_goal_fallback(state, conversation_id)
 }
 
-fn task_enqueue_conversation_trigger(
+pub(crate) fn task_enqueue_conversation_trigger(
     state: &AppState,
     task: &TaskRecordStored,
     session: &TaskDispatchSessionResolved,
@@ -279,7 +279,7 @@ fn task_enqueue_conversation_trigger(
     ingress_chat_event(state, event)
 }
 
-fn task_complete_one_time_dispatch_if_needed(
+pub(crate) fn task_complete_one_time_dispatch_if_needed(
     state: &AppState,
     task: &TaskRecordStored,
 ) -> Result<(), String> {
@@ -299,14 +299,14 @@ fn task_complete_one_time_dispatch_if_needed(
     Ok(())
 }
 
-fn task_mark_dispatch_sent(state: &AppState, task: &TaskRecordStored) -> Result<(), String> {
+pub(crate) fn task_mark_dispatch_sent(state: &AppState, task: &TaskRecordStored) -> Result<(), String> {
     if task_record_is_one_time(task) {
         return task_complete_one_time_dispatch_if_needed(state, task);
     }
     task_store_mark_triggered(&state.data_path, &task.task_id)
 }
 
-fn task_mark_dispatch_skipped(
+pub(crate) fn task_mark_dispatch_skipped(
     state: &AppState,
     task: &TaskRecordStored,
     reason: &str,
@@ -335,7 +335,7 @@ fn task_mark_dispatch_skipped(
     task_complete_one_time_dispatch_if_needed(state, task)
 }
 
-fn task_fail_missing_bound_conversation(
+pub(crate) fn task_fail_missing_bound_conversation(
     state: &AppState,
     task: &TaskRecordStored,
 ) -> Result<(), String> {
@@ -365,7 +365,7 @@ fn task_fail_missing_bound_conversation(
     Ok(())
 }
 
-fn task_fail_unavailable_owner(
+pub(crate) fn task_fail_unavailable_owner(
     state: &AppState,
     task: &TaskRecordStored,
     reason: &str,
@@ -390,7 +390,7 @@ fn task_fail_unavailable_owner(
     Ok(())
 }
 
-fn task_is_due(entry: &TaskRecordStored, now: OffsetDateTime) -> bool {
+pub(crate) fn task_is_due(entry: &TaskRecordStored, now: OffsetDateTime) -> bool {
     if entry.completion_state != TASK_STATE_ACTIVE {
         return false;
     }
@@ -403,7 +403,7 @@ fn task_is_due(entry: &TaskRecordStored, now: OffsetDateTime) -> bool {
         .unwrap_or(false)
 }
 
-fn task_build_board_snapshot(data_path: &PathBuf) -> Result<TaskBoardSnapshot, String> {
+pub(crate) fn task_build_board_snapshot(data_path: &PathBuf) -> Result<TaskBoardSnapshot, String> {
     let tasks = task_store_list_tasks(data_path)?;
     Ok(TaskBoardSnapshot {
         tasks: tasks
@@ -421,7 +421,7 @@ fn task_build_board_snapshot(data_path: &PathBuf) -> Result<TaskBoardSnapshot, S
     })
 }
 
-fn build_hidden_task_board_block(state: &AppState) -> Option<String> {
+pub(crate) fn build_hidden_task_board_block(state: &AppState) -> Option<String> {
     let snapshot = task_build_board_snapshot(&state.data_path).ok()?;
     if snapshot.tasks.is_empty() {
         return None;
@@ -456,7 +456,7 @@ fn build_hidden_task_board_block(state: &AppState) -> Option<String> {
     Some(prompt_xml_block("task board", lines.join("\n")))
 }
 
-fn task_system_delegate_title(task: &TaskRecordStored) -> String {
+pub(crate) fn task_system_delegate_title(task: &TaskRecordStored) -> String {
     let goal = task_goal_from_legacy_fields(&task.title, &task.goal);
     let compact = goal.trim().chars().take(32).collect::<String>();
     if compact.trim().is_empty() {
@@ -466,14 +466,14 @@ fn task_system_delegate_title(task: &TaskRecordStored) -> String {
     }
 }
 
-fn build_system_task_delegate_instruction(task: &TaskRecordStored) -> String {
+pub(crate) fn build_system_task_delegate_instruction(task: &TaskRecordStored) -> String {
     format!(
         "{}\n\n这是系统任务，请在独立委托线程中完成，不要读取 `P-ai系统` 会话正文作为上下文。完成后直接汇报结果。",
         build_task_trigger_hidden_prompt(task),
     )
 }
 
-fn task_dispatch_system_delegate(
+pub(crate) fn task_dispatch_system_delegate(
     state: &AppState,
     task: &TaskRecordStored,
     session: &TaskDispatchSessionResolved,
@@ -508,7 +508,7 @@ fn task_dispatch_system_delegate(
     Ok(delegate_id)
 }
 
-async fn task_dispatch_due_task(
+pub(crate) async fn task_dispatch_due_task(
     state: &AppState,
     task: &TaskRecordStored,
     session: &TaskDispatchSessionResolved,
@@ -590,7 +590,7 @@ async fn task_dispatch_due_task(
     Ok(())
 }
 
-fn task_skip_context_for_candidate_filter(
+pub(crate) fn task_skip_context_for_candidate_filter(
     task: &TaskRecordStored,
     session: &TaskDispatchSessionResolved,
 ) -> TaskDispatchSkipContext {
@@ -609,7 +609,7 @@ fn task_skip_context_for_candidate_filter(
     }
 }
 
-fn task_matches_conversation(task: &TaskRecordStored, conversation_id: &str) -> bool {
+pub(crate) fn task_matches_conversation(task: &TaskRecordStored, conversation_id: &str) -> bool {
     task.conversation_id
         .as_deref()
         .map(str::trim)
@@ -617,7 +617,7 @@ fn task_matches_conversation(task: &TaskRecordStored, conversation_id: &str) -> 
         == Some(conversation_id.trim())
 }
 
-fn task_build_dispatch_candidates(
+pub(crate) fn task_build_dispatch_candidates(
     state: &AppState,
     tasks: Vec<TaskRecordStored>,
     now: OffsetDateTime,
@@ -664,7 +664,7 @@ fn task_build_dispatch_candidates(
     Ok(candidates)
 }
 
-fn task_due_dispatch_is_ready_now(
+pub(crate) fn task_due_dispatch_is_ready_now(
     state: &AppState,
     task: &TaskRecordStored,
 ) -> Result<bool, String> {
@@ -680,7 +680,7 @@ fn task_due_dispatch_is_ready_now(
     task_conversation_is_ready_for_immediate_dispatch(state, &session.conversation_id)
 }
 
-fn maybe_enqueue_overdue_task_after_idle(
+pub(crate) fn maybe_enqueue_overdue_task_after_idle(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<bool, String> {
@@ -719,7 +719,7 @@ fn maybe_enqueue_overdue_task_after_idle(
     Ok(true)
 }
 
-async fn task_scheduler_tick(state: &AppState) -> Result<(), String> {
+pub(crate) async fn task_scheduler_tick(state: &AppState) -> Result<(), String> {
     let tasks = task_store_list_task_records(&state.data_path)?;
     let now = now_utc();
     let candidates = task_build_dispatch_candidates(state, tasks, now)?;
@@ -729,7 +729,7 @@ async fn task_scheduler_tick(state: &AppState) -> Result<(), String> {
     Ok(())
 }
 
-fn task_scheduler_next_wake_delay(state: &AppState) -> Result<Option<std::time::Duration>, String> {
+pub(crate) fn task_scheduler_next_wake_delay(state: &AppState) -> Result<Option<std::time::Duration>, String> {
     let tasks = task_store_list_task_records(&state.data_path)?;
     let now = now_utc();
     let mut next_future_due = None::<OffsetDateTime>;
@@ -765,7 +765,7 @@ fn task_scheduler_next_wake_delay(state: &AppState) -> Result<Option<std::time::
     Ok(Some(std::time::Duration::from_millis(millis)))
 }
 
-async fn task_scheduler_wait(state: &AppState) -> Result<(), String> {
+pub(crate) async fn task_scheduler_wait(state: &AppState) -> Result<(), String> {
     let fallback = std::time::Duration::from_secs(TASK_SCHEDULER_FALLBACK_SECONDS);
     let next_delay = task_scheduler_next_wake_delay(state)?;
     let wait_duration = next_delay.map(|delay| delay.min(fallback)).unwrap_or(fallback);
@@ -782,7 +782,7 @@ async fn task_scheduler_wait(state: &AppState) -> Result<(), String> {
     Ok(())
 }
 
-fn start_task_scheduler(state: AppState) {
+pub(crate) fn start_task_scheduler(state: AppState) {
     tokio::spawn(async move {
         loop {
             let tick_started_at = std::time::Instant::now();

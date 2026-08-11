@@ -1,11 +1,11 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PromptPreviewMode {
+pub(crate) enum PromptPreviewMode {
     Chat,
     Compaction,
     Archive,
 }
 
-fn parse_prompt_preview_mode(raw: Option<&str>) -> PromptPreviewMode {
+pub(crate) fn parse_prompt_preview_mode(raw: Option<&str>) -> PromptPreviewMode {
     match raw.unwrap_or("").trim() {
         "compaction" => PromptPreviewMode::Compaction,
         "archive" => PromptPreviewMode::Archive,
@@ -13,7 +13,7 @@ fn parse_prompt_preview_mode(raw: Option<&str>) -> PromptPreviewMode {
     }
 }
 
-fn resolve_chat_prompt_preview_api_config(
+pub(crate) fn resolve_chat_prompt_preview_api_config(
     app_config: &AppConfig,
     conversation: &Conversation,
     requested_api_config_id: Option<&str>,
@@ -39,7 +39,7 @@ fn resolve_chat_prompt_preview_api_config(
 }
 
 
-async fn get_prompt_preview_inner(
+pub(crate) async fn get_prompt_preview_inner(
     input: SessionSelector,
     preview_mode: Option<String>,
     state: &AppState,
@@ -253,7 +253,7 @@ async fn get_prompt_preview_inner(
 }
 
 
-fn archive_time_label(raw: &str) -> String {
+pub(crate) fn archive_time_label(raw: &str) -> String {
     let s = raw.trim();
     if s.is_empty() {
         return "unknown-time".to_string();
@@ -269,7 +269,7 @@ fn archive_time_label(raw: &str) -> String {
     }
 }
 
-fn conversation_to_archive(conversation: &Conversation) -> ConversationArchive {
+pub(crate) fn conversation_to_archive(conversation: &Conversation) -> ConversationArchive {
     let mut source_conversation = conversation.clone();
     source_conversation.fast_request_turns.clear();
     ConversationArchive {
@@ -283,7 +283,7 @@ fn conversation_to_archive(conversation: &Conversation) -> ConversationArchive {
     }
 }
 
-fn archive_to_conversation(archive: ConversationArchive) -> Conversation {
+pub(crate) fn archive_to_conversation(archive: ConversationArchive) -> Conversation {
     let mut conversation = archive.source_conversation;
     if conversation.id.trim().is_empty() {
         conversation.id = archive.archive_id;
@@ -306,45 +306,45 @@ fn archive_to_conversation(archive: ConversationArchive) -> Conversation {
 }
 
 
-fn list_archives_inner(state: &AppState) -> Result<Vec<ArchiveSummary>, String> {
+pub(crate) fn list_archives_inner(state: &AppState) -> Result<Vec<ArchiveSummary>, String> {
     conversation_service_v2().list_archives(state)
 }
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ArchiveBlockSummaryOutput {
-    block_id: u32,
-    message_count: usize,
-    first_message_id: String,
-    last_message_id: String,
+pub(crate) struct ArchiveBlockSummaryOutput {
+    pub(crate) block_id: u32,
+    pub(crate) message_count: usize,
+    pub(crate) first_message_id: String,
+    pub(crate) last_message_id: String,
     #[serde(default)]
-    first_created_at: Option<String>,
+    pub(crate) first_created_at: Option<String>,
     #[serde(default)]
-    last_created_at: Option<String>,
-    is_latest: bool,
+    pub(crate) last_created_at: Option<String>,
+    pub(crate) is_latest: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct GetArchiveBlockPageInput {
-    archive_id: String,
+pub(crate) struct GetArchiveBlockPageInput {
+    pub(crate) archive_id: String,
     #[serde(default)]
-    block_id: Option<u32>,
+    pub(crate) block_id: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ArchiveBlockPageOutput {
-    blocks: Vec<ArchiveBlockSummaryOutput>,
-    selected_block_id: u32,
-    messages: Vec<ChatMessage>,
-    has_prev_block: bool,
-    has_next_block: bool,
+pub(crate) struct ArchiveBlockPageOutput {
+    pub(crate) blocks: Vec<ArchiveBlockSummaryOutput>,
+    pub(crate) selected_block_id: u32,
+    pub(crate) messages: Vec<ChatMessage>,
+    pub(crate) has_prev_block: bool,
+    pub(crate) has_next_block: bool,
 }
 
 
-fn get_archive_block_page_inner(
+pub(crate) fn get_archive_block_page_inner(
     input: GetArchiveBlockPageInput,
     state: &AppState,
 ) -> Result<ArchiveBlockPageOutput, String> {
@@ -379,17 +379,17 @@ fn get_archive_block_page_inner(
 }
 
 
-fn get_archive_summary_inner(state: &AppState, archive_id: &str) -> Result<String, String> {
+pub(crate) fn get_archive_summary_inner(state: &AppState, archive_id: &str) -> Result<String, String> {
     conversation_service_v2().get_archive_summary(state, archive_id)
 }
 
 
-fn delete_archive_inner(state: &AppState, archive_id: &str) -> Result<(), String> {
+pub(crate) fn delete_archive_inner(state: &AppState, archive_id: &str) -> Result<(), String> {
     conversation_service_v2().delete_archive(state, archive_id)
 }
 
 
-fn unarchive_archive_inner(state: &AppState, archive_id: &str) -> Result<(), String> {
+pub(crate) fn unarchive_archive_inner(state: &AppState, archive_id: &str) -> Result<(), String> {
     conversation_service_v2().unarchive_archive(state, archive_id)?;
     flush_pending_persists_blocking(state)?;
     if let Err(err) = emit_unarchived_conversation_overview_updated_from_state(state) {
@@ -402,7 +402,7 @@ fn unarchive_archive_inner(state: &AppState, archive_id: &str) -> Result<(), Str
 }
 
 #[cfg(test)]
-mod fast_request_archive_tests {
+pub(crate) mod fast_request_archive_tests {
     use super::*;
 
     fn test_fast_request_turn() -> FastRequestTurn {

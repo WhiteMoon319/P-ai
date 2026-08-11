@@ -1,22 +1,22 @@
-fn ide_context_chat_clients() -> Arc<Mutex<std::collections::HashMap<String, tokio::sync::mpsc::UnboundedSender<serde_json::Value>>>> {
+pub(crate) fn ide_context_chat_clients() -> Arc<Mutex<std::collections::HashMap<String, tokio::sync::mpsc::UnboundedSender<serde_json::Value>>>> {
     IDE_CONTEXT_CHAT_CLIENTS
         .get_or_init(|| Arc::new(Mutex::new(std::collections::HashMap::new())))
         .clone()
 }
 
-fn ide_context_chat_client_conversations() -> Arc<Mutex<std::collections::HashMap<String, String>>> {
+pub(crate) fn ide_context_chat_client_conversations() -> Arc<Mutex<std::collections::HashMap<String, String>>> {
     IDE_CONTEXT_CHAT_CLIENT_CONVERSATIONS
         .get_or_init(|| Arc::new(Mutex::new(std::collections::HashMap::new())))
         .clone()
 }
 
-fn web_access_connections() -> Arc<Mutex<std::collections::HashMap<String, WebAccessConnectionEntry>>> {
+pub(crate) fn web_access_connections() -> Arc<Mutex<std::collections::HashMap<String, WebAccessConnectionEntry>>> {
     WEB_ACCESS_CONNECTIONS
         .get_or_init(|| Arc::new(Mutex::new(std::collections::HashMap::new())))
         .clone()
 }
 
-fn ide_context_web_access_enabled(state: &AppState) -> bool {
+pub(crate) fn ide_context_web_access_enabled(state: &AppState) -> bool {
     match state_read_config_cached(state) {
         Ok(config) => config.web_access_enabled,
         Err(err) => {
@@ -26,7 +26,7 @@ fn ide_context_web_access_enabled(state: &AppState) -> bool {
     }
 }
 
-fn ide_context_bridge_shutdown_notification(reason: &str) -> serde_json::Value {
+pub(crate) fn ide_context_bridge_shutdown_notification(reason: &str) -> serde_json::Value {
     serde_json::json!({
         "jsonrpc": "2.0",
         "method": "bridge.shutdown",
@@ -36,7 +36,7 @@ fn ide_context_bridge_shutdown_notification(reason: &str) -> serde_json::Value {
     })
 }
 
-fn ide_context_notify_chat_clients_shutdown(reason: &str) {
+pub(crate) fn ide_context_notify_chat_clients_shutdown(reason: &str) {
     let notification = ide_context_bridge_shutdown_notification(reason);
     if let Ok(clients) = ide_context_chat_clients().lock() {
         for sender in clients.values() {
@@ -45,7 +45,7 @@ fn ide_context_notify_chat_clients_shutdown(reason: &str) {
     }
 }
 
-fn web_access_register_connection(
+pub(crate) fn web_access_register_connection(
     path: &str,
     peer_addr: &std::net::SocketAddr,
     local: bool,
@@ -68,7 +68,7 @@ fn web_access_register_connection(
     id
 }
 
-fn web_access_update_connection_auth(connection_id: &str, authenticated: bool, client_id: Option<&str>) {
+pub(crate) fn web_access_update_connection_auth(connection_id: &str, authenticated: bool, client_id: Option<&str>) {
     if let Ok(mut connections) = web_access_connections().lock() {
         if let Some(entry) = connections.get_mut(connection_id) {
             entry.authenticated = authenticated;
@@ -79,13 +79,13 @@ fn web_access_update_connection_auth(connection_id: &str, authenticated: bool, c
     }
 }
 
-fn web_access_remove_connection(connection_id: &str) {
+pub(crate) fn web_access_remove_connection(connection_id: &str) {
     if let Ok(mut connections) = web_access_connections().lock() {
         connections.remove(connection_id);
     }
 }
 
-fn web_access_connection_summaries() -> Vec<WebAccessConnectionSummary> {
+pub(crate) fn web_access_connection_summaries() -> Vec<WebAccessConnectionSummary> {
     let mut items = if let Ok(connections) = web_access_connections().lock() {
         connections
             .values()
@@ -107,7 +107,7 @@ fn web_access_connection_summaries() -> Vec<WebAccessConnectionSummary> {
     items
 }
 
-fn ide_chat_broadcast_notification(method: &str, params: serde_json::Value) {
+pub(crate) fn ide_chat_broadcast_notification(method: &str, params: serde_json::Value) {
     let clients = ide_context_chat_clients();
     let message = serde_json::json!({
         "jsonrpc": "2.0",
@@ -131,7 +131,7 @@ fn ide_chat_broadcast_notification(method: &str, params: serde_json::Value) {
     }
 }
 
-fn ide_chat_emit_notification_to_client(
+pub(crate) fn ide_chat_emit_notification_to_client(
     client_id: &str,
     method: &str,
     params: serde_json::Value,
@@ -173,7 +173,7 @@ fn ide_chat_emit_notification_to_client(
     delivered
 }
 
-fn ide_chat_sidebar_client_id_from_label(label: &str) -> Option<String> {
+pub(crate) fn ide_chat_sidebar_client_id_from_label(label: &str) -> Option<String> {
     let label = label.trim();
     if let Some(value) = label.strip_prefix("vscode-sidebar:") {
         let client_id = value.trim();
@@ -190,7 +190,7 @@ fn ide_chat_sidebar_client_id_from_label(label: &str) -> Option<String> {
     None
 }
 
-fn ide_chat_emit_notification_to_sidebar_conversation(
+pub(crate) fn ide_chat_emit_notification_to_sidebar_conversation(
     conversation_id: &str,
     method: &str,
     params: serde_json::Value,
@@ -252,7 +252,7 @@ fn ide_chat_emit_notification_to_sidebar_conversation(
     delivered
 }
 
-fn ide_context_prune_expired_bridge_tokens(auth: &mut IdeContextBridgeAuthRuntime, now: OffsetDateTime) {
+pub(crate) fn ide_context_prune_expired_bridge_tokens(auth: &mut IdeContextBridgeAuthRuntime, now: OffsetDateTime) {
     auth.valid_tokens.retain(|_, expires_at| *expires_at > now);
     if auth.valid_tokens.len() <= IDE_CONTEXT_MAX_AUTH_TOKENS {
         return;
@@ -269,13 +269,13 @@ fn ide_context_prune_expired_bridge_tokens(auth: &mut IdeContextBridgeAuthRuntim
         .collect();
 }
 
-fn ide_context_bridge_token_store_path(state: &AppState) -> PathBuf {
+pub(crate) fn ide_context_bridge_token_store_path(state: &AppState) -> PathBuf {
     app_root_from_data_path(&state.data_path)
         .join("web-access")
         .join("bridge-auth-token.json")
 }
 
-fn ide_context_clear_persisted_bridge_token(state: &AppState) -> Result<(), String> {
+pub(crate) fn ide_context_clear_persisted_bridge_token(state: &AppState) -> Result<(), String> {
     let path = ide_context_bridge_token_store_path(state);
     if !path.exists() {
         return Ok(());
@@ -284,7 +284,7 @@ fn ide_context_clear_persisted_bridge_token(state: &AppState) -> Result<(), Stri
         .map_err(|err| format!("删除 Web 访问令牌失败，path={}，error={err}", path.display()))
 }
 
-fn ide_context_persist_bridge_tokens(
+pub(crate) fn ide_context_persist_bridge_tokens(
     state: &AppState,
     tokens: &std::collections::HashMap<String, OffsetDateTime>,
 ) -> Result<(), String> {
@@ -317,7 +317,7 @@ fn ide_context_persist_bridge_tokens(
         .map_err(|err| format!("写入 Web 访问令牌失败，path={}，error={err}", path.display()))
 }
 
-fn ide_context_try_restore_persisted_bridge_token(
+pub(crate) fn ide_context_try_restore_persisted_bridge_token(
     state: &AppState,
     runtime: &IdeContextRuntime,
 ) -> Result<(), String> {
@@ -357,7 +357,7 @@ fn ide_context_try_restore_persisted_bridge_token(
     Ok(())
 }
 
-fn ide_context_store_bridge_token(
+pub(crate) fn ide_context_store_bridge_token(
     runtime: &IdeContextRuntime,
     state: Option<&AppState>,
     token: &str,
@@ -381,7 +381,7 @@ fn ide_context_store_bridge_token(
     Ok(())
 }
 
-fn ide_context_issue_bridge_token_with_state(
+pub(crate) fn ide_context_issue_bridge_token_with_state(
     runtime: &IdeContextRuntime,
     state: Option<&AppState>,
 ) -> Result<String, String> {
@@ -392,7 +392,7 @@ fn ide_context_issue_bridge_token_with_state(
     Ok(token)
 }
 
-fn ide_context_consume_bridge_token_with_state(
+pub(crate) fn ide_context_consume_bridge_token_with_state(
     runtime: &IdeContextRuntime,
     state: Option<&AppState>,
     provided: &str,

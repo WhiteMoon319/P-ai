@@ -3,20 +3,20 @@
     description = "桌面脚本请求。只接收一个 script 字段；script 必须是多行字符串，一行一个动作。",
     example = operate_request_example()
 )]
-struct OperateRequest {
+pub(crate) struct OperateRequest {
     #[schemars(
         description = "桌面脚本文本，一行一个动作。",
         example = operate_script_example()
     )]
-    script: String,
+    pub(crate) script: String,
     #[serde(default)]
     #[schemars(
         description = "本次桌面脚本工具调用的超时时间，单位毫秒；未指定时默认 300000ms。长时间 wait 或自动化脚本应显式传入足够大的值。"
     )]
-    timeout_ms: Option<u64>,
+    pub(crate) timeout_ms: Option<u64>,
 }
 
-fn operate_script_example() -> String {
+pub(crate) fn operate_script_example() -> String {
     r#"mouse left click @0.50,0.10
 wait 0.5
 text "B站热榜"
@@ -26,7 +26,7 @@ screenshot"#
         .to_string()
 }
 
-fn operate_request_example() -> OperateRequest {
+pub(crate) fn operate_request_example() -> OperateRequest {
     OperateRequest {
         script: operate_script_example(),
         timeout_ms: None,
@@ -35,7 +35,7 @@ fn operate_request_example() -> OperateRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-enum DesktopScriptStepKind {
+pub(crate) enum DesktopScriptStepKind {
     Mouse,
     Key,
     Text,
@@ -45,46 +45,46 @@ enum DesktopScriptStepKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct DesktopScriptStepResult {
-    line: usize,
-    kind: DesktopScriptStepKind,
-    summary: String,
-    ok: bool,
+pub(crate) struct DesktopScriptStepResult {
+    pub(crate) line: usize,
+    pub(crate) kind: DesktopScriptStepKind,
+    pub(crate) summary: String,
+    pub(crate) ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    saved_path: Option<String>,
+    pub(crate) saved_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct LatestScreenshotInfo {
-    mode: String,
-    width: u32,
-    height: u32,
+pub(crate) struct LatestScreenshotInfo {
+    pub(crate) mode: String,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    saved_path: Option<String>,
+    pub(crate) saved_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct OperateResponse {
-    ok: bool,
-    executed_count: usize,
-    elapsed_ms: u64,
-    steps: Vec<DesktopScriptStepResult>,
+pub(crate) struct OperateResponse {
+    pub(crate) ok: bool,
+    pub(crate) executed_count: usize,
+    pub(crate) elapsed_ms: u64,
+    pub(crate) steps: Vec<DesktopScriptStepResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    latest_screenshot: Option<LatestScreenshotInfo>,
+    pub(crate) latest_screenshot: Option<LatestScreenshotInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    image_mime: Option<String>,
+    pub(crate) image_mime: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    image_base64: Option<String>,
+    pub(crate) image_base64: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    width: Option<u32>,
+    pub(crate) width: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    height: Option<u32>,
+    pub(crate) height: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum OperateMouseButton {
+pub(crate) enum OperateMouseButton {
     Left,
     Right,
     Middle,
@@ -93,28 +93,28 @@ enum OperateMouseButton {
 }
 
 #[derive(Debug, Clone)]
-struct NormalizedPoint {
-    x: f64,
-    y: f64,
+pub(crate) struct NormalizedPoint {
+    pub(crate) x: f64,
+    pub(crate) y: f64,
 }
 
 #[derive(Debug, Clone)]
-struct NormalizedRegion {
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
+pub(crate) struct NormalizedRegion {
+    pub(crate) x: f64,
+    pub(crate) y: f64,
+    pub(crate) width: f64,
+    pub(crate) height: f64,
 }
 
 #[derive(Debug, Clone)]
-enum ScreenshotModeSpec {
+pub(crate) enum ScreenshotModeSpec {
     Desktop,
     FocusedWindow,
     Region(NormalizedRegion),
 }
 
 #[derive(Debug, Clone)]
-enum DesktopScriptAction {
+pub(crate) enum DesktopScriptAction {
     MouseClick { line: usize, button: OperateMouseButton, target: NormalizedPoint, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration, press: std::time::Duration },
     MouseScroll { line: usize, direction: i32, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration },
     Key { line: usize, keys: Vec<String>, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration, press: std::time::Duration },
@@ -123,15 +123,15 @@ enum DesktopScriptAction {
     Screenshot { line: usize, mode: ScreenshotModeSpec, save_path: Option<String>, quality: f32 },
 }
 
-fn operate_invalid(message: impl Into<String>) -> DesktopToolError {
+pub(crate) fn operate_invalid(message: impl Into<String>) -> DesktopToolError {
     DesktopToolError::invalid_params(message)
 }
 
-fn operate_line_error(line: usize, action: &str, message: impl Into<String>) -> DesktopToolError {
+pub(crate) fn operate_line_error(line: usize, action: &str, message: impl Into<String>) -> DesktopToolError {
     operate_invalid(format!("第 {line} 行 {action} {}", message.into()))
 }
 
-fn tokenize_script_line(line: &str) -> Result<Vec<String>, String> {
+pub(crate) fn tokenize_script_line(line: &str) -> Result<Vec<String>, String> {
     let mut tokens = Vec::<String>::new();
     let mut current = String::new();
     let mut in_quotes = false;
@@ -158,7 +158,7 @@ fn tokenize_script_line(line: &str) -> Result<Vec<String>, String> {
     Ok(tokens)
 }
 
-fn strip_quoted_value(token: &str) -> Option<String> {
+pub(crate) fn strip_quoted_value(token: &str) -> Option<String> {
     let trimmed = token.trim();
     if trimmed.len() < 2 || !trimmed.starts_with('"') || !trimmed.ends_with('"') {
         return None;
@@ -166,7 +166,7 @@ fn strip_quoted_value(token: &str) -> Option<String> {
     Some(trimmed[1..trimmed.len() - 1].to_string())
 }
 
-fn parse_seconds_token(line: usize, action: &str, raw: &str, field: &str) -> DesktopToolResult<std::time::Duration> {
+pub(crate) fn parse_seconds_token(line: usize, action: &str, raw: &str, field: &str) -> DesktopToolResult<std::time::Duration> {
     let value = raw.parse::<f64>().map_err(|_| operate_line_error(line, action, format!("{field} 非法：必须是数字，当前为 `{raw}`")))?;
     if !value.is_finite() || value < 0.0 {
         return Err(operate_line_error(line, action, format!("{field} 非法：必须是 >= 0 的有限数字，当前为 `{raw}`")));
@@ -177,7 +177,7 @@ fn parse_seconds_token(line: usize, action: &str, raw: &str, field: &str) -> Des
     Ok(std::time::Duration::from_secs_f64(value))
 }
 
-fn parse_repeat_token(line: usize, action: &str, raw: &str) -> DesktopToolResult<u32> {
+pub(crate) fn parse_repeat_token(line: usize, action: &str, raw: &str) -> DesktopToolResult<u32> {
     let value = raw.parse::<u32>().map_err(|_| operate_line_error(line, action, format!("repeat 非法：必须是正整数，当前为 `{raw}`")))?;
     if value == 0 || value > 100 {
         return Err(operate_line_error(line, action, format!("repeat 非法：必须在 1~100 之间，当前为 `{raw}`")));
@@ -185,7 +185,7 @@ fn parse_repeat_token(line: usize, action: &str, raw: &str) -> DesktopToolResult
     Ok(value)
 }
 
-fn parse_named_params(line: usize, action: &str, tokens: &[String], allowed: &[&str]) -> DesktopToolResult<std::collections::HashMap<String, String>> {
+pub(crate) fn parse_named_params(line: usize, action: &str, tokens: &[String], allowed: &[&str]) -> DesktopToolResult<std::collections::HashMap<String, String>> {
     let mut out = std::collections::HashMap::<String, String>::new();
     let allowed_set = allowed.iter().map(|item| item.to_string()).collect::<std::collections::HashSet<_>>();
     for token in tokens {
@@ -204,7 +204,7 @@ fn parse_named_params(line: usize, action: &str, tokens: &[String], allowed: &[&
     Ok(out)
 }
 
-fn parse_normalized_pair(line: usize, action: &str, raw: &str) -> DesktopToolResult<NormalizedPoint> {
+pub(crate) fn parse_normalized_pair(line: usize, action: &str, raw: &str) -> DesktopToolResult<NormalizedPoint> {
     let value = raw.trim().strip_prefix('@').ok_or_else(|| operate_line_error(line, action, format!("坐标非法：必须使用 @x,y 形式，当前为 `{raw}`")))?;
     let parts = value.split(',').map(str::trim).collect::<Vec<_>>();
     if parts.len() != 2 {
@@ -221,7 +221,7 @@ fn parse_normalized_pair(line: usize, action: &str, raw: &str) -> DesktopToolRes
     Ok(NormalizedPoint { x, y })
 }
 
-fn parse_normalized_region(line: usize, action: &str, raw: &str) -> DesktopToolResult<NormalizedRegion> {
+pub(crate) fn parse_normalized_region(line: usize, action: &str, raw: &str) -> DesktopToolResult<NormalizedRegion> {
     let value = raw.trim().strip_prefix('@').ok_or_else(|| operate_line_error(line, action, format!("region 非法：必须使用 @x,y,w,h 形式，当前为 `{raw}`")))?;
     let parts = value.split(',').map(str::trim).collect::<Vec<_>>();
     if parts.len() != 4 {
@@ -245,7 +245,7 @@ fn parse_normalized_region(line: usize, action: &str, raw: &str) -> DesktopToolR
     Ok(NormalizedRegion { x, y, width, height })
 }
 
-fn parse_mouse_button(line: usize, raw: &str) -> DesktopToolResult<OperateMouseButton> {
+pub(crate) fn parse_mouse_button(line: usize, raw: &str) -> DesktopToolResult<OperateMouseButton> {
     match raw.trim().to_ascii_lowercase().as_str() {
         "left" => Ok(OperateMouseButton::Left),
         "right" => Ok(OperateMouseButton::Right),
@@ -256,11 +256,11 @@ fn parse_mouse_button(line: usize, raw: &str) -> DesktopToolResult<OperateMouseB
     }
 }
 
-fn parse_key_combo(raw: &str) -> Vec<String> {
+pub(crate) fn parse_key_combo(raw: &str) -> Vec<String> {
     raw.split('+').map(str::trim).filter(|item| !item.is_empty()).map(ToOwned::to_owned).collect()
 }
 
-fn parse_absolute_save_path(line: usize, action: &str, raw: &str) -> DesktopToolResult<String> {
+pub(crate) fn parse_absolute_save_path(line: usize, action: &str, raw: &str) -> DesktopToolResult<String> {
     let Some(path) = strip_quoted_value(raw) else {
         return Err(operate_line_error(line, action, "save 非法：必须使用双引号包裹绝对路径".to_string()));
     };
@@ -270,7 +270,7 @@ fn parse_absolute_save_path(line: usize, action: &str, raw: &str) -> DesktopTool
     Ok(path)
 }
 
-fn parse_mouse_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
+pub(crate) fn parse_mouse_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
     if tokens.len() < 2 {
         return Err(operate_line_error(line_no, "mouse", "非法：至少需要按钮或滚动方向".to_string()));
     }
@@ -299,7 +299,7 @@ fn parse_mouse_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<Desk
     Ok(DesktopScriptAction::MouseClick { line: line_no, button, target, repeat, delay, pre_delay, press })
 }
 
-fn parse_key_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
+pub(crate) fn parse_key_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
     if tokens.len() < 2 {
         return Err(operate_line_error(line_no, "key", "非法：缺少按键组合".to_string()));
     }
@@ -315,7 +315,7 @@ fn parse_key_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<Deskto
     Ok(DesktopScriptAction::Key { line: line_no, keys, repeat, delay, pre_delay, press })
 }
 
-fn parse_text_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
+pub(crate) fn parse_text_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
     if tokens.len() < 2 {
         return Err(operate_line_error(line_no, "text", "非法：缺少文本内容".to_string()));
     }
@@ -332,7 +332,7 @@ fn parse_text_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<Deskt
     Ok(DesktopScriptAction::Text { line: line_no, text, repeat, delay, pre_delay })
 }
 
-fn parse_wait_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
+pub(crate) fn parse_wait_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
     if tokens.len() != 2 {
         return Err(operate_line_error(line_no, "wait", "非法：格式应为 `wait <seconds>`".to_string()));
     }
@@ -340,7 +340,7 @@ fn parse_wait_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<Deskt
     Ok(DesktopScriptAction::Wait { line: line_no, duration })
 }
 
-fn parse_screenshot_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
+pub(crate) fn parse_screenshot_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
     let mut mode = ScreenshotModeSpec::Desktop;
     let mut named_tokens = Vec::<String>::new();
     for token in &tokens[1..] {
@@ -376,7 +376,7 @@ fn parse_screenshot_line(line_no: usize, tokens: &[String]) -> DesktopToolResult
     Ok(DesktopScriptAction::Screenshot { line: line_no, mode, save_path, quality })
 }
 
-fn parse_script_line(line_no: usize, raw_line: &str) -> DesktopToolResult<Option<DesktopScriptAction>> {
+pub(crate) fn parse_script_line(line_no: usize, raw_line: &str) -> DesktopToolResult<Option<DesktopScriptAction>> {
     let trimmed = raw_line.trim();
     if trimmed.is_empty() {
         return Ok(None);
@@ -395,7 +395,7 @@ fn parse_script_line(line_no: usize, raw_line: &str) -> DesktopToolResult<Option
     }
 }
 
-fn parse_script(request: &OperateRequest) -> DesktopToolResult<Vec<DesktopScriptAction>> {
+pub(crate) fn parse_script(request: &OperateRequest) -> DesktopToolResult<Vec<DesktopScriptAction>> {
     let trimmed = request.script.trim();
     if trimmed.is_empty() {
         return Err(operate_invalid("script 不能为空"));

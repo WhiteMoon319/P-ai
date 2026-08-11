@@ -18,6 +18,7 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
 use uuid::Uuid;
 
 
+use std::collections::{HashMap, HashSet};
 use super::*;
 // Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
 
@@ -641,7 +642,7 @@ pub(crate) fn conversation_real_user_message_texts(conversation: &Conversation) 
 }
 
 #[cfg(test)]
-mod summary_context_title_tests {
+pub(crate) mod summary_context_title_tests {
 
     fn test_chat_message(
         id: &str,
@@ -2347,7 +2348,7 @@ pub(crate) fn prompt_user_extra_blocks_for_message(
 }
 
 #[cfg(test)]
-mod prompt_user_extra_attachment_tests {
+pub(crate) mod prompt_user_extra_attachment_tests {
 
     #[test]
     fn prompt_user_extra_blocks_should_include_all_attachment_notices() {
@@ -2669,7 +2670,7 @@ pub(crate) fn prompt_path_from_stored_binary_marker(
 }
 
 #[cfg(test)]
-mod prompt_media_path_tests {
+pub(crate) mod prompt_media_path_tests {
 
     fn test_png_base64() -> String {
         let image = image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(

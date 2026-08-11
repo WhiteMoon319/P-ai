@@ -1,126 +1,126 @@
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SyncMemoryEmbeddingProviderInput {
-    provider_id: String,
+pub(crate) struct SyncMemoryEmbeddingProviderInput {
+    pub(crate) provider_id: String,
     #[serde(default)]
-    api_config_id: Option<String>,
+    pub(crate) api_config_id: Option<String>,
     #[serde(default)]
-    model_name: Option<String>,
+    pub(crate) model_name: Option<String>,
     #[serde(default)]
-    batch_size: Option<usize>,
+    pub(crate) batch_size: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TestMemoryEmbeddingProviderInput {
-    provider_id: Option<String>,
+pub(crate) struct TestMemoryEmbeddingProviderInput {
+    pub(crate) provider_id: Option<String>,
     #[serde(default)]
-    api_config_id: Option<String>,
+    pub(crate) api_config_id: Option<String>,
     #[serde(default)]
-    model_name: Option<String>,
+    pub(crate) model_name: Option<String>,
     #[serde(default)]
-    text: Option<String>,
+    pub(crate) text: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TestMemoryRerankProviderInput {
+pub(crate) struct TestMemoryRerankProviderInput {
     #[serde(default)]
-    api_config_id: Option<String>,
+    pub(crate) api_config_id: Option<String>,
     #[serde(default)]
-    model_name: Option<String>,
+    pub(crate) model_name: Option<String>,
     #[serde(default)]
-    query: Option<String>,
+    pub(crate) query: Option<String>,
     #[serde(default)]
-    documents: Option<Vec<String>>,
+    pub(crate) documents: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TestMemoryEmbeddingProviderResult {
-    provider_kind: String,
-    model_name: String,
-    vector_dim: usize,
-    elapsed_ms: u128,
+pub(crate) struct TestMemoryEmbeddingProviderResult {
+    pub(crate) provider_kind: String,
+    pub(crate) model_name: String,
+    pub(crate) vector_dim: usize,
+    pub(crate) elapsed_ms: u128,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct TestMemoryRerankProviderResult {
-    provider_kind: String,
-    model_name: String,
-    elapsed_ms: u128,
-    result_count: usize,
-    top_index: Option<usize>,
-    top_score: Option<f64>,
+pub(crate) struct TestMemoryRerankProviderResult {
+    pub(crate) provider_kind: String,
+    pub(crate) model_name: String,
+    pub(crate) elapsed_ms: u128,
+    pub(crate) result_count: usize,
+    pub(crate) top_index: Option<usize>,
+    pub(crate) top_score: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SaveMemoryEmbeddingBindingInput {
-    api_config_id: String,
+pub(crate) struct SaveMemoryEmbeddingBindingInput {
+    pub(crate) api_config_id: String,
     #[serde(default)]
-    model_name: Option<String>,
+    pub(crate) model_name: Option<String>,
     #[serde(default)]
-    batch_size: Option<usize>,
+    pub(crate) batch_size: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SaveMemoryRerankBindingInput {
-    api_config_id: String,
+pub(crate) struct SaveMemoryRerankBindingInput {
+    pub(crate) api_config_id: String,
     #[serde(default)]
-    model_name: Option<String>,
+    pub(crate) model_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MemoryProviderBindings {
+pub(crate) struct MemoryProviderBindings {
     #[serde(default)]
-    embedding_api_config_id: Option<String>,
+    pub(crate) embedding_api_config_id: Option<String>,
     #[serde(default)]
-    rerank_api_config_id: Option<String>,
+    pub(crate) rerank_api_config_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SaveMemoryRerankBindingResult {
-    status: String,
-    rerank_api_config_id: Option<String>,
-    model_name: String,
+pub(crate) struct SaveMemoryRerankBindingResult {
+    pub(crate) status: String,
+    pub(crate) rerank_api_config_id: Option<String>,
+    pub(crate) model_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MemoryEmbeddingSyncProgress {
-    status: String,
-    done_batches: usize,
-    total_batches: usize,
-    trace_id: Option<String>,
-    error: Option<String>,
+pub(crate) struct MemoryEmbeddingSyncProgress {
+    pub(crate) status: String,
+    pub(crate) done_batches: usize,
+    pub(crate) total_batches: usize,
+    pub(crate) trace_id: Option<String>,
+    pub(crate) error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MemoryHealthCheckInput {
+pub(crate) struct MemoryHealthCheckInput {
     #[serde(default)]
-    auto_repair: bool,
+    pub(crate) auto_repair: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MemoryBackupInput {
-    path: String,
+pub(crate) struct MemoryBackupInput {
+    pub(crate) path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MemoryRestoreInput {
-    path: String,
+pub(crate) struct MemoryRestoreInput {
+    pub(crate) path: String,
 }
 
 
-fn test_memory_embedding_provider_inner(
+pub(crate) fn test_memory_embedding_provider_inner(
     input: TestMemoryEmbeddingProviderInput,
     state: &AppState,
 ) -> Result<TestMemoryEmbeddingProviderResult, String> {
@@ -167,7 +167,7 @@ fn test_memory_embedding_provider_inner(
     })
 }
 
-fn test_memory_rerank_provider_inner(
+pub(crate) fn test_memory_rerank_provider_inner(
     input: TestMemoryRerankProviderInput,
     state: &AppState,
 ) -> Result<TestMemoryRerankProviderResult, String> {
@@ -217,7 +217,7 @@ fn test_memory_rerank_provider_inner(
     })
 }
 
-fn memory_binding_provider_id(api_id: &str, request_format: &str, model: &str) -> String {
+pub(crate) fn memory_binding_provider_id(api_id: &str, request_format: &str, model: &str) -> String {
     let norm = |raw: &str| -> String {
         let mut out = raw
             .trim()
@@ -242,7 +242,7 @@ fn memory_binding_provider_id(api_id: &str, request_format: &str, model: &str) -
     format!("{id}_{fmt}_{mdl}")
 }
 
-fn get_memory_provider_bindings_inner(state: &AppState) -> Result<MemoryProviderBindings, String> {
+pub(crate) fn get_memory_provider_bindings_inner(state: &AppState) -> Result<MemoryProviderBindings, String> {
     let conn = memory_store_open(&state.data_path)?;
     Ok(MemoryProviderBindings {
         embedding_api_config_id: memory_store_get_runtime_state(&conn, KB_STATE_EMBEDDING_API_CONFIG_ID)?,
@@ -250,7 +250,7 @@ fn get_memory_provider_bindings_inner(state: &AppState) -> Result<MemoryProvider
     })
 }
 
-fn get_memory_embedding_sync_progress_inner(
+pub(crate) fn get_memory_embedding_sync_progress_inner(
     state: &AppState,
 ) -> Result<MemoryEmbeddingSyncProgress, String> {
     let conn = memory_store_open(&state.data_path)?;
@@ -273,7 +273,7 @@ fn get_memory_embedding_sync_progress_inner(
     })
 }
 
-fn save_memory_embedding_binding_inner(
+pub(crate) fn save_memory_embedding_binding_inner(
     input: SaveMemoryEmbeddingBindingInput,
     state: &AppState,
 ) -> Result<MemoryStoreProviderSyncReport, String> {
@@ -342,7 +342,7 @@ fn save_memory_embedding_binding_inner(
     Ok(report)
 }
 
-fn save_memory_rerank_binding_inner(
+pub(crate) fn save_memory_rerank_binding_inner(
     input: SaveMemoryRerankBindingInput,
     state: &AppState,
 ) -> Result<SaveMemoryRerankBindingResult, String> {

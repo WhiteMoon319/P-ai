@@ -79,7 +79,7 @@ pub(crate) fn normalize_android_release_version(raw: &str) -> String {
 }
 
 #[cfg(test)]
-mod android_version_comparison_tests {
+pub(crate) mod android_version_comparison_tests {
     use super::*;
 
     #[test]

@@ -1,19 +1,20 @@
-fn ide_context_generate_bridge_token() -> String {
+use tokio_tungstenite::tungstenite::handshake::server::Request;
+pub(crate) fn ide_context_generate_bridge_token() -> String {
     Uuid::new_v4().to_string()
 }
 
-fn ide_context_generate_remote_password() -> String {
+pub(crate) fn ide_context_generate_remote_password() -> String {
     generate_web_access_password()
 }
 
-fn ide_context_normalize_remote_password(raw: &str) -> String {
+pub(crate) fn ide_context_normalize_remote_password(raw: &str) -> String {
     raw.chars()
         .filter(|ch| ch.is_ascii_alphanumeric())
         .flat_map(|ch| ch.to_uppercase())
         .collect()
 }
 
-fn ide_context_remote_password(runtime: &IdeContextRuntime) -> Result<String, String> {
+pub(crate) fn ide_context_remote_password(runtime: &IdeContextRuntime) -> Result<String, String> {
     let auth = runtime
         .bridge_auth
         .lock()
@@ -21,7 +22,7 @@ fn ide_context_remote_password(runtime: &IdeContextRuntime) -> Result<String, St
     Ok(auth.remote_password.clone())
 }
 
-fn ide_context_effective_remote_password(
+pub(crate) fn ide_context_effective_remote_password(
     state: &AppState,
     runtime: &IdeContextRuntime,
 ) -> Result<String, String> {
@@ -33,17 +34,17 @@ fn ide_context_effective_remote_password(
     ide_context_remote_password(runtime)
 }
 
-fn ide_context_current_port(runtime: &IdeContextRuntime) -> Option<u16> {
+pub(crate) fn ide_context_current_port(runtime: &IdeContextRuntime) -> Option<u16> {
     runtime.current_port.lock().ok().and_then(|guard| *guard)
 }
 
-fn ide_context_set_current_port(runtime: &IdeContextRuntime, port: Option<u16>) {
+pub(crate) fn ide_context_set_current_port(runtime: &IdeContextRuntime, port: Option<u16>) {
     if let Ok(mut slot) = runtime.current_port.lock() {
         *slot = port;
     }
 }
 
-fn ide_context_verify_remote_password(
+pub(crate) fn ide_context_verify_remote_password(
     runtime: &IdeContextRuntime,
     state: Option<&AppState>,
     provided: &str,
@@ -59,11 +60,11 @@ fn ide_context_verify_remote_password(
     Ok(provided == ide_context_normalize_remote_password(&expected))
 }
 
-fn ide_context_peer_is_local(peer_addr: &std::net::SocketAddr) -> bool {
+pub(crate) fn ide_context_peer_is_local(peer_addr: &std::net::SocketAddr) -> bool {
     peer_addr.ip().is_loopback()
 }
 
-fn ide_context_ws_header_value(request: &Request, name: &str) -> Option<String> {
+pub(crate) fn ide_context_ws_header_value(request: &Request, name: &str) -> Option<String> {
     request
         .headers()
         .get(name)
@@ -73,7 +74,7 @@ fn ide_context_ws_header_value(request: &Request, name: &str) -> Option<String> 
         .map(ToOwned::to_owned)
 }
 
-fn ide_context_ws_request_host_matches(request: &Request, origin_host: &str, port: u16) -> bool {
+pub(crate) fn ide_context_ws_request_host_matches(request: &Request, origin_host: &str, port: u16) -> bool {
     let Some(raw_host) = ide_context_ws_header_value(request, "host") else {
         return false;
     };
@@ -90,7 +91,7 @@ fn ide_context_ws_request_host_matches(request: &Request, origin_host: &str, por
         .unwrap_or(false)
 }
 
-fn ide_context_ws_origin_allowed(request: &Request, port: u16) -> bool {
+pub(crate) fn ide_context_ws_origin_allowed(request: &Request, port: u16) -> bool {
     let Some(origin) = ide_context_ws_header_value(request, "origin") else {
         eprintln!("[P-AI Android] origin check: no Origin header, allowing");
         return true;
@@ -122,7 +123,7 @@ fn ide_context_ws_origin_allowed(request: &Request, port: u16) -> bool {
         .unwrap_or(false)
 }
 
-fn ide_context_ws_forbidden_response(message: &str) -> tokio_tungstenite::tungstenite::handshake::server::ErrorResponse {
+pub(crate) fn ide_context_ws_forbidden_response(message: &str) -> tokio_tungstenite::tungstenite::handshake::server::ErrorResponse {
     let mut response =
         tokio_tungstenite::tungstenite::handshake::server::ErrorResponse::new(Some(message.to_string()));
     *response.status_mut() = tokio_tungstenite::tungstenite::http::StatusCode::FORBIDDEN;
@@ -130,15 +131,15 @@ fn ide_context_ws_forbidden_response(message: &str) -> tokio_tungstenite::tungst
 }
 
 #[derive(Debug, Clone)]
-struct IdeContextLanHostCandidate {
-    ip: std::net::Ipv4Addr,
-    adapter_name: String,
-    adapter_description: String,
-    has_gateway: bool,
-    active: bool,
+pub(crate) struct IdeContextLanHostCandidate {
+    pub(crate) ip: std::net::Ipv4Addr,
+    pub(crate) adapter_name: String,
+    pub(crate) adapter_description: String,
+    pub(crate) has_gateway: bool,
+    pub(crate) active: bool,
 }
 
-fn ide_context_ipv4_in_cidr(ip: std::net::Ipv4Addr, network: [u8; 4], prefix_len: u8) -> bool {
+pub(crate) fn ide_context_ipv4_in_cidr(ip: std::net::Ipv4Addr, network: [u8; 4], prefix_len: u8) -> bool {
     let ip_num = u32::from(ip);
     let network_num = u32::from(std::net::Ipv4Addr::from(network));
     let mask = if prefix_len == 0 {
@@ -149,11 +150,11 @@ fn ide_context_ipv4_in_cidr(ip: std::net::Ipv4Addr, network: [u8; 4], prefix_len
     (ip_num & mask) == (network_num & mask)
 }
 
-fn ide_context_ipv4_is_private_lan(ip: std::net::Ipv4Addr) -> bool {
+pub(crate) fn ide_context_ipv4_is_private_lan(ip: std::net::Ipv4Addr) -> bool {
     ip.is_private()
 }
 
-fn ide_context_ipv4_is_remote_link_candidate(ip: std::net::Ipv4Addr) -> bool {
+pub(crate) fn ide_context_ipv4_is_remote_link_candidate(ip: std::net::Ipv4Addr) -> bool {
     !ip.is_loopback()
         && !ip.is_unspecified()
         && !ip.is_link_local()
@@ -167,7 +168,7 @@ fn ide_context_ipv4_is_remote_link_candidate(ip: std::net::Ipv4Addr) -> bool {
         && ide_context_ipv4_is_private_lan(ip)
 }
 
-fn ide_context_adapter_name_is_virtual(name: &str, description: &str) -> bool {
+pub(crate) fn ide_context_adapter_name_is_virtual(name: &str, description: &str) -> bool {
     let text = format!("{name} {description}").to_ascii_lowercase();
     [
         "mihomo",
@@ -191,7 +192,7 @@ fn ide_context_adapter_name_is_virtual(name: &str, description: &str) -> bool {
     .any(|needle| text.contains(needle))
 }
 
-fn ide_context_lan_host_rank(candidate: &IdeContextLanHostCandidate) -> (u8, u8, u8, u32) {
+pub(crate) fn ide_context_lan_host_rank(candidate: &IdeContextLanHostCandidate) -> (u8, u8, u8, u32) {
     let virtual_adapter = ide_context_adapter_name_is_virtual(
         &candidate.adapter_name,
         &candidate.adapter_description,
@@ -204,7 +205,7 @@ fn ide_context_lan_host_rank(candidate: &IdeContextLanHostCandidate) -> (u8, u8,
     )
 }
 
-fn ide_context_collect_default_route_lan_host() -> Vec<IdeContextLanHostCandidate> {
+pub(crate) fn ide_context_collect_default_route_lan_host() -> Vec<IdeContextLanHostCandidate> {
     let mut hosts = Vec::new();
     if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
         let _ = socket.connect("8.8.8.8:80");
@@ -223,7 +224,7 @@ fn ide_context_collect_default_route_lan_host() -> Vec<IdeContextLanHostCandidat
     hosts
 }
 
-fn ide_context_json_strings(value: Option<&serde_json::Value>) -> Vec<String> {
+pub(crate) fn ide_context_json_strings(value: Option<&serde_json::Value>) -> Vec<String> {
     match value {
         Some(serde_json::Value::String(text)) => vec![text.trim().to_string()],
         Some(serde_json::Value::Array(items)) => items
@@ -235,7 +236,7 @@ fn ide_context_json_strings(value: Option<&serde_json::Value>) -> Vec<String> {
     }
 }
 
-fn ide_context_parse_windows_lan_host_candidates(
+pub(crate) fn ide_context_parse_windows_lan_host_candidates(
     value: serde_json::Value,
 ) -> Vec<IdeContextLanHostCandidate> {
     let entries = match value {
@@ -282,7 +283,7 @@ fn ide_context_parse_windows_lan_host_candidates(
 }
 
 #[cfg(target_os = "windows")]
-fn ide_context_collect_windows_lan_hosts() -> Vec<IdeContextLanHostCandidate> {
+pub(crate) fn ide_context_collect_windows_lan_hosts() -> Vec<IdeContextLanHostCandidate> {
     let script = r#"
 $ErrorActionPreference = 'SilentlyContinue'
 Get-NetIPConfiguration | ForEach-Object {
@@ -321,11 +322,11 @@ Get-NetIPConfiguration | ForEach-Object {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn ide_context_collect_windows_lan_hosts() -> Vec<IdeContextLanHostCandidate> {
+pub(crate) fn ide_context_collect_windows_lan_hosts() -> Vec<IdeContextLanHostCandidate> {
     Vec::new()
 }
 
-fn ide_context_lan_hosts() -> Vec<String> {
+pub(crate) fn ide_context_lan_hosts() -> Vec<String> {
     let mut candidates = ide_context_collect_windows_lan_hosts();
     if candidates.is_empty() {
         candidates = ide_context_collect_default_route_lan_host();

@@ -1,4 +1,4 @@
-fn persist_failed_chat_completed_tool_history(
+pub(crate) fn persist_failed_chat_completed_tool_history(
     state: &AppState,
     requested_conversation_id: Option<&str>,
     requested_department_id: Option<&str>,
@@ -32,7 +32,7 @@ fn persist_failed_chat_completed_tool_history(
     Ok(persist_result.persisted)
 }
 
-fn tool_call_ids_from_history(events: &[Value]) -> std::collections::HashSet<String> {
+pub(crate) fn tool_call_ids_from_history(events: &[Value]) -> std::collections::HashSet<String> {
     events
         .iter()
         .filter_map(|event| event.get("tool_calls").and_then(Value::as_array))
@@ -44,7 +44,7 @@ fn tool_call_ids_from_history(events: &[Value]) -> std::collections::HashSet<Str
         .collect()
 }
 
-fn stream_blocks_to_tool_history_events(blocks: &[AssistantStreamBlock]) -> Vec<Value> {
+pub(crate) fn stream_blocks_to_tool_history_events(blocks: &[AssistantStreamBlock]) -> Vec<Value> {
     let mut events = Vec::<Value>::new();
     for block in blocks {
         let tools = block
@@ -102,7 +102,7 @@ fn stream_blocks_to_tool_history_events(blocks: &[AssistantStreamBlock]) -> Vec<
     events
 }
 
-fn merge_stream_block_tool_history(
+pub(crate) fn merge_stream_block_tool_history(
     completed_tool_history: &[Value],
     partial_stream_blocks: &[AssistantStreamBlock],
 ) -> Vec<Value> {
@@ -136,7 +136,7 @@ fn merge_stream_block_tool_history(
     merged
 }
 
-fn persist_aborted_chat_partial_result(
+pub(crate) fn persist_aborted_chat_partial_result(
     state: &AppState,
     requested_conversation_id: Option<&str>,
     requested_department_id: Option<&str>,

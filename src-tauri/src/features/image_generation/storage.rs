@@ -208,7 +208,7 @@ pub(crate) async fn materialize_pending_generated_image(
 }
 
 #[cfg(test)]
-mod image_generation_storage_tests {
+pub(crate) mod image_generation_storage_tests {
     use super::*;
 
     #[test]

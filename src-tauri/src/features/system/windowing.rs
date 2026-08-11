@@ -1,11 +1,35 @@
-static DETACHED_CHAT_WINDOWS: OnceLock<Mutex<std::collections::HashMap<String, String>>> =
+use std::{
+    fs,
+    io::Cursor,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+};
+
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use directories::ProjectDirs;
+use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
+use image::ImageFormat;
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use rmcp::{schemars, ServiceExt};
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
+use uuid::Uuid;
+
+// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
+
+use std::collections::{HashMap};
+use super::*;
+
+pub(crate) static DETACHED_CHAT_WINDOWS: OnceLock<Mutex<std::collections::HashMap<String, String>>> =
     OnceLock::new();
 
-fn detached_chat_windows() -> &'static Mutex<std::collections::HashMap<String, String>> {
+pub(crate) fn detached_chat_windows() -> &'static Mutex<std::collections::HashMap<String, String>> {
     DETACHED_CHAT_WINDOWS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
-fn detached_chat_window_for_conversation(conversation_id: &str) -> Option<String> {
+pub(crate) fn detached_chat_window_for_conversation(conversation_id: &str) -> Option<String> {
     let cid = conversation_id.trim();
     if cid.is_empty() {
         return None;
@@ -20,7 +44,7 @@ fn detached_chat_window_for_conversation(conversation_id: &str) -> Option<String
     guard.get(cid).cloned()
 }
 
-fn register_detached_chat_window(conversation_id: &str, label: &str) -> Result<(), String> {
+pub(crate) fn register_detached_chat_window(conversation_id: &str, label: &str) -> Result<(), String> {
     let cid = conversation_id.trim();
     let window_label = label.trim();
     if cid.is_empty() || window_label.is_empty() {
@@ -33,7 +57,7 @@ fn register_detached_chat_window(conversation_id: &str, label: &str) -> Result<(
     Ok(())
 }
 
-fn unregister_detached_chat_window_by_label(label: &str) -> Option<String> {
+pub(crate) fn unregister_detached_chat_window_by_label(label: &str) -> Option<String> {
     let window_label = label.trim();
     if window_label.is_empty() {
         return None;
@@ -53,7 +77,7 @@ fn unregister_detached_chat_window_by_label(label: &str) -> Option<String> {
 }
 
 #[cfg(target_os = "android")]
-fn toggle_window_maximize_with_default_restore(
+pub(crate) fn toggle_window_maximize_with_default_restore(
     _app: &NativeAppHandle,
     _label: &str,
 ) -> Result<bool, String> {
@@ -61,15 +85,15 @@ fn toggle_window_maximize_with_default_restore(
 }
 
 #[cfg(target_os = "android")]
-fn start_window_drag_with_default_restore(_app: &NativeAppHandle, _label: &str) -> Result<(), String> {
+pub(crate) fn start_window_drag_with_default_restore(_app: &NativeAppHandle, _label: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn default_hotkey_label() -> String {
+pub(crate) fn default_hotkey_label() -> String {
     "Alt+·".to_string()
 }
 
-fn normalize_hotkey_label(value: &str) -> String {
+pub(crate) fn normalize_hotkey_label(value: &str) -> String {
     let raw = value.trim();
     if raw.is_empty() {
         return default_hotkey_label();
@@ -85,7 +109,7 @@ fn normalize_hotkey_label(value: &str) -> String {
     normalized
 }
 
-fn ensure_hotkey_config_normalized(config: &mut AppConfig) {
+pub(crate) fn ensure_hotkey_config_normalized(config: &mut AppConfig) {
     config.hotkey = normalize_hotkey_label(&config.hotkey);
     if config.hotkey.trim().is_empty() {
         config.hotkey = default_hotkey_label();

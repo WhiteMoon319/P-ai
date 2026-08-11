@@ -1,8 +1,8 @@
-fn ide_chat_list_memories_for_web_settings(state: &AppState) -> Result<Value, String> {
+pub(crate) fn ide_chat_list_memories_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(list_memories_inner(state)?)
 }
 
-fn ide_chat_delete_memory_for_web_settings(
+pub(crate) fn ide_chat_delete_memory_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -10,11 +10,11 @@ fn ide_chat_delete_memory_for_web_settings(
     ide_chat_serialize(delete_memory_inner(state, input)?)
 }
 
-fn ide_chat_preview_export_memories_for_web_settings(state: &AppState) -> Result<Value, String> {
+pub(crate) fn ide_chat_preview_export_memories_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(preview_export_memories_inner(state)?)
 }
 
-fn ide_chat_export_memories_for_web_settings(
+pub(crate) fn ide_chat_export_memories_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -37,7 +37,7 @@ fn ide_chat_export_memories_for_web_settings(
     ide_chat_serialize(export_memories_inner(state, selected_scopes)?)
 }
 
-fn ide_chat_import_memories_for_web_settings(
+pub(crate) fn ide_chat_import_memories_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -45,12 +45,12 @@ fn ide_chat_import_memories_for_web_settings(
     ide_chat_serialize(import_memories_inner(state, input)?)
 }
 
-fn ide_chat_preview_import_angel_memories_for_web_settings(params: Value) -> Result<Value, String> {
+pub(crate) fn ide_chat_preview_import_angel_memories_for_web_settings(params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<PreviewImportAngelMemoriesInput>(params, "input")?;
     ide_chat_serialize(preview_import_angel_memories_inner(input)?)
 }
 
-fn ide_chat_import_angel_memories_for_web_settings(
+pub(crate) fn ide_chat_import_angel_memories_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -58,7 +58,7 @@ fn ide_chat_import_angel_memories_for_web_settings(
     ide_chat_serialize(import_angel_memories_inner(state, input)?)
 }
 
-fn ide_chat_search_memories_mixed_for_web_settings(
+pub(crate) fn ide_chat_search_memories_mixed_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -66,7 +66,7 @@ fn ide_chat_search_memories_mixed_for_web_settings(
     ide_chat_serialize(search_memories_mixed_inner(state, input)?)
 }
 
-fn ide_chat_search_chat_history_slices_for_web_settings(
+pub(crate) fn ide_chat_search_chat_history_slices_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -74,19 +74,19 @@ fn ide_chat_search_chat_history_slices_for_web_settings(
     ide_chat_serialize(chat_history_search_for_agent(state, &input)?)
 }
 
-fn ide_chat_get_memory_provider_bindings_for_web_settings(
+pub(crate) fn ide_chat_get_memory_provider_bindings_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
     ide_chat_serialize(get_memory_provider_bindings_inner(state)?)
 }
 
-fn ide_chat_get_memory_embedding_sync_progress_for_web_settings(
+pub(crate) fn ide_chat_get_memory_embedding_sync_progress_for_web_settings(
     state: &AppState,
 ) -> Result<Value, String> {
     ide_chat_serialize(get_memory_embedding_sync_progress_inner(state)?)
 }
 
-fn ide_chat_test_memory_embedding_provider_for_web_settings(
+pub(crate) fn ide_chat_test_memory_embedding_provider_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -94,7 +94,7 @@ fn ide_chat_test_memory_embedding_provider_for_web_settings(
     ide_chat_serialize(test_memory_embedding_provider_inner(input, state)?)
 }
 
-fn ide_chat_test_memory_rerank_provider_for_web_settings(
+pub(crate) fn ide_chat_test_memory_rerank_provider_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -102,7 +102,7 @@ fn ide_chat_test_memory_rerank_provider_for_web_settings(
     ide_chat_serialize(test_memory_rerank_provider_inner(input, state)?)
 }
 
-fn ide_chat_save_memory_embedding_binding_for_web_settings(
+pub(crate) fn ide_chat_save_memory_embedding_binding_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -110,7 +110,7 @@ fn ide_chat_save_memory_embedding_binding_for_web_settings(
     ide_chat_serialize(save_memory_embedding_binding_inner(input, state)?)
 }
 
-fn ide_chat_save_memory_rerank_binding_for_web_settings(
+pub(crate) fn ide_chat_save_memory_rerank_binding_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -118,7 +118,7 @@ fn ide_chat_save_memory_rerank_binding_for_web_settings(
     ide_chat_serialize(save_memory_rerank_binding_inner(input, state)?)
 }
 
-fn ide_chat_get_agent_private_memory_count_for_web_settings(
+pub(crate) fn ide_chat_get_agent_private_memory_count_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -126,7 +126,7 @@ fn ide_chat_get_agent_private_memory_count_for_web_settings(
     ide_chat_serialize(get_agent_private_memory_count_inner(input, state)?)
 }
 
-fn ide_chat_set_agent_memory_recall_mode_for_web_settings(
+pub(crate) fn ide_chat_set_agent_memory_recall_mode_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {
@@ -134,7 +134,7 @@ fn ide_chat_set_agent_memory_recall_mode_for_web_settings(
     ide_chat_serialize(set_agent_memory_recall_mode_inner(input, state)?)
 }
 
-fn ide_chat_disable_agent_private_memory_for_web_settings(
+pub(crate) fn ide_chat_disable_agent_private_memory_for_web_settings(
     state: &AppState,
     params: Value,
 ) -> Result<Value, String> {

@@ -1,44 +1,44 @@
-const ANDROID_WORKSPACE_STATUS_EVENT: &str = "easy-call:android-workspace-status-changed";
-const ANDROID_WORKSPACE_NOT_READY_MESSAGE: &str = "Android 工作区未就绪，请先在设置的工具页初始化 PAI 助理空间。";
-const ANDROID_WORKSPACE_ROOTFS_URL: &str = "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-arm64.tar.gz";
-const ANDROID_WORKSPACE_ROOTFS_FILE_NAME: &str = "ubuntu-base-24.04.3-base-arm64.tar.gz";
-const ANDROID_WORKSPACE_ROOTFS_SHA256: &str = "7b2dced6dd56ad5e4a813fa25c8de307b655fdabc6ea9213175a92c48dabb048";
-const ANDROID_WORKSPACE_ROOTFS_VERSION: &str = "ubuntu-base-24.04.3-arm64";
-const ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH: u64 = 29_865_086;
-const ANDROID_WORKSPACE_ROOTFS_CONNECT_TIMEOUT_SECS: u64 = 30;
-const ANDROID_WORKSPACE_ROOTFS_CHUNK_TIMEOUT_SECS: u64 = 60;
-const ANDROID_WORKSPACE_ROOTFS_MARKER_FILE: &str = ".pai-rootfs-installed";
-const ANDROID_WORKSPACE_FILE_TRANSFER_MAX_BYTES: u64 = 64 * 1024 * 1024;
+pub(crate) const ANDROID_WORKSPACE_STATUS_EVENT: &str = "easy-call:android-workspace-status-changed";
+pub(crate) const ANDROID_WORKSPACE_NOT_READY_MESSAGE: &str = "Android 工作区未就绪，请先在设置的工具页初始化 PAI 助理空间。";
+pub(crate) const ANDROID_WORKSPACE_ROOTFS_URL: &str = "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-arm64.tar.gz";
+pub(crate) const ANDROID_WORKSPACE_ROOTFS_FILE_NAME: &str = "ubuntu-base-24.04.3-base-arm64.tar.gz";
+pub(crate) const ANDROID_WORKSPACE_ROOTFS_SHA256: &str = "7b2dced6dd56ad5e4a813fa25c8de307b655fdabc6ea9213175a92c48dabb048";
+pub(crate) const ANDROID_WORKSPACE_ROOTFS_VERSION: &str = "ubuntu-base-24.04.3-arm64";
+pub(crate) const ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH: u64 = 29_865_086;
+pub(crate) const ANDROID_WORKSPACE_ROOTFS_CONNECT_TIMEOUT_SECS: u64 = 30;
+pub(crate) const ANDROID_WORKSPACE_ROOTFS_CHUNK_TIMEOUT_SECS: u64 = 60;
+pub(crate) const ANDROID_WORKSPACE_ROOTFS_MARKER_FILE: &str = ".pai-rootfs-installed";
+pub(crate) const ANDROID_WORKSPACE_FILE_TRANSFER_MAX_BYTES: u64 = 64 * 1024 * 1024;
 
-mod android_workspace_types {
+pub(crate) mod android_workspace_types {
     include!("android_workspace/types.rs");
 }
 use android_workspace_types::*;
 
 #[cfg(target_os = "android")]
-mod android_workspace_rootfs_installer {
+pub(crate) mod android_workspace_rootfs_installer {
     include!("android_workspace/rootfs_installer.rs");
 }
 #[cfg(target_os = "android")]
 use android_workspace_rootfs_installer::*;
 
-fn android_workspace_root(state: &AppState) -> PathBuf {
+pub(crate) fn android_workspace_root(state: &AppState) -> PathBuf {
     state.llm_workspace_path.clone()
 }
 
-fn android_workspace_state_path(state: &AppState) -> PathBuf {
+pub(crate) fn android_workspace_state_path(state: &AppState) -> PathBuf {
     let root = android_workspace_root(state);
     android_workspace_runtime_base(&root).join(ANDROID_WORKSPACE_STATE_FILE)
 }
 
-fn android_workspace_status_paths(root: &std::path::Path) -> (String, String) {
+pub(crate) fn android_workspace_status_paths(root: &std::path::Path) -> (String, String) {
     (
         shell_workspace_display_path(root),
         shell_workspace_display_path(&android_workspace_runtime_root(root)),
     )
 }
 
-fn android_workspace_required_dirs(root: &std::path::Path) -> [PathBuf; 4] {
+pub(crate) fn android_workspace_required_dirs(root: &std::path::Path) -> [PathBuf; 4] {
     [
         root.join("imports"),
         root.join("exports"),
@@ -48,12 +48,12 @@ fn android_workspace_required_dirs(root: &std::path::Path) -> [PathBuf; 4] {
 }
 
 #[cfg(target_os = "android")]
-fn android_workspace_proot_temp_root(state: &AppState) -> PathBuf {
+pub(crate) fn android_workspace_proot_temp_root(state: &AppState) -> PathBuf {
     let root = android_workspace_root(state);
     android_workspace_runtime_base(&root).join("tmp").join("proot")
 }
 
-fn android_workspace_runtime_ready(root: &std::path::Path) -> bool {
+pub(crate) fn android_workspace_runtime_ready(root: &std::path::Path) -> bool {
     let runtime_root = android_workspace_runtime_root(root);
     if !runtime_root.join(ANDROID_WORKSPACE_ROOTFS_MARKER_FILE).is_file() {
         return false;
@@ -66,19 +66,19 @@ fn android_workspace_runtime_ready(root: &std::path::Path) -> bool {
     dash.is_file() && usr_sh.is_file()
 }
 
-fn android_workspace_layout_ready(root: &std::path::Path) -> bool {
+pub(crate) fn android_workspace_layout_ready(root: &std::path::Path) -> bool {
     root.is_dir()
         && android_workspace_required_dirs(root).iter().all(|path| path.is_dir())
         && android_workspace_runtime_ready(root)
 }
 
-fn read_android_workspace_status_file(state: &AppState) -> Option<AndroidWorkspaceStatus> {
+pub(crate) fn read_android_workspace_status_file(state: &AppState) -> Option<AndroidWorkspaceStatus> {
     let path = android_workspace_state_path(state);
     let raw = fs::read_to_string(path).ok()?;
     serde_json::from_str::<AndroidWorkspaceStatus>(&raw).ok()
 }
 
-fn write_android_workspace_status_file(
+pub(crate) fn write_android_workspace_status_file(
     state: &AppState,
     status: &AndroidWorkspaceStatus,
 ) -> Result<(), String> {
@@ -93,7 +93,7 @@ fn write_android_workspace_status_file(
         .map_err(|err| format!("写入 Android 工作区状态失败 ({}): {err}", path.display()))
 }
 
-fn normalize_android_workspace_status(state: &AppState) -> AndroidWorkspaceStatus {
+pub(crate) fn normalize_android_workspace_status(state: &AppState) -> AndroidWorkspaceStatus {
     let root = android_workspace_root(state);
     let (llm_workspace_root, runtime_root) = android_workspace_status_paths(&root);
     let Some(mut status) = read_android_workspace_status_file(state) else {
@@ -157,13 +157,13 @@ fn normalize_android_workspace_status(state: &AppState) -> AndroidWorkspaceStatu
     status
 }
 
-fn emit_android_workspace_status(app: Option<&NativeAppHandle>, status: &AndroidWorkspaceStatus) {
+pub(crate) fn emit_android_workspace_status(app: Option<&NativeAppHandle>, status: &AndroidWorkspaceStatus) {
     if let Some(app) = app {
         let _ = app.emit(ANDROID_WORKSPACE_STATUS_EVENT, status);
     }
 }
 
-fn android_workspace_set_status(
+pub(crate) fn android_workspace_set_status(
     state: &AppState,
     app: Option<&NativeAppHandle>,
     mut status: AndroidWorkspaceStatus,
@@ -180,7 +180,7 @@ fn android_workspace_set_status(
     Ok(status)
 }
 
-fn ensure_android_workspace_layout(root: &std::path::Path) -> Result<(), String> {
+pub(crate) fn ensure_android_workspace_layout(root: &std::path::Path) -> Result<(), String> {
     fs::create_dir_all(root)
         .map_err(|err| format!("创建 Android 工作区根目录失败 ({}): {err}", root.display()))?;
     for dir in android_workspace_required_dirs(root) {
@@ -195,7 +195,7 @@ fn ensure_android_workspace_layout(root: &std::path::Path) -> Result<(), String>
     Ok(())
 }
 
-fn android_workspace_ready_status(root: &std::path::Path) -> AndroidWorkspaceStatus {
+pub(crate) fn android_workspace_ready_status(root: &std::path::Path) -> AndroidWorkspaceStatus {
     let now = now_iso();
     let (llm_workspace_root, runtime_root) = android_workspace_status_paths(root);
     AndroidWorkspaceStatus {
@@ -214,7 +214,7 @@ fn android_workspace_ready_status(root: &std::path::Path) -> AndroidWorkspaceSta
     }
 }
 
-fn is_android_workspace_ready(state: &AppState) -> bool {
+pub(crate) fn is_android_workspace_ready(state: &AppState) -> bool {
     #[cfg(target_os = "android")]
     {
         let status = normalize_android_workspace_status(state);
@@ -223,7 +223,7 @@ fn is_android_workspace_ready(state: &AppState) -> bool {
     }
 }
 
-fn android_workspace_gate_error_for_tool(tool_name: &str, is_mcp_tool: bool) -> Option<String> {
+pub(crate) fn android_workspace_gate_error_for_tool(tool_name: &str, is_mcp_tool: bool) -> Option<String> {
     #[cfg(target_os = "android")]
     {
         if android_workspace_tool_requires_linux_runtime(tool_name, is_mcp_tool) {
@@ -233,13 +233,13 @@ fn android_workspace_gate_error_for_tool(tool_name: &str, is_mcp_tool: bool) -> 
     None
 }
 
-mod android_workspace_manager {
+pub(crate) mod android_workspace_manager {
     include!("android_workspace/manager.rs");
 }
 use android_workspace_manager::*;
 
 #[cfg(target_os = "android")]
-mod android_workspace_file_system {
+pub(crate) mod android_workspace_file_system {
     include!("android_workspace/file_system.rs");
 }
 #[cfg(target_os = "android")]
@@ -247,7 +247,7 @@ use android_workspace_file_system::*;
 
 
 /// ws 端调用版。
-fn list_android_workspace_files_ws_inner(
+pub(crate) fn list_android_workspace_files_ws_inner(
     state: &AppState,
     path: Option<String>,
 ) -> Result<AndroidWorkspaceFileListResult, String> {
@@ -295,7 +295,7 @@ fn list_android_workspace_files_ws_inner(
 
 
 /// ws 端调用版。
-fn read_android_workspace_text_ws_inner(
+pub(crate) fn read_android_workspace_text_ws_inner(
     state: &AppState,
     path: String,
 ) -> Result<AndroidWorkspaceTextResult, String> {
@@ -329,7 +329,7 @@ fn read_android_workspace_text_ws_inner(
 
 
 /// ws 端调用版。
-fn write_android_workspace_text_ws_inner(
+pub(crate) fn write_android_workspace_text_ws_inner(
     state: &AppState,
     path: String,
     text: String,
@@ -374,7 +374,7 @@ fn write_android_workspace_text_ws_inner(
 
 
 /// ws 端调用版。
-fn move_android_workspace_file_ws_inner(
+pub(crate) fn move_android_workspace_file_ws_inner(
     state: &AppState,
     source: String,
     target: String,
@@ -427,7 +427,7 @@ fn move_android_workspace_file_ws_inner(
 
 
 /// ws 端调用版。
-fn glob_android_workspace_files_ws_inner(
+pub(crate) fn glob_android_workspace_files_ws_inner(
     state: &AppState,
     pattern: String,
     path: Option<String>,
@@ -463,7 +463,7 @@ fn glob_android_workspace_files_ws_inner(
 
 
 /// ws 端调用版。
-fn grep_android_workspace_files_ws_inner(
+pub(crate) fn grep_android_workspace_files_ws_inner(
     state: &AppState,
     query: String,
     path: Option<String>,
@@ -561,7 +561,7 @@ fn grep_android_workspace_files_ws_inner(
 
 
 /// ws 端调用版：接受 &AppState（dispatch 无法注入 State）。
-fn get_android_workspace_status_ws_inner(state: &AppState) -> Result<AndroidWorkspaceStatus, String> {
+pub(crate) fn get_android_workspace_status_ws_inner(state: &AppState) -> Result<AndroidWorkspaceStatus, String> {
     #[cfg(target_os = "android")]
     {
         Ok(normalize_android_workspace_status(state))
@@ -572,7 +572,7 @@ fn get_android_workspace_status_ws_inner(state: &AppState) -> Result<AndroidWork
 
 
 #[cfg(target_os = "android")]
-fn android_workspace_remove_path_if_exists(path: &std::path::Path, context: &str) -> Result<(), String> {
+pub(crate) fn android_workspace_remove_path_if_exists(path: &std::path::Path, context: &str) -> Result<(), String> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -635,7 +635,7 @@ pub(crate) fn android_workspace_ws_fake_ready(root: &std::path::Path) -> Android
 
 
 /// ws 端调用版。
-fn import_file_to_android_workspace_ws_inner(
+pub(crate) fn import_file_to_android_workspace_ws_inner(
     state: &AppState,
     file_name: String,
     mime: Option<String>,
@@ -649,11 +649,11 @@ fn import_file_to_android_workspace_ws_inner(
             .canonicalize()
             .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
         let mut target = android_workspace_resolve_import_target_path(&root, &file_name, target_path.as_deref())?;
-        android_workspace_ensure_paths_within_sandbox(state, &[target.clone()])?;
+        android_workspace_manager::android_workspace_ensure_paths_within_sandbox(state, &[target.clone()])?;
         android_workspace_ensure_user_file_manager_path(&root, &target, false)?;
         if target.exists() {
             target = android_workspace_unique_sibling_path(&target);
-            android_workspace_ensure_paths_within_sandbox(state, &[target.clone()])?;
+            android_workspace_manager::android_workspace_ensure_paths_within_sandbox(state, &[target.clone()])?;
             android_workspace_ensure_user_file_manager_path(&root, &target, false)?;
         }
         if let Some(parent) = target.parent() {
@@ -706,7 +706,7 @@ fn import_file_to_android_workspace_ws_inner(
 
 
 /// ws 端调用版。
-fn export_file_from_android_workspace_ws_inner(
+pub(crate) fn export_file_from_android_workspace_ws_inner(
     state: &AppState,
     path: String,
 ) -> Result<AndroidWorkspaceExportResult, String> {
@@ -753,7 +753,7 @@ fn export_file_from_android_workspace_ws_inner(
 
 
 /// ws 端调用版。
-fn delete_file_from_android_workspace_ws_inner(
+pub(crate) fn delete_file_from_android_workspace_ws_inner(
     state: &AppState,
     path: String,
 ) -> Result<AndroidWorkspaceDeleteResult, String> {
@@ -903,10 +903,10 @@ pub(crate) fn repair_android_workspace_runtime_ws_inner(
             let temp_dir = if let Ok(canonical) = temp_dir.canonicalize() { canonical } else { temp_dir };
             fs::create_dir_all(&temp_dir)
                 .map_err(|err| format!("创建 Android proot 临时目录失败 ({}): {err}", temp_dir.display()))?;
-            let (native_dir, _, _) = android_proot_binary_paths()?;
-            let _ = android_proot_ensure_libs_dir(&native_dir, &temp_dir)?;
-            android_proot_ensure_host_pai_layout(&root)?;
-            android_proot_patch_rootfs(&runtime_root)?;
+            let (native_dir, _, _) = features_system_sandbox::android_rootfs_runner::android_proot_binary_paths()?;
+            let _ = features_system_sandbox::android_rootfs_runner::android_proot_ensure_libs_dir(&native_dir, &temp_dir)?;
+            features_system_sandbox::android_rootfs_patcher::android_proot_ensure_host_pai_layout(&root)?;
+            features_system_sandbox::android_rootfs_patcher::android_proot_patch_rootfs(&runtime_root)?;
             write_android_workspace_rootfs_marker(&runtime_root)?;
             if !android_workspace_runtime_ready(&root) {
                 return Err("Android Linux 运行环境修复后仍未通过就绪检查。".to_string());

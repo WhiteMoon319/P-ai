@@ -1,14 +1,14 @@
 #[derive(Debug, Clone)]
-struct TerminalCommandPathCandidate {
-    path: PathBuf,
-    is_absolute: bool,
+pub(crate) struct TerminalCommandPathCandidate {
+    pub(crate) path: PathBuf,
+    pub(crate) is_absolute: bool,
 }
 
-fn terminal_tokenize(command: &str) -> Vec<String> {
+pub(crate) fn terminal_tokenize(command: &str) -> Vec<String> {
     terminal_lex_command(command)
 }
 
-fn terminal_unquote_token(token: &str) -> String {
+pub(crate) fn terminal_unquote_token(token: &str) -> String {
     let trimmed = token.trim();
     if trimmed.len() >= 2 {
         let bytes = trimmed.as_bytes();
@@ -22,7 +22,7 @@ fn terminal_unquote_token(token: &str) -> String {
 }
 
 #[cfg(target_os = "windows")]
-fn terminal_has_windows_drive_prefix(token: &str) -> bool {
+pub(crate) fn terminal_has_windows_drive_prefix(token: &str) -> bool {
     let bytes = token.as_bytes();
     if bytes.len() < 2 || bytes[1] != b':' || !bytes[0].is_ascii_alphabetic() {
         return false;
@@ -34,15 +34,15 @@ fn terminal_has_windows_drive_prefix(token: &str) -> bool {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn terminal_has_windows_drive_prefix(_token: &str) -> bool {
+pub(crate) fn terminal_has_windows_drive_prefix(_token: &str) -> bool {
     false
 }
 
-fn terminal_is_posix_style_shell(shell_kind: &str) -> bool {
+pub(crate) fn terminal_is_posix_style_shell(shell_kind: &str) -> bool {
     matches!(shell_kind, "git-bash" | "bash" | "zsh" | "sh")
 }
 
-fn terminal_is_virtual_sink_path(token: &str, shell_kind: &str) -> bool {
+pub(crate) fn terminal_is_virtual_sink_path(token: &str, shell_kind: &str) -> bool {
     let trimmed = token.trim().to_ascii_lowercase();
     if terminal_is_posix_style_shell(shell_kind) {
         return matches!(
@@ -54,7 +54,7 @@ fn terminal_is_virtual_sink_path(token: &str, shell_kind: &str) -> bool {
 }
 
 #[cfg(test)]
-fn terminal_command_contains_absolute_path_token(command: &str, shell_kind: &str) -> bool {
+pub(crate) fn terminal_command_contains_absolute_path_token(command: &str, shell_kind: &str) -> bool {
     let tokens = terminal_tokenize(command);
     for token in tokens {
         let unquoted = terminal_unquote_token(&token);
@@ -75,7 +75,7 @@ fn terminal_command_contains_absolute_path_token(command: &str, shell_kind: &str
     false
 }
 
-fn terminal_resolve_candidate_path(cwd: &Path, raw: &str) -> Option<PathBuf> {
+pub(crate) fn terminal_resolve_candidate_path(cwd: &Path, raw: &str) -> Option<PathBuf> {
     let token = terminal_unquote_token(raw);
     if token.is_empty() {
         return None;
@@ -106,7 +106,7 @@ fn terminal_resolve_candidate_path(cwd: &Path, raw: &str) -> Option<PathBuf> {
     Some(joined)
 }
 
-fn terminal_raw_token_is_absolute_path(raw: &str) -> bool {
+pub(crate) fn terminal_raw_token_is_absolute_path(raw: &str) -> bool {
     let token = terminal_unquote_token(raw);
     if token.is_empty() {
         return false;
@@ -118,7 +118,7 @@ fn terminal_raw_token_is_absolute_path(raw: &str) -> bool {
     PathBuf::from(&normalized).is_absolute() || terminal_has_windows_drive_prefix(&normalized)
 }
 
-fn terminal_dedup_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
+pub(crate) fn terminal_dedup_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
     let mut out = Vec::<PathBuf>::new();
     let mut seen = std::collections::HashSet::<String>::new();
     for path in paths {
@@ -132,7 +132,7 @@ fn terminal_dedup_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
 
 
 #[cfg(test)]
-fn terminal_collect_command_path_candidates(
+pub(crate) fn terminal_collect_command_path_candidates(
     cwd: &Path,
     command: &str,
     shell_kind: &str,

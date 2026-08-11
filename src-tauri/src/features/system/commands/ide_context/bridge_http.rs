@@ -1,34 +1,34 @@
-fn ide_context_bridge_url_for_host(host: &str, port: u16) -> String {
+pub(crate) fn ide_context_bridge_url_for_host(host: &str, port: u16) -> String {
     format!("ws://{}:{}{}", host, port, IDE_CONTEXT_BRIDGE_PATH)
 }
 
-fn ide_context_chat_bridge_url_for_host(host: &str, port: u16) -> String {
+pub(crate) fn ide_context_chat_bridge_url_for_host(host: &str, port: u16) -> String {
     format!("ws://{}:{}{}", host, port, IDE_CONTEXT_CHAT_BRIDGE_PATH)
 }
 
-fn ide_context_bridge_url(port: u16) -> String {
+pub(crate) fn ide_context_bridge_url(port: u16) -> String {
     ide_context_bridge_url_for_host(IDE_CONTEXT_BRIDGE_HOST, port)
 }
 
-fn ide_context_chat_bridge_url(port: u16) -> String {
+pub(crate) fn ide_context_chat_bridge_url(port: u16) -> String {
     ide_context_chat_bridge_url_for_host(IDE_CONTEXT_BRIDGE_HOST, port)
 }
 
-fn ide_context_sidebar_url_for_host(host: &str, port: u16) -> String {
+pub(crate) fn ide_context_sidebar_url_for_host(host: &str, port: u16) -> String {
     format!("http://{}:{}/sidebar", host, port)
 }
 
-fn ide_context_bridge_discovery_path() -> std::path::PathBuf {
+pub(crate) fn ide_context_bridge_discovery_path() -> std::path::PathBuf {
     std::env::temp_dir().join(IDE_CONTEXT_BRIDGE_DISCOVERY_FILE)
 }
 
-fn ide_context_bridge_shutdown_slot() -> Arc<Mutex<Option<tokio_util::sync::CancellationToken>>> {
+pub(crate) fn ide_context_bridge_shutdown_slot() -> Arc<Mutex<Option<tokio_util::sync::CancellationToken>>> {
     IDE_CONTEXT_BRIDGE_SHUTDOWN
         .get_or_init(|| Arc::new(Mutex::new(None)))
         .clone()
 }
 
-fn ide_context_bridge_create_shutdown_token() -> tokio_util::sync::CancellationToken {
+pub(crate) fn ide_context_bridge_create_shutdown_token() -> tokio_util::sync::CancellationToken {
     let token = tokio_util::sync::CancellationToken::new();
     if let Ok(mut slot) = ide_context_bridge_shutdown_slot().lock() {
         *slot = Some(token.clone());
@@ -36,36 +36,36 @@ fn ide_context_bridge_create_shutdown_token() -> tokio_util::sync::CancellationT
     token
 }
 
-fn ide_context_bridge_server_task_slot() -> Arc<Mutex<Option<tokio::task::JoinHandle<()>>>> {
+pub(crate) fn ide_context_bridge_server_task_slot() -> Arc<Mutex<Option<tokio::task::JoinHandle<()>>>> {
     IDE_CONTEXT_BRIDGE_SERVER_TASK
         .get_or_init(|| Arc::new(Mutex::new(None)))
         .clone()
 }
 
-fn ide_context_bridge_set_server_task(handle: tokio::task::JoinHandle<()>) {
+pub(crate) fn ide_context_bridge_set_server_task(handle: tokio::task::JoinHandle<()>) {
     if let Ok(mut slot) = ide_context_bridge_server_task_slot().lock() {
         *slot = Some(handle);
     }
 }
 
-fn ide_context_port_service_core() -> Arc<LocalPortServiceCore> {
+pub(crate) fn ide_context_port_service_core() -> Arc<LocalPortServiceCore> {
     IDE_CONTEXT_PORT_SERVICE_CORE
         .get_or_init(|| Arc::new(LocalPortServiceCore::new()))
         .clone()
 }
 
-fn ide_context_bridge_server_task_is_running() -> bool {
+pub(crate) fn ide_context_bridge_server_task_is_running() -> bool {
     IDE_CONTEXT_BRIDGE_STARTED.load(Ordering::SeqCst)
 }
 
-fn ide_context_bridge_take_server_task() -> Option<tokio::task::JoinHandle<()>> {
+pub(crate) fn ide_context_bridge_take_server_task() -> Option<tokio::task::JoinHandle<()>> {
     ide_context_bridge_server_task_slot()
         .lock()
         .ok()
         .and_then(|mut slot| slot.take())
 }
 
-fn publish_ide_context_bridge_discovery(port: u16, remote_password: &str) -> Result<(), String> {
+pub(crate) fn publish_ide_context_bridge_discovery(port: u16, remote_password: &str) -> Result<(), String> {
     let url = ide_context_bridge_url(port);
     let chat_url = ide_context_chat_bridge_url(port);
     let payload = IdeContextBridgeDiscovery {
@@ -94,14 +94,14 @@ fn publish_ide_context_bridge_discovery(port: u16, remote_password: &str) -> Res
     Ok(())
 }
 
-fn clear_ide_context_bridge_discovery() {
+pub(crate) fn clear_ide_context_bridge_discovery() {
     let path = ide_context_bridge_discovery_path();
     if path.exists() {
         let _ = fs::remove_file(path);
     }
 }
 
-async fn prepare_ide_context_bridge_server_start(
+pub(crate) async fn prepare_ide_context_bridge_server_start(
     state: &AppState,
     ide_context_runtime: &IdeContextRuntime,
     port_service: &Arc<LocalPortServiceCore>,
@@ -217,7 +217,7 @@ async fn prepare_ide_context_bridge_server_start(
     Some((listener, port, bridge_url))
 }
 
-fn spawn_ide_context_bridge_server_task(
+pub(crate) fn spawn_ide_context_bridge_server_task(
     app: NativeAppHandle,
     state: AppState,
     ide_context_runtime: IdeContextRuntime,
@@ -273,7 +273,7 @@ fn spawn_ide_context_bridge_server_task(
     ide_context_bridge_set_server_task(server_task);
 }
 
-async fn bind_ide_context_bridge_listener(
+pub(crate) async fn bind_ide_context_bridge_listener(
     preferred_port: u16,
 ) -> Result<(tokio::net::TcpListener, u16), String> {
     let port = normalize_web_access_port(preferred_port);
@@ -292,7 +292,7 @@ async fn bind_ide_context_bridge_listener(
     }
 }
 
-async fn ide_context_stream_is_websocket(stream: &tokio::net::TcpStream) -> bool {
+pub(crate) async fn ide_context_stream_is_websocket(stream: &tokio::net::TcpStream) -> bool {
     let mut buffer = [0_u8; 1024];
     match tokio::time::timeout(std::time::Duration::from_millis(500), stream.peek(&mut buffer)).await
     {
@@ -305,7 +305,7 @@ async fn ide_context_stream_is_websocket(stream: &tokio::net::TcpStream) -> bool
     }
 }
 
-fn ide_context_http_status_text(status: u16) -> &'static str {
+pub(crate) fn ide_context_http_status_text(status: u16) -> &'static str {
     match status {
         200 => "OK",
         404 => "Not Found",
@@ -315,7 +315,7 @@ fn ide_context_http_status_text(status: u16) -> &'static str {
     }
 }
 
-fn ide_context_http_header_value<'a>(headers: &'a str, name: &str) -> Option<&'a str> {
+pub(crate) fn ide_context_http_header_value<'a>(headers: &'a str, name: &str) -> Option<&'a str> {
     let prefix = format!("{}:", name.to_ascii_lowercase());
     headers.lines().skip(1).find_map(|line| {
         let trimmed = line.trim();
@@ -327,7 +327,7 @@ fn ide_context_http_header_value<'a>(headers: &'a str, name: &str) -> Option<&'a
     })
 }
 
-fn ide_context_http_path_from_request(headers: &str) -> (&str, &str) {
+pub(crate) fn ide_context_http_path_from_request(headers: &str) -> (&str, &str) {
     let first_line = headers.lines().next().unwrap_or_default();
     let mut parts = first_line.split_whitespace();
     let method = parts.next().unwrap_or_default();
@@ -336,7 +336,7 @@ fn ide_context_http_path_from_request(headers: &str) -> (&str, &str) {
     (method, path)
 }
 
-fn ide_context_web_asset_path(path: &str) -> Option<String> {
+pub(crate) fn ide_context_web_asset_path(path: &str) -> Option<String> {
     let path = path.trim();
     match path {
         "/" | "/sidebar" | "/sidebar.html" => Some("sidebar.html".to_string()),
@@ -348,7 +348,7 @@ fn ide_context_web_asset_path(path: &str) -> Option<String> {
     }
 }
 
-fn ide_context_web_icon_bytes(path: &str) -> Option<&'static [u8]> {
+pub(crate) fn ide_context_web_icon_bytes(path: &str) -> Option<&'static [u8]> {
     match path.trim() {
         "/favicon.ico" | "/favicon.png" => {
             Some(include_bytes!("../../../../../icons/32x32.png").as_slice())
@@ -357,7 +357,7 @@ fn ide_context_web_icon_bytes(path: &str) -> Option<&'static [u8]> {
     }
 }
 
-fn ide_context_web_html_with_bridge(asset_bytes: &[u8], host: &str) -> Vec<u8> {
+pub(crate) fn ide_context_web_html_with_bridge(asset_bytes: &[u8], host: &str) -> Vec<u8> {
     let chat_url = format!("ws://{}{}", host, IDE_CONTEXT_CHAT_BRIDGE_PATH);
     let injected = serde_json::json!({
         "chatUrl": chat_url,
@@ -379,7 +379,7 @@ fn ide_context_web_html_with_bridge(asset_bytes: &[u8], host: &str) -> Vec<u8> {
     }
 }
 
-async fn ide_context_http_write_response(
+pub(crate) async fn ide_context_http_write_response(
     stream: &mut tokio::net::TcpStream,
     status: u16,
     content_type: &str,
@@ -399,7 +399,7 @@ async fn ide_context_http_write_response(
     let _ = stream.shutdown().await;
 }
 
-async fn ide_context_http_handle_connection(
+pub(crate) async fn ide_context_http_handle_connection(
     mut stream: tokio::net::TcpStream,
     app: NativeAppHandle,
 ) {

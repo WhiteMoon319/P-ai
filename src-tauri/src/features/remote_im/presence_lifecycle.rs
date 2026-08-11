@@ -1,4 +1,4 @@
-fn remote_im_mark_contact_present(
+pub(crate) fn remote_im_mark_contact_present(
     state: &AppState,
     contact_id: &str,
     reason: &str,
@@ -17,7 +17,7 @@ fn remote_im_mark_contact_present(
     Ok(())
 }
 
-fn remote_im_mark_contact_present_and_schedule(
+pub(crate) fn remote_im_mark_contact_present_and_schedule(
     state: &AppState,
     contact_id: &str,
     patience_seconds: u64,
@@ -27,7 +27,7 @@ fn remote_im_mark_contact_present_and_schedule(
     remote_im_schedule_presence_timeout(state, contact_id, patience_seconds)
 }
 
-fn remote_im_mark_contact_present_and_schedule_after_entry_compaction(
+pub(crate) fn remote_im_mark_contact_present_and_schedule_after_entry_compaction(
     state: &AppState,
     contact_id: &str,
     conversation_id: &str,
@@ -92,14 +92,14 @@ fn remote_im_mark_contact_present_and_schedule_after_entry_compaction(
     Ok(force_memory_prompt_snapshot)
 }
 
-fn remote_im_contact_is_away(state: &AppState, contact_id: &str) -> Result<bool, String> {
+pub(crate) fn remote_im_contact_is_away(state: &AppState, contact_id: &str) -> Result<bool, String> {
     Ok(lock_remote_im_contact_runtime_states(state)?
         .get(contact_id)
         .map(|runtime| runtime.presence_state == RemoteImPresenceState::Away)
         .unwrap_or(true))
 }
 
-fn remote_im_schedule_presence_timeout(
+pub(crate) fn remote_im_schedule_presence_timeout(
     state: &AppState,
     contact_id: &str,
     patience_seconds: u64,
@@ -165,7 +165,7 @@ fn remote_im_schedule_presence_timeout(
     Ok(())
 }
 
-fn remote_im_departure_reflection_context(
+pub(crate) fn remote_im_departure_reflection_context(
     state: &AppState,
     contact_id: &str,
 ) -> Result<(RemoteImContact, Conversation, RemoteImConversationAssistantContext), String> {
@@ -194,7 +194,7 @@ fn remote_im_departure_reflection_context(
     Ok((contact, conversation, assistant))
 }
 
-fn spawn_remote_im_departure_reflection_delegate(
+pub(crate) fn spawn_remote_im_departure_reflection_delegate(
     state: &AppState,
     contact_id: &str,
 ) -> Result<String, String> {
@@ -320,7 +320,7 @@ fn spawn_remote_im_departure_reflection_delegate(
     Ok(delegate.delegate_id)
 }
 
-fn remote_im_departure_reflection_delegate_input(
+pub(crate) fn remote_im_departure_reflection_delegate_input(
     contact: &RemoteImContact,
     context: &Conversation,
     assistant: &RemoteImConversationAssistantContext,
@@ -345,7 +345,7 @@ fn remote_im_departure_reflection_delegate_input(
     }
 }
 
-async fn run_remote_im_departure_reflection(
+pub(crate) async fn run_remote_im_departure_reflection(
     state: &AppState,
     delegate: &DelegateEntry,
     context: &Conversation,
@@ -430,7 +430,7 @@ async fn run_remote_im_departure_reflection(
     Ok(())
 }
 
-fn finalize_remote_im_departure_reflection_delegate(
+pub(crate) fn finalize_remote_im_departure_reflection_delegate(
     state: &AppState,
     delegate: &DelegateEntry,
     status: &str,

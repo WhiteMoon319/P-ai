@@ -1,4 +1,4 @@
-fn write_retrieved_memory_ids_into_provider_meta(
+pub(crate) fn write_retrieved_memory_ids_into_provider_meta(
     provider_meta: &mut Option<Value>,
     recall_hit_ids: &[String],
 ) {
@@ -26,7 +26,7 @@ fn write_retrieved_memory_ids_into_provider_meta(
     *provider_meta = Some(meta);
 }
 
-fn append_user_message_to_conversation(
+pub(crate) fn append_user_message_to_conversation(
     state: &AppState,
     mut conversation: Conversation,
     user_message: ChatMessage,
@@ -43,11 +43,11 @@ fn append_user_message_to_conversation(
     conversation
 }
 
-fn memory_recall_query_from_user_text(user_text: &str) -> String {
+pub(crate) fn memory_recall_query_from_user_text(user_text: &str) -> String {
     clean_text(user_text.trim())
 }
 
-fn render_message_parts_text_for_recall(parts: &[MessagePart]) -> String {
+pub(crate) fn render_message_parts_text_for_recall(parts: &[MessagePart]) -> String {
     parts.iter()
         .filter_map(|part| match part {
             MessagePart::Text { text, .. } => {
@@ -67,12 +67,12 @@ fn render_message_parts_text_for_recall(parts: &[MessagePart]) -> String {
 }
 
 #[derive(Debug, Clone, Default)]
-struct UserMessageRecallPayload {
-    stored_ids: Vec<String>,
-    raw_ids: Vec<String>,
+pub(crate) struct UserMessageRecallPayload {
+    pub(crate) stored_ids: Vec<String>,
+    pub(crate) raw_ids: Vec<String>,
 }
 
-fn with_memory_lock<T>(
+pub(crate) fn with_memory_lock<T>(
     state: &AppState,
     task_name: &str,
     f: impl FnOnce() -> Result<T, String>,
@@ -101,7 +101,7 @@ fn with_memory_lock<T>(
     f()
 }
 
-fn collect_recall_payload_for_user_message(
+pub(crate) fn collect_recall_payload_for_user_message(
     data_path: &PathBuf,
     agents: &[AgentProfile],
     effective_agent_id: &str,

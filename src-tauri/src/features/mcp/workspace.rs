@@ -1,37 +1,37 @@
 #[derive(Debug, Clone)]
-struct McpWorkspaceLoadError {
-    item: String,
-    error: String,
+pub(crate) struct McpWorkspaceLoadError {
+    pub(crate) item: String,
+    pub(crate) error: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct McpToolPoliciesFile {
+pub(crate) struct McpToolPoliciesFile {
     #[serde(default)]
-    server_id: String,
+    pub(crate) server_id: String,
     #[serde(default)]
-    enabled: bool,
+    pub(crate) enabled: bool,
     #[serde(default)]
-    tools: Vec<McpToolPolicy>,
+    pub(crate) tools: Vec<McpToolPolicy>,
 }
 
-fn llm_workspace_mcp_root_at(workspace_root: &Path) -> PathBuf {
+pub(crate) fn llm_workspace_mcp_root_at(workspace_root: &Path) -> PathBuf {
     workspace_root.join("mcp")
 }
 
-fn llm_workspace_mcp_root(state: &AppState) -> Result<PathBuf, String> {
+pub(crate) fn llm_workspace_mcp_root(state: &AppState) -> Result<PathBuf, String> {
     Ok(llm_workspace_mcp_root_at(&configured_workspace_root_path(state)?))
 }
 
-fn llm_workspace_mcp_servers_dir(state: &AppState) -> Result<PathBuf, String> {
+pub(crate) fn llm_workspace_mcp_servers_dir(state: &AppState) -> Result<PathBuf, String> {
     Ok(llm_workspace_mcp_root(state)?.join("servers"))
 }
 
-fn llm_workspace_mcp_policies_dir(state: &AppState) -> Result<PathBuf, String> {
+pub(crate) fn llm_workspace_mcp_policies_dir(state: &AppState) -> Result<PathBuf, String> {
     Ok(llm_workspace_mcp_root(state)?.join("policies"))
 }
 
-fn ensure_workspace_mcp_layout_at_root(workspace_root: &Path) -> Result<(), String> {
+pub(crate) fn ensure_workspace_mcp_layout_at_root(workspace_root: &Path) -> Result<(), String> {
     let mcp_root = llm_workspace_mcp_root_at(workspace_root);
     let mcp_servers = mcp_root.join("servers");
     let mcp_policies = mcp_root.join("policies");
@@ -46,12 +46,12 @@ fn ensure_workspace_mcp_layout_at_root(workspace_root: &Path) -> Result<(), Stri
     Ok(())
 }
 
-fn ensure_workspace_mcp_layout(state: &AppState) -> Result<(), String> {
+pub(crate) fn ensure_workspace_mcp_layout(state: &AppState) -> Result<(), String> {
     let root = ensure_workspace_root_ready(&configured_workspace_root_path(state)?)?;
     ensure_workspace_mcp_layout_at_root(&root)
 }
 
-fn sanitize_mcp_server_id_for_filename(raw: &str) -> String {
+pub(crate) fn sanitize_mcp_server_id_for_filename(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
     for ch in raw.chars() {
         if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
@@ -68,17 +68,17 @@ fn sanitize_mcp_server_id_for_filename(raw: &str) -> String {
     }
 }
 
-fn mcp_server_file_path(state: &AppState, server_id: &str) -> Result<PathBuf, String> {
+pub(crate) fn mcp_server_file_path(state: &AppState, server_id: &str) -> Result<PathBuf, String> {
     let file = format!("{}.json", sanitize_mcp_server_id_for_filename(server_id));
     Ok(llm_workspace_mcp_servers_dir(state)?.join(file))
 }
 
-fn mcp_tool_policies_file_path(state: &AppState, server_id: &str) -> Result<PathBuf, String> {
+pub(crate) fn mcp_tool_policies_file_path(state: &AppState, server_id: &str) -> Result<PathBuf, String> {
     let file = format!("{}.json", sanitize_mcp_server_id_for_filename(server_id));
     Ok(llm_workspace_mcp_policies_dir(state)?.join(file))
 }
 
-fn parse_workspace_mcp_server_from_file(path: &PathBuf) -> Result<McpServerConfig, String> {
+pub(crate) fn parse_workspace_mcp_server_from_file(path: &PathBuf) -> Result<McpServerConfig, String> {
     let content = fs::read_to_string(path)
         .map_err(|err| format!("Read MCP file failed ({}): {err}", path.display()))?;
     let value: Value = serde_json::from_str(&content)
@@ -119,7 +119,7 @@ fn parse_workspace_mcp_server_from_file(path: &PathBuf) -> Result<McpServerConfi
     })
 }
 
-fn load_workspace_mcp_servers_with_errors(
+pub(crate) fn load_workspace_mcp_servers_with_errors(
     state: &AppState,
 ) -> Result<(Vec<McpServerConfig>, Vec<McpWorkspaceLoadError>), String> {
     ensure_workspace_mcp_layout(state)?;
@@ -145,7 +145,7 @@ fn load_workspace_mcp_servers_with_errors(
     Ok((servers, errors))
 }
 
-fn normalize_mcp_tool_policies(raw: Vec<McpToolPolicy>) -> Vec<McpToolPolicy> {
+pub(crate) fn normalize_mcp_tool_policies(raw: Vec<McpToolPolicy>) -> Vec<McpToolPolicy> {
     let mut out = Vec::<McpToolPolicy>::new();
     let mut seen = std::collections::HashSet::<String>::new();
     for item in raw {
@@ -165,7 +165,7 @@ fn normalize_mcp_tool_policies(raw: Vec<McpToolPolicy>) -> Vec<McpToolPolicy> {
     out
 }
 
-fn load_workspace_mcp_server_policy(
+pub(crate) fn load_workspace_mcp_server_policy(
     state: &AppState,
     server_id: &str,
 ) -> Result<McpToolPoliciesFile, String> {
@@ -196,14 +196,14 @@ fn load_workspace_mcp_server_policy(
     Ok(parsed)
 }
 
-fn load_workspace_mcp_tool_policies(
+pub(crate) fn load_workspace_mcp_tool_policies(
     state: &AppState,
     server_id: &str,
 ) -> Result<Vec<McpToolPolicy>, String> {
     Ok(load_workspace_mcp_server_policy(state, server_id)?.tools)
 }
 
-fn save_workspace_mcp_tool_policies(
+pub(crate) fn save_workspace_mcp_tool_policies(
     state: &AppState,
     server_id: &str,
     tools: &[McpToolPolicy],
@@ -213,7 +213,7 @@ fn save_workspace_mcp_tool_policies(
     save_workspace_mcp_server_policy(state, server_id, &payload)
 }
 
-fn save_workspace_mcp_server_policy(
+pub(crate) fn save_workspace_mcp_server_policy(
     state: &AppState,
     server_id: &str,
     payload: &McpToolPoliciesFile,
@@ -235,7 +235,7 @@ fn save_workspace_mcp_server_policy(
         .map_err(|err| format!("Write MCP policy file failed ({}): {err}", path.display()))
 }
 
-fn merge_workspace_mcp_tool_policies_with_new_tools(
+pub(crate) fn merge_workspace_mcp_tool_policies_with_new_tools(
     state: &AppState,
     server_id: &str,
     discovered_tool_names: &[String],
@@ -268,7 +268,7 @@ fn merge_workspace_mcp_tool_policies_with_new_tools(
     Ok(policies)
 }
 
-fn set_workspace_mcp_policy_enabled(
+pub(crate) fn set_workspace_mcp_policy_enabled(
     state: &AppState,
     server_id: &str,
     enabled: bool,
@@ -278,7 +278,7 @@ fn set_workspace_mcp_policy_enabled(
     save_workspace_mcp_server_policy(state, server_id, &policy)
 }
 
-fn load_workspace_mcp_servers(state: &AppState) -> Result<Vec<McpServerConfig>, String> {
+pub(crate) fn load_workspace_mcp_servers(state: &AppState) -> Result<Vec<McpServerConfig>, String> {
     let (mut servers, errors) = load_workspace_mcp_servers_with_errors(state)?;
     for err in errors {
         runtime_log_warn(format!("[MCP] 跳过无效文件: {} | {}", err.item, err.error));
@@ -291,7 +291,7 @@ fn load_workspace_mcp_servers(state: &AppState) -> Result<Vec<McpServerConfig>, 
     Ok(servers)
 }
 
-fn save_workspace_mcp_server(state: &AppState, server: &McpServerConfig) -> Result<(), String> {
+pub(crate) fn save_workspace_mcp_server(state: &AppState, server: &McpServerConfig) -> Result<(), String> {
     ensure_workspace_mcp_layout(state)?;
     let value: Value = serde_json::from_str(&server.definition_json)
         .map_err(|err| format!("Parse MCP definition JSON failed before write: {err}"))?;
@@ -302,7 +302,7 @@ fn save_workspace_mcp_server(state: &AppState, server: &McpServerConfig) -> Resu
         .map_err(|err| format!("Write MCP file failed ({}): {err}", target.display()))
 }
 
-fn remove_workspace_mcp_server(state: &AppState, server_id: &str) -> Result<bool, String> {
+pub(crate) fn remove_workspace_mcp_server(state: &AppState, server_id: &str) -> Result<bool, String> {
     ensure_workspace_mcp_layout(state)?;
     let target = mcp_server_file_path(state, server_id)?;
     let mut removed = false;
@@ -336,7 +336,7 @@ fn remove_workspace_mcp_server(state: &AppState, server_id: &str) -> Result<bool
     Ok(removed)
 }
 
-fn open_path_in_file_manager(path: &Path) -> Result<(), String> {
+pub(crate) fn open_path_in_file_manager(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("explorer")
@@ -365,7 +365,7 @@ fn open_path_in_file_manager(path: &Path) -> Result<(), String> {
     Err("Open in file manager is not supported on this platform".to_string())
 }
 
-fn open_mcp_workspace_dir(state: &AppState) -> Result<String, String> {
+pub(crate) fn open_mcp_workspace_dir(state: &AppState) -> Result<String, String> {
     ensure_workspace_mcp_layout(state)?;
     let path = llm_workspace_mcp_root(state)?;
     open_path_in_file_manager(&path)?;

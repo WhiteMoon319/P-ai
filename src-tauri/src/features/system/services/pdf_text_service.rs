@@ -1,14 +1,14 @@
 use rayon::prelude::*;
 
-const MAX_PDF_CONVERT_PAGES: usize = 100;
-const MAX_PDF_TEXT_TOKENS: usize = 30_000;
-const PDF_PAGE_LIMIT_ERR_PREFIX: &str = "pdf_page_limit_exceeded";
+pub(crate) const MAX_PDF_CONVERT_PAGES: usize = 100;
+pub(crate) const MAX_PDF_TEXT_TOKENS: usize = 30_000;
+pub(crate) const PDF_PAGE_LIMIT_ERR_PREFIX: &str = "pdf_page_limit_exceeded";
 
-static PDF_SESSION_MEMORY_CACHE: std::sync::OnceLock<
+pub(crate) static PDF_SESSION_MEMORY_CACHE: std::sync::OnceLock<
     std::sync::Mutex<std::collections::HashMap<String, std::collections::HashMap<String, PdfExtractStructuredResult>>>,
 > = std::sync::OnceLock::new();
 
-fn pdf_session_memory_cache(
+pub(crate) fn pdf_session_memory_cache(
 ) -> &'static std::sync::Mutex<
     std::collections::HashMap<String, std::collections::HashMap<String, PdfExtractStructuredResult>>,
 > {
@@ -17,7 +17,7 @@ fn pdf_session_memory_cache(
     })
 }
 
-fn build_pdf_session_cache_key(file_path: &str, include_images: bool) -> Result<String, String> {
+pub(crate) fn build_pdf_session_cache_key(file_path: &str, include_images: bool) -> Result<String, String> {
     let meta = std::fs::metadata(file_path)
         .map_err(|err| format!("stat pdf failed: {err}"))?;
     let size = meta.len();
@@ -36,7 +36,7 @@ fn build_pdf_session_cache_key(file_path: &str, include_images: bool) -> Result<
     ))
 }
 
-fn get_pdf_session_cached_result(
+pub(crate) fn get_pdf_session_cached_result(
     conversation_id: &str,
     cache_key: &str,
 ) -> Option<PdfExtractStructuredResult> {
@@ -47,7 +47,7 @@ fn get_pdf_session_cached_result(
         .cloned()
 }
 
-fn put_pdf_session_cached_result(
+pub(crate) fn put_pdf_session_cached_result(
     conversation_id: &str,
     cache_key: String,
     result: PdfExtractStructuredResult,
@@ -70,7 +70,7 @@ pub(crate) fn is_pdf_page_limit_exceeded_error(err: &str) -> bool {
     err.starts_with(PDF_PAGE_LIMIT_ERR_PREFIX)
 }
 
-fn pdf_page_limit_error(total_pages: usize) -> String {
+pub(crate) fn pdf_page_limit_error(total_pages: usize) -> String {
     format!(
         "{}: total_pages={}, limit={}",
         PDF_PAGE_LIMIT_ERR_PREFIX, total_pages, MAX_PDF_CONVERT_PAGES
@@ -94,7 +94,7 @@ pub struct PdfExtractStructuredResult {
     pub pages: Vec<PdfPageExtractBlock>,
 }
 
-fn extract_pdf_page_text(doc: &mut pdf_oxide::api::Pdf, page_index: usize) -> Result<String, String> {
+pub(crate) fn extract_pdf_page_text(doc: &mut pdf_oxide::api::Pdf, page_index: usize) -> Result<String, String> {
     let lines = doc
         .extract_text_lines(page_index)
         .map_err(|err| format!("pdf_oxide extract_text_lines(page={}) failed: {}", page_index, err))?;
@@ -106,7 +106,7 @@ fn extract_pdf_page_text(doc: &mut pdf_oxide::api::Pdf, page_index: usize) -> Re
     Ok(normalize_pdf_page_text_once(&raw))
 }
 
-fn is_cjk_char(ch: char) -> bool {
+pub(crate) fn is_cjk_char(ch: char) -> bool {
     matches!(
         ch as u32,
         0x3400..=0x4DBF
@@ -121,7 +121,7 @@ fn is_cjk_char(ch: char) -> bool {
     )
 }
 
-fn normalize_pdf_page_text_once(input: &str) -> String {
+pub(crate) fn normalize_pdf_page_text_once(input: &str) -> String {
     let chars = input
         .chars()
         .filter(|ch| !matches!(ch, '\r' | '\n'))
@@ -150,7 +150,7 @@ fn normalize_pdf_page_text_once(input: &str) -> String {
     out
 }
 
-fn truncate_pdf_pages_to_token_limit(
+pub(crate) fn truncate_pdf_pages_to_token_limit(
     pages: &mut Vec<PdfPageExtractBlock>,
     token_limit: usize,
 ) -> Result<(), String> {
@@ -195,7 +195,7 @@ fn truncate_pdf_pages_to_token_limit(
     Ok(())
 }
 
-fn encode_rgba_page_to_webp(
+pub(crate) fn encode_rgba_page_to_webp(
     page_index: usize,
     width: u32,
     height: u32,
@@ -212,7 +212,7 @@ fn encode_rgba_page_to_webp(
     })
 }
 
-fn render_pdf_pages_as_webp_with_hayro(file_path: &str) -> Result<(usize, Vec<PdfRenderedImage>), String> {
+pub(crate) fn render_pdf_pages_as_webp_with_hayro(file_path: &str) -> Result<(usize, Vec<PdfRenderedImage>), String> {
     let file_bytes: hayro::hayro_syntax::PdfData = std::sync::Arc::new(
         std::fs::read(file_path).map_err(|err| format!("read pdf failed: {err}"))?,
     )

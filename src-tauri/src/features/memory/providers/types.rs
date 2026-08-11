@@ -1,5 +1,5 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MemoryProviderKind {
+pub(crate) enum MemoryProviderKind {
     OpenAIEmbedding,
     GeminiEmbedding,
     VllmRerank,
@@ -7,26 +7,26 @@ enum MemoryProviderKind {
 }
 
 #[derive(Debug, Clone)]
-struct MemoryProviderApiConfig {
-    base_url: String,
-    api_key: String,
-    model: String,
+pub(crate) struct MemoryProviderApiConfig {
+    pub(crate) base_url: String,
+    pub(crate) api_key: String,
+    pub(crate) model: String,
 }
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MemoryRerankItem {
-    index: usize,
-    relevance_score: f64,
+pub(crate) struct MemoryRerankItem {
+    pub(crate) index: usize,
+    pub(crate) relevance_score: f64,
 }
 
-trait MemoryEmbeddingProvider: Send + Sync {
+pub(crate) trait MemoryEmbeddingProvider: Send + Sync {
     fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, String>;
 }
 
 #[allow(dead_code)]
-trait MemoryRerankProvider: Send + Sync {
+pub(crate) trait MemoryRerankProvider: Send + Sync {
     fn rerank(
         &self,
         query: &str,
@@ -35,7 +35,7 @@ trait MemoryRerankProvider: Send + Sync {
     ) -> Result<Vec<MemoryRerankItem>, String>;
 }
 
-fn memory_run_async<F, T>(future: F) -> Result<T, String>
+pub(crate) fn memory_run_async<F, T>(future: F) -> Result<T, String>
 where
     F: std::future::Future<Output = Result<T, String>>,
 {
@@ -52,7 +52,7 @@ where
     runtime.block_on(future)
 }
 
-fn memory_join_url(base_url: &str, suffix: &str) -> String {
+pub(crate) fn memory_join_url(base_url: &str, suffix: &str) -> String {
     format!(
         "{}/{}",
         base_url.trim().trim_end_matches('/'),

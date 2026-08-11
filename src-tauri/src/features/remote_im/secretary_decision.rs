@@ -1,32 +1,32 @@
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImSecretaryMessageDigest {
-    time_text: String,
-    speaker: String,
-    text: String,
+pub(crate) struct RemoteImSecretaryMessageDigest {
+    pub(crate) time_text: String,
+    pub(crate) speaker: String,
+    pub(crate) text: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteImSecretaryDecisionReply {
+pub(crate) struct RemoteImSecretaryDecisionReply {
     #[serde(default, alias = "should_reply")]
-    should_reply: bool,
+    pub(crate) should_reply: bool,
     #[serde(default, alias = "target_delegate_id")]
-    target_delegate_id: Option<String>,
+    pub(crate) target_delegate_id: Option<String>,
     #[serde(default)]
-    reason: String,
+    pub(crate) reason: String,
 }
 
 #[derive(Debug, Clone)]
-struct RemoteImSecretaryDecision {
-    should_reply: bool,
-    target_delegate_id: Option<String>,
-    reason: String,
-    model_name: String,
-    emit_log: bool,
+pub(crate) struct RemoteImSecretaryDecision {
+    pub(crate) should_reply: bool,
+    pub(crate) target_delegate_id: Option<String>,
+    pub(crate) reason: String,
+    pub(crate) model_name: String,
+    pub(crate) emit_log: bool,
 }
 
-fn remote_im_secretary_contact_type_label(contact_type: &str) -> &str {
+pub(crate) fn remote_im_secretary_contact_type_label(contact_type: &str) -> &str {
     match contact_type.trim().to_ascii_lowercase().as_str() {
         "group" => "群聊",
         "private" => "私聊",
@@ -34,7 +34,7 @@ fn remote_im_secretary_contact_type_label(contact_type: &str) -> &str {
     }
 }
 
-fn remote_im_secretary_contact_display_name(contact: &RemoteImContact) -> String {
+pub(crate) fn remote_im_secretary_contact_display_name(contact: &RemoteImContact) -> String {
     let remote_id = contact.remote_contact_id.trim();
     let remark_name = contact.remark_name.trim();
     if !remark_name.is_empty() && remark_name != remote_id {
@@ -47,7 +47,7 @@ fn remote_im_secretary_contact_display_name(contact: &RemoteImContact) -> String
     remote_im_secretary_contact_type_label(&contact.remote_contact_type).to_string()
 }
 
-fn remote_im_secretary_context_display_name(name: &str, id: &str, fallback_name: &str) -> String {
+pub(crate) fn remote_im_secretary_context_display_name(name: &str, id: &str, fallback_name: &str) -> String {
     let name = name.trim();
     let id = id.trim();
     if !name.is_empty() && name != id {
@@ -57,7 +57,7 @@ fn remote_im_secretary_context_display_name(name: &str, id: &str, fallback_name:
     }
 }
 
-fn remote_im_secretary_named_label(
+pub(crate) fn remote_im_secretary_named_label(
     prefix: &str,
     name: &str,
     id: &str,
@@ -88,7 +88,7 @@ fn remote_im_secretary_named_label(
     }
 }
 
-fn remote_im_secretary_current_assistant_context(
+pub(crate) fn remote_im_secretary_current_assistant_context(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<RemoteImConversationAssistantContext, String> {
@@ -96,7 +96,7 @@ fn remote_im_secretary_current_assistant_context(
         .ok_or_else(|| format!("缺少当前助理上下文: conversation_id={}", conversation_id.trim()))
 }
 
-fn remote_im_resolve_contact_assistant_context(
+pub(crate) fn remote_im_resolve_contact_assistant_context(
     state: &AppState,
     contact: &RemoteImContact,
 ) -> Result<RemoteImConversationAssistantContext, String> {
@@ -137,7 +137,7 @@ fn remote_im_resolve_contact_assistant_context(
     })
 }
 
-fn remote_im_secretary_message_speaker_label(
+pub(crate) fn remote_im_secretary_message_speaker_label(
     message: &ChatMessage,
     contact: &RemoteImContact,
     agents: &[AgentProfile],
@@ -214,11 +214,11 @@ fn remote_im_secretary_message_speaker_label(
     }
 }
 
-fn remote_im_secretary_truncate_text(text: &str, max_chars: usize) -> String {
+pub(crate) fn remote_im_secretary_truncate_text(text: &str, max_chars: usize) -> String {
     text.chars().take(max_chars).collect::<String>()
 }
 
-fn remote_im_secretary_message_time_text(created_at: &str) -> String {
+pub(crate) fn remote_im_secretary_message_time_text(created_at: &str) -> String {
     let time_text = format_utc_storage_time_to_local_relative_label(created_at);
     if time_text.trim().is_empty() {
         "时间未知".to_string()
@@ -227,7 +227,7 @@ fn remote_im_secretary_message_time_text(created_at: &str) -> String {
     }
 }
 
-fn remote_im_secretary_message_line(
+pub(crate) fn remote_im_secretary_message_line(
     item: &RemoteImSecretaryMessageDigest,
     latest_suffix: &str,
 ) -> String {
@@ -237,7 +237,7 @@ fn remote_im_secretary_message_line(
     )
 }
 
-fn remote_im_secretary_message_digest(
+pub(crate) fn remote_im_secretary_message_digest(
     message: &ChatMessage,
     contact: &RemoteImContact,
     agents: &[AgentProfile],
@@ -287,7 +287,7 @@ fn remote_im_secretary_message_digest(
     })
 }
 
-fn remote_im_collect_secretary_recent_messages(
+pub(crate) fn remote_im_collect_secretary_recent_messages(
     messages: &[ChatMessage],
     limit: usize,
     contact: &RemoteImContact,
@@ -312,7 +312,7 @@ fn remote_im_collect_secretary_recent_messages(
     selected
 }
 
-fn remote_im_secretary_messages_to_text(
+pub(crate) fn remote_im_secretary_messages_to_text(
     messages: &[RemoteImSecretaryMessageDigest],
     mark_latest_last: bool,
 ) -> String {
@@ -334,7 +334,7 @@ fn remote_im_secretary_messages_to_text(
         .join("\n")
 }
 
-fn build_remote_im_secretary_prepared_prompt(
+pub(crate) fn build_remote_im_secretary_prepared_prompt(
     language: &str,
     contact: &RemoteImContact,
     response_guidance: &str,
@@ -398,7 +398,7 @@ JSON 只能包含字段：shouldReply, targetDelegateId, reason。"
     }
 }
 
-fn remote_im_secretary_extract_json(raw: &str) -> &str {
+pub(crate) fn remote_im_secretary_extract_json(raw: &str) -> &str {
     let trimmed = raw.trim();
     if let Some(stripped) = trimmed.strip_prefix("```json") {
         return stripped.trim().trim_end_matches("```").trim();
@@ -409,7 +409,7 @@ fn remote_im_secretary_extract_json(raw: &str) -> &str {
     trimmed
 }
 
-fn remote_im_resolve_secretary_contact(
+pub(crate) fn remote_im_resolve_secretary_contact(
     state: &AppState,
     activated_sources: &[RemoteImActivationSource],
 ) -> Result<Option<RemoteImContact>, String> {
@@ -427,7 +427,7 @@ fn remote_im_resolve_secretary_contact(
     Ok(remote_im_contact_by_activation_source_in_runtime(&runtime.remote_im_contacts, source).cloned())
 }
 
-async fn run_remote_im_secretary_decision(
+pub(crate) async fn run_remote_im_secretary_decision(
     state: &AppState,
     contact: &RemoteImContact,
     current_assistant: &RemoteImConversationAssistantContext,

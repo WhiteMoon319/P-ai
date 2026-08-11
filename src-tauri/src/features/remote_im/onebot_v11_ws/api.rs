@@ -12,7 +12,7 @@ impl OnebotV11WsManager {
             .map_err(|err| err.message)
     }
 
-    async fn call_api_classified(
+    pub(crate) async fn call_api_classified(
         &self,
         channel_id: &str,
         action: &str,

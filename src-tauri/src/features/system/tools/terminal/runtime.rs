@@ -1,12 +1,12 @@
 #[derive(Debug, Clone)]
-struct TerminalShellProfile {
-    kind: String,
-    path: String,
-    args_prefix: Vec<String>,
+pub(crate) struct TerminalShellProfile {
+    pub(crate) kind: String,
+    pub(crate) path: String,
+    pub(crate) args_prefix: Vec<String>,
 }
 
 #[cfg(target_os = "windows")]
-fn terminal_apply_windows_utf8_env<T>(command_builder: &mut T)
+pub(crate) fn terminal_apply_windows_utf8_env<T>(command_builder: &mut T)
 where
     T: CommandExtUtf8Env,
 {
@@ -39,19 +39,19 @@ mod terminal_windows_command_ext {
 use terminal_windows_command_ext::CommandExtUtf8Env;
 
 #[derive(Debug)]
-struct TerminalLiveShellSession {
-    shell_kind: String,
-    shell_path: String,
-    created_at: String,
-    last_used_at: tokio::sync::Mutex<String>,
-    child: tokio::sync::Mutex<tokio::process::Child>,
+pub(crate) struct TerminalLiveShellSession {
+    pub(crate) shell_kind: String,
+    pub(crate) shell_path: String,
+    pub(crate) created_at: String,
+    pub(crate) last_used_at: tokio::sync::Mutex<String>,
+    pub(crate) child: tokio::sync::Mutex<tokio::process::Child>,
 }
 
-type TerminalLiveShellSessionHandle = std::sync::Arc<TerminalLiveShellSession>;
+pub(crate) type TerminalLiveShellSessionHandle = std::sync::Arc<TerminalLiveShellSession>;
 
-const TERMINAL_LIVE_CLOSE_WAIT_MS: u64 = 2_000;
+pub(crate) const TERMINAL_LIVE_CLOSE_WAIT_MS: u64 = 2_000;
 
-async fn terminal_live_kill_child_with_timeout(
+pub(crate) async fn terminal_live_kill_child_with_timeout(
     child: &mut tokio::process::Child,
     context: &str,
 ) {
@@ -71,12 +71,12 @@ async fn terminal_live_kill_child_with_timeout(
 }
 
 #[cfg(target_os = "windows")]
-fn terminal_powershell_escape_literal(input: &str) -> String {
+pub(crate) fn terminal_powershell_escape_literal(input: &str) -> String {
     input.replace('\'', "''")
 }
 
 #[cfg(target_os = "windows")]
-fn terminal_strip_windows_verbatim_prefix(input: &str) -> String {
+pub(crate) fn terminal_strip_windows_verbatim_prefix(input: &str) -> String {
     let text = input.trim();
     if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
         return format!(r"\\{}", rest);
@@ -87,7 +87,7 @@ fn terminal_strip_windows_verbatim_prefix(input: &str) -> String {
     text.to_string()
 }
 
-fn terminal_path_for_user(path: &Path) -> String {
+pub(crate) fn terminal_path_for_user(path: &Path) -> String {
     let text = path.to_string_lossy().to_string();
     #[cfg(target_os = "windows")]
     {
@@ -99,7 +99,7 @@ fn terminal_path_for_user(path: &Path) -> String {
     }
 }
 
-async fn terminal_live_close_session(state: &AppState, session_id: &str) -> Result<bool, String> {
+pub(crate) async fn terminal_live_close_session(state: &AppState, session_id: &str) -> Result<bool, String> {
     let normalized = normalize_terminal_tool_session_id(session_id);
     let removed = {
         let mut sessions = state.terminal_live_sessions.lock().await;
@@ -113,7 +113,7 @@ async fn terminal_live_close_session(state: &AppState, session_id: &str) -> Resu
     Ok(true)
 }
 
-async fn terminal_live_list_sessions(state: &AppState) -> Vec<Value> {
+pub(crate) async fn terminal_live_list_sessions(state: &AppState) -> Vec<Value> {
     let handles = {
         let sessions = state.terminal_live_sessions.lock().await;
         sessions.values().cloned().collect::<Vec<_>>()
@@ -131,7 +131,7 @@ async fn terminal_live_list_sessions(state: &AppState) -> Vec<Value> {
     out
 }
 
-fn detect_terminal_shell_candidates() -> Vec<TerminalShellProfile> {
+pub(crate) fn detect_terminal_shell_candidates() -> Vec<TerminalShellProfile> {
     #[cfg(target_os = "windows")]
     {
         fn with_args(kind: &str, path: String, args_prefix: &[&str]) -> TerminalShellProfile {
@@ -314,7 +314,7 @@ fn detect_terminal_shell_candidates() -> Vec<TerminalShellProfile> {
     Vec::new()
 }
 
-fn terminal_shell_missing_profile() -> TerminalShellProfile {
+pub(crate) fn terminal_shell_missing_profile() -> TerminalShellProfile {
     TerminalShellProfile {
         kind: "missing-terminal-shell".to_string(),
         path: String::new(),
@@ -322,14 +322,14 @@ fn terminal_shell_missing_profile() -> TerminalShellProfile {
     }
 }
 
-fn detect_default_terminal_shell() -> TerminalShellProfile {
+pub(crate) fn detect_default_terminal_shell() -> TerminalShellProfile {
     detect_terminal_shell_candidates()
         .into_iter()
         .next()
         .unwrap_or_else(terminal_shell_missing_profile)
 }
 
-fn terminal_shell_from_candidates(
+pub(crate) fn terminal_shell_from_candidates(
     candidates: &[TerminalShellProfile],
     preferred_kind: &str,
 ) -> TerminalShellProfile {
@@ -345,14 +345,14 @@ fn terminal_shell_from_candidates(
         .unwrap_or_else(terminal_shell_missing_profile)
 }
 
-fn terminal_shell_for_state(state: &AppState) -> TerminalShellProfile {
+pub(crate) fn terminal_shell_for_state(state: &AppState) -> TerminalShellProfile {
     let preferred = state_read_config_cached(state)
         .map(|cfg| cfg.terminal_shell_kind)
         .unwrap_or_else(|_| "auto".to_string());
     terminal_shell_from_candidates(&state.terminal_shell_candidates, &preferred)
 }
 
-fn terminal_shell_candidates_for_ui(
+pub(crate) fn terminal_shell_candidates_for_ui(
     state: &AppState,
 ) -> (String, TerminalShellProfile, Vec<Value>) {
     let preferred = state_read_config_cached(state)
@@ -378,7 +378,7 @@ fn terminal_shell_candidates_for_ui(
     (preferred, current, items)
 }
 
-fn terminal_shell_runtime_label(shell: &TerminalShellProfile) -> String {
+pub(crate) fn terminal_shell_runtime_label(shell: &TerminalShellProfile) -> String {
     let title = match shell.kind.as_str() {
         "powershell7" => "PowerShell 7",
         "powershell5" => "Windows PowerShell 5.1",
@@ -393,7 +393,7 @@ fn terminal_shell_runtime_label(shell: &TerminalShellProfile) -> String {
     format!("{title} ({})", shell.path.trim())
 }
 
-fn terminal_exec_tool_description(shell: &TerminalShellProfile) -> String {
+pub(crate) fn terminal_exec_tool_description(shell: &TerminalShellProfile) -> String {
     format!(
         "在当前 shell 工作区根目录中执行一次性命令。运行时 shell：{}。命令结束、失败或超时后，本次进程树会被回收。",
         terminal_shell_runtime_label(shell)

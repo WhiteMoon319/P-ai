@@ -1,11 +1,11 @@
-const MESSAGE_STORE_MIGRATION_PROGRESS_EVENT: &str = "easy-call:message-store-migration-progress";
+pub(crate) const MESSAGE_STORE_MIGRATION_PROGRESS_EVENT: &str = "easy-call:message-store-migration-progress";
 
-fn message_store_migration_lock() -> &'static std::sync::Mutex<()> {
+pub(crate) fn message_store_migration_lock() -> &'static std::sync::Mutex<()> {
     static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
     LOCK.get_or_init(|| std::sync::Mutex::new(()))
 }
 
-fn lock_message_store_migration() -> std::sync::MutexGuard<'static, ()> {
+pub(crate) fn lock_message_store_migration() -> std::sync::MutexGuard<'static, ()> {
     message_store_migration_lock().lock().unwrap_or_else(|poison| {
         runtime_log_info(format!(
             "[消息存储迁移] 迁移锁已污染，继续串行执行恢复，error={:?}",
@@ -17,52 +17,52 @@ fn lock_message_store_migration() -> std::sync::MutexGuard<'static, ()> {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct MessageStoreMigrationPreflightReport {
-    migration_required: bool,
-    total_conversations: usize,
-    ready_count: usize,
-    legacy_count: usize,
-    busy_count: usize,
-    blocked_count: usize,
-    can_auto_migrate: bool,
-    items: Vec<MessageStoreMigrationPreflightItem>,
+pub(crate) struct MessageStoreMigrationPreflightReport {
+    pub(crate) migration_required: bool,
+    pub(crate) total_conversations: usize,
+    pub(crate) ready_count: usize,
+    pub(crate) legacy_count: usize,
+    pub(crate) busy_count: usize,
+    pub(crate) blocked_count: usize,
+    pub(crate) can_auto_migrate: bool,
+    pub(crate) items: Vec<MessageStoreMigrationPreflightItem>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct MessageStoreMigrationPreflightItem {
-    conversation_id: String,
-    title: String,
-    status: String,
-    message_count: usize,
-    reason: Option<String>,
+pub(crate) struct MessageStoreMigrationPreflightItem {
+    pub(crate) conversation_id: String,
+    pub(crate) title: String,
+    pub(crate) status: String,
+    pub(crate) message_count: usize,
+    pub(crate) reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RunMessageStoreMigrationInput {}
+pub(crate) struct RunMessageStoreMigrationInput {}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct MessageStoreMigrationRunReport {
-    migrated_count: usize,
-    skipped_ready_count: usize,
-    discarded_count: usize,
-    failed_count: usize,
+pub(crate) struct MessageStoreMigrationRunReport {
+    pub(crate) migrated_count: usize,
+    pub(crate) skipped_ready_count: usize,
+    pub(crate) discarded_count: usize,
+    pub(crate) failed_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct MessageStoreMigrationProgressPayload {
-    current: usize,
-    total: usize,
-    conversation_id: String,
-    title: String,
-    status: String,
-    detail: Option<String>,
+pub(crate) struct MessageStoreMigrationProgressPayload {
+    pub(crate) current: usize,
+    pub(crate) total: usize,
+    pub(crate) conversation_id: String,
+    pub(crate) title: String,
+    pub(crate) status: String,
+    pub(crate) detail: Option<String>,
 }
 
-fn emit_message_store_migration_progress(
+pub(crate) fn emit_message_store_migration_progress(
     app: &NativeAppHandle,
     payload: MessageStoreMigrationProgressPayload,
 ) {
@@ -93,7 +93,7 @@ fn emit_message_store_migration_progress(
     }
 }
 
-fn message_store_migration_candidate_ids(data_path: &PathBuf) -> Vec<String> {
+pub(crate) fn message_store_migration_candidate_ids(data_path: &PathBuf) -> Vec<String> {
     let conversations_dir = app_layout_chat_conversations_dir(data_path);
     let mut ids = std::collections::BTreeSet::<String>::new();
     if let Ok(entries) = fs::read_dir(conversations_dir) {
@@ -119,7 +119,7 @@ fn message_store_migration_candidate_ids(data_path: &PathBuf) -> Vec<String> {
     ids.into_iter().collect()
 }
 
-fn preflight_legacy_conversation(
+pub(crate) fn preflight_legacy_conversation(
     data_path: &PathBuf,
     conversation_id: &str,
 ) -> MessageStoreMigrationPreflightItem {
@@ -179,7 +179,7 @@ fn preflight_legacy_conversation(
     }
 }
 
-fn preflight_ready_message_store_conversation(
+pub(crate) fn preflight_ready_message_store_conversation(
     paths: &message_store::MessageStorePaths,
     conversation_id: &str,
     fallback_message_count: usize,
@@ -230,7 +230,7 @@ fn preflight_ready_message_store_conversation(
     }
 }
 
-fn preflight_message_store_conversation(
+pub(crate) fn preflight_message_store_conversation(
     data_path: &PathBuf,
     conversation_id: &str,
 ) -> MessageStoreMigrationPreflightItem {
@@ -292,7 +292,7 @@ fn preflight_message_store_conversation(
     }
 }
 
-fn empty_message_store_migration_preflight_report() -> MessageStoreMigrationPreflightReport {
+pub(crate) fn empty_message_store_migration_preflight_report() -> MessageStoreMigrationPreflightReport {
     MessageStoreMigrationPreflightReport {
         migration_required: false,
         total_conversations: 0,
@@ -305,12 +305,12 @@ fn empty_message_store_migration_preflight_report() -> MessageStoreMigrationPref
     }
 }
 
-fn message_store_migration_current_version_recorded(state: &AppState) -> Result<bool, String> {
+pub(crate) fn message_store_migration_current_version_recorded(state: &AppState) -> Result<bool, String> {
     Ok(state_read_runtime_state_cached(state)?.message_store_migration_version
         >= DATA_MIGRATION_CURRENT_VERSION)
 }
 
-fn build_message_store_migration_preflight_report(
+pub(crate) fn build_message_store_migration_preflight_report(
     state: &AppState,
 ) -> MessageStoreMigrationPreflightReport {
     let items = message_store_migration_candidate_ids(&state.data_path)
@@ -336,7 +336,7 @@ fn build_message_store_migration_preflight_report(
     }
 }
 
-fn message_store_migration_error_is_system_failure(error: &str) -> bool {
+pub(crate) fn message_store_migration_error_is_system_failure(error: &str) -> bool {
     [
         "创建",
         "写入",
@@ -354,7 +354,7 @@ fn message_store_migration_error_is_system_failure(error: &str) -> bool {
     .any(|marker| error.contains(marker))
 }
 
-fn record_discarded_message_store_migration_item(
+pub(crate) fn record_discarded_message_store_migration_item(
     app: &NativeAppHandle,
     report: &mut MessageStoreMigrationRunReport,
     current: usize,
@@ -382,7 +382,7 @@ fn record_discarded_message_store_migration_item(
 }
 
 
-fn check_message_store_migration_inner(
+pub(crate) fn check_message_store_migration_inner(
     state: &AppState,
 ) -> Result<MessageStoreMigrationPreflightReport, String> {
     let _migration_guard = lock_message_store_migration();
@@ -392,7 +392,7 @@ fn check_message_store_migration_inner(
     Ok(build_message_store_migration_preflight_report(state))
 }
 
-fn refresh_message_store_migration_caches(state: &AppState) -> Result<(), String> {
+pub(crate) fn refresh_message_store_migration_caches(state: &AppState) -> Result<(), String> {
     // 这里只刷新普通会话消息仓库迁移相关缓存。
     // 委托快照缓存只镜像当前委托目录型正文仓库；旧格式委托若需要升级，职责在迁移服务本身，
     // 绝不能让运行期委托列表/快照路径为了观察旧格式变化而额外承担兼容或补刷逻辑。
@@ -419,7 +419,7 @@ fn refresh_message_store_migration_caches(state: &AppState) -> Result<(), String
 }
 
 
-fn run_message_store_migration_inner(
+pub(crate) fn run_message_store_migration_inner(
     app: &NativeAppHandle,
     state: &AppState,
     _input: RunMessageStoreMigrationInput,

@@ -1,4 +1,4 @@
-const ANDROID_WORKSPACE_STATE_FILE: &str = "android_workspace_state.json";
+pub(crate) const ANDROID_WORKSPACE_STATE_FILE: &str = "android_workspace_state.json";
 
 pub(crate) fn android_workspace_runtime_base(root: &std::path::Path) -> std::path::PathBuf {
     root.parent()
@@ -18,14 +18,14 @@ pub(crate) fn android_workspace_tool_requires_linux_runtime(tool_name: &str, is_
     is_mcp_tool || tool_name.trim() == "exec"
 }
 
-fn android_workspace_guest_path_suffix<'a>(path_text: &'a str, guest_prefix: &str) -> Option<&'a str> {
+pub(crate) fn android_workspace_guest_path_suffix<'a>(path_text: &'a str, guest_prefix: &str) -> Option<&'a str> {
     if path_text == guest_prefix {
         return Some("");
     }
     path_text.strip_prefix(&format!("{guest_prefix}/"))
 }
 
-fn android_workspace_join_guest_suffix(host_base: &std::path::Path, suffix: &str) -> std::path::PathBuf {
+pub(crate) fn android_workspace_join_guest_suffix(host_base: &std::path::Path, suffix: &str) -> std::path::PathBuf {
     let mut out = host_base.to_path_buf();
     for part in suffix.split('/') {
         if !part.is_empty() {
@@ -51,7 +51,7 @@ pub(crate) fn android_workspace_map_guest_path_to_host(
     raw.to_path_buf()
 }
 
-fn android_workspace_root_name_is_reserved_for_file_tools(name: &str) -> bool {
+pub(crate) fn android_workspace_root_name_is_reserved_for_file_tools(name: &str) -> bool {
     matches!(
         name,
         ".pai"
@@ -89,7 +89,7 @@ pub(crate) fn android_workspace_relative_path_is_tool_visible(
 }
 
 #[cfg(test)]
-fn android_workspace_normalize_path_input(raw: &str) -> String {
+pub(crate) fn android_workspace_normalize_path_input(raw: &str) -> String {
     let trimmed = raw.trim();
     if trimmed.len() >= 2 {
         let bytes = trimmed.as_bytes();
@@ -103,7 +103,7 @@ fn android_workspace_normalize_path_input(raw: &str) -> String {
 }
 
 #[cfg(not(test))]
-fn android_workspace_normalize_path_input(raw: &str) -> String {
+pub(crate) fn android_workspace_normalize_path_input(raw: &str) -> String {
     normalize_terminal_path_input_for_current_platform(raw)
 }
 
@@ -132,7 +132,7 @@ pub(crate) fn android_workspace_clean_relative_input(raw: &str) -> Result<std::p
     Ok(out)
 }
 
-fn android_workspace_root_name_is_reserved_for_file_manager(name: &str) -> bool {
+pub(crate) fn android_workspace_root_name_is_reserved_for_file_manager(name: &str) -> bool {
     matches!(
         name,
         "runtime"

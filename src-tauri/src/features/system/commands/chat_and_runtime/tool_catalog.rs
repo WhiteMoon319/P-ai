@@ -1,4 +1,4 @@
-fn frontend_tool_definition(function: ProviderToolDefinition) -> FrontendToolDefinition {
+pub(crate) fn frontend_tool_definition(function: ProviderToolDefinition) -> FrontendToolDefinition {
     FrontendToolDefinition {
         kind: "function".to_string(),
         function: FrontendToolFunctionDefinition {
@@ -9,7 +9,7 @@ fn frontend_tool_definition(function: ProviderToolDefinition) -> FrontendToolDef
     }
 }
 
-async fn builtin_tool_definitions_for_frontend(
+pub(crate) async fn builtin_tool_definitions_for_frontend(
     state: &AppState,
 ) -> Vec<FrontendToolDefinition> {
     let preview_session_id = "__frontend_tool_preview__".to_string();
@@ -188,7 +188,7 @@ async fn builtin_tool_definitions_for_frontend(
     out
 }
 
-fn department_permission_catalog_item(name: &str, description: &str) -> Option<DepartmentPermissionCatalogItem> {
+pub(crate) fn department_permission_catalog_item(name: &str, description: &str) -> Option<DepartmentPermissionCatalogItem> {
     let name = name.trim();
     if name.is_empty() {
         return None;
@@ -199,7 +199,7 @@ fn department_permission_catalog_item(name: &str, description: &str) -> Option<D
     })
 }
 
-fn sorted_unique_catalog_items(
+pub(crate) fn sorted_unique_catalog_items(
     values: impl IntoIterator<Item = DepartmentPermissionCatalogItem>,
 ) -> Vec<DepartmentPermissionCatalogItem> {
     let mut out = values.into_iter().collect::<Vec<_>>();
@@ -209,12 +209,12 @@ fn sorted_unique_catalog_items(
 }
 
 
-async fn list_tool_catalog_inner(state: &AppState) -> Result<Vec<FrontendToolDefinition>, String> {
+pub(crate) async fn list_tool_catalog_inner(state: &AppState) -> Result<Vec<FrontendToolDefinition>, String> {
     Ok(builtin_tool_definitions_for_frontend(state).await)
 }
 
 
-async fn list_department_permission_catalog_inner(
+pub(crate) async fn list_department_permission_catalog_inner(
     state: &AppState,
 ) -> Result<DepartmentPermissionCatalog, String> {
     let builtin_tools = sorted_unique_catalog_items(

@@ -1,4 +1,4 @@
-async fn resolve_image_description_with_vision_fallback(
+pub(crate) async fn resolve_image_description_with_vision_fallback(
     state: &AppState,
     conversation_id: &str,
     vision_api: &ApiConfig,
@@ -87,7 +87,7 @@ async fn resolve_image_description_with_vision_fallback(
     Ok(Some(trimmed))
 }
 
-fn prepared_latest_user_present(prepared: &PreparedPrompt) -> bool {
+pub(crate) fn prepared_latest_user_present(prepared: &PreparedPrompt) -> bool {
     !prepared.latest_user_text.trim().is_empty()
         || !prepared.latest_user_meta_text.trim().is_empty()
         || !prepared.latest_user_extra_text.trim().is_empty()
@@ -99,7 +99,7 @@ fn prepared_latest_user_present(prepared: &PreparedPrompt) -> bool {
         || !prepared.latest_audios.is_empty()
 }
 
-fn recent_user_image_fallback_plan(prepared: &PreparedPrompt) -> (Vec<bool>, bool) {
+pub(crate) fn recent_user_image_fallback_plan(prepared: &PreparedPrompt) -> (Vec<bool>, bool) {
     let latest_user_in_window = prepared_latest_user_present(prepared);
     let mut remaining = IMAGE_FALLBACK_RECENT_USER_MESSAGE_LIMIT
         .saturating_sub(usize::from(latest_user_in_window));
@@ -121,7 +121,7 @@ fn recent_user_image_fallback_plan(prepared: &PreparedPrompt) -> (Vec<bool>, boo
     (history_in_window, latest_user_in_window)
 }
 
-fn collect_payload_attachment_meta_entries(payload: &ChatInputPayload) -> Vec<Value> {
+pub(crate) fn collect_payload_attachment_meta_entries(payload: &ChatInputPayload) -> Vec<Value> {
     let entries = normalize_payload_attachments(payload.attachments.as_ref());
     if !entries.is_empty() {
         return entries;
@@ -157,7 +157,7 @@ fn collect_payload_attachment_meta_entries(payload: &ChatInputPayload) -> Vec<Va
     entries
 }
 
-fn collect_payload_attachment_relative_paths(payload: &ChatInputPayload) -> Vec<String> {
+pub(crate) fn collect_payload_attachment_relative_paths(payload: &ChatInputPayload) -> Vec<String> {
     collect_payload_attachment_meta_entries(payload)
         .into_iter()
         .filter_map(|item| {
@@ -171,7 +171,7 @@ fn collect_payload_attachment_relative_paths(payload: &ChatInputPayload) -> Vec<
 }
 
 #[cfg(test)]
-fn image_attachment_reference_label(
+pub(crate) fn image_attachment_reference_label(
     payload: &ChatInputPayload,
     image: &BinaryPart,
     image_index: usize,
@@ -198,11 +198,11 @@ fn image_attachment_reference_label(
     format!("图片#{}", image_index + 1)
 }
 
-fn image_description_block(label: &str, text: &str) -> String {
+pub(crate) fn image_description_block(label: &str, text: &str) -> String {
     format!("[{} 图片转文]\n{}", label.trim(), text.trim())
 }
 
-fn drop_all_prepared_images(prepared: &mut PreparedPrompt) -> bool {
+pub(crate) fn drop_all_prepared_images(prepared: &mut PreparedPrompt) -> bool {
     let mut changed = !prepared.latest_images.is_empty();
     prepared.latest_images.clear();
     for message in &mut prepared.history_messages {
@@ -212,7 +212,7 @@ fn drop_all_prepared_images(prepared: &mut PreparedPrompt) -> bool {
     changed
 }
 
-fn drop_unsupported_prepared_audios(
+pub(crate) fn drop_unsupported_prepared_audios(
     selected_api: &ApiConfig,
     prepared: &mut PreparedPrompt,
 ) -> bool {
@@ -234,7 +234,7 @@ fn drop_unsupported_prepared_audios(
     changed
 }
 
-async fn apply_prompt_image_fallbacks_to_prepared(
+pub(crate) async fn apply_prompt_image_fallbacks_to_prepared(
     state: &AppState,
     conversation_id: &str,
     app_config: &AppConfig,

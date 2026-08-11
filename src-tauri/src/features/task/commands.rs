@@ -1,13 +1,13 @@
 
-fn task_list_tasks_inner(state: &AppState) -> Result<Vec<TaskEntry>, String> {
+pub(crate) fn task_list_tasks_inner(state: &AppState) -> Result<Vec<TaskEntry>, String> {
     task_store_list_tasks(&state.data_path)
 }
 
-fn task_ensure_system_notification_conversation(state: &AppState) -> Result<(), String> {
+pub(crate) fn task_ensure_system_notification_conversation(state: &AppState) -> Result<(), String> {
     conversation_service_v2().ensure_system_notification_conversation(state)
 }
 
-fn task_normalize_conversation_for_write(
+pub(crate) fn task_normalize_conversation_for_write(
     state: &AppState,
     conversation_id: Option<&str>,
 ) -> Result<String, String> {
@@ -33,7 +33,7 @@ fn task_normalize_conversation_for_write(
     Ok(normalized)
 }
 
-fn task_validate_department_agent_for_write(
+pub(crate) fn task_validate_department_agent_for_write(
     state: &AppState,
     department_id: &str,
     agent_id: &str,
@@ -68,7 +68,7 @@ fn task_validate_department_agent_for_write(
     Ok((normalized_department_id.to_string(), normalized_agent_id.to_string()))
 }
 
-fn task_resolve_department_agent_pair_for_write(
+pub(crate) fn task_resolve_department_agent_pair_for_write(
     state: &AppState,
     department_id: &str,
     agent_id: Option<&str>,
@@ -119,7 +119,7 @@ fn task_resolve_department_agent_pair_for_write(
     Ok((normalized_department_id.to_string(), resolved_agent_id))
 }
 
-fn task_validate_stored_department_agent_for_dispatch(
+pub(crate) fn task_validate_stored_department_agent_for_dispatch(
     state: &AppState,
     department_id: &str,
     agent_id: &str,
@@ -146,7 +146,7 @@ fn task_validate_stored_department_agent_for_dispatch(
     ))
 }
 
-fn task_resolve_stored_department_agent_for_dispatch(
+pub(crate) fn task_resolve_stored_department_agent_for_dispatch(
     state: &AppState,
     department_id: &str,
     agent_id: Option<&str>,
@@ -157,7 +157,7 @@ fn task_resolve_stored_department_agent_for_dispatch(
     task_resolve_department_agent_pair_for_write(state, department_id, None)
 }
 
-fn task_default_department_agent_for_write(state: &AppState) -> Result<(String, String), String> {
+pub(crate) fn task_default_department_agent_for_write(state: &AppState) -> Result<(String, String), String> {
     let runtime_snapshot = load_runtime_organization_snapshot(state)?;
     let runtime = state_read_runtime_state_cached(state)?;
     let assistant_department_id = assistant_department(&runtime_snapshot.config)
@@ -180,7 +180,7 @@ fn task_default_department_agent_for_write(state: &AppState) -> Result<(String, 
         .map_err(|err| format!("任务缺少默认执行人格：{err}"))
 }
 
-fn task_conversation_has_system_owner(
+pub(crate) fn task_conversation_has_system_owner(
     state: &AppState,
     agent_id: &str,
     is_system_notification: bool,
@@ -204,7 +204,7 @@ fn task_conversation_has_system_owner(
         .unwrap_or(false))
 }
 
-fn task_department_agent_from_conversation_for_write(
+pub(crate) fn task_department_agent_from_conversation_for_write(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<Option<(String, String)>, String> {
@@ -229,7 +229,7 @@ fn task_department_agent_from_conversation_for_write(
     task_resolve_department_agent_pair_for_write(state, department_id, Some(agent_id)).map(Some)
 }
 
-fn task_resolve_department_agent_for_write(
+pub(crate) fn task_resolve_department_agent_for_write(
     state: &AppState,
     conversation_id: &str,
     requested_department_id: Option<&str>,
@@ -253,7 +253,7 @@ fn task_resolve_department_agent_for_write(
     task_default_department_agent_for_write(state)
 }
 
-fn task_create_input_for_write(
+pub(crate) fn task_create_input_for_write(
     state: &AppState,
     input: &TaskCreateInput,
 ) -> Result<TaskCreateInput, String> {
@@ -272,7 +272,7 @@ fn task_create_input_for_write(
     Ok(next)
 }
 
-fn task_update_input_for_write(
+pub(crate) fn task_update_input_for_write(
     state: &AppState,
     input: &TaskUpdateInput,
 ) -> Result<TaskUpdateInput, String> {
@@ -300,7 +300,7 @@ fn task_update_input_for_write(
     Ok(next)
 }
 
-fn task_optimize_draft_prompt(input: &TaskOptimizeDraftInput) -> Result<String, String> {
+pub(crate) fn task_optimize_draft_prompt(input: &TaskOptimizeDraftInput) -> Result<String, String> {
     let content = input.content.trim();
     if content.is_empty() {
         return Err("任务内容不能为空。".to_string());
@@ -346,7 +346,7 @@ fn task_optimize_draft_prompt(input: &TaskOptimizeDraftInput) -> Result<String, 
     ))
 }
 
-fn task_trim_chars(value: &str, limit: usize) -> String {
+pub(crate) fn task_trim_chars(value: &str, limit: usize) -> String {
     let normalized = value.trim().replace("\r\n", "\n").replace('\r', "\n");
     let mut out = String::new();
     for (index, ch) in normalized.chars().enumerate() {
@@ -358,7 +358,7 @@ fn task_trim_chars(value: &str, limit: usize) -> String {
     out.trim().to_string()
 }
 
-fn task_optimize_draft_output_from_value(
+pub(crate) fn task_optimize_draft_output_from_value(
     value: &Value,
     input: &TaskOptimizeDraftInput,
 ) -> Result<TaskOptimizeDraftOutput, String> {
@@ -411,7 +411,7 @@ fn task_optimize_draft_output_from_value(
     })
 }
 
-fn task_value_string_any(value: &Value, keys: &[&str]) -> Option<String> {
+pub(crate) fn task_value_string_any(value: &Value, keys: &[&str]) -> Option<String> {
     keys.iter()
         .find_map(|key| value.get(*key).and_then(Value::as_str))
         .map(str::trim)
@@ -419,14 +419,14 @@ fn task_value_string_any(value: &Value, keys: &[&str]) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn task_optimize_schedule_mode(value: &str) -> &'static str {
+pub(crate) fn task_optimize_schedule_mode(value: &str) -> &'static str {
     match value.trim().to_ascii_lowercase().as_str() {
         "interval" | "recurring" | "repeat" | "repeating" | "定时" | "重复" => "interval",
         _ => "once",
     }
 }
 
-fn task_optimize_repeat_unit(value: &str) -> &'static str {
+pub(crate) fn task_optimize_repeat_unit(value: &str) -> &'static str {
     match value.trim().to_ascii_lowercase().as_str() {
         "minute" | "minutes" | "分钟" => "minutes",
         "day" | "days" | "天" | "日" => "days",
@@ -436,7 +436,7 @@ fn task_optimize_repeat_unit(value: &str) -> &'static str {
     }
 }
 
-fn task_optimize_repeat_every(value: &str, unit: &str, fallback: &str) -> String {
+pub(crate) fn task_optimize_repeat_every(value: &str, unit: &str, fallback: &str) -> String {
     let fallback_number = fallback
         .trim()
         .parse::<i64>()
@@ -459,18 +459,18 @@ fn task_optimize_repeat_every(value: &str, unit: &str, fallback: &str) -> String
     number.to_string()
 }
 
-fn task_optimize_rfc3339_local(value: &str) -> Option<String> {
+pub(crate) fn task_optimize_rfc3339_local(value: &str) -> Option<String> {
     parse_rfc3339_time(value.trim()).map(format_offset_datetime_to_local_rfc3339)
 }
 
-fn task_optimize_run_at(value: Option<&str>, fallback: &str) -> String {
+pub(crate) fn task_optimize_run_at(value: Option<&str>, fallback: &str) -> String {
     value
         .and_then(task_optimize_rfc3339_local)
         .or_else(|| task_optimize_rfc3339_local(fallback))
         .unwrap_or_else(now_local_rfc3339)
 }
 
-fn task_optimize_end_at(value: Option<&str>, fallback: &str, run_at: &str) -> String {
+pub(crate) fn task_optimize_end_at(value: Option<&str>, fallback: &str, run_at: &str) -> String {
     let candidate = value
         .and_then(task_optimize_rfc3339_local)
         .or_else(|| task_optimize_rfc3339_local(fallback));
@@ -491,12 +491,12 @@ fn task_optimize_end_at(value: Option<&str>, fallback: &str, run_at: &str) -> St
 }
 
 
-fn task_get_task_inner(input: TaskGetInput, state: &AppState) -> Result<TaskEntry, String> {
+pub(crate) fn task_get_task_inner(input: TaskGetInput, state: &AppState) -> Result<TaskEntry, String> {
     task_store_get_task(&state.data_path, input.task_id.trim())
 }
 
 
-async fn task_optimize_draft_internal(
+pub(crate) async fn task_optimize_draft_internal(
     input: TaskOptimizeDraftInput,
     state: &AppState,
 ) -> Result<TaskOptimizeDraftOutput, String> {
@@ -595,7 +595,7 @@ async fn task_optimize_draft_internal(
 }
 
 
-fn task_create_task_inner(input: TaskCreateInput, state: &AppState) -> Result<TaskEntry, String> {
+pub(crate) fn task_create_task_inner(input: TaskCreateInput, state: &AppState) -> Result<TaskEntry, String> {
     let input = task_create_input_for_write(state, &input)?;
     let task = task_store_create_task(&state.data_path, &input)?;
     task_scheduler_notify_changed(state);
@@ -603,7 +603,7 @@ fn task_create_task_inner(input: TaskCreateInput, state: &AppState) -> Result<Ta
 }
 
 
-async fn task_dispatch_task_now_inner(
+pub(crate) async fn task_dispatch_task_now_inner(
     input: TaskDispatchNowInput,
     state: &AppState,
 ) -> Result<bool, String> {
@@ -617,7 +617,7 @@ async fn task_dispatch_task_now_inner(
 }
 
 
-fn task_update_task_inner(input: TaskUpdateInput, state: &AppState) -> Result<TaskEntry, String> {
+pub(crate) fn task_update_task_inner(input: TaskUpdateInput, state: &AppState) -> Result<TaskEntry, String> {
     let input = task_update_input_for_write(state, &input)?;
     let task = task_store_update_task(&state.data_path, &input)?;
     task_scheduler_notify_changed(state);
@@ -625,21 +625,21 @@ fn task_update_task_inner(input: TaskUpdateInput, state: &AppState) -> Result<Ta
 }
 
 
-fn task_complete_task_inner(input: TaskCompleteInput, state: &AppState) -> Result<TaskEntry, String> {
+pub(crate) fn task_complete_task_inner(input: TaskCompleteInput, state: &AppState) -> Result<TaskEntry, String> {
     let task = task_store_complete_task(&state.data_path, &input)?;
     task_scheduler_notify_changed(state);
     Ok(task)
 }
 
 
-fn task_delete_task_inner(input: TaskDeleteInput, state: &AppState) -> Result<(), String> {
+pub(crate) fn task_delete_task_inner(input: TaskDeleteInput, state: &AppState) -> Result<(), String> {
     task_store_delete_task(&state.data_path, input.task_id.trim())?;
     task_scheduler_notify_changed(state);
     Ok(())
 }
 
 
-fn task_list_run_logs_inner(
+pub(crate) fn task_list_run_logs_inner(
     input: Option<TaskRunLogListInput>,
     state: &AppState,
 ) -> Result<Vec<TaskRunLogEntry>, String> {

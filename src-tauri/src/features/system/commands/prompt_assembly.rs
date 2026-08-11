@@ -1,23 +1,23 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PromptBuildMode {
+pub(crate) enum PromptBuildMode {
     Chat,
     Delegate,
 }
 
 #[derive(Debug, Clone, Default)]
-struct ChatPromptOverrides {
-    executor_department_id: Option<String>,
-    latest_user_intent: Option<LatestUserPayloadIntent>,
+pub(crate) struct ChatPromptOverrides {
+    pub(crate) executor_department_id: Option<String>,
+    pub(crate) latest_user_intent: Option<LatestUserPayloadIntent>,
     // 会话主链不允许外部直接注入系统侧块；系统提示词相关块必须由提示词服务内部生成。
-    todo_tool_enabled: bool,
-    remote_im_activation_sources: Vec<RemoteImActivationSource>,
-    latest_images: Option<Vec<PreparedBinaryPayload>>,
-    latest_audios: Option<Vec<PreparedBinaryPayload>>,
+    pub(crate) todo_tool_enabled: bool,
+    pub(crate) remote_im_activation_sources: Vec<RemoteImActivationSource>,
+    pub(crate) latest_images: Option<Vec<PreparedBinaryPayload>>,
+    pub(crate) latest_audios: Option<Vec<PreparedBinaryPayload>>,
 }
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-enum LatestUserPayloadIntent {
+pub(crate) enum LatestUserPayloadIntent {
     ChatRequest {
         include_task_board: bool,
         include_todo_board: bool,
@@ -43,7 +43,7 @@ pub(crate) fn prompt_xml_block(block_name: &str, body: impl AsRef<str>) -> Strin
     format!("<{}>\n{}\n</{}>", name, content, name)
 }
 
-fn build_prepared_prompt_for_mode(
+pub(crate) fn build_prepared_prompt_for_mode(
     mode: PromptBuildMode,
     conversation: &Conversation,
     agent: &AgentProfile,
@@ -82,7 +82,7 @@ fn build_prepared_prompt_for_mode(
     )
 }
 
-fn build_prepared_prompt_for_mode_with_stage_logger(
+pub(crate) fn build_prepared_prompt_for_mode_with_stage_logger(
     mode: PromptBuildMode,
     conversation: &Conversation,
     agent: &AgentProfile,
@@ -122,7 +122,7 @@ fn build_prepared_prompt_for_mode_with_stage_logger(
     )
 }
 
-fn render_user_profile_memory_block(
+pub(crate) fn render_user_profile_memory_block(
     memories: &[MemoryEntry],
     block_name: &str,
     intro: &str,
@@ -151,7 +151,7 @@ fn render_user_profile_memory_block(
     }
 }
 
-fn render_user_profile_memory_context_block(memories: &[MemoryEntry]) -> Option<String> {
+pub(crate) fn render_user_profile_memory_context_block(memories: &[MemoryEntry]) -> Option<String> {
     let recall_ids = memories
         .iter()
         .map(|memory| memory.id.clone())
@@ -159,7 +159,7 @@ fn render_user_profile_memory_context_block(memories: &[MemoryEntry]) -> Option<
     build_memory_board_xml_from_recall_ids(memories, &recall_ids, false)
 }
 
-fn build_user_profile_snapshot_block(
+pub(crate) fn build_user_profile_snapshot_block(
     data_path: &PathBuf,
     agent: &AgentProfile,
     limit: usize,
@@ -167,7 +167,7 @@ fn build_user_profile_snapshot_block(
     build_user_profile_snapshot_block_for_user(data_path, agent, USER_PERSONA_ID, limit)
 }
 
-fn build_user_profile_snapshot_block_for_user(
+pub(crate) fn build_user_profile_snapshot_block_for_user(
     data_path: &PathBuf,
     agent: &AgentProfile,
     user_id: &str,
@@ -184,14 +184,14 @@ fn build_user_profile_snapshot_block_for_user(
 }
 
 #[allow(dead_code)]
-fn build_user_profile_memory_board(
+pub(crate) fn build_user_profile_memory_board(
     data_path: &PathBuf,
     agent: &AgentProfile,
 ) -> Result<Option<String>, String> {
     build_user_profile_memory_board_for_user(data_path, agent, USER_PERSONA_ID)
 }
 
-fn build_user_profile_memory_board_for_user(
+pub(crate) fn build_user_profile_memory_board_for_user(
     data_path: &PathBuf,
     agent: &AgentProfile,
     user_id: &str,
@@ -210,7 +210,7 @@ fn build_user_profile_memory_board_for_user(
     ))
 }
 
-fn build_transient_user_profile_snapshot_block_for_user(
+pub(crate) fn build_transient_user_profile_snapshot_block_for_user(
     data_path: &PathBuf,
     agent: &AgentProfile,
     user_id: &str,
@@ -228,7 +228,7 @@ fn build_transient_user_profile_snapshot_block_for_user(
     Ok(render_user_profile_memory_context_block(&memories))
 }
 
-fn conversation_user_main_workspace_root(conversation: &Conversation, state: &AppState) -> Option<PathBuf> {
+pub(crate) fn conversation_user_main_workspace_root(conversation: &Conversation, state: &AppState) -> Option<PathBuf> {
     // 联系人会话：从联系人配置中查找 main workspace
     if conversation.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT {
         if let Ok(runtime) = state_read_runtime_state_cached(state) {
@@ -257,15 +257,15 @@ fn conversation_user_main_workspace_root(conversation: &Conversation, state: &Ap
         .and_then(|workspace| shell_workspace_resolve_path_candidate(state, workspace))
 }
 
-const WORKSPACE_AGENTS_MD_MAX_BYTES: u64 = 32 * 1024;
-const INTERFACE_REMOTE_PRIVATE_CONTACT_PROMPT_MD: &str =
+pub(crate) const WORKSPACE_AGENTS_MD_MAX_BYTES: u64 = 32 * 1024;
+pub(crate) const INTERFACE_REMOTE_PRIVATE_CONTACT_PROMPT_MD: &str =
     include_str!("../../../../resources/prompts/interface_remote_private_contact.md");
-const INTERFACE_REMOTE_GROUP_CONTACT_PROMPT_MD: &str =
+pub(crate) const INTERFACE_REMOTE_GROUP_CONTACT_PROMPT_MD: &str =
     include_str!("../../../../resources/prompts/interface_remote_group_contact.md");
-const INTERFACE_LOCAL_CONVERSATION_PROMPT_MD: &str =
+pub(crate) const INTERFACE_LOCAL_CONVERSATION_PROMPT_MD: &str =
     include_str!("../../../../resources/prompts/interface_local_conversation.md");
 
-fn resolve_human_interface_remote_contact_type(
+pub(crate) fn resolve_human_interface_remote_contact_type(
     state: Option<&AppState>,
     conversation: &Conversation,
     activation_sources: &[RemoteImActivationSource],
@@ -303,7 +303,7 @@ fn resolve_human_interface_remote_contact_type(
         .filter(|value| !value.is_empty())
 }
 
-fn build_human_interface_environment_block(remote_contact_type: Option<&str>) -> String {
+pub(crate) fn build_human_interface_environment_block(remote_contact_type: Option<&str>) -> String {
     let body = match remote_contact_type {
         Some(contact_type) if contact_type.trim().eq_ignore_ascii_case("group") => {
             INTERFACE_REMOTE_GROUP_CONTACT_PROMPT_MD
@@ -314,7 +314,7 @@ fn build_human_interface_environment_block(remote_contact_type: Option<&str>) ->
     prompt_xml_block("interface", body.trim())
 }
 
-fn build_remote_im_contact_downloads_block(conversation: &Conversation, state: &AppState) -> Option<String> {
+pub(crate) fn build_remote_im_contact_downloads_block(conversation: &Conversation, state: &AppState) -> Option<String> {
     if !conversation_is_remote_im_contact(conversation) {
         return None;
     }
@@ -333,7 +333,7 @@ fn build_remote_im_contact_downloads_block(conversation: &Conversation, state: &
     ))
 }
 
-fn build_workspace_agents_md_block(conversation: &Conversation, state: &AppState) -> Option<String> {
+pub(crate) fn build_workspace_agents_md_block(conversation: &Conversation, state: &AppState) -> Option<String> {
     let Some(workspace_root) = conversation_user_main_workspace_root(conversation, state) else {
         return None;
     };
@@ -368,7 +368,7 @@ fn build_workspace_agents_md_block(conversation: &Conversation, state: &AppState
 }
 
 #[allow(dead_code)]
-fn enrich_prepared_prompt_with_common_preamble(
+pub(crate) fn enrich_prepared_prompt_with_common_preamble(
     mut prepared: PreparedPrompt,
     _last_archive_summary: Option<&str>,
     user_profile_memory_block: Option<&str>,
@@ -392,7 +392,7 @@ fn enrich_prepared_prompt_with_common_preamble(
     prepared
 }
 
-fn apply_chat_latest_user_payload(
+pub(crate) fn apply_chat_latest_user_payload(
     prepared: &mut PreparedPrompt,
     latest_user_text: String,
     latest_user_meta_text: String,
@@ -423,13 +423,13 @@ fn apply_chat_latest_user_payload(
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum LatestUserExtraBlocksMode {
+pub(crate) enum LatestUserExtraBlocksMode {
     Append,
     ReplaceIfNonEmpty,
 }
 
 #[cfg(test)]
-mod prompt_assembly_tests {
+pub(crate) mod prompt_assembly_tests {
     use super::*;
     use std::collections::{HashMap, HashSet, VecDeque};
     use std::sync::{Arc, Mutex};

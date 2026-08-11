@@ -1,4 +1,4 @@
-fn validate_images(channel: &RemoteImChannelConfig, input: &RemoteImEnqueueInput) -> Vec<BinaryPart> {
+pub(crate) fn validate_images(channel: &RemoteImChannelConfig, input: &RemoteImEnqueueInput) -> Vec<BinaryPart> {
     if channel.receive_files {
         input.payload.images.clone().unwrap_or_default()
     } else {
@@ -6,7 +6,7 @@ fn validate_images(channel: &RemoteImChannelConfig, input: &RemoteImEnqueueInput
     }
 }
 
-fn validate_audios(channel: &RemoteImChannelConfig, input: &RemoteImEnqueueInput) -> Vec<BinaryPart> {
+pub(crate) fn validate_audios(channel: &RemoteImChannelConfig, input: &RemoteImEnqueueInput) -> Vec<BinaryPart> {
     if channel.receive_files {
         input.payload.audios.clone().unwrap_or_default()
     } else {
@@ -14,7 +14,7 @@ fn validate_audios(channel: &RemoteImChannelConfig, input: &RemoteImEnqueueInput
     }
 }
 
-fn validate_attachments(
+pub(crate) fn validate_attachments(
     channel: &RemoteImChannelConfig,
     input: &RemoteImEnqueueInput,
 ) -> Vec<AttachmentMetaInput> {
@@ -25,7 +25,7 @@ fn validate_attachments(
     }
 }
 
-fn resolve_channel_config(
+pub(crate) fn resolve_channel_config(
     input: &RemoteImEnqueueInput,
     config: &AppConfig,
 ) -> Result<(String, RemoteImChannelConfig), String> {
@@ -42,7 +42,7 @@ fn resolve_channel_config(
     Ok((channel_id, channel))
 }
 
-fn resolve_department_agent_pair(
+pub(crate) fn resolve_department_agent_pair(
     requested_department_id: Option<&str>,
     requested_agent_id: Option<&str>,
     config: &AppConfig,
@@ -99,7 +99,7 @@ fn resolve_department_agent_pair(
     Ok((department.id.clone(), agent_id))
 }
 
-fn validate_enqueue_input(
+pub(crate) fn validate_enqueue_input(
     input: &RemoteImEnqueueInput,
     config: &AppConfig,
 ) -> Result<ValidatedEnqueueInput, String> {
@@ -121,7 +121,7 @@ fn validate_enqueue_input(
     })
 }
 
-fn ensure_remote_im_contact_conversation_id(
+pub(crate) fn ensure_remote_im_contact_conversation_id(
     state: &AppState,
     contact: &mut RemoteImContact,
 ) -> Result<String, String> {
@@ -191,7 +191,7 @@ fn ensure_remote_im_contact_conversation_id(
     Ok(conversation_id)
 }
 
-fn remote_im_contact_conversation_sync_lock(
+pub(crate) fn remote_im_contact_conversation_sync_lock(
     state: &AppState,
     contact_id: &str,
 ) -> std::sync::Arc<std::sync::Mutex<()>> {
@@ -219,7 +219,7 @@ fn remote_im_contact_conversation_sync_lock(
         .clone()
 }
 
-fn sync_remote_im_contact_conversation_binding(
+pub(crate) fn sync_remote_im_contact_conversation_binding(
     state: &AppState,
     contact: &RemoteImContact,
     conversation_id: &str,
@@ -411,7 +411,7 @@ fn sync_remote_im_contact_conversation_binding(
     Ok(())
 }
 
-fn restore_remote_im_contact_conversation_binding(
+pub(crate) fn restore_remote_im_contact_conversation_binding(
     state: &AppState,
     conversation_id: &str,
     original_meta: &ConversationMetaView,
@@ -450,7 +450,7 @@ fn restore_remote_im_contact_conversation_binding(
     Ok(())
 }
 
-fn sync_remote_im_contact_conversation_binding_unchecked(
+pub(crate) fn sync_remote_im_contact_conversation_binding_unchecked(
     state: &AppState,
     contact: &RemoteImContact,
     conversation_id: &str,
@@ -491,7 +491,7 @@ fn sync_remote_im_contact_conversation_binding_unchecked(
     Ok(())
 }
 
-fn remote_im_meta_is_reusable_active_contact_conversation(
+pub(crate) fn remote_im_meta_is_reusable_active_contact_conversation(
     conversation_meta: &ConversationMetaView,
 ) -> bool {
     conversation_meta.status.trim() != "archived"
@@ -504,7 +504,7 @@ fn remote_im_meta_is_reusable_active_contact_conversation(
         && conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT
 }
 
-fn resolve_contact_session_target(
+pub(crate) fn resolve_contact_session_target(
     state: &AppState,
     _runtime: &mut RuntimeStateFile,
     contact: &mut RemoteImContact,
@@ -525,7 +525,7 @@ fn resolve_contact_session_target(
     Ok((department_id, agent_id, conversation_id))
 }
 
-fn build_chat_message_from_input(
+pub(crate) fn build_chat_message_from_input(
     state: &AppState,
     input: &RemoteImEnqueueInput,
     conversation_id: &str,
@@ -677,7 +677,7 @@ fn build_chat_message_from_input(
     }
 }
 
-fn create_pending_event(
+pub(crate) fn create_pending_event(
     event_id: String,
     conversation_id: String,
     messages: Vec<ChatMessage>,

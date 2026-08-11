@@ -11,50 +11,53 @@ use tantivy::schema::{
 use tantivy::tokenizer::{SimpleTokenizer, TextAnalyzer};
 use tantivy::{doc, Index};
 
-const MEMORY_MATCH_MAX_ITEMS: usize = 7;
-const MEMORY_CANDIDATE_MULTIPLIER: usize = 7;
-const MEMORY_ROUTE_CANDIDATE_LIMIT: usize = MEMORY_MATCH_MAX_ITEMS * MEMORY_CANDIDATE_MULTIPLIER;
-const MEMORY_RRF_K: f64 = 60.0;
-const MEMORY_RECALL_TOP_SCORE_RATIO: f64 = 0.5;
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use super::*;
+
+pub(crate) const MEMORY_MATCH_MAX_ITEMS: usize = 7;
+pub(crate) const MEMORY_CANDIDATE_MULTIPLIER: usize = 7;
+pub(crate) const MEMORY_ROUTE_CANDIDATE_LIMIT: usize = MEMORY_MATCH_MAX_ITEMS * MEMORY_CANDIDATE_MULTIPLIER;
+pub(crate) const MEMORY_RRF_K: f64 = 60.0;
+pub(crate) const MEMORY_RECALL_TOP_SCORE_RATIO: f64 = 0.5;
 // rerank 模式绝对门槛: relevance_score 低于门槛视为无关, 不参与最终排序与召回。
 // RAG 自动召回用 0.7 (严格), 工具召回用 0.5 (宽松), 浏览类搜索用 0.0 (不过滤)。
-const MEMORY_RERANK_MIN_SCORE_RAG: f64 = 0.7;
-const MEMORY_RERANK_MIN_SCORE_TOOL: f64 = 0.5;
+pub(crate) const MEMORY_RERANK_MIN_SCORE_RAG: f64 = 0.7;
+pub(crate) const MEMORY_RERANK_MIN_SCORE_TOOL: f64 = 0.5;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MemoryMixedRankItem {
-    memory_id: String,
-    bm25_score: f64,
-    bm25_raw_score: f64,
-    vector_score: f64,
-    rerank_score: f64,
-    final_score: f64,
+pub(crate) struct MemoryMixedRankItem {
+    pub(crate) memory_id: String,
+    pub(crate) bm25_score: f64,
+    pub(crate) bm25_raw_score: f64,
+    pub(crate) vector_score: f64,
+    pub(crate) rerank_score: f64,
+    pub(crate) final_score: f64,
 }
 
 #[derive(Debug, Clone)]
-struct MemoryBm25Hit {
-    memory_id: String,
-    raw_score: f64,
-    normalized_score: f64,
+pub(crate) struct MemoryBm25Hit {
+    pub(crate) memory_id: String,
+    pub(crate) raw_score: f64,
+    pub(crate) normalized_score: f64,
 }
 
 #[cfg(test)]
 #[derive(Debug, Clone)]
-struct CompiledMemoryMatcher {
-    signature: String,
-    matcher: Option<AhoCorasick>,
-    keyword_to_memory_indices: Vec<Vec<usize>>,
+pub(crate) struct CompiledMemoryMatcher {
+    pub(crate) signature: String,
+    pub(crate) matcher: Option<AhoCorasick>,
+    pub(crate) keyword_to_memory_indices: Vec<Vec<usize>>,
 }
 
 #[cfg(test)]
-fn memory_matcher_cache() -> &'static std::sync::Mutex<Option<CompiledMemoryMatcher>> {
+pub(crate) fn memory_matcher_cache() -> &'static std::sync::Mutex<Option<CompiledMemoryMatcher>> {
     static CACHE: std::sync::OnceLock<std::sync::Mutex<Option<CompiledMemoryMatcher>>> =
         std::sync::OnceLock::new();
     CACHE.get_or_init(|| std::sync::Mutex::new(None))
 }
 
-fn memory_is_cjk_char(ch: char) -> bool {
+pub(crate) fn memory_is_cjk_char(ch: char) -> bool {
     matches!(
         ch as u32,
         0x3400..=0x4DBF
@@ -69,7 +72,7 @@ fn memory_is_cjk_char(ch: char) -> bool {
     )
 }
 
-fn memory_normalize_search_text(text: &str) -> String {
+pub(crate) fn memory_normalize_search_text(text: &str) -> String {
     let mut out = String::new();
     for ch in text.trim().chars() {
         let normalized = match ch {
@@ -84,7 +87,7 @@ fn memory_normalize_search_text(text: &str) -> String {
     out.trim_matches('"').trim().to_string()
 }
 
-fn memory_push_token(
+pub(crate) fn memory_push_token(
     out: &mut Vec<String>,
     seen: &mut HashSet<String>,
     token: String,
@@ -99,7 +102,7 @@ fn memory_push_token(
     out.push(token);
 }
 
-fn memory_tokenize_terms(text: &str, dedup: bool) -> Vec<String> {
+pub(crate) fn memory_tokenize_terms(text: &str, dedup: bool) -> Vec<String> {
     let normalized = memory_normalize_search_text(text);
     if normalized.trim().is_empty() {
         return Vec::new();
@@ -152,7 +155,7 @@ fn memory_tokenize_terms(text: &str, dedup: bool) -> Vec<String> {
 }
 
 #[cfg(test)]
-fn memory_tokenize_query_terms(text: &str) -> Vec<String> {
+pub(crate) fn memory_tokenize_query_terms(text: &str) -> Vec<String> {
     let mut terms = memory_tokenize_terms(text, true);
 
     let compact = text
@@ -167,7 +170,7 @@ fn memory_tokenize_query_terms(text: &str) -> Vec<String> {
     terms
 }
 
-fn memory_split_query_terms(text: &str) -> Vec<String> {
+pub(crate) fn memory_split_query_terms(text: &str) -> Vec<String> {
     let normalized = memory_normalize_search_text(text);
     let mut terms = Vec::<String>::new();
     let mut seen = HashSet::<String>::new();
@@ -181,7 +184,7 @@ fn memory_split_query_terms(text: &str) -> Vec<String> {
     terms
 }
 
-fn memory_required_query_terms(query: &str) -> Vec<String> {
+pub(crate) fn memory_required_query_terms(query: &str) -> Vec<String> {
     let normalized = memory_normalize_search_text(query);
     let mut out = Vec::<String>::new();
     let mut seen = HashSet::<String>::new();
@@ -229,7 +232,7 @@ fn memory_required_query_terms(query: &str) -> Vec<String> {
     out
 }
 
-fn memory_escape_query_term(term: &str) -> String {
+pub(crate) fn memory_escape_query_term(term: &str) -> String {
     let mut out = String::new();
     for ch in term.chars() {
         if matches!(
@@ -244,7 +247,7 @@ fn memory_escape_query_term(term: &str) -> String {
     out
 }
 
-fn memory_build_all_terms_query(field_name: &str, terms: &[String]) -> String {
+pub(crate) fn memory_build_all_terms_query(field_name: &str, terms: &[String]) -> String {
     terms
         .iter()
         .map(|term| format!("+{}:\"{}\"", field_name, memory_escape_query_term(term)))
@@ -252,7 +255,7 @@ fn memory_build_all_terms_query(field_name: &str, terms: &[String]) -> String {
         .join(" ")
 }
 
-fn memory_build_any_terms_query(field_name: &str, terms: &[String]) -> String {
+pub(crate) fn memory_build_any_terms_query(field_name: &str, terms: &[String]) -> String {
     terms
         .iter()
         .map(|term| format!("{}:\"{}\"", field_name, memory_escape_query_term(term)))
@@ -260,7 +263,7 @@ fn memory_build_any_terms_query(field_name: &str, terms: &[String]) -> String {
         .join(" OR ")
 }
 
-fn memory_resolve_hit_limit(query: &str, base_limit: usize) -> usize {
+pub(crate) fn memory_resolve_hit_limit(query: &str, base_limit: usize) -> usize {
     let compact = memory_normalize_search_text(query)
         .chars()
         .filter(|ch| !ch.is_whitespace())
@@ -276,7 +279,7 @@ fn memory_resolve_hit_limit(query: &str, base_limit: usize) -> usize {
     }
 }
 
-fn memory_rrf_score_for_id(
+pub(crate) fn memory_rrf_score_for_id(
     memory_id: &str,
     bm25_rank_map: &HashMap<String, usize>,
     vector_rank_map: Option<&HashMap<String, usize>>,
@@ -293,7 +296,7 @@ fn memory_rrf_score_for_id(
 }
 
 #[cfg(test)]
-fn memory_match_signature(memories: &[MemoryEntry]) -> String {
+pub(crate) fn memory_match_signature(memories: &[MemoryEntry]) -> String {
     let mut hasher = Sha256::new();
     for memory in memories {
         hasher.update(memory.id.as_bytes());
@@ -312,7 +315,7 @@ fn memory_match_signature(memories: &[MemoryEntry]) -> String {
 }
 
 #[cfg(test)]
-fn compile_memory_matcher(memories: &[MemoryEntry]) -> CompiledMemoryMatcher {
+pub(crate) fn compile_memory_matcher(memories: &[MemoryEntry]) -> CompiledMemoryMatcher {
     let signature = memory_match_signature(memories);
     let mut patterns = Vec::<String>::new();
     let mut keyword_index = HashMap::<String, usize>::new();
@@ -355,7 +358,7 @@ fn compile_memory_matcher(memories: &[MemoryEntry]) -> CompiledMemoryMatcher {
 }
 
 #[cfg(test)]
-fn get_or_compile_memory_matcher(memories: &[MemoryEntry]) -> CompiledMemoryMatcher {
+pub(crate) fn get_or_compile_memory_matcher(memories: &[MemoryEntry]) -> CompiledMemoryMatcher {
     let signature = memory_match_signature(memories);
     let cache = memory_matcher_cache();
     if let Ok(guard) = cache.lock() {
@@ -373,7 +376,7 @@ fn get_or_compile_memory_matcher(memories: &[MemoryEntry]) -> CompiledMemoryMatc
     compiled
 }
 
-fn invalidate_memory_matcher_cache() {
+pub(crate) fn invalidate_memory_matcher_cache() {
     #[cfg(test)]
     {
         if let Ok(mut guard) = memory_matcher_cache().lock() {
@@ -383,7 +386,7 @@ fn invalidate_memory_matcher_cache() {
 }
 
 #[cfg(test)]
-fn conversation_search_text(conversation: &Conversation) -> String {
+pub(crate) fn conversation_search_text(conversation: &Conversation) -> String {
     let mut lines = Vec::<String>::new();
     for msg in &conversation.messages {
         if msg.role != "user" {
@@ -400,7 +403,7 @@ fn conversation_search_text(conversation: &Conversation) -> String {
     lines.join("\n")
 }
 
-fn memory_extract_query_tags_from_text(memories: &[MemoryEntry], latest_user_text: &str) -> Vec<String> {
+pub(crate) fn memory_extract_query_tags_from_text(memories: &[MemoryEntry], latest_user_text: &str) -> Vec<String> {
     let lowered = latest_user_text.to_lowercase();
     if lowered.trim().is_empty() {
         return Vec::new();
@@ -426,7 +429,7 @@ fn memory_extract_query_tags_from_text(memories: &[MemoryEntry], latest_user_tex
     tags
 }
 
-fn memory_search_query_text(memories: &[MemoryEntry], query_text: &str) -> String {
+pub(crate) fn memory_search_query_text(memories: &[MemoryEntry], query_text: &str) -> String {
     let trimmed = query_text.trim();
     if trimmed.is_empty() {
         return String::new();
@@ -441,7 +444,7 @@ fn memory_search_query_text(memories: &[MemoryEntry], query_text: &str) -> Strin
 }
 
 #[cfg(test)]
-fn memory_match_hit_indices(memories: &[MemoryEntry], corpus: &str) -> Vec<(usize, usize)> {
+pub(crate) fn memory_match_hit_indices(memories: &[MemoryEntry], corpus: &str) -> Vec<(usize, usize)> {
     if memories.is_empty() || corpus.trim().is_empty() {
         return Vec::new();
     }
@@ -474,7 +477,7 @@ fn memory_match_hit_indices(memories: &[MemoryEntry], corpus: &str) -> Vec<(usiz
     hits
 }
 
-fn memory_recall_hit_ids(
+pub(crate) fn memory_recall_hit_ids(
     data_path: &PathBuf,
     memories: &[MemoryEntry],
     query_text: &str,
@@ -490,7 +493,7 @@ fn memory_recall_hit_ids(
     memory_recall_ids_from_ranked_items(ranked)
 }
 
-fn memory_recall_ids_from_ranked_items(ranked: Vec<MemoryMixedRankItem>) -> Vec<String> {
+pub(crate) fn memory_recall_ids_from_ranked_items(ranked: Vec<MemoryMixedRankItem>) -> Vec<String> {
     let top_score = ranked
         .first()
         .map(|item| item.final_score)
@@ -507,7 +510,7 @@ fn memory_recall_ids_from_ranked_items(ranked: Vec<MemoryMixedRankItem>) -> Vec<
         .collect::<Vec<_>>()
 }
 
-fn memory_board_ids_from_current_hits(recall_ids: &[String], max_items: usize) -> Vec<String> {
+pub(crate) fn memory_board_ids_from_current_hits(recall_ids: &[String], max_items: usize) -> Vec<String> {
     let mut seen = HashSet::<String>::new();
     let mut out = Vec::<String>::new();
     for memory_id in recall_ids {
@@ -521,7 +524,7 @@ fn memory_board_ids_from_current_hits(recall_ids: &[String], max_items: usize) -
     out
 }
 
-fn memory_tantivy_bm25_scores(
+pub(crate) fn memory_tantivy_bm25_scores(
     memories: &[MemoryEntry],
     query_text: &str,
     limit: usize,
@@ -749,7 +752,7 @@ fn memory_tantivy_bm25_scores(
     Ok(out)
 }
 
-fn memory_has_embedding_binding(data_path: &PathBuf) -> bool {
+pub(crate) fn memory_has_embedding_binding(data_path: &PathBuf) -> bool {
     let Ok(conn) = memory_store_open(data_path) else {
         return false;
     };
@@ -764,7 +767,7 @@ fn memory_has_embedding_binding(data_path: &PathBuf) -> bool {
     !active.trim().is_empty() && !embedding_api.trim().is_empty()
 }
 
-fn memory_rerank_provider_from_binding(
+pub(crate) fn memory_rerank_provider_from_binding(
     data_path: &PathBuf,
 ) -> Result<Option<Box<dyn MemoryRerankProvider>>, String> {
     let conn = memory_store_open(data_path)?;
@@ -801,7 +804,7 @@ fn memory_rerank_provider_from_binding(
     Ok(Some(provider))
 }
 
-fn memory_rerank_scores(
+pub(crate) fn memory_rerank_scores(
     provider: &dyn MemoryRerankProvider,
     query_text: &str,
     candidate_memories: &[&MemoryEntry],
@@ -826,7 +829,7 @@ fn memory_rerank_scores(
     Ok(out)
 }
 
-fn memory_mixed_ranked_items(
+pub(crate) fn memory_mixed_ranked_items(
     data_path: &PathBuf,
     memories: &[MemoryEntry],
     query_text: &str,
@@ -1034,15 +1037,15 @@ fn memory_mixed_ranked_items(
         .collect::<Vec<_>>()
 }
 
-fn memory_store_active_embedding_provider_id(conn: &Connection) -> Result<Option<String>, String> {
+pub(crate) fn memory_store_active_embedding_provider_id(conn: &Connection) -> Result<Option<String>, String> {
     memory_store_get_runtime_state(conn, KB_STATE_ACTIVE_INDEX_PROVIDER_ID)
 }
 
-fn memory_store_embedding_binding_api_id(conn: &Connection) -> Result<Option<String>, String> {
+pub(crate) fn memory_store_embedding_binding_api_id(conn: &Connection) -> Result<Option<String>, String> {
     memory_store_get_runtime_state(conn, KB_STATE_EMBEDDING_API_CONFIG_ID)
 }
 
-fn memory_store_embedding_provider_model_name(
+pub(crate) fn memory_store_embedding_provider_model_name(
     conn: &Connection,
     provider_id: &str,
 ) -> Result<Option<String>, String> {
@@ -1055,7 +1058,7 @@ fn memory_store_embedding_provider_model_name(
     .map_err(|err| format!("Query embedding provider model_name failed: {err}"))
 }
 
-fn memory_query_embedding_vector(data_path: &PathBuf, query_text: &str) -> Result<Vec<f32>, String> {
+pub(crate) fn memory_query_embedding_vector(data_path: &PathBuf, query_text: &str) -> Result<Vec<f32>, String> {
     let conn = memory_store_open(data_path)?;
     let provider_id = memory_store_active_embedding_provider_id(&conn)?
         .ok_or_else(|| "active_index_provider_id is empty".to_string())?;
@@ -1099,7 +1102,7 @@ fn memory_query_embedding_vector(data_path: &PathBuf, query_text: &str) -> Resul
     Ok(first)
 }
 
-fn memory_cosine_similarity(a: &[f32], b: &[f32]) -> Option<f64> {
+pub(crate) fn memory_cosine_similarity(a: &[f32], b: &[f32]) -> Option<f64> {
     if a.is_empty() || b.is_empty() || a.len() != b.len() {
         return None;
     }
@@ -1119,7 +1122,7 @@ fn memory_cosine_similarity(a: &[f32], b: &[f32]) -> Option<f64> {
     Some(dot / (na.sqrt() * nb.sqrt()))
 }
 
-fn memory_store_search_vector_scores(
+pub(crate) fn memory_store_search_vector_scores(
     data_path: &PathBuf,
     query_text: &str,
     limit: usize,
@@ -1165,7 +1168,7 @@ fn memory_store_search_vector_scores(
 }
 
 #[cfg(test)]
-fn latest_recall_memory_ids(recall_table: &[String], max_items: usize) -> Vec<String> {
+pub(crate) fn latest_recall_memory_ids(recall_table: &[String], max_items: usize) -> Vec<String> {
     recall_table
         .iter()
         .rev()
@@ -1174,7 +1177,7 @@ fn latest_recall_memory_ids(recall_table: &[String], max_items: usize) -> Vec<St
         .collect::<Vec<_>>()
 }
 
-fn build_memory_board_xml_from_recall_ids(
+pub(crate) fn build_memory_board_xml_from_recall_ids(
     memories: &[MemoryEntry],
     recall_ids: &[String],
     include_reasoning: bool,
@@ -1226,7 +1229,7 @@ fn build_memory_board_xml_from_recall_ids(
 }
 
 #[cfg(test)]
-fn build_memory_board_xml(
+pub(crate) fn build_memory_board_xml(
     memories: &[MemoryEntry],
     search_text: &str,
     latest_user_text: &str,

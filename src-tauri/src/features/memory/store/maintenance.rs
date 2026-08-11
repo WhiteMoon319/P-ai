@@ -1,4 +1,4 @@
-fn memory_store_rebuild_indexes(data_path: &PathBuf) -> Result<MemoryStoreRebuildReport, String> {
+pub(crate) fn memory_store_rebuild_indexes(data_path: &PathBuf) -> Result<MemoryStoreRebuildReport, String> {
     let mut conn = memory_store_open(data_path)?;
     let tx = conn
         .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -62,7 +62,7 @@ fn memory_store_rebuild_indexes(data_path: &PathBuf) -> Result<MemoryStoreRebuil
     })
 }
 
-fn memory_store_health_check(
+pub(crate) fn memory_store_health_check(
     data_path: &PathBuf,
     auto_repair: bool,
 ) -> Result<MemoryStoreHealthReport, String> {
@@ -178,7 +178,7 @@ fn memory_store_health_check(
     })
 }
 
-fn memory_store_backup_db(data_path: &PathBuf, target_path: &PathBuf) -> Result<MemoryStoreBackupResult, String> {
+pub(crate) fn memory_store_backup_db(data_path: &PathBuf, target_path: &PathBuf) -> Result<MemoryStoreBackupResult, String> {
     if let Some(parent) = target_path.parent() {
         fs::create_dir_all(parent)
             .map_err(|err| format!("Create backup dir failed ({}): {err}", parent.display()))?;
@@ -196,7 +196,7 @@ fn memory_store_backup_db(data_path: &PathBuf, target_path: &PathBuf) -> Result<
     })
 }
 
-fn memory_store_restore_db(data_path: &PathBuf, source_path: &PathBuf) -> Result<MemoryStoreBackupResult, String> {
+pub(crate) fn memory_store_restore_db(data_path: &PathBuf, source_path: &PathBuf) -> Result<MemoryStoreBackupResult, String> {
     if !source_path.exists() {
         return Err(format!("Restore source not found: {}", source_path.display()));
     }

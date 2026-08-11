@@ -120,7 +120,7 @@ pub(crate) struct RewindConversationMutationResult {
     pub(crate) current_todo: Option<String>,
     pub(crate) current_todos: Vec<ConversationTodoItem>,
     pub(crate) recalled_user_message: Option<ChatMessage>,
-    pub(crate) git_snapshot: Option<git_ghost_snapshot::UserMessageGitGhostSnapshotRecord>,
+    pub(crate) git_snapshot: Option<features_system_commands::git_ghost_snapshot::UserMessageGitGhostSnapshotRecord>,
 }
 
 pub(crate) struct RewindConversationPreviewResult {

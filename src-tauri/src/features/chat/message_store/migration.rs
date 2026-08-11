@@ -235,7 +235,7 @@ pub(crate) fn rollback_message_store_manifest(
 }
 
 #[cfg(test)]
-mod message_store_tests {
+pub(crate) mod message_store_tests {
     use super::*;
 
     fn test_message(id: &str, role: &str) -> ChatMessage {

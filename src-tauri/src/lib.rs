@@ -102,37 +102,81 @@ pub(crate) use features_chat_scheduler::*;
 #[path = "features/remote_im/channel_store.rs"]
 mod features_remote_im_channel_store;
 pub(crate) use features_remote_im_channel_store::*;
-include!("features/remote_im/markdown_filter.rs");
-include!("features/remote_im/onebot_v11_ws.rs");
+#[path = "features/remote_im/markdown_filter.rs"]
+mod features_remote_im_markdown_filter;
+pub(crate) use features_remote_im_markdown_filter::*;
+#[path = "features/remote_im/onebot_v11_ws.rs"]
+mod features_remote_im_onebot_v11_ws;
+pub(crate) use features_remote_im_onebot_v11_ws::*;
 #[cfg(target_os = "android")]
-include!("features/remote_im/dingtalk_stream_android_stub.rs");
-include!("features/remote_im/weixin_oc.rs");
-include!("features/remote_im.rs");
-include!("features/remote_im/maintenance.rs");
-include!("features/remote_im_adapters.rs");
+#[path = "features/remote_im/dingtalk_stream_android_stub.rs"]
+mod features_remote_im_dingtalk_stream_android_stub;
+pub(crate) use features_remote_im_dingtalk_stream_android_stub::*;
+#[path = "features/remote_im/weixin_oc.rs"]
+mod features_remote_im_weixin_oc;
+pub(crate) use features_remote_im_weixin_oc::*;
+#[path = "features/remote_im.rs"]
+mod features_remote_im;
+pub(crate) use features_remote_im::*;
+#[path = "features/remote_im/maintenance.rs"]
+mod features_remote_im_maintenance;
+pub(crate) use features_remote_im_maintenance::*;
+#[path = "features/remote_im_adapters.rs"]
+mod features_remote_im_adapters;
+pub(crate) use features_remote_im_adapters::*;
 
 // ==================== 系统窗口与命令 ====================
-include!("features/system/windowing.rs");
-include!("features/system/sandbox.rs");
-include!("features/system/local_port_service.rs");
-include!("features/system/tools.rs");
+#[path = "features/system/windowing.rs"]
+mod features_system_windowing;
+pub(crate) use features_system_windowing::*;
+#[path = "features/system/sandbox.rs"]
+mod features_system_sandbox;
+pub(crate) use features_system_sandbox::*;
+#[path = "features/system/local_port_service.rs"]
+mod features_system_local_port_service;
+pub(crate) use features_system_local_port_service::*;
+#[path = "features/system/tools.rs"]
+mod features_system_tools;
+pub(crate) use features_system_tools::*;
 #[cfg(target_os = "android")]
-include!("features/system/updater_android_stub.rs");
+#[path = "features/system/updater_android_stub.rs"]
+mod features_system_updater_android_stub;
+pub(crate) use features_system_updater_android_stub::*;
 
 // ==================== 记忆匹配 ====================
-include!("features/memory/store.rs");
-include!("features/memory/matcher.rs");
-include!("features/memory/chat_history_search.rs");
-include!("features/memory/providers.rs");
+#[path = "features/memory/store.rs"]
+mod features_memory_store;
+pub(crate) use features_memory_store::*;
+#[path = "features/memory/matcher.rs"]
+mod features_memory_matcher;
+pub(crate) use features_memory_matcher::*;
+#[path = "features/memory/chat_history_search.rs"]
+mod features_memory_chat_history_search;
+pub(crate) use features_memory_chat_history_search::*;
+#[path = "features/memory/providers.rs"]
+mod features_memory_providers;
+pub(crate) use features_memory_providers::*;
 
 // ==================== MCP ====================
-include!("features/mcp.rs");
-include!("features/skill.rs");
-include!("features/goal.rs");
-include!("features/task.rs");
-include!("features/delegate.rs");
+#[path = "features/mcp.rs"]
+mod features_mcp;
+pub(crate) use features_mcp::*;
+#[path = "features/skill.rs"]
+mod features_skill;
+pub(crate) use features_skill::*;
+#[path = "features/goal.rs"]
+mod features_goal;
+pub(crate) use features_goal::*;
+#[path = "features/task.rs"]
+mod features_task;
+pub(crate) use features_task::*;
+#[path = "features/delegate.rs"]
+mod features_delegate;
+pub(crate) use features_delegate::*;
 
-include!("features/system/commands.rs");
+#[path = "features/system/commands.rs"]
+mod features_system_commands;
+pub(crate) use features_system_commands::*;
 
 #[cfg(target_os = "android")]
 include!("native_bridge.rs");
@@ -408,5 +452,7 @@ pub mod pai_config_tool;
 
 #[cfg(test)]
 mod tests {
-    include!("features/tests.rs");
+    #[path = "features/tests.rs"]
+mod features_tests;
+pub(crate) use features_tests::*;
 }

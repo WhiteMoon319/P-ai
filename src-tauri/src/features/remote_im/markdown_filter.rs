@@ -1,4 +1,27 @@
-fn remote_im_strip_simple_markdown(input: &str) -> String {
+use std::{
+    fs,
+    io::Cursor,
+    path::PathBuf,
+    sync::{Arc, Mutex, OnceLock},
+};
+
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use directories::ProjectDirs;
+use futures_util::{future::AbortHandle, future::join_all, future::BoxFuture, StreamExt};
+use image::ImageFormat;
+use reqwest::header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use rmcp::{schemars, ServiceExt};
+use scraper::{Html, Selector};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
+use uuid::Uuid;
+
+// Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
+
+use super::*;
+
+pub(crate) fn remote_im_strip_simple_markdown(input: &str) -> String {
     let normalized = input.replace("\r\n", "\n").replace('\r', "\n");
     let mut out = Vec::<String>::new();
     let mut in_fenced_code = false;
@@ -27,7 +50,7 @@ fn remote_im_strip_simple_markdown(input: &str) -> String {
     strip_remote_im_terminal_period(out.join("\n").trim())
 }
 
-fn strip_remote_im_terminal_period(input: &str) -> String {
+pub(crate) fn strip_remote_im_terminal_period(input: &str) -> String {
     if let Some(without_period) = input.strip_suffix('。') {
         return without_period.to_string();
     }
@@ -43,7 +66,7 @@ fn strip_remote_im_terminal_period(input: &str) -> String {
     input.to_string()
 }
 
-fn strip_markdown_line_prefixes(line: &str) -> String {
+pub(crate) fn strip_markdown_line_prefixes(line: &str) -> String {
     let trimmed = line.trim_start();
     if trimmed.is_empty() {
         return String::new();
@@ -81,7 +104,7 @@ fn strip_markdown_line_prefixes(line: &str) -> String {
     strip_markdown_task_prefixes(&candidate)
 }
 
-fn strip_markdown_task_prefixes(input: &str) -> String {
+pub(crate) fn strip_markdown_task_prefixes(input: &str) -> String {
     if let Some(rest) = input.strip_prefix("[ ] ") {
         return rest.to_string();
     }
@@ -94,7 +117,7 @@ fn strip_markdown_task_prefixes(input: &str) -> String {
     input.to_string()
 }
 
-fn strip_markdown_inline(line: &str) -> String {
+pub(crate) fn strip_markdown_inline(line: &str) -> String {
     let mut out = String::with_capacity(line.len());
     let chars: Vec<char> = line.chars().collect();
     let mut i = 0usize;
@@ -151,7 +174,7 @@ fn strip_markdown_inline(line: &str) -> String {
     out
 }
 
-fn markdown_bracket_link_label(chars: &[char], open_index: usize) -> Option<(String, usize)> {
+pub(crate) fn markdown_bracket_link_label(chars: &[char], open_index: usize) -> Option<(String, usize)> {
     let close_bracket = chars[(open_index + 1)..]
         .iter()
         .position(|ch| *ch == ']')
@@ -167,7 +190,7 @@ fn markdown_bracket_link_label(chars: &[char], open_index: usize) -> Option<(Str
     Some((label, close_paren + 1))
 }
 
-fn collapse_markdown_whitespace(input: &str) -> String {
+pub(crate) fn collapse_markdown_whitespace(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     let mut previous_was_space = false;
     for ch in input.chars() {
@@ -184,7 +207,7 @@ fn collapse_markdown_whitespace(input: &str) -> String {
     out.trim().to_string()
 }
 
-fn remote_im_filter_markdown_content_items(
+pub(crate) fn remote_im_filter_markdown_content_items(
     channel: &RemoteImChannelConfig,
     content: Vec<Value>,
 ) -> Vec<Value> {
@@ -213,7 +236,7 @@ fn remote_im_filter_markdown_content_items(
 }
 
 #[cfg(test)]
-mod remote_im_markdown_filter_tests {
+pub(crate) mod remote_im_markdown_filter_tests {
     use super::*;
 
     #[test]
@@ -246,7 +269,7 @@ mod remote_im_markdown_filter_tests {
 - [ ] 待补一次联调验证
 
 ```ts
-const result = await runTask();
+pub(crate) const result = await runTask();
 console.log(result);
 ```
 
@@ -270,7 +293,7 @@ console.log(result);
 已完成接口梳理
 待补一次联调验证
 
-const result = await runTask();
+pub(crate) const result = await runTask();
 console.log(result);
 
 如需更多信息，可以查看 截图说明 或访问 https://example.com/docs"#;

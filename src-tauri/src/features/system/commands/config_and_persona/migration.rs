@@ -1,26 +1,26 @@
-const MIGRATION_SCHEMA_VERSION: u32 = 1;
-const MIGRATION_MANIFEST_FILE_NAME: &str = "manifest.json";
-const MIGRATION_PAYLOAD_FILE_NAME: &str = "payload.json";
-const MIGRATION_PASSWORD_REQUIRED_CODE: &str = "MIGRATION_PASSWORD_REQUIRED";
-const MIGRATION_PASSWORD_REQUIRED_MESSAGE: &str = "该迁移包需要密码，请先输入解压密码。";
+pub(crate) const MIGRATION_SCHEMA_VERSION: u32 = 1;
+pub(crate) const MIGRATION_MANIFEST_FILE_NAME: &str = "manifest.json";
+pub(crate) const MIGRATION_PAYLOAD_FILE_NAME: &str = "payload.json";
+pub(crate) const MIGRATION_PASSWORD_REQUIRED_CODE: &str = "MIGRATION_PASSWORD_REQUIRED";
+pub(crate) const MIGRATION_PASSWORD_REQUIRED_MESSAGE: &str = "该迁移包需要密码，请先输入解压密码。";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct MigrationCommandError {
-    message: String,
+pub(crate) struct MigrationCommandError {
+    pub(crate) message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    code: Option<String>,
+    pub(crate) code: Option<String>,
 }
 
 impl MigrationCommandError {
-    fn message(message: impl Into<String>) -> Self {
+    pub(crate) fn message(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
             code: None,
         }
     }
 
-    fn coded(code: impl Into<String>, message: impl Into<String>) -> Self {
+    pub(crate) fn coded(code: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
             code: Some(code.into()),
@@ -42,98 +42,98 @@ impl From<&str> for MigrationCommandError {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MigrationManifest {
-    schema_version: u32,
+pub(crate) struct MigrationManifest {
+    pub(crate) schema_version: u32,
     #[serde(default)]
-    migration_version: u32,
+    pub(crate) migration_version: u32,
     #[serde(default)]
-    app_version: String,
-    exported_at: String,
+    pub(crate) app_version: String,
+    pub(crate) exported_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MigrationBlobFile {
-    key: String,
-    relative_path: String,
-    bytes_base64: String,
+pub(crate) struct MigrationBlobFile {
+    pub(crate) key: String,
+    pub(crate) relative_path: String,
+    pub(crate) bytes_base64: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct MigrationPayload {
-    config: AppConfig,
-    runtime_data: AppData,
-    memories: Vec<MemoryEntry>,
-    oauth_files: Vec<MigrationBlobFile>,
-    avatar_files: Vec<MigrationBlobFile>,
+pub(crate) struct MigrationPayload {
+    pub(crate) config: AppConfig,
+    pub(crate) runtime_data: AppData,
+    pub(crate) memories: Vec<MemoryEntry>,
+    pub(crate) oauth_files: Vec<MigrationBlobFile>,
+    pub(crate) avatar_files: Vec<MigrationBlobFile>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ExportConfigMigrationPackageInput {
-    password: String,
+pub(crate) struct ExportConfigMigrationPackageInput {
+    pub(crate) password: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ExportConfigMigrationPackageResult {
-    path: String,
-    provider_count: usize,
-    api_config_count: usize,
-    memory_count: usize,
+pub(crate) struct ExportConfigMigrationPackageResult {
+    pub(crate) path: String,
+    pub(crate) provider_count: usize,
+    pub(crate) api_config_count: usize,
+    pub(crate) memory_count: usize,
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    file_name: String,
+    pub(crate) file_name: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    bytes_base64: String,
+    pub(crate) bytes_base64: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PreviewImportConfigMigrationPackageInput {
-    password: String,
-    package_path: Option<String>,
+pub(crate) struct PreviewImportConfigMigrationPackageInput {
+    pub(crate) password: String,
+    pub(crate) package_path: Option<String>,
     #[serde(default)]
-    package_file_name: Option<String>,
+    pub(crate) package_file_name: Option<String>,
     #[serde(default)]
-    package_bytes_base64: Option<String>,
+    pub(crate) package_bytes_base64: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PreviewImportConfigMigrationPackageResult {
-    preview_id: String,
-    package_version: String,
-    memory_added_count: usize,
-    memory_merged_count: usize,
-    provider_added_count: usize,
-    provider_updated_count: usize,
-    api_config_added_count: usize,
-    api_config_updated_count: usize,
-    oauth_file_count: usize,
-    avatar_file_count: usize,
+pub(crate) struct PreviewImportConfigMigrationPackageResult {
+    pub(crate) preview_id: String,
+    pub(crate) package_version: String,
+    pub(crate) memory_added_count: usize,
+    pub(crate) memory_merged_count: usize,
+    pub(crate) provider_added_count: usize,
+    pub(crate) provider_updated_count: usize,
+    pub(crate) api_config_added_count: usize,
+    pub(crate) api_config_updated_count: usize,
+    pub(crate) oauth_file_count: usize,
+    pub(crate) avatar_file_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ApplyImportConfigMigrationPackageInput {
-    preview_id: String,
+pub(crate) struct ApplyImportConfigMigrationPackageInput {
+    pub(crate) preview_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ApplyImportConfigMigrationPackageResult {
-    imported_memory_count: usize,
-    created_memory_count: usize,
-    merged_memory_count: usize,
-    provider_added_count: usize,
-    provider_updated_count: usize,
-    api_config_added_count: usize,
-    api_config_updated_count: usize,
-    backup_dir: String,
+pub(crate) struct ApplyImportConfigMigrationPackageResult {
+    pub(crate) imported_memory_count: usize,
+    pub(crate) created_memory_count: usize,
+    pub(crate) merged_memory_count: usize,
+    pub(crate) provider_added_count: usize,
+    pub(crate) provider_updated_count: usize,
+    pub(crate) api_config_added_count: usize,
+    pub(crate) api_config_updated_count: usize,
+    pub(crate) backup_dir: String,
 }
 
-fn validate_migration_password(password: &str) -> Result<(), String> {
+pub(crate) fn validate_migration_password(password: &str) -> Result<(), String> {
     let trimmed = password.trim();
     if trimmed.is_empty() {
         return Err("迁移密码不能为空".to_string());
@@ -144,21 +144,21 @@ fn validate_migration_password(password: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_export_migration_password(password: &str) -> Result<(), String> {
+pub(crate) fn validate_export_migration_password(password: &str) -> Result<(), String> {
     validate_migration_password(password)
 }
 
-fn migration_temp_root(state: &AppState) -> PathBuf {
+pub(crate) fn migration_temp_root(state: &AppState) -> PathBuf {
     app_root_from_data_path(&state.data_path)
         .join("temp")
         .join("migration")
 }
 
-fn migration_preview_dir(state: &AppState, preview_id: &str) -> PathBuf {
+pub(crate) fn migration_preview_dir(state: &AppState, preview_id: &str) -> PathBuf {
     migration_temp_root(state).join(preview_id)
 }
 
-fn migration_backup_dir(state: &AppState) -> PathBuf {
+pub(crate) fn migration_backup_dir(state: &AppState) -> PathBuf {
     app_layout_backups_dir(&state.data_path)
         .join("migration")
         .join(now_iso().replace(':', "-"))
@@ -167,7 +167,7 @@ fn migration_backup_dir(state: &AppState) -> PathBuf {
 
 
 
-fn zip_error_requires_password(err: &zip::result::ZipError) -> bool {
+pub(crate) fn zip_error_requires_password(err: &zip::result::ZipError) -> bool {
     let text = err.to_string().to_ascii_lowercase();
     text.contains("password")
         || text.contains("encrypted")
@@ -175,7 +175,7 @@ fn zip_error_requires_password(err: &zip::result::ZipError) -> bool {
         || text.contains("unsupported archive: aes")
 }
 
-fn sanitize_migration_zip_entry_path(name: &str) -> Result<PathBuf, String> {
+pub(crate) fn sanitize_migration_zip_entry_path(name: &str) -> Result<PathBuf, String> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return Err("迁移包中存在空文件路径。".to_string());
@@ -202,17 +202,17 @@ fn sanitize_migration_zip_entry_path(name: &str) -> Result<PathBuf, String> {
     Ok(safe)
 }
 
-fn encode_base64(bytes: &[u8]) -> String {
+pub(crate) fn encode_base64(bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
 
-fn decode_base64(input: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn decode_base64(input: &str) -> Result<Vec<u8>, String> {
     base64::engine::general_purpose::STANDARD
         .decode(input.trim())
         .map_err(|err| format!("解码迁移文件失败: {err}"))
 }
 
-fn copy_dir_recursive_if_exists(src: &Path, dst: &Path) -> Result<(), String> {
+pub(crate) fn copy_dir_recursive_if_exists(src: &Path, dst: &Path) -> Result<(), String> {
     if !src.exists() {
         return Ok(());
     }
@@ -243,7 +243,7 @@ fn copy_dir_recursive_if_exists(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn copy_file_if_exists(src: &Path, dst: &Path) -> Result<(), String> {
+pub(crate) fn copy_file_if_exists(src: &Path, dst: &Path) -> Result<(), String> {
     if !src.exists() {
         return Ok(());
     }
@@ -261,7 +261,7 @@ fn copy_file_if_exists(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn backup_current_migration_targets(state: &AppState) -> Result<PathBuf, String> {
+pub(crate) fn backup_current_migration_targets(state: &AppState) -> Result<PathBuf, String> {
     let backup_dir = migration_backup_dir(state);
     fs::create_dir_all(&backup_dir)
         .map_err(|err| format!("创建迁移备份目录失败 ({}): {err}", backup_dir.display()))?;
@@ -295,7 +295,7 @@ fn backup_current_migration_targets(state: &AppState) -> Result<PathBuf, String>
     Ok(backup_dir)
 }
 
-fn collect_avatar_files_from_agents(
+pub(crate) fn collect_avatar_files_from_agents(
     state: &AppState,
     agents: &mut [AgentProfile],
 ) -> Result<Vec<MigrationBlobFile>, String> {
@@ -334,7 +334,7 @@ fn collect_avatar_files_from_agents(
     Ok(files)
 }
 
-fn collect_oauth_files_from_providers(config: &AppConfig) -> Result<Vec<MigrationBlobFile>, String> {
+pub(crate) fn collect_oauth_files_from_providers(config: &AppConfig) -> Result<Vec<MigrationBlobFile>, String> {
     let mut files = Vec::<MigrationBlobFile>::new();
     let mut seen = std::collections::HashSet::<String>::new();
 
@@ -363,7 +363,7 @@ fn collect_oauth_files_from_providers(config: &AppConfig) -> Result<Vec<Migratio
     Ok(files)
 }
 
-fn build_export_payload(state: &AppState) -> Result<MigrationPayload, String> {
+pub(crate) fn build_export_payload(state: &AppState) -> Result<MigrationPayload, String> {
     let mut config = state_read_config_cached(state)?;
     let mut runtime_data = state_read_agents_runtime_snapshot(state)?;
     let memories = memory_store_list_memories(&state.data_path)?;
@@ -392,7 +392,7 @@ fn build_export_payload(state: &AppState) -> Result<MigrationPayload, String> {
     })
 }
 
-fn write_migration_package(
+pub(crate) fn write_migration_package(
     path: &Path,
     password: &str,
     manifest: &MigrationManifest,
@@ -436,7 +436,7 @@ fn write_migration_package(
     Ok(())
 }
 
-fn unzip_migration_package_to_dir(
+pub(crate) fn unzip_migration_package_to_dir(
     package_path: &Path,
     password: &str,
     target_dir: &Path,
@@ -499,7 +499,7 @@ fn unzip_migration_package_to_dir(
     Ok(())
 }
 
-fn read_preview_payload(preview_dir: &Path) -> Result<(MigrationManifest, MigrationPayload), String> {
+pub(crate) fn read_preview_payload(preview_dir: &Path) -> Result<(MigrationManifest, MigrationPayload), String> {
     let manifest = serde_json::from_str::<MigrationManifest>(
         &std::fs::read_to_string(preview_dir.join(MIGRATION_MANIFEST_FILE_NAME))
             .map_err(|err| format!("读取迁移清单失败: {err}"))?,
@@ -513,18 +513,18 @@ fn read_preview_payload(preview_dir: &Path) -> Result<(MigrationManifest, Migrat
     Ok((manifest, payload))
 }
 
-fn format_migration_version_label(version: u32) -> String {
+pub(crate) fn format_migration_version_label(version: u32) -> String {
     format!("V{version}")
 }
 
-fn migration_manifest_version(manifest: &MigrationManifest, payload: &MigrationPayload) -> u32 {
+pub(crate) fn migration_manifest_version(manifest: &MigrationManifest, payload: &MigrationPayload) -> u32 {
     manifest
         .migration_version
         .max(payload.runtime_data.data_migration_version)
         .max(DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES)
 }
 
-fn assert_manifest_version(
+pub(crate) fn assert_manifest_version(
     manifest: &MigrationManifest,
     payload: &MigrationPayload,
 ) -> Result<u32, String> {
@@ -545,7 +545,7 @@ fn assert_manifest_version(
     Ok(package_version)
 }
 
-fn preview_memory_import(
+pub(crate) fn preview_memory_import(
     state: &AppState,
     preview_dir: &Path,
     memories: &[MemoryEntry],
@@ -582,7 +582,7 @@ fn preview_memory_import(
     })
 }
 
-fn merge_unique_api_keys(current: &[String], imported: &[String]) -> Vec<String> {
+pub(crate) fn merge_unique_api_keys(current: &[String], imported: &[String]) -> Vec<String> {
     let mut seen = std::collections::HashSet::<String>::new();
     let mut merged = Vec::<String>::new();
     for item in current.iter().chain(imported.iter()) {
@@ -597,7 +597,7 @@ fn merge_unique_api_keys(current: &[String], imported: &[String]) -> Vec<String>
     merged
 }
 
-fn merge_api_providers(
+pub(crate) fn merge_api_providers(
     current: &[ApiProviderConfig],
     imported: &[ApiProviderConfig],
 ) -> (Vec<ApiProviderConfig>, usize, usize) {
@@ -620,7 +620,7 @@ fn merge_api_providers(
     (merged, added, updated)
 }
 
-fn merge_api_configs(
+pub(crate) fn merge_api_configs(
     current: &[ApiConfig],
     imported: &[ApiConfig],
 ) -> (Vec<ApiConfig>, usize, usize) {
@@ -641,7 +641,7 @@ fn merge_api_configs(
     (merged, added, updated)
 }
 
-fn merge_remote_im_channels_preserve_credentials(
+pub(crate) fn merge_remote_im_channels_preserve_credentials(
     current: &[RemoteImChannelConfig],
     imported: &[RemoteImChannelConfig],
 ) -> Vec<RemoteImChannelConfig> {
@@ -662,7 +662,7 @@ fn merge_remote_im_channels_preserve_credentials(
         .collect::<Vec<_>>()
 }
 
-fn write_avatar_files(
+pub(crate) fn write_avatar_files(
     state: &AppState,
     avatar_files: &[MigrationBlobFile],
 ) -> Result<std::collections::HashMap<String, String>, String> {
@@ -679,7 +679,7 @@ fn write_avatar_files(
     Ok(result)
 }
 
-fn write_oauth_files(config: &AppConfig, oauth_files: &[MigrationBlobFile]) -> Result<(), String> {
+pub(crate) fn write_oauth_files(config: &AppConfig, oauth_files: &[MigrationBlobFile]) -> Result<(), String> {
     let file_map = oauth_files
         .iter()
         .map(|item| (item.key.clone(), item))
@@ -705,7 +705,7 @@ fn write_oauth_files(config: &AppConfig, oauth_files: &[MigrationBlobFile]) -> R
     Ok(())
 }
 
-fn build_imported_config(
+pub(crate) fn build_imported_config(
     current: &AppConfig,
     imported: &AppConfig,
 ) -> (AppConfig, usize, usize, usize, usize) {
@@ -731,7 +731,7 @@ fn build_imported_config(
     )
 }
 
-fn build_imported_runtime(
+pub(crate) fn build_imported_runtime(
     current: &AppData,
     imported: &AppData,
     avatar_path_map: &std::collections::HashMap<String, String>,
@@ -754,14 +754,14 @@ fn build_imported_runtime(
     final_data
 }
 
-fn migration_command_error_for_web(error: MigrationCommandError) -> String {
+pub(crate) fn migration_command_error_for_web(error: MigrationCommandError) -> String {
     match error.code.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
         Some(code) => format!("{code}: {}", error.message),
         None => error.message,
     }
 }
 
-fn export_config_migration_package_to_path(
+pub(crate) fn export_config_migration_package_to_path(
     input: &ExportConfigMigrationPackageInput,
     state: &AppState,
     path: &Path,
@@ -814,7 +814,7 @@ fn export_config_migration_package_to_path(
     })
 }
 
-fn export_config_migration_package_for_web(
+pub(crate) fn export_config_migration_package_for_web(
     input: ExportConfigMigrationPackageInput,
     state: &AppState,
 ) -> Result<ExportConfigMigrationPackageResult, MigrationCommandError> {
@@ -853,7 +853,7 @@ fn export_config_migration_package_for_web(
 }
 
 
-fn preview_import_config_migration_package_from_path(
+pub(crate) fn preview_import_config_migration_package_from_path(
     input: &PreviewImportConfigMigrationPackageInput,
     state: &AppState,
     package_path: &Path,
@@ -892,7 +892,7 @@ fn preview_import_config_migration_package_from_path(
     })
 }
 
-fn preview_import_config_migration_package_for_web(
+pub(crate) fn preview_import_config_migration_package_for_web(
     input: PreviewImportConfigMigrationPackageInput,
     state: &AppState,
 ) -> Result<PreviewImportConfigMigrationPackageResult, MigrationCommandError> {

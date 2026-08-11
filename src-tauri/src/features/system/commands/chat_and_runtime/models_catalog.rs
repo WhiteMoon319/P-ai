@@ -1,4 +1,4 @@
-async fn fetch_models_openai(input: &RefreshModelsInput) -> Result<Vec<String>, String> {
+pub(crate) async fn fetch_models_openai(input: &RefreshModelsInput) -> Result<Vec<String>, String> {
     let base = input.base_url.trim().trim_end_matches('/');
     let api_key = input.api_key.trim();
 
