@@ -1017,6 +1017,15 @@ private fun ThinkingSectionMessage(steps: List<ActivityStep>) {
 @Composable
 fun MessageBubble(message: ChatMessage, agentName: String? = null) {
     val isUser = message.role == "user"
+    val context = LocalContext.current
+    val textContent = message.parts.joinToString("\n") { part ->
+        when (part.type) {
+            "Attachment" -> "📎 ${part.name?.takeIf { it.isNotBlank() } ?: part.text?.takeIf { it.isNotBlank() } ?: "附件"}"
+            "Image" -> "🖼 ${part.name?.takeIf { it.isNotBlank() } ?: "图片"}"
+            "Audio" -> "🎵 ${part.name?.takeIf { it.isNotBlank() } ?: "音频"}"
+            else -> part.displayText
+        }
+    }
     Row(
         Modifier
             .fillMaxWidth()
@@ -1026,16 +1035,19 @@ fun MessageBubble(message: ChatMessage, agentName: String? = null) {
         Surface(
             color = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
             shape = MaterialTheme.shapes.medium,
-            modifier = Modifier.widthIn(max = 320.dp),
+            modifier = Modifier
+                .widthIn(max = 320.dp)
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = {
+                        if (textContent.isNotBlank()) {
+                            val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("PAI 消息", textContent))
+                            android.widget.Toast.makeText(context, "已复制", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                ),
         ) {
-            val text = message.parts.joinToString("\n") { part ->
-                when (part.type) {
-                    "Attachment" -> "📎 ${part.name?.takeIf { it.isNotBlank() } ?: part.text?.takeIf { it.isNotBlank() } ?: "附件"}"
-                    "Image" -> "🖼 ${part.name?.takeIf { it.isNotBlank() } ?: "图片"}"
-                    "Audio" -> "🎵 ${part.name?.takeIf { it.isNotBlank() } ?: "音频"}"
-                    else -> part.displayText
-                }
-            }
             if (isUser) {
                 Column(Modifier.padding(10.dp)) {
                     Text(
@@ -1044,7 +1056,7 @@ fun MessageBubble(message: ChatMessage, agentName: String? = null) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(2.dp))
-                    Text(text)
+                    Text(textContent)
                 }
             } else {
                 Column(Modifier.padding(10.dp)) {
@@ -1061,8 +1073,8 @@ fun MessageBubble(message: ChatMessage, agentName: String? = null) {
                     if (steps.isNotEmpty()) {
                         ThinkingSectionMessage(steps)
                     }
-                    if (text.isNotBlank()) {
-                        MarkdownText(content = text)
+                    if (textContent.isNotBlank()) {
+                        MarkdownText(content = textContent)
                     }
                 }
             }
