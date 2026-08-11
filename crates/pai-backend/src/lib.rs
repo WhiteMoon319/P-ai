@@ -12,6 +12,7 @@ use std::sync::{Mutex, OnceLock};
 pub mod archive_host_selector;
 pub mod archive_summary_parser;
 pub mod core;
+pub mod core_provider_gemini;
 pub mod delegate;
 pub mod desktop_tools;
 pub mod image_generation;
