@@ -1,44 +1,81 @@
-pub(crate) const MESSAGE_STORE_MANIFEST_FILE_NAME: &str = "manifest.json";
-pub(crate) const MESSAGE_STORE_META_FILE_NAME: &str = "meta.json";
-pub(crate) const MESSAGE_STORE_MESSAGES_FILE_NAME: &str = "messages.jsonl";
-pub(crate) const MESSAGE_STORE_ACTIVE_PLANS_FILE_NAME: &str = "active_plans.jsonl";
-pub(crate) const MESSAGE_STORE_INDEX_FILE_NAME: &str = "messages.idx.json";
-pub(crate) const MESSAGE_STORE_BLOCKS_DIR_NAME: &str = "blocks";
-pub(crate) const MESSAGE_STORE_BLOBS_DIR_NAME: &str = "blobs";
+use uuid::Uuid;
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use super::*;
+
+/// 数据布局目录常量（从 src-tauri app_data_layout.rs 迁入）。
+pub const LAYOUT_DIR_CHAT: &str = "chat";
+pub const LAYOUT_DIR_CHAT_CONVERSATIONS: &str = "conversations";
+pub const CHAT_METADATA_DB_FILE_NAME: &str = "chat_metadata.db";
+
+/// 应用根下 chat 目录（从 src-tauri app_data_layout.rs 迁入）。
+pub fn app_layout_chat_dir(path: &PathBuf) -> PathBuf {
+    crate::memory::store::app_root_from_data_path(path).join(LAYOUT_DIR_CHAT)
+}
+
+/// 会话目录（从 src-tauri app_data_layout.rs 迁入）。
+pub fn app_layout_chat_conversations_dir(path: &PathBuf) -> PathBuf {
+    app_layout_chat_dir(path).join(LAYOUT_DIR_CHAT_CONVERSATIONS)
+}
+
+/// 单会话 JSON 路径（从 src-tauri app_data_layout.rs 迁入）。
+pub fn app_layout_chat_conversation_path(path: &PathBuf, conversation_id: &str) -> PathBuf {
+    app_layout_chat_conversations_dir(path).join(format!("{conversation_id}.json"))
+}
+
+/// 会话元数据 DB 路径（从 src-tauri message_store/sqlite.rs 迁入）。
+pub fn chat_metadata_store_db_path(data_path: &PathBuf) -> PathBuf {
+    app_layout_chat_dir(data_path).join(CHAT_METADATA_DB_FILE_NAME)
+}
+
+/// 会话元数据 DB 是否就绪（简化版：DB 文件存在即就绪）。
+pub fn chat_metadata_store_is_ready(data_path: &PathBuf) -> Result<bool, String> {
+    Ok(chat_metadata_store_db_path(data_path).exists())
+}
+
+pub const MESSAGE_STORE_MANIFEST_FILE_NAME: &str = "manifest.json";
+pub const MESSAGE_STORE_META_FILE_NAME: &str = "meta.json";
+pub const MESSAGE_STORE_MESSAGES_FILE_NAME: &str = "messages.jsonl";
+pub const MESSAGE_STORE_ACTIVE_PLANS_FILE_NAME: &str = "active_plans.jsonl";
+pub const MESSAGE_STORE_INDEX_FILE_NAME: &str = "messages.idx.json";
+pub const MESSAGE_STORE_BLOCKS_DIR_NAME: &str = "blocks";
+pub const MESSAGE_STORE_BLOBS_DIR_NAME: &str = "blobs";
 
 #[cfg(target_os = "windows")]
 use std::os::windows::ffi::OsStrExt as _;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct MessageStorePaths {
-    data_path: PathBuf,
-    conversation_id: String,
-    legacy_conversation_file: PathBuf,
-    shard_dir: PathBuf,
-    manifest_file: PathBuf,
-    meta_file: PathBuf,
-    messages_file: PathBuf,
-    active_plans_file: PathBuf,
-    index_file: PathBuf,
-    blocks_dir: PathBuf,
+pub struct MessageStorePaths {
+    pub data_path: PathBuf,
+    pub conversation_id: String,
+    pub legacy_conversation_file: PathBuf,
+    pub shard_dir: PathBuf,
+    pub manifest_file: PathBuf,
+    pub meta_file: PathBuf,
+    pub messages_file: PathBuf,
+    pub active_plans_file: PathBuf,
+    pub index_file: PathBuf,
+    pub blocks_dir: PathBuf,
     blobs_dir: PathBuf,
 }
 
 impl MessageStorePaths {
-    pub(crate) fn is_local_chat_conversation(&self) -> bool {
+    pub fn is_local_chat_conversation(&self) -> bool {
         self.shard_dir.parent() == Some(app_layout_chat_conversations_dir(&self.data_path).as_path())
     }
 
-    pub(crate) fn is_v3_ready(&self) -> Result<bool, String> {
+    pub fn is_v3_ready(&self) -> Result<bool, String> {
         Ok(self.is_local_chat_conversation() && chat_metadata_store_is_ready(&self.data_path)?)
     }
 }
 
-pub(crate) fn message_store_is_v3_ready(paths: &MessageStorePaths) -> Result<bool, String> {
+pub fn message_store_is_v3_ready(paths: &MessageStorePaths) -> Result<bool, String> {
     paths.is_v3_ready()
 }
 
-pub(crate) fn message_store_paths(
+pub fn message_store_paths(
     data_path: &PathBuf,
     conversation_id: &str,
 ) -> Result<MessageStorePaths, String> {
@@ -60,7 +97,7 @@ pub(crate) fn message_store_paths(
     )
 }
 
-pub(crate) fn message_store_paths_for_shard_dir(
+pub fn message_store_paths_for_shard_dir(
     data_path: &PathBuf,
     conversation_id: &str,
     shard_dir: PathBuf,
@@ -90,7 +127,7 @@ pub(crate) fn message_store_paths_for_shard_dir(
     })
 }
 
-pub(crate) fn validate_message_store_conversation_id(conversation_id: &str) -> Result<(), String> {
+pub fn validate_message_store_conversation_id(conversation_id: &str) -> Result<(), String> {
     if conversation_id.contains('/') || conversation_id.contains('\\') {
         return Err(format!(
             "会话 ID 不能包含路径分隔符，conversation_id={conversation_id}"
@@ -137,11 +174,11 @@ pub(crate) fn validate_message_store_conversation_id(conversation_id: &str) -> R
     Ok(())
 }
 
-pub(crate) fn path_modified_time(path: &PathBuf) -> Option<std::time::SystemTime> {
+pub fn path_modified_time(path: &PathBuf) -> Option<std::time::SystemTime> {
     fs::metadata(path).and_then(|metadata| metadata.modified()).ok()
 }
 
-pub(crate) fn directory_children_modified_time(path: &PathBuf) -> Option<std::time::SystemTime> {
+pub fn directory_children_modified_time(path: &PathBuf) -> Option<std::time::SystemTime> {
     let Ok(entries) = fs::read_dir(path) else {
         return None;
     };
@@ -152,7 +189,7 @@ pub(crate) fn directory_children_modified_time(path: &PathBuf) -> Option<std::ti
         .max()
 }
 
-pub(crate) fn message_store_shard_modified_time(
+pub fn message_store_shard_modified_time(
     paths: &MessageStorePaths,
 ) -> Option<std::time::SystemTime> {
     if paths.is_v3_ready().unwrap_or(false) {
@@ -171,7 +208,7 @@ pub(crate) fn message_store_shard_modified_time(
     .max()
 }
 
-pub(crate) fn write_message_store_text_atomic(
+pub fn write_message_store_text_atomic(
     path: &PathBuf,
     tmp_extension: &str,
     content: &str,
@@ -195,7 +232,7 @@ pub(crate) fn write_message_store_text_atomic(
     replace_message_store_file_atomic(&tmp_path, path, label)
 }
 
-pub(crate) fn replace_message_store_file_atomic(
+pub fn replace_message_store_file_atomic(
     tmp_path: &PathBuf,
     path: &PathBuf,
     label: &str,
@@ -220,7 +257,7 @@ pub(crate) fn replace_message_store_file_atomic(
 }
 
 #[cfg(target_os = "windows")]
-pub(crate) fn replace_message_store_file_atomic_inner(
+pub fn replace_message_store_file_atomic_inner(
     tmp_path: &PathBuf,
     path: &PathBuf,
 ) -> Result<(), std::io::Error> {
@@ -243,7 +280,7 @@ pub(crate) fn replace_message_store_file_atomic_inner(
 }
 
 #[cfg(not(target_os = "windows"))]
-pub(crate) fn replace_message_store_file_atomic_inner(
+pub fn replace_message_store_file_atomic_inner(
     tmp_path: &PathBuf,
     path: &PathBuf,
 ) -> Result<(), std::io::Error> {
@@ -251,7 +288,7 @@ pub(crate) fn replace_message_store_file_atomic_inner(
 }
 
 #[cfg(target_os = "windows")]
-pub(crate) fn path_to_windows_wide_null(path: &Path) -> Vec<u16> {
+pub fn path_to_windows_wide_null(path: &Path) -> Vec<u16> {
     path.as_os_str()
         .encode_wide()
         .chain(std::iter::once(0))
@@ -259,7 +296,7 @@ pub(crate) fn path_to_windows_wide_null(path: &Path) -> Vec<u16> {
 }
 
 #[cfg(test)]
-pub(crate) mod message_store_atomic_write_tests {
+pub mod message_store_atomic_write_tests {
     use super::*;
 
     #[test]

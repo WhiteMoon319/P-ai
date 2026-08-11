@@ -64,6 +64,10 @@ pub(crate) use features_config_storage_and_stt::*;
 #[path = "features/config/app_data_layout.rs"]
 mod features_config_app_data_layout;
 pub(crate) use features_config_app_data_layout::*;
+// app_layout_chat_dir / app_layout_chat_conversations_dir 已迁至
+// crates/pai-backend message_store::paths（阶段 4）。
+pub(crate) use pai_backend::message_store::paths::app_layout_chat_conversations_dir;
+pub(crate) use pai_backend::message_store::paths::app_layout_chat_dir;
 #[path = "features/chat/message_store/mod.rs"]
 mod features_chat_message_store_mod;
 pub(crate) use features_chat_message_store_mod::message_store;

@@ -270,13 +270,8 @@ pub(crate) fn app_layout_state_dir(path: &PathBuf) -> PathBuf {
     app_root_from_data_path(path).join(LAYOUT_DIR_STATE)
 }
 
-pub(crate) fn app_layout_chat_dir(path: &PathBuf) -> PathBuf {
-    app_root_from_data_path(path).join(LAYOUT_DIR_CHAT)
-}
-
-pub(crate) fn app_layout_chat_conversations_dir(path: &PathBuf) -> PathBuf {
-    app_layout_chat_dir(path).join(LAYOUT_DIR_CHAT_CONVERSATIONS)
-}
+// app_layout_chat_dir / app_layout_chat_conversations_dir 已迁至
+// crates/pai-backend message_store::paths（阶段 4），通过 crate 根重导出生效。
 
 pub(crate) fn app_layout_backups_dir(path: &PathBuf) -> PathBuf {
     app_root_from_data_path(path).join(LAYOUT_DIR_BACKUPS)
@@ -291,11 +286,11 @@ pub(crate) fn app_layout_runtime_state_path(path: &PathBuf) -> PathBuf {
 }
 
 pub(crate) fn app_layout_chat_index_path(path: &PathBuf) -> PathBuf {
-    app_layout_chat_dir(path).join(LAYOUT_FILE_CHAT_INDEX)
+    pai_backend::message_store::paths::app_layout_chat_dir(path).join(LAYOUT_FILE_CHAT_INDEX)
 }
 
 pub(crate) fn app_layout_chat_conversation_path(path: &PathBuf, conversation_id: &str) -> PathBuf {
-    app_layout_chat_conversations_dir(path).join(format!("{conversation_id}.json"))
+    pai_backend::message_store::paths::app_layout_chat_conversations_dir(path).join(format!("{conversation_id}.json"))
 }
 
 pub(crate) fn build_agents_file(agents: &[AgentProfile]) -> AgentsFile {
@@ -642,7 +637,7 @@ pub(crate) fn read_conversation_shard_raw(path: &PathBuf, conversation_id: &str)
 }
 
 pub(crate) fn write_conversation_shard(path: &PathBuf, conversation: &Conversation) -> Result<bool, String> {
-    fs::create_dir_all(app_layout_chat_conversations_dir(path))
+    fs::create_dir_all(pai_backend::message_store::paths::app_layout_chat_conversations_dir(path))
         .map_err(|err| format!("Create chat conversations dir failed: {err}"))?;
     let store_paths = message_store::message_store_paths(path, &conversation.id)?;
     if message_store::message_store_is_v3_ready(&store_paths)?
@@ -684,7 +679,7 @@ pub(crate) fn delete_conversation_shard(path: &PathBuf, conversation_id: &str) -
 pub(crate) fn app_layout_exists(path: &PathBuf) -> bool {
     app_layout_agents_path(path).exists()
         || app_layout_runtime_state_path(path).exists()
-        || app_layout_chat_conversations_dir(path).exists()
+        || pai_backend::message_store::paths::app_layout_chat_conversations_dir(path).exists()
 }
 
 pub(crate) fn legacy_app_data_split_dir(path: &PathBuf) -> PathBuf {
@@ -752,7 +747,7 @@ pub(crate) fn app_data_cache_signature(path: &PathBuf) -> AppDataCacheSignature 
     let (runtime_len, runtime_modified) = file_metadata_signature(&runtime_path);
 
     let mut conversations = ConversationDirCacheSignature::default();
-    let conversations_dir = app_layout_chat_conversations_dir(path);
+    let conversations_dir = pai_backend::message_store::paths::app_layout_chat_conversations_dir(path);
     if let Ok(entries) = fs::read_dir(conversations_dir) {
         for entry in entries.flatten() {
             let entry_path = entry.path();
@@ -876,7 +871,7 @@ pub(crate) fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
     };
 
     let mut conversations = Vec::<Conversation>::new();
-    let conv_dir = app_layout_chat_conversations_dir(path);
+    let conv_dir = pai_backend::message_store::paths::app_layout_chat_conversations_dir(path);
     if conv_dir.exists() {
         if let Ok(entries) = fs::read_dir(&conv_dir) {
             let mut seen_ids = std::collections::HashSet::<String>::new();
@@ -1365,9 +1360,9 @@ pub(crate) fn write_app_data_with_stats(path: &PathBuf, data: &AppData) -> Resul
         .map_err(|err| format!("Create config layout dir failed: {err}"))?;
     fs::create_dir_all(app_layout_state_dir(path))
         .map_err(|err| format!("Create state layout dir failed: {err}"))?;
-    fs::create_dir_all(app_layout_chat_dir(path))
+    fs::create_dir_all(pai_backend::message_store::paths::app_layout_chat_dir(path))
         .map_err(|err| format!("Create chat layout dir failed: {err}"))?;
-    fs::create_dir_all(app_layout_chat_conversations_dir(path))
+    fs::create_dir_all(pai_backend::message_store::paths::app_layout_chat_conversations_dir(path))
         .map_err(|err| format!("Create chat conversations dir failed: {err}"))?;
     fs::create_dir_all(app_layout_backups_dir(path))
         .map_err(|err| format!("Create backups dir failed: {err}"))?;
@@ -1401,7 +1396,7 @@ pub(crate) fn write_app_data_with_stats(path: &PathBuf, data: &AppData) -> Resul
     if !system_notification_in_input && ensure_system_notification_conversation_shard(path)? {
         stats.conversation_writes += 1;
     }
-    if let Ok(entries) = fs::read_dir(app_layout_chat_conversations_dir(path)) {
+    if let Ok(entries) = fs::read_dir(pai_backend::message_store::paths::app_layout_chat_conversations_dir(path)) {
         for entry in entries.flatten() {
             let p = entry.path();
             let shard_id = if p.extension().and_then(|v| v.to_str()) == Some("json") {

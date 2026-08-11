@@ -30,10 +30,11 @@ pub(crate) mod message_store {
     #![allow(dead_code)]
     // 嵌套 mod 内 glob import 不传递，直接引用 crate 根 pub(crate) 项
     use crate::*;
-    include!("paths.rs");
-    include!("manifest.rs");
+    // paths/manifest/index 已迁至 crates/pai-backend（阶段 4）。
+    pub(crate) use pai_backend::message_store::paths::*;
+    pub(crate) use pai_backend::message_store::manifest::*;
+    pub(crate) use pai_backend::message_store::index::*;
     include!("meta.rs");
-    include!("index.rs");
     include!("active_plan.rs");
     include!("sqlite.rs");
     include!("jsonl_snapshot.rs");

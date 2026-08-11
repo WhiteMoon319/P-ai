@@ -1,33 +1,43 @@
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex, OnceLock};
+
+use crate::core::domain::types_chat::{ChatMessage, Conversation};
+use crate::core::time_semantics::now_iso;
+use crate::logging::runtime_log_info;
+use super::*;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct MessageStoreIndexItem {
-    pub(crate) message_id: String,
+pub struct MessageStoreIndexItem {
+    pub message_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) block_id: Option<u32>,
-    pub(crate) offset: u64,
-    pub(crate) byte_len: u64,
+    pub block_id: Option<u32>,
+    pub offset: u64,
+    pub byte_len: u64,
     #[serde(default, skip_serializing)]
-    pub(crate) compaction_kind: Option<String>,
+    pub compaction_kind: Option<String>,
     #[serde(default, skip_serializing)]
-    pub(crate) role: String,
+    pub role: String,
     #[serde(default, skip_serializing)]
-    pub(crate) created_at: String,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct MessageStoreIndexFile {
-    pub(crate) version: u32,
+pub struct MessageStoreIndexFile {
+    pub version: u32,
     #[serde(default)]
-    pub(crate) items: Vec<MessageStoreIndexItem>,
+    pub items: Vec<MessageStoreIndexItem>,
     #[serde(skip)]
-    pub(crate) positions_by_message_id: std::collections::HashMap<String, usize>,
+    pub positions_by_message_id: std::collections::HashMap<String, usize>,
     #[serde(skip)]
-    pub(crate) compaction_boundary_positions: Vec<usize>,
+    pub compaction_boundary_positions: Vec<usize>,
 }
 
 impl MessageStoreIndexFile {
-    pub(crate) fn new(version: u32, items: Vec<MessageStoreIndexItem>) -> Self {
+    pub fn new(version: u32, items: Vec<MessageStoreIndexItem>) -> Self {
         Self {
             version,
             items,
@@ -37,12 +47,12 @@ impl MessageStoreIndexFile {
         .with_position_lookup()
     }
 
-    pub(crate) fn with_position_lookup(mut self) -> Self {
+    pub fn with_position_lookup(mut self) -> Self {
         self.rebuild_position_lookup();
         self
     }
 
-    pub(crate) fn persistent_view(&self) -> Self {
+    pub fn persistent_view(&self) -> Self {
         let mut next = self.clone();
         for item in &mut next.items {
             item.compaction_kind = None;
@@ -54,7 +64,7 @@ impl MessageStoreIndexFile {
         next.with_position_lookup()
     }
 
-    pub(crate) fn rebuild_position_lookup(&mut self) {
+    pub fn rebuild_position_lookup(&mut self) {
         self.positions_by_message_id.clear();
         self.compaction_boundary_positions.clear();
         let has_block_ids = self
@@ -84,22 +94,22 @@ impl MessageStoreIndexFile {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct CachedMessageStoreIndexFile {
-    pub(crate) modified_at: Option<std::time::SystemTime>,
-    pub(crate) len: u64,
-    pub(crate) index: Arc<MessageStoreIndexFile>,
+pub struct CachedMessageStoreIndexFile {
+    pub modified_at: Option<std::time::SystemTime>,
+    pub len: u64,
+    pub index: Arc<MessageStoreIndexFile>,
 }
 
-pub(crate) static MESSAGE_STORE_INDEX_CACHE: OnceLock<
+pub static MESSAGE_STORE_INDEX_CACHE: OnceLock<
     Mutex<std::collections::HashMap<PathBuf, CachedMessageStoreIndexFile>>,
 > = OnceLock::new();
 
-pub(crate) fn message_store_index_cache(
+pub fn message_store_index_cache(
 ) -> &'static Mutex<std::collections::HashMap<PathBuf, CachedMessageStoreIndexFile>> {
     MESSAGE_STORE_INDEX_CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
-pub(crate) fn lock_message_store_index_cache(
+pub fn lock_message_store_index_cache(
 ) -> std::sync::MutexGuard<
     'static,
     std::collections::HashMap<PathBuf, CachedMessageStoreIndexFile>,
@@ -113,7 +123,7 @@ pub(crate) fn lock_message_store_index_cache(
     })
 }
 
-pub(crate) fn write_message_store_index_atomic(path: &PathBuf, index: &MessageStoreIndexFile) -> Result<(), String> {
+pub fn write_message_store_index_atomic(path: &PathBuf, index: &MessageStoreIndexFile) -> Result<(), String> {
     let raw = serde_json::to_string_pretty(index)
         .map_err(|err| format!("序列化消息索引失败: {err}"))?;
     write_message_store_text_atomic(path, "json.tmp", &raw, "消息索引")?;
@@ -125,7 +135,7 @@ pub(crate) fn write_message_store_index_atomic(path: &PathBuf, index: &MessageSt
     Ok(())
 }
 
-pub(crate) fn read_message_store_index_file(path: &PathBuf) -> Result<Arc<MessageStoreIndexFile>, String> {
+pub fn read_message_store_index_file(path: &PathBuf) -> Result<Arc<MessageStoreIndexFile>, String> {
     let metadata = fs::metadata(path)
         .map_err(|err| format!("读取消息索引元数据失败，path={}，error={err}", path.display()))?;
     let modified_at = metadata.modified().ok();
@@ -155,7 +165,7 @@ pub(crate) fn read_message_store_index_file(path: &PathBuf) -> Result<Arc<Messag
     Ok(index)
 }
 
-pub(crate) fn remember_message_store_index_cache(path: &PathBuf, index: &MessageStoreIndexFile) {
+pub fn remember_message_store_index_cache(path: &PathBuf, index: &MessageStoreIndexFile) {
     let Ok(metadata) = fs::metadata(path) else {
         return;
     };
@@ -169,11 +179,11 @@ pub(crate) fn remember_message_store_index_cache(path: &PathBuf, index: &Message
     );
 }
 
-pub(crate) fn forget_message_store_index_cache(path: &PathBuf) {
+pub fn forget_message_store_index_cache(path: &PathBuf) {
     lock_message_store_index_cache().remove(path);
 }
 
-pub(crate) fn message_store_index_cache_stats() -> (usize, usize, usize) {
+pub fn message_store_index_cache_stats() -> (usize, usize, usize) {
     let cache = lock_message_store_index_cache();
     let entry_count = cache.len();
     let item_count = cache.values().map(|item| item.index.items.len()).sum::<usize>();
@@ -184,7 +194,7 @@ pub(crate) fn message_store_index_cache_stats() -> (usize, usize, usize) {
     (entry_count, item_count, estimated_json_bytes)
 }
 
-pub(crate) fn validate_message_store_index_file(
+pub fn validate_message_store_index_file(
     path: &PathBuf,
     index: &MessageStoreIndexFile,
 ) -> Result<(), String> {
@@ -247,7 +257,7 @@ pub(crate) fn validate_message_store_index_file(
     Ok(())
 }
 
-pub(crate) fn message_store_provider_meta_kind(message: &ChatMessage) -> Option<String> {
+pub fn message_store_provider_meta_kind(message: &ChatMessage) -> Option<String> {
     message
         .provider_meta
         .as_ref()?
@@ -259,7 +269,7 @@ pub(crate) fn message_store_provider_meta_kind(message: &ChatMessage) -> Option<
         .filter(|value| !value.is_empty())
 }
 
-pub(crate) fn message_store_compaction_kind(message: &ChatMessage) -> Option<String> {
+pub fn message_store_compaction_kind(message: &ChatMessage) -> Option<String> {
     match message_store_provider_meta_kind(message).as_deref() {
         Some("context_compaction") => Some("context_compaction".to_string()),
         Some("summary_context_seed") => Some("summary_context_seed".to_string()),
@@ -267,7 +277,7 @@ pub(crate) fn message_store_compaction_kind(message: &ChatMessage) -> Option<Str
     }
 }
 
-pub(crate) fn message_store_index_item_for_message(
+pub fn message_store_index_item_for_message(
     message: &ChatMessage,
     offset: u64,
     byte_len: u64,
@@ -275,7 +285,7 @@ pub(crate) fn message_store_index_item_for_message(
     message_store_index_item_for_message_in_block(message, None, offset, byte_len)
 }
 
-pub(crate) fn message_store_index_item_for_message_in_block(
+pub fn message_store_index_item_for_message_in_block(
     message: &ChatMessage,
     block_id: Option<u32>,
     offset: u64,
@@ -292,7 +302,7 @@ pub(crate) fn message_store_index_item_for_message_in_block(
     }
 }
 
-pub(crate) fn message_store_index_item_block_key(item: &MessageStoreIndexItem) -> String {
+pub fn message_store_index_item_block_key(item: &MessageStoreIndexItem) -> String {
     item.block_id
         .map(|block_id| block_id.to_string())
         .unwrap_or_default()
@@ -300,7 +310,7 @@ pub(crate) fn message_store_index_item_block_key(item: &MessageStoreIndexItem) -
 
 #[cfg(test)]
 #[test]
-pub(crate) fn message_store_index_persistent_view_should_ignore_runtime_only_locator_fields() {
+pub fn message_store_index_persistent_view_should_ignore_runtime_only_locator_fields() {
     let persisted = MessageStoreIndexFile::new(
         MESSAGE_STORE_MANIFEST_VERSION,
         vec![MessageStoreIndexItem {
