@@ -1835,6 +1835,7 @@ fun MessageBubble(
     val isUser = message.role == "user"
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
+    val userAlias = vm.chatSettings.collectAsState().value?.userAlias?.takeIf { it.isNotBlank() } ?: "我"
     val textContent = message.parts.joinToString("\n") { part ->
         when (part.type) {
             "Attachment" -> "📎 ${part.name?.takeIf { it.isNotBlank() } ?: part.text?.takeIf { it.isNotBlank() } ?: "附件"}"
@@ -1907,7 +1908,7 @@ fun MessageBubble(
                 Column(Modifier.padding(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "我",
+                            userAlias,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1950,7 +1951,7 @@ fun MessageBubble(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        "我",
+                        userAlias.take(1),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )
