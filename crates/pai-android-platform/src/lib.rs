@@ -7,6 +7,7 @@
 
 pub mod android_workspace;
 pub mod remote_im;
+pub mod local_port_service;
 pub mod remote_im_sdk;
 pub mod sandbox;
 pub mod tls;

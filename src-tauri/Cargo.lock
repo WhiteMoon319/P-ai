@@ -3513,7 +3513,9 @@ dependencies = [
 name = "pai-android-platform"
 version = "0.57.0"
 dependencies = [
+ "axum",
  "base64 0.22.1",
+ "chrono",
  "infer",
  "pai-backend",
  "regex",

@@ -143,9 +143,8 @@ pub(crate) use features_system_windowing::*;
 #[path = "features/system/sandbox.rs"]
 mod features_system_sandbox;
 pub(crate) use features_system_sandbox::*;
-#[path = "features/system/local_port_service.rs"]
-mod features_system_local_port_service;
-pub(crate) use features_system_local_port_service::*;
+// local_port_service 已迁至 crates/pai-android-platform（阶段 5）。
+pub(crate) use pai_android_platform::local_port_service::*;
 #[path = "features/system/tools.rs"]
 mod features_system_tools;
 pub(crate) use features_system_tools::*;
