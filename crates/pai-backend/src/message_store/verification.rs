@@ -1,13 +1,19 @@
+use std::fs;
+use std::path::PathBuf;
+
+use crate::core::domain::types_chat::ChatMessage;
+use super::*;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct MessageStoreVerificationReport {
-    pub(crate) message_count: usize,
-    pub(crate) last_message_id: String,
-    pub(crate) compaction_count: usize,
-    pub(crate) index: MessageStoreIndexFile,
-    pub(crate) last_valid_offset: u64,
+pub struct MessageStoreVerificationReport {
+    pub message_count: usize,
+    pub last_message_id: String,
+    pub compaction_count: usize,
+    pub index: MessageStoreIndexFile,
+    pub last_valid_offset: u64,
 }
 
-pub(crate) fn verify_jsonl_snapshot_content(
+pub fn verify_jsonl_snapshot_content(
     content: &str,
     expected_message_count: usize,
     expected_last_message_id: &str,
@@ -63,7 +69,7 @@ pub(crate) fn verify_jsonl_snapshot_content(
     })
 }
 
-pub(crate) fn verify_jsonl_snapshot_file(
+pub fn verify_jsonl_snapshot_file(
     path: &PathBuf,
     expected_message_count: usize,
     expected_last_message_id: &str,
@@ -73,7 +79,7 @@ pub(crate) fn verify_jsonl_snapshot_file(
     verify_jsonl_snapshot_content(&content, expected_message_count, expected_last_message_id)
 }
 
-pub(crate) fn repair_jsonl_snapshot_file(
+pub fn repair_jsonl_snapshot_file(
     path: &PathBuf,
     seen_message_ids: &mut std::collections::HashSet<String>,
 ) -> Result<(MessageStoreVerificationReport, usize, usize), String> {
@@ -114,7 +120,7 @@ pub(crate) fn repair_jsonl_snapshot_file(
     Ok((report, discarded, duplicate))
 }
 
-pub(crate) fn rebuild_jsonl_snapshot_index_from_file(path: &PathBuf) -> Result<MessageStoreIndexFile, String> {
+pub fn rebuild_jsonl_snapshot_index_from_file(path: &PathBuf) -> Result<MessageStoreIndexFile, String> {
     let report = verify_jsonl_snapshot_file(path, usize::MAX, "")?;
     Ok(report.index)
 }

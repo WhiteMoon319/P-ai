@@ -3529,6 +3529,7 @@ version = "0.57.0"
 dependencies = [
  "aho-corasick",
  "chardetng",
+ "chrono",
  "encoding_rs",
  "genai",
  "image",

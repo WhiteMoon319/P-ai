@@ -8,6 +8,7 @@ description = "P-AI 平台无关业务后端（会话/消息/记忆/任务/远�
 pai-protocol = { path = "../pai-protocol" }
 aho-corasick = "1.1"
 chardetng = "1.0.0"
+chrono = { version = "0.4", features = ["serde"] }
 encoding_rs = "0.8"
 genai = { git = "https://github.com/jeremychone/rust-genai.git", rev = "cf3396e3ac9c6bf74be5a9ed4c2400ff920f29e7" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
