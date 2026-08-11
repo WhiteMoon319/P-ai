@@ -1409,6 +1409,7 @@ private fun ThinkingSectionMessage(steps: List<ActivityStep>) {
     ThinkingBlock(steps = steps)
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MessageBubble(
     message: ChatMessage,
