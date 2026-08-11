@@ -205,6 +205,7 @@ class AppViewModel(
             try {
                 service.setActive(conversationId, agentId)
                 service.resumeSubscription(conversationId)
+                runCatching { service.markRead(conversationId) }
                 val page = service.blockPage(conversationId)
                 currentConversationId.value = conversationId
                 messages.value = page.messages

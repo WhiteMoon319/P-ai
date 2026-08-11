@@ -35,6 +35,10 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("conversation.setActive", mapOf("input" to input), SetActiveResult::class.java)
     }
 
+    /** 标记会话已读（清零未读计数）。 */
+    suspend fun markRead(conversationId: String): Boolean =
+        client.request("conversation.markRead", mapOf("conversationId" to conversationId), Boolean::class.java)
+
     /** 切换会话首选模型（供应商）。 */
     suspend fun setConversationPreferredModel(conversationId: String, preferredApiConfigId: String?): Map<String, Any?> {
         val input = mapOf(
