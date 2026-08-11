@@ -1712,7 +1712,8 @@ class AppViewModel(
             try {
                 val bytes = file.readBytes()
                 val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
-                val text = service.sttTranscribe("audio/mp4", b64, null)
+                val sttId = appConfig.value?.sttApiConfigId
+                val text = service.sttTranscribe("audio/mp4", b64, sttId)
                 if (!text.isNullOrBlank()) {
                     withContext(Dispatchers.Main) { recognizedText.value = text }
                 } else {
