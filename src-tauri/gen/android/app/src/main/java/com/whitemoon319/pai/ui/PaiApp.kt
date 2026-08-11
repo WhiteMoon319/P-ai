@@ -1050,10 +1050,7 @@ fun SettingsScreen(
             SettingsEntry.Tools -> ToolsSettingsTab(vm = vm, toolStatus = toolStatus)
             SettingsEntry.Mcp -> McpSettingsTab(vm = vm)
             SettingsEntry.Persona -> PersonaSettingsTab(vm = vm)
-            SettingsEntry.Department -> Text(
-                "部门管理：当前版本使用默认部门，暂不支持编辑。",
-                modifier = Modifier.padding(20.dp),
-            )
+            SettingsEntry.Department -> DepartmentSettingsTab(vm = vm)
             SettingsEntry.Memory -> MemorySettingsTab(vm = vm)
             SettingsEntry.Task -> TaskSettingsTab(vm = vm)
             SettingsEntry.Logs -> LogsSettingsTab(vm = vm)
@@ -1761,6 +1758,58 @@ private fun AppearanceSettingsTab(vm: AppViewModel) {
         if (saved) {
             Spacer(Modifier.height(8.dp))
             Text("已保存", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
+/** 部门设置（对齐 Vue DepartmentTab：只读展示部门信息）。 */
+@Composable
+private fun DepartmentSettingsTab(vm: AppViewModel) {
+    val appConfig by vm.appConfig.collectAsState()
+    val departments = appConfig?.departments.orEmpty()
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Text("部门管理", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "当前版本支持查看部门结构；编辑请在桌面端配置。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        if (departments.isEmpty()) {
+            Text(
+                "暂无部门（使用默认部门）",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            departments.forEach { dept ->
+                Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(
+                            buildString {
+                                append(dept.name ?: "未命名")
+                                if (dept.isBuiltInAssistant == true) append("（助手）")
+                            },
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        if (!dept.summary.isNullOrBlank()) {
+                            Text(
+                                dept.summary,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (dept.agentIds.isNotEmpty()) {
+                            Text(
+                                "人设：${dept.agentIds.size} 个",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

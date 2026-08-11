@@ -494,6 +494,23 @@ data class AppConfig(
     @SerializedName("desktopOperationNoticeEnabled") val desktopOperationNoticeEnabled: Boolean? = null,
     @SerializedName("uiLanguage") val uiLanguage: String? = null,
     @SerializedName("uiSizeScale") val uiSizeScale: Int? = null,
+    @SerializedName("departments") val departments: List<DepartmentConfig> = emptyList(),
+)
+
+/** 部门配置（DepartmentConfig），只读展示用。 */
+data class DepartmentConfig(
+    val id: String? = null,
+    val name: String? = null,
+    val summary: String? = null,
+    val guide: String? = null,
+    @SerializedName("apiConfigIds") val apiConfigIds: List<String> = emptyList(),
+    @SerializedName("apiConfigId") val apiConfigId: String? = null,
+    @SerializedName("modelFailureFallbackEnabled") val modelFailureFallbackEnabled: Boolean = false,
+    @SerializedName("agentIds") val agentIds: List<String> = emptyList(),
+    @SerializedName("childDepartmentIds") val childDepartmentIds: List<String> = emptyList(),
+    @SerializedName("isBuiltInAssistant") val isBuiltInAssistant: Boolean = false,
+    val source: String? = null,
+    val scope: String? = null,
 )
 
 /** 会话级 API 设置（含 STT/视觉/工具审查供应商），save_conversation_api_settings 用。 */
