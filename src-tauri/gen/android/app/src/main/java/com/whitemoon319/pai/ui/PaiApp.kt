@@ -1542,6 +1542,7 @@ fun ChatScreen(
 /**
  * 消息内图片渲染：通过后端 read_chat_image_data_url 读取 data URL，原生解码显示。
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChatImagePart(
     vm: AppViewModel,
