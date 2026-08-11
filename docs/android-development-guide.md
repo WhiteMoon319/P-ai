@@ -39,10 +39,11 @@ Tauri Android WebView (origin: http://tauri.localhost)
 
 ### 2.3 CI/CD（.github/workflows/android-build.yml）
 
-- 触发：push 到 `main`/`android` 分支或手动 workflow_dispatch。
+- 触发：push 到 `main`/`dev` 分支或手动 workflow_dispatch。
 - 环境：ubuntu-latest + pnpm + Node 24 + JDK 17(temurin) + rust stable（target `aarch64-linux-android`）+ runner 预装 NDK。
-- 关键步骤：Export Android NDK path（把 `$ANDROID_NDK_LATEST_HOME` 写入 `$GITHUB_ENV` 的 `NDK_HOME`/`ANDROID_NDK_HOME`/`ANDROID_NDK_ROOT`，并把 llvm 工具链加入 PATH）→ `pnpm tauri android init --ci` → `pnpm tauri android build --apk --target aarch64` → keytool 生成 debug keystore + apksigner 签名 → 上传 artifact `p-ai-android-apk`。
+- 关键步骤：Export Android NDK path（把 `$ANDROID_NDK_LATEST_HOME` 写入 `$GITHUB_ENV` 的 `NDK_HOME`/`ANDROID_NDK_HOME`/`ANDROID_NDK_ROOT`，并把 llvm 工具链加入 PATH）→ cargo 交叉编译 `.so` 并复制到 jniLibs → `./gradlew :app:assembleDebug` → 版本注入（`scripts/patch-android-version.sh`，git 派生）→ 上传 artifact `p-ai-android-apk`。
 - 注意：`${{ env.XXX }}` 只能引用 workflow env 块，**runner 的 OS 环境变量必须先用 shell 步骤导出到 `$GITHUB_ENV`**。
+- 本分支 Android 端已剥离 Tauri：**不使用** `pnpm tauri android init/build`。
 
 ## 3. 关键配置文件与修改点
 

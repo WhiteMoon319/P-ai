@@ -46,23 +46,27 @@ APK 发布在 [GitHub Releases](https://github.com/WhiteMoon319/P-ai/releases)�
 
 ### 构建与开发
 
-环境要求：Node.js（pnpm）、Rust 工具链、Android SDK + NDK（建议 r27+）。
+环境要求：Rust 工具链、Android SDK + NDK（建议 r27+）、Java 17+。
 
 ```bash
-# 前端依赖
-pnpm install
-
-# 类型检查
-pnpm typecheck
-cd src-tauri && cargo check --target aarch64-linux-android
+# Rust 后端交叉编译（aarch64）
+cd src-tauri
+# 设置 NDK 环境（路径按本机 NDK 调整）：
+#   export CC_aarch64_linux_android="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/<host>/bin/aarch64-linux-android21-clang"
+#   export AR_aarch64_linux_android="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/<host>/bin/llvm-ar"
+#   export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CC_aarch64_linux_android"
+cargo build --target aarch64-linux-android --release
+cp target/aarch64-linux-android/release/libeasy_call_ai_lib.so \
+  gen/android/app/src/main/jniLibs/arm64-v8a/libeasy_call_ai_lib.so
 
 # 构建 Android APK（aarch64）
-pnpm tauri android build --apk --target aarch64 --debug   # debug 包
-pnpm tauri android build --apk --target aarch64           # release 包
+cd gen/android
+./gradlew :app:assembleDebug    # debug 包
+./gradlew :app:assembleRelease  # release 包（R8 压缩）
 ```
 
-> 注：若全局 Cargo 配置了 `rustc-wrapper=sccache` 或特定镜像源，构建 Android target 时
-> 可能需要用 `--config` 覆盖（见 [docs/android-development-guide.md](docs/android-development-guide.md)）。
+> 说明：本项目 Android 端已彻底剥离 Tauri 运行时（原生 Kotlin/Compose 前端 + Rust JNI 后端），
+> 不再使用 `pnpm tauri android` 系列命令。
 
 CI 构建（GitHub Actions）：
 
