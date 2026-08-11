@@ -62,8 +62,8 @@ print("Inserted git version logic into %s" % path)
 PY
 
 sed -i \
-  -e 's|versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()|versionCode = gitVersionCode|' \
-  -e 's|versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")|versionName = gitVersionName|' \
+  -e 's|versionCode = 1|versionCode = gitVersionCode|' \
+  -e 's|versionName = "0.57.0"|versionName = gitVersionName|' \
   "$GRADLE"
 
 echo "=== version lines after patch ==="
