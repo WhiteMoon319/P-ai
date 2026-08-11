@@ -284,6 +284,35 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("task_list_tasks", emptyMap<String, Any?>(), List::class.java) as List<Map<String, Any?>>
     }
 
+    /** 创建定时任务。 */
+    suspend fun taskCreateTask(
+        goal: String,
+        why: String = "",
+        todo: String = "",
+        runAt: String? = null,
+        cronExpression: String? = null,
+        agentId: String? = null,
+    ): Map<String, Any?> {
+        val input = mapOf(
+            "goal" to goal,
+            "why" to why,
+            "todo" to todo,
+            "agentId" to agentId,
+            "trigger" to mapOf(
+                "runAt" to runAt,
+                "cronExpression" to cronExpression,
+            ),
+        )
+        @Suppress("UNCHECKED_CAST")
+        return client.request("task_create_task", mapOf("input" to input), Map::class.java) as Map<String, Any?>
+    }
+
+    /** 删除任务。 */
+    suspend fun taskDeleteTask(taskId: String): Boolean {
+        val input = mapOf("taskId" to taskId)
+        return client.request("task_delete_task", mapOf("input" to input), Boolean::class.java)
+    }
+
     suspend fun remoteImListChannels(): List<Map<String, Any?>> {
         @Suppress("UNCHECKED_CAST")
         return client.request("remote_im_list_channels", emptyMap<String, Any?>(), List::class.java) as List<Map<String, Any?>>

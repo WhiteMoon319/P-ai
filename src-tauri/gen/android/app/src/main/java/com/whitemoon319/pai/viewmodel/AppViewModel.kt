@@ -1106,6 +1106,43 @@ class AppViewModel(
         }
     }
 
+    /** 创建定时任务。 */
+    suspend fun createTask(goal: String, why: String, todo: String, runAt: String?, cron: String?): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val currentConvId = currentConversationId.value
+                val conv = currentConvId?.let { id -> conversations.value.firstOrNull { it.conversationId == id } }
+                val result = service.taskCreateTask(
+                    goal = goal,
+                    why = why,
+                    todo = todo,
+                    runAt = runAt,
+                    cronExpression = cron,
+                    agentId = conv?.agentId,
+                )
+                if (result.isNotEmpty()) loadTasks()
+                result.isNotEmpty()
+            } catch (e: Exception) {
+                error.value = "创建任务失败: ${e.message}"
+                false
+            }
+        }
+    }
+
+    /** 删除任务。 */
+    suspend fun deleteTask(taskId: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val ok = service.taskDeleteTask(taskId)
+                if (ok) loadTasks()
+                ok
+            } catch (e: Exception) {
+                error.value = "删除任务失败: ${e.message}"
+                false
+            }
+        }
+    }
+
     val remoteImChannels = MutableStateFlow<List<Map<String, Any?>>?>(null)
     val remoteImLoading = MutableStateFlow(false)
 

@@ -2636,6 +2636,13 @@ private fun TaskSettingsTab(vm: AppViewModel) {
     val scope = rememberCoroutineScope()
     val tasks by vm.tasks.collectAsState()
     val loading by vm.tasksLoading.collectAsState()
+    var showCreate by remember { mutableStateOf(false) }
+    var goal by remember { mutableStateOf("") }
+    var why by remember { mutableStateOf("") }
+    var todo by remember { mutableStateOf("") }
+    var runAt by remember { mutableStateOf("") }
+    var cron by remember { mutableStateOf("") }
+    var pendingDelete by remember { mutableStateOf<Map<String, Any?>?>(null) }
 
     LaunchedEffect(Unit) { vm.loadTasks() }
 
@@ -2643,6 +2650,14 @@ private fun TaskSettingsTab(vm: AppViewModel) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("定时任务", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             TextButton(onClick = { scope.launch { vm.loadTasks() } }, enabled = !loading) { Text(if (loading) "加载中…" else "刷新") }
+            Button(onClick = {
+                goal = ""
+                why = ""
+                todo = ""
+                runAt = ""
+                cron = ""
+                showCreate = true
+            }) { Text("新建") }
         }
         if (tasks.isNullOrEmpty()) {
             Text(
@@ -2657,7 +2672,14 @@ private fun TaskSettingsTab(vm: AppViewModel) {
                     val task = tasks!![index]
                     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                         Column(Modifier.padding(12.dp)) {
-                            Text(task["title"] as? String ?: "未命名", style = MaterialTheme.typography.titleSmall)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    task["title"] as? String ?: task["goal"] as? String ?: "未命名",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                TextButton(onClick = { pendingDelete = task }) { Text("删除") }
+                            }
                             val next = task["nextRunAt"] as? String ?: ""
                             Text(
                                 if (next.isNotBlank()) "下次：$next" else "—",
@@ -2669,6 +2691,88 @@ private fun TaskSettingsTab(vm: AppViewModel) {
                 }
             }
         }
+    }
+
+    if (showCreate) {
+        AlertDialog(
+            onDismissRequest = { showCreate = false },
+            title = { Text("新建定时任务") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = goal,
+                        onValueChange = { goal = it },
+                        label = { Text("目标（goal）") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = why,
+                        onValueChange = { why = it },
+                        label = { Text("原因（why）") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = todo,
+                        onValueChange = { todo = it },
+                        label = { Text("待办（todo）") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = runAt,
+                        onValueChange = { runAt = it },
+                        label = { Text("触发时间（RFC3339，如 2026-08-12T09:00:00+08:00）") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = cron,
+                        onValueChange = { cron = it },
+                        label = { Text("cron 表达式（可选，如 0 9 * * *）") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = goal.isNotBlank(),
+                    onClick = {
+                        showCreate = false
+                        scope.launch {
+                            vm.createTask(
+                                goal = goal,
+                                why = why,
+                                todo = todo,
+                                runAt = runAt.trim().takeIf { it.isNotBlank() },
+                                cron = cron.trim().takeIf { it.isNotBlank() },
+                            )
+                        }
+                    },
+                ) { Text("创建") }
+            },
+            dismissButton = { TextButton(onClick = { showCreate = false }) { Text("取消") } },
+        )
+    }
+
+    pendingDelete?.let { task ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("删除任务") },
+            text = { Text("确定删除「${task["title"] ?: task["goal"] ?: "未命名"}」吗？") },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        vm.deleteTask((task["taskId"] as? String) ?: "")
+                        pendingDelete = null
+                    }
+                }) { Text("删除") }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("取消") } },
+        )
     }
 }
 
