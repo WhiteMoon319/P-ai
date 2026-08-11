@@ -24,7 +24,8 @@ use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use std::collections::{HashSet};
 use super::*;
 pub(crate) use pai_backend::task::domain::*;
-include!("task/migration.rs");
-include!("task/store.rs");
+// task/migration.rs 与 task/store.rs 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::task::migration::*;
+pub(crate) use pai_backend::task::store::*;
 include!("task/scheduler.rs");
 include!("task/commands.rs");

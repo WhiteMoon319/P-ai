@@ -1,4 +1,16 @@
-pub(crate) fn task_store_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool, String> {
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use std::path::PathBuf;
+
+use crate::core::time_semantics::{now_utc_rfc3339, normalize_rfc3339_to_utc_storage, parse_rfc3339_time};
+use std::fs;
+use uuid::Uuid;
+use crate::logging::runtime_log_info;
+use crate::memory::store::app_root_from_data_path;
+use super::domain::*;
+use super::store::*;
+use crate::core::domain::constants::SYSTEM_NOTIFICATION_CONVERSATION_ID;
+
+pub fn task_store_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool, String> {
     let sql = format!("PRAGMA table_info({table})");
     let mut stmt = conn
         .prepare(&sql)
@@ -15,7 +27,7 @@ pub(crate) fn task_store_has_column(conn: &Connection, table: &str, column: &str
     Ok(false)
 }
 
-pub(crate) fn task_store_rename_column_if_needed(
+pub fn task_store_rename_column_if_needed(
     conn: &Connection,
     table: &str,
     legacy_column: &str,
@@ -36,7 +48,7 @@ pub(crate) fn task_store_rename_column_if_needed(
     Ok(())
 }
 
-pub(crate) fn task_store_add_column_if_missing(
+pub fn task_store_add_column_if_missing(
     conn: &Connection,
     table: &str,
     definition: &str,
@@ -50,7 +62,7 @@ pub(crate) fn task_store_add_column_if_missing(
     Ok(())
 }
 
-pub(crate) fn task_store_apply_migrations(conn: &Connection) -> Result<(), String> {
+pub fn task_store_apply_migrations(conn: &Connection) -> Result<(), String> {
     conn.execute_batch("BEGIN IMMEDIATE;")
         .map_err(|err| format!("Begin task migration transaction failed: {err}"))?;
 
@@ -93,7 +105,7 @@ pub(crate) fn task_store_apply_migrations(conn: &Connection) -> Result<(), Strin
     Ok(())
 }
 
-pub(crate) fn task_store_migrate_empty_conversation_id_to_system(conn: &Connection) -> Result<(), String> {
+pub fn task_store_migrate_empty_conversation_id_to_system(conn: &Connection) -> Result<(), String> {
     conn.execute(
         "UPDATE task_record
          SET conversation_id = ?1
@@ -104,7 +116,7 @@ pub(crate) fn task_store_migrate_empty_conversation_id_to_system(conn: &Connecti
     Ok(())
 }
 
-pub(crate) fn task_store_migrate_triggered_one_time_tasks_to_completed(conn: &Connection) -> Result<(), String> {
+pub fn task_store_migrate_triggered_one_time_tasks_to_completed(conn: &Connection) -> Result<(), String> {
     conn.execute(
         "UPDATE task_record
          SET completion_state = ?1,
@@ -135,7 +147,7 @@ pub(crate) fn task_store_migrate_triggered_one_time_tasks_to_completed(conn: &Co
     Ok(())
 }
 
-pub(crate) fn task_store_migrate_legacy_task_triggers(conn: &Connection) -> Result<(), String> {
+pub fn task_store_migrate_legacy_task_triggers(conn: &Connection) -> Result<(), String> {
     let mut stmt = conn
         .prepare(
             "SELECT task_id, run_at_utc, cron_expression, every_minutes, end_at_utc, last_triggered_at_utc, created_at_utc, updated_at_utc
