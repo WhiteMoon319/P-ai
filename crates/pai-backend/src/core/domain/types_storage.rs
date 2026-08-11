@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::core::domain::constants::{
-    APP_DATA_SCHEMA_VERSION, ASSISTANT_DEPARTMENT_ID, DEFAULT_AGENT_ID, USER_PERSONA_ID,
+    APP_DATA_SCHEMA_VERSION, ASSISTANT_DEPARTMENT_ID, DEFAULT_AGENT_ID, SYSTEM_NOTIFICATION_CONVERSATION_ID,
+    USER_PERSONA_ID,
 };
 use crate::core::domain::runtime_defaults::{
     default_agent, default_deputy_agent, default_system_persona, default_user_persona,
@@ -922,6 +923,75 @@ pub fn user_persona_intro(data: &AppData) -> String {
         .find(|a| a.id == USER_PERSONA_ID || a.is_built_in_user)
         .map(|a| a.system_prompt.trim().to_string())
         .unwrap_or_default()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeStateFile {
+    pub version: u32,
+    #[serde(default)]
+    pub runtime_revision: u64,
+    #[serde(default)]
+    pub data_migration_version: u32,
+    #[serde(default, alias = "messageStoreMigrationVersion")]
+    pub message_store_migration_version: u32,
+    #[serde(alias = "selectedAgentId", alias = "selected_agent_id")]
+    pub assistant_department_agent_id: String,
+    pub response_style_id: String,
+    #[serde(default = "default_pdf_read_mode")]
+    pub pdf_read_mode: String,
+    #[serde(default = "default_background_voice_screenshot_keywords")]
+    pub background_voice_screenshot_keywords: String,
+    #[serde(default = "default_background_voice_screenshot_mode")]
+    pub background_voice_screenshot_mode: String,
+    #[serde(default)]
+    pub instruction_presets: Vec<PromptCommandPreset>,
+    #[serde(
+        default,
+        rename = "systemNotificationConversationId",
+        alias = "mainConversationId",
+        alias = "main_conversation_id"
+    )]
+    pub main_conversation_id: Option<String>,
+    #[serde(default)]
+    pub pinned_conversation_ids: Vec<String>,
+    #[serde(default)]
+    pub conversation_section_orders: ConversationSectionOrders,
+    #[serde(default)]
+    pub image_text_cache: Vec<ImageTextCacheEntry>,
+    #[serde(default)]
+    pub pdf_text_cache: Vec<PdfTextCacheEntry>,
+    #[serde(default)]
+    pub pdf_image_cache: Vec<PdfImageCacheEntry>,
+    #[serde(default)]
+    pub remote_im_contacts: Vec<RemoteImContact>,
+    #[serde(default)]
+    pub remote_im_contact_checkpoints: Vec<RemoteImContactCheckpoint>,
+}
+
+impl Default for RuntimeStateFile {
+    fn default() -> Self {
+        Self {
+            version: APP_DATA_SCHEMA_VERSION,
+            runtime_revision: 0,
+            data_migration_version: 0,
+            message_store_migration_version: 0,
+            assistant_department_agent_id: default_assistant_department_agent_id(),
+            response_style_id: default_response_style_id(),
+            pdf_read_mode: default_pdf_read_mode(),
+            background_voice_screenshot_keywords: default_background_voice_screenshot_keywords(),
+            background_voice_screenshot_mode: default_background_voice_screenshot_mode(),
+            instruction_presets: Vec::new(),
+            main_conversation_id: Some(SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string()),
+            pinned_conversation_ids: Vec::new(),
+            conversation_section_orders: ConversationSectionOrders::default(),
+            image_text_cache: Vec::new(),
+            pdf_text_cache: Vec::new(),
+            pdf_image_cache: Vec::new(),
+            remote_im_contacts: Vec::new(),
+            remote_im_contact_checkpoints: Vec::new(),
+        }
+    }
 }
 
 #[cfg(test)]
