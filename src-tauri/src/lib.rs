@@ -351,7 +351,6 @@ fn windows_set_process_app_user_model_id() {
     }
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // ========== Android 原生模式 ==========
     // 彻底拔掉 Tauri 运行时：Kotlin 不再继承 TauriActivity，后端由 PaiNative.init 通过
