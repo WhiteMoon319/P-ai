@@ -13,7 +13,7 @@ use crate::memory::store::*;
 
 /// 简化版配置读取（从 src-tauri storage_and_stt.rs 迁入：只做 TOML 解析，
 /// 不做 normalize；配置缺失时返回默认值）。
-fn read_config(path: &std::path::PathBuf) -> Result<AppConfig, String> {
+pub fn read_config(path: &std::path::PathBuf) -> Result<AppConfig, String> {
     let resolved_path = if path.exists() {
         path.clone()
     } else {

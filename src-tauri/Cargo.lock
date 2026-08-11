@@ -3522,6 +3522,8 @@ dependencies = [
  "schemars 1.2.1",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
+ "tantivy",
  "time",
  "tokio",
  "toml 1.1.2+spec-1.1.0",

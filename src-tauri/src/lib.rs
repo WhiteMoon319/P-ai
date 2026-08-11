@@ -146,9 +146,8 @@ pub(crate) use features_system_updater_android_stub::*;
 #[path = "features/memory/store.rs"]
 mod features_memory_store;
 pub(crate) use features_memory_store::*;
-#[path = "features/memory/matcher.rs"]
-mod features_memory_matcher;
-pub(crate) use features_memory_matcher::*;
+// matcher 已迁至 crates/pai-backend memory::matcher（阶段 4）。
+pub(crate) use pai_backend::memory::matcher::*;
 #[path = "features/memory/chat_history_search.rs"]
 mod features_memory_chat_history_search;
 pub(crate) use features_memory_chat_history_search::*;
