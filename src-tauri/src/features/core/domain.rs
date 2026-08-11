@@ -25,6 +25,7 @@ use super::*;
 pub(crate) use pai_backend::core::domain::constants::*;
 pub(crate) use pai_backend::core::domain::remote_customer_service_defaults::*;
 pub(crate) use pai_backend::core::domain::runtime_defaults::*;
+pub(crate) use pai_backend::core::domain::runtime_types::*;
 pub(crate) use pai_backend::core::domain::types_chat::*;
 pub(crate) use pai_backend::core::domain::types_config::*;
 pub(crate) use pai_backend::core::domain::types_foundation::*;
