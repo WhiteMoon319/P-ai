@@ -275,8 +275,11 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("model.list", mapOf("conversationId" to conversationId), List::class.java) as List<Map<String, Any?>>
     }
 
-    suspend fun batchArchiveConversations(conversationIds: List<String>): Boolean {
-        val input = mapOf("conversationIds" to conversationIds)
+    suspend fun batchArchiveConversations(conversationIds: List<String>, reflectionApiConfigId: String? = null): Boolean {
+        val input = mutableMapOf<String, Any?>("conversationIds" to conversationIds)
+        if (!reflectionApiConfigId.isNullOrBlank()) {
+            input["reflectionApiConfigId"] = reflectionApiConfigId
+        }
         return client.request("conversation.batchArchive", mapOf("input" to input), Boolean::class.java)
     }
 

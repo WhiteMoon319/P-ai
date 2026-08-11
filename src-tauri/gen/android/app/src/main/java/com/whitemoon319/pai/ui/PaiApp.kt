@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Compress
@@ -235,6 +236,9 @@ private fun ConversationListScreenImpl(
     var autoPushTargetConvId by remember { mutableStateOf<String?>(null) }
     val autoPushContacts = vm.remoteImContacts.collectAsState().value
     var conversationSearchQuery by remember { mutableStateOf("") }
+    var showBatchArchive by remember { mutableStateOf(false) }
+    var batchArchiveDays by remember { mutableStateOf("30") }
+    val primaryModelId = vm.appConfig.collectAsState().value?.assistantDepartmentApiConfigId
     var showNewDialog by remember { mutableStateOf(false) }
     var fullOptions by remember { mutableStateOf<com.whitemoon319.pai.model.CreateConversationOptions>(com.whitemoon319.pai.model.CreateConversationOptions()) }
     var optionsLoading by remember { mutableStateOf(false) }
@@ -275,6 +279,9 @@ private fun ConversationListScreenImpl(
                 }
             },
             actions = {
+                IconButton(onClick = { showBatchArchive = true }) {
+                    Icon(Icons.Default.AutoFixHigh, contentDescription = "批量归档")
+                }
                 IconButton(onClick = { onDelegate() }) {
                     Icon(Icons.Default.SwapHoriz, contentDescription = "委托")
                 }
@@ -512,6 +519,56 @@ private fun ConversationListScreenImpl(
             dismissButton = {
                 TextButton(onClick = { autoPushTargetConvId = null }) { Text("取消") }
             },
+        )
+    }
+
+    // 批量归档对话框（对齐 Vue batchArchiveCard）
+    if (showBatchArchive) {
+        AlertDialog(
+            onDismissRequest = { showBatchArchive = false },
+            title = { Text("批量归档会话") },
+            text = {
+                Column {
+                    Text(
+                        "归档 N 天前未更新的本地会话（固定会话保留）。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = batchArchiveDays,
+                        onValueChange = { batchArchiveDays = it.filter(Char::isDigit).take(3) },
+                        label = { Text("归档天数（≥1）") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        if (primaryModelId.isNullOrBlank()) "将使用默认模型执行归档总结" else "归档总结模型：$primaryModelId",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = (batchArchiveDays.toIntOrNull() ?: 0) >= 1,
+                    onClick = {
+                        showBatchArchive = false
+                        val days = batchArchiveDays.toIntOrNull() ?: 30
+                        val modelId = primaryModelId
+                        scope.launch {
+                            val count = vm.batchArchiveOldConversations(days, modelId)
+                            android.widget.Toast.makeText(
+                                context,
+                                if (count > 0) "已归档 $count 个会话" else "没有符合条件的会话",
+                                android.widget.Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                    },
+                ) { Text("开始归档") }
+            },
+            dismissButton = { TextButton(onClick = { showBatchArchive = false }) { Text("取消") } },
         )
     }
 }

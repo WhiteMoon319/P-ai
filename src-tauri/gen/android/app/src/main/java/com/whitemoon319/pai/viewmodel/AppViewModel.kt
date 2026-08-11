@@ -631,6 +631,37 @@ class AppViewModel(
         }
     }
 
+    /** 批量归档：筛选 N 天前未固定的本地会话并归档。返回成功归档数量。 */
+    suspend fun batchArchiveOldConversations(days: Int, reflectionApiConfigId: String?): Int {
+        return withContext(Dispatchers.IO) {
+            try {
+                val threshold = System.currentTimeMillis() - days.toLong() * 24 * 3600 * 1000
+                val candidates = conversations.value.filter { conv ->
+                    val ts = conv.updatedAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
+                        ?: conv.lastMessageAt?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
+                        ?: 0L
+                    ts in 1..threshold && conv.isPinned != true
+                }
+                if (candidates.isEmpty()) {
+                    0
+                } else {
+                    val ids = candidates.map { it.conversationId }
+                    val ok = service.batchArchiveConversations(ids, reflectionApiConfigId)
+                    if (ok) {
+                        refreshConversations()
+                        ids.size
+                    } else {
+                        error.value = "批量归档失败"
+                        0
+                    }
+                }
+            } catch (e: Exception) {
+                error.value = "批量归档失败: ${e.message}"
+                0
+            }
+        }
+    }
+
     // ---------------- 归档会话管理 ----------------
 
     val archives = MutableStateFlow<List<Map<String, Any?>>?>(null)
