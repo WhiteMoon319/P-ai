@@ -4,6 +4,8 @@ use std::fs;
 use std::path::PathBuf;
 use uuid::Uuid;
 
+use crate::core::domain::constants::{ASSISTANT_DEPARTMENT_ID, DEFAULT_AGENT_ID};
+use crate::core::domain::types_config::SHELL_WORK_MODE_DIRECTORY;
 use crate::core::domain::types_chat::{
     ChatMessage, Conversation, ConversationGoalState, ConversationTodoItem, FastRequestTurn,
     MessagePart,
