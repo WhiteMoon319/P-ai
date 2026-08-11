@@ -77,7 +77,9 @@ class AppViewModel(
         loadCachedConversations()
         client.connect()
         notificationJob = scope.launch(Dispatchers.IO) {
-            client.notifications.collectLatest { (method, params) ->
+            // 用 collect 而非 collectLatest：流式 delta 必须顺序累积，
+            // collectLatest 会在新事件到达时取消上一个处理（丢/乱序 delta）。
+            client.notifications.collect { (method, params) ->
                 handleNotification(method, params)
             }
         }

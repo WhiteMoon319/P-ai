@@ -94,9 +94,9 @@ class PaiWsClient(private val scope: CoroutineScope) {
             } catch (_: Exception) {
                 null
             }
-            scope.launch(Dispatchers.IO) {
-                _notifications.emit(method to params)
-            }
+            // 顺序同步 emit：不能 launch 并发，否则流式 delta 顺序错乱（词序颠倒）。
+            // SharedFlow.emit 在无订阅者时直接丢弃，有订阅者（notificationJob）时同步投递。
+            _notifications.tryEmit(method to params)
         }
     }
 
