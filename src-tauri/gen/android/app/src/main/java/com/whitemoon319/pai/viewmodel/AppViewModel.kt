@@ -537,6 +537,53 @@ class AppViewModel(
         }
     }
 
+    // ---------------- 长期目标（goal） ----------------
+
+    val currentGoal = MutableStateFlow<Map<String, Any?>?>(null)
+    val goalLoading = MutableStateFlow(false)
+
+    /** 查询当前会话目标。 */
+    suspend fun loadCurrentGoal(conversationId: String) {
+        withContext(Dispatchers.IO) {
+            goalLoading.value = true
+            try {
+                currentGoal.value = service.goalCurrent(conversationId)
+            } catch (e: Exception) {
+                error.value = "读取目标失败: ${e.message}"
+            } finally {
+                goalLoading.value = false
+            }
+        }
+    }
+
+    /** 创建/更新目标。 */
+    suspend fun createGoal(conversationId: String, objective: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val result = service.goalCreate(conversationId, objective)
+                currentGoal.value = result
+                true
+            } catch (e: Exception) {
+                error.value = "创建目标失败: ${e.message}"
+                false
+            }
+        }
+    }
+
+    /** 取消目标。 */
+    suspend fun cancelGoal(conversationId: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val result = service.goalCancel(conversationId)
+                currentGoal.value = result
+                true
+            } catch (e: Exception) {
+                error.value = "取消目标失败: ${e.message}"
+                false
+            }
+        }
+    }
+
     /** 当前会话提示词预览：返回 (标题, 内容)。 */
     suspend fun promptPreviewForCurrent(): Pair<String, String>? {
         val conversationId = currentConversationId.value ?: return null

@@ -283,6 +283,10 @@ async fn native_dispatch(
         "conversation.compact" => ide_chat_compact_conversation(state, params).await,
         "conversation.compactPreview" => ide_chat_compact_preview(state, params),
         "conversation.autoPush" => ide_chat_set_auto_push_command(state, params),
+        // ---- 长期目标（goal）----
+        "goal.current" => ide_chat_goal_current(state, params),
+        "goal.create" => ide_chat_goal_create(state, params),
+        "goal.cancel" => ide_chat_goal_cancel(state, params),
         // ---- 委托任务（delegate）----
         "delegate.conversations.list" => ide_chat_list_delegate_conversations_for_web_settings(state),
         "delegate.statuses" => ide_chat_delegate_statuses_command(state, params),

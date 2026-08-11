@@ -230,6 +230,27 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("delegate.submit", mapOf("input" to input), Map::class.java) as Map<String, Any?>
     }
 
+    // ---------------- 长期目标（goal） ----------------
+
+    /** 查询会话当前目标。 */
+    suspend fun goalCurrent(conversationId: String): Map<String, Any?> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("goal.current", mapOf("conversationId" to conversationId), Map::class.java) as Map<String, Any?>
+    }
+
+    /** 创建/更新会话目标。 */
+    suspend fun goalCreate(conversationId: String, objective: String): Map<String, Any?> {
+        val input = mapOf("conversationId" to conversationId, "objective" to objective)
+        @Suppress("UNCHECKED_CAST")
+        return client.request("goal.create", input, Map::class.java) as Map<String, Any?>
+    }
+
+    /** 取消会话目标。 */
+    suspend fun goalCancel(conversationId: String): Map<String, Any?> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("goal.cancel", mapOf("conversationId" to conversationId), Map::class.java) as Map<String, Any?>
+    }
+
     /** 当前会话提示词预览（get_prompt_preview）。 */
     suspend fun promptPreview(
         conversationId: String,

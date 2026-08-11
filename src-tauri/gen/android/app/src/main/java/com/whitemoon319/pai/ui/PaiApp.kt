@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Compress
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
@@ -885,6 +886,8 @@ fun ChatScreen(
     var delegateTodo by remember { mutableStateOf("") }
     var delegateTargetDept by remember { mutableStateOf("") }
     var delegateTargetAgent by remember { mutableStateOf("") }
+    var showGoalDialog by remember { mutableStateOf(false) }
+    var goalObjective by remember { mutableStateOf("") }
 
     // 消息/流式输出/活动步骤变化时自动滚动到最底部
     LaunchedEffect(messages.size, streaming.length, activitySteps.size) {
@@ -935,6 +938,15 @@ fun ChatScreen(
                     }
                 }) {
                     Icon(Icons.Default.Description, contentDescription = "查看提示词")
+                }
+                IconButton(onClick = {
+                    val convId = vm.currentConversationId.value
+                    if (convId != null) {
+                        scope.launch { vm.loadCurrentGoal(convId) }
+                    }
+                    showGoalDialog = true
+                }) {
+                    Icon(Icons.Default.Flag, contentDescription = "目标")
                 }
                 IconButton(onClick = onSettings) {
                     Icon(Icons.Default.Settings, contentDescription = "设置")
@@ -1276,6 +1288,67 @@ fun ChatScreen(
                 ) { Text("提交") }
             },
             dismissButton = { TextButton(onClick = { showDelegateDialog = false }) { Text("取消") } },
+        )
+    }
+
+    if (showGoalDialog) {
+        val currentGoal by vm.currentGoal.collectAsState()
+        val goalText = (currentGoal?.get("objective") as? String)
+            ?: (currentGoal?.get("goal") as? String)
+            ?: ""
+        LaunchedEffect(currentGoal) {
+            goalObjective = goalText
+        }
+        AlertDialog(
+            onDismissRequest = { showGoalDialog = false },
+            title = { Text("长期目标") },
+            text = {
+                Column {
+                    if (goalText.isNotBlank()) {
+                        Text(
+                            "当前目标：$goalText",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    OutlinedTextField(
+                        value = goalObjective,
+                        onValueChange = { goalObjective = it },
+                        label = { Text("目标内容") },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = goalObjective.isNotBlank(),
+                    onClick = {
+                        showGoalDialog = false
+                        val convId = vm.currentConversationId.value
+                        if (convId != null && goalObjective.isNotBlank()) {
+                            scope.launch {
+                                val ok = vm.createGoal(convId, goalObjective)
+                                if (ok) {
+                                    android.widget.Toast.makeText(chatContext, "目标已更新", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    },
+                ) { Text("保存目标") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGoalDialog = false }) { Text("取消") }
+                if (goalText.isNotBlank()) {
+                    TextButton(onClick = {
+                        showGoalDialog = false
+                        val convId = vm.currentConversationId.value
+                        if (convId != null) {
+                            scope.launch { vm.cancelGoal(convId) }
+                        }
+                    }) { Text("取消目标") }
+                }
+            },
         )
     }
 }
