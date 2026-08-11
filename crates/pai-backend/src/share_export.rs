@@ -1,18 +1,21 @@
+use serde::Deserialize;
+use std::path::PathBuf;
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct WriteUtf8TextFileInput {
-    pub(crate) path: String,
-    pub(crate) text: String,
+pub struct WriteUtf8TextFileInput {
+    pub path: String,
+    pub text: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct WriteBase64FileInput {
-    pub(crate) path: String,
-    pub(crate) bytes_base64: String,
+pub struct WriteBase64FileInput {
+    pub path: String,
+    pub bytes_base64: String,
 }
 
-pub(crate) fn normalize_export_path(raw: &str) -> Result<PathBuf, String> {
+pub fn normalize_export_path(raw: &str) -> Result<PathBuf, String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err("导出路径不能为空".to_string());
@@ -26,7 +29,7 @@ pub(crate) fn normalize_export_path(raw: &str) -> Result<PathBuf, String> {
     Ok(PathBuf::from(trimmed))
 }
 
-pub(crate) fn ensure_share_export_parent_dir(path: &PathBuf) -> Result<(), String> {
+pub fn ensure_share_export_parent_dir(path: &PathBuf) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
             std::fs::create_dir_all(parent)

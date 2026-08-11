@@ -49,7 +49,8 @@ include!("commands/android_workspace_paths.rs");
 include!("commands/android_workspace.rs");
 
 // ==================== 分享导出命令 ====================
-include!("commands/share_export_commands.rs");
+// share_export_commands 已迁至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::share_export::*;
 
 // ==================== 记忆整理（独立模块） ====================
 include!("commands/memory_curation/prompt_contract.rs");
