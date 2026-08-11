@@ -1074,6 +1074,35 @@ class AppViewModel(
         }
     }
 
+    val llmRoundLogs = MutableStateFlow<List<Map<String, Any?>>?>(null)
+    val llmRoundLogsLoading = MutableStateFlow(false)
+
+    suspend fun loadLlmRoundLogs() {
+        withContext(Dispatchers.IO) {
+            llmRoundLogsLoading.value = true
+            try {
+                llmRoundLogs.value = service.listRecentLlmRoundLogs()
+            } catch (e: Exception) {
+                error.value = "读取 LLM 轮次日志失败: ${e.message}"
+            } finally {
+                llmRoundLogsLoading.value = false
+            }
+        }
+    }
+
+    suspend fun clearLlmRoundLogs(): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val ok = service.clearRecentLlmRoundLogs()
+                if (ok) llmRoundLogs.value = emptyList()
+                ok
+            } catch (e: Exception) {
+                error.value = "清空 LLM 轮次日志失败: ${e.message}"
+                false
+            }
+        }
+    }
+
     val storageOverview = MutableStateFlow<Map<String, Any?>?>(null)
     val storageLoading = MutableStateFlow(false)
 

@@ -293,6 +293,16 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("list_recent_runtime_logs", emptyMap<String, Any?>(), List::class.java) as List<Map<String, Any?>>
     }
 
+    /** LLM 轮次日志（诊断）。 */
+    suspend fun listRecentLlmRoundLogs(): List<Map<String, Any?>> {
+        @Suppress("UNCHECKED_CAST")
+        return client.request("list_recent_llm_round_logs", emptyMap<String, Any?>(), List::class.java) as List<Map<String, Any?>>
+    }
+
+    /** 清空 LLM 轮次日志。 */
+    suspend fun clearRecentLlmRoundLogs(): Boolean =
+        client.request("clear_recent_llm_round_logs", emptyMap<String, Any?>(), Boolean::class.java)
+
     suspend fun mcpListServers(): List<Map<String, Any?>> {
         @Suppress("UNCHECKED_CAST")
         return client.request("mcp_list_servers", emptyMap<String, Any?>(), List::class.java) as List<Map<String, Any?>>

@@ -2474,25 +2474,45 @@ private fun LogsSettingsTab(vm: AppViewModel) {
     val scope = rememberCoroutineScope()
     val logs by vm.runtimeLogs.collectAsState()
     val loading by vm.runtimeLogsLoading.collectAsState()
+    val llmLogs by vm.llmRoundLogs.collectAsState()
+    val llmLoading by vm.llmRoundLogsLoading.collectAsState()
+    var showLlm by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { vm.loadRuntimeLogs() }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("运行日志", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            TextButton(onClick = { scope.launch { vm.loadRuntimeLogs() } }, enabled = !loading) { Text(if (loading) "加载中…" else "刷新") }
+            Text(if (showLlm) "LLM 轮次日志" else "运行日志", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = {
+                scope.launch {
+                    if (showLlm) vm.loadLlmRoundLogs() else vm.loadRuntimeLogs()
+                }
+            }, enabled = !(if (showLlm) llmLoading else loading)) {
+                Text(if ((if (showLlm) llmLoading else loading)) "加载中…" else "刷新")
+            }
+            TextButton(onClick = {
+                showLlm = !showLlm
+                if (showLlm) {
+                    scope.launch { vm.loadLlmRoundLogs() }
+                }
+            }) { Text(if (showLlm) "运行日志" else "LLM 轮次") }
+            if (showLlm) {
+                TextButton(onClick = { scope.launch { vm.clearLlmRoundLogs() } }) { Text("清空") }
+            }
         }
-        if (logs.isNullOrEmpty()) {
+        val displayLogs = if (showLlm) llmLogs else logs
+        val displayLoading = if (showLlm) llmLoading else loading
+        if (displayLogs.isNullOrEmpty()) {
             Text(
-                if (loading) "加载中…" else "暂无日志",
+                if (displayLoading) "加载中…" else "暂无日志",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(16.dp),
             )
         } else {
             LazyColumn(Modifier.weight(1f)) {
-                items(logs!!.size) { index ->
-                    val log = logs!![index]
+                items(displayLogs!!.size) { index ->
+                    val log = displayLogs!![index]
                     val level = log["level"] as? String ?: "info"
                     val message = log["message"] as? String ?: ""
                     val time = log["createdAt"] as? String ?: ""

@@ -357,6 +357,10 @@ async fn native_dispatch(
         "append_runtime_log_probe" => append_runtime_log_probe(
             params.get("message").and_then(Value::as_str).map(str::to_string),
         ).and_then(ide_chat_serialize),
+        // ---- LLM 轮次日志（诊断）----
+        "list_recent_llm_round_logs" => ide_chat_list_recent_llm_round_logs_for_web_settings(state),
+        "get_recent_llm_round_log_section" => ide_chat_get_recent_llm_round_log_section_for_web_settings(state, params),
+        "clear_recent_llm_round_logs" => ide_chat_clear_recent_llm_round_logs_for_web_settings(state),
         // ---- Vue 设置页对齐：记忆 ----
         "list_memories" => ide_chat_list_memories_for_web_settings(state),
         "delete_memory" => ide_chat_delete_memory_for_web_settings(state, params),
