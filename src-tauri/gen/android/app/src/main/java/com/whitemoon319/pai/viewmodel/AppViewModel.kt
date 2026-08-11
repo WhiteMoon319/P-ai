@@ -834,6 +834,8 @@ class AppViewModel(
                             }
                             activitySteps.value = emptyList()
                             finalizeStreaming()
+                            // 回合完成：刷新会话列表（更新预览/时间/未读数）
+                            scope.launch { refreshConversations() }
                         }
                         "round_failed" -> {
                             val msgJson = event?.message
