@@ -23,8 +23,9 @@ use uuid::Uuid;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use super::*;
-include!("mcp/types.rs");
-include!("mcp/parser.rs");
+// mcp/types.rs 与 mcp/parser.rs 已迁移至 crates/pai-backend（阶段 4）。
+pub(crate) use pai_backend::mcp::types::*;
+pub(crate) use pai_backend::mcp::parser::*;
 include!("mcp/workspace.rs");
 include!("mcp/runtime_manager.rs");
 include!("mcp/commands.rs");

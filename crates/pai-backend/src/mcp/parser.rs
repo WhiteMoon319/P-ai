@@ -1,4 +1,9 @@
-pub(crate) fn mcp_definition_json_schema() -> Value {
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::mcp::types::*;
+
+pub fn mcp_definition_json_schema() -> Value {
     serde_json::json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": "P-ai MCP Definition",
@@ -42,19 +47,19 @@ pub(crate) fn mcp_definition_json_schema() -> Value {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct McpValidationIssue {
-    pub(crate) code: String,
-    pub(crate) message: String,
+pub struct McpValidationIssue {
+    pub code: String,
+    pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) server_name: Option<String>,
+    pub server_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) field: Option<String>,
+    pub field: Option<String>,
     #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
-    pub(crate) params: std::collections::HashMap<String, String>,
+    pub params: std::collections::HashMap<String, String>,
 }
 
 impl McpValidationIssue {
-    pub(crate) fn new(code: &str, message: String) -> Self {
+    pub fn new(code: &str, message: String) -> Self {
         Self {
             code: code.to_string(),
             message,
@@ -64,30 +69,30 @@ impl McpValidationIssue {
         }
     }
 
-    pub(crate) fn with_server(mut self, server_name: &str) -> Self {
+    pub fn with_server(mut self, server_name: &str) -> Self {
         self.server_name = Some(server_name.to_string());
         self
     }
 
-    pub(crate) fn with_field(mut self, field: &str) -> Self {
+    pub fn with_field(mut self, field: &str) -> Self {
         self.field = Some(field.to_string());
         self
     }
 
-    pub(crate) fn with_param(mut self, key: &str, value: &str) -> Self {
+    pub fn with_param(mut self, key: &str, value: &str) -> Self {
         self.params.insert(key.to_string(), value.to_string());
         self
     }
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct McpDefinitionValidationError {
-    pub(crate) message: String,
-    pub(crate) issues: Vec<McpValidationIssue>,
+pub struct McpDefinitionValidationError {
+    pub message: String,
+    pub issues: Vec<McpValidationIssue>,
 }
 
 impl McpDefinitionValidationError {
-    pub(crate) fn from_issue(issue: McpValidationIssue) -> Self {
+    pub fn from_issue(issue: McpValidationIssue) -> Self {
         Self {
             message: issue.message.clone(),
             issues: vec![issue],
@@ -97,7 +102,7 @@ impl McpDefinitionValidationError {
 
 // ========== JSON 值读取（别名兼容） ==========
 
-pub(crate) fn value_get<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
+pub fn value_get<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
     value
         .get(key)
         .or_else(|| value.get(&key.to_ascii_lowercase()))
@@ -121,7 +126,7 @@ pub(crate) fn value_get<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
         })
 }
 
-pub(crate) fn value_get_string(value: &Value, key: &str) -> Option<String> {
+pub fn value_get_string(value: &Value, key: &str) -> Option<String> {
     value_get(value, key)
         .and_then(Value::as_str)
         .map(|s| s.trim().to_string())
@@ -131,7 +136,7 @@ pub(crate) fn value_get_string(value: &Value, key: &str) -> Option<String> {
 /// 读取字符串映射，兼容两种值形态：
 /// - 字符串: "KEY": "value"
 /// - 对象:   "KEY": { "value": "xxx", "secret": true }（取 value 字段）
-pub(crate) fn value_get_map_string_string(
+pub fn value_get_map_string_string(
     value: &Value,
     key: &str,
 ) -> std::collections::HashMap<String, String> {
@@ -160,7 +165,7 @@ pub(crate) fn value_get_map_string_string(
     out
 }
 
-pub(crate) fn value_get_string_array(value: &Value, key: &str) -> Vec<String> {
+pub fn value_get_string_array(value: &Value, key: &str) -> Vec<String> {
     value_get(value, key)
         .and_then(Value::as_array)
         .map(|items| {
@@ -178,13 +183,13 @@ pub(crate) fn value_get_string_array(value: &Value, key: &str) -> Vec<String> {
 // ========== 多格式展开 ==========
 
 #[derive(Debug, Clone)]
-pub(crate) struct ParsedMcpDefinition {
-    pub(crate) servers: Vec<(String, Value)>,
-    pub(crate) issues: Vec<McpValidationIssue>,
+pub struct ParsedMcpDefinition {
+    pub servers: Vec<(String, Value)>,
+    pub issues: Vec<McpValidationIssue>,
 }
 
 /// 判定某字段是否为"单 server 直接字段"（出现时根对象不再视为命名 server 集合）
-pub(crate) fn is_server_direct_field(key: &str) -> bool {
+pub fn is_server_direct_field(key: &str) -> bool {
     matches!(
         key,
         "command"
@@ -203,7 +208,7 @@ pub(crate) fn is_server_direct_field(key: &str) -> bool {
     )
 }
 
-pub(crate) fn issue_server_missing_name(index: usize) -> McpValidationIssue {
+pub fn issue_server_missing_name(index: usize) -> McpValidationIssue {
     McpValidationIssue::new(
         "server_missing_name",
         format!("server at index {index} is missing required 'name'"),
@@ -211,7 +216,7 @@ pub(crate) fn issue_server_missing_name(index: usize) -> McpValidationIssue {
     .with_param("index", &index.to_string())
 }
 
-pub(crate) fn issue_duplicate_name(name: &str) -> McpValidationIssue {
+pub fn issue_duplicate_name(name: &str) -> McpValidationIssue {
     McpValidationIssue::new(
         "duplicate_name",
         format!("duplicate server name '{name}' in definition"),
@@ -219,7 +224,7 @@ pub(crate) fn issue_duplicate_name(name: &str) -> McpValidationIssue {
     .with_server(name)
 }
 
-pub(crate) fn parse_server_array(
+pub fn parse_server_array(
     items: &[Value],
     field_path: &str,
 ) -> Result<ParsedMcpDefinition, McpDefinitionValidationError> {
@@ -254,7 +259,7 @@ pub(crate) fn parse_server_array(
     })
 }
 
-pub(crate) fn parse_named_server_map(
+pub fn parse_named_server_map(
     map: &serde_json::Map<String, Value>,
     field_path: &str,
 ) -> Result<ParsedMcpDefinition, McpDefinitionValidationError> {
@@ -293,7 +298,7 @@ pub(crate) fn parse_named_server_map(
 /// 5. 单 server 直接字段（向后兼容）
 ///
 /// Err 只用于整体无法解析（JSON 语法错、根类型错、空容器、mcpServers 类型错）。
-pub(crate) fn normalize_mcp_member_name(raw: &str) -> Option<String> {
+pub fn normalize_mcp_member_name(raw: &str) -> Option<String> {
     let mut out = String::with_capacity(raw.len());
     let mut has_legal_identifier_char = false;
     let mut previous_was_separator = false;
@@ -315,11 +320,11 @@ pub(crate) fn normalize_mcp_member_name(raw: &str) -> Option<String> {
     Some(out.trim_matches('_').to_string())
 }
 
-pub(crate) fn normalized_mcp_member_name_or_original(raw: &str) -> String {
+pub fn normalized_mcp_member_name_or_original(raw: &str) -> String {
     normalize_mcp_member_name(raw).unwrap_or_else(|| raw.trim().to_string())
 }
 
-pub(crate) fn normalized_unique_mcp_member_name(raw: &str, used_names: &mut std::collections::HashSet<String>) -> String {
+pub fn normalized_unique_mcp_member_name(raw: &str, used_names: &mut std::collections::HashSet<String>) -> String {
     let base = normalized_mcp_member_name_or_original(raw);
     if used_names.insert(base.clone()) {
         return base;
@@ -334,7 +339,7 @@ pub(crate) fn normalized_unique_mcp_member_name(raw: &str, used_names: &mut std:
     }
 }
 
-pub(crate) fn normalize_mcp_member_name_in_array(items: &mut [Value]) {
+pub fn normalize_mcp_member_name_in_array(items: &mut [Value]) {
     let mut used_names = std::collections::HashSet::<String>::new();
     for item in items {
         let Some(object) = item.as_object_mut() else {
@@ -350,7 +355,7 @@ pub(crate) fn normalize_mcp_member_name_in_array(items: &mut [Value]) {
     }
 }
 
-pub(crate) fn normalize_mcp_member_name_in_map(map: &mut serde_json::Map<String, Value>) {
+pub fn normalize_mcp_member_name_in_map(map: &mut serde_json::Map<String, Value>) {
     let original = std::mem::take(map);
     let mut used_names = std::collections::HashSet::<String>::new();
     for (name, value) in original {
@@ -358,7 +363,7 @@ pub(crate) fn normalize_mcp_member_name_in_map(map: &mut serde_json::Map<String,
     }
 }
 
-pub(crate) fn normalize_mcp_definition_member_names(definition_json: &str) -> Result<String, String> {
+pub fn normalize_mcp_definition_member_names(definition_json: &str) -> Result<String, String> {
     let mut definition: Value = serde_json::from_str(definition_json)
         .map_err(|err| format!("Parse MCP definition JSON failed: {err}"))?;
     if let Some(items) = definition.as_array_mut() {
@@ -389,7 +394,7 @@ pub(crate) fn normalize_mcp_definition_member_names(definition_json: &str) -> Re
         .map_err(|err| format!("Serialize normalized MCP definition JSON failed: {err}"))
 }
 
-pub(crate) fn parse_mcp_definition_servers(
+pub fn parse_mcp_definition_servers(
     definition_json: &str,
 ) -> Result<ParsedMcpDefinition, McpDefinitionValidationError> {
     let parsed: Value = serde_json::from_str(definition_json).map_err(|err| {
@@ -455,7 +460,7 @@ pub(crate) fn parse_mcp_definition_servers(
 
 /// 展开 + 逐 server 字段校验，返回 (可用 servers, 全部 issues)。
 /// 结构问题（缺 name、内部重名、类型错）与字段问题（缺 command/url、args/env 类型错）都聚合在 issues。
-pub(crate) fn validate_mcp_definition_servers(
+pub fn validate_mcp_definition_servers(
     definition_json: &str,
 ) -> (Vec<(String, Value)>, Vec<McpValidationIssue>) {
     match parse_mcp_definition_servers(definition_json) {
@@ -475,7 +480,7 @@ pub(crate) fn validate_mcp_definition_servers(
 // ========== 单 server 解析（兼容既有调用方） ==========
 
 /// 校验单个 server 对象，错误以 issues 返回
-pub(crate) fn validate_single_server_obj(
+pub fn validate_single_server_obj(
     server_obj: &serde_json::Map<String, Value>,
     server_name: &str,
     issues: &mut Vec<McpValidationIssue>,
@@ -565,7 +570,7 @@ pub(crate) fn validate_single_server_obj(
     }
 }
 
-pub(crate) fn parse_mcp_server_definition_from_value(
+pub fn parse_mcp_server_definition_from_value(
     _server_name: &str,
     root: &Value,
 ) -> Result<ParsedMcpServerDefinition, String> {
@@ -637,7 +642,7 @@ pub(crate) fn parse_mcp_server_definition_from_value(
     })
 }
 
-pub(crate) fn parse_mcp_server_definition(definition_json: &str) -> Result<(String, ParsedMcpServerDefinition), String> {
+pub fn parse_mcp_server_definition(definition_json: &str) -> Result<(String, ParsedMcpServerDefinition), String> {
     let parsed = parse_mcp_definition_servers(definition_json)
         .map_err(|err| format!("{}", err.message))?;
     let (server_name, root) = parsed

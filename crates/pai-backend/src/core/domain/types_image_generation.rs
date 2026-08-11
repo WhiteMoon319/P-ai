@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum ImageGenerationProviderKind {
+pub enum ImageGenerationProviderKind {
     Comfyui,
     Codex,
     Openai,
@@ -9,8 +11,13 @@ pub(crate) enum ImageGenerationProviderKind {
     Gemini,
 }
 
-pub(crate) const CODEX_IMAGE_MAIN_MODEL: &str = "gpt-5.6-luna";
-pub(crate) const CODEX_IMAGE_TOOL_MODEL: &str = "gpt-image-2";
+/// serde default 辅助（从 src-tauri core/domain/types_config.rs 内联迁入）。
+pub fn default_true() -> bool {
+    true
+}
+
+pub const CODEX_IMAGE_MAIN_MODEL: &str = "gpt-5.6-luna";
+pub const CODEX_IMAGE_TOOL_MODEL: &str = "gpt-image-2";
 
 impl Default for ImageGenerationProviderKind {
     fn default() -> Self {
@@ -19,7 +26,7 @@ impl Default for ImageGenerationProviderKind {
 }
 
 impl ImageGenerationProviderKind {
-    pub(crate) fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::Comfyui => "comfyui",
             Self::Codex => "codex",
@@ -33,20 +40,20 @@ impl ImageGenerationProviderKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ImageGenerationModelConfig {
-    pub(crate) id: String,
-    pub(crate) name: String,
-    pub(crate) model: String,
+pub struct ImageGenerationModelConfig {
+    pub id: String,
+    pub name: String,
+    pub model: String,
     #[serde(default = "default_true")]
-    pub(crate) enabled: bool,
+    pub enabled: bool,
     #[serde(default)]
-    pub(crate) deprecated: bool,
+    pub deprecated: bool,
     #[serde(default)]
-    pub(crate) default_size: Option<String>,
+    pub default_size: Option<String>,
     #[serde(default)]
-    pub(crate) default_aspect_ratio: Option<String>,
+    pub default_aspect_ratio: Option<String>,
     #[serde(default)]
-    pub(crate) default_quality: Option<String>,
+    pub default_quality: Option<String>,
 }
 
 impl Default for ImageGenerationModelConfig {
@@ -66,15 +73,15 @@ impl Default for ImageGenerationModelConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ComfyUiNodeInputMapping {
+pub struct ComfyUiNodeInputMapping {
     #[serde(default)]
-    pub(crate) node_ids: Vec<String>,
+    pub node_ids: Vec<String>,
     #[serde(default)]
-    pub(crate) input_key: String,
+    pub input_key: String,
 }
 
 impl ComfyUiNodeInputMapping {
-    pub(crate) fn with_input_key(input_key: &str) -> Self {
+    pub fn with_input_key(input_key: &str) -> Self {
         Self {
             node_ids: Vec::new(),
             input_key: input_key.to_string(),
@@ -90,62 +97,62 @@ impl Default for ComfyUiNodeInputMapping {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ComfyUiWorkflowMapping {
+pub struct ComfyUiWorkflowMapping {
     #[serde(default = "default_comfyui_prompt_mapping")]
-    pub(crate) prompt: ComfyUiNodeInputMapping,
+    pub prompt: ComfyUiNodeInputMapping,
     #[serde(default = "default_comfyui_negative_prompt_mapping")]
-    pub(crate) negative_prompt: ComfyUiNodeInputMapping,
+    pub negative_prompt: ComfyUiNodeInputMapping,
     #[serde(default = "default_comfyui_model_mapping")]
-    pub(crate) model: ComfyUiNodeInputMapping,
+    pub model: ComfyUiNodeInputMapping,
     #[serde(default = "default_comfyui_width_mapping")]
-    pub(crate) width: ComfyUiNodeInputMapping,
+    pub width: ComfyUiNodeInputMapping,
     #[serde(default = "default_comfyui_height_mapping")]
-    pub(crate) height: ComfyUiNodeInputMapping,
+    pub height: ComfyUiNodeInputMapping,
     #[serde(default = "default_comfyui_seed_mapping")]
-    pub(crate) seed: ComfyUiNodeInputMapping,
+    pub seed: ComfyUiNodeInputMapping,
     #[serde(default = "default_comfyui_steps_mapping")]
-    pub(crate) steps: ComfyUiNodeInputMapping,
+    pub steps: ComfyUiNodeInputMapping,
     #[serde(default = "default_comfyui_input_image_mapping")]
-    pub(crate) input_image: ComfyUiNodeInputMapping,
+    pub input_image: ComfyUiNodeInputMapping,
     #[serde(default = "default_comfyui_mask_image_mapping")]
-    pub(crate) mask_image: ComfyUiNodeInputMapping,
+    pub mask_image: ComfyUiNodeInputMapping,
     #[serde(default)]
-    pub(crate) output_node_ids: Vec<String>,
+    pub output_node_ids: Vec<String>,
 }
 
-pub(crate) fn default_comfyui_prompt_mapping() -> ComfyUiNodeInputMapping {
+pub fn default_comfyui_prompt_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("text")
 }
 
-pub(crate) fn default_comfyui_negative_prompt_mapping() -> ComfyUiNodeInputMapping {
+pub fn default_comfyui_negative_prompt_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("text")
 }
 
-pub(crate) fn default_comfyui_model_mapping() -> ComfyUiNodeInputMapping {
+pub fn default_comfyui_model_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("ckpt_name")
 }
 
-pub(crate) fn default_comfyui_width_mapping() -> ComfyUiNodeInputMapping {
+pub fn default_comfyui_width_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("width")
 }
 
-pub(crate) fn default_comfyui_height_mapping() -> ComfyUiNodeInputMapping {
+pub fn default_comfyui_height_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("height")
 }
 
-pub(crate) fn default_comfyui_seed_mapping() -> ComfyUiNodeInputMapping {
+pub fn default_comfyui_seed_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("seed")
 }
 
-pub(crate) fn default_comfyui_steps_mapping() -> ComfyUiNodeInputMapping {
+pub fn default_comfyui_steps_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("steps")
 }
 
-pub(crate) fn default_comfyui_input_image_mapping() -> ComfyUiNodeInputMapping {
+pub fn default_comfyui_input_image_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("image")
 }
 
-pub(crate) fn default_comfyui_mask_image_mapping() -> ComfyUiNodeInputMapping {
+pub fn default_comfyui_mask_image_mapping() -> ComfyUiNodeInputMapping {
     ComfyUiNodeInputMapping::with_input_key("image")
 }
 
@@ -166,38 +173,38 @@ impl Default for ComfyUiWorkflowMapping {
     }
 }
 
-pub(crate) fn default_image_generation_timeout_seconds() -> u32 {
+pub fn default_image_generation_timeout_seconds() -> u32 {
     600
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ImageGenerationProviderConfig {
-    pub(crate) id: String,
-    pub(crate) name: String,
+pub struct ImageGenerationProviderConfig {
+    pub id: String,
+    pub name: String,
     #[serde(default)]
-    pub(crate) provider_type: ImageGenerationProviderKind,
+    pub provider_type: ImageGenerationProviderKind,
     #[serde(default = "default_true")]
-    pub(crate) enabled: bool,
+    pub enabled: bool,
     #[serde(default)]
-    pub(crate) deprecated: bool,
-    pub(crate) base_url: String,
+    pub deprecated: bool,
+    pub base_url: String,
     #[serde(default)]
-    pub(crate) api_keys: Vec<String>,
+    pub api_keys: Vec<String>,
     #[serde(default)]
-    pub(crate) codex_api_provider_id: Option<String>,
+    pub codex_api_provider_id: Option<String>,
     #[serde(default)]
-    pub(crate) key_cursor: u32,
+    pub key_cursor: u32,
     #[serde(default = "default_image_generation_timeout_seconds")]
-    pub(crate) timeout_seconds: u32,
+    pub timeout_seconds: u32,
     #[serde(default)]
-    pub(crate) watermark: bool,
+    pub watermark: bool,
     #[serde(default)]
-    pub(crate) models: Vec<ImageGenerationModelConfig>,
+    pub models: Vec<ImageGenerationModelConfig>,
     #[serde(default)]
-    pub(crate) comfyui_workflow_json: String,
+    pub comfyui_workflow_json: String,
     #[serde(default)]
-    pub(crate) comfyui_mapping: ComfyUiWorkflowMapping,
+    pub comfyui_mapping: ComfyUiWorkflowMapping,
 }
 
 impl Default for ImageGenerationProviderConfig {
@@ -221,6 +228,6 @@ impl Default for ImageGenerationProviderConfig {
     }
 }
 
-pub(crate) fn default_image_generation_providers() -> Vec<ImageGenerationProviderConfig> {
+pub fn default_image_generation_providers() -> Vec<ImageGenerationProviderConfig> {
     Vec::new()
 }

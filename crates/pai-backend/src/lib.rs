@@ -9,6 +9,7 @@
 
 pub mod core;
 pub mod delegate;
+pub mod mcp;
 pub mod skill;
 pub mod task;
 pub mod version_compare;

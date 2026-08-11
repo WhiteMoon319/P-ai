@@ -24,6 +24,7 @@ use super::*;
 // 核心常量与远端客服默认文案已迁移至 crates/pai-backend（阶段 4）。
 pub(crate) use pai_backend::core::domain::constants::*;
 pub(crate) use pai_backend::core::domain::remote_customer_service_defaults::*;
+pub(crate) use pai_backend::core::domain::types_image_generation::*;
 
 include!("domain/http_identity.rs");
 include!("domain/types.rs");
