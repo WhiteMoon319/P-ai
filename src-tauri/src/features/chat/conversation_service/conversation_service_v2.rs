@@ -80,66 +80,8 @@ pub(crate) struct ConversationOverwriteAudit {
     pub(crate) reason: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ConversationMetaView {
-    pub(crate) id: String,
-    pub(crate) title: String,
-    pub(crate) latest_summary_title: Option<String>,
-    pub(crate) status: String,
-    pub(crate) summary: String,
-    pub(crate) conversation_kind: String,
-    pub(crate) visible_in_foreground_lists: bool,
-    pub(crate) is_remote_im_contact: bool,
-    pub(crate) is_delegate: bool,
-    pub(crate) agent_id: String,
-    pub(crate) delegate_id: Option<String>,
-    pub(crate) department_id: String,
-    pub(crate) root_conversation_id: Option<String>,
-    pub(crate) unread_count: usize,
-    pub(crate) updated_at: String,
-    pub(crate) created_at: String,
-    pub(crate) archived_at: Option<String>,
-    pub(crate) last_user_at: Option<String>,
-    pub(crate) last_assistant_at: Option<String>,
-    pub(crate) message_count: usize,
-    pub(crate) body_message_count: usize,
-    pub(crate) body_text_length: usize,
-    pub(crate) has_assistant_reply: bool,
-    pub(crate) has_context_compaction_message: bool,
-    pub(crate) last_message_at: Option<String>,
-    pub(crate) parent_conversation_id: Option<String>,
-    pub(crate) child_conversation_ids: Vec<String>,
-    pub(crate) fork_message_cursor: Option<String>,
-    pub(crate) user_profile_snapshot: String,
-    pub(crate) preferred_api_config_id: Option<String>,
-    pub(crate) auto_push_remote_contact_id: Option<String>,
-    pub(crate) cumulative_usage: ConversationCumulativeUsage,
-    pub(crate) plan_mode_enabled: bool,
-    pub(crate) shell_workspace_path: Option<String>,
-    pub(crate) shell_workspaces: Vec<ShellWorkspaceConfig>,
-    pub(crate) shell_autonomous_mode: bool,
-    pub(crate) shell_work_mode: String,
-    pub(crate) current_todos: Vec<ConversationTodoItem>,
-    pub(crate) active_goal: Option<ConversationGoalState>,
-    pub(crate) fast_request_turns: Vec<FastRequestTurn>,
-    pub(crate) last_message_id: Option<String>,
-    pub(crate) preview_messages: Vec<ConversationMetaPreviewMessage>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ConversationMetaPreviewMessage {
-    pub(crate) message_id: String,
-    pub(crate) role: String,
-    pub(crate) speaker_agent_id: Option<String>,
-    pub(crate) created_at: Option<String>,
-    pub(crate) text_preview: String,
-    pub(crate) has_image: bool,
-    pub(crate) has_pdf: bool,
-    pub(crate) has_audio: bool,
-    pub(crate) has_attachment: bool,
-}
+// ConversationMetaView / ConversationMetaPreviewMessage 已迁至
+// crates/pai-backend message_store::meta（阶段 4），通过 crate 根重导出生效。
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -250,8 +192,7 @@ pub(crate) struct MessageProviderMetaBatchPatchInput {
     pub(crate) items: Vec<MessageProviderMetaPatchItem>,
 }
 
-impl ConversationMetaView {
-    pub(crate) fn from_meta(meta: &message_store::ConversationShardMeta) -> Self {
+pub(crate) fn conversation_meta_view_from_meta(meta: &message_store::ConversationShardMeta) -> ConversationMetaView {
         let preview_messages = meta
             .preview_messages()
             .iter()
@@ -268,7 +209,7 @@ impl ConversationMetaView {
             })
             .collect::<Vec<_>>();
         let last_message_id = meta.last_message_id().map(ToOwned::to_owned);
-        Self {
+        ConversationMetaView {
             id: meta.id().to_string(),
             title: meta.title().to_string(),
             latest_summary_title: meta.latest_summary_title().map(ToOwned::to_owned),
@@ -314,7 +255,6 @@ impl ConversationMetaView {
             last_message_id,
             preview_messages,
         }
-    }
 }
 
 pub(crate) const FRONTEND_MESSAGE_DISPLAY_TOOL_RESULT_PLACEHOLDER_TEXT: &str = "工具已执行，结果已省略。";
@@ -1157,7 +1097,7 @@ impl ConversationServiceV2 {
                 }
             },
         };
-        Ok(ConversationMetaView::from_meta(&meta))
+        Ok(conversation_meta_view_from_meta(&meta))
     }
 
     pub(crate) fn get_conversation_metadata_record(

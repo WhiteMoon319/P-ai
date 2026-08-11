@@ -39,7 +39,8 @@ pub(crate) mod message_store {
     pub(crate) use pai_backend::message_store::verification::*;
     // active_plan 已迁至 crates/pai-backend（阶段 4）。
     pub(crate) use pai_backend::message_store::active_plan::*;
-    include!("meta.rs");
+    // meta 已迁至 crates/pai-backend（阶段 4）。
+    pub(crate) use pai_backend::message_store::meta::*;
     include!("sqlite.rs");
     include!("store.rs");
     include!("persist.rs");

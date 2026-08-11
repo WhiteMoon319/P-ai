@@ -235,35 +235,9 @@ pub(crate) fn conversation_preview_title(conversation: &Conversation) -> String 
     }
 }
 
-pub(crate) fn build_conversation_preview_text(message: &ChatMessage) -> String {
-    let text = message
-        .parts
-        .iter()
-        .filter_map(|part| match part {
-            MessagePart::Text { text, .. } => Some(text.trim()),
-            _ => None,
-        })
-        .filter(|text| !text.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n");
-    truncate_conversation_preview_text(&clean_text(text.trim()))
-}
-
-pub(crate) fn truncate_conversation_preview_text(text: &str) -> String {
-    text.chars()
-        .take(CONVERSATION_PREVIEW_TEXT_CHAR_LIMIT)
-        .collect()
-}
-
-pub(crate) fn conversation_message_has_attachment(message: &ChatMessage) -> bool {
-    message
-        .provider_meta
-        .as_ref()
-        .and_then(|meta| meta.get("attachments"))
-        .and_then(Value::as_array)
-        .map(|items| !items.is_empty())
-        .unwrap_or(false)
-}
+// build_conversation_preview_text / truncate_conversation_preview_text /
+// conversation_message_has_attachment 已迁至 crates/pai-backend message_store::meta
+// （阶段 4），通过 crate 根重导出生效。
 
 pub(crate) fn build_conversation_preview_messages(
     conversation: &Conversation,

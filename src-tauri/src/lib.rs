@@ -68,6 +68,11 @@ pub(crate) use features_config_app_data_layout::*;
 // crates/pai-backend message_store::paths（阶段 4）。
 pub(crate) use pai_backend::message_store::paths::app_layout_chat_conversations_dir;
 pub(crate) use pai_backend::message_store::paths::app_layout_chat_dir;
+// crates/pai-backend message_store::meta（阶段 4）。
+pub(crate) use pai_backend::message_store::meta::{
+    build_conversation_preview_text, conversation_message_has_attachment,
+    conversation_latest_summary_title, ConversationMetaPreviewMessage, ConversationMetaView,
+};
 #[path = "features/chat/message_store/mod.rs"]
 mod features_chat_message_store_mod;
 pub(crate) use features_chat_message_store_mod::message_store;
