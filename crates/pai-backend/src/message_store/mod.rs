@@ -6,6 +6,7 @@ pub mod jsonl_snapshot;
 pub mod manifest;
 pub mod meta;
 pub mod paths;
+pub mod usage_trail;
 pub mod verification;
 
 pub use active_plan::*;
@@ -14,4 +15,5 @@ pub use jsonl_snapshot::*;
 pub use manifest::*;
 pub use meta::*;
 pub use paths::*;
+pub use usage_trail::*;
 pub use verification::*;

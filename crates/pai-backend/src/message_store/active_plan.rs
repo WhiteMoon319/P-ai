@@ -36,7 +36,7 @@ where
 
 /// 打开聊天元数据 DB（精简版：仅确保 active_plan_records 表存在，
 /// 完整 schema 由 src-tauri sqlite.rs 建立；此处只补充缺失表）。
-fn chat_metadata_store_open(data_path: &PathBuf) -> Result<rusqlite::Connection, String> {
+pub(crate) fn chat_metadata_store_open(data_path: &PathBuf) -> Result<rusqlite::Connection, String> {
     let db_path = chat_metadata_store_db_path(data_path);
     if let Some(parent) = db_path.parent() {
         fs::create_dir_all(parent).map_err(|err| {
