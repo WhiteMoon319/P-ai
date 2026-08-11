@@ -82,6 +82,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
@@ -1070,6 +1071,19 @@ fun ChatScreen(
                 } else {
                     listState.scrollToItem(last)
                 }
+            }
+        }
+    }
+
+    // 上滑到顶部时加载更早消息（对齐 Vue 历史消息分页）
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            val info = listState.layoutInfo
+            val firstVisible = info.visibleItemsInfo.firstOrNull()
+            firstVisible?.index == 0 && firstVisible.offset <= 0
+        }.collect { atTop ->
+            if (atTop && !loading && vm.hasMoreMessages.value && vm.messages.value.isNotEmpty()) {
+                scope.launch { vm.loadMoreMessages() }
             }
         }
     }

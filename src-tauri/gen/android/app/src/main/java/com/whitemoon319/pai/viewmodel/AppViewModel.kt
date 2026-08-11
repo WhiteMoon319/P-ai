@@ -395,6 +395,35 @@ class AppViewModel(
         }
     }
 
+    val loadingMoreMessages = MutableStateFlow(false)
+    val hasMoreMessages = MutableStateFlow(true)
+
+    /** 加载更早消息（插入列表头部）。 */
+    suspend fun loadMoreMessages() {
+        val conversationId = currentConversationId.value ?: return
+        if (loadingMoreMessages.value || !hasMoreMessages.value) return
+        val firstMessageId = messages.value.firstOrNull()?.id ?: return
+        loadingMoreMessages.value = true
+        withContext(Dispatchers.IO) {
+            try {
+                val (older, hasMore) = service.messagesBefore(conversationId, firstMessageId)
+                if (older.isNotEmpty()) {
+                    messages.value = older + messages.value
+                }
+                hasMoreMessages.value = hasMore
+            } catch (e: Exception) {
+                error.value = "加载更早消息失败: ${e.message}"
+            } finally {
+                loadingMoreMessages.value = false
+            }
+        }
+    }
+
+    fun resetMessagePagination() {
+        hasMoreMessages.value = true
+        loadingMoreMessages.value = false
+    }
+
     /** 压缩当前会话（compact：汇总旧消息释放上下文）。 */
     suspend fun compactCurrentConversation(): Boolean {
         val conversationId = currentConversationId.value ?: return false

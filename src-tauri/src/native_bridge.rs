@@ -274,6 +274,7 @@ async fn native_dispatch(
         "conversation.messageById" => ide_chat_conversation_message_by_id_command(state, params),
         "conversation.messagesBefore" => ide_chat_conversation_messages_before_command(state, params),
         "conversation.markRead" => ide_chat_mark_conversation_read(state, params),
+        "conversation.messagesBefore" => ide_chat_conversation_messages_before_command(state, params),
         "conversation.setPreferredModel" => ide_chat_set_preferred_model_command(state, params),
         "model.list" => ide_chat_model_list(state, params),
         "get_prompt_preview" => ide_chat_get_prompt_preview_for_web_settings(state, params).await,

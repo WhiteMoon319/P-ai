@@ -76,6 +76,25 @@ class ChatService(private val client: PaiWsClient) {
         return client.request("conversation.blockPage", input, BlockPageResult::class.java)
     }
 
+    /** 加载更早消息（conversation.messagesBefore）。返回 (messages, 是否还有更多)。 */
+    suspend fun messagesBefore(conversationId: String, beforeMessageId: String, limit: Int = 30): Pair<List<com.whitemoon319.pai.model.ChatMessage>, Boolean> {
+        val input = mapOf(
+            "conversationId" to conversationId,
+            "beforeMessageId" to beforeMessageId,
+            "limit" to limit,
+        )
+        @Suppress("UNCHECKED_CAST")
+        val result = client.request("conversation.messagesBefore", mapOf("input" to input), Map::class.java) as Map<String, Any?>
+        val messages = (result["messages"] as? List<Map<String, Any?>>).orEmpty().mapNotNull { raw ->
+            runCatching {
+                val gson = com.google.gson.Gson()
+                gson.fromJson(gson.toJson(raw), com.whitemoon319.pai.model.ChatMessage::class.java)
+            }.getOrNull()
+        }
+        val hasMore = (result["hasMore"] as? Boolean) ?: (messages.size >= limit)
+        return messages to hasMore
+    }
+
     suspend fun send(conversationId: String, departmentId: String?, agentId: String?, text: String): SubmitChatResult {
         val request = SendChatRequest(
             payload = com.whitemoon319.pai.model.ChatInputPayload(text = text),
