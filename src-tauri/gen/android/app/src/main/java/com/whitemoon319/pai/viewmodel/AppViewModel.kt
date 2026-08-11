@@ -67,7 +67,13 @@ class AppViewModel(
     val loading = MutableStateFlow(false)
     val error = MutableStateFlow<String?>(null)
 
+    private var started = false
+
     fun start() {
+        // 幂等保护：MainActivity.onCreate 与 PaiApp DisposableEffect 都会调用，
+        // 重复 start 会导致 connect 多次 → pollEvents 双循环 → 事件被消费两次（流式乱码）。
+        if (started) return
+        started = true
         loadCachedConversations()
         client.connect()
         notificationJob = scope.launch(Dispatchers.IO) {
@@ -88,6 +94,8 @@ class AppViewModel(
     }
 
     fun stop() {
+        if (!started) return
+        started = false
         notificationJob?.cancel()
         connectJob?.cancel()
         client.disconnect()
