@@ -333,47 +333,104 @@ private fun ConversationListScreenImpl(
                         }
                     } else {
                         LazyColumn(Modifier.fillMaxSize()) {
-                            items(filtered, key = { it.conversationId }) { conv ->
-                                ConversationRow(
-                                    conv = conv,
-                                    onClick = { onOpen(conv) },
-                                    onRename = { title ->
-                                        scope.launch { vm.renameConversation(conv.conversationId, title) }
-                                    },
-                                    onTogglePin = { pinned ->
-                                        scope.launch { vm.toggleConversationPin(conv.conversationId, pinned) }
-                                    },
-                            onArchive = {
-                                scope.launch { vm.archiveConversation(conv.conversationId) }
-                            },
-                            onExport = { convId ->
-                                scope.launch {
-                                    val result = vm.exportConversationShare(convId)
-                                    if (result != null) {
-                                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("PAI 会话导出", result.second))
-                                        android.widget.Toast.makeText(context, "已复制导出内容（${result.first}）", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
+                            val pinnedGroup = filtered.filter { it.isPinned == true }
+                            val othersGroup = filtered.filter { it.isPinned != true }
+                            if (pinnedGroup.isNotEmpty()) {
+                                item(key = "hdr_pinned") {
+                                    Text(
+                                        "置顶会话",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 2.dp),
+                                    )
                                 }
-                            },
-                            onAutoPush = { convId ->
-                                scope.launch {
-                                    vm.loadRemoteImContacts()
-                                    autoPushTargetConvId = convId
+                                items(pinnedGroup, key = { "p_${it.conversationId}" }) { conv ->
+                                    ConversationRow(
+                                        conv = conv,
+                                        onClick = { onOpen(conv) },
+                                        onRename = { title ->
+                                            scope.launch { vm.renameConversation(conv.conversationId, title) }
+                                        },
+                                        onTogglePin = { pinned ->
+                                            scope.launch { vm.toggleConversationPin(conv.conversationId, pinned) }
+                                        },
+                                        onArchive = {
+                                            scope.launch { vm.archiveConversation(conv.conversationId) }
+                                        },
+                                        onExport = { convId ->
+                                            scope.launch {
+                                                val result = vm.exportConversationShare(convId)
+                                                if (result != null) {
+                                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("PAI 会话导出", result.second))
+                                                    android.widget.Toast.makeText(context, "已复制导出内容（${result.first}）", android.widget.Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        },
+                                        onAutoPush = { convId ->
+                                            scope.launch {
+                                                vm.loadRemoteImContacts()
+                                                autoPushTargetConvId = convId
+                                            }
+                                        },
+                                        onDelete = {
+                                            scope.launch { vm.deleteConversation(conv.conversationId) }
+                                        },
+                                    )
+                                    HorizontalDivider()
                                 }
-                            },
-                            onDelete = {
-                                scope.launch { vm.deleteConversation(conv.conversationId) }
-                            },
-                        )
-                        HorizontalDivider()
+                            }
+                            if (othersGroup.isNotEmpty()) {
+                                item(key = "hdr_others") {
+                                    Text(
+                                        "最近会话",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 2.dp),
+                                    )
+                                }
+                                items(othersGroup, key = { "o_${it.conversationId}" }) { conv ->
+                                    ConversationRow(
+                                        conv = conv,
+                                        onClick = { onOpen(conv) },
+                                        onRename = { title ->
+                                            scope.launch { vm.renameConversation(conv.conversationId, title) }
+                                        },
+                                        onTogglePin = { pinned ->
+                                            scope.launch { vm.toggleConversationPin(conv.conversationId, pinned) }
+                                        },
+                                        onArchive = {
+                                            scope.launch { vm.archiveConversation(conv.conversationId) }
+                                        },
+                                        onExport = { convId ->
+                                            scope.launch {
+                                                val result = vm.exportConversationShare(convId)
+                                                if (result != null) {
+                                                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                                    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("PAI 会话导出", result.second))
+                                                    android.widget.Toast.makeText(context, "已复制导出内容（${result.first}）", android.widget.Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        },
+                                        onAutoPush = { convId ->
+                                            scope.launch {
+                                                vm.loadRemoteImContacts()
+                                                autoPushTargetConvId = convId
+                                            }
+                                        },
+                                        onDelete = {
+                                            scope.launch { vm.deleteConversation(conv.conversationId) }
+                                        },
+                                    )
+                                    HorizontalDivider()
+                                }
+                            }
+                            }
+                        }
                         }
                     }
                 }
-                }
             }
-        }
-    }
 
     if (showNewDialog) {
         val list = fullOptions.departments
