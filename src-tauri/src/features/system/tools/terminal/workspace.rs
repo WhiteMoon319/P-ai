@@ -128,6 +128,20 @@ fn terminal_session_conversation(state: &AppState, session_id: &str) -> Result<O
     conversation_service_v2().try_get_conversation_snapshot_fast(state, &conversation_id)
 }
 
+/// 轻量读取：只取会话元数据（工作区/Shell 模式等），不整读消息正文。
+/// 供会话工作区列表等 UI 轮询使用；需要消息内容的调用方仍走 terminal_session_conversation。
+fn terminal_session_conversation_meta(state: &AppState, session_id: &str) -> Result<Option<Conversation>, String> {
+    let Some(conversation_id) = terminal_session_conversation_id(session_id) else {
+        return Ok(None);
+    };
+    if let Some(conversation) = delegate_runtime_thread_conversation_get_any(state, &conversation_id)? {
+        return Ok(Some(conversation));
+    }
+    Ok(conversation_service_v2()
+        .get_conversation_metadata_record(state, &conversation_id)
+        .ok())
+}
+
 fn normalize_terminal_timeout_ms(timeout_ms: Option<u64>) -> u64 {
     let value = timeout_ms.unwrap_or(TERMINAL_DEFAULT_TIMEOUT_MS);
     value.max(1)
