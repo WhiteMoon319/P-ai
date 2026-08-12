@@ -13,3 +13,4 @@ pub mod sandbox;
 pub mod tls;
 pub mod chat;
 pub mod delegate;
+pub mod config;

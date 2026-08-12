@@ -58,9 +58,11 @@ pub(crate) use features_core_domain::*;
 pub(crate) use pai_backend::core::time_semantics::*;
 
 // ==================== 配置与存储 ====================
-#[path = "features/config/storage_and_stt.rs"]
-mod features_config_storage_and_stt;
-pub(crate) use features_config_storage_and_stt::*;
+// storage_and_stt.rs 纯逻辑已迁至 crates/pai-android-platform config（阶段 6）。
+pub(crate) use pai_android_platform::config::*;
+#[path = "features/config/resolve_api.rs"]
+mod features_config_resolve_api;
+pub(crate) use features_config_resolve_api::*;
 #[path = "features/config/app_data_layout.rs"]
 mod features_config_app_data_layout;
 pub(crate) use features_config_app_data_layout::*;
