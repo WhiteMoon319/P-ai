@@ -143,6 +143,7 @@ pub(crate) use features_remote_im_adapters::*;
 pub(crate) use pai_android_platform::remote_im::message_routing::*;
 pub(crate) use pai_android_platform::remote_im::contact_snapshots::*;
 pub(crate) use pai_android_platform::remote_im::inbound_validation::*;
+pub(crate) use pai_android_platform::remote_im::secretary_labelling::*;
 
 // ==================== 系统窗口与命令 ====================
 #[path = "features/system/windowing.rs"]

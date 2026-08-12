@@ -9,6 +9,7 @@ pub mod adapters;
 pub mod message_routing;
 pub mod contact_snapshots;
 pub mod inbound_validation;
+pub mod secretary_labelling;
 
 pub use feishu_sdk::*;
 pub use weixin_oc::*;
@@ -19,3 +20,4 @@ pub use adapters::*;
 pub use message_routing::*;
 pub use contact_snapshots::*;
 pub use inbound_validation::*;
+pub use secretary_labelling::*;
