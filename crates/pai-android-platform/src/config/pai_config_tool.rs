@@ -6,16 +6,12 @@ use std::{
 };
 
 use chrono::Utc;
-use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
 thread_local! {
     static OUTPUT_BUFFER: RefCell<String> = const { RefCell::new(String::new()) };
 }
-
-
-use super::*;
 
 const MODEL_ROLE_EXPERT_API_CONFIG_ID: &str = "role:expert";
 const MODEL_ROLE_QUICK_API_CONFIG_ID: &str = "role:quick";
@@ -358,11 +354,6 @@ pub(crate) struct CliContext {
     workspace_root: PathBuf,
 }
 
-#[allow(dead_code)]
-pub fn run_cli(args: &[String]) -> Result<String, String> {
-    let ctx = CliContext::detect()?;
-    run_with_context(&ctx, args)
-}
 
 #[allow(dead_code)]
 pub fn run_with_paths(
@@ -411,39 +402,6 @@ fn run_with_context(ctx: &CliContext, args: &[String]) -> Result<String, String>
     Ok(take_output_buffer())
 }
 
-impl CliContext {
-    #[allow(dead_code)]
-    fn detect() -> Result<Self, String> {
-        if let Ok(root) = std::env::var("PAI_APP_ROOT") {
-            let app_root = PathBuf::from(root);
-            return Ok(Self {
-                config_path: app_root.join("app_config.toml"),
-                data_path: app_root.join("app_data.json"),
-                workspace_root: app_root.join("llm-workspace"),
-                app_root,
-            });
-        }
-
-        if let Some(portable_root) = detect_portable_runtime_root() {
-            let config_dir = portable_root.join("config");
-            return Ok(Self {
-                config_path: config_dir.join("app_config.toml"),
-                data_path: config_dir.join("app_data.json"),
-                workspace_root: portable_root.join("llm-workspace"),
-                app_root: portable_root,
-            });
-        }
-
-        let config_dir = resolve_standard_config_dir()?;
-        let app_root = config_dir.clone();
-        Ok(Self {
-            config_path: config_dir.join("app_config.toml"),
-            data_path: config_dir.join("app_data.json"),
-            workspace_root: app_root.join("llm-workspace"),
-            app_root,
-        })
-    }
-}
 
 fn print_help() -> Result<(), String> {
     push_output(
@@ -2074,11 +2032,18 @@ fn effective_workspace_root(ctx: &CliContext) -> PathBuf {
 fn normalize_path_text(value: &str) -> String {
     let mut out = value.trim().trim_matches('"').trim_matches('\'').to_string();
     if let Some(rest) = out.strip_prefix("~/") {
-        if let Some(home) = directories::BaseDirs::new().map(|dirs| dirs.home_dir().to_path_buf()) {
+        if let Some(home) = home_dir_from_env() {
             out = home.join(rest).to_string_lossy().to_string();
         }
     }
     out
+}
+
+/// 展开 `~/` 的用户主目录（等价 directories::BaseDirs 的语义，避免桌面依赖）。
+fn home_dir_from_env() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
 }
 
 fn mcp_servers_dir(ctx: &CliContext) -> PathBuf {
@@ -2100,23 +2065,7 @@ fn json_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(files)
 }
 
-#[allow(dead_code)]
-fn detect_portable_runtime_root() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    let exe_dir = exe.parent()?;
-    let marker = exe_dir.join("PORTABLE");
-    marker.exists().then(|| exe_dir.join("data"))
-}
 
-#[allow(dead_code)]
-fn resolve_standard_config_dir() -> Result<PathBuf, String> {
-    let dirs = ProjectDirs::from("ai", "easycall", "p-ai")
-        .ok_or_else(|| "无法定位标准配置目录".to_string())?;
-    let path = dirs.config_dir().to_path_buf();
-    fs::create_dir_all(&path)
-        .map_err(|err| format!("创建标准配置目录失败 ({}): {err}", path.display()))?;
-    Ok(path)
-}
 
 fn slugify(text: &str) -> String {
     let mut out = String::new();

@@ -5,5 +5,7 @@
 //! src-tauri（依赖桌面 ProjectDirs / portable 全局路径）。
 
 pub mod storage_and_stt;
+pub mod pai_config_tool;
 
 pub use storage_and_stt::*;
+pub use pai_config_tool::*;

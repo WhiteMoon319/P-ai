@@ -468,7 +468,7 @@ pub fn run() {
     // 若 Android 编译期仍解析 generate_context!() 会报 UnknownManifest 错，故整段 cfg 隔离。
 }
 
-#[path = "features/config/pai_config_tool.rs"]
+#[path = "features/config/pai_config_tool_cli.rs"]
 pub mod pai_config_tool;
 
 #[cfg(test)]
