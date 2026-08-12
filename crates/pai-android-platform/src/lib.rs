@@ -12,3 +12,4 @@ pub mod remote_im_sdk;
 pub mod sandbox;
 pub mod tls;
 pub mod chat;
+pub mod delegate;
