@@ -63,14 +63,6 @@ pub(crate) struct ConversationPromptSnapshot {
     pub(crate) abstract_messages: Vec<AbstractConversationMessageProjection>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct PromptUsageResolution {
-    pub(crate) effective_prompt_tokens: u64,
-    pub(crate) usage_ratio: f64,
-    pub(crate) estimated_prompt_tokens: Option<u64>,
-    pub(crate) source: &'static str,
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct AbstractMessageProjectionCacheEntry {
     pub(crate) revision: u64,

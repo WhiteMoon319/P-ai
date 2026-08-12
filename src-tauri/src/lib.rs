@@ -93,6 +93,7 @@ pub(crate) use features_chat_message_semantics::*;
 #[path = "features/chat/conversation.rs"]
 mod features_chat_conversation;
 pub(crate) use features_chat_conversation::*;
+pub(crate) use pai_android_platform::chat::conversation_utils::*;
 #[path = "features/chat/message_attachment_projection.rs"]
 mod features_chat_message_attachment_projection;
 pub(crate) use features_chat_message_attachment_projection::*;

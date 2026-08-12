@@ -295,23 +295,6 @@ pub(crate) fn workspace_relative_path(state: &AppState, absolute: &std::path::Pa
         .unwrap_or_else(|| absolute.to_string_lossy().replace('\\', "/"))
 }
 
-pub(crate) fn assistant_space_display_path(relative_path: &str) -> String {
-    let trimmed = relative_path.trim().trim_start_matches(['\\', '/']);
-    if trimmed.is_empty() {
-        "{Assistant Space}".to_string()
-    } else {
-        format!("{{Assistant Space}}/{}", trimmed.replace('\\', "/"))
-    }
-}
-
-pub(crate) fn build_attachment_notice_text(index: usize, relative_path: &str) -> String {
-    format!(
-        "[附件#{}]\npath: {}",
-        index + 1,
-        assistant_space_display_path(relative_path)
-    )
-}
-
 pub(crate) fn queue_attachment_from_raw(
     state: &AppState,
     file_name_input: &str,
