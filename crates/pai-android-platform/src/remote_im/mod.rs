@@ -8,6 +8,7 @@ pub mod channel_store;
 pub mod adapters;
 pub mod message_routing;
 pub mod contact_snapshots;
+pub mod inbound_validation;
 
 pub use feishu_sdk::*;
 pub use weixin_oc::*;
@@ -17,3 +18,4 @@ pub use channel_store::*;
 pub use adapters::*;
 pub use message_routing::*;
 pub use contact_snapshots::*;
+pub use inbound_validation::*;

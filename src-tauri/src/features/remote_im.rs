@@ -267,16 +267,6 @@ pub(crate) struct RemoteImContactConversationMessagesInput {
     pub(crate) contact_id: String,
 }
 
-pub(crate) fn remote_im_channel_by_id<'a>(
-    config: &'a AppConfig,
-    channel_id: &str,
-) -> Option<&'a RemoteImChannelConfig> {
-    config
-        .remote_im_channels
-        .iter()
-        .find(|channel| channel.id == channel_id)
-}
-
 pub(crate) fn remote_im_upsert_contact_for_inbound(
     runtime: &mut RuntimeStateFile,
     input: &RemoteImEnqueueInput,
