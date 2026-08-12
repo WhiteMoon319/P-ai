@@ -108,42 +108,6 @@ pub(crate) fn remote_im_contact_dashboard_subscriptions(
         .get_or_init(|| Mutex::new(RemoteImContactDashboardSubscriptions::default()))
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RemoteImContactDashboardSnapshot {
-    pub(crate) contact_id: String,
-    pub(crate) energy: f64,
-    pub(crate) maximum_energy: f64,
-    pub(crate) energy_percent: f64,
-    pub(crate) energy_recovery_per_second: f64,
-    pub(crate) presence: String,
-    pub(crate) last_presence_at: Option<String>,
-    pub(crate) watermark: String,
-    pub(crate) updated_at: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RemoteImContactDashboardInput {
-    pub(crate) contact_id: String,
-    #[serde(default)]
-    pub(crate) known_watermark: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RemoteImContactDashboardSyncResult {
-    pub(crate) snapshot: RemoteImContactDashboardSnapshot,
-    pub(crate) changed: bool,
-}
-
-pub(crate) fn remote_im_contact_dashboard_presence_label(state: RemoteImPresenceState) -> &'static str {
-    match state {
-        RemoteImPresenceState::Away => "away",
-        RemoteImPresenceState::Present => "present",
-    }
-}
-
 pub(crate) fn remote_im_contact_dashboard_snapshot_inner(
     state: &AppState,
     contact_id: &str,
@@ -352,45 +316,6 @@ pub(crate) fn remote_im_unsubscribe_contact_dashboard_for_web(
         }
     }
     Ok(serde_json::Value::Null)
-}
-
-#[derive(Clone)]
-pub(crate) struct RemoteImContactBindingSnapshot {
-    pub(crate) bound_department_id: Option<String>,
-    pub(crate) bound_agent_id: Option<String>,
-    pub(crate) bound_conversation_id: Option<String>,
-    pub(crate) route_mode: String,
-}
-
-pub(crate) fn remote_im_contact_binding_snapshot(
-    contact: &RemoteImContact,
-) -> RemoteImContactBindingSnapshot {
-    RemoteImContactBindingSnapshot {
-        bound_department_id: contact.bound_department_id.clone(),
-        bound_agent_id: contact.bound_agent_id.clone(),
-        bound_conversation_id: contact.bound_conversation_id.clone(),
-        route_mode: contact.route_mode.clone(),
-    }
-}
-
-pub(crate) fn remote_im_contact_binding_matches(
-    contact: &RemoteImContact,
-    snapshot: &RemoteImContactBindingSnapshot,
-) -> bool {
-    contact.bound_department_id == snapshot.bound_department_id
-        && contact.bound_agent_id == snapshot.bound_agent_id
-        && contact.bound_conversation_id == snapshot.bound_conversation_id
-        && contact.route_mode == snapshot.route_mode
-}
-
-pub(crate) fn remote_im_apply_contact_binding_snapshot(
-    contact: &mut RemoteImContact,
-    snapshot: &RemoteImContactBindingSnapshot,
-) {
-    contact.bound_department_id = snapshot.bound_department_id.clone();
-    contact.bound_agent_id = snapshot.bound_agent_id.clone();
-    contact.bound_conversation_id = snapshot.bound_conversation_id.clone();
-    contact.route_mode = snapshot.route_mode.clone();
 }
 
 pub(crate) fn remote_im_resolve_contact_session_target_atomic(
