@@ -30,8 +30,8 @@ pub(crate) fn remote_im_maintenance_running_keys() -> &'static Mutex<std::collec
     KEYS.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
 }
 
-pub(crate) fn remote_im_maintenance_key(state: &AppState) -> String {
-    state.data_path.to_string_lossy().to_string()
+pub(crate) fn remote_im_maintenance_key(state: &impl StateAccess) -> String {
+    state.data_path().to_string_lossy().to_string()
 }
 
 pub(crate) fn remote_im_maintenance_last_started_at(data_path: &PathBuf) -> Result<Option<OffsetDateTime>, String> {
