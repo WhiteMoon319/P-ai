@@ -499,11 +499,12 @@ pub(crate) fn merge_private_organization_into_runtime(
 }
 
 pub(crate) fn merge_private_organization_into_runtime_data(
-    data_path: &PathBuf,
+    data_path: &Path,
     config: &mut AppConfig,
     data: &mut AppData,
 ) -> Result<PrivateOrganizationMergeResult, String> {
-    merge_private_organization_into_runtime(data_path, config, &mut data.agents)
+    let data_path = data_path.to_path_buf();
+    merge_private_organization_into_runtime(&data_path, config, &mut data.agents)
 }
 
 pub(crate) fn sync_private_agents_to_workspace(

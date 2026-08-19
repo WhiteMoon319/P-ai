@@ -84,8 +84,11 @@ pub(crate) fn lock_remote_im_group_reply_state_store(
     }
 }
 
-pub(crate) fn remote_im_group_reply_state_key(state: &AppState, contact_id: &str) -> String {
-    format!("{}::{}", state.data_path.to_string_lossy(), contact_id.trim())
+pub(crate) fn remote_im_group_reply_state_key(
+    state: &impl StateAccess,
+    contact_id: &str,
+) -> String {
+    format!("{}::{}", state.data_path().to_string_lossy(), contact_id.trim())
 }
 
 pub(crate) fn remote_im_group_reply_next_generation(store: &mut RemoteImGroupReplyStateStore) -> u64 {
@@ -129,7 +132,7 @@ pub(crate) fn remote_im_group_reply_phase_matches_timer(
 }
 
 pub(crate) fn remote_im_group_reply_generation_is_current(
-    state: &AppState,
+    state: &impl StateAccess,
     contact_id: &str,
     generation: u64,
 ) -> bool {
@@ -141,7 +144,10 @@ pub(crate) fn remote_im_group_reply_generation_is_current(
         .unwrap_or(false)
 }
 
-pub(crate) fn remote_im_group_reply_has_active_batch(state: &AppState, contact_id: &str) -> bool {
+pub(crate) fn remote_im_group_reply_has_active_batch(
+    state: &impl StateAccess,
+    contact_id: &str,
+) -> bool {
     let key = remote_im_group_reply_state_key(state, contact_id);
     lock_remote_im_group_reply_state_store()
         .by_contact

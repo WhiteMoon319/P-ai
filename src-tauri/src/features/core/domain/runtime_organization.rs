@@ -38,7 +38,7 @@ pub(crate) fn normalize_runtime_organization_department_children(config: &mut Ap
 }
 
 pub(crate) fn build_runtime_organization_snapshot_from_parts(
-    data_path: &PathBuf,
+    data_path: &Path,
     base_config: &AppConfig,
     base_agents: &[AgentProfile],
 ) -> Result<RuntimeOrganizationSnapshot, String> {
@@ -78,11 +78,11 @@ pub(crate) fn build_runtime_organization_snapshot_from_parts(
 }
 
 pub(crate) fn load_runtime_organization_snapshot(
-    state: &AppState,
+    state: &impl StateAccess,
 ) -> Result<RuntimeOrganizationSnapshot, String> {
-    let config = state_read_config_cached(state)?;
-    let agents = state_read_agents_cached(state)?;
-    build_runtime_organization_snapshot_from_parts(&state.data_path, &config, &agents)
+    let config = state.read_config_cached()?;
+    let agents = state.read_agents_cached()?;
+    build_runtime_organization_snapshot_from_parts(state.data_path(), &config, &agents)
 }
 
 pub(crate) fn runtime_department_by_id<'a>(
