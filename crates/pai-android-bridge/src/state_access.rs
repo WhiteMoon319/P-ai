@@ -18,7 +18,7 @@ use std::path::Path;
 
 use pai_backend::core::domain::types_storage::RuntimeStateFile;
 use pai_backend::core::domain::types_config::AppConfig;
-use pai_backend::core::domain::types_chat::{AgentProfile, Conversation, DelegateRuntimeThread};
+use pai_backend::core::domain::types_chat::{AgentProfile, ChatMessage, Conversation, DelegateRuntimeThread};
 use pai_backend::core::domain::runtime_types::{RemoteImContactRuntimeState, RemoteImReplyDelegateRuntime};
 use pai_backend::message_store::meta::ConversationShardMeta;
 use pai_backend::message_store::sqlite::ChatIndexFile;
@@ -101,6 +101,15 @@ pub trait StateAccess: Clone + Send + Sync {
 
     /// 取消指定 key 的进行中聊天（inflight abort handle），返回是否找到并取消。
     fn abort_inflight_chat(&self, key: &str) -> bool;
+
+    /// 广播未归档会话概览项更新事件（用于 append_message 等写入后通知前端）。
+    fn emit_unarchived_conversation_overview_item_updated(
+        &self,
+        conversation_id: &str,
+    ) -> Result<bool, String>;
+
+    /// 广播对话消息追加事件（用于 append_remote_im_user_message 后通知前端）。
+    fn emit_conversation_message_appended(&self, conversation_id: &str, message: &ChatMessage);
 
     // ── 会话持久化 ──
 

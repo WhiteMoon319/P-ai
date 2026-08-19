@@ -5,7 +5,7 @@ use pai_android_bridge::state_access::StateAccess;
 use pai_backend::core::domain::runtime_types::{
     RemoteImContactRuntimeState, RemoteImReplyDelegateRuntime,
 };
-use pai_backend::core::domain::types_chat::{AgentProfile, Conversation, DelegateRuntimeThread};
+use pai_backend::core::domain::types_chat::{AgentProfile, ChatMessage, Conversation, DelegateRuntimeThread};
 use pai_backend::core::domain::types_config::AppConfig;
 use pai_backend::core::domain::types_storage::RuntimeStateFile;
 use pai_backend::message_store::meta::ConversationShardMeta;
@@ -30,6 +30,8 @@ use crate::state_update_conversation_meta_cached_unlocked;
 use crate::state_update_conversation_metadata_cached;
 use crate::state_update_conversation_metadata_cached_unlocked;
 use crate::state_upsert_chat_index_conversation_cached;
+use crate::emit_unarchived_conversation_overview_item_updated_from_state;
+use crate::emit_conversation_message_appended_event;
 
 impl StateAccess for AppState {
     fn read_config_cached(&self) -> Result<AppConfig, String> {
@@ -175,6 +177,21 @@ impl StateAccess for AppState {
                 }
             }
         }
+    }
+
+    fn emit_unarchived_conversation_overview_item_updated(
+        &self,
+        conversation_id: &str,
+    ) -> Result<bool, String> {
+        emit_unarchived_conversation_overview_item_updated_from_state(self, conversation_id)
+    }
+
+    fn emit_conversation_message_appended(
+        &self,
+        conversation_id: &str,
+        message: &ChatMessage,
+    ) {
+        emit_conversation_message_appended_event(self, conversation_id, message)
     }
 
     fn schedule_conversation_persist(

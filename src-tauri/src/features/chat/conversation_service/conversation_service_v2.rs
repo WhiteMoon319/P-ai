@@ -1250,15 +1250,14 @@ impl ConversationServiceV2 {
 
     pub(crate) fn append_message(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         message: &ChatMessage,
     ) -> Result<(), String> {
-        with_conversation_mutation(state, conversation_id, "append_message", || {
+        state.with_conversation_mutation(conversation_id, "append_message", || {
             self.append_message_locked(state, conversation_id, message)
         })?;
-        if let Err(err) = emit_unarchived_conversation_overview_item_updated_from_state(
-            state,
+        if let Err(err) = state.emit_unarchived_conversation_overview_item_updated(
             conversation_id,
         ) {
             runtime_log_warn(format!(
@@ -1339,7 +1338,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn append_messages(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         messages: &[ChatMessage],
     ) -> Result<(), String> {
@@ -1350,8 +1349,7 @@ impl ConversationServiceV2 {
         if messages.is_empty() {
             return Ok(());
         }
-        with_conversation_mutation(
-            state,
+        state.with_conversation_mutation(
             normalized_conversation_id,
             "append_messages",
             || {
@@ -1386,8 +1384,7 @@ impl ConversationServiceV2 {
                 } else {
                     conversation_meta.unread_count.saturating_add(messages.len())
                 };
-                let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
-                    state,
+                let (updated_meta, (), _) = state.update_conversation_meta_cached_unlocked(
                     normalized_conversation_id,
                     |cached| {
                         let mut metadata_conversation =
@@ -1403,7 +1400,7 @@ impl ConversationServiceV2 {
                 )?;
                 let metadata_conversation =
                     self.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
-                state_upsert_chat_index_conversation_cached(state, &metadata_conversation)?;
+                state.upsert_chat_index_conversation_cached(&metadata_conversation)?;
                 let mut ready_meta = self
                     .ensure_appendable_ready_message_store(state, normalized_conversation_id)?;
                 ready_meta.apply_metadata_fields_from_meta(&updated_meta);
@@ -1417,8 +1414,7 @@ impl ConversationServiceV2 {
                 Ok(())
             },
         )?;
-        if let Err(err) = emit_unarchived_conversation_overview_item_updated_from_state(
-            state,
+        if let Err(err) = state.emit_unarchived_conversation_overview_item_updated(
             normalized_conversation_id,
         ) {
             runtime_log_warn(format!(
@@ -1442,7 +1438,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn append_user_message(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         input: &UserMessageAppendInput,
     ) -> Result<(), String> {
         let conversation_id = input.conversation_id.trim();
@@ -1453,7 +1449,7 @@ impl ConversationServiceV2 {
             return Err("append_user_message 只允许 user message".to_string());
         }
         let memory_recall_ids = dedup_memory_recall_ids_v2(&input.memory_recall_ids);
-        with_conversation_mutation(state, conversation_id, "append_user_message", || {
+        state.with_conversation_mutation(conversation_id, "append_user_message", || {
             let conversation_meta = self.get_conversation_meta(state, conversation_id)?;
             if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
                 return Err(format!("Unarchived conversation not found: {conversation_id}"));
@@ -1467,8 +1463,7 @@ impl ConversationServiceV2 {
             } else {
                 conversation_meta.unread_count.saturating_add(1)
             };
-            let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
-                state,
+            let (updated_meta, (), _) = state.update_conversation_meta_cached_unlocked(
                 conversation_id,
                 |cached| {
                     let mut metadata_conversation =
@@ -1494,7 +1489,7 @@ impl ConversationServiceV2 {
             )?;
             let metadata_conversation =
                 self.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
-            state_upsert_chat_index_conversation_cached(state, &metadata_conversation)?;
+            state.upsert_chat_index_conversation_cached(&metadata_conversation)?;
             let mut ready_meta = self.ensure_appendable_ready_message_store(state, conversation_id)?;
             ready_meta.apply_metadata_fields_from_meta(&updated_meta);
             ready_meta.apply_appended_messages(std::slice::from_ref(&input.message));
@@ -1506,8 +1501,7 @@ impl ConversationServiceV2 {
             self.mark_conversation_metadata_cached_persisted(state, conversation_id)?;
             Ok(())
         })?;
-        if let Err(err) = emit_unarchived_conversation_overview_item_updated_from_state(
-            state,
+        if let Err(err) = state.emit_unarchived_conversation_overview_item_updated(
             conversation_id,
         ) {
             runtime_log_warn(format!(
@@ -1521,7 +1515,7 @@ impl ConversationServiceV2 {
     /// 远程入站专用追加：只负责把远程消息正式写入会话历史。
     pub(crate) fn append_remote_im_user_message(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         message: &ChatMessage,
     ) -> Result<ChatMessage, String> {
@@ -1532,7 +1526,7 @@ impl ConversationServiceV2 {
         if message.role.trim() != "user" {
             return Err("远程入站追加只允许 user message".to_string());
         }
-        with_conversation_mutation(state, conversation_id, "append_remote_im_user_message", || {
+        state.with_conversation_mutation(conversation_id, "append_remote_im_user_message", || {
             let conversation_meta = self.get_conversation_meta(state, conversation_id)?;
             if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
                 return Err(format!("远程入站目标会话不存在：{conversation_id}"));
@@ -1546,8 +1540,7 @@ impl ConversationServiceV2 {
             } else {
                 conversation_meta.unread_count.saturating_add(1)
             };
-            let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
-                state,
+            let (updated_meta, (), _) = state.update_conversation_meta_cached_unlocked(
                 conversation_id,
                 |cached| {
                     let mut metadata_conversation =
@@ -1562,7 +1555,7 @@ impl ConversationServiceV2 {
             )?;
             let metadata_conversation =
                 self.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
-            state_upsert_chat_index_conversation_cached(state, &metadata_conversation)?;
+            state.upsert_chat_index_conversation_cached(&metadata_conversation)?;
             let mut ready_meta = self.ensure_appendable_ready_message_store(state, conversation_id)?;
             ready_meta.apply_metadata_fields_from_meta(&updated_meta);
             ready_meta.apply_appended_messages(std::slice::from_ref(message));
@@ -1574,8 +1567,7 @@ impl ConversationServiceV2 {
             self.mark_conversation_metadata_cached_persisted(state, conversation_id)?;
             Ok(())
         })?;
-        if let Err(err) = emit_unarchived_conversation_overview_item_updated_from_state(
-            state,
+        if let Err(err) = state.emit_unarchived_conversation_overview_item_updated(
             conversation_id,
         ) {
             runtime_log_warn(format!(
@@ -1583,7 +1575,7 @@ impl ConversationServiceV2 {
                 conversation_id, err
             ));
         }
-        emit_conversation_message_appended_event(state, conversation_id, message);
+        state.emit_conversation_message_appended(conversation_id, message);
         Ok(message.clone())
     }
 
