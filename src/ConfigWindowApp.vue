@@ -55,8 +55,13 @@
         :code-font="config.codeFont"
         :locale-options="localeOptions"
         :current-theme="currentTheme"
+        :theme-mode="themeMode"
+        :auto-light-theme="autoLightTheme"
+        :auto-dark-theme="autoDarkTheme"
         :generated-theme-controls="generatedThemeControls"
         :generated-theme-tokens="generatedThemeTokens"
+        :generated-light-tokens="generatedLightTokens"
+        :generated-dark-tokens="generatedDarkTokens"
         :ui-size-scale="config.uiSizeScale ?? 100"
         :selected-api-config="selectedApiConfig"
         :tool-api-config="toolApiConfig"
@@ -122,6 +127,8 @@
         @update:code-font="setCodeFont($event)"
         @update:github-update-method="updateGithubUpdateMethod"
         @set-theme="setTheme"
+        @set-theme-mode="setThemeMode"
+        @set-auto-theme="setAutoTheme"
         @activate-generated-theme="activateGeneratedTheme"
         @update-generated-theme-controls="updateGeneratedThemeControls"
         @reset-generated-theme="resetGeneratedTheme"
@@ -362,6 +369,7 @@ const config = reactive<AppConfig>({
   messageNotificationEnabled: true,
   messageNotificationSoundEnabled: false,
   desktopOperationNoticeEnabled: true,
+  desktopOperateEnabled: true,
   selectedApiConfigId: "",
   assistantDepartmentApiConfigId: "",
   visionApiConfigId: undefined,
@@ -424,13 +432,22 @@ const {
   currentTheme,
   generatedThemeControls,
   generatedThemeTokens,
+  generatedThemeTokensByMode,
+  themeMode,
+  autoLightTheme,
+  autoDarkTheme,
   applyTheme,
   setTheme,
+  setThemeMode,
+  setAutoTheme,
   activateGeneratedTheme,
   updateGeneratedThemeControls,
   resetGeneratedTheme,
   restoreThemeFromStorage,
 } = useAppTheme();
+
+const generatedLightTokens = computed(() => generatedThemeTokensByMode.value.light);
+const generatedDarkTokens = computed(() => generatedThemeTokensByMode.value.dark);
 
 const markdownIsDark = computed(() => isDarkAppTheme(currentTheme.value));
 
@@ -463,7 +480,7 @@ const {
   setStatusError,
 });
 const startupOverlayVisible = ref(false);
-const startupOverlayMessage = ref("等待后端加载中...");
+const startupOverlayMessage = ref("正在启动应用...");
 const { setUiSizeScale, uiSizeScale } = useUiSizeAppearance();
 const { updateGithubUpdateMethod } = useGithubUpdateMethod(config, setStatusError);
 
@@ -908,7 +925,7 @@ useAppLifecycle({
   cleanupChatMedia: cleanupHotkeyRecordTest,
   onStartupOverlayChange: (visible, message) => {
     startupOverlayVisible.value = visible;
-    startupOverlayMessage.value = message || "等待后端加载中...";
+    startupOverlayMessage.value = message || "正在启动应用...";
   },
   afterMountedReady: async () => {
     await refreshGithubUpdateState();

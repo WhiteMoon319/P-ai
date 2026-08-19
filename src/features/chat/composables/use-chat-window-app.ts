@@ -64,13 +64,21 @@ export function useChatWindowApp() {
     currentTheme,
     generatedThemeControls,
     generatedThemeTokens,
+    generatedThemeTokensByMode,
+    themeMode,
+    autoLightTheme,
+    autoDarkTheme,
     applyTheme,
     setTheme,
+    setThemeMode,
+    setAutoTheme,
     activateGeneratedTheme,
     updateGeneratedThemeControls,
     resetGeneratedTheme,
     restoreThemeFromStorage,
   } = useAppTheme();
+  const generatedLightTokens = computed(() => generatedThemeTokensByMode.value.light);
+  const generatedDarkTokens = computed(() => generatedThemeTokensByMode.value.dark);
   
   const {
     BACKGROUND_CONVERSATION_CACHE_LIMIT,
@@ -964,7 +972,14 @@ export function useChatWindowApp() {
     currentTheme,
     generatedThemeControls,
     generatedThemeTokens,
+    generatedLightTokens,
+    generatedDarkTokens,
+    themeMode,
+    autoLightTheme,
+    autoDarkTheme,
     setTheme,
+    setThemeMode,
+    setAutoTheme,
     activateGeneratedTheme,
     updateGeneratedThemeControls,
     resetGeneratedTheme,

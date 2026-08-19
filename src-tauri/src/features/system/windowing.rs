@@ -433,7 +433,6 @@ fn focus_file_reader_window(app: &AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window(FILE_READER_WINDOW_LABEL)
         .ok_or_else(|| "文件阅读窗口不存在".to_string())?;
-    #[cfg(not(target_os = "android"))]
     let _ = window.unminimize();
     let _ = window.show();
     ensure_window_visible_after_show(app, FILE_READER_WINDOW_LABEL, "focus_file_reader_window");
@@ -492,7 +491,7 @@ fn schedule_file_reader_window_creation(app: &AppHandle, path: String) -> Result
 
             let encoded_path = urlencoding::encode(&path);
             let url = format!("file-reader.html?path={encoded_path}");
-            let builder = tauri::WebviewWindowBuilder::new(
+            let window = match tauri::WebviewWindowBuilder::new(
                 &app_handle,
                 FILE_READER_WINDOW_LABEL,
                 tauri::WebviewUrl::App(url.into()),
@@ -500,10 +499,11 @@ fn schedule_file_reader_window_creation(app: &AppHandle, path: String) -> Result
             .title("PAI - 文件阅读")
             .inner_size(1040.0, 760.0)
             .min_inner_size(720.0, 520.0)
-            .resizable(true);
-            #[cfg(not(target_os = "android"))]
-            let builder = builder.decorations(false).shadow(true).visible(false);
-            let window = match builder.build()
+            .resizable(true)
+            .decorations(false)
+            .shadow(true)
+            .visible(false)
+            .build()
             {
                 Ok(window) => window,
                 Err(err) => {
@@ -523,7 +523,6 @@ fn schedule_file_reader_window_creation(app: &AppHandle, path: String) -> Result
                     err
                 ));
             }
-            #[cfg(not(target_os = "android"))]
             let _ = window.unminimize();
             let _ = window.show();
             ensure_window_visible_after_show(
@@ -875,7 +874,6 @@ fn position_window_on_monitor(
     let _ = window.set_position(Position::Physical(PhysicalPosition::new(x, y)));
 }
 
-#[cfg(not(target_os = "android"))]
 fn restore_window_to_default_drag_size(
     window: &tauri::WebviewWindow,
     label: &str,
@@ -1077,7 +1075,6 @@ fn apply_window_layout_before_show(app: &AppHandle, label: &str) -> Result<(), S
             }
         }
         if saved.maximized {
-            #[cfg(not(target_os = "android"))]
             let _ = window.maximize();
         }
         return Ok(());
@@ -1179,66 +1176,72 @@ fn persist_window_layout_snapshot_with_reason(
     })
 }
 
+/// 为单个窗口注册布局持久化监听（大小/位置/关闭/销毁时写快照）
+fn attach_window_layout_persistence_for(
+    window: &tauri::WebviewWindow,
+    app: &AppHandle,
+    label: &str,
+) {
+    let app_handle = app.clone();
+    let label = label.to_string();
+    let _ = window.on_window_event(move |event| match event {
+        tauri::WindowEvent::Resized(_) => {
+            if let Err(err) = persist_window_layout_snapshot_with_reason(&app_handle, &label, "resized")
+            {
+                runtime_log_error(format!(
+                    "[窗口] 持久化窗口布局失败: label={}, error={}",
+                    label.trim(),
+                    err
+                ));
+            }
+        }
+        tauri::WindowEvent::Moved(_) => {
+            if let Err(err) = persist_window_layout_snapshot_with_reason(&app_handle, &label, "moved")
+            {
+                runtime_log_error(format!(
+                    "[窗口] 持久化窗口布局失败: label={}, error={}",
+                    label.trim(),
+                    err
+                ));
+            }
+        }
+        tauri::WindowEvent::CloseRequested { .. } => {
+            if let Err(err) = persist_window_layout_snapshot_with_reason(
+                &app_handle,
+                &label,
+                "close_requested",
+            ) {
+                runtime_log_error(format!(
+                    "[窗口] 持久化窗口布局失败: label={}, error={}",
+                    label.trim(),
+                    err
+                ));
+            }
+        }
+        tauri::WindowEvent::Destroyed => {
+            if let Err(err) =
+                persist_window_layout_snapshot_with_reason(&app_handle, &label, "destroyed")
+            {
+                runtime_log_error(format!(
+                    "[窗口] 持久化窗口布局失败: label={}, error={}",
+                    label.trim(),
+                    err
+                ));
+            }
+        }
+        _ => {}
+    });
+}
+
 fn attach_window_layout_persistence(app: &AppHandle) {
     for label in ["main", "chat", "archives"] {
         let Some(window) = app.get_webview_window(label) else {
             continue;
         };
-        let app_handle = app.clone();
-        let label = label.to_string();
-        let _ = window.on_window_event(move |event| match event {
-            tauri::WindowEvent::Resized(_) => {
-                if let Err(err) =
-                    persist_window_layout_snapshot_with_reason(&app_handle, &label, "resized")
-                {
-                    runtime_log_error(format!(
-                        "[窗口] 持久化窗口布局失败: label={}, error={}",
-                        label.trim(),
-                        err
-                    ));
-                }
-            }
-            tauri::WindowEvent::Moved(_) => {
-                if let Err(err) =
-                    persist_window_layout_snapshot_with_reason(&app_handle, &label, "moved")
-                {
-                    runtime_log_error(format!(
-                        "[窗口] 持久化窗口布局失败: label={}, error={}",
-                        label.trim(),
-                        err
-                    ));
-                }
-            }
-            tauri::WindowEvent::CloseRequested { .. } => {
-                if let Err(err) = persist_window_layout_snapshot_with_reason(
-                    &app_handle,
-                    &label,
-                    "close_requested",
-                ) {
-                    runtime_log_error(format!(
-                        "[窗口] 持久化窗口布局失败: label={}, error={}",
-                        label.trim(),
-                        err
-                    ));
-                }
-            }
-            tauri::WindowEvent::Destroyed => {
-                if let Err(err) =
-                    persist_window_layout_snapshot_with_reason(&app_handle, &label, "destroyed")
-                {
-                    runtime_log_error(format!(
-                        "[窗口] 持久化窗口布局失败: label={}, error={}",
-                        label.trim(),
-                        err
-                    ));
-                }
-            }
-            _ => {}
-        });
+        attach_window_layout_persistence_for(&window, app, label);
     }
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn sync_default_tray_icon(app: &AppHandle) -> Result<(), String> {
     let tray = app
         .tray_by_id(MAIN_TRAY_ID)
@@ -1247,11 +1250,6 @@ fn sync_default_tray_icon(app: &AppHandle) -> Result<(), String> {
     tray
         .set_icon(app.default_window_icon().cloned())
         .map_err(|err| format!("Set tray icon failed: {err}"))
-}
-
-#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-fn sync_default_tray_icon(_app: &AppHandle) -> Result<(), String> {
-    Ok(())
 }
 
 fn show_window(app: &AppHandle, label: &str) -> Result<(), String> {
@@ -1266,7 +1264,6 @@ fn show_window(app: &AppHandle, label: &str) -> Result<(), String> {
         .get_webview_window(label)
         .ok_or_else(|| format!("Window '{label}' not found"))?;
 
-    #[cfg(not(target_os = "android"))]
     let _ = window.unminimize();
     let _ = window.show();
     ensure_window_visible_after_show(app, label, "show_window");
@@ -1274,7 +1271,6 @@ fn show_window(app: &AppHandle, label: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(not(target_os = "android"))]
 fn toggle_window_maximize_with_default_restore(
     app: &AppHandle,
     label: &str,
@@ -1323,15 +1319,6 @@ fn toggle_window_maximize_with_default_restore(
     Ok(maximized)
 }
 
-#[cfg(target_os = "android")]
-fn toggle_window_maximize_with_default_restore(
-    _app: &AppHandle,
-    _label: &str,
-) -> Result<bool, String> {
-    Ok(false)
-}
-
-#[cfg(not(target_os = "android"))]
 fn start_window_drag_with_default_restore(app: &AppHandle, label: &str) -> Result<(), String> {
     let window = app
         .get_webview_window(label)
@@ -1367,11 +1354,6 @@ fn start_window_drag_with_default_restore(app: &AppHandle, label: &str) -> Resul
         .map_err(|err| format!("Start dragging window failed: {err}"))
 }
 
-#[cfg(target_os = "android")]
-fn start_window_drag_with_default_restore(_app: &AppHandle, _label: &str) -> Result<(), String> {
-    Ok(())
-}
-
 fn toggle_window(app: &AppHandle, label: &str) -> Result<(), String> {
     let window = app
         .get_webview_window(label)
@@ -1401,7 +1383,6 @@ fn normalize_hotkey_for_parser(raw: &str) -> String {
     text
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn parse_hotkey(raw: &str) -> Result<Shortcut, String> {
     let normalized = normalize_hotkey_for_parser(raw);
     Shortcut::from_str(&normalized)
@@ -1409,29 +1390,16 @@ fn parse_hotkey(raw: &str) -> Result<Shortcut, String> {
         .map_err(|err| format!("Parse hotkey failed: {err}"))
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn register_default_hotkey(app: &AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     let config = read_config(&state.config_path).unwrap_or_default();
     register_hotkeys_from_config(app, &config)
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-fn register_default_hotkey(_app: &AppHandle) -> Result<(), String> {
-    Ok(())
-}
-
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn register_hotkey_from_config(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
     register_hotkeys_from_config(app, config)
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-fn register_hotkey_from_config(_app: &AppHandle, _config: &AppConfig) -> Result<(), String> {
-    Ok(())
-}
-
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn register_hotkeys_from_config(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
     let summon_shortcut = parse_hotkey(&config.hotkey)?;
     let manager = app.global_shortcut();
@@ -1538,7 +1506,6 @@ fn show_runtime_logs_window(app: &AppHandle) -> Result<(), String> {
                 RUNTIME_LOGS_WINDOW_LABEL
             ),
         );
-        #[cfg(not(target_os = "android"))]
         if let Err(err) = window.unminimize() {
             append_window_diagnostic_log(
                 app,
@@ -1591,7 +1558,7 @@ fn show_runtime_logs_window(app: &AppHandle) -> Result<(), String> {
                 );
                 return;
             }
-            let builder = tauri::WebviewWindowBuilder::new(
+            let window = match tauri::WebviewWindowBuilder::new(
                 &app_handle,
                 RUNTIME_LOGS_WINDOW_LABEL,
                 tauri::WebviewUrl::App("runtime-logs.html".into()),
@@ -1599,10 +1566,11 @@ fn show_runtime_logs_window(app: &AppHandle) -> Result<(), String> {
             .title("PAI - 运行日志")
             .inner_size(900.0, 600.0)
             .min_inner_size(600.0, 400.0)
-            .resizable(true);
-            #[cfg(not(target_os = "android"))]
-            let builder = builder.decorations(false).shadow(true).visible(false);
-            let window = match builder.build()
+            .resizable(true)
+            .decorations(false)
+            .shadow(true)
+            .visible(false)
+            .build()
             {
                 Ok(w) => w,
                 Err(err) => {
@@ -1625,7 +1593,6 @@ fn show_runtime_logs_window(app: &AppHandle) -> Result<(), String> {
                     ),
                 );
             }
-            #[cfg(not(target_os = "android"))]
             if let Err(err) = window.unminimize() {
                 append_window_diagnostic_log(
                     &app_handle,
@@ -1678,7 +1645,6 @@ fn show_runtime_logs_window(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn build_tray(app: &AppHandle) -> Result<(), String> {
     let config = MenuItem::with_id(app, "config", "配置", true, None::<&str>)
         .map_err(|err| format!("Create tray menu item failed: {err}"))?;
@@ -1736,40 +1702,39 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-fn build_tray(_app: &AppHandle) -> Result<(), String> {
-    Ok(())
-}
-
-fn hide_on_close(app: &AppHandle) {
+/// 为单个窗口注册关闭语义（平台相关）：
+/// Windows 关闭即隐藏；Linux/macOS 无托盘环境关闭即优雅退出，避免无法恢复的死锁。
+fn install_hide_on_close(window: &tauri::WebviewWindow, app: &AppHandle) {
     #[cfg(target_os = "windows")]
     {
-        for label in ["main", "chat", "archives"] {
-            if let Some(window) = app.get_webview_window(label) {
-                let cloned = window.clone();
-                let _ = window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        api.prevent_close();
-                        let _ = cloned.hide();
-                    }
-                });
+        let _ = app;
+        let cloned = window.clone();
+        let _ = window.on_window_event(move |event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = cloned.hide();
             }
-        }
+        });
     }
     #[cfg(not(target_os = "windows"))]
     {
         // Linux/macOS 部分桌面环境不显示托盘，隐藏后可能无法恢复窗口；
         // 关闭任一主窗口直接优雅退出，避免无退出途径的死锁。
-        for label in ["main", "chat", "archives"] {
-            if let Some(window) = app.get_webview_window(label) {
-                let app_clone = app.clone();
-                let _ = window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { .. } = event {
-                        runtime_log_info(format!("[窗口] {label} 关闭请求，非 Windows 平台直接退出应用"));
-                        graceful_exit_app(&app_clone, 0);
-                    }
-                });
+        let label = window.label().to_string();
+        let app_clone = app.clone();
+        let _ = window.on_window_event(move |event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                runtime_log_info(format!("[窗口] {label} 关闭请求，非 Windows 平台直接退出应用"));
+                graceful_exit_app(&app_clone, 0);
             }
+        });
+    }
+}
+
+fn hide_on_close(app: &AppHandle) {
+    for label in ["main", "chat", "archives"] {
+        if let Some(window) = app.get_webview_window(label) {
+            install_hide_on_close(&window, app);
         }
     }
 }
@@ -1813,72 +1778,32 @@ fn rebuild_crashed_window(app: &AppHandle, label: &str) {
 
     let url = webview_window_url_for_label(label);
     let (default_w, default_h) = default_window_size(label);
-    let (min_w, min_h) = minimum_window_size(label);
-    let resizable = true;
+    let _ = tauri::WebviewWindowBuilder::new(app, label, tauri::WebviewUrl::App(url.into()))
+        .inner_size(default_w, default_h)
+        .build();
 
-    let builder = tauri::WebviewWindowBuilder::new(
-        app,
-        label,
-        tauri::WebviewUrl::App(url.into()),
-    )
-    .title(format!("PAI - {label}"))
-    .inner_size(default_w as f64, default_h as f64)
-    .min_inner_size(min_w as f64, min_h as f64)
-    .resizable(resizable);
-    #[cfg(not(target_os = "android"))]
-    let builder = builder.decorations(false).shadow(true).visible(false);
-    let result = builder.build();
-
-    match result {
-        Ok(window) => {
-            // 重新注册 hide_on_close
-            let cloned = window.clone();
-            let _ = window.on_window_event(move |event| {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    let _ = cloned.hide();
-                }
-            });
-            // 恢复布局并显示
-            let _ = apply_window_layout_before_show(app, label);
-            let _ = window.show();
-            ensure_window_visible_after_show(app, label, "rebuild_crashed_window");
-            let _ = window.set_focus();
-            // 重置 pong 时间戳
-            webview_record_pong(label);
-            runtime_log_error(format!("[WebView心跳] 窗口崩溃恢复完成: label={label}"));
-        }
-        Err(err) => {
-            runtime_log_error(format!("[WebView心跳] 窗口重建失败: label={label}, error={err}"));
-        }
+    // 重建后重新注册关闭语义
+    if let Some(window) = app.get_webview_window(label) {
+        install_hide_on_close(&window, app);
     }
 }
 
-fn start_webview_heartbeat_monitor(app: &AppHandle) {
-    // 初始化所有监控窗口的 pong 时间戳
-    for label in WEBVIEW_MONITORED_LABELS {
-        webview_record_pong(label);
-    }
-
+/// 启动对 main/chat 窗口的常驻心跳监控（Android 壳内 WebView 崩溃恢复用）。
+pub fn start_webview_heartbeat_monitor(app: &AppHandle) {
     let app_handle = app.clone();
-    std::thread::Builder::new()
-        .name("webview-heartbeat".to_string())
-        .spawn(move || {
-            loop {
-                std::thread::sleep(std::time::Duration::from_millis(WEBVIEW_HEARTBEAT_INTERVAL_MS));
-
-                for label in WEBVIEW_MONITORED_LABELS {
-                    // 只监控可见窗口
-                    let is_visible = app_handle
-                        .get_webview_window(label)
-                        .and_then(|w| w.is_visible().ok())
-                        .unwrap_or(false);
-                    if !is_visible {
-                        // 不可见窗口重置时间戳，不检测
-                        webview_record_pong(label);
-                        continue;
-                    }
-
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_millis(
+            WEBVIEW_HEARTBEAT_INTERVAL_MS,
+        ));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            interval.tick().await;
+            for label in WEBVIEW_MONITORED_LABELS {
+                let Some(_window) = app_handle.get_webview_window(label) else {
+                    continue;
+                };
+                // 只在窗口存在且 Android 平台下做心跳检查（桌面端由前端自己维持）
+                {
                     // 发送 ping
                     let _ = app_handle.emit_to(label, "easy-call:webview-ping", ());
 
@@ -1899,6 +1824,6 @@ fn start_webview_heartbeat_monitor(app: &AppHandle) {
                     }
                 }
             }
-        })
-        .ok();
+        }
+    });
 }

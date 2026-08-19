@@ -420,6 +420,7 @@ fn normalize_model_id(input: &str) -> String {
 
 #[derive(Debug, Clone)]
 struct ModelMetadataCandidate {
+    provider_name: String,
     provider_api: String,
     model_id: String,
     context_window_tokens: Option<u32>,
@@ -458,7 +459,7 @@ fn normalize_model_metadata_base_url(value: &str) -> String {
 fn select_model_metadata_candidates<'a>(
     candidates: &'a [ModelMetadataCandidate],
     requested_base_url: &str,
-) -> (Vec<&'a ModelMetadataCandidate>, Vec<&'a ModelMetadataCandidate>, &'static str) {
+) -> (Vec<&'a ModelMetadataCandidate>, Vec<&'a ModelMetadataCandidate>, bool) {
     let url_matched = candidates
         .iter()
         .filter(|candidate| {
@@ -467,9 +468,9 @@ fn select_model_metadata_candidates<'a>(
         })
         .collect::<Vec<_>>();
     if url_matched.is_empty() {
-        (candidates.iter().collect(), Vec::new(), "未匹配URL，候选合并最大值")
+        (candidates.iter().collect(), Vec::new(), false)
     } else {
-        (url_matched.clone(), url_matched, "URL精准匹配")
+        (url_matched.clone(), url_matched, true)
     }
 }
 
@@ -584,9 +585,21 @@ fn merge_documentation_url(selected_candidates: &[&ModelMetadataCandidate]) -> O
 fn merge_model_metadata_candidates(
     selected_candidates: &[&ModelMetadataCandidate],
     documentation_candidates: &[&ModelMetadataCandidate],
+    exact_match: bool,
 ) -> FetchModelMetadataOutput {
+    let provider = selected_candidates
+        .first()
+        .map(|candidate| candidate.provider_name.clone())
+        .filter(|value| !value.is_empty());
+    let api = selected_candidates
+        .first()
+        .map(|candidate| candidate.provider_api.clone())
+        .filter(|value| !value.is_empty());
     FetchModelMetadataOutput {
         found: true,
+        fuzzy_match: !exact_match,
+        provider_name: if exact_match { provider } else { None },
+        provider_api: if exact_match { api } else { None },
         matched_model_id: selected_candidates
             .first()
             .map(|candidate| candidate.model_id.clone()),
@@ -627,6 +640,9 @@ async fn fetch_model_metadata_inner(
     let Some(cache) = read_models_dev_cache_only(&state)? else {
         return Ok(FetchModelMetadataOutput {
             found: false,
+            fuzzy_match: false,
+            provider_name: None,
+            provider_api: None,
             matched_model_id: None,
             context_window_tokens: None,
             max_output_tokens: None,
@@ -654,6 +670,11 @@ async fn fetch_model_metadata_inner(
         };
         let provider_api = provider_obj
             .get("api")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let provider_name = provider_obj
+            .get("name")
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_string();
@@ -698,6 +719,7 @@ async fn fetch_model_metadata_inner(
             let documentation_url = parse_documentation_url(provider_obj)
                 .or_else(|| parse_documentation_url(model_obj));
             candidates.push(ModelMetadataCandidate {
+                provider_name: provider_name.clone(),
                 provider_api: provider_api.clone(),
                 model_id: model_id.to_string(),
                 context_window_tokens,
@@ -715,6 +737,9 @@ async fn fetch_model_metadata_inner(
     if candidates.is_empty() {
         return Ok(FetchModelMetadataOutput {
             found: false,
+            fuzzy_match: false,
+            provider_name: None,
+            provider_api: None,
             matched_model_id: None,
             context_window_tokens: None,
             max_output_tokens: None,
@@ -727,9 +752,9 @@ async fn fetch_model_metadata_inner(
             documentation_url: None,
         });
     }
-    let (selected_candidates, documentation_candidates, _) =
+    let (selected_candidates, documentation_candidates, exact_match) =
         select_model_metadata_candidates(&candidates, &requested_base_url);
-    let merged = merge_model_metadata_candidates(&selected_candidates, &documentation_candidates);
+    let merged = merge_model_metadata_candidates(&selected_candidates, &documentation_candidates, exact_match);
     Ok(merged)
 }
 
@@ -1158,6 +1183,7 @@ mod model_metadata_selection_tests {
         enable_video: bool,
     ) -> ModelMetadataCandidate {
         ModelMetadataCandidate {
+            provider_name: "mimo".to_string(),
             provider_api: provider_api.to_string(),
             model_id: "mimo-v2.5".to_string(),
             context_window_tokens: Some(context_window_tokens),
@@ -1206,9 +1232,9 @@ mod model_metadata_selection_tests {
 
         let (selected, documentation_candidates, strategy) =
             select_model_metadata_candidates(&candidates, &requested_base_url);
-        let merged = merge_model_metadata_candidates(&selected, &documentation_candidates);
+        let merged = merge_model_metadata_candidates(&selected, &documentation_candidates, strategy);
 
-        assert_eq!(strategy, "URL精准匹配");
+        assert!(strategy, "URL 精准匹配时应为 exact_match");
         assert_eq!(selected.len(), 1);
         assert_eq!(
             selected[0].provider_api,
@@ -1234,7 +1260,7 @@ mod model_metadata_selection_tests {
         let (selected, _documentation_candidates, strategy) =
             select_model_metadata_candidates(&candidates, &requested_base_url);
 
-        assert_eq!(strategy, "URL精准匹配");
+        assert!(strategy, "根路径与 v1 视为同一 provider 时应为 exact_match");
         assert_eq!(selected.len(), 1);
         assert_eq!(selected[0].provider_api, "https://api.deepseek.com");
     }
@@ -1255,9 +1281,9 @@ mod model_metadata_selection_tests {
             normalize_model_metadata_base_url("https://api.deepseek.com/v1");
 
         let binding = [fallback, exact];
-        let (selected, documentation_candidates, _) =
+        let (selected, documentation_candidates, strategy) =
             select_model_metadata_candidates(&binding, &requested_base_url);
-        let merged = merge_model_metadata_candidates(&selected, &documentation_candidates);
+        let merged = merge_model_metadata_candidates(&selected, &documentation_candidates, strategy);
 
         assert_eq!(
             merged.documentation_url.as_deref(),
@@ -1282,9 +1308,9 @@ mod model_metadata_selection_tests {
 
         let (selected, documentation_candidates, strategy) =
             select_model_metadata_candidates(&candidates, &requested_base_url);
-        let merged = merge_model_metadata_candidates(&selected, &documentation_candidates);
+        let merged = merge_model_metadata_candidates(&selected, &documentation_candidates, strategy);
 
-        assert_eq!(strategy, "未匹配URL，候选合并最大值");
+        assert!(!strategy, "URL 未匹配时应为模糊合并");
         assert_eq!(selected.len(), 2);
         assert_eq!(merged.context_window_tokens, Some(1_050_000));
         assert_eq!(merged.max_output_tokens, Some(131_100));

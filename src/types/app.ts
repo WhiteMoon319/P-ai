@@ -379,6 +379,7 @@ export type AppConfig = {
   messageNotificationEnabled: boolean;
   messageNotificationSoundEnabled: boolean;
   desktopOperationNoticeEnabled: boolean;
+  desktopOperateEnabled: boolean;
   selectedApiConfigId: string;
   // Active chat LLM provider config id (kept as legacy key name for storage compatibility).
   assistantDepartmentApiConfigId: string;
