@@ -37,6 +37,7 @@ target-tests/
 apps/android/**/build/
 apps/android/.gradle/
 apps/android/app/.gradle/
+src-tauri/vendor/**/.gradle/
 apps/android/.kotlin/
 *.apk
 *.aab
