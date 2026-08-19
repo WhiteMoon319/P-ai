@@ -119,7 +119,12 @@
       "soundLabel": "Enable sound",
       "soundHint": "When on, Windows native notifications use the system default sound.",
       "desktopNoticeLabel": "Desktop operation alerts",
-      "desktopNoticeHint": "Show a system notification before the model performs mouse, keyboard, text input, or screenshot actions on your PC."
+      "desktopNoticeHint": "Show a system notification before the model performs mouse, keyboard, text input, or screenshot actions on your PC.",
+      "testLabel": "Test notifications",
+      "testHint": "Send a test notification to verify normal and live update (island) notifications.",
+      "testNormalLabel": "Normal",
+      "testLiveUpdateLabel": "Live update",
+      "testFailedLabel": "Notification test failed"
     },
     "api": {
       "saving": "Saving...",
@@ -238,7 +243,9 @@
       "pinApiKeyToTop": "Pin to top",
       "connectionTest": "Connection Test",
       "testFirstKey": "Test First",
-      "testAllKeys": "Test All"
+      "testAllKeys": "Test All",
+      "deepSeekKimiProtocolHint": "This model name contains DeepSeek/Kimi. Use the DeepSeek / Kimi protocol.",
+      "noModels": "No usable model configured yet"
     },
     "storage": {
       "pageTitle": "Storage",
@@ -437,12 +444,93 @@
           "hint": "Fast local search that speeds up AI search"
         },
         "expertModel": {
-          "title": "Expert Model"
+          "title": "Expert Model",
+          "summary": "The expert model handles complex reasoning tasks. Without it, some deep tasks degrade or become unavailable.",
+          "currentOk": "A working expert model was found: {name}",
+          "currentMissing": "No expert model was detected yet.",
+          "action": "Open LLM Setup"
         },
         "quickModel": {
-          "title": "Fast Model"
+          "title": "Fast Model",
+          "summary": "The quick model handles lightweight tasks (tool review, title generation) with faster responses and lower cost.",
+          "currentOk": "A working quick model was found: {name}",
+          "currentMissing": "No quick model was detected yet.",
+          "action": "Open LLM Setup"
+        },
+        "textModel": {
+          "title": "Available Text Model",
+          "summary": "The app needs at least one working text model. A multimodal one is recommended.",
+          "currentOkMultimodal": "A working multimodal text model was found: {name}",
+          "currentOk": "A working text model was found: {name}. It is not multimodal yet.",
+          "currentMissing": "No working text model was detected yet.",
+          "action": "Open LLM Setup"
+        },
+        "rerank": {
+          "title": "Rerank Model",
+          "summary": "A rerank model improves the quality of memory and retrieval ranking for more precise results.",
+          "currentOk": "A rerank model was found: {name}",
+          "currentMissing": "No rerank model was detected yet.",
+          "action": "Open Rerank Setup"
+        },
+        "memory": {
+          "title": "Memory & Retrieval",
+          "summary": "Bind an embedding (and optionally a rerank) model to make memory, retrieval, and recall work well.",
+          "currentMissingBinding": "Models found but not bound to memory retrieval yet. Go to Memory to bind them.",
+          "currentOk": "Memory retrieval models are ready.",
+          "currentMissingModel": "No embedding or rerank model configured yet. Memory and retrieval are unavailable.",
+          "action": "Open Memory Setup"
+        },
+        "persona": {
+          "title": "Personas",
+          "summary": "Personas define how your assistant speaks and behaves. More personas mean more flexibility.",
+          "currentOk": "{count} personas configured",
+          "currentMissing": "Only the default persona exists. Create a few to better match your preference.",
+          "action": "Open Persona Setup"
+        },
+        "embedding": {
+          "title": "Embedding Model",
+          "summary": "If you want stronger memory, retrieval, and recall, you should prepare an embedding model.",
+          "currentOk": "An embedding model was found: {name}",
+          "currentMissing": "No embedding model was detected yet.",
+          "action": "Open Embedding Setup"
+        },
+        "voice": {
+          "title": "Speech Recognition",
+          "summary": "If you want voice input, this is a very worthwhile setup.",
+          "currentOk": "A speech recognition model was found: {name}",
+          "currentMissing": "No speech recognition model was detected yet.",
+          "action": "Open Voice Setup"
+        },
+        "department": {
+          "title": "Departments",
+          "summary": "Departments split the workflow by responsibility. Create your own department to hand off tasks for follow-up.",
+          "currentOk": "{count} custom departments configured",
+          "currentMissing": "No custom department yet. Create one to hand off repetitive tasks.",
+          "action": "Open Department Setup"
+        },
+        "skill": {
+          "title": "Skills",
+          "summary": "Skills are reusable capability packs (document processing, web automation, etc.). Your assistant can call them once installed.",
+          "currentOk": "{count} skills installed",
+          "currentMissing": "No skill installed yet. Install a few to greatly expand what your assistant can do.",
+          "action": "Open Skill Setup"
+        },
+        "mcp": {
+          "title": "MCP",
+          "summary": "MCP connects your assistant to external tools and data sources (databases, browsers, API services).",
+          "currentOk": "{count} MCP servers enabled",
+          "currentMissing": "No MCP enabled yet. Connect external services to greatly extend your assistant.",
+          "action": "Open MCP Setup"
         }
-      }
+      },
+      "title": "First-Setup Welcome",
+      "subtitle": "These cards check whether your key config is ready. Fill the required ones first, then the recommended ones, to get started reliably.",
+      "askLlmHint": "Not sure how to configure? The easiest way is to screenshot the page and let an LLM guide you step by step.",
+      "currentState": "Current state: ",
+      "manualInstall": "Manual install",
+      "requiredBadge": "Required",
+      "stronglyRecommendedBadge": "Strongly recommended",
+      "recommendedBadge": "Recommended"
     },
     "imageGeneration": {
       "title": "Independent image generation",
@@ -574,7 +662,115 @@
       "resetWorkspacePathFailed": "Failed to reset assistant space path: {err}",
       "systemCatalogTitle": "System Tool Catalog",
       "systemCatalogReadonly": "Edit department permissions in Department settings",
-      "workspaceAlreadyExists": "A workspace with this name already exists. Please choose a different name."
+      "workspaceAlreadyExists": "A workspace with this name already exists. Please choose a different name.",
+      "androidWorkspaceInitialize": "Initialize Workspace",
+      "androidWorkspaceImportRootfsArchive": "Import Archive",
+      "androidWorkspaceImport": "Import File",
+      "androidWorkspaceExport": "Export File",
+      "androidWorkspaceDisable": "Disable Workspace",
+      "androidWorkspaceRepairRuntime": "Repair Sandbox",
+      "androidWorkspaceResetRuntime": "Reset Sandbox",
+      "androidWorkspaceResetRuntimeConfirmTitle": "Reset the Linux sandbox?",
+      "androidWorkspaceResetRuntimeConfirm": "This deletes the entire Ubuntu rootfs, including apt/pip packages and every file created inside the Linux filesystem outside /workspace, plus proot temporary files. Workspace user files under /workspace, Skills, MCP, private organization data, and app configuration are preserved. Reinitialize or import the Linux runtime after resetting.",
+      "androidWorkspaceResetRuntimeConfirmAction": "Reset Sandbox",
+      "androidWorkspaceRootPath": "Assistant Space Path",
+      "androidWorkspaceExportPath": "Export Path",
+      "androidWorkspaceExportPathPlaceholder": "Example: imports/example.txt",
+      "androidWorkspaceHint": "On Android, the assistant space is fixed inside the app private sandbox and is mounted in Linux as both /workspace and /root/.pai, so terminal commands, Skills, MCP, and user files can call each other directly. Initialization downloads Ubuntu Base 24.04.3 arm64 (about 28.5 MiB) and extracts it to the app private runtime. Until it is ready, only terminal and MCP tools are unavailable; file tools can still maintain assistant-space files. The file manager shows user files by default and does not directly expose the Linux rootfs, app data, or system directories.",
+      "androidWorkspaceRuntime": "Linux Runtime",
+      "androidWorkspaceDownloadProgress": "{stage}: {downloaded} / {total}",
+      "androidWorkspaceDownloadStage": {
+        "preparing": "Preparing",
+        "connecting": "Connecting",
+        "importing": "Importing",
+        "downloading": "Downloading",
+        "downloaded": "Downloaded",
+        "verifying": "Verifying",
+        "extracting": "Extracting"
+      },
+      "androidWorkspaceRootfsManualTitle": "Manual Linux Runtime Import",
+      "androidWorkspaceRootfsManualHint": "If online download stays stuck, download {fileName} in a browser first, then tap “Import Archive”. The app verifies file size and SHA256 before extracting it.",
+      "androidWorkspaceRootfsDownloadLink": "Download URL",
+      "androidWorkspaceRuntimeReady": "{version}, package {size}",
+      "androidWorkspaceStateNotDownloaded": "Not Downloaded",
+      "androidWorkspaceStateDownloading": "Downloading",
+      "androidWorkspaceStateReady": "Ready",
+      "androidWorkspaceLastError": "Last error: {err}",
+      "androidWorkspaceUpdatedAt": "Updated: {time}",
+      "androidWorkspaceStatusFailed": "Failed to read workspace status: {err}",
+      "androidWorkspaceInitializeDone": "Workspace is ready: {path}",
+      "androidWorkspaceInitializeFailed": "Failed to initialize workspace: {err}",
+      "androidWorkspaceRootfsImportDone": "Archive verified and extracted. Workspace is ready: {path}",
+      "androidWorkspaceRootfsImportFailed": "Failed to import Linux runtime: {err}",
+      "androidWorkspaceDisabled": "Workspace disabled. The sandbox directory was not deleted.",
+      "androidWorkspaceDisableFailed": "Failed to disable workspace: {err}",
+      "androidWorkspaceRepairRuntimeDone": "The Linux sandbox was repaired and passed readiness checks.",
+      "androidWorkspaceRepairRuntimeFailed": "Failed to repair the Linux sandbox: {err}",
+      "androidWorkspaceResetRuntimeDone": "The Linux sandbox was reset. User files and Skills were preserved. Reinitialize or import the runtime.",
+      "androidWorkspaceResetRuntimeFailed": "Failed to reset the Linux sandbox: {err}",
+      "androidWorkspaceImportDone": "Imported into workspace: {path}",
+      "androidWorkspaceImportFailed": "Failed to import file: {err}",
+      "androidWorkspaceExportDone": "Prepared export: {path}",
+      "androidWorkspaceExportFailed": "Failed to export file: {err}",
+      "androidWorkspaceExportPathRequired": "Enter a file path inside the sandbox to export",
+      "androidWorkspaceFileManagerTitle": "File Manager",
+      "androidWorkspaceFileManagerStandaloneHint": "Browse, import, export, and delete sandbox user files in a dedicated view.",
+      "androidWorkspaceOpenFileManager": "Open File Manager",
+      "androidWorkspaceFileManagerCurrentPath": "Current: {path}",
+      "androidWorkspaceFileManagerRoot": "Workspace",
+      "androidWorkspaceRefreshFiles": "Refresh",
+      "androidWorkspaceParentDirectory": "Parent",
+      "androidWorkspaceImportHere": "Import Here",
+      "androidWorkspaceDelete": "Delete",
+      "androidWorkspaceFileManagerLoading": "Reading files...",
+      "androidWorkspaceFileManagerEmpty": "This folder is empty",
+      "androidWorkspaceFileManagerLoadFailed": "Failed to read file list: {err}",
+      "androidWorkspaceFileKindDirectory": "Folder",
+      "androidWorkspaceFileSelected": "Selected",
+      "androidWorkspaceFileSelectRequired": "Select a file first",
+      "androidWorkspaceDeleteTitle": "Delete File",
+      "androidWorkspaceDeleteConfirm": "Delete this sandbox file?\n{path}",
+      "androidWorkspaceDeleteDone": "Deleted: {path}",
+      "androidWorkspaceDeleteFailed": "Failed to delete file: {err}",
+      "androidWorkspaceReadText": "View",
+      "androidWorkspaceEditText": "Edit",
+      "androidWorkspaceMove": "Move",
+      "androidWorkspaceSearchFiles": "Search",
+      "androidWorkspaceTextReadFailed": "Failed to read text: {err}",
+      "androidWorkspaceTextPlaceholder": "Text content",
+      "androidWorkspaceTextSave": "Save",
+      "androidWorkspaceTextSaved": "Saved: {path}",
+      "androidWorkspaceTextSaveFailed": "Failed to save text: {err}",
+      "androidWorkspaceMoveTitle": "Move / Rename",
+      "androidWorkspaceMoveSource": "Source path",
+      "androidWorkspaceMoveTarget": "Target path",
+      "androidWorkspaceMoveTargetPlaceholder": "e.g. docs/renamed.md",
+      "androidWorkspaceMoveTargetRequired": "Enter a target path",
+      "androidWorkspaceMoveOverwrite": "Overwrite existing target",
+      "androidWorkspaceMoveDone": "Moved: {path}",
+      "androidWorkspaceMoveFailed": "Failed to move file: {err}",
+      "androidWorkspaceSearchTitle": "Search Workspace Files",
+      "androidWorkspaceSearchGlob": "Glob",
+      "androidWorkspaceSearchGrep": "Text",
+      "androidWorkspaceSearchPattern": "Glob pattern",
+      "androidWorkspaceSearchPatternPlaceholder": "e.g. **/*.md",
+      "androidWorkspaceSearchPatternRequired": "Enter a glob pattern",
+      "androidWorkspaceSearchQuery": "Search text",
+      "androidWorkspaceSearchQueryPlaceholder": "e.g. TODO",
+      "androidWorkspaceSearchQueryRequired": "Enter search text",
+      "androidWorkspaceSearchPath": "Start directory",
+      "androidWorkspaceSearchPathPlaceholder": "Leave empty for workspace root",
+      "androidWorkspaceSearchIncludeGlob": "Only search matching files",
+      "androidWorkspaceSearchIncludeGlobPlaceholder": "e.g. **/*.rs",
+      "androidWorkspaceSearchRegex": "Regular expression",
+      "androidWorkspaceSearchIgnoreCase": "Ignore case",
+      "androidWorkspaceSearchRun": "Search",
+      "androidWorkspaceSearchEmpty": "No matches",
+      "androidWorkspaceSearchFailed": "Failed to search: {err}",
+      "terminalRuntime": "Terminal runtime",
+      "terminalRuntimeHint": "The terminal PAI uses to run commands. Git Bash is required on Windows.",
+      "gitRequiredHint": "No usable terminal detected. Install Git and use Git Bash first.",
+      "installGit": "Install Git (Git Bash)"
     },
     "persona": {
       "title": "Persona",
@@ -825,7 +1021,9 @@
       "refreshFailed": "Failed to refresh network access info",
       "openFailed": "Failed to open link",
       "copied": "Copied",
-      "copyFailed": "Copy failed"
+      "copyFailed": "Copy failed",
+      "passwordPlaceholder": "PC PAI remote access password (optional)",
+      "password": "Access password"
     },
     "remoteIm": {
       "title": "Contact Channels",
@@ -1433,7 +1631,18 @@
     "simpleSetupModeSimple": "Simple",
     "simpleSetupModeAdvanced": "Advanced",
     "simpleSetupModeSwitchToAdvanced": "Switch to Advanced",
-    "simpleSetupModeSwitchToSimple": "Switch to Simple"
+    "simpleSetupModeSwitchToSimple": "Switch to Simple",
+    "remoteFrontend": {
+      "summary": "Enter the PC PAI address and port to use your phone PAI as a remote frontend for the PC PAI. Once connected, your phone shows the PC PAI chat and settings; notifications still arrive on your phone when the PC PAI replies.",
+      "host": "PC PAI address",
+      "hostPlaceholder": "e.g. 192.168.1.100",
+      "port": "Port",
+      "connect": "Connect",
+      "disconnect": "Disconnect",
+      "connectedTo": "Connected to {target}",
+      "invalidTarget": "Enter a valid address and port",
+      "password": "Connection password"
+    }
   },
   "responseStyle": {
     "none": "No Preference",
@@ -1971,7 +2180,12 @@
     "codeReviewSubmitFailed": "Failed to submit code review",
     "deleteConversationFailed": "Failed to delete conversation",
     "readCommitFailed": "Failed to read commit",
-    "startCodeReviewFailed": "Failed to start code review"
+    "startCodeReviewFailed": "Failed to start code review",
+    "holdToRecord": "Hold button to record",
+    "exitRemote": "Exit remote",
+    "remoteBackToChat": "Back to remote chat",
+    "remoteModeTitle": "Remote · {target}",
+    "errorTitleRequest": "Request failed"
   },
   "memory": {
     "title": "Memories",
@@ -2419,6 +2633,12 @@
       "summonNeedsModifier": "The summon hotkey needs at least one modifier key.",
       "unrecognized": "Key not recognized.",
       "recorded": "Recorded: {combo}"
+    },
+    "themeOptions": {
+      "light": "Light",
+      "dark": "Dark",
+      "switchToLight": "Switch to light",
+      "switchToDark": "Switch to dark"
     }
   },
   "runtimeLogs": {

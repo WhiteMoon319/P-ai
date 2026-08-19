@@ -1880,6 +1880,7 @@ const TRANSPORT_NOTIFICATION_EVENT_ALIASES: Record<string, string | string[]> = 
   "messageStore.migrationProgress": "easy-call:message-store-migration-progress",
   "fileReader.openPath": "file-reader-open-path",
   "fileReader.addToChat": "easy-call:file-reader-add-to-chat",
+  "webview.ping": "easy-call:webview-ping",
   "codeReview.requested": "code-review-requested",
   "uiSize.changed": "easy-call:ui-size-changed",
   "markdownAppearance.changed": "easy-call:markdown-appearance-changed",
