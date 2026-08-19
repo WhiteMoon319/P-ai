@@ -2,22 +2,13 @@
 name = "easy-call-ai"
 version = "0.57.0"
 edition = "2021"
-description = "P-ai desktop app"
-default-run = "p-ai"
-autobins = false
-
-[[bin]]
-name = "p-ai"
-path = "src/main.rs"
+description = "P-ai Android native backend"
 
 [lib]
 name = "easy_call_ai_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-
-[target.'cfg(not(target_os = "android"))'.build-dependencies]
-tauri-build = { version = "2", features = [] }
 
 [dependencies]
 pai-backend = { path = "../crates/pai-backend" }
