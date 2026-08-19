@@ -1,6 +1,6 @@
 pub(crate) type DynamicMcpClient = rmcp::service::RunningService<rmcp::RoleClient, ()>;
 
-include!("sse_client.rs");
+pub(crate) use pai_android_platform::mcp::sse_client::*;
 
 pub(crate) const MCP_CONNECT_TIMEOUT_SECS: u64 = 30;
 pub(crate) const MCP_REQUEST_TIMEOUT_SECS: u64 = 60;
