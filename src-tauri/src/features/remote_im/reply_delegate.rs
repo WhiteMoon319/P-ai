@@ -258,7 +258,7 @@ pub(crate) fn build_remote_im_reply_delegate_processing_reminder(
 }
 
 pub(crate) fn build_remote_im_assistant_work_ledger(
-    state: &AppState,
+    state: &impl StateAccess,
     contact_id: &str,
     conversation_id: &str,
 ) -> Result<String, String> {
@@ -655,7 +655,7 @@ pub(crate) fn abort_remote_im_reply_delegate(
 }
 
 pub(crate) fn remote_im_reply_delegate_mirror_message(
-    state: &AppState,
+    state: &impl StateAccess,
     delegate_id: &str,
     mut message: ChatMessage,
     internal_kind: Option<&str>,
@@ -675,7 +675,7 @@ pub(crate) fn remote_im_reply_delegate_mirror_message(
 }
 
 pub(crate) fn remote_im_reply_delegate_mirror_internal_messages(
-    state: &AppState,
+    state: &impl StateAccess,
     delegate_id: &str,
     kind: &str,
     messages: &[ChatMessage],
