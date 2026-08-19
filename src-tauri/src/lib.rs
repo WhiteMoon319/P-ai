@@ -76,7 +76,10 @@ pub(crate) use pai_backend::message_store::meta::{
     conversation_latest_summary_title, ConversationMetaPreviewMessage, ConversationMetaView,
 };
 // crates/pai-backend message_store::sqlite（阶段 4）。
-pub(crate) use pai_backend::message_store::sqlite::ChatIndexConversationItem;
+pub(crate) use pai_backend::message_store::sqlite::{
+    ChatIndexConversationItem, ChatIndexFile, chat_index_item_is_archived,
+    remove_chat_index_conversation, upsert_chat_index_conversation,
+};
 // crates/pai-backend tool_loop（阶段 4）。
 pub(crate) use pai_backend::tool_loop::repeat_guard::ModelReply;
 #[path = "features/chat/message_store/mod.rs"]

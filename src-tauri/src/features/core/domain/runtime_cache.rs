@@ -1004,7 +1004,7 @@ pub(crate) fn state_upsert_chat_index_conversation_cached(
     conversation: &Conversation,
 ) -> Result<(), String> {
     let mut index = state_read_chat_index_cached(state)?;
-    upsert_chat_index_conversation(&mut index, conversation);
+    upsert_chat_index_from_conversation(&mut index, conversation);
     sort_chat_index_items(&mut index.conversations);
     *state
         .cached_chat_index

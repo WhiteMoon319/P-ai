@@ -1875,7 +1875,7 @@ model = "gpt-4.1"
         conversation_a.summary = "updated summary".to_string();
         conversation_a.archived_at = Some("2026-04-15T12:34:56Z".to_string());
 
-        upsert_chat_index_conversation(&mut index, &conversation_a);
+        upsert_chat_index_from_conversation(&mut index, &conversation_a);
 
         assert_eq!(index.conversations.len(), 2);
         let updated = index

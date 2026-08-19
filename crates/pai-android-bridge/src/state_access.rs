@@ -20,6 +20,7 @@ use pai_backend::core::domain::types_storage::RuntimeStateFile;
 use pai_backend::core::domain::types_config::AppConfig;
 use pai_backend::core::domain::types_chat::AgentProfile;
 use pai_backend::core::domain::runtime_types::{RemoteImContactRuntimeState, RemoteImReplyDelegateRuntime};
+use pai_backend::message_store::sqlite::ChatIndexFile;
 
 /// 运行时状态访问接口。
 ///
@@ -35,6 +36,12 @@ pub trait StateAccess: Clone + Send + Sync {
 
     /// 读取缓存的 RuntimeStateFile。
     fn read_runtime_state_cached(&self) -> Result<RuntimeStateFile, String>;
+
+    /// 读取缓存的会话索引（ChatIndexFile，带磁盘缓存）。
+    fn read_chat_index_cached(&self) -> Result<ChatIndexFile, String>;
+
+    /// 调度一次会话删除（排队持久化 + 清理缓存）。
+    fn schedule_conversation_delete(&self, conversation_id: &str) -> Result<u64, String>;
 
     /// 可变操作 RuntimeStateFile：读 → 回调修改 → 标记脏。
     fn mutate_runtime_state_cached<T, F>(&self, f: F) -> Result<T, String>

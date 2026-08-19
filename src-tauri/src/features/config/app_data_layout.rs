@@ -166,15 +166,8 @@ pub(crate) struct AgentsFile {
     pub(crate) agents: Vec<AgentProfile>,
 }
 
-// ChatIndexConversationItem 已迁至 crates/pai-backend message_store::sqlite
-// （阶段 4），通过 crate 根重导出生效。
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ChatIndexFile {
-    #[serde(default)]
-    pub(crate) conversations: Vec<ChatIndexConversationItem>,
-}
+// ChatIndexConversationItem / ChatIndexFile 已迁至 crates/pai-backend
+// message_store::sqlite（阶段 4/6），通过 crate 根重导出生效。
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct AppDataWriteStats {
@@ -305,17 +298,6 @@ pub(crate) fn build_chat_index_item(conversation: &Conversation) -> ChatIndexCon
     }
 }
 
-pub(crate) fn chat_index_item_is_archived(item: &ChatIndexConversationItem) -> bool {
-    if item.status.trim() == "archived" {
-        return true;
-    }
-    item.archived_at
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .is_some()
-}
-
 #[cfg(test)]
 pub(crate) fn build_chat_index_file(conversations: &[Conversation]) -> ChatIndexFile {
     ChatIndexFile {
@@ -326,26 +308,14 @@ pub(crate) fn build_chat_index_file(conversations: &[Conversation]) -> ChatIndex
     }
 }
 
-pub(crate) fn upsert_chat_index_conversation(index: &mut ChatIndexFile, conversation: &Conversation) {
-    let next = build_chat_index_item(conversation);
-    if let Some(existing) = index
-        .conversations
-        .iter_mut()
-        .find(|item| item.id == conversation.id)
-    {
-        *existing = next;
-    } else {
-        index.conversations.push(next);
-    }
-}
-
-#[allow(dead_code)]
-pub(crate) fn remove_chat_index_conversation(index: &mut ChatIndexFile, conversation_id: &str) {
-    let conversation_id = conversation_id.trim();
-    if conversation_id.is_empty() {
-        return;
-    }
-    index.conversations.retain(|item| item.id != conversation_id);
+/// 从 Conversation 构建索引项后 upsert（Conversation 仍为 src-tauri 类型，
+/// 故保留在本地；索引结构操作已迁至 pai-backend）。
+pub(crate) fn upsert_chat_index_from_conversation(
+    index: &mut ChatIndexFile,
+    conversation: &Conversation,
+) {
+    let item = build_chat_index_item(conversation);
+    upsert_chat_index_conversation(index, item);
 }
 
 pub(crate) fn apply_runtime_state_to_app_data(data: &mut AppData, runtime: &RuntimeStateFile) {

@@ -856,6 +856,51 @@ pub struct ChatIndexConversationItem {
     pub archived_at: Option<String>,
 }
 
+/// 会话索引文件（从 src-tauri app_data_layout.rs 迁入，阶段 6）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatIndexFile {
+    #[serde(default)]
+    pub conversations: Vec<ChatIndexConversationItem>,
+}
+
+/// 合并/更新一个会话到索引（upsert，按 id 匹配）。
+pub fn upsert_chat_index_conversation(
+    index: &mut ChatIndexFile,
+    item: ChatIndexConversationItem,
+) {
+    if let Some(existing) = index
+        .conversations
+        .iter_mut()
+        .find(|existing| existing.id == item.id)
+    {
+        *existing = item;
+    } else {
+        index.conversations.push(item);
+    }
+}
+
+/// 从索引移除指定会话（id 精确匹配，空 id 忽略）。
+pub fn remove_chat_index_conversation(index: &mut ChatIndexFile, conversation_id: &str) {
+    let conversation_id = conversation_id.trim();
+    if conversation_id.is_empty() {
+        return;
+    }
+    index.conversations.retain(|item| item.id != conversation_id);
+}
+
+/// 判断索引项是否已归档（status 或 archived_at 非空）。
+pub fn chat_index_item_is_archived(item: &ChatIndexConversationItem) -> bool {
+    if item.status.trim() == "archived" {
+        return true;
+    }
+    item.archived_at
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_some()
+}
+
 pub fn chat_metadata_store_list_chat_index(
     data_path: &PathBuf,
 ) -> Result<Option<Vec<ChatIndexConversationItem>>, String> {
