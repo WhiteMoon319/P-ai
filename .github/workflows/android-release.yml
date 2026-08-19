@@ -67,6 +67,9 @@ jobs:
       - name: Copy Android app icons
         run: |
           if [ -d "src-tauri/icons/android" ]; then
+            # 移除 tauri android init 生成的模板自适应图标（引用模板 foreground），
+            # 让 Android 8+ 直接使用 mipmap-*/ic_launcher.png（PAI legacy 图标）
+            rm -rf src-tauri/gen/android/app/src/main/res/mipmap-anydpi-v26
             cp -rf src-tauri/icons/android/* src-tauri/gen/android/app/src/main/res/
             echo "Custom icons copied to Android res/"
             ls src-tauri/gen/android/app/src/main/res/mipmap-hdpi/ic_launcher.png || echo "WARNING: icon not found"
