@@ -109,14 +109,14 @@ pub(crate) fn remote_im_contact_dashboard_subscriptions(
 }
 
 pub(crate) fn remote_im_contact_dashboard_snapshot_inner(
-    state: &AppState,
+    state: &impl StateAccess,
     contact_id: &str,
 ) -> Result<RemoteImContactDashboardSnapshot, String> {
     let contact_id = contact_id.trim();
     if contact_id.is_empty() {
         return Err("远程联系人仪表盘读取失败：联系人ID为空".to_string());
     }
-    let runtime = state_read_runtime_state_cached(state)?;
+    let runtime = state.read_runtime_state_cached()?;
     let contact = runtime
         .remote_im_contacts
         .iter()
@@ -128,7 +128,8 @@ pub(crate) fn remote_im_contact_dashboard_snapshot_inner(
         .find(|item| item.contact_id == contact_id);
     let pacing = effective_remote_im_group_reply_pacing(state, contact);
     let energy = remote_im_group_energy_at(checkpoint, &pacing, now_utc());
-    let presence_runtime = lock_remote_im_contact_runtime_states(state)?
+    let presence_runtime = state
+        .lock_remote_im_contact_runtime_states()?
         .get(contact_id)
         .cloned()
         .unwrap_or_default();
@@ -160,7 +161,10 @@ pub(crate) fn remote_im_contact_dashboard_snapshot_inner(
     })
 }
 
-pub(crate) fn remote_im_emit_contact_dashboard_snapshot(state: &AppState, contact_id: &str) {
+pub(crate) fn remote_im_emit_contact_dashboard_snapshot(
+    state: &impl StateAccess,
+    contact_id: &str,
+) {
     let (has_subscription, web_client_ids) = remote_im_contact_dashboard_subscriptions()
         .lock()
         .map(|subscriptions| {

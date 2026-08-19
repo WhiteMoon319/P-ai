@@ -38,8 +38,11 @@ pub(crate) fn remote_im_event_hits_wake(contact: &RemoteImContact, event: &ChatP
     remote_im_keyword_matched(contact, &render_message_content_for_model(message))
 }
 
-pub(crate) fn remote_im_contact_is_muted(state: &AppState, contact_id: &str) -> Result<bool, String> {
-    let mut runtime_states = lock_remote_im_contact_runtime_states(state)?;
+pub(crate) fn remote_im_contact_is_muted(
+    state: &impl StateAccess,
+    contact_id: &str,
+) -> Result<bool, String> {
+    let mut runtime_states = state.lock_remote_im_contact_runtime_states()?;
     let Some(runtime) = runtime_states.get_mut(contact_id) else {
         return Ok(false);
     };

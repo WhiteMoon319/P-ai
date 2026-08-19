@@ -7,7 +7,7 @@ pub(crate) struct RemoteImGroupReplyGate {
 }
 
 pub(crate) fn effective_remote_im_group_reply_pacing(
-    state: &AppState,
+    state: &impl StateAccess,
     contact: &RemoteImContact,
 ) -> RemoteImGroupReplyPacing {
     let defaults = RemoteImGroupReplyPacing::default();
@@ -92,7 +92,7 @@ pub(crate) fn remote_im_group_energy_can_reply(energy: f64) -> bool {
 }
 
 pub(crate) fn remote_im_group_reply_gate(
-    state: &AppState,
+    state: &impl StateAccess,
     contact: &RemoteImContact,
     focus: bool,
 ) -> Result<RemoteImGroupReplyGate, String> {
@@ -104,7 +104,7 @@ pub(crate) fn remote_im_group_reply_gate(
             reason: "联系人未同时允许收发".to_string(),
         });
     }
-    let config = state_read_config_cached(state)?;
+    let config = state.read_config_cached()?;
     let Some(channel) = remote_im_channel_by_id(&config, &contact.channel_id) else {
         return Ok(RemoteImGroupReplyGate {
             allowed: false,
@@ -129,7 +129,7 @@ pub(crate) fn remote_im_group_reply_gate(
             reason: "联系人处于闭嘴状态".to_string(),
         });
     }
-    let runtime = state_read_runtime_state_cached(state)?;
+    let runtime = state.read_runtime_state_cached()?;
     let checkpoint = runtime
         .remote_im_contact_checkpoints
         .iter()
@@ -364,7 +364,7 @@ pub(crate) fn remote_im_cancel_prepared_group_reply_delivery(
 }
 
 pub(crate) fn remote_im_persist_group_reply_settlement(
-    state: &AppState,
+    state: &impl StateAccess,
     contact: &RemoteImContact,
     settlement: &RemoteImGroupReplySettlement,
 ) -> Result<(), String> {
@@ -373,7 +373,7 @@ pub(crate) fn remote_im_persist_group_reply_settlement(
         RemoteImGroupReplySettlementStatus::Delivered => "committed",
         RemoteImGroupReplySettlementStatus::Uncertain => "uncertain",
     };
-    let applied = state_mutate_runtime_state_cached(state, |runtime| {
+    let applied = state.mutate_runtime_state_cached(|runtime| {
         let checkpoint = remote_im_contact_checkpoint_mut_in_list(
             &mut runtime.remote_im_contact_checkpoints,
             &contact.id,

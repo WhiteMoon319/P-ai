@@ -1,5 +1,5 @@
 pub(crate) fn remote_im_group_reply_focus_matches(
-    state: &AppState,
+    state: &impl StateAccess,
     contact: &RemoteImContact,
     text: &str,
 ) -> bool {

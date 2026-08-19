@@ -92,8 +92,12 @@ pub(crate) fn remote_im_mark_contact_present_and_schedule_after_entry_compaction
     Ok(force_memory_prompt_snapshot)
 }
 
-pub(crate) fn remote_im_contact_is_away(state: &AppState, contact_id: &str) -> Result<bool, String> {
-    Ok(lock_remote_im_contact_runtime_states(state)?
+pub(crate) fn remote_im_contact_is_away(
+    state: &impl StateAccess,
+    contact_id: &str,
+) -> Result<bool, String> {
+    Ok(state
+        .lock_remote_im_contact_runtime_states()?
         .get(contact_id)
         .map(|runtime| runtime.presence_state == RemoteImPresenceState::Away)
         .unwrap_or(true))

@@ -68,7 +68,7 @@ pub(crate) fn remote_im_resolve_contact_assistant_context(
 }
 
 pub(crate) fn remote_im_resolve_secretary_contact(
-    state: &AppState,
+    state: &impl StateAccess,
     activated_sources: &[RemoteImActivationSource],
 ) -> Result<Option<RemoteImContact>, String> {
     let Some(source) = activated_sources.first() else {
@@ -81,7 +81,7 @@ pub(crate) fn remote_im_resolve_secretary_contact(
         ));
         return Ok(None);
     }
-    let runtime = state_read_runtime_state_cached(state)?;
+    let runtime = state.read_runtime_state_cached()?;
     Ok(remote_im_contact_by_activation_source_in_runtime(&runtime.remote_im_contacts, source).cloned())
 }
 

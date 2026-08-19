@@ -501,10 +501,10 @@ pub(crate) fn remote_im_channel_behavior_settings_from_channel(
 }
 
 pub(crate) fn remote_im_channel_behavior_settings_for_contact(
-    state: &AppState,
+    state: &impl StateAccess,
     contact: &RemoteImContact,
 ) -> RemoteImChannelBehaviorSettings {
-    match state_read_config_cached(state) {
+    match state.read_config_cached() {
         Ok(config) => match config
             .remote_im_channels
             .iter()
