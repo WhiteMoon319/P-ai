@@ -27,7 +27,7 @@ pub(crate) fn remote_im_secretary_current_assistant_context(
 }
 
 pub(crate) fn remote_im_resolve_contact_assistant_context(
-    state: &AppState,
+    state: &impl StateAccess,
     contact: &RemoteImContact,
 ) -> Result<RemoteImConversationAssistantContext, String> {
     let runtime_snapshot = load_runtime_organization_snapshot(state)?;

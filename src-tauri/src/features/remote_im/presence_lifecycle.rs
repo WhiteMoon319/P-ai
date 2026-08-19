@@ -1,9 +1,9 @@
 pub(crate) fn remote_im_mark_contact_present(
-    state: &AppState,
+    state: &impl StateAccess,
     contact_id: &str,
     reason: &str,
 ) -> Result<(), String> {
-    let mut states = lock_remote_im_contact_runtime_states(state)?;
+    let mut states = state.lock_remote_im_contact_runtime_states()?;
     let runtime = remote_im_contact_runtime_state_mut(&mut states, contact_id);
     runtime.presence_state = RemoteImPresenceState::Present;
     runtime.last_presence_at = Some(now_iso());

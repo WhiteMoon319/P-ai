@@ -69,7 +69,7 @@ pub(crate) fn ensure_remote_im_contact_conversation_id(
 }
 
 pub(crate) fn remote_im_contact_conversation_sync_lock(
-    state: &AppState,
+    state: &impl StateAccess,
     contact_id: &str,
 ) -> std::sync::Arc<std::sync::Mutex<()>> {
     static LOCKS: std::sync::OnceLock<
@@ -79,7 +79,7 @@ pub(crate) fn remote_im_contact_conversation_sync_lock(
     > = std::sync::OnceLock::new();
     let key = format!(
         "{}::{}",
-        state.data_path.to_string_lossy(),
+        state.data_path().to_string_lossy(),
         contact_id.trim()
     );
     let locks = LOCKS.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
