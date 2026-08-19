@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn remote_im_list_channels_inner(
     state: &impl StateAccess,
 ) -> Result<Vec<RemoteImChannelConfig>, String> {

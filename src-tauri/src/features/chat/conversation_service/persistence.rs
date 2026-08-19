@@ -1,3 +1,5 @@
+use super::*;
+
 #[cfg(test)]
 pub(crate) fn resolve_unarchived_conversation_index_with_fallback(
     data: &mut AppData,

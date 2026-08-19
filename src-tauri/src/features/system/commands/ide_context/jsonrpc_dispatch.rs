@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) const WEB_NATIVE_CAPABILITY_UNAVAILABLE: &str = "WEB_NATIVE_CAPABILITY_UNAVAILABLE";
 
 pub(crate) fn ide_chat_web_native_only_method(method: &str) -> bool {

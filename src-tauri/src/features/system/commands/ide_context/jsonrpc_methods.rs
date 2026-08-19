@@ -59,6 +59,10 @@ pub(crate) fn ide_chat_serialize<T: Serialize>(value: T) -> Result<Value, String
     serde_json::to_value(value).map_err(|err| format!("serialize result failed: {err}"))
 }
 
-include!("web_settings_methods.rs");
+#[path = "web_settings_methods.rs"]
+mod web_settings_methods;
+pub(crate) use web_settings_methods::*;
 
-include!("chat_methods.rs");
+#[path = "chat_methods.rs"]
+mod chat_methods;
+pub(crate) use chat_methods::*;

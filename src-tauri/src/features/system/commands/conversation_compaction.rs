@@ -1,4 +1,6 @@
 
+use super::*;
+
 pub(crate) fn compact_conversation_preview_inner(
     input: &ConversationIdOnlyInput,
     state: &AppState,

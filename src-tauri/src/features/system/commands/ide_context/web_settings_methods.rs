@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn ide_chat_load_config_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(load_config_inner(state)?)
 }
@@ -166,7 +168,9 @@ pub(crate) async fn ide_chat_list_department_permission_catalog_for_web_settings
 }
 
 
-include!("memory_methods.rs");
+#[path = "memory_methods.rs"]
+mod memory_methods;
+pub(crate) use memory_methods::*;
 
 pub(crate) fn ide_chat_task_list_tasks_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(task_list_tasks_inner(state)?)
@@ -228,7 +232,9 @@ pub(crate) async fn ide_chat_task_optimize_draft_for_web_settings(
     ide_chat_serialize(task_optimize_draft_internal(input, state).await?)
 }
 
-include!("mcp_methods.rs");
+#[path = "mcp_methods.rs"]
+mod mcp_methods;
+pub(crate) use mcp_methods::*;
 
 pub(crate) async fn ide_chat_get_usage_overview_for_web_settings(state: &AppState) -> Result<Value, String> {
     ide_chat_serialize(start_usage_overview_refresh_if_needed(state.clone(), false).await)
@@ -443,7 +449,9 @@ pub(crate) async fn ide_chat_web_access_info_for_web_settings(
     ide_chat_serialize(get_web_access_info_inner(app, state, ide_context_runtime, false).await?)
 }
 
-include!("remote_im_methods.rs");
+#[path = "remote_im_methods.rs"]
+mod remote_im_methods;
+pub(crate) use remote_im_methods::*;
 
 pub(crate) fn ide_chat_save_chat_settings_for_web_settings(
     state: &AppState,

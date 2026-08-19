@@ -27,5 +27,9 @@ pub(crate) use pai_backend::task::domain::*;
 // task/migration.rs 与 task/store.rs 已迁至 crates/pai-backend（阶段 4）。
 pub(crate) use pai_backend::task::migration::*;
 pub(crate) use pai_backend::task::store::*;
-include!("task/scheduler.rs");
-include!("task/commands.rs");
+#[path = "task/scheduler.rs"]
+mod task_scheduler;
+pub(crate) use task_scheduler::*;
+#[path = "task/commands.rs"]
+mod task_commands;
+pub(crate) use task_commands::*;

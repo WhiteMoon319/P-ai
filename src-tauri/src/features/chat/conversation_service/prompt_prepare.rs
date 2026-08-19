@@ -1,3 +1,5 @@
+use super::*;
+
 impl ConversationServiceV2 {
     pub(crate) fn resolve_prompt_prepare_conversation_read_only(
         &self,

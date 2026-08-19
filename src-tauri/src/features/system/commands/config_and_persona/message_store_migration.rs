@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) const MESSAGE_STORE_MIGRATION_PROGRESS_EVENT: &str = "easy-call:message-store-migration-progress";
 
 pub(crate) fn message_store_migration_lock() -> &'static std::sync::Mutex<()> {

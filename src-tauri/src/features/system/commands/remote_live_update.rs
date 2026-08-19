@@ -1,3 +1,5 @@
+use super::*;
+
 // ==================== 远程前端模式通知命令 ====================
 // 远程模式下手机 PAI 壳层把 iframe 转发的电脑 PAI 聊天事件转成 Android 通知。
 // 平台实现（含通知构建）在 features/chat/scheduler/live_update.rs 的

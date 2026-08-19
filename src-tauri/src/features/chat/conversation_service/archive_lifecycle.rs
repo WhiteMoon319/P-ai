@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) const REMOTE_IM_WAKE_COMPACTION_MIN_BLOCK_MESSAGE_COUNT: usize = 14;
 
 #[derive(Debug, Clone)]

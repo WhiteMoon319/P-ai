@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn upsert_ide_context_snapshot_internal(
     input: UpsertIdeContextSnapshotInput,
     runtime: &IdeContextRuntime,

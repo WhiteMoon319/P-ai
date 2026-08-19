@@ -1,3 +1,5 @@
+    use super::*;
+
     #[test]
     fn memory_board_should_match_user_text_only_and_require_hit() {
         let now = now_iso();

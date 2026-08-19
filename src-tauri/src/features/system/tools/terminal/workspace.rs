@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn normalize_terminal_tool_session_id(session_id: &str) -> String {
     let trimmed = session_id.trim();
     if trimmed.is_empty() {

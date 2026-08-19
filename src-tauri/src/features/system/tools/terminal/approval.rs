@@ -1,3 +1,5 @@
+use super::*;
+
 #[derive(Debug)]
 pub(crate) struct PendingTerminalApprovalRequest {
     pub(crate) sender: tokio::sync::oneshot::Sender<bool>,

@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn memory_generation_rules_body() -> &'static str {
     let raw = include_str!("../../../../../resources/preset-skills/memory-generation/SKILL.md");
     let trimmed = raw.trim_start();

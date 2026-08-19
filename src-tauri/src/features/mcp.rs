@@ -26,6 +26,12 @@ use super::*;
 // mcp/types.rs 与 mcp/parser.rs 已迁移至 crates/pai-backend（阶段 4）。
 pub(crate) use pai_backend::mcp::types::*;
 pub(crate) use pai_backend::mcp::parser::*;
-include!("mcp/workspace.rs");
-include!("mcp/runtime_manager.rs");
-include!("mcp/commands.rs");
+#[path = "mcp/workspace.rs"]
+mod mcp_workspace;
+pub(crate) use mcp_workspace::*;
+#[path = "mcp/runtime_manager.rs"]
+mod mcp_runtime_manager;
+pub(crate) use mcp_runtime_manager::*;
+#[path = "mcp/commands.rs"]
+mod mcp_commands;
+pub(crate) use mcp_commands::*;

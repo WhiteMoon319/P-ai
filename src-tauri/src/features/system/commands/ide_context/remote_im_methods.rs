@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) async fn remote_im_get_channel_status_inner(
     state: &AppState,
     channel_id: String,

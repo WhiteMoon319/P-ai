@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn terminal_workspace_access_rank(access: &str) -> i32 {
     match access {
         SHELL_WORKSPACE_ACCESS_READ_ONLY => 3,

@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn expand(json: &str) -> Result<ParsedMcpDefinition, McpDefinitionValidationError> {
     parse_mcp_definition_servers(json)
 }

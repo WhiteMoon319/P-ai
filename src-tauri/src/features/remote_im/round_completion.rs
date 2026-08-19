@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn remote_im_event_latest_message_id(event: &ChatPendingEvent) -> Option<String> {
     event.messages.last().map(|message| message.id.clone())
 }

@@ -536,18 +536,32 @@ pub(crate) fn effective_remote_im_channel_response_guidance(
     remote_im_channel_behavior_settings_for_contact(state, contact).response_guidance
 }
 
-include!("remote_im/group_reply_focus.rs");
+use super::*;
+
+#[path = "remote_im/group_reply_focus.rs"]
+mod remote_im_group_reply_focus;
+pub(crate) use remote_im_group_reply_focus::*;
 // multilingual_text_units 已迁至 crates/pai-backend（阶段 4）。
 pub(crate) use pai_backend::multilingual::text_units::*;
-include!("remote_im/group_reply_energy.rs");
+#[path = "remote_im/group_reply_energy.rs"]
+mod remote_im_group_reply_energy;
+pub(crate) use remote_im_group_reply_energy::*;
 
-include!("remote_im/group_reply_state.rs");
+#[path = "remote_im/group_reply_state.rs"]
+mod remote_im_group_reply_state;
+pub(crate) use remote_im_group_reply_state::*;
 
-include!("remote_im/reply_debounce.rs");
+#[path = "remote_im/reply_debounce.rs"]
+mod remote_im_reply_debounce;
+pub(crate) use remote_im_reply_debounce::*;
 
-include!("remote_im/reply_delegate.rs");
+#[path = "remote_im/reply_delegate.rs"]
+mod remote_im_reply_delegate;
+pub(crate) use remote_im_reply_delegate::*;
 
-include!("remote_im/presence_lifecycle.rs");
+#[path = "remote_im/presence_lifecycle.rs"]
+mod remote_im_presence_lifecycle;
+pub(crate) use remote_im_presence_lifecycle::*;
 
 pub(crate) fn remote_im_contact_runtime_state_mut<'a>(
     states: &'a mut std::collections::HashMap<String, RemoteImContactRuntimeState>,
@@ -840,10 +854,18 @@ pub(crate) fn remote_im_prepare_enqueue_runtime_state(
     Ok((activate_assistant, reason))
 }
 
-include!("remote_im/secretary_decision.rs");
+#[path = "remote_im/secretary_decision.rs"]
+mod remote_im_secretary_decision;
+pub(crate) use remote_im_secretary_decision::*;
 
-include!("remote_im/round_completion.rs");
+#[path = "remote_im/round_completion.rs"]
+mod remote_im_round_completion;
+pub(crate) use remote_im_round_completion::*;
 
-include!("remote_im/inbound_message.rs");
+#[path = "remote_im/inbound_message.rs"]
+mod remote_im_inbound_message;
+pub(crate) use remote_im_inbound_message::*;
 
-include!("remote_im/contact_commands.rs");
+#[path = "remote_im/contact_commands.rs"]
+mod remote_im_contact_commands;
+pub(crate) use remote_im_contact_commands::*;

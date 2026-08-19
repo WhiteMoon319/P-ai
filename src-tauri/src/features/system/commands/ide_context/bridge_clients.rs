@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn ide_context_chat_clients() -> Arc<Mutex<std::collections::HashMap<String, tokio::sync::mpsc::UnboundedSender<serde_json::Value>>>> {
     IDE_CONTEXT_CHAT_CLIENTS
         .get_or_init(|| Arc::new(Mutex::new(std::collections::HashMap::new())))

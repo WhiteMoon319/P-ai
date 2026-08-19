@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn remote_im_mark_contact_present(
     state: &impl StateAccess,
     contact_id: &str,

@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn render_preserved_conversation_message_text(message: &ChatMessage) -> String {
     let mut blocks = Vec::<String>::new();
     if message.role.trim().eq_ignore_ascii_case("assistant") {

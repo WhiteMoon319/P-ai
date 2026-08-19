@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn lock_remote_im_contact_runtime_states(
     state: &AppState,
 ) -> Result<std::sync::MutexGuard<'_, std::collections::HashMap<String, RemoteImContactRuntimeState>>, String>

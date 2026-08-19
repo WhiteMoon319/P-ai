@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn ide_context_bridge_url_for_host(host: &str, port: u16) -> String {
     format!("ws://{}:{}{}", host, port, IDE_CONTEXT_BRIDGE_PATH)
 }

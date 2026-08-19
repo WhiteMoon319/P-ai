@@ -1,3 +1,5 @@
+    use super::*;
+
     #[test]
     fn image_text_cache_upsert_and_find_should_work() {
         let mut data = AppData::default();

@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) const PRESERVED_DIALOGUE_READ_PAGE_SIZE: usize = 32;
 pub(crate) const ACTIVE_COMPACTION_PRESERVED_DIALOGUE_BUDGET: PreservedDialogueBudget =
     PreservedDialogueBudget::Kib(26);

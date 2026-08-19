@@ -1,3 +1,5 @@
+use super::*;
+
 use rayon::prelude::*;
 
 pub(crate) const MAX_PDF_CONVERT_PAGES: usize = 100;

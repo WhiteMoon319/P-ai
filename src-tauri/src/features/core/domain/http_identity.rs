@@ -1,4 +1,6 @@
 
+use super::*;
+
 pub(crate) fn app_http_user_agent() -> String {
     format!(
         "{}/{} ({}; tauri)",

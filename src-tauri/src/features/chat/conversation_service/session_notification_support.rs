@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn normalized_session_search_keyword(keyword: Option<&str>) -> Option<String> {
     keyword
         .map(str::trim)

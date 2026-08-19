@@ -1,3 +1,5 @@
+    use super::*;
+
     #[test]
     fn build_prompt_should_include_structured_tool_history_messages() {
         let now = now_iso();

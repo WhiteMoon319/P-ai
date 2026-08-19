@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn goal_active_goal_from_conversation(
     conversation: &Conversation,
 ) -> Option<ConversationGoalState> {

@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) const MIGRATION_SCHEMA_VERSION: u32 = 1;
 pub(crate) const MIGRATION_MANIFEST_FILE_NAME: &str = "manifest.json";
 pub(crate) const MIGRATION_PAYLOAD_FILE_NAME: &str = "payload.json";

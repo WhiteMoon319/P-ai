@@ -1,4 +1,6 @@
-    fn test_task_data_path(label: &str) -> PathBuf {
+    use super::*;
+
+fn test_task_data_path(label: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!(
             "easy_call_ai_task_test_{}_{}",
             label,

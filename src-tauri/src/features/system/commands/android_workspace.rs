@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) const ANDROID_WORKSPACE_STATUS_EVENT: &str = "easy-call:android-workspace-status-changed";
 pub(crate) const ANDROID_WORKSPACE_NOT_READY_MESSAGE: &str = "Android 工作区未就绪，请先在设置的工具页初始化 PAI 助理空间。";
 pub(crate) const ANDROID_WORKSPACE_ROOTFS_URL: &str = "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-arm64.tar.gz";
@@ -16,13 +18,13 @@ pub(crate) use pai_android_platform::android_workspace::rootfs_paths::*;
 use pai_android_bridge::TaskManager;
 
 #[cfg(target_os = "android")]
-pub(crate) mod android_workspace_rootfs_installer {
-    include!("android_workspace/rootfs_installer.rs");
-    // android_workspace_apply_static_webpki_roots 已迁至 crates/pai-android-platform（阶段 5）。
-    pub(crate) use pai_android_platform::tls::android_workspace_apply_static_webpki_roots;
-}
+#[path = "android_workspace/rootfs_installer.rs"]
+mod android_workspace_rootfs_installer;
 #[cfg(target_os = "android")]
-use android_workspace_rootfs_installer::*;
+pub(crate) use android_workspace_rootfs_installer::*;
+// android_workspace_apply_static_webpki_roots 已迁至 crates/pai-android-platform（阶段 5）。
+#[cfg(target_os = "android")]
+pub(crate) use pai_android_platform::tls::android_workspace_apply_static_webpki_roots;
 
 pub(crate) fn android_workspace_root(state: &impl StateAccess) -> PathBuf {
     state.llm_workspace_path().to_path_buf()
@@ -231,10 +233,11 @@ pub(crate) fn android_workspace_gate_error_for_tool(tool_name: &str, is_mcp_tool
     None
 }
 
-pub(crate) mod android_workspace_manager {
-    include!("android_workspace/manager.rs");
-}
-use android_workspace_manager::*;
+#[cfg(target_os = "android")]
+#[path = "android_workspace/manager.rs"]
+mod android_workspace_manager;
+#[cfg(target_os = "android")]
+pub(crate) use android_workspace_manager::*;
 
 // file_system 已迁至 crates/pai-android-platform（阶段 5）。
 #[cfg(target_os = "android")]

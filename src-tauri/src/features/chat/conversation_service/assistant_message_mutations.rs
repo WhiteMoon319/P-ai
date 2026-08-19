@@ -1,3 +1,5 @@
+use super::*;
+
 impl ConversationServiceV2 {
     pub(crate) fn append_tool_event_to_assistant_message(
         &self,

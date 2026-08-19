@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) static LAST_PANIC_SNAPSHOT_SLOT: OnceLock<Arc<Mutex<Option<String>>>> = OnceLock::new();
 
 pub(crate) fn init_last_panic_snapshot_slot(slot: Arc<Mutex<Option<String>>>) {

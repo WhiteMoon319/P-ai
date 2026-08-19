@@ -1,3 +1,5 @@
+use super::*;
+
 impl ConversationServiceV2 {
     pub(crate) fn commit_scheduler_history_flush(
         &self,

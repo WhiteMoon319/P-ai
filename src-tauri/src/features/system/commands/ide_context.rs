@@ -1,3 +1,5 @@
+use super::*;
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct IdeContextReferenceInput {
@@ -587,22 +589,40 @@ pub(crate) fn ide_chat_create_conversation_options(state: &AppState) -> Result<V
     }))
 }
 
-include!("ide_context/bridge_access.rs");
+use super::*;
 
-include!("ide_context/bridge_clients.rs");
+#[path = "ide_context/bridge_access.rs"]
+mod ide_context_bridge_access;
+pub(crate) use ide_context_bridge_access::*;
 
-include!("ide_context/context_references.rs");
+#[path = "ide_context/bridge_clients.rs"]
+mod ide_context_bridge_clients;
+pub(crate) use ide_context_bridge_clients::*;
+
+#[path = "ide_context/context_references.rs"]
+mod ide_context_context_references;
+pub(crate) use ide_context_context_references::*;
 
 
-include!("ide_context/bridge_http.rs");
+#[path = "ide_context/bridge_http.rs"]
+mod ide_context_bridge_http;
+pub(crate) use ide_context_bridge_http::*;
 
-include!("ide_context/context_commands.rs");
+#[path = "ide_context/context_commands.rs"]
+mod ide_context_context_commands;
+pub(crate) use ide_context_context_commands::*;
 
-include!("ide_context/jsonrpc_methods.rs");
+#[path = "ide_context/jsonrpc_methods.rs"]
+mod ide_context_jsonrpc_methods;
+pub(crate) use ide_context_jsonrpc_methods::*;
 
-include!("ide_context/jsonrpc_dispatch.rs");
+#[path = "ide_context/jsonrpc_dispatch.rs"]
+mod ide_context_jsonrpc_dispatch;
+pub(crate) use ide_context_jsonrpc_dispatch::*;
 
-include!("ide_context/bridge_server.rs");
+#[path = "ide_context/bridge_server.rs"]
+mod ide_context_bridge_server;
+pub(crate) use ide_context_bridge_server::*;
 
 #[cfg(test)]
 pub(crate) mod ide_context_tests {

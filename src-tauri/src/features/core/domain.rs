@@ -33,5 +33,9 @@ pub(crate) use pai_backend::core::domain::types_image_generation::*;
 pub(crate) use pai_backend::core::domain::types_requests::*;
 pub(crate) use pai_backend::core::domain::types_storage::*;
 
-include!("domain/http_identity.rs");
-include!("domain/runtime.rs");
+#[path = "domain/http_identity.rs"]
+mod domain_http_identity;
+pub(crate) use domain_http_identity::*;
+#[path = "domain/runtime.rs"]
+mod domain_runtime;
+pub(crate) use domain_runtime::*;

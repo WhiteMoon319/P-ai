@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn native_notification_text_excerpt(raw: &str, max_chars: usize) -> String {
     let normalized = raw
         .lines()

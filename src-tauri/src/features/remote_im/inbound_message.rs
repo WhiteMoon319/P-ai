@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn ensure_remote_im_contact_conversation_id(
     state: &AppState,
     contact: &mut RemoteImContact,

@@ -1,3 +1,5 @@
+use super::*;
+
 impl ConversationServiceV2 {
     pub(crate) fn create_remote_im_contact_conversation(
         &self,

@@ -1,3 +1,5 @@
+use super::*;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SyncMemoryEmbeddingProviderInput {

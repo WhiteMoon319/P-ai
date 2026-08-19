@@ -1,3 +1,5 @@
+    use super::*;
+
     #[test]
     fn fetch_models_openai_should_read_models_from_base_url() {
         let server = MockServer::start();

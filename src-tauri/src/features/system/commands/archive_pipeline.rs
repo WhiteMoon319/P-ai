@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn mark_tasks_as_session_lost(data_path: &PathBuf, conversation_id: &str) {
     let Ok(tasks) = task_store_list_task_records(data_path) else {
         runtime_log_error(format!(

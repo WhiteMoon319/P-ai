@@ -1,3 +1,5 @@
+use super::*;
+
 // ==================== 对话与运行时命令（拆分入口） ====================
 #[path = "chat_and_runtime/core.rs"]
 mod chat_and_runtime_core;

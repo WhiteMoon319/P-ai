@@ -102,10 +102,24 @@ use super::*;
         }
     }
 
-    include!("config/tests.rs");
-    include!("chat/tests.rs");
-    include!("task/tests.rs");
-    include!("remote_im/tests.rs");
-    include!("system/tests.rs");
-    include!("memory/tests.rs");
-    include!("mcp/tests.rs");
+    #[path = "config/tests.rs"]
+    mod tests_config;
+    pub(crate) use tests_config::*;
+    #[path = "chat/tests.rs"]
+    mod tests_chat;
+    pub(crate) use tests_chat::*;
+    #[path = "task/tests.rs"]
+    mod tests_task;
+    pub(crate) use tests_task::*;
+    #[path = "remote_im/tests.rs"]
+    mod tests_remote_im;
+    pub(crate) use tests_remote_im::*;
+    #[path = "system/tests.rs"]
+    mod tests_system;
+    pub(crate) use tests_system::*;
+    #[path = "memory/tests.rs"]
+    mod tests_memory;
+    pub(crate) use tests_memory::*;
+    #[path = "mcp/tests.rs"]
+    mod tests_mcp;
+    pub(crate) use tests_mcp::*;

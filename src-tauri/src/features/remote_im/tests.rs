@@ -1,3 +1,5 @@
+    use super::*;
+
     #[test]
     fn remote_im_upsert_contact_for_inbound_should_keep_new_contact_communication_disabled() {
         let mut runtime = RuntimeStateFile::default();

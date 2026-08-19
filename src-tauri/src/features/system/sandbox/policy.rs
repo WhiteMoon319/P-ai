@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn sandbox_normalize_path_for_compare(path: &std::path::Path) -> String {
     let text = path.to_string_lossy().to_string();
     #[cfg(target_os = "windows")]

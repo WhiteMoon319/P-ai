@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) mod git_ghost_snapshot;
 
 use git_ghost_snapshot::read_git_snapshot_record_from_provider_meta;

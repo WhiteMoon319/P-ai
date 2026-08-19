@@ -1,3 +1,5 @@
+use super::*;
+
 #[derive(Debug, Clone)]
 pub(crate) struct RemoteImGroupReplyGate {
     pub(crate) allowed: bool,

@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn remote_im_group_reply_focus_matches(
     state: &impl StateAccess,
     contact: &RemoteImContact,

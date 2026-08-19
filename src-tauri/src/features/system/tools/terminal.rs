@@ -3,7 +3,9 @@ use super::*;
 pub(crate) const TERMINAL_MAX_OUTPUT_BYTES: usize = 256 * 1024;
 pub(crate) const TERMINAL_DEFAULT_TIMEOUT_MS: u64 = 300_000;
 
-include!("terminal/runtime.rs");
+#[path = "terminal/runtime.rs"]
+mod terminal_runtime;
+pub(crate) use terminal_runtime::*;
 
 // terminal/output.rs 已迁至 crates/pai-backend（阶段 4）。
 pub(crate) use pai_backend::terminal::output::*;
@@ -11,11 +13,17 @@ pub(crate) use pai_backend::terminal::output::*;
 pub(crate) use pai_backend::terminal::matcher::*;
 pub(crate) use pai_backend::terminal::analyzer::*;
 
-include!("terminal/workspace.rs");
+#[path = "terminal/workspace.rs"]
+mod terminal_workspace;
+pub(crate) use terminal_workspace::*;
 
-include!("terminal/approval.rs");
+#[path = "terminal/approval.rs"]
+mod terminal_approval;
+pub(crate) use terminal_approval::*;
 
 // terminal/guards.rs 已迁至 crates/pai-backend（阶段 4）。
 pub(crate) use pai_backend::terminal::guards::*;
 
-include!("terminal/exec.rs");
+#[path = "terminal/exec.rs"]
+mod terminal_exec;
+pub(crate) use terminal_exec::*;
