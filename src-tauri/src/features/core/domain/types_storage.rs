@@ -850,7 +850,7 @@ mod types_storage_tests {
         let whitelist = build_department_with_permission_control(
             "whitelist",
             vec!["fetch"],
-            vec!["workspace-guide"],
+            vec!["assistant-space-guide"],
             vec!["server-a::search"],
         );
         assert!(department_permission_allows_any_name(
@@ -882,7 +882,7 @@ mod types_storage_tests {
         let blacklist = build_department_with_permission_control(
             "blacklist",
             vec!["fetch"],
-            vec!["workspace-guide"],
+            vec!["assistant-space-guide"],
             vec!["server-a::search"],
         );
         assert!(!department_permission_allows_any_name(
