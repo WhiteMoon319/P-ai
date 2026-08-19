@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) fn should_stop_after_contact_tool(tool_name: &str, tool_result: &ProviderToolResult) -> bool {
     if tool_name != "contact_send_files" {
         return false;

@@ -1,3 +1,4 @@
+use super::*;
 pub async fn runtime_tool_definitions_for_genai(
     definitions: &[ProviderToolDefinition],
     adapter_kind: genai::adapter::AdapterKind,

@@ -933,7 +933,9 @@ pub(crate) async fn describe_openai_family_media_with_multimodal_api(
     Ok(text)
 }
 
-include!("read_media_qwen.rs");
+#[path = "read_media_qwen.rs"]
+mod read_media_qwen;
+pub(crate) use read_media_qwen::*;
 
 pub(crate) async fn describe_gemini_media_with_multimodal_api(
     state: &AppState,

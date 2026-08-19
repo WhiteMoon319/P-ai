@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) fn build_qwen_media_block(
     media_type: ReadMediaDetectedType,
     mime: &str,

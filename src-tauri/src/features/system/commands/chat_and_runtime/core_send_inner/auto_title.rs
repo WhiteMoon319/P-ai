@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) fn conversation_has_visible_title(conversation: &Conversation) -> bool {
     !conversation.title.trim().is_empty()
         || conversation_has_auto_title_blocking_summary_title(conversation)

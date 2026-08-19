@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) fn build_genai_message_state(
     prepared: &PreparedPrompt,
 ) -> Result<(Option<String>, Vec<genai::chat::ChatMessage>), String> {

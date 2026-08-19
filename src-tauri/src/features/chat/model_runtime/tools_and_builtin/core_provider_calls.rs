@@ -1,3 +1,4 @@
+use super::*;
 // ModelReply 已迁至 crates/pai-backend tool_loop::repeat_guard（阶段 4），
 // 通过 crate 根重导出生效。
 

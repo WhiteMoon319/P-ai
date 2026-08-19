@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) async fn resolve_image_description_with_vision_fallback(
     state: &AppState,
     conversation_id: &str,

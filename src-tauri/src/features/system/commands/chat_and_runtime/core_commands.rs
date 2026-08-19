@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) fn normalize_payload_image_attachments(
     raw: Option<&Vec<BinaryPart>>,
 ) -> Vec<serde_json::Value> {

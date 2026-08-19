@@ -7,4 +7,6 @@ use std::collections::{HashMap as StdHashMap, HashSet as StdHashSet};
 
 use super::*;
 pub(crate) use pai_backend::memory::store::*;
-include!("store/tests.rs");
+#[path = "store/tests.rs"]
+mod store_tests;
+pub(crate) use store_tests::*;

@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) fn inflight_chat_key(
     department_id: &str,
     conversation_id: Option<&str>,

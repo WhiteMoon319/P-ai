@@ -1,4 +1,7 @@
-include!("core_send_inner/user_message_memory.rs");
+use super::*;
+#[path = "core_send_inner/user_message_memory.rs"]
+mod send_user_message_memory;
+pub(crate) use send_user_message_memory::*;
 pub(crate) fn trim_conversation_for_prompt_request(conversation: &Conversation) -> Conversation {
     let mut trimmed = conversation.clone();
     if trimmed.messages.is_empty() {
@@ -131,9 +134,15 @@ pub(crate) fn conversation_latest_user_has_plan_mode_block(
         .unwrap_or(false)
 }
 
-include!("core_send_inner/remote_im_auto_send.rs");
-include!("core_send_inner/image_fallback.rs");
-include!("core_send_inner/auto_title.rs");
+#[path = "core_send_inner/remote_im_auto_send.rs"]
+mod send_remote_im_auto_send;
+pub(crate) use send_remote_im_auto_send::*;
+#[path = "core_send_inner/image_fallback.rs"]
+mod send_image_fallback;
+pub(crate) use send_image_fallback::*;
+#[path = "core_send_inner/auto_title.rs"]
+mod send_auto_title;
+pub(crate) use send_auto_title::*;
 pub(crate) fn prepend_required_chat_api_id(
     api_id: Option<&str>,
     candidate_api_ids: &mut Vec<String>,
@@ -247,7 +256,9 @@ pub(crate) fn build_chat_candidate_api_ids(
     Ok((candidate_api_ids, preferred_model_applied))
 }
 
-include!("core_send_inner/stream_failure_persistence.rs");
+#[path = "core_send_inner/stream_failure_persistence.rs"]
+mod send_stream_failure_persistence;
+pub(crate) use send_stream_failure_persistence::*;
 pub(crate) fn main_assistant_activation_should_reject_latest_message(
     latest_message: &ChatMessage,
     assistant_agent_id: &str,

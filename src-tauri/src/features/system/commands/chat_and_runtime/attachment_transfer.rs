@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) const ATTACHMENT_TRANSFER_CHUNK_BYTES: usize = 256 * 1024;
 pub(crate) const ATTACHMENT_TRANSFER_WEB_MAX_BYTES: u64 = 50 * 1024 * 1024;
 pub(crate) const ATTACHMENT_TRANSFER_IDLE_TIMEOUT_SECS: u64 = 10 * 60;

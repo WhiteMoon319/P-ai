@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) const ALIYUN_MULTIMODAL_CACHE_META_KEY: &str = "aliyunMultimodalCache";
 pub(crate) const ALIYUN_MULTIMODAL_CACHE_ITEM_KIND_IMAGE: &str = "image";
 pub(crate) const ALIYUN_MULTIMODAL_CACHE_ITEM_KIND_AUDIO: &str = "audio";

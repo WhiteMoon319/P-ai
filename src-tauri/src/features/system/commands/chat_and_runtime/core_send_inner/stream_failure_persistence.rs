@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) fn persist_failed_chat_completed_tool_history(
     state: &AppState,
     requested_conversation_id: Option<&str>,

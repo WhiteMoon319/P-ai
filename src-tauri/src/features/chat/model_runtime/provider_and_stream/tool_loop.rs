@@ -54,7 +54,9 @@ pub(crate) fn tool_result_history_event(
 
 // repeat_guard 已迁至 crates/pai-backend（阶段 4）。
 pub(crate) use pai_backend::tool_loop::repeat_guard::*;
-include!("tool_loop/tool_output_store.rs");
+#[path = "tool_loop/tool_output_store.rs"]
+mod loop_tool_output_store;
+pub(crate) use loop_tool_output_store::*;
 
 pub(crate) fn tool_loop_round_tool_calls_json(tool_calls: &[genai::chat::ToolCall]) -> Vec<Value> {
     tool_calls
@@ -326,10 +328,18 @@ pub(crate) fn build_tool_loop_prepared_for_continuation(
     Ok(Some((conversation, prepared)))
 }
 
-include!("tool_loop/remote_im_tools.rs");
-include!("tool_loop/tool_result_handling.rs");
-include!("tool_loop/runtime_execution.rs");
-include!("tool_loop/compaction.rs");
+#[path = "tool_loop/remote_im_tools.rs"]
+mod loop_remote_im_tools;
+pub(crate) use loop_remote_im_tools::*;
+#[path = "tool_loop/tool_result_handling.rs"]
+mod loop_tool_result_handling;
+pub(crate) use loop_tool_result_handling::*;
+#[path = "tool_loop/runtime_execution.rs"]
+mod loop_runtime_execution;
+pub(crate) use loop_runtime_execution::*;
+#[path = "tool_loop/compaction.rs"]
+mod loop_compaction;
+pub(crate) use loop_compaction::*;
 pub(crate) async fn run_genai_tool_loop(
     api_config: &ResolvedApiConfig,
     model_name: &str,
