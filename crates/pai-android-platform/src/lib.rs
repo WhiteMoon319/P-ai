@@ -16,3 +16,4 @@ pub mod delegate;
 pub mod config;
 pub mod codex_usage;
 pub mod mcp;
+pub mod event_queue;

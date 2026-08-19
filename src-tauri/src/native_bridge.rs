@@ -6,7 +6,12 @@
 // - 全局 NativeRuntime 单例：自建 Tokio runtime + AppState + IdeContextRuntime
 // - nativeInit(appRoot)：用应用数据目录初始化后端（等价原 tauri setup 的 AppState::new_with_root）
 // - nativeCall(requestJson)：同步执行 JSON-RPC（block_on dispatch），返回响应 JSON
-// - 事件下发（流式 token/通知）暂走事件队列，后续轮次补齐
+// - 事件下发（流式 token/通知）走事件队列（pai_android_platform::event_queue）。
+//
+// 事件队列（native_delta_queue / push_native_delta_event / drain_native_delta_events）
+// 已迁至 crates/pai-android-platform::event_queue（阶段 6）。
+
+pub(crate) use pai_android_platform::event_queue::*;
 
 use jni::objects::{JClass, JString};
 use jni::sys::{jstring};
@@ -23,38 +28,6 @@ static NATIVE_RUNTIME: OnceLock<Result<Arc<NativeRuntime>, String>> = OnceLock::
 
 /// 原生流式事件队列：Kotlin 通过 pollEvents 轮询弹出。
 /// dispatch_assistant_delta_to_active_view 在 Android 分支把所有 delta 事件 push 进来，
-/// AppViewModel/前端轮询 Java_com_whitemoon319_pai_native_PaiNative_pollEvents 取出。
-static NATIVE_DELTA_QUEUE: OnceLock<std::sync::Mutex<Vec<serde_json::Value>>> = OnceLock::new();
-
-pub(crate) fn native_delta_queue() -> &'static std::sync::Mutex<Vec<serde_json::Value>> {
-    NATIVE_DELTA_QUEUE.get_or_init(|| std::sync::Mutex::new(Vec::new()))
-}
-
-/// 把一条流式事件追加进原生事件队列（Android 分支专用）。
-pub(crate) fn push_native_delta_event(event: serde_json::Value) {
-    if let Ok(mut guard) = native_delta_queue().lock() {
-        guard.push(event);
-        // 队列只作短暂缓冲，Kotlin 高频轮询清空，不会无限增长。
-        if guard.len() > 4096 {
-            let len = guard.len();
-            let overflow = guard.split_off(len - 2048);
-            *guard = overflow;
-        }
-    }
-}
-
-/// 弹出并清空当前事件队列，返回 JSON 数组字符串。
-fn drain_native_delta_events() -> String {
-    let mut events = Vec::new();
-    if let Ok(mut guard) = native_delta_queue().lock() {
-        std::mem::swap(&mut events, &mut guard);
-    }
-    match serde_json::to_string(&events) {
-        Ok(json) => json,
-        Err(_) => "[]".to_string(),
-    }
-}
-
 fn native_runtime() -> Result<&'static Arc<NativeRuntime>, String> {
     NATIVE_RUNTIME
         .get()
