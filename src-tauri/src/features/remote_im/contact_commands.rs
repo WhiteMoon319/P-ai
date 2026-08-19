@@ -1,11 +1,15 @@
-pub(crate) fn remote_im_list_channels_inner(state: &AppState) -> Result<Vec<RemoteImChannelConfig>, String> {
-    let config = state_read_config_cached(state)?;
+pub(crate) fn remote_im_list_channels_inner(
+    state: &impl StateAccess,
+) -> Result<Vec<RemoteImChannelConfig>, String> {
+    let config = state.read_config_cached()?;
     Ok(config.remote_im_channels)
 }
 
 
-pub(crate) fn remote_im_list_contacts_inner(state: &AppState) -> Result<Vec<RemoteImContact>, String> {
-    let runtime = state_read_runtime_state_cached(state)?;
+pub(crate) fn remote_im_list_contacts_inner(
+    state: &impl StateAccess,
+) -> Result<Vec<RemoteImContact>, String> {
+    let runtime = state.read_runtime_state_cached()?;
     let mut contacts = runtime.remote_im_contacts;
     contacts.sort_by(|a, b| {
         a.channel_id
@@ -216,7 +220,9 @@ pub(crate) fn remote_im_emit_contact_dashboard_snapshot(
     }
 }
 
-pub(crate) fn remote_im_start_contact_dashboard_push_worker(state: &AppState) {
+pub(crate) fn remote_im_start_contact_dashboard_push_worker<T: StateAccess + 'static>(
+    state: &T,
+) {
     let should_start = match remote_im_contact_dashboard_subscriptions().lock() {
         Ok(mut subscriptions) => {
             if subscriptions.push_worker_running {
@@ -231,7 +237,7 @@ pub(crate) fn remote_im_start_contact_dashboard_push_worker(state: &AppState) {
     if !should_start {
         return;
     }
-    let state = state.clone();
+    let state = (*state).clone();
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(
@@ -1099,7 +1105,9 @@ pub(crate) fn remote_im_clear_contact_conversation_inner(
 }
 
 
-pub(crate) fn remote_im_stale_cached_config_best_effort(state: &AppState) -> Option<AppConfig> {
+pub(crate) fn remote_im_stale_cached_config_best_effort(
+    state: &impl StateAccess,
+) -> Option<AppConfig> {
     state.stale_cached_config_best_effort()
 }
 

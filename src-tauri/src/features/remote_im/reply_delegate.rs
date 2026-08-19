@@ -1,5 +1,5 @@
 pub(crate) fn lock_remote_im_reply_delegate_runtimes(
-    state: &AppState,
+    state: &impl StateAccess,
 ) -> Result<
     std::sync::MutexGuard<'_, std::collections::HashMap<String, RemoteImReplyDelegateRuntime>>,
     String,
@@ -138,7 +138,7 @@ pub(crate) fn remote_im_reply_delegate_register(
 }
 
 pub(crate) fn remote_im_reply_delegate_group_policy(
-    state: &AppState,
+    state: &impl StateAccess,
     delegate_id: &str,
 ) -> Option<(String, RemoteImGroupReplyDispatchPolicy)> {
     lock_remote_im_reply_delegate_runtimes(state)
@@ -164,7 +164,7 @@ pub(crate) fn remote_im_reply_delegate_prepend_system_reminder(
 }
 
 pub(crate) fn build_remote_im_reply_delegate_system_reminder(
-    state: &AppState,
+    state: &impl StateAccess,
     contact_id: &str,
     conversation_id: &str,
     trigger_message: &ChatMessage,
@@ -173,10 +173,11 @@ pub(crate) fn build_remote_im_reply_delegate_system_reminder(
     const PROFILE_MEMORY_LIMIT: usize = 12;
     let profile = remote_im_message_canonical_user_id(trigger_message)
         .and_then(|user_id| {
-            let agents = state_read_agents_cached(state).ok()?;
+            let agents = state.read_agents_cached().ok()?;
             let agent = agents.iter().find(|agent| agent.id == agent_id)?;
+            let data_path = state.data_path().to_path_buf();
             match build_transient_user_profile_snapshot_block_for_user(
-                &state.data_path,
+                &data_path,
                 agent,
                 &user_id,
                 "",
@@ -297,7 +298,7 @@ pub(crate) fn build_remote_im_assistant_work_ledger(
 }
 
 pub(crate) fn remote_im_reply_delegate_prompt_messages(
-    state: &AppState,
+    state: &impl StateAccess,
     delegate_id: &str,
 ) -> Result<Vec<ChatMessage>, String> {
     let runtimes = lock_remote_im_reply_delegate_runtimes(state)?;
@@ -312,7 +313,10 @@ pub(crate) fn remote_im_reply_delegate_prompt_messages(
     Ok(messages)
 }
 
-pub(crate) fn remote_im_reply_delegate_is_active(state: &AppState, delegate_id: &str) -> bool {
+pub(crate) fn remote_im_reply_delegate_is_active(
+    state: &impl StateAccess,
+    delegate_id: &str,
+) -> bool {
     lock_remote_im_reply_delegate_runtimes(state)
         .ok()
         .and_then(|runtimes| runtimes.get(delegate_id).cloned())
@@ -424,7 +428,7 @@ pub(crate) enum RemoteImReplyDelegateNext {
 }
 
 pub(crate) fn remote_im_reply_delegate_active_ids_for_contact(
-    state: &AppState,
+    state: &impl StateAccess,
     contact_id: &str,
 ) -> Result<Vec<String>, String> {
     let runtimes = lock_remote_im_reply_delegate_runtimes(state)?
