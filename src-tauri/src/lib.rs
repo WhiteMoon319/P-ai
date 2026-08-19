@@ -203,7 +203,7 @@ mod features_system_commands;
 pub(crate) use features_system_commands::*;
 
 #[cfg(target_os = "android")]
-include!("native_bridge.rs");
+include!("native/mod.rs");
 // StateAccess trait 实现（阶段 6）
 mod state_access_impl;
 
