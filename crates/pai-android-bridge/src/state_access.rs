@@ -18,7 +18,7 @@ use std::path::Path;
 
 use pai_backend::core::domain::types_storage::RuntimeStateFile;
 use pai_backend::core::domain::types_config::AppConfig;
-use pai_backend::core::domain::types_chat::{AgentProfile, Conversation};
+use pai_backend::core::domain::types_chat::{AgentProfile, Conversation, DelegateRuntimeThread};
 use pai_backend::core::domain::runtime_types::{RemoteImContactRuntimeState, RemoteImReplyDelegateRuntime};
 use pai_backend::message_store::meta::ConversationShardMeta;
 use pai_backend::message_store::sqlite::ChatIndexFile;
@@ -101,4 +101,30 @@ pub trait StateAccess: Clone + Send + Sync {
 
     /// 取消指定 key 的进行中聊天（inflight abort handle），返回是否找到并取消。
     fn abort_inflight_chat(&self, key: &str) -> bool;
+
+    // ── 应答委托运行时表 ──
+
+    /// 锁应答委托运行时线程表（delegate_runtime_threads）。
+    fn lock_delegate_runtime_threads(
+        &self,
+    ) -> Result<
+        std::sync::MutexGuard<'_, std::collections::HashMap<String, DelegateRuntimeThread>>,
+        String,
+    >;
+
+    /// 锁最近应答委托线程表（delegate_recent_threads）。
+    fn lock_delegate_recent_threads(
+        &self,
+    ) -> Result<
+        std::sync::MutexGuard<'_, std::collections::VecDeque<DelegateRuntimeThread>>,
+        String,
+    >;
+
+    /// 锁已完成工具历史表（inflight_completed_tool_history）。
+    fn lock_inflight_completed_tool_history(
+        &self,
+    ) -> Result<
+        std::sync::MutexGuard<'_, std::collections::HashMap<String, Vec<serde_json::Value>>>,
+        String,
+    >;
 }

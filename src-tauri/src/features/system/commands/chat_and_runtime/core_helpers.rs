@@ -48,12 +48,11 @@ pub(crate) fn replace_inflight_completed_tool_history(
 }
 
 pub(crate) fn inflight_completed_tool_history(
-    state: &AppState,
+    state: &impl StateAccess,
     chat_key: &str,
 ) -> Result<Vec<Value>, String> {
     let inflight = state
-        .inflight_completed_tool_history
-        .lock()
+        .lock_inflight_completed_tool_history()
         .map_err(|_| "Failed to lock inflight completed tool history".to_string())?;
     Ok(inflight.get(chat_key).cloned().unwrap_or_default())
 }

@@ -771,14 +771,14 @@ pub(crate) async fn send_chat_message_inner(
     let runtime_conversation_id = requested_conversation_id
         .as_deref()
         .filter(|conversation_id| {
-            delegate_runtime_thread_conversation_get(&state, conversation_id)
+            delegate_runtime_thread_conversation_get(state, conversation_id)
                 .ok()
                 .flatten()
                 .is_some()
         })
         .map(ToOwned::to_owned);
     let runtime_conversation = if let Some(conversation_id) = runtime_conversation_id.as_deref() {
-        delegate_runtime_thread_conversation_get(&state, conversation_id)?
+        delegate_runtime_thread_conversation_get(state, conversation_id)?
             .ok_or_else(|| format!("指定临时会话不存在：{conversation_id}"))?
     } else {
         Conversation {

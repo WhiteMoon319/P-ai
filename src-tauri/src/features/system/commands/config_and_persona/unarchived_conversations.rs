@@ -1685,12 +1685,12 @@ pub(crate) fn delegate_display_title_from_snapshot(snapshot: &DelegateConversati
 }
 
 pub(crate) fn delegate_display_title_from_id(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     delegate_id: &str,
     conversation: Option<&Conversation>,
     fallback_title: Option<&str>,
 ) -> String {
-    if let Ok(Some(snapshot)) = delegate_snapshot_cache_get(&app_state.data_path, delegate_id) {
+    if let Ok(Some(snapshot)) = delegate_snapshot_cache_get(&app_state.data_path().to_path_buf(), delegate_id) {
         let title = delegate_display_title_from_snapshot(&snapshot);
         if !title.trim().is_empty() {
             return title;
@@ -1896,11 +1896,11 @@ pub(crate) fn conversation_delegate_stats_from_conversation(
 }
 
 pub(crate) fn conversation_delegate_status_from_entry(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     delegate_id: &str,
     active: bool,
 ) -> (String, String, Option<String>) {
-    match delegate_snapshot_cache_get(&app_state.data_path, delegate_id) {
+    match delegate_snapshot_cache_get(&app_state.data_path().to_path_buf(), delegate_id) {
         Ok(Some(snapshot)) => {
             let status = if active && snapshot.status == DELEGATE_STATUS_DELIVERED {
                 "running".to_string()
@@ -1921,7 +1921,7 @@ pub(crate) fn conversation_delegate_status_from_entry(
 }
 
 pub(crate) fn conversation_delegate_summary_from_thread(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     thread: &DelegateRuntimeThread,
     active: bool,
 ) -> Result<ConversationDelegateStatusSummary, String> {
@@ -1941,7 +1941,7 @@ pub(crate) fn conversation_delegate_summary_from_thread(
     } else {
         stored_started_at
     };
-    let snapshot = delegate_snapshot_cache_get(&app_state.data_path, &delegate_id)?
+    let snapshot = delegate_snapshot_cache_get(&app_state.data_path().to_path_buf(), &delegate_id)?
         .unwrap_or_else(|| DelegateConversationSnapshot {
             delegate_id: delegate_id.clone(),
             kind: "normal".to_string(),
@@ -1999,7 +1999,7 @@ pub(crate) fn conversation_delegate_summary_from_thread(
 }
 
 pub(crate) fn conversation_delegate_summary_from_snapshot(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     snapshot: &DelegateConversationSnapshot,
 ) -> Result<ConversationDelegateStatusSummary, String> {
     let (status, stored_started_at, stored_completed_at) =

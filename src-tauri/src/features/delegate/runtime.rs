@@ -16,7 +16,7 @@ pub(crate) struct ConversationDelegateStatusUpdatedPayload {
 }
 
 pub(crate) fn emit_conversation_delegate_status_updated(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     root_conversation_id: &str,
     delegate_id: &str,
     status: &str,
@@ -28,19 +28,7 @@ pub(crate) fn emit_conversation_delegate_status_updated(
         status: status.to_string(),
         summary,
     };
-    let app_handle = {
-        let guard = app_state
-            .app_handle
-            .lock()
-            .map_err(|_| "Failed to lock app handle".to_string())?;
-        guard
-            .as_ref()
-            .cloned()
-            .ok_or_else(|| "App handle is not ready".to_string())?
-    };
-    app_handle
-        .emit(DELEGATE_STATUS_UPDATED_EVENT, payload.clone())
-        .map_err(|err| format!("推送委托状态事件失败: {err}"))?;
+    app_state.emit_app_event(DELEGATE_STATUS_UPDATED_EVENT, payload.clone())?;
     ide_chat_broadcast_notification(
         "conversation.delegateStatusUpdated",
         serde_json::json!(payload),
@@ -49,7 +37,7 @@ pub(crate) fn emit_conversation_delegate_status_updated(
 }
 
 pub(crate) fn conversation_delegate_status_summary_for_event(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     delegate_id: &str,
     status: &str,
 ) -> Option<ConversationDelegateStatusSummary> {
@@ -72,7 +60,7 @@ pub(crate) fn conversation_delegate_status_summary_for_event(
                 .map(|thread| conversation_delegate_summary_from_thread(app_state, &thread, false))
         })
         .or_else(|| {
-            delegate_snapshot_cache_get(&app_state.data_path, delegate_id)
+            delegate_snapshot_cache_get(&app_state.data_path().to_path_buf(), delegate_id)
                 .ok()
                 .flatten()
                 .map(|snapshot| {
@@ -105,7 +93,7 @@ pub(crate) fn delegate_runtime_thread_is_deleted(delegate_id: &str) -> Result<bo
 }
 
 pub(crate) fn delegate_conversation_store_write_if_not_deleted(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     delegate_id: &str,
     conversation: &Conversation,
 ) -> Result<bool, String> {
@@ -120,12 +108,12 @@ pub(crate) fn delegate_conversation_store_write_if_not_deleted(
         ));
         return Ok(false);
     }
-    delegate_conversation_store_write(&app_state.data_path, conversation)?;
+    delegate_conversation_store_write(&app_state.data_path().to_path_buf(), conversation)?;
     Ok(true)
 }
 
 pub(crate) fn delegate_conversation_store_delete_with_tombstone(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     delegate_id: &str,
 ) -> Result<bool, String> {
     let normalized_delegate_id = delegate_id.trim();
@@ -136,7 +124,7 @@ pub(crate) fn delegate_conversation_store_delete_with_tombstone(
         .lock()
         .map_err(|_| "Failed to lock deleted delegate conversation ids".to_string())?;
     deleted.insert(normalized_delegate_id.to_string());
-    delegate_conversation_store_delete(&app_state.data_path, normalized_delegate_id)
+    delegate_conversation_store_delete(&app_state.data_path().to_path_buf(), normalized_delegate_id)
 }
 
 pub(crate) fn delegate_parent_shell_workspace(
@@ -378,21 +366,21 @@ pub(crate) fn delegate_runtime_thread_create(
 }
 
 pub(crate) fn delegate_runtime_thread_get(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     delegate_id: &str,
 ) -> Result<Option<DelegateRuntimeThread>, String> {
     let guard = app_state
-        .delegate_runtime_threads
-        .lock()
+        .lock_delegate_runtime_threads()
         .map_err(|_| "Failed to lock delegate runtime threads".to_string())?;
     Ok(guard.get(delegate_id.trim()).cloned())
 }
 
 pub(crate) fn delegate_runtime_thread_apply_persisted_conversation(
     mut thread: DelegateRuntimeThread,
-    app_state: &AppState,
+    app_state: &impl StateAccess,
 ) -> Result<DelegateRuntimeThread, String> {
-    match delegate_conversation_store_read(&app_state.data_path, &thread.delegate_id) {
+    let data_path = app_state.data_path().to_path_buf();
+    match delegate_conversation_store_read(&data_path, &thread.delegate_id) {
         Ok(Some(conversation)) => {
             thread.conversation = conversation;
         }
@@ -408,7 +396,7 @@ pub(crate) fn delegate_runtime_thread_apply_persisted_conversation(
 }
 
 pub(crate) fn delegate_runtime_thread_modify<T, F>(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     delegate_id: &str,
     modify: F,
 ) -> Result<T, String>
@@ -416,8 +404,7 @@ where
     F: FnOnce(&mut DelegateRuntimeThread) -> Result<T, String>,
 {
     let mut guard = app_state
-        .delegate_runtime_threads
-        .lock()
+        .lock_delegate_runtime_threads()
         .map_err(|_| "Failed to lock delegate runtime threads".to_string())?;
     let thread = guard
         .get_mut(delegate_id.trim())
@@ -425,18 +412,20 @@ where
     modify(thread)
 }
 
-pub(crate) fn delegate_runtime_thread_list(app_state: &AppState) -> Result<Vec<DelegateRuntimeThread>, String> {
+pub(crate) fn delegate_runtime_thread_list(
+    app_state: &impl StateAccess,
+) -> Result<Vec<DelegateRuntimeThread>, String> {
     let guard = app_state
-        .delegate_runtime_threads
-        .lock()
+        .lock_delegate_runtime_threads()
         .map_err(|_| "Failed to lock delegate runtime threads".to_string())?;
     Ok(guard.values().cloned().collect())
 }
 
-pub(crate) fn delegate_recent_thread_list(app_state: &AppState) -> Result<Vec<DelegateRuntimeThread>, String> {
+pub(crate) fn delegate_recent_thread_list(
+    app_state: &impl StateAccess,
+) -> Result<Vec<DelegateRuntimeThread>, String> {
     let guard = app_state
-        .delegate_recent_threads
-        .lock()
+        .lock_delegate_recent_threads()
         .map_err(|_| "Failed to lock recent delegate runtime threads".to_string())?;
     guard
         .iter()
@@ -446,17 +435,16 @@ pub(crate) fn delegate_recent_thread_list(app_state: &AppState) -> Result<Vec<De
 }
 
 pub(crate) fn delegate_runtime_thread_archive(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     delegate_id: &str,
     archived_at: &str,
 ) -> Result<(), String> {
     let mut active = app_state
-        .delegate_runtime_threads
-        .lock()
+        .lock_delegate_runtime_threads()
         .map_err(|_| "Failed to lock delegate runtime threads".to_string())?;
     let Some(mut thread) = active.remove(delegate_id.trim()) else {
         drop(active);
-        let Some(mut conversation) = delegate_conversation_store_read(&app_state.data_path, delegate_id)? else {
+        let Some(mut conversation) = delegate_conversation_store_read(&app_state.data_path().to_path_buf(), delegate_id)? else {
             return Ok(());
         };
         conversation.archived_at = Some(archived_at.to_string());
@@ -468,7 +456,7 @@ pub(crate) fn delegate_runtime_thread_archive(
         return Ok(());
     }
     if let Some(persisted) =
-        delegate_conversation_store_read(&app_state.data_path, &thread.delegate_id)?
+        delegate_conversation_store_read(&app_state.data_path().to_path_buf(), &thread.delegate_id)?
     {
         thread.conversation = persisted;
     }
@@ -481,8 +469,7 @@ pub(crate) fn delegate_runtime_thread_archive(
         &thread.conversation,
     )?;
     let mut recent = app_state
-        .delegate_recent_threads
-        .lock()
+        .lock_delegate_recent_threads()
         .map_err(|_| "Failed to lock recent delegate runtime threads".to_string())?;
     recent.retain(|item| item.delegate_id != thread.delegate_id);
     recent.push_front(thread);
@@ -582,7 +569,7 @@ pub(crate) fn abort_delegate_runtime_thread(
 }
 
 pub(crate) fn delegate_runtime_thread_get_any(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     delegate_id: &str,
 ) -> Result<Option<DelegateRuntimeThread>, String> {
     if let Some(thread) = delegate_runtime_thread_get(app_state, delegate_id)? {
@@ -590,8 +577,7 @@ pub(crate) fn delegate_runtime_thread_get_any(
     }
     let recent_thread = {
         let recent = app_state
-            .delegate_recent_threads
-            .lock()
+            .lock_delegate_recent_threads()
             .map_err(|_| "Failed to lock recent delegate runtime threads".to_string())?;
         recent
             .iter()
@@ -601,7 +587,7 @@ pub(crate) fn delegate_runtime_thread_get_any(
     if let Some(thread) = recent_thread {
         return delegate_runtime_thread_apply_persisted_conversation(thread, app_state).map(Some);
     }
-    if let Some(conversation) = delegate_conversation_store_read(&app_state.data_path, delegate_id)? {
+    if let Some(conversation) = delegate_conversation_store_read(&app_state.data_path().to_path_buf(), delegate_id)? {
         let root_conversation_id = conversation.root_conversation_id.clone().unwrap_or_default();
         let delegate_id = conversation
             .delegate_id
@@ -622,10 +608,10 @@ pub(crate) fn delegate_runtime_thread_get_any(
 }
 
 pub(crate) fn delegate_runtime_thread_conversation_get(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     delegate_id: &str,
 ) -> Result<Option<Conversation>, String> {
-    if let Some(conversation) = delegate_conversation_store_read(&app_state.data_path, delegate_id)? {
+    if let Some(conversation) = delegate_conversation_store_read(&app_state.data_path().to_path_buf(), delegate_id)? {
         return Ok(Some(conversation));
     }
     Ok(
@@ -635,7 +621,7 @@ pub(crate) fn delegate_runtime_thread_conversation_get(
 }
 
 pub(crate) fn delegate_runtime_thread_conversation_get_any(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     delegate_id: &str,
 ) -> Result<Option<Conversation>, String> {
     Ok(
@@ -645,14 +631,14 @@ pub(crate) fn delegate_runtime_thread_conversation_get_any(
 }
 
 pub(crate) fn delegate_runtime_thread_conversation_mutation_lock(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     delegate_id: &str,
 ) -> Arc<Mutex<()>> {
     static LOCKS: std::sync::OnceLock<Mutex<std::collections::HashMap<String, Arc<Mutex<()>>>>> =
         std::sync::OnceLock::new();
     let key = format!(
         "{}::{}",
-        app_state.data_path.to_string_lossy(),
+        app_state.data_path().to_string_lossy(),
         delegate_id.trim()
     );
     let locks = LOCKS.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
@@ -670,7 +656,7 @@ pub(crate) fn delegate_runtime_thread_conversation_mutation_lock(
 }
 
 pub(crate) fn delegate_runtime_thread_conversation_update_unlocked(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     delegate_id: &str,
     conversation: Conversation,
 ) -> Result<(), String> {
@@ -682,8 +668,7 @@ pub(crate) fn delegate_runtime_thread_conversation_update_unlocked(
         return Ok(());
     }
     let mut active = app_state
-        .delegate_runtime_threads
-        .lock()
+        .lock_delegate_runtime_threads()
         .map_err(|_| "Failed to lock delegate runtime threads".to_string())?;
     if let Some(thread) = active.get_mut(delegate_id.trim()) {
         thread.conversation = conversation;
@@ -691,8 +676,7 @@ pub(crate) fn delegate_runtime_thread_conversation_update_unlocked(
     }
     drop(active);
     let mut recent = app_state
-        .delegate_recent_threads
-        .lock()
+        .lock_delegate_recent_threads()
         .map_err(|_| "Failed to lock recent delegate runtime threads".to_string())?;
     if let Some(thread) = recent
         .iter_mut()
@@ -704,7 +688,7 @@ pub(crate) fn delegate_runtime_thread_conversation_update_unlocked(
 }
 
 pub(crate) fn delegate_runtime_thread_conversation_update(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     delegate_id: &str,
     conversation: Conversation,
 ) -> Result<(), String> {
@@ -725,7 +709,7 @@ pub(crate) fn delegate_runtime_thread_conversation_update(
 // 群聊长度门改写（默认禁用，保留待重新启用）。
 #[allow(dead_code)]
 pub(crate) fn delegate_runtime_thread_append_fast_request(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     delegate_id: &str,
     turn: FastRequestTurn,
 ) -> Result<bool, String> {
@@ -768,7 +752,7 @@ pub(crate) fn delegate_runtime_thread_append_fast_request(
 }
 
 pub(crate) fn delegate_runtime_thread_conversation_append_if_absent(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     delegate_id: &str,
     message: ChatMessage,
 ) -> Result<bool, String> {
@@ -882,14 +866,14 @@ pub(crate) fn delegate_runtime_thread_conversation_delete_by_root(
 }
 
 pub(crate) fn delegate_persisted_conversation_summary_list(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
 ) -> Result<Vec<DelegateConversationSnapshot>, String> {
-    delegate_snapshot_cache_list(&app_state.data_path)
+    delegate_snapshot_cache_list(&app_state.data_path().to_path_buf())
 }
 
 pub(crate) fn delegate_persisted_snapshot_list_by_root(
-    app_state: &AppState,
+    app_state: &impl StateAccess,
     root_conversation_id: &str,
 ) -> Result<Vec<DelegateConversationSnapshot>, String> {
-    delegate_snapshot_cache_list_by_root(&app_state.data_path, root_conversation_id)
+    delegate_snapshot_cache_list_by_root(&app_state.data_path().to_path_buf(), root_conversation_id)
 }

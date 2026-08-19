@@ -5,7 +5,7 @@ use pai_android_bridge::state_access::StateAccess;
 use pai_backend::core::domain::runtime_types::{
     RemoteImContactRuntimeState, RemoteImReplyDelegateRuntime,
 };
-use pai_backend::core::domain::types_chat::{AgentProfile, Conversation};
+use pai_backend::core::domain::types_chat::{AgentProfile, Conversation, DelegateRuntimeThread};
 use pai_backend::core::domain::types_config::AppConfig;
 use pai_backend::core::domain::types_storage::RuntimeStateFile;
 use pai_backend::message_store::meta::ConversationShardMeta;
@@ -166,5 +166,38 @@ impl StateAccess for AppState {
                 }
             }
         }
+    }
+
+    fn lock_delegate_runtime_threads(
+        &self,
+    ) -> Result<
+        std::sync::MutexGuard<'_, std::collections::HashMap<String, DelegateRuntimeThread>>,
+        String,
+    > {
+        self.delegate_runtime_threads
+            .lock()
+            .map_err(|_| "Failed to lock delegate runtime threads".to_string())
+    }
+
+    fn lock_delegate_recent_threads(
+        &self,
+    ) -> Result<
+        std::sync::MutexGuard<'_, std::collections::VecDeque<DelegateRuntimeThread>>,
+        String,
+    > {
+        self.delegate_recent_threads
+            .lock()
+            .map_err(|_| "Failed to lock recent delegate runtime threads".to_string())
+    }
+
+    fn lock_inflight_completed_tool_history(
+        &self,
+    ) -> Result<
+        std::sync::MutexGuard<'_, std::collections::HashMap<String, Vec<serde_json::Value>>>,
+        String,
+    > {
+        self.inflight_completed_tool_history
+            .lock()
+            .map_err(|_| "Failed to lock inflight completed tool history".to_string())
     }
 }
