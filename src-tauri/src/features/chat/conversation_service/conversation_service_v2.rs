@@ -746,7 +746,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn get_raw_recent_messages(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         limit: usize,
     ) -> Result<Vec<ChatMessage>, String> {
@@ -760,7 +760,7 @@ impl ConversationServiceV2 {
         {
             page.messages
         } else {
-            let conversation = state_read_conversation_cached(state, conversation_id)?;
+            let conversation = state.read_conversation_cached(conversation_id)?;
             self.ensure_unarchived_conversation(&conversation, conversation_id)?;
             let total = conversation.messages.len();
             let start = total.saturating_sub(normalized_limit);
@@ -930,11 +930,11 @@ impl ConversationServiceV2 {
 
     pub(crate) fn resolve_latest_foreground_conversation_id(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         agent_id: &str,
     ) -> Result<Option<String>, String> {
         let normalized_agent_id = agent_id.trim();
-        let chat_index = state_read_chat_index_cached(state)?;
+        let chat_index = state.read_chat_index_cached()?;
         Ok(chat_index
             .conversations
             .iter()
@@ -1102,7 +1102,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn get_conversation_metadata_record(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
     ) -> Result<Conversation, String> {
         let conversation_meta = self.get_conversation_meta(state, conversation_id)?;
