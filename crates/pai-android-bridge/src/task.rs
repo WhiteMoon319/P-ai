@@ -5,7 +5,9 @@
 //! - 任务在后台异步执行，进度通过事件队列推送给 Kotlin
 //! - 调用方通过 taskId 查询状态或取消任务
 //!
-//! 本模块定义类型与 trait，具体实现在 src-tauri 侧。
+//! 本模块定义类型、trait 与默认实现（`DefaultTaskManager`）。
+//! `DefaultTaskManager` 提供全局静态任务注册表 + 自动事件推送（Kotlin 侧通过 pollEvents 消费）。
+//! 自定义实现可绕过 `TaskManager` trait，直接在 src-tauri 侧对接已有任务系统。
 
 use serde::{Deserialize, Serialize};
 
