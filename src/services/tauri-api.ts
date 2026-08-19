@@ -14,14 +14,15 @@ type WebBridgeConfig = {
 // 远程前端模式：iframe 内电脑 PAI 页面与手机 PAI 壳层之间的密码认证消息源标识。
 const REMOTE_AUTH_BRIDGE_SOURCE = "pai-remote-bridge-auth";
 
-// 远程前端模式：允许 postMessage 桥接的壳层 origin 白名单。
-// Tauri Android WebView 默认 asset 协议 origin 为 https://tauri.localhost，
-// 与电脑端 PAI（含 PR #17 适配）的桥接约定保持一致；接收侧校验 event.origin、
-// 转发侧 targetOrigin 均使用此值。
-export const REMOTE_BRIDGE_ALLOWED_ORIGIN = "https://tauri.localhost";
-
 // 远程前端模式：手机 PAI 壳层 → 本页面的会话命令消息源标识（与认证方向相反）。
 const REMOTE_COMMAND_BRIDGE_SOURCE = "pai-remote-bridge-command";
+
+// 远程前端模式：允许与 iframe 内电脑 PAI 页面做 postMessage 桥接的父窗口 origin。
+// 与手机 PAI 壳层约定：壳层页面必须以该 origin 加载（Tauri Android WebView 默认
+// asset 协议为 https://tauri.localhost）。桌面独立窗口（self === top）与 VSCode
+// 侧边栏（走 acquireVsCodeApi，不经 postMessage）不受影响；若壳层实际 origin
+// 不同，需两端同步修改。
+export const REMOTE_BRIDGE_ALLOWED_ORIGIN = "https://tauri.localhost";
 
 export type TransportHostWorkspace = {
   path: string;
@@ -231,15 +232,6 @@ export type TransportCapabilities = {
 };
 
 /**
- * Android 上同样是 Tauri WebView（会注入 __TAURI_INTERNALS__），但移动端
- * 没有可操作的最小化/最大化/关闭窗口语义，窗口控制按钮必须隐藏。
- */
-export function isAndroidRuntime(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /android/i.test(String(navigator.userAgent || ""));
-}
-
-/**
  * 文件对话框也是传输边界的一部分。
  *
  * 业务层只消费这个与运行时无关的结果；原生插件的动态 import 只能出现在
@@ -404,9 +396,7 @@ function downloadBrowserTransportBase64File(fileName: string, bytesBase64: strin
 export async function pickTransportAttachments<T>(
   options: TransportFileDialogOptions = { multiple: true },
 ): Promise<T[]> {
-  // Android 上 dialog.open() 返回 content:// URI，后端经 workspace-io 原生插件
-  // 流式写入沙盒 downloads（绕开 base64 与 64MB 上限）。桌面走本地路径摄取。
-  if (isTauriRuntimeAvailable() && !isAndroidRuntime()) {
+  if (isTauriRuntimeAvailable()) {
     const selected = await openTransportFileDialog({ ...options, directory: false });
     const paths = (Array.isArray(selected) ? selected : [selected])
       .map((value) => String(value || "").trim())
@@ -416,17 +406,6 @@ export async function pickTransportAttachments<T>(
       receipts.push(await invokeTauri<T>("attachment_ingest_local_path", {
         input: { path },
       }));
-    }
-    return receipts;
-  }
-  if (isAndroidRuntime()) {
-    const selected = await openTransportFileDialog({ ...options, directory: false });
-    const uris = (Array.isArray(selected) ? selected : [selected])
-      .map((value) => String(value || "").trim())
-      .filter((value) => value.startsWith("content://"));
-    const receipts: T[] = [];
-    for (const uri of uris) {
-      receipts.push(await invokeTauri<T>("attachment_ingest_content_uri", { uri }));
     }
     return receipts;
   }
@@ -530,7 +509,7 @@ function postTransportHostMessage(message: unknown): boolean {
 export function getTransportCapabilities(): TransportCapabilities {
   const native = isTauriRuntimeAvailable();
   return {
-    windowControls: native && !isAndroidRuntime(),
+    windowControls: native,
     localFileSystem: native,
     localPathPicker: native,
   };
@@ -820,10 +799,6 @@ export async function writeTransportBase64File(path: string, bytesBase64: string
   return true;
 }
 
-export async function acknowledgeTransportWebviewHeartbeat(): Promise<void> {
-  await invokeTauri("webview_pong");
-}
-
 export type TransportChatImageData = {
   dataUrl: string;
   mime?: string;
@@ -998,12 +973,6 @@ export function sendTransportNativeNotificationDemo<T>(): Promise<T> {
   return invokeRequiredNativeTransport<T>("本机通知演示", "demo_send_native_notification");
 }
 
-export function sendTransportNotificationTest<T>(kind: "normal" | "live_update"): Promise<T> {
-  return invokeRequiredNativeTransport<T>("通知测试", "demo_test_notification", {
-    input: { kind: String(kind) },
-  });
-}
-
 export function restartTransportApplicationDemo(): Promise<void> {
   return invokeRequiredNativeTransport<void>("应用重启演示", "demo_restart_app");
 }
@@ -1153,7 +1122,7 @@ async function ensureWebTransportConversationContext(conversationId: string, for
 
 /** 设置入口由适配器决定打开原生窗口、宿主页或普通浏览器页面。 */
 export async function openTransportSettings(): Promise<boolean> {
-  if (isTauriRuntimeAvailable() && !isAndroidRuntime()) {
+  if (isTauriRuntimeAvailable()) {
     return openTransportWindow("main");
   }
   if (typeof window === "undefined") return false;
@@ -1171,13 +1140,6 @@ export async function openTransportSettings(): Promise<boolean> {
   const url = new URL(path, window.location.href);
   const config = ensureWebBridgeConfig();
   if (config?.chatUrl) url.searchParams.set("chatUrl", config.chatUrl);
-  // Android WebView（回环地址 + Tauri runtime 无独立 main 窗口）：在 WebView 内
-  // 导航到设置页并注入平台标识，不能调用 show_main_window（Android 只有 chat 窗口）。
-  if (isAndroidRuntime()) {
-    url.searchParams.set("platform", "android");
-    window.location.href = url.toString();
-    return true;
-  }
   return openTransportExternalUrl(url.toString());
 }
 
@@ -1417,7 +1379,6 @@ const WEB_BRIDGE_NATIVE_ONLY_COMMANDS = new Set([
   "migrate_shell_workspace_directory",
   "desktop_screenshot",
   "demo_send_native_notification",
-  "demo_test_notification",
   "demo_restart_app",
   "xcap",
   "start_current_window_drag",
@@ -1880,7 +1841,6 @@ const TRANSPORT_NOTIFICATION_EVENT_ALIASES: Record<string, string | string[]> = 
   "messageStore.migrationProgress": "easy-call:message-store-migration-progress",
   "fileReader.openPath": "file-reader-open-path",
   "fileReader.addToChat": "easy-call:file-reader-add-to-chat",
-  "webview.ping": "easy-call:webview-ping",
   "codeReview.requested": "code-review-requested",
   "uiSize.changed": "easy-call:ui-size-changed",
   "markdownAppearance.changed": "easy-call:markdown-appearance-changed",
@@ -2239,7 +2199,6 @@ export async function requestRemotePasswordFromParent(
     return "";
   }
   return new Promise((resolve) => {
-
     let settled = false;
     const settle = (password: string) => {
       if (settled) return;
@@ -2252,7 +2211,6 @@ export async function requestRemotePasswordFromParent(
       // 只接受约定壳层 origin 与父窗口来源的消息，防恶意页面伪造密码注入。
       if (event.origin !== REMOTE_BRIDGE_ALLOWED_ORIGIN) return;
       if (event.source !== win.parent) return;
-
       const data = event.data as { source?: unknown; method?: unknown; payload?: unknown } | null;
       if (!data || typeof data !== "object") return;
       if (data.source !== REMOTE_AUTH_BRIDGE_SOURCE) return;
@@ -2264,7 +2222,6 @@ export async function requestRemotePasswordFromParent(
     win.addEventListener("message", listener);
     try {
       win.parent.postMessage(
-
         { source: REMOTE_AUTH_BRIDGE_SOURCE, method: "request-password" },
         REMOTE_BRIDGE_ALLOWED_ORIGIN,
       );
@@ -2411,9 +2368,8 @@ function isWebBridgeAuthenticationRefreshError(error: unknown): boolean {
 }
 
 function emitWebBridgeNotification(method: string, payload: unknown) {
-  // 远程前端模式：远程 sidebar 被手机 PAI 以 iframe 嵌入时（window.self !== window.top），
-  // 把 bridge 通知转发给父窗口（手机 PAI 壳层），由壳层构建 Android 通知。
-
+  // 远程前端场景：sidebar 页面被外部宿主以 iframe 嵌入时（window.self !== window.top），
+  // 把 bridge 通知转发给父窗口（如手机端 PAI 壳层），供宿主消费同一事件流；
   // 桌面独立窗口 self === top 不触发，既有行为不变。
   if (typeof window !== "undefined" && window.self !== window.top) {
     try {
@@ -2426,7 +2382,6 @@ function emitWebBridgeNotification(method: string, payload: unknown) {
     }
   }
   const handlers = webBridgeNotificationHandlers.get(method);
-
   if (!handlers) return;
   for (const handler of handlers) handler(payload);
 }
@@ -2804,6 +2759,11 @@ export type GitPanelStatusOutput = {
   repoRoot: string;
   branch: string;
   entries: GitPanelStatusEntry[];
+  truncated: boolean;
+  /** 截断前暂存组实际数量（折叠条尾部显示） */
+  stagedTotal: number;
+  /** 截断前更改组实际数量（折叠条尾部显示） */
+  unstagedTotal: number;
 };
 
 export type GitPanelDiffOutput = {
@@ -2847,6 +2807,24 @@ export type GitPanelLogOutput = {
   entries: GitPanelLogEntry[];
 };
 
+export type GitPanelRepoEntry = {
+  path: string;
+  name: string;
+};
+
+export type GitPanelReposOutput = {
+  repos: GitPanelRepoEntry[];
+};
+
+export type GitPanelDiscoverOutput = {
+  gitAvailable: boolean;
+  currentRepoRoot?: string | null;
+  repos: GitPanelRepoEntry[];
+  defaultRepoRoot?: string | null;
+  checked: boolean;
+  error?: string | null;
+};
+
 function gitPanelWorkspaceArgs(workspacePath: string): Record<string, unknown> {
   return { input: { workspacePath: String(workspacePath || "").trim() } };
 }
@@ -2872,6 +2850,20 @@ function gitPanelRequiredWorkspace(workspacePath: string): string {
 
 export async function gitPanelDetect(workspacePath: string): Promise<GitPanelDetectOutput> {
   return invokeTauri<GitPanelDetectOutput>("git_panel_detect", gitPanelWorkspaceArgs(gitPanelRequiredWorkspace(workspacePath)));
+}
+
+export async function gitPanelRepos(workspacePath: string, refresh = false): Promise<GitPanelReposOutput> {
+  return invokeTauri<GitPanelReposOutput>("git_panel_repos", {
+    ...gitPanelWorkspaceArgs(gitPanelRequiredWorkspace(workspacePath)),
+    refresh,
+  });
+}
+
+export async function gitPanelDiscover(workspacePath: string, refresh = false): Promise<GitPanelDiscoverOutput> {
+  return invokeTauri<GitPanelDiscoverOutput>("git_panel_discover", {
+    ...gitPanelWorkspaceArgs(gitPanelRequiredWorkspace(workspacePath)),
+    refresh,
+  });
 }
 
 export async function gitPanelStatus(workspacePath: string): Promise<GitPanelStatusOutput> {

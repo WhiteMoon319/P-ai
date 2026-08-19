@@ -1,14 +1,17 @@
 <template>
   <div class="flex h-full min-h-0 w-full flex-col bg-base-200/35 text-base-content" @click="closeCommitCard">
-    <!-- 失败提示 -->
-    <div v-if="errorToast" class="pointer-events-none absolute inset-x-0 top-10 z-50 flex justify-center px-4">
-      <div class="pointer-events-auto max-w-full rounded bg-error px-3 py-1.5 text-xs text-error-content shadow-lg">
-        {{ errorToast }}
+    <!-- 操作提示：进行中 / 成功 / 失败 -->
+    <div v-if="toast" class="pointer-events-none absolute inset-x-0 top-10 z-50 flex justify-center px-4">
+      <div
+        class="pointer-events-auto max-w-full rounded px-3 py-1.5 text-xs shadow-lg"
+        :class="toast.kind === 'error' ? 'bg-error text-error-content' : toast.kind === 'success' ? 'bg-success text-success-content' : 'bg-neutral text-neutral-content'"
+      >
+        {{ toast.message }}
       </div>
     </div>
 
-    <!-- 未检测到 git 或非仓库 -->
-    <div v-if="detectError" class="flex h-full min-h-0 flex-col items-center justify-center gap-2 px-4 text-center">
+    <!-- 未检测到 git 或非仓库（且没有可显示的仓库列表时） -->
+    <div v-if="detectError && repos.length === 0 && !reposLoading" class="flex h-full min-h-0 flex-col items-center justify-center gap-2 px-4 text-center">
       <SquareTerminal class="h-8 w-8 opacity-50" />
       <div class="text-sm font-medium">{{ detectError }}</div>
       <div v-if="detectChecked" class="max-w-56 text-xs leading-relaxed text-base-content/55">
@@ -17,8 +20,78 @@
     </div>
 
     <template v-else>
-      <!-- 上栏：提交输入框 + 更改/暂存双树 -->
-      <div class="flex min-h-0 flex-1 flex-col">
+      <!-- 仓库栏：折叠条（标题=当前仓库名）+ 仓库列表（懒加载，可切换） -->
+      <div class="flex min-h-0 shrink-0 flex-col overflow-hidden">
+        <GitSectionBar v-model="repoCollapsed">
+          <template #default>
+            <span class="max-w-40 truncate text-xs font-medium opacity-70">{{ currentRepoName }}</span>
+          </template>
+          <template #actions>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs h-6 min-h-6 w-6 px-0"
+              :title="t('gitPanel.refresh')"
+              :disabled="reposLoading || busy"
+              @click="refreshRepos"
+            >
+              <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': reposLoading }" />
+            </button>
+          </template>
+        </GitSectionBar>
+        <div v-if="!repoCollapsed" class="git-panel-scroller max-h-44 min-h-0 overflow-y-auto py-1">
+          <div v-if="reposLoading" class="px-3 py-2 text-xs opacity-50">{{ t('gitPanel.loading') }}</div>
+          <template v-else>
+            <button
+              v-for="repo in repos"
+              :key="repo.path"
+              type="button"
+              class="flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs hover:bg-base-300/40"
+              :class="{ 'bg-primary/10 text-primary': isCurrentRepo(repo.path) }"
+              :disabled="busy"
+              @click="switchRepo(repo.path)"
+            >
+              <GitBranch class="h-3 w-3 shrink-0 opacity-60" />
+              <span class="min-w-0 flex-1 truncate">{{ repo.name }}</span>
+              <span v-if="isCurrentRepo(repo.path)" class="shrink-0 opacity-50">{{ t('gitPanel.currentRepo') }}</span>
+            </button>
+            <div v-if="repos.length === 0" class="px-3 py-2 text-xs opacity-50">{{ t('gitPanel.noRepos') }}</div>
+          </template>
+        </div>
+      </div>
+
+      <!-- 上栏：折叠条 + 提交输入框 + 更改/暂存双树 -->
+      <div class="flex min-h-0 flex-col overflow-hidden" :class="{ 'flex-1': !changesCollapsed }">
+        <GitSectionBar v-model="changesCollapsed">
+          <template #default>
+            <span class="text-xs font-medium opacity-70">
+              {{ t('gitPanel.changes') }}
+              <span v-if="statusTruncated" class="tabular-nums opacity-50">1000+</span>
+              <span v-else-if="totalChanges > 0" class="tabular-nums opacity-50">{{ totalChanges }}</span>
+            </span>
+          </template>
+          <template #actions>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs h-6 min-h-6 w-6 px-0"
+              :title="changesViewMode === 'tree' ? t('gitPanel.listView') : t('gitPanel.treeView')"
+              :disabled="busy"
+              @click="toggleChangesViewMode"
+            >
+              <ListTree v-if="changesViewMode === 'tree'" class="h-3.5 w-3.5" />
+              <Rows3 v-else class="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs h-6 min-h-6 w-6 px-0"
+              :title="t('gitPanel.refresh')"
+              :disabled="busy"
+              @click="refreshChanges"
+            >
+              <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': changesRefreshing }" />
+            </button>
+          </template>
+        </GitSectionBar>
+        <div v-if="!changesCollapsed" class="flex min-h-0 flex-1 flex-col">
         <!-- 提交输入框（单行起，随内容增高，外观同 input） -->
         <div class="shrink-0 border-b border-base-300 bg-base-200/35 p-2">
           <textarea
@@ -52,6 +125,8 @@
             :title="t('gitPanel.stagedChanges')"
             :entries="stagedEntries"
             :busy="busy"
+            :mode="changesViewMode"
+            :total-count="stagedTotal"
             action-kind="unstage"
             :action-title="t('gitPanel.unstage')"
             :discard-title="t('gitPanel.discard')"
@@ -67,6 +142,8 @@
             :title="t('gitPanel.changes')"
             :entries="unstagedEntries"
             :busy="busy"
+            :mode="changesViewMode"
+            :total-count="unstagedTotal"
             action-kind="stage"
             :action-title="t('gitPanel.stage')"
             :discard-title="t('gitPanel.discard')"
@@ -79,77 +156,91 @@
             @discard="discardPaths"
           />
           <div v-if="!busy && totalChanges === 0" class="px-3 py-6 text-center text-xs text-base-content/50">
-            {{ t('gitPanel.noChanges') }}
+            {{ repoRoot ? t('gitPanel.noChanges') : t('gitPanel.selectRepoHint') }}
           </div>
+        </div>
         </div>
       </div>
 
-      <!-- 下栏：tab 内容 + 底部标签页 -->
-      <div class="flex min-h-0 flex-1 flex-col border-t border-base-300">
-        <div class="min-h-0 flex-1 overflow-hidden">
-          <!-- 提交 tab：commit 表 + 底部分支切换 -->
-          <div v-if="activeGitTab === 'commits'" class="flex h-full min-h-0 flex-col">
-            <div class="relative shrink-0 border-b border-base-300 px-2 py-1.5">
-              <div class="flex items-center gap-1">
-                <!-- 最左边：分支名 + 切换分支下拉 -->
+      <!-- 分界线：仅两栏都展开时显示，独立于折叠条 -->
+      <GitResizeHandle v-if="!changesCollapsed && !historyCollapsed" @resize-start="onHistoryResizeStart" @resize="onHistoryResize" />
+
+      <!-- 下栏：折叠条 + tab 内容 + 底部标签页 -->
+      <div
+        ref="historySectionRef"
+        class="relative flex min-h-0 flex-col"
+        :class="{ 'flex-1': !historyCollapsed && (historyHeight === null || changesCollapsed) }"
+        :style="!historyCollapsed && !changesCollapsed && historyHeight !== null ? { height: `${historyHeight}px` } : undefined"
+      >
+        <!-- 下栏折叠条：折叠按钮 + 标题 + 分支名 + 刷新/同步/拉/推 -->
+        <GitSectionBar v-model="historyCollapsed">
+          <template #default>
+            <span class="text-xs font-medium opacity-70">
+              {{ activeGitTab === 'commits' ? t('gitPanel.commitHistory') : activeGitTab === 'stashes' ? t('gitPanel.stashesTab') : t('gitPanel.branchesTab') }}
+            </span>
+          </template>
+          <template #actions>
+            <button
+              v-if="activeGitTab === 'commits'"
+              type="button"
+              class="flex h-6 min-w-0 items-center gap-1 rounded px-1 text-xs font-medium hover:bg-base-300/40"
+              :disabled="busy"
+              @click="toggleBranchPicker"
+            >
+              <GitBranch class="h-3.5 w-3.5 shrink-0 opacity-70" />
+              <span class="max-w-28 truncate">{{ currentBranch || t('gitPanel.detachedHead') }}</span>
+              <ChevronUp class="h-3 w-3 shrink-0 opacity-50" :class="{ 'rotate-180': !branchPickerOpen }" />
+            </button>
+            <!-- 分支切换下拉（absolute 相对折叠条） -->
+            <div v-if="branchPickerOpen" class="absolute left-0 right-0 top-full z-20 max-h-64 overflow-y-auto border border-base-300 bg-base-100 p-1 shadow-lg">
+              <div v-if="branchPickerLoading" class="px-2 py-2 text-xs opacity-50">{{ t('gitPanel.loading') }}</div>
+              <template v-else>
+                <div v-if="localBranches.length > 0" class="px-2 pb-0.5 pt-1 text-[11px] font-medium opacity-50">{{ t('gitPanel.localBranches') }}</div>
                 <button
+                  v-for="branch in localBranches"
+                  :key="branch.name"
                   type="button"
-                  class="flex h-6 min-w-0 items-center gap-1 rounded px-1 text-xs font-medium hover:bg-base-300/40"
-                  :disabled="busy"
-                  @click="branchPickerOpen = !branchPickerOpen"
+                  class="flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs hover:bg-base-300/40"
+                  :class="{ 'bg-primary/10 text-primary': branch.isCurrent }"
+                  :disabled="busy || branch.isCurrent"
+                  @click="runCheckoutBranch(branch.name)"
                 >
-                  <GitBranch class="h-3.5 w-3.5 shrink-0 opacity-70" />
-                  <span class="max-w-28 truncate">{{ currentBranch || t('gitPanel.detachedHead') }}</span>
-                  <ChevronUp class="h-3 w-3 shrink-0 opacity-50" :class="{ 'rotate-180': !branchPickerOpen }" />
+                  <GitBranch class="h-3 w-3 shrink-0 opacity-60" />
+                  <span class="min-w-0 flex-1 truncate">{{ branch.name }}</span>
+                  <span v-if="branch.isCurrent" class="shrink-0 opacity-50">{{ t('gitPanel.current') }}</span>
                 </button>
-                <span class="flex-1"></span>
-                <!-- 右边：推拉同步 -->
-                <button class="btn btn-ghost btn-xs h-6 min-h-6 w-6 px-0" type="button" :title="t('gitPanel.refresh')" :disabled="busy" @click="refreshHistory">
-                  <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': busy }" />
+                <div v-if="remoteBranches.length > 0" class="px-2 pb-0.5 pt-2 text-[11px] font-medium opacity-50">{{ t('gitPanel.remoteBranches') }}</div>
+                <button
+                  v-for="branch in remoteBranches"
+                  :key="branch.name"
+                  type="button"
+                  class="flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs hover:bg-base-300/40"
+                  :disabled="busy"
+                  @click="runCheckoutBranch(branch.name)"
+                >
+                  <Cloud class="h-3 w-3 shrink-0 opacity-60" />
+                  <span class="min-w-0 flex-1 truncate">{{ branch.name }}</span>
                 </button>
-                <button class="btn btn-ghost btn-xs h-6 min-h-6 w-6 px-0" type="button" :title="t('gitPanel.sync')" :disabled="busy" @click="runSync">
-                  <CloudSync class="h-3.5 w-3.5" :class="{ 'animate-spin': busy }" />
-                </button>
-                <button class="btn btn-ghost btn-xs h-6 min-h-6 w-6 px-0" type="button" :title="t('gitPanel.pull')" :disabled="busy" @click="runPull">
-                  <ArrowDownToLine class="h-3.5 w-3.5" />
-                </button>
-                <button class="btn btn-ghost btn-xs h-6 min-h-6 w-6 px-0" type="button" :title="t('gitPanel.push')" :disabled="busy" @click="runPush">
-                  <ArrowUpFromLine class="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <!-- 分支切换下拉 -->
-              <div v-if="branchPickerOpen" class="absolute left-0 right-0 top-full z-20 max-h-64 overflow-y-auto border border-base-300 bg-base-100 p-1 shadow-lg">
-                <div v-if="branchPickerLoading" class="px-2 py-2 text-xs opacity-50">{{ t('gitPanel.loading') }}</div>
-                <template v-else>
-                  <div v-if="localBranches.length > 0" class="px-2 pb-0.5 pt-1 text-[11px] font-medium opacity-50">{{ t('gitPanel.localBranches') }}</div>
-                  <button
-                    v-for="branch in localBranches"
-                    :key="branch.name"
-                    type="button"
-                    class="flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs hover:bg-base-300/40"
-                    :class="{ 'bg-primary/10 text-primary': branch.isCurrent }"
-                    :disabled="busy || branch.isCurrent"
-                    @click="runCheckoutBranch(branch.name)"
-                  >
-                    <GitBranch class="h-3 w-3 shrink-0 opacity-60" />
-                    <span class="min-w-0 flex-1 truncate">{{ branch.name }}</span>
-                    <span v-if="branch.isCurrent" class="shrink-0 opacity-50">{{ t('gitPanel.current') }}</span>
-                  </button>
-                  <div v-if="remoteBranches.length > 0" class="px-2 pb-0.5 pt-2 text-[11px] font-medium opacity-50">{{ t('gitPanel.remoteBranches') }}</div>
-                  <button
-                    v-for="branch in remoteBranches"
-                    :key="branch.name"
-                    type="button"
-                    class="flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs hover:bg-base-300/40"
-                    :disabled="busy"
-                    @click="runCheckoutBranch(branch.name)"
-                  >
-                    <Cloud class="h-3 w-3 shrink-0 opacity-60" />
-                    <span class="min-w-0 flex-1 truncate">{{ branch.name }}</span>
-                  </button>
-                </template>
-              </div>
+              </template>
             </div>
+            <button v-if="activeGitTab === 'commits'" class="btn btn-ghost btn-xs h-6 min-h-6 w-6 px-0" type="button" :title="t('gitPanel.refresh')" :disabled="busy" @click="refreshHistory">
+              <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': busy }" />
+            </button>
+            <button v-if="activeGitTab === 'commits'" class="btn btn-ghost btn-xs h-6 min-h-6 w-6 px-0" type="button" :title="t('gitPanel.sync')" :disabled="busy" @click="runSync">
+              <CloudSync class="h-3.5 w-3.5" :class="{ 'animate-spin': busy }" />
+            </button>
+            <button v-if="activeGitTab === 'commits'" class="btn btn-ghost btn-xs h-6 min-h-6 w-6 px-0" type="button" :title="t('gitPanel.pull')" :disabled="busy" @click="runPull">
+              <ArrowDownToLine class="h-3.5 w-3.5" />
+            </button>
+            <button v-if="activeGitTab === 'commits'" class="btn btn-ghost btn-xs h-6 min-h-6 w-6 px-0" type="button" :title="t('gitPanel.push')" :disabled="busy" @click="runPush">
+              <ArrowUpFromLine class="h-3.5 w-3.5" />
+            </button>
+          </template>
+        </GitSectionBar>
+        <div v-if="!historyCollapsed" class="flex min-h-0 flex-1 flex-col">
+          <div class="min-h-0 flex-1 overflow-hidden">
+          <!-- 提交 tab：commit 表（工具条已上移到折叠条） -->
+          <div v-if="activeGitTab === 'commits'" class="flex h-full min-h-0 flex-col">
             <div ref="historyScroller" class="git-panel-scroller min-h-0 flex-1 overflow-y-auto py-1">
               <div v-if="logEntries.length === 0 && !busy" class="px-3 py-6 text-center text-xs text-base-content/50">
                 {{ t('gitPanel.noCommits') }}
@@ -172,6 +263,15 @@
                 </div>
                 <!-- 展开的 diff 文件列表 -->
                 <div v-if="expandedCommitHash === entry.hash" class="ml-4 border-l border-base-300 py-0.5 pl-2">
+                  <button
+                    type="button"
+                    class="flex w-full cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-left font-medium text-primary hover:bg-base-300/40"
+                    :disabled="busy"
+                    @click="openCommitAllDiff(entry)"
+                  >
+                    <Files class="h-3 w-3 shrink-0" />
+                    <span class="min-w-0 truncate">{{ t('gitPanel.viewCommitChanges') }}</span>
+                  </button>
                   <div v-if="commitFilesLoading[entry.hash]" class="px-2 py-1 opacity-50">
                     {{ t('gitPanel.loading') }}
                   </div>
@@ -313,8 +413,8 @@
           </div>
         </div>
 
-        <!-- 底部标签页：提交 / 储藏 / 分支 -->
-        <div class="flex h-8 shrink-0 items-center gap-1 border-t border-base-300 bg-base-200/35 px-2">
+          <!-- 底部标签页：提交 / 储藏 / 分支 -->
+          <div class="flex h-8 shrink-0 items-center gap-1 border-t border-base-300 bg-base-200/35 px-2">
           <button
             v-for="item in gitPanelTabs"
             :key="item.key"
@@ -323,9 +423,10 @@
             :class="activeGitTab === item.key ? 'bg-base-100 text-primary shadow-sm' : 'text-base-content/60 hover:bg-base-300/40'"
             @click="selectGitTab(item.key)"
           >
-            <component :is="item.icon" class="h-3.5 w-3.5" />
-            <span class="truncate">{{ item.label }}</span>
-          </button>
+              <component :is="item.icon" class="h-3.5 w-3.5" />
+              <span class="truncate">{{ item.label }}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -369,11 +470,14 @@ import {
   Cloud,
   CloudSync,
   Copy,
+  Files,
   GitBranch,
   GitCommitHorizontal,
   History,
+  ListTree,
   Plus,
   RefreshCw,
+  Rows3,
   SquareTerminal,
   Trash2,
   Upload,
@@ -387,7 +491,7 @@ import {
   gitPanelCheckoutCheck,
   gitPanelCommit,
   gitPanelCommitFiles,
-  gitPanelDetect,
+  gitPanelDiscover,
   gitPanelDiscard,
   gitPanelLog,
   gitPanelPull,
@@ -406,11 +510,14 @@ import {
   type GitPanelCommitFileEntry,
   type GitPanelLogEntry,
   type GitPanelRemoteEntry,
+  type GitPanelRepoEntry,
   type GitPanelRunOutput,
   type GitPanelStashEntry,
   type GitPanelStatusEntry,
 } from "../../../services/tauri-api";
 import GitChangesGroup from "./GitChangesGroup.vue";
+import GitResizeHandle from "./GitResizeHandle.vue";
+import GitSectionBar from "./GitSectionBar.vue";
 
 const props = withDefaults(defineProps<{
   workspacePath: string;
@@ -435,8 +542,50 @@ const gitPanelTabs = computed(() => [
 
 const activeGitTab = ref("commits");
 const busy = ref(false);
-const errorToast = ref("");
-let errorToastTimer: number | undefined;
+
+// ==================== 折叠状态 ====================
+const changesCollapsed = ref(false);
+const historyCollapsed = ref(false);
+const changesRefreshing = ref(false);
+
+// 更改列表展示模式：tree 树状分组 / list 平铺（VSCode 风格切换）
+const changesViewMode = ref<"tree" | "list">("tree");
+
+// 切换更改列表视图模式，并持久化到会话
+function toggleChangesViewMode() {
+  changesViewMode.value = changesViewMode.value === "tree" ? "list" : "tree";
+  persistChangesViewMode();
+}
+
+// 仓库栏：折叠/展开 + 列表（懒加载，展开首次才扫描）
+const repoCollapsed = ref(false);
+const repos = ref<GitPanelRepoEntry[]>([]);
+const reposLoading = ref(false);
+const reposLoaded = ref(false);
+
+// ==================== 分栏高度（分界线拖拽） ====================
+const historyHeight = ref<number | null>(null);
+const historySectionRef = ref<HTMLElement | null>(null);
+let historyResizeStart = 0;
+let historyContainerHeight = 0;
+
+// 上栏最小高度：保留折叠条高度，拖拽时不允许覆盖
+const CHANGES_MIN_HEIGHT = 40;
+// 下栏最小高度：折叠条 + 底部 tab 栏
+const HISTORY_MIN_HEIGHT = 96;
+
+function onHistoryResizeStart() {
+  historyResizeStart = historySectionRef.value?.offsetHeight ?? 300;
+  historyContainerHeight = historySectionRef.value?.parentElement?.offsetHeight ?? 0;
+}
+function onHistoryResize(dy: number) {
+  // 分界线向上拖（dy 为负）→ 下栏变大；向下拖 → 下栏变小
+  // 上限：容器高度 - 上栏最小高度，保证上栏折叠条不被覆盖
+  const maxHistory = Math.max(HISTORY_MIN_HEIGHT, historyContainerHeight - CHANGES_MIN_HEIGHT);
+  historyHeight.value = Math.min(Math.max(HISTORY_MIN_HEIGHT, historyResizeStart - dy), maxHistory);
+}
+const toast = ref<{ kind: "success" | "error" | "info"; message: string } | null>(null);
+let toastTimer: number | undefined;
 
 // ==================== 探测状态 ====================
 const gitAvailable = ref(false);
@@ -445,8 +594,21 @@ const detectError = ref("");
 const repoRoot = ref("");
 const currentBranch = ref("");
 
+// 当前仓库名（仓库栏折叠条标题）：repoRoot 最后一段
+const currentRepoName = computed(() => {
+  if (!repoRoot.value) return t("gitPanel.repoBar");
+  const segments = repoRoot.value.replace(/\\/g, "/").split("/").filter(Boolean);
+  return segments[segments.length - 1] || repoRoot.value;
+});
+
 // ==================== 数据 ====================
 const statusEntries = ref<GitPanelStatusEntry[]>([]);
+/** 变更条目超过后端返回上限（1000）时为 true，前端显示 1000+ 而非全量加载 */
+const statusTruncated = ref(false);
+/** 截断前暂存组实际数量（折叠条尾部显示，可能大于展示上限） */
+const stagedTotal = ref(0);
+/** 截断前更改组实际数量（折叠条尾部显示，可能大于展示上限） */
+const unstagedTotal = ref(0);
 const branches = ref<GitPanelBranchEntry[]>([]);
 const remotes = ref<GitPanelRemoteEntry[]>([]);
 const stashList = ref<GitPanelStashEntry[]>([]);
@@ -538,19 +700,29 @@ const branchHasMore = computed(() => branchRows.value.length > branchVisibleCoun
 const visibleStashList = computed(() => stashList.value.slice(0, stashVisibleCount.value));
 const stashHasMore = computed(() => stashList.value.length > stashVisibleCount.value);
 
-// ==================== 错误提示 ====================
-function showErrorToast(message: string) {
-  errorToast.value = message;
-  if (errorToastTimer) window.clearTimeout(errorToastTimer);
-  errorToastTimer = window.setTimeout(() => {
-    errorToast.value = "";
+// ==================== 操作提示 ====================
+function showToast(kind: "success" | "error" | "info", message: string) {
+  toast.value = { kind, message };
+  if (toastTimer) window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => {
+    toast.value = null;
   }, 5000);
+}
+
+/** 成功提示：中文动作描述，不展示 git 原始输出 */
+function showSuccessToast(message: string) {
+  showToast("success", message);
+}
+
+/** 失败提示：git stderr 或可读错误信息，保留排障细节 */
+function showErrorToast(message: string) {
+  showToast("error", message);
 }
 
 // ==================== 输出记录 ====================
 function appendOutput(command: string, result: GitPanelRunOutput | null, error: unknown = null) {
+  // 失败：展示 stderr / 退出码 / 异常信息；成功时不弹 git 原文（由调用方按动作弹中文成功提示）
   const body: string[] = [];
-  if (result?.stdout?.trim()) body.push(result.stdout.trim());
   if (result?.stderr?.trim()) body.push(result.stderr.trim());
   if (error) body.push(error instanceof Error ? error.message : String(error));
   const message = body.join("\n").trim();
@@ -562,36 +734,147 @@ function appendOutput(command: string, result: GitPanelRunOutput | null, error: 
 }
 
 // ==================== 数据加载 ====================
-async function loadDetect() {
+// 按需懒加载：上栏展开才拉更改/暂存，下栏切到对应 tab 才拉历史/存储/分支；
+// 各数据首次加载成功置标记，折叠/切走不重复拉取
+const statusLoaded = ref(false);
+const historyLoaded = ref(false);
+const stashesLoaded = ref(false);
+const branchesLoaded = ref(false);
+
+// 按当前可见状态加载缺失数据：上栏展开 → 更改/暂存；下栏展开 → 当前 tab 对应数据
+function ensureVisibleData() {
+  if (!statusLoaded.value && !changesCollapsed.value) {
+    void loadStatus();
+  }
+  if (historyCollapsed.value) return;
+  if (activeGitTab.value === "commits" && !historyLoaded.value) {
+    void loadHistory();
+  } else if (activeGitTab.value === "stashes" && !stashesLoaded.value) {
+    void loadStashes();
+  } else if (activeGitTab.value === "branches" && !branchesLoaded.value) {
+    void Promise.all([loadBranches(), loadRemotes()]);
+  }
+}
+
+// 折叠/切 tab 变化时重新评估可见数据；immediate 保证初始即展开时也加载
+watch([changesCollapsed, activeGitTab, historyCollapsed], () => ensureVisibleData(), {
+  immediate: true,
+});
+
+// 仓库列表：单次探查（向上探测 + 向下扫描 + 默认仓库推荐），后端一次返回；
+// force=true 强制重扫（绕过缓存）
+async function loadDiscover(force = false) {
+  if (reposLoading.value) return;
+  reposLoading.value = true;
   try {
-    const result = await gitPanelDetect(props.workspacePath);
+    const result = await gitPanelDiscover(props.workspacePath, force);
     gitAvailable.value = !!result.gitAvailable;
     detectChecked.value = !!result.checked;
-    repoRoot.value = result.repoRoot || "";
-    detectError.value = result.error || (!result.gitAvailable ? t("gitPanel.gitNotInstalled") : !result.repoRoot ? t("gitPanel.notRepository") : "");
+    repos.value = result.repos || [];
+    reposLoaded.value = true;
+    repoRoot.value = result.defaultRepoRoot || "";
+    detectError.value =
+      result.error ||
+      (!result.gitAvailable
+        ? t("gitPanel.gitNotInstalled")
+        : !result.currentRepoRoot && repos.value.length === 0
+          ? t("gitPanel.notRepository")
+          : "");
+    // 探查完成后统一触发可见数据加载：无论本次探查由 watch immediate、
+    // onMounted 还是手动刷新发起，都能补上首次数据，避免 onMounted 被
+    // reposLoading 防重入挡住时触发链断裂导致面板全空。
+    ensureVisibleData();
   } catch (error) {
     gitAvailable.value = false;
     detectChecked.value = true;
     detectError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    reposLoading.value = false;
   }
 }
 
-async function loadStatus() {
+function refreshRepos() {
+  void loadDiscover(true);
+}
+
+function isCurrentRepo(path: string): boolean {
+  if (!repoRoot.value || !path) return false;
+  const norm = (p: string) => p.replace(/\\/g, "/").toLowerCase();
+  return norm(path) === norm(repoRoot.value);
+}
+
+// 切换仓库：更新 repoRoot，重置各数据加载标记后按当前可见区域重载
+function switchRepo(path: string) {
+  if (!path || isCurrentRepo(path) || busy.value) return;
+  repoRoot.value = path;
+  branchPickerOpen.value = false;
+  expandedCommitHash.value = "";
+  expandedStashRef.value = "";
+  commitCard.value = { entry: null, x: 0, y: 0 };
+  lastClickedDiffPath.value = "";
+  commitFilesMap.value = {};
+  statusLoaded.value = false;
+  historyLoaded.value = false;
+  stashesLoaded.value = false;
+  branchesLoaded.value = false;
+  ensureVisibleData();
+}
+
+// 展开仓库栏才首次探查（懒加载）；之后只读后端缓存。
+// immediate：初始即展开时也要触发加载，否则列表一直空到手动刷新。
+watch(
+  repoCollapsed,
+  (collapsed) => {
+    if (!collapsed && !reposLoaded.value) {
+      void loadDiscover(false);
+    }
+  },
+  { immediate: true },
+);
+
+/** 数据加载冷却：自动触发 1 秒内不重复请求；写操作后的刷新与用户主动刷新可穿透 */
+const REFRESH_CD_MS = 1000;
+const lastStatusLoad = ref(0);
+const lastBranchesLoad = ref(0);
+const lastStashesLoad = ref(0);
+const lastHistoryLoad = ref(0);
+
+async function loadStatus(force = false) {
   if (!repoRoot.value) return;
+  const now = Date.now();
+  if (!force && now - lastStatusLoad.value < REFRESH_CD_MS) return;
+  lastStatusLoad.value = now;
   try {
-    const result = await gitPanelStatus(props.workspacePath);
+    const result = await gitPanelStatus(repoRoot.value);
     statusEntries.value = result.entries || [];
+    statusTruncated.value = !!result.truncated;
+    stagedTotal.value = result.stagedTotal ?? 0;
+    unstagedTotal.value = result.unstagedTotal ?? 0;
     currentBranch.value = result.branch || "";
     if (result.repoRoot) repoRoot.value = result.repoRoot;
+    statusLoaded.value = true;
   } catch (error) {
     appendOutput("status", null, error);
   }
 }
 
-async function loadBranches() {
-  if (!repoRoot.value) return;
+async function refreshChanges() {
+  changesRefreshing.value = true;
   try {
-    branches.value = await gitPanelBranchList(props.workspacePath);
+    await loadStatus(true);
+  } finally {
+    changesRefreshing.value = false;
+  }
+}
+
+async function loadBranches(force = false) {
+  if (!repoRoot.value) return;
+  const now = Date.now();
+  if (!force && now - lastBranchesLoad.value < REFRESH_CD_MS) return;
+  lastBranchesLoad.value = now;
+  try {
+    branches.value = await gitPanelBranchList(repoRoot.value);
+    branchesLoaded.value = true;
   } catch (error) {
     appendOutput("branch -a", null, error);
   }
@@ -600,27 +883,35 @@ async function loadBranches() {
 async function loadRemotes() {
   if (!repoRoot.value) return;
   try {
-    remotes.value = await gitPanelRemoteList(props.workspacePath);
+    remotes.value = await gitPanelRemoteList(repoRoot.value);
   } catch (error) {
     appendOutput("remote -v", null, error);
   }
 }
 
-async function loadStashes() {
+async function loadStashes(force = false) {
   if (!repoRoot.value) return;
+  const now = Date.now();
+  if (!force && now - lastStashesLoad.value < REFRESH_CD_MS) return;
+  lastStashesLoad.value = now;
   try {
-    stashList.value = await gitPanelStashList(props.workspacePath);
+    stashList.value = await gitPanelStashList(repoRoot.value);
+    stashesLoaded.value = true;
   } catch (error) {
     appendOutput("stash list", null, error);
   }
 }
 
-async function loadHistory() {
+async function loadHistory(force = false) {
   if (!repoRoot.value) return;
+  const now = Date.now();
+  if (!force && now - lastHistoryLoad.value < REFRESH_CD_MS) return;
+  lastHistoryLoad.value = now;
   try {
-    const result = await gitPanelLog(props.workspacePath, logPageSize, 0);
+    const result = await gitPanelLog(repoRoot.value, logPageSize, 0);
     logEntries.value = result.entries || [];
     logHasMore.value = (result.entries || []).length >= logPageSize;
+    historyLoaded.value = true;
   } catch (error) {
     appendOutput("log", null, error);
   }
@@ -630,7 +921,7 @@ async function loadMoreHistory() {
   if (!repoRoot.value || logLoadingMore.value || busy.value || !logHasMore.value) return;
   logLoadingMore.value = true;
   try {
-    const result = await gitPanelLog(props.workspacePath, logPageSize, logEntries.value.length);
+    const result = await gitPanelLog(repoRoot.value, logPageSize, logEntries.value.length);
     const next = result.entries || [];
     logEntries.value = logEntries.value.concat(next);
     logHasMore.value = next.length >= logPageSize;
@@ -711,21 +1002,11 @@ watch([stashHasMore, activeGitTab], async ([hasMore, tab]) => {
   }
 });
 
-async function refreshAll() {
-  if (busy.value || !repoRoot.value) return;
-  busy.value = true;
-  try {
-    await Promise.all([loadStatus(), loadBranches(), loadRemotes(), loadStashes()]);
-  } finally {
-    busy.value = false;
-  }
-}
-
 async function refreshHistory() {
   if (busy.value) return;
   busy.value = true;
   try {
-    await loadHistory();
+    await loadHistory(true);
   } finally {
     busy.value = false;
   }
@@ -735,8 +1016,13 @@ function selectGitTab(key: string) {
   activeGitTab.value = key;
   persistGitTab();
   branchPickerOpen.value = false;
-  if (key === "commits" && logEntries.value.length === 0) {
-    void refreshHistory();
+}
+
+// 分支下拉展开时才加载分支/远程数据（提交页底部的分支按钮也能用）
+function toggleBranchPicker() {
+  branchPickerOpen.value = !branchPickerOpen.value;
+  if (branchPickerOpen.value && !branchesLoaded.value) {
+    void Promise.all([loadBranches(), loadRemotes()]);
   }
 }
 
@@ -770,18 +1056,63 @@ function persistGitTab() {
   }
 }
 
+// ==================== 更改列表视图模式持久化 ====================
+// 按会话记住更改列表是树状还是平铺，下次自动恢复
+function changesViewModeStorageKey() {
+  const key = String(props.sessionKey || "").trim();
+  return key ? `${key}:git-panel-view-mode` : "";
+}
+
+function restoreChangesViewMode() {
+  const storageKey = changesViewModeStorageKey();
+  if (!storageKey || typeof window === "undefined") return;
+  try {
+    const saved = window.localStorage.getItem(storageKey);
+    if (saved === "tree" || saved === "list") {
+      changesViewMode.value = saved;
+    }
+  } catch {
+    // 读取失败忽略，保持默认
+  }
+}
+
+function persistChangesViewMode() {
+  const storageKey = changesViewModeStorageKey();
+  if (!storageKey || typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(storageKey, changesViewMode.value);
+  } catch {
+    // 写入失败忽略
+  }
+}
+
 // ==================== 更改操作 ====================
-async function runGitAction(command: string, action: () => Promise<GitPanelRunOutput>): Promise<boolean> {
+async function runGitAction(
+  command: string,
+  action: () => Promise<GitPanelRunOutput>,
+  successText?: string,
+): Promise<boolean> {
   if (busy.value) return false;
   busy.value = true;
+  // 操作超过 300ms 未完成时显示进行中提示，避免快速操作闪烁
+  let processingTimer: number | undefined;
+  if (successText) {
+    processingTimer = window.setTimeout(() => showToast("info", "正在执行 git 操作…"), 300);
+  }
   try {
     const result = await action();
-    appendOutput(command, result);
-    await loadStatus();
-    await loadBranches();
-    await loadStashes();
+    if (processingTimer) window.clearTimeout(processingTimer);
+    if (result.exitCode !== 0) {
+      appendOutput(command, result);
+      return false;
+    }
+    if (successText) showSuccessToast(successText);
+    await loadStatus(true);
+    await loadBranches(true);
+    await loadStashes(true);
     return true;
   } catch (error) {
+    if (processingTimer) window.clearTimeout(processingTimer);
     appendOutput(command, null, error);
     return false;
   } finally {
@@ -791,18 +1122,18 @@ async function runGitAction(command: string, action: () => Promise<GitPanelRunOu
 
 function stagePaths(paths: string[]) {
   if (paths.length === 0) return;
-  void runGitAction(`add ${paths.join(" ")}`, () => gitPanelStage(props.workspacePath, paths));
+  void runGitAction(`add ${paths.join(" ")}`, () => gitPanelStage(repoRoot.value, paths), `已暂存 ${paths.length} 个文件`);
 }
 
 function unstagePaths(paths: string[]) {
   if (paths.length === 0) return;
-  void runGitAction(`restore --staged ${paths.join(" ")}`, () => gitPanelUnstage(props.workspacePath, paths));
+  void runGitAction(`restore --staged ${paths.join(" ")}`, () => gitPanelUnstage(repoRoot.value, paths), `已取消暂存 ${paths.length} 个文件`);
 }
 
 function discardPaths(paths: string[]) {
   if (paths.length === 0) return;
   if (!window.confirm(t("gitPanel.discardConfirm", { paths: paths.join(", ") }))) return;
-  void runGitAction(`restore --staged --worktree ${paths.join(" ")}`, () => gitPanelDiscard(props.workspacePath, paths));
+  void runGitAction(`restore --staged --worktree ${paths.join(" ")}`, () => gitPanelDiscard(repoRoot.value, paths), `已撤回 ${paths.length} 个文件`);
 }
 
 async function runCommit() {
@@ -810,13 +1141,14 @@ async function runCommit() {
   if (!message || stagedEntries.value.length === 0 || busy.value) return;
   busy.value = true;
   try {
-    const result = await gitPanelCommit(props.workspacePath, message, amendCommit.value);
+    const result = await gitPanelCommit(repoRoot.value, message, amendCommit.value);
     appendOutput(`commit${amendCommit.value ? " --amend" : ""}`, result);
+    if (result.exitCode === 0) showSuccessToast(amendCommit.value ? "已修改提交" : "已提交");
     commitMessage.value = "";
     amendCommit.value = false;
     resetCommitInputHeight();
-    await loadStatus();
-    await loadHistory();
+    await loadStatus(true);
+    await loadHistory(true);
   } catch (error) {
     appendOutput("commit", null, error);
   } finally {
@@ -828,30 +1160,30 @@ async function runCommit() {
 async function runStashCreate() {
   const message = stashMessage.value.trim();
   if (!message || busy.value) return;
-  const ok = await runGitAction("stash push", () => gitPanelStashCreate(props.workspacePath, message));
+  const ok = await runGitAction("stash push", () => gitPanelStashCreate(repoRoot.value, message), "已创建储藏");
   if (ok) stashMessage.value = "";
 }
 
 async function runStashPop(stashRef: string) {
-  void runGitAction(`stash pop ${stashRef}`, () => gitPanelStashPop(props.workspacePath, stashRef));
+  void runGitAction(`stash pop ${stashRef}`, () => gitPanelStashPop(repoRoot.value, stashRef), "已恢复储藏");
 }
 
 async function runStashDrop(stashRef: string) {
   if (!window.confirm(t("gitPanel.stashDropConfirm", { reference: stashRef }))) return;
-  void runGitAction(`stash drop ${stashRef}`, () => gitPanelStashDrop(props.workspacePath, stashRef));
+  void runGitAction(`stash drop ${stashRef}`, () => gitPanelStashDrop(repoRoot.value, stashRef), "已删除储藏");
 }
 
 // ==================== 同步操作 ====================
 function runSync() {
-  void runGitAction("sync (fetch + pull)", () => gitPanelSync(props.workspacePath));
+  void runGitAction("sync (fetch + pull)", () => gitPanelSync(repoRoot.value), "已同步");
 }
 
 function runPush() {
-  void runGitAction("push", () => gitPanelPush(props.workspacePath));
+  void runGitAction("push", () => gitPanelPush(repoRoot.value), "已推送");
 }
 
 function runPull() {
-  void runGitAction("pull", () => gitPanelPull(props.workspacePath));
+  void runGitAction("pull", () => gitPanelPull(repoRoot.value), "已拉取");
 }
 
 // ==================== 分支操作 ====================
@@ -860,10 +1192,11 @@ async function runBranchCreate() {
   if (!name || busy.value) return;
   busy.value = true;
   try {
-    const result = await gitPanelBranchCreate(props.workspacePath, name);
+    const result = await gitPanelBranchCreate(repoRoot.value, name);
     appendOutput(`branch ${name}`, result);
+    if (result.exitCode === 0) showSuccessToast("已创建分支");
     newBranchName.value = "";
-    await loadBranches();
+    await loadBranches(true);
   } catch (error) {
     appendOutput(`branch ${name}`, null, error);
   } finally {
@@ -875,9 +1208,10 @@ async function runBranchDelete(name: string) {
   if (!window.confirm(t("gitPanel.deleteBranchConfirm", { name }))) return;
   busy.value = true;
   try {
-    const result = await gitPanelBranchDelete(props.workspacePath, name);
+    const result = await gitPanelBranchDelete(repoRoot.value, name);
     appendOutput(`branch -d ${name}`, result);
-    await loadBranches();
+    if (result.exitCode === 0) showSuccessToast("已删除分支");
+    await loadBranches(true);
   } catch (error) {
     appendOutput(`branch -d ${name}`, null, error);
   } finally {
@@ -894,7 +1228,7 @@ async function runCheckoutBranch(name: string) {
   if (busy.value) return;
   // 预检：工作区未提交文件与目标分支改动有交集则禁止切换
   try {
-    const check = await gitPanelCheckoutCheck(props.workspacePath, name);
+    const check = await gitPanelCheckoutCheck(repoRoot.value, name);
     if (check.conflictingPaths.length > 0) {
       window.alert(
         t("gitPanel.checkoutBlocked", {
@@ -909,9 +1243,9 @@ async function runCheckoutBranch(name: string) {
   }
   if (!window.confirm(t("gitPanel.checkoutConfirm", { name }))) return;
   branchPickerOpen.value = false;
-  const ok = await runGitAction(`checkout ${name}`, () => gitPanelCheckout(props.workspacePath, name));
+  const ok = await runGitAction(`checkout ${name}`, () => gitPanelCheckout(repoRoot.value, name), `已切换分支 ${name}`);
   if (ok) {
-    await loadHistory();
+    await loadHistory(true);
   }
 }
 
@@ -962,7 +1296,7 @@ async function toggleCommitExpand(entry: GitPanelLogEntry) {
   if (commitFilesMap.value[entry.hash] || commitFilesLoading.value[entry.hash]) return;
   commitFilesLoading.value = { ...commitFilesLoading.value, [entry.hash]: true };
   try {
-    const result = await gitPanelCommitFiles(props.workspacePath, entry.hash);
+    const result = await gitPanelCommitFiles(repoRoot.value, entry.hash);
     commitFilesMap.value = { ...commitFilesMap.value, [entry.hash]: result.entries || [] };
   } catch (error) {
     appendOutput(`show --name-status ${entry.hash}`, null, error);
@@ -974,8 +1308,18 @@ async function toggleCommitExpand(entry: GitPanelLogEntry) {
 
 function openCommitFileDiff(entry: GitPanelLogEntry, file: GitPanelCommitFileEntry) {
   emit("openDiff", {
-    workspacePath: repoRoot.value || props.workspacePath,
+    workspacePath: repoRoot.value,
     path: file.path,
+    staged: false,
+    hash: entry.hash,
+  });
+}
+
+// 一次性聚合查看整个提交的全部文件更改（类似 VS Code 悬停提交时的"查看提交更改"）
+function openCommitAllDiff(entry: GitPanelLogEntry) {
+  emit("openDiff", {
+    workspacePath: repoRoot.value,
+    path: entry.hash,
     staged: false,
     hash: entry.hash,
   });
@@ -992,7 +1336,7 @@ async function toggleStashExpand(stash: GitPanelStashEntry) {
   if (stashFilesMap.value[stash.reference] || stashFilesLoading.value[stash.reference]) return;
   stashFilesLoading.value = { ...stashFilesLoading.value, [stash.reference]: true };
   try {
-    const result = await gitPanelStashFiles(props.workspacePath, stash.reference);
+    const result = await gitPanelStashFiles(repoRoot.value, stash.reference);
     stashFilesMap.value = { ...stashFilesMap.value, [stash.reference]: result.entries || [] };
   } catch (error) {
     appendOutput(`stash show --name-status ${stash.reference}`, null, error);
@@ -1004,7 +1348,7 @@ async function toggleStashExpand(stash: GitPanelStashEntry) {
 
 function openStashFileDiff(stash: GitPanelStashEntry, file: GitPanelCommitFileEntry) {
   emit("openDiff", {
-    workspacePath: repoRoot.value || props.workspacePath,
+    workspacePath: repoRoot.value,
     path: file.path,
     staged: false,
     hash: stash.reference,
@@ -1039,7 +1383,7 @@ const lastClickedDiffPath = ref("");
 function openDiff(payload: { path: string; staged: boolean }) {
   lastClickedDiffPath.value = payload.path;
   emit("openDiff", {
-    workspacePath: repoRoot.value || props.workspacePath,
+    workspacePath: repoRoot.value,
     path: payload.path,
     staged: payload.staged,
   });
@@ -1064,19 +1408,20 @@ function resetCommitInputHeight() {
 
 onMounted(() => {
   restoreGitTab();
-  void loadDetect().then(() => {
+  restoreChangesViewMode();
+  void loadDiscover().then(() => {
     if (repoRoot.value) {
-      void refreshAll();
-      void loadHistory();
+      ensureVisibleData();
     }
   });
 });
 
-// 会话切换时（sessionKey 变化）重新恢复该会话记住的 git 标签
+// 会话切换时（sessionKey 变化）重新恢复该会话记住的 git 标签与视图模式
 watch(
   () => props.sessionKey,
   () => {
     restoreGitTab();
+    restoreChangesViewMode();
   },
 );
 
