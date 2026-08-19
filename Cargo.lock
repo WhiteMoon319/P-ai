@@ -1916,6 +1916,7 @@ version = "0.57.0"
 dependencies = [
  "pai-android-platform",
  "pai-backend",
+ "reqwest",
  "serde",
  "serde_json",
  "tokio",
