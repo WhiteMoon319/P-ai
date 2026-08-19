@@ -1925,10 +1925,12 @@ dependencies = [
  "pai-backend",
  "regex",
  "reqwest",
+ "rmcp",
  "rusqlite",
  "serde",
  "serde_json",
  "sha2",
+ "sse-stream",
  "tiktoken-rs",
  "time",
  "tokio",
@@ -2390,16 +2392,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8dddc5b1924b9a59fba420166160ca2c4663a4e01803e52eda33070f56d63c8"
 dependencies = [
  "base64 0.23.1",
+ "bytes",
  "chrono",
  "futures",
+ "http",
  "pastey",
  "pin-project-lite",
+ "reqwest",
  "rmcp-macros",
  "schemars 1.2.2",
  "serde",
  "serde_json",
+ "sse-stream",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "tokio-util",
  "tracing",
  "uuid",
@@ -2886,6 +2893,19 @@ dependencies = [
  "js-sys",
  "rsqlite-vfs",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "sse-stream"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c123f296ade4ec4b8b0f6162116e6629f5146922ca5ab40ca9d3c2e73ab4761e"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "http-body",
+ "http-body-util",
+ "pin-project-lite",
 ]
 
 [[package]]
