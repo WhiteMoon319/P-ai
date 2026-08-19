@@ -918,6 +918,22 @@ class AppViewModel(
                 } catch (_: Exception) {
                 }
             }
+            "task.progress" -> {
+                handleTaskProgress(params)
+            }
+        }
+    }
+
+    // ---------------- 任务状态机事件 ----------------
+
+    private fun handleTaskProgress(params: JsonElement?) {
+        try {
+            val event = params?.let { gson.fromJson(it, com.whitemoon319.pai.model.TaskProgressEvent::class.java) }
+            if (event != null) {
+                android.util.Log.d("PaiTask", "task=${event.taskId} state=${event.state} progress=${event.progress} msg=${event.message}")
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("PaiTask", "解析 task.progress 事件失败: ${e.message}")
         }
     }
 
