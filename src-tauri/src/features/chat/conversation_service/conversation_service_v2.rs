@@ -686,7 +686,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn apply_privileged_snapshot_overwrite_inner(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         audit: &ConversationOverwriteAudit,
         snapshot: &Conversation,
     ) -> Result<(), String> {
@@ -706,9 +706,9 @@ impl ConversationServiceV2 {
         let store_paths = message_store::message_store_paths(state.data_path(), &snapshot.id)?;
         if message_store::message_store_is_v3_ready(&store_paths)? {
             message_store::write_jsonl_snapshot_directory_shard(&store_paths, snapshot)?;
-            state_mark_conversation_metadata_direct_persisted(state, &snapshot.id)?;
+            state.mark_conversation_metadata_direct_persisted(&snapshot.id)?;
         } else {
-            state_schedule_conversation_persist(state, snapshot)?;
+            state.schedule_conversation_persist(snapshot)?;
         }
         runtime_log_info(format!(
             "[会话V2] 完成，任务=特批覆写会话，conversation_id={}，source={}，job_id={}，operator={}，message_count={}",
@@ -824,10 +824,10 @@ impl ConversationServiceV2 {
 
     pub(crate) fn mark_conversation_metadata_cached_persisted(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
     ) -> Result<(), String> {
-        state_mark_conversation_metadata_cached_persisted_unlocked(state, conversation_id)
+        state.mark_conversation_metadata_cached_persisted(conversation_id)
     }
 
     pub(crate) fn increment_conversation_unread_count_if_background(
@@ -1111,7 +1111,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn ensure_system_notification_conversation(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
     ) -> Result<(), String> {
         let exists = self
             .get_conversation_meta(state, SYSTEM_NOTIFICATION_CONVERSATION_ID)
@@ -1125,7 +1125,7 @@ impl ConversationServiceV2 {
             return Ok(());
         }
         let conversation = build_system_notification_conversation_record();
-        state_schedule_conversation_persist(state, &conversation)?;
+        state.schedule_conversation_persist(&conversation)?;
         Ok(())
     }
 

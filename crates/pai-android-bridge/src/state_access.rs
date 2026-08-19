@@ -102,6 +102,29 @@ pub trait StateAccess: Clone + Send + Sync {
     /// 取消指定 key 的进行中聊天（inflight abort handle），返回是否找到并取消。
     fn abort_inflight_chat(&self, key: &str) -> bool;
 
+    // ── 会话持久化 ──
+
+    /// 调度一次会话持久化（排队给 worker 异步落盘）。
+    fn schedule_conversation_persist(
+        &self,
+        conversation: &Conversation,
+    ) -> Result<u64, String>;
+
+    /// 标记会话 metadata 已直接持久化（更新缓存 mtime）。
+    fn mark_conversation_metadata_direct_persisted(
+        &self,
+        conversation_id: &str,
+    ) -> Result<ConversationShardMeta, String>;
+
+    /// 标记会话 metadata 缓存已持久化（清除待落盘标记）。
+    fn mark_conversation_metadata_cached_persisted(
+        &self,
+        conversation_id: &str,
+    ) -> Result<(), String>;
+
+    /// 阻塞等待所有待落盘持久化完成（migration/恢复等同步场景）。
+    fn flush_pending_persists_blocking(&self) -> Result<bool, String>;
+
     // ── 应答委托运行时表 ──
 
     /// 锁应答委托运行时线程表（delegate_runtime_threads）。

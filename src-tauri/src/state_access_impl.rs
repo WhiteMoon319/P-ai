@@ -21,6 +21,10 @@ use crate::state_read_conversation_metadata_cached;
 use crate::state_read_conversation_cached;
 use crate::state_mutate_runtime_state_cached;
 use crate::state_schedule_conversation_delete;
+use crate::state_schedule_conversation_persist;
+use crate::state_mark_conversation_metadata_direct_persisted;
+use crate::state_mark_conversation_metadata_cached_persisted_unlocked;
+use crate::flush_pending_persists_blocking;
 
 impl StateAccess for AppState {
     fn read_config_cached(&self) -> Result<AppConfig, String> {
@@ -166,6 +170,31 @@ impl StateAccess for AppState {
                 }
             }
         }
+    }
+
+    fn schedule_conversation_persist(
+        &self,
+        conversation: &Conversation,
+    ) -> Result<u64, String> {
+        state_schedule_conversation_persist(self, conversation)
+    }
+
+    fn mark_conversation_metadata_direct_persisted(
+        &self,
+        conversation_id: &str,
+    ) -> Result<ConversationShardMeta, String> {
+        state_mark_conversation_metadata_direct_persisted(self, conversation_id)
+    }
+
+    fn mark_conversation_metadata_cached_persisted(
+        &self,
+        conversation_id: &str,
+    ) -> Result<(), String> {
+        state_mark_conversation_metadata_cached_persisted_unlocked(self, conversation_id)
+    }
+
+    fn flush_pending_persists_blocking(&self) -> Result<bool, String> {
+        flush_pending_persists_blocking(self)
     }
 
     fn lock_delegate_runtime_threads(
