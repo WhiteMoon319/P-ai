@@ -159,11 +159,12 @@ impl DefaultTaskManager {
             progress: task.progress,
             message: task.message.clone(),
         };
-        let event = match serde_json::to_value(&event) {
-            Ok(value) => value,
-            Err(_) => return,
-        };
-        push_native_delta_event(event);
+        // Kotlin NativeEventPump 期望事件为 {method, params} 结构（与旧 ws 事件对齐）。
+        let payload = serde_json::json!({
+            "method": "task.progress",
+            "params": event,
+        });
+        push_native_delta_event(payload);
     }
 }
 
