@@ -433,7 +433,13 @@
           "十一月",
           "十二月"
         ],
-        "chartPolar": "极区图"
+        "chartPolar": "极区图",
+        "achievements": "成就",
+        "achTotal": "累计 Token",
+        "achPeak": "峰值 Token（单日）",
+        "achCurrentStreak": "当前连续日",
+        "achBestStreak": "最高连续日",
+        "dayUnit": "天"
       },
       "runtimeDeps": {
         "title": "运行时依赖"
@@ -1663,6 +1669,8 @@
     "personaModelNotConfigured": "未配置模型",
     "personaRemoved": "已移除",
     "departmentNoAvailableAgent": "部门无可用负责人",
+    "todoProgress": "已完成 {done} / 共 {total}",
+    "todoCollapse": "收起待办列表",
     "todoIntentionWithPersona": "{name} 打算{todo}",
     "todoIntention": "打算{todo}",
     "loadMore": "加载更多...",
@@ -2448,6 +2456,10 @@
     "text": "文字",
     "textLanguage": "文字语言",
     "textWeight": "文字字重",
+    "uiFont": "界面字体",
+    "codeFont": "代码字体",
+    "fontAuto": "自动（按语言适配）",
+    "fontAutoCode": "内置等宽字体",
     "theme": "主题",
     "markdownFontScale": "全局字重",
     "markdownFontScaleHint": "调节全局界面与 Markdown 字重。",
@@ -2457,6 +2469,10 @@
     "chatBubbleBackground": "背景",
     "chatBubbleSegmentedMarkdown": "分段",
     "chatBubbleFullTime": "完整时间",
+    "chatBubbleMarkdownLayout": "Markdown 布局",
+    "markdownLayoutCompact": "紧凑",
+    "markdownLayoutComfortable": "适中",
+    "markdownLayoutRelaxed": "宽松",
     "inputPanel": "输入面板外观",
     "inputPanelSideFileTags": "显示侧边文件标签",
     "inputPanelIdeBridgeFileTags": "显示 IDE 桥文件标签",

@@ -114,15 +114,14 @@
       </ConfigTemplate>
 
 
-      <section v-if="!selectedProviderIsCodex">
-        <h3 class="text-sm font-semibold">{{ t("config.imageGeneration.apiKeys") }}</h3>
-        <ApiKeyListCard
-          :key="selectedProvider.id"
-          :model-value="selectedProvider.apiKeys"
-          :connection-test-key-status="connectionTestKeyStatus"
-          @update:model-value="updateSelectedApiKeys"
-        />
-      </section>
+      <ApiKeyListCard
+        v-if="!selectedProviderIsCodex"
+        :title="t('config.imageGeneration.apiKeys')"
+        :key="selectedProvider.id"
+        :model-value="selectedProvider.apiKeys"
+        :connection-test-key-status="connectionTestKeyStatus"
+        @update:model-value="updateSelectedApiKeys"
+      />
 
       <CodexProviderPanel
         v-else
@@ -135,95 +134,76 @@
         @select-model="selectModelCard"
       />
 
-      <section v-if="!selectedProviderIsCodex">
-        <h3 class="mb-1 text-sm font-semibold">{{ t("config.api.connectionTest") }}</h3>
-        <div class="card border border-base-300 bg-base-100">
-          <div class="card-body gap-3 p-4">
-            <div class="flex items-center gap-2">
-              <select v-model="connectionTestModelId" class="select select-bordered select-sm flex-1">
-                <option v-for="m in (selectedProvider.models || []).filter((item) => !item.deprecated)" :key="m.id" :value="m.id">
-                  {{ modelDisplayLabel(selectedProvider, m) }}
-                </option>
-              </select>
-              <button class="btn btn-sm" type="button"
-                :class="connectionTestFirstKeyRunning ? 'loading' : 'bg-base-200'"
-                :disabled="connectionTestFirstKeyRunning || connectionTestAllKeysRunning"
-                @click="runConnectionTestFirstKey">
-                <span v-if="connectionTestFirstKeyRunning" class="loading loading-spinner loading-xs"></span>
-                {{ t("config.api.testFirstKey") }}
-              </button>
-              <button class="btn btn-sm" type="button"
-                :class="connectionTestAllKeysRunning ? 'loading' : 'bg-base-200'"
-                :disabled="connectionTestFirstKeyRunning || connectionTestAllKeysRunning"
-                @click="runConnectionTestAllKeys">
-                <span v-if="connectionTestAllKeysRunning" class="loading loading-spinner loading-xs"></span>
-                {{ t("config.api.testAllKeys") }}
-              </button>
-            </div>
-          </div>
+      <ConfigCard v-if="!selectedProviderIsCodex" :title="t('config.api.connectionTest')">
+        <div class="flex items-center gap-2 py-3">
+          <select v-model="connectionTestModelId" class="select select-bordered select-sm flex-1">
+            <option v-for="m in draftViewModels" :key="m.id" :value="m.id">
+              {{ modelDisplayLabel(selectedProvider, m) }}
+            </option>
+          </select>
+          <button class="btn btn-sm" type="button"
+            :class="connectionTestFirstKeyRunning ? 'loading' : 'bg-base-200'"
+            :disabled="connectionTestFirstKeyRunning || connectionTestAllKeysRunning"
+            @click="runConnectionTestFirstKey">
+            <span v-if="connectionTestFirstKeyRunning" class="loading loading-spinner loading-xs"></span>
+            {{ t("config.api.testFirstKey") }}
+          </button>
+          <button class="btn btn-sm" type="button"
+            :class="connectionTestAllKeysRunning ? 'loading' : 'bg-base-200'"
+            :disabled="connectionTestFirstKeyRunning || connectionTestAllKeysRunning"
+            @click="runConnectionTestAllKeys">
+            <span v-if="connectionTestAllKeysRunning" class="loading loading-spinner loading-xs"></span>
+            {{ t("config.api.testAllKeys") }}
+          </button>
         </div>
-      </section>
+      </ConfigCard>
 
-      <section v-if="!selectedProviderIsCodex">
-        <h3 class="mb-3 text-sm font-semibold">{{ t("config.api.modelCards") }}</h3>
-        <div class="card border border-base-300 bg-base-100">
-          <div class="card-body gap-3 p-4">
-            <div class="flex items-center justify-between gap-2">
-              <span
-                class="text-xs min-w-0 truncate"
-                :class="props.modelRefreshError
-                  ? 'text-error'
-                  : props.modelRefreshOk
-                    ? 'text-success'
-                    : 'text-base-content/55'"
-              >{{ modelRefreshStatusText }}</span>
-              <div class="flex items-center gap-2 shrink-0">
-                <button class="btn btn-sm bg-base-200" type="button" :class="{ loading: props.refreshingModels }"
-                  :disabled="props.refreshingModels" @click="$emit('refreshModels')">
-                  <RefreshCw class="h-3.5 w-3.5" />
-                  <span>{{ t("config.api.refreshModels") }}</span>
-                </button>
-                <button class="btn btn-sm bg-base-200" type="button" @click="addModelCard">
-                  <Plus class="h-3.5 w-3.5" />
-                  <span>{{ t("config.api.addModel") }}</span>
-                </button>
-              </div>
-            </div>
+      <ConfigCard v-if="!selectedProviderIsCodex" :title="t('config.api.modelCards')">
+        <template #actions>
+          <button class="btn btn-sm" type="button" :class="{ loading: props.refreshingModels }"
+            :disabled="props.refreshingModels" @click="$emit('refreshModels')">
+            <RefreshCw class="h-3.5 w-3.5" />
+            <span>{{ t("config.api.refreshModels") }}</span>
+          </button>
+          <button class="btn btn-sm" type="button" @click="addModelCard">
+            <Plus class="h-3.5 w-3.5" />
+            <span>{{ t("config.api.addModel") }}</span>
+          </button>
+        </template>
 
-                        <div class="grid gap-3">
+        <div class="divide-y divide-base-200/60">
               <ApiModelCard
-                v-for="modelCard in activeModelCards"
-                :key="modelCard.id"
-                :card="modelCard"
-                :title="modelGroupDisplayLabel(modelCard)"
+                v-for="group in draftModelGroups"
+                :key="group.primary.id"
+                :card="group.primary"
                 :model-options="providerModelOptions"
+                :default-open="draftModelGroups.length <= 2"
+                :capability="reasoningCapability(group) ?? null"
                 :show-delete="true"
-                :delete-disabled="activeModelGroups.length <= 1"
+                :delete-disabled="draftModelGroups.length <= 1"
                 :show-capability-toggles="selectedCapability === 'text'"
                 :show-context-window="selectedCapability === 'text'"
                 :show-reasoning="selectedCapability === 'text'"
                 :show-temperature="selectedCapability === 'text'"
                 :show-max-output-tokens="selectedCapability === 'text'"
-                :reasoning-items="reasoningEffortItems(modelCard)"
-                :reasoning-checked-values="reasoningEffortCheckedValues(modelCard)"
-                :reasoning-status="reasoningCapabilityStatus(modelCard)"
-                :protocol-hint="selectedProtocol === 'auto' ? resolvedAdapterByModelId[modelCard.id] : ''"
-                :warning-text="shouldWarnDeepSeekKimiProtocol(modelCard) ? t('config.api.deepSeekKimiProtocolHint') : ''"
-                :documentation-url="modelDocumentationUrl(modelCard)"
-                :connection-result="modelConnectionResult[modelCard.id] ?? null"
-                :context-window-max="contextWindowMax(modelCard)"
-                @select="selectModelCard(modelCard.id)"
-                @remove="removeModelGroup(modelCard)"
-                @sync-metadata="handleModelCardSyncMetadata(modelCard)"
-                @select-option="(option: string) => selectModelOption(modelCard, option)"
-                @toggle-max-output="handleCustomMaxOutputTokensToggle(modelCard)"
-                @reasoning-change="(payload: { value: string; checked: boolean }) => setGroupReasoningEffort(modelCard, payload.value, payload.checked)"
-                @open-documentation="openModelDocumentation(modelCard)"
+                :reasoning-items="reasoningEffortItems(group)"
+                :reasoning-checked-values="reasoningEffortCheckedValues(group)"
+                :reasoning-status="reasoningCapabilityStatus(group)"
+                :protocol-hint="selectedProtocol === 'auto' ? resolvedAdapterByModelId[group.primary.id] : ''"
+                :documentation-url="modelDocumentationUrl(group)"
+                :connection-result="modelConnectionResult[group.primary.id] ?? null"
+                :context-window-max="contextWindowMax(group)"
+                embedded
+                @select="selectModelCard(group.primary.id)"
+                @remove="removeModelGroup(group)"
+                @sync-metadata="handleModelCardSyncMetadata(group)"
+                @select-option="(option: string) => selectModelOption(group, option)"
+                @toggle-max-output="handleCustomMaxOutputTokensToggle(group)"
+                @reasoning-change="(payload: { value: string; checked: boolean }) => setGroupReasoningEffort(group, payload.value, payload.checked)"
+                @open-documentation="openModelDocumentation(group)"
               />
-            </div>
-          </div>
         </div>
-      </section>
+      </ConfigCard>
     </div>
 
     <div v-else-if="activeTopTab === 'imageGeneration'" class="grid gap-3">
@@ -257,16 +237,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { ExternalLink, Plus, RefreshCw, WandSparkles } from "@lucide/vue";
 import type { ApiModelConfigItem, ApiProviderConfigItem, ApiRequestFormat, AppConfig, CodexAuthMode, CodexAuthStatus } from "../../../../types/app";
 import ApiKeyListCard, { type ApiKeyConnectionStatus } from "../../components/ApiKeyListCard.vue";
 import ApiModelCard from "../../components/ApiModelCard.vue";
+import ConfigCard from "../../components/ConfigCard.vue";
 import ConfigTemplate from "../../components/ConfigTemplate.vue";
 import ProviderToolbar, { type ProviderToolbarOption } from "../../components/ProviderToolbar.vue";
 import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
-import { invokeTauri, openTransportExternalUrl } from "../../../../services/tauri-api";
+import { canUseTransportGenaiChatAdapters, invokeTauri, openTransportExternalUrl } from "../../../../services/tauri-api";
 import CodexProviderPanel from "./CodexProviderPanel.vue";
 import ImageGenerationTab from "./ImageGenerationTab.vue";
 import { normalizeApiRequestFormat } from "../../utils/api-request-format";
@@ -276,6 +257,14 @@ import {
   sortReasoningEffortValues,
 } from "../../utils/api-config-display";
 import { buildModelCapability, type ModelCapabilitySnapshot } from "../../utils/model-capability";
+import {
+  AUTO_CONTEXT_WINDOW_TOKENS,
+  buildDraftGroups,
+  modelGroupKey,
+  normalizedModelReasoningEffortFor,
+  splitDraftGroups,
+  type DraftModelGroup,
+} from "../../utils/draft-model-groups";
 import type { ConfigTemplateGroup } from "../../components/config-template";
 
 type ApiCapability = "text" | "voice" | "embedding" | "rerank";
@@ -293,6 +282,9 @@ type ProviderPreset = {
 type ProtocolOption = { value: ApiRequestFormat; label: string };
 type FetchModelMetadataResult = {
   found: boolean;
+  fuzzyMatch?: boolean | null;
+  providerName?: string | null;
+  providerApi?: string | null;
   matchedModelId?: string | null;
   contextWindowTokens?: number | null;
   maxOutputTokens?: number | null;
@@ -306,11 +298,6 @@ type FetchModelMetadataResult = {
 };
 type ModelCapabilityLimits = Partial<ModelCapabilitySnapshot> & {
   metadataFound?: boolean;
-};
-type ActiveModelGroup = {
-  key: string;
-  primary: ApiModelConfigItem;
-  cards: ApiModelConfigItem[];
 };
 type ImageGenerationToolbarState = {
   providers: ProviderToolbarOption[];
@@ -331,7 +318,6 @@ type ImageGenerationTabPublicInstance = {
 };
 
 const SLIDER_CONTEXT_MIN = 16_000;
-const AUTO_CONTEXT_WINDOW_TOKENS = 256_000;
 const AUTO_CONTEXT_WINDOW_SMALL_MODEL_THRESHOLD = 200_000;
 const FALLBACK_CONTEXT_WINDOW_MAX = 2_000_000;
 const DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
@@ -406,35 +392,72 @@ const capabilityTabs = computed<Array<{ id: ApiTopTab; label: string }>>(() => [
   { id: "rerank", label: t("config.api.capabilityRerank") },
   { id: "imageGeneration", label: t("config.tabs.imageGeneration") },
 ]);
-const protocolOptionsByCapability: Record<ApiCapability, ProtocolOption[]> = {
-  text: [
-    { value: "auto", label: "Auto" },
-    { value: "openai", label: "OpenAI Compatible" },
-    { value: "deepseek", label: "DeepSeek" },
-    { value: "openai_responses", label: "OpenAI Responses" },
-    { value: "codex", label: "OpenAI Codex" },
-    { value: "gemini", label: "Google Gemini" },
-    { value: "anthropic", label: "Anthropic" },
-    { value: "fireworks", label: "Fireworks" },
-    { value: "together", label: "Together AI" },
-    { value: "groq", label: "Groq" },
-    { value: "mimo", label: "Mimo" },
-    { value: "minimax", label: "MiniMax" },
-    { value: "moonshot", label: "Moonshot/Kimi" },
-    { value: "nebius", label: "Nebius" },
-    { value: "xai", label: "xAI" },
-    { value: "zai", label: "Zai" },
-    { value: "bigmodel", label: "BigModel" },
-    { value: "aliyun", label: "Aliyun" },
-    { value: "baidu", label: "Baidu" },
-    { value: "cohere", label: "Cohere" },
-    { value: "ollama", label: "Ollama" },
-    { value: "ollama_cloud", label: "Ollama Cloud" },
-    { value: "vertex", label: "Google Vertex AI" },
-    { value: "github_copilot", label: "GitHub Copilot" },
-    { value: "opencode_go", label: "OpenCode Go" },
-    { value: "bedrock_api", label: "AWS Bedrock API" },
-  ],
+// 本地补充项：genai 无对应 adapter，但项目自身支持（auto=自动探测、codex=本地协议）。
+const LOCAL_TEXT_PROTOCOL_OPTIONS: ProtocolOption[] = [
+  { value: "auto", label: "Auto" },
+  { value: "openai", label: "OpenAI Compatible" },
+  { value: "codex", label: "OpenAI Codex" },
+];
+
+// genai 清单 id → 前端协议值 映射；未命中（后端 supported=false）的适配器不进入候选。
+const GENAI_ADAPTER_TO_PROTOCOL: Record<string, ApiRequestFormat> = {
+  openai: "openai",
+  openai_resp: "openai_responses",
+  deepseek: "deepseek",
+  gemini: "gemini",
+  anthropic: "anthropic",
+  fireworks: "fireworks",
+  together: "together",
+  groq: "groq",
+  kimi: "moonshot",
+  moonshot: "moonshot",
+  mimo: "mimo",
+  minimax: "minimax",
+  nebius: "nebius",
+  xai: "xai",
+  zai: "zai",
+  bigmodel: "bigmodel",
+  aliyun: "aliyun",
+  baidu: "baidu",
+  cohere: "cohere",
+  ollama: "ollama",
+  ollama_cloud: "ollama_cloud",
+  vertex: "vertex",
+  github_copilot: "github_copilot",
+  opencode_go: "opencode_go",
+  bedrock_api: "bedrock_api",
+};
+
+const GENAI_ADAPTER_LABELS: Record<string, string> = {
+  openai: "OpenAI Compatible",
+  openai_resp: "OpenAI Responses",
+  deepseek: "DeepSeek",
+  gemini: "Google Gemini",
+  anthropic: "Anthropic",
+  fireworks: "Fireworks",
+  together: "Together AI",
+  groq: "Groq",
+  kimi: "Moonshot/Kimi",
+  moonshot: "Moonshot/Kimi",
+  mimo: "Mimo",
+  minimax: "MiniMax",
+  nebius: "Nebius",
+  xai: "xAI",
+  zai: "Zai",
+  bigmodel: "BigModel",
+  aliyun: "Aliyun",
+  baidu: "Baidu",
+  cohere: "Cohere",
+  ollama: "Ollama",
+  ollama_cloud: "Ollama Cloud",
+  vertex: "Google Vertex AI",
+  github_copilot: "GitHub Copilot",
+  opencode_go: "OpenCode Go",
+  bedrock_api: "AWS Bedrock API",
+};
+
+const localProtocolOptionsByCapability: Record<ApiCapability, ProtocolOption[]> = {
+  text: LOCAL_TEXT_PROTOCOL_OPTIONS,
   voice: [
     { value: "openai_stt", label: "OpenAI STT" },
     { value: "mimo_asr", label: "MiMo ASR" },
@@ -448,6 +471,27 @@ const protocolOptionsByCapability: Record<ApiCapability, ProtocolOption[]> = {
     { value: "openai_rerank", label: "OpenAI Rerank" },
   ],
 };
+
+// genai 内置 chat 适配器清单（后端权威源）；未加载时为 null，text 候选仅显示本地项。
+const genaiChatAdapters = ref<Array<{ id: string; label: string; supported: boolean }> | null>(null);
+
+function protocolOptionsByCapability(): Record<ApiCapability, ProtocolOption[]> {
+  const adapters = genaiChatAdapters.value;
+  if (!adapters) return localProtocolOptionsByCapability;
+  const seen = new Set(localProtocolOptionsByCapability.text.map((option) => option.value));
+  const textFromGenai: ProtocolOption[] = [];
+  for (const adapter of adapters) {
+    if (!adapter.supported) continue;
+    const protocol = GENAI_ADAPTER_TO_PROTOCOL[adapter.id];
+    if (!protocol || seen.has(protocol)) continue;
+    seen.add(protocol);
+    textFromGenai.push({ value: protocol, label: GENAI_ADAPTER_LABELS[adapter.id] || adapter.label });
+  }
+  return {
+    ...localProtocolOptionsByCapability,
+    text: [...localProtocolOptionsByCapability.text, ...textFromGenai],
+  };
+}
 const capabilityDefaultProtocol: Record<ApiCapability, ApiRequestFormat> = {
   text: "auto",
   voice: "mimo_asr",
@@ -541,11 +585,6 @@ function firstActiveModel(provider: ApiProviderConfigItem | null | undefined): A
   return (provider.models || []).find((model) => !isModelDeprecated(model)) ?? null;
 }
 
-function activeModelCount(provider: ApiProviderConfigItem | null | undefined): number {
-  if (!provider) return 0;
-  return (provider.models || []).filter((model) => !isModelDeprecated(model)).length;
-}
-
 function reasoningEffortDisplayLabel(value: string): string {
   return sharedReasoningEffortDisplayLabel(value, t);
 }
@@ -574,58 +613,62 @@ const selectedProvider = computed(() => {
   return activeProviderList.value.find((provider) => provider.id === providerId) ?? activeProviderList.value[0] ?? null;
 });
 
-function modelGroupKey(model: ApiModelConfigItem): string {
-  return JSON.stringify({
-    model: String(model.model || "").trim(),
-    enableImage: !!model.enableImage,
-    enableAudio: !!model.enableAudio,
-    enableVideo: !!model.enableVideo,
-    enableTools: model.enableTools !== false,
-    temperature: Number(model.temperature ?? 1),
-    customTemperatureEnabled: !!model.customTemperatureEnabled,
-    contextWindowTokens: Math.round(Number(model.contextWindowTokens ?? AUTO_CONTEXT_WINDOW_TOKENS)),
-    customMaxOutputTokensEnabled: !!model.customMaxOutputTokensEnabled,
-    maxOutputTokens: Number(model.maxOutputTokens ?? 4096),
-  });
+const draftModelGroups = ref<DraftModelGroup[]>([]);
+
+// 草稿视图模型列表（纯读）：每组每个勾选等级一张卡，供连接测试等基于当前草稿内容的场景使用
+const draftViewModels = computed<ApiModelConfigItem[]>(() =>
+  draftModelGroups.value.flatMap((group) =>
+    (group.reasoningEfforts.length > 0 ? group.reasoningEfforts : ["default"]).map((effort) => ({
+      ...group.primary,
+      id: group.variantIdByEffort.get(String(effort || "").trim().toLowerCase() || "default") ?? group.primary.id,
+      reasoningEffort: String(effort || "").trim().toLowerCase() || "default",
+      deprecated: false,
+    })),
+  ),
+);
+
+// ========== 草稿聚合（读取时执行一次，编辑期间不重建） ==========
+
+function rebuildDraftGroups() {
+  const provider = selectedProvider.value;
+  draftModelGroups.value = buildDraftGroups(provider);
 }
 
-const activeModelGroups = computed<ActiveModelGroup[]>(() => {
-  const groups = new Map<string, ActiveModelGroup>();
-  for (const model of selectedProvider.value?.models || []) {
+// ========== 草稿拆分（保存时执行一次，写回 config.models） ==========
+
+function commitDraftGroups() {
+  const provider = selectedProvider.value;
+  if (!provider) return;
+  // 先算草稿拆分结果，确定哪些卡被移除；被移除的活跃卡先标记 deprecated（保留历史，边界 4）
+  const draftModels = splitDraftGroups(provider, draftModelGroups.value, () => `api-model-${buildProviderSeed()}`);
+  const keptIds = new Set(draftModels.map((model) => model.id));
+  const actuallyRemoved: string[] = [];
+  for (const model of provider.models || []) {
     if (isModelDeprecated(model)) continue;
-    const key = modelGroupKey(model);
-    const existing = groups.get(key);
-    if (existing) {
-      existing.cards.push(model);
-    } else {
-      groups.set(key, { key, primary: model, cards: [model] });
+    if (!keptIds.has(model.id)) {
+      model.deprecated = true;
+      actuallyRemoved.push(`${provider.id}::${model.id}`);
     }
   }
-  return Array.from(groups.values());
-});
-const activeModelCards = computed(() => activeModelGroups.value.map((group) => group.primary));
-
-function modelGroupForCard(modelCard: ApiModelConfigItem): ActiveModelGroup | null {
-  return activeModelGroups.value.find((group) => group.cards.some((card) => card.id === modelCard.id)) ?? null;
+  // 标记后再拆一次，确保 deprecated 卡被 splitDraftGroups 保留
+  provider.models = splitDraftGroups(provider, draftModelGroups.value, () => `api-model-${buildProviderSeed()}`);
+  if (actuallyRemoved.length > 0) {
+    clearRemovedApiConfigReferences(actuallyRemoved);
+    props.normalizeApiBindingsAction();
+  }
+  // 仅当原选中卡被移除时才 fallback，保留用户当前选中
+  const [, selectedModelId] = String(props.config.selectedApiConfigId || "").split("::");
+  const selectedStillActive = selectedModelId && provider.models.some(
+    (model) => model.id === selectedModelId && !isModelDeprecated(model),
+  );
+  if (!selectedStillActive) {
+    const fallback = firstActiveModel(provider);
+    props.config.selectedApiConfigId = fallback
+      ? `${provider.id}::${fallback.id}`
+      : firstActiveApiConfigIdExcluding(new Set(actuallyRemoved));
+  }
 }
 
-function modelGroupDisplayLabel(modelCard: ApiModelConfigItem): string {
-  const group = modelGroupForCard(modelCard);
-  const displayName = String(modelCard.displayName || "").trim();
-  const modelName = displayName || String(modelCard.model || "").trim() || t("config.api.unnamedModel");
-  const sameNameGroups = activeModelGroups.value.filter((candidate) => candidate.primary.model === modelCard.model);
-  if (!group || sameNameGroups.length <= 1) return modelName;
-  const peers = sameNameGroups.map((candidate) => candidate.primary);
-  const summary: string[] = [];
-  if (new Set(peers.map((item) => item.contextWindowTokens)).size > 1) summary.push(`${t("config.api.contextWindow")} ${Math.round(Number(modelCard.contextWindowTokens || 0) / 1000)}K`);
-  if (new Set(peers.map((item) => item.maxOutputTokens)).size > 1) summary.push(`${t("config.api.maxOutputTokens")} ${Math.round(Number(modelCard.maxOutputTokens || 0) / 1000)}K`);
-  if (new Set(peers.map((item) => item.temperature)).size > 1) summary.push(`${t("config.api.temperature")} ${Number(modelCard.temperature || 0).toFixed(1)}`);
-  if (new Set(peers.map((item) => item.enableTools)).size > 1) summary.push(`${t("config.api.capTools")} ${modelCard.enableTools ? "✓" : "—"}`);
-  if (new Set(peers.map((item) => item.enableImage)).size > 1) summary.push(`${t("config.api.capImage")} ${modelCard.enableImage ? "✓" : "—"}`);
-  if (new Set(peers.map((item) => item.enableAudio)).size > 1) summary.push(`${t("config.api.capAudio")} ${modelCard.enableAudio ? "✓" : "—"}`);
-  if (new Set(peers.map((item) => item.enableVideo)).size > 1) summary.push(`${t("config.api.capVideo")} ${modelCard.enableVideo ? "✓" : "—"}`);
-  return summary.length > 0 ? `${modelName} · ${summary.join(" · ")}` : modelName;
-}
 const selectedCapability = computed<ApiCapability>(() => capabilityFromRequestFormat(selectedProvider.value?.requestFormat || "openai"));
 const activeTopTab = ref<ApiTopTab>(selectedCapability.value);
 const emptyImageToolbarState: ImageGenerationToolbarState = {
@@ -660,19 +703,12 @@ const providerToolbarOptions = computed<ProviderToolbarOption[]>(() => scopedPro
   label: `${provider.name || provider.id}（${provider.requestFormat}）`,
 })));
 const protocolOptions = computed(() =>
-  protocolOptionsByCapability[selectedCapability.value].map((option) =>
+  protocolOptionsByCapability()[selectedCapability.value].map((option) =>
     option.value === "auto"
       ? { ...option, label: t("config.api.protocolAuto") }
       : option,
   ),
 );
-
-const selectedModel = computed(() => {
-  const [, modelId] = String(props.config.selectedApiConfigId || "").split("::");
-  const provider = selectedProvider.value;
-  if (!provider) return null;
-  return (provider.models || []).find((model) => model.id === modelId && !isModelDeprecated(model)) ?? firstActiveModel(provider);
-});
 
 const selectedProtocol = computed<ApiRequestFormat>(() => canonicalRequestFormat(selectedProvider.value?.requestFormat || "openai"));
 const selectedProviderIsCodex = computed(() => selectedProtocol.value === "codex");
@@ -792,14 +828,6 @@ const providerModelOptions = computed(() => {
   return Array.from(new Set([...props.modelOptions, ...cached].map((item) => String(item || "").trim()).filter(Boolean)));
 });
 
-const modelRefreshStatusText = computed(() => {
-  if (props.modelRefreshError) return props.modelRefreshError;
-  if (props.modelRefreshOk) return t("status.modelListRefreshed", { count: providerModelOptions.value.length });
-  const initialCount = providerModelOptions.value.length;
-  if (initialCount > 0) return t("config.api.modelCount", { count: initialCount });
-  return t("config.api.noModels");
-});
-
 const savedProviderMap = computed(() => {
   const raw = String(props.lastSavedConfigJson || "").trim();
   if (!raw) return new Map<string, ApiProviderConfigItem>();
@@ -819,7 +847,12 @@ const currentProviderDirty = computed(() => {
   if (!provider) return false;
   const savedProvider = savedProviderMap.value.get(String(provider.id || "").trim());
   if (!savedProvider) return true;
-  return JSON.stringify(normalizeProviderForCompare(provider)) !== JSON.stringify(normalizeProviderForCompare(savedProvider));
+  // 草稿态比较：用草稿拆分结果构造 provider 视图，与保存后落盘内容一致
+  const draftView = {
+    ...provider,
+    models: splitDraftGroups(provider, draftModelGroups.value, () => `api-model-${buildProviderSeed()}`),
+  };
+  return JSON.stringify(normalizeProviderForCompare(draftView)) !== JSON.stringify(normalizeProviderForCompare(savedProvider));
 });
 
 function isGoogleModelAdapter(adapter: string | undefined): boolean {
@@ -873,7 +906,7 @@ async function refreshResolvedAdaptersForSelectedProvider() {
     return;
   }
   const requestSeq = ++adapterResolveRequestSeq.value;
-  const models = (provider.models || []).filter((model) => !isModelDeprecated(model));
+  const models = draftModelGroups.value.map((group) => group.primary);
   const pairs = await Promise.all(models.map(async (model) => {
     const modelName = String(model.model || "").trim();
     if (!modelName) return [model.id, ""] as const;
@@ -912,24 +945,23 @@ function setDeepSeekReasoningEffort(modelCard: ApiModelConfigItem, value: string
   modelCard.reasoningEffort = deepseekReasoningEffortOptions.value.some((item) => item.value === value) ? value : DEFAULT_DEEPSEEK_REASONING_EFFORT;
 }
 
-function reasoningCapability(modelCard: ApiModelConfigItem): ModelCapabilityLimits | undefined {
-  const group = modelGroupForCard(modelCard);
-  for (const card of group?.cards || [modelCard]) {
-    const capability = modelCapabilityById.value[card.id];
-    if (capability) return capability;
+function reasoningCapability(group: DraftModelGroup): ModelCapabilityLimits | undefined {
+  const primaryId = group.primary.id;
+  const capability = modelCapabilityById.value[primaryId];
+  if (capability) return capability;
+  for (const cardId of group.variantIdByEffort.values()) {
+    const item = modelCapabilityById.value[cardId];
+    if (item) return item;
   }
   return undefined;
 }
 
-function configuredReasoningEffortValues(modelCard: ApiModelConfigItem): string[] {
-  const group = modelGroupForCard(modelCard);
-  return (group?.cards || [modelCard]).map((item) => (
-    String(item.reasoningEffort || "").trim().toLowerCase() || "default"
-  ));
+function configuredReasoningEffortValues(group: DraftModelGroup): string[] {
+  return group.reasoningEfforts;
 }
 
-function reasoningCapabilityStatus(modelCard: ApiModelConfigItem): "known" | "unknown" | "unsupported" {
-  const capability = reasoningCapability(modelCard);
+function reasoningCapabilityStatus(group: DraftModelGroup): "known" | "unknown" | "unsupported" {
+  const capability = reasoningCapability(group);
   if (!capability || capability.metadataFound !== true) return "unknown";
   if (capability.reasoning?.supportsReasoning === false) return "unsupported";
   const explicitOptions = capability.reasoning?.reasoningEffortOptions?.some((value) => {
@@ -939,8 +971,8 @@ function reasoningCapabilityStatus(modelCard: ApiModelConfigItem): "known" | "un
   return explicitOptions ? "known" : "unknown";
 }
 
-function reasoningEffortSupportSet(modelCard: ApiModelConfigItem): Set<string> | null {
-  const capability = reasoningCapability(modelCard);
+function reasoningEffortSupportSet(group: DraftModelGroup): Set<string> | null {
+  const capability = reasoningCapability(group);
   if (!capability || capability.metadataFound !== true) return null;
   if (capability.reasoning?.supportsReasoning === false) return new Set();
   const options = (capability.reasoning?.reasoningEffortOptions || [])
@@ -950,12 +982,12 @@ function reasoningEffortSupportSet(modelCard: ApiModelConfigItem): Set<string> |
   return new Set(options);
 }
 
-function reasoningEffortItems(modelCard: ApiModelConfigItem): Array<{ value: string; label: string; disabled: boolean }> {
+function reasoningEffortItems(group: DraftModelGroup): Array<{ value: string; label: string; disabled: boolean }> {
   const values = sortReasoningEffortValues([
     ...LEGAL_REASONING_EFFORTS,
-    ...configuredReasoningEffortValues(modelCard),
+    ...configuredReasoningEffortValues(group),
   ]);
-  const supported = reasoningEffortSupportSet(modelCard);
+  const supported = reasoningEffortSupportSet(group);
   return values.map((value) => ({
     value,
     label: reasoningEffortDisplayLabel(value) || value,
@@ -963,70 +995,59 @@ function reasoningEffortItems(modelCard: ApiModelConfigItem): Array<{ value: str
   }));
 }
 
-function showReasoningEffort(modelCard: ApiModelConfigItem): boolean {
+function showReasoningEffort(group: DraftModelGroup): boolean {
   if (selectedCapability.value !== "text") return false;
-  const capability = reasoningCapability(modelCard);
-  const hasConfiguredReasoningEffort = configuredReasoningEffortValues(modelCard).some((value) => value !== "default");
+  const capability = reasoningCapability(group);
+  const hasConfiguredReasoningEffort = configuredReasoningEffortValues(group).some((value) => value !== "default");
   if (capability?.metadataFound === true && capability.reasoning?.supportsReasoning === false && !hasConfiguredReasoningEffort) {
     return false;
   }
   return true;
 }
 
-function groupHasReasoningEffort(modelCard: ApiModelConfigItem, effort: string): boolean {
+function groupHasReasoningEffort(group: DraftModelGroup, effort: string): boolean {
   const normalized = String(effort || "").trim().toLowerCase() || "default";
-  return (modelGroupForCard(modelCard)?.cards || [modelCard])
-    .some((item) => (String(item.reasoningEffort || "").trim().toLowerCase() || "default") === normalized);
+  return group.reasoningEfforts.includes(normalized);
 }
 
-function reasoningEffortCheckedValues(modelCard: ApiModelConfigItem): string[] {
-  return reasoningEffortItems(modelCard)
-    .filter((item) => groupHasReasoningEffort(modelCard, item.value))
+function reasoningEffortCheckedValues(group: DraftModelGroup): string[] {
+  return reasoningEffortItems(group)
+    .filter((item) => groupHasReasoningEffort(group, item.value))
     .map((item) => item.value);
 }
 
-function setGroupReasoningEffort(modelCard: ApiModelConfigItem, effort: string, enabled: boolean) {
-  const provider = selectedProvider.value;
-  const group = modelGroupForCard(modelCard);
-  if (!provider || !group) return;
+function setGroupReasoningEffort(group: DraftModelGroup, effort: string, enabled: boolean) {
   const normalized = String(effort || "").trim().toLowerCase() || "default";
-  const selectedOption = reasoningEffortItems(modelCard).find((item) => item.value === normalized);
+  const selectedOption = reasoningEffortItems(group).find((item) => item.value === normalized);
   if (selectedOption?.disabled) return;
-  const matchingCards = group.cards.filter((item) =>
-    (String(item.reasoningEffort || "").trim().toLowerCase() || "default") === normalized,
-  );
+  const hasEffort = group.reasoningEfforts.includes(normalized);
   if (enabled) {
-    if (matchingCards.length > 0) return;
-    provider.models.push({
-      ...group.primary,
-      id: `api-model-${buildProviderSeed()}`,
-      deprecated: false,
-      reasoningEffort: normalized,
-    });
+    if (hasEffort) return;
+    group.reasoningEfforts.push(normalized);
+    if (!group.variantIdByEffort.has(normalized)) {
+      group.variantIdByEffort.set(normalized, `api-model-${buildProviderSeed()}`);
+    }
     return;
   }
-  if (matchingCards.length === 0) return;
-  if (matchingCards.length === group.cards.length) {
+  if (!hasEffort) return;
+  if (group.reasoningEfforts.length === 1) {
     if (normalized === "default") return;
-    provider.models.push({
-      ...group.primary,
-      id: `api-model-${buildProviderSeed()}`,
-      deprecated: false,
-      reasoningEffort: "default",
-    });
+    group.reasoningEfforts.length = 0;
+    group.reasoningEfforts.push("default");
+    return;
   }
-  deprecateModelCards(provider, matchingCards);
+  group.reasoningEfforts = group.reasoningEfforts.filter((item) => item !== normalized);
 }
 
 
-function modelDocumentationUrl(modelCard: ApiModelConfigItem): string {
-  const capability = reasoningCapability(modelCard);
+function modelDocumentationUrl(group: DraftModelGroup): string {
+  const capability = reasoningCapability(group);
   if (capability?.metadataFound === false) return "";
   return String(capability?.documentationUrl || "").trim();
 }
 
-async function openModelDocumentation(modelCard: ApiModelConfigItem) {
-  const url = modelDocumentationUrl(modelCard);
+async function openModelDocumentation(group: DraftModelGroup) {
+  const url = modelDocumentationUrl(group);
   if (!url) return;
   try {
     await openTransportExternalUrl(url);
@@ -1219,31 +1240,30 @@ function applyProtocolDefaults(provider: ApiProviderConfigItem) {
     provider.codexAuthMode = (String(provider.codexAuthMode || DEFAULT_CODEX_AUTH_MODE).trim() || DEFAULT_CODEX_AUTH_MODE) as CodexAuthMode;
     provider.codexLocalAuthPath = String(provider.codexLocalAuthPath || DEFAULT_CODEX_LOCAL_AUTH_PATH).trim() || DEFAULT_CODEX_LOCAL_AUTH_PATH;
     provider.apiKeys = [];
-    provider.models = (provider.models || []).map((model) => ({
-      ...model,
-      reasoningEffort: String(model.reasoningEffort || DEFAULT_REASONING_EFFORT).trim() || DEFAULT_REASONING_EFFORT,
-      temperature: 1,
-      customTemperatureEnabled: false,
-      contextWindowTokens: AUTO_CONTEXT_WINDOW_TOKENS,
-      customMaxOutputTokensEnabled: false,
-      maxOutputTokens: 4096,
-    }));
+    for (const group of draftModelGroups.value) {
+      group.primary.reasoningEffort = String(group.primary.reasoningEffort || DEFAULT_REASONING_EFFORT).trim() || DEFAULT_REASONING_EFFORT;
+      group.primary.temperature = 1;
+      group.primary.customTemperatureEnabled = false;
+      group.primary.contextWindowTokens = AUTO_CONTEXT_WINDOW_TOKENS;
+      group.primary.customMaxOutputTokensEnabled = false;
+      group.primary.maxOutputTokens = 4096;
+    }
     return;
   }
   if (!Array.isArray(provider.apiKeys) || provider.apiKeys.length === 0) {
     provider.apiKeys = [""];
   }
-  provider.models = (provider.models || []).map((model) => ({
-    ...model,
-    reasoningEffort: String(model.reasoningEffort || DEFAULT_REASONING_EFFORT).trim() || DEFAULT_REASONING_EFFORT,
-    customMaxOutputTokensEnabled: isAnthropic ? true : !!model.customMaxOutputTokensEnabled,
-    maxOutputTokens: isAnthropic && Number(model.maxOutputTokens ?? 4096) === 4096
+  for (const group of draftModelGroups.value) {
+    group.primary.reasoningEffort = String(group.primary.reasoningEffort || DEFAULT_REASONING_EFFORT).trim() || DEFAULT_REASONING_EFFORT;
+    group.primary.customMaxOutputTokensEnabled = isAnthropic ? true : !!group.primary.customMaxOutputTokensEnabled;
+    group.primary.maxOutputTokens = isAnthropic && Number(group.primary.maxOutputTokens ?? 4096) === 4096
       ? 128000
-      : Number(model.maxOutputTokens ?? 4096),
-  }));
+      : Number(group.primary.maxOutputTokens ?? 4096);
+  }
 }
 
-function handleCustomMaxOutputTokensToggle(modelCard: ApiModelConfigItem) {
+function handleCustomMaxOutputTokensToggle(group: DraftModelGroup) {
+  const modelCard = group.primary;
   if (!modelCard.customMaxOutputTokensEnabled) return;
   const provider = selectedProvider.value;
   const currentValue = Number(modelCard.maxOutputTokens ?? 4096);
@@ -1471,6 +1491,8 @@ function revertUnsavedConfigIfNeeded() {
     return;
   }
   props.config.apiProviders.splice(providerIndex, 1, cloneProvider(savedProvider));
+  // config 已还原，草稿需要跟随重建，避免残留旧草稿
+  rebuildDraftGroups();
 }
 
 function updateSelectedApiKeys(apiKeys: string[]) {
@@ -1487,66 +1509,44 @@ function addModelCard() {
   if (provider.requestFormat === "codex") {
     model.model = "gpt-5.5";
   }
-  provider.models.push(model);
+  const group: DraftModelGroup = {
+    key: modelGroupKey(model),
+    primary: model,
+    reasoningEfforts: [normalizedModelReasoningEffortFor(model)],
+    variantIdByEffort: new Map([[normalizedModelReasoningEffortFor(model), model.id]]),
+  };
+  draftModelGroups.value.unshift(group);
   props.config.selectedApiConfigId = `${provider.id}::${model.id}`;
 }
 
-function deprecateModelCards(provider: ApiProviderConfigItem, models: ApiModelConfigItem[]) {
-  const removedIds = models.map((model) => `${provider.id}::${model.id}`);
-  const removedModelIds = new Set(models.map((model) => model.id));
-  for (const model of provider.models || []) {
-    if (removedModelIds.has(model.id)) model.deprecated = true;
-  }
-  clearRemovedApiConfigReferences(removedIds);
-  props.normalizeApiBindingsAction();
-  const fallback = firstActiveModel(provider);
-  props.config.selectedApiConfigId = fallback
-    ? `${provider.id}::${fallback.id}`
-    : firstActiveApiConfigIdExcluding(new Set(removedIds));
-}
-
-function removeModelGroup(modelCard: ApiModelConfigItem) {
+function removeModelGroup(group: DraftModelGroup) {
   const provider = selectedProvider.value;
-  const group = modelGroupForCard(modelCard);
-  if (!provider || !group || activeModelGroups.value.length <= 1) return;
-  deprecateModelCards(provider, group.cards);
+  if (!provider || draftModelGroups.value.length <= 1) return;
+  draftModelGroups.value = draftModelGroups.value.filter((item) => item !== group);
 }
 
-function removeModelCard(modelId: string) {
-  const provider = selectedProvider.value;
-  if (!provider) return;
-  const model = provider.models.find((item) => item.id === modelId && !item.deprecated);
-  if (!model || activeModelCount(provider) <= 1) return;
-  deprecateModelCards(provider, [model]);
-}
-
-function contextWindowMax(modelCard: ApiModelConfigItem): number {
-  const raw = Number(modelCapabilityById.value[modelCard.id]?.contextWindowMax ?? FALLBACK_CONTEXT_WINDOW_MAX);
+function contextWindowMax(group: DraftModelGroup): number {
+  const raw = Number(modelCapabilityById.value[group.primary.id]?.contextWindowMax ?? FALLBACK_CONTEXT_WINDOW_MAX);
   if (!Number.isFinite(raw)) return FALLBACK_CONTEXT_WINDOW_MAX;
   return Math.max(SLIDER_CONTEXT_MIN, Math.min(FALLBACK_CONTEXT_WINDOW_MAX, Math.round(raw)));
 }
 
-function autoContextWindowTokens(modelCard: ApiModelConfigItem): number {
-  const contextMax = contextWindowMax(modelCard);
+function autoContextWindowTokens(group: DraftModelGroup): number {
+  const contextMax = contextWindowMax(group);
   if (contextMax < AUTO_CONTEXT_WINDOW_SMALL_MODEL_THRESHOLD) {
     return contextMax;
   }
   return Math.min(AUTO_CONTEXT_WINDOW_TOKENS, contextMax);
 }
 
-function applyAutoContextWindowTokens(modelCard: ApiModelConfigItem) {
-  modelCard.contextWindowTokens = autoContextWindowTokens(modelCard);
+function applyAutoContextWindowTokens(group: DraftModelGroup) {
+  group.primary.contextWindowTokens = autoContextWindowTokens(group);
 }
 
-function shouldWarnDeepSeekKimiProtocol(modelCard: ApiModelConfigItem): boolean {
-  if (selectedProtocol.value === "auto" || selectedProtocol.value === "deepseek") return false;
-  const modelName = String(modelCard.model || "").toLowerCase();
-  return modelName.includes("deepseek") || modelName.includes("kimi");
-}
-
-function clampModelCardValues(modelCard: ApiModelConfigItem) {
+function clampModelCardValues(group: DraftModelGroup) {
+  const modelCard = group.primary;
   const nextContext = Math.round(Number(modelCard.contextWindowTokens ?? AUTO_CONTEXT_WINDOW_TOKENS));
-  const contextMax = contextWindowMax(modelCard);
+  const contextMax = contextWindowMax(group);
   const contextMin = Math.min(SLIDER_CONTEXT_MIN, contextMax);
   const clampedContext = Math.max(contextMin, Math.min(contextMax, nextContext));
   if (Number.isFinite(nextContext) && nextContext !== clampedContext) {
@@ -1559,7 +1559,8 @@ function clampModelCardValues(modelCard: ApiModelConfigItem) {
   }
 }
 
-function clampManualContextWindowValue(modelCard: ApiModelConfigItem) {
+function clampManualContextWindowValue(group: DraftModelGroup) {
+  const modelCard = group.primary;
   const nextContext = Math.round(Number(modelCard.contextWindowTokens ?? AUTO_CONTEXT_WINDOW_TOKENS));
   const clampedContext = Math.max(SLIDER_CONTEXT_MIN, Math.min(FALLBACK_CONTEXT_WINDOW_MAX, nextContext));
   if (!Number.isFinite(nextContext)) {
@@ -1571,8 +1572,8 @@ function clampManualContextWindowValue(modelCard: ApiModelConfigItem) {
   }
 }
 
-function selectModelOption(modelCard: ApiModelConfigItem, option: string) {
-  modelCard.model = option;
+function selectModelOption(group: DraftModelGroup, option: string) {
+  group.primary.model = option;
   const provider = selectedProvider.value;
   if (provider && !provider.cachedModelOptions.includes(option)) {
     provider.cachedModelOptions.push(option);
@@ -1580,26 +1581,17 @@ function selectModelOption(modelCard: ApiModelConfigItem, option: string) {
   if (provider) {
     applyProtocolDefaults(provider);
   }
-  applyAutoContextWindowTokens(modelCard);
-  void syncModelMetadata(modelCard);
+  applyAutoContextWindowTokens(group);
+  void syncModelMetadata(group);
 }
 
-function handleModelCardSyncMetadata(modelCard: ApiModelConfigItem) {
-  const group = modelGroupForCard(modelCard);
-  if (group) {
-    // 模型卡聚合同一 model 的多个思维等级变体，显示名需同步到组内所有卡片，
-    // 否则只有 primary 生效，树/下拉里其他思维等级仍显示原始模型名。
-    const displayName = String(modelCard.displayName || "").trim();
-    for (const card of group.cards) {
-      if (card === modelCard) continue;
-      card.displayName = displayName;
-    }
-  }
-  void syncModelMetadata(modelCard);
+function handleModelCardSyncMetadata(group: DraftModelGroup) {
+  void syncModelMetadata(group);
 }
 
-async function syncModelMetadata(modelCard: ApiModelConfigItem) {
+async function syncModelMetadata(group: DraftModelGroup) {
   const provider = selectedProvider.value;
+  const modelCard = group.primary;
   const model = String(modelCard.model || "").trim();
   if (!provider || !model) return;
   try {
@@ -1624,6 +1616,9 @@ async function syncModelMetadata(modelCard: ApiModelConfigItem) {
     const nextCapability: ModelCapabilityLimits = metadata?.found
       ? {
           metadataFound: true,
+          fuzzyMatch: metadata.fuzzyMatch === true,
+          providerName: String(metadata.providerName || "").trim() || undefined,
+          providerApi: String(metadata.providerApi || "").trim() || undefined,
           ...buildModelCapability({
             metadataFound: true,
             contextWindowTokens: metadata.contextWindowTokens,
@@ -1647,8 +1642,16 @@ async function syncModelMetadata(modelCard: ApiModelConfigItem) {
       ...modelCapabilityById.value,
       [modelCard.id]: nextCapability,
     };
-    applyAutoContextWindowTokens(modelCard);
-    clampModelCardValues(modelCard);
+    applyAutoContextWindowTokens(group);
+    clampModelCardValues(group);
+    // 元数据已知时，自动移除不支持的思考等级（草稿态只改集合，不触发重组）
+    const supported = reasoningEffortSupportSet(group);
+    if (supported) {
+      const nextEfforts = group.reasoningEfforts.filter((effort) => supported.has(effort));
+      if (nextEfforts.length !== group.reasoningEfforts.length) {
+        group.reasoningEfforts = nextEfforts.length > 0 ? nextEfforts : ["default"];
+      }
+    }
   } catch (error) {
     console.warn("[API] 获取模型元数据失败:", error);
   }
@@ -1798,13 +1801,16 @@ async function openProviderSite(preset: ProviderPreset) {
 async function handleSaveApiConfig() {
   const provider = selectedProvider.value;
   if (provider) {
-    const hasEmptyModel = (provider.models || []).some(
-      (model) => !model.deprecated && !String(model.model || "").trim(),
+    // 基于草稿组检查空模型，失败时不碰 config 本体
+    const hasEmptyModel = draftModelGroups.value.some(
+      (group) => !String(group.primary.model || "").trim(),
     );
     if (hasEmptyModel) {
       props.setStatusAction(t("config.api.emptyModelNotAllowed"));
       return;
     }
+    // 保存前先把草稿拆分结果写回 config.models
+    commitDraftGroups();
     provider.cachedModelOptions = Array.from(new Set(providerModelOptions.value));
   }
   await Promise.resolve(props.saveApiConfigAction());
@@ -1817,7 +1823,7 @@ function handleRestoreProviderDraft() {
 async function testModelConnection(modelCardId: string) {
   const provider = selectedProvider.value;
   if (!provider) return;
-  const modelCard = provider.models.find((m) => m.id === modelCardId);
+  const modelCard = draftViewModels.value.find((m) => m.id === modelCardId);
   if (!modelCard) return;
   const apiKey = (provider.apiKeys || []).find((k) => k.trim()) ?? "";
   if (!apiKey.trim()) {
@@ -1914,7 +1920,7 @@ function maskKeyPreview(key: string): string {
 
 async function runSingleConnectionTest(apiKey: string): Promise<ConnectionTestResultItem> {
   const provider = selectedProvider.value!;
-  const modelCard = provider.models.find((m) => m.id === connectionTestModelId.value) ?? provider.models[0];
+  const modelCard = draftViewModels.value.find((m) => m.id === connectionTestModelId.value) ?? draftViewModels.value[0];
   const modelName = modelCard?.model.trim() ?? "";
   try {
     const latencyMs = await runProviderConnectionProbe(provider, apiKey, modelName);
@@ -1984,8 +1990,9 @@ watch(
 
 watch(
   () => selectedProvider.value?.id,
-  (providerId) => {
+  (providerId, previousProviderId) => {
     const provider = selectedProvider.value;
+    rebuildDraftGroups();
     if (!providerId || !provider) {
       stopCodexAuthPolling();
       return;
@@ -1993,6 +2000,9 @@ watch(
     if (provider.requestFormat === "codex") {
       void refreshCodexAuthStatus(provider);
       return;
+    }
+    if (previousProviderId && previousProviderId !== providerId) {
+      void refreshResolvedAdaptersForSelectedProvider();
     }
     stopCodexAuthPolling();
   },
@@ -2005,7 +2015,7 @@ watch(
     const provider = selectedProvider.value;
     connectionTestKeyStatus.value = {};
     modelConnectionResult.value = {};
-    const activeModels = (provider?.models || []).filter((model) => !isModelDeprecated(model));
+    const activeModels = draftViewModels.value;
     if (!provider || activeModels.length === 0) {
       connectionTestModelId.value = "";
       connectionTestResults.value = [];
@@ -2021,7 +2031,7 @@ watch(
 watch(
   () => {
     const provider = selectedProvider.value;
-    const activeModels = (provider?.models || []).filter((model) => !isModelDeprecated(model));
+    const activeModels = draftModelGroups.value.map((group) => group.primary);
     return [
       provider?.id || "",
       selectedProtocol.value,
@@ -2035,59 +2045,37 @@ watch(
 );
 
 watch(
-  () => [
-    selectedProvider.value?.id || "",
-    selectedProvider.value?.baseUrl || "",
-    selectedProvider.value?.requestFormat || "",
-    selectedModel.value?.id || "",
-  ].join("\0"),
   () => {
-    const modelCard = selectedModel.value;
-    if (!modelCard) return;
-    void syncModelMetadata(modelCard);
+    const provider = selectedProvider.value;
+    const activeModels = draftModelGroups.value.map((group) => group.primary);
+    return [
+      provider?.id || "",
+      provider?.baseUrl || "",
+      provider?.requestFormat || "",
+      ...activeModels.map((model) => `${model.id}:${String(model.model || "").trim()}`),
+    ].join("\0");
+  },
+  (current, previous) => {
+    if (current === previous) return;
+    for (const group of draftModelGroups.value) {
+      void syncModelMetadata(group);
+    }
   },
   { immediate: true },
 );
 
-let synchronizingModelGroupFields = false;
-watch(
-  () => (selectedProvider.value?.models || [])
-    .filter((model) => !model.deprecated)
-    .map((model) => ({ id: model.id, key: modelGroupKey(model) })),
-  (current, previous) => {
-    if (synchronizingModelGroupFields) {
-      synchronizingModelGroupFields = false;
-      return;
-    }
-    const previousById = new Map((previous || []).map((item) => [item.id, item.key]));
-    const changed = current.find((item) => {
-      const previousKey = previousById.get(item.id);
-      return previousKey !== undefined && previousKey !== item.key;
+onMounted(() => {
+  if (!canUseTransportGenaiChatAdapters()) return;
+  void invokeTauri<Array<{ id: string; label: string; supported: boolean }>>("list_genai_chat_adapters")
+    .then((adapters) => {
+      if (Array.isArray(adapters) && adapters.length > 0) {
+        genaiChatAdapters.value = adapters;
+      }
+    })
+    .catch((error) => {
+      console.warn("[API] list_genai_chat_adapters failed:", error);
     });
-    if (!changed) return;
-    const previousKey = previousById.get(changed.id);
-    if (!previousKey) return;
-    const provider = selectedProvider.value;
-    const source = provider?.models.find((model) => model.id === changed.id);
-    if (!provider || !source) return;
-    const siblingIds = (previous || []).filter((item) => item.key === previousKey && item.id !== source.id).map((item) => item.id);
-    if (siblingIds.length === 0) return;
-    synchronizingModelGroupFields = true;
-    for (const sibling of provider.models || []) {
-      if (!siblingIds.includes(sibling.id)) continue;
-      sibling.model = source.model;
-      sibling.enableImage = source.enableImage;
-      sibling.enableAudio = source.enableAudio;
-      sibling.enableVideo = source.enableVideo;
-      sibling.enableTools = source.enableTools;
-      sibling.temperature = source.temperature;
-      sibling.customTemperatureEnabled = source.customTemperatureEnabled;
-      sibling.contextWindowTokens = source.contextWindowTokens;
-      sibling.customMaxOutputTokensEnabled = source.customMaxOutputTokensEnabled;
-      sibling.maxOutputTokens = source.maxOutputTokens;
-    }
-  },
-);
+});
 
 onUnmounted(() => {
   stopCodexAuthPolling();

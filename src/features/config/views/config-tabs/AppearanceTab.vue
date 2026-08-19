@@ -26,6 +26,32 @@
       </div>
     </template>
 
+    <template v-if="fontsAvailable" #row-ui-font>
+      <div class="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <span class="text-sm">{{ t("appearance.uiFont") }}</span>
+        <FontFamilySelect
+          :model-value="props.uiFont || 'auto'"
+          :options="uiFontOptions"
+          :auto-label="t('appearance.fontAuto')"
+          :disabled="fontsLoading"
+          @update:model-value="$emit('update:uiFont', $event)"
+        />
+      </div>
+    </template>
+
+    <template v-if="fontsAvailable" #row-code-font>
+      <div class="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <span class="text-sm">{{ t("appearance.codeFont") }}</span>
+        <FontFamilySelect
+          :model-value="props.codeFont || 'auto'"
+          :options="codeFontOptions"
+          :auto-label="t('appearance.fontAutoCode')"
+          :disabled="fontsLoading"
+          @update:model-value="$emit('update:codeFont', $event)"
+        />
+      </div>
+    </template>
+
     <template #row-chat-bubble-background>
       <label class="flex min-w-0 cursor-pointer items-center justify-between gap-4">
         <span class="text-sm">{{ t("appearance.chatBubbleBackground") }}</span>
@@ -58,6 +84,19 @@
           @change="setChatTimeDisplayMode(($event.target as HTMLInputElement).checked ? 'absolute' : 'relative')"
         />
       </label>
+    </template>
+    <template #row-chat-bubble-markdown-layout>
+      <div class="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <span class="text-sm">{{ t("appearance.chatBubbleMarkdownLayout") }}</span>
+        <SegmentedControl
+          :model-value="markdownLayout"
+          :options="markdownLayoutOptions"
+          size="sm"
+          :full-width="false"
+          class="max-w-full shrink-0"
+          @change="setChatMarkdownLayout"
+        />
+      </div>
     </template>
 
     <template #row-input-side-file-tags>
@@ -172,10 +211,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { canUseTransportSystemFonts, invokeTauri } from "../../../../services/tauri-api";
 import SegmentedControl from "../../components/SegmentedControl.vue";
 import ConfigTemplate from "../../components/ConfigTemplate.vue";
+import FontFamilySelect from "../../components/FontFamilySelect.vue";
 import type { ConfigTemplateGroup } from "../../components/config-template";
 import ThemePreviewGrid from "../../components/ThemePreviewGrid.vue";
 import GeneratedThemeEditor from "../../components/GeneratedThemeEditor.vue";
@@ -191,12 +232,14 @@ import {
 import {
   useMarkdownAppearance,
 } from "../../../shell/composables/use-markdown-appearance";
-import { useChatMessageAppearance } from "../../../shell/composables/use-chat-message-appearance";
+import { useChatMessageAppearance, type ChatMarkdownLayout } from "../../../shell/composables/use-chat-message-appearance";
 import { SIDE_FILE_TAGS_AVAILABLE, useChatComposerAppearance } from "../../../shell/composables/use-chat-composer-appearance";
 import { useFileReaderAppearance } from "../../../shell/composables/use-file-reader-appearance";
 
 const props = defineProps<{
   uiLanguage: "zh-CN" | "en-US" | "zh-TW";
+  uiFont?: string;
+  codeFont?: string;
   localeOptions: Array<{ value: "zh-CN" | "en-US" | "zh-TW"; label: string }>;
   currentTheme: string;
   generatedThemeControls: GeneratedThemeControls;
@@ -206,6 +249,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "update:uiLanguage", value: string): void;
+  (e: "update:uiFont", value: string): void;
+  (e: "update:codeFont", value: string): void;
   (e: "update:uiSizeScale", value: number): void;
   (e: "setTheme", value: string): void;
   (e: "activateGeneratedTheme"): void;
@@ -222,6 +267,12 @@ const templateGroups = computed<ConfigTemplateGroup[]>(() => [
     rows: [
       { key: "language", items: [] },
       { key: "markdown-font-scale", items: [] },
+      ...(fontsAvailable.value
+        ? [
+            { key: "ui-font", items: [] },
+            { key: "code-font", items: [] },
+          ]
+        : []),
     ],
   },
   {
@@ -231,6 +282,7 @@ const templateGroups = computed<ConfigTemplateGroup[]>(() => [
       { key: "chat-bubble-background", items: [] },
       { key: "chat-bubble-markdown", items: [] },
       { key: "chat-bubble-time", items: [] },
+      { key: "chat-bubble-markdown-layout", items: [] },
     ],
   },
   {
@@ -263,6 +315,11 @@ const markdownFontScaleOptions = computed(() => [
   { value: 0, label: t("appearance.markdownFontScaleLight") },
   { value: 1, label: t("appearance.markdownFontScaleHeavy") },
 ]);
+const markdownLayoutOptions = computed<Array<{ value: ChatMarkdownLayout; label: string }>>(() => [
+  { value: "compact", label: t("appearance.markdownLayoutCompact") },
+  { value: "comfortable", label: t("appearance.markdownLayoutComfortable") },
+  { value: "relaxed", label: t("appearance.markdownLayoutRelaxed") },
+]);
 const lightThemes = computed(() => APP_THEMES.filter((theme) => !DARK_APP_THEMES.has(theme)));
 const darkThemes = computed(() => APP_THEMES.filter((theme) => DARK_APP_THEMES.has(theme)));
 const {
@@ -273,9 +330,11 @@ const {
   assistantBubbleBackgroundEnabled,
   segmentedMarkdownEnabled,
   chatTimeDisplayMode,
+  markdownLayout,
   setAssistantBubbleBackgroundEnabled,
   setSegmentedMarkdownEnabled,
   setChatTimeDisplayMode,
+  setChatMarkdownLayout,
 } = useChatMessageAppearance();
 const {
   sideFileTagsEnabled,
@@ -287,6 +346,57 @@ const {
   fileReaderLineWrapEnabled,
   setFileReaderLineWrapEnabled,
 } = useFileReaderAppearance();
+
+const fontsAvailable = computed(() => canUseTransportSystemFonts());
+const systemFonts = ref<string[]>([]);
+const monospaceFonts = ref<Set<string>>(new Set());
+const fontsLoading = ref(false);
+
+const uiFontOptions = computed(() => {
+  const current = String(props.uiFont || "").trim();
+  const set = new Set<string>();
+  if (current && current !== "auto" && !monospaceFonts.value.has(current)) set.add(current);
+  for (const name of systemFonts.value) {
+    if (!monospaceFonts.value.has(name)) set.add(name);
+  }
+  return [...set];
+});
+
+const codeFontOptions = computed(() => {
+  const current = String(props.codeFont || "").trim();
+  const set = new Set<string>();
+  // 无条件保留用户已保存的代码字体为候选项：即使系统字体枚举失败、或后端未将其标记为 monospace，
+  // 下拉列表也必须能对应上当前选中的代码字体
+  if (current && current !== "auto") set.add(current);
+  for (const name of systemFonts.value) {
+    if (monospaceFonts.value.has(name)) set.add(name);
+  }
+  return [...set];
+});
+
+onMounted(async () => {
+  if (!fontsAvailable.value) return;
+  fontsLoading.value = true;
+  try {
+    const fonts = await invokeTauri<{ family: string; monospace: boolean }[]>("list_system_fonts");
+    if (Array.isArray(fonts)) {
+      const families: string[] = [];
+      const mono = new Set<string>();
+      for (const item of fonts) {
+        if (!item || typeof item.family !== "string" || !item.family.trim()) continue;
+        families.push(item.family.trim());
+        if (item.monospace) mono.add(item.family.trim());
+      }
+      systemFonts.value = families;
+      monospaceFonts.value = mono;
+    }
+  } catch (error) {
+    console.warn("[APPEARANCE] list_system_fonts failed:", error);
+    systemFonts.value = [];
+  } finally {
+    fontsLoading.value = false;
+  }
+});
 
 function isGeneratedTheme(theme: string) {
   return theme === GENERATED_THEME_LIGHT_ID || theme === GENERATED_THEME_DARK_ID;

@@ -361,6 +361,7 @@ async fn run_genai_tool_loop(
     );
     let options = build_provider_genai_chat_options(
         &api_config,
+        adapter_kind,
         true,
         true,
     );
@@ -1007,6 +1008,7 @@ async fn run_genai_tool_loop_non_stream(
     );
     let options = build_provider_genai_chat_options(
         &api_config,
+        adapter_kind,
         true,
         true,
     );

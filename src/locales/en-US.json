@@ -433,7 +433,13 @@
           "Nov",
           "Dec"
         ],
-        "chartPolar": "Polar"
+        "chartPolar": "Polar",
+        "achievements": "Achievements",
+        "achTotal": "Total Tokens",
+        "achPeak": "Peak Tokens (Day)",
+        "achCurrentStreak": "Current Streak",
+        "achBestStreak": "Best Streak",
+        "dayUnit": "days"
       },
       "runtimeDeps": {
         "title": "Runtime Dependencies"
@@ -1663,6 +1669,8 @@
     "personaModelNotConfigured": "Model not configured",
     "personaRemoved": "Removed",
     "departmentNoAvailableAgent": "Department has no available agent",
+    "todoProgress": "{done} / {total} done",
+    "todoCollapse": "Collapse todo list",
     "todoIntentionWithPersona": "{name} plans to {todo}",
     "todoIntention": "Plans to {todo}",
     "loadMore": "Load more...",
@@ -2448,6 +2456,10 @@
     "text": "Text",
     "textLanguage": "Text Language",
     "textWeight": "Text Weight",
+    "uiFont": "UI Font",
+    "codeFont": "Code Font",
+    "fontAuto": "Auto (language based)",
+    "fontAutoCode": "Built-in Monospace",
     "theme": "Theme",
     "markdownFontScale": "Global Font Weight",
     "markdownFontScaleHint": "Adjust font weight across the interface and Markdown.",
@@ -2457,6 +2469,10 @@
     "chatBubbleBackground": "Background",
     "chatBubbleSegmentedMarkdown": "Segmented",
     "chatBubbleFullTime": "Full time",
+    "chatBubbleMarkdownLayout": "Markdown layout",
+    "markdownLayoutCompact": "Compact",
+    "markdownLayoutComfortable": "Comfortable",
+    "markdownLayoutRelaxed": "Relaxed",
     "inputPanel": "Input Panel Appearance",
     "inputPanelSideFileTags": "Show side file tags",
     "inputPanelIdeBridgeFileTags": "Show IDE bridge file tags",

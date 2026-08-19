@@ -7,8 +7,11 @@
     <div class="flex min-w-0 flex-1 items-center gap-1.5">
       <div
         v-if="!hideMenuButton"
+        ref="menuDropdownRef"
         class="dropdown dropdown-start"
         :class="menuPlacement === 'top' ? 'dropdown-top' : 'dropdown-bottom'"
+        @mouseleave="handleMenuMouseLeave"
+        @focusout="handleMenuFocusOut"
       >
         <button
           ref="menuButtonRef"
@@ -22,67 +25,201 @@
         </button>
         <ul
           tabindex="0"
-          class="dropdown-content menu z-50 w-64 rounded-box border border-base-300 bg-base-100 p-3 text-sm shadow-xl"
+          class="dropdown-content menu z-50 w-64 rounded-box border border-base-300 bg-base-100 p-2 text-sm shadow-xl"
           :class="menuPlacement === 'top' ? 'mb-3' : 'mt-3'"
         >
-          <li v-if="showCodeReviewMenuItem">
-            <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" @click="emit('openCodeReview')">
-              <ClipboardCheck class="h-4 w-4 shrink-0" />
-              <span class="leading-5">{{ t('chat.toolbar.codeReview') }}</span>
-            </button>
-          </li>
-          <li>
-            <button v-if="showTaskCreateMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" @click="emit('openTaskCreate')">
+          <li v-if="showTaskCreateMenuItem" @mouseenter="activeSubmenu = null">
+            <button type="button" class="flex min-h-9 items-center justify-start gap-3 px-3 py-1.5 text-left" @click="emit('openTaskCreate')">
               <ListTodo class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t("chat.newTask") }}</span>
             </button>
           </li>
-          <li>
-            <button v-if="showDelegateMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" @click="emit('openDelegateSelection')">
-              <ClipboardList class="h-4 w-4 shrink-0" />
-              <span class="leading-5">{{ t("chat.conversationMenu.startDelegate") }}</span>
-            </button>
-          </li>
-          <li>
-            <button v-if="showBranchMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" @click="emit('openBranchSelection')">
-              <Split class="h-4 w-4 shrink-0" />
-              <span class="leading-5">{{ t("chat.conversationMenu.branchConversation") }}</span>
-            </button>
-          </li>
-          <li>
-            <button v-if="showAutoPushMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" @click="emit('openAutoPush')">
-              <Send class="h-4 w-4 shrink-0" />
-              <span class="leading-5">{{ t("chat.conversationMenu.autoPush") }}</span>
-            </button>
-          </li>
-          <li>
-            <button v-if="showForwardMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" @click="emit('openForwardSelection')">
-              <Package class="h-4 w-4 shrink-0" />
-              <span class="leading-5">{{ t("chat.conversationMenu.forwardConversation") }}</span>
-            </button>
-          </li>
-          <li>
-            <button v-if="showShareMenuItem" type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" @click="emit('openShareSelection')">
-              <ExternalLink class="h-4 w-4 shrink-0" />
+          <li v-if="showShareMenuItem" @mouseenter="activeSubmenu = null">
+            <button type="button" class="flex min-h-9 items-center justify-start gap-3 px-3 py-1.5 text-left" @click="emit('openShareSelection')">
+              <Share2 class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t("chat.conversationMenu.shareConversation") }}</span>
             </button>
           </li>
-          <li v-if="showWorkspaceMenuItem && !workspaceButtonDisabled">
-            <button type="button" class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left" :disabled="workspaceButtonDisabled" @click="emit('lockWorkspace')">
-              <Folder class="h-4 w-4 shrink-0" />
-              <span class="leading-5">{{ t("chat.conversationMenu.setWorkspace") }}</span>
-            </button>
-          </li>
-          <li v-if="showOpenInBrowserButton && !openInBrowserDisabled">
+          <li v-if="hasDelegateMenuItems" class="relative">
             <button
               type="button"
-              class="flex min-h-10 items-center justify-start gap-3 px-4 py-2 text-left"
-              :disabled="openInBrowserDisabled"
-              @click="emit('openConversationInBrowser')"
+              class="flex min-h-9 w-full items-center justify-between gap-3 px-3 py-1.5 text-left"
+              @mouseenter="openSubmenu('delegate')"
+              @click="toggleSubmenu('delegate')"
             >
-              <ExternalLink class="h-4 w-4 shrink-0" />
-              <span class="leading-5">{{ t("chat.conversationMenu.openInBrowser") }}</span>
+              <span class="flex min-w-0 items-center gap-3">
+                <Users class="h-4 w-4 shrink-0" />
+                <span class="leading-5">{{ t("chat.conversationMenu.groupDelegate") }}</span>
+              </span>
+              <ChevronRight class="h-4 w-4 shrink-0 opacity-50" />
             </button>
+            <ul
+              v-if="activeSubmenu === 'delegate'"
+              ref="delegateSubmenuEl"
+              class="menu absolute bottom-0 left-full ml-1 z-50 min-w-52 w-max rounded-box border border-base-300 bg-base-100 p-2 shadow-xl"
+            >
+              <li v-if="showCodeReviewMenuItem">
+                <button type="button" class="flex min-h-9 items-center justify-start gap-3 px-3 py-1.5 text-left" @click="emit('openCodeReview')">
+                  <ClipboardCheck class="h-4 w-4 shrink-0" />
+                  <span class="leading-5">{{ t('chat.toolbar.codeReview') }}</span>
+                </button>
+              </li>
+              <li v-if="showDelegateMenuItem">
+                <button type="button" class="flex min-h-9 items-center justify-start gap-3 px-3 py-1.5 text-left" @click="emit('openDelegateSelection')">
+                  <ClipboardList class="h-4 w-4 shrink-0" />
+                  <span class="leading-5">{{ t("chat.conversationMenu.startDelegate") }}</span>
+                </button>
+              </li>
+            </ul>
+          </li>
+          <li v-if="hasBranchMenuItems" class="relative">
+            <button
+              type="button"
+              class="flex min-h-9 w-full items-center justify-between gap-3 px-3 py-1.5 text-left"
+              @mouseenter="openSubmenu('branch')"
+              @click="toggleSubmenu('branch')"
+            >
+              <span class="flex min-w-0 items-center gap-3">
+                <Split class="h-4 w-4 shrink-0" />
+                <span class="leading-5">{{ t("chat.conversationMenu.groupBranch") }}</span>
+              </span>
+              <ChevronRight class="h-4 w-4 shrink-0 opacity-50" />
+            </button>
+            <ul
+              v-if="activeSubmenu === 'branch'"
+              ref="branchSubmenuEl"
+              class="menu absolute bottom-0 left-full ml-1 z-50 min-w-60 w-max rounded-box border border-base-300 bg-base-100 p-2 shadow-xl"
+            >
+              <li v-if="showBranchMenuItem">
+                <button type="button" class="flex min-h-9 items-center justify-start gap-3 px-3 py-1.5 text-left" @click="emit('openBranchFromCurrent')">
+                  <GitBranch class="h-4 w-4 shrink-0" />
+                  <span class="leading-5">{{ t("chat.conversationMenu.branchFromCurrent") }}</span>
+                </button>
+              </li>
+              <li v-if="showBranchMenuItem">
+                <button type="button" class="flex min-h-9 items-center justify-start gap-3 px-3 py-1.5 text-left" @click="emit('openBranchSelection')">
+                  <GitBranchPlus class="h-4 w-4 shrink-0" />
+                  <span class="leading-5">{{ t("chat.conversationMenu.branchConversation") }}</span>
+                </button>
+              </li>
+              <li v-if="sideChatEnabled">
+                <button type="button" class="flex min-h-9 items-center justify-start gap-3 px-3 py-1.5 text-left" @click="emit('openSideChat')">
+                  <MessageSquareMore class="h-4 w-4 shrink-0" />
+                  <span class="leading-5">{{ t("chat.conversationMenu.sideChatFollowUp") }}</span>
+                </button>
+              </li>
+            </ul>
+          </li>
+          <li v-if="hasInteractionMenuItems" class="relative">
+            <button
+              type="button"
+              class="flex min-h-9 w-full items-center justify-between gap-3 px-3 py-1.5 text-left"
+              @mouseenter="openSubmenu('interaction')"
+              @click="toggleSubmenu('interaction')"
+            >
+              <span class="flex min-w-0 items-center gap-3">
+                <Send class="h-4 w-4 shrink-0" />
+                <span class="leading-5">{{ t("chat.conversationMenu.groupInteraction") }}</span>
+              </span>
+              <ChevronRight class="h-4 w-4 shrink-0 opacity-50" />
+            </button>
+            <ul
+              v-if="activeSubmenu === 'interaction'"
+              ref="interactionSubmenuEl"
+              class="menu absolute bottom-0 left-full ml-1 z-50 min-w-60 w-max rounded-box border border-base-300 bg-base-100 p-2 shadow-xl"
+            >
+              <li v-if="showAutoPushMenuItem">
+                <button type="button" class="flex min-h-9 items-center justify-start gap-3 px-3 py-1.5 text-left" @click="emit('openAutoPush')">
+                  <BellRing class="h-4 w-4 shrink-0" />
+                  <span class="leading-5">{{ t("chat.conversationMenu.autoPushToContact") }}</span>
+                </button>
+              </li>
+              <li v-if="showForwardMenuItem">
+                <button type="button" class="flex min-h-9 items-center justify-start gap-3 px-3 py-1.5 text-left" @click="emit('openForwardSelection')">
+                  <Package class="h-4 w-4 shrink-0" />
+                  <span class="leading-5">{{ t("chat.conversationMenu.forwardToContact") }}</span>
+                </button>
+              </li>
+            </ul>
+          </li>
+          <li class="relative">
+            <button
+              type="button"
+              class="flex min-h-9 w-full items-center justify-between gap-3 px-3 py-1.5 text-left"
+              @mouseenter="openSubmenu('appearance')"
+              @click="toggleSubmenu('appearance')"
+            >
+              <span class="flex min-w-0 items-center gap-3">
+                <Palette class="h-4 w-4 shrink-0" />
+                <span class="leading-5">{{ t("chat.conversationMenu.groupAppearance") }}</span>
+              </span>
+              <ChevronRight class="h-4 w-4 shrink-0 opacity-50" />
+            </button>
+            <ul
+              v-if="activeSubmenu === 'appearance'"
+              ref="appearanceSubmenuEl"
+              class="menu absolute bottom-0 left-full ml-1 z-50 min-w-72 w-max rounded-box border border-base-300 bg-base-100 p-2 shadow-xl"
+            >
+              <li class="menu-title px-2 py-1 text-xs uppercase tracking-wide opacity-60">{{ t("appearance.chatBubble") }}</li>
+              <li>
+                <label class="flex cursor-pointer items-center justify-between gap-3 px-2 py-1.5">
+                  <span class="text-sm">{{ t("appearance.chatBubbleBackground") }}</span>
+                  <input
+                    :checked="assistantBubbleBackgroundEnabled"
+                    type="checkbox"
+                    class="toggle toggle-sm"
+                    @change="setAssistantBubbleBackgroundEnabled(($event.target as HTMLInputElement).checked)"
+                  />
+                </label>
+              </li>
+              <li>
+                <label class="flex cursor-pointer items-center justify-between gap-3 px-2 py-1.5">
+                  <span class="text-sm">{{ t("appearance.chatBubbleSegmentedMarkdown") }}</span>
+                  <input
+                    :checked="segmentedMarkdownEnabled"
+                    type="checkbox"
+                    class="toggle toggle-sm"
+                    @change="setSegmentedMarkdownEnabled(($event.target as HTMLInputElement).checked)"
+                  />
+                </label>
+              </li>
+              <li>
+                <label class="flex cursor-pointer items-center justify-between gap-3 px-2 py-1.5">
+                  <span class="text-sm">{{ t("appearance.chatBubbleFullTime") }}</span>
+                  <input
+                    :checked="chatTimeDisplayMode === 'absolute'"
+                    type="checkbox"
+                    class="toggle toggle-sm"
+                    @change="setChatTimeDisplayMode(($event.target as HTMLInputElement).checked ? 'absolute' : 'relative')"
+                  />
+                </label>
+              </li>
+              <li>
+                <div class="flex items-center justify-between gap-3 px-2 py-1.5">
+                  <span class="whitespace-nowrap text-sm">{{ t("appearance.chatBubbleMarkdownLayout") }}</span>
+                  <SegmentedControl
+                    :model-value="markdownLayout"
+                    :options="markdownLayoutOptions"
+                    size="sm"
+                    :full-width="false"
+                    class="shrink-0"
+                    @change="setChatMarkdownLayout"
+                  />
+                </div>
+              </li>
+              <li class="menu-title px-2 py-1 text-xs uppercase tracking-wide opacity-60">{{ t("appearance.fileReader") }}</li>
+              <li>
+                <label class="flex cursor-pointer items-center justify-between gap-3 px-2 py-1.5">
+                  <span class="text-sm">{{ t("appearance.fileReaderLineWrap") }}</span>
+                  <input
+                    :checked="fileReaderLineWrapEnabled"
+                    type="checkbox"
+                    class="toggle toggle-sm"
+                    @change="setFileReaderLineWrapEnabled(($event.target as HTMLInputElement).checked)"
+                  />
+                </label>
+              </li>
+            </ul>
           </li>
         </ul>
       </div>
@@ -266,13 +403,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, useAttrs } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useAttrs, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { ClipboardCheck, ClipboardList, ExternalLink, Folder, Grip, ListTodo, Package, Send, Split } from "@lucide/vue";
+import { BellRing, ChevronRight, ClipboardCheck, ClipboardList, GitBranch, GitBranchPlus, Grip, ListTodo, MessageSquareMore, Package, Palette, Send, Share2, Split, Users } from "@lucide/vue";
 import type { ChatMentionEntry, ConversationDelegateStatusSummary } from "../../../types/app";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import { SIDE_FILE_TAGS_AVAILABLE, useChatComposerAppearance } from "../../shell/composables/use-chat-composer-appearance";
+import { useChatMessageAppearance, type ChatMarkdownLayout } from "../../shell/composables/use-chat-message-appearance";
+import { useFileReaderAppearance } from "../../shell/composables/use-file-reader-appearance";
 import SessionControlPanel from "./SessionControlPanel.vue";
+import SegmentedControl from "../../config/components/SegmentedControl.vue";
 
 defineOptions({
   inheritAttrs: false,
@@ -301,6 +441,7 @@ const props = withDefaults(defineProps<{
   showWorkspaceMenuItem?: boolean;
   showOpenInBrowserButton?: boolean;
   openInBrowserDisabled?: boolean;
+  sideChatEnabled?: boolean;
   delegateStatuses?: ConversationDelegateStatusSummary[];
 }>(), {
   showTaskCreateMenuItem: true,
@@ -325,6 +466,8 @@ const emit = defineEmits<{
   (e: "openAutoPush"): void;
   (e: "openShareSelection"): void;
   (e: "openConversationInBrowser"): void;
+  (e: "openBranchFromCurrent"): void;
+  (e: "openSideChat"): void;
   (e: "mentionEntry", entry: ChatMentionEntry): void;
 }>();
 
@@ -336,6 +479,25 @@ const {
   setSideFileTagsEnabled,
   setIdeBridgeFileTagsEnabled,
 } = useChatComposerAppearance();
+const {
+  assistantBubbleBackgroundEnabled,
+  segmentedMarkdownEnabled,
+  chatTimeDisplayMode,
+  markdownLayout,
+  setAssistantBubbleBackgroundEnabled,
+  setSegmentedMarkdownEnabled,
+  setChatTimeDisplayMode,
+  setChatMarkdownLayout,
+} = useChatMessageAppearance();
+const markdownLayoutOptions = computed<Array<{ value: ChatMarkdownLayout; label: string }>>(() => [
+  { value: "compact", label: t("appearance.markdownLayoutCompact") },
+  { value: "comfortable", label: t("appearance.markdownLayoutComfortable") },
+  { value: "relaxed", label: t("appearance.markdownLayoutRelaxed") },
+]);
+const {
+  fileReaderLineWrapEnabled,
+  setFileReaderLineWrapEnabled,
+} = useFileReaderAppearance();
 const busy = computed(() => props.chatting || props.frozen || !!props.conversationBusy);
 const showTaskCreateMenuItem = computed(() => props.showTaskCreateMenuItem);
 const showDelegateMenuItem = computed(() => props.showDelegateMenuItem);
@@ -345,6 +507,83 @@ const showForwardMenuItem = computed(() => props.showForwardMenuItem);
 const showAutoPushMenuItem = computed(() => props.showAutoPushMenuItem);
 const showShareMenuItem = computed(() => props.showShareMenuItem);
 const showWorkspaceMenuItem = computed(() => props.showWorkspaceMenuItem);
+type SubmenuKey = "delegate" | "branch" | "interaction" | "appearance";
+const activeSubmenu = ref<SubmenuKey | null>(null);
+function openSubmenu(key: SubmenuKey) {
+  activeSubmenu.value = key;
+}
+function toggleSubmenu(key: SubmenuKey) {
+  activeSubmenu.value = activeSubmenu.value === key ? null : key;
+}
+const delegateSubmenuEl = ref<HTMLElement | null>(null);
+const branchSubmenuEl = ref<HTMLElement | null>(null);
+const interactionSubmenuEl = ref<HTMLElement | null>(null);
+const appearanceSubmenuEl = ref<HTMLElement | null>(null);
+const submenuEls: Record<SubmenuKey, Ref<HTMLElement | null>> = {
+  delegate: delegateSubmenuEl,
+  branch: branchSubmenuEl,
+  interaction: interactionSubmenuEl,
+  appearance: appearanceSubmenuEl,
+};
+
+/** 鼠标真正离开整套菜单（一级菜单 + 已打开的二级菜单）时才关闭子菜单 */
+function handleMenuMouseLeave(event: MouseEvent) {
+  const nextTarget = event.relatedTarget;
+  if (nextTarget instanceof Node) {
+    const container = event.currentTarget as HTMLElement;
+    if (container.contains(nextTarget)) return;
+    // 二级菜单是 dropdown 容器内的绝对定位后代，需单独判断
+    for (const key of Object.keys(submenuEls) as SubmenuKey[]) {
+      const el = submenuEls[key].value;
+      if (el?.contains(nextTarget)) return;
+    }
+  }
+  activeSubmenu.value = null;
+}
+
+const menuDropdownRef = ref<HTMLElement | null>(null);
+
+/** 目标是否在整套菜单树内（一级菜单容器 + 各二级菜单容器） */
+function isInsideMenuTree(target: Node | null): boolean {
+  if (!target) return false;
+  if (menuDropdownRef.value?.contains(target)) return true;
+  for (const key of Object.keys(submenuEls) as SubmenuKey[]) {
+    const el = submenuEls[key].value;
+    if (el?.contains(target)) return true;
+  }
+  return false;
+}
+
+/** 焦点离开菜单树（含一级菜单整体被关闭）时清理二级菜单，避免残留 */
+function handleMenuFocusOut(event: FocusEvent) {
+  const nextTarget = event.relatedTarget;
+  if (nextTarget instanceof Node && isInsideMenuTree(nextTarget)) return;
+  activeSubmenu.value = null;
+}
+
+/** 点击菜单树外部时清理二级菜单（主菜单被 daisyui 关闭的兜底） */
+function handleGlobalPointerDown(event: PointerEvent) {
+  if (!(event.target instanceof Node)) return;
+  if (!isInsideMenuTree(event.target)) {
+    activeSubmenu.value = null;
+  }
+}
+
+/* 二级菜单定位：纯 CSS 底部对齐。
+   每个二级菜单 ul 相对锚点 li（relative）定位：
+   - 底边对齐锚点底边（bottom-0），向上展开
+   - 右侧展开（left-full），配合 min-w-* 自适应宽度
+   不再使用任何 JS 坐标计算。 */
+
+const hasDelegateMenuItems = computed(
+  () => props.showCodeReviewMenuItem || props.showDelegateMenuItem,
+);
+const hasBranchMenuItems = computed(
+  () => props.showBranchMenuItem || !!props.sideChatEnabled,
+);
+const hasInteractionMenuItems = computed(
+  () => props.showAutoPushMenuItem || props.showForwardMenuItem,
+);
 const hasDelegateStatuses = computed(() => (props.delegateStatuses || []).length > 0);
 const showSessionControlPanel = computed(() => !props.hideWorkspaceButton || hasDelegateStatuses.value);
 const POPUP_OFFSET = 8;
@@ -607,6 +846,7 @@ onMounted(() => {
   window.addEventListener("resize", handleAvatarPopupViewportChange);
   window.addEventListener("scroll", handleAvatarPopupViewportChange, true);
   window.addEventListener("click", handleAvatarClickOutside, true);
+  window.addEventListener("pointerdown", handleGlobalPointerDown, true);
   window.addEventListener("keydown", handleFileTagsContextMenuKeydown);
 });
 
@@ -618,6 +858,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", handleAvatarPopupViewportChange);
   window.removeEventListener("scroll", handleAvatarPopupViewportChange, true);
   window.removeEventListener("click", handleAvatarClickOutside, true);
+  window.removeEventListener("pointerdown", handleGlobalPointerDown, true);
   window.removeEventListener("keydown", handleFileTagsContextMenuKeydown);
 });
 </script>

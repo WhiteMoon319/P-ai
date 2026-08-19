@@ -1327,6 +1327,7 @@ pub fn run() {
             webview_pong,
             debug_crash_webview,
             list_system_fonts,
+            list_genai_chat_adapters,
             update_record_hotkey,
             update_record_background_wake,
             save_config,

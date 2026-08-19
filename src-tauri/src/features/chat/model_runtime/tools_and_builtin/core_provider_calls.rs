@@ -542,12 +542,15 @@ fn provider_genai_headers(api_config: &ResolvedApiConfig) -> genai::Headers {
 
 fn provider_genai_reasoning_effort(
     api_config: &ResolvedApiConfig,
+    adapter_kind: genai::adapter::AdapterKind,
 ) -> Option<genai::chat::ReasoningEffort> {
     if provider_genai_model_disables_reasoning(&api_config.model) {
         return None;
     }
+    // DeepSeek 已由 genai 的 managed_body_thinking 管理（Zero 会生成 thinking.type=disabled），
+    // 直接透传 reasoning_effort；其余需要手动关思维链的通道（moonshot/doubao 等）none 时压成 None。
     if provider_genai_reasoning_disabled_raw(api_config)
-        && provider_genai_requires_deepseek_thinking_disabled(api_config)
+        && provider_genai_requires_manual_thinking_disabled(api_config, adapter_kind)
     {
         return None;
     }
@@ -568,8 +571,16 @@ fn provider_genai_reasoning_explicitly_disabled(api_config: &ResolvedApiConfig) 
     provider_genai_reasoning_disabled_raw(api_config)
 }
 
-fn provider_genai_requires_deepseek_thinking_disabled(api_config: &ResolvedApiConfig) -> bool {
+/// 需要手动注入 thinking.type=disabled 的通道：非 DeepSeek（genai 已管理）且命中
+/// 已知需关闭思维链的供应商域名/模型（moonshot/doubao/ark/volc/kimi 等）。
+fn provider_genai_requires_manual_thinking_disabled(
+    api_config: &ResolvedApiConfig,
+    adapter_kind: genai::adapter::AdapterKind,
+) -> bool {
     if !provider_genai_reasoning_disabled_raw(api_config) {
+        return false;
+    }
+    if adapter_kind == genai::adapter::AdapterKind::DeepSeek {
         return false;
     }
     let base_url = api_config.base_url.trim().to_ascii_lowercase();
@@ -665,6 +676,7 @@ fn build_provider_genai_client_and_model_spec_from_target(
 
 fn build_provider_genai_chat_options(
     api_config: &ResolvedApiConfig,
+    adapter_kind: genai::adapter::AdapterKind,
     capture_reasoning_content: bool,
     capture_tool_calls: bool,
 ) -> genai::chat::ChatOptions {
@@ -679,10 +691,10 @@ fn build_provider_genai_chat_options(
     if capture_tool_calls {
         options = options.with_capture_tool_calls(true);
     }
-    if let Some(reasoning_effort) = provider_genai_reasoning_effort(api_config) {
+    if let Some(reasoning_effort) = provider_genai_reasoning_effort(api_config, adapter_kind) {
         options = options.with_reasoning_effort(reasoning_effort);
     }
-    if provider_genai_requires_deepseek_thinking_disabled(api_config) {
+    if provider_genai_requires_manual_thinking_disabled(api_config, adapter_kind) {
         options = options.with_extra_body(serde_json::json!({
             "thinking": {
                 "type": "disabled",
@@ -779,7 +791,7 @@ async fn call_model_genai_stream_internal(
         model_name,
         request_api_key.clone(),
     );
-    let options = build_provider_genai_chat_options(&api_config, true, false);
+    let options = build_provider_genai_chat_options(&api_config, adapter_kind, true, false);
 
     let (client, model_spec) = build_provider_genai_client_and_model_spec_from_target(
         &api_config,
@@ -892,7 +904,7 @@ async fn call_model_genai_non_stream_with_definitions(
         let genai_tools = runtime_tool_definitions_for_genai(&tool_definitions, adapter_kind).await?;
         request = request.with_tools(genai_tools);
     }
-    let options = build_provider_genai_chat_options(&api_config, true, false);
+    let options = build_provider_genai_chat_options(&api_config, adapter_kind, true, false);
     let (client, model_spec) = build_provider_genai_client_and_model_spec_from_target(
         &api_config,
         model_name,
@@ -949,18 +961,19 @@ async fn call_model_openai_responses(
     let _provider_concurrency_guard =
         maybe_acquire_provider_concurrency_guard(app_state, &api_config, model_name).await?;
     let request_api_key = consume_api_key_for_request(&api_config);
+    let adapter_kind = resolve_provider_genai_adapter_kind(
+        &api_config,
+        model_name,
+        genai::adapter::AdapterKind::OpenAIResp,
+    );
     let service_target = build_provider_genai_service_target(
         &api_config,
-        resolve_provider_genai_adapter_kind(
-            &api_config,
-            model_name,
-            genai::adapter::AdapterKind::OpenAIResp,
-        ),
+        adapter_kind,
         model_name,
         request_api_key.clone(),
     );
     let request = build_genai_chat_request(&prepared)?;
-    let options = build_provider_genai_chat_options(&api_config, true, false);
+    let options = build_provider_genai_chat_options(&api_config, adapter_kind, true, false);
     let (client, model_spec) = build_provider_genai_client_and_model_spec_from_target(
         &api_config,
         model_name,
@@ -997,17 +1010,18 @@ async fn call_model_gemini(
     let _provider_concurrency_guard =
         maybe_acquire_provider_concurrency_guard(app_state, &api_config, model_name).await?;
     let request_api_key = consume_api_key_for_request(&api_config);
+    let adapter_kind = resolve_provider_genai_adapter_kind(
+        &api_config,
+        model_name,
+        genai::adapter::AdapterKind::Gemini,
+    );
     let service_target = build_provider_genai_service_target(
         &api_config,
-        resolve_provider_genai_adapter_kind(
-            &api_config,
-            model_name,
-            genai::adapter::AdapterKind::Gemini,
-        ),
+        adapter_kind,
         model_name,
         request_api_key.clone(),
     );
-    let options = build_provider_genai_chat_options(&api_config, true, false);
+    let options = build_provider_genai_chat_options(&api_config, adapter_kind, true, false);
     let (client, model_spec) = build_provider_genai_client_and_model_spec_from_target(
         &api_config,
         model_name,
@@ -1061,18 +1075,19 @@ async fn call_model_anthropic(
     let _provider_concurrency_guard =
         maybe_acquire_provider_concurrency_guard(app_state, &api_config, model_name).await?;
     let request_api_key = consume_api_key_for_request(&api_config);
+    let adapter_kind = resolve_provider_genai_adapter_kind(
+        &api_config,
+        model_name,
+        genai::adapter::AdapterKind::Anthropic,
+    );
     let service_target = build_provider_genai_service_target(
         &api_config,
-        resolve_provider_genai_adapter_kind(
-            &api_config,
-            model_name,
-            genai::adapter::AdapterKind::Anthropic,
-        ),
+        adapter_kind,
         model_name,
         request_api_key.clone(),
     );
     let request = build_genai_chat_request(&prepared)?;
-    let options = build_provider_genai_chat_options(&api_config, true, false);
+    let options = build_provider_genai_chat_options(&api_config, adapter_kind, true, false);
     let (client, model_spec) = build_provider_genai_client_and_model_spec_from_target(
         &api_config,
         model_name,
@@ -1408,7 +1423,7 @@ mod openai_responses_genai_request_tests {
             codex_custom_api_key: None,
         };
 
-        let options = build_provider_genai_chat_options(&api_config, false, false);
+        let options = build_provider_genai_chat_options(&api_config, genai::adapter::AdapterKind::OpenAI, false, false);
 
         assert_eq!(options.prompt_cache_key, None);
         assert_eq!(options.cache_control, None);
@@ -1435,7 +1450,7 @@ mod openai_responses_genai_request_tests {
             codex_custom_api_key: None,
         };
 
-        let options = build_provider_genai_chat_options(&api_config, true, true);
+        let options = build_provider_genai_chat_options(&api_config, genai::adapter::AdapterKind::OpenAIResp, true, true);
 
         assert_eq!(
             options.prompt_cache_key.as_deref(),
@@ -1465,7 +1480,7 @@ mod openai_responses_genai_request_tests {
             codex_custom_api_key: None,
         };
 
-        let options = build_provider_genai_chat_options(&api_config, true, true);
+        let options = build_provider_genai_chat_options(&api_config, genai::adapter::AdapterKind::OpenAIResp, true, true);
 
         assert_eq!(options.prompt_cache_key.as_deref(), Some("conversation-codex"));
         assert_eq!(options.cache_control, None);
@@ -1492,7 +1507,7 @@ mod openai_responses_genai_request_tests {
             codex_custom_api_key: None,
         };
 
-        let options = build_provider_genai_chat_options(&api_config, true, true);
+        let options = build_provider_genai_chat_options(&api_config, genai::adapter::AdapterKind::OpenAIResp, true, true);
 
         assert_eq!(
             options.extra_body,
@@ -1538,7 +1553,7 @@ mod openai_responses_genai_request_tests {
             codex_custom_api_key: None,
         };
 
-        let options = build_provider_genai_chat_options(&api_config, true, true);
+        let options = build_provider_genai_chat_options(&api_config, genai::adapter::AdapterKind::OpenAIResp, true, true);
 
         assert_eq!(options.capture_reasoning_content, Some(false));
         assert!(options.reasoning_effort.is_none());
@@ -1565,18 +1580,16 @@ mod openai_responses_genai_request_tests {
             codex_custom_api_key: None,
         };
 
-        let options = build_provider_genai_chat_options(&api_config, true, true);
+        let options = build_provider_genai_chat_options(&api_config, genai::adapter::AdapterKind::DeepSeek, true, true);
 
         assert_eq!(options.capture_reasoning_content, Some(false));
-        assert!(options.reasoning_effort.is_none());
-        assert_eq!(
-            options.extra_body,
-            Some(serde_json::json!({
-                "thinking": {
-                    "type": "disabled",
-                }
-            }))
-        );
+        // DeepSeek 已由 genai managed_body_thinking 管理：none 透传为 Zero，
+        // 由 genai 生成 thinking.type=disabled，本项目不再手动注入。
+        assert!(matches!(
+            options.reasoning_effort,
+            Some(genai::chat::ReasoningEffort::Zero)
+        ));
+        assert_eq!(options.extra_body, None);
     }
 
     #[test]
@@ -1600,7 +1613,7 @@ mod openai_responses_genai_request_tests {
             codex_custom_api_key: None,
         };
 
-        let options = build_provider_genai_chat_options(&api_config, true, true);
+        let options = build_provider_genai_chat_options(&api_config, genai::adapter::AdapterKind::OpenAI, true, true);
 
         assert!(options.reasoning_effort.is_none());
         assert_eq!(
@@ -1634,7 +1647,7 @@ mod openai_responses_genai_request_tests {
             codex_custom_api_key: None,
         };
 
-        let options = build_provider_genai_chat_options(&api_config, true, true);
+        let options = build_provider_genai_chat_options(&api_config, genai::adapter::AdapterKind::OpenAI, true, true);
 
         assert!(options.reasoning_effort.is_none());
         assert_eq!(
@@ -1668,7 +1681,7 @@ mod openai_responses_genai_request_tests {
             codex_custom_api_key: None,
         };
 
-        let options = build_provider_genai_chat_options(&api_config, true, true);
+        let options = build_provider_genai_chat_options(&api_config, genai::adapter::AdapterKind::OpenAI, true, true);
 
         assert_eq!(options.extra_body, None);
     }

@@ -557,6 +557,16 @@ export function isDesktopTauriHost(): boolean {
   return isTauriRuntimeAvailable();
 }
 
+/** 系统字体枚举仅桌面宿主可查；Web/VS Code 无此能力，业务层直接读语义能力控制显隐。 */
+export function canUseTransportSystemFonts(): boolean {
+  return isTauriRuntimeAvailable();
+}
+
+/** genai 内置 chat 适配器清单仅桌面宿主可查；Web/VS Code 无此能力，业务层直接读语义能力控制显隐。 */
+export function canUseTransportGenaiChatAdapters(): boolean {
+  return isTauriRuntimeAvailable();
+}
+
 function nativeTransportConnectionState(): TransportConnectionState {
   return {
     configured: true,
@@ -1856,6 +1866,7 @@ const TRANSPORT_NOTIFICATION_EVENT_ALIASES: Record<string, string | string[]> = 
   "chat.assistantDelta": "easy-call:assistant-delta",
   "chat.streamRebindRequired": "easy-call:stream-rebind-required",
   "conversation.messageAppended": "easy-call:conversation-message-appended",
+  "chat.rewindCompleted": "easy-call:chat-rewind-completed",
   "conversation.overviewUpdated": "easy-call:conversation-overview-updated",
   "conversation.overviewItemUpdated": "easy-call:conversation-overview-item-updated",
   "conversation.todosUpdated": "easy-call:conversation-todos-updated",

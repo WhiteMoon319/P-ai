@@ -135,6 +135,7 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
     syncCurrentConversationWorkspaceLabel: bindings.syncCurrentConversationWorkspaceLabel,
     handleWindowFocusForMicPrewarm: bindings.handleWindowFocusForMicPrewarm,
     applyUiFont: bindings.applyUiFont,
+    applyCodeFont: bindings.applyCodeFont,
   });
 
   useChatRuntimeWatchers({

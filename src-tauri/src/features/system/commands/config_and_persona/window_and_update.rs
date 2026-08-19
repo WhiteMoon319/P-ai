@@ -530,21 +530,67 @@ fn debug_crash_webview(webview: tauri::Webview) -> Result<(), String> {
         .map_err(|err| format!("注入崩溃脚本失败：{err}"))
 }
 
-#[tauri::command]
-fn list_system_fonts() -> Result<Vec<String>, String> {
-    #[cfg(target_os = "android")]
-    {
-        Ok(Vec::new())
-    }
-    #[cfg(not(target_os = "android"))]
-    {
-    let mut families = font_kit::source::SystemSource::new()
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SystemFontInfo {
+    family: String,
+    monospace: bool,
+}
+
+/// 系统字体列表进程内缓存：字体安装状态几乎不变，避免每次打开设置页都重新枚举+加载字形。
+static SYSTEM_FONTS_CACHE: std::sync::OnceLock<std::sync::Mutex<Option<Vec<SystemFontInfo>>>> =
+    std::sync::OnceLock::new();
+
+/// 枚举并分类系统字体（耗时操作：数百字体族逐一加载字形判断等宽）。
+fn enumerate_system_fonts() -> Result<Vec<SystemFontInfo>, String> {
+    let source = font_kit::source::SystemSource::new();
+    let mut families = source
         .all_families()
         .map_err(|err| format!("列出系统字体失败：{err}"))?;
     families.sort_by_key(|name| name.to_ascii_lowercase());
     families.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
-    Ok(families)
+    let mut result = Vec::with_capacity(families.len());
+    for family in families {
+        // 取该族第一个字形判断等宽属性；加载失败时保守视为非等宽，避免漏列字体
+        let handle = source
+            .select_family_by_name(&family)
+            .ok()
+            .and_then(|fh| fh.fonts().first().cloned());
+        let monospace = handle
+            .as_ref()
+            .and_then(|handle| handle.load().ok())
+            .map(|font| font.is_monospace())
+            .unwrap_or(false);
+        result.push(SystemFontInfo {
+            family,
+            monospace,
+        });
     }
+    Ok(result)
+}
+
+#[tauri::command]
+async fn list_system_fonts() -> Result<Vec<SystemFontInfo>, String> {
+    // Android 无桌面字体系统可枚举，直接返回空列表（前端不展示字体选择器）。
+    #[cfg(target_os = "android")]
+    {
+        return Ok(Vec::new());
+    }
+    // 命中缓存直接返回，避免重复枚举；miss 时把重活丢到阻塞线程池，不占 IPC 线程。
+    let cache = SYSTEM_FONTS_CACHE.get_or_init(|| std::sync::Mutex::new(None));
+    if let Ok(guard) = cache.lock() {
+        if let Some(cached) = guard.as_ref() {
+            return Ok(cached.clone());
+        }
+    }
+    let result = tauri::async_runtime::spawn_blocking(enumerate_system_fonts)
+        .await
+        .map_err(|err| format!("枚举系统字体任务失败：{err}"))?
+        .map_err(|err| err.to_string())?;
+    if let Ok(mut guard) = cache.lock() {
+        *guard = Some(result.clone());
+    }
+    Ok(result)
 }
 
 fn validate_record_hotkey_available(config: &AppConfig) -> Result<String, String> {
@@ -820,4 +866,62 @@ fn save_config_inner(
     }
     stop_removed_remote_im_channel_runtimes(state.clone(), removed_remote_im_channels);
     Ok(runtime_config)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GenaiChatAdapterInfo {
+    id: String,
+    label: String,
+    /// 后端 RequestFormat 路由是否已支持该适配器；不支持的只作候选展示，不能直接保存使用。
+    supported: bool,
+}
+
+/// 暴露 genai 内置的 chat 适配器清单（来源：AdapterKind::all()），
+/// 供前端生成文本供应商协议候选，避免手工维护静态列表产生漂移。
+#[tauri::command]
+fn list_genai_chat_adapters() -> Vec<GenaiChatAdapterInfo> {
+    genai::adapter::AdapterKind::all()
+        .iter()
+        .map(|kind| GenaiChatAdapterInfo {
+            id: kind.as_lower_str().to_string(),
+            label: kind.as_str().to_string(),
+            supported: request_format_from_genai_adapter(*kind).is_some(),
+        })
+        .collect()
+}
+
+/// 项目 RequestFormat 中有对应 chat 变体时返回 Some；无对应路由视为暂不支持。
+fn request_format_from_genai_adapter(kind: genai::adapter::AdapterKind) -> Option<RequestFormat> {
+    use RequestFormat::*;
+    Some(match kind {
+        genai::adapter::AdapterKind::OpenAI => OpenAI,
+        genai::adapter::AdapterKind::OpenAIResp => OpenAIResponses,
+        genai::adapter::AdapterKind::DeepSeek => DeepSeek,
+        genai::adapter::AdapterKind::Gemini => Gemini,
+        genai::adapter::AdapterKind::Anthropic => Anthropic,
+        genai::adapter::AdapterKind::Fireworks => Fireworks,
+        genai::adapter::AdapterKind::Together => Together,
+        genai::adapter::AdapterKind::Groq => Groq,
+        genai::adapter::AdapterKind::Kimi | genai::adapter::AdapterKind::Moonshot => Moonshot,
+        genai::adapter::AdapterKind::Mimo => Mimo,
+        genai::adapter::AdapterKind::MiniMax => MiniMax,
+        genai::adapter::AdapterKind::Nebius => Nebius,
+        genai::adapter::AdapterKind::Xai => Xai,
+        genai::adapter::AdapterKind::Zai => Zai,
+        genai::adapter::AdapterKind::BigModel => BigModel,
+        genai::adapter::AdapterKind::Aliyun => Aliyun,
+        genai::adapter::AdapterKind::Baidu => Baidu,
+        genai::adapter::AdapterKind::Cohere => Cohere,
+        genai::adapter::AdapterKind::Ollama => Ollama,
+        genai::adapter::AdapterKind::OllamaCloud => OllamaCloud,
+        genai::adapter::AdapterKind::Vertex => Vertex,
+        genai::adapter::AdapterKind::GithubCopilot => GithubCopilot,
+        genai::adapter::AdapterKind::OpenCodeGo => OpenCodeGo,
+        genai::adapter::AdapterKind::BedrockApi => BedrockApi,
+        // 以下为 genai 新内置但项目 RequestFormat 尚无对应路由的适配器：
+        // Aihubmix / QwenCloud / Omlx / OpenRouter / AtlasCloud / MiniMax(已有) /
+        // BedrockSigv4(feature-gated) —— 均返回 None，仅候选展示。
+        _ => return None,
+    })
 }
