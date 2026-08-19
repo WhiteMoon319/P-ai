@@ -335,7 +335,7 @@ impl ConversationServiceV2 {
     // 前端消息展示专用读取：返回值已经做过展示投影，禁止写路径/撤回路径复用。
     pub(crate) fn get_recent_messages_for_frontend_display_only(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         limit: usize,
     ) -> Result<Vec<ChatMessage>, String> {

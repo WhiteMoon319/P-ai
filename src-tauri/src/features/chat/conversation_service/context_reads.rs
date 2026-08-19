@@ -43,7 +43,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn read_persisted_conversation(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
     ) -> Result<Conversation, String> {
         let normalized_conversation_id = conversation_id.trim();
@@ -53,7 +53,7 @@ impl ConversationServiceV2 {
         let conversation_meta =
             self.get_conversation_meta(state, normalized_conversation_id)?;
         let store_paths =
-            message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
+            message_store::message_store_paths(state.data_path(), normalized_conversation_id)?;
         ensure_ready_message_store_from_legacy_conversation(
             state,
             normalized_conversation_id,

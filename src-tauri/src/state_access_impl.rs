@@ -26,6 +26,10 @@ use crate::state_mark_conversation_metadata_direct_persisted;
 use crate::state_mark_conversation_metadata_cached_persisted_unlocked;
 use crate::flush_pending_persists_blocking;
 use crate::with_conversation_mutation_for_data_path;
+use crate::state_update_conversation_meta_cached_unlocked;
+use crate::state_update_conversation_metadata_cached;
+use crate::state_update_conversation_metadata_cached_unlocked;
+use crate::state_upsert_chat_index_conversation_cached;
 
 impl StateAccess for AppState {
     fn read_config_cached(&self) -> Result<AppConfig, String> {
@@ -208,6 +212,77 @@ impl StateAccess for AppState {
         F: FnOnce() -> Result<T, String>,
     {
         with_conversation_mutation_for_data_path(&self.data_path(), conversation_id, task_name, f)
+    }
+
+    fn update_conversation_meta_cached_unlocked<T, F>(
+        &self,
+        normalized_conversation_id: &str,
+        updater: F,
+    ) -> Result<(ConversationShardMeta, T, u64), String>
+    where
+        F: FnOnce(&mut ConversationShardMeta) -> Result<T, String>,
+    {
+        state_update_conversation_meta_cached_unlocked(
+            self,
+            normalized_conversation_id,
+            updater,
+        )
+    }
+
+    fn update_conversation_metadata_cached<T, F>(
+        &self,
+        conversation_id: &str,
+        updater: F,
+    ) -> Result<(Conversation, T, u64), String>
+    where
+        F: FnOnce(&mut Conversation) -> Result<T, String>,
+    {
+        state_update_conversation_metadata_cached(self, conversation_id, updater)
+    }
+
+    fn update_conversation_metadata_cached_unlocked<T, F>(
+        &self,
+        normalized_conversation_id: &str,
+        updater: F,
+    ) -> Result<(Conversation, T, u64), String>
+    where
+        F: FnOnce(&mut Conversation) -> Result<T, String>,
+    {
+        state_update_conversation_metadata_cached_unlocked(
+            self,
+            normalized_conversation_id,
+            updater,
+        )
+    }
+
+    fn conversation_has_active_chat_view(&self, conversation_id: &str) -> bool {
+        let target = conversation_id.trim();
+        if target.is_empty() {
+            return false;
+        }
+        match self.active_chat_view_bindings.lock() {
+            Ok(bindings) => bindings.values().any(|binding| {
+                let bound = binding.conversation_id.trim();
+                !bound.is_empty() && bound != "*" && bound == target
+            }),
+            Err(poisoned) => {
+                runtime_log_warn(
+                    "[会话活动视图] 运行时锁中毒，已恢复并视作无活动视图".to_string(),
+                );
+                let bindings = poisoned.into_inner();
+                bindings.values().any(|binding| {
+                    let bound = binding.conversation_id.trim();
+                    !bound.is_empty() && bound != "*" && bound == target
+                })
+            }
+        }
+    }
+
+    fn upsert_chat_index_conversation_cached(
+        &self,
+        conversation: &Conversation,
+    ) -> Result<(), String> {
+        state_upsert_chat_index_conversation_cached(self, conversation)
     }
 
     fn lock_delegate_runtime_threads(

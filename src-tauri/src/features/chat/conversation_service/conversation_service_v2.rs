@@ -560,7 +560,7 @@ pub(crate) fn conversation_service() -> &'static ConversationServiceV2 {
 impl ConversationServiceV2 {
     pub(crate) fn ensure_appendable_ready_message_store(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
     ) -> Result<message_store::ConversationShardMeta, String> {
         let normalized_conversation_id = conversation_id.trim();
@@ -584,7 +584,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn fill_summary_preview_messages_fallback(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_meta: &ConversationMetaView,
     ) -> ConversationMetaView {
         if !conversation_meta.preview_messages.is_empty() {
@@ -670,7 +670,7 @@ impl ConversationServiceV2 {
     // 后续目标：彻底移除此能力，连导入也改为按消息/按 block 增量写入。
     pub(crate) fn apply_privileged_snapshot_overwrite(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         audit: &ConversationOverwriteAudit,
         snapshot: &Conversation,
     ) -> Result<(), String> {
@@ -679,7 +679,7 @@ impl ConversationServiceV2 {
         if snapshot_id.is_empty() {
             return Err("overwrite snapshot conversation.id is required.".to_string());
         }
-        with_conversation_mutation(state, snapshot_id, "apply_privileged_snapshot_overwrite", || {
+        state.with_conversation_mutation(snapshot_id, "apply_privileged_snapshot_overwrite", || {
             self.apply_privileged_snapshot_overwrite_inner(state, audit, snapshot)
         })
     }
@@ -723,7 +723,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn read_current_writable_assistant_message(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         assistant_message_id: &str,
     ) -> Result<ChatMessage, String> {
@@ -772,7 +772,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn get_raw_message_by_id(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         message_id: &str,
     ) -> Result<ChatMessage, String> {
@@ -803,23 +803,10 @@ impl ConversationServiceV2 {
 
     pub(crate) fn conversation_has_active_chat_view(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
     ) -> bool {
-        let target = conversation_id.trim();
-        if target.is_empty() {
-            return false;
-        }
-        state
-            .active_chat_view_bindings
-            .lock()
-            .map(|bindings| {
-                bindings.values().any(|binding| {
-                    let bound = binding.conversation_id.trim();
-                    !bound.is_empty() && bound != "*" && bound == target
-                })
-            })
-            .unwrap_or(false)
+        state.conversation_has_active_chat_view(conversation_id)
     }
 
     pub(crate) fn mark_conversation_metadata_cached_persisted(
@@ -832,7 +819,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn increment_conversation_unread_count_if_background(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation: &mut Conversation,
         count: usize,
         mutation_gate_already_held: bool,
@@ -853,13 +840,12 @@ impl ConversationServiceV2 {
                 Ok(())
             };
         let update_result = if mutation_gate_already_held {
-            state_update_conversation_metadata_cached_unlocked(
-                state,
+            state.update_conversation_metadata_cached_unlocked(
                 &conversation.id,
                 updater,
             )
         } else {
-            state_update_conversation_metadata_cached(state, &conversation.id, updater)
+            state.update_conversation_metadata_cached(&conversation.id, updater)
         };
         if let Err(err) = update_result {
             runtime_log_warn(format!(
@@ -871,7 +857,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn persist_replaced_ready_message_locked(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         updated_message: &ChatMessage,
     ) -> Result<(), String> {
@@ -895,8 +881,7 @@ impl ConversationServiceV2 {
             })?;
         let updated_at = updated_message.created_at.clone();
         let last_assistant_at = Some(updated_at.clone());
-        let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
-            state,
+        let (updated_meta, (), _) = state.update_conversation_meta_cached_unlocked(
             conversation_id,
             |cached| {
                 let mut metadata_conversation =
@@ -960,7 +945,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn with_unarchived_conversation_by_id_fast<T>(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         reader: impl FnOnce(&Conversation) -> Result<T, String>,
     ) -> Result<T, String> {
@@ -1288,7 +1273,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn append_message_locked(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         message: &ChatMessage,
     ) -> Result<(), String> {
@@ -1324,8 +1309,7 @@ impl ConversationServiceV2 {
         } else {
             conversation_meta.unread_count.saturating_add(1)
         };
-        let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
-            state,
+        let (updated_meta, (), _) = state.update_conversation_meta_cached_unlocked(
             normalized_conversation_id,
             |cached| {
                 let mut metadata_conversation =
@@ -1341,7 +1325,7 @@ impl ConversationServiceV2 {
         )?;
         let metadata_conversation =
             self.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
-        state_upsert_chat_index_conversation_cached(state, &metadata_conversation)?;
+        state.upsert_chat_index_conversation_cached(&metadata_conversation)?;
         let mut ready_meta = self
             .ensure_appendable_ready_message_store(state, normalized_conversation_id)?;
         ready_meta.apply_metadata_fields_from_meta(&updated_meta);
@@ -1607,7 +1591,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn increment_unread_count_if_background(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation: &mut Conversation,
         count: usize,
     ) {
@@ -1712,7 +1696,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn import_conversation_snapshot(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         job_id: &str,
         operator: &str,
         reason: &str,
@@ -1733,7 +1717,7 @@ impl ConversationServiceV2 {
     #[cfg(test)]
     pub(crate) fn sync_replace_conversation_snapshot(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         job_id: &str,
         operator: &str,
         reason: &str,
@@ -1753,7 +1737,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn recover_conversation_snapshot(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         job_id: &str,
         operator: &str,
         reason: &str,

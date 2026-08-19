@@ -135,6 +135,45 @@ pub trait StateAccess: Clone + Send + Sync {
     where
         F: FnOnce() -> Result<T, String>;
 
+    /// 无锁更新会话轻量元数据缓存并排队落盘（调用方需已持有会话突变门控）。
+    /// 返回 `(更新后的元数据, 回调结果, persist seq)`。
+    fn update_conversation_meta_cached_unlocked<T, F>(
+        &self,
+        normalized_conversation_id: &str,
+        updater: F,
+    ) -> Result<(ConversationShardMeta, T, u64), String>
+    where
+        F: FnOnce(&mut ConversationShardMeta) -> Result<T, String>;
+
+    /// 带门控更新会话元数据缓存并排队落盘（自动加会话突变门控）。
+    /// 返回 `(更新后的会话快照, 回调结果, persist seq)`。
+    fn update_conversation_metadata_cached<T, F>(
+        &self,
+        conversation_id: &str,
+        updater: F,
+    ) -> Result<(Conversation, T, u64), String>
+    where
+        F: FnOnce(&mut Conversation) -> Result<T, String>;
+
+    /// 无锁更新会话元数据缓存并排队落盘（调用方需已持有会话突变门控）。
+    /// 返回 `(更新后的会话快照, 回调结果, persist seq)`。
+    fn update_conversation_metadata_cached_unlocked<T, F>(
+        &self,
+        normalized_conversation_id: &str,
+        updater: F,
+    ) -> Result<(Conversation, T, u64), String>
+    where
+        F: FnOnce(&mut Conversation) -> Result<T, String>;
+
+    /// 会话是否处于前台活动视图（用于后台消息不计未读）。
+    fn conversation_has_active_chat_view(&self, conversation_id: &str) -> bool;
+
+    /// 将会话 upsert 进缓存会话索引（ChatIndexFile）。
+    fn upsert_chat_index_conversation_cached(
+        &self,
+        conversation: &Conversation,
+    ) -> Result<(), String>;
+
     // ── 应答委托运行时表 ──
 
     /// 锁应答委托运行时线程表（delegate_runtime_threads）。
