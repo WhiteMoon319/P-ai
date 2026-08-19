@@ -67,7 +67,7 @@ pub(crate) fn clear_remote_im_debounces_for_contact(
 }
 
 pub(crate) fn remote_im_group_reply_reconfigure_contact(
-    state: &AppState,
+    state: &impl StateAccess,
     contact: &RemoteImContact,
 ) -> Result<(), String> {
     let key = remote_im_group_reply_state_key(state, &contact.id);

@@ -21,11 +21,11 @@ pub(crate) fn remote_im_list_contacts_inner(
 }
 
 pub(crate) fn remote_im_mutate_contact<T>(
-    state: &AppState,
+    state: &impl StateAccess,
     contact_id: &str,
     mutate: impl FnOnce(&mut RemoteImContact) -> Result<T, String>,
 ) -> Result<T, String> {
-    state_mutate_runtime_state_cached(state, |runtime| {
+    state.mutate_runtime_state_cached(|runtime| {
         let contact = runtime
             .remote_im_contacts
             .iter_mut()
@@ -36,10 +36,11 @@ pub(crate) fn remote_im_mutate_contact<T>(
 }
 
 pub(crate) fn remote_im_get_contact_by_id(
-    state: &AppState,
+    state: &impl StateAccess,
     contact_id: &str,
 ) -> Result<RemoteImContact, String> {
-    state_read_runtime_state_cached(state)?
+    state
+        .read_runtime_state_cached()?
         .remote_im_contacts
         .into_iter()
         .find(|contact| contact.id == contact_id)
@@ -269,7 +270,7 @@ pub(crate) fn remote_im_start_contact_dashboard_push_worker<T: StateAccess + 'st
 
 
 pub(crate) fn remote_im_subscribe_contact_dashboard_for_web(
-    state: &AppState,
+    state: &impl StateAccess,
     params: serde_json::Value,
     client_id: &str,
 ) -> Result<serde_json::Value, String> {
@@ -291,7 +292,7 @@ pub(crate) fn remote_im_subscribe_contact_dashboard_for_web(
 }
 
 pub(crate) fn remote_im_sync_contact_dashboard_for_web(
-    state: &AppState,
+    state: &impl StateAccess,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     let input = serde_json::from_value::<RemoteImContactDashboardInput>(params)
@@ -560,7 +561,7 @@ pub(crate) fn remote_im_resolve_contact_session_target_fail_soft(
 
 
 pub(crate) fn remote_im_update_contact_allow_send_inner(
-    state: &AppState,
+    state: &impl StateAccess,
     input: RemoteImContactAllowSendUpdateInput,
 ) -> Result<RemoteImContact, String> {
     remote_im_mutate_contact(state, &input.contact_id, |contact| {
@@ -572,7 +573,7 @@ pub(crate) fn remote_im_update_contact_allow_send_inner(
 
 
 pub(crate) fn remote_im_update_contact_allow_send_files_inner(
-    state: &AppState,
+    state: &impl StateAccess,
     input: RemoteImContactAllowSendFilesUpdateInput,
 ) -> Result<RemoteImContact, String> {
     remote_im_mutate_contact(state, &input.contact_id, |contact| {
@@ -583,7 +584,7 @@ pub(crate) fn remote_im_update_contact_allow_send_files_inner(
 
 
 pub(crate) fn remote_im_update_contact_blocked_message_prefixes_inner(
-    state: &AppState,
+    state: &impl StateAccess,
     input: RemoteImContactBlockedMessagePrefixesUpdateInput,
 ) -> Result<RemoteImContact, String> {
     let _ = input.blocked_message_prefixes;
@@ -596,7 +597,7 @@ pub(crate) fn remote_im_update_contact_blocked_message_prefixes_inner(
 
 
 pub(crate) fn remote_im_update_contact_behavior_inner(
-    state: &AppState,
+    state: &impl StateAccess,
     input: RemoteImContactBehaviorUpdateInput,
 ) -> Result<RemoteImContact, String> {
     let contact_id = input.contact_id;
@@ -616,7 +617,7 @@ pub(crate) struct RemoteImChannelBehaviorReconfigureResult {
 }
 
 pub(crate) fn remote_im_reconfigure_channel_behavior_inner(
-    state: &AppState,
+    state: &impl StateAccess,
     channel_id: &str,
 ) -> RemoteImChannelBehaviorReconfigureResult {
     let channel_id = channel_id.trim();
@@ -627,7 +628,7 @@ pub(crate) fn remote_im_reconfigure_channel_behavior_inner(
             skipped_contacts: 0,
         };
     }
-    let runtime = match state_read_runtime_state_cached(state) {
+    let runtime = match state.read_runtime_state_cached() {
         Ok(runtime) => runtime,
         Err(err) => {
             runtime_log_warn(format!(
@@ -801,7 +802,7 @@ pub(crate) fn remote_im_patch_contact_settings_inner(
 
 
 pub(crate) fn remote_im_update_contact_activation_inner(
-    state: &AppState,
+    state: &impl StateAccess,
     input: RemoteImContactActivationUpdateInput,
 ) -> Result<RemoteImContact, String> {
     remote_im_mutate_contact(state, &input.contact_id, |contact| {
@@ -925,7 +926,7 @@ pub(crate) fn remote_im_update_contact_department_binding_inner(
 
 
 pub(crate) fn remote_im_update_contact_processing_mode_inner(
-    state: &AppState,
+    state: &impl StateAccess,
     input: RemoteImContactProcessingModeUpdateInput,
 ) -> Result<RemoteImContact, String> {
     remote_im_mutate_contact(state, &input.contact_id, |contact| {
@@ -936,7 +937,7 @@ pub(crate) fn remote_im_update_contact_processing_mode_inner(
 
 
 pub(crate) fn remote_im_update_contact_workspace_inner(
-    state: &AppState,
+    state: &impl StateAccess,
     input: RemoteImContactWorkspaceUpdateInput,
 ) -> Result<RemoteImContact, String> {
     let output = remote_im_mutate_contact(state, &input.contact_id, |contact| {

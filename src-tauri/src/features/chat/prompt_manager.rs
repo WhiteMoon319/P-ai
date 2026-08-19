@@ -799,7 +799,7 @@ pub(crate) fn finalize_system_prompt_with_manager(
 }
 
 pub(crate) fn mark_prompt_cache_rebuild_internal(
-    state: &AppState,
+    state: &impl StateAccess,
     department_ids: &[String],
     agent_ids: &[String],
     conversation_ids: &[String],
@@ -808,7 +808,7 @@ pub(crate) fn mark_prompt_cache_rebuild_internal(
     mark_final: bool,
     dirty_kind: PromptCacheDirtyKind,
 ) {
-    let scope_prefix = format!("scope={}|", prompt_cache_scope_key(Some(state)));
+    let scope_prefix = format!("scope={}|", state.data_path().display());
     let department_ids = department_ids
         .iter()
         .map(|value| value.trim())
@@ -897,7 +897,7 @@ pub(crate) fn mark_prompt_cache_rebuild_internal(
 }
 
 pub(crate) fn mark_prompt_cache_rebuild_for_system_sources_by_departments(
-    state: &AppState,
+    state: &impl StateAccess,
     department_ids: &[String],
 ) {
     mark_prompt_cache_rebuild_internal(
@@ -913,7 +913,7 @@ pub(crate) fn mark_prompt_cache_rebuild_for_system_sources_by_departments(
 }
 
 pub(crate) fn mark_prompt_cache_rebuild_for_system_sources_by_agents(
-    state: &AppState,
+    state: &impl StateAccess,
     agent_ids: &[String],
 ) {
     mark_prompt_cache_rebuild_internal(
@@ -929,7 +929,7 @@ pub(crate) fn mark_prompt_cache_rebuild_for_system_sources_by_agents(
 }
 
 pub(crate) fn mark_prompt_cache_rebuild_for_system_environment_by_conversation(
-    state: &AppState,
+    state: &impl StateAccess,
     conversation_id: &str,
 ) {
     mark_prompt_cache_rebuild_internal(
@@ -944,7 +944,7 @@ pub(crate) fn mark_prompt_cache_rebuild_for_system_environment_by_conversation(
     );
 }
 
-pub(crate) fn mark_prompt_cache_rebuild_for_all_system_environments(state: &AppState) {
+pub(crate) fn mark_prompt_cache_rebuild_for_all_system_environments(state: &impl StateAccess) {
     mark_prompt_cache_rebuild_internal(
         state,
         &[],
@@ -957,7 +957,7 @@ pub(crate) fn mark_prompt_cache_rebuild_for_all_system_environments(state: &AppS
     );
 }
 
-pub(crate) fn mark_prompt_cache_rebuild_for_all_final_system_sources(state: &AppState) {
+pub(crate) fn mark_prompt_cache_rebuild_for_all_final_system_sources(state: &impl StateAccess) {
     mark_prompt_cache_rebuild_internal(
         state,
         &[],
