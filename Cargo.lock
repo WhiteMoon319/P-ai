@@ -1911,6 +1911,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "pai-android-bridge"
+version = "0.57.0"
+dependencies = [
+ "pai-android-platform",
+ "pai-backend",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "pai-android-platform"
 version = "0.57.0"
 dependencies = [

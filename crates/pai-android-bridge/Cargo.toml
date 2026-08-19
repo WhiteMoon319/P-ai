@@ -1,0 +1,12 @@
+[package]
+name = "pai-android-bridge"
+version.workspace = true
+edition.workspace = true
+description = "Android bridge: JNI / runtime / dispatch / state access trait / event queue"
+
+[dependencies]
+pai-backend = { path = "../pai-backend" }
+pai-android-platform = { path = "../pai-android-platform" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }

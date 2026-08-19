@@ -8,7 +8,7 @@ members = [
     "crates/pai-backend",
     "crates/pai-android-platform",
     # 阶段 6 加入：
-    # "crates/pai-android-bridge",
+    "crates/pai-android-bridge",
 ]
 exclude = ["src-tauri"]
 
