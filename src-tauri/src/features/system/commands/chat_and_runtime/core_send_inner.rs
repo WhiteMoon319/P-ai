@@ -1170,7 +1170,7 @@ pub(crate) async fn send_chat_message_inner(
             .as_deref()
             .or(runtime_main_conversation_id.as_deref())
             .and_then(|conversation_id| {
-                conversation_service_v2().get_conversation_meta(&state, conversation_id).ok()
+                conversation_service_v2().get_conversation_meta(state, conversation_id).ok()
             });
         let conversation_preferred_api_config_id = conversation_meta_for_model_selection
             .as_ref()

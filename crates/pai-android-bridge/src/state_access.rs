@@ -18,8 +18,9 @@ use std::path::Path;
 
 use pai_backend::core::domain::types_storage::RuntimeStateFile;
 use pai_backend::core::domain::types_config::AppConfig;
-use pai_backend::core::domain::types_chat::AgentProfile;
+use pai_backend::core::domain::types_chat::{AgentProfile, Conversation};
 use pai_backend::core::domain::runtime_types::{RemoteImContactRuntimeState, RemoteImReplyDelegateRuntime};
+use pai_backend::message_store::meta::ConversationShardMeta;
 use pai_backend::message_store::sqlite::ChatIndexFile;
 
 /// 运行时状态访问接口。
@@ -39,6 +40,15 @@ pub trait StateAccess: Clone + Send + Sync {
 
     /// 读取缓存的会话索引（ChatIndexFile，带磁盘缓存）。
     fn read_chat_index_cached(&self) -> Result<ChatIndexFile, String>;
+
+    /// 读取会话轻量元数据（带磁盘缓存，禁止整读正文）。
+    fn read_conversation_metadata_cached(
+        &self,
+        conversation_id: &str,
+    ) -> Result<ConversationShardMeta, String>;
+
+    /// 读取完整会话缓存（仅轻量元数据不可读时的降级回退路径）。
+    fn read_conversation_cached(&self, conversation_id: &str) -> Result<Conversation, String>;
 
     /// 调度一次会话删除（排队持久化 + 清理缓存）。
     fn schedule_conversation_delete(&self, conversation_id: &str) -> Result<u64, String>;

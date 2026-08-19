@@ -5124,7 +5124,7 @@
         state_schedule_conversation_persist(&state, &conversation).expect("persist conversation");
 
         let meta = conversation_service_v2()
-            .get_conversation_meta(&state, &conversation.id)
+            .get_conversation_meta(state, &conversation.id)
             .expect("read v2 meta");
 
         assert_eq!(meta.id, conversation.id);
@@ -6207,7 +6207,7 @@
             .iter()
             .any(|message| message.id == "assistant-delegate-bootstrap"));
         assert!(conversation_service_v2()
-            .get_conversation_meta(&state, &conversation.id)
+            .get_conversation_meta(state, &conversation.id)
             .is_err());
     }
 
@@ -6755,7 +6755,7 @@
             .expect("cached meta exists");
         assert_eq!(cached.latest_summary_title().as_deref(), Some("新标题"));
         let meta_view = conversation_service_v2()
-            .get_conversation_meta(&state, &conversation.id)
+            .get_conversation_meta(state, &conversation.id)
             .expect("read meta view");
         assert_eq!(meta_view.latest_summary_title.as_deref(), Some("新标题"));
     }
@@ -11417,7 +11417,7 @@
         data.conversations.push(conversation.clone());
         state_write_app_data_cached(&state, &data).expect("write app data");
         let meta = conversation_service_v2()
-            .get_conversation_meta(&state, &conversation_id)
+            .get_conversation_meta(state, &conversation_id)
             .expect("get conversation meta");
 
         assert!(conversation_service_v2().conversation_meta_is_unarchived_meta_view(&meta));

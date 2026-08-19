@@ -1073,14 +1073,14 @@ impl ConversationServiceV2 {
 
     pub(crate) fn get_conversation_meta(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
     ) -> Result<ConversationMetaView, String> {
-        let meta = match state_read_conversation_metadata_cached(state, conversation_id) {
+        let meta = match state.read_conversation_metadata_cached(conversation_id) {
             Ok(meta) => meta,
             // 仅当轻量 metadata 不可读时回退：待落盘/迁移中的会话可能仍有完整缓存快照，
             // 此时若直接判定不存在会中断通知与入站业务；正常路径仍禁止整读消息正文。
-            Err(meta_err) => match state_read_conversation_cached(state, conversation_id) {
+            Err(meta_err) => match state.read_conversation_cached(conversation_id) {
                 Ok(conversation) => {
                     runtime_log_warn(format!(
                         "[会话元数据] 轻量读取失败，使用会话缓存快照降级恢复，conversation_id={}，error={}",

@@ -5,9 +5,10 @@ use pai_android_bridge::state_access::StateAccess;
 use pai_backend::core::domain::runtime_types::{
     RemoteImContactRuntimeState, RemoteImReplyDelegateRuntime,
 };
-use pai_backend::core::domain::types_chat::AgentProfile;
+use pai_backend::core::domain::types_chat::{AgentProfile, Conversation};
 use pai_backend::core::domain::types_config::AppConfig;
 use pai_backend::core::domain::types_storage::RuntimeStateFile;
+use pai_backend::message_store::meta::ConversationShardMeta;
 use pai_backend::message_store::sqlite::ChatIndexFile;
 
 use crate::AppState;
@@ -16,6 +17,8 @@ use crate::state_read_config_cached;
 use crate::state_read_agents_cached;
 use crate::state_read_runtime_state_cached;
 use crate::state_read_chat_index_cached;
+use crate::state_read_conversation_metadata_cached;
+use crate::state_read_conversation_cached;
 use crate::state_mutate_runtime_state_cached;
 use crate::state_schedule_conversation_delete;
 
@@ -30,6 +33,17 @@ impl StateAccess for AppState {
 
     fn read_chat_index_cached(&self) -> Result<ChatIndexFile, String> {
         state_read_chat_index_cached(self)
+    }
+
+    fn read_conversation_metadata_cached(
+        &self,
+        conversation_id: &str,
+    ) -> Result<ConversationShardMeta, String> {
+        state_read_conversation_metadata_cached(self, conversation_id)
+    }
+
+    fn read_conversation_cached(&self, conversation_id: &str) -> Result<Conversation, String> {
+        state_read_conversation_cached(self, conversation_id)
     }
 
     fn schedule_conversation_delete(&self, conversation_id: &str) -> Result<u64, String> {
