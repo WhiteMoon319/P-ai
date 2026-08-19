@@ -270,7 +270,7 @@ pub(crate) fn remote_im_start_contact_dashboard_push_worker<T: StateAccess + 'st
 
 
 pub(crate) fn remote_im_subscribe_contact_dashboard_for_web(
-    state: &impl StateAccess,
+    state: &(impl StateAccess + 'static),
     params: serde_json::Value,
     client_id: &str,
 ) -> Result<serde_json::Value, String> {
@@ -617,7 +617,7 @@ pub(crate) struct RemoteImChannelBehaviorReconfigureResult {
 }
 
 pub(crate) fn remote_im_reconfigure_channel_behavior_inner(
-    state: &impl StateAccess,
+    state: &AppState,
     channel_id: &str,
 ) -> RemoteImChannelBehaviorReconfigureResult {
     let channel_id = channel_id.trim();

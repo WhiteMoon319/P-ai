@@ -127,4 +127,15 @@ pub trait StateAccess: Clone + Send + Sync {
         std::sync::MutexGuard<'_, std::collections::HashMap<String, Vec<serde_json::Value>>>,
         String,
     >;
+
+    /// 锁进行中工具中止句柄表（inflight_tool_abort_handles）。
+    fn lock_inflight_tool_abort_handles(
+        &self,
+    ) -> Result<
+        std::sync::MutexGuard<
+            '_,
+            std::collections::HashMap<String, futures_util::future::AbortHandle>,
+        >,
+        String,
+    >;
 }

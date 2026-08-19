@@ -200,4 +200,18 @@ impl StateAccess for AppState {
             .lock()
             .map_err(|_| "Failed to lock inflight completed tool history".to_string())
     }
+
+    fn lock_inflight_tool_abort_handles(
+        &self,
+    ) -> Result<
+        std::sync::MutexGuard<
+            '_,
+            std::collections::HashMap<String, futures_util::future::AbortHandle>,
+        >,
+        String,
+    > {
+        self.inflight_tool_abort_handles
+            .lock()
+            .map_err(|_| "Failed to lock inflight tool abort handles".to_string())
+    }
 }

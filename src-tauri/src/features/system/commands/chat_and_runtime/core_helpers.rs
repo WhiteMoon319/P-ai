@@ -11,13 +11,12 @@ pub(crate) fn inflight_chat_key(
 }
 
 pub(crate) fn register_inflight_tool_abort_handle(
-    state: &AppState,
+    state: &impl StateAccess,
     chat_key: &str,
     handle: AbortHandle,
 ) -> Result<(), String> {
     let mut inflight = state
-        .inflight_tool_abort_handles
-        .lock()
+        .lock_inflight_tool_abort_handles()
         .map_err(|_| "Failed to lock inflight tool abort handles".to_string())?;
     if let Some(previous) = inflight.insert(chat_key.to_string(), handle) {
         previous.abort();
@@ -25,23 +24,21 @@ pub(crate) fn register_inflight_tool_abort_handle(
     Ok(())
 }
 
-pub(crate) fn reset_inflight_completed_tool_history(state: &AppState, chat_key: &str) -> Result<(), String> {
+pub(crate) fn reset_inflight_completed_tool_history(state: &impl StateAccess, chat_key: &str) -> Result<(), String> {
     let mut inflight = state
-        .inflight_completed_tool_history
-        .lock()
+        .lock_inflight_completed_tool_history()
         .map_err(|_| "Failed to lock inflight completed tool history".to_string())?;
     inflight.insert(chat_key.to_string(), Vec::new());
     Ok(())
 }
 
 pub(crate) fn replace_inflight_completed_tool_history(
-    state: &AppState,
+    state: &impl StateAccess,
     chat_key: &str,
     events: &[Value],
 ) -> Result<(), String> {
     let mut inflight = state
-        .inflight_completed_tool_history
-        .lock()
+        .lock_inflight_completed_tool_history()
         .map_err(|_| "Failed to lock inflight completed tool history".to_string())?;
     inflight.insert(chat_key.to_string(), events.to_vec());
     Ok(())
@@ -57,28 +54,25 @@ pub(crate) fn inflight_completed_tool_history(
     Ok(inflight.get(chat_key).cloned().unwrap_or_default())
 }
 
-pub(crate) fn clear_inflight_completed_tool_history(state: &AppState, chat_key: &str) -> Result<(), String> {
+pub(crate) fn clear_inflight_completed_tool_history(state: &impl StateAccess, chat_key: &str) -> Result<(), String> {
     let mut inflight = state
-        .inflight_completed_tool_history
-        .lock()
+        .lock_inflight_completed_tool_history()
         .map_err(|_| "Failed to lock inflight completed tool history".to_string())?;
     inflight.remove(chat_key);
     Ok(())
 }
 
-pub(crate) fn clear_inflight_tool_abort_handle(state: &AppState, chat_key: &str) -> Result<(), String> {
+pub(crate) fn clear_inflight_tool_abort_handle(state: &impl StateAccess, chat_key: &str) -> Result<(), String> {
     let mut inflight = state
-        .inflight_tool_abort_handles
-        .lock()
+        .lock_inflight_tool_abort_handles()
         .map_err(|_| "Failed to lock inflight tool abort handles".to_string())?;
     inflight.remove(chat_key);
     Ok(())
 }
 
-pub(crate) fn abort_inflight_tool_abort_handle(state: &AppState, chat_key: &str) -> Result<bool, String> {
+pub(crate) fn abort_inflight_tool_abort_handle(state: &impl StateAccess, chat_key: &str) -> Result<bool, String> {
     let mut inflight = state
-        .inflight_tool_abort_handles
-        .lock()
+        .lock_inflight_tool_abort_handles()
         .map_err(|_| "Failed to lock inflight tool abort handles".to_string())?;
     if let Some(handle) = inflight.remove(chat_key) {
         handle.abort();
@@ -96,25 +90,14 @@ pub(crate) fn delegate_thread_chat_key(thread: &DelegateRuntimeThread) -> String
 }
 
 pub(crate) fn abort_delegate_runtime_descendant_threads(
-    state: &AppState,
+    state: &impl StateAccess,
     parent_chat_key: &str,
     children: Vec<DelegateRuntimeThread>,
 ) -> Result<usize, String> {
     let mut aborted_count = 0usize;
     for thread in children {
         let child_chat_key = delegate_thread_chat_key(&thread);
-        let aborted_chat = {
-            let mut inflight = state
-                .inflight_chat_abort_handles
-                .lock()
-                .map_err(|_| "Failed to lock inflight chat abort handles".to_string())?;
-            if let Some(handle) = inflight.remove(&child_chat_key) {
-                handle.abort();
-                true
-            } else {
-                false
-            }
-        };
+        let aborted_chat = state.abort_inflight_chat(&child_chat_key);
         let aborted_tool = abort_inflight_tool_abort_handle(state, &child_chat_key)?;
         if aborted_chat || aborted_tool {
             aborted_count += 1;
@@ -131,7 +114,7 @@ pub(crate) fn abort_delegate_runtime_descendant_threads(
 }
 
 pub(crate) fn abort_delegate_runtime_descendants_by_parent_session(
-    state: &AppState,
+    state: &impl StateAccess,
     parent_chat_key: &str,
 ) -> Result<usize, String> {
     let children = delegate_runtime_thread_list(state)?
@@ -142,7 +125,7 @@ pub(crate) fn abort_delegate_runtime_descendants_by_parent_session(
 }
 
 pub(crate) fn abort_delegate_runtime_descendants_by_parent_context(
-    state: &AppState,
+    state: &impl StateAccess,
     parent_chat_key: &str,
     root_conversation_id: Option<&str>,
 ) -> Result<usize, String> {

@@ -210,7 +210,7 @@ pub(crate) fn save_agents_inner(
     sync_private_agents_to_workspace(&state.data_path, &base_config, &desired_agents)?;
     state_write_agents_cached(&state, &data.agents)?;
     if !affected_agent_ids.is_empty() {
-        mark_prompt_cache_rebuild_for_system_sources_by_agents(&state, &affected_agent_ids);
+        mark_prompt_cache_rebuild_for_system_sources_by_agents(state, &affected_agent_ids);
     }
     let mut config = state_read_config_cached(&state)?;
     let runtime_agents = runtime_agents_with_private_organization(&state, &config, &data)?;
@@ -246,7 +246,7 @@ pub(crate) fn save_agents_inner(
         config = persist_departments_by_source(&state, &runtime_config)?;
         if !changed_departments.is_empty() {
             mark_prompt_cache_rebuild_for_system_sources_by_departments(
-                &state,
+                state,
                 &changed_departments,
             );
         }

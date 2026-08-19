@@ -551,12 +551,12 @@ pub(crate) fn save_config_inner(
     let main_config = persist_departments_by_source(&state, &config)?;
     if !departments_changed.is_empty() {
         mark_prompt_cache_rebuild_for_system_sources_by_departments(
-            &state,
+            state,
             &departments_changed,
         );
     }
     if shell_workspaces_changed {
-        mark_prompt_cache_rebuild_for_all_system_environments(&state);
+        mark_prompt_cache_rebuild_for_all_system_environments(state);
     }
     let assistant_workspace_label_synced = if shell_workspaces_changed {
         sync_assistant_workspace_label_for_unarchived_conversations(
