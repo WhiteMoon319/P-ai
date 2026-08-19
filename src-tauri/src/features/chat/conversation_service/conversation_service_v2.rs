@@ -568,7 +568,7 @@ impl ConversationServiceV2 {
             return Err("conversationId is required.".to_string());
         }
         let store_paths =
-            message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
+            message_store::message_store_paths(state.data_path(), normalized_conversation_id)?;
         ensure_ready_message_store_from_legacy_conversation(
             state,
             normalized_conversation_id,
@@ -703,7 +703,7 @@ impl ConversationServiceV2 {
             audit.reason,
             snapshot.messages.len()
         ));
-        let store_paths = message_store::message_store_paths(&state.data_path, &snapshot.id)?;
+        let store_paths = message_store::message_store_paths(state.data_path(), &snapshot.id)?;
         if message_store::message_store_is_v3_ready(&store_paths)? {
             message_store::write_jsonl_snapshot_directory_shard(&store_paths, snapshot)?;
             state_mark_conversation_metadata_direct_persisted(state, &snapshot.id)?;
@@ -751,7 +751,7 @@ impl ConversationServiceV2 {
         limit: usize,
     ) -> Result<Vec<ChatMessage>, String> {
         let normalized_limit = limit.clamp(1, 50);
-        let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
+        let store_paths = message_store::message_store_paths(state.data_path(), conversation_id)?;
         let mut messages = if let Some(page) =
             message_store::read_ready_message_store_recent_messages_page_cached(
                 &store_paths,
@@ -766,7 +766,7 @@ impl ConversationServiceV2 {
             let start = total.saturating_sub(normalized_limit);
             conversation.messages[start..].to_vec()
         };
-        materialize_chat_message_parts_from_media_refs(&mut messages, &state.data_path);
+        materialize_chat_message_parts_from_media_refs(&mut messages, state.data_path());
         Ok(messages)
     }
 
@@ -785,7 +785,7 @@ impl ConversationServiceV2 {
             return Err("messageId is required.".to_string());
         }
         let store_paths =
-            message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
+            message_store::message_store_paths(state.data_path(), normalized_conversation_id)?;
         ensure_ready_message_store_from_legacy_conversation(
             state,
             normalized_conversation_id,
@@ -796,7 +796,7 @@ impl ConversationServiceV2 {
                 .ok_or_else(|| format!("Message not found: {normalized_message_id}"))?;
         materialize_chat_message_parts_from_media_refs(
             std::slice::from_mut(&mut message),
-            &state.data_path,
+            state.data_path(),
         );
         Ok(message)
     }
@@ -880,7 +880,7 @@ impl ConversationServiceV2 {
             conversation_id,
             updated_message.id.trim(),
         )?;
-        let paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
+        let paths = message_store::message_store_paths(state.data_path(), conversation_id)?;
         let mut ready_meta = message_store::read_ready_message_store_meta(&paths)?
             .ok_or_else(|| {
                 ConversationServiceV2Error::new(
@@ -1305,7 +1305,7 @@ impl ConversationServiceV2 {
             ));
         }
         let store_paths =
-            message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
+            message_store::message_store_paths(state.data_path(), normalized_conversation_id)?;
         let updated_at = message.created_at.clone();
         let last_user_at = if message.role.trim() == "user" {
             Some(message.created_at.clone())
@@ -1382,7 +1382,7 @@ impl ConversationServiceV2 {
                     ));
                 }
                 let store_paths =
-                    message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
+                    message_store::message_store_paths(state.data_path(), normalized_conversation_id)?;
                 let last_message = messages
                     .last()
                     .ok_or_else(|| "messages is empty".to_string())?;
@@ -1476,7 +1476,7 @@ impl ConversationServiceV2 {
             if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
                 return Err(format!("Unarchived conversation not found: {conversation_id}"));
             }
-            let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
+            let store_paths = message_store::message_store_paths(state.data_path(), conversation_id)?;
             let updated_at = input.message.created_at.clone();
             let unread_count = if self.conversation_has_active_chat_view(state, conversation_id)
                 || conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT
@@ -1555,7 +1555,7 @@ impl ConversationServiceV2 {
             if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
                 return Err(format!("远程入站目标会话不存在：{conversation_id}"));
             }
-            let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
+            let store_paths = message_store::message_store_paths(state.data_path(), conversation_id)?;
             let updated_at = message.created_at.clone();
             let unread_count = if self.conversation_has_active_chat_view(state, conversation_id)
                 || conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT

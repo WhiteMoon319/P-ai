@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use time::format_description::well_known::Rfc3339;
 
 use crate::core::time_semantics::now_iso;
@@ -8,7 +8,7 @@ use crate::logging::runtime_log_info;
 use super::*;
 
 /// 从数据目录解析应用根（从 src-tauri runtime_state 迁入的纯路径逻辑）。
-pub fn app_root_from_data_path(data_path: &PathBuf) -> PathBuf {
+pub fn app_root_from_data_path(data_path: &Path) -> PathBuf {
     let parent = data_path
         .parent()
         .map(ToOwned::to_owned)

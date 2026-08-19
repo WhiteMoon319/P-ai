@@ -1,6 +1,6 @@
 use std::{
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
 };
 
@@ -1409,11 +1409,11 @@ pub fn media_base64_cache_put(key: String, value: String) {
     }
 }
 
-pub fn media_storage_dir_from_data_path(data_path: &PathBuf) -> Result<PathBuf, String> {
+pub fn media_storage_dir_from_data_path(data_path: &Path) -> Result<PathBuf, String> {
     Ok(app_root_from_data_path(data_path).join("media"))
 }
 
-pub fn downloads_storage_dir_from_data_path(data_path: &PathBuf) -> Result<PathBuf, String> {
+pub fn downloads_storage_dir_from_data_path(data_path: &Path) -> Result<PathBuf, String> {
     Ok(app_root_from_data_path(data_path)
         .join("llm-workspace")
         .join("downloads"))
@@ -1494,7 +1494,7 @@ pub fn persist_media_bytes(data_path: &PathBuf, mime: &str, raw: &[u8]) -> Resul
     Ok(media_id)
 }
 
-pub fn resolve_stored_binary_base64(data_path: &PathBuf, stored: &str) -> Result<String, String> {
+pub fn resolve_stored_binary_base64(data_path: &Path, stored: &str) -> Result<String, String> {
     let trimmed = stored.trim();
     if trimmed.is_empty() {
         return Ok(String::new());
@@ -1587,7 +1587,7 @@ pub fn externalize_message_parts_to_media_refs_lossy(parts: &mut [MessagePart], 
     externalize_message_parts_to_media_refs(parts, data_path).unwrap_or(false)
 }
 
-pub fn materialize_message_parts_from_media_refs(parts: &mut [MessagePart], data_path: &PathBuf) {
+pub fn materialize_message_parts_from_media_refs(parts: &mut [MessagePart], data_path: &Path) {
     for part in parts {
         match part {
             // 图片在前台显示链路里保留已外置附件引用，由前端按需懒加载；
@@ -1610,7 +1610,7 @@ pub fn materialize_message_parts_from_media_refs(parts: &mut [MessagePart], data
     }
 }
 
-pub fn materialize_chat_message_parts_from_media_refs(messages: &mut [ChatMessage], data_path: &PathBuf) {
+pub fn materialize_chat_message_parts_from_media_refs(messages: &mut [ChatMessage], data_path: &Path) {
     for message in messages {
         materialize_message_parts_from_media_refs(&mut message.parts, data_path);
     }

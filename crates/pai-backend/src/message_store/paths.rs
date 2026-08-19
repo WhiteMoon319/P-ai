@@ -11,17 +11,17 @@ pub const LAYOUT_DIR_CHAT_CONVERSATIONS: &str = "conversations";
 pub const CHAT_METADATA_DB_FILE_NAME: &str = "chat_metadata.db";
 
 /// 应用根下 chat 目录（从 src-tauri app_data_layout.rs 迁入）。
-pub fn app_layout_chat_dir(path: &PathBuf) -> PathBuf {
+pub fn app_layout_chat_dir(path: &Path) -> PathBuf {
     crate::memory::store::app_root_from_data_path(path).join(LAYOUT_DIR_CHAT)
 }
 
 /// 会话目录（从 src-tauri app_data_layout.rs 迁入）。
-pub fn app_layout_chat_conversations_dir(path: &PathBuf) -> PathBuf {
+pub fn app_layout_chat_conversations_dir(path: &Path) -> PathBuf {
     app_layout_chat_dir(path).join(LAYOUT_DIR_CHAT_CONVERSATIONS)
 }
 
 /// 单会话 JSON 路径（从 src-tauri app_data_layout.rs 迁入）。
-pub fn app_layout_chat_conversation_path(path: &PathBuf, conversation_id: &str) -> PathBuf {
+pub fn app_layout_chat_conversation_path(path: &Path, conversation_id: &str) -> PathBuf {
     app_layout_chat_conversations_dir(path).join(format!("{conversation_id}.json"))
 }
 
@@ -68,7 +68,7 @@ pub fn message_store_is_v3_ready(paths: &MessageStorePaths) -> Result<bool, Stri
 }
 
 pub fn message_store_paths(
-    data_path: &PathBuf,
+    data_path: &Path,
     conversation_id: &str,
 ) -> Result<MessageStorePaths, String> {
     if conversation_id.trim().is_empty() {
@@ -90,7 +90,7 @@ pub fn message_store_paths(
 }
 
 pub fn message_store_paths_for_shard_dir(
-    data_path: &PathBuf,
+    data_path: &Path,
     conversation_id: &str,
     shard_dir: PathBuf,
     legacy_conversation_file: PathBuf,
@@ -105,7 +105,7 @@ pub fn message_store_paths_for_shard_dir(
     }
     validate_message_store_conversation_id(conversation_id)?;
     Ok(MessageStorePaths {
-        data_path: data_path.clone(),
+        data_path: data_path.to_path_buf(),
         conversation_id: conversation_id.to_string(),
         legacy_conversation_file,
         manifest_file: shard_dir.join(MESSAGE_STORE_MANIFEST_FILE_NAME),
@@ -166,11 +166,11 @@ pub fn validate_message_store_conversation_id(conversation_id: &str) -> Result<(
     Ok(())
 }
 
-pub fn path_modified_time(path: &PathBuf) -> Option<std::time::SystemTime> {
+pub fn path_modified_time(path: &Path) -> Option<std::time::SystemTime> {
     fs::metadata(path).and_then(|metadata| metadata.modified()).ok()
 }
 
-pub fn directory_children_modified_time(path: &PathBuf) -> Option<std::time::SystemTime> {
+pub fn directory_children_modified_time(path: &Path) -> Option<std::time::SystemTime> {
     let Ok(entries) = fs::read_dir(path) else {
         return None;
     };
@@ -195,7 +195,7 @@ pub fn message_store_shard_modified_time(
         &paths.blocks_dir,
     ]
     .into_iter()
-    .filter_map(path_modified_time)
+    .filter_map(|p| path_modified_time(p))
     .chain(std::iter::once(directory_children_modified_time(&paths.blocks_dir)).flatten())
     .max()
 }
