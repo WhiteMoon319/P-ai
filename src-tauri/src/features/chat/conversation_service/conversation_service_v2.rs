@@ -966,7 +966,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn apply_external_metadata_patch(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         task_name: &str,
         patch: ConversationExternalMetadataPatch,
@@ -975,13 +975,11 @@ impl ConversationServiceV2 {
         if normalized_conversation_id.is_empty() {
             return Err("conversationId is required.".to_string());
         }
-        let (conversation, (), _) = with_conversation_mutation(
-            state,
+        let (conversation, (), _) = state.with_conversation_mutation(
             normalized_conversation_id,
             task_name,
             || {
-                state_update_conversation_metadata_cached_unlocked(
-                    state,
+                state.update_conversation_metadata_cached_unlocked(
                     normalized_conversation_id,
                     |conversation| {
                         if let Some(value) = patch.title {
@@ -1235,7 +1233,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn set_conversation_unread_count_metadata(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         unread_count: usize,
     ) -> Result<Conversation, String> {
@@ -1758,7 +1756,7 @@ impl ConversationServiceV2 {
     #[cfg(test)]
     pub(crate) fn set_conversation_preferred_api_config_id(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         preferred_api_config_id: Option<String>,
     ) -> Result<Conversation, String> {
@@ -1768,7 +1766,7 @@ impl ConversationServiceV2 {
     #[cfg(test)]
     pub(crate) fn set_conversation_auto_push_remote_contact_id(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         auto_push_remote_contact_id: Option<String>,
     ) -> Result<Conversation, String> {
@@ -1789,7 +1787,7 @@ impl ConversationServiceV2 {
     #[cfg(test)]
     pub(crate) fn set_conversation_title_metadata(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         next_title: &str,
     ) -> Result<Conversation, String> {
@@ -1799,7 +1797,7 @@ impl ConversationServiceV2 {
     #[cfg(test)]
     pub(crate) fn set_conversation_shell_workspace_metadata(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         shell_workspace_path: Option<Option<String>>,
         shell_workspaces: Option<Vec<ShellWorkspaceConfig>>,
@@ -1819,7 +1817,7 @@ impl ConversationServiceV2 {
     #[cfg(test)]
     pub(crate) fn set_conversation_lifecycle_metadata(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         status: Option<&str>,
         summary: Option<&str>,
@@ -1843,7 +1841,7 @@ impl ConversationServiceV2 {
     #[cfg(test)]
     pub(crate) fn set_conversation_current_todos_metadata(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         current_todos: Vec<ConversationTodoItem>,
     ) -> Result<Conversation, String> {

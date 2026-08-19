@@ -32,7 +32,7 @@ pub(crate) fn android_workspace_existing_ancestor(path: &std::path::Path) -> Opt
     None
 }
 
-pub(crate) fn android_workspace_canonical_root(state: &AppState) -> Result<Option<PathBuf>, String> {
+pub(crate) fn android_workspace_canonical_root(state: &impl StateAccess) -> Result<Option<PathBuf>, String> {
     #[cfg(target_os = "android")]
     {
         let root = android_workspace_root(state)
@@ -42,7 +42,7 @@ pub(crate) fn android_workspace_canonical_root(state: &AppState) -> Result<Optio
     }
 }
 
-pub(crate) fn android_workspace_canonical_root_if_ready(state: &AppState) -> Result<Option<PathBuf>, String> {
+pub(crate) fn android_workspace_canonical_root_if_ready(state: &impl StateAccess) -> Result<Option<PathBuf>, String> {
     #[cfg(target_os = "android")]
     {
         if !is_android_workspace_ready(state) {

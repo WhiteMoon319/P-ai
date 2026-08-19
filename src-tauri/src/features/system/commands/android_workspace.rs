@@ -24,11 +24,11 @@ pub(crate) mod android_workspace_rootfs_installer {
 #[cfg(target_os = "android")]
 use android_workspace_rootfs_installer::*;
 
-pub(crate) fn android_workspace_root(state: &AppState) -> PathBuf {
-    state.llm_workspace_path.clone()
+pub(crate) fn android_workspace_root(state: &impl StateAccess) -> PathBuf {
+    state.llm_workspace_path().to_path_buf()
 }
 
-pub(crate) fn android_workspace_state_path(state: &AppState) -> PathBuf {
+pub(crate) fn android_workspace_state_path(state: &impl StateAccess) -> PathBuf {
     let root = android_workspace_root(state);
     android_workspace_runtime_base(&root).join(ANDROID_WORKSPACE_STATE_FILE)
 }
@@ -46,7 +46,7 @@ pub(crate) fn android_workspace_required_dirs(root: &std::path::Path) -> [PathBu
 }
 
 #[cfg(target_os = "android")]
-pub(crate) fn android_workspace_proot_temp_root(state: &AppState) -> PathBuf {
+pub(crate) fn android_workspace_proot_temp_root(state: &impl StateAccess) -> PathBuf {
     let root = android_workspace_root(state);
     android_workspace_runtime_base(&root).join("tmp").join("proot")
 }
@@ -70,14 +70,14 @@ pub(crate) fn android_workspace_layout_ready(root: &std::path::Path) -> bool {
         && android_workspace_runtime_ready(root)
 }
 
-pub(crate) fn read_android_workspace_status_file(state: &AppState) -> Option<AndroidWorkspaceStatus> {
+pub(crate) fn read_android_workspace_status_file(state: &impl StateAccess) -> Option<AndroidWorkspaceStatus> {
     let path = android_workspace_state_path(state);
     let raw = fs::read_to_string(path).ok()?;
     serde_json::from_str::<AndroidWorkspaceStatus>(&raw).ok()
 }
 
 pub(crate) fn write_android_workspace_status_file(
-    state: &AppState,
+    state: &impl StateAccess,
     status: &AndroidWorkspaceStatus,
 ) -> Result<(), String> {
     let path = android_workspace_state_path(state);
@@ -91,7 +91,7 @@ pub(crate) fn write_android_workspace_status_file(
         .map_err(|err| format!("写入 Android 工作区状态失败 ({}): {err}", path.display()))
 }
 
-pub(crate) fn normalize_android_workspace_status(state: &AppState) -> AndroidWorkspaceStatus {
+pub(crate) fn normalize_android_workspace_status(state: &impl StateAccess) -> AndroidWorkspaceStatus {
     let root = android_workspace_root(state);
     let (llm_workspace_root, runtime_root) = android_workspace_status_paths(&root);
     let Some(mut status) = read_android_workspace_status_file(state) else {
@@ -212,7 +212,7 @@ pub(crate) fn android_workspace_ready_status(root: &std::path::Path) -> AndroidW
     }
 }
 
-pub(crate) fn is_android_workspace_ready(state: &AppState) -> bool {
+pub(crate) fn is_android_workspace_ready(state: &impl StateAccess) -> bool {
     #[cfg(target_os = "android")]
     {
         let status = normalize_android_workspace_status(state);
@@ -801,7 +801,7 @@ pub(crate) async fn init_android_workspace_ws_inner(
     app: Option<&NativeAppHandle>,
 ) -> Result<AndroidWorkspaceStatus, String> {
 
-        let root = android_workspace_root(&state);
+        let root = android_workspace_root(state);
         // 创建统一长任务句柄：进度事件通过 DefaultTaskManager 推送（Kotlin task.progress）。
         let _ = pai_android_bridge::DefaultTaskManager.create_task("workspace-init");
         let mut downloading = normalize_android_workspace_status(state);
@@ -838,7 +838,7 @@ pub(crate) async fn import_android_workspace_rootfs_archive_ws_inner(
     data_base64: String,
 ) -> Result<AndroidWorkspaceStatus, String> {
 
-        let root = android_workspace_root(&state);
+        let root = android_workspace_root(state);
         // 创建统一长任务句柄：导入也复用 workspace-init 任务 ID。
         let _ = pai_android_bridge::DefaultTaskManager.create_task("workspace-init");
         let safe_name = android_workspace_sanitize_file_name(&file_name);
@@ -908,7 +908,7 @@ pub(crate) fn reset_android_workspace_state_ws_inner(
     app: Option<&NativeAppHandle>,
 ) -> Result<AndroidWorkspaceStatus, String> {
 
-        let status = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &android_workspace_root(&state));
+        let status = AndroidWorkspaceStatus::new(AndroidWorkspaceStateKind::NotDownloaded, &android_workspace_root(state));
         android_workspace_set_status(state, app, status)
 }
 
@@ -917,14 +917,14 @@ pub(crate) fn repair_android_workspace_runtime_ws_inner(
     app: Option<&NativeAppHandle>,
 ) -> Result<AndroidWorkspaceStatus, String> {
 
-        let root = android_workspace_root(&state);
+        let root = android_workspace_root(state);
         let runtime_root = android_workspace_runtime_root(&root);
         let result = (|| {
             ensure_android_workspace_layout(&root)?;
             if !runtime_root.join("usr").join("bin").join("dash").is_file() {
                 return Err("Android Linux 运行环境缺少 usr/bin/dash，请重置沙盒后重新初始化。".to_string());
             }
-            let temp_dir = android_workspace_proot_temp_root(&state);
+            let temp_dir = android_workspace_proot_temp_root(state);
             let temp_dir = if let Ok(canonical) = temp_dir.canonicalize() { canonical } else { temp_dir };
             fs::create_dir_all(&temp_dir)
                 .map_err(|err| format!("创建 Android proot 临时目录失败 ({}): {err}", temp_dir.display()))?;

@@ -153,7 +153,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn set_preferred_api_config_id(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         preferred_api_config_id: Option<String>,
     ) -> Result<Conversation, String> {
@@ -170,7 +170,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn set_auto_push_remote_contact_id(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         auto_push_remote_contact_id: Option<String>,
     ) -> Result<Conversation, String> {
@@ -187,7 +187,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn set_title(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         next_title: &str,
     ) -> Result<Conversation, String> {
@@ -439,7 +439,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn set_current_todos(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         current_todos: Vec<ConversationTodoItem>,
     ) -> Result<Conversation, String> {
@@ -456,7 +456,7 @@ impl ConversationServiceV2 {
 
     pub(crate) fn set_shell_workspace(
         &self,
-        state: &AppState,
+        state: &impl StateAccess,
         conversation_id: &str,
         shell_workspace_path: Option<Option<String>>,
         shell_workspaces: Option<Vec<ShellWorkspaceConfig>>,

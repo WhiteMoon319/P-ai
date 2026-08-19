@@ -90,7 +90,7 @@ pub(crate) fn configured_system_workspace_root_from_shell_workspaces(
 }
 
 pub(crate) fn terminal_workspace_path_from_conversation(
-    state: &AppState,
+    state: &impl StateAccess,
     conversation: &Conversation,
 ) -> Option<PathBuf> {
     let raw = conversation
@@ -247,7 +247,7 @@ pub(crate) struct TerminalWorkspaceResolved {
     pub(crate) path: PathBuf,
 }
 
-pub(crate) fn android_terminal_workspace_resolved(state: &AppState) -> Result<TerminalWorkspaceResolved, String> {
+pub(crate) fn android_terminal_workspace_resolved(state: &impl StateAccess) -> Result<TerminalWorkspaceResolved, String> {
     let root = features_system_commands::android_workspace_manager::android_workspace_canonical_root_if_ready(state)?
         .ok_or_else(|| ANDROID_WORKSPACE_NOT_READY_MESSAGE.to_string())?;
     Ok(TerminalWorkspaceResolved {
@@ -685,7 +685,7 @@ pub(crate) fn resolve_contact_workspaces_for_conversation(
 }
 
 pub(crate) fn terminal_allowed_workspaces_for_conversation_canonical(
-    state: &AppState,
+    state: &impl StateAccess,
     conversation: Option<&Conversation>,
 ) -> Result<Vec<TerminalWorkspaceResolved>, String> {
     #[cfg(target_os = "android")]
