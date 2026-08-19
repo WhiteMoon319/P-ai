@@ -13,6 +13,7 @@ pub(crate) const ANDROID_WORKSPACE_FILE_TRANSFER_MAX_BYTES: u64 = 64 * 1024 * 10
 // types 与 rootfs_paths 已迁至 crates/pai-android-platform（阶段 5）。
 pub(crate) use pai_android_platform::android_workspace::types::*;
 pub(crate) use pai_android_platform::android_workspace::rootfs_paths::*;
+use pai_android_bridge::TaskManager;
 
 #[cfg(target_os = "android")]
 pub(crate) mod android_workspace_rootfs_installer {
@@ -801,6 +802,8 @@ pub(crate) async fn init_android_workspace_ws_inner(
 ) -> Result<AndroidWorkspaceStatus, String> {
 
         let root = android_workspace_root(&state);
+        // 创建统一长任务句柄：进度事件通过 DefaultTaskManager 推送（Kotlin task.progress）。
+        let _ = pai_android_bridge::DefaultTaskManager.create_task("workspace-init");
         let mut downloading = normalize_android_workspace_status(state);
         downloading.state = AndroidWorkspaceStateKind::Downloading;
         downloading.last_error = None;
@@ -836,6 +839,8 @@ pub(crate) async fn import_android_workspace_rootfs_archive_ws_inner(
 ) -> Result<AndroidWorkspaceStatus, String> {
 
         let root = android_workspace_root(&state);
+        // 创建统一长任务句柄：导入也复用 workspace-init 任务 ID。
+        let _ = pai_android_bridge::DefaultTaskManager.create_task("workspace-init");
         let safe_name = android_workspace_sanitize_file_name(&file_name);
         if !safe_name.ends_with(".tar.gz") && safe_name != ANDROID_WORKSPACE_ROOTFS_FILE_NAME {
             runtime_log_warn(format!(

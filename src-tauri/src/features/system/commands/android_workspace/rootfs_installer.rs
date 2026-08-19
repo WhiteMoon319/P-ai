@@ -1,5 +1,7 @@
 use super::*;
 
+use pai_android_bridge::TaskManager;
+
 pub(crate) fn android_workspace_rootfs_archive_path(root: &std::path::Path) -> PathBuf {
     android_workspace_runtime_base(root)
         .join("tmp")
@@ -35,6 +37,15 @@ pub(crate) fn android_workspace_update_download_progress(
         download_total_bytes: Some(ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH),
         download_stage: Some(stage.to_string()),
     };
+    // 通过 DefaultTaskManager 推送统一的任务进度事件（Kotlin pollEvents 的 task.progress）。
+    // taskId 与 android_workspace 长任务入口（init/import）创建的 workspace-init 一致。
+    let progress = (bytes as f64 / ANDROID_WORKSPACE_ROOTFS_CONTENT_LENGTH as f64).clamp(0.0, 1.0);
+    let _ = pai_android_bridge::DefaultTaskManager.update_task(
+        "workspace-init",
+        pai_android_bridge::TaskState::Running,
+        progress,
+        stage,
+    );
     android_workspace_set_status(state, Some(app), status).map(|_| ())
 }
 
