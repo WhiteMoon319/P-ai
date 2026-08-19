@@ -18,7 +18,7 @@
         :active-tab="chatLeftPanelMode"
         :chat-model-options="chatModelOptions"
         :tool-review-api-config-id="toolReviewApiConfigId"
-        :current-workspace-root-path="currentWorkspaceRootPath"
+        :current-workspace-root-path="currentProjectWorkspaceRoot"
         @update:active-tab="$emit('update:conversation-list-tab', $event)"
         @edit-task="openTaskEditDialog"
         @select="handleConversationListSelect"
@@ -45,6 +45,13 @@
         <div class="relative flex min-h-0 flex-1 overflow-hidden" @mouseenter="chatScrollbarRef?.reveal()" @mouseleave="chatScrollbarRef?.hide()">
           <div class="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center px-3 pt-0">
             <ConversationTodoDropdown :todos="normalizedConversationTodos" :persona-name="personaName" />
+          </div>
+          <div
+            v-if="showInitialMeasureOverlay"
+            class="absolute inset-0 z-10 flex items-center justify-center bg-base-100/85"
+            aria-hidden="true"
+          >
+            <span class="loading loading-spinner loading-md text-primary" />
           </div>
           <div
             ref="scrollContainer"
@@ -168,6 +175,7 @@
               :show-open-in-browser-button="showOpenInBrowserButton && !activeConversationIsSystemNotification"
               :open-in-browser-disabled="!activeConversationId || activeConversationIsSystemNotification"
               :show-code-review-menu-item="true"
+              :side-chat-enabled="sideChatPanelEnabled"
               :mention-entries="mentionEntries" :selected-mention-keys="selectedMentionKeys"
               :delegate-statuses="delegateStatuses"
               @lock-workspace="$emit('lockWorkspace')" @open-branch-selection="openBranchSelectionMenu"
@@ -178,6 +186,8 @@
               @open-conversation-in-browser="openActiveConversationInBrowser"
               @open-delegate-summary="openDelegateSummaryPanel"
               @open-code-review="openCodeReviewDialog"
+              @open-branch-from-current="openBranchFromCurrentMessage"
+              @open-side-chat="selectChatRightPanelMode('sideChat')"
               @mention-entry="(entry) => {
                 const agentId = String(entry?.agentId || '').trim();
                 const departmentId = String(entry?.departmentId || '').trim();
@@ -609,7 +619,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { isDarkAppTheme } from "../../shell/composables/use-app-theme";
+import { isDarkAppTheme, isVscodeHost } from "../../shell/composables/use-app-theme";
 import {
   useChatComposerAppearance,
   visibleChatComposerContextGroups,
@@ -617,6 +627,7 @@ import {
 import { ArrowDownToLine, Check, ChevronsDown, ChevronsUp, CircleAlert, Copy, History, Inbox, ListTodo, Network, Trash2, Undo2, Wrench, X } from "@lucide/vue";
 import {
   copyTransportChatImageToClipboard,
+  getTransportHostContext,
   invokeTauri,
   onTransportNotification,
   openTransportExternalUrl,
@@ -1053,6 +1064,20 @@ const openDelegateSelectionMenu = () => openSelectionMenu({ delegateOnly: true, 
 const openForwardSelectionMenu = () => openSelectionMenu({ allowWhenBusy: true });
 const openShareSelectionMenu = () => openSelectionMenu({ allowWhenBusy: true });
 
+/** 从当前会话最新一条用户消息直接创建分支（无需进入选择模式） */
+function openBranchFromCurrentMessage() {
+  if (props.chatting || props.frozen || conversationInteractionBusy.value) return;
+  const candidates = props.messageBlocks.filter(
+    (block) => !block.isExtraTextBlock
+      && String(block.role || "").trim().toLowerCase() === "user"
+      && !block.isStreaming,
+  );
+  const latest = candidates[candidates.length - 1];
+  const turnId = latest ? String(latest.sourceMessageId || latest.id || "").trim() : "";
+  if (!turnId) return;
+  emit("createConversationBranchFromTurn", { turnId });
+}
+
 function openTaskCreateDialog() {
   taskDialogMode.value = "create";
   taskDialogTask.value = null;
@@ -1243,6 +1268,43 @@ const { chatRenderItems, messageMemoKey } = useChatVirtualList({
 
 const virtualRenderItems = computed<ChatRenderItem[]>(() => [...chatRenderItems.value]);
 const olderHistoryCorrectionAllowed = ref(false);
+
+// 初始测高覆盖层：会话切换后消息行按 1px 估计高度定位、未实测前会重叠，
+// 用半透明覆盖层遮住直到视口内全部行实测完成（measurementSettled）。
+// 超时兜底 1.5s 防信号异常导致永久遮挡；流式期间不显示（行高度持续变化）。
+const initialMeasureOverlayForceHidden = ref(false);
+let initialMeasureOverlayTimeout: ReturnType<typeof setTimeout> | undefined;
+watch(
+  () => String(props.activeConversationId || "").trim(),
+  () => {
+    initialMeasureOverlayForceHidden.value = false;
+    if (initialMeasureOverlayTimeout) {
+      clearTimeout(initialMeasureOverlayTimeout);
+      initialMeasureOverlayTimeout = undefined;
+    }
+    if (typeof window !== "undefined") {
+      initialMeasureOverlayTimeout = setTimeout(() => {
+        initialMeasureOverlayTimeout = undefined;
+        initialMeasureOverlayForceHidden.value = true;
+      }, 1500);
+    }
+  },
+  { immediate: true },
+);
+const showInitialMeasureOverlay = computed(() =>
+  !!String(props.activeConversationId || "").trim()
+  && virtualRenderItems.value.length > 0
+  && !props.chatting
+  && !measurementSettled.value
+  && !initialMeasureOverlayForceHidden.value,
+);
+onBeforeUnmount(() => {
+  if (initialMeasureOverlayTimeout) {
+    clearTimeout(initialMeasureOverlayTimeout);
+    initialMeasureOverlayTimeout = undefined;
+  }
+});
+
 const showNoMoreHistoryDivider = computed(() =>
   !!String(props.activeConversationId || "").trim()
   && props.messageBlocks.length > 0
@@ -1322,7 +1384,7 @@ const {
 
 const {
   virtualizer, virtualEntries, totalVirtualSize,
-  latestOwnTailContentHeight, latestOwnTailContentMeasured, scheduleVirtualMeasure, syncViewportMetrics,
+  latestOwnTailContentHeight, latestOwnTailContentMeasured, measurementSettled, scheduleVirtualMeasure, syncViewportMetrics,
   scrollVirtualizerToIndex, scrollVirtualizerToConversationBottomLightweight,
   resetVirtualizerAtConversationBottom,
   measureElementRef,
@@ -1865,6 +1927,19 @@ function handleRebindConversationRecipient() {
   emit("rebindConversationRecipient", { conversationId, departmentId, agentId });
 }
 
+// 「当前项目」分组只允许在 VS Code 侧边栏显示：
+// 宿主为 VS Code 时跟随扩展注入的 workspaceRoots（当前打开的项目），
+// 与会话工作区（currentWorkspaceRootPath）无关
+const currentProjectWorkspaceRoot = computed<string>(() => {
+  if (!isVscodeHost()) return "";
+  try {
+    const hostRoot = getTransportHostContext().workspaceRoots[0];
+    return String(hostRoot?.path || "").trim();
+  } catch {
+    return "";
+  }
+});
+
 const conversationDisplaySections = computed<ConversationSection[]>(() => {
   const sections = buildConversationSections(props.conversationItems || props.unarchivedConversationItems || [], {
     tab: props.chatLeftPanelMode,
@@ -1876,7 +1951,7 @@ const conversationDisplaySections = computed<ConversationSection[]>(() => {
       currentProject: t("chat.currentProject"),
     },
     locale: locale.value,
-    currentWorkspaceRootPath: props.currentWorkspaceRootPath,
+    currentWorkspaceRootPath: currentProjectWorkspaceRoot.value,
   });
   // Shift+滚轮跳过「最近会话」区：其中的会话在工作区/频道区会重复出现，
   // 滚动时同一会话滚两遍，顺序对不上列表直觉。

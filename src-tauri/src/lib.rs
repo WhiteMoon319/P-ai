@@ -96,7 +96,10 @@ include!("features/remote_im_adapters.rs");
 include!("features/system/windowing.rs");
 include!("features/system/record_hotkey_probe.rs");
 include!("features/system/windows_job.rs");
+#[cfg(target_os = "android")]
 include!("features/system/sandbox.rs");
+#[cfg(not(target_os = "android"))]
+include!("features/system/execution.rs");
 include!("features/system/local_port_service.rs");
 include!("features/system/tools.rs");
 #[cfg(not(target_os = "android"))]

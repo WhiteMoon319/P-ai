@@ -1360,7 +1360,10 @@ async fn tool_review_exec_git_readonly(
     timeout_ms: u64,
 ) -> Result<String, String> {
     let session_id = format!("tool-review-code::{}", conversation_id.trim());
+    #[cfg(target_os = "android")]
     let execution = sandbox_execute_command(state, &session_id, command, cwd, timeout_ms, false, None, None).await?;
+    #[cfg(not(target_os = "android"))]
+    let execution = run_command_in_workspace(state, &session_id, command, cwd, timeout_ms, false).await?;
     let stdout = terminal_decode_output_bytes(&execution.stdout);
     let stderr = terminal_decode_output_bytes(&execution.stderr);
     if !execution.ok {

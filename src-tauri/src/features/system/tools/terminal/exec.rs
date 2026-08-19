@@ -1604,7 +1604,10 @@ async fn builtin_shell_exec(
         }
     }
 
+#[cfg(target_os = "android")]
     let execution_result = sandbox_execute_command(state, &normalized_session, cmd, &execution_cwd, timeout_ms, is_read_whitelist, None, None).await;
+    #[cfg(not(target_os = "android"))]
+    let execution_result = run_command_in_workspace(state, &normalized_session, cmd, &execution_cwd, timeout_ms, is_read_whitelist).await;
     let execution = match execution_result {
         Ok(execution) => execution,
         Err(err) if terminal_is_timeout_error(&err) => {
@@ -1625,7 +1628,17 @@ async fn builtin_shell_exec(
         }
         Err(err) => return Err(err),
     };
+    #[cfg(target_os = "android")]
     let SandboxExecutionResult {
+        ok,
+        exit_code,
+        stdout: raw_stdout,
+        stderr: raw_stderr,
+        duration_ms,
+        ..
+    } = execution;
+    #[cfg(not(target_os = "android"))]
+    let ExecutionResult {
         ok,
         exit_code,
         stdout: raw_stdout,

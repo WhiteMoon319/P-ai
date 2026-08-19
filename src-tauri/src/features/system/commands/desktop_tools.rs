@@ -749,7 +749,10 @@ async fn terminal_self_check(state: State<'_, AppState>) -> Result<Value, String
 
     let mut results = Vec::<TerminalSelfCheckStepResult>::new();
     for step in steps {
+#[cfg(target_os = "android")]
         match sandbox_execute_command(&state, &session_id, step, &cwd, 15_000, false, None, None).await {
+        #[cfg(not(target_os = "android"))]
+        match run_command_in_workspace(&state, &session_id, step, &cwd, 15_000, false).await {
             Ok(execution) => {
                 let (stdout, _) = truncate_terminal_output(&execution.stdout);
                 let (stderr, _) = truncate_terminal_output(&execution.stderr);
