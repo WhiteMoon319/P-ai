@@ -12,7 +12,7 @@
 // 已迁至 crates/pai-android-platform::event_queue（阶段 6）。
 
 pub(crate) use pai_android_platform::event_queue::*;
-use pai_android_bridge::{DispatchResult, NativeDispatcher};
+use pai_android_bridge::{DefaultTaskManager, DispatchResult, NativeDispatcher, TaskManager, TaskState};
 
 use jni::objects::{JClass, JString};
 use jni::sys::{jstring};
@@ -291,6 +291,45 @@ impl NativeDispatcher for NativeDispatcherImpl {
                 "list_terminal_shell_candidates" => ide_chat_list_terminal_shell_candidates_for_web_settings(state),
                 "list_tool_catalog" => ide_chat_list_tool_catalog_for_web_settings(state).await,
                 "list_department_permission_catalog" => ide_chat_list_department_permission_catalog_for_web_settings(state).await,
+                // ---- 原生任务状态机（长任务进度追踪）----
+                "task.create" => {
+                    let task_id = params.get("taskId")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    let handle = DefaultTaskManager.create_task(task_id)?;
+                    ide_chat_serialize(&handle)
+                }
+                "task.update" => {
+                    let task_id = params.get("taskId")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    let state_str = params.get("state")
+                        .and_then(Value::as_str)
+                        .unwrap_or("Running");
+                    let progress = params.get("progress")
+                        .and_then(Value::as_f64)
+                        .unwrap_or(0.0);
+                    let message = params.get("message")
+                        .and_then(Value::as_str)
+                        .unwrap_or("");
+                    let task_state = TaskState::from_str(state_str)?;
+                    let handle = DefaultTaskManager.update_task(task_id, task_state, progress, message)?;
+                    ide_chat_serialize(&handle)
+                }
+                "task.get" => {
+                    let task_id = params.get("taskId")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    let handle = DefaultTaskManager.get_task(task_id)?;
+                    ide_chat_serialize(&handle)
+                }
+                "task.cancel" => {
+                    let task_id = params.get("taskId")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    let handle = DefaultTaskManager.cancel_task(task_id)?;
+                    ide_chat_serialize(&handle)
+                }
                 _ => Err(format!("原生桥 method not found: {method}")),
             }
         });

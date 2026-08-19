@@ -24,6 +24,33 @@ pub enum TaskState {
     Cancelled,
 }
 
+impl TaskState {
+    /// 从 JSON-RPC 字符串解析任务状态。
+    ///
+    /// 接受 `Pending` / `Running` / `Completed` / `Failed` / `Cancelled`
+    /// （大小写不敏感；`Failed` 可附带 `,reason` 后缀承载错误信息）。
+    pub fn from_str(value: &str) -> Result<TaskState, String> {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err("task state is required.".to_string());
+        }
+        let (head, reason) = match trimmed.split_once(',') {
+            Some((head, reason)) => (head.trim(), Some(reason.trim())),
+            None => (trimmed, None),
+        };
+        match head.to_ascii_lowercase().as_str() {
+            "pending" => Ok(TaskState::Pending),
+            "running" => Ok(TaskState::Running),
+            "completed" | "done" => Ok(TaskState::Completed),
+            "failed" | "error" => Ok(TaskState::Failed(
+                reason.map(str::to_string).unwrap_or_default(),
+            )),
+            "cancelled" | "canceled" => Ok(TaskState::Cancelled),
+            other => Err(format!("unknown task state: {other}")),
+        }
+    }
+}
+
 /// 任务句柄，唯一标识一个后台长任务。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskHandle {
@@ -259,5 +286,33 @@ mod tests {
             .is_err());
         // 空 taskId 拒绝创建
         assert!(manager.create_task("  ").is_err());
+    }
+
+    #[test]
+    fn task_state_from_str_parses_all_variants() {
+        assert_eq!(TaskState::from_str("Pending").unwrap(), TaskState::Pending);
+        assert_eq!(TaskState::from_str("running").unwrap(), TaskState::Running);
+        assert_eq!(
+            TaskState::from_str("completed").unwrap(),
+            TaskState::Completed
+        );
+        assert_eq!(
+            TaskState::from_str("done").unwrap(),
+            TaskState::Completed
+        );
+        assert_eq!(
+            TaskState::from_str("Failed,rootfs download timeout").unwrap(),
+            TaskState::Failed("rootfs download timeout".to_string())
+        );
+        assert_eq!(
+            TaskState::from_str("cancelled").unwrap(),
+            TaskState::Cancelled
+        );
+        assert_eq!(
+            TaskState::from_str("canceled").unwrap(),
+            TaskState::Cancelled
+        );
+        assert!(TaskState::from_str("").is_err());
+        assert!(TaskState::from_str("weird").is_err());
     }
 }
