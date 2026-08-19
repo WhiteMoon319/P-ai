@@ -4,15 +4,7 @@ pub(crate) fn lock_remote_im_reply_delegate_runtimes(
     std::sync::MutexGuard<'_, std::collections::HashMap<String, RemoteImReplyDelegateRuntime>>,
     String,
 > {
-    match state.remote_im_reply_delegate_runtimes.lock() {
-        Ok(runtimes) => Ok(runtimes),
-        Err(poisoned) => {
-            runtime_log_warn(
-                "[远程应答委托] 运行时锁中毒，已恢复并继续处理当前业务".to_string(),
-            );
-            Ok(poisoned.into_inner())
-        }
-    }
+    state.lock_remote_im_reply_delegate_runtimes()
 }
 
 pub(crate) fn remote_im_reply_delegate_register(
@@ -625,29 +617,7 @@ pub(crate) fn abort_remote_im_reply_delegate(
         runtime
     };
     let chat_key = format!("remote-im-reply-delegate::{delegate_id}");
-    let aborted_chat = match state.inflight_chat_abort_handles.lock() {
-        Ok(mut inflight) => {
-            if let Some(handle) = inflight.remove(&chat_key) {
-                handle.abort();
-                true
-            } else {
-                false
-            }
-        }
-        Err(poisoned) => {
-            runtime_log_warn(format!(
-                "[远程应答委托] 聊天取消句柄锁中毒，已恢复，delegate_id={}",
-                delegate_id
-            ));
-            let mut inflight = poisoned.into_inner();
-            if let Some(handle) = inflight.remove(&chat_key) {
-                handle.abort();
-                true
-            } else {
-                false
-            }
-        }
-    };
+    let aborted_chat = state.abort_inflight_chat(&chat_key);
     let tool_key = format!(
         "{}::{}::remote_reply_delegate:{}",
         runtime.session_agent_id, runtime.conversation_id, delegate_id

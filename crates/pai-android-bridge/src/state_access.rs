@@ -13,11 +13,13 @@
 //! - `read_chat_index_cached`
 //! - `schedule_conversation_persist` / `delete_conversation_cached`
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use pai_backend::core::domain::types_storage::RuntimeStateFile;
 use pai_backend::core::domain::types_config::AppConfig;
 use pai_backend::core::domain::types_chat::AgentProfile;
+use pai_backend::core::domain::runtime_types::{RemoteImContactRuntimeState, RemoteImReplyDelegateRuntime};
 
 /// 运行时状态访问接口。
 ///
@@ -55,4 +57,31 @@ pub trait StateAccess: Clone + Send + Sync {
     fn config_path(&self) -> &Path;
     /// LLM 工作区路径。
     fn llm_workspace_path(&self) -> &Path;
+
+    // ── 远程 IM 运行时状态 ──
+
+    /// 锁远程 IM 联系人运行时状态表（毒锁自动恢复）。
+    fn lock_remote_im_contact_runtime_states(
+        &self,
+    ) -> Result<
+        std::sync::MutexGuard<'_, HashMap<String, RemoteImContactRuntimeState>>,
+        String,
+    >;
+
+    /// 锁远程 IM 应答委托运行时表（毒锁自动恢复）。
+    fn lock_remote_im_reply_delegate_runtimes(
+        &self,
+    ) -> Result<
+        std::sync::MutexGuard<'_, HashMap<String, RemoteImReplyDelegateRuntime>>,
+        String,
+    >;
+
+    /// 读取最后可信的配置缓存快照（不重读磁盘）。
+    fn stale_cached_config_best_effort(&self) -> Option<AppConfig>;
+
+    /// 广播应用级事件（桌面端转发 tauri emit，Android 原生模式为空操作）。
+    fn emit_app_event<S: serde::Serialize + Clone>(&self, event: &str, payload: S) -> Result<(), String>;
+
+    /// 取消指定 key 的进行中聊天（inflight abort handle），返回是否找到并取消。
+    fn abort_inflight_chat(&self, key: &str) -> bool;
 }

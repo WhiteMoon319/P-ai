@@ -204,15 +204,11 @@ pub(crate) fn remote_im_emit_contact_dashboard_snapshot(state: &AppState, contac
             serde_json::json!(snapshot),
         );
     }
-    if let Ok(guard) = state.app_handle.lock() {
-        if let Some(app_handle) = guard.as_ref() {
-            if let Err(err) = app_handle.emit(REMOTE_IM_CONTACT_DASHBOARD_UPDATED_EVENT, snapshot) {
-                runtime_log_debug(format!(
-                    "[远程会话仪表盘] 跳过，任务=推送快照，contact_id={}，error={}",
-                    contact_id, err
-                ));
-            }
-        }
+    if let Err(err) = state.emit_app_event(REMOTE_IM_CONTACT_DASHBOARD_UPDATED_EVENT, snapshot) {
+        runtime_log_debug(format!(
+            "[远程会话仪表盘] 跳过，任务=推送快照，contact_id={}，error={}",
+            contact_id, err
+        ));
     }
 }
 
@@ -1100,17 +1096,7 @@ pub(crate) fn remote_im_clear_contact_conversation_inner(
 
 
 pub(crate) fn remote_im_stale_cached_config_best_effort(state: &AppState) -> Option<AppConfig> {
-    match state.cached_config.lock() {
-        Ok(cached) => cached.clone(),
-        Err(poisoned) => {
-            runtime_log_warn(
-                "[远程IM] 渠道配置缓存锁中毒，恢复锁但不使用不确定权限快照".to_string(),
-            );
-            state.cached_config.clear_poison();
-            drop(poisoned.into_inner());
-            None
-        }
-    }
+    state.stale_cached_config_best_effort()
 }
 
 /// 内部入队函数，供事件消费循环调用

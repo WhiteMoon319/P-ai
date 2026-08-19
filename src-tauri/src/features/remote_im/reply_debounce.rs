@@ -2,15 +2,7 @@ pub(crate) fn lock_remote_im_contact_runtime_states(
     state: &AppState,
 ) -> Result<std::sync::MutexGuard<'_, std::collections::HashMap<String, RemoteImContactRuntimeState>>, String>
 {
-    match state.remote_im_contact_runtime_states.lock() {
-        Ok(states) => Ok(states),
-        Err(poisoned) => {
-            runtime_log_warn(
-                "[远程联系人状态机] 运行时锁中毒，已恢复并继续处理当前业务".to_string(),
-            );
-            Ok(poisoned.into_inner())
-        }
-    }
+    state.lock_remote_im_contact_runtime_states()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
