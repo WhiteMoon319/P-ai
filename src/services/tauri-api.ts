@@ -405,7 +405,9 @@ function downloadBrowserTransportBase64File(fileName: string, bytesBase64: strin
 export async function pickTransportAttachments<T>(
   options: TransportFileDialogOptions = { multiple: true },
 ): Promise<T[]> {
-  if (isTauriRuntimeAvailable()) {
+  // Android 上 dialog.open() 返回 content:// URI，后端经 workspace-io 原生插件
+  // 流式写入沙盒 downloads（绕开 base64 与 64MB 上限）。桌面走本地路径摄取。
+  if (isTauriRuntimeAvailable() && !isAndroidRuntime()) {
     const selected = await openTransportFileDialog({ ...options, directory: false });
     const paths = (Array.isArray(selected) ? selected : [selected])
       .map((value) => String(value || "").trim())
@@ -415,6 +417,17 @@ export async function pickTransportAttachments<T>(
       receipts.push(await invokeTauri<T>("attachment_ingest_local_path", {
         input: { path },
       }));
+    }
+    return receipts;
+  }
+  if (isAndroidRuntime()) {
+    const selected = await openTransportFileDialog({ ...options, directory: false });
+    const uris = (Array.isArray(selected) ? selected : [selected])
+      .map((value) => String(value || "").trim())
+      .filter((value) => value.startsWith("content://"));
+    const receipts: T[] = [];
+    for (const uri of uris) {
+      receipts.push(await invokeTauri<T>("attachment_ingest_content_uri", { uri }));
     }
     return receipts;
   }
@@ -518,7 +531,7 @@ function postTransportHostMessage(message: unknown): boolean {
 export function getTransportCapabilities(): TransportCapabilities {
   const native = isTauriRuntimeAvailable();
   return {
-    windowControls: native,
+    windowControls: native && !isAndroidRuntime(),
     localFileSystem: native,
     localPathPicker: native,
   };
@@ -1141,7 +1154,7 @@ async function ensureWebTransportConversationContext(conversationId: string, for
 
 /** 设置入口由适配器决定打开原生窗口、宿主页或普通浏览器页面。 */
 export async function openTransportSettings(): Promise<boolean> {
-  if (isTauriRuntimeAvailable()) {
+  if (isTauriRuntimeAvailable() && !isAndroidRuntime()) {
     return openTransportWindow("main");
   }
   if (typeof window === "undefined") return false;
@@ -1159,6 +1172,13 @@ export async function openTransportSettings(): Promise<boolean> {
   const url = new URL(path, window.location.href);
   const config = ensureWebBridgeConfig();
   if (config?.chatUrl) url.searchParams.set("chatUrl", config.chatUrl);
+  // Android WebView（回环地址 + Tauri runtime 无独立 main 窗口）：在 WebView 内
+  // 导航到设置页并注入平台标识，不能调用 show_main_window（Android 只有 chat 窗口）。
+  if (isAndroidRuntime()) {
+    url.searchParams.set("platform", "android");
+    window.location.href = url.toString();
+    return true;
+  }
   return openTransportExternalUrl(url.toString());
 }
 
