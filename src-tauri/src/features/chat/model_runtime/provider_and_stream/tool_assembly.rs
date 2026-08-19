@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) fn tool_manifest_item(
     source: &str,
     name: &str,

@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) const IMAGE_GENERATION_MAX_IMAGE_BYTES: usize = 64 * 1024 * 1024;
 pub(crate) const IMAGE_GENERATION_MAX_JSON_BYTES: usize = 96 * 1024 * 1024;
 pub(crate) const IMAGE_GENERATION_MAX_ERROR_BYTES: usize = 8 * 1024;

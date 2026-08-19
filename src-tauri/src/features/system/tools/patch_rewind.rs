@@ -1,3 +1,4 @@
+use super::*;
 // ========== apply_patch rewind (by backupRecordId) ==========
 
 /// 从被移除的消息中提取所有 backupRecordId，用于恢复或清理。

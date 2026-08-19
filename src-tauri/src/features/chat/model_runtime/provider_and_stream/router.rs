@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) fn replace_disabled_multimodal_with_text(
     prepared: &mut PreparedPrompt,
     enable_image: bool,

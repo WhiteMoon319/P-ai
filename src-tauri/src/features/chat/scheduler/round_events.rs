@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) fn latest_user_text_from_events(events: &[ChatPendingEvent]) -> String {
     events
         .iter()

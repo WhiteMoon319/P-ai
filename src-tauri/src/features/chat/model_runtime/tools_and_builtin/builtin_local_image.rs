@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) const LOCAL_IMAGE_THUMBNAIL_MAX_EDGE: u32 = 1080;
 pub(crate) const LOCAL_IMAGE_REMOTE_MAX_EDGE: u32 = 2160;
 pub(crate) const LOCAL_IMAGE_WEBP_QUALITY: f32 = 82.0;

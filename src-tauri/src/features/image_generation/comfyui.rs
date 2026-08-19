@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) fn comfyui_candidate_roots(base_url: &str) -> Vec<String> {
     let base = base_url.trim().trim_end_matches('/').to_string();
     let mut roots = if base.to_ascii_lowercase().ends_with("/api") {

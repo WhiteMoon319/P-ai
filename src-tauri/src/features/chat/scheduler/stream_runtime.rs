@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) fn register_chat_event_delta_channel(
     state: &AppState,
     event_id: &str,

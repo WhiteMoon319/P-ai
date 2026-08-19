@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) fn resolve_image_generation_model(
     config: &AppConfig,
     requested_model_id: Option<&str>,

@@ -140,9 +140,17 @@ pub(crate) const CHAT_CONVERSATION_OVERVIEW_UPDATED_EVENT: &str = "easy-call:con
 pub(crate) const CHAT_CONCURRENCY_LIMIT: usize = 8;
 pub(crate) const GOAL_CONTINUE_DISPLAY_TEXT: &str = "继续完成目标";
 
-include!("scheduler/queue_management.rs");
-include!("scheduler/stream_runtime.rs");
-include!("scheduler/live_update.rs");pub(crate) fn trigger_chat_queue_processing(state: &AppState) {
+#[path = "scheduler/queue_management.rs"]
+mod scheduler_queue_management;
+pub(crate) use scheduler_queue_management::*;
+#[path = "scheduler/stream_runtime.rs"]
+mod scheduler_stream_runtime;
+pub(crate) use scheduler_stream_runtime::*;
+#[path = "scheduler/live_update.rs"]
+mod scheduler_live_update;
+pub(crate) use scheduler_live_update::*;
+
+pub(crate) fn trigger_chat_queue_processing(state: &AppState) {
     let state_clone = state.clone();
     tokio::spawn(async move {
         if let Err(err) = process_chat_queue(&state_clone).await {
@@ -210,7 +218,9 @@ pub(crate) fn trigger_chat_event_after_ingress_with_delay(
     });
 }
 
-include!("scheduler/continuation_processing.rs");
+#[path = "scheduler/continuation_processing.rs"]
+mod scheduler_continuation_processing;
+pub(crate) use scheduler_continuation_processing::*;
 // ==================== 状态机管理函数 ====================
 
 /// 获取当前状态
@@ -329,7 +339,9 @@ pub(crate) fn set_conversation_runtime_state_and_emit(
     Ok(())
 }
 
-include!("scheduler/remote_im_processing.rs");
+#[path = "scheduler/remote_im_processing.rs"]
+mod scheduler_remote_im_processing;
+pub(crate) use scheduler_remote_im_processing::*;
 pub(crate) fn set_conversation_plan_mode_enabled(
     state: &AppState,
     conversation_id: &str,
@@ -1608,7 +1620,9 @@ pub(crate) async fn activate_main_assistant(
     })
 }
 
-include!("scheduler/round_events.rs");
+#[path = "scheduler/round_events.rs"]
+mod scheduler_round_events;
+pub(crate) use scheduler_round_events::*;
 pub(crate) fn collect_active_chat_view_activations(
     state: &AppState,
     conversation_id: &str,

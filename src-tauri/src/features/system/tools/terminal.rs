@@ -1,3 +1,4 @@
+use super::*;
 
 pub(crate) const TERMINAL_MAX_OUTPUT_BYTES: usize = 256 * 1024;
 pub(crate) const TERMINAL_DEFAULT_TIMEOUT_MS: u64 = 300_000;

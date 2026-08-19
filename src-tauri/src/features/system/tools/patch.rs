@@ -1,3 +1,4 @@
+use super::*;
 use sha2::Digest;
 #[derive(Debug, Clone)]
 pub(crate) enum ApplyPatchSafetyCheck {

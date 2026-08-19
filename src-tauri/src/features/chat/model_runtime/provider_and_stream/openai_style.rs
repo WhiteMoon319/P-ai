@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) async fn call_model_openai_with_tools(
     api_config: &ResolvedApiConfig,
     selected_api: &ApiConfig,

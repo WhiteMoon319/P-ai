@@ -36,9 +36,21 @@ use super::*;
 pub(crate) use pai_backend::image_generation::config::*;
 pub(crate) use pai_backend::image_generation::types::*;
 
-include!("image_generation/storage.rs");
-include!("image_generation/providers.rs");
-include!("image_generation/edit.rs");
-include!("image_generation/comfyui.rs");
-include!("image_generation/codex.rs");
-include!("image_generation/service.rs");
+#[path = "image_generation/storage.rs"]
+mod storage;
+pub(crate) use storage::*;
+#[path = "image_generation/providers.rs"]
+mod providers;
+pub(crate) use providers::*;
+#[path = "image_generation/edit.rs"]
+mod edit;
+pub(crate) use edit::*;
+#[path = "image_generation/comfyui.rs"]
+mod comfyui;
+pub(crate) use comfyui::*;
+#[path = "image_generation/codex.rs"]
+mod codex;
+pub(crate) use codex::*;
+#[path = "image_generation/service.rs"]
+mod service;
+pub(crate) use service::*;

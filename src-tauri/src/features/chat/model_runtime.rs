@@ -26,14 +26,20 @@ use super::*;
 
 // ==================== 运行时共享抽象 ====================
 
-include!("model_runtime/runtime_migration_guard.rs");
+#[path = "model_runtime/runtime_migration_guard.rs"]
+mod runtime_migration_guard;
+pub(crate) use runtime_migration_guard::*;
 // provider_resolution 已迁至 crates/pai-backend（阶段 4）。
 pub(crate) use pai_backend::provider_resolution::*;
 // runtime_abstractions 已迁至 crates/pai-backend（阶段 4）。
 pub(crate) use pai_backend::model_runtime::*;
 
 // ==================== 工具定义与内置能力 ====================
-include!("model_runtime/tools_and_builtin.rs");
+#[path = "model_runtime/tools_and_builtin.rs"]
+mod tools_and_builtin;
+pub(crate) use tools_and_builtin::*;
 
 // ==================== Provider 调用与流式处理 ====================
-include!("model_runtime/provider_and_stream.rs");
+#[path = "model_runtime/provider_and_stream.rs"]
+mod provider_and_stream;
+pub(crate) use provider_and_stream::*;

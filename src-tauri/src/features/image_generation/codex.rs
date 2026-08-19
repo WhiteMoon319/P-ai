@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) struct CodexImageAuth {
     pub(crate) access_token: String,
     pub(crate) base_url: String,

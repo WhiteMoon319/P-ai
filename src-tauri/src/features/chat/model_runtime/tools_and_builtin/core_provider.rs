@@ -1,3 +1,4 @@
+use super::*;
 // ========== provider 调用 ==========
 // core_provider_gemini 已迁至 crates/pai-backend（阶段 4）。
 pub(crate) use pai_backend::core_provider_gemini::*;

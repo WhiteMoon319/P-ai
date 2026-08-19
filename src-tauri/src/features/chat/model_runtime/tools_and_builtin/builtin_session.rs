@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) fn session_tool_source_conversation_id(session_id: &str) -> Result<String, String> {
     delegate_session_conversation_id(session_id)
         .ok_or_else(|| "固定会话工具缺少 conversation_id".to_string())

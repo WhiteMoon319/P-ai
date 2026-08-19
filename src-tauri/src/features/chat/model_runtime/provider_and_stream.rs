@@ -1,3 +1,4 @@
+use super::*;
 // ---- 共享类型 ----
 // types.rs 已迁至 crates/pai-backend（阶段 4）。
 pub(crate) use pai_backend::screenshot_cache_types::*;
@@ -11,25 +12,41 @@ pub(crate) use pai_backend::screenshot_cache::*;
 pub(crate) use pai_backend::tool_policy::*;
 
 // ---- 流式收集 ----
-include!("provider_and_stream/stream_collect.rs");
+#[path = "provider_and_stream/stream_collect.rs"]
+mod provider_stream_collect;
+pub(crate) use provider_stream_collect::*;
 
 // ---- 工具组装 ----
-include!("provider_and_stream/tool_assembly.rs");
+#[path = "provider_and_stream/tool_assembly.rs"]
+mod provider_tool_assembly;
+pub(crate) use provider_tool_assembly::*;
 
 // ---- 统一工具循环 ----
-include!("provider_and_stream/tool_loop.rs");
+#[path = "provider_and_stream/tool_loop.rs"]
+mod provider_tool_loop;
+pub(crate) use provider_tool_loop::*;
 
 // ---- OpenAI provider ----
-include!("provider_and_stream/openai_style.rs");
+#[path = "provider_and_stream/openai_style.rs"]
+mod provider_openai_style;
+pub(crate) use provider_openai_style::*;
 
 // ---- Gemini provider ----
-include!("provider_and_stream/gemini.rs");
+#[path = "provider_and_stream/gemini.rs"]
+mod provider_gemini;
+pub(crate) use provider_gemini::*;
 
 // ---- Anthropic provider ----
-include!("provider_and_stream/anthropic.rs");
+#[path = "provider_and_stream/anthropic.rs"]
+mod provider_anthropic;
+pub(crate) use provider_anthropic::*;
 
 // ---- 路由分发 + 日志 ----
-include!("provider_and_stream/router.rs");
+#[path = "provider_and_stream/router.rs"]
+mod provider_router;
+pub(crate) use provider_router::*;
 
 // ---- Vision API ----
-include!("provider_and_stream/vision.rs");
+#[path = "provider_and_stream/vision.rs"]
+mod provider_vision;
+pub(crate) use provider_vision::*;

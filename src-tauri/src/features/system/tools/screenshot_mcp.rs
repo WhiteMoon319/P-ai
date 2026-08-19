@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) const MCP_SCREENSHOT_SERVER_FLAG: &str = "--mcp-screenshot-server";
 
 #[derive(Debug, Clone, serde::Deserialize, rmcp::schemars::JsonSchema)]

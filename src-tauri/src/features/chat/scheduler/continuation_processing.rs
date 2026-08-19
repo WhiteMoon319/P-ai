@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) fn goal_continue_turn_for_conversation(
     conversation: &Conversation,
     goal_id: &str,

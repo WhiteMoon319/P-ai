@@ -1,3 +1,4 @@
+use super::*;
 pub(crate) fn image_provider_key_cursor_state() -> &'static Mutex<std::collections::HashMap<String, usize>> {
     static CURSORS: OnceLock<Mutex<std::collections::HashMap<String, usize>>> = OnceLock::new();
     CURSORS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))

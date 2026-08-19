@@ -1,3 +1,4 @@
+use super::*;
 #[derive(Debug, Clone)]
 pub(crate) struct BuiltinFetchTool {
     pub(crate) app_state: AppState,
