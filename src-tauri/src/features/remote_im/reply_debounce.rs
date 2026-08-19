@@ -57,7 +57,7 @@ pub(crate) fn remote_im_contact_is_muted(
 }
 
 pub(crate) fn clear_remote_im_debounces_for_contact(
-    state: &AppState,
+    state: &impl StateAccess,
     contact_id: &str,
 ) -> Result<(), String> {
     let key = remote_im_group_reply_state_key(state, contact_id);
@@ -567,10 +567,11 @@ pub(crate) fn remote_im_group_reply_complete_after_send(
 }
 
 pub(crate) fn remote_im_group_reply_contact_latest(
-    state: &AppState,
+    state: &impl StateAccess,
     contact_id: &str,
 ) -> Result<RemoteImContact, String> {
-    state_read_runtime_state_cached(state)?
+    state
+        .read_runtime_state_cached()?
         .remote_im_contacts
         .into_iter()
         .find(|contact| contact.id == contact_id)
