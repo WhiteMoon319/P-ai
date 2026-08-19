@@ -41,6 +41,9 @@ pub trait StateAccess {
     /// 读取缓存的 AgentProfile 列表。
     fn read_agents_cached(&self) -> Result<Vec<AgentProfile>, String>;
 
+    /// 共享 HTTP 客户端（用于调用供应商 API）。
+    fn shared_http_client(&self) -> &reqwest::Client;
+
     // ── 运行时路径 ──
 
     /// 应用数据根目录。

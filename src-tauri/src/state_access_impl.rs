@@ -32,6 +32,10 @@ impl StateAccess for AppState {
         state_read_agents_cached(self)
     }
 
+    fn shared_http_client(&self) -> &reqwest::Client {
+        &self.shared_http_client
+    }
+
     fn data_path(&self) -> &std::path::Path {
         &self.data_path
     }
