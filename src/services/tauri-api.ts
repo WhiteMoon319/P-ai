@@ -232,6 +232,15 @@ export type TransportCapabilities = {
 };
 
 /**
+ * Android 上同样是 Tauri WebView（会注入 __TAURI_INTERNALS__），但移动端
+ * 没有可操作的最小化/最大化/关闭窗口语义，窗口控制按钮必须隐藏。
+ */
+export function isAndroidRuntime(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /android/i.test(String(navigator.userAgent || ""));
+}
+
+/**
  * 文件对话框也是传输边界的一部分。
  *
  * 业务层只消费这个与运行时无关的结果；原生插件的动态 import 只能出现在
@@ -799,6 +808,10 @@ export async function writeTransportBase64File(path: string, bytesBase64: string
   return true;
 }
 
+export async function acknowledgeTransportWebviewHeartbeat(): Promise<void> {
+  await invokeTauri("webview_pong");
+}
+
 export type TransportChatImageData = {
   dataUrl: string;
   mime?: string;
@@ -971,6 +984,12 @@ export function captureTransportDesktop<T>(): Promise<T> {
 
 export function sendTransportNativeNotificationDemo<T>(): Promise<T> {
   return invokeRequiredNativeTransport<T>("本机通知演示", "demo_send_native_notification");
+}
+
+export function sendTransportNotificationTest<T>(kind: "normal" | "live_update"): Promise<T> {
+  return invokeRequiredNativeTransport<T>("通知测试", "demo_test_notification", {
+    input: { kind: String(kind) },
+  });
 }
 
 export function restartTransportApplicationDemo(): Promise<void> {
