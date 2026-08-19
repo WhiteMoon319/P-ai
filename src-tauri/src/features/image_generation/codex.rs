@@ -6,10 +6,10 @@ pub(crate) struct CodexImageAuth {
 pub(crate) const CODEX_IMAGE_TOOL_OUTPUT_FORMAT: &str = "png";
 
 pub(crate) async fn resolve_codex_image_auth(
-    state: &AppState,
+    state: &impl StateAccess,
     provider: &ImageGenerationProviderConfig,
 ) -> Result<CodexImageAuth, String> {
-    let mut config = state_read_config_cached(state)?;
+    let mut config = state.read_config_cached()?;
     normalize_app_config(&mut config);
     let requested_id = provider
         .codex_api_provider_id
@@ -272,7 +272,7 @@ pub(crate) fn parse_codex_image_generation_response(data: &[u8]) -> Result<Provi
 }
 
 pub(crate) async fn generate_codex_image_once(
-    state: &AppState,
+    state: &impl StateAccess,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
     edit_inputs: &ImageEditInputs,
@@ -294,7 +294,7 @@ pub(crate) async fn generate_codex_image_once(
         HeaderValue::from_static("text/event-stream"),
     );
     let response = state
-        .shared_http_client
+        .shared_http_client()
         .post(endpoint)
         .headers(headers)
         .bearer_auth(auth.access_token)

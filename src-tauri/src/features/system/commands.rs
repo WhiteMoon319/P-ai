@@ -47,6 +47,8 @@ include!("commands/debug_log_commands.rs");
 // ==================== Android 沙盒工作区 ====================
 // android_workspace_paths 已迁至 crates/pai-android-platform（阶段 5）。
 pub(crate) use pai_android_platform::android_workspace::paths::*;
+#[allow(unused_imports)]
+pub(crate) use pai_android_bridge::state_access::StateAccess;
 include!("commands/android_workspace.rs");
 
 // ==================== 分享导出命令 ====================

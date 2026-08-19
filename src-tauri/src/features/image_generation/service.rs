@@ -106,7 +106,7 @@ pub(crate) fn normalize_image_generation_request(
 }
 
 pub(crate) async fn generate_image_with_provider_once(
-    state: &AppState,
+    state: &impl StateAccess,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
     edit_inputs: &ImageEditInputs,
@@ -151,11 +151,11 @@ pub(crate) async fn generate_image_with_provider_once(
 }
 
 pub(crate) async fn generate_images(
-    state: &AppState,
+    state: &impl StateAccess,
     request: ImageGenerationRequest,
 ) -> Result<ImageGenerationResult, String> {
     let request = normalize_image_generation_request(request)?;
-    let mut config = state_read_config_cached(state)?;
+    let mut config = state.read_config_cached()?;
     normalize_image_generation_config(&mut config);
     let resolved = resolve_image_generation_model(&config, request.model_id.as_deref())?;
     let api_key = select_image_generation_api_key(&resolved.provider);

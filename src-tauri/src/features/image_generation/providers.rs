@@ -490,14 +490,14 @@ pub(crate) fn parse_gemini_image_response(value: &Value) -> Result<ProviderImage
 }
 
 pub(crate) async fn post_bearer_image_generation_json(
-    state: &AppState,
+    state: &impl StateAccess,
     provider: &ImageGenerationProviderConfig,
     api_key: &str,
     endpoint: &str,
     payload: &Value,
 ) -> Result<Value, String> {
     let response = state
-        .shared_http_client
+        .shared_http_client()
         .post(endpoint)
         .bearer_auth(api_key)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -510,7 +510,7 @@ pub(crate) async fn post_bearer_image_generation_json(
 }
 
 pub(crate) async fn generate_openai_image_once(
-    state: &AppState,
+    state: &impl StateAccess,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
     api_key: &str,
@@ -529,7 +529,7 @@ pub(crate) async fn generate_openai_image_once(
 }
 
 pub(crate) async fn generate_xai_image_once(
-    state: &AppState,
+    state: &impl StateAccess,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
     api_key: &str,
@@ -548,7 +548,7 @@ pub(crate) async fn generate_xai_image_once(
 }
 
 pub(crate) async fn generate_seedream_image_once(
-    state: &AppState,
+    state: &impl StateAccess,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
     api_key: &str,
@@ -567,7 +567,7 @@ pub(crate) async fn generate_seedream_image_once(
 }
 
 pub(crate) async fn post_gemini_image_interactions(
-    state: &AppState,
+    state: &impl StateAccess,
     resolved: &ResolvedImageGenerationModel,
     api_key: &str,
     payload: &Value,
@@ -577,7 +577,7 @@ pub(crate) async fn post_gemini_image_interactions(
         "/interactions",
     );
     let response = state
-        .shared_http_client
+        .shared_http_client()
         .post(endpoint)
         .header("x-goog-api-key", api_key)
         .header("Api-Revision", "2026-05-20")
@@ -593,7 +593,7 @@ pub(crate) async fn post_gemini_image_interactions(
 }
 
 pub(crate) async fn generate_gemini_image_once(
-    state: &AppState,
+    state: &impl StateAccess,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
     api_key: &str,

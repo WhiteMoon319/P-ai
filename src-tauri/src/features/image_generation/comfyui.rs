@@ -180,7 +180,7 @@ pub(crate) fn comfyui_request_with_auth(
 }
 
 pub(crate) async fn queue_comfyui_workflow(
-    state: &AppState,
+    state: &impl StateAccess,
     provider: &ImageGenerationProviderConfig,
     api_key: &str,
     workflow: Value,
@@ -193,7 +193,7 @@ pub(crate) async fn queue_comfyui_workflow(
     for root in comfyui_candidate_roots(&provider.base_url) {
         let endpoint = append_image_generation_endpoint(&root, "/prompt");
         let request = state
-            .shared_http_client
+            .shared_http_client()
             .post(&endpoint)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .json(&payload)
@@ -325,7 +325,7 @@ pub(crate) fn extract_comfyui_history_images(
 }
 
 pub(crate) async fn wait_for_comfyui_images(
-    state: &AppState,
+    state: &impl StateAccess,
     provider: &ImageGenerationProviderConfig,
     api_key: &str,
     root: &str,
@@ -342,7 +342,7 @@ pub(crate) async fn wait_for_comfyui_images(
             return Err(format!("ComfyUI 生成超时（{} 秒）", provider.timeout_seconds));
         }
         let request = state
-            .shared_http_client
+            .shared_http_client()
             .get(&endpoint)
             .timeout(std::time::Duration::from_secs(15));
         let response = comfyui_request_with_auth(request, api_key)
@@ -371,7 +371,7 @@ pub(crate) async fn wait_for_comfyui_images(
 }
 
 pub(crate) async fn generate_comfyui_image_once(
-    state: &AppState,
+    state: &impl StateAccess,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
     api_key: &str,
@@ -381,7 +381,7 @@ pub(crate) async fn generate_comfyui_image_once(
 }
 
 pub(crate) async fn queue_and_wait_comfyui_workflow(
-    state: &AppState,
+    state: &impl StateAccess,
     resolved: &ResolvedImageGenerationModel,
     api_key: &str,
     workflow: Value,
@@ -407,7 +407,7 @@ pub(crate) async fn queue_and_wait_comfyui_workflow(
 // ==================== ComfyUI 图像编辑（上传输入图 + 节点注入） ====================
 
 pub(crate) async fn upload_comfyui_input_image(
-    state: &AppState,
+    state: &impl StateAccess,
     provider: &ImageGenerationProviderConfig,
     api_key: &str,
     input: &ImageEditInputImage,
@@ -420,7 +420,7 @@ pub(crate) async fn upload_comfyui_input_image(
             .part("image", image_edit_multipart_part(input, file_stem)?)
             .text("overwrite", "true");
         let request = state
-            .shared_http_client
+            .shared_http_client()
             .post(&endpoint)
             .multipart(form)
             .timeout(std::time::Duration::from_secs(u64::from(provider.timeout_seconds)));
@@ -500,7 +500,7 @@ pub(crate) fn inject_comfyui_input_images(
 }
 
 pub(crate) async fn edit_comfyui_image_once(
-    state: &AppState,
+    state: &impl StateAccess,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
     inputs: &ImageEditInputs,

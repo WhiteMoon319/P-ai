@@ -20,7 +20,10 @@ use pai_backend::core::domain::types_config::AppConfig;
 use pai_backend::core::domain::types_chat::AgentProfile;
 
 /// 运行时状态访问接口。
-pub trait StateAccess {
+///
+/// 实现方必须是 `Clone + Send + Sync`（src-tauri AppState 已实现 `Clone`，
+/// 字段均为 Arc/Mutex 线程安全），以便在 `spawn_blocking` / async 任务中复制状态引用。
+pub trait StateAccess: Clone + Send + Sync {
     // ── 配置 ──
 
     /// 读取缓存的 AppConfig（带文件 mtime 缓存，必要时从磁盘重读）。

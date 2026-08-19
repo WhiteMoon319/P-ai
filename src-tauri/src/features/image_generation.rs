@@ -19,6 +19,8 @@ use uuid::Uuid;
 
 
 use std::collections::{HashMap, HashSet};
+#[allow(unused_imports)]
+use pai_android_bridge::state_access::StateAccess;
 use super::*;
 // Android 下 updater.rs / xcap_screenshot.rs 被 stub 替换，其头部 use 需在此补齐
 

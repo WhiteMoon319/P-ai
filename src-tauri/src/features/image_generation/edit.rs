@@ -28,7 +28,7 @@ pub(crate) fn image_edit_data_url(input: &ImageEditInputImage) -> String {
 }
 
 pub(crate) async fn load_image_edit_reference(
-    state: &AppState,
+    state: &impl StateAccess,
     reference: &str,
     field_name: &str,
 ) -> Result<ImageEditInputImage, String> {
@@ -58,7 +58,7 @@ pub(crate) async fn load_image_edit_reference(
 }
 
 pub(crate) async fn load_image_edit_inputs(
-    state: &AppState,
+    state: &impl StateAccess,
     request: &ImageGenerationRequest,
 ) -> Result<ImageEditInputs, String> {
     if !matches!(request.operation, ImageGenerationOperation::Edit) {
@@ -162,7 +162,7 @@ pub(crate) fn image_edit_multipart_part(
 }
 
 pub(crate) async fn edit_openai_image_once(
-    state: &AppState,
+    state: &impl StateAccess,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
     inputs: &ImageEditInputs,
@@ -186,7 +186,7 @@ pub(crate) async fn edit_openai_image_once(
     }
     let endpoint = append_image_generation_endpoint(&resolved.provider.base_url, "/images/edits");
     let response = state
-        .shared_http_client
+        .shared_http_client()
         .post(endpoint)
         .bearer_auth(api_key)
         .multipart(form)
@@ -274,7 +274,7 @@ pub(crate) fn xai_image_edit_payload(
 }
 
 pub(crate) async fn edit_xai_image_once(
-    state: &AppState,
+    state: &impl StateAccess,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
     inputs: &ImageEditInputs,
@@ -350,7 +350,7 @@ pub(crate) fn seedream_image_edit_payload(
 }
 
 pub(crate) async fn edit_seedream_image_once(
-    state: &AppState,
+    state: &impl StateAccess,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
     inputs: &ImageEditInputs,
@@ -421,7 +421,7 @@ pub(crate) fn gemini_image_edit_payload(
 }
 
 pub(crate) async fn edit_gemini_image_once(
-    state: &AppState,
+    state: &impl StateAccess,
     resolved: &ResolvedImageGenerationModel,
     request: &ImageGenerationRequest,
     inputs: &ImageEditInputs,

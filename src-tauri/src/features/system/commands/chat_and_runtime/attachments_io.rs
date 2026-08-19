@@ -88,10 +88,9 @@ pub(crate) fn image_mime_from_bytes(raw: &[u8]) -> Option<&'static str> {
         .filter(|mime| mime.starts_with("image/"))
 }
 
-pub(crate) fn workspace_downloads_dir(state: &AppState) -> PathBuf {
+pub(crate) fn workspace_downloads_dir(state: &impl StateAccess) -> PathBuf {
     // downloads 是用户与 LLM 共用的附件落地区；允许 LLM 后续自行清理和管理空间占用。
-    configured_workspace_root_path(state)
-        .unwrap_or_else(|_| state.llm_workspace_path.clone())
+    state.llm_workspace_path().to_path_buf()
         .join("downloads")
 }
 
@@ -211,7 +210,7 @@ pub(crate) fn sanitize_download_file_name(name: &str) -> String {
 }
 
 pub(crate) fn persist_raw_attachment_to_downloads(
-    state: &AppState,
+    state: &impl StateAccess,
     suggested_name: &str,
     mime: &str,
     raw: &[u8],
@@ -220,7 +219,7 @@ pub(crate) fn persist_raw_attachment_to_downloads(
 }
 
 pub(crate) fn persist_raw_attachment_to_downloads_subdir(
-    state: &AppState,
+    state: &impl StateAccess,
     subdir: Option<&str>,
     suggested_name: &str,
     mime: &str,
@@ -285,9 +284,8 @@ pub(crate) fn existing_file_content_equals_raw(path: &std::path::Path, raw: &[u8
     Ok(true)
 }
 
-pub(crate) fn workspace_relative_path(state: &AppState, absolute: &std::path::Path) -> String {
-    let workspace_root = configured_workspace_root_path(state)
-        .unwrap_or_else(|_| state.llm_workspace_path.clone());
+pub(crate) fn workspace_relative_path(state: &impl StateAccess, absolute: &std::path::Path) -> String {
+    let workspace_root = state.llm_workspace_path().to_path_buf();
     absolute
         .strip_prefix(&workspace_root)
         .ok()
@@ -296,7 +294,7 @@ pub(crate) fn workspace_relative_path(state: &AppState, absolute: &std::path::Pa
 }
 
 pub(crate) fn queue_attachment_from_raw(
-    state: &AppState,
+    state: &impl StateAccess,
     file_name_input: &str,
     mime_input: &str,
     raw: &[u8],
@@ -442,7 +440,7 @@ pub(crate) fn provider_meta_attachment_relative_paths(meta: &Value) -> Vec<Strin
 
 pub(crate) fn queue_inline_file_attachment_inner(
     input: QueueInlineFileAttachmentInput,
-    state: &AppState,
+    state: &impl StateAccess,
 ) -> Result<QueueLocalFileAttachmentOutput, String> {
     if input.bytes_base64.trim().is_empty() {
         return Err("Attachment payload is empty.".to_string());
@@ -514,7 +512,10 @@ pub(crate) fn assistant_space_relative_image_path(path: &str) -> Result<Option<P
     Ok(Some(relative))
 }
 
-pub(crate) fn resolve_local_chat_image_path(state: &AppState, path: &str) -> Result<PathBuf, String> {
+pub(crate) fn resolve_local_chat_image_path(
+    state: &impl StateAccess,
+    path: &str,
+) -> Result<PathBuf, String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
         return Err("图片路径为空".to_string());
@@ -522,8 +523,7 @@ pub(crate) fn resolve_local_chat_image_path(state: &AppState, path: &str) -> Res
     let Some(relative) = assistant_space_relative_image_path(trimmed)? else {
         return Ok(PathBuf::from(trimmed));
     };
-    let workspace_root = configured_workspace_root_path(state)
-        .unwrap_or_else(|_| state.llm_workspace_path.clone());
+    let workspace_root = state.llm_workspace_path().to_path_buf();
     let canonical_root = workspace_root
         .canonicalize()
         .map_err(|err| format!("解析 Assistant Space 目录失败：{err}"))?;
@@ -538,9 +538,10 @@ pub(crate) fn resolve_local_chat_image_path(state: &AppState, path: &str) -> Res
 }
 
 
-pub(crate) async fn read_local_chat_image_thumbnail_inner(
+#[allow(clippy::needless_lifetimes)]
+pub(crate) async fn read_local_chat_image_thumbnail_inner<S: StateAccess + 'static>(
     input: ReadLocalChatImageThumbnailInput,
-    state: &AppState,
+    state: &S,
 ) -> Result<ReadLocalChatImageThumbnailOutput, String> {
     let app_state = state.clone();
     tokio::task::spawn_blocking(move || {
@@ -562,9 +563,10 @@ pub(crate) async fn read_local_chat_image_thumbnail_inner(
 }
 
 
-pub(crate) async fn read_local_chat_image_original_inner(
+#[allow(clippy::needless_lifetimes)]
+pub(crate) async fn read_local_chat_image_original_inner<S: StateAccess + 'static>(
     input: ReadLocalChatImageThumbnailInput,
-    state: &AppState,
+    state: &S,
 ) -> Result<ReadLocalChatImageOutput, String> {
     let app_state = state.clone();
     tokio::task::spawn_blocking(move || {

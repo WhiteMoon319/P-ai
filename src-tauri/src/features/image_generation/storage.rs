@@ -106,7 +106,7 @@ pub(crate) fn same_origin_url(base_url: &str, target_url: &str) -> bool {
 }
 
 pub(crate) async fn download_generated_image(
-    state: &AppState,
+    state: &impl StateAccess,
     provider: &ImageGenerationProviderConfig,
     api_key: &str,
     url: &str,
@@ -115,7 +115,7 @@ pub(crate) async fn download_generated_image(
         return decode_generated_image_base64(url).map(|bytes| (bytes, None));
     }
     let mut request = state
-        .shared_http_client
+        .shared_http_client()
         .get(url)
         .timeout(std::time::Duration::from_secs(u64::from(provider.timeout_seconds)));
     if matches!(provider.provider_type, ImageGenerationProviderKind::Comfyui)
@@ -147,13 +147,12 @@ pub(crate) async fn download_generated_image(
 }
 
 pub(crate) async fn persist_generated_image_bytes(
-    state: &AppState,
+    state: &impl StateAccess,
     bytes: Vec<u8>,
     remote_url: Option<String>,
     revised_prompt: Option<String>,
 ) -> Result<GeneratedImageAsset, String> {
-    let workspace_root = configured_workspace_root_path(state)
-        .unwrap_or_else(|_| state.llm_workspace_path.clone());
+    let workspace_root = state.llm_workspace_path().to_path_buf();
     let date_dir = chrono::Local::now().format("%Y%m%d").to_string();
     let blocking_root = workspace_root.clone();
     let persisted = tokio::task::spawn_blocking(move || {
@@ -193,7 +192,7 @@ pub(crate) async fn persist_generated_image_bytes(
 }
 
 pub(crate) async fn materialize_pending_generated_image(
-    state: &AppState,
+    state: &impl StateAccess,
     provider: &ImageGenerationProviderConfig,
     api_key: &str,
     pending: PendingGeneratedImage,
