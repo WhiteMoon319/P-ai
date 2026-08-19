@@ -42,6 +42,7 @@ class AppViewModel(
     private val eventPump = NativeEventPump(scope)
     private val client = NativeRpcClient()
     private val service = ChatService(client)
+    private val taskService = com.whitemoon319.pai.service.TaskService(client)
     private val gson = Gson()
     private val conversationListType = object : TypeToken<List<ConversationSummary>>() {}.type
     private var notificationJob: Job? = null
@@ -931,6 +932,8 @@ class AppViewModel(
             val event = params?.let { gson.fromJson(it, com.whitemoon319.pai.model.TaskProgressEvent::class.java) }
             if (event != null) {
                 android.util.Log.d("PaiTask", "task=${event.taskId} state=${event.state} progress=${event.progress} msg=${event.message}")
+                // 驱动 workspace 长任务 UI（tool 页展示 taskId/进度条/阶段消息）。
+                workspaceTask.value = event
             }
         } catch (e: Exception) {
             android.util.Log.w("PaiTask", "解析 task.progress 事件失败: ${e.message}")
@@ -1822,6 +1825,9 @@ class AppViewModel(
 
     val workspaceStatus = MutableStateFlow<com.whitemoon319.pai.model.AndroidWorkspaceStatus?>(null)
     val workspaceBusy = MutableStateFlow(false)
+
+    /** 进行中的 workspace/rootfs 长任务进度（task.progress 事件驱动，UI 展示 taskId/进度条）。 */
+    val workspaceTask = MutableStateFlow<com.whitemoon319.pai.model.TaskProgressEvent?>(null)
     val workspaceFiles = MutableStateFlow<com.whitemoon319.pai.model.WorkspaceFileListResult?>(null)
     val workspaceDir = MutableStateFlow<String?>(null)
 
@@ -1934,10 +1940,25 @@ class AppViewModel(
     ) {
         withContext(Dispatchers.IO) {
             workspaceBusy.value = true
+            // 新动作开始：清空旧的进度展示，等 task.progress 事件重新驱动。
+            workspaceTask.value = null
             try {
                 workspaceStatus.value = action()
             } catch (e: Exception) {
-                error.value = "工作区操作失败: ${e.message}"
+                // 长任务超时/失败不直接误判：查询任务状态机拿到真实进度与阶段消息。
+                // workspace 初始化/修复/重置/导入统一使用 "workspace-init" 任务 ID。
+                val probe = runCatching { taskService.getTask("workspace-init") }.getOrNull()
+                if (probe != null && probe.state != com.whitemoon319.pai.model.RpcTaskState.Completed) {
+                    workspaceTask.value = com.whitemoon319.pai.model.TaskProgressEvent(
+                        taskId = probe.taskId,
+                        state = probe.state,
+                        progress = probe.progress,
+                        message = probe.message,
+                    )
+                    error.value = "工作区操作未完成（${probe.state} ${probe.progress}）：${e.message}"
+                } else {
+                    error.value = "工作区操作失败: ${e.message}"
+                }
             } finally {
                 workspaceBusy.value = false
             }

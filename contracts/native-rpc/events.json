@@ -32,6 +32,11 @@
       "direction": "rust-to-kotlin",
       "params": { "event": "string", "current": "number", "total": "number", "conversationId": "string", "title": "string", "status": "string", "detail": "string?" },
       "description": "消息存储迁移进度。"
+    },
+    "task.progress": {
+      "direction": "rust-to-kotlin",
+      "params": { "taskId": "string", "state": "string", "progress": "number", "message": "string" },
+      "description": "长任务进度（workspace 初始化/rootfs 导入等）：state 为 Pending/Running/Completed/Failed/Cancelled，progress 0.0~1.0。"
     }
   }
 }

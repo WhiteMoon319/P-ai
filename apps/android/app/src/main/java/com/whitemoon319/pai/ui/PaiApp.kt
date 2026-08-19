@@ -64,6 +64,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -4019,6 +4020,28 @@ private fun ToolsSettingsTab(
                 workspace?.lastError?.let {
                     Spacer(Modifier.height(4.dp))
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+                // 长任务进度：由 Rust task.progress 事件驱动（workspace-init 下载/解压/校验）。
+                val task by vm.workspaceTask.collectAsState()
+                if (task != null && task?.state != com.whitemoon319.pai.model.RpcTaskState.Completed) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "任务 ${task?.taskId}：${task?.message ?: ""}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    val progress = ((task?.progress ?: 0.0).toFloat()).coerceIn(0f, 1f)
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "${(progress * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 Spacer(Modifier.height(8.dp))
                 // 按钮较多，用 FlowRow 自动换行避免挤爆单行
