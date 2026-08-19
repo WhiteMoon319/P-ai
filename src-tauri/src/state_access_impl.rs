@@ -25,6 +25,7 @@ use crate::state_schedule_conversation_persist;
 use crate::state_mark_conversation_metadata_direct_persisted;
 use crate::state_mark_conversation_metadata_cached_persisted_unlocked;
 use crate::flush_pending_persists_blocking;
+use crate::with_conversation_mutation_for_data_path;
 
 impl StateAccess for AppState {
     fn read_config_cached(&self) -> Result<AppConfig, String> {
@@ -195,6 +196,18 @@ impl StateAccess for AppState {
 
     fn flush_pending_persists_blocking(&self) -> Result<bool, String> {
         flush_pending_persists_blocking(self)
+    }
+
+    fn with_conversation_mutation<T, F>(
+        &self,
+        conversation_id: &str,
+        task_name: &str,
+        f: F,
+    ) -> Result<T, String>
+    where
+        F: FnOnce() -> Result<T, String>,
+    {
+        with_conversation_mutation_for_data_path(&self.data_path(), conversation_id, task_name, f)
     }
 
     fn lock_delegate_runtime_threads(

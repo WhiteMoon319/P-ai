@@ -125,6 +125,16 @@ pub trait StateAccess: Clone + Send + Sync {
     /// 阻塞等待所有待落盘持久化完成（migration/恢复等同步场景）。
     fn flush_pending_persists_blocking(&self) -> Result<bool, String>;
 
+    /// 在会话突变门控下执行闭包（防止并发写冲突）。
+    fn with_conversation_mutation<T, F>(
+        &self,
+        conversation_id: &str,
+        task_name: &str,
+        f: F,
+    ) -> Result<T, String>
+    where
+        F: FnOnce() -> Result<T, String>;
+
     // ── 应答委托运行时表 ──
 
     /// 锁应答委托运行时线程表（delegate_runtime_threads）。

@@ -43,7 +43,7 @@ pub(crate) fn resolve_unarchived_conversation_index_with_fallback(
 }
 
 pub(crate) fn ensure_ready_message_store_from_legacy_conversation(
-    state: &AppState,
+    state: &impl StateAccess,
     conversation_id: &str,
     store_paths: &message_store::MessageStorePaths,
 ) -> Result<(), String> {
@@ -51,8 +51,7 @@ pub(crate) fn ensure_ready_message_store_from_legacy_conversation(
     if normalized_conversation_id.is_empty() {
         return Err("conversationId is required.".to_string());
     }
-    let recovery = with_conversation_mutation(
-        state,
+    let recovery = state.with_conversation_mutation(
         normalized_conversation_id,
         "ensure_ready_message_store_from_legacy_conversation",
         || {
@@ -88,7 +87,7 @@ pub(crate) fn ensure_ready_message_store_from_legacy_conversation(
     if !recovery {
         return Ok(());
     }
-    flush_pending_persists_blocking(state)?;
+    state.flush_pending_persists_blocking()?;
     Ok(())
 }
 
@@ -96,10 +95,10 @@ pub(crate) fn ensure_ready_message_store_from_legacy_conversation(
 // 当 ready message store 尚未建立时，只能先读取历史 conversation 分片快照，
 // 再立即通过 V2 特权恢复入口补建 store。其他业务代码禁止复用这条路径。
 pub(crate) fn read_legacy_conversation_snapshot_for_ready_store_recovery(
-    state: &AppState,
+    state: &impl StateAccess,
     conversation_id: &str,
 ) -> Result<Conversation, String> {
-    state_read_conversation_cached(state, conversation_id)
+    state.read_conversation_cached(conversation_id)
 }
 
 pub(crate) fn build_foreground_conversation_snapshot_from_conversation(

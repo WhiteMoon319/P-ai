@@ -272,7 +272,7 @@ impl Drop for TimedConversationMutationGuard<'_> {
 }
 
 pub(crate) fn with_conversation_mutation_for_data_path<T, F>(
-    data_path: &std::path::PathBuf,
+    data_path: &std::path::Path,
     conversation_id: &str,
     task_name: &str,
     f: F,
@@ -299,7 +299,7 @@ where
 }
 
 pub(crate) fn conversation_mutation_gate(
-    data_path: &std::path::PathBuf,
+    data_path: &std::path::Path,
     conversation_id: &str,
 ) -> Result<std::sync::Arc<ConversationMutationGate>, String> {
     let conversation_id = conversation_id.trim();
