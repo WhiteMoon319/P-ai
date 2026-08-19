@@ -206,7 +206,7 @@ pub(crate) fn remote_im_group_inbound_batch_delta(
 }
 
 pub(crate) fn remote_im_apply_group_energy_for_messages(
-    state: &AppState,
+    state: &impl StateAccess,
     contact: &RemoteImContact,
     messages: &[ChatMessage],
 ) -> Result<(), String> {
@@ -216,7 +216,7 @@ pub(crate) fn remote_im_apply_group_energy_for_messages(
         return Ok(());
     }
     let now = now_utc();
-    let before = state_mutate_runtime_state_cached(state, |runtime| {
+    let before = state.mutate_runtime_state_cached(|runtime| {
         let checkpoint = remote_im_contact_checkpoint_mut_in_list(
             &mut runtime.remote_im_contact_checkpoints,
             &contact.id,
@@ -240,7 +240,7 @@ pub(crate) fn remote_im_apply_group_energy_for_messages(
 
 #[cfg(test)]
 pub(crate) fn remote_im_apply_inbound_group_energy(
-    state: &AppState,
+    state: &impl StateAccess,
     contact: &RemoteImContact,
     _sender_id: &str,
     text: &str,
@@ -264,7 +264,7 @@ pub(crate) fn remote_im_apply_inbound_group_energy(
 }
 
 pub(crate) fn remote_im_prepare_group_reply_delivery(
-    state: &AppState,
+    state: &impl StateAccess,
     contact: &RemoteImContact,
     generation: u64,
     final_text: &str,
@@ -298,7 +298,7 @@ pub(crate) fn remote_im_prepare_group_reply_delivery(
         "group-reply::{}::{}::{}",
         contact.id, generation, boundary_message_id
     );
-    state_mutate_runtime_state_cached(state, |runtime| {
+    state.mutate_runtime_state_cached(|runtime| {
         let checkpoint = remote_im_contact_checkpoint_mut_in_list(
             &mut runtime.remote_im_contact_checkpoints,
             &contact.id,
@@ -331,12 +331,12 @@ pub(crate) fn remote_im_prepare_group_reply_delivery(
 }
 
 pub(crate) fn remote_im_cancel_prepared_group_reply_delivery(
-    state: &AppState,
+    state: &impl StateAccess,
     contact_id: &str,
     marker: &RemoteImGroupReplyDeliveryMarker,
     reason: &str,
 ) -> Result<(), String> {
-    let changed = state_mutate_runtime_state_cached(state, |runtime| {
+    let changed = state.mutate_runtime_state_cached(|runtime| {
         let checkpoint = remote_im_contact_checkpoint_mut_in_list(
             &mut runtime.remote_im_contact_checkpoints,
             contact_id,
@@ -474,10 +474,10 @@ pub(crate) fn remote_im_persist_group_reply_settlement(
 }
 
 pub(crate) fn remote_im_recover_group_reply_delivery_marker(
-    state: &AppState,
+    state: &impl StateAccess,
     contact: &RemoteImContact,
 ) -> Result<(), String> {
-    let marker = state_read_runtime_state_cached(state)?
+    let marker = state.read_runtime_state_cached()?
         .remote_im_contact_checkpoints
         .into_iter()
         .find(|checkpoint| checkpoint.contact_id == contact.id)
@@ -539,9 +539,9 @@ pub(crate) fn remote_im_recover_group_reply_delivery_marker(
 }
 
 pub(crate) fn remote_im_recover_all_group_reply_delivery_markers(
-    state: &AppState,
+    state: &impl StateAccess,
 ) -> Result<(usize, usize), String> {
-    let runtime = state_read_runtime_state_cached(state)?;
+    let runtime = state.read_runtime_state_cached()?;
     let pending_contact_ids = runtime
         .remote_im_contact_checkpoints
         .iter()
