@@ -27,4 +27,6 @@ use std::path::Path;
 use pai_android_bridge::state_access::StateAccess;
 use super::*;
 pub(crate) use pai_backend::delegate::domain::*;
-include!("delegate/runtime.rs");
+#[path = "delegate/runtime.rs"]
+mod runtime;
+pub(crate) use runtime::*;

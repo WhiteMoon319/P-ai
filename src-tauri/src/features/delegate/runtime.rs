@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) const DELEGATE_RECENT_THREAD_LIMIT: usize = 10;
 pub(crate) const DELEGATE_STATUS_UPDATED_EVENT: &str = "easy-call:conversation-delegate-status-updated";
 
