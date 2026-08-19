@@ -62,6 +62,8 @@ struct LatestScreenshotInfo {
     height: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     saved_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tree: Option<Vec<UiElementInfo>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,7 +122,7 @@ enum DesktopScriptAction {
     Key { line: usize, keys: Vec<String>, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration, press: std::time::Duration },
     Text { line: usize, text: String, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration },
     Wait { line: usize, duration: std::time::Duration },
-    Screenshot { line: usize, mode: ScreenshotModeSpec, save_path: Option<String>, quality: f32 },
+    Screenshot { line: usize, mode: ScreenshotModeSpec, save_path: Option<String>, quality: f32, elements: bool },
 }
 
 fn operate_invalid(message: impl Into<String>) -> DesktopToolError {
@@ -322,6 +324,8 @@ fn parse_text_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<Deskt
     let Some(text) = strip_quoted_value(&tokens[1]) else {
         return Err(operate_line_error(line_no, "text", "非法：必须使用双引号包裹文本内容".to_string()));
     };
+    // 字面 `\n`（反斜杠+n）解码为真实换行，支持脚本单行书写多行文本
+    let text = text.replace("\\n", "\n");
     if text.is_empty() {
         return Err(operate_line_error(line_no, "text", "非法：文本内容不能为空".to_string()));
     }
@@ -358,7 +362,7 @@ fn parse_screenshot_line(line_no: usize, tokens: &[String]) -> DesktopToolResult
             other => return Err(operate_line_error(line_no, "screenshot", format!("非法参数 `{other}`"))),
         }
     }
-    let params = parse_named_params(line_no, "screenshot", &named_tokens, &["region", "save", "quality"])?;
+    let params = parse_named_params(line_no, "screenshot", &named_tokens, &["region", "save", "quality", "elements"])?;
     if let Some(raw) = params.get("region") {
         if !matches!(mode, ScreenshotModeSpec::Desktop) {
             return Err(operate_line_error(line_no, "screenshot", "非法：focused_window 与 region 不能同时出现".to_string()));
@@ -373,7 +377,14 @@ fn parse_screenshot_line(line_no: usize, tokens: &[String]) -> DesktopToolResult
         }
         Ok(parsed)
     }).transpose()?.unwrap_or(75.0);
-    Ok(DesktopScriptAction::Screenshot { line: line_no, mode, save_path, quality })
+    let elements = params.get("elements").map(|v| {
+        match v.to_ascii_lowercase().as_str() {
+            "true" | "1" => Ok(true),
+            "false" | "0" => Ok(false),
+            _ => Err(operate_line_error(line_no, "screenshot", format!("elements 非法：必须是 true 或 false，当前为 `{v}`"))),
+        }
+    }).transpose()?.unwrap_or(false);
+    Ok(DesktopScriptAction::Screenshot { line: line_no, mode, save_path, quality, elements })
 }
 
 fn parse_script_line(line_no: usize, raw_line: &str) -> DesktopToolResult<Option<DesktopScriptAction>> {
@@ -400,8 +411,28 @@ fn parse_script(request: &OperateRequest) -> DesktopToolResult<Vec<DesktopScript
     if trimmed.is_empty() {
         return Err(operate_invalid("script 不能为空"));
     }
+    // 引号感知拆行：双引号内的换行属于字符串内容，引号外的换行才是动作边界。
+    // 不能直接用 lines() 裸拆，否则 text "第一行\n第二行" 会被拦腰切开、报引号未闭合。
+    let mut lines = Vec::<String>::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    for ch in request.script.chars() {
+        match ch {
+            '"' => {
+                current.push(ch);
+                in_quotes = !in_quotes;
+            }
+            '\n' if !in_quotes => {
+                lines.push(std::mem::take(&mut current));
+            }
+            _ => current.push(ch),
+        }
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
     let mut actions = Vec::<DesktopScriptAction>::new();
-    for (idx, raw_line) in request.script.lines().enumerate() {
+    for (idx, raw_line) in lines.iter().enumerate() {
         if let Some(action) = parse_script_line(idx + 1, raw_line)? {
             actions.push(action);
         }

@@ -2887,9 +2887,7 @@
     "newBranchPlaceholder": "新分支名…",
     "localBranches": "本地分支",
     "remoteBranches": "远程分支",
-    "remotes": "远程",
-    "deleteBranch": "删除",
-    "deleteBranchConfirm": "确定删除分支 {name}？",
+    "remotes": "远程仓库",
     "checkoutBranch": "切换",
     "checkoutConfirm": "确定切换到分支 {name}？",
     "checkoutBlocked": "无法切换到分支 {name}：以下文件有未提交更改，且目标分支也修改了它们，直接切换会丢失改动。\n{paths}\n\n建议让 AI 帮忙处理：例如先把这些更改提交或存储起来，再切换分支。",
@@ -2909,7 +2907,13 @@
     "repoBar": "仓库",
     "currentRepo": "在此仓库",
     "noRepos": "未发现其他仓库",
-    "selectRepoHint": "从上方选择要查看的仓库"
+    "selectRepoHint": "从上方选择要查看的仓库",
+    "createBranchFromCommit": "基于该提交新建分支",
+    "createBranchPrompt": "输入新分支名（基于该提交）",
+    "branchCreated": "已创建分支",
+    "resetSoftCommit": "撤销最近一次提交",
+    "resetSoftSuccess": "已撤销最近一次提交，改动保留在暂存区",
+    "resetSoftPushed": "已经在远端，无法软退回"
   },
   "simpleSetup": {
     "providerName": "简单供应商",

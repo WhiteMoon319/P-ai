@@ -1576,6 +1576,8 @@ const TAURI_COMMAND_ALIASES: Record<string, string> = {
   "conversation.archiveSummary": "get_archive_summary",
   "conversation.exportShare": "export_conversation_share_json",
   "conversation.importArchives": "import_archives_from_json",
+  "conversation.sectionOrders.get": "get_conversation_section_orders",
+  "conversation.sectionOrders.save": "save_conversation_section_order",
   "app.bootstrapSnapshot": "load_app_bootstrap_snapshot",
   "app.language.set": "set_ui_language",
   "messageStore.migration.check": "check_message_store_migration",
@@ -1660,6 +1662,7 @@ const TAURI_INPUT_WRAPPED_COMMANDS = new Set([
   "prompt.systemPreview",
   "conversation.exportShare",
   "conversation.importArchives",
+  "conversation.sectionOrders.save",
   "department.primaryApi.set",
   "archives.export",
   "goal.create",
@@ -1921,8 +1924,6 @@ const TRANSPORT_NOTIFICATION_EVENT_ALIASES: Record<string, string | string[]> = 
   "chatMessageAppearance.changed": "easy-call:chat-message-appearance-changed",
   "chatComposerAppearance.changed": "easy-call:chat-composer-appearance-changed",
   "fileReaderAppearance.changed": "easy-call:file-reader-appearance-changed",
-  "backend.ready": "easy-call:backend-ready",
-  "startup.progress": "easy-call:startup-progress",
   "workspace.migrationProgress": "easy-call:workspace-migration-progress",
   "fileReader.watchChanged": "easy-call:file-reader-watch-changed",
 };
@@ -3034,15 +3035,6 @@ export async function gitPanelBranchCreate(workspacePath: string, name: string, 
   });
 }
 
-export async function gitPanelBranchDelete(workspacePath: string, name: string): Promise<GitPanelRunOutput> {
-  const normalizedWorkspace = gitPanelRequiredWorkspace(workspacePath);
-  const normalizedName = String(name || "").trim();
-  if (!normalizedName) throw new Error("分支名不能为空");
-  return invokeTauri<GitPanelRunOutput>("git_panel_branch_delete", {
-    input: { workspacePath: normalizedWorkspace, name: normalizedName, startPoint: "" },
-  });
-}
-
 export async function gitPanelCheckout(workspacePath: string, reference: string): Promise<GitPanelRunOutput> {
   const normalizedWorkspace = gitPanelRequiredWorkspace(workspacePath);
   const normalizedReference = String(reference || "").trim();
@@ -3064,6 +3056,12 @@ export async function gitPanelCheckoutCheck(workspacePath: string, reference: st
   if (!normalizedReference) throw new Error("引用不能为空");
   return invokeTauri<GitPanelCheckoutCheckOutput>("git_panel_checkout_check", {
     input: { workspacePath: normalizedWorkspace, reference: normalizedReference },
+  });
+}
+
+export async function gitPanelResetSoft(workspacePath: string): Promise<GitPanelRunOutput> {
+  return invokeTauri<GitPanelRunOutput>("git_panel_reset_soft", {
+    input: { workspacePath: gitPanelRequiredWorkspace(workspacePath) },
   });
 }
 

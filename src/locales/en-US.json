@@ -2888,8 +2888,6 @@
     "localBranches": "Local Branches",
     "remoteBranches": "Remote Branches",
     "remotes": "Remotes",
-    "deleteBranch": "Delete",
-    "deleteBranchConfirm": "Delete branch {name}?",
     "checkoutBranch": "Checkout",
     "checkoutConfirm": "Switch to branch {name}?",
     "checkoutBlocked": "Cannot switch to branch {name}: these files have uncommitted changes that also differ in the target branch, switching would lose your work.\n{paths}\n\nAsk AI for help: e.g. commit or stash these changes first, then switch.",
@@ -2909,7 +2907,13 @@
     "repoBar": "Repositories",
     "currentRepo": "Current repo",
     "noRepos": "No other repositories found",
-    "selectRepoHint": "Select a repository from the bar above"
+    "selectRepoHint": "Select a repository from the bar above",
+    "createBranchFromCommit": "Create branch from commit",
+    "createBranchPrompt": "Enter new branch name (from this commit)",
+    "branchCreated": "Branch created",
+    "resetSoftCommit": "Undo last commit",
+    "resetSoftSuccess": "Undid last commit, changes kept in staging",
+    "resetSoftPushed": "Already on remote, cannot soft reset"
   },
   "simpleSetup": {
     "providerName": "Simple Provider",

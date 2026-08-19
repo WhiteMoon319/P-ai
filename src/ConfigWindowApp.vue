@@ -258,18 +258,9 @@
       @close-settings-save-error-dialog="closeSettingsSaveErrorDialog"
     />
 
-    <div
-      v-if="startupOverlayVisible"
-      class="fixed inset-0 z-9998 flex items-center justify-center bg-base-300/90 p-6 backdrop-blur"
-    >
-      <div class="flex min-w-72 max-w-sm items-center gap-3 rounded-box border border-base-content/10 bg-base-100 px-5 py-4 shadow-2xl">
-        <span class="loading loading-spinner loading-md text-primary"></span>
-        <div class="min-w-0">
-          <div class="font-medium">{{ startupOverlayMessage }}</div>
-          <div class="mt-1 text-xs opacity-60">请稍候...</div>
-        </div>
-      </div>
-    </div>
+    <StartupOverlay v-if="startupOverlayVisible" />
+
+    <ConfigStatusToast :text="status" :tone="statusTone" />
 
     <Win10ResizeHandles :enabled="!maximized" />
   </div>
@@ -281,7 +272,9 @@ import { useI18n } from "vue-i18n";
 import ConfigView from "./features/config/views/ConfigView.vue";
 import AppWindowHeader from "./features/shell/components/AppWindowHeader.vue";
 import ShellDialogsHost from "./features/shell/components/ShellDialogsHost.vue";
+import StartupOverlay from "./features/shell/components/StartupOverlay.vue";
 import Win10ResizeHandles from "./features/shell/components/Win10ResizeHandles.vue";
+import ConfigStatusToast from "./features/config/components/ConfigStatusToast.vue";
 import MemoryDialog from "./features/memory/components/dialogs/MemoryDialog.vue";
 import PromptPreviewDialog from "./features/chat/components/dialogs/PromptPreviewDialog.vue";
 import { getTransportCapabilities, invokeTauri, openTransportWindow } from "./services/tauri-api";
@@ -454,6 +447,7 @@ const markdownIsDark = computed(() => isDarkAppTheme(currentTheme.value));
 const {
   setStatus,
   setStatusError,
+  statusTone,
   localeOptions,
   applyUiLanguage,
 } = useAppCore({
@@ -479,8 +473,7 @@ const {
   setStatus,
   setStatusError,
 });
-const startupOverlayVisible = ref(false);
-const startupOverlayMessage = ref("正在启动应用...");
+const startupOverlayVisible = ref(true);
 const { setUiSizeScale, uiSizeScale } = useUiSizeAppearance();
 const { updateGithubUpdateMethod } = useGithubUpdateMethod(config, setStatusError);
 
@@ -923,9 +916,8 @@ useAppLifecycle({
   stopRecording: async () => undefined,
   cleanupSpeechRecording: () => undefined,
   cleanupChatMedia: cleanupHotkeyRecordTest,
-  onStartupOverlayChange: (visible, message) => {
-    startupOverlayVisible.value = visible;
-    startupOverlayMessage.value = message || "正在启动应用...";
+  onBackendReadyChange: (ready) => {
+    startupOverlayVisible.value = !ready;
   },
   afterMountedReady: async () => {
     await refreshGithubUpdateState();

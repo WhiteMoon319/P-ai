@@ -98,14 +98,26 @@ async fn run_operate_tool(
                 ));
                 steps.push(step);
             }
-            DesktopScriptAction::Screenshot { line, mode, save_path, quality } => {
-                let (result, mode_name) =
-                    execute_screenshot_action(&mode, save_path, quality, screenshots_root, include_base64).await?;
+            DesktopScriptAction::Screenshot { line, mode, save_path, quality, elements } => {
+                let (result, mode_name, ui_tree) =
+                    execute_screenshot_action(&mode, save_path, quality, screenshots_root, include_base64, elements).await?;
+                let tree_summary = match &ui_tree {
+                    Some(elems) if elems.is_empty() => {
+                        if cfg!(target_os = "windows") {
+                            "，控件树为空或目标窗口未暴露 UIA".to_string()
+                        } else {
+                            "，当前平台不支持控件树".to_string()
+                        }
+                    }
+                    Some(elems) => format!("，控件树元素数={}", elems.len()),
+                    None => String::new(),
+                };
                 latest_screenshot = Some(LatestScreenshotInfo {
                     mode: mode_name.clone(),
                     width: result.width,
                     height: result.height,
                     saved_path: result.path.clone(),
+                    tree: ui_tree,
                 });
                 image_mime = Some(result.image_mime.clone());
                 image_base64 = result.image_base64.clone();
@@ -114,7 +126,7 @@ async fn run_operate_tool(
                 let step = DesktopScriptStepResult {
                     line,
                     kind: DesktopScriptStepKind::Screenshot,
-                    summary: format!("screenshot completed, mode={mode_name}"),
+                    summary: format!("screenshot completed, mode={mode_name}{tree_summary}"),
                     ok: true,
                     saved_path: result.path,
                 };
@@ -232,6 +244,50 @@ mod operate_tool_tests {
     }
 
     #[test]
+    fn parse_text_escape_newline_decodes_to_real_newline() {
+        match parse_single(r#"text "第一行\n第二行""#) {
+            DesktopScriptAction::Text { text, .. } => assert_eq!(text, "第一行\n第二行"),
+            _ => panic!("expected text action"),
+        }
+    }
+
+    #[test]
+    fn parse_text_multiline_inside_quotes_stays_single_action() {
+        let script = "text \"第一行\n第二行\"";
+        let actions = parse_script(&OperateRequest { script: script.to_string(), timeout_ms: None }).unwrap();
+        assert_eq!(actions.len(), 1);
+        match &actions[0] {
+            DesktopScriptAction::Text { text, .. } => assert_eq!(text, "第一行\n第二行"),
+            _ => panic!("expected text action"),
+        }
+    }
+
+    #[test]
+    fn parse_script_newline_outside_quotes_splits_actions() {
+        let script = "text \"第一行\"\ntext \"第二行\"\nscreenshot";
+        let actions = parse_script(&OperateRequest { script: script.to_string(), timeout_ms: None }).unwrap();
+        assert_eq!(actions.len(), 3);
+    }
+
+    #[test]
+    fn parse_script_multiline_line_numbers_are_accurate() {
+        let script = "text \"a\"\nkey Enter\nscreenshot";
+        let actions = parse_script(&OperateRequest { script: script.to_string(), timeout_ms: None }).unwrap();
+        match &actions[1] {
+            DesktopScriptAction::Key { line, .. } => assert_eq!(*line, 2),
+            other => panic!("expected key action at line 2, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_script_unclosed_quote_reports_line_number() {
+        let script = "text \"第一行\n第二行";
+        let err = parse_script(&OperateRequest { script: script.to_string(), timeout_ms: None }).unwrap_err();
+        assert!(err.message.contains("第 1 行"));
+        assert!(err.message.contains("双引号未闭合"));
+    }
+
+    #[test]
     fn screenshot_save_requires_absolute_path() {
         let err = parse_script(&OperateRequest { script: r#"screenshot save="tmp/shot.webp""#.to_string(), timeout_ms: None }).unwrap_err();
         assert!(err.message.contains("第 1 行 screenshot"));
@@ -251,6 +307,29 @@ mod operate_tool_tests {
             DesktopScriptAction::Screenshot { mode: ScreenshotModeSpec::Region(_), .. } => {}
             _ => panic!("expected screenshot region"),
         }
+    }
+
+    #[test]
+    fn screenshot_tree_true_should_parse() {
+        match parse_single("screenshot elements=true") {
+            DesktopScriptAction::Screenshot { elements, .. } => assert!(elements),
+            _ => panic!("expected screenshot action"),
+        }
+    }
+
+    #[test]
+    fn screenshot_tree_default_should_be_false() {
+        match parse_single("screenshot") {
+            DesktopScriptAction::Screenshot { elements, .. } => assert!(!elements),
+            _ => panic!("expected screenshot action"),
+        }
+    }
+
+    #[test]
+    fn screenshot_tree_invalid_should_reject() {
+        let err = parse_script(&OperateRequest { script: "screenshot elements=yes".to_string(), timeout_ms: None }).unwrap_err();
+        assert!(err.message.contains("第 1 行 screenshot"));
+        assert!(err.message.contains("elements 非法"));
     }
 
     #[test]
