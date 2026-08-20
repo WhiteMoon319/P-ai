@@ -30,7 +30,9 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: |
+            .
+            src-tauri
 
       - name: Export Android NDK path
         run: |
@@ -40,7 +42,15 @@ jobs:
           echo "$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
 
       - name: Inject git-based version
-        run: bash scripts/patch-android-version.sh
+        run: |
+          GRADLE="apps/android/app/build.gradle.kts"
+          COUNT=$(git rev-list --count HEAD)
+          TAG=$(git describe --tags --always 2>/dev/null || echo "0.0.0-dev")
+          VERSION="${TAG#v}"
+          echo "versionCode=$COUNT versionName=$VERSION"
+          sed -i "s/versionCode = [0-9]*/versionCode = $COUNT/" "$GRADLE"
+          sed -i "s/versionName = \".*\"/versionName = \"$VERSION\"/" "$GRADLE"
+          echo "PAI_ANDROID_APP_VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Copy Android app icons
         run: |
@@ -52,18 +62,19 @@ jobs:
             echo "No custom Android icons found"
           fi
 
-      - name: Patch Android microphone permissions and safe area
-        run: bash scripts/patch-android-project.sh
-
       - name: Download proot native libs (arm64)
         run: |
           JNI_DIR="apps/android/app/src/main/jniLibs/arm64-v8a"
           mkdir -p "$JNI_DIR"
           sudo apt-get update -qq && sudo apt-get install -y -qq patchelf binutils
-          # 从 Termux 官方包仓库下载 proot 及宿主侧动态依赖
-          PROOT_URL="https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.1.107.89_aarch64.deb"
-          TALLOC_URL="https://packages.termux.dev/apt/termux-main/pool/main/libt/libtalloc/libtalloc_2.4.3_aarch64.deb"
-          SHMEM_URL="https://packages.termux.dev/apt/termux-main/pool/main/liba/libandroid-shmem/libandroid-shmem_0.7_aarch64.deb"
+          # 从 Termux 官方包仓库动态解析最新版本
+          PROOT_DEB=$(curl -fsSL "https://packages.termux.dev/apt/termux-main/pool/main/p/proot/" | grep -oE 'proot_[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+_aarch64\.deb' | sort -V | tail -1)
+          TALLOC_DEB=$(curl -fsSL "https://packages.termux.dev/apt/termux-main/pool/main/libt/libtalloc/" | grep -oE 'libtalloc_[0-9]+\.[0-9]+\.[0-9]+_aarch64\.deb' | sort -V | tail -1)
+          SHMEM_DEB=$(curl -fsSL "https://packages.termux.dev/apt/termux-main/pool/main/liba/libandroid-shmem/" | grep -oE 'libandroid-shmem_[0-9]+\.[0-9]+_aarch64\.deb' | sort -V | tail -1)
+          [ -n "$PROOT_DEB" ] && [ -n "$TALLOC_DEB" ] && [ -n "$SHMEM_DEB" ] || { echo "ERROR: failed to resolve latest Termux deb" >&2; exit 1; }
+          PROOT_URL="https://packages.termux.dev/apt/termux-main/pool/main/p/proot/${PROOT_DEB}"
+          TALLOC_URL="https://packages.termux.dev/apt/termux-main/pool/main/libt/libtalloc/${TALLOC_DEB}"
+          SHMEM_URL="https://packages.termux.dev/apt/termux-main/pool/main/liba/libandroid-shmem/${SHMEM_DEB}"
           for url in "$PROOT_URL" "$TALLOC_URL" "$SHMEM_URL"; do
             name=$(basename "$url")
             curl -fsSL --connect-timeout 30 --retry 3 "$url" -o "/tmp/$name"
@@ -71,12 +82,11 @@ jobs:
             ar x "/tmp/$name" --output="/tmp/extract-$name"
             tar -xf "/tmp/extract-$name/data.tar.xz" -C "/tmp/extract-$name"
           done
-          # proot 二进制（exec + loader，loader 缺失时 guest execve 无法初始化）。
-          cp /tmp/extract-proot_5.1.107.89_aarch64.deb/data/data/com.termux/files/usr/bin/proot "$JNI_DIR/libproot_exec.so"
+          cp /tmp/extract-${PROOT_DEB}/data/data/com.termux/files/usr/bin/proot "$JNI_DIR/libproot_exec.so"
           chmod +x "$JNI_DIR/libproot_exec.so"
-          LOADER_SRC="/tmp/extract-proot_5.1.107.89_aarch64.deb/data/data/com.termux/files/usr/libexec/proot/loader"
+          LOADER_SRC="/tmp/extract-${PROOT_DEB}/data/data/com.termux/files/usr/libexec/proot/loader"
           if [ ! -f "$LOADER_SRC" ]; then
-            LOADER_SRC="/tmp/extract-proot_5.1.107.89_aarch64.deb/data/data/com.termux/files/usr/lib/libproot_loader.so"
+            LOADER_SRC="/tmp/extract-${PROOT_DEB}/data/data/com.termux/files/usr/lib/libproot_loader.so"
           fi
           if [ -f "$LOADER_SRC" ]; then
             cp "$LOADER_SRC" "$JNI_DIR/libproot_loader.so"
@@ -85,10 +95,10 @@ jobs:
             echo "ERROR: libproot_loader.so not found in proot deb" >&2
             exit 1
           fi
-          cp /tmp/extract-libtalloc_2.4.3_aarch64.deb/data/data/com.termux/files/usr/lib/libtalloc.so.2 "$JNI_DIR/libtalloc.so"
+          cp /tmp/extract-${TALLOC_DEB}/data/data/com.termux/files/usr/lib/libtalloc.so.2 "$JNI_DIR/libtalloc.so"
           chmod 0644 "$JNI_DIR/libtalloc.so"
           patchelf --set-soname libtalloc.so "$JNI_DIR/libtalloc.so" || true
-          cp /tmp/extract-libandroid-shmem_0.7_aarch64.deb/data/data/com.termux/files/usr/lib/libandroid-shmem.so "$JNI_DIR/libandroid-shmem.so"
+          cp /tmp/extract-${SHMEM_DEB}/data/data/com.termux/files/usr/lib/libandroid-shmem.so "$JNI_DIR/libandroid-shmem.so"
           chmod 0644 "$JNI_DIR/libandroid-shmem.so"
           if patchelf --print-needed "$JNI_DIR/libproot_exec.so" | grep -qx 'libtalloc.so.2'; then
             patchelf --replace-needed libtalloc.so.2 libtalloc.so "$JNI_DIR/libproot_exec.so"
@@ -110,12 +120,11 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
           ls -la "$RUNNER_TEMP/release.jks"
 
-      - name: Build native .so (aarch64)
+      - name: Build native .so (aarch64, release)
         run: |
           export CC_aarch64_linux_android="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang"
           export AR_aarch64_linux_android="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang"
-          # 构建期版本注入：与 APK versionName 同源（patch-android-version.sh 导出）
           if [[ -n "${PAI_ANDROID_APP_VERSION:-}" ]]; then
             export PAI_ANDROID_APP_VERSION
             echo "cargo 注入版本 PAI_ANDROID_APP_VERSION=$PAI_ANDROID_APP_VERSION"
@@ -133,7 +142,6 @@ jobs:
         run: |
           APK_DIR="apps/android/app/build/outputs/apk/release"
           ls -la "$APK_DIR"
-          # 保持 CI 后续步骤的 universal/release 路径约定
           mkdir -p "$APK_DIR/universal/release" 2>/dev/null || true
           for apk in "$APK_DIR"/*-release-unsigned.apk "$APK_DIR"/*-unsigned.apk; do
             [ -e "$apk" ] || continue
@@ -191,7 +199,6 @@ jobs:
               exit 1
             fi
           done
-          # 静态确认 release Manifest 保持 usesCleartextTraffic=false
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME/build-tools/"* | sort -V | tail -n 1)
           MERGED="apps/android/app/build/intermediates/merged_manifests/release/processReleaseManifest/AndroidManifest.xml"
           if [ -f "$MERGED" ] && grep -q 'usesCleartextTraffic="true"' "$MERGED"; then

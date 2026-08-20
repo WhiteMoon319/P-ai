@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     branches:
-      - dev
+      - main
       - feat/android-native-no-webview
 
 jobs:
