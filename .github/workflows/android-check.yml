@@ -74,4 +74,4 @@ jobs:
             MANIFEST=$(find app/build/intermediates -name AndroidManifest.xml -path "*processDebugMainManifest*" | head -n1)
           fi
           [ -n "$MANIFEST" ] || { echo "ERROR: merged manifest not found" >&2; exit 1; }
-          python "$GITHUB_WORKSPACE/tools/android/verify-manifest.py" "$MANIFEST"
+          python "$GITHUB_WORKSPACE/tools/android/verify-manifest.py" "$MANIFEST" debug
