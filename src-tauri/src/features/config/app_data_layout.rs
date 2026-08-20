@@ -1,130 +1,3 @@
-fn migrate_app_data_inline_media_to_refs(data_path: &PathBuf, data: &mut AppData) -> bool {
-    let mut changed = false;
-    for conversation in &mut data.conversations {
-        for message in &mut conversation.messages {
-            changed |= externalize_message_parts_to_media_refs_lossy(&mut message.parts, data_path);
-        }
-    }
-    for archive in &mut data.archived_conversations {
-        for message in &mut archive.source_conversation.messages {
-            changed |= externalize_message_parts_to_media_refs_lossy(&mut message.parts, data_path);
-        }
-    }
-    changed
-}
-
-fn migrate_app_data_archives_into_conversations(
-    data_path: &PathBuf,
-    data: &mut AppData,
-) -> Result<bool, String> {
-    if data.archived_conversations.is_empty() {
-        return Ok(false);
-    }
-    let backup_file = app_layout_backups_dir(data_path).join(format!(
-        "app_data.pre_archive_merge.{}.json",
-        now_utc().unix_timestamp()
-    ));
-    write_json_file_atomic(&backup_file, data, "pre-migration app_data backup")?;
-
-    for archive in data.archived_conversations.clone() {
-        let mut conv = archive.source_conversation;
-        if conv.id.trim().is_empty() {
-            conv.id = Uuid::new_v4().to_string();
-        }
-        if conv.archived_at.as_deref().unwrap_or("").trim().is_empty() {
-            conv.archived_at = Some(archive.archived_at.clone());
-        }
-        if conv.status.trim() != "archived" {
-            conv.status = "archived".to_string();
-        }
-        conv.fast_request_turns.clear();
-
-        if let Some(existing_idx) = data.conversations.iter().position(|c| c.id == conv.id) {
-            let should_replace = {
-                let existing = &data.conversations[existing_idx];
-                existing.summary.trim().is_empty() && !conv.summary.trim().is_empty()
-            };
-            if should_replace {
-                data.conversations[existing_idx] = conv;
-            }
-        } else {
-            data.conversations.push(conv);
-        }
-    }
-
-    data.archived_conversations.clear();
-    Ok(true)
-}
-
-fn migrate_agent_avatar_paths(data_path: &PathBuf, data: &mut AppData) -> bool {
-    let root = app_root_from_data_path(data_path);
-    let new_avatar_dir = root.join("avatars");
-    let legacy_avatar_dir = root.join("config").join("avatars");
-    let mut changed = false;
-
-    for agent in &mut data.agents {
-        let Some(path_raw) = agent.avatar_path.as_ref() else {
-            continue;
-        };
-        if path_raw.trim().is_empty() {
-            continue;
-        }
-        let old_path = PathBuf::from(path_raw);
-        let file_name = old_path
-            .file_name()
-            .map(|v| v.to_owned())
-            .or_else(|| {
-                PathBuf::from(path_raw)
-                    .components()
-                    .last()
-                    .map(|c| std::ffi::OsString::from(c.as_os_str()))
-            });
-        let Some(file_name) = file_name else {
-            continue;
-        };
-        let new_path = new_avatar_dir.join(file_name);
-
-        if new_path.exists() {
-            let next = new_path.to_string_lossy().to_string();
-            if next != *path_raw {
-                agent.avatar_path = Some(next);
-                changed = true;
-            }
-            continue;
-        }
-
-        let legacy_candidate = if old_path.exists() {
-            old_path.clone()
-        } else {
-            legacy_avatar_dir.join(
-                old_path
-                    .file_name()
-                    .unwrap_or_else(|| std::ffi::OsStr::new("")),
-            )
-        };
-        if !legacy_candidate.exists() {
-            continue;
-        }
-        let _ = fs::create_dir_all(&new_avatar_dir);
-        if fs::rename(&legacy_candidate, &new_path).is_err() {
-            if fs::copy(&legacy_candidate, &new_path).is_ok() {
-                let _ = fs::remove_file(&legacy_candidate);
-            }
-        }
-        if new_path.exists() {
-            let next = new_path.to_string_lossy().to_string();
-            if next != *path_raw {
-                agent.avatar_path = Some(next);
-                changed = true;
-            }
-        }
-    }
-
-    changed
-}
-
-const LEGACY_APP_DATA_SPLIT_DIR_NAME: &str = "app_data";
-
 const LAYOUT_DIR_CONFIG: &str = "config";
 const LAYOUT_DIR_STATE: &str = "state";
 const LAYOUT_DIR_CHAT: &str = "chat";
@@ -132,79 +5,12 @@ const LAYOUT_DIR_CHAT_CONVERSATIONS: &str = "conversations";
 const LAYOUT_DIR_BACKUPS: &str = "backups";
 const LAYOUT_FILE_AGENTS: &str = "agents.json";
 const LAYOUT_FILE_RUNTIME: &str = "runtime_state.json";
-const LAYOUT_FILE_CHAT_INDEX: &str = "index.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct AgentsFile {
     #[serde(default)]
     agents: Vec<AgentProfile>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RuntimeStateFile {
-    version: u32,
-    #[serde(default)]
-    runtime_revision: u64,
-    #[serde(default)]
-    data_migration_version: u32,
-    #[serde(default, alias = "messageStoreMigrationVersion")]
-    message_store_migration_version: u32,
-    #[serde(alias = "selectedAgentId", alias = "selected_agent_id")]
-    assistant_department_agent_id: String,
-    response_style_id: String,
-    #[serde(default = "default_pdf_read_mode")]
-    pdf_read_mode: String,
-    #[serde(default = "default_background_voice_screenshot_keywords")]
-    background_voice_screenshot_keywords: String,
-    #[serde(default = "default_background_voice_screenshot_mode")]
-    background_voice_screenshot_mode: String,
-    #[serde(default)]
-    instruction_presets: Vec<PromptCommandPreset>,
-    #[serde(
-        default,
-        rename = "systemNotificationConversationId",
-        alias = "mainConversationId",
-        alias = "main_conversation_id"
-    )]
-    main_conversation_id: Option<String>,
-    #[serde(default)]
-    pinned_conversation_ids: Vec<String>,
-    #[serde(default)]
-    image_text_cache: Vec<ImageTextCacheEntry>,
-    #[serde(default)]
-    pdf_text_cache: Vec<PdfTextCacheEntry>,
-    #[serde(default)]
-    pdf_image_cache: Vec<PdfImageCacheEntry>,
-    #[serde(default)]
-    remote_im_contacts: Vec<RemoteImContact>,
-    #[serde(default)]
-    remote_im_contact_checkpoints: Vec<RemoteImContactCheckpoint>,
-}
-
-impl Default for RuntimeStateFile {
-    fn default() -> Self {
-        Self {
-            version: APP_DATA_SCHEMA_VERSION,
-            runtime_revision: 0,
-            data_migration_version: 0,
-            message_store_migration_version: 0,
-            assistant_department_agent_id: default_assistant_department_agent_id(),
-            response_style_id: default_response_style_id(),
-            pdf_read_mode: default_pdf_read_mode(),
-            background_voice_screenshot_keywords: default_background_voice_screenshot_keywords(),
-            background_voice_screenshot_mode: default_background_voice_screenshot_mode(),
-            instruction_presets: Vec::new(),
-            main_conversation_id: Some(SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string()),
-            pinned_conversation_ids: Vec::new(),
-            image_text_cache: Vec::new(),
-            pdf_text_cache: Vec::new(),
-            pdf_image_cache: Vec::new(),
-            remote_im_contacts: Vec::new(),
-            remote_im_contact_checkpoints: Vec::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -222,14 +28,6 @@ struct ChatIndexConversationItem {
 struct ChatIndexFile {
     #[serde(default)]
     conversations: Vec<ChatIndexConversationItem>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-struct AppDataWriteStats {
-    agents_written: bool,
-    runtime_written: bool,
-    conversation_writes: usize,
-    conversation_deletes: usize,
 }
 
 fn app_layout_config_dir(path: &PathBuf) -> PathBuf {
@@ -260,10 +58,6 @@ fn app_layout_runtime_state_path(path: &PathBuf) -> PathBuf {
     app_layout_state_dir(path).join(LAYOUT_FILE_RUNTIME)
 }
 
-fn app_layout_chat_index_path(path: &PathBuf) -> PathBuf {
-    app_layout_chat_dir(path).join(LAYOUT_FILE_CHAT_INDEX)
-}
-
 fn app_layout_chat_conversation_path(path: &PathBuf, conversation_id: &str) -> PathBuf {
     app_layout_chat_conversations_dir(path).join(format!("{conversation_id}.json"))
 }
@@ -272,23 +66,6 @@ fn build_agents_file(agents: &[AgentProfile]) -> AgentsFile {
     AgentsFile {
         agents: agents.to_vec(),
     }
-}
-
-fn normalize_runtime_state_contact_communication(runtime: &mut RuntimeStateFile) {
-    for contact in &mut runtime.remote_im_contacts {
-        contact.allow_send = contact.allow_send || contact.allow_receive;
-        contact.allow_receive = contact.allow_send;
-    }
-}
-
-fn normalize_runtime_state_system_notification_pointer(runtime: &mut RuntimeStateFile) -> bool {
-    if runtime.main_conversation_id.as_deref().map(str::trim)
-        == Some(SYSTEM_NOTIFICATION_CONVERSATION_ID)
-    {
-        return false;
-    }
-    runtime.main_conversation_id = Some(SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string());
-    true
 }
 
 fn system_notification_conversation_shard_has_artifacts(path: &PathBuf) -> Result<bool, String> {
@@ -320,31 +97,6 @@ fn ensure_system_notification_conversation_shard(path: &PathBuf) -> Result<bool,
             write_conversation_shard(path, &conversation)
         }
     }
-}
-
-fn build_runtime_state_file(data: &AppData) -> RuntimeStateFile {
-    let mut runtime = RuntimeStateFile {
-        version: APP_DATA_SCHEMA_VERSION,
-        runtime_revision: 0,
-        data_migration_version: data.data_migration_version,
-        message_store_migration_version: data.message_store_migration_version,
-        assistant_department_agent_id: data.assistant_department_agent_id.clone(),
-        response_style_id: data.response_style_id.clone(),
-        pdf_read_mode: data.pdf_read_mode.clone(),
-        background_voice_screenshot_keywords: data.background_voice_screenshot_keywords.clone(),
-        background_voice_screenshot_mode: data.background_voice_screenshot_mode.clone(),
-        instruction_presets: data.instruction_presets.clone(),
-        main_conversation_id: Some(SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string()),
-        pinned_conversation_ids: data.pinned_conversation_ids.clone(),
-        image_text_cache: data.image_text_cache.clone(),
-        pdf_text_cache: data.pdf_text_cache.clone(),
-        pdf_image_cache: data.pdf_image_cache.clone(),
-        remote_im_contacts: data.remote_im_contacts.clone(),
-        remote_im_contact_checkpoints: data.remote_im_contact_checkpoints.clone(),
-    };
-    normalize_runtime_state_contact_communication(&mut runtime);
-    let _ = normalize_runtime_state_system_notification_pointer(&mut runtime);
-    runtime
 }
 
 fn build_chat_index_item(conversation: &Conversation) -> ChatIndexConversationItem {
@@ -399,75 +151,22 @@ fn remove_chat_index_conversation(index: &mut ChatIndexFile, conversation_id: &s
     index.conversations.retain(|item| item.id != conversation_id);
 }
 
-fn apply_runtime_state_to_app_data(data: &mut AppData, runtime: &RuntimeStateFile) {
-    data.version = runtime.version;
-    data.data_migration_version = runtime.data_migration_version;
-    data.message_store_migration_version = runtime.message_store_migration_version;
-    data.assistant_department_agent_id = runtime.assistant_department_agent_id.clone();
-    data.response_style_id = runtime.response_style_id.clone();
-    data.pdf_read_mode = runtime.pdf_read_mode.clone();
-    data.background_voice_screenshot_keywords =
-        runtime.background_voice_screenshot_keywords.clone();
-    data.background_voice_screenshot_mode = runtime.background_voice_screenshot_mode.clone();
-    data.instruction_presets = runtime.instruction_presets.clone();
-    data.main_conversation_id = Some(SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string());
-    data.pinned_conversation_ids = runtime.pinned_conversation_ids.clone();
-    data.image_text_cache = runtime.image_text_cache.clone();
-    data.pdf_text_cache = runtime.pdf_text_cache.clone();
-    data.pdf_image_cache = runtime.pdf_image_cache.clone();
-    data.remote_im_contacts = runtime.remote_im_contacts.clone();
-    data.remote_im_contact_checkpoints = runtime.remote_im_contact_checkpoints.clone();
-}
-
 fn read_agents_shard(path: &PathBuf) -> Result<Vec<AgentProfile>, String> {
-    let mut agents = if !app_layout_exists(path) && path.exists() {
-        read_app_data(path)?.agents
-    } else if app_layout_agents_path(path).exists() {
-        read_json_file::<AgentsFile>(&app_layout_agents_path(path), "agents file")?.agents
+    if app_layout_agents_path(path).exists() {
+        Ok(read_json_file::<AgentsFile>(&app_layout_agents_path(path), "agents file")?.agents)
     } else {
-        AppData::default().agents
-    };
-    ensure_required_builtin_agents_in_list(&mut agents);
-    Ok(agents)
+        Ok(AppData::default().agents)
+    }
 }
 
 fn write_agents_shard(path: &PathBuf, agents: &[AgentProfile]) -> Result<bool, String> {
     fs::create_dir_all(app_layout_config_dir(path))
         .map_err(|err| format!("Create config layout dir failed: {err}"))?;
-    let mut normalized_agents = agents.to_vec();
-    ensure_required_builtin_agents_in_list(&mut normalized_agents);
     write_json_file_atomic_if_changed(
         &app_layout_agents_path(path),
-        &build_agents_file(&normalized_agents),
+        &build_agents_file(agents),
         "agents file",
     )
-}
-
-fn read_runtime_state_shard(path: &PathBuf) -> Result<RuntimeStateFile, String> {
-    let mut runtime = if app_layout_runtime_state_path(path).exists() {
-        read_json_file::<RuntimeStateFile>(&app_layout_runtime_state_path(path), "runtime state file")?
-    } else {
-        RuntimeStateFile::default()
-    };
-    normalize_runtime_state_contact_communication(&mut runtime);
-    let _ = normalize_runtime_state_system_notification_pointer(&mut runtime);
-    ensure_system_notification_conversation_shard(path)?;
-    Ok(runtime)
-}
-
-fn write_runtime_state_shard(path: &PathBuf, runtime: &RuntimeStateFile) -> Result<bool, String> {
-    fs::create_dir_all(app_layout_state_dir(path))
-        .map_err(|err| format!("Create state layout dir failed: {err}"))?;
-    let mut normalized = runtime.clone();
-    normalize_runtime_state_contact_communication(&mut normalized);
-    let _ = normalize_runtime_state_system_notification_pointer(&mut normalized);
-    let conversation_written = ensure_system_notification_conversation_shard(path)?;
-    let runtime_written = write_json_file_atomic_if_changed(
-        &app_layout_runtime_state_path(path),
-        &normalized,
-        "runtime state file",
-    )?;
-    Ok(runtime_written || conversation_written)
 }
 
 fn read_conversation_shard(path: &PathBuf, conversation_id: &str) -> Result<Conversation, String> {
@@ -654,14 +353,6 @@ fn app_layout_exists(path: &PathBuf) -> bool {
         || app_layout_chat_conversations_dir(path).exists()
 }
 
-fn legacy_app_data_split_dir(path: &PathBuf) -> PathBuf {
-    let parent = path
-        .parent()
-        .map(ToOwned::to_owned)
-        .unwrap_or_else(|| PathBuf::from("."));
-    parent.join(LEGACY_APP_DATA_SPLIT_DIR_NAME)
-}
-
 fn read_json_file<T>(path: &PathBuf, label: &str) -> Result<T, String>
 where
     T: serde::de::DeserializeOwned,
@@ -773,6 +464,7 @@ fn app_data_cache_signature(path: &PathBuf) -> AppDataCacheSignature {
     }
 }
 
+#[cfg(test)]
 fn write_json_file_atomic<T>(path: &PathBuf, value: &T, label: &str) -> Result<(), String>
 where
     T: Serialize,
@@ -828,19 +520,18 @@ where
     Ok(true)
 }
 
+#[cfg(test)]
 fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
-    let mut agents = if app_layout_agents_path(path).exists() {
+    let agents = if app_layout_agents_path(path).exists() {
         read_json_file::<AgentsFile>(&app_layout_agents_path(path), "agents file")?.agents
     } else {
         AppData::default().agents
     };
-    ensure_required_builtin_agents_in_list(&mut agents);
 
-    let runtime = if app_layout_runtime_state_path(path).exists() {
-        read_json_file::<RuntimeStateFile>(&app_layout_runtime_state_path(path), "runtime state file")?
-    } else {
-        RuntimeStateFile::default()
-    };
+    let data_migration_version =
+        state_db_get_kv(path, "data_migration_version")?
+            .and_then(|value| value.trim().parse::<u32>().ok())
+            .unwrap_or(0);
 
     let mut conversations = Vec::<Conversation>::new();
     let conv_dir = app_layout_chat_conversations_dir(path);
@@ -873,26 +564,11 @@ fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
     }
 
     Ok(AppData {
-        version: runtime.version,
-        data_migration_version: runtime.data_migration_version,
-        message_store_migration_version: runtime.message_store_migration_version,
+        version: APP_DATA_SCHEMA_VERSION,
+        data_migration_version,
         agents,
-        assistant_department_agent_id: runtime.assistant_department_agent_id,
         user_alias: default_user_alias(),
-        response_style_id: runtime.response_style_id,
-        pdf_read_mode: runtime.pdf_read_mode,
-        background_voice_screenshot_keywords: runtime.background_voice_screenshot_keywords,
-        background_voice_screenshot_mode: runtime.background_voice_screenshot_mode,
-        instruction_presets: runtime.instruction_presets,
-        main_conversation_id: runtime.main_conversation_id,
-        pinned_conversation_ids: runtime.pinned_conversation_ids,
         conversations,
-        image_text_cache: runtime.image_text_cache,
-        remote_im_contacts: runtime.remote_im_contacts,
-        remote_im_contact_checkpoints: runtime.remote_im_contact_checkpoints,
-        pdf_text_cache: runtime.pdf_text_cache,
-        pdf_image_cache: runtime.pdf_image_cache,
-        archived_conversations: Vec::new(),
     })
 }
 
@@ -1068,35 +744,35 @@ fn run_app_data_migrations_with_state(
     state: &AppState,
     config: &AppConfig,
 ) -> Result<bool, String> {
-    let mut runtime = state_read_runtime_state_cached(state)?;
-    if runtime.data_migration_version >= DATA_MIGRATION_CURRENT_VERSION {
+    let mut migration_version = state_service_get_data_migration_version(state)?;
+    if migration_version >= DATA_MIGRATION_CURRENT_VERSION {
         return Ok(false);
     }
-    let migration_version_before = runtime.data_migration_version;
+    let migration_version_before = migration_version;
     let mut any_data_changed = false;
     for step in data_migration_steps() {
-        if runtime.data_migration_version >= step.version {
+        if migration_version >= step.version {
             continue;
         }
         let started = std::time::Instant::now();
         let stats = (step.run)(&DataMigrationContext { state, config })?;
-        runtime.data_migration_version = step.version;
+        migration_version = step.version;
         any_data_changed |= stats.data_changed;
         runtime_log_info(format!(
             "[应用数据迁移] 完成，任务={}，migration_version_before={}，migration_version_after={}，data_changed={}，conversation_writes={}，duration_ms={}",
             step.name,
             migration_version_before,
-            runtime.data_migration_version,
+            migration_version,
             stats.data_changed,
             stats.conversation_writes,
             started.elapsed().as_millis()
         ));
     }
-    if runtime.data_migration_version < DATA_MIGRATION_CURRENT_VERSION {
-        runtime.data_migration_version = DATA_MIGRATION_CURRENT_VERSION;
+    if migration_version < DATA_MIGRATION_CURRENT_VERSION {
+        migration_version = DATA_MIGRATION_CURRENT_VERSION;
     }
-    state_write_runtime_state_cached(state, &runtime)?;
-    Ok(any_data_changed || migration_version_before != runtime.data_migration_version)
+    state_service_set_data_migration_version(state, migration_version)?;
+    Ok(any_data_changed || migration_version_before != migration_version)
 }
 
 fn assistant_workspace_label_sync_target_keys(
@@ -1199,232 +875,26 @@ fn sync_assistant_workspace_label_for_unarchived_conversations(
     Ok(changed)
 }
 
-fn read_app_data(path: &PathBuf) -> Result<AppData, String> {
-    let mut parsed = read_layout_app_data(path)?;
-    parsed.version = APP_DATA_SCHEMA_VERSION;
-    let migration_version_before = parsed.data_migration_version;
-    let run_v1_baseline_migrations =
-        migration_version_before < DATA_MIGRATION_VERSION_V1_BASELINE;
-    let builtin_agents_filled = ensure_required_builtin_agents(&mut parsed);
-    let conversation_metadata_filled = if run_v1_baseline_migrations {
-        fill_missing_conversation_metadata(&mut parsed)
-    } else {
-        false
-    };
-    let avatar_paths_migrated = if run_v1_baseline_migrations {
-        migrate_agent_avatar_paths(path, &mut parsed)
-    } else {
-        false
-    };
-    let merged_archives = if run_v1_baseline_migrations {
-        migrate_app_data_archives_into_conversations(path, &mut parsed)?
-    } else {
-        false
-    };
-    let migrated = if run_v1_baseline_migrations {
-        migrate_app_data_inline_media_to_refs(path, &mut parsed)
-    } else {
-        false
-    };
-    let main_conversation_marker_changed = if run_v1_baseline_migrations {
-        normalize_main_conversation_marker(&mut parsed, "")
-    } else {
-        false
-    };
-    let mut tool_review_legacy_cleaned = false;
-    if run_v1_baseline_migrations {
-        for conversation in parsed.conversations.iter_mut() {
-            if tool_review_cleanup_legacy_artifacts(path, conversation)? {
-                tool_review_legacy_cleaned = true;
-            }
-        }
-    }
-    let data_migration_version_recorded = if parsed.data_migration_version < DATA_MIGRATION_VERSION_V1_BASELINE {
-        parsed.data_migration_version = DATA_MIGRATION_VERSION_V1_BASELINE;
-        true
-    } else {
-        false
-    };
-    if conversation_metadata_filled
-        || builtin_agents_filled
-        || avatar_paths_migrated
-        || merged_archives
-        || migrated
-        || tool_review_legacy_cleaned
-        || main_conversation_marker_changed
-        || !app_layout_exists(path)
-    {
-        #[allow(deprecated)]
-        let started = std::time::Instant::now();
-        let stats = write_app_data_with_stats(path, &parsed)?;
-        runtime_log_debug(format!(
-            "[应用数据读入迁移] 完成，任务=读入后兼容写回，触发条件=read_app_data，migration_version_before={}，migration_version_after={}，run_v1_baseline_migrations={}，data_migration_version_recorded={}，builtin_agents_filled={}，conversation_metadata_filled={}，avatar_paths_migrated={}，merged_archives={}，inline_media_migrated={}，tool_review_legacy_cleaned={}，main_conversation_marker_changed={}，layout_missing={}，agents_written={}，runtime_written={}，conversation_writes={}，conversation_deletes={}，duration_ms={}",
-            migration_version_before,
-            parsed.data_migration_version,
-            run_v1_baseline_migrations,
-            data_migration_version_recorded,
-            builtin_agents_filled,
-            conversation_metadata_filled,
-            avatar_paths_migrated,
-            merged_archives,
-            migrated,
-            tool_review_legacy_cleaned,
-            main_conversation_marker_changed,
-            !app_layout_exists(path),
-            stats.agents_written,
-            stats.runtime_written,
-            stats.conversation_writes,
-            stats.conversation_deletes,
-            started.elapsed().as_millis()
-        ));
-    } else if data_migration_version_recorded {
-        let mut runtime = build_runtime_state_file(&parsed);
-        if app_layout_runtime_state_path(path).exists() {
-            if let Ok(existing_runtime) =
-                read_json_file::<RuntimeStateFile>(&app_layout_runtime_state_path(path), "runtime state file")
-            {
-                runtime.data_migration_version = runtime
-                    .data_migration_version
-                    .max(existing_runtime.data_migration_version);
-                runtime.message_store_migration_version = runtime
-                    .message_store_migration_version
-                    .max(existing_runtime.message_store_migration_version);
-            }
-        }
-        let runtime_written = write_runtime_state_shard(path, &runtime)?;
-        runtime_log_debug(format!(
-            "[应用数据读入迁移] 完成，任务=记录迁移版本，触发条件=read_app_data，migration_version_before={}，migration_version_after={}，run_v1_baseline_migrations={}，runtime_written={}，conversation_writes=0",
-            migration_version_before,
-            parsed.data_migration_version,
-            run_v1_baseline_migrations,
-            runtime_written
-        ));
-    }
-    Ok(parsed)
-}
-
 fn normalize_conversation_runtime_volatile_fields(conversation: &mut Conversation) {
     let _ = fill_missing_conversation_message_speaker_agent_ids(conversation);
     let _ = cleanup_legacy_summary_context_messages(conversation);
 }
 
-// AppData 聚合写入需要保留，作为兼容/迁移/全量导入导出入口。
-// 但业务热路径禁止直接依赖它，应该优先走分片写入：
-// agents / runtime_state / conversation:<id>
-fn write_app_data_with_stats(path: &PathBuf, data: &AppData) -> Result<AppDataWriteStats, String> {
-    let agents = build_agents_file(&data.agents);
-    let mut runtime = build_runtime_state_file(data);
-    if app_layout_runtime_state_path(path).exists() {
-        if let Ok(existing_runtime) =
-            read_json_file::<RuntimeStateFile>(&app_layout_runtime_state_path(path), "runtime state file")
-        {
-            runtime.data_migration_version = runtime
-                .data_migration_version
-                .max(existing_runtime.data_migration_version);
-            runtime.message_store_migration_version = runtime
-                .message_store_migration_version
-                .max(existing_runtime.message_store_migration_version);
-        }
+/// 测试专用：从聚合 AppData 结构 seed 分片布局（agents.json + conversation shards + 系统通知会话）。
+/// 替代已删除的兼容层全量写入器，供测试构造使用。
+#[cfg(test)]
+fn seed_app_data_shards(path: &PathBuf, data: &AppData) -> Result<(), String> {
+    write_agents_shard(path, &data.agents)?;
+    if data.data_migration_version > 0 {
+        state_db_upsert_kv(
+            path,
+            "data_migration_version",
+            &data.data_migration_version.to_string(),
+        )?;
     }
-
-    fs::create_dir_all(app_layout_config_dir(path))
-        .map_err(|err| format!("Create config layout dir failed: {err}"))?;
-    fs::create_dir_all(app_layout_state_dir(path))
-        .map_err(|err| format!("Create state layout dir failed: {err}"))?;
-    fs::create_dir_all(app_layout_chat_dir(path))
-        .map_err(|err| format!("Create chat layout dir failed: {err}"))?;
-    fs::create_dir_all(app_layout_chat_conversations_dir(path))
-        .map_err(|err| format!("Create chat conversations dir failed: {err}"))?;
-    fs::create_dir_all(app_layout_backups_dir(path))
-        .map_err(|err| format!("Create backups dir failed: {err}"))?;
-
-    let mut stats = AppDataWriteStats::default();
-
-    stats.agents_written = write_json_file_atomic_if_changed(
-        &app_layout_agents_path(path),
-        &agents,
-        "agents file",
-    )?;
-    stats.runtime_written = write_json_file_atomic_if_changed(
-        &app_layout_runtime_state_path(path),
-        &runtime,
-        "runtime state file",
-    )?;
-    let mut expected_ids = std::collections::HashSet::<String>::new();
-    let mut system_notification_in_input = false;
     for conv in &data.conversations {
-        let mut conversation = conv.clone();
-        if conversation.id.trim() == SYSTEM_NOTIFICATION_CONVERSATION_ID {
-            system_notification_in_input = true;
-            let _ = normalize_system_notification_conversation(&mut conversation);
-        }
-        expected_ids.insert(conversation.id.clone());
-        if write_conversation_shard(path, &conversation)? {
-            stats.conversation_writes += 1;
-        }
+        write_conversation_shard(path, conv)?;
     }
-    expected_ids.insert(SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string());
-    if !system_notification_in_input && ensure_system_notification_conversation_shard(path)? {
-        stats.conversation_writes += 1;
-    }
-    if let Ok(entries) = fs::read_dir(app_layout_chat_conversations_dir(path)) {
-        for entry in entries.flatten() {
-            let p = entry.path();
-            let shard_id = if p.extension().and_then(|v| v.to_str()) == Some("json") {
-                p.file_stem()
-                    .and_then(|v| v.to_str())
-                    .unwrap_or_default()
-                    .to_string()
-            } else if p.is_dir() {
-                p.file_name()
-                    .and_then(|v| v.to_str())
-                    .unwrap_or_default()
-                    .to_string()
-            } else {
-                continue;
-            };
-            if !expected_ids.contains(&shard_id) {
-                match delete_conversation_shard(path, &shard_id) {
-                    Ok(true) => {
-                        stats.conversation_deletes += 1;
-                    }
-                    Ok(false) => {}
-                    Err(err) => runtime_log_warn(format!(
-                        "[应用数据写入] 状态=失败，任务=清理孤立会话分片，conversation_id={}，path={}，error={}",
-                        shard_id,
-                        p.display(),
-                        err
-                    )),
-                }
-            }
-        }
-    }
-    Ok(stats)
-}
-
-/// Compatibility-only full AppData writer.
-///
-/// New production code must not add new call sites to this function. Prefer shard APIs:
-/// `write_agents_shard`, `write_runtime_state_shard`, `write_conversation_shard`,
-/// and their cached state wrappers.
-///
-/// Migration timeline:
-/// - New code: forbidden immediately.
-/// - Existing compatibility / migration / import-export flows: temporarily allowed.
-/// - After compatibility-only callers are fully isolated, reevaluate final removal.
-#[deprecated(
-    note = "兼容层专用的全量 AppData 写入器；新代码禁止调用，请改用 agents/runtime_state/chat_index/conversation 分片写入 API。"
-)]
-fn write_app_data(path: &PathBuf, data: &AppData) -> Result<(), String> {
-    let started = std::time::Instant::now();
-    let stats = write_app_data_with_stats(path, data)?;
-    runtime_log_debug(format!(
-        "[应用数据写入] 任务=应用数据写入，状态=完成，触发=兼容层全量写入，agents_written={}，runtime_written={}，conversation_writes={}，conversation_deletes={}，duration_ms={}",
-        stats.agents_written,
-        stats.runtime_written,
-        stats.conversation_writes,
-        stats.conversation_deletes,
-        started.elapsed().as_millis()
-    ));
+    ensure_system_notification_conversation_shard(path)?;
     Ok(())
 }
