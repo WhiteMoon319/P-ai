@@ -38,24 +38,30 @@ pub mod text_codec;
 pub mod tool_arg_types;
 pub mod version_compare;
 
-/// 原生流式事件队列：Kotlin 通过 pollEvents 轮询弹出。
-/// Android 原生模式下所有 delta 事件 push 进来，AppViewModel/前端轮询取出。
-/// （阶段 4 从 src-tauri native_bridge 迁入；桌面端 tauri Channel 分支已剥离。）
-static NATIVE_DELTA_QUEUE: OnceLock<Mutex<Vec<serde_json::Value>>> = OnceLock::new();
+// 原生流式事件出口：由平台接入方（Android 的 pai-android-platform event_queue）
+// 注册 sink，Kotlin 通过 pollEvents 轮询弹出。pai-backend 保持平台无关，不直接持有"最终队列"。
+type NativeDeltaSink = Box<dyn Fn(serde_json::Value) + Send + Sync + 'static>;
 
-fn native_delta_queue() -> &'static Mutex<Vec<serde_json::Value>> {
-    NATIVE_DELTA_QUEUE.get_or_init(|| Mutex::new(Vec::new()))
+static NATIVE_DELTA_SINK: OnceLock<Mutex<Option<NativeDeltaSink>>> = OnceLock::new();
+
+/// 注册原生流式事件转发目标（Android：pai-android-platform event_queue）。
+/// 应在平台初始化（nativeInit）时调用一次，确保所有 DeltaChannel::send 事件正确入队。
+pub fn set_native_delta_event_sink(sink: impl Fn(serde_json::Value) + Send + Sync + 'static) {
+    let slot = NATIVE_DELTA_SINK.get_or_init(|| Mutex::new(None));
+    if let Ok(mut guard) = slot.lock() {
+        *guard = Some(Box::new(sink));
+    }
 }
 
-/// 把一条流式事件追加进原生事件队列（Android 分支专用）。
+/// 把一条流式事件转发给已注册的平台事件队列（Android 分支专用）。
+/// 未注册 sink 时丢弃并记录日志（平台初始化必然先于任何 delta 产生）。
 pub fn push_native_delta_event(event: serde_json::Value) {
-    if let Ok(mut guard) = native_delta_queue().lock() {
-        guard.push(event);
-        // 队列只作短暂缓冲，Kotlin 高频轮询清空，不会无限增长。
-        if guard.len() > 4096 {
-            let len = guard.len();
-            let overflow = guard.split_off(len - 2048);
-            *guard = overflow;
+    let slot = NATIVE_DELTA_SINK.get_or_init(|| Mutex::new(None));
+    if let Ok(guard) = slot.lock() {
+        if let Some(ref sink) = *guard {
+            sink(event);
+            return;
         }
     }
+    eprintln!("[pai-backend] native delta sink 未注册，丢弃事件: {}", event);
 }

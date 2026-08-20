@@ -72,6 +72,12 @@ fn init_native_runtime(app_root: std::path::PathBuf) -> Result<(), String> {
     handle.spawn(async move {
         start_web_access_server(native_app, start_state, start_ide_context_runtime).await;
     });
+    // 注册原生流式事件转发：pai-backend 的 DeltaChannel::send 经此把事件
+    // 送进 pai-android-platform event_queue（Kotlin pollEvents 消费）。
+    pai_backend::set_native_delta_event_sink(|event| {
+        crate::push_native_delta_event(event);
+    });
+
     NATIVE_RUNTIME
         .set(Ok(Arc::new(NativeRuntime {
             runtime,
