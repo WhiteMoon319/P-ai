@@ -34,6 +34,21 @@ struct XcapMonitorInfo {
     is_builtin: bool,
 }
 
+/// 控件树元素类型（仅用于类型签名对齐，Android 上桌面操作始终返回错误）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UiElementInfo {
+    pub window_id: u32,
+    pub window_title: String,
+    pub control_type: String,
+    pub name: String,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub focused: bool,
+}
+
 fn desktop_tool_unsupported_error(tool: &str) -> DesktopToolError {
     DesktopToolError::internal_error(format!("Android 平台不支持桌面工具：{tool}"))
 }
@@ -71,4 +86,41 @@ fn clear_operate_screenshots_temp(
     _conversation_id: &str,
 ) -> Result<(usize, usize), String> {
     Ok((0, 0))
+}
+
+// ==================== windows 工具 stub（Android 始终返回错误） ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WindowsRequest {
+    script: String,
+    #[serde(default)]
+    timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WindowsResponse {
+    ok: bool,
+    executed_count: usize,
+    steps: Vec<WindowsStepResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WindowsStepResult {
+    kind: WindowsStepKind,
+    summary: String,
+    ok: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum WindowsStepKind {
+    ListWindows,
+    ActivateWindow,
+}
+
+fn run_windows_tool(_input: WindowsRequest) -> DesktopToolResult<WindowsResponse> {
+    Err(desktop_tool_unsupported_error("windows"))
 }

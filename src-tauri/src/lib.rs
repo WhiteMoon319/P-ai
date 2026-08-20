@@ -98,8 +98,6 @@ include!("features/system/record_hotkey_probe.rs");
 include!("features/system/windows_job.rs");
 #[cfg(target_os = "android")]
 include!("features/system/sandbox.rs");
-#[cfg(not(target_os = "android"))]
-include!("features/system/execution.rs");
 include!("features/system/local_port_service.rs");
 include!("features/system/tools.rs");
 #[cfg(not(target_os = "android"))]
@@ -1044,12 +1042,6 @@ pub fn run() {
     install_backend_file_panic_hook();
     unix_extend_process_path_from_login_shell();
 
-    if std::env::args().any(|arg| arg == MCP_SCREENSHOT_SERVER_FLAG) {
-        if let Err(err) = run_desktop_screenshot_mcp_server() {
-            runtime_log_info(format!("{err}"));
-        }
-        return;
-    }
     match maybe_run_portable_update_helper_from_args() {
         Ok(true) => return,
         Ok(false) => {}
