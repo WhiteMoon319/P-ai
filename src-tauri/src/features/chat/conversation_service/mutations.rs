@@ -289,20 +289,6 @@ fn apply_stop_chat_partial_message_by_id(
     Ok(conversation.id.clone())
 }
 
-fn read_latest_archive_summary_from_chat_index(state: &AppState) -> Result<Option<String>, String> {
-    let chat_index = state_read_chat_index_cached(state)?;
-    Ok(chat_index
-        .conversations
-        .iter()
-        .rev()
-        .filter_map(|item| conversation_service_v2().get_conversation_meta(state, item.id.as_str()).ok())
-        .find(|conversation_meta| {
-            !conversation_meta.is_delegate
-                && !conversation_meta.summary.trim().is_empty()
-        })
-        .map(|conversation_meta| conversation_meta.summary.to_string()))
-}
-
 fn validate_isolated_worktree_root(path: &str) -> Result<(), String> {
     let raw_path = path.trim();
     if raw_path.is_empty() {
@@ -357,7 +343,7 @@ fn create_unarchived_conversation_shared(
         .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
     let runtime_snapshot = load_runtime_organization_snapshot(state)?;
     let app_config = runtime_snapshot.config.clone();
-    let runtime = state_read_runtime_state_cached(state)?;
+    let assistant_department_agent_id = assistant_department_agent_id_downgraded(state);
     let agents = runtime_snapshot.agents.clone();
     let requested_department_id = input
         .department_id
@@ -405,7 +391,7 @@ fn create_unarchived_conversation_shared(
         let source_conversation = conversation_service_v2()
             .try_get_conversation_snapshot(state, source_conversation_id)?
             .filter(|conversation| {
-                conversation.summary.trim().is_empty()
+                conversation.status.trim() != "archived"
                     && conversation_visible_in_foreground_lists(conversation)
                     && conversation_is_local_normal_chat(conversation)
             })
@@ -420,8 +406,7 @@ fn create_unarchived_conversation_shared(
         build_unarchived_conversation_record_from_runtime(
             &state.data_path,
             &agents,
-            &runtime.assistant_department_agent_id,
-            read_latest_archive_summary_from_chat_index(state)?,
+            &assistant_department_agent_id,
             &api_config_id,
             &agent_id,
             &department.id,
@@ -502,7 +487,6 @@ fn build_unarchived_conversation_record_from_runtime(
     data_path: &PathBuf,
     agents: &[AgentProfile],
     assistant_department_agent_id: &str,
-    _last_archive_summary: Option<String>,
     api_config_id: &str,
     agent_id: &str,
     department_id: &str,
@@ -853,7 +837,6 @@ fn read_conversation_for_backup_cleanup(
         last_user_at: None,
         last_assistant_at: None,
         status: conversation_meta.status,
-        summary: conversation_meta.summary,
         user_profile_snapshot: conversation_meta.user_profile_snapshot,
         shell_workspace_path: conversation_meta.shell_workspace_path,
         shell_workspaces: conversation_meta.shell_workspaces,

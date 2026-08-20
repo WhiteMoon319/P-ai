@@ -32,66 +32,6 @@ fn conversation_current_segment_is_compaction_summary_only(conversation: &Conver
 const REMOTE_IM_AUTO_COMPACTION_IDLE_HOURS: i64 = 10;
 const REMOTE_IM_AUTO_COMPACTION_MIN_MESSAGES: usize = 7;
 
-fn find_runtime_image_text_cache(
-    runtime: &RuntimeStateFile,
-    hash: &str,
-    vision_api_id: &str,
-) -> Option<String> {
-    runtime
-        .image_text_cache
-        .iter()
-        .find(|entry| {
-            entry.hash == hash
-                && entry.model_api_id == vision_api_id
-                && entry.media_type == "image"
-                && entry.description.is_empty()
-        })
-        .map(|entry| entry.text.clone())
-}
-
-fn upsert_runtime_image_text_cache(
-    runtime: &mut RuntimeStateFile,
-    hash: &str,
-    vision_api_id: &str,
-    text: &str,
-) {
-    if let Some(entry) = runtime
-        .image_text_cache
-        .iter_mut()
-        .find(|entry| {
-            entry.hash == hash
-                && entry.model_api_id == vision_api_id
-                && entry.media_type == "image"
-                && entry.description.is_empty()
-        })
-    {
-        entry.text = text.to_string();
-        entry.updated_at = now_iso();
-        return;
-    }
-
-    runtime.image_text_cache.push(ImageTextCacheEntry {
-        hash: hash.to_string(),
-        model_api_id: vision_api_id.to_string(),
-        media_type: "image".to_string(),
-        description: String::new(),
-        text: text.to_string(),
-        updated_at: now_iso(),
-    });
-    if runtime.image_text_cache.len() <= MAX_IMAGE_TEXT_CACHE_ENTRIES {
-        return;
-    }
-    let Some((oldest_idx, _)) = runtime
-        .image_text_cache
-        .iter()
-        .enumerate()
-        .min_by(|(_, a), (_, b)| a.updated_at.cmp(&b.updated_at))
-    else {
-        return;
-    };
-    runtime.image_text_cache.remove(oldest_idx);
-}
-
 fn plan_mode_prompt_block() -> &'static str {
     "<plan mode>\n先理解用户目标，调查当前上下文或代码。计划阶段是你和我之间的双向拷问，不是你独自思考后直接写计划。\n\n把计划拆成设计决策树：从根目标开始，沿范围、取舍、架构、数据、交互、风险、验收等分支逐一访谈我；只有父决策已达成共识，才能进入依赖它的子决策。每次只问一个当前最关键的问题，同时给出你的推荐答案、理由、证据和主要替代方案；不要静默替我选择目标、偏好、优先级、可接受风险或验收取舍。\n\n问题可由代码、配置、文档或工具回答时，必须先探索并带着结果继续访谈，不能把可自行查证的工作转嫁给我。我可以回答、补充、否定前提，也可以反过来拷问你的推荐、证据或替代方案；你必须直接回答我的反问，再回到下一个尚未收敛的决策。不要回避质疑，也不要为维护旧方案而辩护。\n\n除非我明确说‘不再追问’或‘直接出计划’，否则在我们确认设计树中会实质改变目标、边界、风险、成本或验收的分支均已收敛前，不得调用 plan.present。对我展示问题、回答、已确认结论和待决定分叉；不要展示内部逐字推理。当目标、约束、现状已清楚后，计划用于对齐需求、边界、风险、术语、测试和最终呈现。得到我明确确认后，再开始修改代码或实施。\n</plan mode>"
 }
@@ -759,7 +699,6 @@ async fn send_chat_message_inner(
         response_style_id: String,
         user_name: String,
         user_intro: String,
-        last_archive_summary: Option<String>,
         storage_conversation_before: Conversation,
         prompt_conversation_before: Conversation,
         is_remote_im_contact_conversation: bool,
@@ -799,7 +738,6 @@ async fn send_chat_message_inner(
             last_user_at: None,
             last_assistant_at: None,
             status: String::new(),
-            summary: String::new(),
             user_profile_snapshot: String::new(),
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
@@ -829,6 +767,7 @@ async fn send_chat_message_inner(
     | -> Result<Option<ConversationPrepareSnapshot>, String> {
         let Some(resolved) =
             conversation_service_v2().resolve_prompt_prepare_conversation_read_only(
+                state,
                 data,
                 &state.data_path,
                 runtime_conversation_id_for_prepare.as_deref(),
@@ -845,7 +784,6 @@ async fn send_chat_message_inner(
             response_style_id: resolved.response_style_id,
             user_name: resolved.user_name,
             user_intro: resolved.user_intro,
-            last_archive_summary: resolved.last_archive_summary,
             storage_conversation_before: resolved.conversation_before.clone(),
             prompt_conversation_before: trim_conversation_for_prompt_request(
                 &resolved.conversation_before,
@@ -863,64 +801,8 @@ async fn send_chat_message_inner(
         effective_agent_id: &str,
     | -> Result<Option<ConversationPrepareSnapshot>, String> {
         if runtime_conversation_id_for_prepare.as_deref() == Some(requested_conversation_id) {
-            let runtime_state = state_read_runtime_state_cached(state)?;
-            let chat_index = state_read_chat_index_cached(state)?;
             let mut data = AppData::default();
             data.agents = runtime_agents.to_vec();
-            data.assistant_department_agent_id = runtime_state.assistant_department_agent_id.clone();
-            data.response_style_id = runtime_state.response_style_id.clone();
-            data.pdf_read_mode = runtime_state.pdf_read_mode.clone();
-            data.background_voice_screenshot_keywords =
-                runtime_state.background_voice_screenshot_keywords.clone();
-            data.background_voice_screenshot_mode =
-                runtime_state.background_voice_screenshot_mode.clone();
-            data.instruction_presets = runtime_state.instruction_presets.clone();
-            data.main_conversation_id = runtime_state.main_conversation_id.clone();
-            data.pinned_conversation_ids = runtime_state.pinned_conversation_ids.clone();
-            data.remote_im_contacts = runtime_state.remote_im_contacts.clone();
-            data.remote_im_contact_checkpoints = runtime_state.remote_im_contact_checkpoints.clone();
-            if let Some(summary_item) = chat_index
-                .conversations
-                .iter()
-                .rev()
-                .find(|item| !item.summary.trim().is_empty())
-            {
-                data.conversations.push(Conversation {
-                    id: summary_item.id.clone(),
-                    title: String::new(),
-                    agent_id: String::new(),
-                    department_id: String::new(),
-                    bound_conversation_id: None,
-                    parent_conversation_id: None,
-                    child_conversation_ids: Vec::new(),
-                    fork_message_cursor: None,
-                    unread_count: 0,
-                    conversation_kind: String::new(),
-                    root_conversation_id: None,
-                    delegate_id: None,
-                    created_at: summary_item.updated_at.clone(),
-                    updated_at: summary_item.updated_at.clone(),
-                    last_user_at: None,
-                    last_assistant_at: None,
-                    status: summary_item.status.clone(),
-                    summary: summary_item.summary.clone(),
-                    user_profile_snapshot: String::new(),
-                    shell_workspace_path: None,
-                    shell_workspaces: Vec::new(),
-                    shell_autonomous_mode: false,
-                    shell_work_mode: default_shell_work_mode(),
-                    archived_at: summary_item.archived_at.clone(),
-                    messages: Vec::new(),
-                    fast_request_turns: Vec::new(),
-                    current_todos: Vec::new(),
-                    memory_recall_table: Vec::new(),
-                    plan_mode_enabled: false,
-                    preferred_api_config_id: None,
-                    auto_push_remote_contact_id: None,
-                    cumulative_usage: ConversationCumulativeUsage::default(),
-                    active_goal: None,
-                });
-            }
             return build_prepare_snapshot_read_only(
                 &data,
                 runtime_agents,
@@ -949,65 +831,9 @@ async fn send_chat_message_inner(
                 requested_conversation.shell_work_mode = normalize_shell_work_mode_text(&parent.shell_work_mode);
             }
         }
-        let runtime_state = state_read_runtime_state_cached(state)?;
-        let chat_index = state_read_chat_index_cached(state)?;
         let mut data = AppData::default();
         data.agents = runtime_agents.to_vec();
-        data.assistant_department_agent_id = runtime_state.assistant_department_agent_id.clone();
-        data.response_style_id = runtime_state.response_style_id.clone();
-        data.pdf_read_mode = runtime_state.pdf_read_mode.clone();
-        data.background_voice_screenshot_keywords =
-            runtime_state.background_voice_screenshot_keywords.clone();
-        data.background_voice_screenshot_mode =
-            runtime_state.background_voice_screenshot_mode.clone();
-        data.instruction_presets = runtime_state.instruction_presets.clone();
-        data.main_conversation_id = runtime_state.main_conversation_id.clone();
-        data.pinned_conversation_ids = runtime_state.pinned_conversation_ids.clone();
-        data.remote_im_contacts = runtime_state.remote_im_contacts.clone();
-        data.remote_im_contact_checkpoints = runtime_state.remote_im_contact_checkpoints.clone();
         data.conversations.push(requested_conversation);
-        if let Some(summary_item) = chat_index
-            .conversations
-            .iter()
-            .rev()
-            .find(|item| !item.summary.trim().is_empty())
-        {
-            data.conversations.push(Conversation {
-                id: summary_item.id.clone(),
-                title: String::new(),
-                agent_id: String::new(),
-                department_id: String::new(),
-                bound_conversation_id: None,
-                parent_conversation_id: None,
-                child_conversation_ids: Vec::new(),
-                fork_message_cursor: None,
-                unread_count: 0,
-                conversation_kind: String::new(),
-                root_conversation_id: None,
-                delegate_id: None,
-                created_at: summary_item.updated_at.clone(),
-                updated_at: summary_item.updated_at.clone(),
-                last_user_at: None,
-                last_assistant_at: None,
-                status: summary_item.status.clone(),
-                summary: summary_item.summary.clone(),
-                user_profile_snapshot: String::new(),
-                shell_workspace_path: None,
-                shell_workspaces: Vec::new(),
-                    shell_autonomous_mode: false,
-                    shell_work_mode: default_shell_work_mode(),
-                archived_at: summary_item.archived_at.clone(),
-                messages: Vec::new(),
-                fast_request_turns: Vec::new(),
-                current_todos: Vec::new(),
-                memory_recall_table: Vec::new(),
-                plan_mode_enabled: false,
-                preferred_api_config_id: None,
-                auto_push_remote_contact_id: None,
-                cumulative_usage: ConversationCumulativeUsage::default(),
-                active_goal: None,
-            });
-        }
         build_prepare_snapshot_read_only(&data, runtime_agents, selected_api, effective_agent_id)
     };
     let build_prepare_snapshot_for_main_conversation_read_only = |
@@ -1079,9 +905,16 @@ async fn send_chat_message_inner(
         ));
         log_chat_stage("runtime_and_session_ready.config_read_done");
         let app_data_started = std::time::Instant::now();
-        let runtime_state = state_read_runtime_state_cached(state)?;
-        let assistant_department_agent_id = runtime_state.assistant_department_agent_id.clone();
-        let runtime_main_conversation_id = runtime_state.main_conversation_id.clone();
+        let (assistant_department_agent_id, runtime_main_conversation_id) = {
+            let state = state.clone();
+            tokio::task::spawn_blocking(move || {
+                let agent_id = state_service_get_assistant_department_agent_id(&state)?;
+                let main_conversation_id = state_service_get_main_conversation_id(&state)?;
+                Ok::<(String, Option<String>), String>((agent_id, main_conversation_id))
+            })
+            .await
+            .map_err(|err| format!("读取运行时人格与会话 ID 失败：error={err}"))??
+        };
         let mut runtime_agents = state_read_agents_cached(state)?;
         let app_data_read_ms = app_data_started
             .elapsed()
@@ -1794,7 +1627,7 @@ async fn send_chat_message_inner(
             &snapshot.response_style_id,
             &app_config.ui_language,
             Some(&state.data_path),
-            snapshot.last_archive_summary.as_deref(),
+            None,
             None,
             chat_overrides.clone(),
             Some(&state),
@@ -1850,7 +1683,6 @@ async fn send_chat_message_inner(
                 user_intro: snapshot.user_intro.clone(),
                 response_style_id: snapshot.response_style_id.clone(),
                 ui_language: app_config.ui_language.clone(),
-                last_archive_summary: snapshot.last_archive_summary.clone(),
                 chat_overrides: chat_overrides.clone(),
                 trusted_prompt_usage: std::sync::Arc::new(std::sync::Mutex::new(None)),
                 compaction_preserved_messages: std::sync::Arc::new(std::sync::Mutex::new(None)),
@@ -3250,7 +3082,6 @@ mod core_send_inner_tests {
             last_user_at: None,
             last_assistant_at: None,
             status: String::new(),
-            summary: String::new(),
             user_profile_snapshot: String::new(),
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
@@ -3959,7 +3790,6 @@ mod core_send_inner_tests {
             last_user_at: None,
             last_assistant_at: None,
             status: String::new(),
-            summary: String::new(),
             user_profile_snapshot: String::new(),
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),

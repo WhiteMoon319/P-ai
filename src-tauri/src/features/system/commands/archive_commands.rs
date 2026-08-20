@@ -52,10 +52,10 @@ async fn get_prompt_preview_inner(
     preview_mode: Option<String>,
     state: &AppState,
 ) -> Result<PromptPreview, String> {
-    let mut data = state_read_agents_runtime_snapshot(state)?;
     let runtime_snapshot = load_runtime_organization_snapshot(state)?;
     let app_config = runtime_snapshot.config;
-    data.agents = runtime_snapshot.agents;
+    let agents = runtime_snapshot.agents;
+    let response_style_id = state_service_get_response_style_id(state)?;
     let preview_mode = parse_prompt_preview_mode(preview_mode.as_deref());
     let requested_conversation_id = input
         .conversation_id
@@ -77,7 +77,7 @@ async fn get_prompt_preview_inner(
         return Err(format!("指定会话不存在或不可用：{requested_conversation_id}"));
     }
     let agent =
-        resolve_conversation_bound_agent(&conversation, &data.agents, &app_config.departments)?
+        resolve_conversation_bound_agent(&conversation, &agents, &app_config.departments)?
             .clone();
     let api_config = match preview_mode {
         PromptPreviewMode::Chat => resolve_chat_prompt_preview_api_config(
@@ -128,18 +128,17 @@ async fn get_prompt_preview_inner(
         latest_user_retrieved_memory_ids
     ));
 
-    let user_name = user_persona_name(&data);
-    let user_intro = user_persona_intro(&data);
-    let last_archive_summary = state_read_chat_index_cached(state)?
-        .conversations
+    let user_name = agents
         .iter()
-        .rev()
-        .filter_map(|item| conversation_service_v2().get_conversation_meta(state, item.id.as_str()).ok())
-        .find(|conversation_meta| {
-            conversation_meta.conversation_kind.trim() != CONVERSATION_KIND_DELEGATE
-                && !conversation_meta.summary.trim().is_empty()
-        })
-        .map(|conversation_meta| conversation_meta.summary.to_string());
+        .find(|a| a.id == USER_PERSONA_ID || a.is_built_in_user)
+        .map(|a| a.name.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(default_user_alias);
+    let user_intro = agents
+        .iter()
+        .find(|a| a.id == USER_PERSONA_ID || a.is_built_in_user)
+        .map(|a| a.system_prompt.trim().to_string())
+        .unwrap_or_default();
     let mut prepared = match preview_mode {
         PromptPreviewMode::Chat => build_prepared_prompt_for_mode(
             if conversation_is_delegate(&conversation) {
@@ -149,14 +148,14 @@ async fn get_prompt_preview_inner(
             },
             &conversation,
             &agent,
-            &data.agents,
+            &agents,
             &app_config.departments,
             &user_name,
             &user_intro,
-            &data.response_style_id,
+            &response_style_id,
             &app_config.ui_language,
             Some(&state.data_path),
-            last_archive_summary.as_deref(),
+            None,
             None,
             Some(ChatPromptOverrides {
                 executor_department_id: Some(conversation.department_id.trim().to_string()),
@@ -168,9 +167,8 @@ async fn get_prompt_preview_inner(
         )?,
         PromptPreviewMode::Compaction | PromptPreviewMode::Archive => {
             let owner_agent_id =
-                resolve_archive_owner_agent_id(&app_config, &data.agents, &conversation)?;
-            let owner_agent = data
-                .agents
+                resolve_archive_owner_agent_id(&app_config, &agents, &conversation)?;
+            let owner_agent = agents
                 .iter()
                 .find(|item| item.id == owner_agent_id)
                 .cloned()
@@ -179,11 +177,11 @@ async fn get_prompt_preview_inner(
                 PromptBuildMode::Chat,
                 &conversation,
                 &owner_agent,
-                &data.agents,
+                &agents,
                 &app_config.departments,
                 &user_name,
                 &user_intro,
-                &data.response_style_id,
+                &response_style_id,
                 &app_config.ui_language,
                 Some(&state.data_path),
                 None,
@@ -423,18 +421,6 @@ fn get_archive_block_page_inner(
         has_prev_block: page.has_prev_block,
         has_next_block: page.has_next_block,
     })
-}
-
-#[tauri::command]
-async fn get_archive_summary(archive_id: String, state: State<'_, AppState>) -> Result<String, String> {
-    let app_state = state.inner().clone();
-    tokio::task::spawn_blocking(move || get_archive_summary_inner(&app_state, &archive_id))
-        .await
-        .map_err(|err| format!("读取归档摘要任务异常：{err}"))?
-}
-
-fn get_archive_summary_inner(state: &AppState, archive_id: &str) -> Result<String, String> {
-    conversation_service_v2().get_archive_summary(state, archive_id)
 }
 
 #[tauri::command]
