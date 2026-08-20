@@ -166,6 +166,7 @@ pub(crate) use features_system_tools::*;
 #[cfg(target_os = "android")]
 #[path = "features/system/updater_android_stub.rs"]
 mod features_system_updater_android_stub;
+#[cfg(target_os = "android")]
 pub(crate) use features_system_updater_android_stub::*;
 
 // ==================== 记忆匹配 ====================

@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn ide_chat_jsonrpc_success(id: Option<Value>, result: Value) -> Value {
     serde_json::json!({
         "jsonrpc": "2.0",

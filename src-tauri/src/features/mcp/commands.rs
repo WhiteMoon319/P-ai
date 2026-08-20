@@ -1,3 +1,5 @@
+use super::*;
+
 pub(crate) fn normalized_mcp_member_names(definition_json: &str) -> Result<std::collections::HashSet<String>, String> {
     let parsed = parse_mcp_definition_servers(definition_json)
         .map_err(|err| err.message.clone())?;

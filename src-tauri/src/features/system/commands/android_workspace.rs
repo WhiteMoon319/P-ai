@@ -19,7 +19,7 @@ use pai_android_bridge::TaskManager;
 
 #[cfg(target_os = "android")]
 #[path = "android_workspace/rootfs_installer.rs"]
-mod android_workspace_rootfs_installer;
+pub(crate) mod android_workspace_rootfs_installer;
 #[cfg(target_os = "android")]
 pub(crate) use android_workspace_rootfs_installer::*;
 // android_workspace_apply_static_webpki_roots 已迁至 crates/pai-android-platform（阶段 5）。
@@ -235,7 +235,7 @@ pub(crate) fn android_workspace_gate_error_for_tool(tool_name: &str, is_mcp_tool
 
 #[cfg(target_os = "android")]
 #[path = "android_workspace/manager.rs"]
-mod android_workspace_manager;
+pub(crate) mod android_workspace_manager;
 #[cfg(target_os = "android")]
 pub(crate) use android_workspace_manager::*;
 

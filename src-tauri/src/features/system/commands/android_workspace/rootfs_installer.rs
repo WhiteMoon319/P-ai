@@ -2,6 +2,10 @@ use super::*;
 
 use pai_android_bridge::TaskManager;
 
+// android_workspace_apply_static_webpki_roots 已迁至 crates/pai-android-platform
+// （阶段 5），子模块显式 re-export 供外部经完整路径调用。
+pub(crate) use pai_android_platform::tls::android_workspace_apply_static_webpki_roots;
+
 pub(crate) fn android_workspace_rootfs_archive_path(root: &std::path::Path) -> PathBuf {
     android_workspace_runtime_base(root)
         .join("tmp")

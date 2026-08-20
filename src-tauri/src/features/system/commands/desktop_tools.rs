@@ -346,29 +346,6 @@ pub(crate) fn build_chat_shell_workspace_output(
     }
 }
 
-pub(crate) fn shell_workspace_display_path(path: &Path) -> String {
-    #[cfg(target_os = "windows")]
-    {
-        let raw = path.to_string_lossy();
-        if let Some(rest) = raw.strip_prefix(r"\\?\UNC\") {
-            return format!(r"\\{rest}");
-        }
-        if let Some(rest) = raw.strip_prefix(r"\\?\") {
-            return rest.to_string();
-        }
-        raw.to_string()
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        path.to_string_lossy().to_string()
-    }
-}
-
-
-
-
-
-
 pub(crate) fn get_chat_shell_workspace_inner(
     input: ChatShellWorkspaceInput,
     state: &AppState,
