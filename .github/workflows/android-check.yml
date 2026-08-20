@@ -68,5 +68,10 @@ jobs:
         run: |
           cd apps/android
           bash gradlew :app:processDebugMainManifest --no-daemon
-          python "$GITHUB_WORKSPACE/tools/android/verify-manifest.py" \
-            app/build/intermediates/merged_manifests/debug/processDebugMainManifest/AndroidManifest.xml
+          # Gradle 8.x 产物路径为 merged_manifest（单数）
+          MANIFEST="app/build/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml"
+          if [ ! -f "$MANIFEST" ]; then
+            MANIFEST=$(find app/build/intermediates -name AndroidManifest.xml -path "*processDebugMainManifest*" | head -n1)
+          fi
+          [ -n "$MANIFEST" ] || { echo "ERROR: merged manifest not found" >&2; exit 1; }
+          python "$GITHUB_WORKSPACE/tools/android/verify-manifest.py" "$MANIFEST"

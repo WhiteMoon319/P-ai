@@ -171,7 +171,9 @@ jobs:
       - name: Rename signed APK
         run: |
           APK_DIR="apps/android/app/build/outputs/apk/universal/release"
+          # GITHUB_REF_NAME 可能是 feat/xxx 形式，替换斜杠避免 mv 目标被当作目录
           TAG="${GITHUB_REF_NAME:-dev}"
+          TAG="${TAG//\//-}"
           for apk in "$APK_DIR"/*-signed.apk; do
             mv "$apk" "$APK_DIR/P-ai-${TAG}-aarch64.apk"
             echo "Renamed to P-ai-${TAG}-aarch64.apk"
@@ -190,8 +192,12 @@ jobs:
             fi
           done
           BUILD_TOOLS=$(ls -d "$ANDROID_HOME/build-tools/"* | sort -V | tail -n 1)
-          MERGED="apps/android/app/build/intermediates/merged_manifests/release/processReleaseManifest/AndroidManifest.xml"
-          if [ -f "$MERGED" ] && grep -q 'usesCleartextTraffic="true"' "$MERGED"; then
+          # Gradle 8.x 产物路径为 merged_manifest（单数）
+          MERGED="apps/android/app/build/intermediates/merged_manifest/release/processReleaseManifest/AndroidManifest.xml"
+          if [ ! -f "$MERGED" ]; then
+            MERGED=$(find apps/android/app/build/intermediates -name AndroidManifest.xml -path "*processReleaseManifest*" | head -n1)
+          fi
+          if [ -n "$MERGED" ] && [ -f "$MERGED" ] && grep -q 'usesCleartextTraffic="true"' "$MERGED"; then
             echo "ERROR: release merged manifest has usesCleartextTraffic=true" >&2
             exit 1
           fi

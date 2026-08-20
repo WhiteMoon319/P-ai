@@ -133,7 +133,9 @@ jobs:
       - name: Rename debug APK
         run: |
           APK_DIR="apps/android/app/build/outputs/apk/universal/debug"
+          # GITHUB_REF_NAME 可能是 feat/xxx 形式，替换斜杠避免 mv 目标被当作目录
           TAG="${GITHUB_REF_NAME:-dev}"
+          TAG="${TAG//\//-}"
           for apk in "$APK_DIR"/*.apk; do
             [ -e "$apk" ] || { echo "No APK found in $APK_DIR" >&2; exit 1; }
             mv "$apk" "$APK_DIR/P-ai-${TAG}-aarch64.apk"
