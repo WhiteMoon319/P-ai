@@ -1822,6 +1822,53 @@ fn get_conversation_section_orders(
     get_conversation_section_orders_inner(state.inner())
 }
 
+// ==================== 会话分组顺序（JSON 文件持久化） ====================
+// V4 状态迁移（SQLite state_db）被排除后，使用简单的 JSON 文件存储，
+// 保持与上游 `state_service_get_conversation_section_orders` 相同的接口签名。
+
+const CONVERSATION_SECTION_ORDERS_FILE: &str = "conversation_section_orders.json";
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ConversationSectionOrders {
+    #[serde(default)]
+    local: Vec<String>,
+    #[serde(default)]
+    contact: Vec<String>,
+}
+
+fn conversation_section_orders_path(data_path: &PathBuf) -> PathBuf {
+    app_layout_state_dir(data_path).join(CONVERSATION_SECTION_ORDERS_FILE)
+}
+
+fn state_service_get_conversation_section_orders(
+    state: &AppState,
+) -> Result<ConversationSectionOrders, String> {
+    let path = conversation_section_orders_path(&state.data_path);
+    if !path.exists() {
+        return Ok(ConversationSectionOrders::default());
+    }
+    let raw = fs::read_to_string(&path)
+        .map_err(|err| format!("读取会话分组顺序文件失败: {err}"))?;
+    serde_json::from_str(&raw)
+        .map_err(|err| format!("解析会话分组顺序失败: {err}"))
+}
+
+fn state_service_set_conversation_section_orders(
+    state: &AppState,
+    orders: &ConversationSectionOrders,
+) -> Result<(), String> {
+    let path = conversation_section_orders_path(&state.data_path);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("创建 state 目录失败: {err}"))?;
+    }
+    let raw = serde_json::to_string_pretty(orders)
+        .map_err(|err| format!("序列化会话分组顺序失败: {err}"))?;
+    fs::write(&path, raw)
+        .map_err(|err| format!("写入会话分组顺序文件失败: {err}"))
+}
+
 fn get_conversation_section_orders_inner(
     state: &AppState,
 ) -> Result<ConversationSectionOrders, String> {

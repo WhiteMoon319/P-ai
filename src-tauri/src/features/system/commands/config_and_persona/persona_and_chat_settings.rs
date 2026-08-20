@@ -1163,7 +1163,10 @@ fn sync_tray_icon(
     app: AppHandle,
     _state: State<'_, AppState>,
 ) -> Result<(), String> {
-    sync_default_tray_icon(&app)
+    #[cfg(not(target_os = "android"))]
+    return sync_default_tray_icon(&app);
+    #[cfg(target_os = "android")]
+    Err("Android 不支持系统托盘".to_string())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

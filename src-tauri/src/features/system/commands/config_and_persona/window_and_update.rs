@@ -20,7 +20,10 @@ fn show_quick_setup_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn open_runtime_logs_window(app: AppHandle) -> Result<(), String> {
-    show_runtime_logs_window(&app)
+    #[cfg(not(target_os = "android"))]
+    return show_runtime_logs_window(&app);
+    #[cfg(target_os = "android")]
+    Err("Android 不支持运行日志窗口".to_string())
 }
 
 #[tauri::command]
@@ -30,12 +33,18 @@ fn hide_current_window(window: tauri::Window) -> Result<(), String> {
 
 #[tauri::command]
 fn toggle_current_window_maximize(window: tauri::Window, app: AppHandle) -> Result<bool, String> {
-    toggle_window_maximize_with_default_restore(&app, window.label())
+    #[cfg(not(target_os = "android"))]
+    return toggle_window_maximize_with_default_restore(&app, window.label());
+    #[cfg(target_os = "android")]
+    Err("Android 不支持最大化/还原".to_string())
 }
 
 #[tauri::command]
 fn start_current_window_drag(window: tauri::Window, app: AppHandle) -> Result<(), String> {
-    start_window_drag_with_default_restore(&app, window.label())
+    #[cfg(not(target_os = "android"))]
+    return start_window_drag_with_default_restore(&app, window.label());
+    #[cfg(target_os = "android")]
+    Err("Android 不支持窗口拖拽".to_string())
 }
 
 #[tauri::command]
@@ -542,6 +551,7 @@ static SYSTEM_FONTS_CACHE: std::sync::OnceLock<std::sync::Mutex<Option<Vec<Syste
     std::sync::OnceLock::new();
 
 /// 枚举并分类系统字体（耗时操作：数百字体族逐一加载字形判断等宽）。
+#[cfg(not(target_os = "android"))]
 fn enumerate_system_fonts() -> Result<Vec<SystemFontInfo>, String> {
     let source = font_kit::source::SystemSource::new();
     let mut families = source
@@ -576,21 +586,24 @@ async fn list_system_fonts() -> Result<Vec<SystemFontInfo>, String> {
     {
         return Ok(Vec::new());
     }
-    // 命中缓存直接返回，避免重复枚举；miss 时把重活丢到阻塞线程池，不占 IPC 线程。
-    let cache = SYSTEM_FONTS_CACHE.get_or_init(|| std::sync::Mutex::new(None));
-    if let Ok(guard) = cache.lock() {
-        if let Some(cached) = guard.as_ref() {
-            return Ok(cached.clone());
+    // 非 Android 平台：命中缓存直接返回，避免重复枚举；miss 时把重活丢到阻塞线程池，不占 IPC 线程。
+    #[cfg(not(target_os = "android"))]
+    {
+        let cache = SYSTEM_FONTS_CACHE.get_or_init(|| std::sync::Mutex::new(None));
+        if let Ok(guard) = cache.lock() {
+            if let Some(cached) = guard.as_ref() {
+                return Ok(cached.clone());
+            }
         }
+        let result = tauri::async_runtime::spawn_blocking(enumerate_system_fonts)
+            .await
+            .map_err(|err| format!("枚举系统字体任务失败：{err}"))?
+            .map_err(|err| err.to_string())?;
+        if let Ok(mut guard) = cache.lock() {
+            *guard = Some(result.clone());
+        }
+        Ok(result)
     }
-    let result = tauri::async_runtime::spawn_blocking(enumerate_system_fonts)
-        .await
-        .map_err(|err| format!("枚举系统字体任务失败：{err}"))?
-        .map_err(|err| err.to_string())?;
-    if let Ok(mut guard) = cache.lock() {
-        *guard = Some(result.clone());
-    }
-    Ok(result)
 }
 
 fn validate_record_hotkey_available(config: &AppConfig) -> Result<String, String> {
@@ -804,6 +817,7 @@ fn save_config_inner(
         }
     }
     if base_config.hotkey != main_config.hotkey {
+        #[cfg(not(target_os = "android"))]
         if let Err(err) = register_hotkey_from_config(&app, &main_config) {
             runtime_log_error(format!(
                 "[热键] 召唤热键运行时注册失败，配置已保存但该热键暂不可用：hotkey={}, err={}",

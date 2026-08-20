@@ -1,5 +1,6 @@
 #[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 fn is_shortcut_match(shortcut: &Shortcut, raw_hotkey: &str) -> bool {
+#[cfg(not(target_os = "android"))]
     match parse_hotkey(raw_hotkey) {
         Ok(parsed) => parsed == *shortcut,
         Err(_) => false,

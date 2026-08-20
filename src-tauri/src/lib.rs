@@ -375,6 +375,7 @@ async fn run_deferred_setup(app_handle: AppHandle) {
     };
 
     emit_progress("注册快捷键");
+    #[cfg(not(target_os = "android"))]
     if let Err(err) = register_default_hotkey(&app_handle) {
         runtime_log_error(format!("[启动-延迟] 注册默认快捷键失败: {err}"));
     }
@@ -520,6 +521,7 @@ async fn run_deferred_setup(app_handle: AppHandle) {
     .await;
     #[cfg(target_os = "android")]
     eprintln!("[P-AI Android] run_deferred_setup: start_web_access_server returned");
+    #[cfg(not(target_os = "android"))]
     let _ = sync_default_tray_icon(&app_handle);
     if should_enable_devtools() {
         runtime_log_warn(format!("[启动-延迟] 检测到 devtools 开关已开启，但当前构建未启用 open_devtools API，跳过打开 devtools"));
@@ -1231,6 +1233,7 @@ pub fn run() {
                     runtime_log_error(format!("[启动] 写入应用句柄槽位失败: {e}"));
                 }
             }
+            #[cfg(not(target_os = "android"))]
             if let Err(err) = build_tray(&app_handle) {
                 runtime_log_error(format!("[启动] 构建托盘失败: {err}"));
             } else {
