@@ -54,16 +54,6 @@ jobs:
           sed -i "s/versionName = \".*\"/versionName = \"$VERSION\"/" "$GRADLE"
           echo "PAI_ANDROID_APP_VERSION=$VERSION" >> "$GITHUB_ENV"
 
-      - name: Copy Android app icons
-        run: |
-          if [ -d "src-tauri/icons/android" ]; then
-            cp -rf src-tauri/icons/android/* apps/android/app/src/main/res/
-            echo "Custom icons copied to apps/android res/"
-            ls apps/android/app/src/main/res/mipmap-hdpi/ic_launcher.png || echo "WARNING: icon not found"
-          else
-            echo "No custom Android icons found"
-          fi
-
       - name: Download proot native libs (arm64)
         run: |
           JNI_DIR="apps/android/app/src/main/jniLibs/arm64-v8a"

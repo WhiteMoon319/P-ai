@@ -28,7 +28,7 @@ jobs:
             $line = $match.Line.Trim()
             $allowed = $false
 
-            if ($line -match '^fn write_app_data\s*\(') {
+            if ($line -match '(^|\s)fn write_app_data\s*\(') {
               $allowed = $true
             } elseif ($line -eq 'write_app_data(path, &parsed)?;') {
               $allowed = $true
