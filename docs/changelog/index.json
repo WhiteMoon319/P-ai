@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-08-21T01:51:54.291Z",
-  "latestVersion": "v0.71.0",
+  "generatedAt": "2026-08-21T23:56:18.431Z",
+  "latestVersion": "v0.72.0",
   "releases": [
+    {
+      "version": "v0.72.0",
+      "path": "docs/changelog/releases/v0.72.0.md",
+      "summary": "模型选择下拉改为两层：上层选模型、底部滑动条直接调节思考等级；每个模型会记住上次使用的思考等级，切换时自动恢复；模型按钮上的思考等级始终可见，模型名过长也不会被截断"
+    },
     {
       "version": "v0.71.0",
       "path": "docs/changelog/releases/v0.71.0.md",
@@ -66,16 +71,6 @@
       "version": "v0.57.0",
       "path": "docs/changelog/releases/v0.57.0.md",
       "summary": "会话列表的聚合旧会话条目新增摘要预览：未读或 7 天内有更新的条目默认展开显示最近消息摘要，其余条目悬停时展开；移除悬停时的系统默认提示气泡"
-    },
-    {
-      "version": "v0.56.2",
-      "path": "docs/changelog/releases/v0.56.2.md",
-      "summary": "修复 i18n 文案缺失：补全三语（zh-CN/zh-TW/en-US）中 welcome 卡片、工具页、远程前端密码等 63 处静态引用缺失的翻译 key，并补齐 zh-TW 热键发送方式的 4 处缺口。"
-    },
-    {
-      "version": "v0.56.1",
-      "path": "docs/changelog/releases/v0.56.1.md",
-      "summary": "Android 工作区导出改用原生 FileProvider + ACTION_SEND 系统分享：把沙盒工作区文件通过系统分享面板导出到其他应用，Kotlin shareFromDevice 改用模板 authority `${packageName}.fileprovider`，patch-android-project.sh 向模板 file_paths.xml 追加 root-path 覆盖沙盒根 app_data_dir()。"
     },
     {
       "version": "v0.56.0",
@@ -995,7 +990,7 @@
     {
       "version": "UNRELEASED",
       "path": "docs/changelog/releases/UNRELEASED.md",
-      "summary": "外观新增「自动」主题模式：跟随系统深浅自动切换主题，浅色/深色可分别指定主题（含自定义主题），重启后保持；全新安装默认开启自动模式"
+      "summary": ""
     }
   ]
 }
