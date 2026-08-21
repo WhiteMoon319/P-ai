@@ -48,7 +48,23 @@ impl MemoryEmbeddingProvider for GeminiEmbeddingProvider {
         let api_key = self.api_key.trim().to_string();
 
         memory_run_async(async move {
-            let client = memory_http_client()?;
+            let mut builder = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(5));
+            #[cfg(target_os = "android")]
+            {
+                let mut roots = Vec::with_capacity(webpki_root_certs::TLS_SERVER_ROOT_CERTS.len());
+                for der in webpki_root_certs::TLS_SERVER_ROOT_CERTS.iter() {
+                    roots.push(
+                        reqwest::tls::Certificate::from_der(der.as_ref())
+                            .map_err(|err| format!("加载 Android 静态 TLS 根证书失败: {err}"))?,
+                    );
+                }
+                builder = builder.tls_certs_only(roots);
+            }
+            let client = builder
+                .build()
+                .map_err(|err| format!("Build Gemini embedding HTTP client failed: {err}"))?;
+
             let resp = client
                 .post(&url)
                 .query(&[("key", api_key.clone())])
