@@ -1638,7 +1638,7 @@
     "simpleSetupModeAdvanced": "高级",
     "simpleSetupModeSwitchToAdvanced": "切换到高级",
     "simpleSetupModeSwitchToSimple": "切换到简单",
-    "remoteFrontend": {
+"remoteFrontend": {
       "summary": "输入电脑 PAI 的地址和端口，将手机 PAI 作为电脑 PAI 的远程前端。连接后手机显示电脑 PAI 的聊天与设置界面，电脑 PAI 回复消息时手机仍会收到通知。",
       "host": "电脑 PAI 地址",
       "hostPlaceholder": "例如 192.168.1.100",
@@ -1648,6 +1648,12 @@
       "connectedTo": "已连接到 {target}",
       "invalidTarget": "请输入有效的地址和端口",
       "password": "连接密码"
+    },
+    "messageStoreMigration": {
+      "title": "会话消息仓库迁移",
+      "cancelStart": "取消启动",
+      "discardAndContinue": "抛弃异常会话并继续迁移",
+      "unknownError": "未知错误"
     }
   },
   "responseStyle": {

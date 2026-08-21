@@ -1638,7 +1638,7 @@
     "simpleSetupModeAdvanced": "進階",
     "simpleSetupModeSwitchToAdvanced": "切換到進階",
     "simpleSetupModeSwitchToSimple": "切換到簡單",
-    "remoteFrontend": {
+"remoteFrontend": {
       "summary": "輸入電腦 PAI 的位址與連接埠，將手機 PAI 作為電腦 PAI 的遠端前端。連線後手機顯示電腦 PAI 的聊天與設定介面，電腦 PAI 回覆訊息時手機仍會收到通知。",
       "host": "電腦 PAI 位址",
       "hostPlaceholder": "例如 192.168.1.100",
@@ -1648,6 +1648,12 @@
       "connectedTo": "已連線到 {target}",
       "invalidTarget": "請輸入有效的位址與連接埠",
       "password": "連線密碼"
+    },
+    "messageStoreMigration": {
+      "title": "會話訊息倉庫遷移",
+      "cancelStart": "取消啟動",
+      "discardAndContinue": "拋棄異常會話並繼續遷移",
+      "unknownError": "未知錯誤"
     }
   },
   "responseStyle": {
