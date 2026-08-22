@@ -119,12 +119,7 @@
       "soundLabel": "是否声音",
       "soundHint": "开启后，Windows 原生通知会使用系统默认提示音。",
       "desktopNoticeLabel": "桌面操作提醒",
-      "desktopNoticeHint": "模型即将执行鼠标、键盘、文本输入或截图操作时，提前弹出系统通知提醒你。",
-      "testLabel": "通知测试",
-      "testHint": "发送测试通知，验证普通通知与实时通知（岛）是否正常显示。",
-      "testNormalLabel": "普通通知",
-      "testLiveUpdateLabel": "实时通知",
-      "testFailedLabel": "通知测试失败"
+      "desktopNoticeHint": "模型即将执行鼠标、键盘、文本输入或截图操作时，提前弹出系统通知提醒你。"
     },
     "api": {
       "saving": "保存中...",
@@ -243,9 +238,7 @@
       "pinApiKeyToTop": "置顶",
       "connectionTest": "连通性测试",
       "testFirstKey": "测试首个",
-      "testAllKeys": "测试全部",
-      "deepSeekKimiProtocolHint": "模型名包含 DeepSeek/Kimi，建议使用 DeepSeek / Kimi 协议。",
-      "noModels": "还没有配置任何可用模型"
+      "testAllKeys": "测试全部"
     },
     "storage": {
       "pageTitle": "储存管理",
@@ -450,93 +443,12 @@
           "hint": "快速的本地搜索工具，可以提高 AI 搜索速度"
         },
         "expertModel": {
-          "title": "专家模型",
-          "summary": "专家模型负责复杂推理类任务，没有它时部分深度任务会降级或不可用。",
-          "currentOk": "已找到可用专家模型：{name}",
-          "currentMissing": "还没有检测到专家模型。",
-          "action": "去设置 LLM"
+          "title": "专家模型"
         },
         "quickModel": {
-          "title": "快速模型",
-          "summary": "快速模型负责轻量任务（如工具审查、标题生成），响应更快、成本更低。",
-          "currentOk": "已找到可用快速模型：{name}",
-          "currentMissing": "还没有检测到快速模型。",
-          "action": "去设置 LLM"
-        },
-        "textModel": {
-          "title": "可用文本模型",
-          "summary": "系统至少需要一个可用的文本模型，建议优先准备一个同时支持图片的多模态模型。",
-          "currentOkMultimodal": "已找到可用多模态文本模型：{name}",
-          "currentOk": "已找到可用文本模型：{name}。但暂时还不是多模态。",
-          "currentMissing": "还没有检测到任何可用文本模型。",
-          "action": "去设置 LLM"
-        },
-        "rerank": {
-          "title": "重排模型",
-          "summary": "重排模型用于提升记忆与检索的排序质量，配置后可让召回结果更精准。",
-          "currentOk": "已找到重排模型：{name}",
-          "currentMissing": "还没有检测到重排模型。",
-          "action": "去设置重排"
-        },
-        "memory": {
-          "title": "记忆与检索",
-          "summary": "绑定嵌入（与可选重排）模型后，记忆、检索、知识召回这套能力才能跑顺。",
-          "currentMissingBinding": "已找到模型但还没有绑定到记忆检索，去「记忆」页完成绑定。",
-          "currentOk": "记忆检索模型已就绪，可以正常使用。",
-          "currentMissingModel": "还没有配置嵌入或重排模型，记忆与检索暂时不可用。",
-          "action": "去设置记忆"
-        },
-        "persona": {
-          "title": "人格",
-          "summary": "人格决定助理的说话风格与角色。已有人格越多，切换越灵活；默认人格开箱即用。",
-          "currentOk": "已配置 {count} 个人格",
-          "currentMissing": "目前只有默认人格。可以再建几个，让助理风格更贴合你的偏好。",
-          "action": "去设置人格"
-        },
-        "embedding": {
-          "title": "嵌入模型",
-          "summary": "如果你想把记忆、检索、知识召回这套能力跑顺，最好尽早准备一个嵌入模型。",
-          "currentOk": "已找到嵌入模型：{name}",
-          "currentMissing": "还没有检测到嵌入模型。",
-          "action": "去设置嵌入"
-        },
-        "voice": {
-          "title": "语音识别",
-          "summary": "如果你想直接语音输入，这是非常值得补上的配置。",
-          "currentOk": "已找到语音识别模型：{name}",
-          "currentMissing": "还没有检测到语音识别模型。",
-          "action": "去设置语音"
-        },
-        "department": {
-          "title": "部门",
-          "summary": "部门让助理可以按职责拆分工作流。建一个自己的部门，就能把任务交给它持续跟进。",
-          "currentOk": "已配置 {count} 个自定义部门",
-          "currentMissing": "还没有自定义部门。建一个试试，把重复性任务交给它。",
-          "action": "去设置部门"
-        },
-        "skill": {
-          "title": "Skill",
-          "summary": "Skill 是 PAI 的可复用能力包（如文档处理、网页操作）。安装后助理就能调用它们。",
-          "currentOk": "已安装 {count} 个 Skill",
-          "currentMissing": "还没有安装 Skill。装几个常用技能，助理能做的事会多很多。",
-          "action": "去设置 Skill"
-        },
-        "mcp": {
-          "title": "MCP",
-          "summary": "MCP 让助理接入外部工具与数据源（数据库、浏览器、API 服务等）。",
-          "currentOk": "已启用 {count} 个 MCP 服务",
-          "currentMissing": "还没有启用 MCP。接入外部服务后，助理的能力边界会大幅扩展。",
-          "action": "去设置 MCP"
+          "title": "快速模型"
         }
-      },
-      "title": "首次设置欢迎页",
-      "subtitle": "下面这些大卡片会直接检查你的关键配置是否完整。先补必须项，再看建议项，就能比较稳定地开始用。",
-      "askLlmHint": "如果你不知道怎么配，最简单的方法就是截图给 LLM，让它一步一步教你设置。",
-      "currentState": "当前状态：",
-      "manualInstall": "手动安装",
-      "requiredBadge": "必须",
-      "stronglyRecommendedBadge": "强烈建议",
-      "recommendedBadge": "建议"
+      }
     },
     "imageGeneration": {
       "title": "图像生成",
@@ -668,115 +580,7 @@
       "resetWorkspacePathFailed": "重置助理空间路径失败: {err}",
       "systemCatalogTitle": "系统工具目录",
       "systemCatalogReadonly": "部门权限到部门去修改",
-      "workspaceAlreadyExists": "同名目录已存在，请换一个名称",
-      "androidWorkspaceInitialize": "初始化工作区",
-      "androidWorkspaceImportRootfsArchive": "导入压缩包",
-      "androidWorkspaceImport": "导入文件",
-      "androidWorkspaceExport": "导出文件",
-      "androidWorkspaceDisable": "关闭工作区",
-      "androidWorkspaceRepairRuntime": "修复沙盒",
-      "androidWorkspaceResetRuntime": "重置沙盒",
-      "androidWorkspaceResetRuntimeConfirmTitle": "重置 Linux 沙盒？",
-      "androidWorkspaceResetRuntimeConfirm": "这会删除整个 Ubuntu rootfs，包括 apt/pip 安装的软件包、Linux 文件系统内位于 /workspace 之外的所有自建文件，以及 proot 临时文件。/workspace 下的工作区用户文件、Skill、MCP、私有组织与应用配置会保留。重置后需要重新初始化或导入 Linux 运行环境。",
-      "androidWorkspaceResetRuntimeConfirmAction": "确认重置",
-      "androidWorkspaceRootPath": "助理空间路径",
-      "androidWorkspaceExportPath": "导出路径",
-      "androidWorkspaceExportPathPlaceholder": "例如 imports/example.txt",
-      "androidWorkspaceHint": "Android 助理空间固定在应用私有沙盒内，并会在 Linux 中同时映射为 /workspace 与 /root/.pai，方便终端、Skill、MCP 与用户文件互相调用。初始化会下载 Ubuntu Base 24.04.3 arm64 运行环境（约 28.5 MiB）并解压到应用私有 runtime；未就绪时仅终端和 MCP 类工具不可用，文件工具仍可维护助理空间文件。文件管理器默认只显示用户文件，不直接展示 Linux rootfs、应用数据或系统目录。",
-      "androidWorkspaceRuntime": "Linux 运行环境",
-      "androidWorkspaceDownloadProgress": "{stage}：{downloaded} / {total}",
-      "androidWorkspaceDownloadStage": {
-        "preparing": "准备中",
-        "connecting": "连接下载源",
-        "importing": "导入中",
-        "downloading": "下载中",
-        "downloaded": "下载完成",
-        "verifying": "校验中",
-        "extracting": "解压中"
-      },
-      "androidWorkspaceRootfsManualTitle": "手动导入 Linux 运行环境",
-      "androidWorkspaceRootfsManualHint": "如果在线下载一直卡住，请先在浏览器下载 {fileName}，再点击“导入压缩包”。导入时会校验文件大小和 SHA256，校验通过后自动解压。",
-      "androidWorkspaceRootfsDownloadLink": "下载地址",
-      "androidWorkspaceRuntimeReady": "{version}，下载包 {size}",
-      "androidWorkspaceStateNotDownloaded": "未下载",
-      "androidWorkspaceStateDownloading": "下载中",
-      "androidWorkspaceStateReady": "就绪",
-      "androidWorkspaceLastError": "上次错误：{err}",
-      "androidWorkspaceUpdatedAt": "更新时间：{time}",
-      "androidWorkspaceStatusFailed": "读取工作区状态失败：{err}",
-      "androidWorkspaceInitializeDone": "工作区已就绪：{path}",
-      "androidWorkspaceInitializeFailed": "初始化工作区失败：{err}",
-      "androidWorkspaceRootfsImportDone": "压缩包校验并解压完成，工作区已就绪：{path}",
-      "androidWorkspaceRootfsImportFailed": "导入 Linux 运行环境失败：{err}",
-      "androidWorkspaceDisabled": "已关闭工作区。沙盒目录未删除。",
-      "androidWorkspaceDisableFailed": "关闭工作区失败：{err}",
-      "androidWorkspaceRepairRuntimeDone": "Linux 沙盒已修复并重新通过就绪检查。",
-      "androidWorkspaceRepairRuntimeFailed": "修复 Linux 沙盒失败：{err}",
-      "androidWorkspaceResetRuntimeDone": "Linux 沙盒已重置。用户文件和 Skill 已保留，请重新初始化或导入运行环境。",
-      "androidWorkspaceResetRuntimeFailed": "重置 Linux 沙盒失败：{err}",
-      "androidWorkspaceImportDone": "已导入到工作区：{path}",
-      "androidWorkspaceImportFailed": "导入文件失败：{err}",
-      "androidWorkspaceExportDone": "已准备导出：{path}",
-      "androidWorkspaceExportFailed": "导出文件失败：{err}",
-      "androidWorkspaceExportPathRequired": "请先填写要导出的沙盒内文件路径",
-      "androidWorkspaceFileManagerTitle": "文件管理",
-      "androidWorkspaceFileManagerStandaloneHint": "在独立界面浏览、导入、导出和删除沙盒用户文件。",
-      "androidWorkspaceOpenFileManager": "打开文件管理器",
-      "androidWorkspaceFileManagerCurrentPath": "当前位置：{path}",
-      "androidWorkspaceFileManagerRoot": "工作区",
-      "androidWorkspaceRefreshFiles": "刷新",
-      "androidWorkspaceParentDirectory": "上一级",
-      "androidWorkspaceImportHere": "导入到此处",
-      "androidWorkspaceDelete": "删除",
-      "androidWorkspaceFileManagerLoading": "正在读取文件…",
-      "androidWorkspaceFileManagerEmpty": "当前文件夹为空",
-      "androidWorkspaceFileManagerLoadFailed": "读取文件列表失败：{err}",
-      "androidWorkspaceFileKindDirectory": "文件夹",
-      "androidWorkspaceFileSelected": "已选中",
-      "androidWorkspaceFileSelectRequired": "请先选中一个文件",
-      "androidWorkspaceDeleteTitle": "删除文件",
-      "androidWorkspaceDeleteConfirm": "确定删除这个沙盒文件吗？\n{path}",
-      "androidWorkspaceDeleteDone": "已删除：{path}",
-      "androidWorkspaceDeleteFailed": "删除文件失败：{err}",
-      "androidWorkspaceReadText": "查看",
-      "androidWorkspaceEditText": "编辑",
-      "androidWorkspaceMove": "移动",
-      "androidWorkspaceSearchFiles": "搜索",
-      "androidWorkspaceTextReadFailed": "读取文本失败：{err}",
-      "androidWorkspaceTextPlaceholder": "文本内容",
-      "androidWorkspaceTextSave": "保存",
-      "androidWorkspaceTextSaved": "已保存：{path}",
-      "androidWorkspaceTextSaveFailed": "保存文本失败：{err}",
-      "androidWorkspaceMoveTitle": "移动 / 重命名",
-      "androidWorkspaceMoveSource": "源路径",
-      "androidWorkspaceMoveTarget": "目标路径",
-      "androidWorkspaceMoveTargetPlaceholder": "例如 docs/renamed.md",
-      "androidWorkspaceMoveTargetRequired": "请填写目标路径",
-      "androidWorkspaceMoveOverwrite": "覆盖已存在目标",
-      "androidWorkspaceMoveDone": "已移动：{path}",
-      "androidWorkspaceMoveFailed": "移动失败：{err}",
-      "androidWorkspaceSearchTitle": "搜索工作区文件",
-      "androidWorkspaceSearchGlob": "通配符",
-      "androidWorkspaceSearchGrep": "文本",
-      "androidWorkspaceSearchPattern": "glob 模式",
-      "androidWorkspaceSearchPatternPlaceholder": "例如 **/*.md",
-      "androidWorkspaceSearchPatternRequired": "请输入 glob 模式",
-      "androidWorkspaceSearchQuery": "搜索文本",
-      "androidWorkspaceSearchQueryPlaceholder": "例如 TODO",
-      "androidWorkspaceSearchQueryRequired": "请输入搜索文本",
-      "androidWorkspaceSearchPath": "起始目录",
-      "androidWorkspaceSearchPathPlaceholder": "留空表示工作区根目录",
-      "androidWorkspaceSearchIncludeGlob": "仅搜索匹配文件",
-      "androidWorkspaceSearchIncludeGlobPlaceholder": "例如 **/*.rs",
-      "androidWorkspaceSearchRegex": "正则表达式",
-      "androidWorkspaceSearchIgnoreCase": "忽略大小写",
-      "androidWorkspaceSearchRun": "搜索",
-      "androidWorkspaceSearchEmpty": "无匹配结果",
-      "androidWorkspaceSearchFailed": "搜索失败：{err}",
-      "terminalRuntime": "终端运行时",
-      "terminalRuntimeHint": "PAI 执行命令时使用的终端。Windows 下需要 Git Bash 才能正常运行。",
-      "gitRequiredHint": "检测到未安装可用终端。请先安装 Git，并使用 Git Bash。",
-      "installGit": "安装 Git（Git Bash）"
+      "workspaceAlreadyExists": "同名目录已存在，请换一个名称"
     },
     "persona": {
       "title": "人格",
@@ -1027,9 +831,7 @@
       "refreshFailed": "刷新网络访问信息失败",
       "openFailed": "打开链接失败",
       "copied": "已复制",
-      "copyFailed": "复制失败",
-      "passwordPlaceholder": "电脑 PAI 的远程访问密码（可留空）",
-      "password": "访问密码"
+      "copyFailed": "复制失败"
     },
     "remoteIm": {
       "title": "渠道列表",
@@ -1638,7 +1440,7 @@
     "simpleSetupModeAdvanced": "高级",
     "simpleSetupModeSwitchToAdvanced": "切换到高级",
     "simpleSetupModeSwitchToSimple": "切换到简单",
-"remoteFrontend": {
+    "remoteFrontend": {
       "summary": "输入电脑 PAI 的地址和端口，将手机 PAI 作为电脑 PAI 的远程前端。连接后手机显示电脑 PAI 的聊天与设置界面，电脑 PAI 回复消息时手机仍会收到通知。",
       "host": "电脑 PAI 地址",
       "hostPlaceholder": "例如 192.168.1.100",
@@ -1651,9 +1453,20 @@
     },
     "messageStoreMigration": {
       "title": "会话消息仓库迁移",
-      "cancelStart": "取消启动",
-      "discardAndContinue": "抛弃异常会话并继续迁移",
-      "unknownError": "未知错误"
+      "confirm": "确认",
+      "retry": "重试",
+      "migratedCount": "迁移会话",
+      "discardedCount": "废弃会话",
+      "stage1": "第 1 阶段",
+      "stage2": "第 2 阶段",
+      "stage3": "第 3 阶段",
+      "stageUsageTrail": "用量数据",
+      "stageFallback": "迁移",
+      "waiting": "正在准备迁移会话消息仓库...",
+      "runningWithTitle": "正在迁移（{stage}）：{title}",
+      "conversationFallback": "会话",
+      "completed": "会话消息仓库迁移完成",
+      "failed": "会话消息仓库迁移失败"
     }
   },
   "responseStyle": {
@@ -2202,12 +2015,7 @@
     "codeReviewSubmitFailed": "提交代码审查失败",
     "deleteConversationFailed": "删除会话失败",
     "readCommitFailed": "读取 commit 失败",
-    "startCodeReviewFailed": "发起代码审查失败",
-    "holdToRecord": "按住按钮录音",
-    "exitRemote": "退出远程",
-    "remoteBackToChat": "返回远程聊天",
-    "remoteModeTitle": "远程模式 · {target}",
-    "errorTitleRequest": "请求发生错误"
+    "startCodeReviewFailed": "发起代码审查失败"
   },
   "memory": {
     "title": "记忆列表",
@@ -2662,12 +2470,6 @@
       "summonNeedsModifier": "呼唤快捷键需要至少一个修饰键。",
       "unrecognized": "未识别按键。",
       "recorded": "已录制：{combo}"
-    },
-    "themeOptions": {
-      "light": "浅色",
-      "dark": "深色",
-      "switchToLight": "切换到亮色",
-      "switchToDark": "切换到暗色"
     }
   },
   "runtimeLogs": {

@@ -38,6 +38,7 @@ reqwest = { version = "0.13.4", default-features = false, features = ["json", "s
 webpki-root-certs = "1"
 genai = { git = "https://github.com/jeremychone/rust-genai.git", rev = "bd84fbb10321536d2543e790d912befb835901b6" }
 base64 = "0.22"
+zstd = "0.13"
 aes = "0.9.1"
 md5 = "0.8"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }

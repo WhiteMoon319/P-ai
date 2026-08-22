@@ -107,9 +107,7 @@
       "builtinAltZLineWrapHint": "切換程式碼預覽的自動換行顯示。",
       "builtinShiftWheelConversationSwitch": "切換會話",
       "builtinShiftWheelConversationSwitchHint": "滾動切換最近會話。",
-      "builtinWheelKey": "滾輪",
-      "sendMode": "傳送快捷鍵",
-      "sendModeHint": "切換聊天輸入框的傳送方式：Enter 或 Ctrl+Enter。"
+      "builtinWheelKey": "滾輪"
     },
     "notification": {
       "title": "訊息通知",
@@ -119,12 +117,7 @@
       "soundLabel": "是否聲音",
       "soundHint": "開啟後，Windows 原生通知會使用系統預設提示音。",
       "desktopNoticeLabel": "桌面操作提醒",
-      "desktopNoticeHint": "模型即將執行滑鼠、鍵盤、文字輸入或截圖操作時，提前彈出系統通知提醒你。",
-      "testLabel": "通知測試",
-      "testHint": "發送測試通知，驗證普通通知與即時通知（島）是否正常顯示。",
-      "testNormalLabel": "普通通知",
-      "testLiveUpdateLabel": "即時通知",
-      "testFailedLabel": "通知測試失敗"
+      "desktopNoticeHint": "模型即將執行滑鼠、鍵盤、文字輸入或截圖操作時，提前彈出系統通知提醒你。"
     },
     "api": {
       "saving": "保存中...",
@@ -243,9 +236,7 @@
       "pinApiKeyToTop": "置頂",
       "connectionTest": "連通性測試",
       "testFirstKey": "測試首個",
-      "testAllKeys": "測試全部",
-      "deepSeekKimiProtocolHint": "模型名包含 DeepSeek/Kimi，建議使用 DeepSeek / Kimi 協議。",
-      "noModels": "還沒有設定任何可用模型"
+      "testAllKeys": "測試全部"
     },
     "storage": {
       "pageTitle": "儲存管理",
@@ -450,93 +441,12 @@
           "hint": "快速的本地搜尋工具，可以提高 AI 搜尋速度"
         },
         "expertModel": {
-          "title": "專家模型",
-          "summary": "專家模型負責複雜推理類任務，沒有它時部分深度任務會降級或不可用。",
-          "currentOk": "已找到可用專家模型：{name}",
-          "currentMissing": "還沒有偵測到專家模型。",
-          "action": "去設定 LLM"
+          "title": "專家模型"
         },
         "quickModel": {
-          "title": "快速模型",
-          "summary": "快速模型負責輕量任務（如工具審查、標題生成），回應更快、成本更低。",
-          "currentOk": "已找到可用快速模型：{name}",
-          "currentMissing": "還沒有偵測到快速模型。",
-          "action": "去設定 LLM"
-        },
-        "textModel": {
-          "title": "可用文字模型",
-          "summary": "系統至少需要一個可用的文字模型，建議優先準備一個同時支援圖片的多模態模型。",
-          "currentOkMultimodal": "已找到可用多模態文字模型：{name}",
-          "currentOk": "已找到可用文字模型：{name}。但暫時還不是多模態。",
-          "currentMissing": "還沒有偵測到任何可用文字模型。",
-          "action": "去設定 LLM"
-        },
-        "rerank": {
-          "title": "重排模型",
-          "summary": "重排模型用於提升記憶與檢索的排序品質，配置後可讓召回結果更精準。",
-          "currentOk": "已找到重排模型：{name}",
-          "currentMissing": "還沒有偵測到重排模型。",
-          "action": "去設定重排"
-        },
-        "memory": {
-          "title": "記憶與檢索",
-          "summary": "綁定嵌入（與可選重排）模型後，記憶、檢索、知識召回這套能力才能跑順。",
-          "currentMissingBinding": "已找到模型但還沒有綁定到記憶檢索，去「記憶」頁完成綁定。",
-          "currentOk": "記憶檢索模型已就緒，可以正常使用。",
-          "currentMissingModel": "還沒有配置嵌入或重排模型，記憶與檢索暫時不可用。",
-          "action": "去設定記憶"
-        },
-        "persona": {
-          "title": "人格",
-          "summary": "人格決定助理的說話風格與角色。已有人格越多，切換越靈活；預設人格開箱即用。",
-          "currentOk": "已配置 {count} 個人格",
-          "currentMissing": "目前只有預設人格。可以再建幾個，讓助理風格更貼合你的偏好。",
-          "action": "去設定人格"
-        },
-        "embedding": {
-          "title": "嵌入模型",
-          "summary": "如果你想把記憶、檢索、知識召回這套能力跑順，最好盡早準備一個嵌入模型。",
-          "currentOk": "已找到嵌入模型：{name}",
-          "currentMissing": "還沒有偵測到嵌入模型。",
-          "action": "去設定嵌入"
-        },
-        "voice": {
-          "title": "語音辨識",
-          "summary": "如果你想直接語音輸入，這是很值得補上的配置。",
-          "currentOk": "已找到語音辨識模型：{name}",
-          "currentMissing": "還沒有偵測到語音辨識模型。",
-          "action": "去設定語音"
-        },
-        "department": {
-          "title": "部門",
-          "summary": "部門讓助理可以按職責拆分工作流。建一個自己的部門，就能把任務交給它持續跟進。",
-          "currentOk": "已配置 {count} 個自訂部門",
-          "currentMissing": "還沒有自訂部門。建一個試試，把重複性任務交給它。",
-          "action": "去設定部門"
-        },
-        "skill": {
-          "title": "Skill",
-          "summary": "Skill 是 PAI 的可重複使用能力包（如文件處理、網頁操作）。安裝後助理就能呼叫它們。",
-          "currentOk": "已安裝 {count} 個 Skill",
-          "currentMissing": "還沒有安裝 Skill。裝幾個常用技能，助理能做的事會多很多。",
-          "action": "去設定 Skill"
-        },
-        "mcp": {
-          "title": "MCP",
-          "summary": "MCP 讓助理接入外部工具與資料源（資料庫、瀏覽器、API 服務等）。",
-          "currentOk": "已啟用 {count} 個 MCP 服務",
-          "currentMissing": "還沒有啟用 MCP。接入外部服務後，助理的能力邊界會大幅擴展。",
-          "action": "去設定 MCP"
+          "title": "快速模型"
         }
-      },
-      "title": "首次設定歡迎頁",
-      "subtitle": "下面這些大卡片會直接檢查你的關鍵配置是否完整。先補必須項，再看建議項，就能比較穩定地開始用。",
-      "askLlmHint": "如果你不知道怎麼配，最簡單的方法就是截圖給 LLM，讓它一步一步教你設定。",
-      "currentState": "目前狀態：",
-      "manualInstall": "手動安裝",
-      "requiredBadge": "必須",
-      "stronglyRecommendedBadge": "強烈建議",
-      "recommendedBadge": "建議"
+      }
     },
     "imageGeneration": {
       "title": "獨立圖像生成",
@@ -668,115 +578,7 @@
       "resetWorkspacePathFailed": "重置助理空間路徑失敗: {err}",
       "systemCatalogTitle": "系統工具目錄",
       "systemCatalogReadonly": "部門權限到部門去修改",
-      "workspaceAlreadyExists": "同名目錄已存在，請換一個名稱",
-      "androidWorkspaceInitialize": "初始化工作區",
-      "androidWorkspaceImportRootfsArchive": "匯入壓縮包",
-      "androidWorkspaceImport": "匯入檔案",
-      "androidWorkspaceExport": "匯出檔案",
-      "androidWorkspaceDisable": "關閉工作區",
-      "androidWorkspaceRepairRuntime": "修復沙盒",
-      "androidWorkspaceResetRuntime": "重置沙盒",
-      "androidWorkspaceResetRuntimeConfirmTitle": "重置 Linux 沙盒？",
-      "androidWorkspaceResetRuntimeConfirm": "這會刪除整個 Ubuntu rootfs，包括 apt/pip 安裝的套件、Linux 檔案系統內位於 /workspace 之外的所有自建檔案，以及 proot 暫存檔案。/workspace 下的工作區用戶檔案、Skill、MCP、私有組織與應用程式設定會保留。重置後需要重新初始化或匯入 Linux 運行環境。",
-      "androidWorkspaceResetRuntimeConfirmAction": "確認重置",
-      "androidWorkspaceRootPath": "助理空間路徑",
-      "androidWorkspaceExportPath": "匯出路徑",
-      "androidWorkspaceExportPathPlaceholder": "例如 imports/example.txt",
-      "androidWorkspaceHint": "Android 助理空間固定在應用程式私有沙盒內，並會在 Linux 中同時映射為 /workspace 與 /root/.pai，方便終端、Skill、MCP 與用戶檔案互相調用。初始化會下載 Ubuntu Base 24.04.3 arm64 運行環境（約 28.5 MiB）並解壓到應用程式私有 runtime；未就緒時僅終端和 MCP 類工具不可用，檔案工具仍可維護助理空間檔案。檔案管理器預設只顯示用戶檔案，不直接展示 Linux rootfs、應用資料或系統目錄。",
-      "androidWorkspaceRuntime": "Linux 運行環境",
-      "androidWorkspaceDownloadProgress": "{stage}：{downloaded} / {total}",
-      "androidWorkspaceDownloadStage": {
-        "preparing": "準備中",
-        "connecting": "連接下載源",
-        "importing": "匯入中",
-        "downloading": "下載中",
-        "downloaded": "下載完成",
-        "verifying": "校驗中",
-        "extracting": "解壓中"
-      },
-      "androidWorkspaceRootfsManualTitle": "手動匯入 Linux 運行環境",
-      "androidWorkspaceRootfsManualHint": "如果線上下載一直卡住，請先在瀏覽器下載 {fileName}，再點擊「匯入壓縮包」。匯入時會校驗檔案大小和 SHA256，校驗通過後自動解壓。",
-      "androidWorkspaceRootfsDownloadLink": "下載地址",
-      "androidWorkspaceRuntimeReady": "{version}，下載包 {size}",
-      "androidWorkspaceStateNotDownloaded": "未下載",
-      "androidWorkspaceStateDownloading": "下載中",
-      "androidWorkspaceStateReady": "就緒",
-      "androidWorkspaceLastError": "上次錯誤：{err}",
-      "androidWorkspaceUpdatedAt": "更新時間：{time}",
-      "androidWorkspaceStatusFailed": "讀取工作區狀態失敗：{err}",
-      "androidWorkspaceInitializeDone": "工作區已就緒：{path}",
-      "androidWorkspaceInitializeFailed": "初始化工作區失敗：{err}",
-      "androidWorkspaceRootfsImportDone": "壓縮包校驗並解壓完成，工作區已就緒：{path}",
-      "androidWorkspaceRootfsImportFailed": "匯入 Linux 運行環境失敗：{err}",
-      "androidWorkspaceDisabled": "已關閉工作區。沙盒目錄未刪除。",
-      "androidWorkspaceDisableFailed": "關閉工作區失敗：{err}",
-      "androidWorkspaceRepairRuntimeDone": "Linux 沙盒已修復並重新通過就緒檢查。",
-      "androidWorkspaceRepairRuntimeFailed": "修復 Linux 沙盒失敗：{err}",
-      "androidWorkspaceResetRuntimeDone": "Linux 沙盒已重置。用戶檔案和 Skill 已保留，請重新初始化或匯入運行環境。",
-      "androidWorkspaceResetRuntimeFailed": "重置 Linux 沙盒失敗：{err}",
-      "androidWorkspaceImportDone": "已匯入到工作區：{path}",
-      "androidWorkspaceImportFailed": "匯入檔案失敗：{err}",
-      "androidWorkspaceExportDone": "已準備匯出：{path}",
-      "androidWorkspaceExportFailed": "匯出檔案失敗：{err}",
-      "androidWorkspaceExportPathRequired": "請先填寫要匯出的沙盒內檔案路徑",
-      "androidWorkspaceFileManagerTitle": "檔案管理",
-      "androidWorkspaceFileManagerStandaloneHint": "在獨立界面瀏覽、匯入、匯出和刪除沙盒用戶檔案。",
-      "androidWorkspaceOpenFileManager": "開啟檔案管理器",
-      "androidWorkspaceFileManagerCurrentPath": "目前位置：{path}",
-      "androidWorkspaceFileManagerRoot": "工作區",
-      "androidWorkspaceRefreshFiles": "重新整理",
-      "androidWorkspaceParentDirectory": "上一級",
-      "androidWorkspaceImportHere": "匯入到此處",
-      "androidWorkspaceDelete": "刪除",
-      "androidWorkspaceFileManagerLoading": "正在讀取檔案…",
-      "androidWorkspaceFileManagerEmpty": "目前資料夾為空",
-      "androidWorkspaceFileManagerLoadFailed": "讀取檔案列表失敗：{err}",
-      "androidWorkspaceFileKindDirectory": "資料夾",
-      "androidWorkspaceFileSelected": "已選中",
-      "androidWorkspaceFileSelectRequired": "請先選中一個檔案",
-      "androidWorkspaceDeleteTitle": "刪除檔案",
-      "androidWorkspaceDeleteConfirm": "確定刪除這個沙盒檔案嗎？\n{path}",
-      "androidWorkspaceDeleteDone": "已刪除：{path}",
-      "androidWorkspaceDeleteFailed": "刪除檔案失敗：{err}",
-      "androidWorkspaceReadText": "檢視",
-      "androidWorkspaceEditText": "編輯",
-      "androidWorkspaceMove": "移動",
-      "androidWorkspaceSearchFiles": "搜尋",
-      "androidWorkspaceTextReadFailed": "讀取文字失敗：{err}",
-      "androidWorkspaceTextPlaceholder": "文字內容",
-      "androidWorkspaceTextSave": "儲存",
-      "androidWorkspaceTextSaved": "已儲存：{path}",
-      "androidWorkspaceTextSaveFailed": "儲存文字失敗：{err}",
-      "androidWorkspaceMoveTitle": "移動 / 重新命名",
-      "androidWorkspaceMoveSource": "來源路徑",
-      "androidWorkspaceMoveTarget": "目標路徑",
-      "androidWorkspaceMoveTargetPlaceholder": "例如 docs/renamed.md",
-      "androidWorkspaceMoveTargetRequired": "請填寫目標路徑",
-      "androidWorkspaceMoveOverwrite": "覆蓋已存在目標",
-      "androidWorkspaceMoveDone": "已移動：{path}",
-      "androidWorkspaceMoveFailed": "移動失敗：{err}",
-      "androidWorkspaceSearchTitle": "搜尋工作區檔案",
-      "androidWorkspaceSearchGlob": "萬用字元",
-      "androidWorkspaceSearchGrep": "文字",
-      "androidWorkspaceSearchPattern": "glob 模式",
-      "androidWorkspaceSearchPatternPlaceholder": "例如 **/*.md",
-      "androidWorkspaceSearchPatternRequired": "請輸入 glob 模式",
-      "androidWorkspaceSearchQuery": "搜尋文字",
-      "androidWorkspaceSearchQueryPlaceholder": "例如 TODO",
-      "androidWorkspaceSearchQueryRequired": "請輸入搜尋文字",
-      "androidWorkspaceSearchPath": "起始目錄",
-      "androidWorkspaceSearchPathPlaceholder": "留空表示工作區根目錄",
-      "androidWorkspaceSearchIncludeGlob": "僅搜尋符合檔案",
-      "androidWorkspaceSearchIncludeGlobPlaceholder": "例如 **/*.rs",
-      "androidWorkspaceSearchRegex": "正規表示式",
-      "androidWorkspaceSearchIgnoreCase": "忽略大小寫",
-      "androidWorkspaceSearchRun": "搜尋",
-      "androidWorkspaceSearchEmpty": "無符合結果",
-      "androidWorkspaceSearchFailed": "搜尋失敗：{err}",
-      "terminalRuntime": "終端執行環境",
-      "terminalRuntimeHint": "PAI 執行指令時使用的終端。Windows 下需要 Git Bash 才能正常運作。",
-      "gitRequiredHint": "偵測到未安裝可用終端。請先安裝 Git，並使用 Git Bash。",
-      "installGit": "安裝 Git（Git Bash）"
+      "workspaceAlreadyExists": "同名目錄已存在，請換一個名稱"
     },
     "persona": {
       "title": "人格",
@@ -1027,9 +829,7 @@
       "refreshFailed": "刷新網路訪問資訊失敗",
       "openFailed": "打開連結失敗",
       "copied": "已複製",
-      "copyFailed": "複製失敗",
-      "passwordPlaceholder": "電腦 PAI 的遠端存取密碼（可留空）",
-      "password": "存取密碼"
+      "copyFailed": "複製失敗"
     },
     "remoteIm": {
       "title": "聯絡人渠道",
@@ -1638,7 +1438,7 @@
     "simpleSetupModeAdvanced": "進階",
     "simpleSetupModeSwitchToAdvanced": "切換到進階",
     "simpleSetupModeSwitchToSimple": "切換到簡單",
-"remoteFrontend": {
+    "remoteFrontend": {
       "summary": "輸入電腦 PAI 的位址與連接埠，將手機 PAI 作為電腦 PAI 的遠端前端。連線後手機顯示電腦 PAI 的聊天與設定介面，電腦 PAI 回覆訊息時手機仍會收到通知。",
       "host": "電腦 PAI 位址",
       "hostPlaceholder": "例如 192.168.1.100",
@@ -1651,9 +1451,20 @@
     },
     "messageStoreMigration": {
       "title": "會話訊息倉庫遷移",
-      "cancelStart": "取消啟動",
-      "discardAndContinue": "拋棄異常會話並繼續遷移",
-      "unknownError": "未知錯誤"
+      "confirm": "確認",
+      "retry": "重試",
+      "migratedCount": "遷移會話",
+      "discardedCount": "廢棄會話",
+      "stage1": "第 1 階段",
+      "stage2": "第 2 階段",
+      "stage3": "第 3 階段",
+      "stageUsageTrail": "用量資料",
+      "stageFallback": "遷移",
+      "waiting": "正在準備遷移會話訊息倉庫...",
+      "runningWithTitle": "正在遷移（{stage}）：{title}",
+      "conversationFallback": "會話",
+      "completed": "會話訊息倉庫遷移完成",
+      "failed": "會話訊息倉庫遷移失敗"
     }
   },
   "responseStyle": {
@@ -2200,14 +2011,7 @@
     "codeReviewSubmitFailed": "提交程式碼審查失敗",
     "deleteConversationFailed": "刪除會話失敗",
     "readCommitFailed": "讀取 commit 失敗",
-    "startCodeReviewFailed": "發起程式碼審查失敗",
-    "holdToRecord": "按住按鈕錄音",
-    "exitRemote": "退出遠端",
-    "remoteBackToChat": "返回遠端聊天",
-    "remoteModeTitle": "遠端模式 · {target}",
-    "errorTitleRequest": "請求發生錯誤",
-    "sendModeEnter": "按 Enter 鍵傳送訊息",
-    "sendModeCtrlEnter": "按 Ctrl + Enter 鍵傳送訊息"
+    "startCodeReviewFailed": "發起程式碼審查失敗"
   },
   "memory": {
     "title": "记忆列表",
@@ -2662,12 +2466,6 @@
       "summonNeedsModifier": "呼喚快捷鍵需要至少一個修飾鍵。",
       "unrecognized": "未識別按鍵。",
       "recorded": "已錄製：{combo}"
-    },
-    "themeOptions": {
-      "light": "淺色",
-      "dark": "深色",
-      "switchToLight": "切換到亮色",
-      "switchToDark": "切換到暗色"
     }
   },
   "runtimeLogs": {
