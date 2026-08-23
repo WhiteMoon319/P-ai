@@ -1442,7 +1442,7 @@ mod git_panel_repos_tests {
         let state = AppState {
             app_handle: Arc::new(Mutex::new(None)),
             config_path: base.join("app_config.toml"),
-            data_path: base.join("app_data.json"),
+            data_path: base.join("config_mark"),
             llm_workspace_path: base.join("llm-workspace"),
             shared_http_client: reqwest::Client::new(),
             terminal_shell: detect_default_terminal_shell(),
@@ -1453,8 +1453,6 @@ mod git_panel_repos_tests {
             cached_config_mtime: Arc::new(Mutex::new(None)),
             cached_agents: Arc::new(Mutex::new(None)),
             cached_agents_mtime: Arc::new(Mutex::new(None)),
-            cached_runtime_state: Arc::new(Mutex::new(None)),
-            cached_runtime_state_mtime: Arc::new(Mutex::new(None)),
             cached_chat_index: Arc::new(Mutex::new(None)),
             cached_conversation_metadata: Arc::new(Mutex::new(std::collections::HashMap::new())),
             cached_conversation_field_metadata_ids: Arc::new(Mutex::new(
@@ -1464,10 +1462,6 @@ mod git_panel_repos_tests {
             cached_app_data: Arc::new(Mutex::new(None)),
             cached_app_data_signature: Arc::new(Mutex::new(None)),
             cached_app_data_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            app_data_persist_pending: Arc::new(Mutex::new(None)),
-            app_data_persist_notify: Arc::new(tokio::sync::Notify::new()),
-            app_data_persist_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            app_data_persist_latest_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             conversation_persist_pending: Arc::new(Mutex::new(None)),
             conversation_persist_notify: Arc::new(tokio::sync::Notify::new()),
             conversation_persist_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),

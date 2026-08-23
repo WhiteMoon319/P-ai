@@ -2908,7 +2908,7 @@
 
         let mut data = AppData::default();
         data.conversations.push(conversation);
-        data.remote_im_contacts.push(RemoteImContact {
+        let contact = RemoteImContact {
             id: "contact-record-a".to_string(),
             channel_id: "remote-im-a".to_string(),
             platform: RemoteImPlatform::OnebotV11,
@@ -2942,7 +2942,8 @@
             dingtalk_session_webhook_expired_time: None,
             onebot_group_members: Vec::new(),
             shell_workspaces: Vec::new(),
-        });
+        };
+        state_service_upsert_remote_im_contact(&state, &contact).expect("write contact");
         state_write_app_data_cached(&state, &data).expect("write app data");
 
         (
@@ -3120,15 +3121,11 @@
                 "mockSendErrorKind": "uncertain"
             }));
         activation_source.remote_contact_type = "group".to_string();
-        let mut runtime = state_read_runtime_state_cached(&state).expect("read runtime");
-        let contact = runtime
-            .remote_im_contacts
-            .iter_mut()
-            .find(|contact| contact.id == "contact-record-a")
+        let mut contact = state_service_get_remote_im_contact(&state, "contact-record-a")
+            .expect("read contact")
             .expect("contact");
         contact.remote_contact_type = "group".to_string();
-        let contact = contact.clone();
-        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+        state_service_upsert_remote_im_contact(&state, &contact).expect("write contact");
         let mut trigger = remote_im_test_group_user_message("user-a");
         trigger.id = "group-trigger-a".to_string();
         let event = create_pending_event(
@@ -3201,11 +3198,8 @@
         assert!(!lock_remote_im_group_reply_state_store()
             .by_contact
             .contains_key(&state_key));
-        let checkpoint = state_read_runtime_state_cached(&state)
-            .expect("read runtime")
-            .remote_im_contact_checkpoints
-            .into_iter()
-            .find(|checkpoint| checkpoint.contact_id == contact.id)
+        let checkpoint = state_service_get_remote_im_contact_checkpoint(&state, &contact.id)
+            .expect("read checkpoint")
             .expect("checkpoint");
         assert_eq!(
             checkpoint.group_reply_delivery.as_ref().map(|marker| marker.status.as_str()),
@@ -3236,15 +3230,11 @@
                 "mockSendError": "mock request rejected before send"
             }));
         source.remote_contact_type = "group".to_string();
-        let mut runtime = state_read_runtime_state_cached(&state).expect("read runtime");
-        let contact = runtime
-            .remote_im_contacts
-            .iter_mut()
-            .find(|contact| contact.id == "contact-record-a")
+        let mut contact = state_service_get_remote_im_contact(&state, "contact-record-a")
+            .expect("read contact")
             .expect("contact");
         contact.remote_contact_type = "group".to_string();
-        let contact = contact.clone();
-        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+        state_service_upsert_remote_im_contact(&state, &contact).expect("write contact");
         let generation = {
             let mut store = lock_remote_im_group_reply_state_store();
             let generation = remote_im_group_reply_next_generation(&mut store);
@@ -3321,11 +3311,8 @@
         assert_eq!(retry.phase, RemoteImGroupReplyPhase::MentionScheduled);
         store.by_contact.remove(&state_key);
         drop(store);
-        let checkpoint = state_read_runtime_state_cached(&state)
-            .expect("read runtime")
-            .remote_im_contact_checkpoints
-            .into_iter()
-            .find(|checkpoint| checkpoint.contact_id == contact.id)
+        let checkpoint = state_service_get_remote_im_contact_checkpoint(&state, &contact.id)
+            .expect("read checkpoint")
             .expect("checkpoint");
         assert_eq!(checkpoint.energy, None);
         assert_eq!(checkpoint.last_success_reply_at, None);
@@ -3637,6 +3624,93 @@
     }
 
     #[test]
+    fn latest_real_prompt_usage_should_read_last_valid_usage_from_tool_events() {
+        let now = now_iso();
+        let mut conversation = test_chat_conversation("conversation-main", "active", &now);
+        conversation.messages.push(ChatMessage {
+            id: "assistant-1".to_string(),
+            role: "assistant".to_string(),
+            created_at: now.clone(),
+            speaker_agent_id: Some(DEFAULT_AGENT_ID.to_string()),
+            parts: vec![MessagePart::Text {
+                text: "最新一组消息".to_string(),
+                reasoning_content: None,
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: None,
+            tool_call: Some(vec![
+                serde_json::json!({
+                    "role": "assistant",
+                    "tool_calls": [],
+                    "usage": {"promptTokens": 1200, "contextWindowTokens": 10000},
+                }),
+                serde_json::json!({"role": "tool", "tool_call_id": "a"}),
+                serde_json::json!({
+                    "role": "assistant",
+                    "tool_calls": [],
+                    "usage": {"promptTokens": 3200, "contextWindowTokens": 10000},
+                }),
+            ]),
+            mcp_call: None,
+        meme_annotations: None,
+        });
+        let mut api = ApiConfig::default();
+        api.context_window_tokens = 10000;
+
+        let usage = conversation_prompt_service()
+            .latest_real_prompt_usage(&conversation, &api)
+            .expect("tool event usage");
+
+        assert_eq!(usage.source, "assistant_tool_event_prompt_tokens");
+        assert_eq!(usage.effective_prompt_tokens, 3200, "倒序取最后一个带真实用量的事件");
+        assert!((usage.usage_ratio - 0.32).abs() < f64::EPSILON);
+        assert!(usage.estimated_prompt_tokens.is_none());
+    }
+
+    #[test]
+    fn latest_real_prompt_usage_should_not_fall_back_to_older_messages_when_latest_group_has_no_usage() {
+        let now = now_iso();
+        let mut conversation = test_chat_conversation("conversation-main", "active", &now);
+        conversation.messages.push(ChatMessage {
+            id: "assistant-older-with-usage".to_string(),
+            role: "assistant".to_string(),
+            created_at: now.clone(),
+            speaker_agent_id: Some(DEFAULT_AGENT_ID.to_string()),
+            parts: vec![MessagePart::Text {
+                text: "更早的一条带真实用量消息".to_string(),
+                reasoning_content: None,
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: Some(serde_json::json!({
+                "providerPromptTokens": 999,
+                "contextUsagePercent": 50
+            })),
+            tool_call: None,
+            mcp_call: None,
+        meme_annotations: None,
+        });
+        conversation.messages.push(ChatMessage {
+            id: "assistant-latest-no-usage".to_string(),
+            role: "assistant".to_string(),
+            created_at: now.clone(),
+            speaker_agent_id: Some(DEFAULT_AGENT_ID.to_string()),
+            parts: vec![MessagePart::Text {
+                text: "最新一组整组没有真实用量".to_string(),
+                reasoning_content: None,
+            }],
+            extra_text_blocks: Vec::new(),
+            provider_meta: None,
+            tool_call: None,
+            mcp_call: None,
+        meme_annotations: None,
+        });
+
+        let usage =
+            conversation_prompt_service().latest_real_prompt_usage(&conversation, &ApiConfig::default());
+        assert!(usage.is_none(), "最新一组没有用量时不往前翻更早的消息");
+    }
+
+    #[test]
     fn runtime_trusted_prompt_usage_should_be_reused_during_dispatch() {
         let now = now_iso();
         let mut conversation = test_chat_conversation("conversation-main", "active", &now);
@@ -3810,7 +3884,7 @@
         AppState {
             app_handle: Arc::new(Mutex::new(None)),
             config_path: root.join("app_config.toml"),
-            data_path: root.join("app_data.json"),
+            data_path: root.join("config_mark"),
             llm_workspace_path: root.join("llm-workspace"),
             shared_http_client: reqwest::Client::new(),
             terminal_shell: detect_default_terminal_shell(),
@@ -3821,8 +3895,6 @@
             cached_config_mtime: Arc::new(Mutex::new(None)),
             cached_agents: Arc::new(Mutex::new(None)),
             cached_agents_mtime: Arc::new(Mutex::new(None)),
-            cached_runtime_state: Arc::new(Mutex::new(None)),
-            cached_runtime_state_mtime: Arc::new(Mutex::new(None)),
             cached_chat_index: Arc::new(Mutex::new(None)),
             cached_conversation_metadata: Arc::new(Mutex::new(std::collections::HashMap::new())),
             cached_conversation_field_metadata_ids: Arc::new(Mutex::new(
@@ -3832,10 +3904,6 @@
             cached_app_data: Arc::new(Mutex::new(None)),
             cached_app_data_signature: Arc::new(Mutex::new(None)),
             cached_app_data_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            app_data_persist_pending: Arc::new(Mutex::new(None)),
-            app_data_persist_notify: Arc::new(tokio::sync::Notify::new()),
-            app_data_persist_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            app_data_persist_latest_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             conversation_persist_pending: Arc::new(Mutex::new(None)),
             conversation_persist_notify: Arc::new(tokio::sync::Notify::new()),
             conversation_persist_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -3950,6 +4018,7 @@
         });
         state_schedule_conversation_persist(&state, &conversation)
             .expect("persist remote group conversation");
+        flush_pending_persists_blocking(&state).expect("flush remote group conversation");
 
         assert!(!maybe_enqueue_goal_continue_after_idle(&state, &conversation.id)
             .expect("group goal continuation should fail soft"));
@@ -3976,7 +4045,6 @@
             last_user_at: None,
             last_assistant_at: None,
             status: status.to_string(),
-            summary: String::new(),
             user_profile_snapshot: String::new(),
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
@@ -3992,6 +4060,7 @@
             auto_push_remote_contact_id: None,
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
+            is_draft: false,
         }
     }
 
@@ -4056,7 +4125,6 @@
             .format(&Rfc3339)
             .expect("format later");
         let mut data = AppData::default();
-        data.main_conversation_id = Some("conversation-main".to_string());
         data.conversations = vec![
             test_chat_conversation("conversation-main", "inactive", &now),
             test_chat_conversation("conversation-sub", "active", &later),
@@ -4143,9 +4211,8 @@
             .expect("healed chat index item");
         assert_eq!(item.updated_at, conversation.updated_at);
         assert_eq!(item.status, conversation.status);
-        assert_eq!(item.summary, conversation.summary);
         assert_eq!(item.archived_at, conversation.archived_at);
-        assert!(!app_layout_chat_index_path(&state.data_path).exists());
+        assert!(!app_layout_chat_dir(&state.data_path).join("index.json").exists());
     }
 
     #[test]
@@ -4153,7 +4220,6 @@
         let state = test_chat_runtime_state();
         let now = now_iso();
         let mut conversation = test_chat_conversation("conversation-hidden-heal", "active", &now);
-        conversation.summary = "测试摘要".to_string();
         conversation.archived_at = Some(now.clone());
         conversation.status = "archived".to_string();
 
@@ -4165,7 +4231,6 @@
             .iter()
             .find(|item| item.id == conversation.id)
             .expect("archived chat index item");
-        assert_eq!(item.summary, conversation.summary);
         assert_eq!(item.archived_at, conversation.archived_at);
         assert_eq!(item.status, conversation.status);
     }
@@ -4175,7 +4240,6 @@
         let state = test_chat_runtime_state();
         let now = now_iso();
         let mut conversation = test_chat_conversation("conversation-archived-recover", "active", &now);
-        conversation.summary = "恢复用归档摘要".to_string();
         conversation.archived_at = Some(now.clone());
         conversation.status = "archived".to_string();
 
@@ -4187,7 +4251,6 @@
             .iter()
             .find(|item| item.id == conversation.id)
             .expect("recovered archived item");
-        assert_eq!(item.summary, conversation.summary);
         assert_eq!(item.archived_at, conversation.archived_at);
         assert_eq!(item.status, conversation.status);
     }
@@ -4231,11 +4294,15 @@
         let state = test_chat_runtime_state();
         let now = now_iso();
         let mut conversation = test_chat_conversation("conversation-bootstrap-recover", "active", &now);
-        conversation.summary = "启动恢复归档摘要".to_string();
         conversation.archived_at = Some(now.clone());
         conversation.status = "archived".to_string();
 
         write_conversation_shard(&state.data_path, &conversation).expect("write archived conversation");
+        state_service_set_message_store_migration_version(
+            &state,
+            DATA_MIGRATION_CURRENT_VERSION,
+        )
+        .expect("mark message store migration complete");
 
         let _snapshot = read_app_bootstrap_snapshot(&state).expect("read bootstrap snapshot");
 
@@ -4250,7 +4317,7 @@
             .conversations
             .iter()
             .any(|item| item.id == SYSTEM_NOTIFICATION_CONVERSATION_ID));
-        assert!(!app_layout_chat_index_path(&state.data_path).exists());
+        assert!(!app_layout_chat_dir(&state.data_path).join("index.json").exists());
     }
 
     #[test]
@@ -4259,7 +4326,6 @@
         let now = now_iso();
         let mut conversation = test_chat_conversation("conversation-memory-upsert", "active", &now);
         state_schedule_conversation_persist(&state, &conversation).expect("schedule persist");
-        conversation.summary = "updated summary".to_string();
         conversation.status = "archived".to_string();
         conversation.archived_at = Some(now.clone());
         state_schedule_conversation_persist(&state, &conversation).expect("schedule updated persist");
@@ -4270,10 +4336,9 @@
             .iter()
             .find(|item| item.id == conversation.id)
             .expect("chat index item");
-        assert_eq!(item.summary, conversation.summary);
         assert_eq!(item.status, conversation.status);
         assert_eq!(item.archived_at, conversation.archived_at);
-        assert!(!app_layout_chat_index_path(&state.data_path).exists());
+        assert!(!app_layout_chat_dir(&state.data_path).join("index.json").exists());
     }
 
     #[test]
@@ -4521,6 +4586,113 @@
     }
 
     #[test]
+    fn changed_since_should_read_changed_ids_directly_and_report_missing_as_deleted() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let conversation = test_chat_conversation("conversation-changed-since-a", "active", &now);
+        write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
+        state_mark_conversation_direct_persisted(&state, &conversation).expect("mark persisted");
+
+        // 首调：无 since → 全量基线，包含已落盘的会话。
+        let first = list_unarchived_conversations_changed_since_blocking(
+            &state,
+            &ListUnarchivedConversationsChangedSinceInput { since: None },
+        )
+        .expect("first sync");
+        assert!(
+            first
+                .changed
+                .iter()
+                .any(|item| item.conversation_id == conversation.id),
+            "首次差量应返回全量基线并包含已落盘会话"
+        );
+        assert!(first.deleted_ids.is_empty());
+        assert!(!first.server_time.is_empty());
+
+        // 基线之后注册单项 watermark → 差量按 id 直读返回该会话。
+        let changed_at = overview_register_item_watermark(&conversation.id);
+        assert!(!changed_at.is_empty());
+        let second = list_unarchived_conversations_changed_since_blocking(
+            &state,
+            &ListUnarchivedConversationsChangedSinceInput {
+                since: Some(first.server_time.clone()),
+            },
+        )
+        .expect("second sync");
+        assert!(
+            second
+                .changed
+                .iter()
+                .any(|item| item.conversation_id == conversation.id),
+            "差量应包含 watermark 注册过的会话且不再全量枚举"
+        );
+        assert!(
+            second
+                .deleted_ids
+                .iter()
+                .all(|id| id != &conversation.id)
+        );
+
+        // watermark 声称变了但直读不到（未落盘的幽灵 id）→ 追加 deleted_ids 兜底。
+        let ghost_id = "conversation-changed-since-ghost";
+        let _ = overview_register_item_watermark(ghost_id);
+        let third = list_unarchived_conversations_changed_since_blocking(
+            &state,
+            &ListUnarchivedConversationsChangedSinceInput {
+                since: Some(second.server_time.clone()),
+            },
+        )
+        .expect("third sync");
+        assert!(
+            third.deleted_ids.iter().any(|id| id == ghost_id),
+            "直读不到的变更 id 应进入 deleted_ids 兜底"
+        );
+        assert!(
+            !third
+                .changed
+                .iter()
+                .any(|item| item.conversation_id == ghost_id)
+        );
+
+        // 注册删除语义后 → deleted_ids 收敛包含该会话。
+        overview_register_missing_item(&conversation.id);
+        let fourth = list_unarchived_conversations_changed_since_blocking(
+            &state,
+            &ListUnarchivedConversationsChangedSinceInput {
+                since: Some(third.server_time.clone()),
+            },
+        )
+        .expect("fourth sync");
+        assert!(
+            fourth.deleted_ids.iter().any(|id| id == &conversation.id),
+            "注册 missing 后差量应返回 deleted_ids"
+        );
+    }
+
+    #[test]
+    fn foreground_snapshot_should_read_new_conversation_before_persist_worker_lands() {
+        let state = test_chat_runtime_state();
+        let now = now_iso();
+        let mut conversation =
+            test_chat_conversation("conversation-foreground-before-persist", "active", &now);
+        conversation
+            .messages
+            .push(test_text_message("assistant", "新建会话首条消息", &now));
+        conversation.updated_at = now.clone();
+        conversation.last_assistant_at = Some(now.clone());
+        state_schedule_conversation_persist(&state, &conversation).expect("schedule persist");
+
+        let meta = conversation_service_v2()
+            .get_conversation_meta(&state, &conversation.id)
+            .expect("read meta from memory cache");
+        let snapshot = build_foreground_conversation_snapshot_from_meta_view(&state, &meta, 4)
+            .expect("新建会话尚未落盘时快照应可读，而不是报仓库不存在");
+        assert_eq!(snapshot.conversation_id, conversation.id);
+        assert_eq!(snapshot.messages.len(), 1);
+        assert_eq!(snapshot.messages[0].id, conversation.messages[0].id);
+    }
+
+    #[test]
     fn list_unarchived_conversation_summaries_should_fallback_to_recent_message_when_preview_missing() {
         let state = test_chat_runtime_state();
         let now = now_iso();
@@ -4531,19 +4703,17 @@
         conversation.last_assistant_at = Some(now.clone());
         write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
 
-        let meta_path = app_layout_chat_conversations_dir(&state.data_path)
-            .join(&conversation.id)
-            .join("meta.json");
-        let mut ready_meta: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(&meta_path).expect("read ready meta raw"),
-        )
-        .expect("parse ready meta raw");
-        ready_meta["previewMessages"] = serde_json::Value::Array(Vec::new());
-        std::fs::write(
-            &meta_path,
-            serde_json::to_vec_pretty(&ready_meta).expect("serialize ready meta raw"),
-        )
-        .expect("write empty preview meta");
+        let store_paths = message_store::message_store_paths(&state.data_path, &conversation.id)
+            .expect("message store paths");
+        let ready_meta = message_store::chat_store_read_meta(&store_paths)
+            .expect("read ready meta")
+            .expect("ready meta exists");
+        let mut ready_meta_json = serde_json::to_value(&ready_meta).expect("serialize ready meta");
+        ready_meta_json["previewMessages"] = serde_json::Value::Array(Vec::new());
+        let cleared_meta: message_store::ConversationPersistMeta =
+            serde_json::from_value(ready_meta_json).expect("deserialize cleared meta");
+        message_store::chat_store_write_meta(&store_paths, &cleared_meta)
+            .expect("write cleared meta");
 
         let summaries = conversation_service_v2()
             .list_unarchived_conversation_summaries(&state)
@@ -4594,7 +4764,6 @@
                 &state,
                 &conversation.id,
                 Some("archived"),
-                Some(""),
                 Some(Some(now.clone())),
                 Some(now.clone()),
             )
@@ -4798,7 +4967,6 @@
         let now = now_iso();
         let mut conversation = test_chat_conversation("conversation-direct-upsert", "active", &now);
         write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
-        conversation.summary = "direct summary".to_string();
         conversation.status = "archived".to_string();
         conversation.archived_at = Some(now.clone());
         state_mark_conversation_direct_persisted(&state, &conversation)
@@ -4807,8 +4975,7 @@
         let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
         assert_eq!(chat_index.conversations.len(), 1);
         assert_eq!(chat_index.conversations[0].id, conversation.id);
-        assert_eq!(chat_index.conversations[0].summary, conversation.summary);
-        assert!(!app_layout_chat_index_path(&state.data_path).exists());
+        assert!(!app_layout_chat_dir(&state.data_path).join("index.json").exists());
     }
 
     #[test]
@@ -4828,7 +4995,7 @@
         let store_paths =
             message_store::message_store_paths(&state.data_path, &conversation.id)
                 .expect("message store paths");
-        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+        message_store::chat_store_write_snapshot(&store_paths, &conversation)
             .expect("write message store");
         state_mark_conversation_direct_persisted(&state, &conversation)
             .expect("mark direct persisted");
@@ -4853,8 +5020,8 @@
         }
     }
 
-    #[test]
-    fn append_message_to_unarchived_conversation_should_preserve_existing_shard_meta() {
+    #[tokio::test]
+    async fn append_message_to_unarchived_conversation_should_preserve_existing_shard_meta() {
         let state = test_chat_runtime_state();
         let now = now_iso();
         let mut conversation = test_chat_conversation("conversation-append-meta", "active", &now);
@@ -4872,7 +5039,7 @@
         let store_paths =
             message_store::message_store_paths(&state.data_path, &conversation.id)
                 .expect("message store paths");
-        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+        message_store::chat_store_write_snapshot(&store_paths, &conversation)
             .expect("write message store");
         state_mark_conversation_direct_persisted(&state, &conversation)
             .expect("mark direct persisted");
@@ -4880,9 +5047,10 @@
         let appended = test_text_message("assistant", "第三条", &now);
         conversation_service_v2()
             .append_message_to_unarchived_conversation(&state, &conversation.id, &appended)
+            .await
             .expect("append message");
 
-        let meta = message_store::read_ready_message_store_meta(&store_paths)
+        let meta = message_store::chat_store_read_meta(&store_paths)
             .expect("read store meta")
             .expect("store meta exists");
         assert_eq!(meta.message_count(), 3);
@@ -4890,7 +5058,7 @@
         assert_eq!(meta.last_message_id(), Some(appended.id.as_str()));
         assert!(meta.has_assistant_reply());
 
-        let stored_messages = message_store::read_ready_message_store_all_messages(&store_paths)
+        let stored_messages = message_store::chat_store_read_all_messages(&store_paths)
             .expect("read stored messages")
             .expect("stored messages exist");
         assert_eq!(stored_messages.len(), 3);
@@ -4900,8 +5068,8 @@
         }
     }
 
-    #[test]
-    fn append_message_should_not_overwrite_history_when_cached_meta_message_count_is_zero() {
+    #[tokio::test]
+    async fn append_message_should_not_overwrite_history_when_cached_meta_message_count_is_zero() {
         let state = test_chat_runtime_state();
         let now = now_iso();
         let mut conversation =
@@ -4920,7 +5088,7 @@
         let store_paths =
             message_store::message_store_paths(&state.data_path, &conversation.id)
                 .expect("message store paths");
-        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+        message_store::chat_store_write_snapshot(&store_paths, &conversation)
             .expect("write message store");
         state_mark_conversation_direct_persisted(&state, &conversation)
             .expect("mark direct persisted");
@@ -4950,9 +5118,10 @@
         let appended = test_text_message("assistant", "第三条新消息", &now);
         conversation_service_v2()
             .append_message_to_unarchived_conversation(&state, &conversation.id, &appended)
+            .await
             .expect("append message after broken cached meta");
 
-        let stored_messages = message_store::read_ready_message_store_all_messages(&store_paths)
+        let stored_messages = message_store::chat_store_read_all_messages(&store_paths)
             .expect("read stored messages")
             .expect("stored messages exist");
         assert_eq!(stored_messages.len(), 3);
@@ -4969,7 +5138,7 @@
             _ => panic!("expected appended text message"),
         }
 
-        let ready_meta = message_store::read_ready_message_store_meta(&store_paths)
+        let ready_meta = message_store::chat_store_read_meta(&store_paths)
             .expect("read ready meta")
             .expect("ready meta exists");
         assert_eq!(ready_meta.message_count(), 3);
@@ -4999,7 +5168,7 @@
         let store_paths =
             message_store::message_store_paths(&state.data_path, &conversation.id)
                 .expect("message store paths");
-        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+        message_store::chat_store_write_snapshot(&store_paths, &conversation)
             .expect("write message store");
         state_mark_conversation_direct_persisted(&state, &conversation)
             .expect("mark direct persisted");
@@ -5021,7 +5190,7 @@
 
         flush_pending_persists_blocking(&state).expect("flush metadata persist");
 
-        let meta = message_store::read_ready_message_store_meta(&store_paths)
+        let meta = message_store::chat_store_read_meta(&store_paths)
             .expect("read ready store meta")
             .expect("ready store meta exists");
         assert_eq!(meta.message_count(), 2);
@@ -5150,7 +5319,6 @@
             "not-a-valid-rfc3339-time",
         );
         conversation.title = String::new();
-        conversation.summary = String::new();
         conversation.department_id = ASSISTANT_DEPARTMENT_ID.to_string();
         conversation.agent_id = DEFAULT_AGENT_ID.to_string();
         state_schedule_conversation_persist(&state, &conversation).expect("persist conversation");
@@ -5216,7 +5384,7 @@
         let store_paths =
             message_store::message_store_paths(&state.data_path, &conversation.id)
                 .expect("message store paths");
-        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+        message_store::chat_store_write_snapshot(&store_paths, &conversation)
             .expect("write message store");
         state_mark_conversation_direct_persisted(&state, &conversation)
             .expect("mark direct persisted");
@@ -5246,8 +5414,8 @@
         assert_eq!(after.last_message_id.as_deref(), Some("msg-3"));
     }
 
-    #[test]
-    fn conversation_service_v2_should_create_and_delete_conversation() {
+    #[tokio::test]
+    async fn conversation_service_v2_should_create_and_delete_conversation() {
         let state = test_chat_runtime_state();
         let git_init = std::process::Command::new("git")
             .args(["init", "--quiet"])
@@ -5267,6 +5435,7 @@
                     shell_workspaces: None,
                     shell_work_mode: Some("isolated_worktree".to_string()),
                     shell_autonomous_mode: None,
+                    is_draft: Some(false),
                 },
             )
             .expect("create conversation through v2");
@@ -5290,11 +5459,281 @@
             created_conversation.shell_workspaces[0].access,
             SHELL_WORKSPACE_ACCESS_FULL_ACCESS
         );
+        let store_paths = message_store::message_store_paths(
+            &state.data_path,
+            &created.conversation_id,
+        )
+        .expect("created conversation store paths");
+        let immediate_message = test_text_message("user", "创建后立即发送", &now_iso());
+        conversation_service_v2()
+            .append_message_to_unarchived_conversation(
+                &state,
+                &created.conversation_id,
+                &immediate_message,
+            )
+            .await
+            .expect("new conversation should accept an immediate first message");
+        assert!(message_store::chat_store_read_message_by_id(
+            &store_paths,
+            &immediate_message.id,
+        )
+        .expect("read immediate first message")
+        .is_some());
+        assert!(!state
+            .cached_conversation_dirty_ids
+            .lock()
+            .expect("read dirty ids after immediate append")
+            .contains(&created.conversation_id));
+        if let Some(pending) = state
+            .conversation_persist_pending
+            .lock()
+            .expect("read pending persists after immediate append")
+            .as_ref()
+        {
+            assert!(!pending.conversations.contains_key(&created.conversation_id));
+            assert!(!pending
+                .metadata_conversation_ids
+                .contains(&created.conversation_id));
+        }
+
+        let legacy_collision_id = "conversation-v2-create-with-legacy-artifact";
+        let mut legacy_collision = test_chat_conversation(legacy_collision_id, "active", &now_iso());        legacy_collision.title = "生产新建忽略旧 artifact".to_string();
+        let legacy_path =
+            app_layout_chat_conversation_path(&state.data_path, legacy_collision_id);
+        let collision_paths = message_store::message_store_paths(
+            &state.data_path,
+            legacy_collision_id,
+        )
+        .expect("collision store paths");
+        let collision_shard_dir =
+            app_layout_chat_conversations_dir(&state.data_path).join(legacy_collision_id);
+        let collision_manifest = collision_shard_dir
+            .join(message_store::MESSAGE_STORE_MANIFEST_FILE_NAME);
+        let collision_legacy_block = collision_shard_dir
+            .join(message_store::MESSAGE_STORE_BLOCKS_DIR_NAME)
+            .join("000000.jsonl");
+        fs::create_dir_all(&collision_shard_dir).expect("create V2 artifact directory");
+        fs::create_dir_all(
+            collision_legacy_block
+                .parent()
+                .expect("legacy block parent"),
+        )
+        .expect("create V2 block directory");
+        fs::write(&legacy_path, "{broken legacy source")
+            .expect("write V1 artifact");
+        fs::write(&collision_manifest, "{broken V2 manifest")
+            .expect("write V2 artifact");
+        fs::write(&collision_legacy_block, "legacy V2 block")
+            .expect("write V2 block artifact");
+        let legacy_before = fs::read(&legacy_path).expect("read V1 artifact before create");
+        let manifest_before = fs::read(&collision_manifest).expect("read V2 artifact before create");
+        let block_before =
+            fs::read(&collision_legacy_block).expect("read V2 block before create");
+
+        state_schedule_conversation_persist(&state, &legacy_collision)
+            .expect("schedule new V3 conversation over ignored old artifacts");
+        flush_pending_persists_blocking(&state)
+            .expect("publish scheduled V3 conversation");
+
+        assert!(message_store::chat_store_read_status(&collision_paths)
+            .expect("read collision V3 status")
+            .is_some());
+        assert_eq!(
+            fs::read(&legacy_path).expect("V1 artifact remains after create"),
+            legacy_before
+        );
+        assert_eq!(
+            fs::read(&collision_manifest).expect("V2 artifact remains after create"),
+            manifest_before
+        );
+        assert_eq!(
+            fs::read(&collision_legacy_block).expect("V2 block remains after create"),
+            block_before
+        );
 
         let deleted = conversation_service_v2()
             .delete_conversation(&state, &created.conversation_id)
             .expect("delete conversation through v2");
         assert_eq!(deleted.deleted_conversation_id, created.conversation_id);
+    }
+
+    #[test]
+    fn conversation_service_v2_should_create_draft_with_fallback_defaults_and_find_it() {
+        let state = test_chat_runtime_state();
+        let git_init = std::process::Command::new("git")
+            .args(["init", "--quiet"])
+            .current_dir(&state.llm_workspace_path)
+            .output()
+            .expect("initialize git workspace");
+        assert!(git_init.status.success(), "git init should succeed");
+
+        let created = conversation_service_v2()
+            .create_conversation(
+                &state,
+                &CreateUnarchivedConversationInput {
+                    api_config_id: None,
+                    agent_id: None,
+                    department_id: None,
+                    title: None,
+                    copy_source_conversation_id: None,
+                    shell_workspaces: None,
+                    shell_work_mode: None,
+                    shell_autonomous_mode: None,
+                    is_draft: Some(true),
+                },
+            )
+            .expect("create draft with fallback defaults");
+
+        let draft = state_read_conversation_cached(&state, &created.conversation_id)
+            .expect("draft conversation should exist");
+        assert!(draft.is_draft, "draft flag should be set on creation");
+        assert!(draft.title.is_empty(), "draft title should stay empty");
+        assert!(!draft.department_id.is_empty(), "draft department should fall back to default");
+        assert!(!draft.agent_id.is_empty(), "draft agent should fall back to default");
+
+        let meta = conversation_service_v2()
+            .get_conversation_meta(&state, &created.conversation_id)
+            .expect("read draft meta view");
+        assert!(meta.is_draft, "is_draft must survive the shard meta roundtrip");
+
+        let found =
+            find_existing_draft_conversation_id(&state).expect("find existing draft");
+        assert_eq!(
+            found.as_deref(),
+            Some(created.conversation_id.as_str()),
+            "singleton query should locate the only unarchived draft"
+        );
+    }
+
+    #[test]
+    fn conversation_service_v2_should_keep_normal_create_non_draft() {
+        let state = test_chat_runtime_state();
+        let git_init = std::process::Command::new("git")
+            .args(["init", "--quiet"])
+            .current_dir(&state.llm_workspace_path)
+            .output()
+            .expect("initialize git workspace");
+        assert!(git_init.status.success(), "git init should succeed");
+
+        let created = conversation_service_v2()
+            .create_conversation(
+                &state,
+                &CreateUnarchivedConversationInput {
+                    api_config_id: None,
+                    agent_id: Some(DEFAULT_AGENT_ID.to_string()),
+                    department_id: Some(ASSISTANT_DEPARTMENT_ID.to_string()),
+                    title: None,
+                    copy_source_conversation_id: None,
+                    shell_workspaces: None,
+                    shell_work_mode: None,
+                    shell_autonomous_mode: None,
+                    is_draft: None,
+                },
+            )
+            .expect("create normal conversation");
+
+        let conversation = state_read_conversation_cached(&state, &created.conversation_id)
+            .expect("conversation should exist");
+        assert!(!conversation.is_draft, "normal create must not set draft flag");
+        let found =
+            find_existing_draft_conversation_id(&state).expect("find draft after normal create");
+        assert!(found.is_none(), "normal conversation must not be treated as draft");
+    }
+
+    #[tokio::test]
+    async fn conversation_service_v2_should_promote_draft_on_first_user_message_and_create_next_draft()
+    {
+        let state = test_chat_runtime_state();
+        let git_init = std::process::Command::new("git")
+            .args(["init", "--quiet"])
+            .current_dir(&state.llm_workspace_path)
+            .output()
+            .expect("initialize git workspace");
+        assert!(git_init.status.success(), "git init should succeed");
+
+        let created = conversation_service_v2()
+            .create_conversation(
+                &state,
+                &CreateUnarchivedConversationInput {
+                    api_config_id: None,
+                    agent_id: None,
+                    department_id: None,
+                    title: None,
+                    copy_source_conversation_id: None,
+                    shell_workspaces: None,
+                    shell_work_mode: None,
+                    shell_autonomous_mode: None,
+                    is_draft: Some(true),
+                },
+            )
+            .expect("create draft with fallback defaults");
+
+        let now = now_iso();
+        conversation_service_v2()
+            .append_user_message(
+                &state,
+                &UserMessageAppendInput {
+                    conversation_id: created.conversation_id.clone(),
+                    message: test_text_message("user", "第一条消息，转正", &now),
+                    memory_recall_ids: Vec::new(),
+                },
+            )
+            .await
+            .expect("append user message should promote draft");
+
+        let promoted = state_read_conversation_cached(&state, &created.conversation_id)
+            .expect("read promoted conversation");
+        assert!(
+            !promoted.is_draft,
+            "draft must be cleared after first user message is persisted"
+        );
+        let promoted_meta = conversation_service_v2()
+            .get_conversation_meta(&state, &created.conversation_id)
+            .expect("read promoted meta view");
+        assert!(
+            !promoted_meta.is_draft,
+            "is_draft=false must be written back to storage meta"
+        );
+
+        let next_draft = find_existing_draft_conversation_id(&state)
+            .expect("find next draft after promotion");
+        assert!(
+            next_draft.is_some() && next_draft.as_deref() != Some(created.conversation_id.as_str()),
+            "a fresh backup draft should exist after promotion"
+        );
+        if let Some(next_draft_id) = next_draft {
+            let next_meta = conversation_service_v2()
+                .get_conversation_meta(&state, &next_draft_id)
+                .expect("read next draft meta");
+            assert!(next_meta.is_draft, "backup draft must keep is_draft=true");
+            assert_eq!(
+                next_meta.department_id, promoted_meta.department_id,
+                "backup draft should inherit department"
+            );
+            assert_eq!(
+                next_meta.agent_id, promoted_meta.agent_id,
+                "backup draft should inherit agent"
+            );
+        }
+    }
+
+    #[test]
+    fn conversation_service_v2_should_reject_draft_agent_outside_department() {
+        let state = test_chat_runtime_state();
+        let git_init = std::process::Command::new("git")
+            .args(["init", "--quiet"])
+            .current_dir(&state.llm_workspace_path)
+            .output()
+            .expect("initialize git workspace");
+        assert!(git_init.status.success(), "git init should succeed");
+
+        // 人格校验复用草稿更新路径的部门归属校验：不存在的部门必须拒绝
+        let result = validate_draft_agent_for_department(
+            &state,
+            "department-not-exists",
+            DEFAULT_AGENT_ID,
+        );
+        assert!(result.is_err(), "unknown department must be rejected");
     }
 
     #[test]
@@ -5319,6 +5758,7 @@
                     shell_workspaces: None,
                     shell_work_mode: Some(SHELL_WORK_MODE_INDEPENDENT_WORKTREE.to_string()),
                     shell_autonomous_mode: None,
+                    is_draft: Some(false),
                 },
             )
             .expect("create independent worktree conversation");
@@ -5359,6 +5799,7 @@
                 }]),
                 shell_work_mode: Some(SHELL_WORK_MODE_ISOLATED_WORKTREE.to_string()),
                 shell_autonomous_mode: None,
+                is_draft: Some(false),
             },
         );
 
@@ -5396,6 +5837,7 @@
                 }]),
                 shell_work_mode: Some(SHELL_WORK_MODE_INDEPENDENT_WORKTREE.to_string()),
                 shell_autonomous_mode: None,
+                is_draft: Some(false),
             },
         );
 
@@ -5453,13 +5895,13 @@
         )
         .expect("seed profile memory");
         let agents = state_read_agents_cached(&state).expect("read agents");
-        let runtime = state_read_runtime_state_cached(&state).expect("read runtime");
+        let assistant_department_agent_id =
+            state_service_get_assistant_department_agent_id(&state).expect("read agent id");
 
         let conversation = build_unarchived_conversation_record_from_runtime(
             &state.data_path,
             &agents,
-            &runtime.assistant_department_agent_id,
-            None,
+            &assistant_department_agent_id,
             "api-1",
             DEFAULT_AGENT_ID,
             ASSISTANT_DEPARTMENT_ID,
@@ -5547,44 +5989,6 @@
     }
 
     #[test]
-    fn conversation_service_v2_should_allow_recovery_snapshot_via_privileged_method() {
-        let state = test_chat_runtime_state();
-        let now = now_iso();
-        let mut conversation =
-            test_chat_conversation("conversation-v2-recovery-overwrite", "active", &now);
-        conversation.title = "恢复后的会话".to_string();
-        conversation.current_todos = vec![ConversationTodoItem {
-            content: "恢复待办".to_string(),
-            status: "pending".to_string(),
-        }];
-        conversation.messages.push(test_text_message("user", "恢复消息1", &now));
-
-        conversation_service_v2()
-            .recover_conversation_snapshot(
-                &state,
-                "recovery-job-test",
-                "test_recovery",
-                "测试迁移恢复",
-                &conversation,
-            )
-            .expect("privileged recovery overwrite should succeed");
-
-        let cached = state_read_conversation_cached(&state, &conversation.id)
-            .expect("conversation should be cached after recovery overwrite");
-        assert_eq!(cached.title, "恢复后的会话");
-        assert_eq!(cached.current_todos.len(), 1);
-        assert_eq!(cached.messages.len(), 1);
-
-        flush_pending_persists_blocking(&state).expect("flush recovery conversation");
-        let persisted = conversation_service_v2()
-            .read_persisted_conversation(&state, &conversation.id)
-            .expect("read persisted recovery conversation");
-        assert_eq!(persisted.title, "恢复后的会话");
-        assert_eq!(persisted.current_todos.len(), 1);
-        assert_eq!(persisted.messages.len(), 1);
-    }
-
-    #[test]
     fn conversation_service_v2_should_reject_privileged_overwrite_without_audit_fields() {
         let state = test_chat_runtime_state();
         let now = now_iso();
@@ -5600,11 +6004,6 @@
             .sync_replace_conversation_snapshot(&state, "job", "", "reason", &conversation)
             .expect_err("missing operator should be rejected");
         assert!(err.contains("operator"));
-
-        let err = conversation_service_v2()
-            .recover_conversation_snapshot(&state, "job", "operator", "", &conversation)
-            .expect_err("missing reason should be rejected");
-        assert!(err.contains("reason"));
     }
 
     fn test_v2_single_tool_group_result(call_id: &str, tool_name: &str) -> (Value, Value) {
@@ -5642,7 +6041,7 @@
         let store_paths =
             message_store::message_store_paths(&state.data_path, &conversation.id)
                 .expect("message store paths");
-        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+        message_store::chat_store_write_snapshot(&store_paths, &conversation)
             .expect("write message store");
         state_mark_conversation_direct_persisted(&state, &conversation)
             .expect("mark direct persisted");
@@ -5657,7 +6056,6 @@
                     assistant_message_id: "assistant-final".to_string(),
                     assistant_tool_event,
                     tool_result_event,
-                    provider_meta_patch: None,
                 },
             )
             .expect_err("final text should close tool append");
@@ -5679,7 +6077,7 @@
         let store_paths =
             message_store::message_store_paths(&state.data_path, &conversation.id)
                 .expect("message store paths");
-        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+        message_store::chat_store_write_snapshot(&store_paths, &conversation)
             .expect("write message store");
         state_mark_conversation_direct_persisted(&state, &conversation)
             .expect("mark direct persisted");
@@ -5694,7 +6092,6 @@
                     assistant_message_id: "assistant-open".to_string(),
                     assistant_tool_event,
                     tool_result_event,
-                    provider_meta_patch: None,
                 },
             )
             .expect("tool append should succeed");
@@ -5707,10 +6104,10 @@
             .read_message_by_id(&state, &conversation.id, "assistant-open")
             .expect("read updated assistant message");
         assert_eq!(stored.tool_call.as_ref().map(Vec::len), Some(2));
-        match &stored.parts[0] {
-            MessagePart::Text { text, .. } => assert!(text.is_empty()),
-            _ => panic!("expected text part"),
-        }
+        assert!(
+            stored.parts.is_empty(),
+            "开放组（未提交 final text）落盘为纯工具行组，读回是未闭合组语义：无正文 part"
+        );
     }
 
     #[test]
@@ -5730,7 +6127,7 @@
         let store_paths =
             message_store::message_store_paths(&state.data_path, &conversation.id)
                 .expect("message store paths");
-        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+        message_store::chat_store_write_snapshot(&store_paths, &conversation)
             .expect("write message store");
         state_mark_conversation_direct_persisted(&state, &conversation)
             .expect("mark direct persisted");
@@ -5747,7 +6144,6 @@
                     assistant_message_id: "assistant-tool-rounds".to_string(),
                     assistant_tool_event: first_assistant_event,
                     tool_result_event: first_tool_result,
-                    provider_meta_patch: None,
                 },
             )
             .expect("persist first completed tool round");
@@ -5875,7 +6271,7 @@
         let store_paths =
             message_store::message_store_paths(&state.data_path, &conversation.id)
                 .expect("message store paths");
-        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+        message_store::chat_store_write_snapshot(&store_paths, &conversation)
             .expect("write message store");
         state_mark_conversation_direct_persisted(&state, &conversation)
             .expect("mark direct persisted");
@@ -5926,6 +6322,80 @@
     }
 
     #[test]
+    fn merge_last_tool_call_usage_should_derive_meta_from_tool_call_events() {
+        let tool_call = Some(vec![
+            serde_json::json!({
+                "role": "assistant",
+                "tool_calls": [],
+                "usage": {"promptTokens": 1000, "contextWindowTokens": 10000},
+            }),
+            serde_json::json!({"role": "tool", "tool_call_id": "a"}),
+            serde_json::json!({
+                "role": "assistant",
+                "tool_calls": [],
+                "usage": {"promptTokens": 2500, "contextWindowTokens": 10000},
+            }),
+        ]);
+        let mut meta = Some(serde_json::json!({"dispatchElapsedMs": 12}));
+        merge_last_tool_call_usage_into_provider_meta(&mut meta, &tool_call);
+        let merged = meta.expect("meta present");
+        assert_eq!(merged["providerPromptTokens"].as_u64(), Some(2500), "取最后一个带用量的事件");
+        assert_eq!(merged["effectivePromptTokens"].as_u64(), Some(2500));
+        assert_eq!(
+            merged["effectivePromptSource"].as_str(),
+            Some("provider_tool_round")
+        );
+        assert_eq!(merged["contextUsagePercent"].as_u64(), Some(25));
+        assert_eq!(merged["contextWindowTokens"].as_u64(), Some(10000));
+
+        // 已有真实用量（最终 call 写入）时不覆盖
+        let mut meta = Some(serde_json::json!({"providerPromptTokens": 999}));
+        merge_last_tool_call_usage_into_provider_meta(&mut meta, &tool_call);
+        assert_eq!(
+            meta.unwrap()["providerPromptTokens"].as_u64(),
+            Some(999),
+            "不覆盖已有真实用量"
+        );
+
+        // 旧数据/外部补丁写入 0 或 null 时不算有效用量，仍应从工具事件恢复
+        for stale_meta in [
+            serde_json::json!({"providerPromptTokens": 0}),
+            serde_json::json!({"providerPromptTokens": null}),
+            serde_json::json!({"providerPromptTokens": "not-a-number"}),
+        ] {
+            let mut meta = Some(stale_meta);
+            merge_last_tool_call_usage_into_provider_meta(&mut meta, &tool_call);
+            let merged = meta.expect("meta present");
+            assert_eq!(
+                merged["providerPromptTokens"].as_u64(),
+                Some(2500),
+                "0/null/非数字视为无有效用量，从工具事件恢复"
+            );
+            assert_eq!(
+                merged["effectivePromptSource"].as_str(),
+                Some("provider_tool_round")
+            );
+        }
+
+        // 事件缺 contextWindowTokens：占用率无法正确计算，应跳过而不是退化为 prompt_tokens
+        let tool_call_missing_window = Some(vec![serde_json::json!({
+            "role": "assistant",
+            "tool_calls": [],
+            "usage": {"promptTokens": 1200},
+        })]);
+        let mut meta = Some(serde_json::json!({}));
+        merge_last_tool_call_usage_into_provider_meta(&mut meta, &tool_call_missing_window);
+        assert!(
+            meta.as_ref().and_then(|m| m.get("contextUsageRatio")).is_none(),
+            "缺 contextWindowTokens 时不写入 contextUsageRatio"
+        );
+        assert!(
+            meta.as_ref().and_then(|m| m.get("providerPromptTokens")).is_none(),
+            "缺 contextWindowTokens 时不写入 providerPromptTokens"
+        );
+    }
+
+    #[test]
     fn conversation_service_v2_should_bootstrap_then_append_tool_and_final_text() {
         let state = test_chat_runtime_state();
         let now = now_iso();
@@ -5960,7 +6430,6 @@
                     assistant_message_id: "assistant-bootstrap".to_string(),
                     assistant_tool_event,
                     tool_result_event,
-                    provider_meta_patch: None,
                 },
             )
             .expect("tool append after bootstrap should succeed");
@@ -6094,16 +6563,10 @@
             Some("tool")
         );
         assert!(stored_before_final.extra_text_blocks.is_empty());
-        match &stored_before_final.parts[0] {
-            MessagePart::Text {
-                text,
-                reasoning_content,
-            } => {
-                assert!(text.is_empty());
-                assert_eq!(reasoning_content.as_deref(), None);
-            }
-            _ => panic!("expected text part"),
-        }
+        assert!(
+            stored_before_final.parts.is_empty(),
+            "开放组（未提交 final text）落盘为纯工具行组，读回是未闭合组语义：无正文 part"
+        );
 
         let final_append = conversation_service_v2()
             .append_final_text_to_assistant_message(
@@ -6271,8 +6734,8 @@
         assert_eq!(turns[0].response_text, "压缩结果");
     }
 
-    #[test]
-    fn conversation_service_v2_should_refresh_preview_after_appending_final_text() {
+    #[tokio::test]
+    async fn conversation_service_v2_should_refresh_preview_after_appending_final_text() {
         let state = test_chat_runtime_state();
         let now = now_iso();
         let conversation =
@@ -6288,6 +6751,7 @@
                     memory_recall_ids: Vec::new(),
                 },
             )
+            .await
             .expect("append user message");
 
         conversation_service_v2()
@@ -6307,7 +6771,7 @@
         let store_paths =
             message_store::message_store_paths(&state.data_path, &conversation.id)
                 .expect("message store paths");
-        let meta_before = message_store::read_ready_message_store_meta(&store_paths)
+        let meta_before = message_store::chat_store_read_meta(&store_paths)
             .expect("read ready meta before final text")
             .expect("ready meta exists before final text");
         assert_eq!(meta_before.preview_messages().len(), 1);
@@ -6330,7 +6794,7 @@
             )
             .expect("append final text");
 
-        let meta_after = message_store::read_ready_message_store_meta(&store_paths)
+        let meta_after = message_store::chat_store_read_meta(&store_paths)
             .expect("read ready meta after final text")
             .expect("ready meta exists after final text");
         assert_eq!(meta_after.preview_messages().len(), 2);
@@ -6410,7 +6874,6 @@
                     assistant_message_id: "assistant-empty-final".to_string(),
                     assistant_tool_event,
                     tool_result_event,
-                    provider_meta_patch: None,
                 },
             )
             .expect_err("empty final commit should close further tool append");
@@ -6517,7 +6980,7 @@
         let store_paths =
             message_store::message_store_paths(&state.data_path, &conversation.id)
                 .expect("message store paths");
-        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+        message_store::chat_store_write_snapshot(&store_paths, &conversation)
             .expect("write message store");
         state_mark_conversation_direct_persisted(&state, &conversation)
             .expect("mark direct persisted");
@@ -6559,7 +7022,7 @@
 
         let chat_index = state_read_chat_index_cached(&state).expect("read memory chat index");
         assert!(chat_index.conversations.is_empty());
-        assert!(!app_layout_chat_index_path(&state.data_path).exists());
+        assert!(!app_layout_chat_dir(&state.data_path).join("index.json").exists());
     }
 
     #[test]
@@ -6662,8 +7125,8 @@
             .contains(&conversation.id));
     }
 
-    #[test]
-    fn update_unarchived_conversation_by_id_should_publish_v3_message_replacements() {
+    #[tokio::test]
+    async fn update_unarchived_conversation_by_id_should_publish_v3_message_replacements() {
         let state = test_chat_runtime_state();
         let now = now_iso();
         let mut conversation =
@@ -6685,11 +7148,12 @@
                     serde_json::Value::String("已审查结果".to_string());
                 Ok(())
             })
+            .await
             .expect("update v3 message");
 
         let paths = message_store::message_store_paths(&state.data_path, &conversation.id)
             .expect("message store paths");
-        let stored = message_store::read_ready_message_store_message_by_id(
+        let stored = message_store::chat_store_read_message_by_id(
             &paths,
             "tool-review-message",
         )
@@ -6701,8 +7165,8 @@
         );
     }
 
-    #[test]
-    fn update_latest_summary_title_should_keep_summary_title_consistent_in_v3() {
+    #[tokio::test]
+    async fn update_latest_summary_title_should_keep_summary_title_consistent_in_v3() {
         let state = test_chat_runtime_state();
         let now = now_iso();
         let mut conversation = test_chat_conversation(
@@ -6729,20 +7193,21 @@
 
         let changed = conversation_service_v2()
             .update_latest_summary_title(&state, &conversation.id, "新标题")
+            .await
             .expect("update summary title");
         assert!(changed);
 
         let paths = message_store::message_store_paths(&state.data_path, &conversation.id)
             .expect("message store paths");
         let stored =
-            message_store::read_ready_message_store_message_by_id(&paths, "summary-message")
+            message_store::chat_store_read_message_by_id(&paths, "summary-message")
                 .expect("read stored summary message")
                 .expect("summary message exists");
         assert_eq!(
             stored.provider_meta.as_ref().expect("provider meta")["message_meta"]["title"],
             serde_json::Value::String("新标题".to_string())
         );
-        let persisted = message_store::read_ready_message_store_meta(&paths)
+        let persisted = message_store::chat_store_read_meta(&paths)
             .expect("read persisted meta")
             .expect("persisted meta exists");
         assert_eq!(persisted.latest_summary_title().as_deref(), Some("新标题"));
@@ -6760,8 +7225,8 @@
         assert_eq!(meta_view.latest_summary_title.as_deref(), Some("新标题"));
     }
 
-    #[test]
-    fn full_refresh_should_read_updated_summary_title() {
+    #[tokio::test]
+    async fn full_refresh_should_read_updated_summary_title() {
         let state = test_chat_runtime_state();
         let now = now_iso();
         let mut conversation = test_chat_conversation(
@@ -6781,6 +7246,7 @@
 
         conversation_service_v2()
             .update_latest_summary_title(&state, &conversation.id, "刷新后标题")
+            .await
             .expect("update summary title");
 
         let summaries = conversation_service_v2()
@@ -6794,8 +7260,8 @@
         assert_eq!(target.summary_title.as_deref(), Some("刷新后标题"));
     }
 
-    #[test]
-    fn replacing_non_latest_summary_message_should_not_override_latest_summary_title() {
+    #[tokio::test]
+    async fn replacing_non_latest_summary_message_should_not_override_latest_summary_title() {
         let state = test_chat_runtime_state();
         let now = now_iso();
         let mut conversation = test_chat_conversation(
@@ -6831,11 +7297,12 @@
                 }));
                 Ok(())
             })
+            .await
             .expect("replace older summary");
 
         let paths = message_store::message_store_paths(&state.data_path, &conversation.id)
             .expect("message store paths");
-        let persisted = message_store::read_ready_message_store_meta(&paths)
+        let persisted = message_store::chat_store_read_meta(&paths)
             .expect("read persisted meta")
             .expect("persisted meta exists");
         assert_eq!(
@@ -6889,7 +7356,7 @@
 
         let paths = message_store::message_store_paths(&state.data_path, &conversation.id)
             .expect("message store paths");
-        let persisted = message_store::read_ready_message_store_meta(&paths)
+        let persisted = message_store::chat_store_read_meta(&paths)
             .expect("read persisted meta")
             .expect("persisted meta exists");
         assert_eq!(
@@ -6898,8 +7365,8 @@
         );
     }
 
-    #[test]
-    fn replacing_plain_message_should_keep_summary_title_and_derived_fields() {
+    #[tokio::test]
+    async fn replacing_plain_message_should_keep_summary_title_and_derived_fields() {
         let state = test_chat_runtime_state();
         let now = now_iso();
         let mut conversation = test_chat_conversation(
@@ -6922,7 +7389,7 @@
 
         let paths = message_store::message_store_paths(&state.data_path, &conversation.id)
             .expect("message store paths");
-        let before = message_store::read_ready_message_store_meta(&paths)
+        let before = message_store::chat_store_read_meta(&paths)
             .expect("read persisted meta before")
             .expect("persisted meta exists before");
 
@@ -6939,9 +7406,10 @@
                 }];
                 Ok(())
             })
+            .await
             .expect("replace plain message");
 
-        let after = message_store::read_ready_message_store_meta(&paths)
+        let after = message_store::chat_store_read_meta(&paths)
             .expect("read persisted meta after")
             .expect("persisted meta exists after");
         assert_eq!(
@@ -7123,7 +7591,7 @@
     }
 
     #[test]
-    fn read_archive_block_page_should_migrate_legacy_archive_before_paging() {
+    fn read_archive_block_page_should_reject_legacy_archive_without_v3_store() {
         let state = test_chat_runtime_state();
         let now = now_iso();
         let mut conversation =
@@ -7148,25 +7616,23 @@
         let paths = message_store::message_store_paths(&state.data_path, &conversation.id)
             .expect("message store paths");
         assert!(
-            message_store::read_ready_message_store_status(&paths)
+            message_store::chat_store_read_status(&paths)
                 .expect("read ready status before archive page")
                 .is_none()
         );
 
-        let page = conversation_service_v2()
+        let err = match conversation_service_v2()
             .read_archive_block_page(&state, &conversation.id, None)
-            .expect("read archive block page");
+        {
+            Ok(_) => panic!("legacy archive must not be migrated by production paging"),
+            Err(err) => err,
+        };
 
-        assert_eq!(page.blocks.len(), 1);
-        assert_eq!(page.selected_block_id, 0);
-        assert_eq!(page.messages.len(), 3);
-        assert_eq!(render_message_content_for_model(&page.messages[0]), "第一条");
-        assert_eq!(render_message_content_for_model(&page.messages[2]), "第三条");
-
-        let ready_status = message_store::read_ready_message_store_status(&paths)
-            .expect("read ready status after archive page")
-            .expect("archive page should migrate legacy archive");
-        assert_eq!(ready_status.source_message_count, 3);
+        assert!(err.contains("请先完成消息存储迁移"));
+        assert!(message_store::chat_store_read_status(&paths)
+            .expect("read status after rejected archive page")
+            .is_none());
+        assert!(legacy_path.exists());
     }
 
     #[test]
@@ -7174,8 +7640,7 @@
         let state = test_chat_runtime_state();
         write_config(&state.config_path, &AppConfig::default()).expect("write config");
         let now = now_iso();
-        let mut runtime = RuntimeStateFile::default();
-        runtime.remote_im_contacts.push(RemoteImContact {
+        let contact = RemoteImContact {
             id: "contact-a".to_string(),
             channel_id: "channel-a".to_string(),
             platform: RemoteImPlatform::OnebotV11,
@@ -7209,21 +7674,18 @@
             dingtalk_session_webhook_expired_time: None,
             onebot_group_members: Vec::new(),
             shell_workspaces: Vec::new(),
-        });
-        state_write_runtime_state_cached(&state, &runtime).expect("write runtime state");
+        };
+        state_service_upsert_remote_im_contact(&state, &contact).expect("write contact");
 
         let items = conversation_service_v2()
             .list_remote_im_contact_conversations(&state)
             .expect("list remote im contact conversations");
 
         assert!(items.is_empty());
-        let updated_runtime = state_read_runtime_state_cached(&state).expect("read runtime state");
-        let contact = updated_runtime
-            .remote_im_contacts
-            .iter()
-            .find(|item| item.id == "contact-a")
+        let persisted = state_service_get_remote_im_contact(&state, "contact-a")
+            .expect("read contact")
             .expect("contact exists");
-        assert!(contact.bound_conversation_id.is_none());
+        assert!(persisted.bound_conversation_id.is_none());
     }
 
     fn seed_session_forward_test_state() -> (AppState, String, String, String) {
@@ -7330,10 +7792,9 @@
         target_remote.id = "target-remote-session".to_string();
         target_remote.updated_at = now.clone();
         state_schedule_conversation_persist(&state, &target_remote).expect("persist remote target");
+        flush_pending_persists_blocking(&state).expect("flush seeded sessions");
 
-        let mut runtime = RuntimeStateFile::default();
-        runtime.remote_im_contacts.push(contact);
-        state_write_runtime_state_cached(&state, &runtime).expect("write runtime state");
+        state_service_upsert_remote_im_contact(&state, &contact).expect("write contact");
 
         (
             state,
@@ -7437,12 +7898,8 @@
             state_read_conversation_cached(&state, &remote_target_id).expect("read remote target");
         let store_paths = message_store::message_store_paths(&state.data_path, &remote_target_id)
             .expect("message store paths");
-        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &target)
+        message_store::chat_store_write_snapshot(&store_paths, &target)
             .expect("write message store");
-        let meta_path = app_layout_chat_conversations_dir(&state.data_path)
-            .join(&remote_target_id)
-            .join("meta.json");
-        std::fs::remove_file(&meta_path).expect("remove message store meta");
 
         conversation_service_v2()
             .enqueue_auto_push_remote_contact_message(
@@ -7556,9 +8013,7 @@
             onebot_group_members: Vec::new(),
             shell_workspaces: Vec::new(),
         };
-        let mut runtime = RuntimeStateFile::default();
-        runtime.remote_im_contacts.push(contact.clone());
-        state_write_runtime_state_cached(&state, &runtime).expect("write runtime state");
+        state_service_upsert_remote_im_contact(&state, &contact).expect("write contact");
 
         let mut conversation = build_conversation_record(
             "",
@@ -7584,11 +8039,8 @@
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].conversation_id, "conversation-contact-old");
         assert_eq!(items[0].message_count, 1);
-        let updated_runtime = state_read_runtime_state_cached(&state).expect("read runtime state");
-        let updated_contact = updated_runtime
-            .remote_im_contacts
-            .iter()
-            .find(|item| item.id == "contact-a")
+        let updated_contact = state_service_get_remote_im_contact(&state, "contact-a")
+            .expect("read contact")
             .expect("contact exists");
         assert_eq!(
             updated_contact.bound_conversation_id.as_deref(),
@@ -7604,8 +8056,8 @@
         assert_eq!(updated_conversation.agent_id, DEFAULT_AGENT_ID);
     }
 
-    #[test]
-    fn remote_im_contact_conversation_should_be_readable_and_writable_as_unarchived() {
+    #[tokio::test]
+    async fn remote_im_contact_conversation_should_be_readable_and_writable_as_unarchived() {
         let state = test_chat_runtime_state();
         write_config(&state.config_path, &AppConfig::default()).expect("write config");
         let now = now_iso();
@@ -7644,9 +8096,7 @@
             onebot_group_members: Vec::new(),
             shell_workspaces: Vec::new(),
         };
-        let mut runtime = RuntimeStateFile::default();
-        runtime.remote_im_contacts.push(contact.clone());
-        state_write_runtime_state_cached(&state, &runtime).expect("write runtime state");
+        state_service_upsert_remote_im_contact(&state, &contact).expect("write contact");
 
         let mut conversation = build_conversation_record(
             "",
@@ -7663,6 +8113,7 @@
         conversation.last_user_at = Some(now.clone());
         state_schedule_conversation_persist(&state, &conversation)
             .expect("persist conversation");
+        flush_pending_persists_blocking(&state).expect("flush contact conversation");
 
         let messages = conversation_service_v2()
             .read_unarchived_messages(&state, "conversation-contact-old")
@@ -7682,6 +8133,7 @@
                     Ok(())
                 },
             )
+            .await
             .expect("update remote im contact conversation as unarchived");
         let updated = state_read_conversation_cached(&state, "conversation-contact-old")
             .expect("read updated conversation");
@@ -7723,7 +8175,7 @@
         let store_paths =
             message_store::message_store_paths(&state.data_path, &conversation.id)
                 .expect("message store paths");
-        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+        message_store::chat_store_write_snapshot(&store_paths, &conversation)
             .expect("write message store");
         conversation.messages = Vec::new();
         state_schedule_conversation_persist(&state, &conversation)
@@ -7757,7 +8209,7 @@
                 .map(|message| message.id.as_str()),
             Some("user-2")
         );
-        let stored = message_store::read_ready_message_store_all_messages(&store_paths)
+        let stored = message_store::chat_store_read_all_messages(&store_paths)
             .expect("read truncated message store")
             .expect("message store exists");
         assert_eq!(
@@ -7804,7 +8256,7 @@
         let store_paths =
             message_store::message_store_paths(&state.data_path, &conversation.id)
                 .expect("message store paths");
-        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+        message_store::chat_store_write_snapshot(&store_paths, &conversation)
             .expect("write message store");
         state_mark_conversation_direct_persisted(&state, &conversation)
             .expect("mark direct persisted");
@@ -7859,7 +8311,7 @@
 
         assert_eq!(result.removed_count, 2);
         assert_eq!(result.remaining_count, 2);
-        let ready_meta = message_store::read_ready_message_store_meta(&store_paths)
+        let ready_meta = message_store::chat_store_read_meta(&store_paths)
             .expect("read ready meta after rewind")
             .expect("ready meta exists after rewind");
         assert_eq!(ready_meta.message_count(), 2);
@@ -7904,7 +8356,7 @@
         let store_paths =
             message_store::message_store_paths(&state.data_path, &conversation.id)
                 .expect("message store paths");
-        message_store::write_jsonl_snapshot_directory_shard(&store_paths, &conversation)
+        message_store::chat_store_write_snapshot(&store_paths, &conversation)
             .expect("write message store");
         let input = RewindConversationInput {
             session: SessionSelector {
@@ -7950,7 +8402,7 @@
         let store_paths =
             message_store::message_store_paths(&state.data_path, "conversation-rewind-streaming")
                 .expect("message store paths");
-        let stored = message_store::read_ready_message_store_all_messages(&store_paths)
+        let stored = message_store::chat_store_read_all_messages(&store_paths)
             .expect("read message store")
             .expect("message store exists");
         assert_eq!(stored.len(), 4);
@@ -7981,7 +8433,7 @@
         let store_paths =
             message_store::message_store_paths(&state.data_path, "conversation-rewind-organizing")
                 .expect("message store paths");
-        let stored = message_store::read_ready_message_store_all_messages(&store_paths)
+        let stored = message_store::chat_store_read_all_messages(&store_paths)
             .expect("read message store")
             .expect("message store exists");
         assert_eq!(stored.len(), 4);
@@ -8019,32 +8471,6 @@
         assert!(matches!(ingress_a1, ChatEventIngress::Direct(_)));
         assert!(matches!(ingress_a2, ChatEventIngress::Queued { .. }));
         assert_eq!(total_queue_len(&state).expect("queue len"), 1);
-    }
-
-    #[test]
-    fn scheduler_should_ignore_duplicate_user_event_after_message_persisted_even_when_idle() {
-        let state = test_chat_runtime_state();
-        let now = now_iso();
-        let mut conversation = test_chat_conversation("conversation-a", "active", &now);
-        let mut persisted = test_text_message("user", "hello", &now);
-        persisted.provider_meta = build_user_message_provider_meta(
-            None,
-            &[],
-            &[],
-            Some("chat-same-request"),
-        );
-        conversation.messages.push(persisted);
-        write_conversation_shard(&state.data_path, &conversation).expect("write conversation");
-        let mut duplicate = test_pending_event("conversation-a");
-        duplicate.runtime_context = Some(RuntimeContext {
-            request_id: Some("chat-same-request".to_string()),
-            ..RuntimeContext::default()
-        });
-
-        let ingress = ingress_chat_event(&state, duplicate).expect("ingress duplicate");
-
-        assert!(matches!(ingress, ChatEventIngress::Duplicate { .. }));
-        assert_eq!(total_queue_len(&state).expect("queue len"), 0);
     }
 
     #[test]
@@ -8396,18 +8822,18 @@
 
     #[test]
     fn ensure_main_conversation_index_should_keep_notification_home_stable() {
+        let state = test_chat_runtime_state();
         let now = now_iso();
         let later = (now_utc() + time::Duration::minutes(1))
             .format(&Rfc3339)
             .expect("format later");
         let mut data = AppData::default();
-        data.main_conversation_id = Some("conversation-main".to_string());
         data.conversations = vec![
             test_chat_conversation("conversation-main", "inactive", &now),
             test_chat_conversation("conversation-sub", "active", &later),
         ];
 
-        let idx = ensure_main_conversation_index(&mut data, "", DEFAULT_AGENT_ID);
+        let idx = ensure_main_conversation_index(&mut data, &state, "", DEFAULT_AGENT_ID).expect("ensure main conversation index");
 
         assert_eq!(data.conversations[idx].id, SYSTEM_NOTIFICATION_CONVERSATION_ID);
         assert_eq!(data.conversations[idx].title, "P-ai系统");
@@ -8416,7 +8842,9 @@
             CONVERSATION_KIND_SYSTEM_NOTIFICATION
         );
         assert_eq!(
-            data.main_conversation_id.as_deref(),
+            state_service_get_main_conversation_id(&state)
+                .expect("read main conversation id")
+                .as_deref(),
             Some(SYSTEM_NOTIFICATION_CONVERSATION_ID)
         );
         let previous_main = data
@@ -8497,15 +8925,13 @@
     }
 
     #[test]
-    fn normalize_single_active_main_conversation_should_keep_summary_only_foreground_chat_active() {
+    fn normalize_single_active_main_conversation_should_keep_inactive_main_foreground_chat_active() {
         let now = now_iso();
         let later = (now_utc() + time::Duration::minutes(1))
             .format(&Rfc3339)
             .expect("format later");
         let mut data = AppData::default();
-        data.main_conversation_id = Some("conversation-main".to_string());
-        let mut main = test_chat_conversation("conversation-main", "inactive", &now);
-        main.summary = "只是内容摘要".to_string();
+        let main = test_chat_conversation("conversation-main", "inactive", &now);
         data.conversations = vec![main, test_chat_conversation("conversation-sub", "active", &later)];
 
         let changed = normalize_single_active_main_conversation(&mut data);
@@ -8516,10 +8942,9 @@
     }
 
     #[test]
-    fn conversation_is_archived_should_ignore_summary_without_archive_fields() {
+    fn conversation_is_archived_should_require_archive_fields() {
         let now = now_iso();
-        let mut conversation = test_chat_conversation("conversation-summary-only", "active", &now);
-        conversation.summary = "只是内容摘要".to_string();
+        let conversation = test_chat_conversation("conversation-summary-only", "active", &now);
 
         assert!(!conversation_is_archived(&conversation));
 
@@ -8534,7 +8959,6 @@
             .format(&Rfc3339)
             .expect("format later");
         let mut data = AppData::default();
-        data.main_conversation_id = Some("conversation-main".to_string());
         data.conversations = vec![
             test_chat_conversation("conversation-main", "inactive", &now),
             test_chat_conversation("conversation-sub", "active", &later),
@@ -8759,8 +9183,8 @@
         let state = test_chat_runtime_state();
         write_config(&state.config_path, &AppConfig::default()).expect("write config");
 
-        let mut data = test_user_switched_to_sub_conversation_data();
-        data.remote_im_contacts.push(RemoteImContact {
+        let data = test_user_switched_to_sub_conversation_data();
+        let contact = RemoteImContact {
             id: "contact-a".to_string(),
             channel_id: "channel-a".to_string(),
             platform: RemoteImPlatform::OnebotV11,
@@ -8794,7 +9218,8 @@
             dingtalk_session_webhook_expired_time: None,
             onebot_group_members: Vec::new(),
             shell_workspaces: Vec::new(),
-        });
+        };
+        state_service_upsert_remote_im_contact(&state, &contact).expect("write contact");
         state_write_app_data_cached(&state, &data).expect("write app data");
         let task = TaskRecordStored {
             task_id: "task-contact".to_string(),
@@ -8861,9 +9286,8 @@
             }, default_user_persona()],
         )
         .expect("write agents");
-        let mut runtime = RuntimeStateFile::default();
-        runtime.assistant_department_agent_id = "private-agent".to_string();
-        state_write_runtime_state_cached(&state, &runtime).expect("write runtime state");
+        state_service_set_assistant_department_agent_id(&state, "private-agent")
+            .expect("write assistant department agent id");
         let task = TaskRecordStored {
             task_id: "task-private-dept".to_string(),
             conversation_id: None,
@@ -9414,7 +9838,6 @@
             last_user_at: None,
             last_assistant_at: None,
             status: "active".to_string(),
-            summary: String::new(),
             user_profile_snapshot: String::new(),
             shell_workspace_path: Some(root_workspace_path.to_string_lossy().to_string()),
             shell_workspaces: vec![ShellWorkspaceConfig {
@@ -9437,6 +9860,7 @@
             auto_push_remote_contact_id: None,
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
+            is_draft: false,
         });
         state_write_app_data_cached(&state, &data).expect("write app data");
 
@@ -9934,10 +10358,8 @@
             onebot_group_members: Vec::new(),
             shell_workspaces: Vec::new(),
         };
-        let mut runtime = RuntimeStateFile::default();
-        runtime.remote_im_contacts.push(private_contact.clone());
-        runtime.remote_im_contacts.push(group_contact.clone());
-        state_write_runtime_state_cached(&state, &runtime).expect("write runtime state");
+        state_service_upsert_remote_im_contact(&state, &private_contact).expect("write private contact");
+        state_service_upsert_remote_im_contact(&state, &group_contact).expect("write group contact");
 
         let mut remote_private_contact = build_conversation_record(
             &selected_api.id,
@@ -11374,7 +11796,7 @@
     }
 
     #[test]
-    fn conversation_meta_is_unarchived_meta_view_should_ignore_summary_only_conversation() {
+    fn conversation_meta_is_unarchived_meta_view_should_follow_archived_at() {
         let state = test_chat_runtime_state();
         let now = now_utc_rfc3339();
         let mut data = AppData::default();
@@ -11396,7 +11818,6 @@
             last_user_at: None,
             last_assistant_at: None,
             status: "active".to_string(),
-            summary: "只是内容摘要".to_string(),
             user_profile_snapshot: String::new(),
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
@@ -11412,6 +11833,7 @@
             auto_push_remote_contact_id: None,
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
+            is_draft: false,
         };
         let conversation_id = conversation.id.clone();
         data.conversations.push(conversation.clone());
@@ -11454,7 +11876,6 @@
             last_user_at: None,
             last_assistant_at: None,
             status: "active".to_string(),
-            summary: String::new(),
             user_profile_snapshot: String::new(),
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
@@ -11470,6 +11891,7 @@
             auto_push_remote_contact_id: None,
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
+            is_draft: false,
         });
         state_write_app_data_cached(&state, &data).expect("write app data");
 
@@ -11525,7 +11947,6 @@
             last_user_at: None,
             last_assistant_at: None,
             status: "active".to_string(),
-            summary: String::new(),
             user_profile_snapshot: String::new(),
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
@@ -11544,6 +11965,7 @@
             auto_push_remote_contact_id: None,
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
+            is_draft: false,
         });
         state_write_app_data_cached(&state, &data).expect("write app data");
 
@@ -11595,9 +12017,11 @@
 
     #[test]
     fn resolve_unarchived_conversation_index_with_fallback_should_use_requested_conversation_when_available() {
+        let state = test_chat_runtime_state();
         let mut data = test_user_switched_to_sub_conversation_data();
         let idx = resolve_unarchived_conversation_index_with_fallback(
             &mut data,
+            &state,
             &AppConfig::default(),
             DEFAULT_AGENT_ID,
             Some("conversation-main"),
@@ -11609,9 +12033,11 @@
 
     #[test]
     fn resolve_unarchived_conversation_index_with_fallback_should_error_when_requested_missing() {
+        let state = test_chat_runtime_state();
         let mut data = test_user_switched_to_sub_conversation_data();
         let err = resolve_unarchived_conversation_index_with_fallback(
             &mut data,
+            &state,
             &AppConfig::default(),
             DEFAULT_AGENT_ID,
             Some("conversation-missing"),
@@ -11656,11 +12082,11 @@
             .format(&Rfc3339)
             .expect("format later");
         let mut source = test_chat_conversation("conversation-main", "active", &now);
-        source.summary = "archived summary".to_string();
         source.status = "archived".to_string();
         source.archived_at = Some(now.clone());
+        state_service_set_main_conversation_id(&state, Some("conversation-main"))
+            .expect("write main conversation id");
         let mut data = AppData::default();
-        data.main_conversation_id = Some(source.id.clone());
         data.conversations = vec![
             source.clone(),
             test_chat_conversation("conversation-sub", "inactive", &later),
@@ -11669,7 +12095,6 @@
 
         let next_id = delete_main_conversation_and_activate_latest(&state, &selected_api, &source)
             .expect("delete main conversation");
-        let runtime = state_read_runtime_state_cached(&state).expect("read runtime");
         let system_notification = state_read_conversation_cached(
             &state,
             SYSTEM_NOTIFICATION_CONVERSATION_ID,
@@ -11680,12 +12105,13 @@
 
         assert_eq!(next_id, "conversation-sub");
         assert_eq!(
-            runtime.main_conversation_id.as_deref(),
+            state_service_get_main_conversation_id(&state)
+                .expect("read main conversation id")
+                .as_deref(),
             Some(SYSTEM_NOTIFICATION_CONVERSATION_ID)
         );
         assert!(conversation_is_system_notification(&system_notification));
         assert_eq!(promoted.status, "inactive");
-        assert_eq!(promoted.summary, "");
     }
 
     #[test]
@@ -11699,17 +12125,16 @@
 
         let now = now_iso();
         let mut source = test_chat_conversation("conversation-main", "active", &now);
-        source.summary = "archived summary".to_string();
         source.status = "archived".to_string();
         source.archived_at = Some(now.clone());
+        state_service_set_main_conversation_id(&state, Some("conversation-main"))
+            .expect("write main conversation id");
         let mut data = AppData::default();
-        data.main_conversation_id = Some(source.id.clone());
         data.conversations = vec![source.clone()];
         state_write_app_data_cached(&state, &data).expect("write app data");
 
         let next_id = delete_main_conversation_and_activate_latest(&state, &selected_api, &source)
             .expect("delete last main conversation");
-        let runtime = state_read_runtime_state_cached(&state).expect("read runtime");
         let system_notification = state_read_conversation_cached(
             &state,
             SYSTEM_NOTIFICATION_CONVERSATION_ID,
@@ -11721,30 +12146,33 @@
         assert_ne!(next_id, "conversation-main");
         assert_ne!(next_id, SYSTEM_NOTIFICATION_CONVERSATION_ID);
         assert_eq!(
-            runtime.main_conversation_id.as_deref(),
+            state_service_get_main_conversation_id(&state)
+                .expect("read main conversation id")
+                .as_deref(),
             Some(SYSTEM_NOTIFICATION_CONVERSATION_ID)
         );
         assert!(conversation_is_system_notification(&system_notification));
         assert_eq!(replacement.status, "active");
-        assert!(replacement.summary.is_empty());
     }
 
     #[test]
     fn archiving_main_conversation_should_promote_existing_sub_conversation() {
+        let state = test_chat_runtime_state();
         let now = now_iso();
         let later = (now_utc() + time::Duration::minutes(1))
             .format(&Rfc3339)
             .expect("format later");
         let mut data = AppData::default();
-        data.main_conversation_id = Some("conversation-main".to_string());
         data.conversations = vec![
             test_chat_conversation("conversation-main", "active", &now),
             test_chat_conversation("conversation-sub", "inactive", &later),
         ];
+        state_service_set_main_conversation_id(&state, Some("conversation-main"))
+            .expect("write main conversation id");
 
-        archive_conversation_now(&mut data, "conversation-main", "test", "archived summary")
+        archive_conversation_now(&mut data, "conversation-main", "test")
             .expect("archive current main");
-        let idx = ensure_main_conversation_index(&mut data, "", DEFAULT_AGENT_ID);
+        let idx = ensure_main_conversation_index(&mut data, &state, "", DEFAULT_AGENT_ID).expect("ensure main conversation index");
 
         assert_eq!(data.conversations[idx].id, SYSTEM_NOTIFICATION_CONVERSATION_ID);
         assert_eq!(
@@ -11752,29 +12180,34 @@
             CONVERSATION_KIND_SYSTEM_NOTIFICATION
         );
         assert_eq!(
-            data.main_conversation_id.as_deref(),
+            state_service_get_main_conversation_id(&state)
+                .expect("read main conversation id")
+                .as_deref(),
             Some(SYSTEM_NOTIFICATION_CONVERSATION_ID)
         );
     }
 
     #[test]
     fn archiving_last_main_conversation_should_create_replacement_main_conversation() {
+        let state = test_chat_runtime_state();
         let now = now_iso();
         let mut data = AppData::default();
-        data.main_conversation_id = Some("conversation-main".to_string());
         data.conversations = vec![test_chat_conversation("conversation-main", "active", &now)];
+        state_service_set_main_conversation_id(&state, Some("conversation-main"))
+            .expect("write main conversation id");
 
-        archive_conversation_now(&mut data, "conversation-main", "test", "archived summary")
+        archive_conversation_now(&mut data, "conversation-main", "test")
             .expect("archive last main");
-        let idx = ensure_main_conversation_index(&mut data, "api-default", DEFAULT_AGENT_ID);
+        let idx = ensure_main_conversation_index(&mut data, &state, "api-default", DEFAULT_AGENT_ID).expect("ensure main conversation index");
 
         assert_eq!(data.conversations[idx].id, SYSTEM_NOTIFICATION_CONVERSATION_ID);
         assert_eq!(
-            data.main_conversation_id.as_deref(),
+            state_service_get_main_conversation_id(&state)
+                .expect("read main conversation id")
+                .as_deref(),
             Some(SYSTEM_NOTIFICATION_CONVERSATION_ID)
         );
         assert_eq!(data.conversations[idx].status, "active");
-        assert!(data.conversations[idx].summary.is_empty());
     }
 
     #[test]
@@ -12471,7 +12904,7 @@
             .join("commands")
             .join("archive_commands.rs");
         let archive_content = std::fs::read_to_string(&archive_file).expect("read archive commands");
-        for name in ["get_archive_messages", "get_archive_block_page", "get_archive_summary"] {
+        for name in ["get_archive_messages", "get_archive_block_page"] {
             let start = archive_content
                 .find(&format!("async fn {name}("))
                 .unwrap_or_else(|| panic!("{name} 应为 async fn"));
@@ -12659,33 +13092,6 @@
         assert!(
             !todos_section.contains("conversation_mutation_gate("),
             "update_conversation_todos 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
-        );
-    }
-
-    #[test]
-    fn persistence_ready_store_recovery_should_use_unified_conversation_mutation_entry() {
-        let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("src")
-            .join("features")
-            .join("chat")
-            .join("conversation_service")
-            .join("persistence.rs");
-        let content = std::fs::read_to_string(&file).expect("read persistence");
-        let recovery_start = content
-            .find("fn ensure_ready_message_store_from_legacy_conversation")
-            .expect("ensure_ready_message_store_from_legacy_conversation exists");
-        let recovery_end = content
-            .find("fn read_legacy_conversation_snapshot_for_ready_store_recovery")
-            .expect("read legacy recovery helper exists");
-        let recovery_section = &content[recovery_start..recovery_end];
-
-        assert!(
-            recovery_section.contains("with_conversation_mutation"),
-            "ensure_ready_message_store_from_legacy_conversation 应保留统一会话 mutation 入口"
-        );
-        assert!(
-            !recovery_section.contains("conversation_mutation_gate("),
-            "ensure_ready_message_store_from_legacy_conversation 必须走 with_conversation_mutation，禁止重新裸用 conversation_mutation_gate"
         );
     }
 

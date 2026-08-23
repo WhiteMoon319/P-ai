@@ -693,15 +693,14 @@ fn resolve_contact_workspaces_for_conversation(
     state: &AppState,
     conversation: &Conversation,
 ) -> Vec<ShellWorkspaceConfig> {
-    let Ok(runtime) = state_read_runtime_state_cached(state) else {
-        return Vec::new();
-    };
     let conversation_id = conversation.id.trim();
     if conversation_id.is_empty() {
         return Vec::new();
     }
-    runtime
-        .remote_im_contacts
+    let Ok(contacts) = state_service_list_remote_im_contacts(state, None) else {
+        return Vec::new();
+    };
+    contacts
         .iter()
         .find(|contact| {
             contact
@@ -1207,7 +1206,7 @@ mod terminal_workspace_tests {
         AppState {
             app_handle: Arc::new(Mutex::new(None)),
             config_path: llm_workspace_path.join("app_config.toml"),
-            data_path: llm_workspace_path.join("app_data.json"),
+            data_path: llm_workspace_path.join("config_mark"),
             llm_workspace_path,
             shared_http_client: reqwest::Client::new(),
             terminal_shell: terminal_shell.clone(),
@@ -1218,8 +1217,6 @@ mod terminal_workspace_tests {
             cached_config_mtime: Arc::new(Mutex::new(None)),
             cached_agents: Arc::new(Mutex::new(None)),
             cached_agents_mtime: Arc::new(Mutex::new(None)),
-            cached_runtime_state: Arc::new(Mutex::new(None)),
-            cached_runtime_state_mtime: Arc::new(Mutex::new(None)),
             cached_chat_index: Arc::new(Mutex::new(None)),
             cached_conversation_metadata: Arc::new(Mutex::new(std::collections::HashMap::new())),
             cached_conversation_field_metadata_ids: Arc::new(Mutex::new(
@@ -1229,10 +1226,6 @@ mod terminal_workspace_tests {
             cached_app_data: Arc::new(Mutex::new(None)),
             cached_app_data_signature: Arc::new(Mutex::new(None)),
             cached_app_data_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            app_data_persist_pending: Arc::new(Mutex::new(None)),
-            app_data_persist_notify: Arc::new(tokio::sync::Notify::new()),
-            app_data_persist_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            app_data_persist_latest_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             conversation_persist_pending: Arc::new(Mutex::new(None)),
             conversation_persist_notify: Arc::new(tokio::sync::Notify::new()),
             conversation_persist_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1407,11 +1400,15 @@ mod terminal_workspace_tests {
         write_conversation_shard(&state.data_path, &custom_conversation)
             .expect("write custom conversation");
         let mut archived_conversation = build_workspace_test_conversation("conv-archived-workspace");
-        archived_conversation.summary = "已归档".to_string();
         archived_conversation.status = "archived".to_string();
         archived_conversation.archived_at = Some(now_iso());
         write_conversation_shard(&state.data_path, &archived_conversation)
             .expect("write archived conversation");
+        state_service_set_message_store_migration_version(
+            &state,
+            DATA_MIGRATION_CURRENT_VERSION,
+        )
+        .expect("mark message store migration complete");
 
         let changed =
             run_app_data_migrations_with_state(&state, &config).expect("run migrations");
@@ -1642,7 +1639,6 @@ mod terminal_workspace_tests {
             last_user_at: None,
             last_assistant_at: None,
             status: "active".to_string(),
-            summary: String::new(),
             user_profile_snapshot: String::new(),
             shell_workspace_path: Some(custom_workspace_path.to_string_lossy().to_string()),
             shell_workspaces: vec![ShellWorkspaceConfig {
@@ -1665,6 +1661,7 @@ mod terminal_workspace_tests {
             auto_push_remote_contact_id: None,
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
+            is_draft: false,
         });
         state_write_app_data_cached(&state, &data).expect("write app data");
 
@@ -1724,7 +1721,6 @@ mod terminal_workspace_tests {
             last_user_at: None,
             last_assistant_at: None,
             status: "active".to_string(),
-            summary: String::new(),
             user_profile_snapshot: String::new(),
             shell_workspace_path: Some(stale_locked_path.to_string_lossy().to_string()),
             shell_workspaces: vec![ShellWorkspaceConfig {
@@ -1747,6 +1743,7 @@ mod terminal_workspace_tests {
             auto_push_remote_contact_id: None,
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
+            is_draft: false,
         });
         state_write_app_data_cached(&state, &data).expect("write app data");
 

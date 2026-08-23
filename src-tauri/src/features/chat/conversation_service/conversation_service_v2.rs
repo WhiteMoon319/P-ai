@@ -53,12 +53,17 @@ impl ConversationServiceV2Error {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PersistReadyMessageMode {
+    Replace,
+    AppendLineToGroup,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum ConversationOverwriteSource {
     Import,
     ExportSync,
-    MigrationRecovery,
 }
 
 impl ConversationOverwriteSource {
@@ -66,7 +71,6 @@ impl ConversationOverwriteSource {
         match self {
             Self::Import => "import",
             Self::ExportSync => "export_sync",
-            Self::MigrationRecovery => "migration_recovery",
         }
     }
 }
@@ -87,7 +91,6 @@ struct ConversationMetaView {
     title: String,
     latest_summary_title: Option<String>,
     status: String,
-    summary: String,
     conversation_kind: String,
     visible_in_foreground_lists: bool,
     is_remote_im_contact: bool,
@@ -113,6 +116,7 @@ struct ConversationMetaView {
     fork_message_cursor: Option<String>,
     user_profile_snapshot: String,
     preferred_api_config_id: Option<String>,
+    is_draft: bool,
     auto_push_remote_contact_id: Option<String>,
     cumulative_usage: ConversationCumulativeUsage,
     plan_mode_enabled: bool,
@@ -159,7 +163,6 @@ struct AssistantMessageToolAppendInput {
     assistant_message_id: String,
     assistant_tool_event: Value,
     tool_result_event: Value,
-    provider_meta_patch: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -273,7 +276,6 @@ impl ConversationMetaView {
             title: meta.title().to_string(),
             latest_summary_title: meta.latest_summary_title().map(ToOwned::to_owned),
             status: meta.status().to_string(),
-            summary: meta.summary().to_string(),
             conversation_kind: meta.conversation_kind().to_string(),
             visible_in_foreground_lists: conversation_service_v2()
                 .conversation_meta_visible_in_foreground_lists(meta),
@@ -301,6 +303,7 @@ impl ConversationMetaView {
             fork_message_cursor: meta.fork_message_cursor().map(ToOwned::to_owned),
             user_profile_snapshot: meta.user_profile_snapshot().to_string(),
             preferred_api_config_id: meta.preferred_api_config_id().map(ToOwned::to_owned),
+            is_draft: meta.is_draft(),
             auto_push_remote_contact_id: meta.auto_push_remote_contact_id().map(ToOwned::to_owned),
             cumulative_usage: meta.cumulative_usage().clone(),
             plan_mode_enabled: meta.plan_mode_enabled(),
@@ -471,6 +474,55 @@ fn merge_provider_meta_patch_v2(target: &mut Option<Value>, patch: Option<Value>
     *target = Some(current);
 }
 
+/// 用量聚合：meta 尚无真实用量时，取最后一个自带真实用量的工具调用事件派生展示字段。
+/// 工具轮的用量随工具调用事件落盘（出生点挂载），此处只兜底、不覆盖最终 call 写入的真实用量。
+fn merge_last_tool_call_usage_into_provider_meta(
+    target: &mut Option<Value>,
+    tool_call: &Option<Vec<Value>>,
+) {
+    if target
+        .as_ref()
+        .and_then(|meta| meta.get("providerPromptTokens"))
+        .and_then(Value::as_u64)
+        .is_some_and(|value| value > 0)
+    {
+        return;
+    }
+    let Some(events) = tool_call.as_deref() else {
+        return;
+    };
+    let Some((prompt_tokens, Some(context_window))) = resolve_tool_call_usage(events) else {
+        // 事件缺 contextWindowTokens：占用率无法正确计算，跳过（不派生出错误的占用率）
+        return;
+    };
+    let usage_ratio = prompt_tokens as f64 / context_window as f64;
+    let usage_percent = (usage_ratio * 100.0).round().clamp(0.0, 100.0) as u32;
+    let mut current = target.take().unwrap_or_else(|| serde_json::json!({}));
+    if !current.is_object() {
+        current = serde_json::json!({
+            "_raw_provider_meta": current,
+        });
+    }
+    if let Some(current_obj) = current.as_object_mut() {
+        current_obj.insert("providerPromptTokens".to_string(), serde_json::json!(prompt_tokens));
+        current_obj.insert("effectivePromptTokens".to_string(), serde_json::json!(prompt_tokens));
+        current_obj.insert(
+            "effectivePromptSource".to_string(),
+            serde_json::json!("provider_tool_round"),
+        );
+        current_obj.insert("contextUsageRatio".to_string(), serde_json::json!(usage_ratio));
+        current_obj.insert(
+            "contextUsagePercent".to_string(),
+            serde_json::json!(usage_percent),
+        );
+        current_obj.insert(
+            "contextWindowTokens".to_string(),
+            serde_json::json!(context_window),
+        );
+    }
+    *target = Some(current);
+}
+
 fn mark_stream_final_committed_v2(target: &mut Option<Value>) {
     let mut current = target.take().unwrap_or_else(|| serde_json::json!({}));
     if !current.is_object() {
@@ -598,13 +650,13 @@ struct ConversationExternalMetadataPatch {
     shell_autonomous_mode: Option<bool>,
     shell_work_mode: Option<String>,
     lifecycle_status: Option<String>,
-    lifecycle_summary: Option<String>,
     lifecycle_archived_at: Option<Option<String>>,
     lifecycle_updated_at: Option<String>,
     routing_department_id: Option<String>,
     routing_agent_id: Option<String>,
     routing_root_conversation_id: Option<Option<String>>,
     routing_conversation_kind: Option<String>,
+    is_draft: Option<bool>,
 }
 
 fn conversation_service_v2() -> &'static ConversationServiceV2 {
@@ -615,6 +667,35 @@ fn conversation_service_v2() -> &'static ConversationServiceV2 {
 #[cfg(test)]
 fn conversation_service() -> &'static ConversationServiceV2 {
     conversation_service_v2()
+}
+
+fn publish_pending_new_conversation_if_needed(
+    state: &AppState,
+    conversation_id: &str,
+    paths: &message_store::MessageStorePaths,
+) -> Result<(), String> {
+    if message_store::chat_store_read_status(paths)?.is_some() {
+        return Ok(());
+    }
+    let conversation = {
+        let pending = state
+            .conversation_persist_pending
+            .lock()
+            .map_err(|_| "读取待持久化新会话失败".to_string())?;
+        pending
+            .as_ref()
+            .and_then(|slot| slot.conversations.get(conversation_id).cloned())
+    };
+    let Some(conversation) = conversation else {
+        return Ok(());
+    };
+    // 这里只发布当前进程刚创建、尚在 pending 队列中的新会话。新建接口本身
+    // 仍只入 pending；若紧随创建发生首条写入/首读，则同步发布到 V4 current
+    // store 并 flush，保证消息只追加到当前生产存储。
+    message_store::chat_store_write_snapshot(paths, &conversation)?;
+    state_mark_conversation_metadata_direct_persisted(state, conversation_id)?;
+    flush_pending_persists_blocking(state)?;
+    Ok(())
 }
 
 impl ConversationServiceV2 {
@@ -629,12 +710,17 @@ impl ConversationServiceV2 {
         }
         let store_paths =
             message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
-        ensure_ready_message_store_from_legacy_conversation(
+        publish_pending_new_conversation_if_needed(
             state,
             normalized_conversation_id,
             &store_paths,
         )?;
-        message_store::read_ready_message_store_meta(&store_paths)?
+        ensure_chat_store_conversation_readable(
+            state,
+            normalized_conversation_id,
+            &store_paths,
+        )?;
+        message_store::chat_store_read_meta(&store_paths)?
             .ok_or_else(|| {
                 format!(
                     "会话消息仓库不可追加：缺少 ready 消息元数据，conversation_id={normalized_conversation_id}"
@@ -764,12 +850,8 @@ impl ConversationServiceV2 {
             snapshot.messages.len()
         ));
         let store_paths = message_store::message_store_paths(&state.data_path, &snapshot.id)?;
-        if message_store::message_store_is_v3_ready(&store_paths)? {
-            message_store::write_jsonl_snapshot_directory_shard(&store_paths, snapshot)?;
-            state_mark_conversation_metadata_direct_persisted(state, &snapshot.id)?;
-        } else {
-            state_schedule_conversation_persist(state, snapshot)?;
-        }
+        message_store::chat_store_write_snapshot(&store_paths, snapshot)?;
+        state_mark_conversation_metadata_direct_persisted(state, &snapshot.id)?;
         runtime_log_info(format!(
             "[会话V2] 完成，任务=特批覆写会话，conversation_id={}，source={}，job_id={}，operator={}，message_count={}",
             snapshot.id,
@@ -813,7 +895,7 @@ impl ConversationServiceV2 {
         let normalized_limit = limit.clamp(1, 50);
         let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
         let mut messages = if let Some(page) =
-            message_store::read_ready_message_store_recent_messages_page_cached(
+            message_store::chat_store_read_recent_messages_page_cached(
                 &store_paths,
                 normalized_limit,
             )?
@@ -846,13 +928,13 @@ impl ConversationServiceV2 {
         }
         let store_paths =
             message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
-        ensure_ready_message_store_from_legacy_conversation(
+        ensure_chat_store_conversation_readable(
             state,
             normalized_conversation_id,
             &store_paths,
         )?;
         let mut message =
-            message_store::read_ready_message_store_message_by_id(&store_paths, normalized_message_id)?
+            message_store::chat_store_read_message_by_id(&store_paths, normalized_message_id)?
                 .ok_or_else(|| format!("Message not found: {normalized_message_id}"))?;
         materialize_chat_message_parts_from_media_refs(
             std::slice::from_mut(&mut message),
@@ -935,13 +1017,42 @@ impl ConversationServiceV2 {
         conversation_id: &str,
         updated_message: &ChatMessage,
     ) -> Result<(), String> {
+        self.persist_ready_message_locked_inner(
+            state,
+            conversation_id,
+            updated_message,
+            PersistReadyMessageMode::Replace,
+        )
+    }
+
+    fn persist_appended_ready_message_locked(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+        updated_message: &ChatMessage,
+    ) -> Result<(), String> {
+        self.persist_ready_message_locked_inner(
+            state,
+            conversation_id,
+            updated_message,
+            PersistReadyMessageMode::AppendLineToGroup,
+        )
+    }
+
+    fn persist_ready_message_locked_inner(
+        &self,
+        state: &AppState,
+        conversation_id: &str,
+        updated_message: &ChatMessage,
+        mode: PersistReadyMessageMode,
+    ) -> Result<(), String> {
         let previous_message = self.get_raw_message_by_id(
             state,
             conversation_id,
             updated_message.id.trim(),
         )?;
         let paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
-        let mut ready_meta = message_store::read_ready_message_store_meta(&paths)?
+        let mut ready_meta = message_store::chat_store_read_meta(&paths)?
             .ok_or_else(|| {
                 ConversationServiceV2Error::new(
                     ConversationServiceV2ErrorCode::StorageCorrupted,
@@ -968,7 +1079,7 @@ impl ConversationServiceV2 {
                     std::slice::from_ref(&previous_message),
                     std::slice::from_ref(updated_message),
                     || {
-                        message_store::recompute_latest_summary_title_after_replace(
+                        message_store::chat_store_recompute_latest_summary_title_after_replace(
                             &paths,
                             std::slice::from_ref(updated_message),
                         )
@@ -979,11 +1090,23 @@ impl ConversationServiceV2 {
         )?;
         ready_meta.apply_metadata_fields_from_meta(&updated_meta);
         ready_meta.preserve_message_derived_fields_from(&updated_meta);
-        message_store::write_jsonl_snapshot_replaced_message_shard(
-            &paths,
-            &ready_meta.to_persist_meta(),
-            updated_message,
-        )?;
+        match mode {
+            PersistReadyMessageMode::Replace => {
+                message_store::chat_store_replace_message(
+                    &paths,
+                    &ready_meta.to_persist_meta(),
+                    updated_message,
+                )?;
+            }
+            PersistReadyMessageMode::AppendLineToGroup => {
+                message_store::chat_store_append_line_to_group(
+                    &paths,
+                    &ready_meta.to_persist_meta(),
+                    &previous_message,
+                    updated_message,
+                )?;
+            }
+        }
         self.mark_conversation_metadata_cached_persisted(state, conversation_id)?;
         Ok(())
     }
@@ -1092,9 +1215,6 @@ impl ConversationServiceV2 {
                         if let Some(value) = patch.lifecycle_status {
                             conversation.status = value;
                         }
-                        if let Some(value) = patch.lifecycle_summary {
-                            conversation.summary = value;
-                        }
                         if let Some(value) = patch.lifecycle_archived_at {
                             conversation.archived_at = value;
                         }
@@ -1112,6 +1232,9 @@ impl ConversationServiceV2 {
                         }
                         if let Some(value) = patch.routing_conversation_kind {
                             conversation.conversation_kind = value;
+                        }
+                        if let Some(value) = patch.is_draft {
+                            conversation.is_draft = value;
                         }
                         if conversation
                             .shell_workspace_path
@@ -1138,12 +1261,12 @@ impl ConversationServiceV2 {
     ) -> Result<ConversationMetaView, String> {
         let meta = match state_read_conversation_metadata_cached(state, conversation_id) {
             Ok(meta) => meta,
-            // 仅当轻量 metadata 不可读时回退：待落盘/迁移中的会话可能仍有完整缓存快照，
-            // 此时若直接判定不存在会中断通知与入站业务；正常路径仍禁止整读消息正文。
+            // 仅使用本次运行中已经进入 pending/current runtime cache 的完整快照兜住
+            // 尚未落盘的状态；这里不会读取或解释 V1/V2 文件。
             Err(meta_err) => match state_read_conversation_cached(state, conversation_id) {
                 Ok(conversation) => {
                     runtime_log_warn(format!(
-                        "[会话元数据] 轻量读取失败，使用会话缓存快照降级恢复，conversation_id={}，error={}",
+                        "[会话元数据] 消息仓库轻量读取失败，使用当前运行时缓存继续，conversation_id={}，error={}",
                         conversation_id.trim(), meta_err
                     ));
                     message_store::ConversationShardMeta::from_conversation(&conversation)
@@ -1289,7 +1412,6 @@ impl ConversationServiceV2 {
         conversation.last_user_at = conversation_meta.last_user_at.clone();
         conversation.last_assistant_at = conversation_meta.last_assistant_at.clone();
         conversation.status = conversation_meta.status.clone();
-        conversation.summary = conversation_meta.summary.clone();
         conversation.user_profile_snapshot = conversation_meta.user_profile_snapshot.clone();
         conversation.shell_workspace_path = conversation_meta.shell_workspace_path.clone();
         conversation.shell_workspaces = conversation_meta.shell_workspaces.clone();
@@ -1325,15 +1447,28 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn append_message(
+    async fn append_message(
         &self,
         state: &AppState,
         conversation_id: &str,
         message: &ChatMessage,
     ) -> Result<(), String> {
-        with_conversation_mutation(state, conversation_id, "append_message", || {
-            self.append_message_locked(state, conversation_id, message)
-        })?;
+        let state_for_mutation = state.clone();
+        let conversation_id_for_mutation = conversation_id.to_string();
+        let message_for_mutation = message.clone();
+        with_conversation_mutation_async(
+            state.clone(),
+            conversation_id_for_mutation.clone(),
+            "append_message".to_string(),
+            move || {
+                conversation_service_v2().append_message_locked(
+                    &state_for_mutation,
+                    &conversation_id_for_mutation,
+                    &message_for_mutation,
+                )
+            },
+        )
+        .await?;
         if let Err(err) = emit_unarchived_conversation_overview_item_updated_from_state(
             state,
             conversation_id,
@@ -1406,7 +1541,7 @@ impl ConversationServiceV2 {
             .ensure_appendable_ready_message_store(state, normalized_conversation_id)?;
         ready_meta.apply_metadata_fields_from_meta(&updated_meta);
         ready_meta.apply_appended_messages(std::slice::from_ref(message));
-        message_store::write_jsonl_snapshot_appended_messages_shard_from_meta(
+        message_store::chat_store_append_messages_from_meta(
             &store_paths,
             &ready_meta,
             std::slice::from_ref(message),
@@ -1415,7 +1550,7 @@ impl ConversationServiceV2 {
         Ok(())
     }
 
-    fn append_messages(
+    async fn append_messages(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1428,22 +1563,28 @@ impl ConversationServiceV2 {
         if messages.is_empty() {
             return Ok(());
         }
-        with_conversation_mutation(
-            state,
-            normalized_conversation_id,
-            "append_messages",
-            || {
-                let conversation_meta =
-                    self.get_conversation_meta(state, normalized_conversation_id)?;
-                if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
+        let service = conversation_service_v2();
+        let state_for_mutation = state.clone();
+        let conversation_id_for_mutation = normalized_conversation_id.to_string();
+        let messages_for_mutation = messages.to_vec();
+        with_conversation_mutation_async(
+            state.clone(),
+            conversation_id_for_mutation.clone(),
+            "append_messages".to_string(),
+            move || {
+                let conversation_meta = service
+                    .get_conversation_meta(&state_for_mutation, &conversation_id_for_mutation)?;
+                if !service.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
                     return Err(format!(
                         "Unarchived conversation not found: {}",
-                        normalized_conversation_id
+                        conversation_id_for_mutation
                     ));
                 }
-                let store_paths =
-                    message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
-                let last_message = messages
+                let store_paths = message_store::message_store_paths(
+                    &state_for_mutation.data_path,
+                    &conversation_id_for_mutation,
+                )?;
+                let last_message = messages_for_mutation
                     .last()
                     .ok_or_else(|| "messages is empty".to_string())?;
                 let updated_at = last_message.created_at.clone();
@@ -1457,44 +1598,52 @@ impl ConversationServiceV2 {
                 } else {
                     conversation_meta.last_assistant_at.clone()
                 };
-                let unread_count = if self.conversation_has_active_chat_view(state, normalized_conversation_id)
-                    || conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT
+                let unread_count = if service.conversation_has_active_chat_view(
+                    &state_for_mutation,
+                    &conversation_id_for_mutation,
+                ) || conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT
                 {
                     0
                 } else {
-                    conversation_meta.unread_count.saturating_add(messages.len())
+                    conversation_meta.unread_count.saturating_add(messages_for_mutation.len())
                 };
                 let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
-                    state,
-                    normalized_conversation_id,
+                    &state_for_mutation,
+                    &conversation_id_for_mutation,
                     |cached| {
                         let mut metadata_conversation =
-                            self.build_conversation_snapshot_from_meta(cached, Vec::new());
+                            service.build_conversation_snapshot_from_meta(cached, Vec::new());
                         metadata_conversation.unread_count = unread_count;
                         metadata_conversation.updated_at = updated_at.clone();
                         metadata_conversation.last_user_at = last_user_at.clone();
                         metadata_conversation.last_assistant_at = last_assistant_at.clone();
                         cached.apply_metadata_fields_from_conversation(&metadata_conversation);
-                        cached.apply_appended_messages(messages);
+                        cached.apply_appended_messages(&messages_for_mutation);
                         Ok(())
                     },
                 )?;
                 let metadata_conversation =
-                    self.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
-                state_upsert_chat_index_conversation_cached(state, &metadata_conversation)?;
-                let mut ready_meta = self
-                    .ensure_appendable_ready_message_store(state, normalized_conversation_id)?;
+                    service.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
+                state_upsert_chat_index_conversation_cached(&state_for_mutation, &metadata_conversation)?;
+                let mut ready_meta = service.ensure_appendable_ready_message_store(
+                    &state_for_mutation,
+                    &conversation_id_for_mutation,
+                )?;
                 ready_meta.apply_metadata_fields_from_meta(&updated_meta);
-                ready_meta.apply_appended_messages(messages);
-                message_store::write_jsonl_snapshot_appended_messages_shard_from_meta(
+                ready_meta.apply_appended_messages(&messages_for_mutation);
+                message_store::chat_store_append_messages_from_meta(
                     &store_paths,
                     &ready_meta,
-                    messages,
+                    &messages_for_mutation,
                 )?;
-                self.mark_conversation_metadata_cached_persisted(state, normalized_conversation_id)?;
+                service.mark_conversation_metadata_cached_persisted(
+                    &state_for_mutation,
+                    &conversation_id_for_mutation,
+                )?;
                 Ok(())
             },
-        )?;
+        )
+        .await?;
         if let Err(err) = emit_unarchived_conversation_overview_item_updated_from_state(
             state,
             normalized_conversation_id,
@@ -1518,7 +1667,7 @@ impl ConversationServiceV2 {
         Ok(build_session_notification_message(&body))
     }
 
-    fn append_user_message(
+    async fn append_user_message(
         &self,
         state: &AppState,
         input: &UserMessageAppendInput,
@@ -1531,59 +1680,108 @@ impl ConversationServiceV2 {
             return Err("append_user_message 只允许 user message".to_string());
         }
         let memory_recall_ids = dedup_memory_recall_ids_v2(&input.memory_recall_ids);
-        with_conversation_mutation(state, conversation_id, "append_user_message", || {
-            let conversation_meta = self.get_conversation_meta(state, conversation_id)?;
-            if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
-                return Err(format!("Unarchived conversation not found: {conversation_id}"));
-            }
-            let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
-            let updated_at = input.message.created_at.clone();
-            let unread_count = if self.conversation_has_active_chat_view(state, conversation_id)
-                || conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT
-            {
-                0
-            } else {
-                conversation_meta.unread_count.saturating_add(1)
-            };
-            let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
-                state,
-                conversation_id,
-                |cached| {
-                    let mut metadata_conversation =
-                        self.build_conversation_snapshot_from_meta(cached, Vec::new());
-                    metadata_conversation.unread_count = unread_count;
-                    metadata_conversation.updated_at = updated_at.clone();
-                    metadata_conversation.last_user_at = Some(updated_at.clone());
-                    if !memory_recall_ids.is_empty() {
-                        for memory_id in &memory_recall_ids {
-                            if !metadata_conversation
-                                .memory_recall_table
-                                .iter()
-                                .any(|item| item == memory_id)
-                            {
-                                metadata_conversation.memory_recall_table.push(memory_id.clone());
+        let service = conversation_service_v2();
+        let state_for_mutation = state.clone();
+        let conversation_id_for_mutation = conversation_id.to_string();
+        let input_for_mutation = input.clone();
+        let (was_draft, promoted_conversation) = with_conversation_mutation_async(
+            state.clone(),
+            conversation_id_for_mutation.clone(),
+            "append_user_message".to_string(),
+            move || {
+                let conversation_meta =
+                    service.get_conversation_meta(&state_for_mutation, &conversation_id_for_mutation)?;
+                if !service.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
+                    return Err(format!(
+                        "Unarchived conversation not found: {conversation_id_for_mutation}"
+                    ));
+                }
+                let was_draft = conversation_meta.is_draft;
+                let store_paths =
+                    message_store::message_store_paths(&state_for_mutation.data_path, &conversation_id_for_mutation)?;
+                let updated_at = input_for_mutation.message.created_at.clone();
+                let unread_count = if service
+                    .conversation_has_active_chat_view(&state_for_mutation, &conversation_id_for_mutation)
+                    || conversation_meta
+                        .conversation_kind
+                        .trim()
+                        == CONVERSATION_KIND_REMOTE_IM_CONTACT
+                {
+                    0
+                } else {
+                    conversation_meta.unread_count.saturating_add(1)
+                };
+                let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
+                    &state_for_mutation,
+                    &conversation_id_for_mutation,
+                    |cached| {
+                        let mut metadata_conversation =
+                            service.build_conversation_snapshot_from_meta(cached, Vec::new());
+                        // 任何用户消息写入都立刻转正：草稿收到第一条用户消息即清除草稿标记，
+                        // 写回存储后 append 路径后续 emit 的 overview 水位线携带 isDraft=false。
+                        if cached.is_draft() {
+                            metadata_conversation.is_draft = false;
+                        }
+                        metadata_conversation.unread_count = unread_count;
+                        metadata_conversation.updated_at = updated_at.clone();
+                        metadata_conversation.last_user_at = Some(updated_at.clone());
+                        if !memory_recall_ids.is_empty() {
+                            for memory_id in &memory_recall_ids {
+                                if !metadata_conversation
+                                    .memory_recall_table
+                                    .iter()
+                                    .any(|item| item == memory_id)
+                                {
+                                    metadata_conversation.memory_recall_table.push(memory_id.clone());
+                                }
                             }
                         }
-                    }
-                    cached.apply_metadata_fields_from_conversation(&metadata_conversation);
-                    cached.apply_appended_messages(std::slice::from_ref(&input.message));
-                    Ok(())
-                },
-            )?;
-            let metadata_conversation =
-                self.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
-            state_upsert_chat_index_conversation_cached(state, &metadata_conversation)?;
-            let mut ready_meta = self.ensure_appendable_ready_message_store(state, conversation_id)?;
-            ready_meta.apply_metadata_fields_from_meta(&updated_meta);
-            ready_meta.apply_appended_messages(std::slice::from_ref(&input.message));
-            message_store::write_jsonl_snapshot_appended_messages_shard_from_meta(
-                &store_paths,
-                &ready_meta,
-                std::slice::from_ref(&input.message),
-            )?;
-            self.mark_conversation_metadata_cached_persisted(state, conversation_id)?;
-            Ok(())
-        })?;
+                        cached.apply_metadata_fields_from_conversation(&metadata_conversation);
+                        cached.apply_appended_messages(std::slice::from_ref(
+                            &input_for_mutation.message,
+                        ));
+                        Ok(())
+                    },
+                )?;
+                let metadata_conversation =
+                    service.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
+                state_upsert_chat_index_conversation_cached(
+                    &state_for_mutation,
+                    &metadata_conversation,
+                )?;
+                let mut ready_meta =
+                    service.ensure_appendable_ready_message_store(&state_for_mutation, &conversation_id_for_mutation)?;
+                ready_meta.apply_metadata_fields_from_meta(&updated_meta);
+                ready_meta.apply_appended_messages(std::slice::from_ref(
+                    &input_for_mutation.message,
+                ));
+                message_store::chat_store_append_messages_from_meta(
+                    &store_paths,
+                    &ready_meta,
+                    std::slice::from_ref(&input_for_mutation.message),
+                )?;
+                service.mark_conversation_metadata_cached_persisted(
+                    &state_for_mutation,
+                    &conversation_id_for_mutation,
+                )?;
+                Ok((was_draft, metadata_conversation))
+            },
+        )
+        .await?;
+        // 草稿转正后立即创建下一个备用草稿：继承刚转正会话的部门/人格/模型/workspace。
+        // 创建失败不阻断消息发送，下次打开草稿入口时按单例查询兜底重建。
+        if was_draft {
+            match create_next_draft_conversation_inherited(state, &promoted_conversation) {
+                Ok(new_draft_id) => runtime_log_info(format!(
+                    "[会话草稿] 完成，任务=首条用户消息转正，conversation_id={}，new_draft_conversation_id={}",
+                    conversation_id, new_draft_id
+                )),
+                Err(err) => runtime_log_warn(format!(
+                    "[会话草稿] 创建备用草稿失败，等待下次打开时重建，conversation_id={}，error={err}",
+                    conversation_id
+                )),
+            }
+        }
         if let Err(err) = emit_unarchived_conversation_overview_item_updated_from_state(
             state,
             conversation_id,
@@ -1597,7 +1795,7 @@ impl ConversationServiceV2 {
     }
 
     /// 远程入站专用追加：只负责把远程消息正式写入会话历史。
-    fn append_remote_im_user_message(
+    async fn append_remote_im_user_message(
         &self,
         state: &AppState,
         conversation_id: &str,
@@ -1610,48 +1808,80 @@ impl ConversationServiceV2 {
         if message.role.trim() != "user" {
             return Err("远程入站追加只允许 user message".to_string());
         }
-        with_conversation_mutation(state, conversation_id, "append_remote_im_user_message", || {
-            let conversation_meta = self.get_conversation_meta(state, conversation_id)?;
-            if !self.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
-                return Err(format!("远程入站目标会话不存在：{conversation_id}"));
-            }
-            let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
-            let updated_at = message.created_at.clone();
-            let unread_count = if self.conversation_has_active_chat_view(state, conversation_id)
-                || conversation_meta.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT
-            {
-                0
-            } else {
-                conversation_meta.unread_count.saturating_add(1)
-            };
-            let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
-                state,
-                conversation_id,
-                |cached| {
-                    let mut metadata_conversation =
-                        self.build_conversation_snapshot_from_meta(cached, Vec::new());
-                    metadata_conversation.unread_count = unread_count;
-                    metadata_conversation.updated_at = updated_at.clone();
-                    metadata_conversation.last_user_at = Some(updated_at.clone());
-                    cached.apply_metadata_fields_from_conversation(&metadata_conversation);
-                    cached.apply_appended_messages(std::slice::from_ref(message));
-                    Ok(())
-                },
-            )?;
-            let metadata_conversation =
-                self.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
-            state_upsert_chat_index_conversation_cached(state, &metadata_conversation)?;
-            let mut ready_meta = self.ensure_appendable_ready_message_store(state, conversation_id)?;
-            ready_meta.apply_metadata_fields_from_meta(&updated_meta);
-            ready_meta.apply_appended_messages(std::slice::from_ref(message));
-            message_store::write_jsonl_snapshot_appended_messages_shard_from_meta(
-                &store_paths,
-                &ready_meta,
-                std::slice::from_ref(message),
-            )?;
-            self.mark_conversation_metadata_cached_persisted(state, conversation_id)?;
-            Ok(())
-        })?;
+        let service = conversation_service_v2();
+        let state_for_mutation = state.clone();
+        let conversation_id_for_mutation = conversation_id.to_string();
+        let message_for_mutation = message.clone();
+        with_conversation_mutation_async(
+            state.clone(),
+            conversation_id_for_mutation.clone(),
+            "append_remote_im_user_message".to_string(),
+            move || {
+                let conversation_meta =
+                    service.get_conversation_meta(&state_for_mutation, &conversation_id_for_mutation)?;
+                if !service.conversation_meta_is_unarchived_meta_view(&conversation_meta) {
+                    return Err(format!(
+                        "远程入站目标会话不存在：{conversation_id_for_mutation}"
+                    ));
+                }
+                let store_paths = message_store::message_store_paths(
+                    &state_for_mutation.data_path,
+                    &conversation_id_for_mutation,
+                )?;
+                let updated_at = message_for_mutation.created_at.clone();
+                let unread_count = if service.conversation_has_active_chat_view(
+                    &state_for_mutation,
+                    &conversation_id_for_mutation,
+                ) || conversation_meta
+                    .conversation_kind
+                    .trim()
+                    == CONVERSATION_KIND_REMOTE_IM_CONTACT
+                {
+                    0
+                } else {
+                    conversation_meta.unread_count.saturating_add(1)
+                };
+                let (updated_meta, (), _) = state_update_conversation_meta_cached_unlocked(
+                    &state_for_mutation,
+                    &conversation_id_for_mutation,
+                    |cached| {
+                        let mut metadata_conversation =
+                            service.build_conversation_snapshot_from_meta(cached, Vec::new());
+                        metadata_conversation.unread_count = unread_count;
+                        metadata_conversation.updated_at = updated_at.clone();
+                        metadata_conversation.last_user_at = Some(updated_at.clone());
+                        cached.apply_metadata_fields_from_conversation(&metadata_conversation);
+                        cached.apply_appended_messages(std::slice::from_ref(
+                            &message_for_mutation,
+                        ));
+                        Ok(())
+                    },
+                )?;
+                let metadata_conversation =
+                    service.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
+                state_upsert_chat_index_conversation_cached(
+                    &state_for_mutation,
+                    &metadata_conversation,
+                )?;
+                let mut ready_meta = service.ensure_appendable_ready_message_store(
+                    &state_for_mutation,
+                    &conversation_id_for_mutation,
+                )?;
+                ready_meta.apply_metadata_fields_from_meta(&updated_meta);
+                ready_meta.apply_appended_messages(std::slice::from_ref(&message_for_mutation));
+                message_store::chat_store_append_messages_from_meta(
+                    &store_paths,
+                    &ready_meta,
+                    std::slice::from_ref(&message_for_mutation),
+                )?;
+                service.mark_conversation_metadata_cached_persisted(
+                    &state_for_mutation,
+                    &conversation_id_for_mutation,
+                )?;
+                Ok(())
+            },
+        )
+        .await?;
         if let Err(err) = emit_unarchived_conversation_overview_item_updated_from_state(
             state,
             conversation_id,
@@ -1811,26 +2041,6 @@ impl ConversationServiceV2 {
         )
     }
 
-    fn recover_conversation_snapshot(
-        &self,
-        state: &AppState,
-        job_id: &str,
-        operator: &str,
-        reason: &str,
-        snapshot: &Conversation,
-    ) -> Result<(), String> {
-        self.apply_privileged_snapshot_overwrite(
-            state,
-            &ConversationOverwriteAudit {
-                job_id: job_id.trim().to_string(),
-                source: ConversationOverwriteSource::MigrationRecovery,
-                operator: operator.trim().to_string(),
-                reason: reason.trim().to_string(),
-            },
-            snapshot,
-        )
-    }
-
     #[cfg(test)]
     fn set_conversation_preferred_api_config_id(
         &self,
@@ -1898,7 +2108,6 @@ impl ConversationServiceV2 {
         state: &AppState,
         conversation_id: &str,
         status: Option<&str>,
-        summary: Option<&str>,
         archived_at: Option<Option<String>>,
         updated_at: Option<String>,
     ) -> Result<Conversation, String> {
@@ -1908,7 +2117,6 @@ impl ConversationServiceV2 {
             "conversation_v2_test_set_lifecycle_metadata",
             ConversationExternalMetadataPatch {
                 lifecycle_status: status.map(|value| value.trim().to_string()),
-                lifecycle_summary: summary.map(ToOwned::to_owned),
                 lifecycle_archived_at: archived_at,
                 lifecycle_updated_at: updated_at,
                 ..Default::default()
@@ -1927,13 +2135,13 @@ impl ConversationServiceV2 {
     }
 
     #[cfg(test)]
-    fn append_message_to_unarchived_conversation(
+    async fn append_message_to_unarchived_conversation(
         &self,
         state: &AppState,
         conversation_id: &str,
         message: &ChatMessage,
     ) -> Result<(), String> {
-        self.append_message(state, conversation_id, message)
+        self.append_message(state, conversation_id, message).await
     }
 
     #[cfg(test)]

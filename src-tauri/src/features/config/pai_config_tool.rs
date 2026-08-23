@@ -415,7 +415,7 @@ impl CliContext {
             let app_root = PathBuf::from(root);
             return Ok(Self {
                 config_path: app_root.join("app_config.toml"),
-                data_path: app_root.join("app_data.json"),
+                data_path: app_root.join("config_mark"),
                 workspace_root: app_root.join("llm-workspace"),
                 app_root,
             });
@@ -425,7 +425,7 @@ impl CliContext {
             let config_dir = portable_root.join("config");
             return Ok(Self {
                 config_path: config_dir.join("app_config.toml"),
-                data_path: config_dir.join("app_data.json"),
+                data_path: config_dir.join("config_mark"),
                 workspace_root: portable_root.join("llm-workspace"),
                 app_root: portable_root,
             });
@@ -435,7 +435,7 @@ impl CliContext {
         let app_root = config_dir.clone();
         Ok(Self {
             config_path: config_dir.join("app_config.toml"),
-            data_path: config_dir.join("app_data.json"),
+            data_path: config_dir.join("config_mark"),
             workspace_root: app_root.join("llm-workspace"),
             app_root,
         })
@@ -1141,17 +1141,6 @@ fn load_main_agents(ctx: &CliContext) -> Result<Vec<AgentProfile>, String> {
     let shard = main_agents_shard_path(ctx);
     if shard.exists() {
         return Ok(read_json_file::<AgentsFile>(&shard)?.agents);
-    }
-    if ctx.data_path.exists() {
-        let raw = fs::read_to_string(&ctx.data_path)
-            .map_err(|err| format!("读取 app_data 失败 ({}): {err}", ctx.data_path.display()))?;
-        let value = serde_json::from_str::<JsonValue>(&raw)
-            .map_err(|err| format!("解析 app_data 失败 ({}): {err}", ctx.data_path.display()))?;
-        let agents = value
-            .get("agents")
-            .cloned()
-            .unwrap_or_else(|| JsonValue::Array(Vec::new()));
-        return serde_json::from_value(agents).map_err(|err| format!("解析 agents 失败: {err}"));
     }
     Ok(Vec::new())
 }
@@ -2580,7 +2569,7 @@ scope = "global"
         let output = run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "agent ls",
         )
@@ -2599,7 +2588,7 @@ scope = "global"
         let output = run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "agent new 测试人格 你是一个可靠助手",
         )
@@ -2611,7 +2600,7 @@ scope = "global"
         let output = run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "agent ls",
         )
@@ -2631,12 +2620,12 @@ scope = "global"
         fs::create_dir_all(actual_data_root.join("config")).expect("create actual config dir");
         fs::create_dir_all(wrong_app_root.join("llm-workspace")).expect("create wrong workspace dir");
         fs::copy(root.join("app_config.toml"), actual_data_root.join("app_config.toml")).expect("copy config");
-        fs::copy(root.join("app_data.json"), actual_data_root.join("app_data.json")).ok();
+        fs::copy(root.join("config_mark"), actual_data_root.join("config_mark")).ok();
 
         let output = run_command_with_paths(
             wrong_app_root.clone(),
             actual_data_root.join("app_config.toml"),
-            actual_data_root.join("app_data.json"),
+            actual_data_root.join("config_mark"),
             wrong_app_root.join("llm-workspace"),
             "agent new TestAgent Prompt",
         )
@@ -2659,7 +2648,7 @@ scope = "global"
         let output = run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "agent ls",
         )
@@ -2671,7 +2660,7 @@ scope = "global"
         let err = run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "agent get user",
         )
@@ -2687,7 +2676,7 @@ scope = "global"
         let output = run_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             &[
                 "agent".to_string(),
@@ -2711,7 +2700,7 @@ scope = "global"
         let output = run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             &command,
         )
@@ -2729,7 +2718,7 @@ scope = "global"
         run_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             &[
                 "agent".to_string(),
@@ -2746,7 +2735,7 @@ scope = "global"
         let output = run_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             &[
                 "agent".to_string(),
@@ -2770,7 +2759,7 @@ scope = "global"
         run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "department tree set-parent dept-b dept-a",
         )
@@ -2786,7 +2775,7 @@ scope = "global"
         let output = run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "department new 测试部门 需要专项处理时使用我 先拆解再执行 expert agent-a",
         )
@@ -2798,7 +2787,7 @@ scope = "global"
         let output = run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "department ls",
         )
@@ -2828,7 +2817,7 @@ scope = "global"
         let output = run_command_with_paths(
             wrong_app_root.clone(),
             actual_data_root.join("app_config.toml"),
-            actual_data_root.join("app_data.json"),
+            actual_data_root.join("config_mark"),
             wrong_app_root.join("llm-workspace"),
             "department new TestDept 需要专项处理时使用我 先拆解再执行 expert agent-a",
         )
@@ -2852,7 +2841,7 @@ scope = "global"
         let output = run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "department ls",
         )
@@ -2864,7 +2853,7 @@ scope = "global"
         let err = run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "department get assistant-department",
         )
@@ -2881,7 +2870,7 @@ scope = "global"
         let err = run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "department set-model-class assistant-department fast",
         )
@@ -2896,7 +2885,7 @@ scope = "global"
         run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "department tree set-parent dept-b dept-a",
         )
@@ -2905,7 +2894,7 @@ scope = "global"
         let err = run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "department tree set-parent dept-a dept-b",
         )
@@ -2943,7 +2932,7 @@ scope = "global"
         let err = run_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             &[
                 "department".to_string(),
@@ -2964,7 +2953,7 @@ scope = "global"
         run_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             &[
                 "provider".to_string(),
@@ -2980,7 +2969,7 @@ scope = "global"
         let output = run_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             &[
                 "provider".to_string(),
@@ -3003,7 +2992,7 @@ scope = "global"
         let err = run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "provider ls",
         )
@@ -3033,7 +3022,7 @@ scope = "global"
         let output = run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "mcp ls",
         )
@@ -3081,7 +3070,7 @@ level = "system"
         let output = run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "mcp ls",
         )
@@ -3099,7 +3088,7 @@ level = "system"
         let err = run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "skill ls",
         )
@@ -3114,7 +3103,7 @@ level = "system"
         let output = run_command_with_paths(
             root.clone(),
             root.join("app_config.toml"),
-            root.join("app_data.json"),
+            root.join("config_mark"),
             root.join("llm-workspace"),
             "help",
         )

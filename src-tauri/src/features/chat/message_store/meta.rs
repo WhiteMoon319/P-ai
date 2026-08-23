@@ -21,7 +21,6 @@ pub(super) struct ConversationPersistMeta {
     last_user_at: Option<String>,
     last_assistant_at: Option<String>,
     status: String,
-    summary: String,
     user_profile_snapshot: String,
     shell_workspace_path: Option<String>,
     shell_workspaces: Vec<ShellWorkspaceConfig>,
@@ -33,6 +32,8 @@ pub(super) struct ConversationPersistMeta {
     memory_recall_table: Vec<String>,
     plan_mode_enabled: bool,
     preferred_api_config_id: Option<String>,
+    #[serde(default)]
+    is_draft: bool,
     auto_push_remote_contact_id: Option<String>,
     cumulative_usage: ConversationCumulativeUsage,
     active_goal: Option<ConversationGoalState>,
@@ -159,8 +160,6 @@ pub(super) struct ConversationShardMeta {
     last_assistant_at: Option<String>,
     status: String,
     #[serde(default)]
-    summary: String,
-    #[serde(default)]
     user_profile_snapshot: String,
     #[serde(default)]
     shell_workspace_path: Option<String>,
@@ -180,6 +179,8 @@ pub(super) struct ConversationShardMeta {
     plan_mode_enabled: bool,
     #[serde(default)]
     preferred_api_config_id: Option<String>,
+    #[serde(default)]
+    is_draft: bool,
     #[serde(default)]
     auto_push_remote_contact_id: Option<String>,
     #[serde(default, alias = "usageSummary")]
@@ -322,9 +323,6 @@ impl ConversationShardMeta {
         self.preferred_api_config_id.as_deref()
     }
 
-    pub(super) fn summary(&self) -> &str {
-        self.summary.as_str()
-    }
 
     pub(super) fn auto_push_remote_contact_id(&self) -> Option<&str> {
         self.auto_push_remote_contact_id.as_deref()
@@ -421,6 +419,10 @@ impl ConversationShardMeta {
         self.plan_mode_enabled
     }
 
+    pub(super) fn is_draft(&self) -> bool {
+        self.is_draft
+    }
+
     pub(super) fn active_goal(&self) -> Option<&ConversationGoalState> {
         self.active_goal.as_ref()
     }
@@ -470,7 +472,6 @@ impl ConversationShardMeta {
         target.last_user_at = self.last_user_at.clone();
         target.last_assistant_at = self.last_assistant_at.clone();
         target.status = self.status.clone();
-        target.summary = self.summary.clone();
         target.user_profile_snapshot = self.user_profile_snapshot.clone();
         target.shell_workspace_path = self.shell_workspace_path.clone();
         target.shell_workspaces = self.shell_workspaces.clone();
@@ -481,6 +482,7 @@ impl ConversationShardMeta {
         target.memory_recall_table = self.memory_recall_table.clone();
         target.plan_mode_enabled = self.plan_mode_enabled;
         target.preferred_api_config_id = self.preferred_api_config_id.clone();
+        target.is_draft = self.is_draft;
         target.auto_push_remote_contact_id = self.auto_push_remote_contact_id.clone();
         target.cumulative_usage = self.cumulative_usage.clone();
         target.active_goal = self.active_goal.clone();
@@ -504,7 +506,6 @@ impl ConversationShardMeta {
         self.last_user_at = source.last_user_at.clone();
         self.last_assistant_at = source.last_assistant_at.clone();
         self.status = source.status.clone();
-        self.summary = source.summary.clone();
         self.user_profile_snapshot = source.user_profile_snapshot.clone();
         self.shell_workspace_path = source.shell_workspace_path.clone();
         self.shell_workspaces = source.shell_workspaces.clone();
@@ -515,6 +516,7 @@ impl ConversationShardMeta {
         self.memory_recall_table = source.memory_recall_table.clone();
         self.plan_mode_enabled = source.plan_mode_enabled;
         self.preferred_api_config_id = source.preferred_api_config_id.clone();
+        self.is_draft = source.is_draft;
         self.auto_push_remote_contact_id = source.auto_push_remote_contact_id.clone();
         self.cumulative_usage = source.cumulative_usage.clone();
         self.active_goal = source.active_goal.clone();
@@ -538,7 +540,6 @@ impl ConversationShardMeta {
         self.last_user_at = source.last_user_at.clone();
         self.last_assistant_at = source.last_assistant_at.clone();
         self.status = source.status.clone();
-        self.summary = source.summary.clone();
         self.user_profile_snapshot = source.user_profile_snapshot.clone();
         self.shell_workspace_path = source.shell_workspace_path.clone();
         self.shell_workspaces = source.shell_workspaces.clone();
@@ -549,6 +550,7 @@ impl ConversationShardMeta {
         self.memory_recall_table = source.memory_recall_table.clone();
         self.plan_mode_enabled = source.plan_mode_enabled;
         self.preferred_api_config_id = source.preferred_api_config_id.clone();
+        self.is_draft = source.is_draft;
         self.auto_push_remote_contact_id = source.auto_push_remote_contact_id.clone();
         self.cumulative_usage = source.cumulative_usage.clone();
         self.active_goal = source.active_goal.clone();
@@ -570,7 +572,6 @@ impl ConversationShardMeta {
         self.last_user_at = source.last_user_at.clone();
         self.last_assistant_at = source.last_assistant_at.clone();
         self.status = source.status.clone();
-        self.summary = source.summary.clone();
         self.user_profile_snapshot = source.user_profile_snapshot.clone();
         self.shell_workspace_path = source.shell_workspace_path.clone();
         self.shell_workspaces = source.shell_workspaces.clone();
@@ -580,6 +581,7 @@ impl ConversationShardMeta {
         self.current_todos = source.current_todos.clone();
         self.plan_mode_enabled = source.plan_mode_enabled;
         self.preferred_api_config_id = source.preferred_api_config_id.clone();
+        self.is_draft = source.is_draft;
         self.auto_push_remote_contact_id = source.auto_push_remote_contact_id.clone();
         self.cumulative_usage = source.cumulative_usage.clone();
         self.active_goal = source.active_goal.clone();
@@ -842,7 +844,6 @@ impl ConversationShardMeta {
             last_user_at: conversation.last_user_at.clone(),
             last_assistant_at: conversation.last_assistant_at.clone(),
             status: conversation.status.clone(),
-            summary: conversation.summary.clone(),
             user_profile_snapshot: conversation.user_profile_snapshot.clone(),
             shell_workspace_path: conversation.shell_workspace_path.clone(),
             shell_workspaces: conversation.shell_workspaces.clone(),
@@ -853,6 +854,7 @@ impl ConversationShardMeta {
             memory_recall_table: conversation.memory_recall_table.clone(),
             plan_mode_enabled: conversation.plan_mode_enabled,
             preferred_api_config_id: conversation.preferred_api_config_id.clone(),
+            is_draft: conversation.is_draft,
             auto_push_remote_contact_id: conversation.auto_push_remote_contact_id.clone(),
             cumulative_usage: conversation.cumulative_usage.clone(),
             active_goal: conversation.active_goal.clone(),
@@ -938,7 +940,6 @@ impl ConversationShardMeta {
             last_user_at: meta.last_user_at.clone(),
             last_assistant_at: meta.last_assistant_at.clone(),
             status: meta.status.clone(),
-            summary: meta.summary.clone(),
             user_profile_snapshot: meta.user_profile_snapshot.clone(),
             shell_workspace_path: meta.shell_workspace_path.clone(),
             shell_workspaces: meta.shell_workspaces.clone(),
@@ -949,6 +950,7 @@ impl ConversationShardMeta {
             memory_recall_table: meta.memory_recall_table.clone(),
             plan_mode_enabled: meta.plan_mode_enabled,
             preferred_api_config_id: meta.preferred_api_config_id.clone(),
+            is_draft: meta.is_draft,
             auto_push_remote_contact_id: meta.auto_push_remote_contact_id.clone(),
             cumulative_usage: meta.cumulative_usage.clone(),
             active_goal: meta.active_goal.clone(),
@@ -985,7 +987,6 @@ impl ConversationShardMeta {
             last_user_at: self.last_user_at.clone(),
             last_assistant_at: self.last_assistant_at.clone(),
             status: self.status.clone(),
-            summary: self.summary.clone(),
             user_profile_snapshot: self.user_profile_snapshot.clone(),
             shell_workspace_path: self.shell_workspace_path.clone(),
             shell_workspaces: self.shell_workspaces.clone(),
@@ -996,6 +997,7 @@ impl ConversationShardMeta {
             memory_recall_table: self.memory_recall_table.clone(),
             plan_mode_enabled: self.plan_mode_enabled,
             preferred_api_config_id: self.preferred_api_config_id.clone(),
+            is_draft: self.is_draft,
             auto_push_remote_contact_id: self.auto_push_remote_contact_id.clone(),
             cumulative_usage: self.cumulative_usage.clone(),
             active_goal: self.active_goal.clone(),
@@ -1031,7 +1033,6 @@ impl ConversationShardMeta {
             last_user_at: self.last_user_at,
             last_assistant_at: self.last_assistant_at,
             status: self.status,
-            summary: self.summary,
             user_profile_snapshot: self.user_profile_snapshot,
             shell_workspace_path: self.shell_workspace_path,
             shell_workspaces: self.shell_workspaces,
@@ -1044,6 +1045,7 @@ impl ConversationShardMeta {
             memory_recall_table: self.memory_recall_table,
             plan_mode_enabled: self.plan_mode_enabled,
             preferred_api_config_id: self.preferred_api_config_id,
+            is_draft: self.is_draft,
             auto_push_remote_contact_id: self.auto_push_remote_contact_id,
             cumulative_usage: self.cumulative_usage,
             active_goal: self.active_goal,
@@ -1112,7 +1114,6 @@ mod message_store_meta_tests {
             last_user_at: Some("2026-04-24T00:00:30Z".to_string()),
             last_assistant_at: Some("2026-04-24T00:00:40Z".to_string()),
             status: "active".to_string(),
-            summary: "summary".to_string(),
             user_profile_snapshot: "profile".to_string(),
             shell_workspace_path: Some("E:/workspace".to_string()),
             shell_workspaces: vec![ShellWorkspaceConfig {
@@ -1162,6 +1163,7 @@ mod message_store_meta_tests {
                 usage_start: ConversationCumulativeUsage::default(),
                 usage_end: None,
             }),
+            is_draft: false,
         }
     }
 

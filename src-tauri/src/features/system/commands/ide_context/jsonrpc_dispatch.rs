@@ -164,6 +164,25 @@ async fn ide_chat_handle_jsonrpc_request(
                 }
                 Ok(result)
             }),
+        "conversation.openDraft" => ide_chat_open_draft_conversation(state, request.params)
+            .await
+            .and_then(|result| {
+                if let Some(conversation_id) = result
+                    .get("conversationId")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                {
+                    ide_chat_register_sidebar_conversation(
+                        state,
+                        conversation_id,
+                        &sidebar_label,
+                        opened_conversation_id,
+                    )?;
+                }
+                Ok(result)
+            }),
+        "conversation.updateDraft" => ide_chat_update_draft_conversation(state, request.params).await,
         "conversation.createSide" => ide_chat_create_side_chat_conversation(state, request.params).await,
         "conversation.createOptions" => ide_chat_create_conversation_options(state),
         "workspace.permission" => ide_chat_workspace_permission(state, request.params),
@@ -207,11 +226,11 @@ async fn ide_chat_handle_jsonrpc_request(
         "fileReader.readFileBlock" => ide_chat_file_reader_read_block(request.params).await,
         "conversation.delete" => ide_chat_delete_conversation(state, request.params).await,
         "conversation.batchArchive" => ide_chat_batch_archive_conversations(state, request.params).await,
-        "conversation.rebindRecipient" => ide_chat_rebind_conversation_recipient(state, request.params),
+        "conversation.rebindRecipient" => ide_chat_rebind_conversation_recipient(state, request.params).await,
         "conversation.rewind" => ide_chat_rewind_conversation(state, request.params).await,
         "conversation.branchFromMessage" => ide_chat_branch_conversation_from_message(state, request.params).await,
         "conversation.branchFromSelection" => ide_chat_branch_conversation(state, request.params).await,
-        "conversation.forwardSelection" => ide_chat_forward_selection_command(state, request.params),
+        "conversation.forwardSelection" => ide_chat_forward_selection_command(state, request.params).await,
         "conversation.forwardRemoteContact" => ide_chat_forward_remote_contact_command(state, request.params),
         "conversation.rename" => ide_chat_rename_conversation_command(state, request.params),
         "conversation.pin" => ide_chat_toggle_pin_command(state, request.params),
@@ -283,12 +302,10 @@ async fn ide_chat_handle_jsonrpc_request(
         "conversation.rewindPreview" => ide_chat_preview_rewind_conversation(state, request.params).await,
         "conversation.archiveList" => ide_chat_list_archives_command(state),
         "conversation.archiveBlockPage" => ide_chat_archive_block_page_command(state, request.params).await,
-        "conversation.archiveSummary" => ide_chat_archive_summary_command(state, request.params).await,
         "conversation.deleteArchive" => ide_chat_delete_archive_command(state, request.params),
         "conversation.unarchive" => ide_chat_unarchive_command(state, request.params),
         "archives.list" => ide_chat_list_archives_command(state),
         "archives.blockPage" => ide_chat_archive_block_page_command(state, request.params).await,
-        "archives.summary" => ide_chat_archive_summary_command(state, request.params).await,
         "archives.delete" => ide_chat_delete_archive_command(state, request.params),
         "archives.unarchive" => ide_chat_unarchive_command(state, request.params),
         "is_backend_ready" => Ok(serde_json::json!(state.backend_ready.load(std::sync::atomic::Ordering::Acquire))),
@@ -297,9 +314,15 @@ async fn ide_chat_handle_jsonrpc_request(
         "app.bootstrapSnapshot" => ide_chat_load_app_bootstrap_snapshot_for_web_settings(state),
         "messageStore.migration.check" => check_message_store_migration_inner(state)
             .and_then(ide_chat_serialize),
+        "messageStore.migration.status" => {
+            ide_chat_serialize(get_message_store_migration_runtime_status())
+        }
         "messageStore.migration.run" => ide_chat_parse_workspace_params::<RunMessageStoreMigrationInput>(request.params)
-            .and_then(|input| run_message_store_migration_inner(app, state, input))
-            .and_then(ide_chat_serialize),
+            .and_then(|_| {
+                spawn_message_store_migration_task(state.clone());
+                ide_chat_serialize(message_store_migration_runtime_snapshot())
+            }),
+        "messageStore.migration.confirm" => ide_chat_serialize(confirm_message_store_migration_summary()),
         "save_config" => ide_chat_save_config_for_web_settings(state, app, ide_context_runtime, request.params),
         "load_agents" => ide_chat_load_agents_for_web_settings(state),
         "convert_private_agent_to_main" => {
@@ -544,7 +567,7 @@ async fn ide_chat_handle_jsonrpc_request(
             .and_then(ide_chat_serialize),
         "mark_conversation_read" => ide_chat_mark_conversation_read_command(state, request.params).await,
         "set_active_unarchived_conversation" => ide_chat_set_active_conversation_command(state, request.params),
-        "rebind_unarchived_conversation_recipient" => ide_chat_rebind_conversation_command(state, request.params),
+        "rebind_unarchived_conversation_recipient" => ide_chat_rebind_conversation_command(state, request.params).await,
         "rewind_conversation_from_message" => ide_chat_rewind_conversation_command(state, request.params).await,
         "preview_rewind_conversation_from_message" => {
             ide_chat_preview_rewind_conversation(state, request.params).await
@@ -559,7 +582,6 @@ async fn ide_chat_handle_jsonrpc_request(
         "query_ide_context_references" => ide_chat_query_ide_context_command(request.params, ide_context_runtime),
         "list_archives" => ide_chat_list_archives_command(state),
         "get_archive_block_page" => ide_chat_archive_block_page_command(state, request.params).await,
-        "get_archive_summary" => ide_chat_archive_summary_command(state, request.params).await,
         "delete_archive" => ide_chat_delete_archive_command(state, request.params),
         "unarchive_archive" => ide_chat_unarchive_command(state, request.params),
         "conversation.archive" => {
@@ -591,7 +613,7 @@ async fn ide_chat_handle_jsonrpc_request(
         "remoteIm.conversation.clear" => ide_chat_remote_im_clear_conversation_command(state, request.params),
         "frontend_ready_start_remote_im_services" => ide_chat_frontend_ready_remote_im_command(app).await,
         "remoteIm.services.start" => ide_chat_frontend_ready_remote_im_command(app).await,
-        "forward_unarchived_conversation_selection" => ide_chat_forward_selection_command(state, request.params),
+        "forward_unarchived_conversation_selection" => ide_chat_forward_selection_command(state, request.params).await,
         "forward_selection_to_remote_im_contact" => ide_chat_forward_remote_contact_command(state, request.params),
         "rename_unarchived_conversation" => ide_chat_rename_conversation_command(state, request.params),
         "toggle_unarchived_conversation_pin" => ide_chat_toggle_pin_command(state, request.params),
@@ -611,7 +633,7 @@ async fn ide_chat_handle_jsonrpc_request(
         "toolReview.item.detail" => ide_chat_tool_review_item_detail(state, request.params),
         "toolReview.item.review" => ide_chat_tool_review_item_review(state, request.params).await,
         "toolReview.batch.review" => ide_chat_tool_review_batch_review(state, request.params).await,
-        "toolReview.item.decision" => ide_chat_tool_review_item_decision(state, request.params),
+        "toolReview.item.decision" => ide_chat_tool_review_item_decision(state, request.params).await,
         _ => return ide_chat_jsonrpc_error(request.id, -32601, "method not found"),
     };
     match result {
@@ -958,7 +980,6 @@ mod web_native_capability_tests {
             "query_ide_context_references",
             "list_archives",
             "get_archive_block_page",
-            "get_archive_summary",
             "delete_archive",
             "unarchive_archive",
             "archive_conversation",

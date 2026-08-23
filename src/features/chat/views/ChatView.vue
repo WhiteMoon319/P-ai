@@ -48,7 +48,7 @@
           </div>
           <div
             v-if="showInitialMeasureOverlay"
-            class="absolute inset-0 z-10 flex items-center justify-center bg-base-100/85"
+            class="absolute inset-0 z-10 flex items-center justify-center bg-base-200"
             aria-hidden="true"
           >
             <span class="loading loading-spinner loading-md text-primary" />
@@ -62,6 +62,15 @@
             @wheel="handleConversationWheelInput"
             @pointerdown="beginPointerScrollIntent"
           >
+          <DraftRecipientCard
+            v-if="activeConversationIsDraft"
+            :options="props.createConversationDepartmentOptions"
+            :recent-options="draftRecentRecipientOptions"
+            :selected-department-id="draftSelectedDepartmentId"
+            :selected-agent-id="draftSelectedAgentId"
+            :avatar-url-map="props.personaAvatarUrlMap"
+            @change="handleDraftPersonaChange($event)"
+          />
           <div class="ecall-chat-history-flow flex min-w-0 shrink-0 flex-col">
             <div
               v-if="showNoMoreHistoryDivider"
@@ -389,9 +398,9 @@
             :frontend-round-phase="frontendRoundPhase" :chat-usage-percent="chatUsagePercent"
             :chatting="chatting" :busy="conversationInteractionBusy"
             :stop-chat-disabled="isOrganizingContextBusy || submitPending" :frozen="frozen"
-            :supervision-active="supervisionActive"
-            :supervision-title="supervisionButtonTitle"
-            :supervision-disabled="activeConversationSummary?.kind === 'remote_im_contact'"
+            :goal-active="goalActive"
+            :goal-title="goalButtonTitle"
+            :goal-disabled="activeConversationSummary?.kind === 'remote_im_contact'"
             :system-notification-mode="activeConversationIsSystemNotification"
             :remote-contact-mode="activeConversationIsRemoteContact"
             :selection-delegate-only="messageSelectionDelegateOnly"
@@ -418,7 +427,7 @@
             @send-chat="handleSendChat" @stop-chat="$emit('stopChat')"
             @open-delegate-selection="openDelegateSelectionMenu"
             @open-task-create="openTaskCreateDialog"
-            @open-supervision-task="$emit('openSupervisionTask')"
+            @open-goal-task="$emit('openGoalTask')"
             @exit-selection-mode="handleExitMessageSelectionMode"
             @selection-action-copy="copySelectedMessages"
             @selection-action-branch="emitSelectionAction('branch')"
@@ -444,12 +453,11 @@
           @copy-image="handleCopyLocalImage" @save-image="handleSaveLocalImage"
         />
 
-        <ChatSupervisionTaskDialog
-          v-if="showConversationActions"
-          :open="supervisionDialogOpen" :saving="supervisionTaskSaving" :error-text="supervisionTaskError"
-          :active-task="activeSupervisionTask" :recent-history="recentSupervisionTaskHistory"
-          @close="$emit('closeSupervisionTask')" @save="$emit('saveSupervisionTask', $event)"
-          @stop="$emit('stopSupervisionTask')"
+        <ChatGoalTaskDialog
+          :open="goalDialogOpen" :saving="goalSaving" :error-text="goalError"
+          :active-task="activeGoalTask" :recent-history="recentGoalTaskHistory"
+          @close="$emit('closeGoalTask')" @save="$emit('saveGoalTask', $event)"
+          @stop="$emit('stopGoalTask')"
         />
         <ToolReviewTargetDialog
           v-if="showConversationActions"
@@ -643,6 +651,7 @@ import ChatApprovalPanel from "../components/ChatApprovalPanel.vue";
 import ChatComposerPanel from "../components/ChatComposerPanel.vue";
 import RemoteImContactEnergyDashboard from "../components/RemoteImContactEnergyDashboard.vue";
 import DepartmentPersonaSelect from "../../shared/components/DepartmentPersonaSelect.vue";
+import DraftRecipientCard from "../components/DraftRecipientCard.vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 import ChatConversationSidebar from "../components/ChatConversationSidebar.vue";
 import ChatWorkspaceToolbar from "../components/ChatWorkspaceToolbar.vue";
@@ -652,7 +661,7 @@ import ToolReviewTargetDialog from "../components/ToolReviewTargetDialog.vue";
 import FileReaderPanel from "../../file-reader/components/FileReaderPanel.vue";
 import PanelTabStrip from "../../shared/components/PanelTabStrip.vue";
 import ChatImagePreviewDialog from "../components/dialogs/ChatImagePreviewDialog.vue";
-import ChatSupervisionTaskDialog from "../components/dialogs/ChatSupervisionTaskDialog.vue";
+import ChatGoalTaskDialog from "../components/dialogs/ChatGoalTaskDialog.vue";
 import TaskCreateCard from "../components/dialogs/TaskCreateCard.vue";
 import ConversationTodoDropdown from "../components/ConversationTodoDropdown.vue";
 import CompactionSummaryCard from "../components/CompactionSummaryCard.vue";
@@ -706,10 +715,10 @@ const props = defineProps<{
   currentWorkspaceName: string; currentWorkspaceDisplayName?: string; currentWorkspaceRootPath: string; workspaces: ShellWorkspace[];
   currentWorkspaceAutonomousMode?: boolean;
   currentDepartmentId: string; activeAgentId: string; activeConversationId: string; currentTodos: ChatTodoItem[];
-  supervisionActive: boolean; supervisionTitle: string; supervisionDialogOpen: boolean;
-  supervisionTaskSaving: boolean; supervisionTaskError: string;
-  activeSupervisionTask: { taskId: string; goal: string; why: string; todo: string; endAtLocal: string; remainingHours: number } | null;
-  recentSupervisionTaskHistory: Array<{ goal: string; why: string; todo: string; durationHours: number }>;
+  goalActive: boolean; goalTitle: string; goalDialogOpen: boolean;
+  goalSaving: boolean; goalError: string;
+  activeGoalTask: { taskId: string; goal: string; why: string; todo: string; endAtLocal: string; remainingHours: number } | null;
+  recentGoalTaskHistory: Array<{ goal: string; why: string; todo: string; durationHours: number }>;
   currentTheme: string; unarchivedConversationItems: ChatConversationOverviewItem[];
   remoteImContactConversations: RemoteImContactConversationOption[];
   conversationItems?: ChatConversationOverviewItem[]; sideConversationListVisible: boolean;
@@ -758,10 +767,10 @@ const emit = defineEmits<{
   (e: "recallTurn", payload: { turnId: string }): void;
   (e: "regenerateTurn", payload: { turnId: string }): void;
   (e: "confirmPlan", payload: { messageId: string }): void;
-  (e: "lockWorkspace"): void; (e: "openSupervisionTask"): void; (e: "openCodeReview"): void;
-  (e: "closeSupervisionTask"): void;
-  (e: "saveSupervisionTask", payload: { durationHours: number; goal: string; why: string; todo: string }): void;
-  (e: "stopSupervisionTask"): void;
+  (e: "lockWorkspace"): void; (e: "openGoalTask"): void; (e: "openCodeReview"): void;
+  (e: "closeGoalTask"): void;
+  (e: "saveGoalTask", payload: { durationHours: number; goal: string; why: string; todo: string }): void;
+  (e: "stopGoalTask"): void;
   (e: "taskCreated", task: TaskEntry): void;
   (e: "taskUpdated", task: TaskEntry): void;
   (e: "switchConversation", payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }): void;
@@ -771,6 +780,7 @@ const emit = defineEmits<{
   (e: "exportConversation", conversationId: string): void;
   (e: "deleteConversation", conversationId: string): void;
   (e: "rebindConversationRecipient", payload: { conversationId: string; departmentId: string; agentId: string }): void;
+  (e: "updateDraftConversation", payload: { conversationId: string; departmentId?: string; agentId?: string; preferredApiConfigId?: string | null }): void;
   (e: "createConversation", input?: { title?: string; departmentId?: string; agentId?: string; copyCurrent?: boolean; importPath?: string; shellWorkspaces?: ShellWorkspace[]; shellWorkMode?: ShellWorkMode; shellAutonomousMode?: boolean }): void;
   (e: "loadOlderHistory"): void; (e: "reachedBottom"): void;
   (e: "jumpToConversationBottom"): void;
@@ -893,7 +903,7 @@ function handleSelectionCopyFailed() {
 const {
   markdownIsDark, normalizedConversationTodos,
   activeConversationSummary, isCurrentConversationCompacting,
-  activeConversationTerminalApprovals, supervisionButtonTitle,
+  activeConversationTerminalApprovals, goalButtonTitle,
   isOrganizingContextBusy, chatStatusBanner: baseChatStatusBanner, selectedMentionKeys,
   latestPendingPlanMessageId,
 } = useChatConversationCtx(props, isDarkAppTheme, t);
@@ -914,6 +924,79 @@ const activeConversationIsSystemNotification = computed(() =>
 const activeConversationIsRemoteContact = computed(() =>
   activeConversationSummary.value?.kind === 'remote_im_contact',
 );
+
+// ==================== 会话草稿：历史区人格选择卡 ====================
+
+// 草稿判定：overview 标记为草稿即显示选择卡。
+// 转正由后端写回存储 is_draft=false 并推送 overview 水位线，前端收到后自动消失。
+// 但「用户按下回车发出消息」的那一刻前端就要立刻转正，不等后端水位线：
+// 本地记录已发送消息的会话 id，该会话即使 overview 仍标记 isDraft=true 也不再显示选择卡。
+const locallyPromotedConversationId = ref("");
+const activeConversationIsDraft = computed(() => {
+  const conversationId = String(props.activeConversationId || "").trim();
+  const locallyPromoted =
+    !!locallyPromotedConversationId.value &&
+    locallyPromotedConversationId.value === conversationId;
+  return !!activeConversationSummary.value?.isDraft && !locallyPromoted;
+});
+const draftSelectedDepartmentId = ref("");
+const draftSelectedAgentId = ref("");
+
+const DRAFT_RECENT_RECIPIENT_LIMIT = 6;
+
+const draftRecentRecipientOptions = computed<DepartmentPersonaOption[]>(() => {
+  const allOptions = Array.isArray(props.createConversationDepartmentOptions)
+    ? props.createConversationDepartmentOptions
+    : [];
+  const activeConversationId = String(props.activeConversationId || "").trim();
+  const items = [...(props.unarchivedConversationItems || [])].sort((a, b) => {
+    const timeOf = (item: ChatConversationOverviewItem) =>
+      String(item.lastMessageAt || item.updatedAt || "").trim();
+    return timeOf(b).localeCompare(timeOf(a));
+  });
+  const seen = new Set<string>();
+  const recents: DepartmentPersonaOption[] = [];
+  for (const item of items) {
+    const departmentId = String(item.departmentId || "").trim();
+    const agentId = String(item.agentId || "").trim();
+    if (!departmentId || !agentId) continue;
+    if (String(item.conversationId || "").trim() === activeConversationId) continue;
+    // 按「部门+人格」组合去重：同一人格挂多个部门时，每个部门各占一个行星卡片
+    const key = `${departmentId}\u0000${agentId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const option = allOptions.find((candidate) =>
+      String(candidate.departmentId || "").trim() === departmentId
+      && String(candidate.agentId || "").trim() === agentId
+      && !candidate.unavailable
+      && !candidate.personaMissing
+    );
+    if (!option) continue;
+    recents.push(option);
+    if (recents.length >= DRAFT_RECENT_RECIPIENT_LIMIT) break;
+  }
+  return recents;
+});
+
+watch(
+  [activeConversationIsDraft, () => props.activeConversationId],
+  ([isDraft]) => {
+    if (!isDraft) return;
+    draftSelectedDepartmentId.value = String(activeConversationSummary.value?.departmentId || "").trim();
+    draftSelectedAgentId.value = String(activeConversationSummary.value?.agentId || "").trim();
+  },
+  { immediate: true },
+);
+
+function handleDraftPersonaChange(payload: { departmentId: string; agentId: string }) {
+  draftSelectedDepartmentId.value = payload.departmentId;
+  draftSelectedAgentId.value = payload.agentId;
+  emit("updateDraftConversation", {
+    conversationId: String(props.activeConversationId || "").trim(),
+    departmentId: payload.departmentId,
+    agentId: payload.agentId,
+  });
+}
 const remoteImContactDashboardContactId = computed(() =>
   activeConversationIsRemoteContact.value
     ? String(activeConversationSummary.value?.remoteContactId || "").trim()
@@ -1888,6 +1971,11 @@ async function openActiveConversationInBrowser() {
 }
 
 function handleSendChat() {
+  const conversationId = String(props.activeConversationId || "").trim();
+  // 用户按下回车/点发送即视为转正：前端立刻隐藏草稿选择卡，不等后端水位线。
+  if (conversationId && activeConversationIsDraft.value) {
+    locallyPromotedConversationId.value = conversationId;
+  }
   const extraTextBlocks = attachedIdeContextReferences.value.map((item) => String(item.textBlock || "").trim()).filter(Boolean);
   emit("sendChat", extraTextBlocks.length > 0 ? { extraTextBlocks } : undefined);
   clearAttachedIdeContextReferences();
@@ -1950,6 +2038,7 @@ const conversationDisplaySections = computed<ConversationSection[]>(() => {
     },
     locale: locale.value,
     currentWorkspaceRootPath: currentProjectWorkspaceRoot.value,
+    activeConversationId: props.activeConversationId,
   });
   // Shift+滚轮跳过「最近会话」区：其中的会话在工作区/频道区会重复出现，
   // 滚动时同一会话滚两遍，顺序对不上列表直觉。

@@ -460,12 +460,6 @@ async fn confirm_plan_and_continue_inner(
                 conversation_id, event_id
             ));
         }
-        ChatEventIngress::Duplicate { event_id } => {
-            runtime_log_warn(format!(
-                "[计划] 确认后继续执行重复，已忽略 conversation_id={} event_id={}",
-                conversation_id, event_id
-            ));
-        }
     }
     trigger_chat_queue_processing(state);
     Ok(true)
@@ -631,7 +625,7 @@ fn read_user_mention_context_snapshot(
 ) -> Result<String, String> {
     let paths = message_store::message_store_paths(&state.data_path, &conversation_meta.id)?;
     if let Some(page) =
-        message_store::read_ready_message_store_recent_messages_page_cached(&paths, 12)?
+        message_store::chat_store_read_recent_messages_page_cached(&paths, 12)?
     {
         return Ok(build_user_mention_context_snapshot_from_messages(
             &page.messages,
@@ -993,7 +987,7 @@ fn resolve_user_async_delegate_plan(
     ))
 }
 
-fn enqueue_user_mention_result_message(
+async fn enqueue_user_mention_result_message(
     app_state: &AppState,
     root_conversation_id: &str,
     source_agent_id: &str,
@@ -1033,6 +1027,7 @@ fn enqueue_user_mention_result_message(
             agent_id: source_agent_id.to_string(),
         }),
     )
+    .await
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1079,7 +1074,7 @@ fn emit_conversation_message_appended_event(
     }
 }
 
-fn append_delegate_result_message_and_emit(
+async fn append_delegate_result_message_and_emit(
     app_state: &AppState,
     conversation_id: &str,
     message: &ChatMessage,
@@ -1090,7 +1085,9 @@ fn append_delegate_result_message_and_emit(
     if conversation_id.is_empty() {
         return Err("缺少 conversation_id，无法写回委托结果".to_string());
     }
-    conversation_service_v2().append_message(app_state, conversation_id, message)?;
+    conversation_service_v2()
+        .append_message(app_state, conversation_id, message)
+        .await?;
     emit_conversation_message_appended_event(app_state, conversation_id, message);
 
     if continue_main_assistant {
@@ -1149,7 +1146,9 @@ fn spawn_user_mention_failure_message(app_state: AppState, failure: UserMentionF
                 "targetAgentId": failure.target_agent_id,
                 "error": failure.reason,
             }),
-        ) {
+        )
+        .await
+        {
             runtime_log_error(format!(
                 "[用户@委托] 写回失败结果消息失败: conversation_id={}, target_agent_id={}, error={}",
                 failure.root_conversation_id,
@@ -1233,7 +1232,9 @@ fn spawn_user_async_delegate(app_state: AppState, plan: UserAsyncDelegatePlan) -
                         "sourceAgentId": plan.source_agent_id,
                         "targetAgentId": plan.target_agent_id,
                     }),
-                ) {
+                )
+                .await
+                {
                     runtime_log_error(format!(
                         "[用户异步委托] 写回完成结果消息失败: conversation_id={}, target_agent_id={}, error={}",
                         plan.root_conversation_id,
@@ -1261,7 +1262,9 @@ fn spawn_user_async_delegate(app_state: AppState, plan: UserAsyncDelegatePlan) -
                         "targetAgentId": plan.target_agent_id,
                         "error": err,
                     }),
-                ) {
+                )
+                .await
+                {
                     runtime_log_error(format!(
                         "[用户异步委托] 写回失败结果消息失败: conversation_id={}, target_agent_id={}, error={}",
                         plan.root_conversation_id,
@@ -1352,7 +1355,9 @@ fn spawn_user_mention_delegate(app_state: AppState, plan: UserMentionPlan) {
                         "sourceAgentId": plan.source_agent_id,
                         "targetAgentId": plan.target_agent_id,
                     }),
-                ) {
+                )
+                .await
+                {
                     runtime_log_error(format!(
                         "[用户@委托] 写回完成结果消息失败: conversation_id={}, target_agent_id={}, error={}",
                         plan.root_conversation_id,
@@ -1380,7 +1385,9 @@ fn spawn_user_mention_delegate(app_state: AppState, plan: UserMentionPlan) {
                         "targetAgentId": plan.target_agent_id,
                         "error": err,
                     }),
-                ) {
+                )
+                .await
+                {
                     runtime_log_error(format!(
                         "[用户@委托] 写回失败结果消息失败: conversation_id={}, target_agent_id={}, error={}",
                         plan.root_conversation_id,
@@ -1705,10 +1712,9 @@ async fn submit_chat_message_inner(
         }
     };
 
-    let (accepted, duplicate, ingress_label) = match &ingress {
-        ChatEventIngress::Direct(_) => (true, false, "direct"),
-        ChatEventIngress::Queued { .. } => (true, false, "queued"),
-        ChatEventIngress::Duplicate { .. } => (false, true, "duplicate"),
+    let (accepted, ingress_label) = match &ingress {
+        ChatEventIngress::Direct(_) => (true, "direct"),
+        ChatEventIngress::Queued { .. } => (true, "queued"),
     };
 
     trigger_chat_event_after_ingress(state, ingress);
@@ -1727,7 +1733,7 @@ async fn submit_chat_message_inner(
 
     Ok(SubmitChatResult {
         accepted,
-        duplicate,
+        duplicate: false,
         event_id,
         conversation_id,
         trace_id: request_id,

@@ -59,13 +59,6 @@
     :active-agent-id="agentId"
     :active-conversation-id="conversationId"
     :current-todos="runtime.currentTodos.value"
-    :supervision-active="false"
-    :supervision-title="''"
-    :supervision-dialog-open="false"
-    :supervision-task-saving="false"
-    :supervision-task-error="''"
-    :active-supervision-task="null"
-    :recent-supervision-task-history="[]"
     :current-theme="currentTheme"
     :unarchived-conversation-items="conversationItems"
     :remote-im-contact-conversations="[]"
@@ -89,6 +82,7 @@
     @stop-chat="runtime.stop"
     @clear-chat-error="clearChatError"
     @load-older-history="runtime.loadOlderHistory"
+    @update:conversation-preferred-api-config-id="handleConversationPreferredApiConfigIdChange"
     @recall-turn="runtime.handleRecallTurn"
     @regenerate-turn="runtime.handleRegenerateTurn"
     @create-conversation-branch-from-turn="props.createConversationBranchFromTurn"
@@ -96,19 +90,35 @@
     @deny-terminal-approval="denyTerminalApproval?.($event)"
     @approve-terminal-approval-for-session="approveTerminalApprovalForSession?.($event)"
     @approve-terminal-approval-for-workspace="approveTerminalApprovalForWorkspace?.($event)"
+    :goal-active="goalActive"
+    :goal-title="goalTitleText"
+    :goal-dialog-open="goalDialogOpen"
+    :goal-saving="goalSaving"
+    :goal-error="goalErrorText"
+    :active-goal-task="activeGoalTask"
+    :recent-goal-task-history="recentGoalTaskHistory"
+    @open-goal-task="openGoalTaskDialog"
+    @close-goal-task="closeGoalTaskDialog"
+    @save-goal-task="saveGoalTask"
+    @stop-goal-task="stopGoalTask"
   />
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, toRef } from "vue";
-import type { ApiConfigItem, PromptCommandPreset, ShellWorkspace } from "../../../types/app";
+import type { ApiConfigItem, AppConfig, PromptCommandPreset, ShellWorkspace } from "../../../types/app";
 import ChatView from "./ChatView.vue";
 import { useChatMessageBlocks } from "../composables/use-chat-turns";
 import { useConversationViewRuntime } from "../composables/use-conversation-view-runtime";
+import { useGoalTask } from "../composables/use-goal-task";
+import { useConversationPreferredModel } from "../composables/use-conversation-preferred-model";
+import { isTextRequestFormat } from "../../config/quick-setup/usable-text-llm";
 import { isViewLayerBusy } from "../composables/chat-view-busy";
 import { getActiveChatComposerScope, clearChatComposerFocus } from "../composables/chat-composer-focus";
 import { collectPastedFiles, ingestPastedImages } from "../composables/chat-paste-ingest";
 import { useI18n } from "vue-i18n";
+import { onTransportNotification } from "../../../services/tauri-api";
+import type { ConversationGoalState } from "../../../types/app";
 import type { TerminalApprovalConversationItem } from "../../shell/composables/use-terminal-approval";
 import type { ExclusiveChatViewSubscriptionSlot } from "../composables/exclusive-chat-view-subscription-slot";
 
@@ -131,6 +141,7 @@ const props = defineProps<{
   workspaces: ShellWorkspace[];
   workspaceAccess: "read_only" | "approval" | "full_access";
   currentTheme: string;
+  config: AppConfig;
   terminalApprovals?: TerminalApprovalConversationItem[];
   terminalApprovalResolving?: boolean;
   approveTerminalApproval?: (requestId: string) => void;
@@ -146,6 +157,7 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
+let unlistenGoalUpdated: (() => void) | null = null;
 const conversationId = toRef(props, "conversationId");
 const apiConfigId = toRef(props, "apiConfigId");
 const agentId = toRef(props, "agentId");
@@ -159,9 +171,43 @@ const runtime = useConversationViewRuntime({
   requestRecallMode: props.requestRecallMode,
   t,
 });
+const {
+  goalDialogOpen,
+  goalSaving,
+  goalError: goalErrorText,
+  activeGoalTask,
+  recentGoalTaskHistory,
+  chatGoalActive: goalActive,
+  chatGoalTitle: goalTitleText,
+  openGoalTaskDialog,
+  closeGoalTaskDialog,
+  saveGoalTask,
+  stopGoalTask,
+  refreshActiveGoalTask,
+  applyConversationGoalUpdated,
+} = useGoalTask({
+  t,
+  currentConversationId: conversationId,
+  // 追问侧无全局状态条（transientNotice 是 ChatView 内部机制），
+  // goal 完成反馈由按钮高亮与对话框关闭承载，这里静默。
+  setStatus: () => {},
+});
 const activeApiConfig = computed(() =>
   props.chatModelOptions.find((item) => item.id === runtime.preferredApiConfigId.value) || null,
 );
+const { updateConversationPreferredApiConfigId } = useConversationPreferredModel({
+  config: props.config,
+  currentChatConversationId: conversationId,
+  currentChatPreferredApiConfigId: runtime.preferredApiConfigId,
+  isTextRequestFormat,
+  setStatus: () => {},
+  setStatusError: (key: string, error: unknown) => {
+    console.error("[追问会话模型] 保存失败", { key, error });
+  },
+});
+function handleConversationPreferredApiConfigIdChange(value: string) {
+  updateConversationPreferredApiConfigId(value);
+}
 const messageBlocks = useChatMessageBlocks({
   allMessages: runtime.allMessages,
   activeChatApiConfig: activeApiConfig,
@@ -208,10 +254,18 @@ function handleSidePaste(event: ClipboardEvent) {
 
 onMounted(() => {
   window.addEventListener("paste", handleSidePaste);
+  void refreshActiveGoalTask({ silent: true });
+  unlistenGoalUpdated = onTransportNotification<{
+    conversationId?: string;
+    goal?: ConversationGoalState | null;
+  }>("conversation.goalUpdated", (payload) => {
+    applyConversationGoalUpdated(payload);
+  });
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("paste", handleSidePaste);
+  unlistenGoalUpdated?.();
   // 追问视图卸载后不再有 paste 监听：主动清掉共享焦点归属，
   // 避免 scope 残留 side 导致主会话误判而丢弃图片（回退主会话接管）。
   clearChatComposerFocus("side");

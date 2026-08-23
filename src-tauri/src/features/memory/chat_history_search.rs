@@ -138,8 +138,6 @@ fn chat_history_index_signature(
         hasher.update(item.status.as_bytes());
         hasher.update(b"\x1d");
         hasher.update(item.archived_at.as_deref().unwrap_or("").as_bytes());
-        hasher.update(b"\x1d");
-        hasher.update(item.summary.as_bytes());
         hasher.update(b"\x1e");
     }
     bytes_to_lower_hex(hasher.finalize())
@@ -441,7 +439,7 @@ fn chat_history_segments_from_message_store(
         return Ok((Vec::new(), 0));
     };
     let paths = message_store::message_store_paths(data_path, &conversation.id)?;
-    let Some(page) = message_store::read_ready_message_store_block_page(&paths, None)? else {
+    let Some(page) = message_store::chat_store_read_block_page(&paths, None)? else {
         return Ok((chat_history_segments_from_snapshot(conversation), 0));
     };
     if page.blocks.is_empty() {
@@ -456,7 +454,7 @@ fn chat_history_segments_from_message_store(
             continue;
         }
         let Some(block_page) =
-            message_store::read_ready_message_store_block_page(&paths, Some(block.block_id))?
+            message_store::chat_store_read_block_page(&paths, Some(block.block_id))?
         else {
             continue;
         };
@@ -526,7 +524,6 @@ fn chat_history_collect_slices_for_state(
             last_user_at: None,
             last_assistant_at: None,
             status: conversation_meta.status.clone(),
-            summary: conversation_meta.summary.clone(),
             user_profile_snapshot: String::new(),
             shell_workspace_path: conversation_meta.shell_workspace_path.clone(),
             shell_workspaces: conversation_meta.shell_workspaces.clone(),
@@ -539,6 +536,7 @@ fn chat_history_collect_slices_for_state(
             memory_recall_table: Vec::new(),
             plan_mode_enabled: false,
             preferred_api_config_id: conversation_meta.preferred_api_config_id.clone(),
+            is_draft: conversation_meta.is_draft,
             auto_push_remote_contact_id: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
             active_goal: conversation_meta.active_goal.clone(),

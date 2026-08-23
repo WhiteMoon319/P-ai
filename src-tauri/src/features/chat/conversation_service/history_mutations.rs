@@ -5,8 +5,6 @@ impl ConversationServiceV2 {
         conversation_id: &str,
     ) -> Result<DeleteUnarchivedConversationMutationResult, String> {
         struct DeleteConversationPreparation {
-            app_config: AppConfig,
-            runtime: RuntimeStateFile,
             child_conversation_ids: Vec<String>,
             active_conversation_id: String,
             should_create_system_notification: bool,
@@ -23,14 +21,9 @@ impl ConversationServiceV2 {
             normalized_conversation_id,
             "delete_conversation",
             || {
-                let app_config = state_read_config_cached(state)?;
-                let runtime = state_read_runtime_state_cached(state)?;
-                let main_conversation_id = runtime
-                    .main_conversation_id
-                    .as_deref()
-                    .map(str::trim)
-                    .unwrap_or_default()
-                    .to_string();
+                let main_conversation_id = state_service_get_main_conversation_id(state)?
+                    .map(|value| value.trim().to_string())
+                    .unwrap_or_default();
                 if normalized_conversation_id == main_conversation_id {
                     return Err("系统通知会话暂不支持删除".to_string());
                 }
@@ -84,16 +77,13 @@ impl ConversationServiceV2 {
                     true
                 };
                 let should_set_main_to_system_notification = active_conversation_id.trim().is_empty()
-                    && runtime.main_conversation_id.as_deref().map(str::trim)
-                        != Some(SYSTEM_NOTIFICATION_CONVERSATION_ID);
+                    && main_conversation_id.trim() != SYSTEM_NOTIFICATION_CONVERSATION_ID;
                 let parent_conversation_id = conversation
                     .as_ref()
                     .and_then(|item| item.parent_conversation_id.clone())
                     .filter(|id| !id.trim().is_empty());
 
                 Ok(DeleteConversationPreparation {
-                    app_config,
-                    runtime,
                     child_conversation_ids,
                     active_conversation_id: if active_conversation_id.trim().is_empty() {
                         SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string()
@@ -113,9 +103,10 @@ impl ConversationServiceV2 {
             state_schedule_conversation_persist(state, &system_notification)?;
         }
         if preparation.should_set_main_to_system_notification {
-            let mut next_runtime = preparation.runtime.clone();
-            next_runtime.main_conversation_id = Some(SYSTEM_NOTIFICATION_CONVERSATION_ID.to_string());
-            state_write_runtime_state_cached(state, &next_runtime)?;
+            state_service_set_main_conversation_id(
+                state,
+                Some(SYSTEM_NOTIFICATION_CONVERSATION_ID),
+            )?;
         }
         if let Ok(cleanup_conversation) =
             read_conversation_for_backup_cleanup(state, normalized_conversation_id)
@@ -167,17 +158,10 @@ impl ConversationServiceV2 {
             }
         }
         clear_conversation_list_activity_mark(state, normalized_conversation_id);
-        let unarchived_conversations =
-            self.collect_unarchived_conversation_summaries_cached(state, &preparation.app_config)?;
+        // 删除不重建全量概览：命令层注册 watermark 删除语义，前端差量同步收敛。
         Ok(DeleteUnarchivedConversationMutationResult {
             deleted_conversation_id: normalized_conversation_id.to_string(),
             active_conversation_id: preparation.active_conversation_id,
-            overview_payload: UnarchivedConversationOverviewUpdatedPayload {
-                preferred_conversation_id: unarchived_conversations
-                    .first()
-                    .map(|item| item.conversation_id.clone()),
-                unarchived_conversations,
-            },
         })
     }
 
@@ -223,9 +207,9 @@ impl ConversationServiceV2 {
                     return Err("当前会话正在运行或整理上下文，完成后再撤回。".to_string());
                 }
                 let store_paths = message_store::message_store_paths(&state.data_path, &conversation_id)?;
-                ensure_ready_message_store_from_legacy_conversation(state, &conversation_id, &store_paths)?;
+                ensure_chat_store_conversation_readable(state, &conversation_id, &store_paths)?;
                 let rewind_state =
-                    read_ready_store_rewind_state_meta_view(state, &store_paths, &conversation_meta, message_id)?;
+                    read_chat_store_rewind_state_meta_view(state, &store_paths, &conversation_meta, message_id)?;
                 if is_context_compaction_message(
                     &rewind_state.recalled_user_message,
                     rewind_state.recalled_user_message.role.trim(),
@@ -270,7 +254,7 @@ impl ConversationServiceV2 {
                     self.build_conversation_snapshot_from_meta(&updated_meta, Vec::new());
                 state_upsert_chat_index_conversation_cached(state, &metadata_conversation)?;
                 let current_todo = conversation_current_todo_text_from_items(&rewind_state.remaining_todos);
-                message_store::write_jsonl_snapshot_truncated_messages_shard_from_meta(
+                message_store::chat_store_truncate_messages_from_meta(
                     &store_paths,
                     &updated_meta,
                     rewind_state.keep_count,
@@ -303,7 +287,7 @@ impl ConversationServiceV2 {
     ) -> Result<bool, String> {
         let mut before_message_id = message_id.trim().to_string();
         while !before_message_id.is_empty() {
-            let Some(page) = message_store::read_ready_message_store_messages_before(
+            let Some(page) = message_store::chat_store_read_messages_before(
                 store_paths,
                 &before_message_id,
                 4,
@@ -367,9 +351,9 @@ impl ConversationServiceV2 {
         }
         drop(guard);
         let store_paths = message_store::message_store_paths(&state.data_path, &conversation_id)?;
-        ensure_ready_message_store_from_legacy_conversation(state, &conversation_id, &store_paths)?;
+        ensure_chat_store_conversation_readable(state, &conversation_id, &store_paths)?;
         let rewind_state =
-            read_ready_store_rewind_state_meta_view(state, &store_paths, &conversation_meta, message_id)?;
+            read_chat_store_rewind_state_meta_view(state, &store_paths, &conversation_meta, message_id)?;
         let backup_record_ids = collect_backup_record_ids_from_messages(&rewind_state.removed_messages);
         let existing_backup_count = backup_record_ids
             .iter()
@@ -415,8 +399,6 @@ impl ConversationServiceV2 {
             .lock()
             .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
         let runtime_snapshot = load_runtime_organization_snapshot(state)?;
-        let app_config = runtime_snapshot.config.clone();
-        let runtime = state_read_runtime_state_cached(state)?;
         let agents = runtime_snapshot.agents.clone();
         let source_conversation_meta = self
             .get_conversation_meta(state, source_conversation_id)
@@ -443,7 +425,7 @@ impl ConversationServiceV2 {
             &source_conversation_meta.title,
             source_conversation_meta.latest_summary_title.as_deref(),
             first_selected_ordinal.max(1),
-            runtime.main_conversation_id.as_deref().map(str::trim)
+            main_conversation_id_downgraded(state).as_deref().map(str::trim)
                 == Some(source_conversation_meta.id.as_str()),
         );
         let latest_compaction_message = selection.latest_compaction_message;
@@ -459,23 +441,15 @@ impl ConversationServiceV2 {
         let conversation_id = conversation.id.clone();
         drop(guard);
         state_schedule_conversation_persist(state, &conversation)?;
-        let overview_payload = UnarchivedConversationOverviewUpdatedPayload {
-            preferred_conversation_id: Some(conversation_id.clone()),
-            unarchived_conversations: self.collect_unarchived_conversation_summaries_cached(
-                state,
-                &app_config,
-            )?,
-        };
         Ok(BranchUnarchivedConversationMutationResult {
             conversation_id,
             title: branch_summary_title,
             selected_count: selected_messages.len(),
             has_compaction_seed: latest_compaction_message.is_some(),
-            overview_payload,
         })
     }
 
-    fn forward_conversation_selection(
+    async fn forward_conversation_selection(
         &self,
         state: &AppState,
         source_conversation_id: &str,
@@ -501,7 +475,6 @@ impl ConversationServiceV2 {
             drop(guard);
             return Err("目标会话正在整理上下文，暂时无法转发到会话".to_string());
         }
-        let app_config = state_read_config_cached(state)?;
         let _source_conversation = self
             .get_conversation_meta(state, source_conversation_id)
             .ok()
@@ -528,22 +501,13 @@ impl ConversationServiceV2 {
             .iter()
             .map(clone_chat_message_for_copied_conversation)
             .collect::<Vec<_>>();
-        conversation_service_v2().append_messages(
-            state,
-            target_conversation_id,
-            &copied_messages,
-        )?;
-        let overview_payload = UnarchivedConversationOverviewUpdatedPayload {
-            preferred_conversation_id: Some(target_conversation_id.to_string()),
-            unarchived_conversations: self.collect_unarchived_conversation_summaries_cached(
-                state,
-                &app_config,
-            )?,
-        };
+        conversation_service_v2()
+            .append_messages(state, target_conversation_id, &copied_messages)
+            .await?;
+        // 转发不重建全量概览：目标会话变更由命令层单项事件推送。
         Ok(ForwardUnarchivedConversationMutationResult {
             target_conversation_id: target_conversation_id.to_string(),
             forwarded_count: selected_messages.len(),
-            overview_payload,
         })
     }
 
@@ -579,12 +543,7 @@ impl ConversationServiceV2 {
             .ok()
             .filter(|conversation_meta| conversation_meta.is_remote_im_contact)
             .ok_or_else(|| "目标远程联系人会话不存在".to_string())?;
-        let runtime = state_read_runtime_state_cached(state)?;
-        let contact = runtime
-            .remote_im_contacts
-            .iter()
-            .find(|item| item.id.trim() == normalized_remote_contact_id)
-            .cloned()
+        let contact = state_service_get_remote_im_contact(state, normalized_remote_contact_id)?
             .ok_or_else(|| "目标远程联系人不存在".to_string())?;
         if contact.bound_conversation_id.as_deref().map(str::trim) != Some(target_conversation_id) {
             return Err("远程联系人与目标会话不匹配".to_string());
@@ -621,18 +580,11 @@ impl ConversationServiceV2 {
             &notification_message,
             "forward_selection_to_remote_im_contact",
         )?;
-        let overview_payload = UnarchivedConversationOverviewUpdatedPayload {
-            preferred_conversation_id: Some(target_conversation_id.to_string()),
-            unarchived_conversations: self.collect_unarchived_conversation_summaries_cached(
-                state,
-                &app_config,
-            )?,
-        };
+        // 转发不重建全量概览：目标会话变更由命令层单项事件推送。
         Ok(ForwardSelectionToRemoteImContactMutationResult {
             target_conversation_id: target_conversation_id.to_string(),
             remote_contact_id: normalized_remote_contact_id.to_string(),
             forwarded_count: selected_messages.len(),
-            overview_payload,
         })
     }
 

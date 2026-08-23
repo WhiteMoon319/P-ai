@@ -1,4 +1,4 @@
-import { importTransportConversationShare, invokeTauri } from "../../../services/tauri-api";
+import { importTransportConversationShare, invokeTauri, openTransportConversationDraft, updateTransportConversationDraft } from "../../../services/tauri-api";
 import type { ShellWorkspace, ShellWorkMode } from "../../../types/app";
 
 export function useChatConversationActionsOrchestrator(bindings: Record<string, any>) {
@@ -51,8 +51,12 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
         });
       const conversationId = String(result?.conversationId || "").trim();
       if (!conversationId) return "";
-      if (Array.isArray(result.unarchivedConversations)) {
-        bindings.unarchivedConversations.value = result.unarchivedConversations;
+      const createdItem = Array.isArray(result.unarchivedConversations)
+        ? result.unarchivedConversations[0]
+        : null;
+      if (createdItem?.conversationId) {
+        // 后端现在只返回新会话单条，插入式更新列表，不再整表覆盖。
+        bindings.applyConversationOverviewItemUpdated?.({ conversation: createdItem });
       } else {
         await bindings.refreshUnarchivedConversationOverview();
       }
@@ -67,8 +71,57 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
     }
   }
 
-  async function createSideChatConversation(parentConversationId?: string) {
-    const parentId = String(parentConversationId || bindings.currentChatConversationId.value || "").trim();
+  // 新建会话 = 打开（或创建）会话草稿：设置直接落在草稿字段上，
+  // 发出第一句话时后端自动转正并创建下一个备用草稿。
+  // workspace 传入时，后端在返回前把工作区写入草稿。
+  async function openDraftConversation(workspace?: {
+    shellWorkspaces?: ShellWorkspace[];
+    shellWorkMode?: ShellWorkMode;
+    shellAutonomousMode?: boolean;
+  }) {
+    try {
+      const result = await openTransportConversationDraft<{ conversationId: string; created: boolean }>({
+        input: {
+          shellWorkspaces: workspace?.shellWorkspaces || null,
+          shellWorkMode: workspace?.shellWorkMode || null,
+          shellAutonomousMode: workspace?.shellAutonomousMode || null,
+        },
+      });
+      const conversationId = String(result?.conversationId || "").trim();
+      if (!conversationId) return "";
+      await bindings.switchUnarchivedConversation(conversationId);
+      // 草稿可能已经打开（conversationId 未变化）：watcher 不触发，需主动刷新工作区 UI
+      if (typeof bindings.refreshChatWorkspaceState === "function") {
+        await bindings.refreshChatWorkspaceState();
+      }
+      return conversationId;
+    } catch (error) {
+      bindings.setStatus(bindings.tr("status.conversationCreateFailed", { err: bindings.formatRequestFailed(error) }));
+      return "";
+    }
+  }
+
+  // 在草稿历史区切换部门/人格/模型：直接改写草稿会话字段
+  async function updateDraftConversation(patch: { departmentId?: string; agentId?: string; preferredApiConfigId?: string | null }) {
+    const conversationId = String(bindings.currentChatConversationId.value || "").trim();
+    if (!conversationId) return false;
+    try {
+      const input: Record<string, unknown> = { conversationId };
+      if (patch.departmentId !== undefined) input.departmentId = patch.departmentId;
+      if (patch.agentId !== undefined) input.agentId = patch.agentId;
+      if (patch.preferredApiConfigId !== undefined) {
+        // undefined 不修改；null 清空回部门默认；字符串为指定模型
+        input.preferredApiConfigId = patch.preferredApiConfigId;
+      }
+      await updateTransportConversationDraft(input);
+      return true;
+    } catch (error) {
+      bindings.setStatusError("status.requestFailed", error);
+      return false;
+    }
+  }
+
+  async function createSideChatConversation(parentConversationId?: string, withContext = true) {    const parentId = String(parentConversationId || bindings.currentChatConversationId.value || "").trim();
     if (!parentId) return "";
     try {
       const result = await invokeTauri<{
@@ -77,7 +130,7 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
         conversationKind: string;
         title: string;
       }>("conversation.createSide", {
-        input: { parentConversationId: parentId },
+        input: { parentConversationId: parentId, withContext },
       });
       return String(result?.conversationId || "").trim();
     } catch (error) {
@@ -109,7 +162,10 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
       });
       const conversationId = String(result?.conversationId || "").trim();
       if (!conversationId) return;
-      await bindings.refreshUnarchivedConversationOverview();
+      // 分支创建已由后端单项事件插入，这里仅做差量兜底，不再全量拉取。
+      if (typeof bindings.syncUnarchivedConversationOverviewChangedSinceWatermark === "function") {
+        await bindings.syncUnarchivedConversationOverviewChangedSinceWatermark("branch_from_selection");
+      }
       const warning = String(result?.warning || "").trim();
       await bindings.switchUnarchivedConversation(conversationId);
       if (warning) {
@@ -147,7 +203,10 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
       });
       const conversationId = String(result?.conversationId || "").trim();
       if (!conversationId) return;
-      await bindings.refreshUnarchivedConversationOverview();
+      // 分支创建已由后端单项事件插入，这里仅做差量兜底，不再全量拉取。
+      if (typeof bindings.syncUnarchivedConversationOverviewChangedSinceWatermark === "function") {
+        await bindings.syncUnarchivedConversationOverviewChangedSinceWatermark("branch_from_message");
+      }
       await bindings.switchUnarchivedConversation(conversationId);
       bindings.setStatus(bindings.tr("status.conversationBranchCreated", { title: String(result?.title || "").trim() || conversationId }));
     } catch (error) {
@@ -339,6 +398,8 @@ export function useChatConversationActionsOrchestrator(bindings: Record<string, 
 
   return {
     createUnarchivedConversation,
+    openDraftConversation,
+    updateDraftConversation,
     createSideChatConversation,
     branchConversationFromSelection,
     createConversationBranchFromMessage,

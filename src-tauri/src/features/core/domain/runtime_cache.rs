@@ -130,30 +130,6 @@ fn sync_cached_app_data_signature(state: &AppState) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ChatIndexStorageMeta {
-    id: String,
-    updated_at: String,
-    status: String,
-    #[serde(default)]
-    summary: String,
-    #[serde(default)]
-    archived_at: Option<String>,
-}
-
-fn build_chat_index_item_from_storage_meta(
-    meta: &ChatIndexStorageMeta,
-) -> ChatIndexConversationItem {
-    ChatIndexConversationItem {
-        id: meta.id.clone(),
-        updated_at: meta.updated_at.clone(),
-        status: meta.status.clone(),
-        summary: meta.summary.clone(),
-        archived_at: meta.archived_at.clone(),
-    }
-}
-
 fn sort_chat_index_items(items: &mut Vec<ChatIndexConversationItem>) {
     items.sort_by(|a, b| {
         a.updated_at
@@ -165,58 +141,7 @@ fn sort_chat_index_items(items: &mut Vec<ChatIndexConversationItem>) {
 fn collect_chat_index_items_from_storage(
     data_path: &PathBuf,
 ) -> Result<Vec<ChatIndexConversationItem>, String> {
-    if let Some(items) = message_store::chat_metadata_store_list_chat_index(data_path)? {
-        return Ok(items);
-    }
-    let conv_dir = app_layout_chat_conversations_dir(data_path);
-    if !conv_dir.exists() {
-        return Ok(Vec::new());
-    }
-    let mut items =
-        std::collections::HashMap::<String, ChatIndexConversationItem>::new();
-    let entries = fs::read_dir(&conv_dir)
-        .map_err(|err| format!("读取会话目录失败，path={}，error={err}", conv_dir.display()))?;
-    for entry in entries {
-        let entry = match entry {
-            Ok(item) => item,
-            Err(_) => continue,
-        };
-        let path = entry.path();
-        if path.is_dir() {
-            let meta_path = path.join("meta.json");
-            if !meta_path.exists() {
-                continue;
-            }
-            let meta = match read_json_file::<ChatIndexStorageMeta>(&meta_path, "conversation meta") {
-                Ok(value) => value,
-                Err(_) => continue,
-            };
-            let item = build_chat_index_item_from_storage_meta(&meta);
-            items.insert(item.id.clone(), item);
-            continue;
-        }
-        if path.extension().and_then(|value| value.to_str()) != Some("json") {
-            continue;
-        }
-        let conversation_id = path
-            .file_stem()
-            .and_then(|value| value.to_str())
-            .unwrap_or_default()
-            .trim()
-            .to_string();
-        if conversation_id.is_empty() {
-            continue;
-        }
-        let conversation = match read_conversation_shard(data_path, &conversation_id) {
-            Ok(value) => value,
-            Err(_) => continue,
-        };
-        items.insert(
-            conversation.id.clone(),
-            build_chat_index_item(&conversation),
-        );
-    }
-    Ok(items.into_values().collect())
+    Ok(message_store::chat_metadata_store_list_chat_index(data_path)?.unwrap_or_default())
 }
 
 fn sync_cached_app_data_agents(state: &AppState, agents: &[AgentProfile]) -> Result<(), String> {
@@ -233,35 +158,6 @@ fn sync_cached_app_data_agents(state: &AppState, agents: &[AgentProfile]) -> Res
 
 fn sanitize_runtime_cached_app_data(data: &mut AppData) {
     data.conversations.clear();
-}
-
-fn sync_cached_app_data_runtime_best_effort(state: &AppState, runtime: &RuntimeStateFile) {
-    let mut cached = match state.cached_app_data.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => {
-            runtime_log_warn(
-                "[应用数据写入] 聚合运行缓存锁已中毒，恢复缓存并继续".to_string(),
-            );
-            state.cached_app_data.clear_poison();
-            poisoned.into_inner()
-        }
-    };
-    if let Some(data) = cached.as_mut() {
-        sanitize_runtime_cached_app_data(data);
-        apply_runtime_state_to_app_data(data, runtime);
-    }
-    drop(cached);
-    let mut signature = match state.cached_app_data_signature.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => {
-            runtime_log_warn(
-                "[应用数据写入] 聚合运行缓存签名锁已中毒，恢复签名并继续".to_string(),
-            );
-            state.cached_app_data_signature.clear_poison();
-            poisoned.into_inner()
-        }
-    };
-    *signature = Some(app_data_cache_signature(&state.data_path));
 }
 
 fn sync_cached_app_data_conversation(
@@ -368,7 +264,7 @@ fn repair_conversation_metadata_message_derived_fields_if_needed(
         return Ok(meta.clone());
     }
     let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
-    let ready_meta = match message_store::read_ready_message_store_meta(&store_paths) {
+    let ready_meta = match message_store::chat_store_read_meta(&store_paths) {
         Ok(Some(ready_meta)) => ready_meta,
         Ok(None) => return Ok(meta.clone()),
         Err(err) => {
@@ -893,14 +789,6 @@ fn state_update_conversation_meta_cached_unlocked<T>(
     Ok((conversation_meta, result, seq))
 }
 
-fn has_pending_app_data_persist(state: &AppState) -> bool {
-    state
-        .app_data_persist_pending
-        .lock()
-        .map(|pending| pending.is_some())
-        .unwrap_or(true)
-}
-
 fn has_pending_conversation_persist(state: &AppState) -> bool {
     let has_pending_slot = state
         .conversation_persist_pending
@@ -921,7 +809,7 @@ fn has_pending_conversation_persist(state: &AppState) -> bool {
 }
 
 fn refresh_cached_app_data_dirty(state: &AppState) {
-    let dirty = has_pending_app_data_persist(state) || has_pending_conversation_persist(state);
+    let dirty = has_pending_conversation_persist(state);
     state
         .cached_app_data_dirty
         .store(dirty, std::sync::atomic::Ordering::Release);
@@ -1053,7 +941,6 @@ fn preserve_field_level_conversation_metadata(
     target.last_user_at = source.last_user_at.clone();
     target.last_assistant_at = source.last_assistant_at.clone();
     target.status = source.status.clone();
-    target.summary = source.summary.clone();
     target.archived_at = source.archived_at.clone();
     target.current_todos = source.current_todos.clone();
     target.user_profile_snapshot = source.user_profile_snapshot.clone();
@@ -1070,10 +957,6 @@ fn state_write_conversation_cached(
     state: &AppState,
     conversation: &Conversation,
 ) -> Result<(), String> {
-    let seq = state
-        .app_data_persist_latest_seq
-        .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
-        + 1;
     let mutation_gate = conversation_mutation_gate(&state.data_path, &conversation.id)?;
     let _guard = mutation_gate.lock().map_err(|err| {
         named_lock_error(
@@ -1103,15 +986,6 @@ fn state_write_conversation_cached(
     }
     sync_cached_app_data_conversation(state, conversation)?;
     state_upsert_chat_index_conversation_cached(state, conversation)?;
-    if let Ok(mut pending) = state.app_data_persist_pending.lock() {
-        if pending
-            .as_ref()
-            .map(|item| item.seq <= seq)
-            .unwrap_or(false)
-        {
-            *pending = None;
-        }
-    }
     refresh_cached_app_data_dirty(state);
     Ok(())
 }
@@ -1121,10 +995,6 @@ fn state_delete_conversation_cached(
     state: &AppState,
     conversation_id: &str,
 ) -> Result<(), String> {
-    let seq = state
-        .app_data_persist_latest_seq
-        .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
-        + 1;
     let mutation_gate = conversation_mutation_gate(&state.data_path, conversation_id)?;
     let _guard = mutation_gate.lock().map_err(|err| {
         named_lock_error(
@@ -1153,15 +1023,6 @@ fn state_delete_conversation_cached(
     }
     sync_cached_app_data_conversation_deleted(state, conversation_id)?;
     state_remove_chat_index_conversation_cached(state, conversation_id)?;
-    if let Ok(mut pending) = state.app_data_persist_pending.lock() {
-        if pending
-            .as_ref()
-            .map(|item| item.seq <= seq)
-            .unwrap_or(false)
-        {
-            *pending = None;
-        }
-    }
     refresh_cached_app_data_dirty(state);
     Ok(())
 }
@@ -1181,9 +1042,7 @@ fn state_read_agents_cached(state: &AppState) -> Result<Vec<AgentProfile>, Strin
             (cached.as_ref(), *cached_mtime, disk_mtime)
         {
             if cached_time == disk_time {
-                let mut agents = agents.clone();
-                ensure_required_builtin_agents_in_list(&mut agents);
-                return Ok(agents);
+                return Ok(agents.clone());
             }
         }
     }
@@ -1200,260 +1059,23 @@ fn state_read_agents_cached(state: &AppState) -> Result<Vec<AgentProfile>, Strin
 }
 
 fn state_write_agents_cached(state: &AppState, agents: &[AgentProfile]) -> Result<(), String> {
-    let mut normalized_agents = agents.to_vec();
-    ensure_required_builtin_agents_in_list(&mut normalized_agents);
-    let seq = state
-        .app_data_persist_latest_seq
-        .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
-        + 1;
     let _write_guard = state
         .app_data_persist_write_lock
         .lock()
         .map_err(|_| "Failed to lock app data persist write lock".to_string())?;
-    let _ = write_agents_shard(&state.data_path, &normalized_agents)?;
+    let _ = write_agents_shard(&state.data_path, agents)?;
     let disk_mtime = path_modified_time(&app_layout_agents_path(&state.data_path));
     *state
         .cached_agents
         .lock()
-        .map_err(|_| "Failed to lock cached agents".to_string())? = Some(normalized_agents.clone());
+        .map_err(|_| "Failed to lock cached agents".to_string())? = Some(agents.to_vec());
     *state
         .cached_agents_mtime
         .lock()
         .map_err(|_| "Failed to lock cached agents mtime".to_string())? = disk_mtime;
-    sync_cached_app_data_agents(state, &normalized_agents)?;
-    if let Ok(mut pending) = state.app_data_persist_pending.lock() {
-        if pending
-            .as_ref()
-            .map(|item| item.seq <= seq)
-            .unwrap_or(false)
-        {
-            *pending = None;
-        }
-    }
+    sync_cached_app_data_agents(state, agents)?;
     refresh_cached_app_data_dirty(state);
     Ok(())
-}
-
-fn state_read_runtime_state_cached(state: &AppState) -> Result<RuntimeStateFile, String> {
-    let disk_mtime = path_modified_time(&app_layout_runtime_state_path(&state.data_path));
-    {
-        let cached = state
-            .cached_runtime_state
-            .lock()
-            .map_err(|_| "Failed to lock cached runtime state".to_string())?;
-        let cached_mtime = state
-            .cached_runtime_state_mtime
-            .lock()
-            .map_err(|_| "Failed to lock cached runtime state mtime".to_string())?;
-        if let (Some(runtime), Some(cached_time), Some(disk_time)) =
-            (cached.as_ref(), *cached_mtime, disk_mtime)
-        {
-            if cached_time == disk_time {
-                return Ok(runtime.clone());
-            }
-        }
-    }
-    let runtime = read_runtime_state_shard(&state.data_path)?;
-    *state
-        .cached_runtime_state
-        .lock()
-        .map_err(|_| "Failed to lock cached runtime state".to_string())? = Some(runtime.clone());
-    *state
-        .cached_runtime_state_mtime
-        .lock()
-        .map_err(|_| "Failed to lock cached runtime state mtime".to_string())? = disk_mtime;
-    Ok(runtime)
-}
-
-fn state_write_runtime_state_cached(
-    state: &AppState,
-    runtime: &RuntimeStateFile,
-) -> Result<(), String> {
-    let seq = state
-        .app_data_persist_latest_seq
-        .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
-        + 1;
-    let _write_guard = match state.app_data_persist_write_lock.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => {
-            runtime_log_warn(
-                "[应用数据写入] 写锁已中毒，恢复锁并继续运行时状态写入".to_string(),
-            );
-            poisoned.into_inner()
-        }
-    };
-    state_commit_runtime_state_cached_locked(state, runtime.clone(), seq, true)
-}
-
-fn state_mutate_runtime_state_cached<T>(
-    state: &AppState,
-    mutate: impl FnOnce(&mut RuntimeStateFile) -> Result<T, String>,
-) -> Result<T, String> {
-    let seq = state
-        .app_data_persist_latest_seq
-        .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
-        + 1;
-    let _write_guard = match state.app_data_persist_write_lock.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => {
-            runtime_log_warn(
-                "[应用数据写入] 写锁已中毒，恢复锁并继续运行时状态原子修改".to_string(),
-            );
-            poisoned.into_inner()
-        }
-    };
-    let mut runtime = read_runtime_state_shard(&state.data_path)?;
-    let output = mutate(&mut runtime)?;
-    state_commit_runtime_state_cached_locked(state, runtime, seq, false)?;
-    Ok(output)
-}
-
-fn state_commit_runtime_state_cached_locked(
-    state: &AppState,
-    mut next_runtime: RuntimeStateFile,
-    seq: u64,
-    preserve_existing_atomic_fields: bool,
-) -> Result<(), String> {
-    if let Ok(existing_runtime) = read_runtime_state_shard(&state.data_path) {
-        if preserve_existing_atomic_fields {
-            merge_atomic_remote_im_checkpoint_fields(&existing_runtime, &mut next_runtime);
-            if next_runtime.runtime_revision < existing_runtime.runtime_revision {
-                runtime_log_warn(format!(
-                    "[应用数据写入] 检测到旧运行状态快照，保留最新远程联系人配置，snapshot_revision={}，current_revision={}",
-                    next_runtime.runtime_revision, existing_runtime.runtime_revision
-                ));
-                next_runtime.remote_im_contacts = existing_runtime.remote_im_contacts.clone();
-                let latest_contact_ids = next_runtime
-                    .remote_im_contacts
-                    .iter()
-                    .map(|contact| contact.id.clone())
-                    .collect::<std::collections::HashSet<_>>();
-                next_runtime
-                    .remote_im_contact_checkpoints
-                    .retain(|checkpoint| latest_contact_ids.contains(&checkpoint.contact_id));
-            }
-        }
-        next_runtime.data_migration_version = next_runtime
-            .data_migration_version
-            .max(existing_runtime.data_migration_version);
-        next_runtime.message_store_migration_version = next_runtime
-            .message_store_migration_version
-            .max(existing_runtime.message_store_migration_version);
-        next_runtime.runtime_revision = existing_runtime
-            .runtime_revision
-            .max(next_runtime.runtime_revision)
-            .saturating_add(1);
-    } else {
-        next_runtime.runtime_revision = next_runtime.runtime_revision.saturating_add(1);
-    }
-    normalize_runtime_state_contact_communication(&mut next_runtime);
-    let _ = write_runtime_state_shard(&state.data_path, &next_runtime)?;
-    let disk_mtime = path_modified_time(&app_layout_runtime_state_path(&state.data_path));
-    let mut cached_runtime = match state.cached_runtime_state.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => {
-            runtime_log_warn(
-                "[应用数据写入] 运行状态缓存锁已中毒，权威分片已写入，恢复缓存并继续"
-                    .to_string(),
-            );
-            state.cached_runtime_state.clear_poison();
-            poisoned.into_inner()
-        }
-    };
-    *cached_runtime = Some(next_runtime.clone());
-    drop(cached_runtime);
-    let mut cached_mtime = match state.cached_runtime_state_mtime.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => {
-            runtime_log_warn(
-                "[应用数据写入] 运行状态缓存时间锁已中毒，权威分片已写入，恢复缓存并继续"
-                    .to_string(),
-            );
-            state.cached_runtime_state_mtime.clear_poison();
-            poisoned.into_inner()
-        }
-    };
-    *cached_mtime = disk_mtime;
-    drop(cached_mtime);
-    sync_cached_app_data_runtime_best_effort(state, &next_runtime);
-    if let Ok(mut pending) = state.app_data_persist_pending.lock() {
-        if pending
-            .as_ref()
-            .map(|item| item.seq <= seq)
-            .unwrap_or(false)
-        {
-            *pending = None;
-        }
-    }
-    refresh_cached_app_data_dirty(state);
-    Ok(())
-}
-
-fn merge_atomic_remote_im_checkpoint_fields(
-    existing_runtime: &RuntimeStateFile,
-    next_runtime: &mut RuntimeStateFile,
-) {
-    let existing_by_contact = existing_runtime
-        .remote_im_contact_checkpoints
-        .iter()
-        .map(|checkpoint| (checkpoint.contact_id.as_str(), checkpoint))
-        .collect::<std::collections::HashMap<_, _>>();
-    for checkpoint in &mut next_runtime.remote_im_contact_checkpoints {
-        let Some(existing) = existing_by_contact.get(checkpoint.contact_id.as_str()) else {
-            continue;
-        };
-        let existing_has_atomic_state = existing.atomic_revision > 0
-            || existing.energy.is_some()
-            || existing.last_success_reply_at.is_some()
-            || existing.last_boundary_message_id.is_some()
-            || existing.last_boundary_covers_message_id.is_some()
-            || existing.group_reply_delivery.is_some();
-        if existing_has_atomic_state && existing.atomic_revision >= checkpoint.atomic_revision {
-            checkpoint.atomic_revision = existing.atomic_revision;
-            checkpoint.energy = existing.energy;
-            checkpoint.energy_updated_at = existing.energy_updated_at.clone();
-            checkpoint.last_success_reply_at = existing.last_success_reply_at.clone();
-            checkpoint.last_boundary_message_id = existing.last_boundary_message_id.clone();
-            checkpoint.last_boundary_covers_message_id =
-                existing.last_boundary_covers_message_id.clone();
-            checkpoint.group_reply_delivery = existing.group_reply_delivery.clone();
-        }
-    }
-    let next_checkpoint_ids = next_runtime
-        .remote_im_contact_checkpoints
-        .iter()
-        .map(|checkpoint| checkpoint.contact_id.clone())
-        .collect::<std::collections::HashSet<_>>();
-    let next_contact_ids = next_runtime
-        .remote_im_contacts
-        .iter()
-        .map(|contact| contact.id.clone())
-        .collect::<std::collections::HashSet<_>>();
-    let missing = existing_runtime
-        .remote_im_contact_checkpoints
-        .iter()
-        .filter(|checkpoint| {
-            !next_checkpoint_ids.contains(&checkpoint.contact_id)
-                && next_contact_ids.contains(&checkpoint.contact_id)
-                && (checkpoint.atomic_revision > 0
-                    || checkpoint.energy.is_some()
-                    || checkpoint.last_success_reply_at.is_some()
-                    || checkpoint.last_boundary_message_id.is_some()
-                    || checkpoint.last_boundary_covers_message_id.is_some()
-                    || checkpoint.group_reply_delivery.is_some())
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-    next_runtime.remote_im_contact_checkpoints.extend(missing);
-}
-
-fn state_read_agents_runtime_snapshot(state: &AppState) -> Result<AppData, String> {
-    let agents = state_read_agents_cached(state)?;
-    let runtime = state_read_runtime_state_cached(state)?;
-    let mut data = AppData::default();
-    data.agents = agents;
-    apply_runtime_state_to_app_data(&mut data, &runtime);
-    Ok(data)
 }
 
 #[cfg(test)]
@@ -1555,7 +1177,7 @@ fn ensure_app_data_cache_ready_inner(
         .min(u128::from(u64::MAX)) as u64;
 
     let disk_read_started = std::time::Instant::now();
-    let mut data = read_app_data(&state.data_path)?;
+    let mut data = read_layout_app_data(&state.data_path)?;
     for conversation in data.conversations.iter_mut() {
         normalize_conversation_runtime_volatile_fields(conversation);
     }
@@ -1634,16 +1256,22 @@ fn ensure_app_data_cache_ready_inner(
 #[cfg(test)]
 #[allow(dead_code)]
 fn state_write_app_data_cached(state: &AppState, data: &AppData) -> Result<(), String> {
-    let seq = state
-        .app_data_persist_latest_seq
-        .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
-        + 1;
     let _write_guard = state
         .app_data_persist_write_lock
         .lock()
         .map_err(|_| "Failed to lock app data persist write lock".to_string())?;
-    #[allow(deprecated)]
-    write_app_data(&state.data_path, data)?;
+    write_agents_shard(&state.data_path, &data.agents)?;
+    if data.data_migration_version > 0 {
+        state_db_upsert_kv(
+            &state.data_path,
+            "data_migration_version",
+            &data.data_migration_version.to_string(),
+        )?;
+    }
+    for conv in &data.conversations {
+        write_conversation_shard(&state.data_path, conv)?;
+    }
+    ensure_system_notification_conversation_shard(&state.data_path)?;
     let disk_signature = app_data_cache_signature(&state.data_path);
     let mut cached_data = data.clone();
     sanitize_runtime_cached_app_data(&mut cached_data);
@@ -1656,54 +1284,8 @@ fn state_write_app_data_cached(state: &AppState, data: &AppData) -> Result<(), S
         .lock()
         .map_err(|_| "Failed to lock cached app data signature".to_string())? =
         Some(disk_signature);
-    if let Ok(mut pending) = state.app_data_persist_pending.lock() {
-        if pending
-            .as_ref()
-            .map(|item| item.seq <= seq)
-            .unwrap_or(false)
-        {
-            *pending = None;
-        }
-    }
-    let has_newer_pending = state
-        .app_data_persist_latest_seq
-        .load(std::sync::atomic::Ordering::Acquire)
-        > seq;
-    state
-        .cached_app_data_dirty
-        .store(has_newer_pending, std::sync::atomic::Ordering::Release);
-    Ok(())
-}
-
-#[cfg(test)]
-#[allow(dead_code)]
-fn state_schedule_app_data_persist(state: &AppState, data: &AppData) -> Result<u64, String> {
-    let seq = state
-        .app_data_persist_latest_seq
-        .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
-        + 1;
-    let mut cached_data = data.clone();
-    sanitize_runtime_cached_app_data(&mut cached_data);
-    *state
-        .cached_app_data
-        .lock()
-        .map_err(|_| "Failed to lock cached app data".to_string())? = Some(cached_data);
-    state
-        .cached_app_data_dirty
-        .store(true, std::sync::atomic::Ordering::Release);
-    {
-        let mut pending = state
-            .app_data_persist_pending
-            .lock()
-            .map_err(|_| "Failed to lock pending app data persist".to_string())?;
-        *pending = Some(PendingAppDataPersist {
-            seq,
-            data: data.clone(),
-        });
-    }
     refresh_cached_app_data_dirty(state);
-    state.app_data_persist_notify.notify_one();
-    Ok(seq)
+    Ok(())
 }
 
 fn state_schedule_conversation_persist(
@@ -1868,7 +1450,7 @@ fn state_schedule_conversation_delete(
 fn flush_pending_persists_blocking(state: &AppState) -> Result<bool, String> {
     // 只用 app-data gate 原子地取走队列；本地 chat 的文件 I/O 必须再按会话 gate 协调，
     // 不能因为退出 flush 把不同会话串行化。
-    let (pending_conversations, pending_app_data) = {
+    let pending_conversations = {
         let _write_guard = state.app_data_persist_write_lock.lock().map_err(|err| {
             named_lock_error(
                 "app_data_persist_write_lock",
@@ -1878,17 +1460,11 @@ fn flush_pending_persists_blocking(state: &AppState) -> Result<bool, String> {
                 &err,
             )
         })?;
-        let pending_conversations = state
+        state
             .conversation_persist_pending
             .lock()
             .map_err(|_| "Failed to lock pending conversation persist".to_string())?
-            .take();
-        let pending_app_data = state
-            .app_data_persist_pending
-            .lock()
-            .map_err(|_| "Failed to lock pending app data persist".to_string())?
-            .take();
-        (pending_conversations, pending_app_data)
+            .take()
     };
     let mut wrote_anything = false;
 
@@ -2007,124 +1583,8 @@ fn flush_pending_persists_blocking(state: &AppState) -> Result<bool, String> {
         }
     }
 
-    if let Some(pending) = pending_app_data {
-        let _write_guard = state.app_data_persist_write_lock.lock().map_err(|err| {
-            named_lock_error(
-                "app_data_persist_write_lock",
-                file!(),
-                line!(),
-                module_path!(),
-                &err,
-            )
-        })?;
-        #[allow(deprecated)]
-        write_app_data(&state.data_path, &pending.data)?;
-        wrote_anything = true;
-        if let Ok(mut cached) = state.cached_app_data.lock() {
-            let mut runtime_cached = pending.data;
-            sanitize_runtime_cached_app_data(&mut runtime_cached);
-            *cached = Some(runtime_cached);
-        }
-    }
-
     refresh_cached_app_data_dirty(state);
     Ok(wrote_anything)
-}
-
-fn start_app_data_persist_worker(state: &AppState) -> Result<(), String> {
-    let started = state.app_data_persist_started.compare_exchange(
-        false,
-        true,
-        std::sync::atomic::Ordering::AcqRel,
-        std::sync::atomic::Ordering::Acquire,
-    );
-    if started.is_err() {
-        return Ok(());
-    }
-    let state_clone = state.clone();
-    tauri::async_runtime::spawn(async move {
-        loop {
-            state_clone.app_data_persist_notify.notified().await;
-            tokio::time::sleep(std::time::Duration::from_millis(120)).await;
-            loop {
-                let Some(pending) = ({
-                    let mut slot = match state_clone.app_data_persist_pending.lock() {
-                        Ok(slot) => slot,
-                        Err(_) => {
-                            runtime_log_error(
-                                "[后台持久化] 失败，任务=读取待写入队列，error=lock poisoned"
-                                    .to_string(),
-                            );
-                            break;
-                        }
-                    };
-                    slot.take()
-                }) else {
-                    break;
-                };
-
-                let latest_seq = state_clone
-                    .app_data_persist_latest_seq
-                    .load(std::sync::atomic::Ordering::Acquire);
-                if pending.seq < latest_seq {
-                    continue;
-                }
-                let data_path = state_clone.data_path.clone();
-                let data_to_write = pending.data.clone();
-                let write_lock = state_clone.app_data_persist_write_lock.clone();
-                let write_result = tokio::task::spawn_blocking(move || {
-                    let _write_guard = write_lock.lock().map_err(|err| {
-                        named_lock_error(
-                            "app_data_persist_write_lock",
-                            file!(),
-                            line!(),
-                            module_path!(),
-                            &err,
-                        )
-                    })?;
-                    #[allow(deprecated)]
-                    write_app_data(&data_path, &data_to_write)?;
-                    Ok::<(), String>(())
-                })
-                .await;
-                match write_result {
-                    Ok(Ok(())) => {
-                        if let Ok(mut cached) = state_clone.cached_app_data.lock() {
-                            let mut runtime_cached = pending.data.clone();
-                            sanitize_runtime_cached_app_data(&mut runtime_cached);
-                            *cached = Some(runtime_cached);
-                        }
-                        if let Ok(mut cached_signature) =
-                            state_clone.cached_app_data_signature.lock()
-                        {
-                            *cached_signature =
-                                Some(app_data_cache_signature(&state_clone.data_path));
-                        }
-                        let still_latest = state_clone
-                            .app_data_persist_latest_seq
-                            .load(std::sync::atomic::Ordering::Acquire)
-                            == pending.seq;
-                        if still_latest {
-                            refresh_cached_app_data_dirty(&state_clone);
-                        }
-                    }
-                    Ok(Err(err)) => {
-                        runtime_log_error(format!(
-                            "[后台持久化] 失败，任务=写入应用数据，seq={}，error={}",
-                            pending.seq, err
-                        ));
-                    }
-                    Err(err) => {
-                        runtime_log_error(format!(
-                            "[后台持久化] 失败，任务=阻塞写入任务，seq={}，error={}",
-                            pending.seq, err
-                        ));
-                    }
-                }
-            }
-        }
-    });
-    Ok(())
 }
 
 fn start_conversation_persist_worker(state: &AppState) -> Result<(), String> {

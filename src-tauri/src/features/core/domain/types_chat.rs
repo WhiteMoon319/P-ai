@@ -60,7 +60,7 @@ struct SaveAgentsInput {
     agents: Vec<AgentProfile>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
 enum MessagePart {
     Text {
@@ -91,7 +91,7 @@ enum MessagePart {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct MemeAnnotation {
     meme: String,
@@ -497,8 +497,6 @@ struct Conversation {
     last_assistant_at: Option<String>,
     status: String,
     #[serde(default)]
-    summary: String,
-    #[serde(default)]
     user_profile_snapshot: String,
     #[serde(default)]
     shell_workspace_path: Option<String>,
@@ -521,6 +519,8 @@ struct Conversation {
     plan_mode_enabled: bool,
     #[serde(default)]
     preferred_api_config_id: Option<String>,
+    #[serde(default)]
+    is_draft: bool,
     #[serde(default)]
     auto_push_remote_contact_id: Option<String>,
     #[serde(default, alias = "usageSummary")]

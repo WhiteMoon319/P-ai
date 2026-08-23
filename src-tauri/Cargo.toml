@@ -1,6 +1,6 @@
 [package]
 name = "easy-call-ai"
-version = "0.71.0"
+version = "0.73.1"
 edition = "2021"
 description = "P-ai desktop app"
 default-run = "p-ai"
@@ -38,6 +38,7 @@ reqwest = { version = "0.13.4", default-features = false, features = ["json", "s
 webpki-root-certs = "1"
 genai = { git = "https://github.com/jeremychone/rust-genai.git", rev = "bd84fbb10321536d2543e790d912befb835901b6" }
 base64 = "0.22"
+zstd = "0.13"
 aes = "0.9.1"
 md5 = "0.8"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp"] }
@@ -146,3 +147,5 @@ core-graphics = "0.25"
 objc2-app-kit = "0.3.2"
 objc2-core-foundation = "0.3.2"
 users = "0.11"
+
+[workspace]

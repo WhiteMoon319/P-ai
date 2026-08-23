@@ -157,6 +157,7 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
     hasMoreBackendHistory: bindings.hasMoreBackendHistory,
     foregroundTailLatestReady: bindings.foregroundTailLatestReady,
     chatWorkspaceName: bindings.chatWorkspaceName,
+    refreshChatWorkspaceState: bindings.refreshChatWorkspaceState,
     conversationMessageCache: bindings.conversationMessageCache,
     backgroundConversationBadgeMap: bindings.backgroundConversationBadgeMap,
     setStatus: bindings.setStatus,
@@ -221,7 +222,10 @@ export function useChatWindowRuntimeOrchestrator(bindings: Record<string, any>) 
       });
       const conversationId = String(result?.conversationId || "").trim();
       if (!conversationId) return;
-      await conversationOrchestrator.refreshUnarchivedConversationOverview();
+      // 分支创建已由后端单项事件插入，这里仅做差量兜底，不再全量拉取。
+      if (typeof bindings.syncUnarchivedConversationOverviewChangedSinceWatermark === "function") {
+        await bindings.syncUnarchivedConversationOverviewChangedSinceWatermark("branch_from_message_shell");
+      }
       await conversationOrchestrator.switchUnarchivedConversation(conversationId);
       bindings.setStatus(bindings.tr("status.conversationBranchCreated", { title: String(result?.title || "").trim() || conversationId }));
     } catch (error) {

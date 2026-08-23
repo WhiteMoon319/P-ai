@@ -1,18 +1,50 @@
     #[test]
     fn image_text_cache_upsert_and_find_should_work() {
-        let mut data = AppData::default();
-        upsert_image_text_cache(&mut data, "h1", "vision-a", "text-a");
+        let state = storage_and_stt_test_state();
+        state_service_upsert_image_text_cache(&state, "h1", "vision-a", "image", "", "text-a")
+            .expect("upsert cache");
         assert_eq!(
-            find_image_text_cache(&data, "h1", "vision-a"),
+            state_service_find_image_text_cache(&state, "h1", "vision-a", "image", "")
+                .expect("find cache"),
             Some("text-a".to_string())
         );
 
-        upsert_image_text_cache(&mut data, "h1", "vision-a", "text-b");
+        state_service_upsert_image_text_cache(&state, "h1", "vision-a", "image", "", "text-b")
+            .expect("upsert cache");
         assert_eq!(
-            find_image_text_cache(&data, "h1", "vision-a"),
+            state_service_find_image_text_cache(&state, "h1", "vision-a", "image", "")
+                .expect("find cache"),
             Some("text-b".to_string())
         );
-        assert_eq!(find_image_text_cache(&data, "h1", "vision-b"), None);
+        assert_eq!(
+            state_service_find_image_text_cache(&state, "h1", "vision-b", "image", "")
+                .expect("find cache"),
+            None
+        );
+    }
+
+    #[test]
+    fn image_text_cache_should_isolate_entries_by_image_type() {
+        let state = storage_and_stt_test_state();
+        state_service_upsert_image_text_cache(&state, "h1", "vision-a", "image", "", "text-image")
+            .expect("upsert image type cache");
+        state_service_upsert_image_text_cache(&state, "h1", "vision-a", "chart", "", "text-chart")
+            .expect("upsert chart type cache");
+        assert_eq!(
+            state_service_find_image_text_cache(&state, "h1", "vision-a", "image", "")
+                .expect("find image type cache"),
+            Some("text-image".to_string())
+        );
+        assert_eq!(
+            state_service_find_image_text_cache(&state, "h1", "vision-a", "chart", "")
+                .expect("find chart type cache"),
+            Some("text-chart".to_string())
+        );
+        assert_eq!(
+            state_service_find_image_text_cache(&state, "h1", "vision-a", "screenshot", "")
+                .expect("find other type cache"),
+            None
+        );
     }
 
     #[test]
@@ -402,7 +434,7 @@
     #[test]
     fn runtime_organization_snapshot_should_filter_missing_children_after_private_merge() {
         let root = std::env::temp_dir().join(format!("eca-runtime-org-{}", Uuid::new_v4()));
-        let data_path = root.join("config").join("app_data.json");
+        let data_path = root.join("config").join("config_mark");
         let departments_dir = root
             .join("llm-workspace")
             .join("private-organization")
@@ -894,7 +926,7 @@
     }
 
     #[test]
-    fn normalize_app_config_should_restore_empty_expert_model_from_text_chat_api() {
+    fn normalize_app_config_should_preserve_empty_expert_model_while_defaulting_department_role() {
         let mut cfg = AppConfig {
             hotkey: "Alt+·".to_string(),
             ui_language: default_ui_language(),
@@ -983,38 +1015,9 @@
 
         normalize_app_config(&mut cfg);
 
-        assert_eq!(cfg.assistant_department_api_config_id, "chat-a");
+        assert_eq!(cfg.assistant_department_api_config_id, "");
         assert_eq!(cfg.departments[0].api_config_id, MODEL_ROLE_EXPERT_API_CONFIG_ID);
         assert_eq!(cfg.departments[0].api_config_ids, vec![MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string()]);
-    }
-
-    #[test]
-    fn normalize_app_config_should_restore_expert_model_from_provider_endpoint() {
-        let mut cfg = AppConfig::default();
-        let expected_endpoint_id = provider_first_endpoint_id(
-            cfg.api_providers
-                .first()
-                .expect("default provider exists"),
-        )
-        .expect("default provider has endpoint");
-        cfg.api_configs.clear();
-        cfg.selected_api_config_id.clear();
-        cfg.assistant_department_api_config_id.clear();
-
-        normalize_app_config(&mut cfg);
-
-        assert_eq!(cfg.assistant_department_api_config_id, expected_endpoint_id);
-        let assistant = cfg
-            .departments
-            .iter()
-            .find(|item| item.id == ASSISTANT_DEPARTMENT_ID)
-            .expect("assistant department");
-        assert_eq!(assistant.api_config_id, MODEL_ROLE_EXPERT_API_CONFIG_ID);
-        assert_eq!(assistant.api_config_ids, vec![MODEL_ROLE_EXPERT_API_CONFIG_ID.to_string()]);
-        assert_eq!(
-            resolve_department_chat_api_config_id(&cfg, MODEL_ROLE_EXPERT_API_CONFIG_ID).as_deref(),
-            Some(cfg.assistant_department_api_config_id.as_str())
-        );
     }
 
     #[test]
@@ -1333,7 +1336,7 @@ model = "gpt-4.1"
     #[test]
     fn private_department_id_conflict_should_be_skipped_with_repair_hint() {
         let root = std::env::temp_dir().join(format!("eca-private-org-conflict-{}", Uuid::new_v4()));
-        let data_path = root.join("config").join("app_data.json");
+        let data_path = root.join("config").join("config_mark");
         let departments_dir = root
             .join("llm-workspace")
             .join("private-organization")
@@ -1538,66 +1541,19 @@ model = "gpt-4.1"
     }
 
     #[test]
-    fn write_app_data_should_only_flush_changed_shards() {
-        let root = std::env::temp_dir().join(format!("eca-app-data-layout-{}", Uuid::new_v4()));
-        std::fs::create_dir_all(root.join("config")).expect("create temp config dir");
-        let data_path = root.join("config").join("app_data.json");
-
-        let mut data = AppData::default();
-        data.conversations = vec![
-            build_test_conversation("conv-a", "Conversation A"),
-            build_test_conversation("conv-b", "Conversation B"),
-        ];
-
-        let first = write_app_data_with_stats(&data_path, &data).expect("write first layout");
-        assert!(first.agents_written);
-        assert!(first.runtime_written);
-        assert_eq!(first.conversation_writes, 3);
-        assert_eq!(first.conversation_deletes, 0);
-        assert!(!app_layout_chat_index_path(&data_path).exists());
-        let system_notification = read_conversation_shard(
-            &data_path,
-            SYSTEM_NOTIFICATION_CONVERSATION_ID,
-        )
-        .expect("system notification conversation should be materialized");
-        assert_eq!(
-            system_notification.conversation_kind,
-            CONVERSATION_KIND_SYSTEM_NOTIFICATION
-        );
-
-        let second = write_app_data_with_stats(&data_path, &data).expect("write same layout");
-        assert!(!second.agents_written);
-        assert!(!second.runtime_written);
-        assert_eq!(second.conversation_writes, 0);
-        assert_eq!(second.conversation_deletes, 0);
-
-        let mut runtime_only = data.clone();
-        runtime_only.assistant_department_agent_id = "agent-runtime-only".to_string();
-        let runtime_stats =
-            write_app_data_with_stats(&data_path, &runtime_only).expect("write runtime-only diff");
-        assert!(!runtime_stats.agents_written);
-        assert!(runtime_stats.runtime_written);
-        assert_eq!(runtime_stats.conversation_writes, 0);
-        assert_eq!(runtime_stats.conversation_deletes, 0);
-    }
-
-    #[test]
-    fn write_agents_and_runtime_shards_should_not_touch_other_files() {
+    fn write_agents_shard_should_not_touch_conversations() {
         let root = std::env::temp_dir().join(format!("eca-app-data-shards-{}", Uuid::new_v4()));
         std::fs::create_dir_all(root.join("config")).expect("create temp config dir");
-        let data_path = root.join("config").join("app_data.json");
+        let data_path = root.join("config").join("config_mark");
 
         let mut data = AppData::default();
-        data.assistant_department_agent_id = "assistant-before".to_string();
         data.conversations = vec![build_test_conversation("conv-a", "Conversation A")];
-        write_app_data_with_stats(&data_path, &data).expect("seed layout");
+        seed_app_data_shards(&data_path, &data).expect("seed layout");
 
         let agents_path = app_layout_agents_path(&data_path);
-        let runtime_path = app_layout_runtime_state_path(&data_path);
         let conversation_paths =
             message_store::message_store_paths(&data_path, "conv-a").expect("conversation paths");
 
-        let runtime_before = std::fs::read(&runtime_path).expect("read runtime before");
         let conversation_before = message_store::message_store_shard_write_signature(&conversation_paths);
 
         let mut agents = data.agents.clone();
@@ -1618,19 +1574,6 @@ model = "gpt-4.1"
             scope: default_global_scope(),
         });
         assert!(write_agents_shard(&data_path, &agents).expect("write agents shard"));
-        assert_eq!(std::fs::read(&runtime_path).expect("read runtime after agents"), runtime_before);
-        assert_eq!(
-            message_store::message_store_shard_write_signature(&conversation_paths),
-            conversation_before
-        );
-
-        let mut runtime = read_runtime_state_shard(&data_path).expect("read runtime shard");
-        runtime.assistant_department_agent_id = "assistant-after".to_string();
-        assert!(write_runtime_state_shard(&data_path, &runtime).expect("write runtime shard"));
-        assert_ne!(
-            std::fs::read(&runtime_path).expect("read runtime after runtime write"),
-            runtime_before
-        );
         assert_eq!(
             message_store::message_store_shard_write_signature(&conversation_paths),
             conversation_before
@@ -1639,71 +1582,20 @@ model = "gpt-4.1"
     }
 
     #[test]
-    fn runtime_state_should_read_legacy_message_store_migration_version_separately() {
-        let root = std::env::temp_dir().join(format!("eca-runtime-legacy-migration-version-{}", Uuid::new_v4()));
-        std::fs::create_dir_all(root.join("state")).expect("create temp state dir");
-        let data_path = root.join("config").join("app_data.json");
-        std::fs::write(
-            app_layout_runtime_state_path(&data_path),
-            r#"{
-  "version": 1,
-  "messageStoreMigrationVersion": 1,
-  "assistantDepartmentAgentId": "default-agent",
-  "userAlias": "用户",
-  "responseStyleId": "concise",
-  "pdfReadMode": "image",
-  "backgroundVoiceScreenshotKeywords": "",
-  "backgroundVoiceScreenshotMode": "focused_window",
-  "mainConversationId": "system-notification-conversation"
-}"#,
-        )
-        .expect("write legacy runtime state");
-
-        let runtime = read_runtime_state_shard(&data_path).expect("read runtime shard");
-
-        assert_eq!(runtime.data_migration_version, 0);
-        assert_eq!(runtime.message_store_migration_version, 1);
-    }
-
-    #[test]
-    fn write_app_data_should_not_downgrade_data_migration_version() {
-        let root = std::env::temp_dir().join(format!("eca-app-data-migration-version-{}", Uuid::new_v4()));
-        std::fs::create_dir_all(root.join("config")).expect("create temp config dir");
-        let data_path = root.join("config").join("app_data.json");
-        let data = AppData::default();
-        write_app_data_with_stats(&data_path, &data).expect("seed layout");
-
-        let mut runtime = read_runtime_state_shard(&data_path).expect("read runtime shard");
-        runtime.data_migration_version =
-            DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES;
-        assert!(write_runtime_state_shard(&data_path, &runtime).expect("write baseline migration version"));
-
-        let stats = write_app_data_with_stats(&data_path, &data).expect("write app data again");
-        let restored = read_runtime_state_shard(&data_path).expect("read restored runtime shard");
-
-        assert_eq!(
-            restored.data_migration_version,
-            DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES
-        );
-        assert_eq!(restored.message_store_migration_version, 0);
-        assert!(!stats.runtime_written);
-    }
-
-    #[test]
     fn runtime_volatile_normalization_should_not_require_rewriting_after_migration_version_recorded() {
         let root = std::env::temp_dir().join(format!("eca-read-baseline-migration-{}", Uuid::new_v4()));
         std::fs::create_dir_all(root.join("config")).expect("create temp config dir");
-        let data_path = root.join("config").join("app_data.json");
+        let data_path = root.join("config").join("config_mark");
         let mut data = AppData::default();
         data.data_migration_version =
             DATA_MIGRATION_VERSION_V2_ASSISTANT_WORKSPACE_FOR_EMPTY_SHELL_WORKSPACES;
         data.conversations = vec![build_test_conversation("conv-baseline", "Baseline")];
-        write_app_data_with_stats(&data_path, &data).expect("seed layout");
+        seed_app_data_shards(&data_path, &data).expect("seed layout");
         let paths = message_store::message_store_paths(&data_path, "conv-baseline")
             .expect("conversation paths");
         let before = message_store::message_store_shard_write_signature(&paths);
 
-        let restored = read_app_data(&data_path).expect("read app data");
+        let restored = read_layout_app_data(&data_path).expect("read app data");
         let after = message_store::message_store_shard_write_signature(&paths);
 
         assert_eq!(
@@ -1725,119 +1617,17 @@ model = "gpt-4.1"
     }
 
     #[test]
-    fn read_runtime_state_shard_should_materialize_fixed_system_notification_conversation() {
-        let root = std::env::temp_dir().join(format!("eca-system-notification-shard-{}", Uuid::new_v4()));
-        std::fs::create_dir_all(root.join("config")).expect("create temp config dir");
-        let data_path = root.join("config").join("app_data.json");
-
-        let old_main = build_test_conversation("conversation-main", "主会话");
-        write_conversation_shard(&data_path, &old_main).expect("write old main conversation");
-        let mut runtime = RuntimeStateFile::default();
-        runtime.main_conversation_id = Some("conversation-main".to_string());
-        write_json_file_atomic(
-            &app_layout_runtime_state_path(&data_path),
-            &runtime,
-            "runtime state file",
-        )
-        .expect("write runtime state directly");
-        assert!(read_conversation_shard(&data_path, SYSTEM_NOTIFICATION_CONVERSATION_ID).is_err());
-
-        let restored = read_runtime_state_shard(&data_path).expect("read runtime shard");
-
-        assert_eq!(
-            restored.main_conversation_id.as_deref(),
-            Some(SYSTEM_NOTIFICATION_CONVERSATION_ID)
-        );
-        let system_notification = read_conversation_shard(
-            &data_path,
-            SYSTEM_NOTIFICATION_CONVERSATION_ID,
-        )
-        .expect("read system notification conversation");
-        assert_eq!(system_notification.id, SYSTEM_NOTIFICATION_CONVERSATION_ID);
-        assert_eq!(system_notification.title, "P-ai系统");
-        assert_eq!(
-            system_notification.conversation_kind,
-            CONVERSATION_KIND_SYSTEM_NOTIFICATION
-        );
-        assert!(system_notification.messages.is_empty());
-        let old_main_after =
-            read_conversation_shard(&data_path, "conversation-main").expect("read old main");
-        assert_eq!(old_main_after.id, "conversation-main");
-        assert_eq!(old_main_after.title, "主会话");
-        assert_eq!(old_main_after.conversation_kind, CONVERSATION_KIND_CHAT);
-    }
-
-    #[test]
-    fn runtime_state_shard_should_sync_remote_im_contact_communication_flags() {
-        let root = std::env::temp_dir().join(format!("eca-app-data-contact-sync-{}", Uuid::new_v4()));
-        std::fs::create_dir_all(root.join("config")).expect("create temp config dir");
-        let data_path = root.join("config").join("app_data.json");
-
-        let mut runtime = RuntimeStateFile::default();
-        runtime.remote_im_contacts.push(RemoteImContact {
-            id: "contact-a".to_string(),
-            channel_id: "channel-a".to_string(),
-            platform: RemoteImPlatform::OnebotV11,
-            remote_contact_type: "private".to_string(),
-            remote_contact_id: "remote-a".to_string(),
-            remote_contact_name: "张三".to_string(),
-            avatar_url: String::new(),
-            remark_name: String::new(),
-            allow_send: false,
-            allow_send_files: false,
-            allow_receive: true,
-            activation_mode: "never".to_string(),
-            activation_keywords: Vec::new(),
-            mute_keywords: default_remote_im_contact_mute_keywords(),
-            unmute_keywords: default_remote_im_contact_unmute_keywords(),
-            patience_seconds: default_remote_im_contact_patience_seconds(),
-            mute_duration_seconds: default_remote_im_contact_mute_duration_seconds(),
-            activation_cooldown_seconds: 0,
-            route_mode: "dedicated_contact_conversation".to_string(),
-            bound_department_id: Some(REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string()),
-            bound_agent_id: None,
-            bound_conversation_id: None,
-            processing_mode: "continuous".to_string(),
-            response_strategy: default_remote_im_contact_response_strategy(),
-            response_guidance: default_remote_im_contact_response_guidance(),
-            blocked_message_prefixes: default_remote_im_contact_blocked_message_prefixes(),
-            group_reply_pacing: RemoteImGroupReplyPacing::default(),
-            last_activated_at: None,
-            last_message_at: None,
-            dingtalk_session_webhook: None,
-            dingtalk_session_webhook_expired_time: None,
-            onebot_group_members: Vec::new(),
-            shell_workspaces: Vec::new(),
-        });
-
-        assert!(write_runtime_state_shard(&data_path, &runtime).expect("write runtime shard"));
-        let restored = read_runtime_state_shard(&data_path).expect("read runtime shard");
-        let contact = restored.remote_im_contacts.first().expect("contact exists");
-        assert!(contact.allow_send);
-        assert!(contact.allow_receive);
-        let system_notification = read_conversation_shard(
-            &data_path,
-            SYSTEM_NOTIFICATION_CONVERSATION_ID,
-        )
-        .expect("read system notification conversation");
-        assert_eq!(
-            system_notification.conversation_kind,
-            CONVERSATION_KIND_SYSTEM_NOTIFICATION
-        );
-    }
-
-    #[test]
     fn write_conversation_shard_should_write_message_store_and_only_touch_target() {
         let root = std::env::temp_dir().join(format!("eca-conversation-shard-{}", Uuid::new_v4()));
         std::fs::create_dir_all(root.join("config")).expect("create temp config dir");
-        let data_path = root.join("config").join("app_data.json");
+        let data_path = root.join("config").join("config_mark");
 
         let mut data = AppData::default();
         data.conversations = vec![
             build_test_conversation("conv-a", "Conversation A"),
             build_test_conversation("conv-b", "Conversation B"),
         ];
-        write_app_data_with_stats(&data_path, &data).expect("seed layout");
+        seed_app_data_shards(&data_path, &data).expect("seed layout");
 
         let legacy_conversation_a_path = app_layout_chat_conversation_path(&data_path, "conv-a");
         let legacy_conversation_b_path = app_layout_chat_conversation_path(&data_path, "conv-b");
@@ -1847,27 +1637,24 @@ model = "gpt-4.1"
             message_store::message_store_paths(&data_path, "conv-a").expect("conversation a paths");
         let conversation_b_paths =
             message_store::message_store_paths(&data_path, "conv-b").expect("conversation b paths");
-        assert!(message_store::should_write_jsonl_snapshot_directory_shard(&conversation_a_paths)
-            .expect("conversation a manifest ready"));
-        assert!(message_store::should_write_jsonl_snapshot_directory_shard(&conversation_b_paths)
-            .expect("conversation b manifest ready"));
-        let conversation_a_before =
-            message_store::message_store_shard_write_signature(&conversation_a_paths);
-        let conversation_b_before =
-            message_store::message_store_shard_write_signature(&conversation_b_paths);
-
+        assert!(message_store::chat_store_read_status(&conversation_a_paths)
+            .expect("conversation a sqlite status")
+            .is_some());
+        assert!(message_store::chat_store_read_status(&conversation_b_paths)
+            .expect("conversation b sqlite status")
+            .is_some());
         let mut conversation_a = read_conversation_shard(&data_path, "conv-a").expect("read conversation a");
         conversation_a.title = "Conversation A Updated".to_string();
         assert!(write_conversation_shard(&data_path, &conversation_a).expect("write conversation a"));
 
-        assert_ne!(
-            message_store::message_store_shard_write_signature(&conversation_a_paths),
-            conversation_a_before
-        );
-        assert_eq!(
-            message_store::message_store_shard_write_signature(&conversation_b_paths),
-            conversation_b_before
-        );
+        let conversation_a_meta = message_store::chat_store_read_meta(&conversation_a_paths)
+            .expect("read conversation a meta")
+            .expect("conversation a meta exists");
+        assert_eq!(conversation_a_meta.title(), "Conversation A Updated");
+        let conversation_b_meta = message_store::chat_store_read_meta(&conversation_b_paths)
+            .expect("read conversation b meta")
+            .expect("conversation b meta exists");
+        assert_eq!(conversation_b_meta.title(), "Conversation B");
         assert!(!legacy_conversation_a_path.exists());
         assert!(!legacy_conversation_b_path.exists());
     }
@@ -1880,7 +1667,6 @@ model = "gpt-4.1"
 
         conversation_a.updated_at = "2026-04-15T12:34:56Z".to_string();
         conversation_a.status = "archived".to_string();
-        conversation_a.summary = "updated summary".to_string();
         conversation_a.archived_at = Some("2026-04-15T12:34:56Z".to_string());
 
         upsert_chat_index_conversation(&mut index, &conversation_a);
@@ -1893,7 +1679,6 @@ model = "gpt-4.1"
             .expect("find updated chat index item");
         assert_eq!(updated.updated_at, "2026-04-15T12:34:56Z");
         assert_eq!(updated.status, "archived");
-        assert_eq!(updated.summary, "updated summary");
         assert_eq!(
             updated.archived_at.as_deref(),
             Some("2026-04-15T12:34:56Z")
@@ -1914,55 +1699,6 @@ model = "gpt-4.1"
     }
 
     #[test]
-    fn runtime_state_shard_should_preserve_pdf_caches() {
-        let root = std::env::temp_dir().join(format!("eca-runtime-pdf-cache-{}", Uuid::new_v4()));
-        std::fs::create_dir_all(root.join("config")).expect("create temp config dir");
-        let data_path = root.join("config").join("app_data.json");
-
-        let mut data = AppData::default();
-        data.pdf_text_cache.push(PdfTextCacheEntry {
-            file_hash: "file-hash-a".to_string(),
-            file_path: "C:/tmp/a.pdf".to_string(),
-            file_name: "a.pdf".to_string(),
-            extracted_text: "pdf text".to_string(),
-            total_pages: 8,
-            extracted_pages: 3,
-            is_truncated: true,
-            conversation_ids: vec!["conv-a".to_string()],
-            created_at: "2026-04-15T00:00:00Z".to_string(),
-            updated_at: "2026-04-15T00:00:00Z".to_string(),
-        });
-        data.pdf_image_cache.push(PdfImageCacheEntry {
-            file_hash: "file-hash-b".to_string(),
-            file_path: "C:/tmp/b.pdf".to_string(),
-            file_name: "b.pdf".to_string(),
-            total_pages: 4,
-            rendered_pages: 2,
-            dpi: 144,
-            images: vec![PdfRenderedImage {
-                page_index: 0,
-                width: 100,
-                height: 200,
-                bytes_base64: "Zm9v".to_string(),
-                mime: "image/png".to_string(),
-            }],
-            conversation_ids: vec!["conv-b".to_string()],
-            created_at: "2026-04-15T00:00:00Z".to_string(),
-            updated_at: "2026-04-15T00:00:00Z".to_string(),
-        });
-
-        let runtime = build_runtime_state_file(&data);
-        assert!(write_runtime_state_shard(&data_path, &runtime).expect("write runtime shard"));
-
-        let restored = read_runtime_state_shard(&data_path).expect("read runtime shard");
-        assert_eq!(restored.pdf_text_cache.len(), 1);
-        assert_eq!(restored.pdf_text_cache[0].file_name, "a.pdf");
-        assert_eq!(restored.pdf_image_cache.len(), 1);
-        assert_eq!(restored.pdf_image_cache[0].file_name, "b.pdf");
-        assert_eq!(restored.pdf_image_cache[0].images.len(), 1);
-    }
-
-    #[test]
     fn migration_package_version_should_allow_importing_older_data_versions() {
         let manifest = MigrationManifest {
             schema_version: MIGRATION_SCHEMA_VERSION,
@@ -1973,7 +1709,7 @@ model = "gpt-4.1"
         };
         let mut payload = MigrationPayload {
             config: AppConfig::default(),
-            runtime_data: AppData::default(),
+            runtime_data: MigrationRuntimeData::default(),
             memories: Vec::new(),
             oauth_files: Vec::new(),
             avatar_files: Vec::new(),
@@ -1999,7 +1735,7 @@ model = "gpt-4.1"
         };
         let mut payload = MigrationPayload {
             config: AppConfig::default(),
-            runtime_data: AppData::default(),
+            runtime_data: MigrationRuntimeData::default(),
             memories: Vec::new(),
             oauth_files: Vec::new(),
             avatar_files: Vec::new(),
@@ -2030,7 +1766,6 @@ model = "gpt-4.1"
             last_user_at: None,
             last_assistant_at: None,
             status: "active".to_string(),
-            summary: String::new(),
             user_profile_snapshot: String::new(),
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
@@ -2060,5 +1795,93 @@ model = "gpt-4.1"
             auto_push_remote_contact_id: None,
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
+            is_draft: false,
         }
+    }
+
+    fn config_test_state() -> AppState {
+        let root = std::env::temp_dir().join(format!("eca-config-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create temp test root");
+        std::fs::create_dir_all(root.join("llm-workspace")).expect("create temp llm workspace");
+        AppState {
+            app_handle: Arc::new(Mutex::new(None)),
+            config_path: root.join("app_config.toml"),
+            data_path: root.join("config_mark"),
+            llm_workspace_path: root.join("llm-workspace"),
+            shared_http_client: reqwest::Client::new(),
+            terminal_shell: detect_default_terminal_shell(),
+            terminal_shell_candidates: detect_terminal_shell_candidates(),
+            conversation_lock: Arc::new(ConversationDomainLock::new()),
+            memory_lock: Arc::new(Mutex::new(())),
+            cached_config: Arc::new(Mutex::new(None)),
+            cached_config_mtime: Arc::new(Mutex::new(None)),
+            cached_agents: Arc::new(Mutex::new(None)),
+            cached_agents_mtime: Arc::new(Mutex::new(None)),
+            cached_chat_index: Arc::new(Mutex::new(None)),
+            cached_conversation_metadata: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            cached_conversation_field_metadata_ids: Arc::new(Mutex::new(
+                std::collections::HashSet::new(),
+            )),
+            cached_conversation_mtimes: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            cached_app_data: Arc::new(Mutex::new(None)),
+            cached_app_data_signature: Arc::new(Mutex::new(None)),
+            cached_app_data_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            conversation_persist_pending: Arc::new(Mutex::new(None)),
+            conversation_persist_notify: Arc::new(tokio::sync::Notify::new()),
+            conversation_persist_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            conversation_persist_latest_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            cached_conversation_dirty_ids: Arc::new(Mutex::new(std::collections::HashSet::new())),
+            cached_deleted_conversation_ids: Arc::new(Mutex::new(std::collections::HashSet::new())),
+            app_data_persist_write_lock: Arc::new(Mutex::new(())),
+            last_panic_snapshot: Arc::new(Mutex::new(None)),
+            inflight_chat_abort_handles: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            inflight_tool_abort_handles: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            inflight_completed_tool_history: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            terminal_session_roots: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            terminal_live_sessions: Arc::new(tokio::sync::Mutex::new(
+                std::collections::HashMap::new(),
+            )),
+            terminal_pending_approvals: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            llm_round_logs: Arc::new(Mutex::new(RecentLlmRoundLogs::default())),
+            conversation_runtime_slots: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            conversation_processing_claims: Arc::new(Mutex::new(std::collections::HashSet::new())),
+            goal_continue_suppressed_conversation_ids: Arc::new(Mutex::new(
+                std::collections::HashSet::new(),
+            )),
+            pending_chat_result_senders: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            pending_chat_delta_channels: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            accepted_submit_trace_ids: Arc::new(Mutex::new(std::collections::VecDeque::new())),
+            active_chat_view_bindings: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            conversation_list_activity_marks: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            dequeue_lock: Arc::new(Mutex::new(())),
+            task_scheduler_notify: Arc::new(tokio::sync::Notify::new()),
+            delegate_runtime_threads: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            delegate_recent_threads: Arc::new(Mutex::new(std::collections::VecDeque::new())),
+            provider_streaming_disabled_keys: Arc::new(Mutex::new(
+                std::collections::HashMap::new(),
+            )),
+            provider_system_message_user_fallback_keys: Arc::new(Mutex::new(
+                std::collections::HashSet::new(),
+            )),
+            provider_request_gates: Arc::new(tokio::sync::Mutex::new(
+                std::collections::HashMap::new(),
+            )),
+            remote_im_contact_runtime_states: Arc::new(Mutex::new(
+                std::collections::HashMap::new(),
+            )),
+            remote_im_reply_delegate_runtimes: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            remote_im_reply_delegate_semaphore: Arc::new(tokio::sync::Semaphore::new(8)),
+            remote_im_channel_state_write_locks: Arc::new(Mutex::new(
+                std::collections::HashMap::new(),
+            )),
+            hidden_skill_snapshot_cache: Arc::new(Mutex::new(String::new())),
+            preferred_release_source: Arc::new(Mutex::new("github".to_string())),
+            migration_preview_dirs: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            delegate_active_ids: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
+            backend_ready: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
+    }
+
+    fn storage_and_stt_test_state() -> AppState {
+        config_test_state()
     }

@@ -19,10 +19,21 @@ fn conversation_has_visible_title_from_store(
         return Ok(false);
     }
     let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
-    ensure_ready_message_store_from_legacy_conversation(state, conversation_id, &store_paths)?;
-    Ok(message_store::read_ready_message_store_latest_compaction_message(&store_paths)?
+    ensure_chat_store_conversation_readable(state, conversation_id, &store_paths)?;
+    Ok(message_store::chat_store_read_latest_compaction_message(&store_paths)?
         .as_ref()
         .is_some_and(summary_context_message_title_blocks_auto_title))
+}
+
+async fn conversation_has_visible_title_from_store_async(
+    state: AppState,
+    conversation_id: String,
+) -> Result<bool, String> {
+    tokio::task::spawn_blocking(move || {
+        conversation_has_visible_title_from_store(&state, &conversation_id)
+    })
+    .await
+    .map_err(|err| format!("会话标题存储检查任务失败：{err}"))?
 }
 
 fn auto_title_generation_inflight(
@@ -177,19 +188,28 @@ fn spawn_conversation_auto_title_generation(
             return;
         }
         let result = async {
-            if conversation_has_visible_title_from_store(&state, &conversation_id)? {
+            if conversation_has_visible_title_from_store_async(
+                state.clone(),
+                conversation_id.clone(),
+            )
+            .await?
+            {
                 return Ok::<(), String>(());
             }
             match run_auto_conversation_title_generation(&state, &conversation_id, &user_message).await {
                 Ok(title) => {
-                    if conversation_has_visible_title_from_store(&state, &conversation_id)? {
+                    if conversation_has_visible_title_from_store_async(
+                        state.clone(),
+                        conversation_id.clone(),
+                    )
+                    .await?
+                    {
                         return Ok(());
                     }
-                    match conversation_service_v2().update_latest_summary_title(
-                        &state,
-                        &conversation_id,
-                        &title,
-                    ) {
+                    match conversation_service_v2()
+                        .update_latest_summary_title(&state, &conversation_id, &title)
+                        .await
+                    {
                         Ok(changed) => {
                             if changed {
                                 if let Err(err) =
@@ -231,4 +251,3 @@ fn spawn_conversation_auto_title_generation(
         auto_title_generation_clear_inflight(&conversation_id);
     });
 }
-

@@ -125,7 +125,6 @@ mod archive_host_selection_tests {
             last_user_at: None,
             last_assistant_at: None,
             status: "active".to_string(),
-            summary: String::new(),
             user_profile_snapshot: String::new(),
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
@@ -141,6 +140,7 @@ mod archive_host_selection_tests {
             auto_push_remote_contact_id: None,
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
+            is_draft: false,
         }
     }
 
@@ -209,7 +209,7 @@ mod archive_host_selection_tests {
             "eca-archive-owner-private-{}",
             Uuid::new_v4()
         ));
-        let data_path = root.join("data").join("app_data.json");
+        let data_path = root.join("data").join("config_mark");
         let departments_dir = app_root_from_data_path(&data_path)
             .join("llm-workspace")
             .join("private-organization")

@@ -231,9 +231,9 @@ fn build_transient_user_profile_snapshot_block_for_user(
 fn conversation_user_main_workspace_root(conversation: &Conversation, state: &AppState) -> Option<PathBuf> {
     // 联系人会话：从联系人配置中查找 main workspace
     if conversation.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT {
-        if let Ok(runtime) = state_read_runtime_state_cached(state) {
+        if let Ok(contacts) = state_service_list_remote_im_contacts(state, None) {
             let conversation_id = conversation.id.trim();
-            if let Some(contact) = runtime.remote_im_contacts.iter().find(|c| {
+            if let Some(contact) = contacts.iter().find(|c| {
                 c.bound_conversation_id.as_deref().map(str::trim) == Some(conversation_id)
             }) {
                 if let Some(ws) = contact.shell_workspaces.iter().find(|workspace| {
@@ -272,15 +272,14 @@ fn resolve_human_interface_remote_contact_type(
 ) -> Option<String> {
     if conversation_is_remote_im_contact(conversation) {
         let remote_contact_type = state.and_then(|state| {
-            let runtime = state_read_runtime_state_cached(state).ok()?;
+            let contacts = state_service_list_remote_im_contacts(state, None).ok()?;
             let conversation_id = conversation.id.trim();
             let root_key = conversation
                 .root_conversation_id
                 .as_deref()
                 .map(str::trim)
                 .filter(|value| !value.is_empty());
-            runtime
-                .remote_im_contacts
+            contacts
                 .iter()
                 .find(|contact| {
                     root_key
@@ -318,8 +317,8 @@ fn build_remote_im_contact_downloads_block(conversation: &Conversation, state: &
     if !conversation_is_remote_im_contact(conversation) {
         return None;
     }
-    let runtime = state_read_runtime_state_cached(state).ok()?;
-    let contact = runtime.remote_im_contacts.iter().find(|contact| {
+    let contacts = state_service_list_remote_im_contacts(state, None).ok()?;
+    let contact = contacts.iter().find(|contact| {
         contact.bound_conversation_id.as_deref().map(str::trim) == Some(conversation.id.trim())
     })?;
     let relative_dir = remote_im_contact_downloads_relative_dir(contact);
@@ -439,7 +438,7 @@ mod prompt_assembly_tests {
             .join("easy_call_ai_tests")
             .join(format!("{}_{}", name, Uuid::new_v4()));
         fs::create_dir_all(&root).expect("create temp dir");
-        root.join("app_data.json")
+        root.join("config_mark")
     }
 
     #[test]
@@ -543,7 +542,7 @@ mod prompt_assembly_tests {
         AppState {
             app_handle: Arc::new(Mutex::new(None)),
             config_path: llm_workspace_path.join("app_config.toml"),
-            data_path: llm_workspace_path.join("app_data.json"),
+            data_path: llm_workspace_path.join("config_mark"),
             llm_workspace_path,
             shared_http_client: reqwest::Client::new(),
             terminal_shell: terminal_shell.clone(),
@@ -554,8 +553,6 @@ mod prompt_assembly_tests {
             cached_config_mtime: Arc::new(Mutex::new(None)),
             cached_agents: Arc::new(Mutex::new(None)),
             cached_agents_mtime: Arc::new(Mutex::new(None)),
-            cached_runtime_state: Arc::new(Mutex::new(None)),
-            cached_runtime_state_mtime: Arc::new(Mutex::new(None)),
             cached_chat_index: Arc::new(Mutex::new(None)),
             cached_conversation_metadata: Arc::new(Mutex::new(std::collections::HashMap::new())),
             cached_conversation_field_metadata_ids: Arc::new(Mutex::new(
@@ -565,10 +562,6 @@ mod prompt_assembly_tests {
             cached_app_data: Arc::new(Mutex::new(None)),
             cached_app_data_signature: Arc::new(Mutex::new(None)),
             cached_app_data_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            app_data_persist_pending: Arc::new(Mutex::new(None)),
-            app_data_persist_notify: Arc::new(tokio::sync::Notify::new()),
-            app_data_persist_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            app_data_persist_latest_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             conversation_persist_pending: Arc::new(Mutex::new(None)),
             conversation_persist_notify: Arc::new(tokio::sync::Notify::new()),
             conversation_persist_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -630,7 +623,6 @@ mod prompt_assembly_tests {
             last_user_at: None,
             last_assistant_at: None,
             status: "active".to_string(),
-            summary: String::new(),
             user_profile_snapshot: String::new(),
             shell_workspace_path: None,
             shell_workspaces: workspaces,
@@ -646,6 +638,7 @@ mod prompt_assembly_tests {
             auto_push_remote_contact_id: None,
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
+            is_draft: false,
         }
     }
 
@@ -831,8 +824,7 @@ mod prompt_assembly_tests {
         let mut conversation = build_test_conversation(Vec::new());
         conversation.conversation_kind = CONVERSATION_KIND_REMOTE_IM_CONTACT.to_string();
 
-        let mut runtime = RuntimeStateFile::default();
-        runtime.remote_im_contacts.push(RemoteImContact {
+        let contact = RemoteImContact {
             id: "contact-record-1".to_string(),
             channel_id: "onebot-main".to_string(),
             platform: RemoteImPlatform::OnebotV11,
@@ -866,8 +858,8 @@ mod prompt_assembly_tests {
             dingtalk_session_webhook_expired_time: None,
             onebot_group_members: Vec::new(),
             shell_workspaces: Vec::new(),
-        });
-        state_write_runtime_state_cached(&state, &runtime).expect("write runtime");
+        };
+        state_service_upsert_remote_im_contact(&state, &contact).expect("write contact");
 
         let block = build_remote_im_contact_downloads_block(&conversation, &state)
             .expect("downloads block");

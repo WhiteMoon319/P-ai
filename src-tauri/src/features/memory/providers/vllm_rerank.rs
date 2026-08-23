@@ -50,7 +50,23 @@ impl MemoryRerankProvider for VllmRerankProvider {
         let auth = self.api_key.clone();
 
         memory_run_async(async move {
-            let client = memory_http_client()?;
+            let mut builder = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(5));
+            #[cfg(target_os = "android")]
+            {
+                let mut roots = Vec::with_capacity(webpki_root_certs::TLS_SERVER_ROOT_CERTS.len());
+                for der in webpki_root_certs::TLS_SERVER_ROOT_CERTS.iter() {
+                    roots.push(
+                        reqwest::tls::Certificate::from_der(der.as_ref())
+                            .map_err(|err| format!("加载 Android 静态 TLS 根证书失败: {err}"))?,
+                    );
+                }
+                builder = builder.tls_certs_only(roots);
+            }
+            let client = builder
+                .build()
+                .map_err(|err| format!("Build vLLM rerank HTTP client failed: {err}"))?;
+
             let mut req = client
                 .post(&url)
                 .header(CONTENT_TYPE, "application/json")
@@ -61,7 +77,7 @@ impl MemoryRerankProvider for VllmRerankProvider {
             let resp = req
                 .send()
                 .await
-                .map_err(|err| format!("vLLM rerank request failed ({url}): {err}"))?;
+                .map_err(|err| format!("vLLM rerank request failed ({url}): {err:?}"))?;
             if !resp.status().is_success() {
                 let status = resp.status();
                 let body = resp.text().await.unwrap_or_default();

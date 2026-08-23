@@ -118,7 +118,7 @@ fn resolve_stop_chat_target(
             return None;
         }
         let paths = message_store::message_store_paths(&state.data_path, &conversation_id).ok()?;
-        let last_message = message_store::read_ready_message_store_recent_messages_page_cached(
+        let last_message = message_store::chat_store_read_recent_messages_page_cached(
             &paths,
             1,
         )
@@ -289,20 +289,6 @@ fn apply_stop_chat_partial_message_by_id(
     Ok(conversation.id.clone())
 }
 
-fn read_latest_archive_summary_from_chat_index(state: &AppState) -> Result<Option<String>, String> {
-    let chat_index = state_read_chat_index_cached(state)?;
-    Ok(chat_index
-        .conversations
-        .iter()
-        .rev()
-        .filter_map(|item| conversation_service_v2().get_conversation_meta(state, item.id.as_str()).ok())
-        .find(|conversation_meta| {
-            !conversation_meta.is_delegate
-                && !conversation_meta.summary.trim().is_empty()
-        })
-        .map(|conversation_meta| conversation_meta.summary.to_string()))
-}
-
 fn validate_isolated_worktree_root(path: &str) -> Result<(), String> {
     let raw_path = path.trim();
     if raw_path.is_empty() {
@@ -346,27 +332,83 @@ fn validate_isolated_worktree_root(path: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// 查找当前唯一未归档的会话草稿；不存在返回 None。
+fn find_existing_draft_conversation_id(state: &AppState) -> Result<Option<String>, String> {
+    let chat_index = state_read_chat_index_cached(state)?;
+    for item in chat_index.conversations.iter().rev() {
+        let conversation_meta = match conversation_service_v2().get_conversation_meta(state, &item.id)
+        {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        if !conversation_meta.is_draft {
+            continue;
+        }
+        if conversation_meta.conversation_kind.trim() != CONVERSATION_KIND_CHAT {
+            continue;
+        }
+        if !conversation_service_v2().conversation_meta_is_unarchived_meta_view(&conversation_meta)
+        {
+            continue;
+        }
+        return Ok(Some(conversation_meta.id));
+    }
+    Ok(None)
+}
+
+/// 转正后的备用草稿：继承刚转正会话的部门/人格/模型/workspace 设置。
+fn create_next_draft_conversation_inherited(
+    state: &AppState,
+    promoted: &Conversation,
+) -> Result<String, String> {
+    let input = CreateUnarchivedConversationInput {
+        api_config_id: promoted.preferred_api_config_id.clone(),
+        agent_id: Some(promoted.agent_id.clone()),
+        department_id: Some(promoted.department_id.clone()),
+        title: None,
+        copy_source_conversation_id: None,
+        shell_workspaces: Some(promoted.shell_workspaces.clone()),
+        shell_work_mode: Some(promoted.shell_work_mode.clone()),
+        shell_autonomous_mode: Some(promoted.shell_autonomous_mode),
+        is_draft: Some(true),
+    };
+    let result = conversation_service_v2().create_conversation(state, &input)?;
+    Ok(result.conversation_id)
+}
+
 fn create_unarchived_conversation_shared(
     state: &AppState,
     input: &CreateUnarchivedConversationInput,
-) -> Result<CreateUnarchivedConversationMutationResult, String> {
-    let started_at = std::time::Instant::now();
+) -> Result<CreateUnarchivedConversationMutationResult, String> {    let started_at = std::time::Instant::now();
     let guard = state
         .conversation_lock
         .lock()
         .map_err(|err| format!("Failed to lock state mutex at {}:{} {}: {err}", file!(), line!(), module_path!()))?;
     let runtime_snapshot = load_runtime_organization_snapshot(state)?;
     let app_config = runtime_snapshot.config.clone();
-    let runtime = state_read_runtime_state_cached(state)?;
+    let assistant_department_agent_id = assistant_department_agent_id_downgraded(state);
     let agents = runtime_snapshot.agents.clone();
+    let is_draft = input.is_draft.unwrap_or(false);
     let requested_department_id = input
         .department_id
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
-    let department_id = requested_department_id
-        .ok_or_else(|| "新建会话必须选择部门。".to_string())?;
-    let department = runtime_department_by_id(&runtime_snapshot, department_id)
+    let department_id = match requested_department_id {
+        Some(value) => value.to_string(),
+        None if is_draft => runtime_snapshot
+            .config
+            .departments
+            .iter()
+            .find(|department| {
+                department.id.trim() == ASSISTANT_DEPARTMENT_ID || department.is_built_in_assistant
+            })
+            .map(|department| department.id.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| "会话草稿缺少默认部门，无法创建。".to_string())?,
+        None => return Err("新建会话必须选择部门。".to_string()),
+    };
+    let department = runtime_department_by_id(&runtime_snapshot, &department_id)
         .ok_or_else(|| format!("Department '{department_id}' not found."))?;
     let api_config_id = input
         .api_config_id
@@ -375,13 +417,43 @@ fn create_unarchived_conversation_shared(
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| department_primary_api_config_id(department));
-    let agent_id = input
+    let requested_agent_id = input
         .agent_id
         .as_deref()
         .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| format!("新建会话必须选择人格，department_id={}", department.id))?
-        .to_string();
+        .filter(|value| !value.is_empty());
+    let agent_id = match requested_agent_id {
+        Some(value) => value.to_string(),
+        None if is_draft => {
+            let preferred = assistant_department_agent_id.trim();
+            if !preferred.is_empty()
+                && department
+                    .agent_ids
+                    .iter()
+                    .any(|id| id.trim() == preferred)
+                && agents
+                    .iter()
+                    .any(|agent| agent.id == preferred && !agent.is_built_in_user)
+            {
+                preferred.to_string()
+            } else {
+                first_available_department_agent(department, &agents)
+                    .map(|agent| agent.id.clone())
+                    .ok_or_else(|| {
+                        format!(
+                            "会话草稿部门没有可用人格，无法创建: department_id={}",
+                            department.id
+                        )
+                    })?
+            }
+        }
+        None => {
+            return Err(format!(
+                "新建会话必须选择人格，department_id={}",
+                department.id
+            ))
+        }
+    };
     if !department.agent_ids.iter().any(|id| id.trim() == agent_id) {
         return Err(format!(
             "新建会话的人格不属于所选部门: department_id={}，agent_id={}",
@@ -405,7 +477,7 @@ fn create_unarchived_conversation_shared(
         let source_conversation = conversation_service_v2()
             .try_get_conversation_snapshot(state, source_conversation_id)?
             .filter(|conversation| {
-                conversation.summary.trim().is_empty()
+                conversation.status.trim() != "archived"
                     && conversation_visible_in_foreground_lists(conversation)
                     && conversation_is_local_normal_chat(conversation)
             })
@@ -420,8 +492,7 @@ fn create_unarchived_conversation_shared(
         build_unarchived_conversation_record_from_runtime(
             &state.data_path,
             &agents,
-            &runtime.assistant_department_agent_id,
-            read_latest_archive_summary_from_chat_index(state)?,
+            &assistant_department_agent_id,
             &api_config_id,
             &agent_id,
             &department.id,
@@ -468,6 +539,10 @@ fn create_unarchived_conversation_shared(
     if let Some(shell_autonomous_mode) = input.shell_autonomous_mode {
         conversation.shell_autonomous_mode = shell_autonomous_mode;
     }
+    if is_draft {
+        conversation.is_draft = true;
+        conversation.title = String::new();
+    }
     let conversation_id = conversation.id.clone();
     drop(guard);
     let persist_seq = state_schedule_conversation_persist(state, &conversation)?;
@@ -484,7 +559,9 @@ fn create_unarchived_conversation_shared(
     let overview_payload = UnarchivedConversationOverviewUpdatedPayload {
         preferred_conversation_id: Some(conversation_id.clone()),
         unarchived_conversations: conversation_service_v2()
-            .collect_unarchived_conversation_summaries_cached(state, &app_config)?,
+            .read_unarchived_conversation_summary(state, &conversation_id)?
+            .map(|conversation| vec![conversation])
+            .unwrap_or_default(),
     };
     runtime_log_debug(format!(
         "[会话] 完成，任务=新建未归档会话，阶段=构建概览，conversation_id={}，overview_count={}，duration_ms={}",
@@ -502,7 +579,6 @@ fn build_unarchived_conversation_record_from_runtime(
     data_path: &PathBuf,
     agents: &[AgentProfile],
     assistant_department_agent_id: &str,
-    _last_archive_summary: Option<String>,
     api_config_id: &str,
     agent_id: &str,
     department_id: &str,
@@ -670,12 +746,12 @@ fn read_branch_selection_or_pending_conversation(
     selected_message_ids: &[String],
 ) -> Result<message_store::MessageStoreBranchSelection, String> {
     let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
-    ensure_ready_message_store_from_legacy_conversation(state, conversation_id, &store_paths)?;
-    message_store::read_ready_message_store_branch_selection(&store_paths, selected_message_ids)?
+    ensure_chat_store_conversation_readable(state, conversation_id, &store_paths)?;
+    message_store::chat_store_read_branch_selection(&store_paths, selected_message_ids)?
         .ok_or_else(|| "源会话消息尚未就绪".to_string())
 }
 
-struct ReadyStoreRewindState {
+struct ChatStoreRewindState {
     keep_count: usize,
     removed_messages: Vec<ChatMessage>,
     recalled_user_message: ChatMessage,
@@ -691,13 +767,13 @@ struct ReadyStoreRewindState {
     remaining_preview_messages: Vec<message_store::ConversationShardPreviewMessage>,
 }
 
-fn read_ready_store_rewind_state_meta_view(
+fn read_chat_store_rewind_state_meta_view(
     _state: &AppState,
     store_paths: &message_store::MessageStorePaths,
     conversation_meta: &ConversationMetaView,
     message_id: &str,
-) -> Result<ReadyStoreRewindState, String> {
-    let rewind_slice = message_store::read_ready_message_store_rewind_slice(store_paths, message_id)?
+) -> Result<ChatStoreRewindState, String> {
+    let rewind_slice = message_store::chat_store_read_rewind_slice(store_paths, message_id)?
         .ok_or_else(|| "Target message not found in active conversation.".to_string())?;
     let mut remaining_last_message_id = None::<String>;
     let mut remaining_last_message_at = None::<String>;
@@ -713,7 +789,7 @@ fn read_ready_store_rewind_state_meta_view(
     let mut before_anchor = message_id.trim().to_string();
 
     while !before_anchor.trim().is_empty() {
-        let Some(page) = message_store::read_ready_message_store_messages_before(
+        let Some(page) = message_store::chat_store_read_messages_before(
             store_paths,
             &before_anchor,
             100,
@@ -809,7 +885,7 @@ fn read_ready_store_rewind_state_meta_view(
     let remaining_todos =
         remaining_todos.unwrap_or_else(|| conversation_meta.current_todos.clone());
 
-    Ok(ReadyStoreRewindState {
+    Ok(ChatStoreRewindState {
         keep_count: rewind_slice.keep_count,
         removed_messages: rewind_slice.removed_messages,
         recalled_user_message: rewind_slice.recalled_user_message,
@@ -832,8 +908,8 @@ fn read_conversation_for_backup_cleanup(
 ) -> Result<Conversation, String> {
     let conversation_meta = conversation_service_v2().get_conversation_meta(state, conversation_id)?;
     let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
-    ensure_ready_message_store_from_legacy_conversation(state, conversation_id, &store_paths)?;
-    let messages = message_store::read_ready_message_store_all_messages(&store_paths)?
+    ensure_chat_store_conversation_readable(state, conversation_id, &store_paths)?;
+    let messages = message_store::chat_store_read_all_messages(&store_paths)?
         .unwrap_or_default();
     Ok(Conversation {
         id: conversation_meta.id,
@@ -853,7 +929,6 @@ fn read_conversation_for_backup_cleanup(
         last_user_at: None,
         last_assistant_at: None,
         status: conversation_meta.status,
-        summary: conversation_meta.summary,
         user_profile_snapshot: conversation_meta.user_profile_snapshot,
         shell_workspace_path: conversation_meta.shell_workspace_path,
         shell_workspaces: conversation_meta.shell_workspaces,
@@ -866,6 +941,7 @@ fn read_conversation_for_backup_cleanup(
         memory_recall_table: Vec::new(),
         plan_mode_enabled: conversation_meta.plan_mode_enabled,
         preferred_api_config_id: conversation_meta.preferred_api_config_id,
+        is_draft: conversation_meta.is_draft,
         auto_push_remote_contact_id: conversation_meta.auto_push_remote_contact_id,
         cumulative_usage: conversation_meta.cumulative_usage,
         active_goal: conversation_meta.active_goal,

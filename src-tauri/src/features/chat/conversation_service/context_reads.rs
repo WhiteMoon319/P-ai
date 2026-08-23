@@ -54,13 +54,13 @@ impl ConversationServiceV2 {
             self.get_conversation_meta(state, normalized_conversation_id)?;
         let store_paths =
             message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
-        ensure_ready_message_store_from_legacy_conversation(
+        ensure_chat_store_conversation_readable(
             state,
             normalized_conversation_id,
             &store_paths,
         )?;
         let messages =
-            message_store::read_ready_message_store_all_messages(&store_paths)?.unwrap_or_default();
+            message_store::chat_store_read_all_messages(&store_paths)?.unwrap_or_default();
         let mut conversation = self.build_conversation_record_from_meta_view(&conversation_meta);
         conversation.messages = messages;
         Ok(conversation)
@@ -84,7 +84,7 @@ impl ConversationServiceV2 {
         let source = self.read_persisted_conversation(state, conversation_id)?;
         let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
         let mut block_messages = if let Some(page) =
-            message_store::read_ready_message_store_block_page(&store_paths, None)?
+            message_store::chat_store_read_block_page(&store_paths, None)?
         {
             page.messages
         } else {
@@ -123,13 +123,9 @@ impl ConversationServiceV2 {
         } else {
             runtime_snapshot.config
         };
-        let runtime = state_read_runtime_state_cached(state)?;
-        let main_conversation_id = runtime
-            .main_conversation_id
-            .as_deref()
-            .map(str::trim)
-            .unwrap_or_default()
-            .to_string();
+        let main_conversation_id = main_conversation_id_downgraded(state)
+            .map(|id| id.trim().to_string())
+            .unwrap_or_default();
         let chat_index = state_read_chat_index_cached(state)?;
         let visible_conversations = chat_index
             .conversations
@@ -157,8 +153,7 @@ impl ConversationServiceV2 {
             .filter(|conversation_id: &String| !conversation_id.is_empty())
             .collect::<std::collections::HashSet<_>>();
         let mut seen_pins = std::collections::HashSet::<String>::new();
-        let pinned_conversation_ids = runtime
-            .pinned_conversation_ids
+        let pinned_conversation_ids = pinned_conversation_ids_downgraded(state)
             .iter()
             .map(|item| item.trim().to_string())
             .filter(|item| !item.is_empty())

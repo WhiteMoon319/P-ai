@@ -1,7 +1,22 @@
 {
-  "generatedAt": "2026-08-21T01:51:54.291Z",
-  "latestVersion": "v0.71.0",
+  "generatedAt": "2026-08-23T14:52:42.443Z",
+  "latestVersion": "v0.73.1",
   "releases": [
+    {
+      "version": "v0.73.1",
+      "path": "docs/changelog/releases/v0.73.1.md",
+      "summary": "修复 Web 端（VS Code 侧边栏）无法创建会话的问题：新建会话与草稿打开命令已接入 Web 传输层"
+    },
+    {
+      "version": "v0.73.0",
+      "path": "docs/changelog/releases/v0.73.0.md",
+      "summary": "会话存储全面升级：消息改为多行分组 + zstd 压缩存储，占用更小、读写更快；旧数据在启动后自动后台迁移，实时显示进度与完成汇总，迁移期间界面不再长时间无反馈"
+    },
+    {
+      "version": "v0.72.0",
+      "path": "docs/changelog/releases/v0.72.0.md",
+      "summary": "模型选择下拉改为两层：上层选模型、底部滑动条直接调节思考等级；每个模型会记住上次使用的思考等级，切换时自动恢复；模型按钮上的思考等级始终可见，模型名过长也不会被截断"
+    },
     {
       "version": "v0.71.0",
       "path": "docs/changelog/releases/v0.71.0.md",

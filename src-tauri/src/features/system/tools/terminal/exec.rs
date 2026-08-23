@@ -1694,7 +1694,7 @@ mod terminal_exec_tests {
         AppState {
             app_handle: Arc::new(Mutex::new(None)),
             config_path: llm_workspace_path.join("app_config.toml"),
-            data_path: llm_workspace_path.join("app_data.json"),
+            data_path: llm_workspace_path.join("config_mark"),
             llm_workspace_path,
             shared_http_client: reqwest::Client::new(),
             terminal_shell: shell.clone(),
@@ -1705,8 +1705,6 @@ mod terminal_exec_tests {
             cached_config_mtime: Arc::new(Mutex::new(None)),
             cached_agents: Arc::new(Mutex::new(None)),
             cached_agents_mtime: Arc::new(Mutex::new(None)),
-            cached_runtime_state: Arc::new(Mutex::new(None)),
-            cached_runtime_state_mtime: Arc::new(Mutex::new(None)),
             cached_chat_index: Arc::new(Mutex::new(None)),
             cached_conversation_metadata: Arc::new(Mutex::new(std::collections::HashMap::new())),
             cached_conversation_field_metadata_ids: Arc::new(Mutex::new(
@@ -1716,10 +1714,6 @@ mod terminal_exec_tests {
             cached_app_data: Arc::new(Mutex::new(None)),
             cached_app_data_signature: Arc::new(Mutex::new(None)),
             cached_app_data_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            app_data_persist_pending: Arc::new(Mutex::new(None)),
-            app_data_persist_notify: Arc::new(tokio::sync::Notify::new()),
-            app_data_persist_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            app_data_persist_latest_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             conversation_persist_pending: Arc::new(Mutex::new(None)),
             conversation_persist_notify: Arc::new(tokio::sync::Notify::new()),
             conversation_persist_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -1821,7 +1815,6 @@ mod terminal_exec_tests {
             last_user_at: None,
             last_assistant_at: None,
             status: "active".to_string(),
-            summary: String::new(),
             user_profile_snapshot: String::new(),
             shell_workspace_path: locked_root.map(terminal_path_for_user),
             shell_workspaces: vec![
@@ -1854,6 +1847,7 @@ mod terminal_exec_tests {
             auto_push_remote_contact_id: None,
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
+            is_draft: false,
         });
         state_write_app_data_cached(state, &data)
             .map_err(|err| format!("write app data failed: {err}"))?;

@@ -258,6 +258,43 @@
       @close-settings-save-error-dialog="closeSettingsSaveErrorDialog"
     />
 
+    <div
+      v-if="messageStoreMigration.visible"
+      class="fixed inset-0 z-9999 flex items-center justify-center bg-base-300/90 p-6 backdrop-blur"
+    >
+      <div class="w-full max-w-2xl rounded-box border border-base-content/10 bg-base-100 p-6 shadow-2xl">
+        <div class="text-xl font-semibold">{{ t("config.messageStoreMigration.title") }}</div>
+        <div class="mt-2 text-sm opacity-70">{{ messageStoreMigration.message }}</div>
+        <progress
+          v-if="messageStoreMigration.mode === 'migrating' || messageStoreMigration.mode === 'waiting'"
+          class="progress progress-primary mt-5 w-full"
+          :value="messageStoreMigration.current"
+          :max="Math.max(messageStoreMigration.total, 1)"
+        />
+        <div
+          v-if="messageStoreMigration.mode === 'migrating'"
+          class="mt-2 text-xs opacity-60"
+        >
+          {{ messageStoreMigration.current }} / {{ messageStoreMigration.total }}
+        </div>
+        <div v-if="messageStoreMigration.mode === 'completed'" class="mt-2 text-xs opacity-60">
+          {{ t("config.messageStoreMigration.migratedCount") }}: {{ messageStoreMigration.migratedCount }}
+          ·
+          {{ t("config.messageStoreMigration.discardedCount") }}: {{ messageStoreMigration.discardedCount }}
+        </div>
+        <div v-if="messageStoreMigration.mode === 'completed'" class="mt-5 flex justify-end">
+          <button class="btn btn-primary" @click="confirmMessageStoreMigrationSummary">
+            {{ t("config.messageStoreMigration.confirm") }}
+          </button>
+        </div>
+        <div v-if="messageStoreMigration.mode === 'error'" class="mt-5 flex justify-end">
+          <button class="btn btn-primary" @click="retryMessageStoreMigration">
+            {{ t("config.messageStoreMigration.retry") }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <StartupOverlay v-if="startupOverlayVisible" />
 
     <ConfigStatusToast :text="status" :tone="statusTone" />
@@ -304,6 +341,8 @@ import { useChatConfigActionsGlue } from "./features/chat/composables/use-chat-c
 import { useChatConfigDerivedState } from "./features/chat/composables/use-chat-config-derived-state";
 import { useChatConfigUiDerivedState } from "./features/chat/composables/use-chat-config-ui-derived-state";
 import { useConfigWindowBootstrap } from "./features/config/composables/use-config-window-bootstrap";
+import { useMessageStoreMigrationGate } from "./features/shell/composables/use-message-store-migration-gate";
+import { formatI18nError } from "./utils/error";
 
 const { t, locale } = useI18n();
 const tr = (key: string, params?: Record<string, unknown>) => t(key, params as never);
@@ -456,6 +495,16 @@ const {
   locale,
   status,
   perfDebug: false,
+});
+
+const {
+  messageStoreMigration,
+  ensureMessageStoreMigrationGate,
+  confirmMessageStoreMigrationSummary,
+  retryMessageStoreMigration,
+} = useMessageStoreMigrationGate({
+  formatRequestFailed: (error) => formatI18nError(tr, "status.requestFailed", error),
+  t: tr,
 });
 const {
   hotkeyTestRecording,
@@ -910,6 +959,7 @@ useAppLifecycle({
   onDrop: (event) => { event.preventDefault(); },
   recordHotkeyMount: () => undefined,
   recordHotkeyUnmount: () => undefined,
+  prepareInitialData: ensureMessageStoreMigrationGate,
   refreshAllViewData,
   viewMode,
   syncWindowControlsState,

@@ -304,9 +304,9 @@ fn ide_chat_set_active_conversation_command(
     ide_chat_serialize(SetActiveUnarchivedConversationOutput { conversation_id })
 }
 
-fn ide_chat_rebind_conversation_command(state: &AppState, params: Value) -> Result<Value, String> {
+async fn ide_chat_rebind_conversation_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<RebindUnarchivedConversationRecipientInput>(params, "input")?;
-    ide_chat_serialize(rebind_unarchived_conversation_recipient_inner(input, state)?)
+    ide_chat_serialize(rebind_unarchived_conversation_recipient_inner(input, state).await?)
 }
 
 async fn ide_chat_rewind_conversation_command(
@@ -400,16 +400,6 @@ async fn ide_chat_archive_block_page_command(state: &AppState, params: Value) ->
     })
     .await
     .map_err(|err| format!("读取归档块分页任务异常：{err}"))?
-}
-
-async fn ide_chat_archive_summary_command(state: &AppState, params: Value) -> Result<Value, String> {
-    let archive_id = ide_chat_parse_param_field::<String>(params, "archiveId")?;
-    let app_state = state.clone();
-    tokio::task::spawn_blocking(move || {
-        ide_chat_serialize(get_archive_summary_inner(&app_state, &archive_id)?)
-    })
-    .await
-    .map_err(|err| format!("读取归档摘要任务异常：{err}"))?
 }
 
 fn ide_chat_delete_archive_command(state: &AppState, params: Value) -> Result<Value, String> {
@@ -517,9 +507,9 @@ async fn ide_chat_frontend_ready_remote_im_command(app: &AppHandle) -> Result<Va
     ide_chat_serialize(frontend_ready_start_remote_im_services(app.clone()).await?)
 }
 
-fn ide_chat_forward_selection_command(state: &AppState, params: Value) -> Result<Value, String> {
+async fn ide_chat_forward_selection_command(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<ForwardUnarchivedConversationSelectionInput>(params, "input")?;
-    ide_chat_serialize(forward_unarchived_conversation_selection_inner(input, state)?)
+    ide_chat_serialize(forward_unarchived_conversation_selection_inner(input, state).await?)
 }
 
 fn ide_chat_forward_remote_contact_command(state: &AppState, params: Value) -> Result<Value, String> {
@@ -687,6 +677,17 @@ async fn ide_chat_create_conversation(state: &AppState, params: Value) -> Result
     ide_chat_serialize(create_unarchived_conversation_inner(input, state).await?)
 }
 
+async fn ide_chat_open_draft_conversation(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<Option<OpenDraftConversationInput>>(params, "input")?;
+    ide_chat_serialize(open_draft_conversation_inner(input, state).await?)
+}
+
+async fn ide_chat_update_draft_conversation(state: &AppState, params: Value) -> Result<Value, String> {
+    let input = ide_chat_parse_param_field::<UpdateDraftConversationInput>(params, "input")?;
+    update_draft_conversation_inner(input, state).await?;
+    Ok(serde_json::json!({ "ok": true }))
+}
+
 async fn ide_chat_create_side_chat_conversation(
     state: &AppState,
     params: Value,
@@ -715,9 +716,9 @@ async fn ide_chat_batch_archive_conversations(
     ide_chat_serialize(output)
 }
 
-fn ide_chat_rebind_conversation_recipient(state: &AppState, params: Value) -> Result<Value, String> {
+async fn ide_chat_rebind_conversation_recipient(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<RebindUnarchivedConversationRecipientInput>(params)?;
-    ide_chat_serialize(rebind_unarchived_conversation_recipient_inner(input, state)?)
+    ide_chat_serialize(rebind_unarchived_conversation_recipient_inner(input, state).await?)
 }
 
 async fn ide_chat_queue_attachment(state: &AppState, params: Value) -> Result<Value, String> {
@@ -982,7 +983,7 @@ async fn ide_chat_tool_review_item_review(state: &AppState, params: Value) -> Re
         .map_err(|err| format!("Serialize tool review item result failed: {err}"))
 }
 
-fn ide_chat_tool_review_item_decision(state: &AppState, params: Value) -> Result<Value, String> {
+async fn ide_chat_tool_review_item_decision(state: &AppState, params: Value) -> Result<Value, String> {
     let input = ide_chat_parse_params::<ToolReviewSetUserDecisionInput>(params)?;
     let conversation_id = input.conversation_id.trim().to_string();
     let call_id = input.call_id.trim().to_string();
@@ -1000,15 +1001,17 @@ fn ide_chat_tool_review_item_decision(state: &AppState, params: Value) -> Result
         },
         "userOpinion": opinion,
     });
-    let detail = conversation_service_v2().update_unarchived_conversation_by_id(
-        state,
-        &conversation_id,
-        |conversation| {
-            tool_review_write_call_review(conversation, &call_id, &user_decision_review)?;
-            let refreshed = tool_review_find_item(conversation, &call_id)?;
-            Ok(tool_review_item_detail_from_collected(&refreshed))
-        },
-    )?;
+    let detail = conversation_service_v2()
+        .update_unarchived_conversation_by_id(
+            state,
+            &conversation_id,
+            move |conversation| {
+                tool_review_write_call_review(conversation, &call_id, &user_decision_review)?;
+                let refreshed = tool_review_find_item(conversation, &call_id)?;
+                Ok(tool_review_item_detail_from_collected(&refreshed))
+            },
+        )
+        .await?;
     serde_json::to_value(detail)
         .map_err(|err| format!("Serialize tool review decision result failed: {err}"))
 }

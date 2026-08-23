@@ -24,20 +24,6 @@ pub(super) struct MessageStorePaths {
     blobs_dir: PathBuf,
 }
 
-impl MessageStorePaths {
-    fn is_local_chat_conversation(&self) -> bool {
-        self.shard_dir.parent() == Some(app_layout_chat_conversations_dir(&self.data_path).as_path())
-    }
-
-    fn is_v3_ready(&self) -> Result<bool, String> {
-        Ok(self.is_local_chat_conversation() && chat_metadata_store_is_ready(&self.data_path)?)
-    }
-}
-
-pub(super) fn message_store_is_v3_ready(paths: &MessageStorePaths) -> Result<bool, String> {
-    paths.is_v3_ready()
-}
-
 pub(super) fn message_store_paths(
     data_path: &PathBuf,
     conversation_id: &str,
@@ -141,40 +127,41 @@ fn path_modified_time(path: &PathBuf) -> Option<std::time::SystemTime> {
     fs::metadata(path).and_then(|metadata| metadata.modified()).ok()
 }
 
-fn directory_children_modified_time(path: &PathBuf) -> Option<std::time::SystemTime> {
-    let Ok(entries) = fs::read_dir(path) else {
-        return None;
-    };
-    entries
-        .filter_map(Result::ok)
-        .filter_map(|entry| entry.metadata().ok())
-        .filter_map(|metadata| metadata.modified().ok())
-        .max()
-}
-
 pub(super) fn message_store_shard_modified_time(
     paths: &MessageStorePaths,
 ) -> Option<std::time::SystemTime> {
-    if paths.is_v3_ready().unwrap_or(false) {
-        return path_modified_time(&chat_metadata_store_db_path(&paths.data_path));
-    }
-    [
-        &paths.legacy_conversation_file,
-        &paths.manifest_file,
-        &paths.meta_file,
-        &paths.index_file,
-        &paths.blocks_dir,
-    ]
-    .into_iter()
-    .filter_map(path_modified_time)
-    .chain(std::iter::once(directory_children_modified_time(&paths.blocks_dir)).flatten())
-    .max()
+    path_modified_time(&chat_metadata_store_db_path(&paths.data_path))
 }
 
 pub(super) fn write_message_store_text_atomic(
     path: &PathBuf,
     tmp_extension: &str,
     content: &str,
+    label: &str,
+) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| {
+            format!(
+                "创建{label}目录失败，path={}，error={err}",
+                parent.display()
+            )
+        })?;
+    }
+    let tmp_path = path.with_extension(format!("{tmp_extension}.{}", Uuid::new_v4()));
+    fs::write(&tmp_path, content).map_err(|err| {
+        format!(
+            "写入{label}临时文件失败，path={}，error={err}",
+            tmp_path.display()
+        )
+    })?;
+    replace_message_store_file_atomic(&tmp_path, path, label)
+}
+
+/// 字节原子写（V4 压缩块用）：写临时文件后原子替换，与文本版同一套替换语义
+pub(super) fn write_message_store_bytes_atomic(
+    path: &PathBuf,
+    tmp_extension: &str,
+    content: &[u8],
     label: &str,
 ) -> Result<(), String> {
     if let Some(parent) = path.parent() {
@@ -268,7 +255,7 @@ mod message_store_atomic_write_tests {
             "easy-call-message-store-paths-{}",
             Uuid::new_v4()
         ));
-        let data_path = root.join("app_data.json");
+        let data_path = root.join("config_mark");
 
         for invalid_id in [
             "../escape",

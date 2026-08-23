@@ -527,6 +527,9 @@ struct CreateUnarchivedConversationInput {
     shell_work_mode: Option<String>,
     #[serde(default)]
     shell_autonomous_mode: Option<bool>,
+    /// true 时创建会话草稿：允许缺省部门/人格，走系统默认；草稿不进入常规新建流程
+    #[serde(default)]
+    is_draft: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -540,6 +543,9 @@ struct CreateUnarchivedConversationOutput {
 #[serde(rename_all = "camelCase")]
 struct CreateSideChatConversationInput {
     parent_conversation_id: String,
+    /// false 时新建空上文追问（不复制父会话消息），默认 true 保持现有行为
+    #[serde(default)]
+    with_context: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -581,15 +587,20 @@ fn create_side_chat_conversation_blocking(
         return Err("只能从普通会话创建追问会话".to_string());
     }
 
-    let store_paths = message_store::message_store_paths(&state.data_path, parent_id)?;
-    ensure_ready_message_store_from_legacy_conversation(state, parent_id, &store_paths)?;
-    let latest_block = message_store::read_ready_message_store_block_page(&store_paths, None)?
-        .ok_or_else(|| "父会话消息尚未就绪".to_string())?;
-    let copied_messages = latest_block
-        .messages
-        .iter()
-        .map(clone_chat_message_for_copied_conversation)
-        .collect::<Vec<_>>();
+    let with_context = input.with_context.unwrap_or(true);
+    let copied_messages = if with_context {
+        let store_paths = message_store::message_store_paths(&state.data_path, parent_id)?;
+        ensure_chat_store_conversation_readable(state, parent_id, &store_paths)?;
+        let latest_block = message_store::chat_store_read_block_page(&store_paths, None)?
+            .ok_or_else(|| "父会话消息尚未就绪".to_string())?;
+        latest_block
+            .messages
+            .iter()
+            .map(clone_chat_message_for_copied_conversation)
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
     let title = parent
         .latest_summary_title
         .clone()
@@ -639,10 +650,11 @@ fn create_side_chat_conversation_blocking(
     })?;
     let _ = emit_unarchived_conversation_overview_item_updated_from_state(state, parent_id);
     runtime_log_info(format!(
-        "[追问会话] 完成，任务=创建真实会话，parent_conversation_id={}，conversation_id={}，message_count={}",
+        "[追问会话] 完成，任务=创建真实会话，parent_conversation_id={}，conversation_id={}，message_count={}，with_context={}",
         parent_id,
         side_chat_id,
-        side_chat.messages.len()
+        side_chat.messages.len(),
+        with_context
     ));
     Ok(CreateSideChatConversationOutput {
         conversation_id: side_chat_id,
@@ -952,7 +964,6 @@ fn clone_foreground_conversation_for_copy(
     conversation.root_conversation_id = None;
     conversation.delegate_id = None;
     conversation.status = "active".to_string();
-    conversation.summary = String::new();
     conversation.archived_at = None;
     conversation.created_at = now.clone();
     conversation.updated_at = now.clone();
@@ -1160,17 +1171,220 @@ async fn create_unarchived_conversation(
     create_unarchived_conversation_inner(input, state.inner()).await
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenDraftConversationInput {
+    /// 打开草稿时立即写入的工作区；None 表示不修改工作区
+    #[serde(default)]
+    shell_workspaces: Option<Vec<ShellWorkspaceConfig>>,
+    #[serde(default)]
+    shell_work_mode: Option<String>,
+    #[serde(default)]
+    shell_autonomous_mode: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenDraftConversationOutput {
+    conversation_id: String,
+    created: bool,
+}
+
+/// 打开会话草稿：存在未归档草稿则直接返回；否则创建一个新草稿。
+/// 传入工作区时，无论新建还是复用已有草稿，都会在返回前写入该草稿的工作区。
+#[tauri::command]
+async fn open_draft_conversation(
+    input: Option<OpenDraftConversationInput>,
+    state: State<'_, AppState>,
+) -> Result<OpenDraftConversationOutput, String> {
+    open_draft_conversation_inner(input, state.inner()).await
+}
+
+async fn open_draft_conversation_inner(
+    input: Option<OpenDraftConversationInput>,
+    state: &AppState,
+) -> Result<OpenDraftConversationOutput, String> {
+    let app_state = state.clone();
+    let shell_workspaces = input.as_ref().and_then(|item| item.shell_workspaces.clone());
+    let shell_work_mode = input.as_ref().and_then(|item| item.shell_work_mode.clone());
+    let shell_autonomous_mode = input.as_ref().and_then(|item| item.shell_autonomous_mode);
+    let output = tokio::task::spawn_blocking(
+        move || -> Result<OpenDraftConversationOutput, String> {
+            if let Some(conversation_id) = find_existing_draft_conversation_id(&app_state)? {
+                if shell_workspaces.is_some() || shell_work_mode.is_some() || shell_autonomous_mode.is_some() {
+                    conversation_service_v2().apply_external_metadata_patch(
+                        &app_state,
+                        &conversation_id,
+                        "conversation_v2_open_draft_with_workspace",
+                        ConversationExternalMetadataPatch {
+                            shell_workspaces: shell_workspaces.clone(),
+                            shell_work_mode: shell_work_mode.clone(),
+                            shell_autonomous_mode,
+                            ..Default::default()
+                        },
+                    )?;
+                }
+                return Ok(OpenDraftConversationOutput {
+                    conversation_id,
+                    created: false,
+                });
+            }
+            let input = CreateUnarchivedConversationInput {
+                api_config_id: None,
+                agent_id: None,
+                department_id: None,
+                title: None,
+                copy_source_conversation_id: None,
+                shell_workspaces,
+                shell_work_mode,
+                shell_autonomous_mode,
+                is_draft: Some(true),
+            };
+            let result = conversation_service_v2().create_conversation(&app_state, &input)?;
+            runtime_log_info(format!(
+                "[会话草稿] 完成，任务=创建备用草稿，conversation_id={}",
+                result.conversation_id
+            ));
+            Ok(OpenDraftConversationOutput {
+                conversation_id: result.conversation_id,
+                created: true,
+            })
+        },
+    )
+    .await
+    .map_err(|err| format!("打开会话草稿任务异常：{err}"))??;
+    let _ = emit_unarchived_conversation_overview_item_updated_from_state(
+        state,
+        &output.conversation_id,
+    );
+    Ok(output)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateDraftConversationInput {
+    conversation_id: String,
+    #[serde(default)]
+    department_id: Option<String>,
+    #[serde(default)]
+    agent_id: Option<String>,
+    /// None=不修改；Some(None)=清空回部门默认模型；Some(Some(id))=指定偏好模型
+    #[serde(default)]
+    preferred_api_config_id: Option<Option<String>>,
+}
+
+/// 在草稿历史区切换部门/人格/模型：直接改写草稿会话字段，作为下次新建的默认值。
+#[tauri::command]
+async fn update_draft_conversation(
+    input: UpdateDraftConversationInput,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    update_draft_conversation_inner(input, state.inner()).await
+}
+
+async fn update_draft_conversation_inner(
+    input: UpdateDraftConversationInput,
+    state: &AppState,
+) -> Result<(), String> {
+    let app_state = state.clone();
+    let conversation_id = input.conversation_id.trim().to_string();
+    let conversation_id_for_emit = conversation_id.clone();
+    tokio::task::spawn_blocking(move || {
+        if conversation_id.is_empty() {
+            return Err("更新会话草稿失败：conversationId 为空。".to_string());
+        }
+        let conversation_meta = conversation_service_v2()
+            .get_conversation_meta(&app_state, &conversation_id)?;
+        if !conversation_meta.is_draft {
+            return Err(format!(
+                "仅会话草稿支持直接改写设置，conversation_id={conversation_id}"
+            ));
+        }
+        let requested_department_id = input
+            .department_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
+        let requested_agent_id = input
+            .agent_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
+        if requested_department_id.is_some() || requested_agent_id.is_some() {
+            let target_department_id = requested_department_id
+                .clone()
+                .unwrap_or_else(|| conversation_meta.department_id.clone());
+            if let Some(agent_id) = requested_agent_id.as_deref() {
+                validate_draft_agent_for_department(&app_state, &target_department_id, agent_id)?;
+            }
+        }
+        conversation_service_v2().apply_external_metadata_patch(
+            &app_state,
+            &conversation_id,
+            "conversation_v2_update_draft_conversation",
+            ConversationExternalMetadataPatch {
+                routing_department_id: requested_department_id,
+                routing_agent_id: requested_agent_id,
+                preferred_api_config_id: input.preferred_api_config_id,
+                ..Default::default()
+            },
+        )?;
+        Ok(())
+    })
+    .await
+    .map_err(|err| format!("更新会话草稿任务异常：{err}"))??;
+    let _ = emit_unarchived_conversation_overview_item_updated_from_state(
+        state,
+        &conversation_id_for_emit,
+    );
+    Ok(())
+}
+
+fn validate_draft_agent_for_department(
+    state: &AppState,
+    department_id: &str,
+    agent_id: &str,
+) -> Result<(), String> {
+    let app_config = state_read_config_cached(state)?;
+    let agents = state_read_agents_cached(state)?;
+    let Some(department) = app_config
+        .departments
+        .iter()
+        .find(|department| department.id.trim() == department_id.trim())
+    else {
+        return Err(format!("Department '{department_id}' not found."));
+    };
+    let agent_exists = agents
+        .iter()
+        .any(|agent| agent.id == agent_id.trim() && !agent.is_built_in_user);
+    let agent_in_department = department
+        .agent_ids
+        .iter()
+        .any(|id| id.trim() == agent_id.trim());
+    if !agent_exists || !agent_in_department {
+        return Err(format!(
+            "会话草稿的人格不属于所选部门: department_id={department_id}，agent_id={agent_id}"
+        ));
+    }
+    Ok(())
+}
+
 async fn create_unarchived_conversation_inner(
     input: CreateUnarchivedConversationInput,
     state: &AppState,
 ) -> Result<CreateUnarchivedConversationOutput, String> {
     let app_state = state.clone();
-    let (output, overview_payload) = tokio::task::spawn_blocking(move || {
+    let (output, _overview_payload) = tokio::task::spawn_blocking(move || {
         create_unarchived_conversation_blocking(input, &app_state)
     })
     .await
     .map_err(|err| format!("新建未归档会话任务异常：{err}"))??;
-    emit_unarchived_conversation_overview_updated_payload(state, &overview_payload);
+    let _ = emit_unarchived_conversation_overview_item_updated_from_state(
+        state,
+        &output.conversation_id,
+    );
     Ok(output)
 }
 
@@ -1314,6 +1528,7 @@ fn import_conversation_share_from_file(
         shell_workspaces: input.shell_workspaces.clone(),
         shell_work_mode: input.shell_work_mode.clone(),
         shell_autonomous_mode: input.shell_autonomous_mode,
+        is_draft: None,
     };
     let result = conversation_service_v2().create_conversation(state.inner(), &create_input)?;
     let conversation_id = result.conversation_id.clone();
@@ -1357,10 +1572,14 @@ fn import_conversation_share_from_file(
     let overview_payload = UnarchivedConversationOverviewUpdatedPayload {
         preferred_conversation_id: Some(conversation_id.clone()),
         unarchived_conversations: conversation_service_v2()
-            .list_unarchived_conversation_summaries(state.inner())?
-            .summaries,
+            .read_unarchived_conversation_summary(state.inner(), &conversation_id)?
+            .map(|conversation| vec![conversation])
+            .unwrap_or_default(),
     };
-    emit_unarchived_conversation_overview_updated_payload(state.inner(), &overview_payload);
+    let _ = emit_unarchived_conversation_overview_item_updated_from_state(
+        state.inner(),
+        &conversation_id,
+    );
     runtime_log_info(format!(
         "[会话分享] 完成，任务=导入会话，conversation_id={}，department_id={}，agent_id={}，message_count={}",
         conversation.id,
@@ -1438,6 +1657,7 @@ async fn create_conversation_branch_from_message_internal(
         shell_workspaces: None,
         shell_work_mode: None,
         shell_autonomous_mode: None,
+        is_draft: None,
     };
     let create_result = conversation_service_v2().create_conversation(state, &create_input)?;
     let conversation_id = create_result.conversation_id.clone();
@@ -1477,7 +1697,10 @@ async fn create_conversation_branch_from_message_internal(
             );
         }
     }
-    emit_unarchived_conversation_overview_updated_payload(state, &create_result.overview_payload);
+    let _ = emit_unarchived_conversation_overview_item_updated_from_state(
+        state,
+        &conversation_id,
+    );
     if conversation_service_v2()
         .update_latest_summary_title_with_source(
             state,
@@ -1485,6 +1708,7 @@ async fn create_conversation_branch_from_message_internal(
             &branch_summary_title,
             SUMMARY_CONTEXT_TITLE_SOURCE_BRANCH,
         )
+        .await
         .unwrap_or(false)
     {
         let _ = emit_unarchived_conversation_overview_item_updated_from_state(
@@ -1532,7 +1756,10 @@ async fn branch_unarchived_conversation_from_selection_internal(
         source_conversation_id,
         &normalized_selected_message_ids,
     )?;
-    emit_unarchived_conversation_overview_updated_payload(state, &result.overview_payload);
+    let _ = emit_unarchived_conversation_overview_item_updated_from_state(
+        state,
+        &result.conversation_id,
+    );
     runtime_log_info(format!(
         "[会话分支] 完成，任务=按已选消息创建会话分支，source_conversation_id={}，conversation_id={}，selected_count={}，has_compaction_seed={}",
         source_conversation_id,
@@ -1549,14 +1776,14 @@ async fn branch_unarchived_conversation_from_selection_internal(
 }
 
 #[tauri::command]
-fn forward_unarchived_conversation_selection(
+async fn forward_unarchived_conversation_selection(
     input: ForwardUnarchivedConversationSelectionInput,
     state: State<'_, AppState>,
 ) -> Result<ForwardUnarchivedConversationSelectionOutput, String> {
-    forward_unarchived_conversation_selection_inner(input, state.inner())
+    forward_unarchived_conversation_selection_inner(input, state.inner()).await
 }
 
-fn forward_unarchived_conversation_selection_inner(
+async fn forward_unarchived_conversation_selection_inner(
     input: ForwardUnarchivedConversationSelectionInput,
     state: &AppState,
 ) -> Result<ForwardUnarchivedConversationSelectionOutput, String> {
@@ -1582,13 +1809,18 @@ fn forward_unarchived_conversation_selection_inner(
         return Err("selectedMessageIds 不能为空".to_string());
     }
 
-    let result = conversation_service_v2().forward_conversation_selection(
+    let result = conversation_service_v2()
+        .forward_conversation_selection(
+            state,
+            source_conversation_id,
+            target_conversation_id,
+            &normalized_selected_message_ids,
+        )
+        .await?;
+    let _ = emit_unarchived_conversation_overview_item_updated_from_state(
         state,
-        source_conversation_id,
-        target_conversation_id,
-        &normalized_selected_message_ids,
-    )?;
-    emit_unarchived_conversation_overview_updated_payload(state, &result.overview_payload);
+        &result.target_conversation_id,
+    );
     runtime_log_info(format!(
         "[转发到会话] 完成，任务=转发已选消息到目标会话，source_conversation_id={}，target_conversation_id={}，message_count={}",
         source_conversation_id,
@@ -1647,7 +1879,10 @@ fn forward_selection_to_remote_im_contact_inner(
         remote_contact_id,
         &normalized_selected_message_ids,
     )?;
-    emit_unarchived_conversation_overview_updated_payload(state, &result.overview_payload);
+    let _ = emit_unarchived_conversation_overview_item_updated_from_state(
+        state,
+        &result.target_conversation_id,
+    );
     runtime_log_info(format!(
         "[转发到远程联系人] 完成，任务=转发已选消息到远程联系人会话，source_conversation_id={}，target_conversation_id={}，remote_contact_id={}，message_count={}",
         source_conversation_id,
@@ -1698,7 +1933,7 @@ fn rename_unarchived_conversation_inner(
     })
 }
 
-fn rebind_unarchived_conversation_recipient_inner(
+async fn rebind_unarchived_conversation_recipient_inner(
     input: RebindUnarchivedConversationRecipientInput,
     state: &AppState,
 ) -> Result<RebindUnarchivedConversationRecipientOutput, String> {
@@ -1735,27 +1970,32 @@ fn rebind_unarchived_conversation_recipient_inner(
         return Err("目标接收人不能是用户或系统人格".to_string());
     }
 
-    let preferred_api_config_id = conversation_service_v2().update_unarchived_conversation_by_id(
-        state,
-        conversation_id,
-        |conversation| {
-            if conversation_is_system_notification(conversation) {
-                return Err("系统通知会话不能手动修改接收人".to_string());
-            }
-            if conversation.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT {
-                return Err("远程联系人会话不能手动修改接收人".to_string());
-            }
-            conversation.department_id = department_id.to_string();
-            conversation.agent_id = agent_id.to_string();
-            conversation.updated_at = now_iso();
-            conversation.preferred_api_config_id = conversation_preferred_model_repair_candidate(
-                &runtime_org.config,
-                department_id,
-                conversation.preferred_api_config_id.as_deref(),
-            );
-            Ok(conversation.preferred_api_config_id.clone())
-        },
-    )?;
+    let department_id_for_mutation = department_id.to_string();
+    let agent_id_for_mutation = agent_id.to_string();
+    let runtime_org_config_for_mutation = runtime_org.config.clone();
+    let preferred_api_config_id = conversation_service_v2()
+        .update_unarchived_conversation_by_id(
+            state,
+            conversation_id,
+            move |conversation| {
+                if conversation_is_system_notification(conversation) {
+                    return Err("系统通知会话不能手动修改接收人".to_string());
+                }
+                if conversation.conversation_kind.trim() == CONVERSATION_KIND_REMOTE_IM_CONTACT {
+                    return Err("远程联系人会话不能手动修改接收人".to_string());
+                }
+                conversation.department_id = department_id_for_mutation.clone();
+                conversation.agent_id = agent_id_for_mutation.clone();
+                conversation.updated_at = now_iso();
+                conversation.preferred_api_config_id = conversation_preferred_model_repair_candidate(
+                    &runtime_org_config_for_mutation,
+                    &department_id_for_mutation,
+                    conversation.preferred_api_config_id.as_deref(),
+                );
+                Ok(conversation.preferred_api_config_id.clone())
+            },
+        )
+        .await?;
     emit_unarchived_conversation_overview_item_updated_from_state(state, conversation_id)?;
     runtime_log_info(format!(
         "[会话] 完成，任务=修复会话接收人，conversation_id={}，department_id={}，agent_id={}，preferred_api_config_id={}",
@@ -1773,11 +2013,11 @@ fn rebind_unarchived_conversation_recipient_inner(
 }
 
 #[tauri::command]
-fn rebind_unarchived_conversation_recipient(
+async fn rebind_unarchived_conversation_recipient(
     input: RebindUnarchivedConversationRecipientInput,
     state: State<'_, AppState>,
 ) -> Result<RebindUnarchivedConversationRecipientOutput, String> {
-    rebind_unarchived_conversation_recipient_inner(input, state.inner())
+    rebind_unarchived_conversation_recipient_inner(input, state.inner()).await
 }
 
 #[tauri::command]
@@ -1820,53 +2060,6 @@ fn get_conversation_section_orders(
     state: State<'_, AppState>,
 ) -> Result<ConversationSectionOrders, String> {
     get_conversation_section_orders_inner(state.inner())
-}
-
-// ==================== 会话分组顺序（JSON 文件持久化） ====================
-// V4 状态迁移（SQLite state_db）被排除后，使用简单的 JSON 文件存储，
-// 保持与上游 `state_service_get_conversation_section_orders` 相同的接口签名。
-
-const CONVERSATION_SECTION_ORDERS_FILE: &str = "conversation_section_orders.json";
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ConversationSectionOrders {
-    #[serde(default)]
-    local: Vec<String>,
-    #[serde(default)]
-    contact: Vec<String>,
-}
-
-fn conversation_section_orders_path(data_path: &PathBuf) -> PathBuf {
-    app_layout_state_dir(data_path).join(CONVERSATION_SECTION_ORDERS_FILE)
-}
-
-fn state_service_get_conversation_section_orders(
-    state: &AppState,
-) -> Result<ConversationSectionOrders, String> {
-    let path = conversation_section_orders_path(&state.data_path);
-    if !path.exists() {
-        return Ok(ConversationSectionOrders::default());
-    }
-    let raw = fs::read_to_string(&path)
-        .map_err(|err| format!("读取会话分组顺序文件失败: {err}"))?;
-    serde_json::from_str(&raw)
-        .map_err(|err| format!("解析会话分组顺序失败: {err}"))
-}
-
-fn state_service_set_conversation_section_orders(
-    state: &AppState,
-    orders: &ConversationSectionOrders,
-) -> Result<(), String> {
-    let path = conversation_section_orders_path(&state.data_path);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| format!("创建 state 目录失败: {err}"))?;
-    }
-    let raw = serde_json::to_string_pretty(orders)
-        .map_err(|err| format!("序列化会话分组顺序失败: {err}"))?;
-    fs::write(&path, raw)
-        .map_err(|err| format!("写入会话分组顺序文件失败: {err}"))
 }
 
 fn get_conversation_section_orders_inner(
@@ -2394,12 +2587,12 @@ fn list_conversation_delegate_statuses_inner(
     if root_conversation_id.is_empty() {
         return Err("conversationId 不能为空".to_string());
     }
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[委托状态] 开始，任务=list_conversation_delegate_statuses，stage=active_threads，root_conversation_id={}",
         root_conversation_id
     ));
     let active_threads = delegate_runtime_thread_list(state)?;
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[委托状态] 完成，任务=list_conversation_delegate_statuses，stage=active_threads，root_conversation_id={}，thread_count={}",
         root_conversation_id,
         active_threads.len()
@@ -2423,7 +2616,7 @@ fn list_conversation_delegate_statuses_inner(
             true,
         )?);
     }
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[委托状态] 开始，任务=list_conversation_delegate_statuses，stage=recent_threads，root_conversation_id={}",
         root_conversation_id
     ));
@@ -2440,12 +2633,12 @@ fn list_conversation_delegate_statuses_inner(
             active_ids.contains(&thread.delegate_id),
         )?);
     }
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[委托状态] 完成，任务=list_conversation_delegate_statuses，stage=recent_threads，root_conversation_id={}，summary_count={}",
         root_conversation_id,
         summaries.len()
     ));
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[委托状态] 开始，任务=list_conversation_delegate_statuses，stage=persisted_snapshots，root_conversation_id={}",
         root_conversation_id
     ));
@@ -2458,7 +2651,7 @@ fn list_conversation_delegate_statuses_inner(
             &snapshot,
         )?);
     }
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[委托状态] 完成，任务=list_conversation_delegate_statuses，stage=persisted_snapshots，root_conversation_id={}，summary_count={}",
         root_conversation_id,
         summaries.len()
@@ -2468,7 +2661,7 @@ fn list_conversation_delegate_statuses_inner(
             .cmp(&a.updated_at)
             .then_with(|| b.started_at.cmp(&a.started_at))
     });
-    runtime_log_info(format!(
+    runtime_log_debug(format!(
         "[委托状态] 完成，任务=list_conversation_delegate_statuses，stage=return，root_conversation_id={}，summary_count={}",
         root_conversation_id,
         summaries.len()
@@ -2853,19 +3046,20 @@ async fn delete_unarchived_conversation_inner(
     state: &AppState,
 ) -> Result<DeleteUnarchivedConversationOutput, String> {
     let app_state = state.clone();
-    let (output, overview_payload) = tokio::task::spawn_blocking(move || {
+    let output = tokio::task::spawn_blocking(move || {
         delete_unarchived_conversation_blocking(input, &app_state)
     })
     .await
     .map_err(|err| format!("删除未归档会话任务异常：{err}"))??;
-    emit_unarchived_conversation_overview_updated_payload(state, &overview_payload);
+    // 删除语义：注册 watermark 删除，前端差量同步收敛；不再全量广播列表。
+    overview_register_missing_item(&output.deleted_conversation_id);
     Ok(output)
 }
 
 fn delete_unarchived_conversation_blocking(
     input: DeleteUnarchivedConversationInput,
     state: &AppState,
-) -> Result<(DeleteUnarchivedConversationOutput, UnarchivedConversationOverviewUpdatedPayload), String> {
+) -> Result<DeleteUnarchivedConversationOutput, String> {
     let conversation_id = input.conversation_id.trim();
     if conversation_id.is_empty() {
         return Err("conversationId is required.".to_string());
@@ -2930,15 +3124,11 @@ fn delete_unarchived_conversation_blocking(
             ));
         }
     }
-    let overview_payload = result.overview_payload;
-    Ok((
-        DeleteUnarchivedConversationOutput {
-            deleted_conversation_id: result.deleted_conversation_id,
-            active_conversation_id: result.active_conversation_id,
-            unarchived_conversations: overview_payload.unarchived_conversations.clone(),
-        },
-        overview_payload,
-    ))
+    Ok(DeleteUnarchivedConversationOutput {
+        deleted_conversation_id: result.deleted_conversation_id,
+        active_conversation_id: result.active_conversation_id,
+        unarchived_conversations: Vec::new(),
+    })
 }
 
 #[tauri::command]
@@ -3568,7 +3758,6 @@ mod unarchived_conversations_tests {
             last_user_at: None,
             last_assistant_at: Some("2026-04-18T10:01:00Z".to_string()),
             status: "active".to_string(),
-            summary: String::new(),
             user_profile_snapshot: String::new(),
             shell_workspace_path: None,
             shell_workspaces: Vec::new(),
@@ -3584,6 +3773,7 @@ mod unarchived_conversations_tests {
             auto_push_remote_contact_id: None,
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
+            is_draft: false,
         }
     }
 

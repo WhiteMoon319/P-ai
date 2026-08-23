@@ -28,6 +28,14 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
   }
 
   onMounted(() => {
+    // 能力自检：报错现场出现过 bindings 缺方法，挂载时打一次关键方法类型，便于定位产物/组装问题
+    console.info("[窗口事件] bindings 能力自检", {
+      mergeMessagesIntoTimeline: typeof bindings.mergeMessagesIntoTimeline,
+      cacheConversationMessages: typeof bindings.cacheConversationMessages,
+      formalizeConversationMessages: typeof bindings.formalizeConversationMessages,
+      getChatFlow: typeof bindings.getChatFlow,
+      hasUnlisteners: typeof bindings.unlisteners,
+    });
     subscribe<any>("chatHistoryFlushed", "chat.historyFlushed", (payload) => {
       const conversationId = bindings.readConversationIdFromPayload(payload);
       if (!conversationId || flowsForConversation(conversationId).length > 0) return;
@@ -53,6 +61,14 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
           const cachedMessages = bindings.formalizeConversationMessages(
             bindings.conversationMessageCache.value[conversationId] || [],
           );
+          if (typeof bindings.mergeMessagesIntoTimeline !== "function") {
+            console.warn("[窗口事件] bindings 缺少 mergeMessagesIntoTimeline，回退为直接拼接", {
+              conversationId,
+              bindingsKeys: Object.keys(bindings).filter((key) => /merge|message/i.test(key)),
+            });
+            bindings.cacheConversationMessages(conversationId, [...cachedMessages, assistantMessage]);
+            return;
+          }
           bindings.cacheConversationMessages(
             conversationId,
             bindings.mergeMessagesIntoTimeline(cachedMessages, [assistantMessage]),
@@ -65,7 +81,7 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
       if (failed) return;
       bindings.toolReviewRefreshTick.value += 1;
       queueMicrotask(() => {
-        void bindings.refreshActiveSupervisionTask({ silent: true });
+        void bindings.refreshActiveGoalTask({ silent: true });
       });
     });
 
@@ -118,8 +134,8 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
     });
 
     bindings.scheduleChatWindowActiveStateSync("mounted");
-    bindings.startSupervisionTaskPolling();
-    void bindings.refreshActiveSupervisionTask({ silent: true });
+    bindings.startGoalTaskPolling();
+    void bindings.refreshActiveGoalTask({ silent: true });
     window.addEventListener("focus", bindings.handleWindowFocusForStateSync);
     window.addEventListener("blur", bindings.handleWindowBlurForStateSync);
     document.addEventListener("visibilitychange", bindings.handleVisibilityForStateSync);
@@ -137,7 +153,7 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
     document.removeEventListener("visibilitychange", bindings.handleVisibilityForStateSync);
     bindings.clearChatWindowActiveSyncTimer();
     bindings.clearChatMicPrewarmTimer();
-    bindings.clearSupervisionTaskPollTimer();
+    bindings.clearGoalTaskPollTimer();
     bindings.cleanupChatForegroundActivity();
     bindings.agentWorkPresence.cleanup();
     void bindings.getChatFlow()?.unbindActiveConversationStream?.().catch(() => {});

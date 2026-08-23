@@ -88,12 +88,10 @@ impl ConversationServiceV2 {
                     }
                     events.push(input.tool_result_event.clone());
                 }
-                merge_provider_meta_patch_v2(
-                    &mut target_message.provider_meta,
-                    input.provider_meta_patch.clone(),
-                );
+                // 此处不改 provider_meta：用量等 meta 由 final text 落盘统一写入，
+                // 工具追加时改 meta 会让 D14 组内追加回退整块重写。
                 let tool_event_count = target_message.tool_call.as_ref().map(Vec::len).unwrap_or(0);
-                self.persist_replaced_ready_message_locked(state, conversation_id, &target_message)?;
+                self.persist_appended_ready_message_locked(state, conversation_id, &target_message)?;
                 Ok(AssistantMessageToolAppendResult {
                     conversation_id: conversation_id.to_string(),
                     assistant_message_id: assistant_message_id.to_string(),
@@ -163,6 +161,12 @@ impl ConversationServiceV2 {
                     &mut target_message.provider_meta,
                     input.provider_meta_patch.clone(),
                 );
+                // 用量聚合：meta 尚无真实用量时，直接取最后一个自带用量的工具调用事件
+                // （工具轮真实用量随事件落盘，此处只兜底，不覆盖外部写入的最终 call 用量）
+                merge_last_tool_call_usage_into_provider_meta(
+                    &mut target_message.provider_meta,
+                    &target_message.tool_call,
+                );
                 runtime_log_debug(format!(
                     "[表情替换] FinalAppend开始，conversation_id={}，assistant_message_id={}，existing_annotation_count={}，incoming_annotation_count={}，incoming_tokens=[{}]",
                     conversation_id,
@@ -186,7 +190,7 @@ impl ConversationServiceV2 {
                 target_message.meme_annotations = input.meme_annotations.clone();
                 mark_stream_final_committed_v2(&mut target_message.provider_meta);
 
-                self.persist_replaced_ready_message_locked(state, conversation_id, &target_message)?;
+                self.persist_appended_ready_message_locked(state, conversation_id, &target_message)?;
                 Ok(target_message)
             },
         )?;
@@ -403,8 +407,8 @@ impl ConversationServiceV2 {
                 return Err(format!("Unarchived conversation not found: {conversation_id}"));
             }
             let paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
-            ensure_ready_message_store_from_legacy_conversation(state, conversation_id, &paths)?;
-            let mut ready_meta = message_store::read_ready_message_store_meta(&paths)?
+            ensure_chat_store_conversation_readable(state, conversation_id, &paths)?;
+            let mut ready_meta = message_store::chat_store_read_meta(&paths)?
                 .ok_or_else(|| {
                     format!(
                         "批量更新消息 providerMeta 失败：缺少 ready 消息元数据，conversation_id={conversation_id}"
@@ -414,7 +418,7 @@ impl ConversationServiceV2 {
             let mut previous_messages = Vec::with_capacity(patch_by_id.len());
             let mut updated_messages = Vec::with_capacity(patch_by_id.len());
             for (message_id, provider_meta) in &patch_by_id {
-                let mut message = message_store::read_ready_message_store_message_by_id(&paths, message_id)?
+                let mut message = message_store::chat_store_read_message_by_id(&paths, message_id)?
                     .ok_or_else(|| {
                         format!(
                             "批量更新消息 providerMeta 失败：消息不存在，conversation_id={}，message_id={}",
@@ -426,12 +430,12 @@ impl ConversationServiceV2 {
                 updated_messages.push(message);
             }
             ready_meta.apply_replaced_messages(&previous_messages, &updated_messages, || {
-                message_store::recompute_latest_summary_title_after_replace(
+                message_store::chat_store_recompute_latest_summary_title_after_replace(
                     &paths,
                     &updated_messages,
                 )
             })?;
-            message_store::write_jsonl_snapshot_replaced_messages_shard(
+            message_store::chat_store_replace_messages(
                 &paths,
                 &ready_meta.to_persist_meta(),
                 &updated_messages,

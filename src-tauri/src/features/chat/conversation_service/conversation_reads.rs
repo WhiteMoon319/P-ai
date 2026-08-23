@@ -10,21 +10,29 @@ impl ConversationServiceV2 {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned);
+        let fallback_main_conversation_id = if requested_conversation_id.is_none() {
+            match state_service_get_main_conversation_id(state) {
+                Ok(value) => value.and_then(|value| {
+                    let trimmed = value.trim();
+                    (!trimmed.is_empty()).then(|| trimmed.to_string())
+                }),
+                Err(err) => {
+                    runtime_log_warn(format!(
+                        "[会话快照] 读取主会话 ID 失败，按无默认会话降级继续：error={err}"
+                    ));
+                    None
+                }
+            }
+        } else {
+            None
+        };
         if let Some(conversation_id) = requested_conversation_id
             .clone()
-            .or_else(|| {
-                state_read_runtime_state_cached(state)
-                    .ok()
-                    .and_then(|runtime| runtime.main_conversation_id)
-                    .and_then(|value| {
-                        let trimmed = value.trim();
-                        (!trimmed.is_empty()).then(|| trimmed.to_string())
-                    })
-            })
+            .or(fallback_main_conversation_id)
         {
             let store_paths = message_store::message_store_paths(&state.data_path, &conversation_id)?;
             let snapshot = if let Some(snapshot) =
-                message_store::read_ready_message_store_chat_snapshot(&store_paths)?
+                message_store::chat_store_read_chat_snapshot(&store_paths)?
             {
                 let mut latest_user = snapshot.latest_user;
                 let mut latest_assistant = snapshot.latest_assistant;
@@ -84,7 +92,6 @@ impl ConversationServiceV2 {
         let _guard = lock_conversation_with_metrics(state, "get_chat_snapshot")?;
 
         let mut app_config = state_read_config_cached(state)?;
-        let runtime = state_read_runtime_state_cached(state)?;
         let agents = state_read_agents_cached(state)?;
         let runtime_snapshot = build_runtime_organization_snapshot_from_parts(
             &state.data_path,
@@ -92,6 +99,7 @@ impl ConversationServiceV2 {
             &agents,
         )?;
         let runtime_agents = runtime_snapshot.agents;
+        let assistant_department_agent_id = assistant_department_agent_id_downgraded(state);
         let requested_agent_id = input.agent_id.trim();
         let effective_agent_id = if !requested_agent_id.is_empty() {
             if runtime_agents
@@ -102,10 +110,11 @@ impl ConversationServiceV2 {
             } else {
                 return Err(format!("Selected agent '{requested_agent_id}' not found."));
             }
-        } else if runtime_agents.iter().any(|agent| {
-            agent.id == runtime.assistant_department_agent_id && !agent.is_built_in_user
-        }) {
-            runtime.assistant_department_agent_id.clone()
+        } else if runtime_agents
+            .iter()
+            .any(|agent| agent.id == assistant_department_agent_id && !agent.is_built_in_user)
+        {
+            assistant_department_agent_id.clone()
         } else {
             runtime_agents
                 .iter()
@@ -118,7 +127,7 @@ impl ConversationServiceV2 {
             self.resolve_latest_foreground_conversation_id(state, &effective_agent_id)?
         {
             let store_paths = message_store::message_store_paths(&state.data_path, &conversation_id)?;
-            if let Some(snapshot) = message_store::read_ready_message_store_chat_snapshot(&store_paths)? {
+            if let Some(snapshot) = message_store::chat_store_read_chat_snapshot(&store_paths)? {
                 let mut latest_user = snapshot.latest_user;
                 let mut latest_assistant = snapshot.latest_assistant;
                 if let Some(message) = latest_user.as_mut() {
@@ -157,12 +166,12 @@ impl ConversationServiceV2 {
         self.get_conversation_meta(state, normalized_conversation_id)?;
         let store_paths =
             message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
-        ensure_ready_message_store_from_legacy_conversation(
+        ensure_chat_store_conversation_readable(
             state,
             normalized_conversation_id,
             &store_paths,
         )?;
-        Ok(message_store::read_ready_message_store_recent_messages(&store_paths, limit)?
+        Ok(message_store::chat_store_read_recent_messages(&store_paths, limit)?
             .unwrap_or_default())
     }
 
@@ -178,12 +187,12 @@ impl ConversationServiceV2 {
         let conversation_meta = self.get_conversation_meta(state, normalized_conversation_id)?;
         let store_paths =
             message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
-        ensure_ready_message_store_from_legacy_conversation(
+        ensure_chat_store_conversation_readable(
             state,
             normalized_conversation_id,
             &store_paths,
         )?;
-        let messages = message_store::read_ready_message_store_current_compaction_segment(&store_paths)?
+        let messages = message_store::chat_store_read_current_compaction_segment(&store_paths)?
             .map(|segment| segment.messages)
             .unwrap_or_default();
         let mut conversation = self.build_conversation_record_from_meta_view(&conversation_meta);
@@ -204,12 +213,12 @@ impl ConversationServiceV2 {
         self.get_conversation_meta(state, normalized_conversation_id)?;
         let store_paths =
             message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
-        ensure_ready_message_store_from_legacy_conversation(
+        ensure_chat_store_conversation_readable(
             state,
             normalized_conversation_id,
             &store_paths,
         )?;
-        let mut messages = message_store::read_ready_message_store_current_compaction_segment(&store_paths)?
+        let mut messages = message_store::chat_store_read_current_compaction_segment(&store_paths)?
             .map(|segment| segment.messages)
             .unwrap_or_default();
         let end_message_id = end_message_id.trim();
@@ -234,13 +243,13 @@ impl ConversationServiceV2 {
             self.get_conversation_meta(state, normalized_conversation_id)?;
         let store_paths =
             message_store::message_store_paths(&state.data_path, normalized_conversation_id)?;
-        ensure_ready_message_store_from_legacy_conversation(
+        ensure_chat_store_conversation_readable(
             state,
             normalized_conversation_id,
             &store_paths,
         )?;
         let messages =
-            message_store::read_ready_message_store_all_messages(&store_paths)?.unwrap_or_default();
+            message_store::chat_store_read_all_messages(&store_paths)?.unwrap_or_default();
         let mut conversation = self.build_conversation_record_from_meta_view(&conversation_meta);
         conversation.messages = messages;
         Ok(conversation)
@@ -279,7 +288,7 @@ impl ConversationServiceV2 {
         self.with_unarchived_conversation_by_id_fast(state, conversation_id, |conversation| {
             let store_paths = message_store::message_store_paths(&state.data_path, &conversation.id)?;
             if let Some(page) =
-                message_store::read_ready_message_store_block_page(&store_paths, Some(block_id))?
+                message_store::chat_store_read_block_page(&store_paths, Some(block_id))?
             {
                 let mut messages = page.messages;
                 materialize_chat_message_parts_from_media_refs(&mut messages, &state.data_path);
@@ -362,7 +371,7 @@ impl ConversationServiceV2 {
     ) -> Result<Vec<ChatMessage>, String> {
         let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
         let mut messages = if let Some(page) =
-            message_store::read_ready_message_store_recent_messages_page_cached(
+            message_store::chat_store_read_recent_messages_page_cached(
                 &store_paths,
                 DEFAULT_FOREGROUND_SNAPSHOT_RECENT_LIMIT,
             )?
@@ -424,7 +433,7 @@ impl ConversationServiceV2 {
 
         let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
         let (mut page, has_more) = if let Some(page) =
-            message_store::read_ready_message_store_messages_before(
+            message_store::chat_store_read_messages_before(
                 &store_paths,
                 normalized_before_message_id,
                 normalized_limit,
@@ -463,7 +472,7 @@ impl ConversationServiceV2 {
         }
 
         let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
-        let mut page = if let Some(page) = message_store::read_ready_message_store_messages_after(
+        let mut page = if let Some(page) = message_store::chat_store_read_messages_after(
             &store_paths,
             normalized_after_message_id,
             normalized_limit,
@@ -533,7 +542,7 @@ impl ConversationServiceV2 {
         let store_paths = message_store::message_store_paths(&state.data_path, conversation_id)?;
         let (mut page, fallback_mode) = if let Some(after_id) = trimmed_after {
             if let Some(after_page) =
-                message_store::read_ready_message_store_messages_after(&store_paths, after_id, 100)?
+                message_store::chat_store_read_messages_after(&store_paths, after_id, 100)?
             {
                 (after_page.messages, None)
             } else {
@@ -551,7 +560,7 @@ impl ConversationServiceV2 {
                 })?
             }
         } else if let Some(page) =
-            message_store::read_ready_message_store_recent_messages_page_cached(
+            message_store::chat_store_read_recent_messages_page_cached(
                 &store_paths,
                 fallback_limit,
             )?

@@ -66,6 +66,7 @@ include!("features/core/time_semantics.rs");
 // ==================== 配置与存储 ====================
 include!("features/config/storage_and_stt.rs");
 include!("features/config/app_data_layout.rs");
+include!("features/state/mod.rs");
 include!("features/chat/message_store/mod.rs");
 
 // ==================== 独立图像生成 ====================
@@ -380,9 +381,7 @@ async fn run_deferred_setup(app_handle: AppHandle) {
         runtime_log_error(format!("[启动-延迟] 注册默认快捷键失败: {err}"));
     }
     emit_progress("启动持久化服务");
-    if let Err(err) = start_app_data_persist_worker(app_state.inner()) {
-        runtime_log_error(format!("[启动-延迟] 启动后台持久化服务失败: {err}"));
-    }
+    
     if let Err(err) = start_conversation_persist_worker(app_state.inner()) {
         runtime_log_error(format!("[启动-延迟] 启动会话后台持久化服务失败: {err}"));
     }
@@ -1285,8 +1284,9 @@ pub fn run() {
             });
 
             Ok(())
-        })
-        .invoke_handler(tauri::generate_handler![
+        });
+    #[cfg(not(target_os = "android"))]
+    let builder = builder.invoke_handler(tauri::generate_handler![
             show_main_window,
             show_chat_window,
             show_archives_window,
@@ -1642,7 +1642,10 @@ pub fn run() {
             git_panel_push,
             git_panel_remote_list,
             git_panel_sync
-        ])
+        ]);
+    #[cfg(target_os = "android")]
+    let builder = builder;
+    builder
         .run(tauri::generate_context!())
         .unwrap_or_else(|err| {
             runtime_log_error(format!("[启动] 运行 Tauri 应用失败: {err}"));

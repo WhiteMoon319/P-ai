@@ -61,13 +61,14 @@ async fn archive_conversation_inner(
             Err(err) => return Err(log_manual_archive_failure(requested_conversation_id, err)),
         };
     let already_archived = conversation_is_archived(&source);
-    let runtime = state_read_runtime_state_cached(state)
-        .map_err(|err| log_manual_archive_failure(&source.id, err))?;
-    let main_conversation_id = runtime
-        .main_conversation_id
-        .as_deref()
-        .map(str::trim)
-        .unwrap_or_default();
+    let main_conversation_id = {
+        let state = state.clone();
+        tokio::task::spawn_blocking(move || state_service_get_main_conversation_id(&state))
+            .await
+            .map_err(|err| log_manual_archive_failure(&source.id, format!("读取主会话 ID 失败：error={err}")))?
+            .map_err(|err| log_manual_archive_failure(&source.id, err))?
+    }
+    .unwrap_or_default();
     if !already_archived && source.id.trim() == main_conversation_id {
         return Err(log_manual_archive_failure(
             &source.id,
@@ -91,10 +92,10 @@ async fn archive_conversation_inner(
     flush_pending_persists_blocking(state).map_err(|err| {
         log_manual_archive_failure(&source.id, format!("归档状态写入失败：{}", err))
     })?;
-    emit_unarchived_conversation_overview_updated_payload(
-        state,
-        &archive_result.overview_payload,
-    );
+    // 归档语义：注册 watermark 删除（列表不再包含已归档会话），不再全量广播。
+    if !archive_result.already_archived {
+        overview_register_missing_item(&source.id);
+    }
     let active_conversation_id = archive_result.active_conversation_id.clone();
 
     if !archive_result.already_archived {
@@ -186,16 +187,15 @@ pub(crate) async fn batch_archive_conversations_inner(
         conversation_ids.len()
     ));
 
-    let runtime = state_read_runtime_state_cached(state)?;
-    let main_conversation_id = runtime
-        .main_conversation_id
-        .as_deref()
-        .map(str::trim)
-        .unwrap_or_default()
-        .to_string();
+    let main_conversation_id = {
+        let state = state.clone();
+        tokio::task::spawn_blocking(move || state_service_get_main_conversation_id(&state))
+            .await
+            .map_err(|err| format!("读取主会话 ID 失败：error={err}"))??
+            .unwrap_or_default()
+    };
     let mut accepted = Vec::<BatchArchiveAcceptedConversation>::new();
     let mut skipped = Vec::<BatchArchiveSkippedConversation>::new();
-    let mut latest_overview_payload = None::<UnarchivedConversationOverviewUpdatedPayload>;
     let mut latest_active_conversation_id = None::<String>;
 
     for conversation_id in conversation_ids {
@@ -209,7 +209,6 @@ pub(crate) async fn batch_archive_conversations_inner(
                     Ok(archive_result) => {
                         latest_active_conversation_id =
                             Some(archive_result.active_conversation_id.clone());
-                        latest_overview_payload = Some(archive_result.overview_payload);
                         if !archive_result.already_archived {
                             accepted.push(BatchArchiveAcceptedConversation {
                                 conversation_id: source.id,
@@ -239,8 +238,9 @@ pub(crate) async fn batch_archive_conversations_inner(
         flush_pending_persists_blocking(state)
             .map_err(|err| format!("批量归档状态写入失败：{}", err))?;
     }
-    if let Some(payload) = latest_overview_payload.as_ref() {
-        emit_unarchived_conversation_overview_updated_payload(state, payload);
+    // 批量归档：逐会话注册 watermark 删除语义，不再全量广播列表。
+    for accepted_conversation_id in accepted.iter().map(|item| item.conversation_id.as_str()) {
+        overview_register_missing_item(accepted_conversation_id);
     }
 
     let accepted_conversation_ids = accepted
@@ -658,7 +658,6 @@ async fn run_archive_pipeline_inner(
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .is_none()
-        && archived_conversation.summary.trim().is_empty()
     {
         return Err("归档后维护失败：会话尚未标记为已归档。".to_string());
     }

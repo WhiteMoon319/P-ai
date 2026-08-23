@@ -412,7 +412,7 @@ fn ide_chat_avatar_data_url(state: &AppState, path: Option<&str>) -> String {
 }
 
 fn ide_chat_persona_payload(state: &AppState, active_agent_id: Option<&str>) -> Result<Value, String> {
-    let runtime = state_read_runtime_state_cached(state)?;
+    let assistant_department_agent_id = state_service_get_assistant_department_agent_id(state)?;
     let runtime_org = load_runtime_organization_snapshot(state)?;
     let agents = runtime_org.agents;
     let user_alias = agents
@@ -423,7 +423,7 @@ fn ide_chat_persona_payload(state: &AppState, active_agent_id: Option<&str>) -> 
     let active_agent_id = active_agent_id
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| runtime.assistant_department_agent_id.trim());
+        .unwrap_or_else(|| assistant_department_agent_id.trim());
     let mut persona_name_map = serde_json::Map::new();
     let mut persona_avatar_url_map = serde_json::Map::new();
     let mut assistant_name = String::new();
@@ -524,7 +524,6 @@ fn ide_chat_conversation_from_meta_view(conversation_meta: &ConversationMetaView
         last_user_at: None,
         last_assistant_at: None,
         status: conversation_meta.status.clone(),
-        summary: conversation_meta.summary.clone(),
         user_profile_snapshot: String::new(),
         shell_workspace_path: conversation_meta.shell_workspace_path.clone(),
         shell_workspaces: conversation_meta.shell_workspaces.clone(),
@@ -537,6 +536,7 @@ fn ide_chat_conversation_from_meta_view(conversation_meta: &ConversationMetaView
         memory_recall_table: Vec::new(),
         plan_mode_enabled: false,
         preferred_api_config_id: conversation_meta.preferred_api_config_id.clone(),
+        is_draft: conversation_meta.is_draft,
         auto_push_remote_contact_id: conversation_meta.auto_push_remote_contact_id.clone(),
         cumulative_usage: conversation_meta.cumulative_usage.clone(),
         active_goal: conversation_meta.active_goal.clone(),
@@ -620,7 +620,7 @@ fn ide_chat_create_conversation_options(state: &AppState) -> Result<Value, Strin
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
-    let default_agent_id = assistant_department_agent_id(&config).unwrap_or_else(default_assistant_department_agent_id);
+    let default_agent_id = state_service_get_assistant_department_agent_id(state)?;
     Ok(serde_json::json!({
         "departments": options,
         "defaultDepartmentId": ASSISTANT_DEPARTMENT_ID,
@@ -664,7 +664,7 @@ mod ide_context_tests {
         AppState {
             app_handle: Arc::new(Mutex::new(None)),
             config_path: root.join("app_config.toml"),
-            data_path: root.join("app_data.json"),
+            data_path: root.join("config_mark"),
             llm_workspace_path: root.join("llm-workspace"),
             shared_http_client: reqwest::Client::new(),
             terminal_shell: detect_default_terminal_shell(),
@@ -675,8 +675,6 @@ mod ide_context_tests {
             cached_config_mtime: Arc::new(Mutex::new(None)),
             cached_agents: Arc::new(Mutex::new(None)),
             cached_agents_mtime: Arc::new(Mutex::new(None)),
-            cached_runtime_state: Arc::new(Mutex::new(None)),
-            cached_runtime_state_mtime: Arc::new(Mutex::new(None)),
             cached_chat_index: Arc::new(Mutex::new(None)),
             cached_conversation_metadata: Arc::new(Mutex::new(std::collections::HashMap::new())),
             cached_conversation_field_metadata_ids: Arc::new(Mutex::new(
@@ -686,10 +684,6 @@ mod ide_context_tests {
             cached_app_data: Arc::new(Mutex::new(None)),
             cached_app_data_signature: Arc::new(Mutex::new(None)),
             cached_app_data_dirty: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            app_data_persist_pending: Arc::new(Mutex::new(None)),
-            app_data_persist_notify: Arc::new(tokio::sync::Notify::new()),
-            app_data_persist_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            app_data_persist_latest_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             conversation_persist_pending: Arc::new(Mutex::new(None)),
             conversation_persist_notify: Arc::new(tokio::sync::Notify::new()),
             conversation_persist_started: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -742,8 +736,6 @@ mod ide_context_tests {
         let state = ide_context_test_state();
         state_write_config_cached(&state, &AppConfig::default()).expect("write test config");
         state_write_agents_cached(&state, &[]).expect("write test agents");
-        state_write_runtime_state_cached(&state, &RuntimeStateFile::default())
-            .expect("write test runtime state");
 
         let exported = export_config_migration_package_for_web(
             ExportConfigMigrationPackageInput {
@@ -1089,9 +1081,11 @@ mod ide_context_tests {
                     shell_workspaces: None,
                     shell_work_mode: None,
                     shell_autonomous_mode: None,
+                    is_draft: Some(false),
                 },
             )
             .expect("create conversation");
+        flush_pending_persists_blocking(&state).expect("flush created conversation");
 
         let result = ide_chat_send_message(
             &state,
@@ -1160,6 +1154,7 @@ mod ide_context_tests {
         )
         .await
         .expect("create conversation");
+        flush_pending_persists_blocking(&state).expect("flush created conversation");
         let conversation_id = created
             .get("conversationId")
             .and_then(Value::as_str)
@@ -1177,6 +1172,7 @@ mod ide_context_tests {
                 "agentId": DEFAULT_AGENT_ID,
             }),
         )
+        .await
         .expect("rebind conversation");
         assert_eq!(
             rebound.get("conversationId").and_then(Value::as_str),

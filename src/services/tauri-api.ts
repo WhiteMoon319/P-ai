@@ -170,7 +170,6 @@ const WEB_BRIDGE_NO_TIMEOUT_COMMANDS = new Set([
   "mcp_remove_server",
   "mcp_undeploy_server",
   "configMigration.preview",
-  "messageStore.migration.run",
   "save_memory_embedding_binding",
   "start_github_update",
 ]);
@@ -922,6 +921,26 @@ export function listTransportFileReaderDirectoryOpenTargets<T>(): Promise<T> {
   return invokeRequiredNativeTransport<T>("本机目录打开方式", "list_file_reader_directory_open_targets");
 }
 
+/** 系统字体枚举仅桌面宿主可查，Web/VS Code 无此能力。 */
+export function listTransportSystemFonts<T>(): Promise<T> {
+  return invokeRequiredNativeTransport<T>("系统字体枚举", "list_system_fonts");
+}
+
+/** genai 内置 chat 适配器清单仅桌面宿主可查，Web/VS Code 无此能力。 */
+export function listTransportGenaiChatAdapters<T>(): Promise<T> {
+  return invokeRequiredNativeTransport<T>("genai 内置聊天适配器清单", "list_genai_chat_adapters");
+}
+
+/** 打开（或创建）会话草稿：Web/VS Code 经 WS 桥由后端 dispatcher 提供。 */
+export function openTransportConversationDraft<T>(input: Record<string, unknown>): Promise<T> {
+  return invokeTauri<T>("conversation.openDraft", { input });
+}
+
+/** 改写会话草稿字段：Web/VS Code 经 WS 桥由后端 dispatcher 提供。 */
+export function updateTransportConversationDraft<T>(input: Record<string, unknown>): Promise<T> {
+  return invokeTauri<T>("conversation.updateDraft", { input });
+}
+
 export async function openTransportFileReaderDirectoryTarget(
   path: string,
   targetKind: string,
@@ -1441,6 +1460,8 @@ const WEB_BRIDGE_NATIVE_ONLY_COMMANDS = new Set([
   "show_archives_window",
   "show_quick_setup_window",
   "complete_quick_setup_and_open_chat",
+  "list_system_fonts",
+  "list_genai_chat_adapters",
   "open_runtime_logs_window",
   "sync_tray_icon",
   "get_github_update_state",
@@ -1539,6 +1560,8 @@ const TAURI_COMMAND_ALIASES: Record<string, string> = {
   "conversation.list": "list_transport_conversations",
   "conversation.createOptions": "list_conversation_create_options",
   "conversation.create": "create_unarchived_conversation",
+  "conversation.openDraft": "open_draft_conversation",
+  "conversation.updateDraft": "update_draft_conversation",
   "conversation.createSide": "create_side_chat_conversation",
   "conversation.importShare": "import_conversation_share_from_file",
   "remoteIm.conversations.list": "remote_im_list_contact_conversations",
@@ -1573,7 +1596,6 @@ const TAURI_COMMAND_ALIASES: Record<string, string> = {
   "conversation.unarchive": "unarchive_archive",
   "conversation.archiveList": "list_archives",
   "conversation.archiveBlockPage": "get_archive_block_page",
-  "conversation.archiveSummary": "get_archive_summary",
   "conversation.exportShare": "export_conversation_share_json",
   "conversation.importArchives": "import_archives_from_json",
   "conversation.sectionOrders.get": "get_conversation_section_orders",
@@ -1582,6 +1604,8 @@ const TAURI_COMMAND_ALIASES: Record<string, string> = {
   "app.language.set": "set_ui_language",
   "messageStore.migration.check": "check_message_store_migration",
   "messageStore.migration.run": "run_message_store_migration",
+  "messageStore.migration.status": "get_message_store_migration_runtime_status",
+  "messageStore.migration.confirm": "confirm_message_store_migration_summary",
   "configMigration.export": "export_config_migration_package",
   "configMigration.preview": "preview_import_config_migration_package",
   "configMigration.apply": "apply_import_config_migration_package",
@@ -1591,7 +1615,6 @@ const TAURI_COMMAND_ALIASES: Record<string, string> = {
   "archives.export": "export_archive_to_file",
   "archives.list": "list_archives",
   "archives.blockPage": "get_archive_block_page",
-  "archives.summary": "get_archive_summary",
   "archives.delete": "delete_archive",
   "archives.unarchive": "unarchive_archive",
   "ideContext.query": "query_ide_context_references",
@@ -1637,6 +1660,8 @@ const TAURI_INPUT_WRAPPED_COMMANDS = new Set([
   "conversation.compact",
   "conversation.changedSince",
   "conversation.create",
+  "conversation.openDraft",
+  "conversation.updateDraft",
   "conversation.createSide",
   "conversation.importShare",
   "conversation.blockPage",
@@ -1667,7 +1692,6 @@ const TAURI_INPUT_WRAPPED_COMMANDS = new Set([
   "archives.export",
   "goal.create",
   "goal.cancel",
-  "messageStore.migration.run",
   "configMigration.export",
   "configMigration.preview",
   "configMigration.apply",
@@ -1915,7 +1939,6 @@ const TRANSPORT_NOTIFICATION_EVENT_ALIASES: Record<string, string | string[]> = 
   "agentWork.stopped": "easy-call:agent-work-stop",
   "recordHotkey.probe": "easy-call:record-hotkey-probe",
   "toolReview.reportsUpdated": "easy-call:tool-review-reports-updated",
-  "messageStore.migrationProgress": "easy-call:message-store-migration-progress",
   "fileReader.openPath": "file-reader-open-path",
   "fileReader.addToChat": "easy-call:file-reader-add-to-chat",
   "codeReview.requested": "code-review-requested",

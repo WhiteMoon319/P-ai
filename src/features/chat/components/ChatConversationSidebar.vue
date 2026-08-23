@@ -205,7 +205,7 @@
                 <label class="block text-sm font-medium" for="batch-archive-model">
                   {{ t("chat.batchArchive.modelLabel") }}
                 </label>
-                <ApiConfigTreeSelect
+                <ApiConfigPicker
                   id="batch-archive-model"
                   v-model="batchArchiveSelectedModelId"
                   :api-configs="batchArchiveApiConfigs"
@@ -309,7 +309,7 @@ import { stripToolcallMarkers } from "../../../utils/chat-message-semantics";
 import type { TaskEntry } from "../../config/views/config-tabs/task-editor";
 import { invokeTauri } from "../../../services/tauri-api";
 import { usePipelineStatus } from "../../shell/composables/use-pipeline-status";
-import ApiConfigTreeSelect from "../../config/components/ApiConfigTreeSelect.vue";
+import ApiConfigPicker from "../../config/components/ApiConfigPicker.vue";
 import { formatConversationListTime } from "../utils/conversation-time";
 import {
   aggregateConversationItems,
@@ -423,6 +423,7 @@ const conversationSections = computed<ConversationSection[]>(() =>
     },
     locale: locale.value,
     currentWorkspaceRootPath: props.currentWorkspaceRootPath,
+    activeConversationId: props.activeConversationId,
   }),
 );
 
@@ -903,18 +904,10 @@ function handleConversationTabTransitionSettled() {
 }
 
 function createConversationInSection(section: ConversationSection) {
-  const path = String(section.workspaceRootPath || "").trim();
-  if (!path) return;
-  window.dispatchEvent(new CustomEvent("easy-call:open-create-conversation-dialog", {
+  // 新建入口统一打开会话草稿；从文件夹分节新建时把该文件夹作为草稿工作区
+  window.dispatchEvent(new CustomEvent("easy-call:open-draft-conversation", {
     detail: {
-      workspace: {
-        id: `conversation-workspace-${path}`,
-        name: section.title,
-        path,
-        level: "main",
-        access: "approval",
-        builtIn: false,
-      },
+      workspaceRootPath: String(section.workspaceRootPath || "").trim() || undefined,
     },
   }));
 }

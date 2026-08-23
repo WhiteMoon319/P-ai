@@ -184,13 +184,13 @@
         :active-agent-id="currentChatAgentId"
         :active-conversation-id="currentChatConversationId"
         :current-todos="currentChatTodos"
-        :supervision-active="chatSupervisionActive"
-        :supervision-title="chatSupervisionTitle"
-        :supervision-dialog-open="supervisionTaskDialogOpen"
-        :supervision-task-saving="supervisionTaskSaving"
-        :supervision-task-error="supervisionTaskError"
-        :active-supervision-task="activeSupervisionTask"
-        :recent-supervision-task-history="recentSupervisionTaskHistory"
+        :goal-active="chatGoalActive"
+        :goal-title="chatGoalTitle"
+        :goal-dialog-open="goalDialogOpen"
+        :goal-saving="goalSaving"
+        :goal-error="goalError"
+        :active-goal-task="activeGoalTask"
+        :recent-goal-task-history="recentGoalTaskHistory"
         :unarchived-conversation-items="chatUnarchivedConversationItems"
         :remote-im-contact-conversations="remoteImContactConversations"
         :conversation-items="chatConversationItems || chatUnarchivedConversationItems"
@@ -247,10 +247,10 @@
         @attach-tool-review-report="attachToolReviewReport"
         @lock-workspace="onLockChatWorkspace"
         @open-code-review="$emit('open-code-review')"
-        @open-supervision-task="openSupervisionTaskDialog"
-        @close-supervision-task="closeSupervisionTaskDialog"
-        @save-supervision-task="saveSupervisionTask"
-        @stop-supervision-task="stopSupervisionTask"
+        @open-goal-task="openGoalTaskDialog"
+        @close-goal-task="closeGoalTaskDialog"
+        @save-goal-task="saveGoalTask"
+        @stop-goal-task="stopGoalTask"
         @task-created="setStatus(props.t('config.task.created'))"
         @task-updated="setStatus(props.t('config.task.updated'))"
         @refresh-tool-review-message="onRefreshToolReviewMessage"
@@ -261,6 +261,7 @@
         @export-conversation="exportConversationShare"
         @delete-conversation="onDeleteConversation"
         @rebind-conversation-recipient="onRebindConversationRecipient"
+        @update-draft-conversation="onUpdateDraftConversation"
         @create-conversation="onCreateConversation"
         @approve-terminal-approval="approveTerminalApproval"
         @deny-terminal-approval="denyTerminalApproval"
@@ -295,7 +296,7 @@
                   type="button"
                   class="btn btn-ghost btn-sm btn-circle"
                   :title="t('chat.sideChat.create')"
-                  @click="createSideChatConversation?.()"
+                  @click="openSideChatNewPage?.()"
                 >
                   <Plus class="size-4" />
                 </button>
@@ -318,6 +319,7 @@
               :persona-avatar-url-map="chatPersonaAvatarUrlMap"
               :chat-model-options="textCapableApiConfigs"
               :instruction-presets="instructionPresets"
+              :config="config"
               :workspace-name="currentChatWorkspaceDisplayName"
               :workspace-root-path="currentChatWorkspaceRootPath"
               :workspaces="currentChatWorkspaces"
@@ -332,6 +334,27 @@
               :request-recall-mode="requestRecallMode"
               :create-conversation-branch-from-turn="(payload) => createSideConversationBranchFromTurn?.({ ...payload, sourceConversationId: sideConversationId })"
             />
+            <div v-else class="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-5 overflow-hidden px-6">
+              <div class="pointer-events-none absolute inset-0" aria-hidden="true">
+                <div class="absolute -top-16 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-primary/5 blur-3xl"></div>
+                <div class="absolute bottom-8 left-1/5 h-80 w-80 rounded-full bg-secondary/5 blur-3xl"></div>
+                <div class="absolute -bottom-24 right-1/6 h-72 w-72 rounded-full bg-accent/3 blur-3xl"></div>
+              </div>
+              <button
+                type="button"
+                class="btn btn-lg btn-primary z-10 h-16 w-full max-w-80 rounded-2xl text-base shadow-lg"
+                @click="createSideChatConversation?.(true)"
+              >
+                {{ t('chat.sideChat.newPageInContext', { persona: selectedPersonaName }) }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-lg btn-outline z-10 h-16 w-full max-w-80 rounded-2xl text-base shadow-lg"
+                @click="createSideChatConversation?.(false)"
+              >
+                {{ t('chat.sideChat.newPageBlank', { persona: selectedPersonaName }) }}
+              </button>
+            </div>
           </div>
         </template>
       </ChatView>
@@ -356,7 +379,6 @@
       :archive-has-prev-block="archiveHasPrevBlock"
       :archive-has-next-block="archiveHasNextBlock"
       :archive-messages="archiveMessages"
-      :archive-summary-text="archiveSummaryText"
       :unarchived-conversations="unarchivedConversations"
       :unarchived-blocks="unarchivedBlocks"
       :selected-unarchived-conversation-id="selectedUnarchivedConversationId"
@@ -652,17 +674,18 @@ const props = defineProps<{
   currentChatConversationId: string;
   sideConversations?: ChildConversationSummary[];
   sideConversationId?: string;
-  createSideChatConversation?: () => Promise<string> | string;
+  createSideChatConversation?: (withContext?: boolean) => Promise<string> | string;
+  openSideChatNewPage?: () => void;
   selectSideChatConversation?: (conversationId: string) => void;
   createSideConversationBranchFromTurn?: (payload: { turnId: string; sourceConversationId?: string }) => Promise<void> | void;
   closeSideChatConversations?: (conversationIds: string[]) => Promise<void> | void;
   currentChatTodos: ChatTodoItem[];
-  chatSupervisionActive: boolean;
-  chatSupervisionTitle: string;
-  supervisionTaskDialogOpen: boolean;
-  supervisionTaskSaving: boolean;
-  supervisionTaskError: string;
-  activeSupervisionTask: {
+  chatGoalActive: boolean;
+  chatGoalTitle: string;
+  goalDialogOpen: boolean;
+  goalSaving: boolean;
+  goalError: string;
+  activeGoalTask: {
     taskId: string;
     goal: string;
     why: string;
@@ -670,7 +693,7 @@ const props = defineProps<{
     endAtLocal: string;
     remainingHours: number;
   } | null;
-  recentSupervisionTaskHistory: Array<{
+  recentGoalTaskHistory: Array<{
     goal: string;
     why: string;
     todo: string;
@@ -688,7 +711,6 @@ const props = defineProps<{
   archiveHasPrevBlock?: boolean;
   archiveHasNextBlock?: boolean;
   archiveMessages: ChatMessage[];
-  archiveSummaryText: string;
   unarchivedConversations: UnarchivedConversationSummary[];
   unarchivedBlocks: import("../../../types/app").ConversationBlockSummary[];
   selectedUnarchivedConversationId: string;
@@ -814,10 +836,10 @@ const props = defineProps<{
   }) => Promise<"with_patch" | "message_only" | "cancel">;
   confirmPlan: (payload: { messageId: string }) => void;
   onLockChatWorkspace: () => void;
-  openSupervisionTaskDialog: () => void;
-  closeSupervisionTaskDialog: () => void;
-  saveSupervisionTask: (payload: { durationHours: number; goal: string; why: string; todo: string }) => void;
-  stopSupervisionTask: () => void;
+  openGoalTaskDialog: () => void;
+  closeGoalTaskDialog: () => void;
+  saveGoalTask: (payload: { durationHours: number; goal: string; why: string; todo: string }) => void;
+  stopGoalTask: () => void;
   onRefreshToolReviewMessage: (payload: { conversationId: string; messageId: string }) => void;
   onSwitchConversation: (payload: { conversationId: string; kind?: "local_unarchived" | "remote_im_contact"; remoteContactId?: string }) => void;
   onRenameConversation: (payload: { conversationId: string; title: string }) => void;
@@ -825,6 +847,7 @@ const props = defineProps<{
   onArchiveConversation: (conversationId: string) => void;
   onDeleteConversation: (conversationId: string) => void;
   onRebindConversationRecipient: (payload: { conversationId: string; departmentId: string; agentId: string }) => void;
+  onUpdateDraftConversation: (payload: { conversationId: string; departmentId?: string; agentId?: string; preferredApiConfigId?: string | null }) => void;
   onCreateConversation: (input?: { title?: string; departmentId?: string; agentId?: string; copyCurrent?: boolean; importPath?: string; shellWorkspaces?: ShellWorkspace[]; shellAutonomousMode?: boolean }) => void;
   onBranchConversationFromSelection: (payload: { count: number; messageIds: string[] }) => void;
   onForwardConversationFromSelection: (payload: { count: number; messageIds: string[]; target: { kind: "local_unarchived" | "remote_im_contact"; conversationId: string; remoteContactId?: string } }) => void;
