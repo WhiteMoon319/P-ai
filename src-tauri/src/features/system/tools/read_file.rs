@@ -251,10 +251,15 @@ fn ensure_absolute_file_path(request: &ReadFileRequest) -> Result<std::path::Pat
     if !path.is_absolute() {
         return Err("path 必须是绝对路径".to_string());
     }
-    if !path.exists() {
-        return Err(format!("文件不存在：{}", path.display()));
-    }
-    let metadata = std::fs::metadata(&path).map_err(|err| format!("读取文件信息失败: {err}"))?;
+    // 不用 Path::exists()：TCC 拒绝时它会把访问错误吞成 false，误报"文件不存在"。
+    // 直接 metadata，NotFound 报不存在，其他错误（如 EPERM）保留原始 I/O 错误文本。
+    let metadata = match std::fs::metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(format!("文件不存在：{}", path.display()));
+        }
+        Err(err) => return Err(format!("读取文件信息失败: {err}")),
+    };
     if !metadata.is_file() {
         return Err(format!("目标不是文件：{}", path.display()));
     }
@@ -278,31 +283,6 @@ fn ensure_absolute_media_path(request: &ReadMediaRequest) -> Result<std::path::P
         return Err(format!("目标不是文件：{}", path.display()));
     }
     Ok(path)
-}
-
-fn ensure_file_path_for_read(state: &AppState, request: &ReadFileRequest) -> Result<std::path::PathBuf, String> {
-    if let Some(path) = android_workspace_resolve_existing_file_path(state, &request.path)? {
-        if matches!(request.limit, Some(0)) {
-            return Err("limit 必须大于等于 1".to_string());
-        }
-        let metadata = std::fs::metadata(&path).map_err(|err| format!("读取文件信息失败: {err}"))?;
-        if !metadata.is_file() {
-            return Err(format!("目标不是文件：{}", path.display()));
-        }
-        return Ok(path);
-    }
-    ensure_absolute_file_path(request)
-}
-
-fn ensure_media_path_for_read(state: &AppState, request: &ReadMediaRequest) -> Result<std::path::PathBuf, String> {
-    if let Some(path) = android_workspace_resolve_existing_file_path(state, &request.path)? {
-        let metadata = std::fs::metadata(&path).map_err(|err| format!("读取文件信息失败: {err}"))?;
-        if !metadata.is_file() {
-            return Err(format!("目标不是文件：{}", path.display()));
-        }
-        return Ok(path);
-    }
-    ensure_absolute_media_path(request)
 }
 
 fn paginate_lines(lines: &[String], start: usize, count: Option<usize>) -> (Vec<String>, Option<usize>) {
@@ -511,68 +491,6 @@ fn build_pdf_image_read_result(
             "includeImages": true
         }
     })
-}
-
-fn read_file_media_cache_lookup(
-    runtime: &RuntimeStateFile,
-    hash: &str,
-    model_api_id: &str,
-    media_type: ReadMediaDetectedType,
-    description: &str,
-) -> Option<String> {
-    runtime
-        .image_text_cache
-        .iter()
-        .find(|entry| {
-            entry.hash == hash
-                && entry.model_api_id == model_api_id
-                && entry.media_type == media_type.as_str()
-                && entry.description == description
-        })
-        .map(|entry| entry.text.clone())
-}
-
-fn read_file_media_cache_upsert(
-    runtime: &mut RuntimeStateFile,
-    hash: &str,
-    model_api_id: &str,
-    media_type: ReadMediaDetectedType,
-    description: &str,
-    text: &str,
-) {
-    if let Some(entry) = runtime
-        .image_text_cache
-        .iter_mut()
-        .find(|entry| {
-            entry.hash == hash
-                && entry.model_api_id == model_api_id
-                && entry.media_type == media_type.as_str()
-                && entry.description == description
-        })
-    {
-        entry.text = text.to_string();
-        entry.updated_at = now_iso();
-        return;
-    }
-    runtime.image_text_cache.push(ImageTextCacheEntry {
-        hash: hash.to_string(),
-        model_api_id: model_api_id.to_string(),
-        media_type: media_type.as_str().to_string(),
-        description: description.to_string(),
-        text: text.to_string(),
-        updated_at: now_iso(),
-    });
-    if runtime.image_text_cache.len() <= MAX_IMAGE_TEXT_CACHE_ENTRIES {
-        return;
-    }
-    if let Some((oldest_idx, _)) = runtime
-        .image_text_cache
-        .iter()
-        .enumerate()
-        .min_by(|(_, a), (_, b)| a.updated_at.cmp(&b.updated_at))
-    {
-        runtime.image_text_cache.remove(oldest_idx);
-    }
 }
 
 fn build_read_media_prepared_prompt(
@@ -1277,13 +1195,10 @@ async fn builtin_read_media(
     request: ReadMediaRequest,
 ) -> Result<Value, String> {
     // 路径校验（metadata）是同步文件 I/O，移入 blocking 线程池，避免阻塞 Tokio 工作线程
-    let state_for_check = state.clone();
     let request_for_check = request.clone();
-    let path = tokio::task::spawn_blocking(move || {
-        ensure_media_path_for_read(&state_for_check, &request_for_check)
-    })
-    .await
-    .map_err(|err| format!("read_media 工具路径校验后台执行失败：{err}"))??;
+    let path = tokio::task::spawn_blocking(move || ensure_absolute_media_path(&request_for_check))
+        .await
+        .map_err(|err| format!("read_media 工具路径校验后台执行失败：{err}"))??;
     let detected = detect_read_media_type(&path).ok_or_else(|| "read_media 仅支持图片、音频或视频文件".to_string())?;
     let app_config = state_read_config_cached(state)?;
     let selected_api = resolve_vision_api_config(&app_config)?;
@@ -1355,10 +1270,9 @@ async fn builtin_read_media(
     let mut hasher = Sha256::new();
     hasher.update(&raw);
     let hash = bytes_to_lower_hex(hasher.finalize());
-    if let Some(cached) = {
-        let runtime = state_read_runtime_state_cached(state)?;
-        read_file_media_cache_lookup(&runtime, &hash, &selected_api.id, detected, &description)
-    } {
+    if let Some(cached) =
+        state_service_find_image_text_cache(state, &hash, &selected_api.id, detected.as_str(), &description)?
+    {
         return Ok(serde_json::json!({
             "ok": true,
             "mediaType": detected.as_str(),
@@ -1517,11 +1431,14 @@ async fn builtin_read_media(
     if text.is_empty() {
         return Err("多模态分析模型返回了空结果".to_string());
     }
-    {
-        let mut runtime = state_read_runtime_state_cached(state)?;
-        read_file_media_cache_upsert(&mut runtime, &hash, &selected_api.id, detected, &description, &text);
-        state_write_runtime_state_cached(state, &runtime)?;
-    }
+    state_service_upsert_image_text_cache(
+        state,
+        &hash,
+        &selected_api.id,
+        detected.as_str(),
+        &description,
+        &text,
+    )?;
     Ok(serde_json::json!({
         "ok": true,
         "mediaType": detected.as_str(),
@@ -1546,13 +1463,13 @@ impl ReadFileReader for TextFileReader {
 
     fn read(
         &self,
-        state: &AppState,
+        _state: &AppState,
         _session_id: &str,
         _api_config_id: &str,
         request: &ReadFileRequest,
         detected: ReadFileDetectedType,
     ) -> Result<Value, String> {
-        let path = ensure_file_path_for_read(state, request)?;
+        let path = ensure_absolute_file_path(request)?;
         let decoded = decode_text_file_from_path(&path)
             .map_err(|err| format!("读取文本文件失败：{err}"))?;
         Ok(build_text_read_result(
@@ -1586,7 +1503,7 @@ impl ReadFileReader for PdfFileReader {
         request: &ReadFileRequest,
         detected: ReadFileDetectedType,
     ) -> Result<Value, String> {
-        let path = ensure_file_path_for_read(state, request)?;
+        let path = ensure_absolute_file_path(request)?;
         let conversation_id = read_file_conversation_cache_key(session_id);
         let include_images = resolve_pdf_image_mode(state, api_config_id)?;
         let structured = match get_or_extract_pdf_structured(
@@ -1693,13 +1610,13 @@ impl ReadFileReader for OfficeLitchiReader {
 
     fn read(
         &self,
-        state: &AppState,
+        _state: &AppState,
         _session_id: &str,
         _api_config_id: &str,
         request: &ReadFileRequest,
         detected: ReadFileDetectedType,
     ) -> Result<Value, String> {
-        let path = ensure_file_path_for_read(state, request)?;
+        let path = ensure_absolute_file_path(request)?;
         let path_for_read = path.clone();
         let detected_for_read = detected;
         let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || -> Result<String, String> {
@@ -1769,12 +1686,14 @@ async fn builtin_read_file(
     request: ReadFileRequest,
 ) -> Result<Value, String> {
     let started = std::time::Instant::now();
+    let ui_language = state_read_config_cached(&state)
+        .map(|config| config.ui_language)
+        .unwrap_or_else(|_| "zh-CN".to_string());
     // 路径校验（metadata）是同步文件 I/O，可能被 TCC 拒绝、慢盘或网络卷拖慢；
     // 移入 blocking 线程池，避免阻塞 Tokio 工作线程。
-    let state_for_check = state.clone();
     let request_for_check = request.clone();
     let (path, detected) = match tokio::task::spawn_blocking(move || {
-        let path = ensure_file_path_for_read(&state_for_check, &request_for_check)?;
+        let path = ensure_absolute_file_path(&request_for_check)?;
         let detected = detect_read_file_type(&path);
         Ok::<_, String>((path, detected))
     })
@@ -1782,7 +1701,14 @@ async fn builtin_read_file(
     .map_err(|err| format!("read 工具路径校验后台执行失败：{err}"))?
     {
         Ok(result) => result,
-        Err(err) => return Err(err),
+        Err(err) => {
+            // 前置校验（metadata）也可能被 TCC 拦截，失败时同样附加授权建议
+            let hint_path = std::path::Path::new(request.path.trim());
+            return match macos_tcc_permission_hint(&ui_language, &err, Some(hint_path)) {
+                Some(hint) => Err(format!("{err}\n\n{hint}")),
+                None => Err(err),
+            };
+        }
     };
     runtime_log_info(format!(
         "[read] 开始，任务=read，session_id={}，api_config_id={}，{}，detected_type={}",
@@ -1859,6 +1785,15 @@ async fn builtin_read_file(
             err
         )),
     }
+    let result = match result {
+        Ok(value) => Ok(value),
+        Err(err) => {
+            match macos_tcc_permission_hint(&ui_language, &err, Some(&path)) {
+                Some(hint) => Err(format!("{err}\n\n{hint}")),
+                None => Err(err),
+            }
+        }
+    };
     result
 }
 
@@ -1881,8 +1816,6 @@ fn test_read_file_state() -> AppState {
             cached_config_mtime: Arc::new(Mutex::new(None)),
             cached_agents: Arc::new(Mutex::new(None)),
             cached_agents_mtime: Arc::new(Mutex::new(None)),
-            cached_runtime_state: Arc::new(Mutex::new(None)),
-            cached_runtime_state_mtime: Arc::new(Mutex::new(None)),
             cached_chat_index: Arc::new(Mutex::new(None)),
             cached_conversation_metadata: Arc::new(Mutex::new(std::collections::HashMap::new())),
             cached_conversation_field_metadata_ids: Arc::new(Mutex::new(

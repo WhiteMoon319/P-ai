@@ -324,7 +324,6 @@ fn app_data_cache_signature(path: &PathBuf) -> AppDataCacheSignature {
     }
 }
 
-#[cfg(test)]
 fn write_json_file_atomic<T>(path: &PathBuf, value: &T, label: &str) -> Result<(), String>
 where
     T: Serialize,

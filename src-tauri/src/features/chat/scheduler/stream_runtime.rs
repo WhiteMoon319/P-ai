@@ -126,7 +126,7 @@ fn conversation_has_focused_chat_view(state: &AppState, conversation_id: &str) -
                 .any(|binding| binding.conversation_id.trim() == conversation_id.trim()),
             Err(_) => false,
         };
-        has_binding && chat_view_foreground_active()
+        has_binding
     }
     #[cfg(not(target_os = "android"))]
     {

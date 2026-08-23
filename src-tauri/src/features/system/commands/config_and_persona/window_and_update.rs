@@ -13,47 +13,28 @@ fn show_archives_window(app: AppHandle) -> Result<(), String> {
     show_window(&app, "archives")
 }
 
-#[tauri::command]
-fn show_quick_setup_window(app: AppHandle) -> Result<(), String> {
-    show_window(&app, "quick-setup")
-}
-
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn open_runtime_logs_window(app: AppHandle) -> Result<(), String> {
-    #[cfg(not(target_os = "android"))]
-    return show_runtime_logs_window(&app);
-    #[cfg(target_os = "android")]
-    Err("Android 不支持运行日志窗口".to_string())
+    show_runtime_logs_window(&app)
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn hide_current_window(window: tauri::Window) -> Result<(), String> {
     window.hide().map_err(|err| format!("隐藏当前窗口失败：{err}"))
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn toggle_current_window_maximize(window: tauri::Window, app: AppHandle) -> Result<bool, String> {
-    #[cfg(not(target_os = "android"))]
-    return toggle_window_maximize_with_default_restore(&app, window.label());
-    #[cfg(target_os = "android")]
-    Err("Android 不支持最大化/还原".to_string())
+    toggle_window_maximize_with_default_restore(&app, window.label())
 }
 
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn start_current_window_drag(window: tauri::Window, app: AppHandle) -> Result<(), String> {
-    #[cfg(not(target_os = "android"))]
-    return start_window_drag_with_default_restore(&app, window.label());
-    #[cfg(target_os = "android")]
-    Err("Android 不支持窗口拖拽".to_string())
-}
-
-#[tauri::command]
-fn complete_quick_setup_and_open_chat(app: AppHandle) -> Result<(), String> {
-    show_window(&app, "chat")?;
-    if let Some(window) = app.get_webview_window("quick-setup") {
-        let _ = window.hide();
-    }
-    Ok(())
+    start_window_drag_with_default_restore(&app, window.label())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,20 +58,6 @@ struct RecordHotkeyUpdateResult {
     max_record_seconds: u32,
 }
 
-// 聊天视图前台激活状态：由前端 useChatForegroundActivity 上报
-// （visibility + focus + viewMode==="chat"），所有平台统一存储，
-// Android 无窗口焦点 API，通知等逻辑依赖该状态判断"会话是否在前台可见"。
-static CHAT_VIEW_FOREGROUND_ACTIVE: std::sync::OnceLock<std::sync::atomic::AtomicBool> =
-    std::sync::OnceLock::new();
-
-#[cfg(target_os = "android")]
-fn chat_view_foreground_active() -> bool {
-    CHAT_VIEW_FOREGROUND_ACTIVE
-        .get()
-        .map(|flag| flag.load(std::sync::atomic::Ordering::Relaxed))
-        .unwrap_or(false)
-}
-
 #[tauri::command]
 fn set_chat_window_active(active: bool) {
     static CHAT_WINDOW_INACTIVE_LOGGED_ONCE: std::sync::atomic::AtomicBool =
@@ -98,9 +65,6 @@ fn set_chat_window_active(active: bool) {
     if !active && !CHAT_WINDOW_INACTIVE_LOGGED_ONCE.swap(true, std::sync::atomic::Ordering::Relaxed) {
         runtime_log_warn(format!("[系统] 聊天窗口激活状态变更：跳过"));
     }
-    let flag = CHAT_VIEW_FOREGROUND_ACTIVE
-        .get_or_init(|| std::sync::atomic::AtomicBool::new(active));
-    flag.store(active, std::sync::atomic::Ordering::Relaxed);
     set_record_hotkey_probe_chat_window_active(active);
 }
 
@@ -358,7 +322,9 @@ fn set_github_update_method_inner(
         state_write_config_cached(state, &config)?;
         runtime_log_info(format!("[自动更新] 更新方式偏好已保存：method={normalized}"));
     }
-    let data = state_read_agents_runtime_snapshot(state)?;
+    let agents = state_read_agents_cached(state)?;
+    let mut data = AppData::default();
+    data.agents = agents;
     let runtime_config = runtime_config_with_private_organization(state, &config, &data)?;
     let _ = app.emit("easy-call:config-updated", &runtime_config);
     Ok(runtime_config)
@@ -387,7 +353,9 @@ fn set_skipped_github_update_version_inner(
         runtime_log_warn(format!("[自动更新] 已保存跳过版本：version={normalized}"));
     }
     sync_update_state_from_skip_version(app, &normalized);
-    let data = state_read_agents_runtime_snapshot(state)?;
+    let agents = state_read_agents_cached(state)?;
+    let mut data = AppData::default();
+    data.agents = agents;
     let runtime_config = runtime_config_with_private_organization(state, &config, &data)?;
     let _ = app.emit("easy-call:config-updated", &runtime_config);
     Ok(runtime_config)
@@ -423,7 +391,9 @@ fn set_ui_language_inner(
         state_write_config_cached(state, &config)?;
         runtime_log_info(format!("[配置] 界面语言已保存：ui_language={normalized}"));
     }
-    let data = state_read_agents_runtime_snapshot(state)?;
+    let agents = state_read_agents_cached(state)?;
+    let mut data = AppData::default();
+    data.agents = agents;
     let runtime_config = runtime_config_with_private_organization(state, &config, &data)?;
     let _ = app.emit("easy-call:config-updated", &runtime_config);
     Ok(runtime_config)
@@ -453,11 +423,11 @@ fn get_department_default_draft_inner(
 fn load_config_inner(state: &AppState) -> Result<AppConfig, String> {
     require_message_store_migration_completed_for_runtime(state, "加载应用配置")?;
     let mut result = state_read_config_cached(&state)?;
-    let config_changed_by_normalize = normalize_app_config_and_detect_changes(&mut result);
+    normalize_app_config(&mut result);
     let workspace_changed = ensure_default_shell_workspace_in_config(&mut result, &state);
     let remote_im_private_state_migrated =
         remote_im_migrate_channel_private_states(&state, &mut result)?;
-    if config_changed_by_normalize || workspace_changed || remote_im_private_state_migrated {
+    if workspace_changed || remote_im_private_state_migrated {
         state_write_config_cached(&state, &result)?;
     }
     let _ = run_app_data_migrations_with_state(&state, &result)?;
@@ -474,11 +444,11 @@ fn load_config_inner(state: &AppState) -> Result<AppConfig, String> {
 fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstrapSnapshot, String> {
     require_message_store_migration_completed_for_runtime(state, "加载应用启动快照")?;
     let mut config = state_read_config_cached(state)?;
-    let config_changed_by_normalize = normalize_app_config_and_detect_changes(&mut config);
+    normalize_app_config(&mut config);
     let workspace_changed = ensure_default_shell_workspace_in_config(&mut config, state);
     let remote_im_private_state_migrated =
         remote_im_migrate_channel_private_states(state, &mut config)?;
-    if config_changed_by_normalize || workspace_changed || remote_im_private_state_migrated {
+    if workspace_changed || remote_im_private_state_migrated {
         state_write_config_cached(state, &config)?;
     }
     let _ = run_app_data_migrations_with_state(state, &config)?;
@@ -487,31 +457,21 @@ fn read_app_bootstrap_snapshot(state: &AppState) -> Result<AppBootstrapSnapshot,
         config.simple_setup_mode = true;
     }
     // 启动快照阶段修复会话总索引，避免旧版本误删归档入口后仍需人工恢复。
+    let _ = ensure_system_notification_conversation_shard(&state.data_path)?;
     let _ = state_read_chat_index_cached(state)?;
-    let mut data = state_read_agents_runtime_snapshot(state)?;
-    let assistant_agent_id =
-        assistant_department_agent_id(&config).unwrap_or_else(default_assistant_department_agent_id);
-    let runtime_changed = if data.assistant_department_agent_id != assistant_agent_id {
-        data.assistant_department_agent_id = assistant_agent_id;
-        true
-    } else {
-        false
-    };
-    if runtime_changed {
-        state_write_runtime_state_cached(state, &build_runtime_state_file(&data))?;
-    }
+    let agents = state_read_agents_cached(state)?;
     let runtime_snapshot =
-        build_runtime_organization_snapshot_from_parts(&state.data_path, &config, &data.agents)?;
-    let mut runtime_data = data.clone();
+        build_runtime_organization_snapshot_from_parts(&state.data_path, &config, &agents)?;
+    let mut runtime_data = AppData::default();
     runtime_data.agents = runtime_snapshot.agents.clone();
     let chat_settings = ChatSettings {
-        assistant_department_agent_id: data.assistant_department_agent_id.clone(),
+        assistant_department_agent_id: state_service_get_assistant_department_agent_id(state)?,
         user_alias: user_persona_name(&runtime_data),
-        response_style_id: data.response_style_id.clone(),
-        pdf_read_mode: data.pdf_read_mode.clone(),
-        background_voice_screenshot_keywords: data.background_voice_screenshot_keywords.clone(),
-        background_voice_screenshot_mode: data.background_voice_screenshot_mode.clone(),
-        instruction_presets: data.instruction_presets.clone(),
+        response_style_id: state_service_get_response_style_id(state)?,
+        pdf_read_mode: state_service_get_pdf_read_mode(state)?,
+        background_voice_screenshot_keywords: state_service_get_background_voice_screenshot_keywords(state)?,
+        background_voice_screenshot_mode: state_service_get_background_voice_screenshot_mode(state)?,
+        instruction_presets: state_service_get_instruction_presets(state)?,
     };
     Ok(AppBootstrapSnapshot {
         config: runtime_snapshot.config,
@@ -528,17 +488,6 @@ fn load_app_bootstrap_snapshot(state: State<'_, AppState>) -> Result<AppBootstra
 #[tauri::command]
 fn is_backend_ready(state: State<'_, AppState>) -> bool {
     state.backend_ready.load(std::sync::atomic::Ordering::Acquire)
-}
-
-#[tauri::command]
-fn webview_pong(window: tauri::Window) {
-    webview_record_pong(window.label());
-}
-
-#[tauri::command]
-fn debug_crash_webview(webview: tauri::Webview) -> Result<(), String> {
-    webview.eval("(function(){const a=[];while(true){a.push(new Array(1000000).fill('x'));}})();")
-        .map_err(|err| format!("注入崩溃脚本失败：{err}"))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -582,30 +531,23 @@ fn enumerate_system_fonts() -> Result<Vec<SystemFontInfo>, String> {
 }
 
 #[tauri::command]
+#[cfg(not(target_os = "android"))]
 async fn list_system_fonts() -> Result<Vec<SystemFontInfo>, String> {
-    // Android 无桌面字体系统可枚举，直接返回空列表（前端不展示字体选择器）。
-    #[cfg(target_os = "android")]
-    {
-        return Ok(Vec::new());
-    }
-    // 非 Android 平台：命中缓存直接返回，避免重复枚举；miss 时把重活丢到阻塞线程池，不占 IPC 线程。
-    #[cfg(not(target_os = "android"))]
-    {
-        let cache = SYSTEM_FONTS_CACHE.get_or_init(|| std::sync::Mutex::new(None));
-        if let Ok(guard) = cache.lock() {
-            if let Some(cached) = guard.as_ref() {
-                return Ok(cached.clone());
-            }
+    // 命中缓存直接返回，避免重复枚举；miss 时把重活丢到阻塞线程池，不占 IPC 线程。
+    let cache = SYSTEM_FONTS_CACHE.get_or_init(|| std::sync::Mutex::new(None));
+    if let Ok(guard) = cache.lock() {
+        if let Some(cached) = guard.as_ref() {
+            return Ok(cached.clone());
         }
-        let result = tauri::async_runtime::spawn_blocking(enumerate_system_fonts)
-            .await
-            .map_err(|err| format!("枚举系统字体任务失败：{err}"))?
-            .map_err(|err| err.to_string())?;
-        if let Ok(mut guard) = cache.lock() {
-            *guard = Some(result.clone());
-        }
-        Ok(result)
     }
+    let result = tauri::async_runtime::spawn_blocking(enumerate_system_fonts)
+        .await
+        .map_err(|err| format!("枚举系统字体任务失败：{err}"))?
+        .map_err(|err| err.to_string())?;
+    if let Ok(mut guard) = cache.lock() {
+        *guard = Some(result.clone());
+    }
+    Ok(result)
 }
 
 fn validate_record_hotkey_available(config: &AppConfig) -> Result<String, String> {
@@ -639,7 +581,9 @@ fn update_record_hotkey(
         if normalized != config.record_hotkey {
             config.record_hotkey = normalized.clone();
             state_write_config_cached(&state, &config)?;
-            let data = state_read_agents_runtime_snapshot(&state)?;
+            let agents = state_read_agents_cached(&state)?;
+    let mut data = AppData::default();
+    data.agents = agents;
             let runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
             let _ = app.emit("easy-call:config-updated", &runtime_config);
         }
@@ -658,7 +602,9 @@ fn update_record_hotkey(
     config.record_hotkey = normalized.clone();
     state_write_config_cached(&state, &config)?;
     set_record_hotkey_probe_hotkey(&normalized)?;
-    let data = state_read_agents_runtime_snapshot(&state)?;
+    let agents = state_read_agents_cached(&state)?;
+    let mut data = AppData::default();
+    data.agents = agents;
     let runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
     let _ = app.emit("easy-call:config-updated", &runtime_config);
     Ok(RecordHotkeyUpdateResult {
@@ -687,7 +633,9 @@ fn update_record_background_wake(
         "[录音热键] 完成，任务=后台唤醒切换，enabled={}",
         config.record_background_wake_enabled
     ));
-    let data = state_read_agents_runtime_snapshot(&state)?;
+    let agents = state_read_agents_cached(&state)?;
+    let mut data = AppData::default();
+    data.agents = agents;
     let runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
     let _ = app.emit("easy-call:config-updated", &runtime_config);
     Ok(RecordHotkeyUpdateResult {
@@ -782,7 +730,9 @@ fn save_config_inner(
     let _ = ensure_default_shell_workspace_in_config(&mut config, &state);
     set_record_hotkey_probe_background_wake_enabled(config.record_background_wake_enabled);
 
-    let mut data = state_read_agents_runtime_snapshot(&state)?;
+    let agents = state_read_agents_cached(&state)?;
+    let mut data = AppData::default();
+    data.agents = agents;
     let base_config = state_read_config_cached(&state)?;
     let removed_remote_im_channels = removed_remote_im_channels(&base_config, &config);
     let previous_runtime_config = runtime_config_with_private_organization(&state, &base_config, &data)?;
@@ -811,13 +761,6 @@ fn save_config_inner(
     } else {
         0
     };
-    if let Some(agent_id) = assistant_department_agent_id(&config) {
-        if data.assistant_department_agent_id != agent_id {
-            data.assistant_department_agent_id = agent_id;
-            state_write_runtime_state_cached(&state, &build_runtime_state_file(&data))
-                .map_err(|err| format!("配置已保存，但运行状态保存失败：{err}"))?;
-        }
-    }
     if base_config.hotkey != main_config.hotkey {
         #[cfg(not(target_os = "android"))]
         if let Err(err) = register_hotkey_from_config(&app, &main_config) {
