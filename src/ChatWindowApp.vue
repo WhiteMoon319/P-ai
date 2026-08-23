@@ -2,6 +2,7 @@
 <template>
   <div class="window-shell text-sm bg-base-200">
     <AppWindowHeader
+      v-if="!hideWindowHeader"
       :view-mode="viewMode"
       :current-theme="currentTheme"
       :title-text="titleText"
@@ -15,15 +16,10 @@
       :active-conversation-id="currentChatConversationId"
       :current-department-id="currentForegroundDepartmentId"
       :conversation-items="chatConversationItems"
-      :current-chat-workspaces="chatWorkspaceChoices"
-      :config-shell-workspaces="config.shellWorkspaces || []"
       :user-alias="userAlias"
       :user-avatar-url="userAvatarUrl"
       :persona-name-map="chatPersonaNameMap"
       :persona-avatar-url-map="chatPersonaAvatarUrlMap"
-      :api-configs="textCapableApiConfigs"
-      :create-conversation-department-options="createConversationDepartmentOptions"
-      :default-create-conversation-department-id="defaultCreateConversationDepartmentId"
       :trim-tip="t('chat.trimTip')"
       :maximized="maximized"
       :window-ready="windowReady"
@@ -38,45 +34,26 @@
       :update-to-latest-label="updateToLatestLabel"
       :update-to-latest-title="updateToLatestTitle"
       @open-archives="openConversationList"
-      @open-settings="handleOpenSettings"
+      @open-settings="openSettingsWindow"
       @minimize-window="minimizeWindowAndClearForeground"
       @toggle-maximize-window="toggleMaximizeWindow"
       @update:config-search-query="updateConfigSearchQuery"
       @select-config-search-result="handleSelectConfigSearchResult"
       @update-to-latest="triggerUpdateToLatest"
-      @toggle-side-conversation-list="handleToggleSideConversationList"
+      @toggle-side-conversation-list="toggleSideConversationList"
       @toggle-tool-review-panel="toggleToolReviewPanel"
       @switch-conversation="switchChatConversation"
       @rename-conversation="renameCurrentConversation"
       @toggle-pin-conversation="toggleConversationPin"
       @archive-conversation="archiveConversationFromList"
       @delete-conversation="deleteUnarchivedConversationFromArchives"
-      @create-conversation="handleCreateConversation"
+      @create-conversation="openDraftConversation"
       @trim-conversation="openTrimActionDialog"
       @start-drag="startDrag"
       @close-window="handleCloseWindow"
-      :remote-mode="isRemoteMode"
-      :remote-view="remoteView"
-      :remote-target-text="remoteTargetText"
-      @exit-remote="handleExitRemote"
-      @remote-back-to-chat="handleRemoteBackToChat"
     />
 
-    <div
-      v-if="isRemoteMode"
-      class="relative flex-1 min-h-0 bg-base-100"
-    >
-      <iframe
-        :key="remoteUrl"
-        ref="remoteFrameRef"
-        :src="remoteUrl"
-        class="h-full w-full border-0"
-        allow="clipboard-write; clipboard-read; microphone; camera"
-      ></iframe>
-    </div>
-
     <AppWindowContent
-      v-else
       :t="tr"
       :view-mode="viewMode"
       :side-conversation-list-visible="sideConversationListVisible"
@@ -165,7 +142,6 @@
       :queued-attachment-notices="queuedAttachmentNotices"
       :chat-input="chatInput"
       :instruction-presets="instructionPresets"
-      :chat-input-placeholder="chatInputPlaceholder"
       :speech-recognition-supported="speechRecognitionSupported"
       :recording="recording"
       :recording-ms="recordingMs"
@@ -350,7 +326,8 @@
       :on-archive-conversation="archiveConversationFromList"
       :on-delete-conversation="deleteUnarchivedConversationFromArchives"
       :on-rebind-conversation-recipient="rebindConversationRecipient"
-      :on-create-conversation="createUnarchivedConversation"
+      :on-update-draft-conversation="updateDraftConversation"
+      :on-create-conversation="openDraftConversation"
       :on-branch-conversation-from-selection="branchConversationFromSelection"
       :on-forward-conversation-from-selection="forwardConversationFromSelection"
       :on-user-async-delegate-from-selection="userAsyncDelegateFromSelection"
@@ -460,28 +437,8 @@
       @open-dir="openChatWorkspaceDir"
       @save="saveChatWorkspacePicker"
     />
-    <div
-      v-if="startupOverlayVisible"
-      class="fixed inset-0 z-9998 flex items-center justify-center bg-base-300/90 p-6 backdrop-blur"
-    >
-      <div class="min-w-72 max-w-sm rounded-box border border-base-content/10 bg-base-100 px-5 py-4 shadow-2xl">
-        <div class="flex items-center gap-3">
-          <span class="loading loading-spinner loading-md text-primary"></span>
-          <div class="min-w-0 flex-1">
-            <div class="font-medium">{{ startupOverlayMessage }}</div>
-            <div class="mt-1 text-xs opacity-70">{{ startupOverlayDetail }}</div>
-          </div>
-          <div class="shrink-0 text-xs opacity-50">
-            {{ Math.min(startupOverlayProgressCurrent, startupOverlayProgressTotal) }}/{{ startupOverlayProgressTotal }}
-          </div>
-        </div>
-        <progress
-          class="progress progress-primary mt-3 w-full"
-          :value="Math.min(startupOverlayProgressCurrent, startupOverlayProgressTotal)"
-          :max="Math.max(startupOverlayProgressTotal, 1)"
-        />
-      </div>
-    </div>
+    <StartupOverlay v-if="startupOverlayVisible" />
+    <ConfigStatusToast :text="status" :tone="statusTone" />
     <div
       v-if="messageStoreMigration.visible"
       class="fixed inset-0 z-9999 flex items-center justify-center bg-base-300/90 p-6 backdrop-blur"
@@ -518,25 +475,27 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, onBeforeUnmount, onMounted, ref } from "vue";
+import { defineComponent, onBeforeUnmount } from "vue";
+import ConfigStatusToast from "./features/config/components/ConfigStatusToast.vue";
 import Win10ResizeHandles from "./features/shell/components/Win10ResizeHandles.vue";
 import ChatWorkspacePickerDialog from "./features/chat/components/dialogs/ChatWorkspacePickerDialog.vue";
 import AppWindowContent from "./features/shell/components/AppWindowContent.vue";
 import AppWindowHeader from "./features/shell/components/AppWindowHeader.vue";
 import ShellDialogsHost from "./features/shell/components/ShellDialogsHost.vue";
+import StartupOverlay from "./features/shell/components/StartupOverlay.vue";
 import { useChatWindowApp } from "./features/chat/composables/use-chat-window-app";
-import { useRemoteMode } from "./features/shell/composables/use-remote-mode";
-import type { ShellWorkspace, ShellWorkMode } from "./types/app";
-import { invokeTauri } from "./services/tauri-api";
+import { onTransportRemoteChatCommand } from "./services/tauri-api";
 
-// 远程桥消息来源标识，与 tauri-api.ts emitWebBridgeNotification 的转发一致。
-const REMOTE_BRIDGE_SOURCE = "pai-remote-bridge";
-// 远程认证桥消息来源标识，与 tauri-api.ts requestRemotePasswordFromParent 的请求一致。
-const REMOTE_AUTH_BRIDGE_SOURCE = "pai-remote-bridge-auth";
-// 手机壳层 → iframe 内电脑 PAI 页面的会话命令消息来源标识（与 PR 分支监听端一致）。
-const REMOTE_COMMAND_SOURCE = "pai-remote-bridge-command";
-// delta 流式事件节流间隔：同 id ongoing 通知最小刷新间隔，避免高频刷新。
-const REMOTE_NOTIFY_THROTTLE_MS = 1000;
+/** iframe 嵌入且非 VSCode 宿主时隐藏窗口栏：远程前端模式下由宿主壳层提供 header。 */
+function isEmbeddedWebHost(): boolean {
+  if (typeof window === "undefined") return false;
+  if (window.self === window.top) return false;
+  const bridgeWindow = window as Window & { acquireVsCodeApi?: unknown };
+  const isVscodeHost =
+    typeof bridgeWindow.acquireVsCodeApi === "function"
+    || window.location.protocol === "vscode-webview:";
+  return !isVscodeHost;
+}
 
 export default defineComponent({
   name: "ChatWindowApp",
@@ -546,210 +505,30 @@ export default defineComponent({
     AppWindowContent,
     AppWindowHeader,
     ShellDialogsHost,
+    StartupOverlay,
+    ConfigStatusToast,
   },
   setup() {
     const app = useChatWindowApp();
-    const remote = useRemoteMode();
-    const remoteFrameRef = ref<HTMLIFrameElement | null>(null);
-    let remoteStartedConversationId = "";
-    let remoteLastStartedNotifyAt = 0;
-    // 各会话最近的会话标题缓存：conversation.todosUpdated 事件不带标题，
-    // 刷新 todo 目标通知时复用最近一次 assistantDelta 广播的标题。
-    const remoteTitleByConversationId = new Map<string, string>();
+    const embedded = isEmbeddedWebHost();
 
-    function handleOpenSettings() {
-      if (remote.isRemoteMode.value) {
-        remote.setRemoteView("settings");
-        return;
-      }
-      app.openSettingsWindow();
-    }
-
-    function forwardRemoteCommand(method: string) {
-      const frame = remoteFrameRef.value as HTMLIFrameElement | null;
-      if (!frame?.contentWindow) return;
-      try {
-        frame.contentWindow.postMessage(
-          { source: REMOTE_COMMAND_SOURCE, method },
-          "*",
-        );
-      } catch {
-        // 跨域投递失败不阻断本地操作
-      }
-    }
-
-    function handleToggleSideConversationList() {
-      if (remote.isRemoteMode.value) {
-        forwardRemoteCommand("toggle-conversation-list");
-        return;
-      }
-      void app.toggleSideConversationList();
-    }
-
-    function handleCreateConversation(input?: {
-      title?: string;
-      departmentId?: string;
-      agentId?: string;
-      copyCurrent?: boolean;
-      importPath?: string;
-      shellWorkspaces?: ShellWorkspace[];
-      shellWorkMode?: ShellWorkMode;
-      shellAutonomousMode?: boolean;
-    }) {
-      if (remote.isRemoteMode.value) {
-        forwardRemoteCommand("create-conversation");
-        return;
-      }
-      void app.createUnarchivedConversation(input);
-    }
-
-    function handleRemoteBackToChat() {
-      remote.setRemoteView("chat");
-    }
-
-    function handleExitRemote() {
-      void invokeTauri("remote_live_update_notify", {
-        payload: {
-          conversationId: "",
-          kind: "clear",
-          delta: "",
-          assistantText: "",
-          reason: "",
-        },
-      }).catch(() => undefined);
-      remote.exitRemote();
-      // Android 单 WebView：清除 active 后重新加载本地 chat 页面。
-      window.location.reload();
-    }
-
-    function handleRemoteBridgeMessage(event: MessageEvent) {
-      if (!remote.isRemoteMode.value) return;
-      const data = event.data as { source?: unknown; method?: unknown; payload?: unknown } | null;
-      if (!data || typeof data !== "object") return;
-      if (data.source === REMOTE_AUTH_BRIDGE_SOURCE) {
-        // 电脑 PAI 页面在 iframe 内请求远程访问密码：用已保存密码自动回复，
-        // 避免 Android WebView 拦截跨域 iframe 的 window.prompt。
-        if (data.method !== "request-password") return;
-        const password = String(remote.remoteTarget.value?.password || "").trim();
-        if (!password) return;
-        const frame = remoteFrameRef.value as HTMLIFrameElement | null;
-        if (!frame?.contentWindow) return;
-        try {
-          frame.contentWindow.postMessage(
-            { source: REMOTE_AUTH_BRIDGE_SOURCE, method: "password", payload: { password } },
-            "*",
-          );
-        } catch {
-          // 跨域投递失败不影响本地处理
+    // 远程前端模式：手机壳层 header 的会话操作（切换对话列表/新建对话）通过
+    // postMessage 转发到这里执行，由电脑 PAI 页面在自己的会话状态上完成操作。
+    // 监听与安全校验统一收敛在 tauri-api 的 onTransportRemoteChatCommand。
+    if (embedded) {
+      const stopRemoteCommands = onTransportRemoteChatCommand((method) => {
+        if (method === "toggle-conversation-list") {
+          void app.toggleSideConversationList();
+        } else if (method === "create-conversation") {
+          void app.openDraftConversation();
         }
-        return;
-      }
-      if (data.source !== REMOTE_BRIDGE_SOURCE) return;
-      if (data.method === "conversation.todosUpdated") {
-        // 电脑 PAI 广播 todo 列表变化（新增/进度推进/状态切换）后刷新活体通知：
-        // 通知正文应显示当前目标文本（current_todo），而不是消息 delta。
-        const todoRecord = data.payload as
-          | { conversationId?: unknown; currentTodo?: unknown }
-          | null;
-        if (!todoRecord || typeof todoRecord !== "object") return;
-        const todoConversationId = String(todoRecord.conversationId || "").trim();
-        const currentTodo = String(todoRecord.currentTodo || "").trim();
-        if (!todoConversationId || !currentTodo) return;
-        void invokeTauri("remote_live_update_notify", {
-          payload: {
-            conversationId: todoConversationId,
-            kind: "todo",
-            delta: currentTodo,
-            assistantText: "",
-            reason: "",
-            title: remoteTitleByConversationId.get(todoConversationId) || "",
-          },
-        }).catch(() => undefined);
-        return;
-      }
-      if (data.method !== "chat.assistantDelta") return;
-      const record = data.payload as
-        | { conversationId?: unknown; event?: unknown; conversationTitle?: unknown }
-        | null;
-      if (!record || typeof record !== "object") return;
-      const conversationId = String(record.conversationId || "").trim();
-      const conversationTitle = String(record.conversationTitle || "").trim();
-      if (conversationId && conversationTitle) {
-        remoteTitleByConversationId.set(conversationId, conversationTitle);
-      }
-      const eventPayload = record.event as
-        | { kind?: unknown; delta?: unknown; message?: unknown; reason?: unknown }
-        | null;
-      const kind = String(eventPayload?.kind || "").trim();
-      const delta = String(eventPayload?.delta || "").trim();
-      let notifyKind = "";
-      let assistantText = "";
-      let reason = "";
-      if (delta) {
-        notifyKind = "started";
-      } else if (kind === "round_completed") {
-        notifyKind = "completed";
-        // 电脑 PAI 端 round_completed 事件把 message 序列化为 JSON 字符串
-        // （{conversationId, activationId, requestId, assistantText, ...}），
-        // 需要先解析再取 assistantText；兼容对象形式。
-        const rawMessage = eventPayload?.message;
-        if (typeof rawMessage === "string" && rawMessage.trim()) {
-          try {
-            const parsed = JSON.parse(rawMessage) as { assistantText?: unknown } | null;
-            assistantText = String(parsed?.assistantText || "").trim();
-          } catch {
-            assistantText = "";
-          }
-        } else if (rawMessage && typeof rawMessage === "object") {
-          assistantText = String(
-            (rawMessage as { assistantText?: unknown }).assistantText || "",
-          ).trim();
-        }
-      } else if (kind === "round_failed") {
-        notifyKind = "failed";
-        reason = String(eventPayload?.reason || "").trim();
-      }
-      if (!notifyKind) return;
-      // started 事件高频出现，节流刷新同 id ongoing 通知；终态无节流。
-      if (notifyKind === "started") {
-        const now = Date.now();
-        if (
-          remoteStartedConversationId === conversationId
-          && now - remoteLastStartedNotifyAt < REMOTE_NOTIFY_THROTTLE_MS
-        ) {
-          return;
-        }
-        remoteStartedConversationId = conversationId;
-        remoteLastStartedNotifyAt = now;
-      }
-      void invokeTauri("remote_live_update_notify", {
-        payload: {
-          conversationId,
-          kind: notifyKind,
-          delta,
-          assistantText,
-          reason,
-          title: conversationTitle,
-        },
-      }).catch(() => undefined);
+      });
+      onBeforeUnmount(stopRemoteCommands);
     }
-
-    onMounted(() => {
-      window.addEventListener("message", handleRemoteBridgeMessage);
-    });
-    onBeforeUnmount(() => {
-      window.removeEventListener("message", handleRemoteBridgeMessage);
-    });
 
     return {
       ...app,
-      ...remote,
-      remoteFrameRef,
-      handleOpenSettings,
-      handleRemoteBackToChat,
-      handleExitRemote,
-      handleToggleSideConversationList,
-      handleCreateConversation,
+      hideWindowHeader: embedded,
     };
   },
 });

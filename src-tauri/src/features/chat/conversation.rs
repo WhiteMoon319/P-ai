@@ -697,6 +697,7 @@ mod summary_context_title_tests {
             auto_push_remote_contact_id: None,
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
+            is_draft: false,
         }
     }
 
@@ -1037,6 +1038,7 @@ fn build_conversation_record(
         memory_recall_table: Vec::new(),
         plan_mode_enabled: false,
         preferred_api_config_id: None,
+        is_draft: false,
         auto_push_remote_contact_id: None,
         cumulative_usage: ConversationCumulativeUsage::default(),
         active_goal: None,
@@ -3611,6 +3613,7 @@ fn build_prompt_with_mode(
         memory_recall_table: conversation.memory_recall_table.clone(),
         plan_mode_enabled: conversation.plan_mode_enabled,
         preferred_api_config_id: conversation.preferred_api_config_id.clone(),
+        is_draft: conversation.is_draft,
         auto_push_remote_contact_id: conversation.auto_push_remote_contact_id.clone(),
         cumulative_usage: conversation.cumulative_usage.clone(),
         active_goal: conversation.active_goal.clone(),

@@ -1664,6 +1664,7 @@ mod terminal_workspace_tests {
             auto_push_remote_contact_id: None,
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
+            is_draft: false,
         });
         state_write_app_data_cached(&state, &data).expect("write app data");
 
@@ -1745,6 +1746,7 @@ mod terminal_workspace_tests {
             auto_push_remote_contact_id: None,
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
+            is_draft: false,
         });
         state_write_app_data_cached(&state, &data).expect("write app data");
 
