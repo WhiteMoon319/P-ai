@@ -1189,6 +1189,9 @@ pub fn run() {
                 let state = AppState::new_with_root(app_root)
                     .map_err(|e| format!("初始化应用状态失败: {e}"))?;
                 eprintln!("[P-AI Android] AppState constructed, config_path={:?}", state.config_path);
+                if let Err(err) = run_state_migration_if_needed(&state) {
+                    runtime_log_error(format!("[启动] 执行 state 迁移失败: {err}"));
+                }
                 init_last_panic_snapshot_slot(state.last_panic_snapshot.clone());
                 {
                     let panic_slot = state.last_panic_snapshot.clone();
@@ -1265,6 +1268,22 @@ pub fn run() {
                         let _ = window.unminimize();
                         let _ = window.show();
                         let _ = window.set_focus();
+                    }
+                }
+            }
+            #[cfg(target_os = "android")]
+            {
+                // 消息存储迁移：版本不足时先标记等待（前端轮询可见），再后台自动开跑
+                let migration_state = app_handle.state::<AppState>().inner().clone();
+                match prepare_message_store_migration_runtime(&migration_state) {
+                    Ok(true) => {
+                        runtime_log_info(format!("[启动] 检测到消息存储待迁移，后台自动开始"));
+                        spawn_message_store_migration_task(migration_state);
+                    }
+                    Ok(false) => {}
+                    Err(err) => {
+                        runtime_log_error(format!("[启动] 消息存储迁移版本预判失败：{err}"));
+                        message_store_migration_runtime_mark_failed(err);
                     }
                 }
             }
