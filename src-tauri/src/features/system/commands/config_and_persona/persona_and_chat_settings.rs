@@ -1138,7 +1138,6 @@ fn read_chat_image_data_url_inner(
     })
 }
 
-#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn sync_tray_icon(
     _input: SyncTrayIconInput,

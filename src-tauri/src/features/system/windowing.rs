@@ -1194,6 +1194,11 @@ fn sync_default_tray_icon(app: &AppHandle) -> Result<(), String> {
         .map_err(|err| format!("Set tray icon failed: {err}"))
 }
 
+#[cfg(target_os = "android")]
+fn sync_default_tray_icon(_app: &AppHandle) -> Result<(), String> {
+    Err("Android 不支持托盘图标".to_string())
+}
+
 fn show_window(app: &AppHandle, label: &str) -> Result<(), String> {
     let chat_side_expanded = label == "chat"
         && read_chat_window_side_expansion()
@@ -1272,6 +1277,11 @@ fn toggle_window_maximize_with_default_restore(
     Ok(maximized)
 }
 
+#[cfg(target_os = "android")]
+fn toggle_window_maximize_with_default_restore(_app: &AppHandle, _label: &str) -> Result<bool, String> {
+    Err("Android 不支持窗口最大化".to_string())
+}
+
 #[cfg(not(target_os = "android"))]
 fn start_window_drag_with_default_restore(app: &AppHandle, label: &str) -> Result<(), String> {
     let window = app
@@ -1306,6 +1316,11 @@ fn start_window_drag_with_default_restore(app: &AppHandle, label: &str) -> Resul
     window
         .start_dragging()
         .map_err(|err| format!("Start dragging window failed: {err}"))
+}
+
+#[cfg(target_os = "android")]
+fn start_window_drag_with_default_restore(_app: &AppHandle, _label: &str) -> Result<(), String> {
+    Err("Android 不支持窗口拖拽".to_string())
 }
 
 fn toggle_window(app: &AppHandle, label: &str) -> Result<(), String> {
@@ -1355,6 +1370,11 @@ fn register_default_hotkey(app: &AppHandle) -> Result<(), String> {
 #[cfg(not(target_os = "android"))]
 fn register_hotkey_from_config(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
     register_hotkeys_from_config(app, config)
+}
+
+#[cfg(target_os = "android")]
+fn register_hotkey_from_config(_app: &AppHandle, _config: &AppConfig) -> Result<(), String> {
+    Err("Android 不支持全局快捷键".to_string())
 }
 
 #[cfg(not(target_os = "android"))]
@@ -1508,6 +1528,11 @@ fn show_runtime_logs_window(app: &AppHandle) -> Result<(), String> {
         })
         .map_err(|err| format!("调度创建运行日志窗口失败：{err}"))?;
     Ok(())
+}
+
+#[cfg(target_os = "android")]
+fn show_runtime_logs_window(_app: &AppHandle) -> Result<(), String> {
+    Err("Android 不支持日志窗口".to_string())
 }
 
 #[cfg(not(target_os = "android"))]

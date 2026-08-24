@@ -1285,18 +1285,15 @@ pub fn run() {
 
             Ok(())
         });
-    #[cfg(not(target_os = "android"))]
     let builder = builder.invoke_handler(tauri::generate_handler![
             show_main_window,
             show_chat_window,
             show_archives_window,
-            show_quick_setup_window,
             open_runtime_logs_window,
             hide_current_window,
             toggle_current_window_maximize,
             start_current_window_drag,
             set_chat_window_side_expanded,
-            complete_quick_setup_and_open_chat,
             set_chat_window_active,
             get_github_update_state,
             check_github_update,
@@ -1322,8 +1319,6 @@ pub fn run() {
             cleanup_storage_legacy_items,
             load_app_bootstrap_snapshot,
             is_backend_ready,
-            webview_pong,
-            debug_crash_webview,
             list_system_fonts,
             list_genai_chat_adapters,
             update_record_hotkey,
@@ -1429,7 +1424,6 @@ pub fn run() {
             memory_restore_db,
             get_archive_messages,
             get_archive_block_page,
-            get_archive_summary,
             delete_archive,
             unarchive_archive,
             export_archive_to_file,
@@ -1643,8 +1637,6 @@ pub fn run() {
             git_panel_remote_list,
             git_panel_sync
         ]);
-    #[cfg(target_os = "android")]
-    let builder = builder;
     builder
         .run(tauri::generate_context!())
         .unwrap_or_else(|err| {

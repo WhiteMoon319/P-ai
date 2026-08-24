@@ -13,25 +13,21 @@ fn show_archives_window(app: AppHandle) -> Result<(), String> {
     show_window(&app, "archives")
 }
 
-#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn open_runtime_logs_window(app: AppHandle) -> Result<(), String> {
     show_runtime_logs_window(&app)
 }
 
-#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn hide_current_window(window: tauri::Window) -> Result<(), String> {
     window.hide().map_err(|err| format!("隐藏当前窗口失败：{err}"))
 }
 
-#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn toggle_current_window_maximize(window: tauri::Window, app: AppHandle) -> Result<bool, String> {
     toggle_window_maximize_with_default_restore(&app, window.label())
 }
 
-#[cfg(not(target_os = "android"))]
 #[tauri::command]
 fn start_current_window_drag(window: tauri::Window, app: AppHandle) -> Result<(), String> {
     start_window_drag_with_default_restore(&app, window.label())
@@ -530,8 +526,13 @@ fn enumerate_system_fonts() -> Result<Vec<SystemFontInfo>, String> {
     Ok(result)
 }
 
+#[cfg(target_os = "android")]
+fn enumerate_system_fonts() -> Result<Vec<SystemFontInfo>, String> {
+    // Android 无系统字体枚举接口，返回空列表
+    Ok(Vec::new())
+}
+
 #[tauri::command]
-#[cfg(not(target_os = "android"))]
 async fn list_system_fonts() -> Result<Vec<SystemFontInfo>, String> {
     // 命中缓存直接返回，避免重复枚举；miss 时把重活丢到阻塞线程池，不占 IPC 线程。
     let cache = SYSTEM_FONTS_CACHE.get_or_init(|| std::sync::Mutex::new(None));
@@ -762,7 +763,6 @@ fn save_config_inner(
         0
     };
     if base_config.hotkey != main_config.hotkey {
-        #[cfg(not(target_os = "android"))]
         if let Err(err) = register_hotkey_from_config(&app, &main_config) {
             runtime_log_error(format!(
                 "[热键] 召唤热键运行时注册失败，配置已保存但该热键暂不可用：hotkey={}, err={}",
