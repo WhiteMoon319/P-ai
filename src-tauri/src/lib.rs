@@ -1631,6 +1631,8 @@ pub fn run() {
             commands::skill_open_workspace_dir,
             git_panel_repos,
             git_panel_detect,
+            git_panel_watch_start,
+            git_panel_watch_stop,
             git_panel_discover,
             git_panel_status,
             git_panel_diff,
