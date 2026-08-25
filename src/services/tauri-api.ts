@@ -1477,10 +1477,9 @@ const WEB_BRIDGE_NATIVE_ONLY_COMMANDS = new Set([
   "open_file_reader_window_command",
   "read_local_binary_file",
   "set_chat_window_side_expanded",
+<<<<<<< HEAD
   "git_panel_repos",
   "git_panel_detect",
-  "git_panel_watch_start",
-  "git_panel_watch_stop",
   "git_panel_discover",
   "git_panel_status",
   "git_panel_diff",
@@ -1507,6 +1506,8 @@ const WEB_BRIDGE_NATIVE_ONLY_COMMANDS = new Set([
   "git_panel_sync",
   "git_panel_log",
   "git_panel_show",
+=======
+>>>>>>> 0814091a (fix(git-panel): Web 端启用仓库监听与自动刷新，事件经 bridge 广播回前端)
 ]);
 
 // 业务层使用同一组可读的协议方法名；桌面端的 Tauri command 名称由适配器
