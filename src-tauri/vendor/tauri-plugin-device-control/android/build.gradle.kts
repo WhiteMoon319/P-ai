@@ -7,6 +7,10 @@ android {
     namespace = "app.tauri.device_control"
     compileSdk = 36
 
+    buildFeatures {
+        aidl = true
+    }
+
     defaultConfig {
         minSdk = 24
 

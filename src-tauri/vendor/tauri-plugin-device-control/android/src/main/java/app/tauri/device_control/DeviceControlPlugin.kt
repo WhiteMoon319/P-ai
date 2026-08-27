@@ -4,28 +4,30 @@
 package app.tauri.device_control
 
 import android.app.Activity
+import android.content.ComponentName
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.os.IBinder
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
+import org.json.JSONObject
 import rikka.shizuku.Shizuku
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
 
 /**
- * 提权设备控制插件（Shizuku 首选 / root 兜底）。
+ * 提权设备控制插件（Shizuku UserService 首选 / root 兜底）——仿 MAA-Meow 的
+ * RemoteServiceManager + ShizukuRemoteServiceConnector 模式：
  *
- * Rust 侧只负责命令白名单校验与调用转发；真正的提权 shell 执行与
- * Shizuku 授权状态在这里完成。
- *
- * 权限链路：
- *  - Shizuku：`pingBinder` 可用 + `checkSelfPermission` 已授权 → 以 shell 身份执行
- *    （`Shizuku.newProcess`，等价 ADB shell 权限，天然持有 INJECT_EVENTS 等）。
+ *  - Shizuku：`bindUserService` 把 [DeviceControlServiceImpl] 以 shell 身份启动在
+ *    独立进程，经 AIDL（[IDeviceControlService]）调用执行提权命令。
  *  - root：`su` 存在时 `su -c <cmd>` 兜底。
+ *
+ * Rust 侧只负责命令白名单校验与调用转发；真正的提权 shell 执行在这里完成。
  */
 @TauriPlugin
 class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
@@ -112,7 +114,7 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
       } else if (isRootAvailable()) {
         executeViaSu(command, timeoutMs)
       } else {
-        return@runCatching ErrorResult("无可用提权通道：请先通过 Shizuku 授权或开启 root")
+        ErrorResult("无可用提权通道：请先通过 Shizuku 授权或开启 root")
       }
     }.getOrElse { err ->
       ErrorResult("命令执行异常: ${err.message ?: err.javaClass.simpleName}")
@@ -160,11 +162,66 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
     }
   }
 
+  // ---- Shizuku UserService 连接（仿 MAA-Meow ShizukuRemoteServiceConnector） ----
+
+  private var boundShizukuService: IDeviceControlService? = null
+  private var boundUserServiceArgs: Shizuku.UserServiceArgs? = null
+  private var boundConnection: ServiceConnection? = null
+
+  /** 懒连接：首次需要时 bindUserService，成功后缓存复用。 */
   private fun executeViaShizuku(command: String, timeoutMs: Long): ExecResult {
-    // shell 身份执行：Shizuku.newProcess 以 ADB shell 权限运行
-    val process = Shizuku.newProcess(arrayOf("sh", "-c", command), null, "/")
-    return collectProcess(process, timeoutMs)
+    val service = obtainShizukuService()
+      ?: return ErrorResult("Shizuku 服务连接失败（服务未启动或超时）")
+    return try {
+      val json = service.execute(command, timeoutMs)
+      val obj = JSONObject(json)
+      ExecResult(obj.getInt("exitCode"), obj.getString("stdout"), obj.getString("stderr"))
+    } catch (e: Exception) {
+      ErrorResult("Shizuku 命令执行异常: ${e.message ?: e.javaClass.simpleName}")
+    }
   }
+
+  @Synchronized
+  private fun obtainShizukuService(): IDeviceControlService? {
+    boundShizukuService?.let { return it }
+    if (!isShizukuGranted()) return null
+
+    val latch = CountDownLatch(1)
+    val args = Shizuku.UserServiceArgs(
+      ComponentName(activity.packageName, DeviceControlServiceImpl::class.java.name)
+    ).apply {
+      processNameSuffix("device_control")
+      daemon(false)
+      version(1)
+    }
+    val connection = object : ServiceConnection {
+      override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+        if (binder != null) {
+          boundShizukuService = IDeviceControlService.Stub.asInterface(binder)
+        }
+        latch.countDown()
+      }
+
+      override fun onServiceDisconnected(name: ComponentName?) {
+        boundShizukuService = null
+        latch.countDown()
+      }
+    }
+    boundUserServiceArgs = args
+    boundConnection = connection
+    return try {
+      Shizuku.bindUserService(args, connection)
+      if (!latch.await(20, TimeUnit.SECONDS)) {
+        null
+      } else {
+        boundShizukuService
+      }
+    } catch (e: Exception) {
+      null
+    }
+  }
+
+  // ---- root 兜底 ----
 
   private fun executeViaSu(command: String, timeoutMs: Long): ExecResult {
     val process = ProcessBuilder("su", "-c", command).redirectErrorStream(false).start()
@@ -173,8 +230,8 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
 
   /** 并发读 stdout/stderr + 带超时 waitFor，避免管道缓冲满死锁。 */
   private fun collectProcess(process: Process, timeoutMs: Long): ExecResult {
-    val stdoutRef = AtomicReference("")
-    val stderrRef = AtomicReference("")
+    val stdoutRef = java.util.concurrent.atomic.AtomicReference("")
+    val stderrRef = java.util.concurrent.atomic.AtomicReference("")
     val outDone = CountDownLatch(1)
     val errDone = CountDownLatch(1)
 
@@ -218,5 +275,7 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
 
   private open class ExecResult(val exitCode: Int, val stdout: String, val stderr: String)
 
-  private class ErrorResult(message: String) : ExecResult(-1, "", message)
+  private class ErrorResult(message: String) : ExecResult(-1, "", message) {
+    val message: String = message
+  }
 }

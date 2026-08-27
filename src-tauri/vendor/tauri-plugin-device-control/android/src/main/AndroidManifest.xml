@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Shizuku Manager 授权权限（v11 前 API_V23；v11+ 走自实现权限，双声明兼容老版本） -->
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V11" />
+
     <!-- Shizuku 授权所需的交互跨用户权限（ShizukuProvider 保护） -->
     <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
