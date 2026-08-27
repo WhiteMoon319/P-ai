@@ -426,6 +426,14 @@ fn device_control_root(state: &AppState) -> PathBuf {
 /// 路径校验：只允许落在 Android 工作区沙盒内（llm_workspace_path），
 /// 拒绝绝对系统路径、`..`、符号链接逃逸。
 fn device_control_validate_path(state: &AppState, raw: &str) -> Result<String, String> {
+    let root = device_control_root(state)
+        .canonicalize()
+        .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
+    device_control_validate_path_inner(&root, raw)
+}
+
+/// 路径校验纯逻辑（与 AppState 解耦，便于单测）。
+fn device_control_validate_path_inner(root: &std::path::Path, raw: &str) -> Result<String, String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err("路径不能为空。".to_string());
@@ -433,9 +441,6 @@ fn device_control_validate_path(state: &AppState, raw: &str) -> Result<String, S
     if trimmed.contains("..") {
         return Err("路径不能包含 ..（路径逃逸防护）。".to_string());
     }
-    let root = device_control_root(state)
-        .canonicalize()
-        .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
     let candidate = std::path::PathBuf::from(trimmed);
     let candidate = if candidate.is_absolute() {
         candidate
@@ -445,8 +450,168 @@ fn device_control_validate_path(state: &AppState, raw: &str) -> Result<String, S
     let canonical = candidate
         .canonicalize()
         .map_err(|err| format!("路径不存在或不可访问: {err}"))?;
-    if !canonical.starts_with(&root) {
+    if !canonical.starts_with(root) {
         return Err(format!("路径不在 Android 工作区沙盒内: {trimmed}"));
     }
     Ok(canonical.to_string_lossy().to_string())
+}
+
+#[cfg(test)]
+mod device_control_tests {
+    use super::*;
+
+    fn tmp_root() -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("dc-test-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::create_dir_all(dir.join("screenshots")).unwrap();
+        dir
+    }
+
+    #[test]
+    fn render_list_packages_third_party() {
+        let cmd = DeviceCommand::ListPackages { third_party_only: true };
+        assert_eq!(cmd.render(), "pm list packages -3");
+        assert!(!cmd.is_dangerous());
+    }
+
+    #[test]
+    fn render_list_packages_all() {
+        let cmd = DeviceCommand::ListPackages { third_party_only: false };
+        assert_eq!(cmd.render(), "pm list packages");
+    }
+
+    #[test]
+    fn render_freeze_uses_user_zero_and_package() {
+        let cmd = DeviceCommand::Freeze { package: "com.example.app".to_string() };
+        assert_eq!(cmd.render(), "pm disable-user --user 0 com.example.app");
+        assert!(cmd.is_dangerous());
+    }
+
+    #[test]
+    fn render_unfreeze_enable() {
+        let cmd = DeviceCommand::Unfreeze { package: "com.example.app".to_string() };
+        assert_eq!(cmd.render(), "pm enable com.example.app");
+        assert!(!cmd.is_dangerous());
+    }
+
+    #[test]
+    fn render_uninstall_user_zero() {
+        let cmd = DeviceCommand::Uninstall { package: "com.example.app".to_string() };
+        assert_eq!(cmd.render(), "pm uninstall --user 0 com.example.app");
+        assert!(cmd.is_dangerous());
+    }
+
+    #[test]
+    fn render_install_reinstall() {
+        let cmd = DeviceCommand::Install { apk_path: "/data/user/0/ai.easycall.app/x.apk".to_string() };
+        assert_eq!(cmd.render(), "pm install -r /data/user/0/ai.easycall.app/x.apk");
+        assert!(cmd.is_dangerous());
+    }
+
+    #[test]
+    fn render_delete_file_rm_force() {
+        let cmd = DeviceCommand::DeleteFile { path: "/data/user/0/ai.easycall.app/llm-workspace/tmp/x.bin".to_string() };
+        assert_eq!(cmd.render(), "rm -f /data/user/0/ai.easycall.app/llm-workspace/tmp/x.bin");
+        assert!(cmd.is_dangerous());
+    }
+
+    #[test]
+    fn render_tap_swipe_key_event() {
+        assert_eq!(DeviceCommand::Tap { x: 540, y: 1200 }.render(), "input tap 540 1200");
+        assert_eq!(
+            DeviceCommand::Swipe { x1: 540, y1: 2000, x2: 540, y2: 400, duration_ms: Some(300) }.render(),
+            "input swipe 540 2000 540 400 300"
+        );
+        assert_eq!(
+            DeviceCommand::Swipe { x1: 540, y1: 2000, x2: 540, y2: 400, duration_ms: None }.render(),
+            "input swipe 540 2000 540 400"
+        );
+        assert_eq!(DeviceCommand::KeyEvent { keycode: 4 }.render(), "input keyevent 4");
+    }
+
+    #[test]
+    fn render_screenshot() {
+        let cmd = DeviceCommand::Screenshot { path: "/data/user/0/ai.easycall.app/llm-workspace/screenshots/a.png".to_string() };
+        assert_eq!(cmd.render(), "screencap -p /data/user/0/ai.easycall.app/llm-workspace/screenshots/a.png");
+    }
+
+    #[test]
+    fn dangerous_commands_require_confirm() {
+        assert!(require_confirm(false, "冻结应用").is_err());
+        assert!(require_confirm(true, "冻结应用").is_ok());
+        assert!(require_confirm(false, "卸载应用").is_err());
+        assert!(require_confirm(false, "删除文件").is_err());
+        assert!(require_confirm(false, "安装应用").is_err());
+    }
+
+    #[test]
+    fn validate_package_accepts_valid_names() {
+        assert_eq!(validate_package("com.example.app").unwrap(), "com.example.app");
+        assert_eq!(validate_package("  com.example.app  ").unwrap(), "com.example.app");
+        assert_eq!(validate_package("com.example.app_2").unwrap(), "com.example.app_2");
+    }
+
+    #[test]
+    fn validate_package_rejects_invalid_chars() {
+        assert!(validate_package("").is_err());
+        assert!(validate_package("   ").is_err());
+        assert!(validate_package("com/example").is_err());
+        assert!(validate_package("com;rm -rf").is_err());
+        assert!(validate_package("com.example$(id)").is_err());
+    }
+
+    #[test]
+    fn validate_package_rejects_shell_metacharacters() {
+        for bad in ["com.a|b", "com.a&b", "com.a`b", "com.a;b", "com.a\\b"] {
+            assert!(validate_package(bad).is_err(), "should reject: {bad}");
+        }
+    }
+
+    #[test]
+    fn path_validation_accepts_sandbox_relative() {
+        let root = tmp_root();
+        let ok = device_control_validate_path_inner(&root, "sub").unwrap();
+        assert!(ok.starts_with(root.to_string_lossy().as_ref()));
+        assert!(ok.ends_with("sub"));
+    }
+
+    #[test]
+    fn path_validation_accepts_sandbox_absolute() {
+        let root = tmp_root();
+        let target = root.join("sub");
+        let ok = device_control_validate_path_inner(&root, &target.to_string_lossy()).unwrap();
+        assert!(ok.ends_with("sub"));
+    }
+
+    #[test]
+    fn path_validation_rejects_traversal() {
+        let root = tmp_root();
+        assert!(device_control_validate_path_inner(&root, "../../etc/passwd").is_err());
+        assert!(device_control_validate_path_inner(&root, "sub/../../etc").is_err());
+        assert!(device_control_validate_path_inner(&root, "").is_err());
+    }
+
+    #[test]
+    fn path_validation_rejects_outside_absolute() {
+        let root = tmp_root();
+        let outside = std::env::temp_dir().join("outside-dc-test");
+        std::fs::create_dir_all(&outside).unwrap();
+        assert!(device_control_validate_path_inner(&root, &outside.to_string_lossy()).is_err());
+    }
+
+    #[test]
+    fn path_validation_rejects_nonexistent() {
+        let root = tmp_root();
+        assert!(device_control_validate_path_inner(&root, "no-such-dir").is_err());
+    }
+
+    #[test]
+    fn android_command_prefixes_include_device_tools() {
+        for prefix in ["pm", "cmd", "input", "am", "dumpsys", "settings", "service", "getprop", "screencap", "toybox"] {
+            assert!(
+                ANDROID_SYSTEM_COMMAND_PREFIXES.contains(&prefix),
+                "missing prefix: {prefix}"
+            );
+        }
+    }
 }
