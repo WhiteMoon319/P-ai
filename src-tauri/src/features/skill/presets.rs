@@ -53,6 +53,10 @@ const WORKSPACE_PRESET_SKILLS: &[WorkspacePresetSkill] = &[
         dir_name: "memory-generation",
         skill_md: include_str!("../../../resources/preset-skills/memory-generation/SKILL.md"),
     },
+    WorkspacePresetSkill {
+        dir_name: "device-control",
+        skill_md: include_str!("../../../resources/preset-skills/device-control/SKILL.md"),
+    },
 ];
 
 #[allow(dead_code)]

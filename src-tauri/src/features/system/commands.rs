@@ -22,6 +22,9 @@ include!("commands/debug_log_commands.rs");
 include!("commands/android_workspace_paths.rs");
 include!("commands/android_workspace.rs");
 
+// ==================== 设备控制（Shizuku/root 提权） ====================
+include!("commands/device_control.rs");
+
 // ==================== 分享导出命令 ====================
 include!("commands/share_export_commands.rs");
 
