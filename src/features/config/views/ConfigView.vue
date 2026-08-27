@@ -278,7 +278,7 @@
         @mouseenter="navScrollbarRef?.reveal()"
         @mouseleave="navScrollbarRef?.hide()"
       >
-        <div ref="navScrollerRef" class="ecall-floating-scroll-target min-h-0 flex-1 overflow-y-auto pr-1">
+<div ref="navScrollerRef" class="ecall-floating-scroll-target min-h-0 flex-1 h-full overflow-y-auto pr-1">
           <ul class="menu w-full gap-1 p-0 pt-2 [&>li>a]:w-full">
             <li v-for="item in visibleConfigNavItems" :key="item.tab">
               <a :class="configNavLinkClass(item.tab)" @click="selectConfigNavTab(item.tab)">
