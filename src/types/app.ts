@@ -1014,6 +1014,7 @@ export type UnarchivedConversationSummary = {
   autoPushRemoteContactId?: string;
   activeGoal?: ConversationGoalState | null;
   currentTodos?: ChatTodoItem[];
+  lastError?: string;
   detachedWindowOpen?: boolean;
   detachedWindowLabel?: string;
   previewMessages?: ConversationPreviewMessage[];
