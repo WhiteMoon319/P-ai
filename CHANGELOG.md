@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.74.0](docs/changelog/releases/v0.74.0.md) - 草稿会话的「和谁对话」卡片新增工作区快捷设置：可以直接切换工作目录（下拉列出侧边栏的所有目录，也能浏览选择任意文件夹），并即时调整权限与工作模式（目录 / 项目内工作树 / 本会话工作树），不用再进设置面板
 - [v0.73.1](docs/changelog/releases/v0.73.1.md) - 修复 Web 端（VS Code 侧边栏）无法创建会话的问题：新建会话与草稿打开命令已接入 Web 传输层
 - [v0.73.0](docs/changelog/releases/v0.73.0.md) - 会话存储全面升级：消息改为多行分组 + zstd 压缩存储，占用更小、读写更快；旧数据在启动后自动后台迁移，实时显示进度与完成汇总，迁移期间界面不再长时间无反馈
 - [v0.72.0](docs/changelog/releases/v0.72.0.md) - 模型选择下拉改为两层：上层选模型、底部滑动条直接调节思考等级；每个模型会记住上次使用的思考等级，切换时自动恢复；模型按钮上的思考等级始终可见，模型名过长也不会被截断
@@ -21,8 +22,6 @@
 - [v0.59.0](docs/changelog/releases/v0.59.0.md) - 文件阅读器新增 Git 面板：可在「文件/Git」之间切换，查看工作区与暂存区改动、查看 diff、暂存与取消暂存、丢弃改动、提交、储藏、切换/新建/删除分支、抓取/拉取/推送/同步，以及浏览提交历史与提交图；点击历史提交可直接查看该次提交的改动。
 - [v0.58.0](docs/changelog/releases/v0.58.0.md) - 委托状态在打开会话时立即刷新，会话工作区栏的活跃委托展示不再依赖监控面板的委托标签页是否打开。
 - [v0.57.0](docs/changelog/releases/v0.57.0.md) - 会话列表的聚合旧会话条目新增摘要预览：未读或 7 天内有更新的条目默认展开显示最近消息摘要，其余条目悬停时展开；移除悬停时的系统默认提示气泡
-- [v0.56.2](docs/changelog/releases/v0.56.2.md) - 修复 i18n 文案缺失：补全三语（zh-CN/zh-TW/en-US）中 welcome 卡片、工具页、远程前端密码等 63 处静态引用缺失的翻译 key，并补齐 zh-TW 热键发送方式的 4 处缺口。
-- [v0.56.1](docs/changelog/releases/v0.56.1.md) - Android 工作区导出改用原生 FileProvider + ACTION_SEND 系统分享：把沙盒工作区文件通过系统分享面板导出到其他应用，Kotlin shareFromDevice 改用模板 authority `${packageName}.fileprovider`，patch-android-project.sh 向模板 file_paths.xml 追加 root-path 覆盖沙盒根 app_data_dir()。
 - [v0.56.0](docs/changelog/releases/v0.56.0.md) - 足迹墙按凌晨 4 点分界：凌晨 0:00-3:59 的使用归属前一个分界日（适配通宵工作场景），今日视图、历史日历、年份统计与小时图全部按分界日口径计算；今日小时图 x 轴按分界日顺序排列（04:00 起头，0-3 点收尾）
 - [v0.55.0](docs/changelog/releases/v0.55.0.md) - 会话列表分组优化：同目录、同助手的会话自动聚合，最新一条完整展示，其余折叠为单行条目；打开会话不再自动展开所在分组，最近会话的文件夹胶囊可点击展开并定位到分组。
 - [v0.52.0](docs/changelog/releases/v0.52.0.md) - Linux 应用内自动更新（AppImage）：支持自动检查、下载并替换安装新版本，发布流程同步生成 Linux 更新清单与签名；macOS 仍不启用。
@@ -206,5 +205,5 @@
 - [v0.9.3](docs/changelog/releases/v0.9.3.md) - 发布（release-0.9.3）：同步版本号并承接当前 `rust-genai` 运行时迁移成果
 - [v0.9.1](docs/changelog/releases/v0.9.1.md) - 发布（release-0.9.1）：整合委托功能修复与聊天交互打磨后发布补丁版本
 - [v0.9.0](docs/changelog/releases/v0.9.0.md) - 发布（release-0.9.0）：整理并发布当前这一轮聊天窗口、Markdown 渲染、流式输出与会话链路重构成果
-- [UNRELEASED](docs/changelog/releases/UNRELEASED.md) - 外观新增「自动」主题模式：跟随系统深浅自动切换主题，浅色/深色可分别指定主题（含自定义主题），重启后保持；全新安装默认开启自动模式
+- [UNRELEASED](docs/changelog/releases/UNRELEASED.md)
 
