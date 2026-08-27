@@ -1148,7 +1148,8 @@ pub fn run() {
     let builder = builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_workspace_io::init());
+        .plugin(tauri_plugin_workspace_io::init())
+        .plugin(tauri_plugin_device_control::init());
     #[cfg(not(target_os = "android"))]
     let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -1573,6 +1574,18 @@ pub fn run() {
             export_file_from_android_workspace,
             share_file_from_android_workspace,
             delete_file_from_android_workspace,
+            device_control_status,
+            device_control_request_privilege,
+            device_control_list_packages,
+            device_control_freeze,
+            device_control_unfreeze,
+            device_control_uninstall,
+            device_control_install,
+            device_control_delete_file,
+            device_control_tap,
+            device_control_swipe,
+            device_control_key_event,
+            device_control_screenshot,
             terminal_self_check,
             list_terminal_shell_candidates,
             open_chat_shell_workspace_dir,

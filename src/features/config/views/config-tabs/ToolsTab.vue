@@ -188,6 +188,47 @@
       <div v-else class="text-sm opacity-50 text-center py-4">{{ t("config.mcpToolList.empty") }}</div>
     </ConfigCard>
 
+    <ConfigCard v-if="props.isAndroid" :title="t('config.tools.deviceControl')">
+      <template #actions>
+        <button class="btn btn-sm" type="button" :disabled="deviceControlBusy" @click="refreshDeviceControlStatus">
+          <span v-if="deviceControlStatusLoading" class="loading loading-spinner loading-xs"></span>
+          {{ t('config.tools.deviceControlRefresh') }}
+        </button>
+        <button
+          v-if="deviceControlPrivilegeState === 'shizuku_pending'"
+          class="btn btn-sm btn-primary"
+          type="button"
+          :disabled="deviceControlBusy"
+          @click="requestDeviceControlPrivilege"
+        >
+          {{ t('config.tools.deviceControlAuthorize') }}
+        </button>
+      </template>
+
+      <div class="grid gap-3 py-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="badge badge-sm" :class="deviceControlStateBadgeClass">{{ deviceControlStateLabel }}</span>
+          <span v-if="deviceControlStatusLoading" class="loading loading-spinner loading-xs"></span>
+        </div>
+
+        <div class="grid gap-1">
+          <div class="text-xs font-medium">{{ t('config.tools.deviceControlStatusDetail') }}</div>
+          <div class="text-sm opacity-80 whitespace-pre-wrap">{{ deviceControlStatusText || '-' }}</div>
+        </div>
+
+        <div v-if="deviceControlPrivilegeState === 'disabled'" class="text-xs opacity-70">
+          {{ t('config.tools.deviceControlDisabledHint') }}
+        </div>
+        <div v-if="deviceControlPrivilegeState === 'shizuku_pending'" class="text-xs opacity-70">
+          {{ t('config.tools.deviceControlPendingHint') }}
+        </div>
+      </div>
+
+      <div v-if="deviceControlMessage" class="pb-3 text-xs" :class="deviceControlMessageError ? 'text-error' : 'opacity-70'">
+        {{ deviceControlMessage }}
+      </div>
+    </ConfigCard>
+
     <input
       ref="androidWorkspaceRootfsInput"
       class="hidden"
@@ -306,6 +347,15 @@ type AndroidWorkspaceStatus = {
   downloadStage?: string | null;
 };
 
+type DeviceControlPrivilegeState = "disabled" | "shizuku_pending" | "shizuku_ready" | "root_ready";
+
+type DeviceControlStatus = {
+  shizukuAvailable: boolean;
+  shizukuGranted: boolean;
+  rootAvailable: boolean;
+  privilegeState: DeviceControlPrivilegeState;
+};
+
 const ANDROID_WORKSPACE_STATUS_EVENT = "easy-call:android-workspace-status-changed";
 const ANDROID_WORKSPACE_ROOTFS_DOWNLOAD_URL = "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.3-base-arm64.tar.gz";
 const ANDROID_WORKSPACE_ROOTFS_FILE_NAME = "ubuntu-base-24.04.3-base-arm64.tar.gz";
@@ -335,6 +385,15 @@ const androidWorkspaceMessage = ref("");
 const androidWorkspaceMessageError = ref(false);
 const androidWorkspaceFileManagerDialog = ref<InstanceType<typeof AndroidWorkspaceFileManagerDialog> | null>(null);
 let androidWorkspaceStatusUnlisten: UnlistenFn | null = null;
+
+// ---- 设备控制（Shizuku/root 提权） ----
+const DEVICE_CONTROL_STATUS_EVENT = "easy-call:device-control-status-changed";
+const deviceControlStatus = ref<DeviceControlStatus | null>(null);
+const deviceControlStatusLoading = ref(false);
+const deviceControlAuthorizing = ref(false);
+const deviceControlMessage = ref("");
+const deviceControlMessageError = ref(false);
+let deviceControlStatusUnlisten: UnlistenFn | null = null;
 const GIT_DOWNLOAD_URL = "https://git-scm.com/downloads";
 const isWindowsHost = typeof navigator !== "undefined" && /windows/i.test(String(navigator.userAgent || ""));
 const localFileSystemAvailable = getTransportCapabilities().localFileSystem;
@@ -380,6 +439,37 @@ const androidWorkspaceRuntimeText = computed(() => {
   const total = formatBytes(status.downloadTotalBytes || 0);
   return t("config.tools.androidWorkspaceRuntimeReady", { version: status.runtimeVersion, size: total });
 });
+
+// ---- 设备控制 computed ----
+const deviceControlPrivilegeState = computed<DeviceControlPrivilegeState>(
+  () => deviceControlStatus.value?.privilegeState || "disabled",
+);
+const deviceControlBusy = computed(() => deviceControlStatusLoading.value || deviceControlAuthorizing.value);
+const deviceControlStateLabel = computed(() => {
+  const state = deviceControlPrivilegeState.value;
+  if (state === "shizuku_ready") return t("config.tools.deviceControlStateShizukuReady");
+  if (state === "root_ready") return t("config.tools.deviceControlStateRootReady");
+  if (state === "shizuku_pending") return t("config.tools.deviceControlStateShizukuPending");
+  return t("config.tools.deviceControlStateDisabled");
+});
+const deviceControlStateBadgeClass = computed(() => {
+  const state = deviceControlPrivilegeState.value;
+  if (state === "shizuku_ready" || state === "root_ready") return "badge-success";
+  if (state === "shizuku_pending") return "badge-info";
+  return "badge-warning";
+});
+const deviceControlStatusText = computed(() => {
+  const status = deviceControlStatus.value;
+  if (!status) return "";
+  const shizuku = t("config.tools.deviceControlDetailShizuku", { ok: status.shizukuAvailable ? "✓" : "✗" });
+  const granted = t("config.tools.deviceControlDetailGranted", { ok: status.shizukuGranted ? "✓" : "✗" });
+  const root = t("config.tools.deviceControlDetailRoot", { ok: status.rootAvailable ? "✓" : "✗" });
+  return `${shizuku}\n${granted}\n${root}`;
+});
+function deviceControlSetMessage(text: string, isError = false) {
+  deviceControlMessage.value = text;
+  deviceControlMessageError.value = isError;
+}
 function formatBytes(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
@@ -509,6 +599,38 @@ function requestAndroidWorkspaceResetConfirm(): Promise<boolean> {
     resolveAndroidWorkspaceResetConfirm = resolve;
     dialog.showModal();
   });
+}
+
+// ---- 设备控制函数 ----
+async function refreshDeviceControlStatus() {
+  if (!props.isAndroid || deviceControlStatusLoading.value) return;
+  deviceControlStatusLoading.value = true;
+  try {
+    deviceControlStatus.value = await invokeTauri<DeviceControlStatus>("device_control_status");
+    deviceControlSetMessage("");
+  } catch (error) {
+    deviceControlSetMessage(t("config.tools.deviceControlStatusFailed", { err: toErrorMessage(error) }), true);
+  } finally {
+    deviceControlStatusLoading.value = false;
+  }
+}
+
+async function requestDeviceControlPrivilege() {
+  if (!props.isAndroid || deviceControlAuthorizing.value) return;
+  deviceControlAuthorizing.value = true;
+  deviceControlSetMessage("");
+  try {
+    await invokeTauri("device_control_request_privilege");
+    deviceControlSetMessage(t("config.tools.deviceControlAuthorizeRequested"));
+    // 授权弹窗异步返回，稍后刷新状态
+    setTimeout(() => {
+      void refreshDeviceControlStatus();
+    }, 800);
+  } catch (error) {
+    deviceControlSetMessage(t("config.tools.deviceControlAuthorizeFailed", { err: toErrorMessage(error) }), true);
+  } finally {
+    deviceControlAuthorizing.value = false;
+  }
 }
 
 function settleAndroidWorkspaceResetConfirm(value: boolean) {
@@ -899,12 +1021,22 @@ onMounted(() => {
     }).catch((error) => {
       setAndroidWorkspaceMessage(t("config.tools.androidWorkspaceStatusFailed", { err: toErrorMessage(error) }), true);
     });
+    void refreshDeviceControlStatus();
+    void listen<DeviceControlStatus>(DEVICE_CONTROL_STATUS_EVENT, (event) => {
+      deviceControlStatus.value = event.payload;
+    }).then((unlisten) => {
+      deviceControlStatusUnlisten = unlisten;
+    }).catch((error) => {
+      deviceControlSetMessage(t("config.tools.deviceControlStatusFailed", { err: toErrorMessage(error) }), true);
+    });
   }
 });
 
 onUnmounted(() => {
   androidWorkspaceStatusUnlisten?.();
   androidWorkspaceStatusUnlisten = null;
+  deviceControlStatusUnlisten?.();
+  deviceControlStatusUnlisten = null;
   settleAndroidWorkspaceResetConfirm(false);
 });
 </script>
