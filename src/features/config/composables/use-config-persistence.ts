@@ -621,6 +621,18 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
           }))
         : [];
       options.config.apiConfigs.splice(0, options.config.apiConfigs.length, ...saved.apiConfigs);
+      // 设备控制开关从后端保存结果回写（字段存在时）
+      if ((saved as AppConfig).deviceControl) {
+        options.config.deviceControl = {
+          enabled: !!saved.deviceControl?.enabled,
+          allowFreeze: !!saved.deviceControl?.allowFreeze,
+          allowUninstall: !!saved.deviceControl?.allowUninstall,
+          allowInstall: !!saved.deviceControl?.allowInstall,
+          allowDeleteFile: !!saved.deviceControl?.allowDeleteFile,
+          allowTouch: !!saved.deviceControl?.allowTouch,
+          allowScreenshot: !!saved.deviceControl?.allowScreenshot,
+        };
+      }
       options.normalizeApiBindingsLocal();
       options.lastSavedConfigJson.value = options.buildConfigSnapshotJson();
       console.info("[配置] save_config success");
