@@ -37,6 +37,20 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
     private const val TAG = "DeviceControlPlugin"
   }
 
+  // App 启动即预绑定 UserService：尽早完成 bind，避免首个命令（尤其 exec 路由）
+  // 在 exec 工具超时内等待 20s 绑定而失败。Shizuku 未就绪/未授权时静默跳过，
+  // 后续 status 仍会再次触发预绑定。
+  init {
+    Thread {
+      try {
+        if (isShizukuGranted() && boundShizukuService == null) {
+          obtainShizukuService()
+        }
+      } catch (_: Exception) {
+      }
+    }.apply { isDaemon = true }.start()
+  }
+
   @InvokeArg
   class ExecuteCommandArgs {
     var command: String? = null
