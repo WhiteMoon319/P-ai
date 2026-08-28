@@ -162,6 +162,12 @@ fn require_confirm(confirm: bool, action: &str) -> Result<(), String> {
 fn device_control_check_enabled(state: &AppState, capability: Option<&str>) -> Result<(), String> {
     let config = state_read_config_cached(state).map_err(|err| format!("读取配置失败: {err}"))?;
     let dc = config.device_control;
+    // Android 调试：经 eprintln! 输出到 logcat（RustStdoutStderr），确认实际读到的开关值
+    eprintln!(
+        "[device-control] check_enabled cap={:?} enabled={} freeze={} uninstall={} install={} delete={} touch={} screenshot={}",
+        capability, dc.enabled, dc.allow_freeze, dc.allow_uninstall, dc.allow_install,
+        dc.allow_delete_file, dc.allow_touch, dc.allow_screenshot
+    );
     if !dc.enabled {
         return Err("设备控制未开启：请先在「设置 → 工具 → 设备控制」启用总开关。".to_string());
     }

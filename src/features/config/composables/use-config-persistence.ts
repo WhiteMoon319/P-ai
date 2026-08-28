@@ -361,6 +361,18 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     options.config.remoteImChannels = Array.isArray((cfg as AppConfig).remoteImChannels)
       ? (cfg.remoteImChannels || []).map(mapRemoteImChannel).filter((item) => !!item.id)
       : [];
+    // 设备控制开关：从后端配置映射到前端 config（字段白名单加载，缺了会显示关闭）
+    if ((cfg as AppConfig).deviceControl) {
+      options.config.deviceControl = {
+        enabled: !!(cfg as AppConfig).deviceControl?.enabled,
+        allowFreeze: !!(cfg as AppConfig).deviceControl?.allowFreeze,
+        allowUninstall: !!(cfg as AppConfig).deviceControl?.allowUninstall,
+        allowInstall: !!(cfg as AppConfig).deviceControl?.allowInstall,
+        allowDeleteFile: !!(cfg as AppConfig).deviceControl?.allowDeleteFile,
+        allowTouch: !!(cfg as AppConfig).deviceControl?.allowTouch,
+        allowScreenshot: !!(cfg as AppConfig).deviceControl?.allowScreenshot,
+      };
+    }
     options.config.apiProviders = Array.isArray((cfg as AppConfig).apiProviders)
       ? (cfg.apiProviders || []).map((provider) => ({
           id: String((provider as { id?: unknown }).id || "").trim(),
@@ -621,6 +633,18 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
           }))
         : [];
       options.config.apiConfigs.splice(0, options.config.apiConfigs.length, ...saved.apiConfigs);
+      // 设备控制开关从后端保存结果回写（字段存在时）
+      if ((saved as AppConfig).deviceControl) {
+        options.config.deviceControl = {
+          enabled: !!saved.deviceControl?.enabled,
+          allowFreeze: !!saved.deviceControl?.allowFreeze,
+          allowUninstall: !!saved.deviceControl?.allowUninstall,
+          allowInstall: !!saved.deviceControl?.allowInstall,
+          allowDeleteFile: !!saved.deviceControl?.allowDeleteFile,
+          allowTouch: !!saved.deviceControl?.allowTouch,
+          allowScreenshot: !!saved.deviceControl?.allowScreenshot,
+        };
+      }
       options.normalizeApiBindingsLocal();
       options.lastSavedConfigJson.value = options.buildConfigSnapshotJson();
       console.info("[配置] save_config success");

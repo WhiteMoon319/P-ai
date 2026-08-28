@@ -530,10 +530,14 @@ function setDeviceControlEnabled(event: Event) {
   if (!(event.target as HTMLInputElement).checked) {
     void refreshDeviceControlStatus();
   }
+  // 开关即时持久化：落盘并刷新后端配置缓存，返回后再进设置仍为开启、
+  // 后端命令/终端路由校验立即读到新值
+  emit("saveApiConfig");
 }
 
 function setDeviceControlCapability(key: keyof NonNullable<AppConfig["deviceControl"]>, event: Event) {
   deviceControlEnsureConfig()[key] = (event.target as HTMLInputElement).checked;
+  emit("saveApiConfig");
 }
 function formatBytes(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "0 B";

@@ -483,6 +483,15 @@ export function useConfigCore(options: UseConfigCoreOptions) {
         customMaxOutputTokensEnabled: !!a.customMaxOutputTokensEnabled,
         maxOutputTokens: toFiniteMaxOutputTokens(a.maxOutputTokens),
       })),
+      deviceControl: options.config.deviceControl ? {
+        enabled: !!options.config.deviceControl.enabled,
+        allowFreeze: !!options.config.deviceControl.allowFreeze,
+        allowUninstall: !!options.config.deviceControl.allowUninstall,
+        allowInstall: !!options.config.deviceControl.allowInstall,
+        allowDeleteFile: !!options.config.deviceControl.allowDeleteFile,
+        allowTouch: !!options.config.deviceControl.allowTouch,
+        allowScreenshot: !!options.config.deviceControl.allowScreenshot,
+      } : undefined,
     };
   }
 
@@ -559,6 +568,15 @@ export function useConfigCore(options: UseConfigCoreOptions) {
         customMaxOutputTokensEnabled: !!a.customMaxOutputTokensEnabled,
         maxOutputTokens: toFiniteMaxOutputTokens(a.maxOutputTokens),
       })),
+      deviceControl: options.config.deviceControl ? {
+        enabled: !!options.config.deviceControl.enabled,
+        allowFreeze: !!options.config.deviceControl.allowFreeze,
+        allowUninstall: !!options.config.deviceControl.allowUninstall,
+        allowInstall: !!options.config.deviceControl.allowInstall,
+        allowDeleteFile: !!options.config.deviceControl.allowDeleteFile,
+        allowTouch: !!options.config.deviceControl.allowTouch,
+        allowScreenshot: !!options.config.deviceControl.allowScreenshot,
+      } : undefined,
     });
   }
 
