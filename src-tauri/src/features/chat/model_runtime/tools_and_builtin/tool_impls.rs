@@ -1403,6 +1403,267 @@ impl RuntimeValueTool for BuiltinDelegateTool {
     }
 }
 
+// ==================== 设备控制（Shizuku/root 提权）工具 ====================
+// agent 经工具目录调用 device_control.*；执行复用 device_control 模块内部
+// 函数（白名单枚举/开关校验/路径校验/提权执行），不重复造轮子。
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DeviceControlToolArgs {
+    action: String,
+    third_party_only: Option<bool>,
+    package: Option<String>,
+    path: Option<String>,
+    file_name: Option<String>,
+    x: Option<u32>,
+    y: Option<u32>,
+    x1: Option<u32>,
+    y1: Option<u32>,
+    x2: Option<u32>,
+    y2: Option<u32>,
+    duration_ms: Option<u32>,
+    keycode: Option<u32>,
+    confirm: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+struct BuiltinDeviceControlTool {
+    app_state: AppState,
+}
+
+impl RuntimeToolMetadata for BuiltinDeviceControlTool {
+    fn provider_tool_definition(&self) -> ProviderToolDefinition {
+        ProviderToolDefinition::new(
+            "device_control",
+            "Android 设备控制（Shizuku/root 提权）：冻结/解冻/卸载/安装应用、删除受限文件、列出应用、注入式触控（tap/swipe/key）与截屏。危险操作（freeze/uninstall/install/delete_file）必须带 confirm=true；对应能力开关未开启时返回结构化错误。仅安卓端可用。",
+            serde_json::json!({
+              "type": "object",
+              "properties": {
+                "action": { "type": "string", "enum": ["status", "list_packages", "freeze", "unfreeze", "uninstall", "install", "delete_file", "tap", "swipe", "key", "screenshot"], "description": "要执行的动作。" },
+                "confirm": { "type": "boolean", "description": "危险操作（freeze/uninstall/install/delete_file）必须为 true，且用户已二次确认。" },
+                "package": { "type": "string", "description": "包名（freeze/unfreeze/uninstall），只允许 [a-zA-Z0-9._]。" },
+                "path": { "type": "string", "description": "目标文件绝对路径（delete_file，需位于设备控制中转区 /sdcard/Android/data/<pkg>/files/device_control）。" },
+                "third_party_only": { "type": "boolean", "description": "list_packages 只列第三方应用（默认 true）。" },
+                "file_name": { "type": "string", "description": "截图文件名（screenshot，可选）。" },
+                "x": { "type": "integer", "description": "tap 坐标 x。" },
+                "y": { "type": "integer", "description": "tap 坐标 y。" },
+                "x1": { "type": "integer", "description": "swipe 起点 x。" },
+                "y1": { "type": "integer", "description": "swipe 起点 y。" },
+                "x2": { "type": "integer", "description": "swipe 终点 x。" },
+                "y2": { "type": "integer", "description": "swipe 终点 y。" },
+                "durationMs": { "type": "integer", "description": "swipe 时长毫秒（可选）。" },
+                "keycode": { "type": "integer", "description": "key 键码（4=返回、3=主页、26=电源）。" }
+              },
+              "required": ["action"],
+              "additionalProperties": false
+            }),
+        )
+    }
+}
+
+impl RuntimeValueTool for BuiltinDeviceControlTool {
+    const NAME: &'static str = "device_control";
+    type Args = DeviceControlToolArgs;
+    type Error = ToolInvokeError;
+
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
+        Box::pin(async move {
+        runtime_log_debug(format!(
+            "[工具调试] 内置工具执行开始 name=device_control args={}",
+            debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
+        ));
+        let result = builtin_device_control(&self.app_state, args).await;
+        match &result {
+            Ok(v) => runtime_log_debug(format!(
+                "[工具调试] 内置工具执行完成 name=device_control result={}",
+                debug_value_snippet(v, 240)
+            )),
+            Err(err) => runtime_log_error(format!("[工具执行] 内置工具 device_control 执行失败: 错误={err}")),
+        }
+        result
+        })
+    }
+}
+
+/// 设备控制工具分发：复用 device_control 模块内部逻辑（开关/白名单/校验/提权执行）。
+async fn builtin_device_control(
+    state: &AppState,
+    args: DeviceControlToolArgs,
+) -> Result<Value, ToolInvokeError> {
+    let app_handle = {
+        let guard = state
+            .app_handle
+            .lock()
+            .map_err(|_| ToolInvokeError::from("设备控制需要 App 已初始化。".to_string()))?;
+        guard
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| ToolInvokeError::from("设备控制需要 App 已初始化。".to_string()))?
+    };
+
+    match args.action.as_str() {
+        "status" => {
+            let status = device_control_status(app_handle)
+                .await
+                .map_err(ToolInvokeError::from)?;
+            serde_json::to_value(status)
+                .map_err(|err| ToolInvokeError::from(err.to_string()))
+        }
+        "list_packages" => {
+            device_control_check_enabled(state, None).map_err(ToolInvokeError::from)?;
+            let cmd = DeviceCommand::ListPackages {
+                third_party_only: args.third_party_only.unwrap_or(true),
+            };
+            let result = device_control_execute_privileged(&app_handle, &cmd, 30_000)
+                .map_err(ToolInvokeError::from)?;
+            if result.exit_code != 0 {
+                return Err(ToolInvokeError::from(format!(
+                    "列出应用失败（exit={}）：{}",
+                    result.exit_code,
+                    result.stderr.trim()
+                )));
+            }
+            Ok(serde_json::json!({ "packages": result.stdout.trim() }))
+        }
+        "freeze" => {
+            device_control_check_enabled(state, Some("freeze")).map_err(ToolInvokeError::from)?;
+            require_confirm(args.confirm.unwrap_or(false), "冻结应用").map_err(ToolInvokeError::from)?;
+            let package = validate_package(&require_tool_arg(&args.package, "package")?)
+                .map_err(ToolInvokeError::from)?;
+            let cmd = DeviceCommand::Freeze { package };
+            device_control_run_checked(&app_handle, cmd, "冻结应用失败", 30_000).await
+        }
+        "unfreeze" => {
+            device_control_check_enabled(state, Some("freeze")).map_err(ToolInvokeError::from)?;
+            let package = validate_package(&require_tool_arg(&args.package, "package")?)
+                .map_err(ToolInvokeError::from)?;
+            let cmd = DeviceCommand::Unfreeze { package };
+            device_control_run_checked(&app_handle, cmd, "解冻应用失败", 30_000).await
+        }
+        "uninstall" => {
+            device_control_check_enabled(state, Some("uninstall")).map_err(ToolInvokeError::from)?;
+            require_confirm(args.confirm.unwrap_or(false), "卸载应用").map_err(ToolInvokeError::from)?;
+            let package = validate_package(&require_tool_arg(&args.package, "package")?)
+                .map_err(ToolInvokeError::from)?;
+            let cmd = DeviceCommand::Uninstall { package };
+            device_control_run_checked(&app_handle, cmd, "卸载应用失败", 60_000).await
+        }
+        "install" => {
+            device_control_check_enabled(state, Some("install")).map_err(ToolInvokeError::from)?;
+            require_confirm(args.confirm.unwrap_or(false), "安装应用").map_err(ToolInvokeError::from)?;
+            let apk_path = require_tool_arg(&args.path, "path")?;
+            let path = device_control_validate_path(state, &apk_path).map_err(ToolInvokeError::from)?;
+            let cmd = DeviceCommand::Install { apk_path: path };
+            device_control_run_checked(&app_handle, cmd, "安装应用失败", 120_000).await
+        }
+        "delete_file" => {
+            device_control_check_enabled(state, Some("delete_file")).map_err(ToolInvokeError::from)?;
+            require_confirm(args.confirm.unwrap_or(false), "删除文件").map_err(ToolInvokeError::from)?;
+            let raw_path = require_tool_arg(&args.path, "path")?;
+            let path = device_control_validate_path(state, &raw_path).map_err(ToolInvokeError::from)?;
+            let cmd = DeviceCommand::DeleteFile { path };
+            device_control_run_checked(&app_handle, cmd, "删除文件失败", 30_000).await
+        }
+        "tap" => {
+            device_control_check_enabled(state, Some("touch")).map_err(ToolInvokeError::from)?;
+            let x = require_tool_u32(&args.x, "x")?;
+            let y = require_tool_u32(&args.y, "y")?;
+            device_control_inject_touch(
+                &app_handle,
+                tauri_plugin_device_control::TouchAction::Tap { x, y },
+            )
+            .map_err(ToolInvokeError::from)?;
+            Ok(serde_json::json!({ "ok": true }))
+        }
+        "swipe" => {
+            device_control_check_enabled(state, Some("touch")).map_err(ToolInvokeError::from)?;
+            let x1 = require_tool_u32(&args.x1, "x1")?;
+            let y1 = require_tool_u32(&args.y1, "y1")?;
+            let x2 = require_tool_u32(&args.x2, "x2")?;
+            let y2 = require_tool_u32(&args.y2, "y2")?;
+            device_control_inject_touch(
+                &app_handle,
+                tauri_plugin_device_control::TouchAction::Swipe {
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    duration_ms: args.duration_ms,
+                },
+            )
+            .map_err(ToolInvokeError::from)?;
+            Ok(serde_json::json!({ "ok": true }))
+        }
+        "key" => {
+            device_control_check_enabled(state, Some("touch")).map_err(ToolInvokeError::from)?;
+            let keycode = require_tool_u32(&args.keycode, "keycode")?;
+            device_control_inject_touch(
+                &app_handle,
+                tauri_plugin_device_control::TouchAction::Key { keycode },
+            )
+            .map_err(ToolInvokeError::from)?;
+            Ok(serde_json::json!({ "ok": true }))
+        }
+        "screenshot" => {
+            device_control_check_enabled(state, Some("screenshot")).map_err(ToolInvokeError::from)?;
+            let root = device_control_root(state);
+            let screenshots_dir = root.join("screenshots");
+            std::fs::create_dir_all(&screenshots_dir)
+                .map_err(|err| ToolInvokeError::from(format!("创建截屏目录失败: {err}")))?;
+            let name = args
+                .file_name
+                .as_ref()
+                .filter(|value| !value.trim().is_empty())
+                .cloned()
+                .unwrap_or_else(|| format!("screenshot_{}.png", chrono::Utc::now().timestamp()));
+            let safe_name = name
+                .replace(['/', '\\', ' ', ':'], "_")
+                .chars()
+                .take(80)
+                .collect::<String>();
+            let target = screenshots_dir.join(safe_name);
+            let cmd = DeviceCommand::Screenshot {
+                path: target.to_string_lossy().to_string(),
+            };
+            device_control_run_checked(&app_handle, cmd, "截屏失败", 30_000).await?;
+            Ok(serde_json::json!({ "path": target.to_string_lossy() }))
+        }
+        other => Err(ToolInvokeError::from(format!("未知 device_control 动作: {other}"))),
+    }
+}
+
+/// 执行命令并检查退出码，返回 {"ok": true}。
+async fn device_control_run_checked(
+    app: &tauri::AppHandle,
+    cmd: DeviceCommand,
+    fail_hint: &str,
+    timeout_ms: u64,
+) -> Result<Value, ToolInvokeError> {
+    let result = device_control_execute_privileged(app, &cmd, timeout_ms)
+        .map_err(ToolInvokeError::from)?;
+    if result.exit_code != 0 {
+        return Err(ToolInvokeError::from(format!(
+            "{fail_hint}（exit={}）：{}",
+            result.exit_code,
+            result.stderr.trim()
+        )));
+    }
+    Ok(serde_json::json!({ "ok": true }))
+}
+
+fn require_tool_arg(value: &Option<String>, name: &str) -> Result<String, ToolInvokeError> {
+    value
+        .clone()
+        .filter(|v| !v.trim().is_empty())
+        .ok_or_else(|| ToolInvokeError::from(format!("缺少参数 {name}")))
+}
+
+fn require_tool_u32(value: &Option<u32>, name: &str) -> Result<u32, ToolInvokeError> {
+    value
+        .as_ref()
+        .copied()
+        .ok_or_else(|| ToolInvokeError::from(format!("缺少参数 {name}")))
+}
+
 #[cfg(test)]
 mod tool_impls_tests {
     use super::config_tool_command_is_readonly;

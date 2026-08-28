@@ -257,6 +257,7 @@
             ],
             api_providers: Vec::new(),
             tool_review_api_config_id: None,
+            device_control: DeviceControlConfig::default(),
         };
         normalize_app_config(&mut cfg);
         assert_eq!(cfg.record_hotkey, "");
@@ -367,6 +368,7 @@
             ],
             api_providers: Vec::new(),
             tool_review_api_config_id: None,
+            device_control: DeviceControlConfig::default(),
         };
         normalize_app_config(&mut cfg);
         assert_eq!(cfg.selected_api_config_id, "edit-b::edit-b-model-default".to_string());
@@ -901,6 +903,7 @@
             ],
             api_providers: Vec::new(),
             tool_review_api_config_id: None,
+            device_control: DeviceControlConfig::default(),
         };
 
         normalize_app_config(&mut cfg);
@@ -1011,6 +1014,7 @@
             }],
             api_providers: Vec::new(),
             tool_review_api_config_id: None,
+            device_control: DeviceControlConfig::default(),
         };
 
         normalize_app_config(&mut cfg);

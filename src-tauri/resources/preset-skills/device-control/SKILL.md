@@ -7,13 +7,13 @@ description: 当需要冻结/解冻/卸载/安装应用、删除受限文件、�
 
 ## 核心规则
 
-- 设备控制优先走 `device_control.*` 工具；`shell_exec` 终端里输入 `pm`/`cmd`/`input`/`am`/`dumpsys`/`settings`/`service`/`getprop`/`screencap`/`toybox`/`wm`/`netd`/`appops`/`content` 等首词白名单命令时**自动路由到 Android 域**（Shizuku 首选 / root 兜底提权执行），无需手动拼接工具。
+- 设备控制优先走 `device_control` 工具（action 分发）；`shell_exec` 终端里输入 `pm`/`cmd`/`input`/`am`/`dumpsys`/`settings`/`service`/`getprop`/`screencap`/`toybox`/`wm`/`netd`/`appops`/`content` 等首词白名单命令时**自动路由到 Android 域**（Shizuku 首选 / root 兜底提权执行），无需手动拼接工具。
+- **能力默认全部关闭**：先查 `device_control {action: "status"}` 只反映提权状态；总开关与分项开关在「设置 → 工具 → 设备控制」开启后，对应操作才可执行。未开启时返回结构化错误，不假装成功。
 - 歧义命令（`ls`/`rm`/`cat`/`cp` 等 Linux 与 Android 域都有）默认落 Linux 域（proot），需要进 Android 域时必须加 `sys:` 前缀显式覆盖（如 `sys:rm -f /data/local/tmp/x`）；未命中白名单的命令一律落 Linux 域，不会静默提权。
 - 终端路由到 Android 域的命令禁止含 shell 元字符（`;`/`|`/`&`/`$`/反引号/`()` 等），含元字符会被拒绝并提示拆分或改用工具，防注入绕过。
-- 先查 `device_control_status` 确认提权状态，再执行任何操作。
-- 冻结/卸载/安装/删除文件是危险操作，必须带 `confirm: true`（用户已二次确认）才执行。
+- 冻结/卸载/安装/删除文件是危险操作，必须带 `confirm: true`（用户已二次确认）才执行；终端路由到 Android 域的卸载/冻结/安装/删除类命令也会触发用户确认。
 - 只使用工具白名单，不拼接自由 shell；包名只允许 `[a-zA-Z0-9._]`。
-- 删除文件路径必须落在 Android 工作区沙盒内，拒绝系统路径与 `..`。
+- 删除/安装/截屏路径必须落在设备控制中转区（`/sdcard/Android/data/<pkg>/files/device_control`），拒绝系统路径与 `..`。
 - 权限不足时如实报错并引导用户激活 Shizuku（ADB 或 root），不假装成功。
 
 ## 提权状态
@@ -26,17 +26,17 @@ description: 当需要冻结/解冻/卸载/安装应用、删除受限文件、�
 ## 常用操作
 
 ```text
-device_control_status
-device_control_list_packages(thirdPartyOnly: true)
-device_control_freeze(package: "com.example", confirm: true)
-device_control_unfreeze(package: "com.example")
-device_control_uninstall(package: "com.example", confirm: true)
-device_control_install(apkPath: "/工作区/x.apk", confirm: true)
-device_control_delete_file(path: "tmp/old.bin", confirm: true)
-device_control_tap(x: 540, y: 1200)
-device_control_swipe(x1: 540, y1: 2000, x2: 540, y2: 400, durationMs: 300)
-device_control_key_event(keycode: 4)
-device_control_screenshot(fileName: "now.png")
+device_control {action: "status"}
+device_control {action: "list_packages", thirdPartyOnly: true}
+device_control {action: "freeze", package: "com.example", confirm: true}
+device_control {action: "unfreeze", package: "com.example"}
+device_control {action: "uninstall", package: "com.example", confirm: true}
+device_control {action: "install", path: "/sdcard/Android/data/ai.easycall.app/files/device_control/x.apk", confirm: true}
+device_control {action: "delete_file", path: "/sdcard/Android/data/ai.easycall.app/files/device_control/tmp/old.bin", confirm: true}
+device_control {action: "tap", x: 540, y: 1200}
+device_control {action: "swipe", x1: 540, y1: 2000, x2: 540, y2: 400, durationMs: 300}
+device_control {action: "key", keycode: 4}
+device_control {action: "screenshot", fileName: "now.png"}
 ```
 
 ## 触控与截屏

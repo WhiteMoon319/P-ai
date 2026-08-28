@@ -184,6 +184,12 @@ async fn builtin_tool_definitions_for_frontend(
             }
             .provider_tool_definition(),
         ),
+        frontend_tool_definition(
+            BuiltinDeviceControlTool {
+                app_state: state.clone(),
+            }
+            .provider_tool_definition(),
+        ),
     ];
     out
 }

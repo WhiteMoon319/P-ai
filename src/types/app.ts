@@ -361,6 +361,16 @@ export type DepartmentPermissionCatalog = {
   mcpTools: DepartmentPermissionCatalogItem[];
 };
 
+export type DeviceControlConfig = {
+  enabled: boolean;
+  allowFreeze: boolean;
+  allowUninstall: boolean;
+  allowInstall: boolean;
+  allowDeleteFile: boolean;
+  allowTouch: boolean;
+  allowScreenshot: boolean;
+};
+
 export type AppConfig = {
   hotkey: string;
   uiLanguage: "zh-CN" | "en-US" | "zh-TW";
@@ -398,6 +408,7 @@ export type AppConfig = {
   apiProviders: ApiProviderConfigItem[];
   imageProviders: ImageGenerationProviderConfigItem[];
   apiConfigs: ApiConfigItem[];
+  deviceControl?: DeviceControlConfig;
 };
 
 export type RecordHotkeyUpdateResult = {

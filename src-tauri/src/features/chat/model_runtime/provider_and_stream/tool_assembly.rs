@@ -363,6 +363,10 @@ fn build_global_tool_schema_cache(state: &AppState) -> Vec<CachedRuntimeToolSche
         BuiltinMemeTool { app_state: state.clone() }.provider_tool_definition(),
         BuiltinImageGenerateTool { app_state: state.clone() }.provider_tool_definition(),
         BuiltinImageEditTool { app_state: state.clone() }.provider_tool_definition(),
+        BuiltinDeviceControlTool {
+            app_state: state.clone(),
+        }
+        .provider_tool_definition(),
         BuiltinContactSendFilesTool {
             app_state: state.clone(),
             session_id: preview_session_id,
@@ -1130,6 +1134,9 @@ fn build_builtin_runtime_tool_executor(
         "meme" => Box::new(BuiltinMemeTool { app_state: state.clone() }),
         "image_generate" => Box::new(BuiltinImageGenerateTool { app_state: state.clone() }),
         "image_edit" => Box::new(BuiltinImageEditTool { app_state: state.clone() }),
+        "device_control" => Box::new(BuiltinDeviceControlTool {
+            app_state: state.clone(),
+        }),
         "contact_send_files" => Box::new(BuiltinContactSendFilesTool {
             app_state: state.clone(),
             session_id: tool_session_id.to_string(),
