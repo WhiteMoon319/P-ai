@@ -12,7 +12,7 @@ description: 当需要冻结/解冻/卸载/安装应用、删除受限文件、�
   - `android`：exec 走 device_control 提权 shell（pm/cmd/input/toybox/dumpsys 等系统命令）。
   - `sys:` 前缀可单命令强制 Android 域（如 `sys:pm list packages`），不依赖环境切换。
 - **能力默认全部关闭**：先查 `device_control {action: "status"}` 只反映提权状态；总开关与分项开关在「设置 → 工具 → 设备控制」开启后，对应操作才可执行。未开启时返回结构化错误，不假装成功。
-- Android 域（含 sys: 覆盖）命令禁止含 shell 元字符（`;`/`|`/`&`/`$`/反引号/`()` 等），含元字符会被拒绝并提示拆分或改用工具，防注入绕过。
+- Android 域（含 sys: 覆盖）允许正常 shell 语法（管道/引号/分号），但危险关键字（`pm uninstall`/`pm disable-user`/`pm install`/`rm -f`/`rm -rf`/`dd if=` 等出现在命令任意位置）会触发用户二次确认。
 - 冻结/卸载/安装/删除文件是危险操作，必须带 `confirm: true`（用户已二次确认）才执行；Android 域的卸载/冻结/安装/删除类命令也会触发用户确认。
 - 只使用工具白名单，不拼接自由 shell；包名只允许 `[a-zA-Z0-9._]`。
 - 删除/安装/截屏路径必须落在设备控制中转区（`/sdcard/Android/data/<pkg>/files/device_control`），拒绝系统路径与 `..`。
