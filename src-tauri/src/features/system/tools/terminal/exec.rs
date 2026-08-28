@@ -1672,7 +1672,14 @@ async fn builtin_shell_exec(
                     .cloned()
                     .ok_or_else(|| "App handle is not ready".to_string())?
             };
-            match device_control_execute_shell_command(&app_handle, &android_cmd, timeout_ms).await {
+            match device_control_execute_shell_command(
+                &app_handle,
+                &android_cmd,
+                // 路由命令放宽超时：UserService 首次绑定可能达 20s，exec 工具
+                // 默认超时（15s）会导致工具层提前超时（exit -1 无输出）
+                timeout_ms.max(30_000),
+            )
+            .await {
                 Ok(result) => Ok(SandboxExecutionResult {
                     ok: result.exit_code == 0,
                     exit_code: result.exit_code,
