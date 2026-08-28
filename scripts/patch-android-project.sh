@@ -59,6 +59,11 @@ class MainActivity : TauriActivity() {
             ViewCompat.setWindowInsetsAnimationCallback(
                 content,
                 object : WindowInsetsAnimationCompat.Callback(WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_STOP) {
+                    override fun onProgress(
+                        insets: WindowInsetsCompat,
+                        runningAnimations: MutableList<WindowInsetsAnimationCompat>,
+                    ): WindowInsetsCompat = insets
+
                     override fun onEnd(animation: WindowInsetsAnimationCompat) {
                         val rootInsets = ViewCompat.getRootWindowInsets(content)
                         if (rootInsets != null) {
