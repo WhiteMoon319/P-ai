@@ -131,28 +131,34 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
     }
     val timeoutMs = if (args.timeoutMs in 1..600_000L) args.timeoutMs else 30_000L
 
-    val result = runCatching {
-      if (isShizukuGranted()) {
-        executeViaShizuku(command, timeoutMs)
-      } else if (isRootAvailable()) {
-        executeViaSu(command, timeoutMs)
-      } else {
-        ErrorResult("无可用提权通道：请先通过 Shizuku 授权或开启 root")
+    // 执行体必须在后台线程：obtainShizukuService 会在 bindUserService 上同步
+    // await（最长 20s），若在主线程执行会阻塞 UI 消息队列，进而卡死 bind 回调
+    // （回调也投递在主线程 handler）形成死锁 → ANR + 「Shizuku 未启动」误报。
+    Thread {
+      val result = runCatching {
+        if (isShizukuGranted()) {
+          executeViaShizuku(command, timeoutMs)
+        } else if (isRootAvailable()) {
+          executeViaSu(command, timeoutMs)
+        } else {
+          ErrorResult("无可用提权通道：请先通过 Shizuku 授权或开启 root")
+        }
+      }.getOrElse { err ->
+        ErrorResult("命令执行异常: ${err.message ?: err.javaClass.simpleName}")
       }
-    }.getOrElse { err ->
-      ErrorResult("命令执行异常: ${err.message ?: err.javaClass.simpleName}")
-    }
-
-    if (result is ErrorResult) {
-      invoke.reject(result.message)
-      return
-    }
-    val out = result as ExecResult
-    val obj = JSObject()
-    obj.put("exitCode", out.exitCode)
-    obj.put("stdout", out.stdout)
-    obj.put("stderr", out.stderr)
-    invoke.resolve(obj)
+      activity.runOnUiThread {
+        if (result is ErrorResult) {
+          invoke.reject(result.message)
+          return@runOnUiThread
+        }
+        val out = result as ExecResult
+        val obj = JSObject()
+        obj.put("exitCode", out.exitCode)
+        obj.put("stdout", out.stdout)
+        obj.put("stderr", out.stderr)
+        invoke.resolve(obj)
+      }
+    }.apply { isDaemon = true }.start()
   }
 
   /**
@@ -174,20 +180,27 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
       invoke.reject("无可用提权通道：请先通过 Shizuku 授权或开启 root")
       return
     }
-    try {
-      val ok = if (isShizukuGranted()) {
-        injectTouchViaShizuku(args, action)
-      } else {
-        injectTouchViaSu(args, action)
+    // 与 executeCommand 同理：绑定/注入耗时链路放到后台线程，避免主线程 ANR
+    Thread {
+      try {
+        val ok = if (isShizukuGranted()) {
+          injectTouchViaShizuku(args, action)
+        } else {
+          injectTouchViaSu(args, action)
+        }
+        activity.runOnUiThread {
+          if (!ok) {
+            invoke.reject("触控注入失败：设备拒绝注入（确认 Shizuku 授权与 INJECT_EVENTS 权限）")
+          } else {
+            invoke.resolveObject("injected")
+          }
+        }
+      } catch (e: Exception) {
+        activity.runOnUiThread {
+          invoke.reject("触控注入失败: ${e.message ?: e.javaClass.simpleName}")
+        }
       }
-      if (!ok) {
-        invoke.reject("触控注入失败：设备拒绝注入（确认 Shizuku 授权与 INJECT_EVENTS 权限）")
-        return
-      }
-      invoke.resolveObject("injected")
-    } catch (e: Exception) {
-      invoke.reject("触控注入失败: ${e.message ?: e.javaClass.simpleName}")
-    }
+    }.apply { isDaemon = true }.start()
   }
 
   /** Shizuku 注入：经 UserService AIDL 调用（服务端 Binder 线程内完成事件序列）。 */
