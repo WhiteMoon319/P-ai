@@ -1610,6 +1610,22 @@ async fn builtin_shell_exec(
         // 显式覆盖）→ Android 域提权执行（Shizuku 首选 / root 兜底）；
         // 未命中一律落 Linux 域（proot rootfs），不允许静默进入提权环境。
         if let Some(android_cmd) = route_to_android_domain(cmd) {
+            // 元字符防护（计划 5.4 防拼接注入）：白名单首词命令含 shell 元字符时
+            // 拒绝路由，不进入提权环境。
+            if let Some(reject_reason) = android_domain_route_rejection(&android_cmd) {
+                return Ok(serde_json::json!({
+                    "ok": false,
+                    "exitCode": -1,
+                    "stdout": "",
+                    "stderr": reject_reason,
+                    "aggregatedOutput": "",
+                    "durationMs": 0,
+                    "timedOut": false,
+                    "truncated": false,
+                    "stdoutTruncated": false,
+                    "stderrTruncated": false
+                }));
+            }
             let app_handle = {
                 let guard = state
                     .app_handle

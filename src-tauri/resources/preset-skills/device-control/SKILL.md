@@ -9,6 +9,7 @@ description: 当需要冻结/解冻/卸载/安装应用、删除受限文件、�
 
 - 设备控制优先走 `device_control.*` 工具；`shell_exec` 终端里输入 `pm`/`cmd`/`input`/`am`/`dumpsys`/`settings`/`service`/`getprop`/`screencap`/`toybox`/`wm`/`netd`/`appops`/`content` 等首词白名单命令时**自动路由到 Android 域**（Shizuku 首选 / root 兜底提权执行），无需手动拼接工具。
 - 歧义命令（`ls`/`rm`/`cat`/`cp` 等 Linux 与 Android 域都有）默认落 Linux 域（proot），需要进 Android 域时必须加 `sys:` 前缀显式覆盖（如 `sys:rm -f /data/local/tmp/x`）；未命中白名单的命令一律落 Linux 域，不会静默提权。
+- 终端路由到 Android 域的命令禁止含 shell 元字符（`;`/`|`/`&`/`$`/反引号/`()` 等），含元字符会被拒绝并提示拆分或改用工具，防注入绕过。
 - 先查 `device_control_status` 确认提权状态，再执行任何操作。
 - 冻结/卸载/安装/删除文件是危险操作，必须带 `confirm: true`（用户已二次确认）才执行。
 - 只使用工具白名单，不拼接自由 shell；包名只允许 `[a-zA-Z0-9._]`。

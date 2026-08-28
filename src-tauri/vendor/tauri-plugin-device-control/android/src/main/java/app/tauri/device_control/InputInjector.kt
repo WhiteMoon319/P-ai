@@ -165,14 +165,16 @@ class InputInjector {
     return invokeInject(keyEvent, INJECT_MODE_ASYNC)
   }
 
-  /** 手势序列辅助（Plugin 侧编排）：tap = down + 50ms + up。 */
+  /** 手势序列辅助（Plugin 侧编排）：tap = down + 50ms + up。整体原子，防并发交错。 */
+  @Synchronized
   fun tap(x: Int, y: Int): Boolean {
     if (!touchDown(x, y)) return false
     Thread.sleep(50)
     return touchUp(x, y)
   }
 
-  /** 手势序列辅助：swipe = down + 逐帧 move + up（帧间隔约 10ms，总时长对齐请求值）。 */
+  /** 手势序列辅助：swipe = down + 逐帧 move + up（帧间隔约 10ms，总时长对齐请求值）。整体原子。 */
+  @Synchronized
   fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Long): Boolean {
     if (durationMs <= 0) {
       // 即时滑动：down + 单帧 move + up
@@ -192,7 +194,8 @@ class InputInjector {
     return touchUp(x2, y2)
   }
 
-  /** 按键序列：keyDown + 10ms + keyUp。 */
+  /** 按键序列：keyDown + 10ms + keyUp。整体原子。 */
+  @Synchronized
   fun key(keyCode: Int): Boolean {
     if (!keyDown(keyCode)) return false
     Thread.sleep(10)

@@ -36,6 +36,21 @@ pub(crate) fn route_to_android_domain(command: &str) -> Option<String> {
     None
 }
 
+/// 路由放行前的元字符防护：白名单首词命令若含 shell 元字符，拒绝进提权
+/// 环境（防 `pm disable-user --user 0 x; rm -rf /` 之类拼接绕过白名单意图，
+/// 计划 5.4「禁止拼接用户自由输入」），返回拒绝原因；无元字符返回 None。
+pub(crate) fn android_domain_route_rejection(command: &str) -> Option<&'static str> {
+    const METACHARS: &[char] = &[
+        ';', '|', '&', '$', '`', '\n', '>', '<', '(', ')', '{', '}', '\\', '\'', '"',
+    ];
+    if command.contains(METACHARS) {
+        return Some(
+            "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。",
+        );
+    }
+    None
+}
+
 const DEVICE_CONTROL_STATUS_EVENT: &str = "easy-call:device-control-status-changed";
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -721,5 +736,22 @@ mod device_control_tests {
         assert_eq!(route_to_android_domain("   "), None);
         assert_eq!(route_to_android_domain("sys:"), None);
         assert_eq!(route_to_android_domain("sys:   "), None);
+    }
+
+    #[test]
+    fn route_rejects_shell_metachars_to_block_injection() {
+        // 白名单首词命令拼接 shell 元字符（`;`/`|`/`&&`/`$()`/反引号等）必须被拒绝，
+        // 防止 `pm disable-user --user 0 x; rm -rf /` 绕过白名单意图进入提权环境。
+        assert_eq!(
+            android_domain_route_rejection("pm disable-user --user 0 x; rm -rf /").unwrap_or(""),
+            "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。"
+        );
+        assert!(android_domain_route_rejection("pm list packages").is_none(), "普通 pm 命令不应被拒");
+        assert!(android_domain_route_rejection("dumpsys window").is_none());
+        assert!(android_domain_route_rejection("sys:rm -f /data/local/tmp/a").is_none(), "sys: 前缀带无元字符命令可放行");
+        assert_eq!(android_domain_route_rejection("pm list | grep x").unwrap_or(""), "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。");
+        assert_eq!(android_domain_route_rejection("pm disable --user 0 x && rm -rf /").unwrap_or(""), "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。");
+        assert_eq!(android_domain_route_rejection("am broadcast -a x $(id)").unwrap_or(""), "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。");
+        assert_eq!(android_domain_route_rejection("cmd package uninstall `whoami`").unwrap_or(""), "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。");
     }
 }
