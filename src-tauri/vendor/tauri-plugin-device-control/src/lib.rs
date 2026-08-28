@@ -64,6 +64,28 @@ pub struct ExecuteCommandResult {
     pub stderr: String,
 }
 
+/// 注入式触控动作（Rust 侧白名单枚举，禁止自由字符串）。
+///
+/// 与计划 5.3 对齐：触控走 Shizuku UserService 进程内 `injectInputEvent`
+/// 注入（MAA-Meow 语义），root 兜底降级 `input` 命令。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "action")]
+pub enum TouchAction {
+    /// 点击（屏幕像素坐标）
+    Tap { x: u32, y: u32 },
+    /// 滑动（可选时长 ms）
+    Swipe {
+        x1: u32,
+        y1: u32,
+        x2: u32,
+        y2: u32,
+        #[serde(default)]
+        duration_ms: Option<u32>,
+    },
+    /// 按键（keycode 参考 Android KeyEvent 常量）
+    Key { keycode: u32 },
+}
+
 /// Extension trait to access the device-control plugin.
 pub trait DeviceControlExt<R: Runtime> {
     fn device_control(&self) -> &DeviceControl<R>;

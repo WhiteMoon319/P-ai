@@ -154,40 +154,6 @@
       </template>
     </ConfigCard>
 
-    <ConfigCard :title="t('config.tools.systemCatalogTitle')">
-      <div class="pt-3 text-sm opacity-60">{{ t("config.tools.systemCatalogReadonly") }}</div>
-
-      <div v-if="toolDefinitions.length" class="divide-y divide-base-300/60">
-        <div
-          v-for="item in toolDefinitions"
-          :key="item.function.name"
-          class="px-4 py-3"
-        >
-          <div class="min-w-0">
-            <div class="font-medium">{{ item.function.name }}</div>
-            <div class="text-xs opacity-60 whitespace-pre-wrap">{{ item.function.description || t("config.mcpToolList.noDescription") }}</div>
-            <div v-if="toolParameterSummary(item.function.name).length" class="mt-1 flex flex-wrap gap-1">
-              <span
-                v-for="paramText in toolParameterSummary(item.function.name)"
-                :key="`${item.function.name}-param-${paramText}`"
-                class="text-caption px-1.5 py-0.5 rounded bg-base-200 border border-base-300/70 opacity-80"
-              >
-                {{ paramText }}
-              </span>
-            </div>
-            <div v-if="toolParameterExamples(item.function.name).length" class="mt-1 grid gap-1">
-              <pre
-                v-for="example in toolParameterExamples(item.function.name)"
-                :key="`${item.function.name}-example-${example}`"
-                class="text-caption leading-4 px-2 py-1 rounded bg-base-200 border border-base-300/70 opacity-90 whitespace-pre-wrap overflow-x-auto"
-              >{{ example }}</pre>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div v-else class="text-sm opacity-50 text-center py-4">{{ t("config.mcpToolList.empty") }}</div>
-    </ConfigCard>
-
     <ConfigCard v-if="props.isAndroid" :title="t('config.tools.deviceControl')">
       <template #actions>
         <button class="btn btn-sm" type="button" :disabled="deviceControlBusy" @click="refreshDeviceControlStatus">
@@ -227,6 +193,40 @@
       <div v-if="deviceControlMessage" class="pb-3 text-xs" :class="deviceControlMessageError ? 'text-error' : 'opacity-70'">
         {{ deviceControlMessage }}
       </div>
+    </ConfigCard>
+
+    <ConfigCard :title="t('config.tools.systemCatalogTitle')">
+      <div class="pt-3 text-sm opacity-60">{{ t("config.tools.systemCatalogReadonly") }}</div>
+
+      <div v-if="toolDefinitions.length" class="divide-y divide-base-300/60">
+        <div
+          v-for="item in toolDefinitions"
+          :key="item.function.name"
+          class="px-4 py-3"
+        >
+          <div class="min-w-0">
+            <div class="font-medium">{{ item.function.name }}</div>
+            <div class="text-xs opacity-60 whitespace-pre-wrap">{{ item.function.description || t("config.mcpToolList.noDescription") }}</div>
+            <div v-if="toolParameterSummary(item.function.name).length" class="mt-1 flex flex-wrap gap-1">
+              <span
+                v-for="paramText in toolParameterSummary(item.function.name)"
+                :key="`${item.function.name}-param-${paramText}`"
+                class="text-caption px-1.5 py-0.5 rounded bg-base-200 border border-base-300/70 opacity-80"
+              >
+                {{ paramText }}
+              </span>
+            </div>
+            <div v-if="toolParameterExamples(item.function.name).length" class="mt-1 grid gap-1">
+              <pre
+                v-for="example in toolParameterExamples(item.function.name)"
+                :key="`${item.function.name}-example-${example}`"
+                class="text-caption leading-4 px-2 py-1 rounded bg-base-200 border border-base-300/70 opacity-90 whitespace-pre-wrap overflow-x-auto"
+              >{{ example }}</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-else class="text-sm opacity-50 text-center py-4">{{ t("config.mcpToolList.empty") }}</div>
     </ConfigCard>
 
     <input
@@ -303,6 +303,13 @@ import { toErrorMessage } from "../../../../utils/error";
 import { open } from "@tauri-apps/plugin-dialog";
 import AndroidWorkspaceFileManagerDialog from "./AndroidWorkspaceFileManagerDialog.vue";
 import ConfigCard from "../../components/ConfigCard.vue";
+import {
+  deviceControlStateBadgeClass as deviceControlBadgeClassOf,
+  deviceControlStateLabelKey,
+  deviceControlStatusLines,
+  type DeviceControlPrivilegeState,
+  type DeviceControlStatus,
+} from "../../composables/device-control-state";
 
 type TerminalShellCandidate = {
   kind: string;
@@ -345,15 +352,6 @@ type AndroidWorkspaceStatus = {
   downloadBytes?: number | null;
   downloadTotalBytes?: number | null;
   downloadStage?: string | null;
-};
-
-type DeviceControlPrivilegeState = "disabled" | "shizuku_pending" | "shizuku_ready" | "root_ready";
-
-type DeviceControlStatus = {
-  shizukuAvailable: boolean;
-  shizukuGranted: boolean;
-  rootAvailable: boolean;
-  privilegeState: DeviceControlPrivilegeState;
 };
 
 const ANDROID_WORKSPACE_STATUS_EVENT = "easy-call:android-workspace-status-changed";
@@ -440,31 +438,21 @@ const androidWorkspaceRuntimeText = computed(() => {
   return t("config.tools.androidWorkspaceRuntimeReady", { version: status.runtimeVersion, size: total });
 });
 
-// ---- 设备控制 computed ----
+// ---- 设备控制 computed（派生逻辑见 composables/device-control-state）----
 const deviceControlPrivilegeState = computed<DeviceControlPrivilegeState>(
   () => deviceControlStatus.value?.privilegeState || "disabled",
 );
 const deviceControlBusy = computed(() => deviceControlStatusLoading.value || deviceControlAuthorizing.value);
-const deviceControlStateLabel = computed(() => {
-  const state = deviceControlPrivilegeState.value;
-  if (state === "shizuku_ready") return t("config.tools.deviceControlStateShizukuReady");
-  if (state === "root_ready") return t("config.tools.deviceControlStateRootReady");
-  if (state === "shizuku_pending") return t("config.tools.deviceControlStateShizukuPending");
-  return t("config.tools.deviceControlStateDisabled");
-});
-const deviceControlStateBadgeClass = computed(() => {
-  const state = deviceControlPrivilegeState.value;
-  if (state === "shizuku_ready" || state === "root_ready") return "badge-success";
-  if (state === "shizuku_pending") return "badge-info";
-  return "badge-warning";
-});
+const deviceControlStateLabel = computed(() =>
+  t(deviceControlStateLabelKey(deviceControlPrivilegeState.value)),
+);
+const deviceControlStateBadgeClass = computed(() =>
+  deviceControlBadgeClassOf(deviceControlPrivilegeState.value),
+);
 const deviceControlStatusText = computed(() => {
   const status = deviceControlStatus.value;
   if (!status) return "";
-  const shizuku = t("config.tools.deviceControlDetailShizuku", { ok: status.shizukuAvailable ? "✓" : "✗" });
-  const granted = t("config.tools.deviceControlDetailGranted", { ok: status.shizukuGranted ? "✓" : "✗" });
-  const root = t("config.tools.deviceControlDetailRoot", { ok: status.rootAvailable ? "✓" : "✗" });
-  return `${shizuku}\n${granted}\n${root}`;
+  return deviceControlStatusLines(status, t).join("\n");
 });
 function deviceControlSetMessage(text: string, isError = false) {
   deviceControlMessage.value = text;

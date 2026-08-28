@@ -7,7 +7,8 @@ description: 当需要冻结/解冻/卸载/安装应用、删除受限文件、�
 
 ## 核心规则
 
-- 设备控制走 `device_control.*` 工具，不要用 `shell_exec` 在 proot Linux 终端里执行 Android 系统命令。
+- 设备控制优先走 `device_control.*` 工具；`shell_exec` 终端里输入 `pm`/`cmd`/`input`/`am`/`dumpsys`/`settings`/`service`/`getprop`/`screencap`/`toybox`/`wm`/`netd`/`appops`/`content` 等首词白名单命令时**自动路由到 Android 域**（Shizuku 首选 / root 兜底提权执行），无需手动拼接工具。
+- 歧义命令（`ls`/`rm`/`cat`/`cp` 等 Linux 与 Android 域都有）默认落 Linux 域（proot），需要进 Android 域时必须加 `sys:` 前缀显式覆盖（如 `sys:rm -f /data/local/tmp/x`）；未命中白名单的命令一律落 Linux 域，不会静默提权。
 - 先查 `device_control_status` 确认提权状态，再执行任何操作。
 - 冻结/卸载/安装/删除文件是危险操作，必须带 `confirm: true`（用户已二次确认）才执行。
 - 只使用工具白名单，不拼接自由 shell；包名只允许 `[a-zA-Z0-9._]`。
@@ -41,11 +42,12 @@ device_control_screenshot(fileName: "now.png")
 
 - 先 `device_control_screenshot` 截屏，看截图定坐标，再 `tap` / `swipe` / `key_event`。
 - 坐标为屏幕物理像素；keycode 参考 Android KeyEvent（4=返回、3=主页、26=电源）。
+- 触控为**注入式**（Shizuku UserService 进程内 `injectInputEvent`，MAA-Meow 语义），root 环境下降级 `input` 命令。
 - 中文文本输入暂不支持直接注入（v1.1），需要输入中文时提示用户手动操作或走无障碍方案。
 
 ## 禁做清单
 
-- 不执行任意自由 shell，只用 `device_control.*` 工具。
+- 不执行任意自由 shell，只用 `device_control.*` 工具（或终端里白名单首词命令的自动路由）。
 - 不删除工作区沙盒外的文件（系统文件、其他应用数据）。
 - 不修改系统设置、不做跨用户操作、不查看其他应用私有数据。
-- 不在 proot Linux 终端里执行 Android 系统命令。
+- 不在 proot Linux 终端里执行 Android 系统命令（会被自动路由到 Android 域提权执行）。

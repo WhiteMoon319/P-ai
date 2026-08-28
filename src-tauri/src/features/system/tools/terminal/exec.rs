@@ -1605,7 +1605,37 @@ async fn builtin_shell_exec(
     }
 
 #[cfg(target_os = "android")]
-    let execution_result = sandbox_execute_command(state, &normalized_session, cmd, &execution_cwd, timeout_ms, is_read_whitelist, None, None).await;
+    let execution_result = {
+        // 执行域路由（计划四）：首词命中 Android 系统命令白名单（或 sys: 前缀
+        // 显式覆盖）→ Android 域提权执行（Shizuku 首选 / root 兜底）；
+        // 未命中一律落 Linux 域（proot rootfs），不允许静默进入提权环境。
+        if let Some(android_cmd) = route_to_android_domain(cmd) {
+            let app_handle = {
+                let guard = state
+                    .app_handle
+                    .lock()
+                    .map_err(|_| "Failed to lock app handle".to_string())?;
+                guard
+                    .as_ref()
+                    .cloned()
+                    .ok_or_else(|| "App handle is not ready".to_string())?
+            };
+            match device_control_execute_shell_command(&app_handle, &android_cmd, timeout_ms).await {
+                Ok(result) => Ok(SandboxExecutionResult {
+                    ok: result.exit_code == 0,
+                    exit_code: result.exit_code,
+                    stdout: result.stdout.into_bytes(),
+                    stderr: result.stderr.into_bytes(),
+                    duration_ms: 0,
+                    shell_kind: "device-control".to_string(),
+                    shell_path: String::new(),
+                }),
+                Err(err) => Err(err),
+            }
+        } else {
+            sandbox_execute_command(state, &normalized_session, cmd, &execution_cwd, timeout_ms, is_read_whitelist, None, None).await
+        }
+    };
     #[cfg(not(target_os = "android"))]
     let execution_result = run_command_in_workspace(state, &normalized_session, cmd, &execution_cwd, timeout_ms, is_read_whitelist).await;
     let execution = match execution_result {
