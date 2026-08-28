@@ -792,7 +792,15 @@
       "deviceControlAuthorizeFailed": "请求 Shizuku 授权失败: {err}",
       "deviceControlDetailShizuku": "Shizuku 服务: {ok}",
       "deviceControlDetailGranted": "Shizuku 授权: {ok}",
-      "deviceControlDetailRoot": "Root 检测: {ok}"
+      "deviceControlDetailRoot": "Root 检测: {ok}",
+      "deviceControlEnabled": "启用设备控制",
+      "deviceControlAllowFreeze": "允许冻结/解冻应用",
+      "deviceControlAllowUninstall": "允许卸载应用",
+      "deviceControlAllowInstall": "允许安装应用",
+      "deviceControlAllowDeleteFile": "允许删除受限文件",
+      "deviceControlAllowTouch": "允许触控（点击/滑动/按键）",
+      "deviceControlAllowScreenshot": "允许截屏",
+      "deviceControlCapabilityHint": "能力开关默认关闭；未开启时对应操作会被拒绝。"
     },
     "persona": {
       "title": "人格",

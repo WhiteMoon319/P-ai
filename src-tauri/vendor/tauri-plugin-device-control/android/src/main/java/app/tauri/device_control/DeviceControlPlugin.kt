@@ -97,6 +97,14 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
             Shizuku.removeRequestPermissionResultListener(this)
           } catch (_: Exception) {
           }
+          // 授权结果经插件事件回传前端（计划 5.1/5.5 privilegeChanged 契约），
+          // 前端 registerListener 订阅后即时刷新提权状态，不再只靠轮询。
+          try {
+            val payload = JSObject()
+            payload.put("granted", grantResult == PackageManager.PERMISSION_GRANTED)
+            triggerObject("device_control_privilege_changed", payload)
+          } catch (_: Exception) {
+          }
         }
       }
       Shizuku.addRequestPermissionResultListener(listener)
@@ -253,16 +261,37 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
     false
   }
 
-  /** root 可用性检测：`su` 可执行即视为有 root（实际提权结果由执行时暴露）。 */
+  /** root 可用性检测：`su -c id` 必须真实提权到 uid=0 才判定可用，且结果缓存 30s
+   * 避免每次 status 查询都同步跑进程；文件存在但 SELinux/权限拒绝的误报不再出现。 */
+  @Volatile
+  private var rootAvailableCache = false
+  @Volatile
+  private var rootCheckedAt = 0L
+
   private fun isRootAvailable(): Boolean {
-    for (path in listOf("/system/bin/su", "/system/xbin/su", "/sbin/su", "/su/bin/su")) {
-      if (java.io.File(path).isFile) return true
+    val now = System.currentTimeMillis()
+    if (now - rootCheckedAt < 30_000L) return rootAvailableCache
+    synchronized(this) {
+      if (now - rootCheckedAt < 30_000L) return rootAvailableCache
+      val probeResult = probeRoot()
+      rootAvailableCache = probeResult
+      rootCheckedAt = System.currentTimeMillis()
+      return probeResult
     }
+  }
+
+  private fun probeRoot(): Boolean {
     return try {
       val process = ProcessBuilder("su", "-c", "id").redirectErrorStream(true).start()
-      val alive = process.waitFor(3, TimeUnit.SECONDS)
-      if (alive) process.destroyForcibly()
-      true
+      val finished = process.waitFor(2, TimeUnit.SECONDS)
+      if (!finished) {
+        process.destroyForcibly()
+        return false
+      }
+      val output = process.inputStream.bufferedReader().readText()
+      process.waitFor(1, TimeUnit.SECONDS)
+      // Magisk/KernelSU 的 su 提权成功后 id 输出 uid=0；SELinux 拒绝或未授权时不输出
+      output.contains("uid=0")
     } catch (_: Exception) {
       false
     }

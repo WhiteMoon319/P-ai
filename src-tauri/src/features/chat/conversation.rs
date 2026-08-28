@@ -2952,6 +2952,7 @@ fn departments_only_config(departments: &[DepartmentConfig]) -> AppConfig {
         api_providers: Vec::new(),
         image_providers: Vec::new(),
         api_configs: Vec::new(),
+        device_control: DeviceControlConfig::default(),
     }
 }
 

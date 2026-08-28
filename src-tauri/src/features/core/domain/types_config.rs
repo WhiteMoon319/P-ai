@@ -1256,6 +1256,40 @@ fn default_remote_im_channels() -> Vec<RemoteImChannelConfig> {
     Vec::new()
 }
 
+/// 设备控制（Shizuku/root 提权）能力开关组（计划 5.4：默认全部关闭）。
+/// 总开关 enabled 关闭时任何命令与终端路由都拒绝；分项开关约束 device_control.* 工具调用。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", default)]
+struct DeviceControlConfig {
+    enabled: bool,
+    /// 冻结/解冻应用（pm disable-user/enable）
+    allow_freeze: bool,
+    /// 卸载应用（pm uninstall）
+    allow_uninstall: bool,
+    /// 安装应用（pm install）
+    allow_install: bool,
+    /// 删除受限文件
+    allow_delete_file: bool,
+    /// 注入式触控（tap/swipe/key）
+    allow_touch: bool,
+    /// 截屏
+    allow_screenshot: bool,
+}
+
+impl Default for DeviceControlConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            allow_freeze: false,
+            allow_uninstall: false,
+            allow_install: false,
+            allow_delete_file: false,
+            allow_touch: false,
+            allow_screenshot: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AppConfig {
@@ -1336,6 +1370,8 @@ struct AppConfig {
     image_providers: Vec<ImageGenerationProviderConfig>,
     #[serde(default)]
     api_configs: Vec<ApiConfig>,
+    #[serde(default)]
+    device_control: DeviceControlConfig,
 }
 
 impl Default for AppConfig {
@@ -1379,6 +1415,7 @@ impl Default for AppConfig {
             api_providers: default_api_providers(),
             image_providers: default_image_generation_providers(),
             api_configs: vec![api_config],
+            device_control: DeviceControlConfig::default(),
         }
     }
 }

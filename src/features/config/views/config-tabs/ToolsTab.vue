@@ -188,6 +188,37 @@
         <div v-if="deviceControlPrivilegeState === 'shizuku_pending'" class="text-xs opacity-70">
           {{ t('config.tools.deviceControlPendingHint') }}
         </div>
+
+        <!-- 能力开关组（计划 5.4：默认全部关闭） -->
+        <div class="grid gap-2 border-t border-base-300/60 pt-3">
+          <label class="flex items-center justify-between gap-2 cursor-pointer">
+            <span class="text-sm">{{ t('config.tools.deviceControlEnabled') }}</span>
+            <input
+              type="checkbox"
+              class="toggle toggle-sm"
+              :checked="deviceControlConfig.enabled"
+              @change="setDeviceControlEnabled"
+            />
+          </label>
+          <template v-if="deviceControlConfig.enabled">
+            <label
+              v-for="cap in deviceControlCapabilities"
+              :key="cap.key"
+              class="flex items-center justify-between gap-2 cursor-pointer"
+            >
+              <span class="text-sm">{{ t(cap.labelKey) }}</span>
+              <input
+                type="checkbox"
+                class="toggle toggle-sm"
+                :checked="deviceControlConfig[cap.key]"
+                @change="setDeviceControlCapability(cap.key, $event)"
+              />
+            </label>
+          </template>
+          <div v-if="deviceControlConfig.enabled" class="text-xs opacity-60">
+            {{ t('config.tools.deviceControlCapabilityHint') }}
+          </div>
+        </div>
       </div>
 
       <div v-if="deviceControlMessage" class="pb-3 text-xs" :class="deviceControlMessageError ? 'text-error' : 'opacity-70'">
@@ -291,6 +322,7 @@ import type {
   ToolLoadStatus,
 } from "../../../../types/app";
 import {
+  createTransportChannel,
   getTransportCapabilities,
   getTransportDefaultChatShellWorkspacePath,
   invokeTauri,
@@ -385,13 +417,12 @@ const androidWorkspaceFileManagerDialog = ref<InstanceType<typeof AndroidWorkspa
 let androidWorkspaceStatusUnlisten: UnlistenFn | null = null;
 
 // ---- 设备控制（Shizuku/root 提权） ----
-const DEVICE_CONTROL_STATUS_EVENT = "easy-call:device-control-status-changed";
 const deviceControlStatus = ref<DeviceControlStatus | null>(null);
 const deviceControlStatusLoading = ref(false);
 const deviceControlAuthorizing = ref(false);
 const deviceControlMessage = ref("");
 const deviceControlMessageError = ref(false);
-let deviceControlStatusUnlisten: UnlistenFn | null = null;
+let deviceControlPrivilegeChannel: ReturnType<typeof createTransportChannel<{ granted: boolean }>> | null = null;
 const GIT_DOWNLOAD_URL = "https://git-scm.com/downloads";
 const isWindowsHost = typeof navigator !== "undefined" && /windows/i.test(String(navigator.userAgent || ""));
 const localFileSystemAvailable = getTransportCapabilities().localFileSystem;
@@ -457,6 +488,52 @@ const deviceControlStatusText = computed(() => {
 function deviceControlSetMessage(text: string, isError = false) {
   deviceControlMessage.value = text;
   deviceControlMessageError.value = isError;
+}
+
+// ---- 设备控制能力开关（计划 5.4：默认全部关闭） ----
+const deviceControlConfig = computed(() => ({
+  enabled: Boolean(props.config.deviceControl?.enabled),
+  allowFreeze: Boolean(props.config.deviceControl?.allowFreeze),
+  allowUninstall: Boolean(props.config.deviceControl?.allowUninstall),
+  allowInstall: Boolean(props.config.deviceControl?.allowInstall),
+  allowDeleteFile: Boolean(props.config.deviceControl?.allowDeleteFile),
+  allowTouch: Boolean(props.config.deviceControl?.allowTouch),
+  allowScreenshot: Boolean(props.config.deviceControl?.allowScreenshot),
+}));
+
+const deviceControlCapabilities: { key: keyof NonNullable<AppConfig["deviceControl"]>; labelKey: string }[] = [
+  { key: "allowFreeze", labelKey: "config.tools.deviceControlAllowFreeze" },
+  { key: "allowUninstall", labelKey: "config.tools.deviceControlAllowUninstall" },
+  { key: "allowInstall", labelKey: "config.tools.deviceControlAllowInstall" },
+  { key: "allowDeleteFile", labelKey: "config.tools.deviceControlAllowDeleteFile" },
+  { key: "allowTouch", labelKey: "config.tools.deviceControlAllowTouch" },
+  { key: "allowScreenshot", labelKey: "config.tools.deviceControlAllowScreenshot" },
+];
+
+function deviceControlEnsureConfig(): NonNullable<AppConfig["deviceControl"]> {
+  if (!props.config.deviceControl) {
+    props.config.deviceControl = {
+      enabled: false,
+      allowFreeze: false,
+      allowUninstall: false,
+      allowInstall: false,
+      allowDeleteFile: false,
+      allowTouch: false,
+      allowScreenshot: false,
+    };
+  }
+  return props.config.deviceControl;
+}
+
+function setDeviceControlEnabled(event: Event) {
+  deviceControlEnsureConfig().enabled = (event.target as HTMLInputElement).checked;
+  if (!(event.target as HTMLInputElement).checked) {
+    void refreshDeviceControlStatus();
+  }
+}
+
+function setDeviceControlCapability(key: keyof NonNullable<AppConfig["deviceControl"]>, event: Event) {
+  deviceControlEnsureConfig()[key] = (event.target as HTMLInputElement).checked;
 }
 function formatBytes(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "0 B";
@@ -1010,10 +1087,16 @@ onMounted(() => {
       setAndroidWorkspaceMessage(t("config.tools.androidWorkspaceStatusFailed", { err: toErrorMessage(error) }), true);
     });
     void refreshDeviceControlStatus();
-    void listen<DeviceControlStatus>(DEVICE_CONTROL_STATUS_EVENT, (event) => {
-      deviceControlStatus.value = event.payload;
-    }).then((unlisten) => {
-      deviceControlStatusUnlisten = unlisten;
+    // 订阅 Kotlin 侧 Shizuku 授权结果事件（plugin registerListener channel），
+    // 授权回调即时刷新提权状态；不再依赖 Rust 侧 tauri 事件（从未 emit）。
+    const privilegeChannel = createTransportChannel<{ granted: boolean }>();
+    privilegeChannel.onmessage = () => {
+      void refreshDeviceControlStatus();
+    };
+    deviceControlPrivilegeChannel = privilegeChannel;
+    void invokeTauri("plugin:device-control|registerListener", {
+      event: "device_control_privilege_changed",
+      handler: privilegeChannel,
     }).catch((error) => {
       deviceControlSetMessage(t("config.tools.deviceControlStatusFailed", { err: toErrorMessage(error) }), true);
     });
@@ -1023,8 +1106,8 @@ onMounted(() => {
 onUnmounted(() => {
   androidWorkspaceStatusUnlisten?.();
   androidWorkspaceStatusUnlisten = null;
-  deviceControlStatusUnlisten?.();
-  deviceControlStatusUnlisten = null;
+  deviceControlPrivilegeChannel?.dispose?.();
+  deviceControlPrivilegeChannel = null;
   settleAndroidWorkspaceResetConfirm(false);
 });
 </script>

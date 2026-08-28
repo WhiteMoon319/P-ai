@@ -1610,6 +1610,8 @@ async fn builtin_shell_exec(
         // 显式覆盖）→ Android 域提权执行（Shizuku 首选 / root 兜底）；
         // 未命中一律落 Linux 域（proot rootfs），不允许静默进入提权环境。
         if let Some(android_cmd) = route_to_android_domain(cmd) {
+            // 总开关校验（计划 5.4 默认关闭）：未开启时拒绝路由到提权环境
+            device_control_check_enabled(state, None)?;
             // 元字符防护（计划 5.4 防拼接注入）：白名单首词命令含 shell 元字符时
             // 拒绝路由，不进入提权环境。
             if let Some(reject_reason) = android_domain_route_rejection(&android_cmd) {
@@ -1625,6 +1627,40 @@ async fn builtin_shell_exec(
                     "stdoutTruncated": false,
                     "stderrTruncated": false
                 }));
+            }
+            // 危险命令二次确认（计划 5.4）：卸载/冻结/安装/删除在终端路由路径同样需用户确认
+            if android_domain_command_is_dangerous(&android_cmd) {
+                let approved = terminal_request_user_approval(
+                    state,
+                    "Android 域危险命令确认",
+                    "该命令将以提权身份在 Android 域执行，属于卸载/冻结/安装/删除类危险操作。",
+                    &normalized_session,
+                    "device_control_dangerous_route",
+                    Some("shell_exec"),
+                    Some("Android 域提权危险命令"),
+                    Some(&android_cmd),
+                    Some(&execution_cwd),
+                    Some(&android_cmd),
+                    None,
+                    None,
+                    &[],
+                    &[],
+                    None,
+                    None,
+                )
+                .await?;
+                if !approved {
+                    return Ok(serde_json::json!({
+                        "ok": false,
+                        "approved": false,
+                        "blockedReason": "user_denied_device_control_dangerous",
+                        "message": "用户拒绝了 Android 域危险命令。",
+                        "rootPath": session_root_text,
+                        "workspacePath": workspace_path_text,
+                        "cwd": terminal_path_for_user(&cwd),
+                        "command": cmd,
+                    }));
+                }
             }
             let app_handle = {
                 let guard = state

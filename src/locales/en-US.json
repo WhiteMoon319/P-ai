@@ -792,7 +792,15 @@
       "deviceControlAuthorizeFailed": "Failed to request Shizuku authorization: {err}",
       "deviceControlDetailShizuku": "Shizuku service: {ok}",
       "deviceControlDetailGranted": "Shizuku granted: {ok}",
-      "deviceControlDetailRoot": "Root available: {ok}"
+      "deviceControlDetailRoot": "Root available: {ok}",
+      "deviceControlEnabled": "Enable device control",
+      "deviceControlAllowFreeze": "Allow freeze/unfreeze apps",
+      "deviceControlAllowUninstall": "Allow uninstall apps",
+      "deviceControlAllowInstall": "Allow install apps",
+      "deviceControlAllowDeleteFile": "Allow deleting restricted files",
+      "deviceControlAllowTouch": "Allow touch (tap/swipe/key)",
+      "deviceControlAllowScreenshot": "Allow screenshots",
+      "deviceControlCapabilityHint": "Capability switches default to off; operations are rejected until enabled."
     },
     "persona": {
       "title": "Persona",

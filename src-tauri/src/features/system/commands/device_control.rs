@@ -51,7 +51,19 @@ pub(crate) fn android_domain_route_rejection(command: &str) -> Option<&'static s
     None
 }
 
-const DEVICE_CONTROL_STATUS_EVENT: &str = "easy-call:device-control-status-changed";
+/// Android 域危险命令识别（终端路由二次确认用）：卸载/冻结/安装/删除文件。
+/// 命中后需用户确认才放行进提权环境（计划 5.4 危险操作确认口径）。
+pub(crate) fn android_domain_command_is_dangerous(command: &str) -> bool {
+    let mut words = command.split_whitespace();
+    match words.next() {
+        Some("pm") => matches!(
+            words.next(),
+            Some("uninstall") | Some("disable-user") | Some("install") | Some("enable")
+        ),
+        Some("rm") => true,
+        _ => false,
+    }
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -144,6 +156,30 @@ fn require_confirm(confirm: bool, action: &str) -> Result<(), String> {
     }
 }
 
+/// 设备控制能力开关校验（计划 5.4：默认全部关闭）。
+/// `capability` 为分项能力名（freeze/uninstall/install/delete_file/touch/screenshot）；
+/// None 表示仅校验总开关（终端路由路径）。
+fn device_control_check_enabled(state: &AppState, capability: Option<&str>) -> Result<(), String> {
+    let config = state_read_config_cached(state).map_err(|err| format!("读取配置失败: {err}"))?;
+    let dc = config.device_control;
+    if !dc.enabled {
+        return Err("设备控制未开启：请先在「设置 → 工具 → 设备控制」启用总开关。".to_string());
+    }
+    let allowed = match capability {
+        Some("freeze") => dc.allow_freeze,
+        Some("uninstall") => dc.allow_uninstall,
+        Some("install") => dc.allow_install,
+        Some("delete_file") => dc.allow_delete_file,
+        Some("touch") => dc.allow_touch,
+        Some("screenshot") => dc.allow_screenshot,
+        _ => true,
+    };
+    if !allowed {
+        return Err(format!("设备控制能力「{}」未开启：请在设置-工具-设备控制中启用对应开关。", capability.unwrap_or("")));
+    }
+    Ok(())
+}
+
 /// Android 域提权执行入口（Shizuku 首选 / root 兜底，均走 Kotlin 插件）。
 #[cfg(target_os = "android")]
 fn device_control_execute_privileged(
@@ -153,15 +189,24 @@ fn device_control_execute_privileged(
 ) -> Result<DeviceControlExecResult, String> {
     use tauri_plugin_device_control::DeviceControlExt;
 
-    // 危险操作的 confirm 校验已在各命令入口完成；此处仅执行。
+    // 审计日志（计划 5.4）：每次提权命令执行落 logs/ 后端日志
     let rendered = command.render();
+    runtime_log_info(format!("[设备控制-审计] 提权执行: {rendered}"));
     let result = app
         .device_control()
         .execute_command(tauri_plugin_device_control::ExecuteCommandRequest {
             command: rendered,
             timeout_ms,
         })
-        .map_err(|err| format!("设备控制执行失败: {err}"))?;
+        .map_err(|err| {
+            runtime_log_warn(format!("[设备控制-审计] 提权执行失败: {err}"));
+            format!("设备控制执行失败: {err}")
+        })?;
+    runtime_log_info(format!(
+        "[设备控制-审计] 完成 exit={} {}",
+        result.exit_code,
+        if result.exit_code == 0 { "OK" } else { "FAIL" }
+    ));
     Ok(DeviceControlExecResult {
         exit_code: result.exit_code,
         stdout: result.stdout,
@@ -187,13 +232,23 @@ pub(crate) async fn device_control_execute_shell_command(
     timeout_ms: u64,
 ) -> Result<DeviceControlExecResult, String> {
     use tauri_plugin_device_control::DeviceControlExt;
+    // 审计日志（计划 5.4）：终端路由到 Android 域的提权执行同样落日志
+    runtime_log_info(format!("[设备控制-审计] 终端路由提权执行: {command}"));
     let result = app
         .device_control()
         .execute_command(tauri_plugin_device_control::ExecuteCommandRequest {
             command: command.to_string(),
             timeout_ms,
         })
-        .map_err(|err| format!("Android 域命令执行失败: {err}"))?;
+        .map_err(|err| {
+            runtime_log_warn(format!("[设备控制-审计] 路由提权执行失败: {err}"));
+            format!("Android 域命令执行失败: {err}")
+        })?;
+    runtime_log_info(format!(
+        "[设备控制-审计] 路由完成 exit={} {}",
+        result.exit_code,
+        if result.exit_code == 0 { "OK" } else { "FAIL" }
+    ));
     Ok(DeviceControlExecResult {
         exit_code: result.exit_code,
         stdout: result.stdout,
@@ -207,6 +262,26 @@ pub(crate) async fn device_control_execute_shell_command(
     _command: &str,
     _timeout_ms: u64,
 ) -> Result<DeviceControlExecResult, String> {
+    Err("设备控制仅在 Android 端可用。".to_string())
+}
+
+/// 注入式触控辅助（供内置工具与 command 共用；desktop stub 返回错误）。
+#[cfg(target_os = "android")]
+pub(crate) fn device_control_inject_touch(
+    app: &tauri::AppHandle,
+    action: tauri_plugin_device_control::TouchAction,
+) -> Result<(), String> {
+    use tauri_plugin_device_control::DeviceControlExt;
+    app.device_control()
+        .inject_touch(action)
+        .map_err(|err| format!("触控注入失败: {err}"))
+}
+
+#[cfg(not(target_os = "android"))]
+pub(crate) fn device_control_inject_touch(
+    _app: &tauri::AppHandle,
+    _action: tauri_plugin_device_control::TouchAction,
+) -> Result<(), String> {
     Err("设备控制仅在 Android 端可用。".to_string())
 }
 
@@ -261,8 +336,10 @@ async fn device_control_request_privilege(app: tauri::AppHandle) -> Result<(), S
 #[tauri::command]
 async fn device_control_list_packages(
     app: tauri::AppHandle,
+    state: State<'_, AppState>,
     third_party_only: Option<bool>,
 ) -> Result<String, String> {
+    device_control_check_enabled(&state, None)?;
     let cmd = DeviceCommand::ListPackages {
         third_party_only: third_party_only.unwrap_or(true),
     };
@@ -281,9 +358,11 @@ async fn device_control_list_packages(
 #[tauri::command]
 async fn device_control_freeze(
     app: tauri::AppHandle,
+    state: State<'_, AppState>,
     package: String,
     confirm: Option<bool>,
 ) -> Result<(), String> {
+    device_control_check_enabled(&state, Some("freeze"))?;
     require_confirm(confirm.unwrap_or(false), "冻结应用")?;
     let package = validate_package(&package)?;
     let cmd = DeviceCommand::Freeze { package };
@@ -300,7 +379,12 @@ async fn device_control_freeze(
 
 /// 解冻应用。
 #[tauri::command]
-async fn device_control_unfreeze(app: tauri::AppHandle, package: String) -> Result<(), String> {
+async fn device_control_unfreeze(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    package: String,
+) -> Result<(), String> {
+    device_control_check_enabled(&state, Some("freeze"))?;
     let package = validate_package(&package)?;
     let cmd = DeviceCommand::Unfreeze { package };
     let result = device_control_execute_privileged(&app, &cmd, 30_000)?;
@@ -318,9 +402,11 @@ async fn device_control_unfreeze(app: tauri::AppHandle, package: String) -> Resu
 #[tauri::command]
 async fn device_control_uninstall(
     app: tauri::AppHandle,
+    state: State<'_, AppState>,
     package: String,
     confirm: Option<bool>,
 ) -> Result<(), String> {
+    device_control_check_enabled(&state, Some("uninstall"))?;
     require_confirm(confirm.unwrap_or(false), "卸载应用")?;
     let package = validate_package(&package)?;
     let cmd = DeviceCommand::Uninstall { package };
@@ -343,6 +429,7 @@ async fn device_control_install(
     apk_path: String,
     confirm: Option<bool>,
 ) -> Result<(), String> {
+    device_control_check_enabled(&state, Some("install"))?;
     require_confirm(confirm.unwrap_or(false), "安装应用")?;
     let path = device_control_validate_path(&state, &apk_path)?;
     let cmd = DeviceCommand::Install { apk_path: path };
@@ -365,6 +452,7 @@ async fn device_control_delete_file(
     path: String,
     confirm: Option<bool>,
 ) -> Result<(), String> {
+    device_control_check_enabled(&state, Some("delete_file"))?;
     require_confirm(confirm.unwrap_or(false), "删除文件")?;
     let path = device_control_validate_path(&state, &path)?;
     let cmd = DeviceCommand::DeleteFile { path };
@@ -381,7 +469,14 @@ async fn device_control_delete_file(
 
 /// 点击屏幕（注入式，x/y 为屏幕像素坐标）。
 #[tauri::command]
-async fn device_control_tap(app: tauri::AppHandle, x: u32, y: u32) -> Result<(), String> {
+async fn device_control_tap(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    x: u32,
+    y: u32,
+) -> Result<(), String> {
+    device_control_check_enabled(&state, Some("touch"))?;
+    runtime_log_info(format!("[设备控制-审计] 注入点击 ({x}, {y})"));
     #[cfg(target_os = "android")]
     {
         use tauri_plugin_device_control::DeviceControlExt;
@@ -391,7 +486,7 @@ async fn device_control_tap(app: tauri::AppHandle, x: u32, y: u32) -> Result<(),
     }
     #[cfg(not(target_os = "android"))]
     {
-        let _ = (&app, x, y);
+        let _ = (&app, &state, x, y);
         return Err("设备控制仅在 Android 端可用。".to_string());
     }
     Ok(())
@@ -401,12 +496,18 @@ async fn device_control_tap(app: tauri::AppHandle, x: u32, y: u32) -> Result<(),
 #[tauri::command]
 async fn device_control_swipe(
     app: tauri::AppHandle,
+    state: State<'_, AppState>,
     x1: u32,
     y1: u32,
     x2: u32,
     y2: u32,
     duration_ms: Option<u32>,
 ) -> Result<(), String> {
+    device_control_check_enabled(&state, Some("touch"))?;
+    runtime_log_info(format!(
+        "[设备控制-审计] 注入滑动 ({x1},{y1})->({x2},{y2}) {:?}ms",
+        duration_ms
+    ));
     #[cfg(target_os = "android")]
     {
         use tauri_plugin_device_control::DeviceControlExt;
@@ -422,7 +523,7 @@ async fn device_control_swipe(
     }
     #[cfg(not(target_os = "android"))]
     {
-        let _ = (&app, x1, y1, x2, y2, duration_ms);
+        let _ = (&app, &state, x1, y1, x2, y2, duration_ms);
         return Err("设备控制仅在 Android 端可用。".to_string());
     }
     Ok(())
@@ -430,7 +531,13 @@ async fn device_control_swipe(
 
 /// 按键（注入式，keycode 参考 Android KeyEvent 常量，如 4=返回、3=主页）。
 #[tauri::command]
-async fn device_control_key_event(app: tauri::AppHandle, keycode: u32) -> Result<(), String> {
+async fn device_control_key_event(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    keycode: u32,
+) -> Result<(), String> {
+    device_control_check_enabled(&state, Some("touch"))?;
+    runtime_log_info(format!("[设备控制-审计] 注入按键 keycode={keycode}"));
     #[cfg(target_os = "android")]
     {
         use tauri_plugin_device_control::DeviceControlExt;
@@ -440,7 +547,7 @@ async fn device_control_key_event(app: tauri::AppHandle, keycode: u32) -> Result
     }
     #[cfg(not(target_os = "android"))]
     {
-        let _ = (&app, keycode);
+        let _ = (&app, &state, keycode);
         return Err("设备控制仅在 Android 端可用。".to_string());
     }
     Ok(())
@@ -453,6 +560,7 @@ async fn device_control_screenshot(
     state: State<'_, AppState>,
     file_name: Option<String>,
 ) -> Result<String, String> {
+    device_control_check_enabled(&state, Some("screenshot"))?;
     let root = device_control_root(&state);
     let screenshots_dir = root.join("screenshots");
     std::fs::create_dir_all(&screenshots_dir)
@@ -483,15 +591,28 @@ async fn device_control_screenshot(
 // ---- 路径防护 ----
 
 fn device_control_root(state: &AppState) -> PathBuf {
-    state.llm_workspace_path.clone()
+    // S3 权限域：文件类命令（install/deleteFile/screenshot）由 shell 身份（Shizuku
+    // ADB 激活）执行，不能落在应用私有目录（/data/user/0/<pkg>/... 700，shell 无权限）。
+    // 改用 `/sdcard/Android/data/<pkg>/files/device_control`——应用（自己）与 shell
+    //（adb 可访问全部 sdcard）都可读写，构成双向可用中转区。
+    let pkg = state
+        .llm_workspace_path
+        .components()
+        .filter_map(|component| component.as_os_str().to_str())
+        .nth(3)
+        .unwrap_or("ai.easycall.app");
+    PathBuf::from(format!("/sdcard/Android/data/{pkg}/files/device_control"))
 }
 
-/// 路径校验：只允许落在 Android 工作区沙盒内（llm_workspace_path），
+/// 路径校验：只允许落在设备控制 sdcard 中转区（device_control_root），
 /// 拒绝绝对系统路径、`..`、符号链接逃逸。
 fn device_control_validate_path(state: &AppState, raw: &str) -> Result<String, String> {
-    let root = device_control_root(state)
+    let root = device_control_root(state);
+    std::fs::create_dir_all(&root)
+        .map_err(|err| format!("创建设备控制中转目录失败: {err}"))?;
+    let root = root
         .canonicalize()
-        .map_err(|err| format!("解析 Android 工作区失败: {err}"))?;
+        .map_err(|err| format!("解析设备控制中转目录失败: {err}"))?;
     device_control_validate_path_inner(&root, raw)
 }
 
@@ -753,5 +874,17 @@ mod device_control_tests {
         assert_eq!(android_domain_route_rejection("pm disable --user 0 x && rm -rf /").unwrap_or(""), "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。");
         assert_eq!(android_domain_route_rejection("am broadcast -a x $(id)").unwrap_or(""), "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。");
         assert_eq!(android_domain_route_rejection("cmd package uninstall `whoami`").unwrap_or(""), "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。");
+    }
+
+    #[test]
+    fn dangerous_command_detection_identifies_high_risk_operations() {
+        assert!(android_domain_command_is_dangerous("pm uninstall com.example.app"));
+        assert!(android_domain_command_is_dangerous("pm disable-user --user 0 com.example.app"));
+        assert!(android_domain_command_is_dangerous("pm install -r /sdcard/a.apk"));
+        assert!(android_domain_command_is_dangerous("rm -f /sdcard/Android/data/ai.easycall.app/files/device_control/x.bin"));
+        assert!(!android_domain_command_is_dangerous("pm list packages"));
+        assert!(!android_domain_command_is_dangerous("dumpsys window"));
+        assert!(!android_domain_command_is_dangerous("input tap 540 1200"));
+        assert!(!android_domain_command_is_dangerous("getprop ro.product.model"));
     }
 }
