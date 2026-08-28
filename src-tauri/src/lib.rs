@@ -1515,6 +1515,7 @@ pub fn run() {
             list_recent_llm_round_logs,
             get_recent_llm_round_log_section,
             clear_recent_llm_round_logs,
+            list_schedule_runs,
             list_recent_runtime_logs,
             list_runtime_logs_since,
             clear_recent_runtime_logs,
