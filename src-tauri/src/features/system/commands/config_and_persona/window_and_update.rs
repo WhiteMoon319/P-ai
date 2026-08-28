@@ -743,6 +743,14 @@ fn save_config_inner(
     let provider_changed = config_provider_domain_changed(&base_config, &config);
     let shell_workspaces_changed = base_config.shell_workspaces != config.shell_workspaces;
     validate_department_names_unique(&config)?;
+    // Android 调试：确认保存的 device_control 配置值
+    eprintln!(
+        "[device-control] save_config device_control enabled={} freeze={} uninstall={} install={} delete={} touch={} screenshot={}",
+        config.device_control.enabled, config.device_control.allow_freeze,
+        config.device_control.allow_uninstall, config.device_control.allow_install,
+        config.device_control.allow_delete_file, config.device_control.allow_touch,
+        config.device_control.allow_screenshot
+    );
     let main_config = persist_departments_by_source(&state, &config)?;
     if !departments_changed.is_empty() {
         mark_prompt_cache_rebuild_for_system_sources_by_departments(
