@@ -5,7 +5,7 @@
 
 ## 最近版本
 
-- [v0.74.2](docs/changelog/releases/v0.74.2.md) - 修复设置窗口左侧导航栏无法滚动的问题：导航菜单项较多时现在可以正常滚动到末尾
+- [v0.74.2](docs/changelog/releases/v0.74.2.md) - **设备控制（Shizuku/root 提权）**：Android 端新增 `device_control` 工具集，支持通过 Shizuku（首选）或 root（兜底）提权执行有限设备控制操作。
 - [v0.74.1](docs/changelog/releases/v0.74.1.md) - 修复 Web 端与 VS Code 侧边栏的 Git 面板无法使用自动刷新的问题：仓库监听（watch）不再被 Web 端拦截，改动、提交、切换分支等操作会像桌面端一样自动刷新更改区和提交历史
 - [v0.74.0](docs/changelog/releases/v0.74.0.md) - 草稿会话的「和谁对话」卡片新增工作区快捷设置：可以直接切换工作目录（下拉列出侧边栏的所有目录，也能浏览选择任意文件夹），并即时调整权限与工作模式（目录 / 项目内工作树 / 本会话工作树），不用再进设置面板
 - [v0.73.1](docs/changelog/releases/v0.73.1.md) - 修复 Web 端（VS Code 侧边栏）无法创建会话的问题：新建会话与草稿打开命令已接入 Web 传输层
@@ -24,6 +24,8 @@
 - [v0.59.0](docs/changelog/releases/v0.59.0.md) - 文件阅读器新增 Git 面板：可在「文件/Git」之间切换，查看工作区与暂存区改动、查看 diff、暂存与取消暂存、丢弃改动、提交、储藏、切换/新建/删除分支、抓取/拉取/推送/同步，以及浏览提交历史与提交图；点击历史提交可直接查看该次提交的改动。
 - [v0.58.0](docs/changelog/releases/v0.58.0.md) - 委托状态在打开会话时立即刷新，会话工作区栏的活跃委托展示不再依赖监控面板的委托标签页是否打开。
 - [v0.57.0](docs/changelog/releases/v0.57.0.md) - 会话列表的聚合旧会话条目新增摘要预览：未读或 7 天内有更新的条目默认展开显示最近消息摘要，其余条目悬停时展开；移除悬停时的系统默认提示气泡
+- [v0.56.2](docs/changelog/releases/v0.56.2.md) - 修复 i18n 文案缺失：补全三语（zh-CN/zh-TW/en-US）中 welcome 卡片、工具页、远程前端密码等 63 处静态引用缺失的翻译 key，并补齐 zh-TW 热键发送方式的 4 处缺口。
+- [v0.56.1](docs/changelog/releases/v0.56.1.md) - Android 工作区导出改用原生 FileProvider + ACTION_SEND 系统分享：把沙盒工作区文件通过系统分享面板导出到其他应用，Kotlin shareFromDevice 改用模板 authority `${packageName}.fileprovider`，patch-android-project.sh 向模板 file_paths.xml 追加 root-path 覆盖沙盒根 app_data_dir()。
 - [v0.56.0](docs/changelog/releases/v0.56.0.md) - 足迹墙按凌晨 4 点分界：凌晨 0:00-3:59 的使用归属前一个分界日（适配通宵工作场景），今日视图、历史日历、年份统计与小时图全部按分界日口径计算；今日小时图 x 轴按分界日顺序排列（04:00 起头，0-3 点收尾）
 - [v0.55.0](docs/changelog/releases/v0.55.0.md) - 会话列表分组优化：同目录、同助手的会话自动聚合，最新一条完整展示，其余折叠为单行条目；打开会话不再自动展开所在分组，最近会话的文件夹胶囊可点击展开并定位到分组。
 - [v0.52.0](docs/changelog/releases/v0.52.0.md) - Linux 应用内自动更新（AppImage）：支持自动检查、下载并替换安装新版本，发布流程同步生成 Linux 更新清单与签名；macOS 仍不启用。

@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-08-27T09:50:33.875Z",
+  "generatedAt": "2026-08-28T14:01:38.891Z",
   "latestVersion": "v0.74.2",
   "releases": [
     {
       "version": "v0.74.2",
       "path": "docs/changelog/releases/v0.74.2.md",
-      "summary": "修复设置窗口左侧导航栏无法滚动的问题：导航菜单项较多时现在可以正常滚动到末尾"
+      "summary": "**设备控制（Shizuku/root 提权）**：Android 端新增 `device_control` 工具集，支持通过 Shizuku（首选）或 root（兜底）提权执行有限设备控制操作。"
     },
     {
       "version": "v0.74.1",
@@ -96,6 +96,16 @@
       "version": "v0.57.0",
       "path": "docs/changelog/releases/v0.57.0.md",
       "summary": "会话列表的聚合旧会话条目新增摘要预览：未读或 7 天内有更新的条目默认展开显示最近消息摘要，其余条目悬停时展开；移除悬停时的系统默认提示气泡"
+    },
+    {
+      "version": "v0.56.2",
+      "path": "docs/changelog/releases/v0.56.2.md",
+      "summary": "修复 i18n 文案缺失：补全三语（zh-CN/zh-TW/en-US）中 welcome 卡片、工具页、远程前端密码等 63 处静态引用缺失的翻译 key，并补齐 zh-TW 热键发送方式的 4 处缺口。"
+    },
+    {
+      "version": "v0.56.1",
+      "path": "docs/changelog/releases/v0.56.1.md",
+      "summary": "Android 工作区导出改用原生 FileProvider + ACTION_SEND 系统分享：把沙盒工作区文件通过系统分享面板导出到其他应用，Kotlin shareFromDevice 改用模板 authority `${packageName}.fileprovider`，patch-android-project.sh 向模板 file_paths.xml 追加 root-path 覆盖沙盒根 app_data_dir()。"
     },
     {
       "version": "v0.56.0",
