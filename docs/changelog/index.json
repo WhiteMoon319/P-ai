@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-08-28T15:37:11.948Z",
-  "latestVersion": "v0.74.2",
+  "generatedAt": "2026-08-28T17:34:58.735Z",
+  "latestVersion": "v0.74.3",
   "releases": [
+    {
+      "version": "v0.74.3",
+      "path": "docs/changelog/releases/v0.74.3.md",
+      "summary": "修复 Android 端输入法弹起时偶发不覆盖/不顶起文本框的问题：MainActivity 补齐 IME insets 处理（`adjustResize` + 内容区 bottom padding + requestLayout + API 30+ 动画结束兜底）"
+    },
     {
       "version": "v0.74.2",
       "path": "docs/changelog/releases/v0.74.2.md",

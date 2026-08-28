@@ -5,6 +5,7 @@
 
 ## 最近版本
 
+- [v0.74.3](docs/changelog/releases/v0.74.3.md) - 修复 Android 端输入法弹起时偶发不覆盖/不顶起文本框的问题：MainActivity 补齐 IME insets 处理（`adjustResize` + 内容区 bottom padding + requestLayout + API 30+ 动画结束兜底）
 - [v0.74.2](docs/changelog/releases/v0.74.2.md) - **设备控制（Shizuku/root 提权）**：Android 端新增 `device_control` 工具集，支持通过 Shizuku（首选）或 root（兜底）提权执行有限设备控制操作。
 - [v0.74.1](docs/changelog/releases/v0.74.1.md) - 修复 Web 端与 VS Code 侧边栏的 Git 面板无法使用自动刷新的问题：仓库监听（watch）不再被 Web 端拦截，改动、提交、切换分支等操作会像桌面端一样自动刷新更改区和提交历史
 - [v0.74.0](docs/changelog/releases/v0.74.0.md) - 草稿会话的「和谁对话」卡片新增工作区快捷设置：可以直接切换工作目录（下拉列出侧边栏的所有目录，也能浏览选择任意文件夹），并即时调整权限与工作模式（目录 / 项目内工作树 / 本会话工作树），不用再进设置面板

@@ -2,6 +2,12 @@
 
 > 此文件由 `pnpm changelog:build` 自动生成，展示最近版本的完整说明。
 
+## 发布：v0.74.3
+
+## 修复
+
+- 修复 Android 端输入法弹起时偶发不覆盖/不顶起文本框的问题：MainActivity 补齐 IME insets 处理（`adjustResize` + 内容区 bottom padding + requestLayout + API 30+ 动画结束兜底）
+
 ## 发布：v0.74.2
 
 ## 新增
@@ -18,7 +24,6 @@
 
 ## 修复
 
-- 修复 Android 端输入法弹起时偶发不覆盖/不顶起文本框的问题：MainActivity 补齐 IME insets 处理（`adjustResize` + 内容区 bottom padding + requestLayout + API 30+ 动画结束兜底）
 - 恢复上游 cherry-pick 时丢失的 96 个 Android 特有 locale 词条（androidWorkspace/remoteFrontend 等）
 - 修复设置窗口左侧导航栏无法滚动的问题：导航菜单项较多时现在可以正常滚动到末尾
 
@@ -173,29 +178,6 @@
 ## 修复
 
 - 配置页面操作（如保存供应商配置）现在会显示明确的成功或失败提示，不再出现点击后毫无反应的情况
-
-## 性能
-
-## 依赖
-
-## 发布：v0.65.0
-
-## 功能
-
-- 新增 `windows` 窗口管理工具：`list windows` 列出全部可见窗口（标题/进程/位置/最小化/聚焦状态），`activate window id=xxx` 还原并切换到前台，配合截图即可定位与操作目标窗口；Windows、Linux（X11）与 macOS 可用
-- 桌面脚本截图命令新增 `elements=true`：局部截图（region/focused_window）时返回区域内可交互控件列表（控件类型、名称、归一化坐标），控件带 `focused` 标记，一眼确认焦点落在哪个控件，便于精准点击；Windows、Linux（X11）与 macOS 可用
-- 桌面脚本 `text` 支持中文与多行内容：中文输入改走剪贴板粘贴，不受输入法干扰、顺序稳定；引号内真实换行与 `\n` 转义均可正常写入
-- 桌面脚本组合键改走真实按键事件注入，快捷键不再失效
-- 电脑使用（桌面操作）新装默认关闭，需要时可在设置中开启
-
-## 重构
-
-## 修复
-
-- 修复切换仓库后更改列表可能不加载的问题
-- Git 面板未跟踪文件点击直接打开文件内容，不再显示空白差异
-- 移除全局右键菜单屏蔽，恢复应用原生右键行为
-- Git 面板文件行撤回/暂存按钮位置统一，始终靠右
 
 ## 性能
 
