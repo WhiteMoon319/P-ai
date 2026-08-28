@@ -1627,22 +1627,9 @@ async fn builtin_shell_exec(
             }
             // 总开关校验（计划 5.4 默认关闭）：未开启时拒绝 Android 域执行
             device_control_check_enabled(state, None)?;
-            // 元字符防护（计划 5.4 防拼接注入）
-            if let Some(reject_reason) = android_domain_route_rejection(&android_cmd) {
-                return Ok(serde_json::json!({
-                    "ok": false,
-                    "exitCode": -1,
-                    "stdout": "",
-                    "stderr": reject_reason,
-                    "aggregatedOutput": "",
-                    "durationMs": 0,
-                    "timedOut": false,
-                    "truncated": false,
-                    "stdoutTruncated": false,
-                    "stderrTruncated": false
-                }));
-            }
-            // 危险命令二次确认（计划 5.4）：卸载/冻结/安装/删除在 Android 域同样需用户确认
+            // 危险命令二次确认（计划 5.4）：全串扫描卸载/冻结/安装/删除类
+            // token（含管道/分号后拼接），命中即需用户确认；允许正常 shell 语法
+            //（用户显式切换 Android 域 = 明确授权提权 shell）
             if android_domain_command_is_dangerous(&android_cmd) {
                 let approved = terminal_request_user_approval(
                     state,
