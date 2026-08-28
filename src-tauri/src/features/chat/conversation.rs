@@ -2953,6 +2953,7 @@ fn departments_only_config(departments: &[DepartmentConfig]) -> AppConfig {
         image_providers: Vec::new(),
         api_configs: Vec::new(),
         device_control: DeviceControlConfig::default(),
+        terminal_environment: default_terminal_environment(),
     }
 }
 

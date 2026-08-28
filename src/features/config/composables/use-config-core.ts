@@ -33,6 +33,11 @@ function normalizeWebAccessPort(value: unknown): number {
   return 8429;
 }
 
+/** 终端执行环境：linux（proot 沙盒，默认）| android（device_control 提权 shell）。 */
+function normalizeTerminalEnvironment(value: unknown): "linux" | "android" {
+  return value === "android" ? "android" : "linux";
+}
+
 type UseConfigCoreOptions = {
   config: AppConfig;
   textCapableApiConfigs: ComputedRef<ApiConfigItem[]>;
@@ -371,6 +376,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
       ...(options.config.sttApiConfigId ? { sttApiConfigId: options.config.sttApiConfigId } : {}),
       ...(options.config.sttAutoSend ? { sttAutoSend: true } : {}),
       terminalShellKind: String(options.config.terminalShellKind ?? ""),
+      terminalEnvironment: normalizeTerminalEnvironment(options.config.terminalEnvironment),
       simpleSetupMode: options.config.simpleSetupMode !== false,
       shellWorkspaces: [...(options.config.shellWorkspaces || [])],
       departments: [...(options.config.departments || [])],
@@ -528,6 +534,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
       sttApiConfigId: options.config.sttApiConfigId,
       sttAutoSend: !!options.config.sttAutoSend,
       terminalShellKind: String(options.config.terminalShellKind ?? ""),
+      terminalEnvironment: normalizeTerminalEnvironment(options.config.terminalEnvironment),
       simpleSetupMode: options.config.simpleSetupMode !== false,
       shellWorkspaces: [...(options.config.shellWorkspaces || [])],
       departments: [...(options.config.departments || [])],

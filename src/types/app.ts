@@ -400,6 +400,8 @@ export type AppConfig = {
   sttApiConfigId?: string;
   sttAutoSend?: boolean;
   terminalShellKind?: string;
+  /** 终端执行环境：linux（proot 沙盒，默认）| android（device_control 提权 shell） */
+  terminalEnvironment?: "linux" | "android";
   simpleSetupMode?: boolean;
   shellWorkspaces: ShellWorkspace[];
   mcpServers: McpServerConfig[];

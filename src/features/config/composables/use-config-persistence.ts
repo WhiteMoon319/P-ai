@@ -319,6 +319,7 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     options.config.sttApiConfigId = cfg.sttApiConfigId ?? undefined;
     options.config.sttAutoSend = !!cfg.sttAutoSend;
     options.config.terminalShellKind = String((cfg as AppConfig).terminalShellKind ?? "");
+    options.config.terminalEnvironment = (cfg as AppConfig).terminalEnvironment === "android" ? "android" : "linux";
     options.config.simpleSetupMode = (cfg as { simpleSetupMode?: unknown }).simpleSetupMode !== false;
     options.config.departments = Array.isArray((cfg as AppConfig).departments)
       ? (cfg.departments || []).map(mapDepartmentConfig)
@@ -573,6 +574,7 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
       options.config.sttApiConfigId = saved.sttApiConfigId ?? undefined;
       options.config.sttAutoSend = !!saved.sttAutoSend;
       options.config.terminalShellKind = String((saved as AppConfig).terminalShellKind ?? "");
+      options.config.terminalEnvironment = (saved as AppConfig).terminalEnvironment === "android" ? "android" : "linux";
       options.config.departments = Array.isArray(saved.departments)
         ? (saved.departments || []).map(mapDepartmentConfig)
         : [];

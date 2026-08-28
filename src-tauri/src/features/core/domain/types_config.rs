@@ -1290,6 +1290,10 @@ impl Default for DeviceControlConfig {
     }
 }
 
+fn default_terminal_environment() -> String {
+    "linux".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AppConfig {
@@ -1372,6 +1376,10 @@ struct AppConfig {
     api_configs: Vec<ApiConfig>,
     #[serde(default)]
     device_control: DeviceControlConfig,
+    /// 终端执行环境：linux（proot 沙盒，默认）| android（device_control 提权 shell）。
+    /// LLM 用 config 工具切换后，exec 命令走对应通道；`sys:` 前缀可单命令强制 Android 域。
+    #[serde(default = "default_terminal_environment")]
+    terminal_environment: String,
 }
 
 impl Default for AppConfig {
@@ -1416,6 +1424,7 @@ impl Default for AppConfig {
             image_providers: default_image_generation_providers(),
             api_configs: vec![api_config],
             device_control: DeviceControlConfig::default(),
+            terminal_environment: default_terminal_environment(),
         }
     }
 }

@@ -1606,29 +1606,30 @@ async fn builtin_shell_exec(
 
 #[cfg(target_os = "android")]
     let execution_result = {
-        // 执行域路由（计划四）：首词命中 Android 系统命令白名单（或 sys: 前缀
-        // 显式覆盖）→ Android 域提权执行（Shizuku 首选 / root 兜底）；
-        // 未命中一律落 Linux 域（proot rootfs），不允许静默进入提权环境。
-        if let Some(android_cmd) = route_to_android_domain(cmd) {
-            // 总开关校验（计划 5.4 默认关闭）：未开启时拒绝路由到提权环境
-            device_control_check_enabled(state, None)?;
-            // 元字符防护（计划 5.4 防拼接注入）：白名单首词命令含 shell 元字符时
-            // 拒绝路由，不进入提权环境。
-            if let Some(reject_reason) = android_domain_route_rejection(&android_cmd) {
-                return Ok(serde_json::json!({
-                    "ok": false,
-                    "exitCode": -1,
-                    "stdout": "",
-                    "stderr": reject_reason,
-                    "aggregatedOutput": "",
-                    "durationMs": 0,
-                    "timedOut": false,
-                    "truncated": false,
-                    "stdoutTruncated": false,
-                    "stderrTruncated": false
-                }));
+        // 显式执行环境（计划口径修正版）：由 config.terminal_environment 决定通道——
+        //   linux（默认）→ proot 沙盒；
+        //   android → device_control 提权 shell（toybox/pm 等系统命令）。
+        // `sys:` 前缀可单命令强制 Android 域。不做首词白名单自动路由。
+        let force_android = cmd.trim_start().starts_with("sys:");
+        let android_environment = force_android || {
+            state_read_config_cached(state)
+                .map(|config| config.terminal_environment == "android")
+                .unwrap_or(false)
+        };
+        if android_environment {
+            let android_cmd = if force_android {
+                cmd.trim_start().trim_start_matches("sys:").trim_start().to_string()
+            } else {
+                cmd.to_string()
+            };
+            if android_cmd.is_empty() {
+                return Err("sys: 前缀后缺少命令。".to_string());
             }
-            // 危险命令二次确认（计划 5.4）：卸载/冻结/安装/删除在终端路由路径同样需用户确认
+            // 总开关校验（计划 5.4 默认关闭）：未开启时拒绝 Android 域执行
+            device_control_check_enabled(state, None)?;
+            // 危险命令二次确认（计划 5.4）：全串扫描卸载/冻结/安装/删除类
+            // token（含管道/分号后拼接），命中即需用户确认；允许正常 shell 语法
+            //（用户显式切换 Android 域 = 明确授权提权 shell）
             if android_domain_command_is_dangerous(&android_cmd) {
                 let approved = terminal_request_user_approval(
                     state,
@@ -1675,8 +1676,7 @@ async fn builtin_shell_exec(
             match device_control_execute_shell_command(
                 &app_handle,
                 &android_cmd,
-                // 路由命令放宽超时：UserService 首次绑定可能达 20s，exec 工具
-                // 默认超时（15s）会导致工具层提前超时（exit -1 无输出）
+                // Android 域命令放宽超时：UserService 首次绑定可能达 20s
                 timeout_ms.max(30_000),
             )
             .await {

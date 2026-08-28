@@ -800,7 +800,11 @@
       "deviceControlAllowDeleteFile": "允许删除受限文件",
       "deviceControlAllowTouch": "允许触控（点击/滑动/按键）",
       "deviceControlAllowScreenshot": "允许截屏",
-      "deviceControlCapabilityHint": "能力开关默认关闭；未开启时对应操作会被拒绝。"
+      "deviceControlCapabilityHint": "能力开关默认关闭；未开启时对应操作会被拒绝。",
+      "terminalEnvironmentTitle": "终端运行环境",
+      "terminalEnvironmentLinux": "Linux 域（proot 沙盒）",
+      "terminalEnvironmentAndroid": "Android 域（toybox 提权 shell）",
+      "terminalEnvironmentHint": "切换后 exec 命令走对应通道；LLM 也可用 config \"terminal set android|linux\" 切换。"
     },
     "persona": {
       "title": "人格",

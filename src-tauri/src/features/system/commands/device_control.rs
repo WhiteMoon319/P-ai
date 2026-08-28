@@ -20,49 +20,29 @@ pub(crate) const ANDROID_SYSTEM_COMMAND_PREFIXES: &[&str] = &[
 ///
 /// 与计划四「执行环境域」口径一致：未命中白名单一律落 Linux 域，
 /// 不允许静默进入提权环境。
-pub(crate) fn route_to_android_domain(command: &str) -> Option<String> {
-    let trimmed = command.trim();
-    if let Some(rest) = trimmed.strip_prefix("sys:") {
-        let rest = rest.trim_start();
-        if rest.is_empty() {
-            return None;
-        }
-        return Some(rest.to_string());
-    }
-    let first_word = trimmed.split_whitespace().next()?;
-    if ANDROID_SYSTEM_COMMAND_PREFIXES.contains(&first_word) {
-        return Some(trimmed.to_string());
-    }
-    None
-}
-
-/// 路由放行前的元字符防护：白名单首词命令若含 shell 元字符，拒绝进提权
-/// 环境（防 `pm disable-user --user 0 x; rm -rf /` 之类拼接绕过白名单意图，
-/// 计划 5.4「禁止拼接用户自由输入」），返回拒绝原因；无元字符返回 None。
-pub(crate) fn android_domain_route_rejection(command: &str) -> Option<&'static str> {
-    const METACHARS: &[char] = &[
-        ';', '|', '&', '$', '`', '\n', '>', '<', '(', ')', '{', '}', '\\', '\'', '"',
-    ];
-    if command.contains(METACHARS) {
-        return Some(
-            "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。",
-        );
-    }
-    None
-}
-
-/// Android 域危险命令识别（终端路由二次确认用）：卸载/冻结/安装/删除文件。
-/// 命中后需用户确认才放行进提权环境（计划 5.4 危险操作确认口径）。
+/// 元字符防护：Android 域命令（显式环境切换或 sys: 覆盖）若含 shell 元字符，
+/// Android 域危险命令识别（Android 域执行前二次确认用）。
+/// 全串 token 扫描：卸载/冻结/安装/删除等危险关键字出现在任何位置（含管道/分号
+/// 后拼接）都判定危险，需用户确认。允许正常 shell 语法（用户显式切 Android 域）。
 pub(crate) fn android_domain_command_is_dangerous(command: &str) -> bool {
-    let mut words = command.split_whitespace();
-    match words.next() {
-        Some("pm") => matches!(
-            words.next(),
-            Some("uninstall") | Some("disable-user") | Some("install") | Some("enable")
-        ),
-        Some("rm") => true,
-        _ => false,
-    }
+    const DANGEROUS_TOKENS: &[&str] = &[
+        "pm uninstall",
+        "pm disable-user",
+        "pm install",
+        "pm enable",
+        "rm -f",
+        "rm -rf",
+        "rm -r",
+        "del",
+        "mount",
+        "chmod",
+        "chown",
+        "dd if=",
+        "reboot",
+        "shutdown",
+    ];
+    let normalized = command.to_ascii_lowercase();
+    DANGEROUS_TOKENS.iter().any(|token| normalized.contains(token))
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -246,8 +226,8 @@ fn device_control_execute_privileged(
     Err("设备控制仅在 Android 端可用。".to_string())
 }
 
-/// Android 域提权 shell 执行（供 terminal 执行域路由调用）。
-/// 仅应经 [route_to_android_domain] 放行的白名单首词命令进入，避免静默提权。
+/// Android 域提权 shell 执行（供终端执行环境切换调用）。
+/// 命令需经元字符防护与危险确认放行，避免静默提权。
 #[cfg(target_os = "android")]
 pub(crate) async fn device_control_execute_shell_command(
     app: &tauri::AppHandle,
@@ -889,63 +869,21 @@ mod device_control_tests {
     }
 
     #[test]
-    fn route_to_android_domain_routes_whitelisted_prefixes() {
-        assert_eq!(route_to_android_domain("pm list packages").as_deref(), Some("pm list packages"));
-        assert_eq!(route_to_android_domain("dumpsys window").as_deref(), Some("dumpsys window"));
-        assert_eq!(route_to_android_domain("toybox").as_deref(), Some("toybox"));
-        assert_eq!(route_to_android_domain("  input tap 540 1200").as_deref(), Some("input tap 540 1200"));
-    }
-
-    #[test]
-    fn route_to_android_domain_sys_prefix_forces_android_domain() {
-        assert_eq!(
-            route_to_android_domain("sys:rm -f /data/local/tmp/a").as_deref(),
-            Some("rm -f /data/local/tmp/a")
-        );
-        assert_eq!(
-            route_to_android_domain("sys: pm clear com.example.app").as_deref(),
-            Some("pm clear com.example.app")
-        );
-    }
-
-    #[test]
-    fn route_to_android_domain_leaves_others_to_linux_domain() {
-        // 歧义命令默认落 Linux 域，不静默提权
-        assert_eq!(route_to_android_domain("ls -la"), None);
-        assert_eq!(route_to_android_domain("rm -f x"), None);
-        assert_eq!(route_to_android_domain("cat /etc/hosts"), None);
-        assert_eq!(route_to_android_domain(""), None);
-        assert_eq!(route_to_android_domain("   "), None);
-        assert_eq!(route_to_android_domain("sys:"), None);
-        assert_eq!(route_to_android_domain("sys:   "), None);
-    }
-
-    #[test]
-    fn route_rejects_shell_metachars_to_block_injection() {
-        // 白名单首词命令拼接 shell 元字符（`;`/`|`/`&&`/`$()`/反引号等）必须被拒绝，
-        // 防止 `pm disable-user --user 0 x; rm -rf /` 绕过白名单意图进入提权环境。
-        assert_eq!(
-            android_domain_route_rejection("pm disable-user --user 0 x; rm -rf /").unwrap_or(""),
-            "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。"
-        );
-        assert!(android_domain_route_rejection("pm list packages").is_none(), "普通 pm 命令不应被拒");
-        assert!(android_domain_route_rejection("dumpsys window").is_none());
-        assert!(android_domain_route_rejection("sys:rm -f /data/local/tmp/a").is_none(), "sys: 前缀带无元字符命令可放行");
-        assert_eq!(android_domain_route_rejection("pm list | grep x").unwrap_or(""), "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。");
-        assert_eq!(android_domain_route_rejection("pm disable --user 0 x && rm -rf /").unwrap_or(""), "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。");
-        assert_eq!(android_domain_route_rejection("am broadcast -a x $(id)").unwrap_or(""), "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。");
-        assert_eq!(android_domain_route_rejection("cmd package uninstall `whoami`").unwrap_or(""), "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。");
-    }
-
-    #[test]
-    fn dangerous_command_detection_identifies_high_risk_operations() {
+    fn dangerous_command_detection_scans_full_command() {
+        // 全串 token 扫描：正常 shell 语法（管道/引号/分号）放行，
+        // 危险关键字出现在任何位置都需确认
         assert!(android_domain_command_is_dangerous("pm uninstall com.example.app"));
         assert!(android_domain_command_is_dangerous("pm disable-user --user 0 com.example.app"));
         assert!(android_domain_command_is_dangerous("pm install -r /sdcard/a.apk"));
         assert!(android_domain_command_is_dangerous("rm -f /sdcard/Android/data/ai.easycall.app/files/device_control/x.bin"));
-        assert!(!android_domain_command_is_dangerous("pm list packages"));
+        assert!(android_domain_command_is_dangerous("pm list packages | rm -rf /data/local/tmp"));
+        assert!(android_domain_command_is_dangerous("echo x; pm uninstall com.x"));
+        assert!(android_domain_command_is_dangerous("dd if=/dev/block/sda of=/sdcard/x"));
+        // 普通命令不受影响
+        assert!(!android_domain_command_is_dangerous("pm list packages | head -20"));
         assert!(!android_domain_command_is_dangerous("dumpsys window"));
         assert!(!android_domain_command_is_dangerous("input tap 540 1200"));
         assert!(!android_domain_command_is_dangerous("getprop ro.product.model"));
+        assert!(!android_domain_command_is_dangerous("echo \"hello world\" | grep hello"));
     }
 }

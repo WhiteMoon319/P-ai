@@ -800,7 +800,11 @@
       "deviceControlAllowDeleteFile": "Allow deleting restricted files",
       "deviceControlAllowTouch": "Allow touch (tap/swipe/key)",
       "deviceControlAllowScreenshot": "Allow screenshots",
-      "deviceControlCapabilityHint": "Capability switches default to off; operations are rejected until enabled."
+      "deviceControlCapabilityHint": "Capability switches default to off; operations are rejected until enabled.",
+      "terminalEnvironmentTitle": "Terminal environment",
+      "terminalEnvironmentLinux": "Linux domain (proot sandbox)",
+      "terminalEnvironmentAndroid": "Android domain (toybox privileged shell)",
+      "terminalEnvironmentHint": "exec commands route to the selected channel; LLM can switch via config \"terminal set android|linux\"."
     },
     "persona": {
       "title": "Persona",

@@ -400,12 +400,52 @@ fn run_with_context(ctx: &CliContext, args: &[String]) -> Result<String, String>
         "agent" => handle_agent(ctx, &args[1..]),
         "department" => handle_department(ctx, &args[1..]),
         "mcp" => handle_mcp(ctx, &args[1..]),
+        "terminal" => handle_terminal(ctx, &args[1..]),
         "skill" => Err("skill 命令当前未开放，请直接通过 skills 目录与 SKILL.md 文件管理。".to_string()),
         "help" | "--help" | "-h" => print_help(),
         "provider" => Err("provider 命令当前未开放，请不要通过 config 工具修改供应商。".to_string()),
         other => Err(format!("未知顶级命令: {other}")),
     }?;
     Ok(take_output_buffer())
+}
+
+/// 终端运行环境切换（Android 域 toybox / Linux 域 proot）。
+/// agent 通过 config 工具调用：`config "terminal get"` / `config "terminal set android|linux"`。
+fn handle_terminal(ctx: &CliContext, args: &[String]) -> Result<(), String> {
+    match args.first().map(String::as_str) {
+        Some("get") | None => {
+            let doc = load_config_doc(ctx)?;
+            let env = doc
+                .get("terminalEnvironment")
+                .and_then(toml::Value::as_str)
+                .unwrap_or("linux")
+                .to_string();
+            push_output(&format!(
+                "当前终端运行环境: {env}（android=Android 域 toybox 提权 shell，linux=proot 沙盒）"
+            ));
+            Ok(())
+        }
+        Some("set") => {
+            let value = args
+                .get(1)
+                .ok_or_else(|| "用法: config \"terminal set <android|linux>\"".to_string())?;
+            if value != "android" && value != "linux" {
+                return Err("终端运行环境仅支持 android（Android 域 toybox）或 linux（proot 沙盒）".to_string());
+            }
+            let mut doc = load_config_doc(ctx)?;
+            let table = doc
+                .as_table_mut()
+                .ok_or_else(|| "配置格式异常：根节点不是表".to_string())?;
+            table.insert("terminalEnvironment".to_string(), toml::Value::String(value.clone()));
+            save_config_doc(ctx, &doc)?;
+            push_output(&format!("终端运行环境已切换为: {value}"));
+            Ok(())
+        }
+        other => Err(format!(
+            "用法: config \"terminal get\" 或 config \"terminal set <android|linux>\"（当前子命令: {:?}）",
+            other
+        )),
+    }
 }
 
 impl CliContext {
@@ -515,6 +555,11 @@ MCP:
   mcp delete <name-or-id> --confirmed
   mcp test <name-or-id>
   mcp tools <name-or-id>
+
+Terminal environment (Android):
+  config "terminal get"
+  config "terminal set android"   # Android 域 toybox 提权 shell
+  config "terminal set linux"     # proot 沙盒（默认）
 
 Common flows:
   config "agent get <name-or-id>"
@@ -2579,6 +2624,53 @@ scope = "global"
         assert_eq!(value[0]["id"], "agent-a");
         assert_eq!(value[0]["name"], "Agent A");
         assert!(value[0].get("systemPrompt").is_none());
+    }
+
+    #[test]
+    fn terminal_environment_set_and_get_should_persist() {
+        let root = test_root();
+        seed_app(&root);
+        // 默认 linux
+        let get_initial = run_command_with_paths(
+            root.clone(),
+            root.join("app_config.toml"),
+            root.join("config_mark"),
+            root.join("llm-workspace"),
+            "terminal get",
+        )
+        .expect("terminal get initial");
+        assert!(get_initial.contains("linux"), "默认应为 linux，got: {get_initial}");
+
+        // 切到 android
+        run_command_with_paths(
+            root.clone(),
+            root.join("app_config.toml"),
+            root.join("config_mark"),
+            root.join("llm-workspace"),
+            "terminal set android",
+        )
+        .expect("terminal set android");
+
+        let get_after = run_command_with_paths(
+            root.clone(),
+            root.join("app_config.toml"),
+            root.join("config_mark"),
+            root.join("llm-workspace"),
+            "terminal get",
+        )
+        .expect("terminal get after set");
+        assert!(get_after.contains("android"), "切换后应为 android，got: {get_after}");
+
+        // 非法值拒绝
+        let err = run_command_with_paths(
+            root.clone(),
+            root.join("app_config.toml"),
+            root.join("config_mark"),
+            root.join("llm-workspace"),
+            "terminal set windows",
+        )
+        .expect_err("非法环境应报错");
+        assert!(err.contains("仅支持 android"));
     }
 
     #[test]
