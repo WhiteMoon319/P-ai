@@ -10,12 +10,11 @@ description: 当需要冻结/解冻/卸载/安装应用、删除受限文件、�
 - 终端执行域由**显式环境切换**决定，非自动路由：`config "terminal get"` 查当前环境，`config "terminal set android|linux"` 切换。
   - `linux`（默认）：exec 走 proot 沙盒（文件/代码/构建命令）。
   - `android`：exec 走 device_control 提权 shell（pm/cmd/input/toybox/dumpsys 等系统命令）。
-  - `sys:` 前缀可单命令强制 Android 域（如 `sys:pm list packages`），不依赖环境切换。
 - **能力默认全部关闭**：先查 `device_control {action: "status"}` 只反映提权状态；总开关与分项开关在「设置 → 工具 → 设备控制」开启后，对应操作才可执行。未开启时返回结构化错误，不假装成功。
-- Android 域（含 sys: 覆盖）允许正常 shell 语法（管道/引号/分号），但危险关键字（`pm uninstall`/`pm disable-user`/`pm install`/`rm -f`/`rm -rf`/`dd if=` 等出现在命令任意位置）会触发用户二次确认。
+- Android 域允许正常 shell 语法（管道/引号/分号），但危险关键字（`pm uninstall`/`pm disable-user`/`pm install`/`rm -f`/`rm -rf`/`dd if=` 等出现在命令任意位置）会触发用户二次确认。
 - 冻结/卸载/安装/删除文件是危险操作，必须带 `confirm: true`（用户已二次确认）才执行；Android 域的卸载/冻结/安装/删除类命令也会触发用户确认。
 - 只使用工具白名单，不拼接自由 shell；包名只允许 `[a-zA-Z0-9._]`。
-- 删除/安装/截屏路径必须落在设备控制中转区（`/sdcard/Android/data/<pkg>/files/device_control`），拒绝系统路径与 `..`。
+- 删除/安装必须在设备控制 sdcard 中转区（`/sdcard/Android/data/<pkg>/files/device_control`）；截屏由提权 shell 写 `/data/local/tmp` 并经 base64 回传，最终落在应用私有 `llm-workspace/screenshots/`；路径一律拒绝系统路径与 `..`。
 - 权限不足时如实报错并引导用户激活 Shizuku（ADB 或 root），不假装成功。
 
 ## 提权状态
@@ -50,7 +49,7 @@ device_control {action: "screenshot", fileName: "now.png"}
 
 ## 禁做清单
 
-- 不执行任意自由 shell，只用 `device_control.*` 工具（或在 Android 域/`sys:` 覆盖下执行系统命令）。
+- 不执行任意自由 shell，只用 `device_control.*` 工具（或切换到 Android 域后用提权 shell 执行系统命令）。
 - 不删除工作区沙盒外的文件（系统文件、其他应用数据）。
 - 不修改系统设置、不做跨用户操作、不查看其他应用私有数据。
-- 不在 proot Linux 终端里执行 Android 系统命令（会被自动路由到 Android 域提权执行）。
+- Linux 域（proot 沙盒）内没有 Android 系统命令（pm/toybox 等），需要时先 `config "terminal set android"` 切换或直接用 `device_control` 工具。
