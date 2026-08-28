@@ -10,7 +10,7 @@
   - 文件操作：删除/安装/截屏走 `/sdcard/Android/data/<pkg>/files/device_control` 中转区（shell 与 app 双向可访问）
   - 触控：点击/滑动/按键/截屏（注入式 `injectInputEvent`，Shizuku UserService shell 身份进程内反射注入，MAA-Meow 语义；root 兜底降级 `input` 命令）
   - 能力开关（总开关 + 分项）默认全部关闭，未开启拒绝执行；agent 侧注册 `device_control` 工具（action 分发）
-  - 执行域路由：`shell_exec` 终端命令首词命中 Android 系统白名单（pm/cmd/input/am/dumpsys/toybox 等）自动路由到 Android 域提权执行；歧义命令用 `sys:` 前缀显式覆盖；未命中一律落 Linux 域，不静默提权；路由命令含 shell 元字符（`;`/`|`/`&&`/`$()` 等）拒绝执行防注入；危险路由命令触发用户二次确认
+  - 终端执行域改为**显式环境切换**：设置页/`config "terminal set android|linux"` 切换，exec 命令走对应通道（linux=proot 沙盒，android=Android 域提权 shell）；`sys:` 前缀可单命令强制 Android 域；不再做命令首词自动路由；Android 域命令仍拒绝 shell 元字符防注入，危险操作二次确认
   - 命令白名单枚举，禁止自由 shell 拼接；路径与包名校验
   - 预设 skill `device-control` 指引 agent 正确使用 Android 域工具；设置页工具页「设备控制」卡片（含能力开关组）
 

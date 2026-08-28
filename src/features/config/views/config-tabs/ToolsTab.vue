@@ -201,6 +201,32 @@
             />
           </label>
           <template v-if="deviceControlConfig.enabled">
+            <div class="grid gap-1">
+              <div class="text-xs font-medium">{{ t('config.tools.terminalEnvironmentTitle') }}</div>
+              <div class="flex gap-2">
+                <label class="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="terminal-environment"
+                    class="radio radio-xs"
+                    :checked="terminalEnvironment === 'linux'"
+                    @change="setTerminalEnvironment('linux')"
+                  />
+                  <span class="text-sm">{{ t('config.tools.terminalEnvironmentLinux') }}</span>
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="terminal-environment"
+                    class="radio radio-xs"
+                    :checked="terminalEnvironment === 'android'"
+                    @change="setTerminalEnvironment('android')"
+                  />
+                  <span class="text-sm">{{ t('config.tools.terminalEnvironmentAndroid') }}</span>
+                </label>
+              </div>
+              <div class="text-xs opacity-60">{{ t('config.tools.terminalEnvironmentHint') }}</div>
+            </div>
             <label
               v-for="cap in deviceControlCapabilities"
               :key="cap.key"
@@ -537,6 +563,17 @@ function setDeviceControlEnabled(event: Event) {
 
 function setDeviceControlCapability(key: keyof NonNullable<AppConfig["deviceControl"]>, event: Event) {
   deviceControlEnsureConfig()[key] = (event.target as HTMLInputElement).checked;
+  emit("saveApiConfig");
+}
+
+// ---- 终端运行环境（linux proot / android toybox，LLM 用 config 工具切换） ----
+const terminalEnvironment = computed<"linux" | "android">(() =>
+  props.config.terminalEnvironment === "android" ? "android" : "linux",
+);
+
+function setTerminalEnvironment(environment: "linux" | "android") {
+  if (props.config.terminalEnvironment === environment) return;
+  props.config.terminalEnvironment = environment;
   emit("saveApiConfig");
 }
 function formatBytes(value: number): string {
