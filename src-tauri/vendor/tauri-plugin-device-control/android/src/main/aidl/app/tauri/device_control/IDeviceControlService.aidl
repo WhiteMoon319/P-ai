@@ -16,4 +16,10 @@ interface IDeviceControlService {
 
     // 执行提权命令，返回 JSON：{"exitCode":N,"stdout":"...","stderr":"..."}
     String execute(String command, long timeoutMs) = 1;
+
+    // 注入式触控（MAA-Meow InputControlUtils 语义，UserService 进程内反射 injectInputEvent，
+    // 事件序列在服务端 Binder 线程执行，避免占用应用进程 UI 线程）
+    boolean tap(int x, int y) = 2;
+    boolean swipe(int x1, int y1, int x2, int y2, long durationMs) = 3;
+    boolean key(int keycode) = 4;
 }

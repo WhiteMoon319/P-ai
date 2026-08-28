@@ -85,4 +85,15 @@ class DeviceControlServiceImpl : IDeviceControlService.Stub() {
       CommandResult(-1, "", "命令执行异常: ${e.message ?: e.javaClass.simpleName}")
     }
   }
+
+  // ---- 注入式触控（MAA-Meow InputControlUtils 语义，见 InputInjector）----
+
+  private val inputInjector = InputInjector()
+
+  override fun tap(x: Int, y: Int): Boolean = inputInjector.tap(x, y)
+
+  override fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Long): Boolean =
+    inputInjector.swipe(x1, y1, x2, y2, durationMs)
+
+  override fun key(keycode: Int): Boolean = inputInjector.key(keycode)
 }

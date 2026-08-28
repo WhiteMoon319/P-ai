@@ -38,6 +38,21 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
     var timeoutMs: Long = 30_000
   }
 
+  /** 注入式触控请求（Rust 侧 TouchAction 枚举白名单校验后转发）。 */
+  @InvokeArg
+  class TouchInvokeArgs {
+    /** 动作：tap | swipe | key */
+    var action: String? = null
+    var x: Int? = null
+    var y: Int? = null
+    var x1: Int? = null
+    var y1: Int? = null
+    var x2: Int? = null
+    var y2: Int? = null
+    var durationMs: Long? = null
+    var keycode: Int? = null
+  }
+
   /** 查询提权状态。 */
   @Command
   fun status(invoke: Invoke) {
@@ -130,6 +145,97 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
     obj.put("stdout", out.stdout)
     obj.put("stderr", out.stderr)
     invoke.resolve(obj)
+  }
+
+  /**
+   * 注入式触控（MAA-Meow 语义）。
+   *
+   * Shizuku 首选：UserService（shell 身份）进程内反射 `injectInputEvent` 注入；
+   * root 兜底：`su -c input ...` 降级（计划 v1 允许）。事件序列统一在服务端
+   * Binder 线程执行，不占用应用进程 UI 线程。
+   */
+  @Command
+  fun injectTouch(invoke: Invoke) {
+    val args = invoke.parseArgs(TouchInvokeArgs::class.java)
+    val action = args.action?.trim().orEmpty()
+    if (action.isEmpty()) {
+      invoke.reject("缺少触控动作")
+      return
+    }
+    if (!isShizukuGranted() && !isRootAvailable()) {
+      invoke.reject("无可用提权通道：请先通过 Shizuku 授权或开启 root")
+      return
+    }
+    try {
+      val ok = if (isShizukuGranted()) {
+        injectTouchViaShizuku(args, action)
+      } else {
+        injectTouchViaSu(args, action)
+      }
+      if (!ok) {
+        invoke.reject("触控注入失败：设备拒绝注入（确认 Shizuku 授权与 INJECT_EVENTS 权限）")
+        return
+      }
+      invoke.resolveObject("injected")
+    } catch (e: Exception) {
+      invoke.reject("触控注入失败: ${e.message ?: e.javaClass.simpleName}")
+    }
+  }
+
+  /** Shizuku 注入：经 UserService AIDL 调用（服务端 Binder 线程内完成事件序列）。 */
+  private fun injectTouchViaShizuku(args: TouchInvokeArgs, action: String): Boolean {
+    val service = obtainShizukuService()
+      ?: throw IllegalStateException("Shizuku 服务连接失败（服务未启动或超时）")
+    return when (action) {
+      "tap" -> {
+        val x = requireNotNull(args.x) { "缺少坐标 x" }
+        val y = requireNotNull(args.y) { "缺少坐标 y" }
+        service.tap(x, y)
+      }
+      "swipe" -> {
+        val x1 = requireNotNull(args.x1) { "缺少 x1" }
+        val y1 = requireNotNull(args.y1) { "缺少 y1" }
+        val x2 = requireNotNull(args.x2) { "缺少 x2" }
+        val y2 = requireNotNull(args.y2) { "缺少 y2" }
+        val duration = (args.durationMs ?: 300L).coerceIn(0L, 10_000L)
+        service.swipe(x1, y1, x2, y2, duration)
+      }
+      "key" -> {
+        val keycode = requireNotNull(args.keycode) { "缺少 keycode" }
+        service.key(keycode)
+      }
+      else -> throw IllegalArgumentException("未知触控动作: $action")
+    }
+  }
+
+  /** root 兜底：`su -c input ...`（计划 v1 允许的降级路径）。 */
+  private fun injectTouchViaSu(args: TouchInvokeArgs, action: String): Boolean {
+    val command = when (action) {
+      "tap" -> {
+        val x = requireNotNull(args.x) { "缺少坐标 x" }
+        val y = requireNotNull(args.y) { "缺少坐标 y" }
+        "input tap $x $y"
+      }
+      "swipe" -> {
+        val x1 = requireNotNull(args.x1) { "缺少 x1" }
+        val y1 = requireNotNull(args.y1) { "缺少 y1" }
+        val x2 = requireNotNull(args.x2) { "缺少 x2" }
+        val y2 = requireNotNull(args.y2) { "缺少 y2" }
+        val duration = args.durationMs
+        if (duration != null && duration > 0) {
+          "input swipe $x1 $y1 $x2 $y2 $duration"
+        } else {
+          "input swipe $x1 $y1 $x2 $y2"
+        }
+      }
+      "key" -> {
+        val keycode = requireNotNull(args.keycode) { "缺少 keycode" }
+        "input keyevent $keycode"
+      }
+      else -> throw IllegalArgumentException("未知触控动作: $action")
+    }
+    val result = executeViaSu(command, 15_000)
+    return result.exitCode == 0
   }
 
   // ---- helpers ----

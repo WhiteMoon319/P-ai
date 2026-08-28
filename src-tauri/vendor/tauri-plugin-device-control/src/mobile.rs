@@ -3,7 +3,7 @@
 
 use tauri::{plugin::PluginHandle, Runtime};
 
-use crate::{ExecuteCommandRequest, ExecuteCommandResult, PrivilegeStatus};
+use crate::{ExecuteCommandRequest, ExecuteCommandResult, PrivilegeStatus, TouchAction};
 
 /// Access to the device-control plugin (Android).
 #[derive(Debug)]
@@ -38,5 +38,13 @@ impl<R: Runtime> DeviceControl<R> {
             .run_mobile_plugin::<ExecuteCommandResult>("executeCommand", request)
             .map_err(crate::Error::PluginInvoke)?;
         Ok(result)
+    }
+
+    /// 注入式触控（tap/swipe/key，MAA-Meow 语义）。
+    pub fn inject_touch(&self, action: TouchAction) -> crate::Result<()> {
+        self.0
+            .run_mobile_plugin::<serde_json::Value>("injectTouch", action)
+            .map_err(crate::Error::PluginInvoke)?;
+        Ok(())
     }
 }

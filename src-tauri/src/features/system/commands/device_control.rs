@@ -14,6 +14,43 @@ pub(crate) const ANDROID_SYSTEM_COMMAND_PREFIXES: &[&str] = &[
     "screencap", "toybox", "wm", "netd", "appops", "content",
 ];
 
+/// 执行域路由：命令首词命中 Android 系统命令白名单，或带 `sys:` 前缀显式
+/// 覆盖（歧义命令如 ls/rm/cat/cp 用 `sys:` 强制进 Android 域），返回需在
+/// Android 域提权执行的命令全文；否则返回 None 落 Linux 域。
+///
+/// 与计划四「执行环境域」口径一致：未命中白名单一律落 Linux 域，
+/// 不允许静默进入提权环境。
+pub(crate) fn route_to_android_domain(command: &str) -> Option<String> {
+    let trimmed = command.trim();
+    if let Some(rest) = trimmed.strip_prefix("sys:") {
+        let rest = rest.trim_start();
+        if rest.is_empty() {
+            return None;
+        }
+        return Some(rest.to_string());
+    }
+    let first_word = trimmed.split_whitespace().next()?;
+    if ANDROID_SYSTEM_COMMAND_PREFIXES.contains(&first_word) {
+        return Some(trimmed.to_string());
+    }
+    None
+}
+
+/// 路由放行前的元字符防护：白名单首词命令若含 shell 元字符，拒绝进提权
+/// 环境（防 `pm disable-user --user 0 x; rm -rf /` 之类拼接绕过白名单意图，
+/// 计划 5.4「禁止拼接用户自由输入」），返回拒绝原因；无元字符返回 None。
+pub(crate) fn android_domain_route_rejection(command: &str) -> Option<&'static str> {
+    const METACHARS: &[char] = &[
+        ';', '|', '&', '$', '`', '\n', '>', '<', '(', ')', '{', '}', '\\', '\'', '"',
+    ];
+    if command.contains(METACHARS) {
+        return Some(
+            "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。",
+        );
+    }
+    None
+}
+
 const DEVICE_CONTROL_STATUS_EVENT: &str = "easy-call:device-control-status-changed";
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -48,12 +85,6 @@ enum DeviceCommand {
     Install { apk_path: String },
     /// rm -f <path>：删除白名单目录内文件（危险）
     DeleteFile { path: String },
-    /// input tap <x> <y>：点击
-    Tap { x: u32, y: u32 },
-    /// input swipe <x1> <y1> <x2> <y2> [ms]：滑动
-    Swipe { x1: u32, y1: u32, x2: u32, y2: u32, duration_ms: Option<u32> },
-    /// input keyevent <keycode>：按键
-    KeyEvent { keycode: u32 },
     /// screencap -p <path>：截屏（供 agent 视觉反馈）
     Screenshot { path: String },
 }
@@ -84,12 +115,6 @@ impl DeviceCommand {
             DeviceCommand::Uninstall { package } => format!("pm uninstall --user 0 {package}"),
             DeviceCommand::Install { apk_path } => format!("pm install -r {apk_path}"),
             DeviceCommand::DeleteFile { path } => format!("rm -f {path}"),
-            DeviceCommand::Tap { x, y } => format!("input tap {x} {y}"),
-            DeviceCommand::Swipe { x1, y1, x2, y2, duration_ms } => match duration_ms {
-                Some(ms) => format!("input swipe {x1} {y1} {x2} {y2} {ms}"),
-                None => format!("input swipe {x1} {y1} {x2} {y2}"),
-            },
-            DeviceCommand::KeyEvent { keycode } => format!("input keyevent {keycode}"),
             DeviceCommand::Screenshot { path } => format!("screencap -p {path}"),
         }
     }
@@ -148,6 +173,38 @@ fn device_control_execute_privileged(
 fn device_control_execute_privileged(
     _app: &tauri::AppHandle,
     _command: &DeviceCommand,
+    _timeout_ms: u64,
+) -> Result<DeviceControlExecResult, String> {
+    Err("设备控制仅在 Android 端可用。".to_string())
+}
+
+/// Android 域提权 shell 执行（供 terminal 执行域路由调用）。
+/// 仅应经 [route_to_android_domain] 放行的白名单首词命令进入，避免静默提权。
+#[cfg(target_os = "android")]
+pub(crate) async fn device_control_execute_shell_command(
+    app: &tauri::AppHandle,
+    command: &str,
+    timeout_ms: u64,
+) -> Result<DeviceControlExecResult, String> {
+    use tauri_plugin_device_control::DeviceControlExt;
+    let result = app
+        .device_control()
+        .execute_command(tauri_plugin_device_control::ExecuteCommandRequest {
+            command: command.to_string(),
+            timeout_ms,
+        })
+        .map_err(|err| format!("Android 域命令执行失败: {err}"))?;
+    Ok(DeviceControlExecResult {
+        exit_code: result.exit_code,
+        stdout: result.stdout,
+        stderr: result.stderr,
+    })
+}
+
+#[cfg(not(target_os = "android"))]
+pub(crate) async fn device_control_execute_shell_command(
+    _app: &tauri::AppHandle,
+    _command: &str,
     _timeout_ms: u64,
 ) -> Result<DeviceControlExecResult, String> {
     Err("设备控制仅在 Android 端可用。".to_string())
@@ -322,22 +379,25 @@ async fn device_control_delete_file(
     Ok(())
 }
 
-/// 点击屏幕（x/y 为屏幕像素坐标）。
+/// 点击屏幕（注入式，x/y 为屏幕像素坐标）。
 #[tauri::command]
 async fn device_control_tap(app: tauri::AppHandle, x: u32, y: u32) -> Result<(), String> {
-    let cmd = DeviceCommand::Tap { x, y };
-    let result = device_control_execute_privileged(&app, &cmd, 15_000)?;
-    if result.exit_code != 0 {
-        return Err(format!(
-            "点击失败（exit={}）：{}",
-            result.exit_code,
-            result.stderr.trim()
-        ));
+    #[cfg(target_os = "android")]
+    {
+        use tauri_plugin_device_control::DeviceControlExt;
+        app.device_control()
+            .inject_touch(tauri_plugin_device_control::TouchAction::Tap { x, y })
+            .map_err(|err| format!("点击失败: {err}"))?;
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (&app, x, y);
+        return Err("设备控制仅在 Android 端可用。".to_string());
     }
     Ok(())
 }
 
-/// 滑动屏幕（可选时长 ms）。
+/// 滑动屏幕（注入式，可选时长 ms）。
 #[tauri::command]
 async fn device_control_swipe(
     app: tauri::AppHandle,
@@ -347,38 +407,41 @@ async fn device_control_swipe(
     y2: u32,
     duration_ms: Option<u32>,
 ) -> Result<(), String> {
-    let cmd = DeviceCommand::Swipe {
-        x1,
-        y1,
-        x2,
-        y2,
-        duration_ms,
-    };
-    let result = device_control_execute_privileged(&app, &cmd, 15_000)?;
-    if result.exit_code != 0 {
-        return Err(format!(
-            "滑动失败（exit={}）：{}",
-            result.exit_code,
-            result.stderr.trim()
-        ));
+    #[cfg(target_os = "android")]
+    {
+        use tauri_plugin_device_control::DeviceControlExt;
+        app.device_control()
+            .inject_touch(tauri_plugin_device_control::TouchAction::Swipe {
+                x1,
+                y1,
+                x2,
+                y2,
+                duration_ms,
+            })
+            .map_err(|err| format!("滑动失败: {err}"))?;
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (&app, x1, y1, x2, y2, duration_ms);
+        return Err("设备控制仅在 Android 端可用。".to_string());
     }
     Ok(())
 }
 
-/// 按键（keycode 参考 Android KeyEvent 常量，如 4=返回、3=主页）。
+/// 按键（注入式，keycode 参考 Android KeyEvent 常量，如 4=返回、3=主页）。
 #[tauri::command]
-async fn device_control_key_event(
-    app: tauri::AppHandle,
-    keycode: u32,
-) -> Result<(), String> {
-    let cmd = DeviceCommand::KeyEvent { keycode };
-    let result = device_control_execute_privileged(&app, &cmd, 15_000)?;
-    if result.exit_code != 0 {
-        return Err(format!(
-            "按键失败（exit={}）：{}",
-            result.exit_code,
-            result.stderr.trim()
-        ));
+async fn device_control_key_event(app: tauri::AppHandle, keycode: u32) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        use tauri_plugin_device_control::DeviceControlExt;
+        app.device_control()
+            .inject_touch(tauri_plugin_device_control::TouchAction::Key { keycode })
+            .map_err(|err| format!("按键失败: {err}"))?;
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = (&app, keycode);
+        return Err("设备控制仅在 Android 端可用。".to_string());
     }
     Ok(())
 }
@@ -516,17 +579,45 @@ mod device_control_tests {
     }
 
     #[test]
-    fn render_tap_swipe_key_event() {
-        assert_eq!(DeviceCommand::Tap { x: 540, y: 1200 }.render(), "input tap 540 1200");
-        assert_eq!(
-            DeviceCommand::Swipe { x1: 540, y1: 2000, x2: 540, y2: 400, duration_ms: Some(300) }.render(),
-            "input swipe 540 2000 540 400 300"
-        );
-        assert_eq!(
-            DeviceCommand::Swipe { x1: 540, y1: 2000, x2: 540, y2: 400, duration_ms: None }.render(),
-            "input swipe 540 2000 540 400"
-        );
-        assert_eq!(DeviceCommand::KeyEvent { keycode: 4 }.render(), "input keyevent 4");
+    fn touch_action_serializes_semantic_events() {
+        // 注入式触控：TouchAction 序列化为结构化动作 JSON（serde tag="action"），不再是 input 命令文本
+        let tap = serde_json::to_value(tauri_plugin_device_control::TouchAction::Tap { x: 540, y: 1200 }).unwrap();
+        assert_eq!(tap["action"], "tap");
+        assert_eq!(tap["x"], 540);
+        assert_eq!(tap["y"], 1200);
+        assert!(tap.get("x1").is_none(), "tap 不应携带 swipe 字段");
+
+        let swipe = serde_json::to_value(tauri_plugin_device_control::TouchAction::Swipe {
+            x1: 540,
+            y1: 2000,
+            x2: 540,
+            y2: 400,
+            duration_ms: Some(300),
+        })
+        .unwrap();
+        assert_eq!(swipe["action"], "swipe");
+        assert_eq!(swipe["x1"], 540);
+        assert_eq!(swipe["durationMs"], 300);
+
+        let swipe_no_duration = serde_json::to_value(tauri_plugin_device_control::TouchAction::Swipe {
+            x1: 540,
+            y1: 2000,
+            x2: 540,
+            y2: 400,
+            duration_ms: None,
+        })
+        .unwrap();
+        assert_eq!(swipe_no_duration["action"], "swipe");
+        assert_eq!(swipe_no_duration["durationMs"], serde_json::Value::Null);
+
+        let key = serde_json::to_value(tauri_plugin_device_control::TouchAction::Key { keycode: 4 }).unwrap();
+        assert_eq!(key["action"], "key");
+        assert_eq!(key["keycode"], 4);
+
+        // 反序列化也能还原（Plugin 侧经过 serde tag 枚举透传）
+        let back: tauri_plugin_device_control::TouchAction =
+            serde_json::from_value(tap).unwrap();
+        assert!(matches!(back, tauri_plugin_device_control::TouchAction::Tap { x: 540, y: 1200 }));
     }
 
     #[test]
@@ -613,5 +704,54 @@ mod device_control_tests {
                 "missing prefix: {prefix}"
             );
         }
+    }
+
+    #[test]
+    fn route_to_android_domain_routes_whitelisted_prefixes() {
+        assert_eq!(route_to_android_domain("pm list packages").as_deref(), Some("pm list packages"));
+        assert_eq!(route_to_android_domain("dumpsys window").as_deref(), Some("dumpsys window"));
+        assert_eq!(route_to_android_domain("toybox").as_deref(), Some("toybox"));
+        assert_eq!(route_to_android_domain("  input tap 540 1200").as_deref(), Some("input tap 540 1200"));
+    }
+
+    #[test]
+    fn route_to_android_domain_sys_prefix_forces_android_domain() {
+        assert_eq!(
+            route_to_android_domain("sys:rm -f /data/local/tmp/a").as_deref(),
+            Some("rm -f /data/local/tmp/a")
+        );
+        assert_eq!(
+            route_to_android_domain("sys: pm clear com.example.app").as_deref(),
+            Some("pm clear com.example.app")
+        );
+    }
+
+    #[test]
+    fn route_to_android_domain_leaves_others_to_linux_domain() {
+        // 歧义命令默认落 Linux 域，不静默提权
+        assert_eq!(route_to_android_domain("ls -la"), None);
+        assert_eq!(route_to_android_domain("rm -f x"), None);
+        assert_eq!(route_to_android_domain("cat /etc/hosts"), None);
+        assert_eq!(route_to_android_domain(""), None);
+        assert_eq!(route_to_android_domain("   "), None);
+        assert_eq!(route_to_android_domain("sys:"), None);
+        assert_eq!(route_to_android_domain("sys:   "), None);
+    }
+
+    #[test]
+    fn route_rejects_shell_metachars_to_block_injection() {
+        // 白名单首词命令拼接 shell 元字符（`;`/`|`/`&&`/`$()`/反引号等）必须被拒绝，
+        // 防止 `pm disable-user --user 0 x; rm -rf /` 绕过白名单意图进入提权环境。
+        assert_eq!(
+            android_domain_route_rejection("pm disable-user --user 0 x; rm -rf /").unwrap_or(""),
+            "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。"
+        );
+        assert!(android_domain_route_rejection("pm list packages").is_none(), "普通 pm 命令不应被拒");
+        assert!(android_domain_route_rejection("dumpsys window").is_none());
+        assert!(android_domain_route_rejection("sys:rm -f /data/local/tmp/a").is_none(), "sys: 前缀带无元字符命令可放行");
+        assert_eq!(android_domain_route_rejection("pm list | grep x").unwrap_or(""), "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。");
+        assert_eq!(android_domain_route_rejection("pm disable --user 0 x && rm -rf /").unwrap_or(""), "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。");
+        assert_eq!(android_domain_route_rejection("am broadcast -a x $(id)").unwrap_or(""), "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。");
+        assert_eq!(android_domain_route_rejection("cmd package uninstall `whoami`").unwrap_or(""), "命令含 shell 元字符，已拒绝路由到 Android 提权环境；请拆分命令或改用 device_control.* 工具。");
     }
 }
