@@ -75,6 +75,16 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
     result.put("shizukuGranted", shizukuGranted)
     result.put("rootAvailable", rootAvailable)
     result.put("privilegeState", privilegeState)
+    // 预绑定：已授权但 UserService 未连接时后台触发 bind，避免首个命令
+    // 在 exec 工具超时内等待 20s 绑定（曾导致路由命令 exit -1 无输出）。
+    if (shizukuGranted && boundShizukuService == null) {
+      Thread {
+        try {
+          obtainShizukuService()
+        } catch (_: Exception) {
+        }
+      }.apply { isDaemon = true }.start()
+    }
     invoke.resolve(result)
   }
 
