@@ -27,14 +27,47 @@ cat > "$ACTIVITY" <<'KOTLIN'
 package ai.easycall.app
 
 import android.os.Bundle
+import android.view.View
 import android.webkit.WebSettings
 import android.webkit.WebView
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsAnimationCompat
+import androidx.core.view.WindowInsetsCompat
 
 class MainActivity : TauriActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        // 输入法弹起时把内容区（WebView）底部推高到 IME 顶部之上，避免输入法覆盖
+        // 输入框导致看不到正在输入的内容。依赖 manifest windowSoftInputMode=adjustResize
+        // 触发 insets 变化；这里把 ime insets 高度应用为内容根视图的 bottom padding。
+        val content = findViewById<View>(android.R.id.content)
+        val applyImeInset = { insets: WindowInsetsCompat ->
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            content.setPadding(0, 0, 0, ime.bottom)
+            content.requestLayout()
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(content) { _, insets ->
+            applyImeInset(insets)
+            insets
+        }
+        // API 30+：IME 动画结束再兜底应用一次，避免键盘弹出时 insets 时序竞态
+        // 导致文本框偶发不弹起（调整 resize 的 onApplyWindowInsets 先于动画结束到达）。
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            ViewCompat.setWindowInsetsAnimationCallback(
+                content,
+                object : WindowInsetsAnimationCompat.Callback(WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_STOP) {
+                    override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                        val rootInsets = ViewCompat.getRootWindowInsets(content)
+                        if (rootInsets != null) {
+                            applyImeInset(rootInsets)
+                        }
+                    }
+                },
+            )
+        }
     }
 
     // 远程前端模式：壳层 origin 为 https://tauri.localhost（满足电脑端桥接的 https 校验），
@@ -48,6 +81,13 @@ class MainActivity : TauriActivity() {
     }
 }
 KOTLIN
+
+if ! grep -q 'android:windowSoftInputMode' "$MANIFEST"; then
+  sed -i 's#<activity#<activity android:windowSoftInputMode="adjustResize"#' "$MANIFEST"
+  echo "Added windowSoftInputMode=adjustResize"
+else
+  echo "windowSoftInputMode already present"
+fi
 
 if ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
   sed -i '/<application/i\    <uses-permission android:name="android.permission.INTERNET" />' "$MANIFEST"
