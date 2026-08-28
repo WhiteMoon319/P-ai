@@ -396,8 +396,7 @@ fn read_layout_app_data(path: &PathBuf) -> Result<AppData, String> {
         version: APP_DATA_SCHEMA_VERSION,
         data_migration_version,
         agents,
-        user_alias: default_user_alias(),
-        conversations: Vec::new(),
+        ..AppData::default()
     })
 }
 

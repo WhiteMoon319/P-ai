@@ -31,6 +31,8 @@ src-tauri/target/
 src-tauri/gen/
 src-tauri/memory/
 target/
+target-tests/
+apps/
 
 # Tauri local config overrides
 src-tauri/.cargo/

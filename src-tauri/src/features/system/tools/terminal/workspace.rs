@@ -1440,8 +1440,9 @@ mod terminal_workspace_tests {
         let archived = read_conversation_shard(&state.data_path, "conv-archived-workspace")
             .expect("read archived conversation");
         assert!(archived.shell_workspaces.is_empty());
-        let runtime = read_runtime_state_shard(&state.data_path).expect("read runtime");
-        assert_eq!(runtime.data_migration_version, DATA_MIGRATION_CURRENT_VERSION);
+        let migration_version =
+            state_service_get_data_migration_version(&state).expect("read migration version");
+        assert_eq!(migration_version, DATA_MIGRATION_CURRENT_VERSION);
 
         let _ = std::fs::remove_dir_all(temp_root);
     }

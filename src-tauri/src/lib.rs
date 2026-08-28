@@ -99,6 +99,8 @@ include!("features/system/record_hotkey_probe.rs");
 include!("features/system/windows_job.rs");
 #[cfg(target_os = "android")]
 include!("features/system/sandbox.rs");
+#[cfg(not(target_os = "android"))]
+include!("features/system/host_terminal_exec.rs");
 include!("features/system/local_port_service.rs");
 include!("features/system/tools.rs");
 #[cfg(not(target_os = "android"))]

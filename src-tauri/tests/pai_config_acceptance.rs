@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use easy_call_ai::pai_config_tool;
+use easy_call_ai_lib::pai_config_tool;
 use serde_json::Value;
 use uuid::Uuid;
 
