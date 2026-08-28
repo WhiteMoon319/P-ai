@@ -31,6 +31,9 @@ PAI 是一个持续进化的 AI 工作系统，不只是聊天客户端。它围
   在手机上跑 Linux 命令与脚本；`llm-workspace` 直接映射为 Linux `/workspace` 与 `/root/.pai`
 - **远程前端模式**：输入电脑 PAI 的地址与端口，手机即成为电脑 PAI 的远程前端，
   实时同步聊天与设置界面；电脑 PAI 回复时手机仍收到通知
+- **设备控制（Shizuku/root 提权）**：通过 Shizuku（首选）或 root（兜底）提权执行有限设备控制，
+  包括冻结/解冻/卸载/安装应用、删除受限文件、注入式触控（tap/swipe/key）与截屏；
+  能力开关默认关闭，危险操作二次确认，命令白名单防注入
 - **移动端细节**：内嵌 WebView 单窗口架构、设置页可滚动、录音权限适配、安全区适配、
   系统分享导出沙盒文件、content URI 文件导入
 
@@ -84,6 +87,11 @@ CI 构建（GitHub Actions）：
 本项目是 **[kawayiYokami/P-ai](https://github.com/kawayiYokami/P-ai)**（桌面版 P-AI）的 Android 移植，
 感谢原作者与上游社区。技术栈依赖：Tauri 2 · Vue 3 · DaisyUI · Tailwind CSS · tokio · reqwest ·
 rusqlite · tantivy · proot（Termux）等优秀开源项目。
+
+特别感谢 **[Aliothmoon/MAA-Meow](https://github.com/Aliothmoon/MAA-Meow)**：
+本项目设备控制的**注入式触控**（Shizuku UserService 进程内反射 `injectInputEvent`，
+tap/swipe/key 事件语义）与提权命令执行的 UserService 模式，均参考其 `InputControlUtils` /
+`RemoteServiceImpl` 实现，并沿用其技术思路（Shizuku 授权 + shell 身份服务进程）。
 
 ## License
 
