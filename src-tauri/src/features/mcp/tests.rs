@@ -520,7 +520,7 @@ mod sse_transport_tests {
         let url_b = spawn_sse_mock(&["fetch"]).await;
         let server = group_server_with_urls(&[("alpha", &url_a), ("beta", &url_b)]);
 
-        let tools = mcp_list_server_tools_runtime(&server)
+        let tools = mcp_list_server_tools_runtime(None, &server)
             .await
             .expect("list group tools");
         let names = tools
@@ -543,7 +543,7 @@ mod sse_transport_tests {
         let url_a = spawn_sse_mock(&["akasha_catalog", "akasha_read"]).await;
         let server = group_server_with_urls(&[("akasha", &url_a)]);
 
-        let tools = mcp_list_server_tools_runtime(&server)
+        let tools = mcp_list_server_tools_runtime(None, &server)
             .await
             .expect("list group tools");
         let names = tools
@@ -576,7 +576,7 @@ mod sse_transport_tests {
         let url_b = spawn_sse_mock(&["b_c"]).await;
         let server = group_server_with_urls(&[("a_b", &url_a), ("a", &url_b)]);
 
-        let tools = mcp_list_server_tools_runtime(&server)
+        let tools = mcp_list_server_tools_runtime(None, &server)
             .await
             .expect("同名共存不应报错");
         let a_b_c_count = tools

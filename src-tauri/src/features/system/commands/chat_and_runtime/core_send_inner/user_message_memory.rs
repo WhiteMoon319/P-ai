@@ -77,7 +77,7 @@ fn with_memory_lock<T>(
     task_name: &str,
     f: impl FnOnce() -> Result<T, String>,
 ) -> Result<T, String> {
-    let start = Instant::now();
+    let start = std::time::Instant::now();
     const MEMORY_LOCK_WARN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
     let _guard = state.memory_lock.lock().map_err(|err| {
         format!(
