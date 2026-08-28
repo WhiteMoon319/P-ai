@@ -99,6 +99,10 @@ enum DeviceCommand {
     DeleteFile { path: String },
     /// screencap -p <path>：截屏（供 agent 视觉反馈）
     Screenshot { path: String },
+    /// base64 <path>：读文件为 base64 文本（shell↔应用中转）
+    Base64Read { path: String },
+    /// rm -f <path>：删除临时文件
+    RemoveFile { path: String },
 }
 
 impl DeviceCommand {
@@ -127,7 +131,20 @@ impl DeviceCommand {
             DeviceCommand::Uninstall { package } => format!("pm uninstall --user 0 {package}"),
             DeviceCommand::Install { apk_path } => format!("pm install -r {apk_path}"),
             DeviceCommand::DeleteFile { path } => format!("rm -f {path}"),
-            DeviceCommand::Screenshot { path } => format!("screencap -p {path}"),
+            DeviceCommand::Screenshot { path } => {
+                // 目录创建由 shell 身份完成（应用进程写 /sdcard/... 受作用域存储限制）
+                let dir = std::path::Path::new(path)
+                    .parent()
+                    .map(|parent| parent.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                if dir.is_empty() || dir == "." || dir == "/" {
+                    format!("screencap -p {path}")
+                } else {
+                    format!("mkdir -p {dir} && screencap -p {path}")
+                }
+            }
+            DeviceCommand::Base64Read { path } => format!("base64 {path}"),
+            DeviceCommand::RemoveFile { path } => format!("rm -f {path}"),
         }
     }
 }
@@ -559,18 +576,29 @@ async fn device_control_key_event(
     Ok(())
 }
 
-/// 截屏到白名单目录（供 agent 视觉反馈）。
+/// 截屏（供 agent 视觉反馈）。
+///
+/// 权限域：screencap 由 shell 身份（Shizuku/root）执行，落盘在 `/data/local/tmp`
+///（shell 可写）；应用侧经 `base64` 回传后解码写入应用私有 `screenshots/` 目录。
+/// 避免 sdcard 中转区两侧权限冲突（应用建目录失败 / shell 建目录属 root 应用读不了）。
 #[tauri::command]
 async fn device_control_screenshot(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     file_name: Option<String>,
 ) -> Result<String, String> {
-    device_control_check_enabled(&state, Some("screenshot"))?;
-    let root = device_control_root(&state);
-    let screenshots_dir = root.join("screenshots");
-    std::fs::create_dir_all(&screenshots_dir)
-        .map_err(|err| format!("创建截屏目录失败: {err}"))?;
+    device_control_screenshot_inner(&app, &state, file_name)
+}
+
+/// 截图共享逻辑（命令与 agent 工具共用）：
+/// tmp 中转方案——shell 身份 screencap 写 /data/local/tmp，base64 回传后应用落盘
+/// 私有目录；不依赖应用进程写 /sdcard（作用域存储限制）。
+fn device_control_screenshot_inner(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    file_name: Option<String>,
+) -> Result<String, String> {
+    device_control_check_enabled(state, Some("screenshot"))?;
     let name = file_name
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| format!("screenshot_{}.png", chrono::Utc::now().timestamp()));
@@ -579,18 +607,45 @@ async fn device_control_screenshot(
         .chars()
         .take(80)
         .collect::<String>();
-    let target = screenshots_dir.join(safe_name);
-    let cmd = DeviceCommand::Screenshot {
-        path: target.to_string_lossy().to_string(),
+
+    // 应用私有落盘目录（应用进程可写）
+    let screenshots_dir = state.llm_workspace_path.join("screenshots");
+    std::fs::create_dir_all(&screenshots_dir)
+        .map_err(|err| format!("创建截屏目录失败: {err}"))?;
+    let target = screenshots_dir.join(&safe_name);
+    let tmp_path = format!("/data/local/tmp/pai_{safe_name}");
+
+    // 1. shell 身份执行 screencap 写 tmp
+    let cap_cmd = DeviceCommand::Screenshot {
+        path: tmp_path.clone(),
     };
-    let result = device_control_execute_privileged(&app, &cmd, 30_000)?;
-    if result.exit_code != 0 {
+    let cap = device_control_execute_privileged(app, &cap_cmd, 30_000)?;
+    if cap.exit_code != 0 {
         return Err(format!(
             "截屏失败（exit={}）：{}",
-            result.exit_code,
-            result.stderr.trim()
+            cap.exit_code,
+            cap.stderr.trim()
         ));
     }
+    // 2. shell 身份 base64 回传
+    let read_cmd = DeviceCommand::Base64Read {
+        path: tmp_path.clone(),
+    };
+    let read = device_control_execute_privileged(app, &read_cmd, 15_000)?;
+    if read.exit_code != 0 {
+        return Err(format!(
+            "读取截图失败（exit={}）：{}",
+            read.exit_code,
+            read.stderr.trim()
+        ));
+    }
+    let b64: String = read.stdout.chars().filter(|c| !c.is_whitespace()).collect();
+    let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, b64)
+        .map_err(|err| format!("截图 base64 解码失败: {err}"))?;
+    std::fs::write(&target, bytes).map_err(|err| format!("写入截图失败: {err}"))?;
+    // 3. 清理 tmp
+    let rm_cmd = DeviceCommand::RemoveFile { path: tmp_path };
+    let _ = device_control_execute_privileged(app, &rm_cmd, 10_000);
     Ok(target.to_string_lossy().to_string())
 }
 

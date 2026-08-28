@@ -8,6 +8,7 @@ import android.content.ComponentName
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
+import android.util.Log
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -31,6 +32,10 @@ import java.util.concurrent.TimeUnit
  */
 @TauriPlugin
 class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
+
+  companion object {
+    private const val TAG = "DeviceControlPlugin"
+  }
 
   @InvokeArg
   class ExecuteCommandArgs {
@@ -318,13 +323,17 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
 
   /** 懒连接：首次需要时 bindUserService，成功后缓存复用。 */
   private fun executeViaShizuku(command: String, timeoutMs: Long): ExecResult {
-    val service = obtainShizukuService()
-      ?: return ErrorResult("Shizuku 服务连接失败（服务未启动或超时）")
+    val service = obtainShizukuService() ?: run {
+      Log.w(TAG, "obtainShizukuService returned null (bind timeout or failure)")
+      return ErrorResult("Shizuku 服务连接失败（服务未启动或超时）")
+    }
     return try {
       val json = service.execute(command, timeoutMs)
       val obj = JSONObject(json)
+      Log.i(TAG, "shizuku exec: '$command' exit=${obj.getInt("exitCode")} stdout=${obj.getString("stdout").take(120)} stderr=${obj.getString("stderr").take(120)}")
       ExecResult(obj.getInt("exitCode"), obj.getString("stdout"), obj.getString("stderr"))
     } catch (e: Exception) {
+      Log.w(TAG, "shizuku exec exception: ${e.message ?: e.javaClass.simpleName}")
       ErrorResult("Shizuku 命令执行异常: ${e.message ?: e.javaClass.simpleName}")
     }
   }
@@ -359,12 +368,15 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
     boundConnection = connection
     return try {
       Shizuku.bindUserService(args, connection)
-      if (!latch.await(20, TimeUnit.SECONDS)) {
-        null
+      val bound = latch.await(20, TimeUnit.SECONDS)
+      if (bound && boundShizukuService != null) {
+        Log.i(TAG, "UserService bound ok")
       } else {
-        boundShizukuService
+        Log.w(TAG, "UserService bind await timeout (20s), bound=$bound")
       }
+      if (bound) boundShizukuService else null
     } catch (e: Exception) {
+      Log.w(TAG, "bindUserService exception: ${e.message ?: e.javaClass.simpleName}")
       null
     }
   }
