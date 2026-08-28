@@ -1604,28 +1604,9 @@ async fn builtin_device_control(
             Ok(serde_json::json!({ "ok": true }))
         }
         "screenshot" => {
-            device_control_check_enabled(state, Some("screenshot")).map_err(ToolInvokeError::from)?;
-            let root = device_control_root(state);
-            let screenshots_dir = root.join("screenshots");
-            std::fs::create_dir_all(&screenshots_dir)
-                .map_err(|err| ToolInvokeError::from(format!("创建截屏目录失败: {err}")))?;
-            let name = args
-                .file_name
-                .as_ref()
-                .filter(|value| !value.trim().is_empty())
-                .cloned()
-                .unwrap_or_else(|| format!("screenshot_{}.png", chrono::Utc::now().timestamp()));
-            let safe_name = name
-                .replace(['/', '\\', ' ', ':'], "_")
-                .chars()
-                .take(80)
-                .collect::<String>();
-            let target = screenshots_dir.join(safe_name);
-            let cmd = DeviceCommand::Screenshot {
-                path: target.to_string_lossy().to_string(),
-            };
-            device_control_run_checked(&app_handle, cmd, "截屏失败", 30_000).await?;
-            Ok(serde_json::json!({ "path": target.to_string_lossy() }))
+            let path = device_control_screenshot_inner(&app_handle, state, args.file_name)
+                .map_err(ToolInvokeError::from)?;
+            Ok(serde_json::json!({ "path": path }))
         }
         other => Err(ToolInvokeError::from(format!("未知 device_control 动作: {other}"))),
     }

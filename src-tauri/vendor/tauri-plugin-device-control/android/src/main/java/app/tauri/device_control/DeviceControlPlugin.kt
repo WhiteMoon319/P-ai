@@ -8,6 +8,7 @@ import android.content.ComponentName
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
+import android.util.Log
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -31,6 +32,24 @@ import java.util.concurrent.TimeUnit
  */
 @TauriPlugin
 class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
+
+  companion object {
+    private const val TAG = "DeviceControlPlugin"
+  }
+
+  // App 启动即预绑定 UserService：尽早完成 bind，避免首个命令（尤其 exec 路由）
+  // 在 exec 工具超时内等待 20s 绑定而失败。Shizuku 未就绪/未授权时静默跳过，
+  // 后续 status 仍会再次触发预绑定。
+  init {
+    Thread {
+      try {
+        if (isShizukuGranted() && boundShizukuService == null) {
+          obtainShizukuService()
+        }
+      } catch (_: Exception) {
+      }
+    }.apply { isDaemon = true }.start()
+  }
 
   @InvokeArg
   class ExecuteCommandArgs {
@@ -70,6 +89,16 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
     result.put("shizukuGranted", shizukuGranted)
     result.put("rootAvailable", rootAvailable)
     result.put("privilegeState", privilegeState)
+    // 预绑定：已授权但 UserService 未连接时后台触发 bind，避免首个命令
+    // 在 exec 工具超时内等待 20s 绑定（曾导致路由命令 exit -1 无输出）。
+    if (shizukuGranted && boundShizukuService == null) {
+      Thread {
+        try {
+          obtainShizukuService()
+        } catch (_: Exception) {
+        }
+      }.apply { isDaemon = true }.start()
+    }
     invoke.resolve(result)
   }
 
@@ -131,28 +160,34 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
     }
     val timeoutMs = if (args.timeoutMs in 1..600_000L) args.timeoutMs else 30_000L
 
-    val result = runCatching {
-      if (isShizukuGranted()) {
-        executeViaShizuku(command, timeoutMs)
-      } else if (isRootAvailable()) {
-        executeViaSu(command, timeoutMs)
-      } else {
-        ErrorResult("无可用提权通道：请先通过 Shizuku 授权或开启 root")
+    // 执行体必须在后台线程：obtainShizukuService 会在 bindUserService 上同步
+    // await（最长 20s），若在主线程执行会阻塞 UI 消息队列，进而卡死 bind 回调
+    // （回调也投递在主线程 handler）形成死锁 → ANR + 「Shizuku 未启动」误报。
+    Thread {
+      val result = runCatching {
+        if (isShizukuGranted()) {
+          executeViaShizuku(command, timeoutMs)
+        } else if (isRootAvailable()) {
+          executeViaSu(command, timeoutMs)
+        } else {
+          ErrorResult("无可用提权通道：请先通过 Shizuku 授权或开启 root")
+        }
+      }.getOrElse { err ->
+        ErrorResult("命令执行异常: ${err.message ?: err.javaClass.simpleName}")
       }
-    }.getOrElse { err ->
-      ErrorResult("命令执行异常: ${err.message ?: err.javaClass.simpleName}")
-    }
-
-    if (result is ErrorResult) {
-      invoke.reject(result.message)
-      return
-    }
-    val out = result as ExecResult
-    val obj = JSObject()
-    obj.put("exitCode", out.exitCode)
-    obj.put("stdout", out.stdout)
-    obj.put("stderr", out.stderr)
-    invoke.resolve(obj)
+      activity.runOnUiThread {
+        if (result is ErrorResult) {
+          invoke.reject(result.message)
+          return@runOnUiThread
+        }
+        val out = result as ExecResult
+        val obj = JSObject()
+        obj.put("exitCode", out.exitCode)
+        obj.put("stdout", out.stdout)
+        obj.put("stderr", out.stderr)
+        invoke.resolve(obj)
+      }
+    }.apply { isDaemon = true }.start()
   }
 
   /**
@@ -174,20 +209,27 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
       invoke.reject("无可用提权通道：请先通过 Shizuku 授权或开启 root")
       return
     }
-    try {
-      val ok = if (isShizukuGranted()) {
-        injectTouchViaShizuku(args, action)
-      } else {
-        injectTouchViaSu(args, action)
+    // 与 executeCommand 同理：绑定/注入耗时链路放到后台线程，避免主线程 ANR
+    Thread {
+      try {
+        val ok = if (isShizukuGranted()) {
+          injectTouchViaShizuku(args, action)
+        } else {
+          injectTouchViaSu(args, action)
+        }
+        activity.runOnUiThread {
+          if (!ok) {
+            invoke.reject("触控注入失败：设备拒绝注入（确认 Shizuku 授权与 INJECT_EVENTS 权限）")
+          } else {
+            invoke.resolveObject("injected")
+          }
+        }
+      } catch (e: Exception) {
+        activity.runOnUiThread {
+          invoke.reject("触控注入失败: ${e.message ?: e.javaClass.simpleName}")
+        }
       }
-      if (!ok) {
-        invoke.reject("触控注入失败：设备拒绝注入（确认 Shizuku 授权与 INJECT_EVENTS 权限）")
-        return
-      }
-      invoke.resolveObject("injected")
-    } catch (e: Exception) {
-      invoke.reject("触控注入失败: ${e.message ?: e.javaClass.simpleName}")
-    }
+    }.apply { isDaemon = true }.start()
   }
 
   /** Shizuku 注入：经 UserService AIDL 调用（服务端 Binder 线程内完成事件序列）。 */
@@ -305,13 +347,17 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
 
   /** 懒连接：首次需要时 bindUserService，成功后缓存复用。 */
   private fun executeViaShizuku(command: String, timeoutMs: Long): ExecResult {
-    val service = obtainShizukuService()
-      ?: return ErrorResult("Shizuku 服务连接失败（服务未启动或超时）")
+    val service = obtainShizukuService() ?: run {
+      Log.w(TAG, "obtainShizukuService returned null (bind timeout or failure)")
+      return ErrorResult("Shizuku 服务连接失败（服务未启动或超时）")
+    }
     return try {
       val json = service.execute(command, timeoutMs)
       val obj = JSONObject(json)
+      Log.i(TAG, "shizuku exec: '$command' exit=${obj.getInt("exitCode")} stdout=${obj.getString("stdout").take(120)} stderr=${obj.getString("stderr").take(120)}")
       ExecResult(obj.getInt("exitCode"), obj.getString("stdout"), obj.getString("stderr"))
     } catch (e: Exception) {
+      Log.w(TAG, "shizuku exec exception: ${e.message ?: e.javaClass.simpleName}")
       ErrorResult("Shizuku 命令执行异常: ${e.message ?: e.javaClass.simpleName}")
     }
   }
@@ -346,12 +392,15 @@ class DeviceControlPlugin(private val activity: Activity) : Plugin(activity) {
     boundConnection = connection
     return try {
       Shizuku.bindUserService(args, connection)
-      if (!latch.await(20, TimeUnit.SECONDS)) {
-        null
+      val bound = latch.await(20, TimeUnit.SECONDS)
+      if (bound && boundShizukuService != null) {
+        Log.i(TAG, "UserService bound ok")
       } else {
-        boundShizukuService
+        Log.w(TAG, "UserService bind await timeout (20s), bound=$bound")
       }
+      if (bound) boundShizukuService else null
     } catch (e: Exception) {
+      Log.w(TAG, "bindUserService exception: ${e.message ?: e.javaClass.simpleName}")
       null
     }
   }
