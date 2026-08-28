@@ -652,6 +652,7 @@ export type LlmRoundLogStage = {
   stage: string;
   elapsedMs: number;
   sincePrevMs: number;
+  detail?: Record<string, unknown>;
 };
 
 export type LlmRoundLogEntry = {
