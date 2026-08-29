@@ -5,6 +5,7 @@
 [![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js)](https://vuejs.org)
 [![Rust](https://img.shields.io/badge/Rust-000000?logo=rust)](https://www.rust-lang.org)
 [![Android](https://img.shields.io/badge/Android-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
+[![Release v0.74.3](https://img.shields.io/badge/Release-v0.74.3-6366f1)](https://github.com/WhiteMoon319/P-ai/releases)
 
 > 本仓库是 **PAI 的 Android 移植版**，基于桌面版 P-AI 二次开发，面向移动端重构。
 > 桌面版原仓库（持续更新、功能最全）：**[kawayiYokami/P-ai](https://github.com/kawayiYokami/P-ai)**
@@ -17,8 +18,8 @@
 
 PAI 是一个持续进化的 AI 工作系统，不只是聊天客户端。它围绕对话、任务、记忆、部门、工具、审查与远程消息组织成一套完整系统。Android 版将桌面端核心能力搬进移动端：
 
-- **Rust 异步后端**（tokio + Tauri 2 WebView 桥接），响应快、本地运行
-- **Vue 3 + DaisyUI** 移动端 UI，适配安全区、返回键、录音等交互细节
+- **Rust 异步后端**（tokio + Tauri 2），响应快、本地运行，Rust 核心以原生库（`staticlib`）形式打进 APK
+- **Vue 3 + DaisyUI** 移动端 UI（复用 sidebar 页面），经 WebSocket 与本机 Rust 后端通信
 - **全部数据本地存储**，无中间服务器，API Key 不出设备
 
 ### 核心能力
@@ -26,7 +27,7 @@ PAI 是一个持续进化的 AI 工作系统，不只是聊天客户端。它围
 - **对话与任务**：本地会话、远程会话（微信/飞书/钉钉/OneBot）、多会话并行、会话自动压缩归档
 - **部门与人格**：多部门、多人格独立配置，各带独立头像与私有记忆；本地会话支持多智能体群聊
 - **工具与审查**：内置 Skill 体系、MCP 支持、工具执行审查链，AI 可自主管理 MCP/Skill/人格/部门
-- **记忆与上下文**：长对话动态压缩归档，低成本全面记忆系统，越用越懂你
+- **记忆与上下文**：长对话动态压缩归档，SQLite + tantivy 混合检索的低成本记忆系统，越用越懂你
 - **Android 沙盒工作区**：内置 proot Linux 运行环境（arm64），支持 Ubuntu Base rootfs 下载/导入，
   在手机上跑 Linux 命令与脚本；`llm-workspace` 直接映射为 Linux `/workspace` 与 `/root/.pai`
 - **远程前端模式**：输入电脑 PAI 的地址与端口，手机即成为电脑 PAI 的远程前端，
@@ -35,14 +36,29 @@ PAI 是一个持续进化的 AI 工作系统，不只是聊天客户端。它围
   包括冻结/解冻/卸载/安装应用、删除受限文件、注入式触控（tap/swipe/key）与截屏；
   能力开关默认关闭，危险操作二次确认，命令白名单防注入
 - **移动端细节**：内嵌 WebView 单窗口架构、设置页可滚动、录音权限适配、安全区适配、
-  系统分享导出沙盒文件、content URI 文件导入
+  IME 输入法弹起避让、系统分享导出沙盒文件、content URI 文件导入
+
+### 技术架构
+
+Android 端复用项目自带的移动端访问页面 `sidebar.html`（原本用于手机浏览器远程访问桌面端 / VS Code 侧边栏），
+**不依赖桌面端多窗口 IPC 体系**，通信链路为：
+
+```
+Tauri Android WebView（加载打包资产 sidebar.html?chatUrl=ws://127.0.0.1:8429/chat）
+  └─ WebSocket 连接本机 web access 服务（默认端口 8429，回环连接自动免密）
+       └─ Rust 后端（bridge_server → 各功能域命令）
+```
+
+- web access 服务默认开启（`default_web_access_enabled() = true`），默认端口 `8429`，可配置
+- 回环地址（`127.0.0.1`）WebSocket 连接**自动免密**，局域网/外网访问 `/chat` 需访问密码
+- 前后端传输差异全部收敛在 `tauri-api` 传输适配层，聊天运行时语义双端一致
 
 ### 下载与安装
 
 APK 发布在 [GitHub Releases](https://github.com/WhiteMoon319/P-ai/releases)：
 
-- 推送 `v*` tag 触发 **Android Release** 构建：release 包 + secrets 签名后发布
-- 推送 `main`/`dev` 分支触发 **Android Build (Debug)** 构建：debug APK 上传到 Actions artifact
+- 推送 `v*` tag 触发 **Android Release** 构建：release 包 + secrets 签名后发布到 Release
+- 推送 `dev` 分支触发 **Android Build (Debug)** 构建：debug APK 上传到 Actions artifact
 
 安装后在应用内配置 LLM API Key 即可开始使用；如需语音输入、记忆检索等能力，
 可在「设置 → LLM」补充 STT、Embedding、Rerank 等模型。
@@ -55,6 +71,9 @@ APK 发布在 [GitHub Releases](https://github.com/WhiteMoon319/P-ai/releases)�
 # 前端依赖
 pnpm install
 
+# 首次或上游结构变化后生成 Android 工程
+pnpm tauri android init
+
 # 类型检查
 pnpm typecheck
 cd src-tauri && cargo check --target aarch64-linux-android
@@ -64,17 +83,45 @@ pnpm tauri android build --apk --target aarch64 --debug   # debug 包
 pnpm tauri android build --apk --target aarch64           # release 包
 ```
 
-> 注：若全局 Cargo 配置了 `rustc-wrapper=sccache` 或特定镜像源，构建 Android target 时
+> 注：CI 构建会额外执行 `scripts/patch-android-project.sh`（权限、通知图标、IME 适配、MainActivity 生成）
+> 与 `scripts/patch-android-version.sh`（git 派生 versionCode/versionName）等补丁，
+> 并开启 WebView 的 cleartext 流量以支持 `ws://127.0.0.1` WebSocket；
+> 若全局 Cargo 配置了 `rustc-wrapper=sccache` 或特定镜像源，构建 Android target 时
 > 可能需要用 `--config` 覆盖（见 [docs/android-development-guide.md](docs/android-development-guide.md)）。
 
-CI 构建（GitHub Actions）：
+### CI 构建
 
-- **Android Build (Debug)**：`main`/`dev` 分支推送或手动触发，构建 debug APK，
+GitHub Actions（[.github/workflows](.github/workflows)）：
+
+- **Android Build (Debug)**（`android-build.yml`）：`dev` 分支推送或手动触发，构建 debug APK，
   版本号由 git 派生（`versionCode` = 提交总数，`versionName` = `git describe` 派生），
   上传签名后的 `P-ai-<分支名>-aarch64.apk` 到 artifact
-- **Android Release**：推送 `v*` tag 或手动触发，release 构建 + secrets 签名
+- **Android Release**（`android-release.yml`）：推送 `v*` tag 或手动触发，release 构建 + secrets 签名
   （`KEYSTORE_BASE64` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD`），
   发布签名 APK 到 GitHub Release
+- **Static Guards**（`static-guards.yml`）：静态守卫检查（i18n 键、硬编码中文、运行时日志审计等）
+
+### 项目结构
+
+```
+apps/android/            本地构建产物（Tauri Android Gradle 工程，gitignore 不提交）
+src/                     Vue 3 前端
+  entries/               多 HTML 入口：index / chat / archives / sidebar / settings /
+                         file-reader / runtime-logs
+  features/              功能域：sidebar（移动端入口）/ chat / config / archive /
+                         memory / shell / shared / file-reader
+src-tauri/               Rust 后端（Tauri 2，features 按功能域组织）
+  src/features/          核心功能域：chat / config / core / memory / remote_im /
+                         mcp / skill / delegate / task / goal / image_generation /
+                         system（含 android_workspace / sandbox / web access 桥）
+  vendor/                本地插件：tauri-plugin-device-control /
+                         tauri-plugin-notification / tauri-plugin-workspace-io
+  capabilities/          平台权限：default / desktop-only（Android 构建需平台隔离）
+  tauri.android.conf.json Android 平台窗口配置（sidebar + 本机 WebSocket 桥）
+docs/                    开发指南、架构设计、changelog
+scripts/                 构建补丁与工具脚本
+.github/workflows/       Android Debug/Release 构建、静态守卫
+```
 
 ### 文档
 
