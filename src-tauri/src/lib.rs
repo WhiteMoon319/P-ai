@@ -1388,6 +1388,7 @@ pub fn run() {
             export_conversation_share_json,
             import_conversation_share_from_file,
             branch_unarchived_conversation_from_selection,
+            branch_unarchived_conversation_from_current,
             forward_unarchived_conversation_selection,
             forward_selection_to_remote_im_contact,
             rename_unarchived_conversation,
