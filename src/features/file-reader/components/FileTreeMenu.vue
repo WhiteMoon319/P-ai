@@ -30,8 +30,6 @@ const props = withDefaults(defineProps<{
   forceOpen?: boolean;
   /** 过滤关键字：非空时逐层保留匹配项与祖先链（含子目录递归） */
   filter?: string;
-  /** 本 ul 所属目录的节点状态：非空时在顶部渲染 loading/error 行（根调用不传） */
-  statusNode?: DirectoryNodeLike | null;
   loadingText?: string;
   depth?: number;
 }>(), {
@@ -39,7 +37,6 @@ const props = withDefaults(defineProps<{
   activePath: "",
   forceOpen: false,
   filter: "",
-  statusNode: null,
   loadingText: "读取目录中…",
   depth: 0,
 });
@@ -86,15 +83,7 @@ function handleToggle(entry: FileReaderDirectoryEntry, event: Event) {
 
 <template>
   <ul :class="depth === 0 ? 'menu menu-xs w-full flex-nowrap p-0' : ''">
-    <li v-if="!forceOpen && statusNode?.loading" class="gap-2 text-xs">
-      <span class="loading loading-spinner loading-xs"></span>
-      <span>{{ loadingText }}</span>
-    </li>
-    <li v-else-if="!forceOpen && statusNode?.error" class="gap-2 text-xs text-error">
-      <span class="truncate">{{ statusNode.error }}</span>
-    </li>
-    <template v-else>
-      <li v-for="entry in filteredEntries(entries)" :key="normalizePath(entry.path)">
+    <li v-for="entry in filteredEntries(entries)" :key="normalizePath(entry.path)">
       <details
         v-if="entry.isDirectory"
         :open="forceOpen || isExpanded(entry)"
@@ -108,21 +97,30 @@ function handleToggle(entry: FileReaderDirectoryEntry, event: Event) {
           />
           <span class="min-w-0 flex-1 truncate">{{ entry.name }}</span>
         </summary>
-        <FileTreeMenu
-          :entries="childEntries(entry)"
-          :node-for="nodeFor"
-          :expanded="expanded"
-          :icon-for="iconFor"
-          :on-toggle-directory="onToggleDirectory"
-          :on-open-entry="onOpenEntry"
-          :on-context-menu="onContextMenu"
-          :active-path="activePath"
-          :force-open="forceOpen"
-          :filter="filter"
-          :status-node="nodeOf(entry)"
-          :loading-text="loadingText"
-          :depth="depth + 1"
-        />
+        <ul>
+          <li v-if="!forceOpen && nodeOf(entry)?.loading" class="gap-2 text-xs">
+            <span class="loading loading-spinner loading-xs"></span>
+            <span>{{ loadingText }}</span>
+          </li>
+          <li v-else-if="!forceOpen && nodeOf(entry)?.error" class="gap-2 text-xs text-error">
+            <span class="truncate">{{ nodeOf(entry)?.error }}</span>
+          </li>
+          <FileTreeMenu
+            v-else
+            :entries="childEntries(entry)"
+            :node-for="nodeFor"
+            :expanded="expanded"
+            :icon-for="iconFor"
+            :on-toggle-directory="onToggleDirectory"
+            :on-open-entry="onOpenEntry"
+            :on-context-menu="onContextMenu"
+            :active-path="activePath"
+            :force-open="forceOpen"
+            :filter="filter"
+            :loading-text="loadingText"
+            :depth="depth + 1"
+          />
+        </ul>
       </details>
       <a
         v-else
@@ -138,7 +136,6 @@ function handleToggle(entry: FileReaderDirectoryEntry, event: Event) {
         />
         <span class="min-w-0 flex-1 truncate">{{ entry.name }}</span>
       </a>
-      </li>
-    </template>
+    </li>
   </ul>
 </template>
