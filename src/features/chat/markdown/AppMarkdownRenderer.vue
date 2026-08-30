@@ -1181,9 +1181,6 @@ function scrollToFootnote(rawId: string) {
 
 const MD_ANIMATE_UNIT_PATTERN = /(\s+)|([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}])|([^\s\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+)/gu;
 
-/** 流式出字淡入动画总开关：暂时关闭，实现保留，恢复时改回 true 即可 */
-const STREAMING_TEXT_ANIMATION_ENABLED = false;
-
 function renderAnimatedText(text: string, keyPrefix: string): VNodeChild[] {
   if (!STREAMING_TEXT_ANIMATION_ENABLED) return text ? [text] : [];
   if (!text) return [];
