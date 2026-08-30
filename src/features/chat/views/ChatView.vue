@@ -55,48 +55,6 @@
         ></div>
       </div>
     </Transition>
-    <div
-      v-if="showSideConversationList"
-      :class="leftPaneInLayout ? 'relative flex h-full min-h-0 shrink-0' : 'absolute bottom-0 left-0 top-0 z-50 flex h-full min-h-0 border-r border-base-300 bg-base-100 shadow-2xl'"
-      :style="{ width: `${leftPaneVisibleWidth}px` }"
-    >
-      <ChatConversationSidebar
-        class="min-w-0 flex-1"
-        :items="conversationItems || unarchivedConversationItems"
-        :active-conversation-id="activeConversationId"
-        :user-alias="userAlias"
-        :user-avatar-url="userAvatarUrl"
-        :persona-name-map="personaNameMap"
-        :persona-avatar-url-map="personaAvatarUrlMap"
-        :active-tab="chatLeftPanelMode"
-        :chat-model-options="chatModelOptions"
-        :tool-review-api-config-id="toolReviewApiConfigId"
-        :current-workspace-root-path="currentProjectWorkspaceRoot"
-        @update:active-tab="$emit('update:conversation-list-tab', $event)"
-        @edit-task="openTaskEditDialog"
-        @select="handleConversationListSelect"
-        @rename="handleConversationRename"
-        @toggle-pin-conversation="handleConversationPinToggle"
-        @archive-conversation="handleConversationArchive"
-        @export-conversation="handleConversationExport"
-        @delete-conversation="handleConversationDelete"
-        @batch-archive-completed="handleBatchArchiveCompleted"
-        @open-settings="$emit('openSettings')"
-      />
-      <div
-        class="ecall-pane-splitter absolute bottom-0 top-0 right-0 z-10 w-1 -mr-0.5 translate-x-1/2"
-        :class="{ 'ecall-pane-splitter-active': activePaneResizeSide === 'left' }"
-        role="separator"
-        tabindex="0"
-        aria-orientation="vertical"
-        :aria-valuemin="PANE_WIDTH_LIMITS.left.min"
-        :aria-valuemax="PANE_WIDTH_LIMITS.left.max"
-        :aria-valuenow="leftPaneVisibleWidth"
-        @pointerdown="startPaneResize('left', $event)"
-        @keydown.left.prevent="adjustPaneWidthByKeyboard('left', -24)"
-        @keydown.right.prevent="adjustPaneWidthByKeyboard('left', 24)"
-      ></div>
-    </div>
 
     <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden">
       <div data-chat-center-pane="true" class="relative flex min-h-0 min-w-0 flex-1 flex-col">
@@ -605,12 +563,7 @@
           :class="rightPaneLayoutSnapshot ? 'relative flex h-full min-h-0 shrink-0 border-l border-base-300 bg-base-100 overflow-hidden' : 'absolute bottom-0 right-0 top-0 z-50 flex h-full min-h-0 border-l border-base-300 bg-base-100 shadow-2xl overflow-hidden'"
           :style="{ width: `${rightPaneVisibleWidth}px` }">
           <div
-            class="ecall-pane-splitter absolute bottom-0 top-0 left-0 z-10 w-1 cursor-col-resize"
-      <div v-if="effectiveToolReviewPanelOpen"
-        :class="rightPaneInLayout ? 'relative flex h-full min-h-0 shrink-0 border-l border-base-300 bg-base-100' : 'absolute bottom-0 right-0 top-0 z-50 flex h-full min-h-0 border-l border-base-300 bg-base-100 shadow-2xl'"
-        :style="{ width: `${rightPaneVisibleWidth}px` }">
-        <div
-          class="ecall-pane-splitter absolute bottom-0 top-0 left-0 z-10 w-1 -ml-0.5 -translate-x-1/2"
+            class="ecall-pane-splitter absolute bottom-0 top-0 left-0 z-10 w-1 -ml-0.5 -translate-x-1/2"
           :class="{ 'ecall-pane-splitter-active': activePaneResizeSide === 'right' }"
           role="separator"
           tabindex="0"
