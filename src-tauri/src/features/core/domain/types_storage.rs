@@ -335,8 +335,6 @@ struct RemoteImChannelBehaviorSettings {
     #[serde(default = "default_remote_im_contact_mute_duration_seconds")]
     mute_duration_seconds: u64,
     #[serde(default)]
-    activation_cooldown_seconds: u64,
-    #[serde(default)]
     group_reply_pacing: RemoteImGroupReplyPacing,
 }
 
@@ -349,7 +347,6 @@ impl Default for RemoteImChannelBehaviorSettings {
             unmute_keywords: default_remote_im_contact_unmute_keywords(),
             patience_seconds: default_remote_im_contact_patience_seconds(),
             mute_duration_seconds: default_remote_im_contact_mute_duration_seconds(),
-            activation_cooldown_seconds: 0,
             group_reply_pacing: RemoteImGroupReplyPacing::default(),
         }
     }
