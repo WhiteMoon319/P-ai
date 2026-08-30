@@ -15,7 +15,7 @@
     @close="onDialogClose"
     @cancel.prevent="onDialogClose"
   >
-    <div class="modal-box flex w-full max-w-3xl max-h-[85vh] min-w-0 flex-col overflow-hidden p-0">
+<div class="modal-box flex w-full max-w-3xl max-h-[85vh] min-w-0 flex-col overflow-hidden p-0">
         <header class="flex shrink-0 items-start justify-between gap-4 border-b border-base-300 px-5 py-4">
           <div class="min-w-0">
             <h3 class="font-semibold">{{ t('config.remoteIm.channelBehaviorSettings') }}</h3>
