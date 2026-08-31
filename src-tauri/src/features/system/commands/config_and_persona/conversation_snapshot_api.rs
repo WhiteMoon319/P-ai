@@ -1149,7 +1149,7 @@ fn list_unarchived_conversations_blocking(
         title: None,
         copy_source_conversation_id: None,
         shell_workspaces: None,
-        shell_work_mode: None,
+        shell_work_mode: None,        shell_work_branch: None,
         shell_autonomous_mode: None,
         is_draft: None,
     };
