@@ -1345,10 +1345,10 @@ pub(crate) async fn ensure_conversation_worktree(_state: &AppState, conversation
         }
         // legacy 存在但未注册，继续走新建流程
     }
-    let branch = conversation.shell_work_branch.trim().to_string();
+    let branch = normalize_shell_work_branch_text(&conversation.shell_work_branch);
     let _branch_for_log = if branch.is_empty() {
         // 尝试取当前分支作为兜底分支名
-        let cur = git_panel_current_branch(&git_root).await;
+        let cur = normalize_shell_work_branch_text(&git_panel_current_branch(&git_root).await);
         let cur_trim = cur.trim().to_string();
         if cur_trim.is_empty() { branch.clone() } else { cur_trim }
     } else {
@@ -1356,7 +1356,7 @@ pub(crate) async fn ensure_conversation_worktree(_state: &AppState, conversation
     };
     // 若 branch 为空，仍尝试以 HEAD 创建
     let effective_branch = if branch.trim().is_empty() {
-        git_panel_current_branch(&git_root).await.trim().to_string()
+        normalize_shell_work_branch_text(&git_panel_current_branch(&git_root).await)
     } else {
         branch.clone()
     };
@@ -1829,6 +1829,7 @@ mod terminal_workspace_tests {
             }],
             shell_autonomous_mode: false,
             shell_work_mode: default_shell_work_mode(),
+            shell_work_branch: String::new(),
             archived_at: None,
             messages: Vec::new(),
             fast_request_turns: Vec::new(),
@@ -1911,6 +1912,7 @@ mod terminal_workspace_tests {
             }],
             shell_autonomous_mode: false,
             shell_work_mode: default_shell_work_mode(),
+            shell_work_branch: String::new(),
             archived_at: None,
             messages: Vec::new(),
             fast_request_turns: Vec::new(),
