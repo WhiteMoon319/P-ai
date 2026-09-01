@@ -1324,6 +1324,7 @@ pub fn run() {
             apply_prepared_github_update,
             fetch_project_changelog_markdown,
             get_app_version,
+            get_app_runtime_info,
             get_project_repository_url,
             set_github_update_method,
             set_skipped_github_update_version,
