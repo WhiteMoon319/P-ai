@@ -1,30 +1,82 @@
 <template>
   <div class="h-full min-h-0 overflow-hidden">
-  <SimpleSetupPanel v-if="props.simpleSetupMode" class="h-full" />
-  <div v-else class="config-drawer-shell drawer md:drawer-open h-full min-h-0 overflow-hidden">
-    <input
-      id="config-drawer-toggle"
-      v-model="configDrawerOpen"
-      type="checkbox"
-      class="drawer-toggle"
-      aria-label="设置导航"
-    />
+  <Transition name="ecall-config-mode" mode="out-in">
+  <div v-if="props.simpleSetupMode" key="simple" class="h-full min-h-0 overflow-hidden bg-base-200 pl-4">
+    <SimpleSetupPanel class="h-full" />
+  </div>
+  <div v-else key="advanced" class="config-shell flex h-full min-h-0 overflow-hidden">
+    <aside class="hidden md:flex relative h-full min-h-0 w-44 shrink-0 flex-col bg-base-200 px-2" style="padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);">
+      <OverlayScrollArea class="min-h-0 flex-1" scroller-class="pr-1 h-full">
+        <ul class="menu w-full gap-1 p-0 pt-2 [&>li>a]:w-full">
+          <li v-for="item in visibleConfigNavItems" :key="item.tab">
+            <a :class="configNavLinkClass(item.tab)" @click="selectConfigNavTab(item.tab)">
+              <component :is="item.icon" class="h-4 w-4 shrink-0" />
+              <span class="min-w-0 truncate">{{ item.labelKey ? t(item.labelKey) : item.label }}</span>
+              <span
+                v-if="item.tab === 'about' && props.hasAvailableUpdate"
+                class="ml-auto inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-error"
+                :title="t('about.updateAvailableBadge')"
+              ></span>
+            </a>
+          </li>
+        </ul>
+      </OverlayScrollArea>
+    </aside>
 
-    <div class="drawer-content flex min-h-0 min-w-0 flex-col overflow-hidden bg-base-200">
+    <Transition name="ecall-config-drawer-mask">
+      <div
+        v-if="configDrawerOpen"
+        class="fixed inset-0 z-30 bg-black/40 md:hidden"
+        @click="configDrawerOpen = false"
+      ></div>
+    </Transition>
+    <Transition name="ecall-config-drawer">
+      <aside
+        v-if="configDrawerOpen"
+        class="fixed inset-y-0 left-0 z-40 flex h-full w-44 flex-col bg-base-200 px-2 shadow-xl md:hidden"
+        style="padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);"
+      >
+        <OverlayScrollArea class="min-h-0 flex-1" scroller-class="pr-1 h-full">
+          <ul class="menu w-full gap-1 p-0 pt-2 [&>li>a]:w-full">
+            <li v-for="item in visibleConfigNavItems" :key="item.tab">
+              <a :class="configNavLinkClass(item.tab)" @click="selectConfigNavTab(item.tab)">
+                <component :is="item.icon" class="h-4 w-4 shrink-0" />
+                <span class="min-w-0 truncate">{{ item.labelKey ? t(item.labelKey) : item.label }}</span>
+                <span
+                  v-if="item.tab === 'about' && props.hasAvailableUpdate"
+                  class="ml-auto inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-error"
+                  :title="t('about.updateAvailableBadge')"
+                ></span>
+              </a>
+            </li>
+          </ul>
+        </OverlayScrollArea>
+      </aside>
+    </Transition>
+
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-base-200">
       <div class="flex shrink-0 items-center gap-2 border-b border-base-300 bg-base-100/80 px-3 py-2 md:hidden">
-        <label
-          for="config-drawer-toggle"
+        <button
           class="btn btn-square btn-ghost btn-sm"
           aria-label="打开设置导航"
           title="打开设置导航"
+          @click="configDrawerOpen = true"
         >
           <Menu class="h-4 w-4" />
-        </label>
+        </button>
         <div class="min-w-0 truncate text-sm font-medium">{{ activeConfigTabTitle }}</div>
       </div>
 
-      <div class="flex min-h-0 flex-1 min-w-0 flex-col overflow-y-auto">
-      <div v-if="props.configTab === 'api'" class="flex-1 min-h-0">
+      <div class="flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden">
+      <Transition name="ecall-config-content" mode="out-in">
+        <div :key="props.configTab" class="flex min-h-0 flex-1 min-w-0 flex-col overflow-hidden">
+      <AndroidTab
+        v-if="props.configTab === 'android'"
+        :config="config"
+        :saving-config="savingConfig"
+        @save-api-config="onSaveAndroidConfig"
+      />
+      <div v-else-if="props.configTab === 'api'" class="flex-1 min-h-0">
         <ApiTab
           :config="config"
           :base-url-reference="baseUrlReference"
@@ -112,8 +164,6 @@
           <WelcomeTab
             v-if="props.configTab === 'welcome'"
             :config="config"
-            :personas="personas"
-            :is-android="isAndroid"
             @jump="$emit('update:configTab', $event)"
             @start-chat="$emit('start-chat')"
           />
@@ -140,13 +190,6 @@
             @update:background-voice-screenshot-keywords="$emit('update:backgroundVoiceScreenshotKeywords', $event)"
             @update:background-voice-screenshot-mode="$emit('update:backgroundVoiceScreenshotMode', $event)"
             @patch-chat-settings="$emit('patchChatSettings', $event)"
-          />
-
-          <AndroidTab
-            v-else-if="props.configTab === 'android'"
-            :config="config"
-            :saving-config="savingConfig"
-            @save-api-config="onSaveAndroidConfig"
           />
 
           <ChatSettingsTab
@@ -253,43 +296,18 @@
             v-else-if="props.configTab === 'about'"
             :github-update-method="props.config.githubUpdateMethod || 'auto'"
             :checking-update="checkingUpdate"
-            :is-android="isAndroid"
             :current-theme="currentTheme"
             @update:github-update-method="$emit('update:githubUpdateMethod', $event)"
             @check-update="$emit('checkUpdate')"
             @open-github="$emit('openGithub')"
           />
       </SettingsStickyLayout>
-    </div>
-    </div>
-
-    <div class="drawer-side z-40 min-h-0 overflow-hidden">
-      <label for="config-drawer-toggle" aria-label="关闭设置导航" class="drawer-overlay"></label>
-      <aside
-        class="relative flex h-full min-h-0 w-44 flex-col bg-base-200 px-2"
-        style="padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);"
-        @mouseenter="navScrollbarRef?.reveal()"
-        @mouseleave="navScrollbarRef?.hide()"
-      >
-<div ref="navScrollerRef" class="ecall-floating-scroll-target min-h-0 flex-1 h-full overflow-y-auto pr-1">
-          <ul class="menu w-full gap-1 p-0 pt-2 [&>li>a]:w-full">
-            <li v-for="item in visibleConfigNavItems" :key="item.tab">
-              <a :class="configNavLinkClass(item.tab)" @click="selectConfigNavTab(item.tab)">
-                <component :is="item.icon" class="h-4 w-4 shrink-0" />
-                <span class="min-w-0 truncate">{{ item.labelKey ? t(item.labelKey) : item.label }}</span>
-                <span
-                  v-if="item.tab === 'about' && props.hasAvailableUpdate"
-                  class="ml-auto inline-flex h-2.5 w-2.5 shrink-0 rounded-full bg-error"
-                  :title="t('about.updateAvailableBadge')"
-                ></span>
-              </a>
-            </li>
-          </ul>
         </div>
-        <FloatingScrollbar ref="navScrollbarRef" :target="navScrollerRef" />
-      </aside>
+      </Transition>
+    </div>
     </div>
   </div>
+  </Transition>
 
     <!-- Dialogs -->
 
@@ -377,8 +395,8 @@ import StorageTab from "./config-tabs/StorageTab.vue";
 import AboutTab from "./config-tabs/AboutTab.vue";
 import SimpleSetupPanel from "./config-tabs/SimpleSetupPanel.vue";
 import { toErrorMessage } from "../../../utils/error";
-import { ArrowLeftRight, Beaker, Bell, Building2, ClipboardList, Code, Cpu, Database, Home, Info, Keyboard, Menu, Network, Palette, Puzzle, Radio, ScrollText, Smartphone, Star, User, Wifi } from "@lucide/vue";
-import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
+import { ArrowLeftRight, Beaker, Bell, Building2, ClipboardList, Code, Cpu, Database, Home, Info, Keyboard, Menu, Network, Palette, Puzzle, Radio, ScrollText, Star, User, Wifi } from "@lucide/vue";
+import OverlayScrollArea from "../../shared/components/OverlayScrollArea.vue";
 
 type ConfigTab = "welcome" | "hotkey" | "api" | "android" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "networkAccess" | "remoteIm" | "usage" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
 type AvatarTarget = { agentId: string };
@@ -397,8 +415,8 @@ const CONFIG_NAV_ITEMS: ConfigNavItem[] = [
   { tab: "welcome", icon: Home, labelKey: "config.tabs.welcome" },
   { tab: "chatSettings", icon: Star, labelKey: "config.tabs.chatSettings" },
   { tab: "notification", icon: Bell, labelKey: "config.tabs.notification" },
-  { tab: "networkAccess", icon: Wifi, labelKey: "config.tabs.networkAccess", desktopOnly: true },
-  { tab: "hotkey", icon: Keyboard, labelKey: "config.tabs.hotkey", desktopOnly: true },
+  { tab: "networkAccess", icon: Wifi, labelKey: "config.tabs.networkAccess" },
+  { tab: "hotkey", icon: Keyboard, labelKey: "config.tabs.hotkey" },
   { tab: "api", icon: Cpu, labelKey: "config.tabs.api" },
   { tab: "android", icon: Smartphone, labelKey: "config.tabs.android", androidOnly: true },
   { tab: "mcp", icon: Puzzle, labelKey: "config.tabs.mcp" },
@@ -484,6 +502,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "update:configTab", value: ConfigTab): void;
+  (e: "update:simpleSetupMode", value: boolean): void;
   (e: "update:uiLanguage", value: string): void;
   (e: "update:uiFont", value: string): void;
   (e: "update:codeFont", value: string): void;
@@ -505,7 +524,6 @@ const emit = defineEmits<{
   (e: "updateGeneratedThemeControls", value: Partial<GeneratedThemeControls>): void;
   (e: "resetGeneratedTheme"): void;
   (e: "refreshModels"): void;
-  (e: "refreshToolsStatus"): void;
   (e: "openMemoryViewer"): void;
   (e: "addApiConfig"): void;
   (e: "removeSelectedApiConfig"): void;
@@ -542,8 +560,6 @@ const cropperReady = ref(false);
 const localCropError = ref("");
 const avatarEditorTargetId = ref("");
 const configDrawerOpen = ref(false);
-const navScrollerRef = ref<HTMLElement | null>(null);
-const navScrollbarRef = ref<InstanceType<typeof FloatingScrollbar> | null>(null);
 const memorySyncLocked = ref(false);
 let cropper: Cropper | null = null;
 let cropTarget: AvatarTarget | null = null;
@@ -552,6 +568,21 @@ const MAX_MIN_RECORD_SECONDS = 30;
 const MAX_RECORD_SECONDS = 600;
 const isAndroid = new URLSearchParams(window.location.search).get("platform") === "android";
 const savingAndroidConfig = ref(false);
+
+async function onSaveAndroidConfig() {
+  if (savingAndroidConfig.value) return;
+  savingAndroidConfig.value = true;
+  try {
+    const saved = await Promise.resolve(props.saveConfigAction());
+    if (!saved) {
+      props.setStatusAction(t("status.saveConfigFailed", { err: "android settings save rejected" }));
+    }
+  } catch (error) {
+    props.setStatusAction(t("status.saveConfigFailed", { err: toErrorMessage(error) }));
+  } finally {
+    savingAndroidConfig.value = false;
+  }
+}
 const visibleConfigNavItems = computed(() =>
   CONFIG_NAV_ITEMS.filter((item) => {
     if (item.devOnly && !SHOW_DEV_DEMO_TAB) return false;
@@ -562,7 +593,7 @@ const visibleConfigNavItems = computed(() =>
 );
 const activeConfigNavItem = computed(() =>
   visibleConfigNavItems.value.find((item) => item.tab === props.configTab)
-  ?? visibleConfigNavItems.value[0]
+  ?? visibleConfigNavItems.value.find((item) => item.tab === "welcome")
   ?? null,
 );
 const activeConfigTabTitle = computed(() => {
@@ -570,21 +601,6 @@ const activeConfigTabTitle = computed(() => {
   if (!item) return "";
   return item.labelKey ? t(item.labelKey) : (item.label || "");
 });
-
-async function onSaveAndroidConfig() {
-  if (savingAndroidConfig.value) return;
-  savingAndroidConfig.value = true;
-  try {
-    const saved = await Promise.resolve(props.saveConfigAction());
-    if (!saved) {
-      props.setStatusAction(t("status.saveConfigFailed", { err: "tools settings save rejected" }));
-    }
-  } catch (error) {
-    props.setStatusAction(t("status.saveConfigFailed", { err: toErrorMessage(error) }));
-  } finally {
-    savingAndroidConfig.value = false;
-  }
-}
 
 function isConfigNavItemLocked(tab: ConfigTab): boolean {
   return memorySyncLocked.value && tab !== "memory";
