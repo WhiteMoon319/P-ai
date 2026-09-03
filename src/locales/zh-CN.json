@@ -1690,17 +1690,6 @@
     "simpleSetupModeAdvanced": "高级",
     "simpleSetupModeSwitchToAdvanced": "切换到高级",
     "simpleSetupModeSwitchToSimple": "切换到简单",
-    "remoteFrontend": {
-      "summary": "输入电脑 PAI 的地址和端口，将手机 PAI 作为电脑 PAI 的远程前端。连接后手机显示电脑 PAI 的聊天与设置界面，电脑 PAI 回复消息时手机仍会收到通知。",
-      "host": "电脑 PAI 地址",
-      "hostPlaceholder": "例如 192.168.1.100",
-      "port": "端口",
-      "connect": "连接",
-      "disconnect": "断开连接",
-      "connectedTo": "已连接到 {target}",
-      "invalidTarget": "请输入有效的地址和端口",
-      "password": "连接密码"
-    },
     "messageStoreMigration": {
       "title": "会话消息仓库迁移",
       "confirm": "确认",
@@ -2328,9 +2317,6 @@
       "noConversation": "当前没有可启动目标的会话。"
     },
     "holdToRecord": "按住按钮录音",
-    "exitRemote": "退出远程",
-    "remoteBackToChat": "返回远程聊天",
-    "remoteModeTitle": "远程模式 · {target}",
     "errorTitleRequest": "请求发生错误",
     "workspaceWorkModeWorktree": "在此目录的会话工作树工作",
     "draftWorkModeWorktree": "工作树",

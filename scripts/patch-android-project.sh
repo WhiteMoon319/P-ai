@@ -28,8 +28,6 @@ package ai.easycall.app
 
 import android.os.Bundle
 import android.view.View
-import android.webkit.WebSettings
-import android.webkit.WebView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsAnimationCompat
@@ -74,16 +72,6 @@ class MainActivity : TauriActivity() {
             )
         }
     }
-
-    // 远程前端模式：壳层 origin 为 https://tauri.localhost（满足电脑端桥接的 https 校验），
-    // 但嵌入的电脑 PAI iframe 是 http://<电脑IP>:8429/sidebar。https 页面加载 http 子资源
-    // 会触发 Android WebView 的 Mixed Content 默认拦截（MIXED_CONTENT_NEVER_ALLOW），导致
-    // 电脑页面整体加载失败（PC 端显示无连接、设置页打不开）。
-    // 这里放开混合内容，让 http 电脑 iframe 能在 https 壳层内正常加载。
-    override fun onWebViewCreate(webView: WebView) {
-        super.onWebViewCreate(webView)
-        webView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-    }
 }
 KOTLIN
 
@@ -99,23 +87,6 @@ if ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
   echo "Added INTERNET permission"
 else
   echo "INTERNET permission already exists"
-fi
-
-# 远程前端模式：手机壳层要加载 http://<电脑IP>:8429/sidebar。Android 9+ 默认
-# 禁止明文流量，tauri 模板的 release 构建把 usesCleartextTraffic 置为 false，
-# 会导致 release 包加载远程 http 页面被 WebView 直接阻断（debug 包默认 true 所以
-# 开发时正常、装 release 后连不上）。这里把 release 的 manifestPlaceholder 改为
-# true，恢复明文 http 能力。
-BUILD_GRADLE="$ANDROID_APP_DIR/build.gradle.kts"
-if [[ -f "$BUILD_GRADLE" ]]; then
-  if grep -q 'usesCleartextTraffic.*false' "$BUILD_GRADLE"; then
-    sed -i 's/android:usesCleartextTraffic="${usesCleartextTraffic}"/android:usesCleartextTraffic="true"/; s#manifestPlaceholders\["usesCleartextTraffic"\] = "false"#manifestPlaceholders["usesCleartextTraffic"] = "true"#' "$BUILD_GRADLE"
-    echo "Enabled cleartext traffic for release build"
-  else
-    echo "cleartext already enabled"
-  fi
-else
-  echo "WARNING: build.gradle.kts not found at $BUILD_GRADLE; remote frontend http may be blocked" >&2
 fi
 
 if ! grep -q 'android.permission.ACCESS_NETWORK_STATE' "$MANIFEST"; then

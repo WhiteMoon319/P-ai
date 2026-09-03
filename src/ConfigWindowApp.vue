@@ -345,15 +345,8 @@ const tr = (key: string, params?: Record<string, unknown>) => t(key, params as n
 const isMacPlatform = /Mac|iPhone|iPad|iPod/i.test(window.navigator.platform || "");
 const windowControlsVisible = getTransportCapabilities().windowControls;
 
-/** iframe 嵌入且非 VSCode 宿主时隐藏窗口栏：远程前端模式下由宿主壳层提供 header。 */
-const hideWindowHeader = (() => {
-  if (window.self === window.top) return false;
-  const bridgeWindow = window as Window & { acquireVsCodeApi?: unknown };
-  const isVscodeHost =
-    typeof bridgeWindow.acquireVsCodeApi === "function"
-    || window.location.protocol === "vscode-webview:";
-  return !isVscodeHost;
-})();
+// 远程前端模式已移除：设置页不再被手机壳层以 iframe 嵌入，窗口栏始终显示。
+const hideWindowHeader = false;
 
 type ConfigTab =
   | "welcome"

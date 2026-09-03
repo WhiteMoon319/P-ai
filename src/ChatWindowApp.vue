@@ -487,7 +487,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, onBeforeUnmount } from "vue";
+import { defineComponent } from "vue";
 import ConfigStatusToast from "./features/config/components/ConfigStatusToast.vue";
 import Win10ResizeHandles from "./features/shell/components/Win10ResizeHandles.vue";
 import ChatWorkspacePickerDialog from "./features/chat/components/dialogs/ChatWorkspacePickerDialog.vue";
@@ -496,18 +496,7 @@ import AppWindowHeader from "./features/shell/components/AppWindowHeader.vue";
 import ShellDialogsHost from "./features/shell/components/ShellDialogsHost.vue";
 import StartupOverlay from "./features/shell/components/StartupOverlay.vue";
 import { useChatWindowApp } from "./features/chat/composables/use-chat-window-app";
-import { onTransportRemoteChatCommand, transportDraftHostWorkspaces } from "./services/tauri-api";
-
-/** iframe 嵌入且非 VSCode 宿主时隐藏窗口栏：远程前端模式下由宿主壳层提供 header。 */
-function isEmbeddedWebHost(): boolean {
-  if (typeof window === "undefined") return false;
-  if (window.self === window.top) return false;
-  const bridgeWindow = window as Window & { acquireVsCodeApi?: unknown };
-  const isVscodeHost =
-    typeof bridgeWindow.acquireVsCodeApi === "function"
-    || window.location.protocol === "vscode-webview:";
-  return !isVscodeHost;
-}
+import { transportDraftHostWorkspaces } from "./services/tauri-api";
 
 export default defineComponent({
   name: "ChatWindowApp",
@@ -522,7 +511,6 @@ export default defineComponent({
   },
   setup() {
     const app = useChatWindowApp();
-    const embedded = isEmbeddedWebHost();
 
     // 打开草稿会话：从文件夹分节新建时带该文件夹；标题栏/composer 新建时带当前会话工作区
     function openDraftConversationFromEntry(payload?: { workspaceRootPath?: string } | Record<string, unknown>) {
@@ -568,23 +556,9 @@ export default defineComponent({
       });
     }
 
-    // 远程前端模式：手机壳层 header 的会话操作（切换对话列表/新建对话）通过
-    // postMessage 转发到这里执行，由电脑 PAI 页面在自己的会话状态上完成操作。
-    // 监听与安全校验统一收敛在 tauri-api 的 onTransportRemoteChatCommand。
-    if (embedded) {
-      const stopRemoteCommands = onTransportRemoteChatCommand((method) => {
-        if (method === "toggle-conversation-list") {
-          void app.toggleSideConversationList();
-        } else if (method === "create-conversation") {
-          openDraftConversationFromEntry();
-        }
-      });
-      onBeforeUnmount(stopRemoteCommands);
-    }
-
     return {
       ...app,
-      hideWindowHeader: embedded,
+      hideWindowHeader: false,
       openDraftConversationFromEntry,
     };
   },

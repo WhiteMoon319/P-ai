@@ -11,19 +11,6 @@ type WebBridgeConfig = {
   workspaceRoots?: Array<{ path?: string; name?: string }>;
 };
 
-// 远程前端模式：iframe 内电脑 PAI 页面与手机 PAI 壳层之间的密码认证消息源标识。
-const REMOTE_AUTH_BRIDGE_SOURCE = "pai-remote-bridge-auth";
-
-// 远程前端模式：手机 PAI 壳层 → 本页面的会话命令消息源标识（与认证方向相反）。
-const REMOTE_COMMAND_BRIDGE_SOURCE = "pai-remote-bridge-command";
-
-// 远程前端模式：允许与 iframe 内电脑 PAI 页面做 postMessage 桥接的父窗口 origin。
-// 与手机 PAI 壳层约定：壳层页面必须以该 origin 加载（Tauri Android WebView 默认
-// asset 协议为 https://tauri.localhost）。桌面独立窗口（self === top）与 VSCode
-// 侧边栏（走 acquireVsCodeApi，不经 postMessage）不受影响；若壳层实际 origin
-// 不同，需两端同步修改。
-export const REMOTE_BRIDGE_ALLOWED_ORIGIN = "https://tauri.localhost";
-
 export type TransportHostWorkspace = {
   path: string;
   name: string;
@@ -518,10 +505,6 @@ function postTransportHostMessage(message: unknown): boolean {
   const vscodeApi = getVsCodeHostApi();
   if (vscodeApi) {
     vscodeApi.postMessage(message);
-    return true;
-  }
-  if (window.parent && window.parent !== window) {
-    window.parent.postMessage(message, REMOTE_BRIDGE_ALLOWED_ORIGIN);
     return true;
   }
   return false;
@@ -2264,80 +2247,12 @@ async function loginWebBridge(password: string): Promise<WebBridgeState> {
 }
 
 async function requestWebBridgePassword(): Promise<string> {
-  // 远程前端模式：iframe 嵌入时优先向父窗口（手机 PAI 壳层）请求已保存密码，
-  // 避免 Android WebView 对跨域 iframe 的 window.prompt 静默拦截。
-  if (typeof window !== "undefined" && window.self !== window.top) {
-    const fromParent = await requestRemotePasswordFromParent();
-    if (fromParent) return fromParent;
-  }
   if (typeof window === "undefined" || typeof window.prompt !== "function") {
     throw new Error("远程访问需要密码，但当前宿主无法显示认证输入框");
   }
   const password = String(window.prompt("请输入 PAI 远程访问密码") || "").trim();
   if (!password) throw new Error("远程访问认证已取消");
   return password;
-}
-
-/**
- * 订阅远程前端壳层的会话命令（toggle-conversation-list / create-conversation）。
- * 只接受约定壳层 origin 与来源标识的消息，防恶意父页面伪造会话操作。
- * 返回取消订阅函数；桌面独立窗口（self === top）不注册监听。
- */
-export function onTransportRemoteChatCommand(handler: (method: string) => void): () => void {
-  if (typeof window === "undefined" || window.self === window.top) return () => {};
-  const listener = (event: MessageEvent) => {
-    if (event.origin !== REMOTE_BRIDGE_ALLOWED_ORIGIN) return;
-    const data = event.data as { source?: unknown; method?: unknown } | null;
-    if (!data || typeof data !== "object") return;
-    if (data.source !== REMOTE_COMMAND_BRIDGE_SOURCE) return;
-    const method = String(data.method || "").trim();
-    if (method) handler(method);
-  };
-  window.addEventListener("message", listener);
-  return () => window.removeEventListener("message", listener);
-}
-
-/** 向父窗口（手机 PAI 壳层）请求远程访问密码；父窗口未回复或超时返回空串。
- *  HostWindow 由调用方注入，便于在测试中提供可控的父窗口与消息监听。 */
-export async function requestRemotePasswordFromParent(
-  hostWindow?: Window,
-): Promise<string> {
-  const win =
-    hostWindow ?? (typeof window !== "undefined" ? window : undefined);
-  if (!win || typeof win.parent === "undefined") {
-    return "";
-  }
-  return new Promise((resolve) => {
-    let settled = false;
-    const settle = (password: string) => {
-      if (settled) return;
-      settled = true;
-      win.removeEventListener("message", listener);
-      win.clearTimeout(timer);
-      resolve(password);
-    };
-    const listener = (event: MessageEvent) => {
-      // 只接受约定壳层 origin 与父窗口来源的消息，防恶意页面伪造密码注入。
-      if (event.origin !== REMOTE_BRIDGE_ALLOWED_ORIGIN) return;
-      if (event.source !== win.parent) return;
-      const data = event.data as { source?: unknown; method?: unknown; payload?: unknown } | null;
-      if (!data || typeof data !== "object") return;
-      if (data.source !== REMOTE_AUTH_BRIDGE_SOURCE) return;
-      if (data.method !== "password") return;
-      const password = String((data.payload as { password?: unknown } | null)?.password || "").trim();
-      settle(password);
-    };
-    const timer = win.setTimeout(() => settle(""), 1500);
-    win.addEventListener("message", listener);
-    try {
-      win.parent.postMessage(
-        { source: REMOTE_AUTH_BRIDGE_SOURCE, method: "request-password" },
-        REMOTE_BRIDGE_ALLOWED_ORIGIN,
-      );
-    } catch {
-      settle("");
-    }
-  });
 }
 
 async function ensureWebBridgeAuthenticated(): Promise<void> {
@@ -2477,19 +2392,6 @@ function isWebBridgeAuthenticationRefreshError(error: unknown): boolean {
 }
 
 function emitWebBridgeNotification(method: string, payload: unknown) {
-  // 远程前端场景：sidebar 页面被外部宿主以 iframe 嵌入时（window.self !== window.top），
-  // 把 bridge 通知转发给父窗口（如手机端 PAI 壳层），供宿主消费同一事件流；
-  // 桌面独立窗口 self === top 不触发，既有行为不变。
-  if (typeof window !== "undefined" && window.self !== window.top) {
-    try {
-      window.parent.postMessage(
-        { source: "pai-remote-bridge", method, payload },
-        REMOTE_BRIDGE_ALLOWED_ORIGIN,
-      );
-    } catch {
-      // 转发失败不影响本地事件分发
-    }
-  }
   const handlers = webBridgeNotificationHandlers.get(method);
   if (!handlers) return;
   for (const handler of handlers) handler(payload);

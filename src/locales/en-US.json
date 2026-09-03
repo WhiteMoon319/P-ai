@@ -1690,17 +1690,6 @@
     "simpleSetupModeAdvanced": "Advanced",
     "simpleSetupModeSwitchToAdvanced": "Switch to Advanced",
     "simpleSetupModeSwitchToSimple": "Switch to Simple",
-    "remoteFrontend": {
-      "summary": "Enter the PC PAI address and port to use your phone PAI as a remote frontend for the PC PAI. Once connected, your phone shows the PC PAI chat and settings; notifications still arrive on your phone when the PC PAI replies.",
-      "host": "PC PAI address",
-      "hostPlaceholder": "e.g. 192.168.1.100",
-      "port": "Port",
-      "connect": "Connect",
-      "disconnect": "Disconnect",
-      "connectedTo": "Connected to {target}",
-      "invalidTarget": "Enter a valid address and port",
-      "password": "Connection password"
-    },
     "messageStoreMigration": {
       "title": "Message Store Migration",
       "confirm": "Confirm",
@@ -2328,9 +2317,6 @@
       "noConversation": "No conversation is available for a goal."
     },
     "holdToRecord": "Hold button to record",
-    "exitRemote": "Exit remote",
-    "remoteBackToChat": "Back to remote chat",
-    "remoteModeTitle": "Remote · {target}",
     "errorTitleRequest": "Request failed",
     "workspaceWorkModeWorktree": "Work in this conversation's worktree",
     "draftWorkModeWorktree": "Worktree",
