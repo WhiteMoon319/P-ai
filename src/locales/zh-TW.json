@@ -39,6 +39,7 @@
   },
   "config": {
     "tabs": {
+      "android": "Android 專屬",
       "welcome": "歡迎",
       "hotkey": "快捷键",
       "api": "供應商",
@@ -657,6 +658,7 @@
       "systemCatalogTitle": "系統工具目錄",
       "systemCatalogReadonly": "部門權限到部門去修改",
       "workspaceAlreadyExists": "同名目錄已存在，請換一個名稱",
+      "androidWorkspaceTitle": "Linux 沙盒工作區",
       "androidWorkspaceInitialize": "初始化工作區",
       "androidWorkspaceImportRootfsArchive": "匯入壓縮包",
       "androidWorkspaceImport": "匯入檔案",

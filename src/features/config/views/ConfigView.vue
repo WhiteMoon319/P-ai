@@ -142,14 +142,11 @@
             @patch-chat-settings="$emit('patchChatSettings', $event)"
           />
 
-          <ToolsTab
-            v-else-if="props.configTab === 'tools'"
+          <AndroidTab
+            v-else-if="props.configTab === 'android'"
             :config="config"
-            :tool-statuses="toolStatuses"
             :saving-config="savingConfig"
-            :is-android="isAndroid"
-            @save-api-config="onSaveToolsConfig"
-            @refresh-tool-statuses="$emit('refreshToolsStatus')"
+            @save-api-config="onSaveAndroidConfig"
           />
 
           <ChatSettingsTab
@@ -370,6 +367,7 @@ import DepartmentTab from "./config-tabs/DepartmentTab.vue";
 import DepartmentTreeTab from "./config-tabs/DepartmentTreeTab.vue";
 import DemoTab from "./config-tabs/DemoTab.vue";
 import ChatSettingsTab from "./config-tabs/ChatSettingsTab.vue";
+import AndroidTab from "./config-tabs/AndroidTab.vue";
 import NotificationTab from "./config-tabs/NotificationTab.vue";
 import NetworkAccessTab from "./config-tabs/NetworkAccessTab.vue";
 import RemoteFrontendTab from "./config-tabs/RemoteFrontendTab.vue";
@@ -383,10 +381,10 @@ import StorageTab from "./config-tabs/StorageTab.vue";
 import AboutTab from "./config-tabs/AboutTab.vue";
 import SimpleSetupPanel from "./config-tabs/SimpleSetupPanel.vue";
 import { toErrorMessage } from "../../../utils/error";
-import { ArrowLeftRight, Beaker, Bell, Building2, ClipboardList, Code, Cpu, Database, Home, Info, Keyboard, Menu, Network, Palette, Puzzle, Radio, ScrollText, Star, User, Wifi, Wrench } from "@lucide/vue";
+import { ArrowLeftRight, Beaker, Bell, Building2, ClipboardList, Code, Cpu, Database, Home, Info, Keyboard, Menu, Network, Palette, Puzzle, Radio, ScrollText, Smartphone, Star, User, Wifi } from "@lucide/vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 
-type ConfigTab = "welcome" | "hotkey" | "api" | "tools" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "networkAccess" | "remoteIm" | "usage" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
+type ConfigTab = "welcome" | "hotkey" | "api" | "android" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "networkAccess" | "remoteIm" | "usage" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
 type AvatarTarget = { agentId: string };
 type ConfigNavItem = {
   tab: ConfigTab;
@@ -406,7 +404,7 @@ const CONFIG_NAV_ITEMS: ConfigNavItem[] = [
   { tab: "networkAccess", icon: Wifi, labelKey: "config.tabs.networkAccess" },
   { tab: "hotkey", icon: Keyboard, labelKey: "config.tabs.hotkey", desktopOnly: true },
   { tab: "api", icon: Cpu, labelKey: "config.tabs.api" },
-  { tab: "tools", icon: Wrench, labelKey: "config.tabs.tools", androidOnly: true },
+  { tab: "android", icon: Smartphone, labelKey: "config.tabs.android", androidOnly: true },
   { tab: "mcp", icon: Puzzle, labelKey: "config.tabs.mcp" },
   { tab: "skill", icon: Code, labelKey: "config.tabs.skill" },
   { tab: "persona", icon: User, labelKey: "config.tabs.persona" },
@@ -557,7 +555,7 @@ const MIN_RECORD_SECONDS = 1;
 const MAX_MIN_RECORD_SECONDS = 30;
 const MAX_RECORD_SECONDS = 600;
 const isAndroid = new URLSearchParams(window.location.search).get("platform") === "android";
-const savingToolsConfig = ref(false);
+const savingAndroidConfig = ref(false);
 const visibleConfigNavItems = computed(() =>
   CONFIG_NAV_ITEMS.filter((item) => {
     if (item.devOnly && !SHOW_DEV_DEMO_TAB) return false;
@@ -577,9 +575,9 @@ const activeConfigTabTitle = computed(() => {
   return item.labelKey ? t(item.labelKey) : (item.label || "");
 });
 
-async function onSaveToolsConfig() {
-  if (savingToolsConfig.value) return;
-  savingToolsConfig.value = true;
+async function onSaveAndroidConfig() {
+  if (savingAndroidConfig.value) return;
+  savingAndroidConfig.value = true;
   try {
     const saved = await Promise.resolve(props.saveConfigAction());
     if (!saved) {
@@ -588,7 +586,7 @@ async function onSaveToolsConfig() {
   } catch (error) {
     props.setStatusAction(t("status.saveConfigFailed", { err: toErrorMessage(error) }));
   } finally {
-    savingToolsConfig.value = false;
+    savingAndroidConfig.value = false;
   }
 }
 

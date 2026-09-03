@@ -39,6 +39,7 @@
   },
   "config": {
     "tabs": {
+      "android": "Android",
       "welcome": "Welcome",
       "hotkey": "Hotkey",
       "api": "Providers",
@@ -659,6 +660,7 @@
       "systemCatalogTitle": "System Tool Catalog",
       "systemCatalogReadonly": "Edit department permissions in Department settings",
       "workspaceAlreadyExists": "A workspace with this name already exists. Please choose a different name.",
+      "androidWorkspaceTitle": "Linux Sandbox Workspace",
       "androidWorkspaceInitialize": "Initialize Workspace",
       "androidWorkspaceImportRootfsArchive": "Import Archive",
       "androidWorkspaceImport": "Import File",
