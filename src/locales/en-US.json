@@ -1940,7 +1940,7 @@
       "executingTool": "Executing {name}",
       "runningTool": "Tool",
       "thinking": "Thinking",
-      "requesting": "Thinking",
+      "requesting": "Requesting",
       "notThought": "No thinking",
       "thinkingAndTools": "Thinking & Tools",
       "toolDone": "Tool done",
