@@ -266,7 +266,7 @@
     <div class="drawer-side z-40 min-h-0 overflow-hidden">
       <label for="config-drawer-toggle" aria-label="关闭设置导航" class="drawer-overlay"></label>
       <aside
-        class="relative flex h-full min-h-0 w-44 flex-col border-r border-base-300 bg-base-200 px-2"
+        class="relative flex h-full min-h-0 w-44 flex-col bg-base-200 px-2"
         style="padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);"
         @mouseenter="navScrollbarRef?.reveal()"
         @mouseleave="navScrollbarRef?.hide()"
