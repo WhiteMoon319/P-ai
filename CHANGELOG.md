@@ -5,6 +5,15 @@
 
 ## 最近版本
 
+- [v0.81.0](docs/changelog/releases/v0.81.0.md) - 新增内置"人力部"部门：它负责招募专家，不可删除，名称、简介、办事指南与权限均内置固定，仅负责人格可以在部门设置里自行更换。
+- [v0.80.0](docs/changelog/releases/v0.80.0.md) - 时间轴灵动岛全新升级为贪吃蛇棋盘：右下角圆按钮原位展开为毛玻璃卡片，卡片根据消息数量与窗口尺寸自动算出行列与尺寸，点与点以蛇形连线从右下角起按时间倒序来回铺开，单数行靠右、双数行靠左，未填满时不溢出
+- [v0.78.0](docs/changelog/releases/v0.78.0.md) - 新增商汤科技 SenseNova 生图供应商，切换时自动填入官方网关并预设 U1 Fast 与 U1.5 Lite 两个模型，开箱可用
+- [v0.77.0](docs/changelog/releases/v0.77.0.md) - VS Code 侧边栏的「当前项目」在打开工作树目录（`.pai/.worktree/{id}`）时，自动回溯到仓库根并聚合该项目的所有会话
+- [v0.76.1](docs/changelog/releases/v0.76.1.md) - 修复流式回复末尾正文被吸附到思维链后的乱序问题，回复顺序不再错位
+- [v0.76.0](docs/changelog/releases/v0.76.0.md) - 流式回复改为尾部增量淡入：最后一块内容以 300ms 平滑浮现，代码/表格/数学块直出不参与，60/120Hz 屏幕自适应，系统开启「减少动态效果」时直接显示
+- [v0.75.0](docs/changelog/releases/v0.75.0.md) - 思考与工具面板中的思维链改为直接预览：默认显示开头一段内容，超长时点「展开」查看全部、可再「收起」，面板本身仍可整体折叠
+- [v0.74.6](docs/changelog/releases/v0.74.6.md) - 「从当前会话创建分支」改为直接复制整个会话快照，无需选择消息，对话生成中也可以创建，且不再出现「无法确定会话分支的消息位置」报错
+- [v0.74.5](docs/changelog/releases/v0.74.5.md) - 聊天窗口左下角头像改为下拉菜单，从菜单进入设置或批量归档；顶部不再显示单独设置按钮，界面更简洁
 - [v0.74.3](docs/changelog/releases/v0.74.3.md) - 修复 Android 端输入法弹起时偶发不覆盖/不顶起文本框的问题：MainActivity 补齐 IME insets 处理（`adjustResize` + 内容区 bottom padding + requestLayout + API 30+ 动画结束兜底）
 - [v0.74.2](docs/changelog/releases/v0.74.2.md) - **设备控制（Shizuku/root 提权）**：Android 端新增 `device_control` 工具集，支持通过 Shizuku（首选）或 root（兜底）提权执行有限设备控制操作。
 - [v0.74.1](docs/changelog/releases/v0.74.1.md) - 修复 Web 端与 VS Code 侧边栏的 Git 面板无法使用自动刷新的问题：仓库监听（watch）不再被 Web 端拦截，改动、提交、切换分支等操作会像桌面端一样自动刷新更改区和提交历史
