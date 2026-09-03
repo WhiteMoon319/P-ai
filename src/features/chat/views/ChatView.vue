@@ -291,8 +291,8 @@
           @update:selected-contact-id="autoPushSelectedContactId = $event"
         />
         <!-- bottom-right: 灵动岛按钮（圆态）+ 回到底部（放上面防跳动） -->
-        <!-- 圆按钮扩成的卡片：挂进按钮容器，定位以按钮为基准，随 jumpToBottomStyle 走 -->
-        <div class="pointer-events-none absolute bottom-3 right-5 z-31 flex flex-col items-end gap-2" :style="jumpToBottomStyle">
+        <!-- 两个按钮整体上移一格（+44px）给工作条让位；时间轴常驻在上，回到底部占位淡入淡出在下 -->
+        <div class="pointer-events-none absolute bottom-3 right-5 z-31 flex flex-col items-end gap-2" :style="jumpAboveBottomStyle">
           <Transition name="ecall-snake-board">
             <TimelineSnakeBoard
               v-if="showTimelineFloatPanel && timelineAnchors.length >= 2 && !showFloatingSessionToolbar"
@@ -313,7 +313,7 @@
             </div>
           </Transition>
           <button
-            v-if="timelineAnchors.length >= 2 && !showTimelineFloatPanel && !showFloatingSessionToolbar"
+            v-if="timelineAnchors.length >= 2"
             ref="timelineFloatWrapRef"
             type="button"
             class="btn btn-sm btn-circle btn-neutral shadow-lg pointer-events-auto shrink-0"
@@ -327,11 +327,6 @@
           >
             <GanttChart class="h-4 w-4" />
           </button>
-          <div
-            v-else-if="showTimelineFloatPanel && !showFloatingSessionToolbar"
-            class="h-8 w-8 shrink-0 invisible pointer-events-none"
-            aria-hidden="true"
-          />
         </div>
 
         <div ref="composerContainer" class="relative shrink-0 border-t border-base-300 bg-base-100 px-2 pt-1.5 pb-1.5 max-md:mx-2 max-md:mb-2 max-md:rounded-box max-md:border max-md:border-base-300 max-md:shadow-lg">
@@ -1552,7 +1547,7 @@ defineExpose({
 const {
   scrollContainer, composerContainer, toolbarContainer, chatLayoutRoot,
   latestOwnElasticMinHeight, showJumpToBottom, atConversationBottom, userScrollingUp,
-  sessionControlPanelVisible, jumpToBottomStyle, jumpAboveBottomStyle, toolbarReservedHeight, floatingToolbarStyle, onScroll,
+  sessionControlPanelVisible, jumpAboveBottomStyle, toolbarReservedHeight, floatingToolbarStyle, onScroll,
   noteWheelScrollIntent, beginPointerScrollIntent, prepareBottomAlignmentLayout,
 } = useChatScrollLayout({
   activeConversationId: toRef(props, "activeConversationId"),
