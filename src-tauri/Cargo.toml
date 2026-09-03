@@ -1,6 +1,6 @@
 [package]
 name = "easy-call-ai"
-version = "0.81.0"
+version = "0.82.0"
 edition = "2021"
 description = "P-ai desktop app"
 default-run = "p-ai"

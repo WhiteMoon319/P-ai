@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-09-03T18:16:51.870Z",
-  "latestVersion": "v0.81.0",
+  "generatedAt": "2026-09-03T20:19:43.224Z",
+  "latestVersion": "v0.82.0",
   "releases": [
     {
-      "version": "v0.81.0",
-      "path": "docs/changelog/releases/v0.81.0.md",
+      "version": "v0.82.0",
+      "path": "docs/changelog/releases/v0.82.0.md",
       "summary": "新增内置\"人力部\"部门：它负责招募专家，不可删除，名称、简介、办事指南与权限均内置固定，仅负责人格可以在部门设置里自行更换。"
     },
     {
