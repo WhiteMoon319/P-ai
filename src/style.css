@@ -83,8 +83,10 @@
 }
 
 html {
+  /* 状态栏纯黑沉浸：顶部安全区留黑带（html 背景黑），底部不留白，
+     让 body 内容直接顶到屏幕底、延伸到小白条之下。左右保留刘海安全区。 */
+  background: #000;
   padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
 }

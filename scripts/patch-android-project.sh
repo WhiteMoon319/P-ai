@@ -32,11 +32,15 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 class MainActivity : TauriActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // 状态栏纯黑沉浸：前端 html 顶部留黑带，这里强制状态栏图标为白色，
+        // 否则浅色主题下深色图标在黑底上看不见。
+        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = false
 
         // 输入法弹起时把内容区（WebView）底部推高到 IME 顶部之上，避免输入法覆盖
         // 输入框导致看不到正在输入的内容。依赖 manifest windowSoftInputMode=adjustResize
