@@ -101,6 +101,23 @@ else
   echo "INTERNET permission already exists"
 fi
 
+# 远程前端模式：手机壳层要加载 http://<电脑IP>:8429/sidebar。Android 9+ 默认
+# 禁止明文流量，tauri 模板的 release 构建把 usesCleartextTraffic 置为 false，
+# 会导致 release 包加载远程 http 页面被 WebView 直接阻断（debug 包默认 true 所以
+# 开发时正常、装 release 后连不上）。这里把 release 的 manifestPlaceholder 改为
+# true，恢复明文 http 能力。
+BUILD_GRADLE="$ANDROID_APP_DIR/build.gradle.kts"
+if [[ -f "$BUILD_GRADLE" ]]; then
+  if grep -q 'usesCleartextTraffic.*false' "$BUILD_GRADLE"; then
+    sed -i 's/android:usesCleartextTraffic="${usesCleartextTraffic}"/android:usesCleartextTraffic="true"/; s#manifestPlaceholders\["usesCleartextTraffic"\] = "false"#manifestPlaceholders["usesCleartextTraffic"] = "true"#' "$BUILD_GRADLE"
+    echo "Enabled cleartext traffic for release build"
+  else
+    echo "cleartext already enabled"
+  fi
+else
+  echo "WARNING: build.gradle.kts not found at $BUILD_GRADLE; remote frontend http may be blocked" >&2
+fi
+
 if ! grep -q 'android.permission.ACCESS_NETWORK_STATE' "$MANIFEST"; then
   sed -i '/<application/i\    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' "$MANIFEST"
   echo "Added ACCESS_NETWORK_STATE permission"
