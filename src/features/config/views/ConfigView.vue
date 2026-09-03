@@ -145,8 +145,6 @@
           <ToolsTab
             v-else-if="props.configTab === 'tools'"
             :config="config"
-            :personas="assistantPersonas"
-            :tool-api-config="toolApiConfig"
             :tool-statuses="toolStatuses"
             :saving-config="savingConfig"
             :is-android="isAndroid"
@@ -388,7 +386,7 @@ import { toErrorMessage } from "../../../utils/error";
 import { ArrowLeftRight, Beaker, Bell, Building2, ClipboardList, Code, Cpu, Database, Home, Info, Keyboard, Menu, Network, Palette, Puzzle, Radio, ScrollText, Star, User, Wifi, Wrench } from "@lucide/vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
 
-type ConfigTab = "welcome" | "hotkey" | "api" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "networkAccess" | "remoteIm" | "usage" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
+type ConfigTab = "welcome" | "hotkey" | "api" | "tools" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "networkAccess" | "remoteIm" | "usage" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
 type AvatarTarget = { agentId: string };
 type ConfigNavItem = {
   tab: ConfigTab;
@@ -397,6 +395,7 @@ type ConfigNavItem = {
   label?: string;
   devOnly?: boolean;
   desktopOnly?: boolean;
+  androidOnly?: boolean;
 };
 const SHOW_DEV_DEMO_TAB = import.meta.env.DEV;
 
@@ -407,6 +406,7 @@ const CONFIG_NAV_ITEMS: ConfigNavItem[] = [
   { tab: "networkAccess", icon: Wifi, labelKey: "config.tabs.networkAccess" },
   { tab: "hotkey", icon: Keyboard, labelKey: "config.tabs.hotkey", desktopOnly: true },
   { tab: "api", icon: Cpu, labelKey: "config.tabs.api" },
+  { tab: "tools", icon: Wrench, labelKey: "config.tabs.tools", androidOnly: true },
   { tab: "mcp", icon: Puzzle, labelKey: "config.tabs.mcp" },
   { tab: "skill", icon: Code, labelKey: "config.tabs.skill" },
   { tab: "persona", icon: User, labelKey: "config.tabs.persona" },
@@ -511,6 +511,7 @@ const emit = defineEmits<{
   (e: "updateGeneratedThemeControls", value: Partial<GeneratedThemeControls>): void;
   (e: "resetGeneratedTheme"): void;
   (e: "refreshModels"): void;
+  (e: "refreshToolsStatus"): void;
   (e: "openMemoryViewer"): void;
   (e: "addApiConfig"): void;
   (e: "removeSelectedApiConfig"): void;
@@ -555,24 +556,13 @@ let cropTarget: AvatarTarget | null = null;
 const MIN_RECORD_SECONDS = 1;
 const MAX_MIN_RECORD_SECONDS = 30;
 const MAX_RECORD_SECONDS = 600;
-const workspaceMigrationProgressValue = computed(() => {
-  if (workspaceMigrationUi.value.total <= 0) return 0;
-  return Math.max(0, Math.min(100, Math.round((workspaceMigrationUi.value.processed / workspaceMigrationUi.value.total) * 100)));
-});
-const workspaceMigrationStageLabel = computed(() => {
-  const stage = workspaceMigrationUi.value.stage;
-  if (stage === "scanning") return t("config.tools.migrateWorkspaceStageScanning");
-  if (stage === "copying") return t("config.tools.migrateWorkspaceStageCopying");
-  if (stage === "deleting") return t("config.tools.migrateWorkspaceStageDeleting");
-  if (stage === "completed") return t("config.tools.migrateWorkspaceStageCompleted");
-  if (stage === "failed") return t("config.tools.migrateWorkspaceStageFailed");
-  return t("config.tools.migrateWorkspacePreparing");
-});
 const isAndroid = new URLSearchParams(window.location.search).get("platform") === "android";
+const savingToolsConfig = ref(false);
 const visibleConfigNavItems = computed(() =>
   CONFIG_NAV_ITEMS.filter((item) => {
     if (item.devOnly && !SHOW_DEV_DEMO_TAB) return false;
     if (item.desktopOnly && isAndroid) return false;
+    if (item.androidOnly && !isAndroid) return false;
     return true;
   }),
 );
@@ -586,6 +576,21 @@ const activeConfigTabTitle = computed(() => {
   if (!item) return "";
   return item.labelKey ? t(item.labelKey) : (item.label || "");
 });
+
+async function onSaveToolsConfig() {
+  if (savingToolsConfig.value) return;
+  savingToolsConfig.value = true;
+  try {
+    const saved = await Promise.resolve(props.saveConfigAction());
+    if (!saved) {
+      props.setStatusAction(t("status.saveConfigFailed", { err: "tools settings save rejected" }));
+    }
+  } catch (error) {
+    props.setStatusAction(t("status.saveConfigFailed", { err: toErrorMessage(error) }));
+  } finally {
+    savingToolsConfig.value = false;
+  }
+}
 
 function isConfigNavItemLocked(tab: ConfigTab): boolean {
   return memorySyncLocked.value && tab !== "memory";
