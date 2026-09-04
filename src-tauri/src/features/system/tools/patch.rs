@@ -1408,7 +1408,7 @@ async fn builtin_apply_patch_with_name(
                                 "cwd": terminal_path_for_user(&cwd),
                             }));
                         }
-                        let approved = match terminal_request_user_approval(
+                        let decision = match terminal_request_user_approval(
                             state,
                             "工具智能评估",
                             &lines.join("\n"),
@@ -1431,12 +1431,12 @@ async fn builtin_apply_patch_with_name(
                             Ok(v) => v,
                             Err(err) => return Err(err),
                         };
-                        if !approved {
+                        if !decision.approved {
                             return Ok(serde_json::json!({
                                 "ok": false,
                                 "approved": false,
                                 "blockedReason": "user_denied_ai_reviewed_patch",
-                                "message": "用户拒绝了智能评估后的补丁执行。",
+                                "message": format_terminal_denied_message("用户拒绝了智能评估后的补丁执行。", &decision),
                                 "toolReview": smart_review_history.clone(),
                                 "cwd": terminal_path_for_user(&cwd),
                             }));
@@ -1472,7 +1472,7 @@ async fn builtin_apply_patch_with_name(
                         "cwd": terminal_path_for_user(&cwd),
                     }));
                 }
-                    let approved = match terminal_request_user_approval(
+                    let decision = match terminal_request_user_approval(
                         state,
                         "工具智能评估",
                         review_note,
@@ -1495,12 +1495,12 @@ async fn builtin_apply_patch_with_name(
                         Ok(v) => v,
                         Err(err) => return Err(err),
                     };
-                    if !approved {
+                    if !decision.approved {
                         return Ok(serde_json::json!({
                             "ok": false,
                             "approved": false,
                             "blockedReason": "user_denied_ai_review_raw_patch",
-                            "message": "用户拒绝了查看原始评估结果后的补丁执行。",
+                            "message": format_terminal_denied_message("用户拒绝了查看原始评估结果后的补丁执行。", &decision),
                             "toolReview": smart_review_history.clone(),
                             "cwd": terminal_path_for_user(&cwd),
                         }));
@@ -1561,7 +1561,7 @@ async fn builtin_apply_patch_with_name(
                         "cwd": terminal_path_for_user(&cwd),
                     }));
                 }
-                let approved = match terminal_request_user_approval(
+                let decision = match terminal_request_user_approval(
                     state,
                     "补丁执行审批",
                     &lines.join("\n"),
@@ -1586,12 +1586,12 @@ async fn builtin_apply_patch_with_name(
                     Ok(v) => v,
                     Err(err) => return Err(err),
                 };
-                if !approved {
+                if !decision.approved {
                     return Ok(serde_json::json!({
                         "ok": false,
                         "approved": false,
                         "blockedReason": "user_denied_apply_patch",
-                        "message": "用户拒绝了本次补丁执行。",
+                        "message": format_terminal_denied_message("用户拒绝了本次补丁执行。", &decision),
                         "cwd": terminal_path_for_user(&cwd),
                     }));
                 }
@@ -1612,7 +1612,7 @@ async fn builtin_apply_patch_with_name(
                             "cwd": terminal_path_for_user(&cwd),
                         }));
                     }
-                    let approved = match terminal_request_user_approval(
+                    let decision = match terminal_request_user_approval(
                         state,
                         "补丁执行审批",
                         notice,
@@ -1635,12 +1635,12 @@ async fn builtin_apply_patch_with_name(
                         Ok(v) => v,
                         Err(err) => return Err(err),
                     };
-                    if !approved {
+                    if !decision.approved {
                         return Ok(serde_json::json!({
                             "ok": false,
                             "approved": false,
                             "blockedReason": "user_denied_apply_patch_after_review_fallback",
-                            "message": "用户拒绝了降级后的补丁执行。",
+                            "message": format_terminal_denied_message("用户拒绝了降级后的补丁执行。", &decision),
                             "cwd": terminal_path_for_user(&cwd),
                         }));
                     }
