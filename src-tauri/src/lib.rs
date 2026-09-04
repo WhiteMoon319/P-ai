@@ -1620,6 +1620,7 @@ pub fn run() {
             goal_create_goal,
             goal_cancel_goal,
             resolve_terminal_approval,
+            list_pending_terminal_approvals,
             approve_terminal_approval_for_session,
             approve_terminal_approval_for_workspace,
             open_file_reader_window_command,
