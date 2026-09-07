@@ -1,5 +1,5 @@
 import { onBeforeUnmount, ref, watch, type Ref } from "vue";
-import { invokeTauri, onTransportNotification } from "../../../services/tauri-api";
+import { invokeTauri, onTransportNotification, onTransportRecovered } from "../../../services/tauri-api";
 import type { BackgroundShellTaskSummary } from "../../../types/app";
 
 interface UseBackgroundShellOptions {
@@ -19,7 +19,6 @@ export function useBackgroundShell(options: UseBackgroundShellOptions) {
 
   const backgroundShells = ref<BackgroundShellTaskSummary[]>([]);
   const backgroundShellsErrorText = ref("");
-  const terminatingIds = ref<Set<string>>(new Set());
   let disposed = false;
   let refreshRequestSeq = 0;
 
@@ -54,22 +53,6 @@ export function useBackgroundShell(options: UseBackgroundShellOptions) {
     }
   }
 
-  async function terminateBackgroundShell(taskId: string) {
-    const conversationId = String(activeConversationId.value || "").trim();
-    if (!conversationId || terminatingIds.value.has(taskId)) return;
-    terminatingIds.value = new Set(terminatingIds.value).add(taskId);
-    try {
-      await invokeTauri("backgroundShell.terminate", { conversationId, taskId }, 10000);
-      await refreshBackgroundShells();
-    } catch (error) {
-      backgroundShellsErrorText.value = `终止后台任务失败：${String(error)}`;
-    } finally {
-      const next = new Set(terminatingIds.value);
-      next.delete(taskId);
-      terminatingIds.value = next;
-    }
-  }
-
   watch(
     [activeConversationId, active],
     ([conversationId, isActive], [prevConversationId]) => {
@@ -87,16 +70,21 @@ export function useBackgroundShell(options: UseBackgroundShellOptions) {
     { immediate: true },
   );
 
+  // 恢复信号兜底：断线重连/前台焦点恢复后重拉快照，补偿期间漏掉的事件
+  const unlistenRecovered = onTransportRecovered(() => {
+    if (disposed || !active.value) return;
+    void refreshBackgroundShells();
+  });
+
   onBeforeUnmount(() => {
     disposed = true;
     unlistenUpdated();
+    unlistenRecovered();
   });
 
   return {
     backgroundShells,
     backgroundShellsErrorText,
-    terminatingIds,
     refreshBackgroundShells,
-    terminateBackgroundShell,
   };
 }

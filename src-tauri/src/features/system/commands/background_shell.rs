@@ -1,27 +1,39 @@
 // ==================== 后台 shell 监控命令（监控面板 / Web 端共用） ====================
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ListConversationBackgroundShellTasksInput {
+    conversation_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TerminateConversationBackgroundShellTaskInput {
+    conversation_id: String,
+    task_id: String,
+}
+
 /// 列出当前会话的后台 shell 任务（含日志尾部，供监控面板直接展示）
 #[tauri::command]
 async fn list_conversation_background_shell_tasks(
     state: State<'_, AppState>,
-    conversation_id: String,
+    input: ListConversationBackgroundShellTasksInput,
 ) -> Result<Vec<Value>, String> {
-    let conversation_id = conversation_id.trim();
+    let conversation_id = input.conversation_id.trim().to_string();
     if conversation_id.is_empty() {
         return Err("conversationId 不能为空".to_string());
     }
-    Ok(terminal_background_shell_monitor_summaries(state.inner(), conversation_id).await)
+    Ok(terminal_background_shell_monitor_summaries(state.inner(), &conversation_id).await)
 }
 
 /// 终止当前会话的后台 shell 任务；已终态时幂等返回
 #[tauri::command]
 async fn terminate_conversation_background_shell_task(
     state: State<'_, AppState>,
-    conversation_id: String,
-    task_id: String,
+    input: TerminateConversationBackgroundShellTaskInput,
 ) -> Result<Value, String> {
-    let conversation_id = conversation_id.trim();
-    let task_id = task_id.trim();
+    let conversation_id = input.conversation_id.trim().to_string();
+    let task_id = input.task_id.trim().to_string();
     if conversation_id.is_empty() {
         return Err("conversationId 不能为空".to_string());
     }
@@ -29,7 +41,7 @@ async fn terminate_conversation_background_shell_task(
         return Err("taskId 不能为空".to_string());
     }
     let (killed, confirmed, status, log) =
-        terminal_background_shell_request_kill(state.inner(), conversation_id, task_id).await?;
+        terminal_background_shell_request_kill(state.inner(), &conversation_id, &task_id).await?;
     Ok(serde_json::json!({
         "ok": true,
         "id": task_id,

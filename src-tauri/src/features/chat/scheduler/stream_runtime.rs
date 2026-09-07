@@ -1241,7 +1241,8 @@ fn emit_stream_rebind_required_event(
         "phaseId": phase_id.map(str::trim).filter(|value| !value.is_empty()),
         "reason": reason.trim(),
     });
-    let _ = app_handle.emit(CHAT_STREAM_REBIND_REQUIRED_EVENT, payload);
+    let _ = app_handle.emit(CHAT_STREAM_REBIND_REQUIRED_EVENT, &payload);
+    ide_chat_broadcast_notification("chat.streamRebindRequired", payload);
 }
 
 #[allow(dead_code)]

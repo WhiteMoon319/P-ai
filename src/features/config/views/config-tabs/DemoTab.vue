@@ -12,6 +12,7 @@
             <option value="bubbles">自研气泡</option>
             <option value="delegates">DelegateProgressLine</option>
             <option value="templates">ConfigTemplate</option>
+            <option value="overview">监控概览（MonitorOverview）</option>
           </select>
           <span class="text-xs text-base-content/50">当前：{{ demoComponentLabel }}</span>
         </div>
@@ -49,6 +50,35 @@
           </div>
           <div v-if="demoQuestionLastSubmit" class="mockup-code max-h-64 overflow-auto text-xs">
             <pre class="whitespace-pre-wrap break-all"><code>{{ JSON.stringify(demoQuestionLastSubmit, undefined, 2) }}</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="demoComponentKey === 'overview'" class="card border border-base-300 bg-base-100">
+      <div class="card-body gap-3 p-4">
+        <div class="space-y-1">
+          <h3 class="card-title text-base">监控概览（MonitorOverview）</h3>
+          <p class="text-sm text-base-content/70">一键切换典型状态；卡片跳转与终止事件在 demo 中不生效。</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs text-base-content/60">预设：</span>
+          <button type="button" class="btn btn-xs" :class="demoOverviewPreset === 'normal' ? 'btn-primary' : 'btn-ghost'" @click="demoOverviewPreset = 'normal'">常规</button>
+          <button type="button" class="btn btn-xs" :class="demoOverviewPreset === 'empty' ? 'btn-primary' : 'btn-ghost'" @click="demoOverviewPreset = 'empty'">空闲</button>
+          <button type="button" class="btn btn-xs" :class="demoOverviewPreset === 'busy' ? 'btn-primary' : 'btn-ghost'" @click="demoOverviewPreset = 'busy'">高负载</button>
+          <button type="button" class="btn btn-xs" :class="demoOverviewPreset === 'backgroundOnly' ? 'btn-primary' : 'btn-ghost'" @click="demoOverviewPreset = 'backgroundOnly'">仅后台任务</button>
+        </div>
+        <div class="flex justify-center">
+          <div class="h-[440px] w-[400px] overflow-hidden rounded-lg border border-base-300 bg-base-100 shadow-sm">
+            <MonitorOverview
+              class="h-full w-full"
+              active-conversation-id="demo"
+              :delegate-statuses="demoOverviewDelegates"
+              :running-tasks="demoOverviewTasks"
+              :background-shells="demoOverviewBackgroundShells"
+              :background-shell-terminating-ids="demoOverviewTerminatingIds"
+              :current-batch="demoOverviewBatch"
+            />
           </div>
         </div>
       </div>
@@ -148,9 +178,12 @@
           <p class="text-sm text-base-content/70">折叠卡片第二行的实时进度组件样本。</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <button type="button" class="btn btn-xs" @click="toggleDemoDelegateActivity">
-            {{ demoHasRunningDelegates ? "结束活动委托" : "恢复活动委托" }}
-          </button>
+          <span class="text-xs text-base-content/60">预设：</span>
+          <button type="button" class="btn btn-xs" :class="demoMonitorPreset === 'normal' ? 'btn-primary' : 'btn-ghost'" @click="demoMonitorPreset = 'normal'">仅委托</button>
+          <button type="button" class="btn btn-xs" :class="demoMonitorPreset === 'tasksOnly' ? 'btn-primary' : 'btn-ghost'" @click="demoMonitorPreset = 'tasksOnly'">仅任务</button>
+          <button type="button" class="btn btn-xs" :class="demoMonitorPreset === 'shellsOnly' ? 'btn-primary' : 'btn-ghost'" @click="demoMonitorPreset = 'shellsOnly'">仅后台进程</button>
+          <button type="button" class="btn btn-xs" :class="demoMonitorPreset === 'all' ? 'btn-primary' : 'btn-ghost'" @click="demoMonitorPreset = 'all'">全部运行</button>
+          <button type="button" class="btn btn-xs" :class="demoMonitorPreset === 'empty' ? 'btn-primary' : 'btn-ghost'" @click="demoMonitorPreset = 'empty'">空闲</button>
         </div>
         <div class="flex w-full max-w-2xl">
           <SessionControlPanel
@@ -158,6 +191,8 @@
             workspace-button-label="工作空间"
             workspace-button-name="easy_call_ai"
             :delegates="demoDelegateStatuses"
+            :running-task-count="demoRunningTaskCount"
+            :running-shell-count="demoRunningShellCount"
           />
         </div>
         <div class="flex flex-col gap-1 py-2">
@@ -318,8 +353,11 @@ import ChatBubbleShell from "../../../chat/components/ChatBubbleShell.vue";
 import ExpandableText from "../../../shared/components/ExpandableText.vue";
 import ChatAttachmentList from "../../../chat/components/ChatAttachmentList.vue";
 import DelegateCard from "../../../chat/components/DelegateCard.vue";
+import MonitorOverview from "../../../chat/components/MonitorOverview.vue";
 import SessionControlPanel from "../../../chat/components/SessionControlPanel.vue";
-import type { AppConfig, ConversationDelegateStatusSummary, PersonaProfile } from "../../../../types/app";
+import type { AppConfig, BackgroundShellTaskSummary, ConversationDelegateStatusSummary, PersonaProfile } from "../../../../types/app";
+import type { ToolReviewBatchSummary } from "../../../chat/composables/use-chat-tool-review";
+import type { TaskEntry } from "./task-editor";
 import type { ChatAttachmentView } from "../../../chat/utils/chat-attachment-display";
 
 type NativeNotificationDemoResult = {
@@ -383,12 +421,135 @@ const configTemplateDemo = ref<Record<string, unknown>>({
   homepage: "https://pai.example.com",
   browserNote: "",
 });
-const demoComponentKey = ref<"question" | "bubbles" | "delegates" | "templates">("question");
+const demoComponentKey = ref<"question" | "bubbles" | "delegates" | "templates" | "overview">("question");
 const demoComponentLabel = computed(() => {
   if (demoComponentKey.value === "question") return "提问卡";
   if (demoComponentKey.value === "bubbles") return "自研气泡";
   if (demoComponentKey.value === "delegates") return "DelegateProgressLine";
+  if (demoComponentKey.value === "overview") return "监控概览（MonitorOverview）";
   return "ConfigTemplate";
+});
+
+const demoOverviewPreset = ref<"empty" | "normal" | "busy" | "backgroundOnly">("normal");
+
+const demoOverviewTerminatingIds = new Set<string>();
+
+function makeDemoOverviewDelegate(index: number, status: string): ConversationDelegateStatusSummary {
+  const titles = ["整理会话记录并归档", "排查后台任务页加载失败", "梳理委托状态轮询调用链"];
+  const tools = ["exec", "read", "rg"];
+  return {
+    delegateId: `demo-delegate-${index}`,
+    kind: "delegate",
+    conversationId: "demo",
+    rootConversationId: "demo",
+    title: titles[index % titles.length],
+    status,
+    active: true,
+    startedAt: new Date(Date.now() - 62000 * (index + 1)).toISOString(),
+    updatedAt: new Date().toISOString(),
+    elapsedMs: 62000 * (index + 1),
+    requestCount: 4 + index * 8,
+    toolCallCount: 9 + index * 25,
+    lastToolName: tools[index % tools.length],
+    tokenCount: 12800 + index * 16200,
+  };
+}
+
+function makeDemoOverviewTask(index: number): TaskEntry {
+  const goals = [
+    "每周整理一次 changelog 未发布条目",
+    "补齐后台 shell 终止的回归测试",
+    "梳理监控面板 tab 的状态链路",
+    "清理未使用的组件导入",
+    "核对三语言包缺失的 key",
+  ];
+  return {
+    taskId: `demo-task-${index}`,
+    orderIndex: index,
+    goal: goals[index % goals.length],
+    why: "保持发布流程可追溯",
+    todo: "检查清单并逐项归类",
+    completionState: "active",
+    completionConclusion: "",
+    progressNotes: [],
+    trigger: {},
+    createdAtLocal: new Date().toISOString(),
+    updatedAtLocal: new Date().toISOString(),
+  };
+}
+
+function makeDemoOverviewShell(index: number, outputTail: string): BackgroundShellTaskSummary {
+  const descriptions = ["前端 dev server 预热", "批量截图回归任务", "Rust 增量编译检查"];
+  const commands = ["pnpm dev", "pnpm smoke", "cargo check"];
+  return {
+    id: `demo-shell-${index}`,
+    kind: "shell",
+    status: "running",
+    exitCode: null,
+    description: descriptions[index % descriptions.length],
+    command: commands[index % commands.length],
+    cwd: "E:/github/easy_call_ai",
+    startedAt: new Date(Date.now() - 124000 * (index + 1)).toISOString(),
+    timeoutMs: null,
+    log: `C:/demo/bg-shell-demo-${index}.log`,
+    outputTail,
+  };
+}
+
+const demoOverviewDelegates = computed<ConversationDelegateStatusSummary[]>(() => {
+  const preset = demoOverviewPreset.value;
+  if (preset === "empty" || preset === "backgroundOnly") return [];
+  if (preset === "busy") return [0, 1, 2].map((index) => makeDemoOverviewDelegate(index, index === 2 ? "delivered" : "running"));
+  return [makeDemoOverviewDelegate(0, "running"), makeDemoOverviewDelegate(1, "delivered")];
+});
+
+const demoOverviewTasks = computed<TaskEntry[]>(() => {
+  const preset = demoOverviewPreset.value;
+  if (preset === "empty" || preset === "backgroundOnly") return [];
+  if (preset === "busy") return [0, 1, 2, 3, 4].map((index) => makeDemoOverviewTask(index));
+  return [makeDemoOverviewTask(0)];
+});
+
+const demoOverviewBackgroundShells = computed<BackgroundShellTaskSummary[]>(() => {
+  const preset = demoOverviewPreset.value;
+  if (preset === "empty") return [];
+  if (preset === "busy") {
+    return [
+      makeDemoOverviewShell(0, "ready in 1243 ms\nLocal: http://localhost:1420/"),
+      makeDemoOverviewShell(1, "[smoke] 12/24 用例通过，正在执行终端联动用例…"),
+      makeDemoOverviewShell(2, "Checking the core runtime... 412 crates checked.\nwarning: unused import: `serde::Serialize`\n= note: `#[warn(unused_imports)]` on part of module `commands`"),
+    ];
+  }
+  if (preset === "backgroundOnly") {
+    return [
+      makeDemoOverviewShell(0, "ready in 1243 ms\nLocal: http://localhost:1420/"),
+      makeDemoOverviewShell(1, "3 分钟计时任务剩余 01:42…"),
+    ];
+  }
+  return [makeDemoOverviewShell(0, "ready in 1243 ms\nLocal: http://localhost:1420/")];
+});
+
+const demoOverviewBatch = computed<ToolReviewBatchSummary | null>(() => {
+  const preset = demoOverviewPreset.value;
+  if (preset === "empty" || preset === "backgroundOnly") return null;
+  if (preset === "busy") {
+    return {
+      batchKey: "demo-batch-busy",
+      userMessageId: "demo-message",
+      userMessageText: "重构监控面板并提取概览组件，同步更新三语言包文案",
+      itemCount: 14,
+      unreviewedCount: 9,
+      items: [],
+    };
+  }
+  return {
+    batchKey: "demo-batch",
+    userMessageId: "demo-message",
+    userMessageText: "修复后台任务页打不开的问题并补充回归测试",
+    itemCount: 8,
+    unreviewedCount: 3,
+    items: [],
+  };
 });
 const demoQuestionPreset = ref<"single" | "singleLong" | "multi" | "ten" | "custom">("single");
 const demoWithWorkspace = ref(true);
@@ -768,7 +929,10 @@ const demoDelegateStatuses = ref<ConversationDelegateStatusSummary[]>([
   },
 ]);
 let delegateDemoTimer = 0;
-const demoHasRunningDelegates = computed(() => demoDelegateStatuses.value.some((delegate) => delegate.active));
+const demoMonitorPreset = ref<"normal" | "tasksOnly" | "shellsOnly" | "all" | "empty">("normal");
+const demoHasRunningDelegates = computed(() => demoMonitorPreset.value === "normal" || demoMonitorPreset.value === "all");
+const demoRunningTaskCount = computed(() => (demoMonitorPreset.value === "tasksOnly" || demoMonitorPreset.value === "all") ? 2 : 0);
+const demoRunningShellCount = computed(() => (demoMonitorPreset.value === "shellsOnly" || demoMonitorPreset.value === "all") ? 3 : 0);
 
 function bubbleDemoPersona(slot: BubbleDemoMessage["personaSlot"]): PersonaProfile | null {
   if (slot === "user") return userPersona.value;
@@ -907,8 +1071,7 @@ function advanceDemoDelegateStatus() {
   });
 }
 
-function toggleDemoDelegateActivity() {
-  const nextActive = !demoHasRunningDelegates.value;
+watch(demoHasRunningDelegates, (nextActive) => {
   demoDelegateStatuses.value = demoDelegateStatuses.value.map((delegate, index) => {
     if (index > 1) return delegate;
     return {
@@ -919,7 +1082,7 @@ function toggleDemoDelegateActivity() {
       updatedAt: new Date().toISOString(),
     };
   });
-}
+}, { immediate: true });
 
 onMounted(() => {
   delegateDemoTimer = window.setInterval(advanceDemoDelegateStatus, 1000);

@@ -812,33 +812,6 @@ function buildPayload(): TaskCreateInputWire | TaskUpdateInputWire | null {
   };
 }
 
-function dispatchTaskCreatedEvent(task: TaskEntry) {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent("easy-call:task-created", {
-    detail: {
-      taskId: String(task.taskId || "").trim(),
-    },
-  }));
-}
-
-function dispatchTaskUpdatedEvent(task: TaskEntry) {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent("easy-call:task-updated", {
-    detail: {
-      taskId: String(task.taskId || "").trim(),
-    },
-  }));
-}
-
-function dispatchTaskDeletedEvent(taskId: string) {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent("easy-call:task-deleted", {
-    detail: {
-      taskId: String(taskId || "").trim(),
-    },
-  }));
-}
-
 async function requestTaskCreate(payload: TaskCreateInputWire): Promise<TaskEntry> {
   return invokeTauri<TaskEntry>("task.create", payload);
 }
@@ -865,13 +838,11 @@ async function handleSubmit() {
   try {
     if (isEditMode.value) {
       const updated = await requestTaskUpdate(payload as TaskUpdateInputWire);
-      dispatchTaskUpdatedEvent(updated);
       emit("updated", updated);
       emit("close");
       return;
     }
     const created = await requestTaskCreate(payload as TaskCreateInputWire);
-    dispatchTaskCreatedEvent(created);
     emit("created", created);
     emit("close");
   } catch (error) {
@@ -947,7 +918,6 @@ async function handleDeleteConfirmed() {
   errorText.value = "";
   try {
     await requestTaskDelete(payload);
-    dispatchTaskDeletedEvent(taskId);
     deleteConfirmOpen.value = false;
     emit("close");
   } catch (error) {

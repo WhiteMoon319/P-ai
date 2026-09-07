@@ -239,6 +239,8 @@
               :side-chat-enabled="sideChatPanelEnabled"
               :mention-entries="mentionEntries" :selected-mention-keys="selectedMentionKeys"
               :delegate-statuses="delegateStatuses"
+              :running-task-count="runningTaskCount"
+              :running-shell-count="runningShellCount"
               @lock-workspace="$emit('lockWorkspace')" @open-branch-selection="openBranchSelectionMenu"
               @open-task-create="openTaskCreateDialog"
               @open-delegate-selection="openDelegateSelectionMenu" @open-forward-selection="openForwardSelectionMenu"
@@ -689,8 +691,7 @@
             :delegate-statuses-error-text="delegateStatusesErrorText"
             :background-shells="backgroundShells"
             :background-shells-error-text="backgroundShellsErrorText"
-            :background-shell-terminating-ids="backgroundShellTerminatingIds"
-            @terminate-background-shell="terminateBackgroundShell"
+            @switch-panel-tab="selectMonitorPanelTab"
             :persona-avatar-url-map="personaAvatarUrlMap"
             @select-batch="setToolReviewCurrentBatchKey" @load-item-detail="loadToolReviewItemDetail"
             @review-item="runToolReviewForCall" @review-batch="runToolReviewForBatch"
@@ -715,12 +716,13 @@ import {
   useChatComposerAppearance,
   visibleChatComposerContextGroups,
 } from "../../shell/composables/use-chat-composer-appearance";
-import { ArrowDownToLine, Check, CircleAlert, Copy, GanttChart, History, Inbox, ListTodo, Network, SquareTerminal, Trash2, Undo2, Wrench, X } from "@lucide/vue";
+import { ArrowDownToLine, Check, CircleAlert, Copy, GanttChart, History, Inbox, LayoutDashboard, ListTodo, Network, Trash2, Undo2, Wrench, X } from "@lucide/vue";
 import {
   copyTransportChatImageToClipboard,
   getTransportHostContext,
   invokeTauri,
   onTransportNotification,
+  onTransportRecovered,
   openTransportExternalUrl,
   openTransportLocalDirectory,
   openTransportLocalFileReference,
@@ -927,22 +929,22 @@ const commitTotal = ref(0);
 const commitPage = ref(1);
 const commitPageSize = ref(5);
 
-type ToolReviewSidebarTab = "tools" | "delegates" | "tasks" | "fastRequests" | "backgroundShells";
+type ToolReviewSidebarTab = "overview" | "tools" | "delegates" | "tasks" | "fastRequests";
 
 const monitorPanelTabs = computed<Array<{ key: ChatMonitorPanelMode; label: string; icon: typeof Network; closeable: false }>>(() => [
+  { key: "overview", label: t("chat.toolReview.overviewTab"), icon: LayoutDashboard, closeable: false },
   { key: "delegate", label: t("chat.toolReview.delegatesTab"), icon: Network, closeable: false },
   { key: "tasks", label: t("chat.toolReview.tasksTab"), icon: ListTodo, closeable: false },
   { key: "tools", label: t("chat.toolReview.toolsTab"), icon: Wrench, closeable: false },
-  { key: "fastRequests", label: t("chat.fastRequest.tab"), icon: Inbox, closeable: false },
-  { key: "backgroundShells", label: t("chat.toolReview.backgroundShellsTab"), icon: SquareTerminal, closeable: false },
+  { key: "fastRequests", label: t("chat.toolReview.overviewOthers"), icon: Inbox, closeable: false },
 ]);
 
 const toolReviewSidebarActiveTab = computed<ToolReviewSidebarTab>(() => {
   if (props.chatMonitorPanelMode === "tools") return "tools";
-  if (props.chatMonitorPanelMode === "fastRequests") return "fastRequests";
   if (props.chatMonitorPanelMode === "tasks") return "tasks";
-  if (props.chatMonitorPanelMode === "backgroundShells") return "backgroundShells";
-  return "delegates";
+  if (props.chatMonitorPanelMode === "delegate") return "delegates";
+  if (props.chatMonitorPanelMode === "fastRequests") return "fastRequests";
+  return "overview";
 });
 // ==================== messages / audio ====================
 
@@ -2212,7 +2214,7 @@ watch(
 );
 
 function selectMonitorPanelTab(key: string) {
-  if (key !== "delegate" && key !== "tasks" && key !== "tools" && key !== "fastRequests") return;
+  if (key !== "overview" && key !== "delegate" && key !== "tasks" && key !== "tools" && key !== "fastRequests") return;
   emit("update:chatMonitorPanelMode", key);
 }
 
@@ -2232,12 +2234,72 @@ const {
 
 const {
   backgroundShells, backgroundShellsErrorText,
-  terminatingIds: backgroundShellTerminatingIds,
-  terminateBackgroundShell,
 } = useBackgroundShell({
   activeConversationId: toRef(props, "activeConversationId"),
-  // 后台任务：仅在监控页后台 tab 激活时拉取与刷新
-  active: computed(() => props.chatMonitorPanelMode === "backgroundShells"),
+  // 后台任务：工作区监控 bar 常驻展示运行数量，靠事件广播驱动刷新
+  active: computed(() => true),
+});
+
+const runningShellCount = computed(() =>
+  backgroundShells.value.filter((task) => String(task.status || "").trim() === "running").length,
+);
+
+// ==================== running task count for monitor bar ====================
+
+const runningTaskCount = ref(0);
+let runningTaskRequestSeq = 0;
+let runningTaskRequestConversationId = "";
+
+async function refreshRunningTaskCount() {
+  const conversationId = String(props.activeConversationId || "").trim();
+  if (!conversationId) {
+    runningTaskRequestSeq += 1;
+    runningTaskRequestConversationId = "";
+    runningTaskCount.value = 0;
+    return;
+  }
+  const seq = ++runningTaskRequestSeq;
+  runningTaskRequestConversationId = conversationId;
+  try {
+    const tasks = await invokeTauri<Array<{ completionState?: string; conversationId?: string }>>("task.list", {});
+    if (seq !== runningTaskRequestSeq || runningTaskRequestConversationId !== String(props.activeConversationId || "").trim()) return;
+    runningTaskCount.value = (Array.isArray(tasks) ? tasks : []).filter((task) =>
+      String(task?.completionState || "").trim() === "active"
+      && String(task?.conversationId || "").trim() === conversationId,
+    ).length;
+  } catch {
+    if (seq !== runningTaskRequestSeq || runningTaskRequestConversationId !== String(props.activeConversationId || "").trim()) return;
+    runningTaskCount.value = 0;
+  }
+}
+
+function handleRunningTaskRefreshEvent() {
+  void refreshRunningTaskCount();
+}
+
+watch(
+  () => String(props.activeConversationId || "").trim(),
+  () => {
+    void refreshRunningTaskCount();
+  },
+  { immediate: true },
+);
+
+let unlistenTaskChanged: (() => void) | null = null;
+let unlistenTaskRecovered: (() => void) | null = null;
+
+onMounted(() => {
+  unlistenTaskChanged = onTransportNotification("task.changed", handleRunningTaskRefreshEvent);
+  unlistenTaskRecovered = onTransportRecovered(() => {
+    void refreshRunningTaskCount();
+  });
+});
+
+onBeforeUnmount(() => {
+  unlistenTaskChanged?.();
+  unlistenTaskChanged = null;
+  unlistenTaskRecovered?.();
+  unlistenTaskRecovered = null;
 });
 
 // ==================== panes ====================

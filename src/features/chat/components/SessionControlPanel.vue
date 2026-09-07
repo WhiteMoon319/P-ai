@@ -31,36 +31,51 @@
         type="button"
         class="btn btn-ghost btn-sm h-8 min-h-8 flex-none gap-1.5 overflow-hidden px-2 transition-[max-width,background-color,color] duration-200 ease-out"
         :class="expandedPanel === 'delegate' ? 'w-auto max-w-[min(21rem,52vw)] justify-start bg-base-200/80' : 'w-8 max-w-8 justify-center'"
-        :disabled="delegateCount <= 0"
+        :disabled="!hasMonitor"
         :title="delegateTitle"
         @click="handleDelegateClick"
       >
         <span class="indicator shrink-0">
           <span
-            v-if="runningCount > 0"
+            v-if="hasMonitor"
             class="indicator-item indicator-top indicator-end h-2.5 w-2.5 rounded-full bg-success"
           ></span>
-          <Network class="size-3.5 shrink-0" :class="delegateCount > 0 ? 'text-base-content/70' : 'text-base-content/40'" aria-hidden="true" />
+          <Network class="size-3.5 shrink-0" :class="hasMonitor ? 'text-base-content/70' : 'text-base-content/40'" aria-hidden="true" />
         </span>
 
         <Transition name="wdc-content">
           <span v-if="expandedPanel === 'delegate'" class="flex min-w-0 items-center gap-1.5 overflow-hidden">
-            <span class="shrink-0 text-xs font-semibold tabular-nums">{{ delegateCount }} 委托</span>
-            <span class="h-4 w-px shrink-0 bg-base-300"></span>
-            <span class="flex min-w-0 items-center gap-2 overflow-hidden text-xs text-base-content/75">
-              <span class="inline-flex min-w-0 items-center gap-1" title="所有当前委托累计用时">
-                <Timer class="size-3.5 shrink-0 text-base-content/45" aria-hidden="true" />
-                <span class="truncate tabular-nums">{{ elapsedText }}</span>
+            <template v-if="activeKindCount >= 2">
+              <span class="truncate text-xs text-base-content/75">{{ monitorSummaryText }}</span>
+            </template>
+            <template v-else-if="taskActiveCount > 0">
+              <span class="shrink-0 text-xs font-semibold tabular-nums">{{ t("chat.monitorBar.taskCount", { count: taskActiveCount }) }}</span>
+              <span class="h-4 w-px shrink-0 bg-base-300"></span>
+              <span class="text-xs text-base-content/75">{{ t("chat.monitorBar.runningSuffix") }}</span>
+            </template>
+            <template v-else-if="shellActiveCount > 0">
+              <span class="shrink-0 text-xs font-semibold tabular-nums">{{ t("chat.monitorBar.shellCount", { count: shellActiveCount }) }}</span>
+              <span class="h-4 w-px shrink-0 bg-base-300"></span>
+              <span class="text-xs text-base-content/75">{{ t("chat.monitorBar.runningSuffix") }}</span>
+            </template>
+            <template v-else>
+              <span class="shrink-0 text-xs font-semibold tabular-nums">{{ t("chat.monitorBar.delegateCount", { count: delegateCount }) }}</span>
+              <span class="h-4 w-px shrink-0 bg-base-300"></span>
+              <span class="flex min-w-0 items-center gap-2 overflow-hidden text-xs text-base-content/75">
+                <span class="inline-flex min-w-0 items-center gap-1" :title="t('chat.monitorBar.elapsedTitle')">
+                  <Timer class="size-3.5 shrink-0 text-base-content/45" aria-hidden="true" />
+                  <span class="truncate tabular-nums">{{ elapsedText }}</span>
+                </span>
+                <span class="inline-flex min-w-0 items-center gap-1" :title="t('chat.monitorBar.requestTitle')">
+                  <Footprints class="size-3.5 shrink-0 text-base-content/45" aria-hidden="true" />
+                  <span class="truncate tabular-nums">{{ t("chat.monitorBar.requestCountLabel", { count: requestCount }) }}</span>
+                </span>
+                <span class="inline-flex min-w-0 items-center gap-1" :title="t('chat.monitorBar.tokenTitle')">
+                  <Coins class="size-3.5 shrink-0 text-base-content/45" aria-hidden="true" />
+                  <span class="truncate tabular-nums">{{ t("chat.monitorBar.tokenCountLabel", { value: tokenText }) }}</span>
+                </span>
               </span>
-              <span class="inline-flex min-w-0 items-center gap-1" title="所有当前委托累计请求步数">
-                <Footprints class="size-3.5 shrink-0 text-base-content/45" aria-hidden="true" />
-                <span class="truncate tabular-nums">{{ requestCount }}步</span>
-              </span>
-              <span class="inline-flex min-w-0 items-center gap-1" title="所有当前委托累计词元">
-                <Coins class="size-3.5 shrink-0 text-base-content/45" aria-hidden="true" />
-                <span class="truncate tabular-nums">{{ tokenText }}词元</span>
-              </span>
-            </span>
+            </template>
           </span>
         </Transition>
       </button>
@@ -89,6 +104,8 @@ const props = defineProps<{
   workspacePermissionKind?: "approval" | "full_access" | "autonomous";
   autoPushActive?: boolean;
   delegates: ConversationDelegateStatusSummary[];
+  runningTaskCount?: number;
+  runningShellCount?: number;
 }>();
 
 const emit = defineEmits<{
@@ -102,6 +119,7 @@ const normalizedDelegates = computed(() => Array.isArray(props.delegates) ? prop
 const runningDelegates = computed(() => normalizedDelegates.value.filter(isDelegateRunning));
 const displayedDelegates = computed(() => runningDelegates.value.length > 0 ? runningDelegates.value : normalizedDelegates.value);
 const delegateCount = computed(() => displayedDelegates.value.length);
+const delegateRunningCount = computed(() => runningDelegates.value.length);
 const runningCount = computed(() => runningDelegates.value.length);
 const elapsedMs = computed(() => sumBy(displayedDelegates.value, (delegate) => delegate.elapsedMs));
 const requestCount = computed(() => sumBy(displayedDelegates.value, (delegate) => delegate.requestCount));
@@ -118,19 +136,31 @@ const workspacePermissionIcon = computed(() => {
 const autoPushLabel = computed(() => t("chat.autoPush.activeChip"));
 const autoPushTitle = computed(() => t("chat.autoPush.activeHint"));
 const delegateTitle = computed(() => {
-  if (delegateCount.value <= 0) return "当前暂无委托";
-  if (runningCount.value > 0) return `查看 ${runningCount.value} 个运行中委托`;
-  return `查看 ${delegateCount.value} 个委托`;
+  if (!hasMonitor.value) return t("chat.monitorBar.emptyTitle");
+  return t("chat.monitorBar.viewRunningTitle", { summary: monitorSummaryText.value });
+});
+const taskActiveCount = computed(() => Math.max(0, Number(props.runningTaskCount ?? 0)));
+const shellActiveCount = computed(() => Math.max(0, Number(props.runningShellCount ?? 0)));
+const hasMonitor = computed(() => delegateRunningCount.value > 0 || taskActiveCount.value > 0 || shellActiveCount.value > 0);
+const activeKindCount = computed(() => [delegateRunningCount.value > 0, taskActiveCount.value > 0, shellActiveCount.value > 0].filter(Boolean).length);
+const monitorSummaryText = computed(() => {
+  const parts: string[] = [];
+  if (delegateRunningCount.value > 0) parts.push(t("chat.monitorBar.delegateCount", { count: delegateRunningCount.value }));
+  if (taskActiveCount.value > 0) parts.push(t("chat.monitorBar.taskCount", { count: taskActiveCount.value }));
+  if (shellActiveCount.value > 0) parts.push(t("chat.monitorBar.shellCount", { count: shellActiveCount.value }));
+  return `${parts.join("、")} ${t("chat.monitorBar.runningSuffix")}`;
 });
 
 watch(
-  runningCount,
-  (count, previousCount) => {
-    if (count > 0 && (!previousCount || previousCount <= 0)) {
+  [runningCount, taskActiveCount, shellActiveCount],
+  ([delegateRunning, tasks, shells], [prevDelegate, prevTasks, prevShells]) => {
+    const total = delegateRunning + tasks + shells;
+    const previousTotal = (prevDelegate ?? 0) + (prevTasks ?? 0) + (prevShells ?? 0);
+    if (total > 0 && previousTotal <= 0) {
       expandedPanel.value = "delegate";
       return;
     }
-    if (count <= 0) {
+    if (total <= 0) {
       expandedPanel.value = "workspace";
     }
   },
@@ -146,7 +176,7 @@ function handleWorkspaceClick() {
 }
 
 function handleDelegateClick() {
-  if (delegateCount.value <= 0) return;
+  if (!hasMonitor.value) return;
   if (expandedPanel.value !== "delegate") {
     expandedPanel.value = "delegate";
     return;

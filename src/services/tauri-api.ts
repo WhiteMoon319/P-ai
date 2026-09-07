@@ -595,10 +595,28 @@ export async function ensureTransportReady(): Promise<TransportConnectionState> 
   return transportConnectionStateFromWebBridge(getWebBridgeState());
 }
 
+/** 传输连接状态恢复信号；恢复路径与业务无关，订阅方据此重拉快照兜底漏掉的事件。 */
+type TransportRecoveredSource = "reconnect" | "foreground";
+
+const transportRecoveredHandlers = new Set<(source: TransportRecoveredSource) => void>();
+
+export function onTransportRecovered(handler: (source: TransportRecoveredSource) => void): () => void {
+  transportRecoveredHandlers.add(handler);
+  return () => {
+    transportRecoveredHandlers.delete(handler);
+  };
+}
+
+function emitTransportRecovered(source: TransportRecoveredSource): void {
+  for (const handler of [...transportRecoveredHandlers]) handler(source);
+}
+
 export async function reconnectTransport(): Promise<TransportConnectionState> {
   if (isTauriRuntimeAvailable()) return nativeTransportConnectionState();
   disconnectWebBridge();
-  return ensureTransportReady();
+  const state = await ensureTransportReady();
+  emitTransportRecovered("reconnect");
+  return state;
 }
 
 export function disconnectTransport(): void {
@@ -627,6 +645,7 @@ export async function restoreTransportAfterForegroundWake(timeoutMs = 2500): Pro
     await reconnectTransport();
     await pingTransport(timeoutMs).catch(() => { throw error; });
   }
+  emitTransportRecovered("foreground");
   return getTransportConnectionState();
 }
 
@@ -1672,6 +1691,8 @@ const TAURI_INPUT_WRAPPED_COMMANDS = new Set([
   "conversation.rewindPreview",
   "conversation.rewind",
   "delegate.statuses",
+  "backgroundShell.list",
+  "backgroundShell.terminate",
   "delegate.abort",
   "delegate.blockPage",
   "delegate.submit",
@@ -1923,6 +1944,7 @@ const TRANSPORT_NOTIFICATION_EVENT_ALIASES: Record<string, string | string[]> = 
   "conversation.chatErrorCleared": "easy-call:chat-error-cleared",
   "conversation.delegateStatusUpdated": "easy-call:conversation-delegate-status-updated",
   "backgroundShell.updated": "easy-call:background-shell-updated",
+  "task.changed": "easy-call:task-changed",
   "ideContext.updated": "ide-context-updated",
   "remoteIm.dashboard.updated": "easy-call:remote-im-contact-dashboard-updated",
   "conversation.workStatus": "conversation_work_status",

@@ -243,6 +243,8 @@
         :workspace-permission-kind="workspacePermissionKind"
         :auto-push-active="autoPushActive"
         :delegates="delegateStatuses || []"
+        :running-task-count="runningTaskCount"
+        :running-shell-count="runningShellCount"
         @lock-workspace="emit('lockWorkspace')"
         @open-delegate-summary="emit('openDelegateSummary')"
       />
@@ -423,6 +425,8 @@ const props = withDefaults(defineProps<{
   openInBrowserDisabled?: boolean;
   sideChatEnabled?: boolean;
   delegateStatuses?: ConversationDelegateStatusSummary[];
+  runningTaskCount?: number;
+  runningShellCount?: number;
 }>(), {
   showTaskCreateMenuItem: true,
   showDelegateMenuItem: true,

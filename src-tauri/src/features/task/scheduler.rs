@@ -295,6 +295,7 @@ fn task_complete_one_time_dispatch_if_needed(
             "[任务调度] 完成，任务=一次性任务已发起调度，task_id={}",
             task.task_id
         ));
+        task_publish_changed_event(state, "completed", &task.task_id, None);
     }
     Ok(())
 }

@@ -38,7 +38,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { invokeTauri } from "../../../services/tauri-api";
+import { invokeTauri, onTransportNotification, onTransportRecovered } from "../../../services/tauri-api";
 import type { ChatConversationOverviewItem } from "../../../types/app";
 import type { TaskEntry } from "../../config/views/config-tabs/task-editor";
 import { toErrorMessage } from "../../../utils/error";
@@ -211,18 +211,21 @@ function handleTaskRefreshEvent() {
   void loadTasks();
 }
 
+let unlistenTaskChanged: (() => void) | null = null;
+let unlistenTaskRecovered: (() => void) | null = null;
+
 onMounted(() => {
   void loadTasks();
-  window.addEventListener("easy-call:task-created", handleTaskRefreshEvent);
-  window.addEventListener("easy-call:task-updated", handleTaskRefreshEvent);
-  window.addEventListener("easy-call:task-completed", handleTaskRefreshEvent);
-  window.addEventListener("easy-call:task-deleted", handleTaskRefreshEvent);
+  unlistenTaskChanged = onTransportNotification("task.changed", handleTaskRefreshEvent);
+  unlistenTaskRecovered = onTransportRecovered(() => {
+    void loadTasks();
+  });
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("easy-call:task-created", handleTaskRefreshEvent);
-  window.removeEventListener("easy-call:task-updated", handleTaskRefreshEvent);
-  window.removeEventListener("easy-call:task-completed", handleTaskRefreshEvent);
-  window.removeEventListener("easy-call:task-deleted", handleTaskRefreshEvent);
+  unlistenTaskChanged?.();
+  unlistenTaskChanged = null;
+  unlistenTaskRecovered?.();
+  unlistenTaskRecovered = null;
 });
 </script>

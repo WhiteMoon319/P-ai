@@ -827,6 +827,7 @@ fn patch_chat_settings_inner(
     let payload = apply_chat_settings_patch(state, &mut agents, &config, input)?;
 
     let _ = app.emit("easy-call:chat-settings-updated", &payload);
+    ide_chat_broadcast_notification("chat.settingsUpdated", serde_json::json!(payload));
     broadcast_sidebar_persona_changed();
 
     Ok(payload)
@@ -1297,6 +1298,7 @@ fn patch_conversation_api_settings_inner(
     let payload = build_conversation_api_settings_payload(&config);
 
     let _ = app.emit("easy-call:conversation-api-updated", &payload);
+    ide_chat_broadcast_notification("conversation.apiUpdated", serde_json::json!(payload));
     broadcast_sidebar_provider_changed();
 
     Ok(payload)

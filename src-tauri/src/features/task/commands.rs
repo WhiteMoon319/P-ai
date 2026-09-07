@@ -3,6 +3,8 @@ fn task_list_tasks(state: State<'_, AppState>) -> Result<Vec<TaskEntry>, String>
     task_list_tasks_inner(state.inner())
 }
 
+const TASK_CHANGED_EVENT: &str = "easy-call:task-changed";
+
 fn task_list_tasks_inner(state: &AppState) -> Result<Vec<TaskEntry>, String> {
     task_store_list_tasks(&state.data_path)
 }
@@ -605,6 +607,26 @@ async fn task_optimize_draft_internal(
     }
 }
 
+fn task_publish_changed_event(state: &AppState, kind: &str, task_id: &str, task: Option<&TaskEntry>) {
+    let conversation_id = task.and_then(|entry| entry.conversation_id.clone());
+    let payload = serde_json::json!({
+        "kind": kind,
+        "taskId": task_id,
+        "conversationId": conversation_id,
+        "task": task,
+    });
+    if let Ok(guard) = state.app_handle.lock() {
+        if let Some(app_handle) = guard.as_ref() {
+            if let Err(err) = app_handle.emit(TASK_CHANGED_EVENT, &payload) {
+                runtime_log_warn(format!(
+                    "[任务] 状态事件推送失败，kind={kind}，task_id={task_id}，error={err:?}"
+                ));
+            }
+        }
+    }
+    ide_chat_broadcast_notification("task.changed", payload);
+}
+
 #[tauri::command]
 fn task_create_task(input: TaskCreateInput, state: State<'_, AppState>) -> Result<TaskEntry, String> {
     task_create_task_inner(input, state.inner())
@@ -614,6 +636,7 @@ fn task_create_task_inner(input: TaskCreateInput, state: &AppState) -> Result<Ta
     let input = task_create_input_for_write(state, &input)?;
     let task = task_store_create_task(&state.data_path, &input)?;
     task_scheduler_notify_changed(state);
+    task_publish_changed_event(state, "created", &task.task_id, Some(&task));
     Ok(task)
 }
 
@@ -644,6 +667,7 @@ fn task_update_task_inner(input: TaskUpdateInput, state: &AppState) -> Result<Ta
     let input = task_update_input_for_write(state, &input)?;
     let task = task_store_update_task(&state.data_path, &input)?;
     task_scheduler_notify_changed(state);
+    task_publish_changed_event(state, "updated", &task.task_id, Some(&task));
     Ok(task)
 }
 
@@ -655,6 +679,7 @@ fn task_complete_task(input: TaskCompleteInput, state: State<'_, AppState>) -> R
 fn task_complete_task_inner(input: TaskCompleteInput, state: &AppState) -> Result<TaskEntry, String> {
     let task = task_store_complete_task(&state.data_path, &input)?;
     task_scheduler_notify_changed(state);
+    task_publish_changed_event(state, "completed", &task.task_id, Some(&task));
     Ok(task)
 }
 
@@ -666,6 +691,7 @@ fn task_delete_task(input: TaskDeleteInput, state: State<'_, AppState>) -> Resul
 fn task_delete_task_inner(input: TaskDeleteInput, state: &AppState) -> Result<(), String> {
     task_store_delete_task(&state.data_path, input.task_id.trim())?;
     task_scheduler_notify_changed(state);
+    task_publish_changed_event(state, "deleted", input.task_id.trim(), None);
     Ok(())
 }
 

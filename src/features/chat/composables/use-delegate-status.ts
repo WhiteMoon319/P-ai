@@ -1,5 +1,5 @@
 import { computed, ref, watch, onMounted, onBeforeUnmount, type Ref } from "vue";
-import { invokeTauri, onTransportNotification, openTransportWindow } from "../../../services/tauri-api";
+import { invokeTauri, onTransportNotification, onTransportRecovered, openTransportWindow } from "../../../services/tauri-api";
 import type { ConversationDelegateStatusSummary } from "../../../types/app";
 
 const ARCHIVE_FOCUS_REQUEST_STORAGE_KEY = "easy_call.archives.focus_request.v1";
@@ -34,6 +34,7 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
   const enabled = () => options.enabled?.value !== false;
 
   let delegateStatusUpdatedUnlisten: (() => void) | null = null;
+  let delegateRecoveredUnlisten: (() => void) | null = null;
   let delegateClockTimer: ReturnType<typeof window.setInterval> | null = null;
   let disposed = false;
   let hydrateRequestSeq = 0;
@@ -169,6 +170,12 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
     );
     if (disposed) unlisten();
     else delegateStatusUpdatedUnlisten = unlisten;
+    // 恢复信号兜底：清幂等守卫强制重水合，补偿断线/后台期间漏掉的状态事件
+    delegateRecoveredUnlisten = onTransportRecovered(() => {
+      if (disposed) return;
+      hydratedConversationId = "";
+      void hydrateStatusesWhenPanelOpens();
+    });
   });
 
   onBeforeUnmount(() => {
@@ -176,6 +183,10 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
     if (delegateStatusUpdatedUnlisten) {
       delegateStatusUpdatedUnlisten();
       delegateStatusUpdatedUnlisten = null;
+    }
+    if (delegateRecoveredUnlisten) {
+      delegateRecoveredUnlisten();
+      delegateRecoveredUnlisten = null;
     }
     if (delegateClockTimer != null) {
       window.clearInterval(delegateClockTimer);

@@ -18,4 +18,9 @@ describe("normalizeChatMonitorPanelMode", () => {
     expect(normalizeChatMonitorPanelMode("tasks")).toBe("tasks");
     expect(normalizeChatMonitorPanelMode("review")).toBe("tools");
   });
+
+  it("migrates removed tabs to overview and falls back to overview", () => {
+    expect(normalizeChatMonitorPanelMode("backgroundShells")).toBe("overview");
+    expect(normalizeChatMonitorPanelMode("unknown")).toBe("overview");
+  });
 });

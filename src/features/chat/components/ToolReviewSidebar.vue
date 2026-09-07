@@ -135,52 +135,14 @@
         active
       />
 
-      <template v-else-if="activeTab === 'backgroundShells'">
-        <div v-if="backgroundShellsErrorText" class="mx-4 my-4 rounded-box border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
-          {{ backgroundShellsErrorText }}
-        </div>
-        <div v-else-if="backgroundShells.length === 0" class="flex min-h-0 flex-1 items-center justify-center px-4 py-8 text-sm text-base-content/65">
-          {{ t("chat.toolReview.backgroundShellsEmpty") }}
-        </div>
-        <div v-else class="min-h-0 flex-1 space-y-2 px-3 py-2">
-          <div
-            v-for="task in backgroundShells"
-            :key="task.id"
-            class="rounded-box border border-base-300 bg-base-100 px-3 py-2"
-          >
-            <div class="flex items-center justify-between gap-2">
-              <div class="flex min-w-0 items-center gap-2">
-                <span
-                  class="badge badge-sm shrink-0"
-                  :class="task.status === 'running' ? 'badge-info' : task.status === 'completed' ? 'badge-success' : 'badge-error'"
-                >
-                  {{ t(`chat.toolReview.backgroundShellStatus.${task.status}`, task.status) }}
-                </span>
-                <span class="min-w-0 truncate text-sm text-base-content" :title="task.description">{{ task.description }}</span>
-              </div>
-              <button
-                v-if="task.status === 'running'"
-                type="button"
-                class="btn btn-ghost btn-xs shrink-0 text-error"
-                :disabled="backgroundShellTerminatingIds.has(task.id)"
-                @click="emit('terminateBackgroundShell', task.id)"
-              >
-                {{ backgroundShellTerminatingIds.has(task.id) ? t("chat.toolReview.backgroundShellTerminating") : t("chat.toolReview.backgroundShellTerminate") }}
-              </button>
-            </div>
-            <div class="mt-1 text-xs text-base-content/60">
-              <div class="truncate" :title="task.command">
-                <span class="font-mono">$</span> {{ task.command }}
-              </div>
-              <div class="mt-0.5 flex flex-wrap gap-x-3">
-                <span>{{ t("chat.toolReview.backgroundShellStartedAt") }}{{ formatConversationListTime(task.startedAt) }}</span>
-                <span v-if="task.exitCode !== null && task.exitCode !== undefined">exitCode={{ task.exitCode }}</span>
-              </div>
-            </div>
-            <pre v-if="task.outputTail.trim()" class="mt-1.5 max-h-40 overflow-auto rounded bg-base-200 px-2 py-1.5 text-xs leading-5 text-base-content/80 whitespace-pre-wrap break-all">{{ task.outputTail }}</pre>
-          </div>
-        </div>
-      </template>
+      <MonitorOverview
+        v-else-if="activeTab === 'overview'"
+        :delegate-statuses="delegateStatuses"
+        :running-tasks="runningTasks"
+        :background-shells="backgroundShells"
+        :current-batch="currentBatch"
+        @switch-panel-tab="(tab) => emit('switchPanelTab', tab)"
+      />
     </div>
     <div
       v-if="activeTab === 'tools' && currentBatch && props.batches.length > 1"
@@ -249,13 +211,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useAttrs, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { invokeTauri } from "../../../services/tauri-api";
+import { invokeTauri, onTransportNotification, onTransportRecovered } from "../../../services/tauri-api";
 import type { ArchiveBlockPage, BackgroundShellTaskSummary, ChatMessage, ConversationDelegateStatusSummary, ShellWorkspace } from "../../../types/app";
 import { toErrorMessage } from "../../../utils/error";
 import { defaultWorkspaceNameFromPath, inferWorkspaceName, isLegacyGenericWorkspaceName, normalizeWorkspaceLevel } from "../../../utils/shell-workspaces";
 import type { ToolReviewBatchSummary, ToolReviewItemDetail, ToolReviewItemSummary, ToolReviewSegment } from "../composables/use-chat-tool-review";
 import { groupSegmentsByFile } from "../composables/tool-review-segments";
-import { formatConversationListTime, formatConversationListTimeWithMinuteDetails } from "../utils/conversation-time";
+import { formatConversationListTimeWithMinuteDetails } from "../utils/conversation-time";
 import { AppMarkdownRenderer, initKatex } from "../markdown";
 import ToolAssessmentCard from "./ToolAssessmentCard.vue";
 import DelegateCard from "./DelegateCard.vue";
@@ -267,11 +229,14 @@ import { resolveShikiLanguage, extensionFromPath } from "../../file-reader/utils
 import TaskListItem from "./TaskListItem.vue";
 import TaskCreateCard from "./dialogs/TaskCreateCard.vue";
 import FastRequestTurnsPanel from "./FastRequestTurnsPanel.vue";
+import MonitorOverview from "./MonitorOverview.vue";
 import type { TaskEntry } from "../../config/views/config-tabs/task-editor";
 
 initKatex();
 
-type ToolReviewSidebarTab = "tools" | "delegates" | "tasks" | "fastRequests" | "backgroundShells";
+type ToolReviewSidebarTab = "overview" | "tools" | "delegates" | "tasks" | "fastRequests";
+
+type MonitorPanelTabKey = "overview" | "delegate" | "tasks" | "tools" | "fastRequests";
 
 const props = defineProps<{
   activeTab: ToolReviewSidebarTab;
@@ -294,7 +259,6 @@ const props = defineProps<{
   delegateStatusesErrorText: string;
   backgroundShells: BackgroundShellTaskSummary[];
   backgroundShellsErrorText: string;
-  backgroundShellTerminatingIds: Set<string>;
   personaAvatarUrlMap: Record<string, string>;
 }>();
 
@@ -305,7 +269,7 @@ const emit = defineEmits<{
   (e: "reviewBatch", batchKey: string): void;
   (e: "openDelegateDetail", status: ConversationDelegateStatusSummary): void;
   (e: "abortDelegate", status: ConversationDelegateStatusSummary): void;
-  (e: "terminateBackgroundShell", taskId: string): void;
+  (e: "switchPanelTab", tab: MonitorPanelTabKey): void;
   (e: "assistantLinkClick", event: MouseEvent): void;
 }>();
 
@@ -380,6 +344,8 @@ const delegateStatusSections = computed<DelegateStatusSection[]>(() => {
 });
 
 const canEditTaskInSidebar = computed(() => true);
+
+const runningTasks = computed(() => taskSections.value.find((section) => section.key === "active")?.items || []);
 const currentConversationTasks = computed(() => {
   const conversationId = String(props.activeConversationId || "").trim();
   if (!conversationId) return [];
@@ -808,18 +774,21 @@ function canShowDelegateResult(delegate: ConversationDelegateStatusSummary) {
   return true;
 }
 
+let unlistenTaskChanged: (() => void) | null = null;
+let unlistenTaskRecovered: (() => void) | null = null;
+
 onMounted(() => {
-  window.addEventListener("easy-call:task-created", handleTaskRefreshEvent);
-  window.addEventListener("easy-call:task-updated", handleTaskRefreshEvent);
-  window.addEventListener("easy-call:task-completed", handleTaskRefreshEvent);
-  window.addEventListener("easy-call:task-deleted", handleTaskRefreshEvent);
+  unlistenTaskChanged = onTransportNotification("task.changed", handleTaskRefreshEvent);
+  unlistenTaskRecovered = onTransportRecovered(() => {
+    void loadConversationTasks();
+  });
 });
 
-// 任务列表懒加载：只有切到 tasks 标签才拉取，避免监控面板挂载时白读全局任务
+// 任务列表懒加载：切到 tasks/overview 标签才拉取（overview 需要运行中任务快照），避免监控面板挂载时白读全局任务
 watch(
   () => props.activeTab,
   (tab) => {
-    if (tab === "tasks") {
+    if (tab === "tasks" || tab === "overview") {
       void loadConversationTasks();
     }
   },
@@ -827,10 +796,10 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  window.removeEventListener("easy-call:task-created", handleTaskRefreshEvent);
-  window.removeEventListener("easy-call:task-updated", handleTaskRefreshEvent);
-  window.removeEventListener("easy-call:task-completed", handleTaskRefreshEvent);
-  window.removeEventListener("easy-call:task-deleted", handleTaskRefreshEvent);
+  unlistenTaskChanged?.();
+  unlistenTaskChanged = null;
+  unlistenTaskRecovered?.();
+  unlistenTaskRecovered = null;
 });
 </script>
 
