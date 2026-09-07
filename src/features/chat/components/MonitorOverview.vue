@@ -23,7 +23,10 @@
         <a>{{ t("chat.toolReview.overviewTasks") }} {{ runningTasks.length }}</a>
         <ul>
           <li v-for="task in runningTasks" :key="task.taskId">
-            <a :title="taskTitle(task)" @click="emit('switchPanelTab', 'tasks')">{{ taskTitle(task) }}</a>
+            <a class="flex flex-col items-start gap-0.5" :title="taskTitle(task)" @click="emit('switchPanelTab', 'tasks')">
+              <span class="block min-w-0 truncate">{{ taskTitle(task) }}</span>
+              <span v-if="taskNextRunText(task)" class="text-xs text-base-content/65">{{ taskNextRunText(task) }}</span>
+            </a>
           </li>
         </ul>
       </li>
@@ -92,36 +95,52 @@ const hasAnyWork = computed(
     runningBackgroundShells.value.length > 0,
 );
 
-// 后台终端快照不随事件逐秒更新，用组件内时钟驱动用时显示；无运行中 shell 时不空转
-const shellClockNowMs = ref(Date.now());
-let shellClockTimer: ReturnType<typeof window.setInterval> | null = null;
+// 后台终端与任务倒计时不逐秒推送，用组件内时钟驱动显示；无倒计面条目时不空转
+const countdownClockNowMs = ref(Date.now());
+let countdownClockTimer: ReturnType<typeof window.setInterval> | null = null;
+
+const hasCountdownWork = computed(
+  () =>
+    runningBackgroundShells.value.length > 0 ||
+    props.runningTasks.some((task) => taskNextRunText(task) !== ""),
+);
 
 watch(
-  () => runningBackgroundShells.value.length > 0,
+  hasCountdownWork,
   (shouldTick) => {
-    if (shouldTick && shellClockTimer == null) {
-      shellClockTimer = window.setInterval(() => {
-        shellClockNowMs.value = Date.now();
+    if (shouldTick && countdownClockTimer == null) {
+      countdownClockTimer = window.setInterval(() => {
+        countdownClockNowMs.value = Date.now();
       }, 1000);
-    } else if (!shouldTick && shellClockTimer != null) {
-      window.clearInterval(shellClockTimer);
-      shellClockTimer = null;
+    } else if (!shouldTick && countdownClockTimer != null) {
+      window.clearInterval(countdownClockTimer);
+      countdownClockTimer = null;
     }
   },
   { immediate: true },
 );
 
 onBeforeUnmount(() => {
-  if (shellClockTimer != null) {
-    window.clearInterval(shellClockTimer);
-    shellClockTimer = null;
+  if (countdownClockTimer != null) {
+    window.clearInterval(countdownClockTimer);
+    countdownClockTimer = null;
   }
 });
 
 function shellElapsedText(startedAt: string) {
   const startedMs = Date.parse(String(startedAt || ""));
   if (!Number.isFinite(startedMs) || startedMs <= 0) return "";
-  return formatDurationMs(shellClockNowMs.value - startedMs);
+  return formatDurationMs(countdownClockNowMs.value - startedMs);
+}
+
+function taskNextRunText(task: TaskEntry) {
+  const targetMs = Date.parse(String(task.trigger?.next_run_at || "").trim());
+  if (!Number.isFinite(targetMs) || targetMs <= 0) return "";
+  const minutes = Math.max(1, Math.floor((targetMs - countdownClockNowMs.value) / 60000));
+  if (minutes < 60) return t("chat.toolReview.overviewNextRunMinutes", { n: minutes });
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return t("chat.toolReview.overviewNextRunHours", { n: hours });
+  return t("chat.toolReview.overviewNextRunDays", { n: Math.floor(hours / 24) });
 }
 
 function formatDurationMs(value: number) {

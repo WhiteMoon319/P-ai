@@ -468,7 +468,9 @@ function makeDemoOverviewTask(index: number): TaskEntry {
     completionState: "active",
     completionConclusion: "",
     progressNotes: [],
-    trigger: {},
+    trigger: index < 3
+      ? { next_run_at: new Date(Date.now() + (index === 0 ? 5 : index === 1 ? 125 : 1490) * 60000).toISOString() }
+      : {},
     createdAtLocal: new Date().toISOString(),
     updatedAtLocal: new Date().toISOString(),
   };
