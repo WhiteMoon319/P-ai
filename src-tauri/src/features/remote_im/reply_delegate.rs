@@ -558,17 +558,12 @@ fn remote_im_reply_delegate_finalize(
         ));
     }
     remote_im_request_24h_maintenance_for_conversation(state.clone(), &runtime.conversation_id);
-    if let Err(err) = emit_conversation_delegate_status_updated(
+    emit_conversation_delegate_status_updated(
         state,
         &runtime.conversation_id,
         &runtime.delegate_id,
         status,
-    ) {
-        runtime_log_warn(format!(
-            "[远程应答委托] 失败，任务=推送终态，delegate_id={}，status={}，error={}",
-            runtime.delegate_id, status, err
-        ));
-    }
+    );
     runtime_log_info(format!(
         "[远程应答委托] 完成，任务=终结，delegate_id={}，status={}，reason={}",
         runtime.delegate_id, status, reason

@@ -143,9 +143,6 @@ struct TerminalBackgroundShellTask {
 
 type TerminalBackgroundShellTaskHandle = std::sync::Arc<TerminalBackgroundShellTask>;
 
-/// 监控面板即时同步事件：终态变化时广播，前端仅在「后台任务」tab 打开时拉取
-const BACKGROUND_SHELL_STATUS_UPDATED_EVENT: &str = "easy-call:background-shell-updated";
-
 /// 输出全部落盘，不做内存缓冲；读取时只取文件尾部。
 fn terminal_background_shell_log_path(id: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("{id}.log"))
@@ -275,11 +272,14 @@ async fn terminal_background_shell_request_kill(
 
 async fn terminal_background_shell_register(state: &AppState, task: TerminalBackgroundShellTaskHandle) {
     let conversation_id = task.conversation_id.clone();
+    let task_id = task.id.clone();
     {
         let mut tasks = state.terminal_background_shell_tasks.lock().await;
         tasks.insert(task.id.clone(), task);
     }
     terminal_background_shell_prune_terminal_records(state, &conversation_id).await;
+    // 登记即发布：运行时写路径统一广播，前端收到后拉快照，监控 bar 计数即时可见
+    monitor_publish_changed(state, MonitorDomain::BackgroundShell, "started", &conversation_id, &task_id);
 }
 
 /// 终态任务保留在登记表供 AI 对账（完成通知可能被压缩或丢失，list 是唯一找回通道）；
@@ -542,23 +542,8 @@ fn terminal_background_shell_writeback(
             err
         ));
     }
-    // 监控面板即时同步：终态变化时向前端广播，前端仅在「后台任务」tab 打开时拉取刷新
-    let payload = serde_json::json!({
-        "conversationId": task.conversation_id,
-        "taskId": task.id,
-        "status": status_label,
-    });
-    ide_chat_broadcast_notification("backgroundShell.updated", payload.clone());
-    if let Ok(guard) = state.app_handle.lock() {
-        if let Some(app_handle) = guard.as_ref() {
-            if let Err(err) = app_handle.emit(BACKGROUND_SHELL_STATUS_UPDATED_EVENT, &payload) {
-                runtime_log_warn(format!(
-                    "[终端后台] 监控事件推送失败，task_id={}，error={:?}",
-                    task.id, err
-                ));
-            }
-        }
-    }
+    // 监控事件由运行时写路径统一发布；LLM 会话通知（带输出尾部）是独立业务语义，保持不变
+    monitor_publish_changed(state, MonitorDomain::BackgroundShell, status_label, &task.conversation_id, &task.id);
 }
 
 async fn terminal_background_shell_finish(

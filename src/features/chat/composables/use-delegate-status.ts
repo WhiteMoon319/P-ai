@@ -10,12 +10,9 @@ interface UseDelegateStatusOptions {
   enabled?: Ref<boolean>;
 }
 
-type DelegateStatusUpdatedPayload = {
-  rootConversationId?: string;
+type MonitorChangedPayload = {
+  domain?: string;
   conversationId?: string;
-  delegateId?: string;
-  status?: string;
-  summary?: ConversationDelegateStatusSummary;
 };
 
 export function useDelegateStatus(options: UseDelegateStatusOptions) {
@@ -33,19 +30,18 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
   const delegateStatusesErrorText = ref("");
   const enabled = () => options.enabled?.value !== false;
 
-  let delegateStatusUpdatedUnlisten: (() => void) | null = null;
+  let monitorChangedUnlisten: (() => void) | null = null;
   let delegateRecoveredUnlisten: (() => void) | null = null;
   let delegateClockTimer: ReturnType<typeof window.setInterval> | null = null;
   let disposed = false;
   let hydrateRequestSeq = 0;
   let hydratedConversationId = "";
 
-  function payloadMatchesActiveConversation(payload: DelegateStatusUpdatedPayload | null | undefined) {
+  function payloadMatchesActiveConversation(payload: MonitorChangedPayload | null | undefined) {
     const activeId = String(activeConversationId.value || "").trim();
     if (!activeId) return false;
-    const rootConversationId = String(payload?.rootConversationId || "").trim();
-    if (rootConversationId) return rootConversationId === activeId;
-    return String(payload?.conversationId || "").trim() === activeId;
+    const payloadConversationId = String(payload?.conversationId || "").trim();
+    return !payloadConversationId || payloadConversationId === activeId;
   }
 
   function clearStatusesWhenConversationChanges() {
@@ -164,12 +160,12 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
   );
 
   onMounted(() => {
-    const unlisten = onTransportNotification<DelegateStatusUpdatedPayload>(
-      "conversation.delegateStatusUpdated",
+    const unlisten = onTransportNotification<MonitorChangedPayload>(
+      "monitor.changed",
       applyStatusEvent,
     );
     if (disposed) unlisten();
-    else delegateStatusUpdatedUnlisten = unlisten;
+    else monitorChangedUnlisten = unlisten;
     // 恢复信号兜底：清幂等守卫强制重水合，补偿断线/后台期间漏掉的状态事件
     delegateRecoveredUnlisten = onTransportRecovered(() => {
       if (disposed) return;
@@ -180,9 +176,9 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
 
   onBeforeUnmount(() => {
     disposed = true;
-    if (delegateStatusUpdatedUnlisten) {
-      delegateStatusUpdatedUnlisten();
-      delegateStatusUpdatedUnlisten = null;
+    if (monitorChangedUnlisten) {
+      monitorChangedUnlisten();
+      monitorChangedUnlisten = null;
     }
     if (delegateRecoveredUnlisten) {
       delegateRecoveredUnlisten();
@@ -194,59 +190,12 @@ export function useDelegateStatus(options: UseDelegateStatusOptions) {
     }
   });
 
-  function applyStatusEvent(payload: DelegateStatusUpdatedPayload | null | undefined) {
+  function applyStatusEvent(payload: MonitorChangedPayload | null | undefined) {
     if (!enabled() || !payloadMatchesActiveConversation(payload)) return;
-    const delegateId = String(payload?.delegateId || "").trim();
-    const status = String(payload?.status || "").trim();
-    const rootConversationId = String(payload?.rootConversationId || payload?.conversationId || "").trim();
-    if (!delegateId || !status || !rootConversationId) return;
-
-    const now = new Date().toISOString();
-    const active = status === "running" || status === "delivered";
-    const eventSummary = payload?.summary;
-    const summary = eventSummary
-      && eventSummary.delegateId === delegateId
-      && eventSummary.rootConversationId === rootConversationId
-      ? {
-          ...eventSummary,
-          status,
-          active,
-          updatedAt: now,
-          completedAt: active ? undefined : eventSummary.completedAt || now,
-        }
-      : null;
-    const index = rawDelegateStatuses.value.findIndex((item) => item.delegateId === delegateId);
-    if (index >= 0) {
-      const current = rawDelegateStatuses.value[index];
-      rawDelegateStatuses.value.splice(index, 1, {
-        ...current,
-        ...summary,
-        status,
-        active,
-        updatedAt: now,
-        completedAt: active ? undefined : current.completedAt || now,
-      });
-    } else {
-      rawDelegateStatuses.value.push(summary || {
-        delegateId,
-        kind: "",
-        conversationId: delegateId,
-        rootConversationId,
-        title: "",
-        status,
-        active,
-        startedAt: now,
-        updatedAt: now,
-        completedAt: active ? undefined : now,
-        elapsedMs: 0,
-        requestCount: 0,
-        toolCallCount: 0,
-        lastToolName: "",
-        tokenCount: 0,
-      });
-    }
-    delegateClockNowMs.value = Date.now();
-    delegateStatusesErrorText.value = "";
+    if (String(payload?.domain || "").trim() !== "delegate") return;
+    // 事件只是脏标记：清幂等守卫后重拉运行时快照，不信任事件内容
+    hydratedConversationId = "";
+    void hydrateStatusesWhenPanelOpens();
   }
 
   return {

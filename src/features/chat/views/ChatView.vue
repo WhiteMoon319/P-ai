@@ -2273,7 +2273,10 @@ async function refreshRunningTaskCount() {
   }
 }
 
-function handleRunningTaskRefreshEvent() {
+type TaskChangedMonitorPayload = { domain?: string };
+
+function handleRunningTaskRefreshEvent(payload: TaskChangedMonitorPayload | null | undefined) {
+  if (String(payload?.domain || "").trim() !== "task") return;
   void refreshRunningTaskCount();
 }
 
@@ -2289,7 +2292,7 @@ let unlistenTaskChanged: (() => void) | null = null;
 let unlistenTaskRecovered: (() => void) | null = null;
 
 onMounted(() => {
-  unlistenTaskChanged = onTransportNotification("task.changed", handleRunningTaskRefreshEvent);
+  unlistenTaskChanged = onTransportNotification("monitor.changed", handleRunningTaskRefreshEvent);
   unlistenTaskRecovered = onTransportRecovered(() => {
     void refreshRunningTaskCount();
   });

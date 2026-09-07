@@ -441,7 +441,7 @@ fn finalize_remote_im_departure_reflection_delegate(
         &delegate.conversation_id,
         &delegate.delegate_id,
         status,
-    )?;
+    );
     runtime_log_info(format!(
         "[群聊离场反思] {}，delegate_id={}，reason={}",
         if status == DELEGATE_STATUS_COMPLETED { "完成" } else { "失败" },

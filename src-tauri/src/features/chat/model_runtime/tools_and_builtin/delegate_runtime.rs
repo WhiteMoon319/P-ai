@@ -369,19 +369,12 @@ async fn delegate_run_thread_to_completion(
                 app_state.clone(),
                 &delegate.conversation_id,
             );
-            if let Err(status_err) = emit_conversation_delegate_status_updated(
+            emit_conversation_delegate_status_updated(
                 &app_state,
                 &delegate.conversation_id,
                 &delegate.delegate_id,
                 DELEGATE_STATUS_FAILED,
-            ) {
-                runtime_log_error(format!(
-                    "[委托状态] 广播失败: 阶段=创建失败, root_conversation_id={}, delegate_id={}, error={}",
-                    delegate.conversation_id,
-                    delegate.delegate_id,
-                    status_err
-                ));
-            }
+            );
             return Err(err);
         }
     };
@@ -463,19 +456,12 @@ async fn delegate_run_thread_to_completion(
                 app_state.clone(),
                 &delegate.conversation_id,
             );
-            if let Err(err) = emit_conversation_delegate_status_updated(
+            emit_conversation_delegate_status_updated(
                 &app_state,
                 &delegate.conversation_id,
                 &delegate.delegate_id,
                 DELEGATE_STATUS_COMPLETED,
-            ) {
-                runtime_log_error(format!(
-                    "[委托状态] 广播失败: 阶段=完成, root_conversation_id={}, delegate_id={}, error={}",
-                    delegate.conversation_id,
-                    delegate.delegate_id,
-                    err
-                ));
-            }
+            );
             if let Err(err) = emit_agent_work_signal(
                 &app_state,
                 AGENT_WORK_EVENT_STOP,
@@ -524,19 +510,12 @@ async fn delegate_run_thread_to_completion(
                 app_state.clone(),
                 &delegate.conversation_id,
             );
-            if let Err(status_err) = emit_conversation_delegate_status_updated(
+            emit_conversation_delegate_status_updated(
                 &app_state,
                 &delegate.conversation_id,
                 &delegate.delegate_id,
                 DELEGATE_STATUS_FAILED,
-            ) {
-                runtime_log_error(format!(
-                    "[委托状态] 广播失败: 阶段=失败, root_conversation_id={}, delegate_id={}, error={}",
-                    delegate.conversation_id,
-                    delegate.delegate_id,
-                    status_err
-                ));
-            }
+            );
             if let Err(stop_err) = emit_agent_work_signal(
                 &app_state,
                 AGENT_WORK_EVENT_STOP,

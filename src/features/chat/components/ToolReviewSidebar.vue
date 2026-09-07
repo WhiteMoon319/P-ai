@@ -753,7 +753,10 @@ function closeTaskEditor() {
   taskEditorTask.value = null;
 }
 
-function handleTaskRefreshEvent() {
+type TaskChangedMonitorPayload = { domain?: string };
+
+function handleTaskRefreshEvent(payload: TaskChangedMonitorPayload | null | undefined) {
+  if (String(payload?.domain || "").trim() !== "task") return;
   void loadConversationTasks();
 }
 
@@ -778,7 +781,7 @@ let unlistenTaskChanged: (() => void) | null = null;
 let unlistenTaskRecovered: (() => void) | null = null;
 
 onMounted(() => {
-  unlistenTaskChanged = onTransportNotification("task.changed", handleTaskRefreshEvent);
+  unlistenTaskChanged = onTransportNotification("monitor.changed", handleTaskRefreshEvent);
   unlistenTaskRecovered = onTransportRecovered(() => {
     void loadConversationTasks();
   });

@@ -3,8 +3,6 @@ fn task_list_tasks(state: State<'_, AppState>) -> Result<Vec<TaskEntry>, String>
     task_list_tasks_inner(state.inner())
 }
 
-const TASK_CHANGED_EVENT: &str = "easy-call:task-changed";
-
 fn task_list_tasks_inner(state: &AppState) -> Result<Vec<TaskEntry>, String> {
     task_store_list_tasks(&state.data_path)
 }
@@ -608,23 +606,11 @@ async fn task_optimize_draft_internal(
 }
 
 fn task_publish_changed_event(state: &AppState, kind: &str, task_id: &str, task: Option<&TaskEntry>) {
-    let conversation_id = task.and_then(|entry| entry.conversation_id.clone());
-    let payload = serde_json::json!({
-        "kind": kind,
-        "taskId": task_id,
-        "conversationId": conversation_id,
-        "task": task,
-    });
-    if let Ok(guard) = state.app_handle.lock() {
-        if let Some(app_handle) = guard.as_ref() {
-            if let Err(err) = app_handle.emit(TASK_CHANGED_EVENT, &payload) {
-                runtime_log_warn(format!(
-                    "[任务] 状态事件推送失败，kind={kind}，task_id={task_id}，error={err:?}"
-                ));
-            }
-        }
-    }
-    ide_chat_broadcast_notification("task.changed", payload);
+    // 业务只更新运行时；事件发布收敛在监控总线，payload 仅脏标记，前端按需拉快照
+    let conversation_id = task
+        .and_then(|entry| entry.conversation_id.clone())
+        .unwrap_or_default();
+    monitor_publish_changed(state, MonitorDomain::Task, kind, &conversation_id, task_id);
 }
 
 #[tauri::command]

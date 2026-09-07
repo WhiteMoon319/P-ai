@@ -8,10 +8,11 @@ interface UseBackgroundShellOptions {
   active: Ref<boolean>;
 }
 
-type BackgroundShellUpdatedPayload = {
+type MonitorChangedPayload = {
+  domain?: string;
+  kind?: string;
   conversationId?: string;
-  taskId?: string;
-  status?: string;
+  entityId?: string;
 };
 
 export function useBackgroundShell(options: UseBackgroundShellOptions) {
@@ -22,11 +23,12 @@ export function useBackgroundShell(options: UseBackgroundShellOptions) {
   let disposed = false;
   let refreshRequestSeq = 0;
 
-  // 事件驱动：仅当「后台任务」tab 打开时收到状态更新事件才拉取一次；平时零请求
-  const unlistenUpdated = onTransportNotification<BackgroundShellUpdatedPayload>(
-    "backgroundShell.updated",
+  // 事件驱动：统一监控事件只是脏标记，确认 domain 与会话匹配后拉取快照；平时零请求
+  const unlistenUpdated = onTransportNotification<MonitorChangedPayload>(
+    "monitor.changed",
     (payload) => {
       if (disposed || !active.value) return;
+      if (String(payload?.domain || "").trim() !== "backgroundShell") return;
       const payloadConversationId = String(payload?.conversationId || "").trim();
       const activeId = String(activeConversationId.value || "").trim();
       if (!activeId || (payloadConversationId && payloadConversationId !== activeId)) return;

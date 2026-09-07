@@ -81,6 +81,7 @@ include!("features/chat/conversation_prompt_service.rs");
 include!("features/chat/conversation_service/mod.rs");
 include!("features/chat/model_runtime.rs");
 include!("features/chat/scheduler.rs");
+include!("features/monitor_events.rs");
 include!("features/remote_im/channel_store.rs");
 include!("features/remote_im/markdown_filter.rs");
 include!("features/remote_im/onebot_v11_ws.rs");
