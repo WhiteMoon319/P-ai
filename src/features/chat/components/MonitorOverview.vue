@@ -5,7 +5,7 @@
         <a>{{ t("chat.toolReview.overviewDelegates") }} {{ runningDelegates.length }}</a>
         <ul>
           <li v-for="delegate in runningDelegates" :key="delegate.delegateId">
-            <a class="flex flex-col gap-0.5" :title="delegate.title || delegate.delegateId" @click="emit('switchPanelTab', 'delegate')">
+            <a class="flex flex-col items-start gap-0.5" :title="delegate.title || delegate.delegateId" @click="emit('switchPanelTab', 'delegate')">
               <span class="block min-w-0 truncate">{{ delegate.title || delegate.delegateId }}</span>
               <DelegateProgressLine
                 class="min-w-0 truncate"
