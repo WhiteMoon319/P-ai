@@ -140,7 +140,7 @@
         :delegate-statuses="delegateStatuses"
         :running-tasks="runningTasks"
         :background-shells="backgroundShells"
-        :current-batch="overviewLatestBatch"
+        :latest-batches="overviewLatestBatches"
         @switch-panel-tab="(tab) => emit('switchPanelTab', tab)"
       />
     </div>
@@ -513,20 +513,30 @@ const currentBatch = computed(() => {
   return props.batches.find((batch) => batch.batchKey === currentKey) || null;
 });
 
-// 概览的「最近更改」锁定时间最新一批，不跟随用户当前浏览位置
-const overviewLatestBatch = computed(() => {
-  let latest: ToolReviewBatchSummary | null = null;
-  let latestMs = NaN;
-  for (const batch of props.batches) {
-    for (const item of batch.items || []) {
-      const ms = Date.parse(String(item.finishedAt || ""));
-      if (Number.isFinite(ms) && (!Number.isFinite(latestMs) || ms > latestMs)) {
-        latestMs = ms;
-        latest = batch;
-      }
-    }
+// 概览的「最近更改」锁定时间最新的最多三批，不跟随用户当前浏览位置
+const OVERVIEW_LATEST_BATCH_LIMIT = 3;
+
+function batchLatestFinishedAtMs(batch: ToolReviewBatchSummary): number {
+  let latest = NaN;
+  for (const item of batch.items || []) {
+    const ms = Date.parse(String(item.finishedAt || ""));
+    if (Number.isFinite(ms) && (!Number.isFinite(latest) || ms > latest)) latest = ms;
   }
-  return latest || props.batches[props.batches.length - 1] || null;
+  return latest;
+}
+
+const overviewLatestBatches = computed<ToolReviewBatchSummary[]>(() => {
+  if (props.batches.length === 0) return [];
+  const sorted = [...props.batches].sort((a, b) => {
+    const aMs = batchLatestFinishedAtMs(a);
+    const bMs = batchLatestFinishedAtMs(b);
+    const aValid = Number.isFinite(aMs);
+    const bValid = Number.isFinite(bMs);
+    if (aValid && bValid && aMs !== bMs) return bMs - aMs;
+    if (aValid !== bValid) return aValid ? -1 : 1;
+    return 0;
+  });
+  return sorted.slice(0, OVERVIEW_LATEST_BATCH_LIMIT);
 });
 
 const previousBatch = computed(() => {

@@ -30,13 +30,13 @@
           </li>
         </ul>
       </li>
-      <li v-if="currentBatch">
-        <a>{{ t("chat.toolReview.overviewLatestChanges") }} {{ currentBatch.itemCount }}</a>
+      <li v-if="latestBatches.length > 0">
+        <a>{{ t("chat.toolReview.overviewLatestChanges") }} {{ latestBatches.length }}</a>
         <ul>
-          <li>
-            <a class="flex flex-col items-start gap-0.5" :title="currentBatch.userMessageText" @click="emit('switchPanelTab', 'tools')">
-              <span class="block min-w-0 truncate">{{ currentBatch.userMessageText }}</span>
-              <span class="text-xs text-base-content/65">{{ batchSummaryText }}</span>
+          <li v-for="batch in latestBatches" :key="batch.batchKey">
+            <a class="flex flex-col items-start gap-0.5" :title="batch.userMessageText" @click="emit('switchPanelTab', 'tools')">
+              <span class="block min-w-0 truncate">{{ batch.userMessageText }}</span>
+              <span class="text-xs text-base-content/65">{{ batchDiffText(batch) }}</span>
             </a>
           </li>
         </ul>
@@ -70,7 +70,7 @@ const props = defineProps<{
   delegateStatuses: ConversationDelegateStatusSummary[];
   runningTasks: TaskEntry[];
   backgroundShells: BackgroundShellTaskSummary[];
-  currentBatch: ToolReviewBatchSummary | null;
+  latestBatches: ToolReviewBatchSummary[];
 }>();
 
 const emit = defineEmits<{
@@ -94,44 +94,29 @@ const hasAnyWork = computed(
   () =>
     runningDelegates.value.length > 0 ||
     props.runningTasks.length > 0 ||
-    props.currentBatch != null ||
+    props.latestBatches.length > 0 ||
     runningBackgroundShells.value.length > 0,
 );
+
+function batchDiffText(batch: ToolReviewBatchSummary) {
+  const files = Number(batch.changedFiles) || 0;
+  const added = Number(batch.addedLines) || 0;
+  const deleted = Number(batch.deletedLines) || 0;
+  if (files <= 0 && added <= 0 && deleted <= 0) return "";
+  const parts = [];
+  if (files > 0) parts.push(t("chat.toolReview.overviewBatchFiles", { n: files }));
+  if (added > 0 || deleted > 0) parts.push(`+${added} -${deleted}`);
+  return parts.join(" · ");
+}
 
 // 后台终端与任务倒计时不逐秒推送，用组件内时钟驱动显示；无倒计面条目时不空转
 const countdownClockNowMs = ref(Date.now());
 let countdownClockTimer: ReturnType<typeof window.setInterval> | null = null;
 
-const batchFinishedAtMs = computed(() => {
-  let latest = NaN;
-  for (const item of props.currentBatch?.items || []) {
-    const ms = Date.parse(String(item.finishedAt || ""));
-    if (Number.isFinite(ms) && (!Number.isFinite(latest) || ms > latest)) latest = ms;
-  }
-  return latest;
-});
-
-const batchSummaryText = computed(() => {
-  const batch = props.currentBatch;
-  if (!batch) return "";
-  const parts = [t("chat.toolReview.overviewBatchItems", { n: batch.itemCount })];
-  const unreviewed = Number(batch.unreviewedCount) || 0;
-  if (unreviewed > 0) parts.push(t("chat.toolReview.overviewBatchUnreviewed", { n: unreviewed }));
-  const finishedMs = batchFinishedAtMs.value;
-  if (Number.isFinite(finishedMs) && finishedMs > 0) {
-    const minutes = Math.max(1, Math.floor((countdownClockNowMs.value - finishedMs) / 60000));
-    if (minutes < 60) parts.push(t("chat.toolReview.overviewAgoMinutes", { n: minutes }));
-    else if (minutes < 60 * 24) parts.push(t("chat.toolReview.overviewAgoHours", { n: Math.floor(minutes / 60) }));
-    else parts.push(t("chat.toolReview.overviewAgoDays", { n: Math.floor(minutes / 1440) }));
-  }
-  return parts.join(" · ");
-});
-
 const hasCountdownWork = computed(
   () =>
     runningBackgroundShells.value.length > 0 ||
-    props.runningTasks.some((task) => taskNextRunText(task) !== "") ||
-    Number.isFinite(batchFinishedAtMs.value),
+    props.runningTasks.some((task) => taskNextRunText(task) !== ""),
 );
 
 watch(

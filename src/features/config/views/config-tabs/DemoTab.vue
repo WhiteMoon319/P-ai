@@ -75,7 +75,7 @@
               :delegate-statuses="demoOverviewDelegates"
               :running-tasks="demoOverviewTasks"
               :background-shells="demoOverviewBackgroundShells"
-              :current-batch="demoOverviewBatch"
+              :latest-batches="demoOverviewBatches"
             />
           </div>
         </div>
@@ -527,32 +527,59 @@ const demoOverviewBackgroundShells = computed<BackgroundShellTaskSummary[]>(() =
   return [makeDemoOverviewShell(0, "ready in 1243 ms\nLocal: http://localhost:1420/")];
 });
 
-const demoOverviewBatch = computed<ToolReviewBatchSummary | null>(() => {
+const demoOverviewBatches = computed<ToolReviewBatchSummary[]>(() => {
   const preset = demoOverviewPreset.value;
-  if (preset === "empty" || preset === "backgroundOnly") return null;
+  if (preset === "empty" || preset === "backgroundOnly") return [];
   if (preset === "busy") {
-    return {
-      batchKey: "demo-batch-busy",
-      userMessageId: "demo-message",
-      userMessageText: "重构监控面板并提取概览组件，同步更新三语言包文案",
-      itemCount: 14,
-      unreviewedCount: 9,
-      items: [
-        { callId: "demo-call-1", toolName: "exec", orderIndex: 1, hasReview: true, finishedAt: new Date(Date.now() - 3 * 60000).toISOString() },
-        { callId: "demo-call-2", toolName: "rg", orderIndex: 2, hasReview: false, finishedAt: new Date(Date.now() - 1 * 60000).toISOString() },
-      ],
-    };
+    return [
+      {
+        batchKey: "demo-batch-busy-1",
+        userMessageId: "demo-message-1",
+        userMessageText: "重构监控面板并提取概览组件，同步更新三语言包文案",
+        itemCount: 14,
+        unreviewedCount: 9,
+        changedFiles: 6,
+        addedLines: 218,
+        deletedLines: 34,
+        items: [],
+      },
+      {
+        batchKey: "demo-batch-busy-2",
+        userMessageId: "demo-message-2",
+        userMessageText: "后台任务页接通 monitor.changed 脏标记事件",
+        itemCount: 7,
+        unreviewedCount: 2,
+        changedFiles: 3,
+        addedLines: 64,
+        deletedLines: 41,
+        items: [],
+      },
+      {
+        batchKey: "demo-batch-busy-3",
+        userMessageId: "demo-message-3",
+        userMessageText: "修复 DeepSeek 协议下思考开关不生效的问题",
+        itemCount: 4,
+        unreviewedCount: 0,
+        changedFiles: 1,
+        addedLines: 12,
+        deletedLines: 9,
+        items: [],
+      },
+    ];
   }
-  return {
-    batchKey: "demo-batch",
-    userMessageId: "demo-message",
-    userMessageText: "修复后台任务页打不开的问题并补充回归测试",
-    itemCount: 8,
-    unreviewedCount: 3,
-    items: [
-      { callId: "demo-call-1", toolName: "exec", orderIndex: 1, hasReview: true, finishedAt: new Date(Date.now() - 26 * 3600000).toISOString() },
-    ],
-  };
+  return [
+    {
+      batchKey: "demo-batch",
+      userMessageId: "demo-message",
+      userMessageText: "修复后台任务页打不开的问题并补充回归测试",
+      itemCount: 8,
+      unreviewedCount: 3,
+      changedFiles: 4,
+      addedLines: 96,
+      deletedLines: 12,
+      items: [],
+    },
+  ];
 });
 const demoQuestionPreset = ref<"single" | "singleLong" | "multi" | "ten" | "custom">("single");
 const demoWithWorkspace = ref(true);

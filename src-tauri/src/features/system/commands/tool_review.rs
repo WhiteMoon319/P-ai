@@ -378,6 +378,10 @@ struct ToolReviewItemSummary {
     command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     finished_at: Option<String>,
+    #[serde(default)]
+    added_lines: usize,
+    #[serde(default)]
+    deleted_lines: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -412,6 +416,9 @@ struct ToolReviewBatchSummary {
     user_message_text: String,
     item_count: usize,
     unreviewed_count: usize,
+    changed_files: usize,
+    added_lines: usize,
+    deleted_lines: usize,
     items: Vec<ToolReviewItemSummary>,
 }
 
@@ -1111,20 +1118,23 @@ fn tool_review_find_batch_by_index(
 }
 
 fn tool_review_batch_summary_from_collected(batch: &ToolReviewCollectedBatch) -> ToolReviewBatchSummary {
-    ToolReviewBatchSummary {
-        batch_key: batch.batch_key.clone(),
-        user_message_id: batch.user_message_id.clone(),
-        user_message_text: batch.user_message_text.clone(),
-        item_count: batch.items.len(),
-        unreviewed_count: batch
-            .items
-            .iter()
-            .filter(|item| item.review_value.is_none())
-            .count(),
-        items: batch
-            .items
-            .iter()
-            .map(|item| ToolReviewItemSummary {
+    let mut added_lines_total = 0usize;
+    let mut deleted_lines_total = 0usize;
+    let mut changed_paths = std::collections::BTreeSet::<String>::new();
+    let items = batch
+        .items
+        .iter()
+        .map(|item| {
+            let affected_paths = if matches!(item.tool_name.as_str(), "apply_patch" | "write" | "delete" | "update" | "move") {
+                tool_review_patch_paths_for_item(item)
+            } else {
+                Vec::new()
+            };
+            let (added_lines, deleted_lines) = tool_review_diff_stats_for_item(item);
+            added_lines_total += added_lines;
+            deleted_lines_total += deleted_lines;
+            changed_paths.extend(affected_paths.iter().cloned());
+            ToolReviewItemSummary {
                 call_id: item.call_id.clone(),
                 tool_name: item.tool_name.clone(),
                 order_index: item.order_index,
@@ -1135,11 +1145,7 @@ fn tool_review_batch_summary_from_collected(batch: &ToolReviewCollectedBatch) ->
                     .and_then(tool_review_value_to_stored_review)
                     .map(|review| review.review_opinion)
                     .filter(|value| !value.trim().is_empty()),
-                affected_paths: if matches!(item.tool_name.as_str(), "apply_patch" | "write" | "delete" | "update" | "move") {
-                    tool_review_patch_paths_for_item(item)
-                } else {
-                    Vec::new()
-                },
+                affected_paths,
                 patch_operation: if matches!(item.tool_name.as_str(), "apply_patch" | "write" | "delete" | "update" | "move") {
                     tool_review_patch_operation_for_item(item)
                 } else {
@@ -1151,8 +1157,81 @@ fn tool_review_batch_summary_from_collected(batch: &ToolReviewCollectedBatch) ->
                     None
                 },
                 finished_at: item.finished_at.clone(),
-            })
-            .collect(),
+                added_lines,
+                deleted_lines,
+            }
+        })
+        .collect();
+    ToolReviewBatchSummary {
+        batch_key: batch.batch_key.clone(),
+        user_message_id: batch.user_message_id.clone(),
+        user_message_text: batch.user_message_text.clone(),
+        item_count: batch.items.len(),
+        unreviewed_count: batch
+            .items
+            .iter()
+            .filter(|item| item.review_value.is_none())
+            .count(),
+        changed_files: changed_paths.len(),
+        added_lines: added_lines_total,
+        deleted_lines: deleted_lines_total,
+        items,
+    }
+}
+
+fn tool_review_diff_stats_for_item(item: &ToolReviewCollectedItem) -> (usize, usize) {
+    if !matches!(item.tool_name.as_str(), "apply_patch" | "write" | "delete" | "update" | "move") {
+        return (0, 0);
+    }
+    let (_, preview_text) = tool_review_preview_for_item(item);
+    tool_review_diff_line_counts_from_text(&preview_text)
+}
+
+fn tool_review_diff_line_counts_from_text(text: &str) -> (usize, usize) {
+    let mut added = 0usize;
+    let mut deleted = 0usize;
+    for line in text.lines() {
+        // 跳过补丁段头、git hunk 头与 unified diff 文件头，只统计正负内容行
+        if line.starts_with("***") || line.starts_with("@@") || line.starts_with("+++") || line.starts_with("---") {
+            continue;
+        }
+        if line.starts_with('+') {
+            added += 1;
+        } else if line.starts_with('-') {
+            deleted += 1;
+        }
+    }
+    (added, deleted)
+}
+
+#[cfg(test)]
+mod tool_review_diff_tests {
+    use super::*;
+
+    #[test]
+    fn diff_line_counts_skip_headers_and_count_content() {
+        let text = "*** Begin Patch\n*** Add File: src/a.rs\n+fn a() {}\n+fn b() {}\n*** Update File: src/b.rs\n@@ -1,2 +1,2 @@\n-old line\n+new line\n context\n--- not a diff header content\n+++ also content\n*** End Patch";
+        let (added, deleted) = tool_review_diff_line_counts_from_text(text);
+        // "+++"/"---" 开头的内容行按 unified diff 规则视为文件头跳过；此处仅验证段头/hunk 头不计数
+        assert_eq!((added, deleted), (3, 1), "added={added} deleted={deleted}");
+    }
+
+    #[test]
+    fn diff_line_counts_ignore_non_patch_tools_text() {
+        let item = ToolReviewCollectedItem {
+            batch_key: "b".to_string(),
+            call_id: "c".to_string(),
+            message_id: "m".to_string(),
+            finished_at: None,
+            tool_name: "shell_exec".to_string(),
+            order_index: 0,
+            args_value: serde_json::json!({}),
+            args_text: String::new(),
+            result_text: String::new(),
+            result_value: None,
+            review_value: None,
+        };
+        assert_eq!(tool_review_diff_stats_for_item(&item), (0, 0));
     }
 }
 

@@ -19,6 +19,8 @@ export type ToolReviewItemSummary = {
   patchOperation?: "add" | "update" | "delete" | "mixed" | string;
   command?: string;
   finishedAt?: string;
+  addedLines?: number;
+  deletedLines?: number;
 };
 
 export type ToolReviewReportRecord = {
@@ -60,6 +62,9 @@ export type ToolReviewBatchSummary = {
   userMessageText: string;
   itemCount: number;
   unreviewedCount: number;
+  changedFiles?: number;
+  addedLines?: number;
+  deletedLines?: number;
   items: ToolReviewItemSummary[];
 };
 
