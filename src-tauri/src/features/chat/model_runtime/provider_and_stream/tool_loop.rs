@@ -405,8 +405,7 @@ async fn run_genai_tool_loop(
         model_name,
         request_api_key,
         service_target,
-    tool_abort_state,
-    );
+    )?;
     let options = build_provider_genai_chat_options(
         &api_config,
         adapter_kind,
@@ -1072,8 +1071,7 @@ async fn run_genai_tool_loop_non_stream(
         model_name,
         request_api_key,
         service_target,
-    tool_abort_state,
-    );
+    )?;
     let options = build_provider_genai_chat_options(
         &api_config,
         adapter_kind,

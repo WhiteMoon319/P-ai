@@ -891,8 +891,7 @@ async fn invoke_quick_model_reply_with_prepared_prompt(
             &model_name,
             request_api_key,
             service_target,
-            Some(state),
-        );
+        )?;
         let mut stream = client
             .exec_chat_stream(model_spec, request, Some(&options))
             .await

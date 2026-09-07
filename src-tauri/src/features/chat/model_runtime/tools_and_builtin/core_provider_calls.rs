@@ -657,8 +657,7 @@ fn build_provider_genai_client_and_model_spec_from_target(
     model_name: &str,
     request_api_key: String,
     service_target: genai::ServiceTarget,
-    app_state: Option<&AppState>,
-) -> (genai::Client, genai::ModelSpec) {
+) -> Result<(genai::Client, genai::ModelSpec), String> {
     let adapter_kind = (api_config.request_format.is_genai_chat()
         || api_config.request_format.is_auto())
         .then(|| resolve_provider_genai_adapter_kind(
@@ -675,23 +674,19 @@ fn build_provider_genai_client_and_model_spec_from_target(
             auth: genai::resolver::AuthData::from_single(request_api_key),
             model: genai::ModelIden::new(adapter_kind, model_name.to_string()),
         };
-        (
-            {
-            let mut b = genai::Client::builder().with_adapter_kind(adapter_kind);
-            if let Some(s) = app_state { b = b.with_reqwest(s.shared_http_client.clone()); }
-            b.build()
-        },
+        let client = genai::Client::builder()
+            .with_adapter_kind(adapter_kind)
+            .build()
+            .map_err(|err| format!("构建 genai 客户端失败: {err}"))?;
+        Ok((
+            client,
             genai::ModelSpec::from_target(target),
-        )
+        ))
     } else {
-        (
-            {
-            let mut b = genai::Client::builder();
-            if let Some(s) = app_state { b = b.with_reqwest(s.shared_http_client.clone()); }
-            b.build()
-        },
-            genai::ModelSpec::from_target(service_target),
-        )
+        let client = genai::Client::builder()
+            .build()
+            .map_err(|err| format!("构建 genai 客户端失败: {err}"))?;
+        Ok((client, genai::ModelSpec::from_target(service_target)))
     }
 }
 
@@ -843,8 +838,7 @@ async fn call_model_genai_stream_internal(
         model_name,
         request_api_key,
         service_target,
-    app_state,
-    );
+    )?;
     let mut stream = client
         .exec_chat_stream(model_spec, request, Some(&options))
         .await
@@ -955,8 +949,7 @@ async fn call_model_genai_non_stream_with_definitions(
         model_name,
         request_api_key,
         service_target,
-    app_state,
-    );
+    )?;
     let response = client
         .exec_chat(model_spec, request, Some(&options))
         .await
@@ -1024,8 +1017,7 @@ async fn call_model_openai_responses(
         model_name,
         request_api_key,
         service_target,
-    app_state,
-    );
+    )?;
     let mut stream = client
         .exec_chat_stream(model_spec, request, Some(&options))
         .await
@@ -1072,8 +1064,7 @@ async fn call_model_gemini(
         model_name,
         request_api_key,
         service_target,
-    app_state,
-    );
+    )?;
     let response = client
         .exec_chat(model_spec, request, Some(&options))
         .await
@@ -1138,8 +1129,7 @@ async fn call_model_anthropic(
         model_name,
         request_api_key,
         service_target,
-    app_state,
-    );
+    )?;
     let mut stream = client
         .exec_chat_stream(model_spec, request, Some(&options))
         .await

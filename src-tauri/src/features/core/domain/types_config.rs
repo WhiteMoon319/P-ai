@@ -1254,7 +1254,9 @@ fn default_codex_context_window_tokens() -> u32 {
 
 fn codex_context_window_tokens_for_model(model_id: &str) -> u32 {
     match model_id.trim().to_ascii_lowercase().as_str() {
-        "gpt-5.6-sol"
+        // gpt-6 系按 gpt-5 系同级处理
+        "gpt-6-astra"
+        | "gpt-5.6-sol"
         | "gpt-5.6-terra"
         | "gpt-5.6-luna"
         | "gpt-5.5"
@@ -1562,6 +1564,7 @@ mod codex_context_window_tests {
     #[test]
     fn codex_context_window_should_use_256k_except_for_128k_spark() {
         for model in [
+            "gpt-6-astra",
             "gpt-5.6-sol",
             "gpt-5.6-terra",
             "gpt-5.6-luna",
