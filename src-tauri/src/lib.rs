@@ -1620,6 +1620,8 @@ pub fn run() {
             goal_create_goal,
             goal_cancel_goal,
             resolve_terminal_approval,
+            list_conversation_background_shell_tasks,
+            terminate_conversation_background_shell_task,
             list_pending_terminal_approvals,
             approve_terminal_approval_for_session,
             approve_terminal_approval_for_workspace,

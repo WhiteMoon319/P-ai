@@ -2143,6 +2143,18 @@
       "toolsTab": "Tools",
       "delegatesTab": "Delegates",
       "tasksTab": "Tasks",
+      "backgroundShellsTab": "Background",
+      "backgroundShellsEmpty": "No background tasks in this conversation",
+      "backgroundShellTerminate": "Terminate",
+      "backgroundShellTerminating": "Terminating…",
+      "backgroundShellStartedAt": "Started ",
+      "backgroundShellStatus": {
+        "running": "Running",
+        "completed": "Completed",
+        "failed": "Failed",
+        "killed": "Terminated",
+        "timed_out": "Timed out"
+      },
       "delegateEmpty": "No delegates in this conversation",
       "taskEmpty": "No tasks in this conversation",
       "departmentLabel": "Review department",

@@ -1149,6 +1149,20 @@ export type ConversationDelegateStatusSummary = {
   targetAgentId?: string;
 };
 
+export type BackgroundShellTaskSummary = {
+  id: string;
+  kind: string;
+  status: string;
+  exitCode: number | null;
+  description: string;
+  command: string;
+  cwd: string;
+  startedAt: string;
+  timeoutMs: number | null;
+  log: string;
+  outputTail: string;
+};
+
 export type ScheduleEvent = {
   id: string;
   runId: string;

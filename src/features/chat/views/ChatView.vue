@@ -687,6 +687,10 @@
             :department-options="toolReviewDepartmentOptions"
             :delegate-statuses="delegateStatuses"
             :delegate-statuses-error-text="delegateStatusesErrorText"
+            :background-shells="backgroundShells"
+            :background-shells-error-text="backgroundShellsErrorText"
+            :background-shell-terminating-ids="backgroundShellTerminatingIds"
+            @terminate-background-shell="terminateBackgroundShell"
             :persona-avatar-url-map="personaAvatarUrlMap"
             @select-batch="setToolReviewCurrentBatchKey" @load-item-detail="loadToolReviewItemDetail"
             @review-item="runToolReviewForCall" @review-batch="runToolReviewForBatch"
@@ -711,7 +715,7 @@ import {
   useChatComposerAppearance,
   visibleChatComposerContextGroups,
 } from "../../shell/composables/use-chat-composer-appearance";
-import { ArrowDownToLine, Check, CircleAlert, Copy, GanttChart, History, Inbox, ListTodo, Network, Trash2, Undo2, Wrench, X } from "@lucide/vue";
+import { ArrowDownToLine, Check, CircleAlert, Copy, GanttChart, History, Inbox, ListTodo, Network, SquareTerminal, Trash2, Undo2, Wrench, X } from "@lucide/vue";
 import {
   copyTransportChatImageToClipboard,
   getTransportHostContext,
@@ -760,6 +764,7 @@ import { type ChatRenderItem, isRightAlignedMessage, canOpenInFileReader, fileEx
 import { clearFileReaderContextCandidates } from "../utils/file-reader-context-tags";
 import { useIdeContext } from "../composables/use-ide-context";
 import { useDelegateStatus } from "../composables/use-delegate-status";
+import { useBackgroundShell } from "../composables/use-background-shell";
 import { useRemoteImContactDashboard } from "../composables/use-remote-im-contact-dashboard";
 import { useChatVirtualList } from "../composables/use-chat-virtual-list";
 import { Virtualizer } from "virtua/vue";
@@ -922,19 +927,21 @@ const commitTotal = ref(0);
 const commitPage = ref(1);
 const commitPageSize = ref(5);
 
-type ToolReviewSidebarTab = "tools" | "delegates" | "tasks" | "fastRequests";
+type ToolReviewSidebarTab = "tools" | "delegates" | "tasks" | "fastRequests" | "backgroundShells";
 
 const monitorPanelTabs = computed<Array<{ key: ChatMonitorPanelMode; label: string; icon: typeof Network; closeable: false }>>(() => [
   { key: "delegate", label: t("chat.toolReview.delegatesTab"), icon: Network, closeable: false },
   { key: "tasks", label: t("chat.toolReview.tasksTab"), icon: ListTodo, closeable: false },
   { key: "tools", label: t("chat.toolReview.toolsTab"), icon: Wrench, closeable: false },
   { key: "fastRequests", label: t("chat.fastRequest.tab"), icon: Inbox, closeable: false },
+  { key: "backgroundShells", label: t("chat.toolReview.backgroundShellsTab"), icon: SquareTerminal, closeable: false },
 ]);
 
 const toolReviewSidebarActiveTab = computed<ToolReviewSidebarTab>(() => {
   if (props.chatMonitorPanelMode === "tools") return "tools";
   if (props.chatMonitorPanelMode === "fastRequests") return "fastRequests";
   if (props.chatMonitorPanelMode === "tasks") return "tasks";
+  if (props.chatMonitorPanelMode === "backgroundShells") return "backgroundShells";
   return "delegates";
 });
 // ==================== messages / audio ====================
@@ -2219,6 +2226,18 @@ const {
   // 委托状态：打开会话即拉取（工作区 bar 常驻展示活跃委托，不依赖监控面板 delegate tab）
   panelOpen: computed(() => !!String(props.activeConversationId || "").trim()),
   enabled: computed(() => true),
+});
+
+// ==================== background shell status ====================
+
+const {
+  backgroundShells, backgroundShellsErrorText,
+  terminatingIds: backgroundShellTerminatingIds,
+  terminateBackgroundShell,
+} = useBackgroundShell({
+  activeConversationId: toRef(props, "activeConversationId"),
+  // 后台任务：仅在监控页后台 tab 激活时拉取与刷新
+  active: computed(() => props.chatMonitorPanelMode === "backgroundShells"),
 });
 
 // ==================== panes ====================

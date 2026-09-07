@@ -134,6 +134,53 @@
         :conversation-id="activeConversationId"
         active
       />
+
+      <template v-else-if="activeTab === 'backgroundShells'">
+        <div v-if="backgroundShellsErrorText" class="mx-4 my-4 rounded-box border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
+          {{ backgroundShellsErrorText }}
+        </div>
+        <div v-else-if="backgroundShells.length === 0" class="flex min-h-0 flex-1 items-center justify-center px-4 py-8 text-sm text-base-content/65">
+          {{ t("chat.toolReview.backgroundShellsEmpty") }}
+        </div>
+        <div v-else class="min-h-0 flex-1 space-y-2 px-3 py-2">
+          <div
+            v-for="task in backgroundShells"
+            :key="task.id"
+            class="rounded-box border border-base-300 bg-base-100 px-3 py-2"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex min-w-0 items-center gap-2">
+                <span
+                  class="badge badge-sm shrink-0"
+                  :class="task.status === 'running' ? 'badge-info' : task.status === 'completed' ? 'badge-success' : 'badge-error'"
+                >
+                  {{ t(`chat.toolReview.backgroundShellStatus.${task.status}`, task.status) }}
+                </span>
+                <span class="min-w-0 truncate text-sm text-base-content" :title="task.description">{{ task.description }}</span>
+              </div>
+              <button
+                v-if="task.status === 'running'"
+                type="button"
+                class="btn btn-ghost btn-xs shrink-0 text-error"
+                :disabled="backgroundShellTerminatingIds.has(task.id)"
+                @click="emit('terminateBackgroundShell', task.id)"
+              >
+                {{ backgroundShellTerminatingIds.has(task.id) ? t("chat.toolReview.backgroundShellTerminating") : t("chat.toolReview.backgroundShellTerminate") }}
+              </button>
+            </div>
+            <div class="mt-1 text-xs text-base-content/60">
+              <div class="truncate" :title="task.command">
+                <span class="font-mono">$</span> {{ task.command }}
+              </div>
+              <div class="mt-0.5 flex flex-wrap gap-x-3">
+                <span>{{ t("chat.toolReview.backgroundShellStartedAt") }}{{ formatConversationListTime(task.startedAt) }}</span>
+                <span v-if="task.exitCode !== null && task.exitCode !== undefined">exitCode={{ task.exitCode }}</span>
+              </div>
+            </div>
+            <pre v-if="task.outputTail.trim()" class="mt-1.5 max-h-40 overflow-auto rounded bg-base-200 px-2 py-1.5 text-xs leading-5 text-base-content/80 whitespace-pre-wrap break-all">{{ task.outputTail }}</pre>
+          </div>
+        </div>
+      </template>
     </div>
     <div
       v-if="activeTab === 'tools' && currentBatch && props.batches.length > 1"
@@ -203,7 +250,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useAttrs, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { invokeTauri } from "../../../services/tauri-api";
-import type { ArchiveBlockPage, ChatMessage, ConversationDelegateStatusSummary, ShellWorkspace } from "../../../types/app";
+import type { ArchiveBlockPage, BackgroundShellTaskSummary, ChatMessage, ConversationDelegateStatusSummary, ShellWorkspace } from "../../../types/app";
 import { toErrorMessage } from "../../../utils/error";
 import { defaultWorkspaceNameFromPath, inferWorkspaceName, isLegacyGenericWorkspaceName, normalizeWorkspaceLevel } from "../../../utils/shell-workspaces";
 import type { ToolReviewBatchSummary, ToolReviewItemDetail, ToolReviewItemSummary, ToolReviewSegment } from "../composables/use-chat-tool-review";
@@ -224,7 +271,7 @@ import type { TaskEntry } from "../../config/views/config-tabs/task-editor";
 
 initKatex();
 
-type ToolReviewSidebarTab = "tools" | "delegates" | "tasks" | "fastRequests";
+type ToolReviewSidebarTab = "tools" | "delegates" | "tasks" | "fastRequests" | "backgroundShells";
 
 const props = defineProps<{
   activeTab: ToolReviewSidebarTab;
@@ -245,6 +292,9 @@ const props = defineProps<{
   departmentOptions: Array<{ id: string; name: string; ownerName: string; providerName?: string; modelName?: string }>;
   delegateStatuses: ConversationDelegateStatusSummary[];
   delegateStatusesErrorText: string;
+  backgroundShells: BackgroundShellTaskSummary[];
+  backgroundShellsErrorText: string;
+  backgroundShellTerminatingIds: Set<string>;
   personaAvatarUrlMap: Record<string, string>;
 }>();
 
@@ -255,6 +305,7 @@ const emit = defineEmits<{
   (e: "reviewBatch", batchKey: string): void;
   (e: "openDelegateDetail", status: ConversationDelegateStatusSummary): void;
   (e: "abortDelegate", status: ConversationDelegateStatusSummary): void;
+  (e: "terminateBackgroundShell", taskId: string): void;
   (e: "assistantLinkClick", event: MouseEvent): void;
 }>();
 

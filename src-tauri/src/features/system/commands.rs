@@ -5,8 +5,11 @@ include!("commands/config_and_persona.rs");
 // ==================== 工具审查命令 ====================
 include!("commands/tool_review.rs");
 
-// ==================== 远程前端模式通知命令 ====================
+// ==================== Android Live Updates 通知命令 ====================
 include!("commands/remote_live_update.rs");
+
+// ==================== 后台 shell 监控命令 ====================
+include!("commands/background_shell.rs");
 
 // ==================== Codex OAuth 命令 ====================
 include!("commands/codex_auth.rs");

@@ -72,55 +72,19 @@ async fn background_shell_kill_inner(
     task_id: &str,
 ) -> Result<Value, String> {
     let conversation_id = background_tool_conversation_id(session_id)?;
-    let maybe_task = terminal_background_shell_find(state, &conversation_id, task_id).await;
-    let Some(task) = maybe_task else {
-        return Err(format!("background id not found: {}", task_id.trim()));
-    };
-    let current_status = *task
-        .status
-        .lock()
-        .expect("terminal background status poisoned");
-    if terminal_background_shell_is_terminal(current_status) {
-        return Ok(serde_json::json!({
-            "ok": true,
-            "action": "kill",
-            "kind": "shell",
-            "conversationId": conversation_id,
-            "id": task.id,
-            "killed": false,
-            "alreadyTerminal": true,
-            "status": format!("{:?}", current_status),
-        }));
-    }
-    task.kill_requested.store(true, std::sync::atomic::Ordering::Relaxed);
-    let _ = task.kill_signal_tx.send(true);
-    // 等待 monitor 确认终态（含写回与出登记表）；确认失败时只报告请求已受理。
-    let mut confirmed = false;
-    for _ in 0..100 {
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-        let status = *task
-            .status
-            .lock()
-            .expect("terminal background status poisoned");
-        if terminal_background_shell_is_terminal(status) {
-            confirmed = true;
-            break;
-        }
-    }
-    let current_status = *task
-        .status
-        .lock()
-        .expect("terminal background status poisoned");
+    let (killed, confirmed, status, log) =
+        terminal_background_shell_request_kill(state, &conversation_id, task_id.trim()).await?;
     Ok(serde_json::json!({
         "ok": true,
         "action": "kill",
         "kind": "shell",
         "conversationId": conversation_id,
-        "id": task.id,
-        "killed": true,
+        "id": task_id.trim(),
+        "killed": killed,
         "confirmed": confirmed,
-        "status": format!("{:?}", current_status),
-        "log": terminal_path_for_user(&task.log_path),
+        "alreadyTerminal": !killed,
+        "status": status,
+        "log": log,
     }))
 }
 

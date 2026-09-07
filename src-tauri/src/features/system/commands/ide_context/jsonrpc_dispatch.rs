@@ -281,6 +281,8 @@ async fn ide_chat_handle_jsonrpc_request(
         })(),
         "delegate.statuses" => ide_chat_delegate_statuses(state, request.params),
         "delegate.abort" => ide_chat_delegate_abort(state, request.params),
+        "backgroundShell.list" => ide_chat_background_shell_list_command(state, request.params).await,
+        "backgroundShell.terminate" => ide_chat_background_shell_terminate_command(state, request.params).await,
         "delegate.blockPage" => ide_chat_delegate_block_page(state, request.params),
         "delegate.submit" => ide_chat_submit_delegate(state, request.params).await,
         "delegate.delete" => ide_chat_delete_delegate_command(state, request.params),

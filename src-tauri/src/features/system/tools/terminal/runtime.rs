@@ -143,6 +143,9 @@ struct TerminalBackgroundShellTask {
 
 type TerminalBackgroundShellTaskHandle = std::sync::Arc<TerminalBackgroundShellTask>;
 
+/// 监控面板即时同步事件：终态变化时广播，前端仅在「后台任务」tab 打开时拉取
+const BACKGROUND_SHELL_STATUS_UPDATED_EVENT: &str = "easy-call:background-shell-updated";
+
 /// 输出全部落盘，不做内存缓冲；读取时只取文件尾部。
 fn terminal_background_shell_log_path(id: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("{id}.log"))
@@ -200,6 +203,74 @@ fn terminal_background_shell_status_text(task: &TerminalBackgroundShellTask) -> 
         terminal_path_for_user(&task.log_path),
         terminal_background_shell_log_tail(&task.log_path, 600),
     )
+}
+
+// ==================== 监控面板摘要与终止（Tauri command / builtin 共用） ====================
+
+/// 监控面板用任务摘要：在 builtin list 字段之上追加 outputTail，供前端直接展示运行进展。
+async fn terminal_background_shell_monitor_summaries(
+    state: &AppState,
+    conversation_id: &str,
+) -> Vec<Value> {
+    let handles = {
+        let tasks = state.terminal_background_shell_tasks.lock().await;
+        tasks.values().cloned().collect::<Vec<_>>()
+    };
+    let mut out = Vec::<Value>::new();
+    for task in handles {
+        if task.conversation_id.trim() != conversation_id.trim() {
+            continue;
+        }
+        let status = *task.status.lock().expect("terminal background status poisoned");
+        let exit_code = *task.exit_code.lock().expect("terminal background exit code poisoned");
+        out.push(serde_json::json!({
+            "id": task.id,
+            "kind": "shell",
+            "status": terminal_background_shell_status_label(status),
+            "exitCode": exit_code,
+            "description": terminal_background_shell_display_description(&task),
+            "command": task.command,
+            "cwd": task.cwd,
+            "startedAt": task.started_at,
+            "timeoutMs": task.timeout_ms,
+            "log": terminal_path_for_user(&task.log_path),
+            "outputTail": terminal_background_shell_log_tail(&task.log_path, 800),
+        }));
+    }
+    out
+}
+
+/// 请求终止后台任务：kill 信号 + 等待 monitor 确认终态；重复终止或已终态时幂等返回。
+/// 返回 (killed, confirmed, status_label, log_path)。
+async fn terminal_background_shell_request_kill(
+    state: &AppState,
+    conversation_id: &str,
+    task_id: &str,
+) -> Result<(bool, bool, String, String), String> {
+    let maybe_task = terminal_background_shell_find(state, conversation_id, task_id).await;
+    let Some(task) = maybe_task else {
+        return Err(format!("background id not found: {task_id}"));
+    };
+    let current_status = *task.status.lock().expect("terminal background status poisoned");
+    let log_path = terminal_path_for_user(&task.log_path);
+    if terminal_background_shell_is_terminal(current_status) {
+        let label = terminal_background_shell_status_label(current_status).to_string();
+        return Ok((false, true, label, log_path));
+    }
+    task.kill_requested.store(true, std::sync::atomic::Ordering::Relaxed);
+    let _ = task.kill_signal_tx.send(true);
+    // 等待 monitor 确认终态（含写回与登记表清理）；确认失败时只报告请求已受理。
+    let mut confirmed = false;
+    for _ in 0..100 {
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        let status = *task.status.lock().expect("terminal background status poisoned");
+        if terminal_background_shell_is_terminal(status) {
+            confirmed = true;
+            break;
+        }
+    }
+    let final_status = *task.status.lock().expect("terminal background status poisoned");
+    Ok((true, confirmed, terminal_background_shell_status_label(final_status).to_string(), log_path))
 }
 
 async fn terminal_background_shell_register(state: &AppState, task: TerminalBackgroundShellTaskHandle) {
@@ -470,6 +541,23 @@ fn terminal_background_shell_writeback(
             status_label,
             err
         ));
+    }
+    // 监控面板即时同步：终态变化时向前端广播，前端仅在「后台任务」tab 打开时拉取刷新
+    let payload = serde_json::json!({
+        "conversationId": task.conversation_id,
+        "taskId": task.id,
+        "status": status_label,
+    });
+    ide_chat_broadcast_notification("backgroundShell.updated", payload.clone());
+    if let Ok(guard) = state.app_handle.lock() {
+        if let Some(app_handle) = guard.as_ref() {
+            if let Err(err) = app_handle.emit(BACKGROUND_SHELL_STATUS_UPDATED_EVENT, &payload) {
+                runtime_log_warn(format!(
+                    "[终端后台] 监控事件推送失败，task_id={}，error={:?}",
+                    task.id, err
+                ));
+            }
+        }
     }
 }
 

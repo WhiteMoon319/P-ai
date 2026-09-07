@@ -2129,6 +2129,18 @@
       "toolsTab": "工具",
       "delegatesTab": "委託",
       "tasksTab": "任務",
+      "backgroundShellsTab": "背景任務",
+      "backgroundShellsEmpty": "目前會話暫無背景任務",
+      "backgroundShellTerminate": "終止",
+      "backgroundShellTerminating": "終止中…",
+      "backgroundShellStartedAt": "開始於 ",
+      "backgroundShellStatus": {
+        "running": "執行中",
+        "completed": "已完成",
+        "failed": "失敗",
+        "killed": "已終止",
+        "timed_out": "已逾時"
+      },
       "delegateEmpty": "目前會話暫無委託",
       "taskEmpty": "目前會話暫無任務",
       "departmentLabel": "審查部門",
