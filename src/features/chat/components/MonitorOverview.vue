@@ -1,52 +1,52 @@
 <template>
   <div class="flex min-h-0 flex-1 flex-col">
     <ul v-if="hasAnyWork" class="menu bg-base-200 w-full">
-        <li v-if="runningDelegates.length > 0">
-          <a>{{ t("chat.toolReview.overviewDelegates") }} {{ runningDelegates.length }}</a>
-          <ul>
-            <li v-for="delegate in runningDelegates" :key="delegate.delegateId">
-              <a class="flex flex-col gap-0.5" :title="delegate.title || delegate.delegateId" @click="emit('switchPanelTab', 'delegate')">
-                <span class="block min-w-0 truncate">{{ delegate.title || delegate.delegateId }}</span>
-                <DelegateProgressLine
-                  class="min-w-0 truncate"
-                  :running="true"
-                  :elapsed-ms="delegate.elapsedMs"
-                  :request-count="delegate.requestCount"
-                  :token-count="delegate.tokenCount"
-                  :last-tool-name="delegate.lastToolName"
-                />
-              </a>
-            </li>
-          </ul>
-        </li>
-        <li v-if="runningTasks.length > 0">
-          <a>{{ t("chat.toolReview.overviewTasks") }} {{ runningTasks.length }}</a>
-          <ul>
-            <li v-for="task in runningTasks" :key="task.taskId">
-              <a :title="taskTitle(task)" @click="emit('switchPanelTab', 'tasks')">{{ taskTitle(task) }}</a>
-            </li>
-          </ul>
-        </li>
-        <li v-if="currentBatch">
-          <a>{{ t("chat.toolReview.overviewLatestChanges") }} {{ currentBatch.itemCount }}</a>
-          <ul>
-            <li>
-              <a :title="currentBatch.userMessageText" @click="emit('switchPanelTab', 'tools')">{{ currentBatch.userMessageText }}</a>
-            </li>
-          </ul>
-        </li>
-        <li v-if="runningBackgroundShells.length > 0">
-          <a>{{ t("chat.toolReview.overviewBackgroundShells") }} {{ runningBackgroundShells.length }}</a>
-          <ul>
-            <li v-for="task in runningBackgroundShells" :key="task.id">
-              <a class="flex items-center justify-between gap-2" :title="task.description">
-                <span class="min-w-0 truncate">{{ task.description }}</span>
-                <span class="shrink-0 text-xs tabular-nums text-base-content/55">{{ shellElapsedText(task.startedAt) }}</span>
-              </a>
-            </li>
-          </ul>
-        </li>
-      </ul>
+      <li v-if="runningDelegates.length > 0">
+        <a>{{ t("chat.toolReview.overviewDelegates") }} {{ runningDelegates.length }}</a>
+        <ul>
+          <li v-for="delegate in runningDelegates" :key="delegate.delegateId">
+            <a class="flex flex-col gap-0.5" :title="delegate.title || delegate.delegateId" @click="emit('switchPanelTab', 'delegate')">
+              <span class="block min-w-0 truncate">{{ delegate.title || delegate.delegateId }}</span>
+              <DelegateProgressLine
+                class="min-w-0 truncate"
+                :running="true"
+                :elapsed-ms="delegate.elapsedMs"
+                :request-count="delegate.requestCount"
+                :token-count="delegate.tokenCount"
+                :last-tool-name="delegate.lastToolName"
+              />
+            </a>
+          </li>
+        </ul>
+      </li>
+      <li v-if="runningTasks.length > 0">
+        <a>{{ t("chat.toolReview.overviewTasks") }} {{ runningTasks.length }}</a>
+        <ul>
+          <li v-for="task in runningTasks" :key="task.taskId">
+            <a :title="taskTitle(task)" @click="emit('switchPanelTab', 'tasks')">{{ taskTitle(task) }}</a>
+          </li>
+        </ul>
+      </li>
+      <li v-if="currentBatch">
+        <a>{{ t("chat.toolReview.overviewLatestChanges") }} {{ currentBatch.itemCount }}</a>
+        <ul>
+          <li>
+            <a :title="currentBatch.userMessageText" @click="emit('switchPanelTab', 'tools')">{{ currentBatch.userMessageText }}</a>
+          </li>
+        </ul>
+      </li>
+      <li v-if="runningBackgroundShells.length > 0">
+        <a>{{ t("chat.toolReview.overviewBackgroundShells") }} {{ runningBackgroundShells.length }}</a>
+        <ul>
+          <li v-for="task in runningBackgroundShells" :key="task.id">
+            <a class="flex items-center justify-between gap-2" :title="task.description">
+              <span class="min-w-0 truncate">{{ task.description }}</span>
+              <span class="shrink-0 text-xs tabular-nums text-base-content/55">{{ shellElapsedText(task.startedAt) }}</span>
+            </a>
+          </li>
+        </ul>
+      </li>
+    </ul>
     <div v-else class="flex flex-1 items-center justify-center p-8 text-center">{{ t("chat.toolReview.overviewEmptyAll") }}</div>
   </div>
 </template>
