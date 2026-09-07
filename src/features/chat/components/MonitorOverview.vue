@@ -39,9 +39,9 @@
         <a>{{ t("chat.toolReview.overviewBackgroundShells") }} {{ runningBackgroundShells.length }}</a>
         <ul>
           <li v-for="task in runningBackgroundShells" :key="task.id">
-            <a class="flex items-center justify-between gap-2" :title="task.description">
-              <span class="min-w-0 truncate">{{ task.description }}</span>
-              <span class="shrink-0 text-xs tabular-nums text-base-content/55">{{ shellElapsedText(task.startedAt) }}</span>
+            <a class="flex flex-col items-start gap-0.5" :title="task.description">
+              <span class="block min-w-0 truncate">{{ task.description }}</span>
+              <span class="text-xs text-base-content/65">{{ shellElapsedText(task.startedAt) }}</span>
             </a>
           </li>
         </ul>
