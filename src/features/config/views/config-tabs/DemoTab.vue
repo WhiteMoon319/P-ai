@@ -72,11 +72,9 @@
           <div class="h-[440px] w-[400px] overflow-hidden rounded-lg border border-base-300 bg-base-100 shadow-sm">
             <MonitorOverview
               class="h-full w-full"
-              active-conversation-id="demo"
               :delegate-statuses="demoOverviewDelegates"
               :running-tasks="demoOverviewTasks"
               :background-shells="demoOverviewBackgroundShells"
-              :background-shell-terminating-ids="demoOverviewTerminatingIds"
               :current-batch="demoOverviewBatch"
             />
           </div>
@@ -431,8 +429,6 @@ const demoComponentLabel = computed(() => {
 });
 
 const demoOverviewPreset = ref<"empty" | "normal" | "busy" | "backgroundOnly">("normal");
-
-const demoOverviewTerminatingIds = new Set<string>();
 
 function makeDemoOverviewDelegate(index: number, status: string): ConversationDelegateStatusSummary {
   const titles = ["整理会话记录并归档", "排查后台任务页加载失败", "梳理委托状态轮询调用链"];
