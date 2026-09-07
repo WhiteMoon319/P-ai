@@ -537,7 +537,10 @@ const demoOverviewBatch = computed<ToolReviewBatchSummary | null>(() => {
       userMessageText: "重构监控面板并提取概览组件，同步更新三语言包文案",
       itemCount: 14,
       unreviewedCount: 9,
-      items: [],
+      items: [
+        { callId: "demo-call-1", toolName: "exec", orderIndex: 1, hasReview: true, finishedAt: new Date(Date.now() - 3 * 60000).toISOString() },
+        { callId: "demo-call-2", toolName: "rg", orderIndex: 2, hasReview: false, finishedAt: new Date(Date.now() - 1 * 60000).toISOString() },
+      ],
     };
   }
   return {
@@ -546,7 +549,9 @@ const demoOverviewBatch = computed<ToolReviewBatchSummary | null>(() => {
     userMessageText: "修复后台任务页打不开的问题并补充回归测试",
     itemCount: 8,
     unreviewedCount: 3,
-    items: [],
+    items: [
+      { callId: "demo-call-1", toolName: "exec", orderIndex: 1, hasReview: true, finishedAt: new Date(Date.now() - 26 * 3600000).toISOString() },
+    ],
   };
 });
 const demoQuestionPreset = ref<"single" | "singleLong" | "multi" | "ten" | "custom">("single");

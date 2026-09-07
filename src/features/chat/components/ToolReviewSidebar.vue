@@ -140,7 +140,7 @@
         :delegate-statuses="delegateStatuses"
         :running-tasks="runningTasks"
         :background-shells="backgroundShells"
-        :current-batch="currentBatch"
+        :current-batch="overviewLatestBatch"
         @switch-panel-tab="(tab) => emit('switchPanelTab', tab)"
       />
     </div>
@@ -511,6 +511,22 @@ const currentBatch = computed(() => {
   const currentKey = String(props.currentBatchKey || "").trim();
   if (!currentKey) return null;
   return props.batches.find((batch) => batch.batchKey === currentKey) || null;
+});
+
+// 概览的「最近更改」锁定时间最新一批，不跟随用户当前浏览位置
+const overviewLatestBatch = computed(() => {
+  let latest: ToolReviewBatchSummary | null = null;
+  let latestMs = NaN;
+  for (const batch of props.batches) {
+    for (const item of batch.items || []) {
+      const ms = Date.parse(String(item.finishedAt || ""));
+      if (Number.isFinite(ms) && (!Number.isFinite(latestMs) || ms > latestMs)) {
+        latestMs = ms;
+        latest = batch;
+      }
+    }
+  }
+  return latest || props.batches[props.batches.length - 1] || null;
 });
 
 const previousBatch = computed(() => {

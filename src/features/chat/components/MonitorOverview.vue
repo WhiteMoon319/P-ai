@@ -34,7 +34,10 @@
         <a>{{ t("chat.toolReview.overviewLatestChanges") }} {{ currentBatch.itemCount }}</a>
         <ul>
           <li>
-            <a :title="currentBatch.userMessageText" @click="emit('switchPanelTab', 'tools')">{{ currentBatch.userMessageText }}</a>
+            <a class="flex flex-col items-start gap-0.5" :title="currentBatch.userMessageText" @click="emit('switchPanelTab', 'tools')">
+              <span class="block min-w-0 truncate">{{ currentBatch.userMessageText }}</span>
+              <span class="text-xs text-base-content/65">{{ batchSummaryText }}</span>
+            </a>
           </li>
         </ul>
       </li>
@@ -99,10 +102,36 @@ const hasAnyWork = computed(
 const countdownClockNowMs = ref(Date.now());
 let countdownClockTimer: ReturnType<typeof window.setInterval> | null = null;
 
+const batchFinishedAtMs = computed(() => {
+  let latest = NaN;
+  for (const item of props.currentBatch?.items || []) {
+    const ms = Date.parse(String(item.finishedAt || ""));
+    if (Number.isFinite(ms) && (!Number.isFinite(latest) || ms > latest)) latest = ms;
+  }
+  return latest;
+});
+
+const batchSummaryText = computed(() => {
+  const batch = props.currentBatch;
+  if (!batch) return "";
+  const parts = [t("chat.toolReview.overviewBatchItems", { n: batch.itemCount })];
+  const unreviewed = Number(batch.unreviewedCount) || 0;
+  if (unreviewed > 0) parts.push(t("chat.toolReview.overviewBatchUnreviewed", { n: unreviewed }));
+  const finishedMs = batchFinishedAtMs.value;
+  if (Number.isFinite(finishedMs) && finishedMs > 0) {
+    const minutes = Math.max(1, Math.floor((countdownClockNowMs.value - finishedMs) / 60000));
+    if (minutes < 60) parts.push(t("chat.toolReview.overviewAgoMinutes", { n: minutes }));
+    else if (minutes < 60 * 24) parts.push(t("chat.toolReview.overviewAgoHours", { n: Math.floor(minutes / 60) }));
+    else parts.push(t("chat.toolReview.overviewAgoDays", { n: Math.floor(minutes / 1440) }));
+  }
+  return parts.join(" · ");
+});
+
 const hasCountdownWork = computed(
   () =>
     runningBackgroundShells.value.length > 0 ||
-    props.runningTasks.some((task) => taskNextRunText(task) !== ""),
+    props.runningTasks.some((task) => taskNextRunText(task) !== "") ||
+    Number.isFinite(batchFinishedAtMs.value),
 );
 
 watch(
