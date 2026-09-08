@@ -22,9 +22,9 @@
         <div v-if="demoComponentKey === 'question'" class="space-y-3 pt-2">
           <div class="flex flex-wrap items-center gap-2">
             <span class="text-xs text-base-content/60">预设：</span>
-            <button type="button" class="btn btn-xs" :class="demoQuestionPreset === 'single' ? 'btn-primary' : 'btn-ghost'" @click="demoQuestionPreset = 'single'">单行</button>
-            <button type="button" class="btn btn-xs" :class="demoQuestionPreset === 'singleLong' ? 'btn-primary' : 'btn-ghost'" @click="demoQuestionPreset = 'singleLong'">10 行</button>
-            <button type="button" class="btn btn-xs" :class="demoQuestionPreset === 'ten' ? 'btn-primary' : 'btn-ghost'" @click="demoQuestionPreset = 'ten'">10 行 diff</button>
+            <button type="button" class="btn btn-xs" :class="demoQuestionPreset === 'single' ? 'btn-primary' : 'btn-ghost'" @click="demoQuestionPreset = 'single'">shell单行</button>
+            <button type="button" class="btn btn-xs" :class="demoQuestionPreset === 'singleLong' ? 'btn-primary' : 'btn-ghost'" @click="demoQuestionPreset = 'singleLong'">shell 10 行</button>
+            <button type="button" class="btn btn-xs" :class="demoQuestionPreset === 'ten' ? 'btn-primary' : 'btn-ghost'" @click="demoQuestionPreset = 'ten'">patch 10 行</button>
             <button type="button" class="btn btn-xs" :class="demoQuestionPreset === 'multi' ? 'btn-primary' : 'btn-ghost'" @click="demoQuestionPreset = 'multi'">多条 3 题</button>
             <button type="button" class="btn btn-xs" :class="demoQuestionPreset === 'custom' ? 'btn-primary' : 'btn-ghost'" @click="demoQuestionPreset = 'custom'">多选项</button>
             <button type="button" class="btn btn-xs btn-ghost" @click="resetDemoQuestionAnswers">重置</button>
@@ -619,7 +619,7 @@ const demoQuestionItems = computed<ChatQuestionItem[]>(() => {
         id: "q-single",
         title: "是否允许执行此命令？",
         description: "单行 shell 命令示例",
-        previewText: "pnpm exec eslint src --ext .ts,.tsx --max-warnings 0 --format stylish --cache --cache-location .eslintcache",
+        previewText: "$ pnpm exec eslint src --ext .ts,.tsx --max-warnings 0 --format stylish --cache --cache-location .eslintcache",
         canRememberWorkspace: demoWithWorkspace.value || undefined,
         workspaceLabel: demoWithWorkspace.value ? "easy_call_ai" : undefined,
         options: [
@@ -630,13 +630,24 @@ const demoQuestionItems = computed<ChatQuestionItem[]>(() => {
     ];
   }
   if (demoQuestionPreset.value === "singleLong") {
-    const tenLines = Array.from({ length: 10 }, (_, i) => `${String(i + 1).padStart(2, "0")}  Lorem ipsum dolor sit amet, 行 ${i + 1} 用于验证 6 行后滚动`).join("\n");
+    const tenShell = [
+      "$ pnpm exec eslint src --ext .ts,.tsx --max-warnings 0",
+      "$ pnpm typecheck",
+      "$ pnpm build",
+      "$ cargo check --manifest-path src-tauri/Cargo.toml",
+      "$ cargo test --manifest-path src-tauri/Cargo.toml",
+      "$ pnpm exec vitest run --reporter=basic",
+      "$ git status --short",
+      "$ git diff --stat",
+      "$ pnpm changelog:build",
+      "$ pnpm tauri build --debug",
+    ].join("\n");
     return [
       {
         id: "q-single-long",
-        title: "是否允许改写 src/App.vue ?（10 行内容）",
-        description: "10 行 plain 文本，超过 6 行应在内容区内滚动",
-        previewText: tenLines,
+        title: "是否允许执行这组命令？（10 行 shell）",
+        description: "10 行 shell 命令，超过 6 行应在内容区内滚动",
+        previewText: tenShell,
         canRememberWorkspace: demoWithWorkspace.value || undefined,
         workspaceLabel: demoWithWorkspace.value ? "easy_call_ai" : undefined,
         options: [

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import DoubleDeckCard from "./input-panel/DoubleDeckCard.vue";
+import OverlayScrollArea from "../../shared/components/OverlayScrollArea.vue";
 import TerminalApprovalPatchSample from "../../shell/components/TerminalApprovalPatchSample.vue";
 
 export type QuestionOptionKind = "direct" | "withInput";
@@ -58,6 +60,13 @@ const optionInputEls = ref<Record<string, HTMLInputElement | null>>({});
 const total = computed(() => props.items.length);
 const currentItem = computed(() => props.items[currentIndex.value] ?? null);
 const isSingle = computed(() => total.value <= 1);
+/** 提问卡露头显隐：前提内容（patch/单行）与确认列表放底座露头，题干与选项收进面卡 */
+const hasPreviewText = computed(() => !!String(currentItem.value?.previewText ?? "").trim());
+const hasExtra = computed(() => {
+  if (total.value === 0) return false;
+  if (confirmStep.value) return true;
+  return hasPreviewText.value;
+});
 const answersMap = computed(() => props.modelValue ?? {});
 
 const allAnswered = computed(() =>
@@ -144,8 +153,8 @@ function isDestructiveOption(opt: QuestionOption): boolean {
 function optionBtnClass(opt: QuestionOption): string {
   const selected = selectedOptionIdForCurrent.value === opt.id;
   const destructive = isDestructiveOption(opt);
-  if (destructive) return selected ? "btn-error" : "btn-outline btn-error";
-  return selected ? "btn-primary" : "btn-outline btn-primary";
+  if (destructive) return selected ? "btn-error" : "btn-error btn-soft";
+  return selected ? "btn-primary" : "btn-primary btn-soft";
 }
 
 function goTo(index: number) {
@@ -216,104 +225,46 @@ function handleSubmitAll(overrideMap?: Record<string, QuestionAnswer>) {
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-3xl rounded-box border border-base-300 bg-base-100 px-4 py-4 shadow-sm">
-    <div v-if="total === 0" class="py-8 text-center text-sm text-base-content/50">
-      暂无问题
-    </div>
-
-    <template v-else>
-      <!-- header: breadcrumb only -->
-      <nav v-if="!isSingle" class="mb-3 flex flex-wrap items-center gap-1 text-xs" aria-label="breadcrumb">
-        <template v-for="(item, idx) in items" :key="item.id">
-          <button
-            type="button"
-            class="rounded px-1.5 py-0.5 transition"
-            :class="[
-              idx === currentIndex && !confirmStep ? 'bg-primary text-primary-content' : answersMap[item.id] ? 'bg-success/15 text-success' : 'text-base-content/45 hover:bg-base-200',
-              confirmStep ? (answersMap[item.id] ? 'bg-success/15 text-success' : 'text-base-content/45') : '',
-            ]"
-            @click="goTo(idx)"
-          >
-            {{ idx + 1 }}
-          </button>
-          <span v-if="idx < items.length - 1" class="text-base-content/25">/</span>
-        </template>
-        <span v-if="confirmStep" class="ml-1 text-base-content/35">· 确认</span>
-      </nav>
-
-      <!-- confirm overview: N>1 all answered -->
-      <div v-if="confirmStep" class="space-y-3">
-        <ul class="flex flex-col gap-2">
-          <li
-            v-for="(item, idx) in items"
-            :key="item.id"
-            class="flex cursor-pointer items-start justify-between gap-3 rounded-box border border-base-200 bg-base-50 px-3 py-2.5 hover:border-base-300"
-            @click="goTo(idx)"
-          >
-            <div class="min-w-0">
-              <div class="flex items-center gap-2">
-                <span class="badge badge-ghost badge-sm">{{ idx + 1 }}</span>
-                <span class="truncate text-sm">{{ item.title }}</span>
-              </div>
-              <div class="mt-1 flex flex-wrap items-center gap-1.5">
-                <span class="badge badge-sm" :class="answersMap[item.id]?.label.includes('拒绝') || answersMap[item.id]?.optionId === 'deny' ? 'badge-error badge-outline' : 'badge-success badge-outline'">
-                  {{ answersMap[item.id]?.label ?? answersMap[item.id]?.optionId }}
-                </span>
-                <span
-                  v-if="answersMap[item.id]?.comment"
-                  class="line-clamp-2 text-xs text-base-content/60"
-                >
-                  {{ answersMap[item.id]?.comment }}
-                </span>
-              </div>
-            </div>
-          </li>
-        </ul>
-
-        <div class="flex justify-end gap-2 pt-1">
-          <button type="button" class="btn btn-ghost btn-sm" :disabled="submitting" @click="confirmStep = false">
-            返回修改
-          </button>
-          <button type="button" class="btn btn-primary btn-sm" :disabled="submitting || !allAnswered" @click="handleSubmitAll()">
-            {{ submitting ? "提交中..." : `确认提交 ${total} 题` }}
-          </button>
-        </div>
-      </div>
-
-      <!-- single question focused -->
-      <div v-else-if="currentItem" class="space-y-3">
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0 flex-1">
-            <div class="text-sm font-medium leading-6 whitespace-pre-wrap break-words">{{ currentItem.title }}</div>
-            <div v-if="currentItem.description" class="whitespace-pre-wrap break-words text-xs leading-5 text-base-content/60">
-              {{ currentItem.description }}
-            </div>
-          </div>
-          <label
-            v-if="canRememberWorkspaceForCurrent"
-            class="flex shrink-0 cursor-pointer items-center gap-2 btn btn-ghost font-normal"
-            :class="submitting ? 'pointer-events-none opacity-60' : ''"
-            :title="workspaceLabelForCurrent || t('terminalApproval.rememberWorkspace')"
-          >
-            <input
-              type="checkbox"
-              class="checkbox checkbox-sm"
-              :disabled="submitting"
-              @change="handleWorkspaceRemember"
+  <div class="mx-auto w-full max-w-3xl">
+    <!-- 提问卡：双层卡，前提内容放底卡露头，题干加选项放面卡 -->
+    <DoubleDeckCard :extra-visible="hasExtra" :is-rounded="true" bg="base-200">
+      <template #extra>
+        <div v-if="total > 0" class="space-y-3 px-4 pb-1 pt-4">
+          <!-- confirm overview: N>1 all answered，列表放露头 -->
+          <ul v-if="confirmStep" class="flex flex-col gap-2">
+            <li
+              v-for="(item, idx) in items"
+              :key="item.id"
+              class="flex cursor-pointer items-start justify-between gap-3 rounded-box border border-base-300/60 bg-base-100/80 px-3 py-2.5 hover:border-base-300"
+              @click="goTo(idx)"
             >
-            <span>{{ t("terminalApproval.rememberWorkspace") }}</span>
-          </label>
-        </div>
-        <!-- 内容区：引用块样式，左竖线 + base-200/60 -->
-        <div
-          v-if="currentItem.previewText"
-          class="overflow-hidden rounded-sm border-l-2 border-base-300 bg-base-200/60 -mx-4"
-        >
-          <div
-            v-if="isPreviewPatch"
-            class="max-h-36 overflow-auto"
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="badge badge-ghost badge-sm">{{ idx + 1 }}</span>
+                  <span class="truncate text-sm">{{ item.title }}</span>
+                </div>
+                <div class="mt-1 flex flex-wrap items-center gap-1.5">
+                  <span class="badge badge-sm" :class="answersMap[item.id]?.label.includes('拒绝') || answersMap[item.id]?.optionId === 'deny' ? 'badge-error badge-outline' : 'badge-success badge-outline'">
+                    {{ answersMap[item.id]?.label ?? answersMap[item.id]?.optionId }}
+                  </span>
+                  <span
+                    v-if="answersMap[item.id]?.comment"
+                    class="line-clamp-2 text-xs text-base-content/60"
+                  >
+                    {{ answersMap[item.id]?.comment }}
+                  </span>
+                </div>
+              </div>
+            </li>
+          </ul>
+
+          <!-- 前提内容：直接铺在底座上，用项目统一滚动区 -->
+          <OverlayScrollArea
+            v-else-if="currentItem && hasPreviewText"
+            scroller-class="max-h-36 overscroll-contain"
           >
             <TerminalApprovalPatchSample
+              v-if="isPreviewPatch"
               :lines="previewLines"
               :diff-only="false"
               :show-prefixes="true"
@@ -321,17 +272,68 @@ function handleSubmitAll(overrideMap?: Record<string, QuestionAnswer>) {
               :hide-header="true"
               :embedded="true"
             />
-          </div>
-          <div
-            v-else
-            class="max-h-36 overflow-auto px-4 py-2"
-          >
-            <pre class="whitespace-pre-wrap break-words text-xs leading-5 text-base-content/70">{{ currentItem.previewText }}</pre>
-          </div>
+            <pre v-else class="whitespace-pre-wrap break-words text-xs leading-5 text-base-content/70">{{ currentItem.previewText }}</pre>
+          </OverlayScrollArea>
+        </div>
+      </template>
+      <template #main>
+        <div v-if="total === 0" class="px-2 py-8 text-center text-sm text-base-content/50">
+          暂无问题
         </div>
 
-        <!-- options: sorted so deny-like (withInput+required) sinks to bottom -->
-        <div class="flex flex-col gap-2 pt-1">
+        <template v-else>
+          <!-- header: breadcrumb -->
+          <nav v-if="!isSingle" class="flex flex-wrap items-center gap-1 px-2 pb-1 text-xs" aria-label="breadcrumb">
+            <template v-for="(item, idx) in items" :key="item.id">
+              <button
+                type="button"
+                class="rounded px-1.5 py-0.5 transition"
+                :class="[
+                  idx === currentIndex && !confirmStep ? 'bg-primary text-primary-content' : answersMap[item.id] ? 'bg-success/15 text-success' : 'text-base-content/45 hover:bg-base-200',
+                  confirmStep ? (answersMap[item.id] ? 'bg-success/15 text-success' : 'text-base-content/45') : '',
+                ]"
+                @click="goTo(idx)"
+              >
+                {{ idx + 1 }}
+              </button>
+              <span v-if="idx < items.length - 1" class="text-base-content/25">/</span>
+            </template>
+            <span v-if="confirmStep" class="ml-1 text-base-content/35">· 确认</span>
+          </nav>
+
+          <div v-if="confirmStep" class="flex justify-end gap-2 px-2 py-1">
+            <button type="button" class="btn btn-ghost btn-sm" :disabled="submitting" @click="confirmStep = false">
+              返回修改
+            </button>
+            <button type="button" class="btn btn-primary btn-sm" :disabled="submitting || !allAnswered" @click="handleSubmitAll()">
+              {{ submitting ? "提交中..." : `确认提交 ${total} 题` }}
+            </button>
+          </div>
+
+          <div v-else-if="currentItem" class="space-y-2 px-2 py-1">
+            <!-- 题干：QuestionItem.title（审批 summary）+ description（审批 message/reason），目录全权随题干进面卡 -->
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0 flex-1">
+                <div class="text-sm font-medium leading-6 whitespace-pre-wrap break-words">{{ currentItem.title }}</div>
+                <div v-if="currentItem.description" class="whitespace-pre-wrap break-words text-xs leading-5 text-base-content/60">
+                  {{ currentItem.description }}
+                </div>
+              </div>
+              <label
+                v-if="canRememberWorkspaceForCurrent"
+                class="flex shrink-0 cursor-pointer items-center gap-2 btn btn-ghost font-normal"
+                :class="submitting ? 'pointer-events-none opacity-60' : ''"
+                :title="workspaceLabelForCurrent || t('terminalApproval.rememberWorkspace')"
+              >
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-sm"
+                  :disabled="submitting"
+                  @change="handleWorkspaceRemember"
+                >
+                <span>{{ t("terminalApproval.rememberWorkspace") }}</span>
+              </label>
+            </div>
           <template
             v-for="opt in [...currentOptions].sort((a, b) => {
               const aDeny = a.kind === 'withInput' && a.inputRequired ? 1 : 0;
@@ -373,9 +375,10 @@ function handleSubmitAll(overrideMap?: Record<string, QuestionAnswer>) {
             </div>
           </template>
           <div v-if="shakeOptionId" class="text-xs text-error">请填写必填的补充说明</div>
-        </div>
-      </div>
-    </template>
+          </div>
+        </template>
+      </template>
+    </DoubleDeckCard>
   </div>
 </template>
 
