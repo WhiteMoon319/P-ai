@@ -26,7 +26,8 @@
     "yes": "是",
     "no": "否",
     "done": "完成",
-    "settings": "設定"
+    "settings": "設定",
+    "openFolder": "開啟資料夾"
   },
   "window": {
     "configTitle": "π師傅 - 配置視窗",
@@ -2980,7 +2981,10 @@
     "updateAndRestartTitle": "更新並重啟",
     "applyingUpdate": "正在應用已下載的更新...",
     "applyUpdateFailed": "應用更新失敗：{error}",
-    "applyUpdateFailedStatus": "更新失敗：{error}"
+    "applyUpdateFailedStatus": "更新失敗：{error}",
+    "portablePendingTitle": "更新已下載，等待手動替換",
+    "portablePendingIntro": "因為權限問題無法完成自動更新，請手動替換。",
+    "portablePendingHint": "已為你保留更新檔案，點擊下方打開目錄後手動完成替換即可。"
   },
   "fileReader": {
     "openFile": "開啟檔案",

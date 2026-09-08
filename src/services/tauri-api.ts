@@ -1059,6 +1059,36 @@ export function applyPreparedTransportGithubUpdate(): Promise<void> {
   return invokeRequiredNativeTransport<void>("应用更新安装", "apply_prepared_github_update");
 }
 
+export type PortablePendingManualReplace = {
+  plan: {
+    target_dir: string;
+    target_exe_name: string;
+    staging_dir: string;
+    backup_root: string;
+    temp_root: string;
+    zip_path: string;
+    log_path: string;
+    parent_pid?: number;
+    target_version?: string;
+  };
+  backup_dir: string;
+  failure_reason: string;
+  created_at: string;
+};
+
+export function getPortablePendingManualReplace(): Promise<PortablePendingManualReplace | null> {
+  return invokeTauri<PortablePendingManualReplace | null>("get_portable_pending_manual_replace");
+}
+export function dismissPortablePendingManualReplace(): Promise<void> {
+  return invokeTauri<void>("dismiss_portable_pending_manual_replace");
+}
+export function retryPortablePendingManualReplace(): Promise<void> {
+  return invokeTauri<void>("retry_portable_pending_manual_replace");
+}
+export function openPortablePendingDir(kind: string): Promise<void> {
+  return invokeTauri<void>("open_portable_pending_dir", { kind });
+}
+
 type TransportConfigMigrationExportPayload = {
   path?: unknown;
   fileName?: unknown;

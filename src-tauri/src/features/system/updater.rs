@@ -52,6 +52,10 @@ const PORTABLE_PLAN_FILE_PREFIX: &str = "portable-plan-";
 const PORTABLE_ZIP_FILE_PREFIX: &str = "p-ai-portable-";
 const PORTABLE_STAGING_DIR_PREFIX: &str = "staging-";
 const PORTABLE_UPDATE_TARGET_SUFFIX: &str = "-portable";
+const PORTABLE_PENDING_FILE_NAME: &str = "portable-pending.json";
+const PORTABLE_REPLACE_MAX_RETRIES: usize = 30;
+const PORTABLE_REPLACE_RETRY_DELAY_MS: u64 = 400;
+const PORTABLE_PARENT_WAIT_TIMEOUT_MS: u64 = 15000;
 const UPDATE_STAGE_CHECKING: &str = "checking";
 const UPDATE_STAGE_DOWNLOADING: &str = "downloading";
 const UPDATE_STAGE_VERIFYING: &str = "verifying";
@@ -199,6 +203,18 @@ struct PortableUpdatePlan {
     temp_root: String,
     zip_path: String,
     log_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    parent_pid: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    target_version: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct PortablePendingManualReplace {
+    plan: PortableUpdatePlan,
+    backup_dir: String,
+    failure_reason: String,
+    created_at: String,
 }
 
 struct PreparedInstallerUpdate {
@@ -997,6 +1013,108 @@ fn copy_file_with_parent(src: &StdPath, dest: &StdPath) -> Result<(), String> {
     Ok(())
 }
 
+fn copy_file_with_retry(src: &StdPath, dest: &StdPath, log_path: &StdPath) -> Result<(), String> {
+    let mut last_err = String::new();
+    for attempt in 1..=PORTABLE_REPLACE_MAX_RETRIES {
+        if let Some(parent) = dest.parent() {
+            if let Err(err) = std_fs::create_dir_all(parent) {
+                last_err = format!("创建目录失败（{}）：{err}", parent.display());
+                append_helper_log(log_path, &format!("[自动更新] 重试 {attempt}/{} 失败：{last_err}", PORTABLE_REPLACE_MAX_RETRIES));
+                thread::sleep(StdDuration::from_millis(PORTABLE_REPLACE_RETRY_DELAY_MS));
+                continue;
+            }
+        }
+        match std_fs::copy(src, dest) {
+            Ok(_) => return Ok(()),
+            Err(err) => {
+                let is_access_denied = err.raw_os_error() == Some(5)
+                    || err.kind() == std::io::ErrorKind::PermissionDenied;
+                last_err = format!("复制文件失败（{} -> {}）：{err}", src.display(), dest.display());
+                if is_access_denied {
+                    append_helper_log(
+                        log_path,
+                        &format!(
+                            "[自动更新] 文件被占用，重试 {attempt}/{}：{last_err}",
+                            PORTABLE_REPLACE_MAX_RETRIES
+                        ),
+                    );
+                } else {
+                    append_helper_log(
+                        log_path,
+                        &format!("[自动更新] 重试 {attempt}/{} 失败：{last_err}", PORTABLE_REPLACE_MAX_RETRIES),
+                    );
+                }
+                if attempt < PORTABLE_REPLACE_MAX_RETRIES {
+                    thread::sleep(StdDuration::from_millis(PORTABLE_REPLACE_RETRY_DELAY_MS));
+                }
+            }
+        }
+    }
+    Err(last_err)
+}
+
+fn portable_pending_path(temp_root: &StdPath) -> StdPathBuf {
+    temp_root.join(PORTABLE_PENDING_FILE_NAME)
+}
+
+fn write_portable_pending(temp_root: &StdPath, plan: &PortableUpdatePlan, backup_dir: &StdPath, failure_reason: &str) -> Result<(), String> {
+    let pending = PortablePendingManualReplace {
+        plan: plan.clone(),
+        backup_dir: backup_dir.to_string_lossy().to_string(),
+        failure_reason: failure_reason.to_string(),
+        created_at: now_utc()
+            .format(&Rfc3339)
+            .unwrap_or_else(|_| "unknown".to_string()),
+    };
+    let json = serde_json::to_vec_pretty(&pending).map_err(|err| format!("序列化 pending 失败：{err}"))?;
+    let path = portable_pending_path(temp_root);
+    if let Some(parent) = path.parent() {
+        std_fs::create_dir_all(parent).map_err(|err| format!("创建 pending 目录失败（{}）：{err}", parent.display()))?;
+    }
+    std_fs::write(&path, json).map_err(|err| format!("写入 pending 失败（{}）：{err}", path.display()))?;
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn wait_for_parent_process_exit(parent_pid: Option<u32>, log_path: &StdPath) {
+    let Some(pid) = parent_pid else {
+        thread::sleep(StdDuration::from_millis(1800));
+        return;
+    };
+    if pid == 0 {
+        thread::sleep(StdDuration::from_millis(1800));
+        return;
+    }
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{OpenProcess, WaitForSingleObject};
+    const SYNCHRONIZE: u32 = 0x00100000;
+    use windows_sys::Win32::Foundation::WAIT_OBJECT_0;
+    unsafe {
+        let handle = OpenProcess(SYNCHRONIZE, 0, pid);
+        if handle == std::ptr::null_mut() {
+            append_helper_log(log_path, &format!("[自动更新] 无法打开父进程 {pid}，可能已退出，等待 2s 后替换"));
+            thread::sleep(StdDuration::from_millis(2000));
+            return;
+        }
+        append_helper_log(log_path, &format!("[自动更新] 等待主进程 {pid} 退出，最长 {}ms", PORTABLE_PARENT_WAIT_TIMEOUT_MS));
+        let wait = WaitForSingleObject(handle, PORTABLE_PARENT_WAIT_TIMEOUT_MS as u32);
+        CloseHandle(handle);
+        if wait == WAIT_OBJECT_0 {
+            append_helper_log(log_path, "[自动更新] 主进程已退出，开始替换");
+        } else {
+            append_helper_log(log_path, "[自动更新] 等待超时，主进程可能仍在退出中，尝试替换");
+        }
+    }
+    thread::sleep(StdDuration::from_millis(400));
+}
+
+#[cfg(not(target_os = "windows"))]
+fn wait_for_parent_process_exit(parent_pid: Option<u32>, log_path: &StdPath) {
+    let _ = parent_pid;
+    append_helper_log(log_path, "[自动更新] 非 Windows 平台，等待 1.8s 后替换");
+    thread::sleep(StdDuration::from_millis(1800));
+}
+
 fn compute_file_sha256(path: &StdPath) -> Result<String, String> {
     let mut file = StdFile::open(path)
         .map_err(|err| format!("打开文件失败（{}）：{err}", path.display()))?;
@@ -1112,12 +1230,17 @@ fn should_cleanup_portable_temp_entry(path: &StdPath) -> bool {
 }
 
 fn cleanup_portable_update_temp_artifacts(temp_root: &StdPath) {
+    // 若存在待手动替换的 pending，则保留其指向的 staging/zip，避免下次启动被清掉现场
+    let pending_paths = read_pending_protected_paths(temp_root);
     let Ok(entries) = std_fs::read_dir(temp_root) else {
         return;
     };
     for entry in entries.filter_map(|entry| entry.ok()) {
         let path = entry.path();
         if !should_cleanup_portable_temp_entry(&path) {
+            continue;
+        }
+        if pending_paths.iter().any(|p| p == &path) {
             continue;
         }
         if let Err(err) = remove_if_exists(&path) {
@@ -1128,6 +1251,21 @@ fn cleanup_portable_update_temp_artifacts(temp_root: &StdPath) {
             ));
         }
     }
+}
+
+fn read_pending_protected_paths(temp_root: &StdPath) -> Vec<StdPathBuf> {
+    let pending_path = portable_pending_path(temp_root);
+    let Ok(raw) = std_fs::read(&pending_path) else {
+        return vec![];
+    };
+    let Ok(pending) = serde_json::from_slice::<PortablePendingManualReplace>(&raw) else {
+        return vec![];
+    };
+    let mut out = vec![];
+    out.push(StdPathBuf::from(&pending.plan.staging_dir));
+    out.push(StdPathBuf::from(&pending.plan.zip_path));
+    out.push(pending_path);
+    out
 }
 
 fn cleanup_portable_update_temp_artifacts_for_current_runtime() -> Result<(), String> {
@@ -1805,6 +1943,8 @@ async fn prepare_portable_update(
         temp_root: temp_root.to_string_lossy().to_string(),
         zip_path: zip_path.to_string_lossy().to_string(),
         log_path: log_path.to_string_lossy().to_string(),
+        parent_pid: Some(std::process::id()),
+        target_version: Some(target_version.clone()),
     };
     write_portable_plan(&plan_path, &plan)?;
     store_prepared_github_update(PreparedGithubUpdate::Portable(PreparedPortableUpdate {
@@ -2079,6 +2219,115 @@ async fn apply_prepared_github_update(app: AppHandle) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+async fn get_portable_pending_manual_replace() -> Result<Option<PortablePendingManualReplace>, String> {
+    let runtime = detect_update_runtime_paths()?;
+    if runtime.runtime_kind != UpdateRuntimeKind::Portable {
+        return Ok(None);
+    }
+    let temp_root = updater_temp_root(&runtime);
+    let pending_path = portable_pending_path(&temp_root);
+    if !pending_path.exists() {
+        return Ok(None);
+    }
+    let raw = std_fs::read(&pending_path).map_err(|err| format!("读取 pending 失败（{}）：{err}", pending_path.display()))?;
+    let pending = serde_json::from_slice::<PortablePendingManualReplace>(&raw).map_err(|err| format!("解析 pending 失败：{err}"))?;
+    Ok(Some(pending))
+}
+
+#[tauri::command]
+async fn dismiss_portable_pending_manual_replace() -> Result<(), String> {
+    let runtime = detect_update_runtime_paths()?;
+    if runtime.runtime_kind != UpdateRuntimeKind::Portable {
+        // 非便携版无 pending，直接视为已关闭，保持与 get/retry 一致的守卫
+        return Ok(());
+    }
+    let temp_root = updater_temp_root(&runtime);
+    let pending_path = portable_pending_path(&temp_root);
+    let _ = remove_if_exists(&pending_path);
+    Ok(())
+}
+
+#[tauri::command]
+async fn retry_portable_pending_manual_replace(app: AppHandle) -> Result<(), String> {
+    let runtime = detect_update_runtime_paths()?;
+    if runtime.runtime_kind != UpdateRuntimeKind::Portable {
+        return Err("当前不是便携版，无需重试".to_string());
+    }
+    let temp_root = updater_temp_root(&runtime);
+    let pending_path = portable_pending_path(&temp_root);
+    if !pending_path.exists() {
+        return Err("没有待重试的更新任务".to_string());
+    }
+    let raw = std_fs::read(&pending_path).map_err(|err| format!("读取 pending 失败：{err}"))?;
+    let pending = serde_json::from_slice::<PortablePendingManualReplace>(&raw).map_err(|err| format!("解析 pending 失败：{err}"))?;
+    // 重试前先优雅关闭后台服务，释放句柄以提升替换成功率（与首次 apply 路径一致）
+    if !graceful_shutdown_background_services_with_timeout(&app).await {
+        let message = "自动关闭失败，请手动关闭应用重启".to_string();
+        show_background_shutdown_timeout_dialog(&app);
+        emit_update_progress(
+            &app,
+            build_update_progress(
+                runtime.runtime_kind,
+                UPDATE_STAGE_FAILED,
+                format!("重试失败：{message}"),
+                Some(env!("CARGO_PKG_VERSION").to_string()),
+                pending.plan.target_version.clone(),
+                None,
+                None,
+                Some(message.clone()),
+            ),
+        );
+        return Err(message);
+    }
+    // 复用原 staging 重试替换（不重新下载），成功后由 helper 清理 pending
+    let plan_path = temp_root.join(format!("{}retry.json", PORTABLE_PLAN_FILE_PREFIX));
+    let mut plan = pending.plan.clone();
+    plan.parent_pid = Some(std::process::id());
+    write_portable_plan(&plan_path, &plan)?;
+    let helper_copy = temp_root.join(format!("portable-helper-retry-{}.exe", Uuid::new_v4()));
+    copy_file_with_parent(&runtime.exe_path, &helper_copy)?;
+    let helper_args = vec![OsString::from(PORTABLE_HELPER_FLAG), plan_path.as_os_str().to_os_string()];
+    spawn_detached_hidden(&helper_copy, &helper_args)?;
+    emit_update_progress(
+        &app,
+        build_update_progress(
+            runtime.runtime_kind,
+            UPDATE_STAGE_REPLACING,
+            format!("正在重试便携版替换，目标 {}", pending.plan.target_version.clone().unwrap_or_default()),
+            Some(env!("CARGO_PKG_VERSION").to_string()),
+            pending.plan.target_version.clone(),
+            None,
+            None,
+            None,
+        ),
+    );
+    app.exit(0);
+    Ok(())
+}
+
+#[tauri::command]
+async fn open_portable_pending_dir(kind: String) -> Result<(), String> {
+    let runtime = detect_update_runtime_paths()?;
+    let temp_root = updater_temp_root(&runtime);
+    let pending_path = portable_pending_path(&temp_root);
+    let raw = std_fs::read(&pending_path).map_err(|err| format!("读取 pending 失败：{err}"))?;
+    let pending = serde_json::from_slice::<PortablePendingManualReplace>(&raw).map_err(|err| format!("解析 pending 失败：{err}"))?;
+    // 只提供一个目录入口：打开更新暂存目录，便于用户手动替换
+    let _ = pending;
+    let target: StdPathBuf = temp_root.to_path_buf();
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("explorer").arg(&target).spawn();
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(&target).spawn();
+    }
+    let _ = kind;
+    Ok(())
+}
+
 fn append_helper_log(log_path: &StdPath, line: &str) {
     if let Some(parent) = log_path.parent() {
         let _ = std_fs::create_dir_all(parent);
@@ -2150,14 +2399,29 @@ fn restore_backup_files(
     replaced_files: &[StdPathBuf],
     new_files: &[StdPathBuf],
 ) -> Result<(), String> {
+    let mut first_err: Option<String> = None;
     for rel in new_files {
         let target = target_dir.join(rel);
-        remove_if_exists(&target)?;
+        if let Err(err) = remove_if_exists(&target) {
+            if first_err.is_none() {
+                first_err = Some(err);
+            }
+        }
     }
     for rel in replaced_files {
         let backup = backup_dir.join(rel);
         let target = target_dir.join(rel);
-        copy_file_with_parent(&backup, &target)?;
+        // 回滚也要带重试，避免再次撞锁导致静默失败
+        let temp_root = target_dir.join("data").join("temp").join("updater");
+        let log_path = temp_root.join("portable-update.log");
+        if let Err(err) = copy_file_with_retry(&backup, &target, &log_path) {
+            if first_err.is_none() {
+                first_err = Some(err);
+            }
+        }
+    }
+    if let Some(err) = first_err {
+        return Err(format!("回滚部分失败：{err}"));
     }
     Ok(())
 }
@@ -2217,7 +2481,7 @@ fn replace_from_staging(plan: &PortableUpdatePlan) -> Result<(), String> {
         for rel in &staging_files {
             let from = staging_dir.join(rel);
             let to = target_dir.join(rel);
-            copy_file_with_parent(&from, &to)?;
+            copy_file_with_retry(&from, &to, &log_path)?;
         }
         for rel in &staging_files {
             let from_hash = compute_file_sha256(&staging_dir.join(rel))?;
@@ -2233,14 +2497,22 @@ fn replace_from_staging(plan: &PortableUpdatePlan) -> Result<(), String> {
     })();
     if let Err(err) = replace_result {
         append_helper_log(&log_path, &format!("[自动更新] 便携版替换失败，开始回滚：{err}"));
-        restore_backup_files(&target_dir, &backup_dir, &replaced_files, &new_files)?;
-        append_helper_log(&log_path, "[自动更新] 便携版回滚完成");
+        match restore_backup_files(&target_dir, &backup_dir, &replaced_files, &new_files) {
+            Ok(_) => append_helper_log(&log_path, "[自动更新] 便携版回滚完成"),
+            Err(rollback_err) => append_helper_log(&log_path, &format!("[自动更新] 便携版回滚失败：{rollback_err}，旧备份保留在 {}", backup_dir.display())),
+        }
+        // 落盘 pending，供下次启动弹窗指引手动替换
+        let temp_root = StdPathBuf::from(&plan.temp_root);
+        let _ = write_portable_pending(&temp_root, plan, &backup_dir, &err);
         return Err(format!("便携版更新失败，已回滚旧版本：{err}"));
     }
     spawn_detached_hidden(&target_exe_path, &[])?;
     append_helper_log(&log_path, "[自动更新] 新版本已启动，开始清理临时文件");
     let _ = remove_if_exists(&staging_dir);
     let _ = remove_if_exists(&zip_path);
+    // 成功则清理 pending（若存在）
+    let temp_root = StdPathBuf::from(&plan.temp_root);
+    let _ = remove_if_exists(&portable_pending_path(&temp_root));
     prune_old_backup_dirs(&backup_root);
     Ok(())
 }
@@ -2254,7 +2526,7 @@ fn run_portable_update_helper(plan_path: &str) -> Result<(), String> {
         .map_err(|err| format!("解析便携版更新计划失败：{err}"))?;
     let log_path = StdPathBuf::from(&plan.log_path);
     append_helper_log(&log_path, "[自动更新] helper 已启动，等待主程序退出");
-    thread::sleep(StdDuration::from_millis(1800));
+    wait_for_parent_process_exit(plan.parent_pid, &log_path);
     let result = replace_from_staging(&plan);
     match &result {
         Ok(_) => {

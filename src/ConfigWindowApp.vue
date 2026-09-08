@@ -225,6 +225,8 @@
       :update-dialog-skip-version-visible="updateDialogSkipVersionVisible"
       :update-dialog-cancel-update-visible="updateDialogCancelUpdateVisible"
       :update-dialog-cancel-pending="updateCancelPending"
+      :portable-pending="portablePending"
+      :is-portable-pending="!!portablePending"
       :markdown-is-dark="markdownIsDark"
       :runtime-logs-dialog-open="false"
       :runtime-logs="[]"
@@ -252,6 +254,9 @@
       @open-update-repository="openGithubRepository"
       @skip-update-version="skipCurrentUpdateVersion"
       @cancel-update="cancelGithubUpdate"
+      @open-portable-pending-dir="openPortablePendingDir"
+      @retry-portable-pending="retryPortablePending"
+      @dismiss-portable-pending="dismissPortablePending"
       @close-settings-save-error-dialog="closeSettingsSaveErrorDialog"
     />
 
@@ -761,6 +766,10 @@ const {
   showUpdateToLatestButton,
   updateToLatestLabel,
   updateToLatestTitle,
+  portablePending,
+  openPortablePendingDir,
+  retryPortablePending,
+  dismissPortablePending,
 } = useGithubUpdateView({
   t: tr,
   viewMode,

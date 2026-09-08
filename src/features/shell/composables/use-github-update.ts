@@ -1,16 +1,21 @@
-import { computed, onBeforeUnmount, ref, type Ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, type Ref } from "vue";
 import { i18n } from "../../../i18n";
 import {
   applyPreparedTransportGithubUpdate,
   canUseTransportGithubUpdate,
   cancelTransportGithubUpdate,
   checkTransportGithubUpdate,
+  dismissPortablePendingManualReplace,
+  getPortablePendingManualReplace,
   getTransportGithubUpdateState,
   invokeTauri,
   onTransportNotification,
+  openPortablePendingDir,
   openTransportExternalUrl,
+  retryPortablePendingManualReplace,
   startTransportGithubUpdate,
 } from "../../../services/tauri-api";
+import type { PortablePendingManualReplace } from "../../../services/tauri-api";
 import type { GithubUpdateInfo, GithubUpdateState, UpdateProgressPayload } from "../types/update";
 import type { GithubUpdateMethod } from "../../../types/app";
 
@@ -512,8 +517,69 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     await refreshGithubUpdateState();
   }
 
+  const portablePending = ref<PortablePendingManualReplace | null>(null);
+  async function refreshPortablePending() {
+    if (!canUseGithubUpdate()) return null;
+    try {
+      const pending = await getPortablePendingManualReplace();
+      portablePending.value = pending;
+      return pending;
+    } catch {
+      return null;
+    }
+  }
+  function buildPortablePendingDialogBody(_pending: PortablePendingManualReplace): string {
+    // 弹窗正文与卡片会重复，pending 场景下正文留空，细节由 ShellDialogsHost 的卡片展示
+    return "";
+  }
+  async function openPortablePendingDialog() {
+    const pending = portablePending.value || (await refreshPortablePending());
+    if (!pending) return;
+    updateDialogKind.value = "info";
+    updateDialogTitle.value = t("about.portablePendingTitle");
+    updateDialogBody.value = buildPortablePendingDialogBody(pending);
+    updateDialogPrimaryAction.value = null;
+    updateProgressPercent.value = null;
+    updateStage.value = "failed";
+    updateDialogOpen.value = true;
+  }
+  async function checkAndShowPortablePending() {
+    const pending = await refreshPortablePending();
+    if (pending) {
+      await openPortablePendingDialog();
+      return true;
+    }
+    return false;
+  }
+  async function dismissPortablePending() {
+    try {
+      await dismissPortablePendingManualReplace();
+    } catch {
+      // 非便携版或文件已清也视为已关闭
+    }
+    portablePending.value = null;
+    updateDialogOpen.value = false;
+  }
+  async function retryPortablePending() {
+    try {
+      await retryPortablePendingManualReplace();
+    } catch (error) {
+      portablePending.value = null;
+      updateDialogKind.value = "error";
+      updateDialogTitle.value = t("about.portablePendingTitle");
+      updateDialogBody.value = String(error ?? t("about.applyUpdateFailed", { error: "" }));
+      updateDialogOpen.value = true;
+    }
+  }
+
   updateProgressUnlisten = onTransportNotification("easy-call:update-status", (payload) => {
     if (isUpdateProgressPayload(payload)) handleUpdateProgressPayload(payload);
+  });
+
+  onMounted(() => {
+    // 仅主窗口自动弹窗，避免 chat/config 双窗口同时弹窗打扰
+    if (options.viewMode.value !== "chat") return;
+    void checkAndShowPortablePending();
   });
 
   onBeforeUnmount(() => {
@@ -547,5 +613,12 @@ export function useGithubUpdate(options: UseGithubUpdateOptions) {
     cancelGithubUpdate,
     skipCurrentUpdateVersion,
     showUpdateToLatestButton,
+    portablePending,
+    refreshPortablePending,
+    openPortablePendingDialog,
+    checkAndShowPortablePending,
+    dismissPortablePending,
+    retryPortablePending,
+    openPortablePendingDir,
   };
 }

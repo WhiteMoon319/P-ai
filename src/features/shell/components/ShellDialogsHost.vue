@@ -15,6 +15,12 @@ initKatex();
 
 type UpdateDialogKind = "error" | "info" | "warning";
 type UpdateDialogPrimaryAction = "force" | "download" | "restart" | null | undefined;
+type PortablePendingProp = {
+  plan: { staging_dir: string; target_dir: string; target_version?: string; log_path: string };
+  backup_dir: string;
+  failure_reason: string;
+  created_at: string;
+} | null;
 type ConfigSaveErrorDialogKind = "warning" | "error";
 type ArchiveImportPreview = {
   fileName: string;
@@ -33,6 +39,8 @@ const props = defineProps<{
   updateDialogSkipVersionVisible?: boolean;
   updateDialogCancelUpdateVisible?: boolean;
   updateDialogCancelPending?: boolean;
+  portablePending?: PortablePendingProp;
+  isPortablePending?: boolean;
   markdownIsDark?: boolean;
   runtimeLogsDialogOpen: boolean;
   runtimeLogs: RuntimeLogEntry[];
@@ -59,6 +67,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   closeUpdateDialog: [];
   confirmUpdateDialogPrimary: [];
+  openPortablePendingDir: [kind: string];
+  retryPortablePending: [];
+  dismissPortablePending: [];
   openUpdateRelease: [];
   openUpdateRepository: [];
   skipUpdateVersion: [];
@@ -209,15 +220,19 @@ function canShowUpdateSecondaryActions() {
         max="100"
       />
       <pre
-        v-if="updateDialogOpen && updateDialogKind === 'error'"
+        v-if="updateDialogOpen && updateDialogKind === 'error' && !isPortablePending"
         class="mt-3 min-h-0 flex-1 whitespace-pre-wrap break-words text-sm overflow-y-auto text-error"
       >{{ updateDialogBody }}</pre>
-      <div v-else-if="updateDialogOpen" class="mt-3 min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <div v-else-if="updateDialogOpen && !isPortablePending" class="mt-3 min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <AppMarkdownRenderer
           :text="updateDialogBody"
           :is-dark="!!props.markdownIsDark"
           variant="document"
         />
+      </div>
+      <div v-if="isPortablePending && portablePending" class="mt-3 rounded-box border border-warning/30 bg-warning/10 p-3 text-xs">
+        <div class="font-semibold">{{ t("about.portablePendingIntro") }}</div>
+        <div class="mt-1 opacity-70">{{ t("about.portablePendingHint") }}</div>
       </div>
       <div class="modal-action mt-4 flex items-center justify-between gap-3">
         <button
@@ -228,6 +243,11 @@ function canShowUpdateSecondaryActions() {
           {{ t("about.starAuthor") }}
         </button>
         <div class="flex items-center gap-2">
+          <template v-if="isPortablePending">
+            <button class="btn btn-sm btn-primary" @click="emit('openPortablePendingDir','pending')">{{ t("common.openFolder") }}</button>
+            <button class="btn btn-sm btn-ghost" @click="emit('dismissPortablePending')">{{ t("common.close") }}</button>
+          </template>
+          <template v-else>
           <button
             v-if="updateDialogPrimaryAction"
             class="btn btn-sm btn-primary"
@@ -266,6 +286,7 @@ function canShowUpdateSecondaryActions() {
           <button class="btn btn-sm" @click="emit('closeUpdateDialog')">
             {{ updateDialogCloseLabel() }}
           </button>
+          </template>
         </div>
       </div>
     </div>

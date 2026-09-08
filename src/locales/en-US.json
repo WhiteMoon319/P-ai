@@ -26,7 +26,8 @@
     "yes": "Yes",
     "no": "No",
     "done": "Done",
-    "settings": "Settings"
+    "settings": "Settings",
+    "openFolder": "Open folder"
   },
   "window": {
     "configTitle": "P-ai - Config",
@@ -2982,7 +2983,10 @@
     "updateAndRestartTitle": "Update and restart",
     "applyingUpdate": "Applying downloaded update...",
     "applyUpdateFailed": "Apply update failed: {error}",
-    "applyUpdateFailedStatus": "Update failed: {error}"
+    "applyUpdateFailedStatus": "Update failed: {error}",
+    "portablePendingTitle": "Update downloaded, manual replace pending",
+    "portablePendingIntro": "Auto update failed due to permission issue, please replace manually.",
+    "portablePendingHint": "Update files are kept. Click open folder below to complete replacement manually."
   },
   "fileReader": {
     "openFile": "Open file",
