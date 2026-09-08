@@ -7,6 +7,7 @@ import {
   unbindTransportConversationStream,
 } from "../../../services/tauri-api";
 import { registerChatFlowRuntime } from "./chat-flow-runtime-registry";
+import { invokeSendChatMessage, invokeStopChatMessage } from "./chat-send-transport";
 import type { ChatRewindCompletedPayload } from "../../../types/app";
 import { useChatFlow } from "./use-chat-flow";
 import { useChatForegroundRuntime } from "./use-chat-foreground-runtime";
@@ -77,49 +78,8 @@ export function useChatRuntimeSetup(bindings: Record<string, any>) {
       t: bindings.tr,
       formatRequestFailed: (error: unknown) => bindings.formatRequestFailed(error),
       removeBinaryPlaceholders: bindings.removeBinaryPlaceholders,
-      invokeSendChatMessage: ({ text, displayText, parts, extraTextBlocks, mentions, session, traceId, onDelta }) =>
-        invokeTauri(
-          "chat.send",
-          {
-            input: {
-              payload: {
-                text,
-                displayText,
-                parts,
-                extraTextBlocks: extraTextBlocks && extraTextBlocks.length > 0 ? extraTextBlocks : undefined,
-                mentions: Array.isArray(mentions) && mentions.length > 0
-                  ? mentions.map((item: any) => ({
-                      agentId: item.agentId,
-                      agentName: item.agentName,
-                      departmentId: item.departmentId,
-                      departmentName: item.departmentName,
-                    }))
-                  : undefined,
-              },
-              session: {
-                apiConfigId: session.apiConfigId,
-                agentId: session.agentId,
-                departmentId: session.departmentId || null,
-                conversationId: session.conversationId || null,
-              },
-              traceId,
-            },
-            onDelta,
-          },
-        ),
-      invokeStopChatMessage: ({ session, partialAssistantText, partialStreamBlocks }) =>
-        invokeTauri("chat.stop", {
-          input: {
-            session: {
-              apiConfigId: session.apiConfigId,
-              agentId: session.agentId,
-              departmentId: session.departmentId || null,
-              conversationId: session.conversationId || null,
-            },
-            partialAssistantText,
-            partialStreamBlocks,
-          },
-        }),
+      invokeSendChatMessage,
+      invokeStopChatMessage,
       refreshMessageById: async ({ conversationId, messageId }) => {
         const normalizedMessageId = String(messageId || "").trim();
         const beforeMessage = bindings.allMessages.value.find((message: any) => String(message?.id || "").trim() === normalizedMessageId);

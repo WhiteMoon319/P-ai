@@ -10,6 +10,7 @@ import {
 import type { AssistantStreamBlock, ChatMentionTarget, ChatMessage, ChatRewindCompletedPayload, ChatTodoItem } from "../../../types/app";
 import { ensureConversationMessageIds } from "../utils/message-id";
 import { registerChatFlowRuntime } from "./chat-flow-runtime-registry";
+import { invokeSendChatMessage, invokeStopChatMessage } from "./chat-send-transport";
 import type { ExclusiveChatViewSubscriptionSlot } from "./exclusive-chat-view-subscription-slot";
 import {
   mergeAuthoritativeConversationMessages,
@@ -329,38 +330,8 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     t: options.t,
     formatRequestFailed: (error) => String(error instanceof Error ? error.message : error || ""),
     removeBinaryPlaceholders: (text) => text,
-    invokeSendChatMessage: ({ text, displayText, parts, mentions, session, traceId, onDelta }) =>
-      invokeTauri("chat.send", {
-        input: {
-          payload: {
-            text,
-            displayText,
-            parts,
-            mentions,
-          },
-          session: {
-            apiConfigId: session.apiConfigId,
-            agentId: session.agentId,
-            departmentId: session.departmentId || null,
-            conversationId: session.conversationId || null,
-          },
-          traceId,
-        },
-        onDelta,
-      }),
-    invokeStopChatMessage: ({ session, partialAssistantText, partialStreamBlocks }) =>
-      invokeTauri("chat.stop", {
-        input: {
-          session: {
-            apiConfigId: session.apiConfigId,
-            agentId: session.agentId,
-            departmentId: session.departmentId || null,
-            conversationId: session.conversationId || null,
-          },
-          partialAssistantText,
-          partialStreamBlocks,
-        },
-      }),
+    invokeSendChatMessage,
+    invokeStopChatMessage,
     refreshMessageById: ({ conversationId, messageId }) => refreshMessageById(conversationId, messageId),
     invokeBindActiveChatViewStream: bindTransportConversationStream,
     invokeUnbindActiveChatViewStream: unbindTransportConversationStream,
