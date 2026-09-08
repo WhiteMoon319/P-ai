@@ -215,6 +215,7 @@ export function useChatForegroundRuntime(bindings: Record<string, any>) {
     recoverForegroundConversation: (reason = "unknown") => foregroundRecoveryRunner.run(reason),
     clearChatWindowActiveSyncTimer: foregroundActivity.clearSyncTimer,
     scheduleChatWindowActiveStateSync: foregroundActivity.schedule,
+    scheduleChatWindowActiveStateRecheck: foregroundActivity.scheduleRecheck,
     syncChatWindowActiveState: foregroundActivity.sync,
     handleWindowFocusForStateSync: foregroundActivity.handleFocus,
     handleWindowBlurForStateSync: foregroundActivity.handleBlur,
@@ -222,6 +223,8 @@ export function useChatForegroundRuntime(bindings: Record<string, any>) {
     handlePageShowForStateSync,
     handleResumeForStateSync,
     handleFreezeForStateSync,
+    handleOnlineForStateSync: foregroundActivity.handleOnline,
+    handleColdStartForStateSync: foregroundActivity.handleColdStart,
     cleanupChatForegroundActivity,
   };
 }

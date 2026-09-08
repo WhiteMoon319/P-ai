@@ -6,6 +6,8 @@ export function useChatWindowWatchersGlue(bindings: Record<string, any>) {
     () => bindings.viewMode.value,
     () => {
       bindings.scheduleChatWindowActiveStateSync("viewmode_changed");
+      // 视图晚就绪/传输还没好时靠它补一次；已同步则空转，桌面无感。
+      bindings.scheduleChatWindowActiveStateRecheck?.("viewmode_changed_recheck");
     },
   );
 

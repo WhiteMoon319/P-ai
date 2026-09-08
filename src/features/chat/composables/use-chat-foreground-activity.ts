@@ -17,10 +17,14 @@ export function useChatForegroundActivity(options: ChatForegroundActivityOptions
   let syncGeneration = 0;
   let syncTimer: ReturnType<typeof setTimeout> | null = null;
   let recheckTimer: ReturnType<typeof setTimeout> | null = null;
+  let coldStartTimer: ReturnType<typeof setTimeout> | null = null;
 
   // 可见回来后的延迟复核：移动端可见先到、获焦后到，第一下判不稳时由它补一次；
   // 边沿去重保证补上的那次在已同步时是空转，不会造成桌面端重复唤醒。
   const VISIBLE_WAKE_RECHECK_MS = 350;
+  // 冷启动兜底重试：进程被杀后重载，挂载时传输/视图可能还没就绪，一次复核可能不够；
+  // 有界（仅冷启动路径一次），已同步时空转，不形成轮询。
+  const COLD_START_RETRY_MS = 2500;
 
   function clearSyncTimer() {
     if (syncTimer === null) return;
@@ -34,13 +38,19 @@ export function useChatForegroundActivity(options: ChatForegroundActivityOptions
     recheckTimer = null;
   }
 
-  function scheduleRecheck(reason: string) {
+  function clearColdStartTimer() {
+    if (coldStartTimer === null) return;
+    clearTimeout(coldStartTimer);
+    coldStartTimer = null;
+  }
+
+  function scheduleRecheck(reason: string, delayMs = VISIBLE_WAKE_RECHECK_MS) {
     clearRecheckTimer();
     recheckTimer = setTimeout(() => {
       recheckTimer = null;
       if (!isVisibleNow()) return;
       void sync(reason);
-    }, VISIBLE_WAKE_RECHECK_MS);
+    }, Math.max(0, delayMs));
   }
 
   // 可见即前台：移动端从隐藏回被动（可见但暂无获焦）就该恢复，不等获焦。
@@ -70,6 +80,7 @@ export function useChatForegroundActivity(options: ChatForegroundActivityOptions
     options.activeSynced.value = visible;
     if (!visible) {
       clearRecheckTimer();
+      clearColdStartTimer();
       options.onBackground?.(reason);
       await setTransportChatViewActive(false).catch(() => {});
       return;
@@ -151,15 +162,38 @@ export function useChatForegroundActivity(options: ChatForegroundActivityOptions
   function handleFreeze() {
     clearSyncTimer();
     clearRecheckTimer();
+    clearColdStartTimer();
     options.activeSynced.value = false;
     options.onBackground?.("freeze");
     void setTransportChatViewActive(false).catch(() => {});
+  }
+
+  function handleOnline() {
+    // 断网期间被杀后回来、传输失败时靠它补一次；可见内已同步则空转。
+    void sync("online");
+    if (isVisibleNow()) scheduleRecheck("online_recheck");
+  }
+
+  function handleColdStart(reason = "cold_start") {
+    // 进程被杀后重载：JS 全新，无边沿事件可依赖，强制跑一次；
+    // 挂载时视图/传输可能还没就绪，短复核管对焦时差、长重试管就绪时差，各一次、有界。
+    clearColdStartTimer();
+    options.activeSynced.value = null;
+    void sync(reason);
+    scheduleRecheck(`${reason}_recheck`);
+    coldStartTimer = setTimeout(() => {
+      coldStartTimer = null;
+      if (options.activeSynced.value === true) return;
+      if (!isVisibleNow()) return;
+      void sync(`${reason}_retry`);
+    }, COLD_START_RETRY_MS);
   }
 
   function cleanup() {
     ++syncGeneration;
     clearSyncTimer();
     clearRecheckTimer();
+    clearColdStartTimer();
     options.activeSynced.value = null;
     options.onBackground?.("cleanup");
     void setTransportChatViewActive(false).catch(() => {});
@@ -171,14 +205,18 @@ export function useChatForegroundActivity(options: ChatForegroundActivityOptions
     isFullyActiveNow,
     clearSyncTimer,
     clearRecheckTimer,
+    clearColdStartTimer,
     sync,
     schedule,
+    scheduleRecheck,
     handleFocus,
     handleBlur,
     handleVisibilityChange,
     handlePageShow,
     handleResume,
     handleFreeze,
+    handleOnline,
+    handleColdStart,
     cleanup,
   };
 }

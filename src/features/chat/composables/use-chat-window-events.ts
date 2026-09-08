@@ -140,13 +140,20 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
       bindings.applyConversationMessageAppended(payload);
     });
 
-    bindings.scheduleChatWindowActiveStateSync("mounted");
+    // 冷启动强制恢复：进程被杀后重载无边沿事件可依赖，不走普通 mounted 调度；
+    // 老宿主没有冷启动入口时回退到原来的 mounted 调度。
+    if (typeof bindings.handleColdStartForStateSync === "function") {
+      bindings.handleColdStartForStateSync("cold_start");
+    } else {
+      bindings.scheduleChatWindowActiveStateSync("mounted");
+    }
     bindings.startGoalTaskPolling();
     void bindings.refreshActiveGoalTask({ silent: true });
     window.addEventListener("focus", bindings.handleWindowFocusForStateSync);
     window.addEventListener("blur", bindings.handleWindowBlurForStateSync);
     document.addEventListener("visibilitychange", bindings.handleVisibilityForStateSync);
     window.addEventListener("pageshow", bindings.handlePageShowForStateSync);
+    window.addEventListener("online", bindings.handleOnlineForStateSync);
     document.addEventListener("resume", bindings.handleResumeForStateSync);
     document.addEventListener("freeze", bindings.handleFreezeForStateSync);
     window.addEventListener("focus", bindings.handleWindowFocusForMicPrewarm);
@@ -162,6 +169,7 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
     window.removeEventListener("blur", bindings.handleWindowBlurForStateSync);
     document.removeEventListener("visibilitychange", bindings.handleVisibilityForStateSync);
     window.removeEventListener("pageshow", bindings.handlePageShowForStateSync);
+    window.removeEventListener("online", bindings.handleOnlineForStateSync);
     document.removeEventListener("resume", bindings.handleResumeForStateSync);
     document.removeEventListener("freeze", bindings.handleFreezeForStateSync);
     bindings.clearChatWindowActiveSyncTimer();

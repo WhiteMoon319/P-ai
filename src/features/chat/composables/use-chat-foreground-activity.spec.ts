@@ -125,4 +125,73 @@ describe("useChatForegroundActivity", () => {
     expect(onWake).toHaveBeenCalledTimes(2);
     activity.cleanup();
   });
+
+  it("冷启动视图晚就绪：短复核补上唤醒，长重试不再重跑", async () => {
+    vi.useFakeTimers();
+    try {
+      stubDocument("visible", false);
+      let enabled = false;
+      const activeSynced = ref<boolean | null>(null);
+      const onWake = vi.fn(async () => {});
+      const activity = useChatForegroundActivity({ activeSynced, onWake, isEnabled: () => enabled });
+
+      activity.handleColdStart("cold_start");
+      await vi.advanceTimersByTimeAsync(10);
+      expect(onWake).not.toHaveBeenCalled();
+      expect(activeSynced.value).toBe(false);
+
+      enabled = true;
+      await vi.advanceTimersByTimeAsync(400);
+      expect(onWake).toHaveBeenCalledTimes(1);
+      expect(activeSynced.value).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(onWake).toHaveBeenCalledTimes(1);
+      activity.cleanup();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("冷启动传输两次失败：短复核与长重试逐次补，最终只唤醒一次", async () => {
+    vi.useFakeTimers();
+    try {
+      stubDocument("visible", true);
+      restoreMock.mockRejectedValueOnce(new Error("down1")).mockRejectedValueOnce(new Error("down2"));
+      const activeSynced = ref<boolean | null>(null);
+      const onWake = vi.fn(async () => {});
+      const onWakeError = vi.fn();
+      const activity = useChatForegroundActivity({ activeSynced, onWake, onWakeError });
+
+      activity.handleColdStart("cold_start");
+      await vi.advanceTimersByTimeAsync(10);
+      expect(onWake).not.toHaveBeenCalled();
+      expect(activeSynced.value).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(400);
+      expect(onWake).not.toHaveBeenCalled();
+      expect(onWakeError).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(2500);
+      expect(onWake).toHaveBeenCalledTimes(1);
+      expect(activeSynced.value).toBe(true);
+      activity.cleanup();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("online 补一次：未同步时唤醒，已同步时空转", async () => {
+    stubDocument("visible", true);
+    const activeSynced = ref<boolean | null>(null);
+    const onWake = vi.fn(async () => {});
+    const activity = useChatForegroundActivity({ activeSynced, onWake });
+    activity.handleOnline();
+    await flush();
+    expect(onWake).toHaveBeenCalledTimes(1);
+    activity.handleOnline();
+    await flush();
+    expect(onWake).toHaveBeenCalledTimes(1);
+    activity.cleanup();
+  });
 });
