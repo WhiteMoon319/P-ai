@@ -1640,30 +1640,54 @@ const {
 
 // ==================== virtual scroll (virtua) ====================
 
+// 远近分界：与当前首项索引差超过10项算远（约3屏），走瞬移保性能；以内走平滑
+const VIRTUAL_SMOOTH_DISTANCE = 10;
+
+function currentFirstVisibleVirtualIndex(): number {
+  const el = scrollContainer.value;
+  const top = el ? el.scrollTop : 0;
+  const v = virtuaRef.value as unknown as { findItemIndex?: (offset: number) => number } | null;
+  if (v && typeof v.findItemIndex === "function") {
+    try {
+      const idx = v.findItemIndex(top);
+      if (Number.isFinite(idx) && (idx as number) >= 0) return idx as number;
+    } catch {}
+  }
+  return Math.max(0, Math.floor(top / 300));
+}
+
+function resolveVirtualSmooth(targetIndex: number, requested: ScrollBehavior | undefined): boolean {
+  if (requested !== "smooth") return false;
+  return Math.abs(targetIndex - currentFirstVisibleVirtualIndex()) <= VIRTUAL_SMOOTH_DISTANCE;
+}
+
 // virtua 的 shift 在顶部插入时自动保持视口位置，无需手工锚定与隐藏预量
 function scrollVirtualizerToIndex(
   index: number,
   options?: { align?: "auto" | "start" | "center" | "end"; behavior?: ScrollBehavior },
 ) {
+  const len = virtualRenderItems.value.length;
+  const clampedTarget = len > 0 ? Math.max(0, Math.min(index, len - 1)) : index;
+  const smooth = resolveVirtualSmooth(clampedTarget, options?.behavior);
   if (virtuaRef.value) {
     try {
-      virtuaRef.value.scrollToIndex(index, options as any);
+      // virtua 不认 behavior，只认 smooth 布尔，这里做翻译，否则平滑永远不生效
+      virtuaRef.value.scrollToIndex(clampedTarget, { align: options?.align, smooth } as any);
       return;
     } catch {}
   }
   // 兜底：直接按索引估算偏移（每项约 320px）滚动外层容器，保证跳转可用
   const el = scrollContainer.value;
   if (!el) return;
-  const clamped = Math.max(0, Math.min(index, virtualRenderItems.value.length - 1));
-  const approxOffset = clamped * 320;
-  el.scrollTo({ top: approxOffset, behavior: options?.behavior || "auto" });
+  const approxOffset = clampedTarget * 320;
+  el.scrollTo({ top: approxOffset, behavior: smooth ? "smooth" : "auto" });
 }
 function scrollVirtualizerToConversationBottomLightweight(behavior: "auto" | "smooth" = "auto") {
   const el = scrollContainer.value;
   if (!el) {
     const len = virtualRenderItems.value.length;
     if (len <= 0 || !virtuaRef.value) return;
-    try { virtuaRef.value.scrollToIndex(len - 1, { align: "end", behavior } as any); } catch {}
+    try { virtuaRef.value.scrollToIndex(len - 1, { align: "end", smooth: resolveVirtualSmooth(len - 1, behavior) } as any); } catch {}
     return;
   }
   // 新消息/气泡插入时直接置底，确保“上推”可见；等待尾部留白与 virtua 测量稳定后再做最终置底
@@ -1707,7 +1731,7 @@ function resetVirtualizerAtConversationBottom(behavior: "auto" | "smooth" = "aut
   }
   const len = virtualRenderItems.value.length;
   if (len <= 0 || !virtuaRef.value) return;
-  try { virtuaRef.value.scrollToIndex(len - 1, { align: "end", behavior } as any); } catch {}
+  try { virtuaRef.value.scrollToIndex(len - 1, { align: "end", smooth: resolveVirtualSmooth(len - 1, behavior) } as any); } catch {}
 }
 function scheduleVirtualMeasure() {
   // virtua 内部 ResizeObserver 自动测量，无需手动触发

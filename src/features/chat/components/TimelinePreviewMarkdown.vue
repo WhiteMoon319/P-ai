@@ -5,7 +5,7 @@ import { parseInlineSegments, type InlineSegment } from "../markdown/parse-markd
 /**
  * previewMarkdown 轻量白名单渲染
  * - 仅标题/引用/列表占位转行，code/表格/图表等块级重型不渲染
- * - 内联仅保留 strong/em/code/kbd/mark/链接文本，统一 13/1.5 不放大
+ * - 内联仅保留 strong/em/code/kbd/mark/链接文本，跟随正文字号不放大
  * - 段落 margin 0.12em 无大间距
  */
 const props = defineProps<{
@@ -120,6 +120,7 @@ const Inline = defineComponent({
 
 <style scoped>
 .ecall-timeline-preview-markdown {
+  font-size: var(--app-chat-message-text-size, var(--app-text-sm-size, 0.875rem));
   line-height: 1.5;
 }
 .ecall-timeline-preview-markdown :deep(.ecall-timeline-inline-code) {

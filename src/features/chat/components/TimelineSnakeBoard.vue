@@ -33,7 +33,7 @@ const PADDING = 21;
 const DOT_HIT = 23;
 const DOT_SMALL = 10;
 const DOT_FOCUSED = 21;
-const PREVIEW_MAX_W = 380;
+const PREVIEW_MAX_W = 440;
 const PREVIEW_PAD = 10;
 const PREVIEW_GAP = 4;
 const PREVIEW_H = 152;
@@ -365,7 +365,7 @@ const previewAnchor = computed(() => {
 
 const tooltipW = computed(() => {
   const cardW = layout.value?.cardW ?? PREVIEW_MAX_W;
-  return Math.min(PREVIEW_MAX_W, Math.max(220, cardW - PREVIEW_PAD * 2 - 8));
+  return Math.min(PREVIEW_MAX_W, Math.max(280, cardW - PREVIEW_PAD * 2 - 8));
 });
 
 const tooltipBelow = computed(() => {
