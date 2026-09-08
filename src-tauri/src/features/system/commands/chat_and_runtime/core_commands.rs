@@ -2525,6 +2525,7 @@ fn recall_chat_queue_event_inner(
     Ok(ChatQueueRecallResult {
         removed: removed.is_some(),
         message_text,
+        not_in_queue: removed.is_none(),
     })
 }
 
@@ -2532,17 +2533,26 @@ fn recall_chat_queue_event_inner(
 async fn mark_chat_queue_event_guided(
     event_id: String,
     state: State<'_, AppState>,
-) -> Result<bool, String> {
+) -> Result<ChatQueueMarkGuidedResult, String> {
     mark_chat_queue_event_guided_inner(&event_id, state.inner())
 }
 
-fn mark_chat_queue_event_guided_inner(event_id: &str, state: &AppState) -> Result<bool, String> {
+fn mark_chat_queue_event_guided_inner(
+    event_id: &str,
+    state: &AppState,
+) -> Result<ChatQueueMarkGuidedResult, String> {
     let conversation_id = mark_queue_event_guided(state, event_id)?;
     if let Some(conversation_id) = conversation_id {
         trigger_guided_queue_processing(state, &conversation_id);
-        return Ok(true);
+        return Ok(ChatQueueMarkGuidedResult {
+            updated: true,
+            not_in_queue: false,
+        });
     }
-    Ok(false)
+    Ok(ChatQueueMarkGuidedResult {
+        updated: false,
+        not_in_queue: true,
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

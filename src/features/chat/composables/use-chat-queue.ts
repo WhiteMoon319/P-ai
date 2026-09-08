@@ -14,7 +14,30 @@ export type ChatQueueEvent = {
 export type ChatQueueRecallResult = {
   removed: boolean;
   messageText: string;
+  notInQueue?: boolean;
 };
+
+export type ChatQueueMarkGuidedResult = {
+  updated: boolean;
+  notInQueue?: boolean;
+};
+
+export const CHAT_QUEUE_OUT_OF_SYNC_EVENT = "easy-call:chat-queue-out-of-sync";
+
+export type ChatQueueOutOfSyncDetail = {
+  eventId: string;
+  conversationId: string;
+  reason: "not_in_queue";
+};
+
+export function broadcastChatQueueOutOfSync(detail: ChatQueueOutOfSyncDetail) {
+  if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") return;
+  try {
+    window.dispatchEvent(new CustomEvent(CHAT_QUEUE_OUT_OF_SYNC_EVENT, { detail }));
+  } catch (error) {
+    console.error("[聊天队列] Failed to broadcast out-of-sync:", error);
+  }
+}
 
 export type MainSessionState = "idle" | "assistant_streaming" | "organizing_context";
 
@@ -71,31 +94,58 @@ export function useChatQueue(options: UseChatQueueOptions = {}) {
     }
   }
 
+  function findQueuedConversationId(eventId: string): string {
+    const hit = queueEvents.value.find((event) => event.id === eventId);
+    return String(hit?.conversationId || "").trim();
+  }
+
   async function recallQueueEvent(eventId: string): Promise<ChatQueueRecallResult> {
-    if (!enabled.value) return { removed: false, messageText: "" };
+    if (!enabled.value) return { removed: false, messageText: "", notInQueue: false };
     try {
-      const result = await invokeTauri<ChatQueueRecallResult>("chat.queueRecall", { eventId }, 10000);
-      if (result?.removed) {
+      const raw = await invokeTauri<ChatQueueRecallResult>("chat.queueRecall", { eventId }, 10000);
+      const result: ChatQueueRecallResult = {
+        removed: !!raw?.removed,
+        messageText: String(raw?.messageText || ""),
+        notInQueue: raw?.notInQueue === true,
+      };
+      if (result.removed) {
         await refreshQueue();
+        return result;
       }
-      return result || { removed: false, messageText: "" };
+      // 仅当后端准确反馈不在队列时才做失配双刷，其他失败保持静默。
+      if (result.notInQueue) {
+        const conversationId = findQueuedConversationId(eventId);
+        await refreshQueue();
+        broadcastChatQueueOutOfSync({ eventId, conversationId, reason: "not_in_queue" });
+      }
+      return result;
     } catch (error) {
       console.error("[聊天队列] Failed to recall queue event:", error);
-      return { removed: false, messageText: "" };
+      return { removed: false, messageText: "", notInQueue: false };
     }
   }
 
-  async function markGuided(eventId: string): Promise<boolean> {
-    if (!enabled.value) return false;
+  async function markGuided(eventId: string): Promise<ChatQueueMarkGuidedResult> {
+    if (!enabled.value) return { updated: false, notInQueue: false };
     try {
-      const updated = await invokeTauri<boolean>("chat.queueMarkGuided", { eventId }, 10000);
-      if (updated) {
+      const raw = await invokeTauri<ChatQueueMarkGuidedResult | boolean>("chat.queueMarkGuided", { eventId }, 10000);
+      const normalized: ChatQueueMarkGuidedResult = typeof raw === "boolean"
+        ? { updated: raw, notInQueue: !raw }
+        : { updated: !!raw?.updated, notInQueue: raw?.notInQueue === true };
+      if (normalized.updated) {
         await refreshQueue();
+        return normalized;
       }
-      return updated;
+      // 仅当后端准确反馈不在队列时才做失配双刷，其他失败保持静默。
+      if (normalized.notInQueue) {
+        const conversationId = findQueuedConversationId(eventId);
+        await refreshQueue();
+        broadcastChatQueueOutOfSync({ eventId, conversationId, reason: "not_in_queue" });
+      }
+      return normalized;
     } catch (error) {
       console.error("[聊天队列] Failed to mark event guided:", error);
-      return false;
+      return { updated: false, notInQueue: false };
     }
   }
 

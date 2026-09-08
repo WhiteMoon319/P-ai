@@ -157,6 +157,14 @@ pub(crate) struct ChatQueueEventSummary {
 pub(crate) struct ChatQueueRecallResult {
     pub removed: bool,
     pub message_text: String,
+    pub not_in_queue: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ChatQueueMarkGuidedResult {
+    pub updated: bool,
+    pub not_in_queue: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

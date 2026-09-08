@@ -483,7 +483,14 @@ async fn send_chat_message_inner(
                     &tool_status_event,
                 );
                 // 发送初始调度状态，让前端也立即建立流式缓存
-                let _ = on_delta.send(tool_status_event);
+                // 单发通道到不了 Web（WebSocket 丢弃 Channel），必须再走一次广播；
+                // 与分发循环内 tool_status 的处理保持同一语义。
+                let _ = on_delta.send(tool_status_event.clone());
+                emit_assistant_delta_app_event(
+                    state,
+                    cid,
+                    &assistant_delta_broadcast_event(&tool_status_event),
+                );
             }
         }
     }
@@ -1259,8 +1266,9 @@ async fn send_chat_message_inner(
     log_chat_stage("runtime_and_session_ready");
 
     // 调度状态更新：运行时与会话解析完成，即将进入上下文构建阶段
-    if let Some(ref _cid) = requested_conversation_id {
-        let _ = on_delta.send(AssistantDeltaEvent {
+    // 单发通道到不了 Web（WebSocket 丢弃 Channel），必须再走一次广播。
+    if let Some(cid) = requested_conversation_id.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+        let early_event = AssistantDeltaEvent {
             delta: String::new(),
             kind: Some("tool_status".to_string()),
             request_id: Some(trace_id.clone()),
@@ -1273,7 +1281,9 @@ async fn send_chat_message_inner(
             tool_args: None,
             message: Some("正在处理附件与上下文...".to_string()),
             stream_cache: None,
-        });
+        };
+        let _ = on_delta.send(early_event.clone());
+        emit_assistant_delta_app_event(state, cid, &assistant_delta_broadcast_event(&early_event));
     }
 
     let default_chat_key = inflight_chat_key(
@@ -1364,8 +1374,9 @@ async fn send_chat_message_inner(
     };
     log_run_stage("run.begin");
     // 调度状态更新：进入模型请求阶段
-    if let Some(ref _cid) = requested_conversation_id {
-        let _ = on_delta.send(AssistantDeltaEvent {
+    // 单发通道到不了 Web（WebSocket 丢弃 Channel），必须再走一次广播。
+    if let Some(cid) = requested_conversation_id.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+        let early_event = AssistantDeltaEvent {
             delta: String::new(),
             kind: Some("tool_status".to_string()),
             request_id: Some(trace_id_for_run.clone()),
@@ -1378,7 +1389,9 @@ async fn send_chat_message_inner(
             tool_args: None,
             message: Some("正在进入模型请求阶段...".to_string()),
             stream_cache: None,
-        });
+        };
+        let _ = on_delta.send(early_event.clone());
+        emit_assistant_delta_app_event(&state, cid, &assistant_delta_broadcast_event(&early_event));
     }
     if !resolved_api.request_format.is_chat_text() {
         return Err(format!(

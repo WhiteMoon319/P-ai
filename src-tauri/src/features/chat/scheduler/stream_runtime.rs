@@ -173,13 +173,6 @@ fn emit_assistant_delta_app_event(
     conversation_id: &str,
     event: &AssistantDeltaEvent,
 ) {
-    let app_handle = match state.app_handle.lock() {
-        Ok(guard) => guard.as_ref().cloned(),
-        Err(_) => None,
-    };
-    let Some(app_handle) = app_handle else {
-        return;
-    };
     let conversation_title = if has_sidebar_conversation_subscriber() {
         assistant_delta_broadcast_conversation_title(state, conversation_id)
     } else {
@@ -190,8 +183,16 @@ fn emit_assistant_delta_app_event(
         "event": event,
         "conversationTitle": conversation_title,
     });
+    // Web 桥接只靠 ide 广播收 tool_status，Tauri 窗口只靠 app_handle.emit；
+    // 两条路必须独立，缺一条不能挡另一条。
     ide_chat_broadcast_notification("chat.assistantDelta", payload.clone());
-    let _ = app_handle.emit(CHAT_ASSISTANT_DELTA_EVENT, payload);
+    let app_handle = match state.app_handle.lock() {
+        Ok(guard) => guard.as_ref().cloned(),
+        Err(_) => None,
+    };
+    if let Some(app_handle) = app_handle {
+        let _ = app_handle.emit(CHAT_ASSISTANT_DELTA_EVENT, payload);
+    }
 }
 
 fn should_emit_assistant_delta_via_app_event_only(event: &AssistantDeltaEvent) -> bool {

@@ -644,4 +644,53 @@ describe("useConversationViewRuntime", () => {
     ).toHaveLength(2);
     scope.stop();
   });
+
+  it("队列失配事件与本会话一致时重新同步权威快照", async () => {
+    invokeTauriMock
+      .mockResolvedValueOnce({
+        conversationId: "conversation-a",
+        messages: [message("user-1", "q1", "user")],
+        runtimeState: "idle",
+        shouldBindStream: false,
+      })
+      .mockResolvedValueOnce({
+        conversationId: "conversation-a",
+        messages: [message("user-1", "q1", "user"), message("assistant-1", "a1")],
+        runtimeState: "idle",
+        shouldBindStream: false,
+      });
+
+    const { runtime, scope, windowTarget } = await createRuntime("conversation-a");
+    await vi.waitFor(() => expect(runtime.allMessages.value).toHaveLength(1));
+    windowTarget.dispatchEvent(new CustomEvent("easy-call:chat-queue-out-of-sync", {
+      detail: { eventId: "event-1", conversationId: "conversation-a", reason: "not_in_queue" },
+    }));
+    await vi.waitFor(() => expect(runtime.allMessages.value.map((item: any) => item.id)).toEqual(["user-1", "assistant-1"]));
+    expect(
+      invokeTauriMock.mock.calls.filter(([command]) => command === "conversation.foregroundLightSnapshot"),
+    ).toHaveLength(2);
+    scope.stop();
+  });
+
+  it("队列失配事件属于其他会话时不触动本会话", async () => {
+    invokeTauriMock.mockResolvedValueOnce({
+      conversationId: "conversation-a",
+      messages: [message("user-1", "q1", "user")],
+      runtimeState: "idle",
+      shouldBindStream: false,
+    });
+
+    const { scope, windowTarget } = await createRuntime("conversation-a");
+    await vi.waitFor(() => expect(
+      invokeTauriMock.mock.calls.filter(([command]) => command === "conversation.foregroundLightSnapshot"),
+    ).toHaveLength(1));
+    windowTarget.dispatchEvent(new CustomEvent("easy-call:chat-queue-out-of-sync", {
+      detail: { eventId: "event-9", conversationId: "conversation-b", reason: "not_in_queue" },
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(
+      invokeTauriMock.mock.calls.filter(([command]) => command === "conversation.foregroundLightSnapshot"),
+    ).toHaveLength(1);
+    scope.stop();
+  });
 });

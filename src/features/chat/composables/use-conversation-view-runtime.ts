@@ -35,6 +35,7 @@ import {
   messageText,
   removeBinaryPlaceholders,
 } from "../../../utils/chat-message";
+import { CHAT_QUEUE_OUT_OF_SYNC_EVENT } from "./use-chat-queue";
 
 type ConversationViewRuntimeOptions = {
   conversationId: Ref<string>;
@@ -554,6 +555,21 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
   window.addEventListener("focus", handleForegroundWake);
   document.addEventListener("visibilitychange", handleForegroundWake);
 
+  // 队列撤回/切引导拿到后端准确不在队列反馈时回源同步权威快照；
+  // 仅本会话失配才动，空会话与跨会话直接忽略。
+  function handleQueueOutOfSync(event: Event) {
+    const detail = (event as CustomEvent<{ conversationId?: string } | undefined>)?.detail;
+    const staleConversationId = String(detail?.conversationId || "").trim();
+    const currentId = currentConversationId();
+    if (!staleConversationId || !currentId || staleConversationId !== currentId) return;
+    void synchronizeConversation(currentId, {
+      clearRuntime: true,
+      preserveExistingHistory: false,
+    });
+  }
+
+  window.addEventListener(CHAT_QUEUE_OUT_OF_SYNC_EVENT, handleQueueOutOfSync);
+
   const rewindActions = useChatRewindActions({
     activeApiConfigId: preferredApiConfigId,
     activeAgentId: options.agentId,
@@ -645,6 +661,7 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     ++snapshotRequestSequence;
     window.removeEventListener("focus", handleForegroundWake);
     document.removeEventListener("visibilitychange", handleForegroundWake);
+    window.removeEventListener(CHAT_QUEUE_OUT_OF_SYNC_EVENT, handleQueueOutOfSync);
     unregister();
     const unbindPromise = flow.unbindActiveConversationStream().catch(() => {});
     if (options.subscriptionSlot) {

@@ -1,5 +1,7 @@
+import { onMounted, onUnmounted } from "vue";
 import { useViewRefresh } from "../../shell/composables/use-view-refresh";
 import { formatI18nError } from "../../../utils/error";
+import { CHAT_QUEUE_OUT_OF_SYNC_EVENT } from "./use-chat-queue";
 import { useChatRuntimeWatchers } from "./use-chat-runtime-watchers";
 import { useChatWindowBootstrap } from "./use-chat-window-bootstrap";
 import { useChatWindowEvents } from "./use-chat-window-events";
@@ -142,6 +144,24 @@ export function useChatWindowLifecycleOrchestrator(bindings: Record<string, any>
     getChatFlow: bindings.getChatFlow,
     maybeResumeForegroundStreamingBubble: bindings.maybeResumeForegroundStreamingBubble,
     resumeForegroundRuntimeFromBackend: bindings.resumeForegroundRuntimeFromBackend,
+  });
+
+  // 队列撤回/切引导拿到后端准确不在队列反馈时，前端队列已在 useChatQueue 内刷新，
+  // 这里只补刷当前会话历史；非准确反馈不触发，跨会话失配直接忽略。
+  onMounted(() => {
+    const handleQueueOutOfSync = (event: Event) => {
+      if (String(bindings.viewMode?.value || "").trim() !== "chat") return;
+      const detail = (event as CustomEvent<{ conversationId?: string } | undefined>)?.detail;
+      const staleConversationId = String(detail?.conversationId || "").trim();
+      const currentConversationId = String(bindings.currentChatConversationId?.value || "").trim();
+      if (!currentConversationId) return;
+      if (staleConversationId && staleConversationId !== currentConversationId) return;
+      void bindings.refreshConversationHistory?.();
+    };
+    window.addEventListener(CHAT_QUEUE_OUT_OF_SYNC_EVENT, handleQueueOutOfSync);
+    onUnmounted(() => {
+      window.removeEventListener(CHAT_QUEUE_OUT_OF_SYNC_EVENT, handleQueueOutOfSync);
+    });
   });
 
   useChatWindowLifecycleSetup({

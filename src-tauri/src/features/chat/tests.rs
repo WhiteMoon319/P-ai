@@ -8618,6 +8618,42 @@
     }
 
     #[test]
+    fn recall_chat_queue_event_inner_should_report_not_in_queue_on_miss() {
+        let state = test_chat_runtime_state();
+        let result =
+            recall_chat_queue_event_inner("missing-event-id", &state).expect("recall miss");
+        assert!(!result.removed);
+        assert!(result.not_in_queue);
+    }
+
+    #[test]
+    fn mark_chat_queue_event_guided_inner_should_report_not_in_queue_on_miss() {
+        let state = test_chat_runtime_state();
+        let result =
+            mark_chat_queue_event_guided_inner("missing-event-id", &state).expect("mark miss");
+        assert!(!result.updated);
+        assert!(result.not_in_queue);
+    }
+
+    #[test]
+    fn recall_chat_queue_event_inner_should_report_removed_on_hit() {
+        let state = test_chat_runtime_state();
+        set_conversation_runtime_state(&state, "conversation-a", MainSessionState::AssistantStreaming)
+            .expect("set streaming state");
+        let ingress =
+            ingress_chat_event(&state, test_pending_event("conversation-a")).expect("queue event");
+        let event_id = match ingress {
+            ChatEventIngress::Queued { event_id } => event_id,
+            _ => panic!("expected queued recall candidate"),
+        };
+
+        let result = recall_chat_queue_event_inner(&event_id, &state).expect("recall hit");
+        assert!(result.removed);
+        assert!(!result.not_in_queue);
+        assert_eq!(result.message_text, "hello");
+    }
+
+    #[test]
     fn claim_queued_conversation_batches_should_only_take_one_normal_event_per_round() {
         let state = test_chat_runtime_state();
         set_conversation_runtime_state(&state, "conversation-a", MainSessionState::AssistantStreaming)
