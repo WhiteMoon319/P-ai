@@ -2083,6 +2083,10 @@
     },
     "plan": {
       "mode": "计划模式",
+      "enterMode": "切换到计划模式",
+      "exitMode": "退出计划",
+      "enabled": "计划模式已开启",
+      "modeOff": "未开启",
       "confirmAction": "我同意，并执行计划",
       "confirmHint": "不同意，请直接告诉我你的想法",
       "sidebarHint": "点击下方链接在侧边栏阅读计划",

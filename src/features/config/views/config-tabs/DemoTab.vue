@@ -13,6 +13,8 @@
             <option value="delegates">DelegateProgressLine</option>
             <option value="templates">ConfigTemplate</option>
             <option value="overview">监控概览（MonitorOverview）</option>
+            <option value="composer">输入面板新结构</option>
+            <option value="double-deck">双层卡（DoubleDeck）</option>
           </select>
           <span class="text-xs text-base-content/50">当前：{{ demoComponentLabel }}</span>
         </div>
@@ -79,6 +81,26 @@
             />
           </div>
         </div>
+      </div>
+    </div>
+
+    <div v-if="demoComponentKey === 'composer'" class="card border border-base-300 bg-base-100">
+      <div class="card-body gap-3 p-4">
+        <div class="space-y-1">
+          <h3 class="card-title text-base">输入面板新结构</h3>
+          <p class="text-sm text-base-content/70">矩形容器包裹，底色 base100→base200→base300 循环切换；灌满 ↔ 悬浮 一键切换。</p>
+        </div>
+        <ChatComposerStructureDemo />
+      </div>
+    </div>
+
+    <div v-if="demoComponentKey === 'double-deck'" class="card border border-base-300 bg-base-100">
+      <div class="card-body gap-3 p-4">
+        <div class="space-y-1">
+          <h3 class="card-title text-base">双层卡（DoubleDeck）</h3>
+          <p class="text-sm text-base-content/70">底卡包面卡 · 露头在面卡上方 · [[abc]]空底座 / [[abc]def]多队列 · 先调顺再回输入面板。</p>
+        </div>
+        <DoubleDeckCardDemo />
       </div>
     </div>
 
@@ -352,6 +374,8 @@ import ExpandableText from "../../../shared/components/ExpandableText.vue";
 import ChatAttachmentList from "../../../chat/components/ChatAttachmentList.vue";
 import DelegateCard from "../../../chat/components/DelegateCard.vue";
 import MonitorOverview from "../../../chat/components/MonitorOverview.vue";
+import ChatComposerStructureDemo from "../../../chat/components/ChatComposerStructureDemo.vue";
+import DoubleDeckCardDemo from "../../../chat/components/DoubleDeckCardDemo.vue";
 import SessionControlPanel from "../../../chat/components/SessionControlPanel.vue";
 import type { AppConfig, BackgroundShellTaskSummary, ConversationDelegateStatusSummary, PersonaProfile } from "../../../../types/app";
 import type { ToolReviewBatchSummary } from "../../../chat/composables/use-chat-tool-review";
@@ -419,8 +443,10 @@ const configTemplateDemo = ref<Record<string, unknown>>({
   homepage: "https://pai.example.com",
   browserNote: "",
 });
-const demoComponentKey = ref<"question" | "bubbles" | "delegates" | "templates" | "overview">("question");
+const demoComponentKey = ref<"question" | "bubbles" | "delegates" | "templates" | "overview" | "composer" | "double-deck">("question");
 const demoComponentLabel = computed(() => {
+  if (demoComponentKey.value === "double-deck") return "双层卡";
+  if (demoComponentKey.value === "composer") return "输入面板新结构";
   if (demoComponentKey.value === "question") return "提问卡";
   if (demoComponentKey.value === "bubbles") return "自研气泡";
   if (demoComponentKey.value === "delegates") return "DelegateProgressLine";

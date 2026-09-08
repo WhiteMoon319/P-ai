@@ -1,5 +1,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, type Ref, watch } from "vue";
 import { isMobileTouchViewport } from "../../shared/utils/mobile-viewport";
+import { isDesktopTauriHost } from "../../../services/tauri-api";
 
 const TODO_DROPDOWN_SAFE_GAP = 30;
 const FLOATING_TOOLBAR_MIN_RESERVE = 24;
@@ -11,6 +12,7 @@ type UseChatScrollLayoutOptions = {
   busy: Ref<boolean>;
   frozen: Ref<boolean>;
   timelineItemCount: Ref<number>;
+  isWebRoundedMode?: Ref<boolean>;
   onReachedBottom: () => void;
   focusComposerInput: (options?: FocusOptions) => void;
 };
@@ -21,6 +23,7 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
   const toolbarContainer = ref<HTMLElement | null>(null);
   const chatLayoutRoot = ref<HTMLElement | null>(null);
   const latestOwnElasticMinHeight = ref(0);
+  const composerReservedHeight = ref(0);
   const jumpToBottomOffset = ref(96);
   const lastBottomState = ref(false);
   const lastScrollTop = ref(0);
@@ -53,8 +56,12 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
 
   function updateJumpToBottomOffset() {
     const composerHeight = composerContainer.value?.offsetHeight ?? 0;
-    // offsetHeight 不含 margin：移动端卡片 mb-2(8px) 已占 8px，再对齐卡片外边距留 8px 间隙
-    const nextOffset = Math.max(16, composerHeight + 16);
+    if (composerReservedHeight.value !== composerHeight) {
+      composerReservedHeight.value = composerHeight;
+    }
+    // 桌面灌满 +16，Web双栏悬浮突出 24px 圆角 +40
+    const isFloating = options.isWebRoundedMode?.value ?? (!isDesktopTauriHost() && false);
+    const nextOffset = Math.max(16, composerHeight + (isFloating ? 40 : 16));
     if (jumpToBottomOffset.value !== nextOffset) {
       jumpToBottomOffset.value = nextOffset;
     }
@@ -292,6 +299,7 @@ export function useChatScrollLayout(options: UseChatScrollLayoutOptions) {
     toolbarContainer,
     chatLayoutRoot,
     latestOwnElasticMinHeight,
+    composerReservedHeight,
     showJumpToBottom,
     atConversationBottom: lastBottomState,
     userScrollingDown,

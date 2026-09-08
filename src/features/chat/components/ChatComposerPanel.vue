@@ -1,14 +1,5 @@
 <template>
   <div>
-    <ChatQueuePreview
-      v-if="queueEnabled && !systemNotificationMode && !remoteContactMode"
-      :queue-events="visibleQueueEvents"
-      :session-state="sessionState"
-      :user-persona-name="queueUserPersonaName"
-      @recall-to-input="handleRecallToInput"
-      @mark-guided="markGuided"
-    />
-
     <div
       v-if="linkOpenErrorText"
       class="alert alert-warning mb-2 py-2 px-3 text-sm whitespace-pre-wrap break-all max-h-24 overflow-auto"
@@ -75,308 +66,152 @@
       </button>
     </div>
     <template v-else>
-    <div v-if="visibleQueuedAttachmentNotices.length > 0" class="mb-2 flex flex-wrap gap-1">
-      <div
-        v-for="(file, idx) in visibleQueuedAttachmentNotices"
-        :key="file.id"
-        class="badge badge-ghost gap-1 py-3"
-      >
-        <span v-if="file.pending" class="loading loading-spinner loading-xs"></span>
-        <FileText v-else class="h-3.5 w-3.5" />
-        <span class="text-xs">{{ file.fileName }}</span>
-        <button
-          v-if="!file.pending"
-          class="btn btn-ghost btn-sm btn-square"
-          @click="emit('removeQueuedAttachmentNotice', idx)"
-        >
-          <X class="h-3 w-3" />
-        </button>
-      </div>
-    </div>
-    <div v-if="transcribing" class="mb-1 text-xs opacity-80 flex items-center gap-1">
-      <span class="loading loading-spinner loading-sm"></span>
-      <span>{{ t("chat.transcribing") }}</span>
-    </div>
-    <div v-if="selectedMentions.length > 0" class="mb-2 flex flex-wrap gap-1">
-      <span
-        v-for="item in selectedMentions"
-        :key="`${item.agentId}:${item.departmentId}`"
-        class="badge gap-1 bg-base-300 px-3 py-3 text-sm text-base-content border-transparent"
-      >
-        <span class="max-w-40 truncate leading-none">@{{ mentionDisplayLabel(item) }}</span>
-        <button
-          type="button"
-          class="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-base-content transition hover:bg-error hover:text-error-content"
-          @click.stop="removeSelectedMention(item)"
-        >
-          <X class="h-3 w-3" />
-        </button>
-      </span>
-    </div>
-    <div v-if="attachedIdeContextReferences.length > 0 || mergedIdeContextGroups.length > 0" class="mb-2 flex flex-col gap-2">
-      <div v-for="group in mergedIdeContextGroups" :key="group.workspacePath" class="flex flex-col gap-1">
-        <div v-if="showIdeWorkspaceGroupLabel" class="px-1 text-xs opacity-60">{{ group.workspaceName }}</div>
-        <div class="flex flex-wrap gap-1">
-          <button
-            v-for="item in group.references"
-            :key="item.id"
-            type="button"
-            class="gap-1 py-3 max-w-full"
-            :class="isIdeContextAttached(item.id) ? 'badge badge-primary' : 'badge badge-ghost'"
-            :title="ideContextReferenceTitle(item)"
-            @mousedown.prevent
-            @click="toggleIdeContextReference(item)"
-          >
-            <Minus v-if="isIdeContextAttached(item.id)" class="h-3.5 w-3.5 shrink-0" />
-            <Plus v-else class="h-3.5 w-3.5 shrink-0" />
-            <span class="flex min-w-0 max-w-72 items-center text-xs">
-              <span class="min-w-0 truncate">{{ ideContextReferenceDisplayParts(item).fileName }}</span>
-              <span
-                v-if="ideContextReferenceDisplayParts(item).lineSuffix"
-                class="shrink-0 whitespace-nowrap"
-              >{{ ideContextReferenceDisplayParts(item).lineSuffix }}</span>
-            </span>
-          </button>
-        </div>
-      </div>
-    </div>
-    <div ref="composerRootRef" class="flex flex-col">
-      <div v-if="instructionPanelOpen" class="flex flex-wrap content-start gap-2 max-h-48 overflow-y-auto">
-        <button
-          v-for="(item, index) in normalizedInstructionPresets"
-          :key="item.id"
-          type="button"
-          class="btn btn-sm min-h-0 max-w-full justify-start normal-case px-3"
-          :class="instructionFocusIndex === index ? 'btn-primary' : 'btn-ghost'"
-          :title="item.prompt"
-          @click="applyInstructionPreset(item)"
-        >
-          <span class="block max-w-64 truncate text-left text-sm sm:max-w-80">{{ item.prompt }}</span>
-        </button>
-        <div v-if="normalizedInstructionPresets.length === 0" class="w-full px-2 py-3 text-sm opacity-60">
-          {{ t("chat.noInstructionPresets") }}
-        </div>
-      </div>
-      <div v-if="mobileViewport" class="flex flex-col gap-1.5">
-        <div class="flex items-center gap-1.5">
-          <button
-            v-if="isMobileCompact && showConversationActions"
-            type="button"
-            class="btn btn-sm btn-circle btn-ghost shrink-0"
-            :title="t('chat.attach')"
-            @click="emit('pickAttachments')"
-          >
-            <Paperclip class="h-3.5 w-3.5" />
-          </button>
-          <div class="min-w-0 flex-1 p-1.5">
-            <div v-if="clipboardImages.length > 0" class="ecall-chat-composer-image-previews mb-1.5">
-              <div
-                v-for="(img, idx) in clipboardImages"
-                :key="`${img.mime}-${idx}`"
-                class="ecall-chat-composer-image-preview"
-              >
-                <img
-                  v-if="clipboardImagePreviewSrc(img)"
-                  class="ecall-chat-composer-image-preview-media"
-                  :src="clipboardImagePreviewSrc(img)"
-                  :alt="t('chat.image', { index: idx + 1 })"
-                  draggable="false"
-                />
-                <div v-else class="ecall-chat-composer-file-preview">
-                  <FileText class="h-5 w-5" />
-                  <span class="text-xs">{{ isPdfMime(img.mime) ? `PDF ${idx + 1}` : t("chat.image", { index: idx + 1 }) }}</span>
-                </div>
-                <button
-                  type="button"
-                  class="ecall-chat-composer-image-remove"
-                  aria-label="删除图片"
-                  @mousedown.prevent
-                  @click.stop="removeClipboardImageAt(idx)"
-                >
-                  <X class="h-3 w-3" />
-                </button>
-              </div>
-            </div>
-            <textarea
-              ref="chatInputRef"
-              v-model="localChatInput"
-              class="block w-full resize-none overflow-y-auto bg-transparent text-sm leading-6 outline-none chat-input-no-focus"
-              rows="1"
-              :placeholder="effectiveChatInputPlaceholder"
-              @input="handleChatInputInput"
-              @compositionstart="handleChatInputCompositionStart"
-              @compositionend="handleChatInputCompositionEnd"
-              @keydown="handleChatInputKeydown"
-              @focus="handleChatInputFocus"
-              @blur="handleChatInputBlur"
-            ></textarea>
-          </div>
-          <button
-            v-if="isMobileCompact && showStopAction"
-            type="button"
-            class="btn btn-sm btn-circle shrink-0 btn-error"
-            :disabled="frozen || busy || !!stopChatDisabled"
-            :title="`${t('chat.stop')} / ${t('chat.stopReplying')}`"
-            @click="emit('stopChat')"
-          >
-            <Square class="h-3.5 w-3.5 fill-current" />
-          </button>
-          <button
-            v-else-if="isMobileCompact && showConversationActions && canUseTransportSpeechRecording()"
-            type="button"
-            class="btn btn-sm btn-circle shrink-0"
-            :class="recording ? 'btn-error' : 'btn-ghost'"
-            :disabled="!canRecord"
-            :title="recording ? t('chat.recording', { seconds: Math.max(1, Math.round(recordingMs / 1000)) }) : t('chat.holdRecord', { hotkey: recordHotkey })"
-            @mousedown.prevent="emit('startRecording')"
-            @mouseup.prevent="emit('stopRecording')"
-            @mouseleave.prevent="recording && emit('stopRecording')"
-            @touchstart.prevent="emit('startRecording')"
-            @touchend.prevent="emit('stopRecording')"
-          >
-            <Mic class="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <div v-if="!isMobileCompact" class="flex items-center justify-between gap-2">
-          <div class="flex min-w-0 flex-1 items-center gap-1">
-            <button
-              v-if="showConversationActions"
-              type="button"
-              class="btn btn-sm btn-circle btn-ghost shrink-0"
-              :title="t('chat.attach')"
-              @click="emit('pickAttachments')"
+    <InputPanelDock
+      :queue-events="queueEnabled && !systemNotificationMode && !remoteContactMode ? visibleQueueEvents : []"
+      :user-persona-name="queueUserPersonaName"
+      :queue-visible="props.queueVisible ?? true"
+      :is-rounded="!!isRounded"
+      dock-bg="base-200"
+      @recall-to-input="handleRecallToInput"
+      @mark-guided="handleQueueMarkGuided"
+    >
+        <template #attachments>
+          <div v-if="selectedMentions.length > 0" class="mb-2 flex flex-wrap gap-1">
+            <span
+              v-for="item in selectedMentions"
+              :key="`${item.agentId}:${item.departmentId}`"
+              class="badge gap-1 bg-base-300 px-3 py-3 text-sm text-base-content border-transparent"
             >
-              <Paperclip class="h-3.5 w-3.5" />
-            </button>
-            <div
-              :class="goalActive ? 'aura aura-rainbow aura-sm' : undefined"
-              :style="goalActive ? { '--aura-radius': '9999px' } : undefined"
-            >
-              <button
-                class="btn btn-sm btn-circle shrink-0"
-                :class="goalActive ? 'btn-primary' : 'btn-ghost'"
-                :disabled="frozen || goalDisabled"
-                :title="goalTitle || t('chat.goal.buttonTitle')"
-                @click="emit('openGoalTask')"
-              >
-                <Target class="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <ChatModelPicker
-              variant="chip"
-              class="min-w-0 flex-1"
-              :model-value="activeModelDisplayId"
-              :api-configs="chatModelOptions"
-              :theme="teleportTheme"
-              @update:model-value="selectConversationPreferredModel"
-            />
-          </div>
-          <div class="flex shrink-0 items-center gap-2">
-            <button
-              v-if="planModeEnabled"
-              type="button"
-              class="inline-flex h-8 min-h-8 shrink-0 select-none items-center rounded-full bg-info px-3 text-xs font-medium leading-none text-info-content"
-              :title="`Shift+Tab ${t('chat.plan.mode')}`"
-              @click="togglePlanMode()"
-            >
-              {{ t("chat.plan.mode") }}
-            </button>
-            <button
-              v-else-if="planSuggestionVisible"
-              type="button"
-              class="inline-flex h-8 min-h-8 shrink-0 select-none items-center rounded-full bg-base-200 px-3 text-xs font-medium leading-none text-base-content"
-              :title="`Shift+Tab ${t('chat.plan.mode')}`"
-              @click="togglePlanMode()"
-            >
-              {{ t("chat.plan.mode") }}
-            </button>
-            <button
-              v-if="showStopAction"
-              class="btn btn-sm btn-circle shrink-0 btn-error"
-              :disabled="frozen || busy || !!stopChatDisabled"
-              :title="`${t('chat.stop')} / ${t('chat.stopReplying')}`"
-              @click="emit('stopChat')"
-            >
-              <Square class="h-3.5 w-3.5 fill-current" />
-            </button>
-            <div v-else ref="sendModeMenuRef" class="relative flex shrink-0">
+              <span class="max-w-40 truncate leading-none">@{{ mentionDisplayLabel(item) }}</span>
               <button
                 type="button"
-                class="btn btn-sm btn-circle shrink-0"
-                :class="composerInputBlank ? 'bg-base-200' : 'btn-success'"
-                :disabled="!composerInputBlank && (frozen || busy)"
-                :title="composerInputBlank ? t('chat.sendModeMenu') : t('chat.send')"
-                @click="composerInputBlank ? (sendModeMenuOpen = !sendModeMenuOpen) : handleSendChat()"
-                @contextmenu.prevent="sendModeMenuOpen = !sendModeMenuOpen"
-              >
-                <ArrowUp class="h-3.5 w-3.5" />
-              </button>
-              <div
-                v-if="sendModeMenuOpen"
-                class="absolute bottom-full right-0 z-50 mb-1.5 min-w-52 overflow-hidden rounded-box border border-base-300 bg-base-100 text-base-content shadow-xl"
-              >
-                <div class="flex flex-col p-1">
-                  <button
-                    type="button"
-                    class="flex min-h-8 w-full items-center justify-between gap-3 rounded-lg px-2.5 text-left text-sm transition-colors hover:bg-base-200"
-                    @click="setSendMode('enter')"
-                  >
-                    <span>{{ t("chat.sendModeEnter") }}</span>
-                    <Check v-if="sendMode === 'enter'" class="h-4 w-4 shrink-0 text-primary" />
-                  </button>
-                  <button
-                    type="button"
-                    class="flex min-h-8 w-full items-center justify-between gap-3 rounded-lg px-2.5 text-left text-sm transition-colors hover:bg-base-200"
-                    @click="setSendMode('ctrl_enter')"
-                  >
-                    <span>{{ t("chat.sendModeCtrlEnter") }}</span>
-                    <Check v-if="sendMode === 'ctrl_enter'" class="h-4 w-4 shrink-0 text-primary" />
-                  </button>
-                  <div class="px-2.5 pt-1 pb-0.5 text-xs opacity-50">{{ t("chat.sendModeAltS") }}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <template v-else>
-      <div class="relative">
-        <div
-          class="ecall-chat-composer-input-shell w-full"
-          :class="{ 'ecall-chat-composer-input-shell-with-images': clipboardImages.length > 0 }"
-        >
-          <div v-if="clipboardImages.length > 0" class="ecall-chat-composer-image-previews">
-            <div
-              v-for="(img, idx) in clipboardImages"
-              :key="`${img.mime}-${idx}`"
-              class="ecall-chat-composer-image-preview"
-            >
-              <img
-                v-if="clipboardImagePreviewSrc(img)"
-                class="ecall-chat-composer-image-preview-media"
-                :src="clipboardImagePreviewSrc(img)"
-                :alt="t('chat.image', { index: idx + 1 })"
-                draggable="false"
-              />
-              <div v-else class="ecall-chat-composer-file-preview">
-                <FileText class="h-5 w-5" />
-                <span class="text-xs">{{ isPdfMime(img.mime) ? `PDF ${idx + 1}` : t("chat.image", { index: idx + 1 }) }}</span>
-              </div>
-              <button
-                type="button"
-                class="ecall-chat-composer-image-remove"
-                aria-label="删除图片"
-                @mousedown.prevent
-                @click.stop="removeClipboardImageAt(idx)"
+                class="ml-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-base-content transition hover:bg-error hover:text-error-content"
+                @click.stop="removeSelectedMention(item)"
               >
                 <X class="h-3 w-3" />
               </button>
-            </div>
+            </span>
           </div>
-          <textarea
-            ref="chatInputRef"
-            v-model="localChatInput"
-            class="ecall-chat-composer-input w-full resize-none overflow-y-auto chat-input-no-focus min-h-0"
+          <InputPanelAttachments
+            :images="panelAttachmentImages"
+            :files="panelAttachmentFiles"
+            :bridges="panelBridgeItems"
+            @remove-image="removeClipboardImageAt($event)"
+            @remove-file="removePanelAttachmentFile($event)"
+            @toggle-bridge="togglePanelBridge($event)"
+          />
+        </template>
+        <template #body>
+          <div ref="composerRootRef" class="relative">
+            <Transition name="ecall-dropdown-up">
+              <div
+                v-if="instructionPanelOpen"
+                class="absolute bottom-full left-0 right-0 z-30 mb-1.5 overflow-hidden rounded-box border border-base-300 bg-base-100 text-base-content shadow-xl"
+              >
+                <button
+                  type="button"
+                  class="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors"
+                  :class="planModeEnabled ? 'bg-info/10' : 'hover:bg-base-200'"
+                  :title="`Shift+Tab ${planModeEnabled ? t('chat.plan.exitMode') : t('chat.plan.enterMode')}`"
+                  @click="togglePlanMode()"
+                >
+                  <span class="flex min-w-0 items-center gap-2">
+                    <ClipboardList class="h-4 w-4 shrink-0" :class="planModeEnabled ? 'text-info' : 'opacity-60'" />
+                    <span class="truncate">{{ planModeEnabled ? t("chat.plan.enabled") : t("chat.plan.enterMode") }}</span>
+                    <kbd class="kbd kbd-xs shrink-0 opacity-60">Shift+Tab</kbd>
+                  </span>
+                  <span
+                    class="badge badge-sm shrink-0"
+                    :class="planModeEnabled ? 'badge-info' : 'badge-ghost'"
+                  >{{ planModeEnabled ? t("chat.plan.exitMode") : t("chat.plan.modeOff") }}</span>
+                </button>
+                <div class="border-t border-base-300/60" />
+                <div class="flex flex-wrap content-start gap-2 max-h-48 overflow-y-auto p-2">
+                  <button
+                    v-for="(item, index) in normalizedInstructionPresets"
+                    :key="item.id"
+                    type="button"
+                    class="btn btn-sm min-h-0 max-w-full justify-start normal-case px-3"
+                    :class="instructionFocusIndex === index ? 'btn-primary' : 'btn-ghost'"
+                    :title="item.prompt"
+                    @click="applyInstructionPreset(item)"
+                  >
+                    <span class="block max-w-64 truncate text-left text-sm sm:max-w-80">{{ item.prompt }}</span>
+                  </button>
+                  <div v-if="normalizedInstructionPresets.length === 0" class="w-full px-2 py-3 text-sm opacity-60">
+                    {{ t("chat.noInstructionPresets") }}
+                  </div>
+                </div>
+              </div>
+            </Transition>
+            <Transition name="ecall-dropdown-up">
+              <div
+                v-if="mentionPanelOpen"
+                class="absolute bottom-full left-0 z-30 mb-1.5 w-max max-w-[min(80vw,20rem)] overflow-hidden rounded-box border border-base-300 bg-base-100 text-base-content shadow-xl"
+              >
+                <div
+                  ref="mentionPanelScrollRef"
+                  class="max-h-[min(56vh,24rem)] overflow-y-auto overscroll-contain p-1"
+                >
+                  <ul class="flex flex-col gap-1">
+                    <li
+                      v-for="(item, index) in filteredMentionOptions"
+                      :key="`${item.agentId}:${item.departmentId}`"
+                    >
+                      <button
+                        type="button"
+                        :data-mention-option-index="index"
+                        class="flex min-h-0 w-full items-start gap-2 rounded-xl px-2 py-1.5 text-left text-base-content transition-colors"
+                        :class="[
+                          mentionFocusIndex === index ? 'bg-base-200' : '',
+                          item.mentionable ? 'hover:bg-base-200/80' : 'opacity-65',
+                        ]"
+                        :disabled="!item.mentionable"
+                        @click="applyMention(item)"
+                      >
+                        <div class="indicator shrink-0">
+                          <span
+                            v-if="isMentionSelected(item)"
+                            class="indicator-item inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-micro font-bold text-primary-content"
+                          >
+                            @
+                          </span>
+                          <div class="avatar">
+                            <div class="w-7 rounded-full">
+                              <img
+                                v-if="item.avatarUrl"
+                                :src="item.avatarUrl"
+                                :alt="item.agentName"
+                                class="w-7 h-7 rounded-full object-cover"
+                              />
+                              <div v-else class="bg-neutral text-neutral-content w-7 h-7 rounded-full flex items-center justify-center text-caption">
+                                {{ avatarInitial(item.agentName) }}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="min-w-0 flex-1 pr-0.5">
+                          <div class="truncate text-sm leading-5">@{{ mentionDisplayLabel(item) }}</div>
+                          <div
+                            v-if="!item.mentionable && item.unavailableReason"
+                            class="truncate text-xs leading-4 text-base-content/60"
+                          >
+                            {{ item.unavailableReason }}
+                          </div>
+                        </div>
+                      </button>
+                    </li>
+                  </ul>
+                  <div v-if="filteredMentionOptions.length === 0" class="px-2.5 py-2 text-sm opacity-60">
+                    {{ t("chat.noMentionCandidates") }}
+                  </div>
+                </div>
+              </div>
+            </Transition>
+            <textarea
+              ref="chatInputRef"
+              v-model="localChatInput"
+              class="block max-h-40 min-h-8 w-full resize-none overflow-y-auto bg-transparent px-2 py-1 text-sm leading-6 outline-none chat-input-no-focus"
             rows="1"
             :placeholder="effectiveChatInputPlaceholder"
             @input="handleChatInputInput"
@@ -386,210 +221,148 @@
             @focus="handleChatInputFocus"
             @blur="handleChatInputBlur"
           ></textarea>
-        </div>
-        <FloatingScrollbar v-if="chatInputRef" :target="chatInputRef" />
-      </div>
-      <div class="flex items-center justify-between">
-        <div class="flex items-center">
-          <div
-            :class="goalActive ? 'aura aura-rainbow aura-sm' : undefined"
-            :style="goalActive ? { '--aura-radius': '9999px' } : undefined"
-          >
-            <button
-              class="btn btn-sm btn-circle shrink-0"
-              :class="goalActive ? 'btn-primary' : 'btn-ghost'"
-              :disabled="frozen || goalDisabled"
-              :title="goalTitle || t('chat.goal.buttonTitle')"
-              @click="emit('openGoalTask')"
-            >
-              <Target class="h-3.5 w-3.5" />
-            </button>
+            <FloatingScrollbar v-if="chatInputRef" :target="chatInputRef" />
           </div>
-          <button
-            v-if="showConversationActions"
-            class="btn btn-sm btn-circle btn-ghost shrink-0"
-            :title="t('chat.attach')"
-            @click="emit('pickAttachments')"
-          >
-            <Paperclip class="h-3.5 w-3.5" />
-          </button>
-          <button
-            v-if="showConversationActions || isAndroid"
-            class="btn btn-sm btn-circle shrink-0"
-            :class="recording ? 'btn-error' : 'btn-ghost'"
-            :disabled="!canRecord"
-            :title="micTitle"
-            @mousedown.prevent="emit('startRecording')"
-            @mouseup.prevent="emit('stopRecording')"
-            @mouseleave.prevent="recording && emit('stopRecording')"
-            @touchstart.prevent="emit('startRecording')"
-            @touchend.prevent="emit('stopRecording')"
-          >
-            <Mic class="h-3.5 w-3.5" />
-          </button>
-          <ChatModelPicker
-            variant="chip"
-            :model-value="activeModelDisplayId"
-            :api-configs="chatModelOptions"
-            :theme="teleportTheme"
-            @update:model-value="selectConversationPreferredModel"
-          />
-        </div>
-        <div class="flex items-center gap-2">
-          <button
-            v-if="planModeEnabled"
-            type="button"
-            class="inline-flex h-8 min-h-8 shrink-0 select-none items-center rounded-full bg-info px-3 text-xs font-medium leading-none text-info-content"
-            :title="`Shift+Tab ${t('chat.plan.mode')}`"
-            @click="togglePlanMode()"
-          >
-            {{ t("chat.plan.mode") }}
-          </button>
-          <button
-            v-else-if="planSuggestionVisible"
-            type="button"
-            class="inline-flex h-8 min-h-8 shrink-0 select-none items-center rounded-full bg-base-200 px-3 text-xs font-medium leading-none text-base-content"
-            :title="`Shift+Tab ${t('chat.plan.mode')}`"
-            @click="togglePlanMode()"
-          >
-            {{ t("chat.plan.mode") }}
-          </button>
-          <button
-            v-if="showStopAction"
-            class="btn btn-sm btn-circle shrink-0 btn-error"
-            :disabled="frozen || busy || !!stopChatDisabled"
-            :title="`${t('chat.stop')} / ${t('chat.stopReplying')}`"
-            @click="emit('stopChat')"
-          >
-            <Square class="h-3.5 w-3.5 fill-current" />
-          </button>
-          <div v-else ref="sendModeMenuRef" class="relative flex shrink-0">
-            <button
-              class="btn btn-sm btn-circle shrink-0"
-              :class="composerInputBlank ? 'bg-base-200' : 'btn-success'"
-              :disabled="!composerInputBlank && (frozen || busy)"
-              :title="composerInputBlank ? t('chat.sendModeMenu') : t('chat.send')"
-              @click="composerInputBlank ? (sendModeMenuOpen = !sendModeMenuOpen) : handleSendChat()"
-              @contextmenu.prevent="sendModeMenuOpen = !sendModeMenuOpen"
-            >
-              <ArrowUp class="h-3.5 w-3.5" />
-            </button>
-            <div
-              v-if="sendModeMenuOpen"
-              class="absolute bottom-full right-0 z-50 mb-1.5 min-w-52 overflow-hidden rounded-box border border-base-300 bg-base-100 text-base-content shadow-xl"
-            >
-              <div class="flex flex-col p-1">
-                <button
-                  type="button"
-                  class="flex min-h-8 w-full items-center justify-between gap-3 rounded-lg px-2.5 text-left text-sm transition-colors hover:bg-base-200"
-                  @click="setSendMode('enter')"
-                >
-                  <span>{{ t("chat.sendModeEnter") }}</span>
-                  <Check v-if="sendMode === 'enter'" class="h-4 w-4 shrink-0 text-primary" />
-                </button>
-                <button
-                  type="button"
-                  class="flex min-h-8 w-full items-center justify-between gap-3 rounded-lg px-2.5 text-left text-sm transition-colors hover:bg-base-200"
-                  @click="setSendMode('ctrl_enter')"
-                >
-                  <span>{{ t("chat.sendModeCtrlEnter") }}</span>
-                  <Check v-if="sendMode === 'ctrl_enter'" class="h-4 w-4 shrink-0 text-primary" />
-                </button>
-                <div class="px-2.5 pt-1 pb-0.5 text-xs opacity-50">{{ t("chat.sendModeAltS") }}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      </template>
-      <Teleport to="body">
-        <div
-          v-if="mentionPanelOpen"
-          class="fixed z-1200"
-          :data-theme="teleportTheme"
-          :style="mentionPanelStyle"
-        >
-          <div
-            ref="mentionPanelScrollRef"
-            class="dropdown-content max-h-[min(56vh,24rem)] w-max max-w-[min(80vw,20rem)] overflow-y-auto overscroll-contain rounded-box border border-base-300 bg-base-100 p-1 text-base-content shadow-xl"
-          >
-            <ul class="flex flex-col gap-1">
-              <li
-                v-for="(item, index) in filteredMentionOptions"
-                :key="`${item.agentId}:${item.departmentId}`"
+        </template>
+        <template #footer>
+          <InputPanelToolbar>
+            <template #left>
+              <button
+                type="button"
+                class="btn btn-sm btn-circle shrink-0 transition-transform duration-150 ease-out active:scale-90"
+                :class="goalActive ? 'btn-primary' : 'btn-ghost'"
+                :disabled="frozen || goalDisabled"
+                :title="goalTitle || t('chat.goal.buttonTitle')"
+                @click="emit('openGoalTask')"
               >
+                <Target class="h-3.5 w-3.5" />
+              </button>
+              <button
+                v-if="showConversationActions"
+                type="button"
+                class="btn btn-sm btn-circle btn-ghost shrink-0 transition-transform duration-150 ease-out active:scale-90"
+                :title="t('chat.attach')"
+                @click="emit('pickAttachments')"
+              >
+                <Paperclip class="h-3.5 w-3.5" />
+              </button>
+              <button
+                v-if="showConversationActions && canUseTransportSpeechRecording()"
+                type="button"
+                class="btn btn-sm btn-circle shrink-0 transition-transform duration-150 ease-out active:scale-90"
+                :class="recording && !transcribing ? 'btn-error' : 'btn-ghost'"
+                :disabled="!canRecord || transcribing"
+                :title="transcribing ? t('chat.transcribing') : recording ? t('chat.recording', { seconds: Math.max(1, Math.round(recordingMs / 1000)) }) : t('chat.holdRecord', { hotkey: recordHotkey })"
+                @mousedown.prevent="emit('startRecording')"
+                @mouseup.prevent="emit('stopRecording')"
+                @mouseleave.prevent="recording && emit('stopRecording')"
+                @touchstart.prevent="emit('startRecording')"
+                @touchend.prevent="emit('stopRecording')"
+              >
+                <span v-if="transcribing" class="loading loading-spinner loading-xs"></span>
+                <Mic v-else class="h-3.5 w-3.5" />
+              </button>
+              <ChatModelPicker
+                variant="chip"
+                class="min-w-0 flex-1"
+                :model-value="activeModelDisplayId"
+                :api-configs="chatModelOptions"
+                :theme="teleportTheme"
+                @update:model-value="selectConversationPreferredModel"
+              />
+            </template>
+            <template #right>
+              <button
+                v-if="planModeEnabled"
+                type="button"
+                class="inline-flex h-8 min-h-8 shrink-0 select-none items-center rounded-full bg-info px-3 text-xs font-medium leading-none text-info-content"
+                :title="`Shift+Tab ${t('chat.plan.mode')}`"
+                @click="togglePlanMode()"
+              >
+                {{ t("chat.plan.mode") }}
+              </button>
+              <button
+                v-else-if="planSuggestionVisible"
+                type="button"
+                class="inline-flex h-8 min-h-8 shrink-0 select-none items-center rounded-full bg-base-200 px-3 text-xs font-medium leading-none text-base-content"
+                :title="`Shift+Tab ${t('chat.plan.mode')}`"
+                @click="togglePlanMode()"
+              >
+                {{ t("chat.plan.mode") }}
+              </button>
+              <button
+                v-if="showStopAction"
+                type="button"
+                class="btn btn-sm btn-circle shrink-0 btn-error transition-transform duration-150 ease-out active:scale-90"
+                :disabled="frozen || busy || !!stopChatDisabled"
+                :title="`${t('chat.stop')} / ${t('chat.stopReplying')}`"
+                @click="emit('stopChat')"
+              >
+                <Square class="h-3.5 w-3.5 fill-current" />
+              </button>
+              <div v-else ref="sendModeMenuRef" class="relative flex shrink-0">
                 <button
                   type="button"
-                  :data-mention-option-index="index"
-                  class="flex min-h-0 w-full items-start gap-2 rounded-xl px-2 py-1.5 text-left text-base-content transition-colors"
-                  :class="[
-                    mentionFocusIndex === index ? 'bg-base-200' : '',
-                    item.mentionable ? 'hover:bg-base-200/80' : 'opacity-65',
-                  ]"
-                  :disabled="!item.mentionable"
-                  @click="applyMention(item)"
+                  class="btn btn-sm btn-circle shrink-0 transition-transform duration-150 ease-out active:scale-90"
+                  :class="composerInputBlank ? 'bg-base-200' : 'btn-success'"
+                  :disabled="!composerInputBlank && (frozen || busy)"
+                  :title="composerInputBlank ? t('chat.sendModeMenu') : t('chat.send')"
+                  @click="composerInputBlank ? (sendModeMenuOpen = !sendModeMenuOpen) : handleSendChat()"
+                  @contextmenu.prevent="sendModeMenuOpen = !sendModeMenuOpen"
                 >
-                  <div class="indicator shrink-0">
-                    <span
-                      v-if="isMentionSelected(item)"
-                      class="indicator-item inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary text-micro font-bold text-primary-content"
-                    >
-                      @
-                    </span>
-                    <div class="avatar">
-                      <div class="w-7 rounded-full">
-                        <img
-                          v-if="item.avatarUrl"
-                          :src="item.avatarUrl"
-                          :alt="item.agentName"
-                          class="w-7 h-7 rounded-full object-cover"
-                        />
-                        <div v-else class="bg-neutral text-neutral-content w-7 h-7 rounded-full flex items-center justify-center text-caption">
-                          {{ avatarInitial(item.agentName) }}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="min-w-0 flex-1 pr-0.5">
-                    <div class="truncate text-sm leading-5">@{{ mentionDisplayLabel(item) }}</div>
-                    <div
-                      v-if="!item.mentionable && item.unavailableReason"
-                      class="truncate text-xs leading-4 text-base-content/60"
-                    >
-                      {{ item.unavailableReason }}
-                    </div>
-                  </div>
+                  <ArrowUp class="h-3.5 w-3.5" />
                 </button>
-              </li>
-            </ul>
-            <div v-if="filteredMentionOptions.length === 0" class="px-2.5 py-2 text-sm opacity-60">
-              {{ t("chat.noMentionCandidates") }}
-            </div>
-          </div>
-        </div>
-      </Teleport>
-    </div>
+                <div
+                  v-if="sendModeMenuOpen"
+                  class="absolute bottom-full right-0 z-50 mb-1.5 min-w-52 overflow-hidden rounded-box border border-base-300 bg-base-100 text-base-content shadow-xl"
+                >
+                  <div class="flex flex-col p-1">
+                    <button
+                      type="button"
+                      class="flex min-h-8 w-full items-center justify-between gap-3 rounded-lg px-2.5 text-left text-sm transition-colors hover:bg-base-200"
+                      @click="setSendMode('enter')"
+                    >
+                      <span>{{ t("chat.sendModeEnter") }}</span>
+                      <Check v-if="sendMode === 'enter'" class="h-4 w-4 shrink-0 text-primary" />
+                    </button>
+                    <button
+                      type="button"
+                      class="flex min-h-8 w-full items-center justify-between gap-3 rounded-lg px-2.5 text-left text-sm transition-colors hover:bg-base-200"
+                      @click="setSendMode('ctrl_enter')"
+                    >
+                      <span>{{ t("chat.sendModeCtrlEnter") }}</span>
+                      <Check v-if="sendMode === 'ctrl_enter'" class="h-4 w-4 shrink-0 text-primary" />
+                    </button>
+                    <div class="px-2.5 pt-1 pb-0.5 text-xs opacity-50">{{ t("chat.sendModeAltS") }}</div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </InputPanelToolbar>
+        </template>
+    </InputPanelDock>
     </template>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { Teleport, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { ArrowUp, CalendarPlus, Check, ClipboardList, FileText, History, Menu, Mic, Minus, Paperclip, Plus, Settings, Square, Target, X } from "@lucide/vue";
+import { ArrowUp, CalendarPlus, Check, ClipboardList, Mic, Paperclip, Plus, Square, Target, X } from "@lucide/vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ChatMentionEntry, ChatMentionTarget, ConversationForwardTarget, IdeContextReferenceItem, IdeContextWorkspaceGroup, PromptCommandPreset, RemoteImContactConversationOption } from "../../../types/app";
-import ChatQueuePreview from "./ChatQueuePreview.vue";
 import ChatSelectionActionPanel from "./ChatSelectionActionPanel.vue";
 import ChatModelPicker from "../../config/components/ApiConfigPicker.vue";
 import FloatingScrollbar from "../../shell/components/FloatingScrollbar.vue";
-import { useChatQueue } from "../composables/use-chat-queue";
+import InputPanelAttachments from "./input-panel/InputPanelAttachments.vue";
+import InputPanelDock from "./input-panel/InputPanelDock.vue";
+import InputPanelToolbar from "./input-panel/InputPanelToolbar.vue";
+import { useChatQueue, type ChatQueueEvent } from "../composables/use-chat-queue";
 import { chatInputEnterConfirmsComposition } from "../composables/chat-composer-ime";
 import { clearChatComposerFocus, registerChatComposerFocus } from "../composables/chat-composer-focus";
 import type { DepartmentPersonaOption } from "../../shared/department-persona-options";
 import { ideContextReferenceDisplayParts } from "../utils/ide-context-reference-display";
 import { mergeComposerIdeContextGroups } from "../utils/ide-context-reference-groups";
-import { isMobileTouchViewport } from "../../shared/utils/mobile-viewport";
 import { canUseTransportSpeechRecording } from "../../../services/tauri-api";
 
 type BinaryAttachment = { mime: string; bytesBase64: string; previewDataUrl?: string };
@@ -606,7 +379,7 @@ type MentionOptionView = {
   unavailableReason?: string;
 };
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   composerScope?: "main" | "side";
   selectionModeEnabled: boolean;
   selectionDelegateOnly?: boolean;
@@ -652,12 +425,15 @@ const props = defineProps<{
   attachedIdeContextReferences: IdeContextReferenceItem[];
   currentTheme?: string;
   showConversationActions?: boolean;
-  sidebarMode?: boolean;
-  bridgeRequest?: unknown;
-  bridgeSubscribe?: unknown;
   chatUsagePercent?: number;
   activeAgentId?: string;
-}>();
+  isRounded?: boolean;
+  queueEventsOverride?: ChatQueueEvent[] | null;
+  queueVisible?: boolean;
+}>(), {
+  /** Vue 会把未传的可选布尔 prop 转成 false 而不是 undefined，必须显式默认显示，否则生产面板队列永远隐藏 */
+  queueVisible: true,
+});
 
 const emit = defineEmits<{
   (e: "exitSelectionMode"): void;
@@ -687,20 +463,13 @@ const emit = defineEmits<{
   (e: "open-conversation-list"): void;
   (e: "open-settings"): void;
   (e: "trim-conversation"): void;
+  (e: "queueRecall", event: ChatQueueEvent): void;
+  (e: "queueMarkGuided", eventId: string): void;
   (e: "createConversation", input?: { departmentId?: string; agentId?: string }): void;
 }>();
 
 const { t } = useI18n();
-const sidebarMode = computed(() => !!props.sidebarMode);
-const bridgeRequest = computed(() => props.bridgeRequest);
-const bridgeSubscribe = computed(() => props.bridgeSubscribe);
-const queueEnabled = computed(() => !sidebarMode.value || typeof bridgeRequest.value === "function");
-const isAndroid = /chatUrl=.*127\.0\.0\.1/.test(window.location.search);
-const micTitle = computed(() => {
-  if (props.recording) return t('chat.recording', { seconds: Math.max(1, Math.round(props.recordingMs / 1000)) });
-  if (isAndroid) return t('chat.holdToRecord');
-  return t('chat.holdRecord', { hotkey: props.recordHotkey });
-});
+const queueEnabled = computed(() => true);
 const showConversationActions = computed(() => props.showConversationActions ?? true);
 const systemNotificationMode = computed(() => !!props.systemNotificationMode);
 const remoteContactMode = computed(() => !!props.remoteContactMode);
@@ -766,16 +535,35 @@ function onMenuOutsideClick(event: MouseEvent) {
     if (sendModeRoot && sendModeRoot.contains(target)) return;
     sendModeMenuOpen.value = false;
   }
+  if (instructionPanelOpen.value) {
+    const root = composerRootRef.value;
+    if (!root || !root.contains(target)) {
+      closeInstructionPanel();
+    }
+  }
+  if (mentionPanelOpen.value) {
+    const mentionRoot = mentionPanelScrollRef.value;
+    const inputEl = chatInputRef.value;
+    const insideMention = !!mentionRoot && mentionRoot.contains(target);
+    const insideInput = !!inputEl && inputEl.contains(target);
+    const insideComposer = !!composerRootRef.value && composerRootRef.value.contains(target);
+    if (!insideMention && !insideInput && !insideComposer) {
+      closeMentionPanel();
+    }
+  }
 }
 
 onMounted(() => { document.addEventListener('pointerdown', onMenuOutsideClick); });
 onBeforeUnmount(() => { document.removeEventListener('pointerdown', onMenuOutsideClick); });
 
-const { queueEvents, sessionState, recallQueueEvent, markGuided } = useChatQueue({
+const { queueEvents, recallQueueEvent, markGuided } = useChatQueue({
   enabled: queueEnabled,
 });
 
 const visibleQueueEvents = computed(() => {
+  if (props.queueEventsOverride !== undefined && props.queueEventsOverride !== null) {
+    return props.queueEventsOverride;
+  }
   const activeConversationId = String(props.activeConversationId || "").trim();
   if (!activeConversationId) return [];
   return queueEvents.value.filter(
@@ -820,37 +608,6 @@ const sendModeMenuOpen = ref(false);
 const sendModeMenuRef = ref<HTMLDivElement | null>(null);
 
 /** 手机窄屏（触摸）下的单行输入条：默认收起为单行，展开为完整输入模式。 */
-const mobileViewport = ref(isMobileTouchViewport());
-const mobileComposerExpanded = ref(false);
-const isMobileCompact = computed(() => mobileViewport.value && !mobileComposerExpanded.value);
-
-function syncMobileViewport() {
-  mobileViewport.value = isMobileTouchViewport();
-  if (!mobileViewport.value) {
-    mobileComposerExpanded.value = false;
-  }
-}
-
-/** 展开为完整输入模式；focus=false 时只展开不聚焦（外部文本注入场景，不弹键盘）。 */
-function expandMobileComposer(focus = true) {
-  mobileComposerExpanded.value = true;
-  void nextTick(() => {
-    if (focus) chatInputRef.value?.focus();
-    scheduleResizeChatInput();
-  });
-}
-
-watch(isMobileCompact, (compact) => {
-  if (compact && chatInputRef.value) {
-    chatInputRef.value.style.height = "";
-  }
-});
-
-// 外部文本进入输入框（语音转写、消息召回等）时展开卡片，否则单行放不下也无法发送
-watch(() => props.chatInput, (value) => {
-  if (String(value || "") && isMobileCompact.value) expandMobileComposer(false);
-});
-
 function loadSendMode() {
   try {
     const raw = window.localStorage.getItem(SEND_MODE_STORAGE_KEY);
@@ -882,11 +639,6 @@ const mentionQuery = ref("");
 const mentionFocusIndex = ref(0);
 const mentionRange = ref<{ start: number; end: number } | null>(null);
 const mentionPanelScrollRef = ref<HTMLDivElement | null>(null);
-const mentionPanelStyle = ref<Record<string, string>>({
-  left: "0px",
-  top: "0px",
-  transform: "translateY(calc(-100% - 8px))",
-});
 
 const normalizedInstructionPresets = computed(() =>
   (Array.isArray(props.instructionPresets) ? props.instructionPresets : [])
@@ -925,7 +677,6 @@ watch(
 // 传给 ChatModelPicker 的当前模型 id：本地选择为空时回退会话主模型
 const activeModelDisplayId = computed(() =>
   localModelOptionId.value || String(props.conversationCallPrimaryApiConfigId || "").trim());
-const showIdeWorkspaceGroupLabel = computed(() => false);
 const attachedIdeContextReferenceIds = computed(() => new Set((props.attachedIdeContextReferences || []).map((item) => item.id)));
 const mergedIdeContextGroups = computed<IdeContextWorkspaceGroup[]>(() => mergeComposerIdeContextGroups(
   props.ideContextGroups || [],
@@ -958,6 +709,54 @@ function toggleIdeContextReference(item: IdeContextReferenceItem) {
     emit("attachIdeContextReference", item);
   }
   void nextTick(() => focusInput({ preventScroll: true }));
+}
+
+/** 输入卡附件适配：图片 / 文件 / IDE 桥胶囊。 */
+const panelAttachmentImages = computed(() =>
+  (Array.isArray(props.clipboardImages) ? props.clipboardImages : []).map((img, idx) => ({
+    mime: String(img?.mime || ""),
+    label: t("chat.image", { index: idx + 1 }),
+    previewDataUrl: clipboardImagePreviewSrc(img),
+  })),
+);
+const panelAttachmentFiles = computed(() =>
+  visibleQueuedAttachmentNotices.value.map((file) => ({
+    id: String(file.id || ""),
+    fileName: String(file.fileName || ""),
+    pending: !!file.pending,
+  })),
+);
+const panelBridgeItems = computed(() =>
+  mergedIdeContextGroups.value.flatMap((group) => group.references || []).map((item) => {
+    const parts = ideContextReferenceDisplayParts(item);
+    return {
+      id: String(item.id || ""),
+      fileName: String(parts.fileName || ""),
+      lineSuffix: String(parts.lineSuffix || ""),
+      title: ideContextReferenceTitle(item),
+      attached: isIdeContextAttached(item.id),
+    };
+  }),
+);
+
+function removePanelAttachmentFile(index: number) {
+  const target = panelAttachmentFiles.value[index];
+  if (!target) return;
+  const realIndex = (Array.isArray(props.queuedAttachmentNotices) ? props.queuedAttachmentNotices : [])
+    .findIndex((item) => String(item.id || "") === String(target.id || ""));
+  if (realIndex < 0) return;
+  emit("removeQueuedAttachmentNotice", realIndex);
+  void nextTick(() => focusInput({ preventScroll: true }));
+}
+
+function togglePanelBridge(id: string) {
+  const targetId = String(id || "").trim();
+  if (!targetId) return;
+  const target = mergedIdeContextGroups.value
+    .flatMap((group) => group.references || [])
+    .find((item) => String(item.id || "") === targetId);
+  if (!target) return;
+  toggleIdeContextReference(target);
 }
 
 function ideContextReferenceTitle(item: IdeContextReferenceItem): string {
@@ -1067,17 +866,6 @@ function closeMentionPanel() {
   mentionQuery.value = "";
   mentionFocusIndex.value = 0;
   mentionRange.value = null;
-}
-
-function refreshMentionPanelPosition() {
-  const el = chatInputRef.value;
-  if (!el) return;
-  const rect = el.getBoundingClientRect();
-  mentionPanelStyle.value = {
-    left: `${Math.round(rect.left)}px`,
-    top: `${Math.round(rect.top)}px`,
-    transform: "translateY(calc(-100% - 8px))",
-  };
 }
 
 function toggleInstructionPanel() {
@@ -1222,7 +1010,6 @@ function updateMentionState() {
   mentionQuery.value = query;
   const atStart = cursor - 1 - query.length;
   mentionRange.value = { start: atStart, end: cursor };
-  refreshMentionPanelPosition();
   mentionPanelOpen.value = true;
   const firstMentionable = filteredMentionOptions.value.findIndex((item) => item.mentionable);
   mentionFocusIndex.value = firstMentionable >= 0 ? firstMentionable : 0;
@@ -1243,9 +1030,8 @@ function togglePlanMode() {
 function resizeChatInput() {
   const el = chatInputRef.value;
   if (!el) return;
-  // 移动紧凑态同样随内容增高（主流聊天应用行为）；软键盘收起时由
-  // watch(isMobileCompact) 清空高度缩回单行。
-  const minHeight = mobileViewport.value ? 24 : 48;
+  // 单布局：空态单行高度，有字随内容增高，上限 160。
+  const minHeight = 24;
   const maxHeight = 160;
   el.style.height = "auto";
   const nextHeight = Math.max(Math.min(el.scrollHeight, maxHeight), minHeight);
@@ -1335,10 +1121,6 @@ function recordSentTextIfNeeded(rawText: string) {
 
 function handleSendChat() {
   const plainText = String(localChatInput.value || "").trim();
-  if (isMobileTouchViewport()) {
-    chatInputRef.value?.blur();
-    mobileComposerExpanded.value = false;
-  }
   emit("sendChat");
   recordSentTextIfNeeded(plainText);
   closeInstructionPanel();
@@ -1361,27 +1143,12 @@ function handleChatInputFocus() {
   if (props.composerScope) {
     registerChatComposerFocus(props.composerScope);
   }
-  // 单行条聚焦即展开为完整输入模式
-  if (isMobileCompact.value) {
-    mobileComposerExpanded.value = true;
-    scheduleResizeChatInput();
-  }
 }
 
-function handleChatInputBlur(event: FocusEvent) {
+function handleChatInputBlur() {
   if (props.composerScope) {
     clearChatComposerFocus(props.composerScope);
   }
-  if (!mobileViewport.value) return;
-  const nextTarget = event.relatedTarget as Node | null;
-  if (nextTarget && composerRootRef.value?.contains(nextTarget)) return;
-  // 延迟一拍再收起：同一次点击可能正在打开 Teleport 到 body 的浮层（如模型抽屉），
-  // 浮层存在时保持展开，避免第二行工具按钮被误缩回
-  window.setTimeout(() => {
-    if (!mobileComposerExpanded.value) return;
-    if (document.querySelector("[data-composer-overlay]")) return;
-    mobileComposerExpanded.value = false;
-  }, 150);
 }
 
 function handleChatInputKeydown(event: KeyboardEvent) {
@@ -1395,10 +1162,25 @@ function handleChatInputKeydown(event: KeyboardEvent) {
   ) {
     return;
   }
+  if (event.key === "Escape") {
+    const hadMention = mentionPanelOpen.value;
+    const hadInstruction = instructionPanelOpen.value;
+    const hadSendMode = sendModeMenuOpen.value;
+    if (hadMention || hadInstruction || hadSendMode) {
+      event.preventDefault();
+      if (hadMention) closeMentionPanel();
+      if (hadInstruction) closeInstructionPanel();
+      else instructionPanelOpen.value = false;
+      if (hadSendMode) sendModeMenuOpen.value = false;
+      return;
+    }
+  }
   if (mentionPanelOpen.value) {
     if (event.key === "Escape") {
       event.preventDefault();
       closeMentionPanel();
+      instructionPanelOpen.value = false;
+      sendModeMenuOpen.value = false;
       return;
     }
     if (event.key === "ArrowUp") {
@@ -1485,10 +1267,6 @@ function handleChatInputKeydown(event: KeyboardEvent) {
   }
 }
 
-function isPdfMime(mime: string): boolean {
-  return (mime || "").trim().toLowerCase() === "application/pdf";
-}
-
 function clipboardImagePreviewSrc(image: BinaryAttachment): string {
   const previewDataUrl = String(image?.previewDataUrl || "").trim();
   if (previewDataUrl.startsWith("data:image/")) return previewDataUrl;
@@ -1533,6 +1311,10 @@ async function handleRecallToInput(event: {
   id?: string;
   queueMode?: "normal" | "guided";
 }) {
+  if (props.queueEventsOverride !== undefined && props.queueEventsOverride !== null) {
+    emit("queueRecall", event as ChatQueueEvent);
+    return;
+  }
   if (event.source === "user" && event.queueMode !== "guided") {
     if (event.id) {
       const result = await recallQueueEvent(event.id);
@@ -1541,6 +1323,14 @@ async function handleRecallToInput(event: {
       }
     }
   }
+}
+
+function handleQueueMarkGuided(eventId: string) {
+  if (props.queueEventsOverride !== undefined && props.queueEventsOverride !== null) {
+    emit("queueMarkGuided", eventId);
+    return;
+  }
+  markGuided(eventId);
 }
 
 function focusInput(options?: FocusOptions) {
@@ -1554,22 +1344,14 @@ defineExpose({
 onMounted(() => {
   loadChatInputHistory();
   loadSendMode();
-  syncMobileViewport();
   window.addEventListener("keydown", handleWindowKeydown);
-  window.addEventListener("resize", refreshMentionPanelPosition);
-  window.addEventListener("scroll", refreshMentionPanelPosition, true);
-  window.addEventListener("resize", syncMobileViewport);
   nextTick(() => {
     resizeChatInput();
-    refreshMentionPanelPosition();
   });
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", handleWindowKeydown);
-  window.removeEventListener("resize", refreshMentionPanelPosition);
-  window.removeEventListener("scroll", refreshMentionPanelPosition, true);
-  window.removeEventListener("resize", syncMobileViewport);
   if (resizeInputRaf.value) {
     cancelAnimationFrame(resizeInputRaf.value);
     resizeInputRaf.value = 0;
@@ -1585,18 +1367,8 @@ watch(
     }
     nextTick(() => scheduleResizeChatInput());
     nextTick(() => {
-      refreshMentionPanelPosition();
       updateMentionState();
     });
-  },
-);
-
-watch(
-  () => props.chatting,
-  (isChatting, wasChatting) => {
-    if (wasChatting && !isChatting && !isMobileTouchViewport()) {
-      nextTick(() => focusInput({ preventScroll: true }));
-    }
   },
 );
 
@@ -1638,108 +1410,5 @@ watch(
 }
 .chat-input-no-focus {
   scrollbar-width: none;
-}
-.ecall-chat-composer-input-shell {
-  appearance: none;
-  border: 0;
-  box-sizing: border-box;
-  display: flex;
-  min-height: 48px;
-  flex-direction: column;
-  gap: 8px;
-  background: transparent;
-  box-shadow: none;
-  outline: 0;
-  padding: 0;
-}
-.ecall-chat-composer-input-shell:focus,
-.ecall-chat-composer-input-shell:focus-within,
-.ecall-chat-composer-input-shell:focus-visible {
-  border: 0;
-  box-shadow: none;
-  outline: 0;
-}
-.ecall-chat-composer-input-shell-with-images {
-  padding: 10px 12px 12px;
-}
-.ecall-chat-composer-image-previews {
-  display: flex;
-  max-height: 4.5rem;
-  flex-wrap: wrap;
-  gap: 8px;
-  overflow: hidden;
-}
-.ecall-chat-composer-image-preview {
-  position: relative;
-  display: inline-flex;
-  min-height: 3.5rem;
-  max-width: 9.5rem;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--color-base-200) 72%, transparent);
-}
-.ecall-chat-composer-image-preview-media {
-  display: block;
-  max-height: 3.75rem;
-  max-width: 9.5rem;
-  object-fit: contain;
-}
-.ecall-chat-composer-file-preview {
-  display: inline-flex;
-  height: 3.5rem;
-  min-width: 5.75rem;
-  align-items: center;
-  justify-content: center;
-  gap: 0.375rem;
-  padding: 0 0.75rem;
-  color: color-mix(in srgb, var(--color-base-content) 72%, transparent);
-}
-.ecall-chat-composer-image-remove {
-  position: absolute;
-  right: 4px;
-  top: 4px;
-  display: inline-flex;
-  height: 1.25rem;
-  width: 1.25rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-base-100) 88%, transparent);
-  color: color-mix(in srgb, var(--color-base-content) 72%, transparent);
-  opacity: 0;
-  transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
-}
-.ecall-chat-composer-image-preview:hover .ecall-chat-composer-image-remove,
-.ecall-chat-composer-image-remove:focus-visible {
-  opacity: 1;
-}
-.ecall-chat-composer-image-remove:hover {
-  background: color-mix(in srgb, var(--color-error) 90%, transparent);
-  color: var(--color-error-content);
-}
-.ecall-chat-composer-input {
-  appearance: none;
-  box-sizing: border-box;
-  border: 0;
-  background: transparent;
-  line-height: 1.5;
-  outline: 0;
-  padding-top: 12px;
-  padding-bottom: 12px;
-}
-.ecall-chat-composer-input:focus,
-.ecall-chat-composer-input:focus-visible {
-  border: 0;
-  box-shadow: none;
-  outline: 0;
-}
-.ecall-chat-composer-input-shell .ecall-chat-composer-input {
-  padding-left: 12px;
-  padding-right: 12px;
-}
-.ecall-chat-composer-input-shell-with-images .ecall-chat-composer-input {
-  padding: 0;
 }
 </style>

@@ -5,7 +5,7 @@
       type="button"
       :class="variant === 'field'
         ? 'select select-bordered bg-none flex w-full items-center justify-between gap-2 pr-3 text-left'
-        : 'btn btn-sm h-8 min-h-8 w-auto min-w-28 max-w-56 justify-between border-0 shadow-none bg-base-100 text-base-content hover:bg-base-200 max-md:min-w-0 max-md:max-w-36'"
+        : 'btn btn-sm h-8 min-h-8 w-auto min-w-28 max-w-56 justify-between border-0 bg-transparent text-base-content shadow-none hover:bg-base-200/60 max-md:min-w-0 max-md:max-w-36'"
       :disabled="disabled || (normalizedOptions.length === 0 && extraOptions.length === 0 && !placeholder)"
       :title="selectedModelTitle"
       @click="toggleDropdown"
@@ -37,10 +37,10 @@
       <div
         v-if="dropdownOpen && !disabled"
         ref="panelRef"
-        class="fixed z-1200 flex flex-col overflow-hidden bg-base-100 text-base-content"
+        class="fixed z-1200 flex flex-col overflow-hidden bg-base-100/70 text-base-content shadow backdrop-blur-md"
         :class="mobileTouchViewport
-          ? 'inset-x-0 bottom-0 max-h-[65vh] rounded-t-2xl border-x border-t border-base-300 pb-[max(0.25rem,env(safe-area-inset-bottom))] shadow-2xl'
-          : 'rounded-box border border-base-300 shadow-xl'"
+          ? 'inset-x-0 bottom-0 max-h-[65vh] rounded-t-[20px] pb-[max(0.25rem,env(safe-area-inset-bottom))] shadow-2xl'
+          : 'rounded-[20px] shadow-xl'"
         :data-theme="teleportTheme"
         :style="mobileTouchViewport ? undefined : panelStyle"
       >

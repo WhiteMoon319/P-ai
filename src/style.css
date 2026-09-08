@@ -532,6 +532,50 @@ body {
   }
 }
 
+/* ecall 扫入填充 sweep-fill：液体灌注式变色，双层伪元素叠扫，复用 --duration-fold 体系 */
+:root { --duration-sweep: 420ms; }
+.ecall-sweep-fill {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  --sweep-progress: 0;
+  --sweep-color: var(--color-primary);
+  --sweep-progress-2: 0;
+  --sweep-color-2: transparent;
+  --sweep-duration: var(--duration-sweep);
+  transition:
+    color var(--sweep-duration) ease,
+    background-color var(--sweep-duration) ease,
+    border-color var(--sweep-duration) ease;
+}
+.ecall-sweep-fill::before,
+.ecall-sweep-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  transform-origin: left center;
+  transition:
+    transform var(--sweep-duration) cubic-bezier(0.22, 0.9, 0.24, 1),
+    background-color var(--sweep-duration) ease;
+}
+.ecall-sweep-fill::before {
+  background: var(--sweep-color);
+  transform: scaleX(var(--sweep-progress));
+}
+.ecall-sweep-fill::after {
+  background: var(--sweep-color-2);
+  transform: scaleX(var(--sweep-progress-2));
+}
+@media (prefers-reduced-motion: reduce) {
+  .ecall-sweep-fill,
+  .ecall-sweep-fill::before,
+  .ecall-sweep-fill::after {
+    transition: none !important;
+  }
+}
 /* settings: simple/advanced mode + right content 0.2s, reuse --duration-fold */
 .ecall-config-mode-enter-active,
 .ecall-config-mode-leave-active,

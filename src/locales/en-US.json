@@ -2105,6 +2105,10 @@
     },
     "plan": {
       "mode": "Plan Mode",
+      "enterMode": "Switch to Plan Mode",
+      "exitMode": "Exit Plan Mode",
+      "enabled": "Plan Mode Enabled",
+      "modeOff": "Off",
       "confirmAction": "I agree, execute the plan",
       "confirmHint": "If you disagree, just tell me your thoughts.",
       "sidebarHint": "Click the link below to read the plan in the sidebar",

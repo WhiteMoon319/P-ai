@@ -2091,6 +2091,10 @@
     },
     "plan": {
       "mode": "計劃模式",
+      "enterMode": "切換到計劃模式",
+      "exitMode": "退出計劃",
+      "enabled": "計劃模式已開啟",
+      "modeOff": "未開啟",
       "confirmAction": "我同意，並執行計劃",
       "confirmHint": "不同意，請直接告訴我你的想法",
       "sidebarHint": "點擊下方連結在側邊欄閱讀計劃",
