@@ -190,6 +190,21 @@ export function useChatForegroundRuntime(bindings: Record<string, any>) {
     foregroundActivity.handleVisibilityChange();
   }
 
+  function handlePageShowForStateSync(event?: { persisted?: boolean }) {
+    bindings.onVisibilityChange?.();
+    foregroundActivity.handlePageShow(event);
+  }
+
+  function handleResumeForStateSync() {
+    bindings.onVisibilityChange?.();
+    foregroundActivity.handleResume();
+  }
+
+  function handleFreezeForStateSync() {
+    bindings.onVisibilityChange?.();
+    foregroundActivity.handleFreeze();
+  }
+
   function cleanupChatForegroundActivity() {
     foregroundRecoveryRunner.cancel();
     foregroundActivity.cleanup();
@@ -204,6 +219,9 @@ export function useChatForegroundRuntime(bindings: Record<string, any>) {
     handleWindowFocusForStateSync: foregroundActivity.handleFocus,
     handleWindowBlurForStateSync: foregroundActivity.handleBlur,
     handleVisibilityForStateSync,
+    handlePageShowForStateSync,
+    handleResumeForStateSync,
+    handleFreezeForStateSync,
     cleanupChatForegroundActivity,
   };
 }

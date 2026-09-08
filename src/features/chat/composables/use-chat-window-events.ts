@@ -146,6 +146,9 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
     window.addEventListener("focus", bindings.handleWindowFocusForStateSync);
     window.addEventListener("blur", bindings.handleWindowBlurForStateSync);
     document.addEventListener("visibilitychange", bindings.handleVisibilityForStateSync);
+    window.addEventListener("pageshow", bindings.handlePageShowForStateSync);
+    document.addEventListener("resume", bindings.handleResumeForStateSync);
+    document.addEventListener("freeze", bindings.handleFreezeForStateSync);
     window.addEventListener("focus", bindings.handleWindowFocusForMicPrewarm);
     document.addEventListener("visibilitychange", bindings.handleVisibilityForMicPrewarm);
   });
@@ -158,6 +161,9 @@ export function useChatWindowEvents(bindings: Record<string, any>) {
     window.removeEventListener("focus", bindings.handleWindowFocusForStateSync);
     window.removeEventListener("blur", bindings.handleWindowBlurForStateSync);
     document.removeEventListener("visibilitychange", bindings.handleVisibilityForStateSync);
+    window.removeEventListener("pageshow", bindings.handlePageShowForStateSync);
+    document.removeEventListener("resume", bindings.handleResumeForStateSync);
+    document.removeEventListener("freeze", bindings.handleFreezeForStateSync);
     bindings.clearChatWindowActiveSyncTimer();
     bindings.clearChatMicPrewarmTimer();
     bindings.clearGoalTaskPollTimer();
