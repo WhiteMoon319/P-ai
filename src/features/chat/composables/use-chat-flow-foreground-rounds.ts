@@ -118,8 +118,13 @@ export function useChatFlowForegroundRounds(bindings: Record<string, any>) {
     const payloadAgentId = String(payload.agentId || "").trim();
     if (payloadAgentId) bindings.setActiveRoundAgentId?.(payloadAgentId);
     let gen = round.phase === "queued" ? round.gen : bindings.getSendChatActiveGen();
-    if (!gen) {
-      gen = bindings.nextGeneration();
+    // 队列出队时上一轮已回到 idle，但 sendChatActiveGen 仍是出队消息的 gen（truthy），
+    // 旧条件只在 !gen 时建轮次，导致 round 永远停在 idle，后续 delta 因身份校验被丢弃、气泡刷不出。
+    // idle 时即使已有 gen 也必须重建 queued 占位；streaming/同 gen queued 保持不动。
+    if (!gen || round.phase === "idle") {
+      if (!gen) {
+        gen = bindings.nextGeneration();
+      }
       bindings.channelBinding.setBoundDisplayGeneration(gen);
       bindings.setPendingTerminalEvent(null);
       bindings.setDeferredRoundCompletion(null);

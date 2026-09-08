@@ -148,4 +148,66 @@ describe("useChatFlowForegroundRounds", () => {
       expect.arrayContaining([expect.objectContaining({ text: "缓存最新内容" })]),
     );
   });
+
+  it("出队时上一轮已 idle 但 sendChatActiveGen 仍是出队 gen：round_started 必须重建 queued 占位", () => {
+    const allMessages = shallowRef<ChatMessage[]>([]);
+    let round: { phase: "idle" | "queued" | "streaming"; gen?: number; messageId?: string } = { phase: "idle" };
+    let cache: any = null;
+    let boundGen = 0;
+
+    const flow = useChatFlowForegroundRounds({
+      allMessages,
+      t: () => "调度中",
+      getConversationId: () => "conversation-1",
+      getRound: () => ({ phase: round.phase, gen: round.gen || 0, messageId: round.messageId || "" }),
+      setRound: (next: typeof round) => { round = next; },
+      nextGeneration: () => { throw new Error("出队重建不应再分配新 gen"); },
+      getSendChatActiveGen: () => 2,
+      setActiveActivationId: () => {},
+      getActiveActivationId: () => "",
+      setActiveRoundAgentId: () => {},
+      channelBinding: { setBoundDisplayGeneration: (gen: number) => { boundGen = gen; } },
+      clearConversationStreamCache: () => { cache = null; },
+      readConversationStreamCache: () => cache,
+      writeConversationStreamCacheSnapshot: (_conversationId: string, nextCache: any) => { cache = { ...cache, ...nextCache }; },
+      setPendingTerminalEvent: () => {},
+      setDeferredRoundCompletion: () => {},
+      setQueuedStreamingState: () => {},
+      resetDisplayState: () => {},
+      setActiveHistoryMessageCount: () => {},
+      startFrontendDispatchTimer: () => {},
+      sendStartedAtMsByGen: new Map<number, number>(),
+      setFrontendRoundPhase: () => {},
+      chatting: ref(false),
+      updateQueuedAssistantMessageStatus: (messageId: string, statusText: string) => {
+        if (!messageId || allMessages.value.some((message) => message.id === messageId)) return;
+        allMessages.value = [{
+          id: messageId,
+          role: "assistant",
+          parts: [{ type: "text", text: "" }],
+          providerMeta: { _streaming: true, _preStreamingStatusText: statusText },
+        }];
+      },
+      hasStreamingAssistantMessageInMessages: () => false,
+      insertStreamingAssistantMessage: (messageId: string) => messageId,
+      applyConversationStreamCacheToDisplay: () => false,
+      loadStreamBlocksFromMessage: () => {},
+      applyPendingTerminalEvent: () => false,
+      getQueuedStreamingState: () => null,
+      updateMessageText: () => {},
+      frontendDispatch: { getStartedAtMs: () => 0, getElapsedMs: () => 0 },
+    });
+
+    const gen = flow.beginAssistantActivationFromEvent({
+      conversationId: "conversation-1",
+      assistantMessageId: "assistant-2",
+      activationId: "activation-2",
+    });
+
+    expect(gen).toBe(2);
+    expect(boundGen).toBe(2);
+    expect(round).toMatchObject({ phase: "queued", gen: 2, messageId: "assistant-2" });
+    expect(allMessages.value).toHaveLength(1);
+    expect(allMessages.value[0].id).toBe("assistant-2");
+  });
 });
