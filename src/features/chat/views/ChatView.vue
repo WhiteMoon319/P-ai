@@ -2029,23 +2029,13 @@ watch(
     latestOwnTailContentHeight,
     latestOwnTailContentMeasured,
     tailMetricsTick,
-    () => props.chatting,
   ],
-  ([itemId, targetHeight, tailContentHeight, tailContentMeasured, , isChatting]) => {
+  ([itemId, targetHeight, tailContentHeight, tailContentMeasured]) => {
     if (!itemId) {
       latestOwnTailSpacerMinHeight.value = targetHeight;
       return;
     }
     if (!tailContentMeasured) return;
-
-    // 流式期间冻结尾部留白缩减，避免换行时“气泡撑大+留白缩小+跨帧scrollTo”引发画面抽搐抖动。
-    // 待流式结束（!isChatting）后统一平滑结算。
-    if (isChatting) {
-      if (tailContentHeight >= targetHeight && latestOwnTailSpacerMinHeight.value !== 0) {
-        latestOwnTailSpacerMinHeight.value = 0;
-      }
-      return;
-    }
 
     const next = Math.max(0, targetHeight - tailContentHeight);
     if (latestOwnTailSpacerMinHeight.value !== next) {
