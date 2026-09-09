@@ -1,4 +1,4 @@
-import type { DepartmentPermissionCatalogItem } from "../../../types/app";
+import type { DepartmentPermissionCatalog, DepartmentPermissionCatalogItem } from "../../../types/app";
 
 // ========== 类型 ==========
 
@@ -28,6 +28,31 @@ export type DepartmentToolTreeSection = {
   groups: DepartmentToolTreeGroup[];
   leaves: DepartmentToolTreeLeaf[];
 };
+
+// ========== 权限目录归一化 ==========
+
+function normalizeCatalogItems(raw: unknown): DepartmentPermissionCatalogItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry) => {
+      const record = (entry ?? {}) as Record<string, unknown>;
+      return {
+        name: String(record.name || "").trim(),
+        description: String(record.description || "").trim(),
+        group: String(record.group || "").trim(),
+      };
+    })
+    .filter((entry) => !!entry.name);
+}
+
+export function normalizeDepartmentPermissionCatalog(payload: unknown): DepartmentPermissionCatalog {
+  const record = (payload ?? {}) as Record<string, unknown>;
+  return {
+    builtinTools: normalizeCatalogItems(record.builtinTools),
+    skills: normalizeCatalogItems(record.skills),
+    mcpTools: normalizeCatalogItems(record.mcpTools),
+  };
+}
 
 // ========== 内置工具前端分组表 ==========
 

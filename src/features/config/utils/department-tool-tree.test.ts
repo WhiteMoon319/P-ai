@@ -3,6 +3,7 @@ import type { DepartmentPermissionCatalogItem } from "../../../types/app";
 import {
   buildBuiltinToolGroups,
   buildMcpToolGroups,
+  normalizeDepartmentPermissionCatalog,
 } from "./department-tool-tree";
 
 function item(name: string, description = "", group = ""): DepartmentPermissionCatalogItem {
@@ -97,5 +98,45 @@ describe("buildMcpToolGroups", () => {
     const fallbackGroup = groups.find((group) => group.key === "other");
     expect(fallbackGroup?.label).toBe("其他");
     expect(fallbackGroup?.leaves.map((leaf) => leaf.displayName)).toEqual(["bare"]);
+  });
+});
+
+describe("normalizeDepartmentPermissionCatalog", () => {
+  it("保留 MCP 工具的服务器分组字段并据此分组", () => {
+    const catalog = normalizeDepartmentPermissionCatalog({
+      builtinTools: [{ name: "read", description: "读取", group: "" }],
+      skills: [{ name: "pai-guide", description: "指南", group: "" }],
+      mcpTools: [
+        { name: "akasha_books", description: "检索文档", group: "akasha" },
+        { name: "playwright_browser_click", description: "点击", group: "playwright" },
+      ],
+    });
+    expect(catalog.mcpTools.map((entry) => entry.group)).toEqual(["akasha", "playwright"]);
+    const groups = buildMcpToolGroups(catalog.mcpTools, () => false, "其他");
+    expect(groups.map((group) => group.label)).toEqual(["akasha", "playwright"]);
+  });
+
+  it("分组字段缺失、为空或含首尾空格时归入其他或去空格", () => {
+    const catalog = normalizeDepartmentPermissionCatalog({
+      mcpTools: [
+        { name: "bare" },
+        { name: "  ", description: "无名字", group: "akasha" },
+        null,
+        { name: "tavily_search", description: "搜索", group: "  tavily  " },
+      ],
+    });
+    expect(catalog.mcpTools.map((entry) => entry.name)).toEqual(["bare", "tavily_search"]);
+    expect(catalog.mcpTools[1]?.group).toBe("tavily");
+    const groups = buildMcpToolGroups(catalog.mcpTools, () => false, "其他");
+    expect(groups.map((group) => group.label)).toEqual(["tavily", "其他"]);
+  });
+
+  it("payload 缺字段或类型异常时返回空目录", () => {
+    expect(normalizeDepartmentPermissionCatalog(null)).toEqual({
+      builtinTools: [],
+      skills: [],
+      mcpTools: [],
+    });
+    expect(normalizeDepartmentPermissionCatalog({ builtinTools: "oops" }).builtinTools).toEqual([]);
   });
 });

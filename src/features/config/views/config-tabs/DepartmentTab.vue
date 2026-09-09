@@ -284,6 +284,7 @@ import type { ApiConfigItem, AppConfig, DepartmentConfig, DepartmentPermissionCa
 import {
   buildBuiltinToolGroups,
   buildMcpToolGroups,
+  normalizeDepartmentPermissionCatalog,
   type DepartmentToolLeafCategory,
   type DepartmentToolTreeSection,
 } from "../../utils/department-tool-tree";
@@ -702,32 +703,7 @@ async function loadPermissionCatalog() {
   permissionCatalogError.value = "";
   try {
     const payload = await invokeTauri<DepartmentPermissionCatalog>("list_department_permission_catalog");
-    permissionCatalog.value = {
-      builtinTools: Array.isArray(payload?.builtinTools)
-        ? payload.builtinTools
-            .map((item) => ({
-              name: String(item?.name || "").trim(),
-              description: String(item?.description || "").trim(),
-            }))
-            .filter((item) => !!item.name)
-        : [],
-      skills: Array.isArray(payload?.skills)
-        ? payload.skills
-            .map((item) => ({
-              name: String(item?.name || "").trim(),
-              description: String(item?.description || "").trim(),
-            }))
-            .filter((item) => !!item.name)
-        : [],
-      mcpTools: Array.isArray(payload?.mcpTools)
-        ? payload.mcpTools
-            .map((item) => ({
-              name: String(item?.name || "").trim(),
-              description: String(item?.description || "").trim(),
-            }))
-            .filter((item) => !!item.name)
-        : [],
-    };
+    permissionCatalog.value = normalizeDepartmentPermissionCatalog(payload);
   } catch (error) {
     permissionCatalogError.value = String(error || "");
   } finally {
