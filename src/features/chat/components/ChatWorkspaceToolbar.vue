@@ -9,7 +9,6 @@
         ref="menuDropdownRef"
         class="dropdown dropdown-start"
         :class="menuPlacement === 'top' ? 'dropdown-top' : 'dropdown-bottom'"
-        @mouseleave="handleMenuMouseLeave"
         @focusout="handleMenuFocusOut"
       >
         <button
@@ -24,39 +23,31 @@
         </button>
         <ul
           tabindex="0"
-          class="dropdown-content menu z-50 w-64 rounded-box border border-base-300 bg-base-100 p-2 text-sm shadow-xl"
+          class="dropdown-content menu z-50 w-72 max-h-[calc(100vh-8rem)] overflow-y-auto rounded-box border border-base-300 bg-base-100 p-2 text-sm shadow-xl"
           :class="menuPlacement === 'top' ? 'mb-3' : 'mt-3'"
         >
-          <li v-if="showTaskCreateMenuItem" @mouseenter="activeSubmenu = null">
+          <li v-if="showTaskCreateMenuItem">
             <button type="button" class="flex min-h-9 items-center justify-start gap-3 px-3 py-1.5 text-left" @click="emit('openTaskCreate')">
               <ListTodo class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t("chat.newTask") }}</span>
             </button>
           </li>
-          <li v-if="showShareMenuItem" @mouseenter="activeSubmenu = null">
+          <li v-if="showShareMenuItem">
             <button type="button" class="flex min-h-9 items-center justify-start gap-3 px-3 py-1.5 text-left" @click="emit('openShareSelection')">
               <Share2 class="h-4 w-4 shrink-0" />
               <span class="leading-5">{{ t("chat.conversationMenu.shareConversation") }}</span>
             </button>
           </li>
-          <li v-if="hasDelegateMenuItems" class="relative">
-            <button
-              type="button"
-              class="flex min-h-9 w-full items-center justify-between gap-3 px-3 py-1.5 text-left"
-              @mouseenter="openSubmenu('delegate')"
-              @click="toggleSubmenu('delegate')"
+          <li v-if="hasDelegateMenuItems">
+            <details
+              :open="activeSubmenu === 'delegate'"
+              @toggle="handleDetailsToggle($event, 'delegate')"
             >
-              <span class="flex min-w-0 items-center gap-3">
+              <summary>
                 <Users class="h-4 w-4 shrink-0" />
                 <span class="leading-5">{{ t("chat.conversationMenu.groupDelegate") }}</span>
-              </span>
-              <ChevronRight class="h-4 w-4 shrink-0 opacity-50" />
-            </button>
-            <ul
-              v-if="activeSubmenu === 'delegate'"
-              ref="delegateSubmenuEl"
-              class="menu absolute bottom-0 left-full ml-1 z-50 min-w-52 w-max rounded-box border border-base-300 bg-base-100 p-2 shadow-xl"
-            >
+              </summary>
+              <ul ref="delegateSubmenuEl">
               <li v-if="showCodeReviewMenuItem">
                 <button type="button" class="flex min-h-9 items-center justify-start gap-3 px-3 py-1.5 text-left" @click="emit('openCodeReview')">
                   <ClipboardCheck class="h-4 w-4 shrink-0" />
@@ -69,26 +60,19 @@
                   <span class="leading-5">{{ t("chat.conversationMenu.startDelegate") }}</span>
                 </button>
               </li>
-            </ul>
+              </ul>
+            </details>
           </li>
-          <li v-if="hasBranchMenuItems" class="relative">
-            <button
-              type="button"
-              class="flex min-h-9 w-full items-center justify-between gap-3 px-3 py-1.5 text-left"
-              @mouseenter="openSubmenu('branch')"
-              @click="toggleSubmenu('branch')"
+          <li v-if="hasBranchMenuItems">
+            <details
+              :open="activeSubmenu === 'branch'"
+              @toggle="handleDetailsToggle($event, 'branch')"
             >
-              <span class="flex min-w-0 items-center gap-3">
+              <summary>
                 <Split class="h-4 w-4 shrink-0" />
                 <span class="leading-5">{{ t("chat.conversationMenu.groupBranch") }}</span>
-              </span>
-              <ChevronRight class="h-4 w-4 shrink-0 opacity-50" />
-            </button>
-            <ul
-              v-if="activeSubmenu === 'branch'"
-              ref="branchSubmenuEl"
-              class="menu absolute bottom-0 left-full ml-1 z-50 min-w-60 w-max rounded-box border border-base-300 bg-base-100 p-2 shadow-xl"
-            >
+              </summary>
+              <ul ref="branchSubmenuEl">
               <li v-if="showBranchMenuItem">
                 <button type="button" class="flex min-h-9 items-center justify-start gap-3 px-3 py-1.5 text-left" @click="emit('openBranchFromCurrent')">
                   <GitBranch class="h-4 w-4 shrink-0" />
@@ -107,26 +91,19 @@
                   <span class="leading-5">{{ t("chat.conversationMenu.sideChatFollowUp") }}</span>
                 </button>
               </li>
-            </ul>
+              </ul>
+            </details>
           </li>
-          <li v-if="hasInteractionMenuItems" class="relative">
-            <button
-              type="button"
-              class="flex min-h-9 w-full items-center justify-between gap-3 px-3 py-1.5 text-left"
-              @mouseenter="openSubmenu('interaction')"
-              @click="toggleSubmenu('interaction')"
+          <li v-if="hasInteractionMenuItems">
+            <details
+              :open="activeSubmenu === 'interaction'"
+              @toggle="handleDetailsToggle($event, 'interaction')"
             >
-              <span class="flex min-w-0 items-center gap-3">
+              <summary>
                 <Send class="h-4 w-4 shrink-0" />
                 <span class="leading-5">{{ t("chat.conversationMenu.groupInteraction") }}</span>
-              </span>
-              <ChevronRight class="h-4 w-4 shrink-0 opacity-50" />
-            </button>
-            <ul
-              v-if="activeSubmenu === 'interaction'"
-              ref="interactionSubmenuEl"
-              class="menu absolute bottom-0 left-full ml-1 z-50 min-w-60 w-max rounded-box border border-base-300 bg-base-100 p-2 shadow-xl"
-            >
+              </summary>
+              <ul ref="interactionSubmenuEl">
               <li v-if="showAutoPushMenuItem">
                 <button type="button" class="flex min-h-9 items-center justify-start gap-3 px-3 py-1.5 text-left" @click="emit('openAutoPush')">
                   <BellRing class="h-4 w-4 shrink-0" />
@@ -140,25 +117,18 @@
                 </button>
               </li>
             </ul>
+            </details>
           </li>
-          <li class="relative">
-            <button
-              type="button"
-              class="flex min-h-9 w-full items-center justify-between gap-3 px-3 py-1.5 text-left"
-              @mouseenter="openSubmenu('appearance')"
-              @click="toggleSubmenu('appearance')"
+          <li>
+            <details
+              :open="activeSubmenu === 'appearance'"
+              @toggle="handleDetailsToggle($event, 'appearance')"
             >
-              <span class="flex min-w-0 items-center gap-3">
+              <summary>
                 <Palette class="h-4 w-4 shrink-0" />
                 <span class="leading-5">{{ t("chat.conversationMenu.groupAppearance") }}</span>
-              </span>
-              <ChevronRight class="h-4 w-4 shrink-0 opacity-50" />
-            </button>
-            <ul
-              v-if="activeSubmenu === 'appearance'"
-              ref="appearanceSubmenuEl"
-              class="menu absolute bottom-0 left-full ml-1 z-50 min-w-72 w-max rounded-box border border-base-300 bg-base-100 p-2 shadow-xl"
-            >
+              </summary>
+              <ul ref="appearanceSubmenuEl">
               <li class="menu-title px-2 py-1 text-xs uppercase tracking-wide opacity-60">{{ t("appearance.chatBubble") }}</li>
               <li>
                 <label class="flex cursor-pointer items-center justify-between gap-3 px-2 py-1.5">
@@ -194,14 +164,14 @@
                 </label>
               </li>
               <li>
-                <div class="flex items-center justify-between gap-3 px-2 py-1.5">
-                  <span class="whitespace-nowrap text-sm">{{ t("appearance.chatBubbleMarkdownLayout") }}</span>
+                <div class="flex flex-col items-stretch gap-1.5 px-2 py-1.5">
+                  <span class="text-xs font-medium text-base-content/80">{{ t("appearance.chatBubbleMarkdownLayout") }}</span>
                   <SegmentedControl
                     :model-value="markdownLayout"
                     :options="markdownLayoutOptions"
-                    size="sm"
-                    :full-width="false"
-                    class="shrink-0"
+                    size="xs"
+                    :full-width="true"
+                    class="w-full"
                     @change="setChatMarkdownLayout"
                   />
                 </div>
@@ -231,6 +201,7 @@
                 </label>
               </li>
             </ul>
+            </details>
           </li>
         </ul>
       </div>
@@ -387,7 +358,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useAttrs, type Ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { BellRing, ChevronRight, ClipboardCheck, ClipboardList, GitBranch, GitBranchPlus, Grip, ListTodo, MessageSquareMore, Package, Palette, Send, Share2, Split, Users } from "@lucide/vue";
+import { BellRing, ClipboardCheck, ClipboardList, GitBranch, GitBranchPlus, Grip, ListTodo, MessageSquareMore, Package, Palette, Send, Share2, Split, Users } from "@lucide/vue";
 import type { ChatMentionEntry, ConversationDelegateStatusSummary } from "../../../types/app";
 import OverlayScrollArea from "../../shared/components/OverlayScrollArea.vue";
 import { useChatComposerAppearance } from "../../shell/composables/use-chat-composer-appearance";
@@ -488,11 +459,14 @@ const showShareMenuItem = computed(() => props.showShareMenuItem);
 const showWorkspaceMenuItem = computed(() => props.showWorkspaceMenuItem);
 type SubmenuKey = "delegate" | "branch" | "interaction" | "appearance";
 const activeSubmenu = ref<SubmenuKey | null>(null);
-function openSubmenu(key: SubmenuKey) {
-  activeSubmenu.value = key;
-}
-function toggleSubmenu(key: SubmenuKey) {
-  activeSubmenu.value = activeSubmenu.value === key ? null : key;
+/** details 原生展开/收起与 activeSubmenu 双向同步，保证同时只展开一组 */
+function handleDetailsToggle(event: ToggleEvent, key: SubmenuKey) {
+  const details = event.target as HTMLDetailsElement | null;
+  if (details?.open) {
+    activeSubmenu.value = key;
+  } else if (activeSubmenu.value === key) {
+    activeSubmenu.value = null;
+  }
 }
 const delegateSubmenuEl = ref<HTMLElement | null>(null);
 const branchSubmenuEl = ref<HTMLElement | null>(null);
@@ -504,21 +478,6 @@ const submenuEls: Record<SubmenuKey, Ref<HTMLElement | null>> = {
   interaction: interactionSubmenuEl,
   appearance: appearanceSubmenuEl,
 };
-
-/** 鼠标真正离开整套菜单（一级菜单 + 已打开的二级菜单）时才关闭子菜单 */
-function handleMenuMouseLeave(event: MouseEvent) {
-  const nextTarget = event.relatedTarget;
-  if (nextTarget instanceof Node) {
-    const container = event.currentTarget as HTMLElement;
-    if (container.contains(nextTarget)) return;
-    // 二级菜单是 dropdown 容器内的绝对定位后代，需单独判断
-    for (const key of Object.keys(submenuEls) as SubmenuKey[]) {
-      const el = submenuEls[key].value;
-      if (el?.contains(nextTarget)) return;
-    }
-  }
-  activeSubmenu.value = null;
-}
 
 const menuDropdownRef = ref<HTMLElement | null>(null);
 
@@ -548,11 +507,9 @@ function handleGlobalPointerDown(event: PointerEvent) {
   }
 }
 
-/* 二级菜单定位：纯 CSS 底部对齐。
-   每个二级菜单 ul 相对锚点 li（relative）定位：
-   - 底边对齐锚点底边（bottom-0），向上展开
-   - 右侧展开（left-full），配合 min-w-* 自适应宽度
-   不再使用任何 JS 坐标计算。 */
+/* 二级菜单：原生 details 可折叠多级菜单。
+   子项在文档流内展开，随主菜单一起滚动，不存在飞出视口问题。
+   仅点按 summary 展开，无 hover 预展开。 */
 
 const hasDelegateMenuItems = computed(
   () => props.showCodeReviewMenuItem || props.showDelegateMenuItem,
