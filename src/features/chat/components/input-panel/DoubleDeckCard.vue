@@ -53,7 +53,6 @@ const roundedClass = computed(() =>
 const mainClass = computed(() => {
   const classes: string[] = [];
   if (props.isRounded) classes.push("rounded-[16px]");
-  if (props.extraVisible) classes.push("double-deck-face-lifted");
   return classes;
 });
 </script>
@@ -67,8 +66,5 @@ const mainClass = computed(() => {
 }
 .double-deck-bg-base-300 {
   background-color: color-mix(in srgb, var(--color-primary) 2%, var(--color-base-300));
-}
-.double-deck-face-lifted {
-  box-shadow: 0 -3px 8px -4px rgba(0, 0, 0, 0.22);
 }
 </style>
