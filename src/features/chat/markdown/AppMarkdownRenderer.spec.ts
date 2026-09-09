@@ -63,4 +63,19 @@ describe("AppMarkdownRenderer", () => {
     expect(html).toContain(">README.md:57</a>");
     expect(html).toContain("data-href=\"E:/github/easy_call_ai/README.md:57\"");
   });
+
+  it("does not attach animation words to quote block during streaming", async () => {
+    const app = createSSRApp({
+      render: () => h(AppMarkdownRenderer, {
+        text: "> 已经渲染好的引用文本\n\n后续正文内容正在流式输出",
+        streaming: true,
+      }),
+    });
+    app.use(i18n);
+    const html = await renderToString(app);
+    expect(html).toContain("ecall-md-quote");
+    expect(html).toContain("已经渲染好的引用文本");
+    const quoteHtml = html.match(/<blockquote[\s\S]*?<\/blockquote>/)?.[0] || "";
+    expect(quoteHtml).not.toContain("ecall-md-animate-word");
+  });
 });

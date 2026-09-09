@@ -814,8 +814,16 @@ function nestedMarkdownBlocks(text: string, streaming: boolean, blockKey?: strin
   }
   if (!streaming) {
     nestedIncrementalParsers.delete(blockKey);
-    // 非流式直接全量解析，避免增量 parser 残留错误
-    return parseMarkdownBlocks(text, false);
+    const cacheKey = `n:${blockKey}:${text}`;
+    const cached = nestedSimpleCache.get(cacheKey);
+    if (cached) return cached;
+    const blocks = parseMarkdownBlocks(text, false);
+    if (nestedSimpleCache.size >= NESTED_SIMPLE_CACHE_MAX) {
+      const first = nestedSimpleCache.keys().next().value as string | undefined;
+      if (first !== undefined) nestedSimpleCache.delete(first);
+    }
+    nestedSimpleCache.set(cacheKey, blocks);
+    return blocks;
   }
   let parser = nestedIncrementalParsers.get(blockKey);
   if (!parser) {
@@ -908,6 +916,7 @@ const BlockRenderer = defineComponent({
     },
     isDark: { type: Boolean, default: false },
     streaming: { type: Boolean, default: false },
+    allowTailAnimate: { type: Boolean, default: true },
     localImageBasePath: { type: String, default: "" },
     footnoteIndexMap: {
       type: Object as PropType<Record<string, number>>,
@@ -947,6 +956,7 @@ const BlockRenderer = defineComponent({
     const isLastBlock = (idx: number) => idx === blockProps.blocks.length - 1;
 
     function makeTailContextForBlock(block: MarkdownBlock, isLast: boolean): StreamingTailContext | null {
+      if (!blockProps.allowTailAnimate) return null;
       if (!isLast) return null;
       if (!STREAMING_TEXT_ANIMATION_ENABLED) return null;
       if (!blockProps.streaming) return null;
@@ -974,12 +984,15 @@ const BlockRenderer = defineComponent({
         ]);
       }
       if (block.type === "quote") {
-        const nestedBlocks = nestedMarkdownBlocks(block.text, blockProps.streaming, block.key);
+        const isCurrentLast = isLastBlock(index);
+        const nestedStreaming = blockProps.streaming && isCurrentLast;
+        const nestedBlocks = nestedMarkdownBlocks(block.text, nestedStreaming, block.key);
         return h("blockquote", { key: `${block.type}-${index}-${block.key}`, class: "ecall-md-quote" }, [
           h(BlockRenderer, {
             blocks: nestedBlocks,
             isDark: blockProps.isDark,
-            streaming: blockProps.streaming,
+            streaming: nestedStreaming,
+            allowTailAnimate: false,
             localImageBasePath: blockProps.localImageBasePath,
             footnoteIndexMap: blockProps.footnoteIndexMap,
             onImagePreview: blockProps.onImagePreview,
@@ -1056,7 +1069,9 @@ const BlockRenderer = defineComponent({
         });
       }
       if (block.type === "details") {
-        const nestedBlocks = nestedMarkdownBlocks(block.body, blockProps.streaming, `${block.key}::body`);
+        const isCurrentLast = isLastBlock(index);
+        const nestedStreaming = blockProps.streaming && isCurrentLast;
+        const nestedBlocks = nestedMarkdownBlocks(block.body, nestedStreaming, `${block.key}::body`);
         return h("details", {
           key: `${block.type}-${index}-${block.key}`,
           class: "ecall-md-details",
@@ -1076,7 +1091,8 @@ const BlockRenderer = defineComponent({
               h(BlockRenderer, {
                 blocks: nestedBlocks,
                 isDark: blockProps.isDark,
-                streaming: blockProps.streaming,
+                streaming: nestedStreaming,
+                allowTailAnimate: false,
                 localImageBasePath: blockProps.localImageBasePath,
                 footnoteIndexMap: blockProps.footnoteIndexMap,
                 onImagePreview: blockProps.onImagePreview,
