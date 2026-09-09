@@ -24,6 +24,10 @@ pub struct WindowInfo {
     pub window_id: usize,
     pub title: String,
     pub process_id: u32,
+    /// 进程可执行名/应用名（G2 名字引用窗口的匹配依据之一，window list 原样返回供模型选用）。
+    /// 查不到时为 None（此时只按标题匹配）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub process_name: Option<String>,
     pub x: i32,
     pub y: i32,
     pub width: i32,
@@ -79,10 +83,11 @@ pub fn app_get_value(window_id: usize, target: &AppTarget) -> Result<String, Str
     windows::app_get_value(window_id, target)
 }
 
-/// 后台滚动：ScrollPattern 优先，WM_MOUSEWHEEL 兜底。返回实际使用的投递方式。
+/// 后台滚动：ScrollPattern 优先，滚轮消息兜底（垂直 WM_MOUSEWHEEL / 水平 WM_MOUSEHWHEEL）。
+/// positive=true 表示 down（垂直）/ right（水平），与 enigo scroll 符号约定一致。返回实际使用的投递方式。
 #[cfg(target_os = "windows")]
-pub fn app_scroll(window_id: usize, target: &AppTarget, up: bool, small: bool, repeat: u32) -> Result<&'static str, String> {
-    windows::app_scroll(window_id, target, up, small, repeat)
+pub fn app_scroll(window_id: usize, target: &AppTarget, horizontal: bool, positive: bool, small: bool, repeat: u32) -> Result<&'static str, String> {
+    windows::app_scroll(window_id, target, horizontal, positive, small, repeat)
 }
 
 /// 后台按键：向目标窗口的内部焦点控件投递键盘消息。
@@ -100,6 +105,31 @@ pub fn platform_capability_hint() -> Option<String> {
 
 #[cfg(not(target_os = "linux"))]
 pub fn platform_capability_hint() -> Option<String> {
+    None
+}
+
+/// 控件树为空时的原因说明（E4/H3）：截图 elements=true 却扫不到元素时，
+/// 把「为什么是空」讲清楚，避免模型反复试错。Windows 返回 None（沿用调用方原有文案）。
+#[cfg(target_os = "macos")]
+pub fn ui_tree_empty_hint() -> Option<String> {
+    if macos::accessibility_permission_granted() {
+        Some("macOS 控件树为空：目标窗口未暴露无障碍元素（部分自绘/Electron 窗口如此）；请改用坐标点击（mouse click @x,y）".to_string())
+    } else {
+        Some("macOS 辅助功能权限缺失：请在系统设置 → 隐私与安全性 → 辅助功能中允许本应用，然后重试；未授权前请改用 key/text 操作当前前台".to_string())
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn ui_tree_empty_hint() -> Option<String> {
+    if linux::is_wayland_session() {
+        Some("当前是 Wayland 会话：原生窗口无法枚举、控件树为空（仅 XWayland 窗口可见）；请在 X11 会话下使用，或改用 key/text 直接操作当前前台".to_string())
+    } else {
+        Some("Linux 控件树为空：需要桌面环境的 AT-SPI2 无障碍服务（GNOME/KDE 默认开启）；缺失时请改用 key/text 操作当前前台".to_string())
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub fn ui_tree_empty_hint() -> Option<String> {
     None
 }
 
@@ -125,7 +155,7 @@ pub fn app_get_value(_window_id: usize, _target: &AppTarget) -> Result<String, S
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn app_scroll(_window_id: usize, _target: &AppTarget, _up: bool, _small: bool, _repeat: u32) -> Result<&'static str, String> {
+pub fn app_scroll(_window_id: usize, _target: &AppTarget, _horizontal: bool, _positive: bool, _small: bool, _repeat: u32) -> Result<&'static str, String> {
     Err("app 后台操作当前仅在 Windows 平台可用；其他平台请改用前台动作（mouse/key/text）并先 window activate 把目标窗口切到前台".to_string())
 }
 

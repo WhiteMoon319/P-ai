@@ -26,7 +26,7 @@ pub fn platform_capability_hint() -> Option<String> {
     }
 }
 
-fn is_wayland_session() -> bool {
+pub fn is_wayland_session() -> bool {
     std::env::var_os("WAYLAND_DISPLAY").is_some()
         || std::env::var("XDG_SESSION_TYPE")
             .map(|value| value.eq_ignore_ascii_case("wayland"))
@@ -41,10 +41,13 @@ pub fn list_all_windows() -> Vec<WindowInfo> {
     };
     windows
         .iter()
-        .map(|w| WindowInfo {
-            window_id: w.id().unwrap_or(0) as usize,
-            title: w.title().unwrap_or_default(),
-            process_id: w.pid().unwrap_or(0),
+        .map(|w| {
+            let app_name = w.app_name().unwrap_or_default();
+            WindowInfo {
+                window_id: w.id().unwrap_or(0) as usize,
+                title: w.title().unwrap_or_default(),
+                process_name: if app_name.is_empty() { None } else { Some(app_name) },
+                process_id: w.pid().unwrap_or(0),
             x: w.x().unwrap_or(0),
             y: w.y().unwrap_or(0),
             width: w.width().unwrap_or(0) as i32,

@@ -826,14 +826,16 @@ pub fn app_set_value(hwnd: usize, target: &AppTarget, text: &str) -> Result<&'st
 /// 后台滚动：ScrollPattern 优先，不支持时降级 PostMessage WM_MOUSEWHEEL。
 /// 方向语义与滚轮一致：up=视图上移（内容回退），down=视图下移（内容前进）。
 /// 返回实际使用的投递方式："scrollpattern" 或 "postmessage"。
-pub fn app_scroll(hwnd: usize, target: &AppTarget, up: bool, small: bool, repeat: u32) -> Result<&'static str, String> {
+pub fn app_scroll(hwnd: usize, target: &AppTarget, horizontal: bool, positive: bool, small: bool, repeat: u32) -> Result<&'static str, String> {
     with_uia_automation(|automation| {
         let (element, point) = resolve_app_target(automation, hwnd, target)?;
-        let vertical = match (up, small) {
-            (true, false) => ScrollAmount_LargeDecrement,
-            (true, true) => ScrollAmount_SmallDecrement,
-            (false, false) => ScrollAmount_LargeIncrement,
-            (false, true) => ScrollAmount_SmallIncrement,
+        // positive=true 表示 down（垂直）/ right（水平），与 enigo scroll 符号约定一致；
+        // UIA 上对应 LargeIncrement，反之为 LargeDecrement。
+        let amount = match (positive, small) {
+            (true, false) => ScrollAmount_LargeIncrement,
+            (true, true) => ScrollAmount_SmallIncrement,
+            (false, false) => ScrollAmount_LargeDecrement,
+            (false, true) => ScrollAmount_SmallDecrement,
         };
         if let Some(raw) = &element {
             unsafe {
@@ -842,8 +844,13 @@ pub fn app_scroll(hwnd: usize, target: &AppTarget, up: bool, small: bool, repeat
                         let pattern: IUIAutomationScrollPattern = windows_core::Type::from_abi(pattern_raw)
                             .map_err(|err| format!("转换 ScrollPattern 失败：{err}"))?;
                         for _ in 0..repeat.max(1) {
+                            let (h, v) = if horizontal {
+                                (amount, ScrollAmount_NoAmount)
+                            } else {
+                                (ScrollAmount_NoAmount, amount)
+                            };
                             pattern
-                                .Scroll(ScrollAmount_NoAmount, vertical)
+                                .Scroll(h, v)
                                 .map_err(|err| format!("Scroll 调用失败：{err}"))?;
                         }
                         return Ok("scrollpattern");
@@ -851,7 +858,11 @@ pub fn app_scroll(hwnd: usize, target: &AppTarget, up: bool, small: bool, repeat
                 }
             }
         }
-        post_mouse_wheel(hwnd, point.0, point.1, up, repeat)?;
+        if horizontal {
+            post_mouse_hwheel(hwnd, point.0, point.1, positive, repeat)?;
+        } else {
+            post_mouse_wheel(hwnd, point.0, point.1, !positive, repeat)?;
+        }
         Ok("postmessage")
     })
 }
@@ -940,6 +951,29 @@ fn post_mouse_wheel(hwnd: usize, screen_x: i32, screen_y: i32, up: bool, repeat:
     unsafe {
         for _ in 0..repeat.max(1) {
             PostMessageW(target_hwnd, WM_MOUSEWHEEL, wparam, lparam);
+        }
+    }
+    Ok(())
+}
+
+/// 水平滚轮兜底（WM_MOUSEHWHEEL = 0x020E）：+120 向右，-120 向左。目标不支持水平滚动时系统静默丢弃。
+fn post_mouse_hwheel(hwnd: usize, screen_x: i32, screen_y: i32, right: bool, repeat: u32) -> Result<(), String> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{IsIconic, PostMessageW, WM_MOUSEHWHEEL};
+    if hwnd == 0 {
+        return Err("目标窗口句柄为 0".to_string());
+    }
+    unsafe {
+        if IsIconic(hwnd as _) != 0 {
+            return Err("目标窗口已最小化，无法投递滚轮消息".to_string());
+        }
+    }
+    let (target_hwnd, _) = descend_to_child_at(hwnd, screen_x, screen_y);
+    let delta: u16 = if right { 120 } else { u16::MAX - 119 };
+    let wparam: usize = (delta as usize) << 16;
+    let lparam = mouse_lparam(screen_x, screen_y);
+    unsafe {
+        for _ in 0..repeat.max(1) {
+            PostMessageW(target_hwnd, WM_MOUSEHWHEEL, wparam, lparam);
         }
     }
     Ok(())
@@ -1082,8 +1116,9 @@ pub fn list_all_windows() -> Vec<WindowInfo> {
 
     struct EnumCtx {
         windows: Vec<WindowInfo>,
+        process_names: std::collections::HashMap<u32, String>,
     }
-    let ctx = Mutex::new(EnumCtx { windows: Vec::new() });
+    let ctx = Mutex::new(EnumCtx { windows: Vec::new(), process_names: process_name_map() });
     let ctx_ptr = &ctx as *const Mutex<EnumCtx> as isize;
 
     unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> windows_sys::core::BOOL {
@@ -1109,9 +1144,11 @@ pub fn list_all_windows() -> Vec<WindowInfo> {
             }
             let minimized = unsafe { IsIconic(hwnd) != 0 };
             let fg = unsafe { GetForegroundWindow() };
+            let process_name = guard.process_names.get(&pid).cloned();
             guard.windows.push(WindowInfo {
                 window_id: hwnd as usize,
                 title,
+                process_name,
                 process_id: pid,
                 x: rect.left,
                 y: rect.top,
@@ -1131,6 +1168,43 @@ pub fn list_all_windows() -> Vec<WindowInfo> {
         Ok(inner) => inner.windows,
         Err(_) => Vec::new(),
     }
+}
+
+/// 进程快照：pid → 可执行文件名（如 notepad.exe），供窗口枚举填充 process_name（G2 名字引用窗口）。
+/// 快照失败返回空表，调用方降级为 None，不阻断枚举。
+fn process_name_map() -> std::collections::HashMap<u32, String> {
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+    let mut map = std::collections::HashMap::new();
+    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
+    if snapshot == INVALID_HANDLE_VALUE {
+        return map;
+    }
+    let mut entry: PROCESSENTRY32W = unsafe { std::mem::zeroed() };
+    entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+    if unsafe { Process32FirstW(snapshot, &mut entry) } != 0 {
+        loop {
+            let len = entry
+                .szExeFile
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(entry.szExeFile.len());
+            let name = String::from_utf16_lossy(&entry.szExeFile[..len]);
+            if !name.is_empty() {
+                map.insert(entry.th32ProcessID, name);
+            }
+            if unsafe { Process32NextW(snapshot, &mut entry) } == 0 {
+                break;
+            }
+        }
+    }
+    unsafe {
+        CloseHandle(snapshot);
+    }
+    map
 }
 
 fn read_window_title(hwnd: windows_sys::Win32::Foundation::HWND) -> String {
@@ -1209,7 +1283,7 @@ mod windows_platform_tests {
     use super::*;
     // tools.rs 被 include 进 main（crate root），window_list / primary_monitor_bounds /
     // runtime_log_info 都在 crate root；eprintln! 宏在 main.rs:29 被重定义为 runtime_log_info
-    use crate::{primary_monitor_bounds, runtime_log_info, window_list};
+    use crate::runtime_log_info;
 
     #[test]
     fn control_type_whitelist_should_match_interactive_types() {

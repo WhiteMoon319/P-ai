@@ -222,16 +222,24 @@ impl Drop for CfValue {
 
 // ==================== list windows（复用 xcap） ====================
 
+/// 辅助功能权限是否已授予（E4/H3 空树提示用；macOS 的 AX 读取与窗口激活都依赖它）。
+pub fn accessibility_permission_granted() -> bool {
+    unsafe { AXIsProcessTrusted() != 0 }
+}
+
 pub fn list_all_windows() -> Vec<WindowInfo> {
     let Ok(windows) = xcap::Window::all() else {
         return Vec::new();
     };
     windows
         .iter()
-        .map(|w| WindowInfo {
-            window_id: w.id().unwrap_or(0) as usize,
-            title: w.title().unwrap_or_default(),
-            process_id: w.pid().unwrap_or(0),
+        .map(|w| {
+            let app_name = w.app_name().unwrap_or_default();
+            WindowInfo {
+                window_id: w.id().unwrap_or(0) as usize,
+                title: w.title().unwrap_or_default(),
+                process_name: if app_name.is_empty() { None } else { Some(app_name) },
+                process_id: w.pid().unwrap_or(0),
             x: w.x().unwrap_or(0),
             y: w.y().unwrap_or(0),
             width: w.width().unwrap_or(0) as i32,

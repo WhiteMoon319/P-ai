@@ -72,6 +72,10 @@ struct ScreenshotRequest {
     webp_quality: f32,
     #[serde(default = "default_include_screenshot_base64")]
     include_base64: bool,
+    /// 像素预算上限（F2）：超出时等比缩小到该预算内；None 表示保持全尺寸。
+    /// operate 截图 DSL 的 max_pixels= 落到这里；其他调用方不传即历史行为。
+    #[serde(default)]
+    max_pixels: Option<u64>,
 }
 
 fn default_screenshot_mode() -> ScreenshotMode {
