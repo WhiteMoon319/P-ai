@@ -514,12 +514,12 @@ impl RuntimeToolMetadata for BuiltinTerminalExecTool {
               "type": "object",
               "properties": {
                 "command": { "type": "string", "description": "要执行的一次性 shell 命令。" },
-                "description": { "type": "string", "description": "可选，本次命令的简短说明。后台任务会用于列表展示与完成写回；留空时列表以命令文本展示。" },
+                "description": { "type": "string", "description": "必填，本次命令的简短说明，用于向用户解释执行意图并在权限审批卡中呈现；后台任务也会用于列表展示与完成写回。" },
                 "mode": { "type": "string", "enum": ["wait", "background"], "default": "wait", "description": "执行模式。wait=当前调用等待结果；background=立即返回后台任务 id。" },
                 "timeout_ms": { "type": "integer", "minimum": 1, "default": 300000, "description": "命令超时时间，单位毫秒；未指定时默认 300000ms，超时后回收本次进程树。长耗时检查/构建应显式传入足够大的值。" },
                 "commitment": { "type": "string", "description": "危险命令确认承诺。平时留空；仅当 exec 返回 blockedReason=local_rule_blocked 且 message 要求确认时，向用户说明危险性并取得明确许可后，填入返回中的 commitmentHint 文案再重新调用。" }
               },
-              "required": ["command"],
+              "required": ["command", "description"],
               "additionalProperties": false
             }),
         )

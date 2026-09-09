@@ -48,6 +48,8 @@ struct TerminalApprovalRequestPayload {
     workspace_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     workspace_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
 }
 
 fn approval_workspace_memory_target(
@@ -182,6 +184,7 @@ async fn terminal_request_user_approval(
     target_paths: &[PathBuf],
     review_opinion: Option<&str>,
     review_model_name: Option<&str>,
+    description: Option<&str>,
 ) -> Result<TerminalApprovalDecision, String> {
     let request_id = Uuid::new_v4().to_string();
     let app_handle = {
@@ -252,6 +255,10 @@ async fn terminal_request_user_approval(
         can_remember_workspace: workspace_memory_target.is_some(),
         workspace_name: workspace_memory_target.as_ref().map(|(name, _)| name.clone()),
         workspace_path: workspace_memory_target.map(|(_, path)| path),
+        description: description
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(ToString::to_string),
     };
 
     let (tx, rx) = tokio::sync::oneshot::channel::<TerminalApprovalDecision>();

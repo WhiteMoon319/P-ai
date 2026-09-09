@@ -1425,6 +1425,7 @@ async fn builtin_apply_patch_with_name(
                             &target_paths,
                             (!review.review_opinion.is_empty()).then_some(review.review_opinion.as_str()),
                             (!review.model_name.is_empty()).then_some(review.model_name.as_str()),
+                            None,
                         )
                         .await
                         {
@@ -1489,6 +1490,7 @@ async fn builtin_apply_patch_with_name(
                         &target_paths,
                         Some(review_note),
                         Some(model_name.as_str()),
+                        None,
                     )
                     .await
                     {
@@ -1580,6 +1582,7 @@ async fn builtin_apply_patch_with_name(
                     &target_paths,
                     None,
                     None,
+                    None,
                 )
                 .await
                 {
@@ -1627,6 +1630,7 @@ async fn builtin_apply_patch_with_name(
                         Some(notice.as_str()),
                         &existing_paths,
                         &target_paths,
+                        None,
                         None,
                         None,
                     )

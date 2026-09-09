@@ -1015,7 +1015,7 @@ const approvalQuestionAnswers = ref<Record<string, { optionId: string; label: st
 const approvalQuestionItems = computed(() => {
   return activeConversationTerminalApprovals.value.map((item) => {
     const title = String(item.summary || item.toolName || item.approvalKind || t("chat.toolReview.title") || "终端审批").trim() || "终端审批";
-    const desc = String(item.message || item.reason || "").trim();
+    const desc = String(item.description || item.message || item.reason || "").trim();
     const cmd = String(item.command || "").trim();
     const rawPreview = String(item.callPreview || "").trim();
     let preview = rawPreview || cmd;

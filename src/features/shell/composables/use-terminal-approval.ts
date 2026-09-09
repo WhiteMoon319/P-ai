@@ -21,6 +21,7 @@ export type TerminalApprovalRequestPayload = {
   canRememberWorkspace?: boolean;
   workspaceName?: string;
   workspacePath?: string;
+  description?: string;
 };
 
 export type TerminalApprovalConversationItem = TerminalApprovalRequestPayload & {
