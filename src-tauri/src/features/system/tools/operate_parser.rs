@@ -74,6 +74,9 @@ struct OperateResponse {
     executed_count: usize,
     elapsed_ms: u64,
     steps: Vec<DesktopScriptStepResult>,
+    /// 中途失败的位置与原因；成功时为 None。失败时 steps 仍包含已完成步骤（D1）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    failure: Option<OperateFailure>,
     #[serde(skip_serializing_if = "Option::is_none")]
     latest_screenshot: Option<LatestScreenshotInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -86,6 +89,33 @@ struct OperateResponse {
     height: Option<u32>,
 }
 
+/// 脚本中途失败的位置与原因；失败时 steps 仍返回已完成步骤，模型可据此从失败行重试（D1）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OperateFailure {
+    line: usize,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    focus_failed: Option<FocusFailureInfo>,
+}
+
+/// 抢焦点失败时的结构化现场：目标状态、前后前台、恢复建议（C3）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FocusFailureInfo {
+    target_window_id: u32,
+    target_title: String,
+    /// 窗口句柄是否仍然存在（存在但不可见即为被隐藏）
+    alive: bool,
+    /// 窗口是否出现在可见窗口枚举里
+    visible: bool,
+    minimized: bool,
+    foreground_before: String,
+    foreground_after: String,
+    /// 建议动作：activate_window / unhide_app / open_application
+    suggested_recovery: Vec<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum OperateMouseButton {
     Left,
@@ -93,6 +123,24 @@ enum OperateMouseButton {
     Middle,
     Back,
     Forward,
+}
+
+/// 前台动作的目标窗口声明：句柄或标题子串
+#[derive(Debug, Clone)]
+enum ForegroundTarget {
+    WindowId(u32),
+    Title(String),
+}
+
+/// 前台动作的焦点策略；仅在声明了 target 时生效
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FocusPolicy {
+    /// 不激活，只校验当前前台是否为目标窗口，不符即失败（声明 target 时的默认）
+    Verify,
+    /// 尝试激活，失败不中止，在结果中报告
+    BestEffort,
+    /// 必须激活成功，失败即中止并返回结构化焦点失败信息
+    Strict,
 }
 
 #[derive(Debug, Clone)]
@@ -115,6 +163,7 @@ enum ScreenshotModeSpec {
     FocusedWindow,
     Region(NormalizedRegion),
     WindowId(u32),
+    Monitor(u32),
 }
 
 /// app 动作目标：快照元素引用（el=<n>）或归一化坐标（@x,y）
@@ -126,21 +175,22 @@ enum AppScriptTarget {
 
 #[derive(Debug, Clone)]
 enum AppScriptAction {
-    Click { target: AppScriptTarget, repeat: u32, dblclick: bool, pre_delay: std::time::Duration },
+    Click { target: AppScriptTarget, monitor: Option<u32>, repeat: u32, dblclick: bool, pre_delay: std::time::Duration },
     SetValue { el: u32, text: String, pre_delay: std::time::Duration },
-    ScrollUp { target: AppScriptTarget, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration },
-    ScrollDown { target: AppScriptTarget, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration },
+    ScrollUp { target: AppScriptTarget, monitor: Option<u32>, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration },
+    ScrollDown { target: AppScriptTarget, monitor: Option<u32>, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration },
     Key { keys: Vec<String>, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration },
     GetValue { el: u32 },
 }
 
 #[derive(Debug, Clone)]
 enum DesktopScriptAction {
-    MouseClick { line: usize, button: OperateMouseButton, target: NormalizedPoint, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration, press: std::time::Duration },
-    MouseMove { line: usize, target: NormalizedPoint, pre_delay: std::time::Duration },
-    MouseScroll { line: usize, direction: i32, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration },
-    Key { line: usize, keys: Vec<String>, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration, press: std::time::Duration },
-    Text { line: usize, text: String, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration },
+    MouseClick { line: usize, button: OperateMouseButton, target: NormalizedPoint, monitor: Option<u32>, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration, press: std::time::Duration, window_target: Option<ForegroundTarget>, focus: FocusPolicy },
+    MouseDrag { line: usize, button: OperateMouseButton, from: NormalizedPoint, to: NormalizedPoint, monitor: Option<u32>, duration: Option<std::time::Duration>, pre_delay: std::time::Duration, window_target: Option<ForegroundTarget>, focus: FocusPolicy },
+    MouseMove { line: usize, target: NormalizedPoint, monitor: Option<u32>, pre_delay: std::time::Duration, window_target: Option<ForegroundTarget>, focus: FocusPolicy },
+    MouseScroll { line: usize, direction: i32, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration, window_target: Option<ForegroundTarget>, focus: FocusPolicy },
+    Key { line: usize, keys: Vec<String>, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration, press: std::time::Duration, window_target: Option<ForegroundTarget>, focus: FocusPolicy },
+    Text { line: usize, text: String, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration, window_target: Option<ForegroundTarget>, focus: FocusPolicy },
     Wait { line: usize, duration: std::time::Duration },
     Screenshot { line: usize, mode: ScreenshotModeSpec, save_path: Option<String>, quality: f32, elements: bool },
     App { line: usize, window_id: u32, action: AppScriptAction, post_delay: std::time::Duration },
@@ -213,6 +263,49 @@ fn parse_bool_token(line: usize, action: &str, raw: &str) -> DesktopToolResult<b
         "true" | "1" => Ok(true),
         "false" | "0" => Ok(false),
         _ => Err(operate_line_error(line, action, format!("布尔参数非法：必须是 true/1 或 false/0，当前为 `{raw}`"))),
+    }
+}
+
+/// monitor 参数：显示器序号，0 起。省略时用主屏。
+fn parse_monitor_token(line: usize, action: &str, raw: &str) -> DesktopToolResult<u32> {
+    raw.trim()
+        .parse::<u32>()
+        .map_err(|_| operate_line_error(line, action, format!("monitor 非法：必须是非负整数，当前为 `{raw}`")))
+}
+
+/// target 参数：窗口句柄（十进制或 0x 十六进制）或带双引号的标题子串。
+fn parse_foreground_target(line: usize, action: &str, raw: &str) -> DesktopToolResult<ForegroundTarget> {
+    if let Some(title) = strip_quoted_value(raw) {
+        if title.trim().is_empty() {
+            return Err(operate_line_error(line, action, "target 非法：标题不能为空".to_string()));
+        }
+        return Ok(ForegroundTarget::Title(title));
+    }
+    parse_window_id_token(line, action, raw).map(ForegroundTarget::WindowId)
+}
+
+/// focus 参数：verify（默认，只校验不激活）/ best_effort（尝试激活，失败继续）/ strict（激活失败即中止）。
+fn parse_focus_token(line: usize, action: &str, raw: &str) -> DesktopToolResult<FocusPolicy> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "verify" => Ok(FocusPolicy::Verify),
+        "best_effort" => Ok(FocusPolicy::BestEffort),
+        "strict" => Ok(FocusPolicy::Strict),
+        other => Err(operate_line_error(line, action, format!("focus 非法：必须是 verify / best_effort / strict，当前为 `{other}`"))),
+    }
+}
+
+/// 解析前台动作的 target/focus 参数对；未声明 target 时返回 (None, Verify)，行为与历史脚本一致。
+fn parse_foreground_params(
+    line: usize,
+    action: &str,
+    params: &std::collections::HashMap<String, String>,
+) -> DesktopToolResult<(Option<ForegroundTarget>, FocusPolicy)> {
+    let window_target = params.get("target").map(|raw| parse_foreground_target(line, action, raw)).transpose()?;
+    let focus = params.get("focus").map(|raw| parse_focus_token(line, action, raw)).transpose()?;
+    match (&window_target, focus) {
+        (None, Some(_)) => Err(operate_line_error(line, action, "focus 必须与 target 一起使用".to_string())),
+        (_, Some(policy)) => Ok((window_target, policy)),
+        (_, None) => Ok((window_target, FocusPolicy::Verify)),
     }
 }
 
@@ -307,36 +400,55 @@ fn parse_mouse_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<Desk
     }
     let subject = tokens[1].trim().to_ascii_lowercase();
     if subject == "scroll_up" || subject == "scroll_down" {
-        let params = parse_named_params(line_no, "mouse", &tokens[2..], &["repeat", "delay", "pre_delay"])?;
+        let params = parse_named_params(line_no, "mouse", &tokens[2..], &["repeat", "delay", "pre_delay", "target", "focus"])?;
         let repeat = params.get("repeat").map(|v| parse_repeat_token(line_no, "mouse", v)).transpose()?.unwrap_or(1);
         let delay = params.get("delay").map(|v| parse_seconds_token(line_no, "mouse", v, "delay")).transpose()?.unwrap_or_default();
         let pre_delay = params.get("pre_delay").map(|v| parse_seconds_token(line_no, "mouse", v, "pre_delay")).transpose()?.unwrap_or_default();
+        let (window_target, focus) = parse_foreground_params(line_no, "mouse", &params)?;
         let direction = if subject == "scroll_up" { 1 } else { -1 };
-        return Ok(DesktopScriptAction::MouseScroll { line: line_no, direction, repeat, delay, pre_delay });
+        return Ok(DesktopScriptAction::MouseScroll { line: line_no, direction, repeat, delay, pre_delay, window_target, focus });
     }
     if subject == "move" {
         if tokens.len() < 3 {
             return Err(operate_line_error(line_no, "mouse", "非法：移动格式应为 `mouse move @x,y`".to_string()));
         }
         let target = parse_normalized_pair(line_no, "mouse", &tokens[2])?;
-        let params = parse_named_params(line_no, "mouse", &tokens[3..], &["pre_delay"])?;
+        let params = parse_named_params(line_no, "mouse", &tokens[3..], &["pre_delay", "monitor", "target", "focus"])?;
         let pre_delay = params.get("pre_delay").map(|v| parse_seconds_token(line_no, "mouse", v, "pre_delay")).transpose()?.unwrap_or_default();
-        return Ok(DesktopScriptAction::MouseMove { line: line_no, target, pre_delay });
+        let monitor = params.get("monitor").map(|v| parse_monitor_token(line_no, "mouse", v)).transpose()?;
+        let (window_target, focus) = parse_foreground_params(line_no, "mouse", &params)?;
+        return Ok(DesktopScriptAction::MouseMove { line: line_no, target, monitor, pre_delay, window_target, focus });
     }
     if tokens.len() < 4 {
-        return Err(operate_line_error(line_no, "mouse", "非法：点击格式应为 `mouse <button> click @x,y`".to_string()));
+        return Err(operate_line_error(line_no, "mouse", "非法：格式应为 `mouse <button> click @x,y` 或 `mouse <button> drag @x1,y1 @x2,y2`".to_string()));
     }
     let button = parse_mouse_button(line_no, &tokens[1])?;
-    if tokens[2].trim().to_ascii_lowercase() != "click" {
-        return Err(operate_line_error(line_no, "mouse", format!("非法：暂只支持 `click`，当前为 `{}`", tokens[2])));
+    let verb = tokens[2].trim().to_ascii_lowercase();
+    if verb == "drag" {
+        if tokens.len() < 5 {
+            return Err(operate_line_error(line_no, "mouse", "非法：拖拽格式应为 `mouse <button> drag @x1,y1 @x2,y2 [duration=s]`".to_string()));
+        }
+        let from = parse_normalized_pair(line_no, "mouse", &tokens[3])?;
+        let to = parse_normalized_pair(line_no, "mouse", &tokens[4])?;
+        let params = parse_named_params(line_no, "mouse", &tokens[5..], &["duration", "pre_delay", "monitor", "target", "focus"])?;
+        let duration = params.get("duration").map(|v| parse_seconds_token(line_no, "mouse", v, "duration")).transpose()?;
+        let pre_delay = params.get("pre_delay").map(|v| parse_seconds_token(line_no, "mouse", v, "pre_delay")).transpose()?.unwrap_or_default();
+        let monitor = params.get("monitor").map(|v| parse_monitor_token(line_no, "mouse", v)).transpose()?;
+        let (window_target, focus) = parse_foreground_params(line_no, "mouse", &params)?;
+        return Ok(DesktopScriptAction::MouseDrag { line: line_no, button, from, to, monitor, duration, pre_delay, window_target, focus });
+    }
+    if verb != "click" {
+        return Err(operate_line_error(line_no, "mouse", format!("非法：暂只支持 `click` / `drag`，当前为 `{}`", tokens[2])));
     }
     let target = parse_normalized_pair(line_no, "mouse", &tokens[3])?;
-    let params = parse_named_params(line_no, "mouse", &tokens[4..], &["repeat", "delay", "pre_delay", "press"])?;
+    let params = parse_named_params(line_no, "mouse", &tokens[4..], &["repeat", "delay", "pre_delay", "press", "monitor", "target", "focus"])?;
     let repeat = params.get("repeat").map(|v| parse_repeat_token(line_no, "mouse", v)).transpose()?.unwrap_or(1);
     let delay = params.get("delay").map(|v| parse_seconds_token(line_no, "mouse", v, "delay")).transpose()?.unwrap_or_default();
     let pre_delay = params.get("pre_delay").map(|v| parse_seconds_token(line_no, "mouse", v, "pre_delay")).transpose()?.unwrap_or_default();
     let press = params.get("press").map(|v| parse_seconds_token(line_no, "mouse", v, "press")).transpose()?.unwrap_or_default();
-    Ok(DesktopScriptAction::MouseClick { line: line_no, button, target, repeat, delay, pre_delay, press })
+    let monitor = params.get("monitor").map(|v| parse_monitor_token(line_no, "mouse", v)).transpose()?;
+    let (window_target, focus) = parse_foreground_params(line_no, "mouse", &params)?;
+    Ok(DesktopScriptAction::MouseClick { line: line_no, button, target, monitor, repeat, delay, pre_delay, press, window_target, focus })
 }
 
 /// windowId 解析：十进制或 0x 前缀十六进制（与 windows 工具的 id 口径一致）
@@ -381,12 +493,13 @@ fn parse_app_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<Deskto
     match verb.as_str() {
         "click" => {
             let target = parse_app_target(line_no, &tokens[3])?;
-            let params = parse_named_params(line_no, "app", &tokens[4..], &["repeat", "dblclick", "pre_delay", "post_delay"])?;
+            let params = parse_named_params(line_no, "app", &tokens[4..], &["repeat", "dblclick", "pre_delay", "post_delay", "monitor"])?;
             let repeat = params.get("repeat").map(|v| parse_repeat_token(line_no, "app", v)).transpose()?.unwrap_or(1);
             let dblclick = params.get("dblclick").map(|v| parse_bool_token(line_no, "app", v)).transpose()?.unwrap_or(false);
             let pre_delay = params.get("pre_delay").map(|v| parse_seconds_token(line_no, "app", v, "pre_delay")).transpose()?.unwrap_or_default();
+            let monitor = params.get("monitor").map(|v| parse_monitor_token(line_no, "app", v)).transpose()?;
             let post_delay = parse_post_delay(&params)?;
-            Ok(DesktopScriptAction::App { line: line_no, window_id, action: AppScriptAction::Click { target, repeat, dblclick, pre_delay }, post_delay })
+            Ok(DesktopScriptAction::App { line: line_no, window_id, action: AppScriptAction::Click { target, monitor, repeat, dblclick, pre_delay }, post_delay })
         }
         "setvalue" => {
             if tokens.len() < 5 {
@@ -416,15 +529,16 @@ fn parse_app_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<Deskto
         }
         "scroll_up" | "scroll_down" => {
             let target = parse_app_target(line_no, &tokens[3])?;
-            let params = parse_named_params(line_no, "app", &tokens[4..], &["repeat", "delay", "pre_delay", "post_delay"])?;
+            let params = parse_named_params(line_no, "app", &tokens[4..], &["repeat", "delay", "pre_delay", "post_delay", "monitor"])?;
             let repeat = params.get("repeat").map(|v| parse_repeat_token(line_no, "app", v)).transpose()?.unwrap_or(1);
             let delay = params.get("delay").map(|v| parse_seconds_token(line_no, "app", v, "delay")).transpose()?.unwrap_or_default();
             let pre_delay = params.get("pre_delay").map(|v| parse_seconds_token(line_no, "app", v, "pre_delay")).transpose()?.unwrap_or_default();
+            let monitor = params.get("monitor").map(|v| parse_monitor_token(line_no, "app", v)).transpose()?;
             let post_delay = parse_post_delay(&params)?;
             let action = if verb == "scroll_up" {
-                AppScriptAction::ScrollUp { target, repeat, delay, pre_delay }
+                AppScriptAction::ScrollUp { target, monitor, repeat, delay, pre_delay }
             } else {
-                AppScriptAction::ScrollDown { target, repeat, delay, pre_delay }
+                AppScriptAction::ScrollDown { target, monitor, repeat, delay, pre_delay }
             };
             Ok(DesktopScriptAction::App { line: line_no, window_id, action, post_delay })
         }
@@ -455,12 +569,13 @@ fn parse_key_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<Deskto
     if keys.is_empty() {
         return Err(operate_line_error(line_no, "key", "非法：缺少按键组合".to_string()));
     }
-    let params = parse_named_params(line_no, "key", &tokens[2..], &["repeat", "delay", "pre_delay", "press"])?;
+    let params = parse_named_params(line_no, "key", &tokens[2..], &["repeat", "delay", "pre_delay", "press", "target", "focus"])?;
     let repeat = params.get("repeat").map(|v| parse_repeat_token(line_no, "key", v)).transpose()?.unwrap_or(1);
     let delay = params.get("delay").map(|v| parse_seconds_token(line_no, "key", v, "delay")).transpose()?.unwrap_or_default();
     let pre_delay = params.get("pre_delay").map(|v| parse_seconds_token(line_no, "key", v, "pre_delay")).transpose()?.unwrap_or_default();
     let press = params.get("press").map(|v| parse_seconds_token(line_no, "key", v, "press")).transpose()?.unwrap_or_default();
-    Ok(DesktopScriptAction::Key { line: line_no, keys, repeat, delay, pre_delay, press })
+    let (window_target, focus) = parse_foreground_params(line_no, "key", &params)?;
+    Ok(DesktopScriptAction::Key { line: line_no, keys, repeat, delay, pre_delay, press, window_target, focus })
 }
 
 fn parse_text_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
@@ -475,11 +590,12 @@ fn parse_text_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<Deskt
     if text.is_empty() {
         return Err(operate_line_error(line_no, "text", "非法：文本内容不能为空".to_string()));
     }
-    let params = parse_named_params(line_no, "text", &tokens[2..], &["repeat", "delay", "pre_delay"])?;
+    let params = parse_named_params(line_no, "text", &tokens[2..], &["repeat", "delay", "pre_delay", "target", "focus"])?;
     let repeat = params.get("repeat").map(|v| parse_repeat_token(line_no, "text", v)).transpose()?.unwrap_or(1);
     let delay = params.get("delay").map(|v| parse_seconds_token(line_no, "text", v, "delay")).transpose()?.unwrap_or_default();
     let pre_delay = params.get("pre_delay").map(|v| parse_seconds_token(line_no, "text", v, "pre_delay")).transpose()?.unwrap_or_default();
-    Ok(DesktopScriptAction::Text { line: line_no, text, repeat, delay, pre_delay })
+    let (window_target, focus) = parse_foreground_params(line_no, "text", &params)?;
+    Ok(DesktopScriptAction::Text { line: line_no, text, repeat, delay, pre_delay, window_target, focus })
 }
 
 fn parse_wait_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
@@ -508,7 +624,7 @@ fn parse_screenshot_line(line_no: usize, tokens: &[String]) -> DesktopToolResult
             other => return Err(operate_line_error(line_no, "screenshot", format!("非法参数 `{other}`"))),
         }
     }
-    let params = parse_named_params(line_no, "screenshot", &named_tokens, &["region", "save", "quality", "elements", "window_id"])?;
+    let params = parse_named_params(line_no, "screenshot", &named_tokens, &["region", "save", "quality", "elements", "window_id", "monitor"])?;
     if let Some(raw) = params.get("window_id") {
         if !matches!(mode, ScreenshotModeSpec::Desktop) {
             return Err(operate_line_error(line_no, "screenshot", "非法：window_id 与 focused_window/region 不能同时出现".to_string()));
@@ -520,6 +636,12 @@ fn parse_screenshot_line(line_no: usize, tokens: &[String]) -> DesktopToolResult
             return Err(operate_line_error(line_no, "screenshot", "非法：focused_window/window_id 与 region 不能同时出现".to_string()));
         }
         mode = ScreenshotModeSpec::Region(parse_normalized_region(line_no, "screenshot", raw)?);
+    }
+    if let Some(raw) = params.get("monitor") {
+        if !matches!(mode, ScreenshotModeSpec::Desktop) {
+            return Err(operate_line_error(line_no, "screenshot", "非法：monitor 与 focused_window/window_id/region 不能同时出现".to_string()));
+        }
+        mode = ScreenshotModeSpec::Monitor(parse_monitor_token(line_no, "screenshot", raw)?);
     }
     let save_path = params.get("save").map(|v| parse_absolute_save_path(line_no, "screenshot", v)).transpose()?;
     let quality = params.get("quality").map(|v| {

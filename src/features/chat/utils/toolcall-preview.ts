@@ -116,7 +116,7 @@ export function parseToolCallResultStatus(resultText?: string): ToolCallResultSt
         isDenied,
         isFailed,
         blockedReason: blockedReason || undefined,
-        message: String(data.message || data.error || "").trim() || undefined,
+        message: String(data.message || data.error || data.failure?.message || "").trim() || undefined,
       };
     }
   } catch {

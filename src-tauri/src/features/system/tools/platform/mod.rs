@@ -141,6 +141,17 @@ pub fn activate_window(window_id: usize) -> (String, bool) {
     windows::activate_window(window_id)
 }
 
+/// 窗口句柄是否仍然存在（含被隐藏的窗口）。
+#[cfg(target_os = "windows")]
+pub fn window_is_alive(window_id: usize) -> bool {
+    windows::window_is_alive(window_id)
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn window_is_alive(window_id: usize) -> bool {
+    list_all_windows().iter().any(|w| w.window_id == window_id)
+}
+
 /// 批量扫描指定窗口列表的可交互元素树（一次 COM/automation 实例复用）。
 /// windows 为 (平台窗口 id, 窗口标题) 列表；返回扁平元素列表（归一化坐标）。
 #[cfg(target_os = "windows")]

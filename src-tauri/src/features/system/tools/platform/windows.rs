@@ -1186,6 +1186,16 @@ pub fn activate_window(window_id: usize) -> (String, bool) {
     }
 }
 
+/// 窗口句柄是否仍然存在（含被隐藏的窗口）：用于区分「窗口已关闭」与「窗口被隐藏」。
+pub fn window_is_alive(window_id: usize) -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::IsWindow;
+    let hwnd = window_id as *mut core::ffi::c_void;
+    if hwnd.is_null() {
+        return false;
+    }
+    unsafe { IsWindow(hwnd) != 0 }
+}
+
 #[cfg(test)]
 mod windows_platform_tests {
     use super::*;
