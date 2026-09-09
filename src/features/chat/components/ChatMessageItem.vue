@@ -756,7 +756,9 @@ function messageAvatarUrl(block: ChatMessageBlock): string {
 }
 
 function isOwnMessage(block: ChatMessageBlock): boolean {
-  if (block.remoteImOrigin) return false;
+  if (block.remoteImOrigin) {
+    return block.role === "user" && block.remoteImOrigin.remoteContactType !== "group";
+  }
   const id = String(block.speakerAgentId || "").trim();
   return !id || id === "user-persona";
 }
@@ -765,6 +767,7 @@ function messageShellTone(block: ChatMessageBlock): "assistant" | "user" | "syst
   if (isOwnMessage(block)) return "user";
   if (String(block.role || "").trim().toLowerCase() === "system") return "system";
   if (String(block.speakerAgentId || "").trim() === "system-persona") return "system";
+  if (String(block.role || "").trim().toLowerCase() === "user") return "user";
   return "assistant";
 }
 
@@ -942,7 +945,7 @@ function toolCallsForBlock(block: ChatMessageBlock): Array<{ name: string; argsT
 }
 
 function showActivityPanel(block: ChatMessageBlock): boolean {
-  if (isOwnMessage(block)) return false;
+  if (isOwnMessage(block) || block.remoteImOrigin) return false;
   const streamBlocks = assistantContentBlocksFromMessage(block);
   if (streamBlocks.length > 0) {
     const hasTrueContent = streamBlocks.some((b) => {
@@ -958,7 +961,7 @@ function showActivityPanel(block: ChatMessageBlock): boolean {
 }
 
 function showActivitySummary(block: ChatMessageBlock): boolean {
-  if (isOwnMessage(block)) return false;
+  if (isOwnMessage(block) || block.remoteImOrigin) return false;
   if (showActivityPanel(block)) return true;
   return !block.isStreaming;
 }

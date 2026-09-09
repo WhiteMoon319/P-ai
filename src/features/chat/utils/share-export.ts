@@ -542,7 +542,9 @@ function shareDisplayName(
 }
 
 function isOwnShareBlock(block: ChatMessageBlock): boolean {
-  if (block.remoteImOrigin) return false;
+  if (block.remoteImOrigin) {
+    return block.role === "user" && block.remoteImOrigin.remoteContactType !== "group";
+  }
   if (block.role === "user") return true;
   const speakerAgentId = String(block.speakerAgentId || "").trim();
   return speakerAgentId === "user-persona";

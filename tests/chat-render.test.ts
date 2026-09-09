@@ -59,4 +59,50 @@ describe("chat render signatures", () => {
 
     expect(first).not.toEqual(second);
   });
+
+  it("determines right-aligned messages correctly for standard and remote IM messages", async () => {
+    const { isRightAlignedMessage } = await import("../src/features/chat/utils/chat-render");
+
+    // standard user
+    expect(isRightAlignedMessage(assistantBlock({ role: "user", speakerAgentId: undefined }))).toBe(true);
+    // standard assistant
+    expect(isRightAlignedMessage(assistantBlock({ role: "assistant", speakerAgentId: "fairy" }))).toBe(false);
+
+    // remote IM private chat user message (e.g. weixin 1-on-1)
+    expect(isRightAlignedMessage(assistantBlock({
+      role: "user",
+      speakerAgentId: undefined,
+      remoteImOrigin: {
+        senderName: "红豆",
+        remoteContactType: "private",
+        channelId: "remote-im-1",
+        contactId: "c-1",
+      },
+    }))).toBe(true);
+
+    // remote IM group chat user message
+    expect(isRightAlignedMessage(assistantBlock({
+      role: "user",
+      speakerAgentId: undefined,
+      remoteImOrigin: {
+        senderName: "红豆",
+        remoteContactType: "group",
+        channelId: "remote-im-1",
+        contactId: "c-1",
+      },
+    }))).toBe(false);
+
+    // remote IM assistant message
+    expect(isRightAlignedMessage(assistantBlock({
+      role: "assistant",
+      speakerAgentId: "fairy",
+      remoteImOrigin: {
+        senderName: "红豆",
+        remoteContactType: "private",
+        channelId: "remote-im-1",
+        contactId: "c-1",
+      },
+    }))).toBe(false);
+  });
 });
+

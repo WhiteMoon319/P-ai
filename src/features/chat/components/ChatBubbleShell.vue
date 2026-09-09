@@ -177,6 +177,7 @@ const surfaceStyle = computed<StyleValue | undefined>(() => {
 }
 
 /* 无头像：不占头像列 */
+.ecall-chat-bubble-shell.ecall-chat-bubble-no-avatar:not(.ecall-chat-bubble-tone-user),
 .ecall-chat-bubble-shell-no-avatar:not(.ecall-chat-bubble-tone-user) {
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
