@@ -262,7 +262,10 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     const existingMessage = options.allMessages.value.find((item) => item.id === messageId);
     if (String(existingMessage?.role || "") === "assistant") {
       const existingMeta = (existingMessage?.providerMeta || {}) as Record<string, unknown>;
-      if (existingMeta._streaming !== true || assistantMessageHasVisibleProgress(existingMessage)) {
+      // 已有可见正文/活动/工具事件的已完成消息不被覆盖；
+      // 但若是后端已持久化但尚无正文的空占位消息（例如出队/引导消息插入时预写库的空消息），
+      // 必须允许激活进入 waiting 状态并打上 _streaming 标记，否则前端气泡无法显示。
+      if (assistantMessageHasVisibleProgress(existingMessage)) {
         return;
       }
     }

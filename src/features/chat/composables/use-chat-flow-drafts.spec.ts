@@ -159,4 +159,25 @@ describe("useChatFlowDrafts shared message projection", () => {
       path: ".pai/plan/new.md",
     });
   });
+
+  it("后端已持久化但尚无正文的空助理消息必须能被 updateQueuedAssistantMessageStatus 激活并显示占位", () => {
+    const { allMessages, runtime } = createRuntime();
+    // 模拟后端在出队/引导消息插入时预先持久化落库的空消息（此时无 _streaming，无正文）
+    allMessages.value = [{
+      id: "assistant-persisted-empty",
+      role: "assistant",
+      parts: [{ type: "text", text: "" }],
+    }];
+
+    runtime.updateQueuedAssistantMessageStatus(
+      "assistant-persisted-empty",
+      "正在等待回复...",
+      { startedAt: "2026-09-09T08:00:00.000Z" },
+    );
+
+    expect(allMessages.value).toHaveLength(1);
+    expect(allMessages.value[0].id).toBe("assistant-persisted-empty");
+    expect(allMessages.value[0].providerMeta?._streaming).toBe(true);
+    expect(allMessages.value[0].providerMeta?._preStreamingStatusText).toBe("正在等待回复...");
+  });
 });
