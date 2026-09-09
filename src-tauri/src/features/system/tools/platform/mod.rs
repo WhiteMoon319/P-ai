@@ -50,9 +50,6 @@ pub struct UiElementInfo {
     pub height: f64,
     /// 该元素当前是否持有键盘焦点（激活窗口后用于确认焦点是否落在目标控件）
     pub focused: bool,
-    /// 快照内元素引用编号（1 起全局唯一；仅 operate 截图响应赋值，供 app 动作 el= 引用）
-    #[serde(rename = "ref", skip_serializing_if = "Option::is_none")]
-    pub element_ref: Option<u32>,
 }
 
 /// app 后台动作目标：按快照序号定位元素，或屏幕物理坐标定位
@@ -60,6 +57,8 @@ pub struct UiElementInfo {
 pub enum AppTarget {
     /// el：模型侧元素引用编号（仅用于 stale 报错文案，指向模型能认识的 ref）
     Element { el: u32, ordinal: usize, control_type: String, name: String },
+    /// 元素名寻址：ordinal 为执行前新鲜扫描的窗口内序号，报错文案按名字讲，不提编号
+    NamedElement { ordinal: usize, control_type: String, name: String },
     Point { screen_x: i32, screen_y: i32 },
 }
 
@@ -94,6 +93,18 @@ pub fn app_scroll(window_id: usize, target: &AppTarget, horizontal: bool, positi
 #[cfg(target_os = "windows")]
 pub fn app_key(window_id: usize, keys: &[String], repeat: u32) -> Result<&'static str, String> {
     windows::app_key(window_id, keys, repeat)
+}
+
+/// 按元素名解析窗口内控件（新鲜扫描、唯一命中）：返回 (窗口内序号, 类型, 全名)。
+/// 找不到或命中多个时返回带候选的中文说明，供模型自我纠正。
+#[cfg(target_os = "windows")]
+pub fn app_find_element_by_name(window_id: usize, name: &str) -> Result<(usize, String, String), String> {
+    windows::app_find_element_by_name(window_id, name)
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn app_find_element_by_name(_window_id: usize, _name: &str) -> Result<(usize, String, String), String> {
+    Err("app 后台操作当前仅在 Windows 平台可用；其他平台请改用前台动作（mouse/key/text）并先 window activate 把目标窗口切到前台".to_string())
 }
 
 /// 当前平台的能力降级说明：仅在平台会静默失败或只报底层错误时返回，

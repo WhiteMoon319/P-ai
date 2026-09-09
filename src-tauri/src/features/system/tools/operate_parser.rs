@@ -199,29 +199,46 @@ enum ScreenshotModeSpec {
     Monitor(u32),
 }
 
-/// app 动作目标：快照元素引用（el=<n>）或归一化坐标（@x,y）
+/// app 动作目标：元素名（新鲜扫描、唯一命中）或归一化坐标（@x,y，窗口内命中测试）。
+/// el= 已退役：模型写 ref 序号时并不知道那是不是它想点的东西，写名字时它知道自己在说什么。
 #[derive(Debug, Clone)]
 enum AppScriptTarget {
-    Element(u32),
+    Name(String),
     Point(NormalizedPoint),
 }
 
 #[derive(Debug, Clone)]
 enum AppScriptAction {
     Click { target: AppScriptTarget, monitor: Option<u32>, repeat: u32, dblclick: bool, pre_delay: std::time::Duration },
-    SetValue { el: u32, text: String, pre_delay: std::time::Duration, verify: bool },
+    SetValue { name: String, text: String, pre_delay: std::time::Duration, verify: bool },
     /// 后台滚动（A3）：horizontal=false 为垂直（positive=true 向下），true 为水平（positive=true 向右）。
     /// 符号与 enigo scroll 约定一致：垂直正=下，水平正=右。
     Scroll { target: AppScriptTarget, monitor: Option<u32>, horizontal: bool, positive: bool, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration },
     Key { keys: Vec<String>, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration },
-    GetValue { el: u32 },
+    GetValue { name: String },
 }
 
-/// app 动作的目标窗口（G2）：数字句柄，或标题/进程名（唯一命中才算数）。
-#[derive(Debug, Clone)]
-enum AppWindowSelector {
-    Id(u32),
-    Name(String),
+/// 窗口变量名规则：ASCII 字母开头，后接字母/数字/下划线；大小写敏感；不得与动作关键字重名。
+fn is_var_name(raw: &str) -> bool {
+    let mut chars = raw.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphabetic() => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// 动作关键字：脚本行首出现这些词时按内置动作解析，不按变量动作解析。
+fn is_script_keyword(raw: &str) -> bool {
+    matches!(
+        raw.trim().to_ascii_lowercase().as_str(),
+        "mouse" | "app" | "key" | "text" | "wait" | "window" | "screenshot" | "clipboard"
+    )
+}
+
+/// 老语法迁移提示（I2）：报错即给改写示例，模型可自我纠正。
+fn app_legacy_hint() -> String {
+    "app <windowId> / el= 已退役：先声明窗口变量再按元素名操作，例如：w = app \"记事本\"，然后 w click \"保存\"".to_string()
 }
 
 #[derive(Debug, Clone)]
@@ -246,7 +263,10 @@ enum DesktopScriptAction {
     WindowList { line: usize },
     WindowActivate { line: usize, target: ForegroundTarget },
     Screenshot { line: usize, mode: ScreenshotModeSpec, save_path: Option<String>, quality: f32, elements: bool, include_text: bool, max_pixels: Option<u64> },
-    App { line: usize, window: AppWindowSelector, action: AppScriptAction, post_delay: std::time::Duration },
+    /// 窗口变量声明：`w = app "记事本"`，本次调用内有效，重复声明即覆盖
+    AppDeclare { line: usize, var: String, name: String, monitor: Option<u32> },
+    /// 变量动作：`w click "保存"` / `w setvalue "用户名" = "admin"` / `w click @0.3,0.4`
+    App { line: usize, var: String, action: AppScriptAction, post_delay: std::time::Duration },
     Clipboard { line: usize, op: ClipboardOp },
 }
 
@@ -533,90 +553,136 @@ fn parse_window_id_token(line: usize, action: &str, raw: &str) -> DesktopToolRes
     parsed.map_err(|_| operate_line_error(line, action, format!("windowId 非法：必须是十进制或 0x 前缀十六进制，当前为 `{raw}`")))
 }
 
-/// app 动作目标解析：`el=<n>` 引用快照元素，或 `@x,y` 归一化坐标
-fn parse_app_target(line: usize, token: &str) -> DesktopToolResult<AppScriptTarget> {
+/// 变量动作目标解析：`@x,y` 归一化坐标，或元素名（带双引号；无空格单名可省略引号）。
+/// el= 已退役，出现即报错并给改写示例。
+fn parse_var_target(line: usize, var: &str, verb: &str, token: &str) -> DesktopToolResult<AppScriptTarget> {
     let trimmed = token.trim();
-    if let Some(raw) = trimmed.strip_prefix("el=").or_else(|| trimmed.strip_prefix("EL=")) {
-        let el = raw.trim().parse::<u32>().map_err(|_| operate_line_error(line, "app", format!("el 非法：必须是正整数，当前为 `{raw}`")))?;
-        if el == 0 {
-            return Err(operate_line_error(line, "app", "el 非法：引用编号从 1 开始".to_string()));
-        }
-        return Ok(AppScriptTarget::Element(el));
+    if trimmed.starts_with('@') {
+        return Ok(AppScriptTarget::Point(parse_normalized_pair(line, var, trimmed)?));
     }
-    Ok(AppScriptTarget::Point(parse_normalized_pair(line, "app", trimmed)?))
+    let lowered = trimmed.to_ascii_lowercase();
+    if lowered.starts_with("el=") {
+        return Err(operate_line_error(line, var, format!("{verb} {}", app_legacy_hint())));
+    }
+    let name = strip_quoted_value(trimmed).unwrap_or_else(|| trimmed.to_string());
+    if name.trim().is_empty() {
+        return Err(operate_line_error(line, var, format!("{verb} 非法：元素名不能为空")));
+    }
+    Ok(AppScriptTarget::Name(name))
 }
 
-fn parse_app_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
-    if tokens.len() < 4 {
-        return Err(operate_line_error(line_no, "app", "非法：格式应为 `app <windowId|\"名\"> <动作> <目标> [参数]`，动作支持 click / setvalue / getvalue / scroll_up / scroll_down / scroll_left / scroll_right / key".to_string()));
+/// `w = app "记事本" [monitor=n]`：声明本次调用内的窗口变量，重复声明即覆盖。
+fn parse_var_declare_line(
+    line_no: usize,
+    tokens: &[String],
+    declared: &mut std::collections::HashSet<String>,
+) -> DesktopToolResult<DesktopScriptAction> {
+    if tokens.len() < 4 || tokens[1] != "=" || !tokens[2].trim().eq_ignore_ascii_case("app") {
+        return Err(operate_line_error(line_no, "脚本", "非法：声明格式应为 `w = app \"窗口名\" [monitor=n]`，例如：w = app \"记事本\""));
     }
-    // G2：目标窗口可用句柄，或标题/进程名（带双引号，含空格时必须加引号；单字名可省略引号）
-    let window = match parse_window_id_token(line_no, "app", &tokens[1]) {
-        Ok(id) => AppWindowSelector::Id(id),
-        Err(_) => {
-            let raw = tokens[1].trim();
-            let name = strip_quoted_value(raw).unwrap_or_else(|| raw.to_string());
-            if name.trim().is_empty() {
-                return Err(operate_line_error(line_no, "app", format!("窗口非法：必须是句柄（十进制/0x十六进制）或\"标题/进程名\"，当前为 `{}`", tokens[1])));
-            }
-            AppWindowSelector::Name(name)
-        }
-    };
-    let verb = tokens[2].trim().to_ascii_lowercase();
-    // post_delay 是全部 app 动作共享的收尾等待：动作完成后等 UI 响应（弹菜单/联想词）再返回，
+    let var = tokens[0].trim().to_string();
+    if !is_var_name(&var) {
+        return Err(operate_line_error(line_no, "脚本", format!("变量名非法 `{var}`：须为字母开头、仅含字母/数字/下划线")));
+    }
+    if is_script_keyword(&var) {
+        return Err(operate_line_error(line_no, "脚本", format!("变量名非法 `{var}`：不得与动作关键字重名")));
+    }
+    let raw = tokens[3].trim();
+    let name = strip_quoted_value(raw).unwrap_or_else(|| raw.to_string());
+    if name.trim().is_empty() {
+        return Err(operate_line_error(line_no, &var, "窗口名不能为空，需给\"标题/进程名\"".to_string()));
+    }
+    let params = parse_named_params(line_no, &var, &tokens[4..], &["monitor"])?;
+    let monitor = params.get("monitor").map(|v| parse_monitor_token(line_no, &var, v)).transpose()?;
+    declared.insert(var.clone());
+    Ok(DesktopScriptAction::AppDeclare { line: line_no, var, name, monitor })
+}
+
+fn parse_var_action_line(
+    line_no: usize,
+    tokens: &[String],
+    declared: &std::collections::HashSet<String>,
+) -> DesktopToolResult<DesktopScriptAction> {
+    let var = tokens[0].trim().to_string();
+    if !declared.contains(&var) {
+        return Err(operate_line_error(line_no, &var, format!("变量 `{var}` 未声明：先用 `{var} = app \"窗口名\"` 声明，例如：{var} = app \"记事本\"")));
+    }
+    if tokens.len() < 2 {
+        return Err(operate_line_error(line_no, &var, "非法：格式应为 `w click \"名\"|@x,y` / `w setvalue \"名\" = \"内容\"` / `w getvalue \"名\"` / `w scroll_up \"名\"|@x,y` / `w key <combo>`".to_string()));
+    }
+    let verb = tokens[1].trim().to_ascii_lowercase();
+    // post_delay 是全部变量动作共享的收尾等待：动作完成后等 UI 响应（弹菜单/联想词）再返回，
     // 避免下一条动作拿到过期的元素树
     let parse_post_delay = |params: &std::collections::HashMap<String, String>| -> DesktopToolResult<std::time::Duration> {
         params
             .get("post_delay")
-            .map(|v| parse_seconds_token(line_no, "app", v, "post_delay"))
+            .map(|v| parse_seconds_token(line_no, &var, v, "post_delay"))
             .transpose()
             .map(|d| d.unwrap_or_default())
     };
     match verb.as_str() {
         "click" => {
-            let target = parse_app_target(line_no, &tokens[3])?;
-            let params = parse_named_params(line_no, "app", &tokens[4..], &["repeat", "dblclick", "pre_delay", "post_delay", "monitor"])?;
-            let repeat = params.get("repeat").map(|v| parse_repeat_token(line_no, "app", v)).transpose()?.unwrap_or(1);
-            let dblclick = params.get("dblclick").map(|v| parse_bool_token(line_no, "app", v)).transpose()?.unwrap_or(false);
-            let pre_delay = params.get("pre_delay").map(|v| parse_seconds_token(line_no, "app", v, "pre_delay")).transpose()?.unwrap_or_default();
-            let monitor = params.get("monitor").map(|v| parse_monitor_token(line_no, "app", v)).transpose()?;
+            if tokens.len() < 3 {
+                return Err(operate_line_error(line_no, &var, "非法：格式应为 `w click \"名\"|@x,y [参数]`".to_string()));
+            }
+            let target = parse_var_target(line_no, &var, "click", &tokens[2])?;
+            let params = parse_named_params(line_no, &var, &tokens[3..], &["repeat", "dblclick", "pre_delay", "post_delay", "monitor"])?;
+            let repeat = params.get("repeat").map(|v| parse_repeat_token(line_no, &var, v)).transpose()?.unwrap_or(1);
+            let dblclick = params.get("dblclick").map(|v| parse_bool_token(line_no, &var, v)).transpose()?.unwrap_or(false);
+            let pre_delay = params.get("pre_delay").map(|v| parse_seconds_token(line_no, &var, v, "pre_delay")).transpose()?.unwrap_or_default();
+            let monitor = params.get("monitor").map(|v| parse_monitor_token(line_no, &var, v)).transpose()?;
             let post_delay = parse_post_delay(&params)?;
-            Ok(DesktopScriptAction::App { line: line_no, window: window.clone(), action: AppScriptAction::Click { target, monitor, repeat, dblclick, pre_delay }, post_delay })
+            Ok(DesktopScriptAction::App { line: line_no, var, action: AppScriptAction::Click { target, monitor, repeat, dblclick, pre_delay }, post_delay })
         }
         "setvalue" => {
-            if tokens.len() < 5 {
-                return Err(operate_line_error(line_no, "app", "非法：setvalue 格式应为 `app <windowId> setvalue el=<n> \"内容\"`".to_string()));
+            if tokens.len() < 5 || tokens[3] != "=" {
+                return Err(operate_line_error(line_no, &var, "非法：setvalue 格式应为 `w setvalue \"名\" = \"内容\"`".to_string()));
             }
-            let AppScriptTarget::Element(el) = parse_app_target(line_no, &tokens[3])? else {
-                return Err(operate_line_error(line_no, "app", "非法：setvalue 必须使用 el=<n> 指定文本控件（@x,y 坐标无法可靠定位文本框）".to_string()));
-            };
+            let name_token = tokens[2].trim();
+            if name_token.starts_with('@') || name_token.to_ascii_lowercase().starts_with("el=") {
+                return Err(operate_line_error(line_no, &var, format!("setvalue {}", app_legacy_hint())));
+            }
+            let name = strip_quoted_value(name_token).unwrap_or_else(|| name_token.to_string());
+            if name.trim().is_empty() {
+                return Err(operate_line_error(line_no, &var, "非法：元素名不能为空".to_string()));
+            }
             let Some(text) = strip_quoted_value(&tokens[4]) else {
-                return Err(operate_line_error(line_no, "app", "非法：必须使用双引号包裹文本内容".to_string()));
+                return Err(operate_line_error(line_no, &var, "非法：必须使用双引号包裹文本内容".to_string()));
             };
             let text = text.replace("\\n", "\n");
             if text.is_empty() {
-                return Err(operate_line_error(line_no, "app", "非法：文本内容不能为空".to_string()));
+                return Err(operate_line_error(line_no, &var, "非法：文本内容不能为空".to_string()));
             }
-            let params = parse_named_params(line_no, "app", &tokens[5..], &["pre_delay", "post_delay", "verify"])?;
-            let pre_delay = params.get("pre_delay").map(|v| parse_seconds_token(line_no, "app", v, "pre_delay")).transpose()?.unwrap_or_default();
+            let params = parse_named_params(line_no, &var, &tokens[5..], &["pre_delay", "post_delay", "verify"])?;
+            let pre_delay = params.get("pre_delay").map(|v| parse_seconds_token(line_no, &var, v, "pre_delay")).transpose()?.unwrap_or_default();
             let post_delay = parse_post_delay(&params)?;
-            let verify = params.get("verify").map(|v| parse_bool_token(line_no, "app", v)).transpose()?.unwrap_or(false);
-            Ok(DesktopScriptAction::App { line: line_no, window: window.clone(), action: AppScriptAction::SetValue { el, text, pre_delay, verify }, post_delay })
+            let verify = params.get("verify").map(|v| parse_bool_token(line_no, &var, v)).transpose()?.unwrap_or(false);
+            Ok(DesktopScriptAction::App { line: line_no, var, action: AppScriptAction::SetValue { name, text, pre_delay, verify }, post_delay })
         }
         "getvalue" => {
-            let AppScriptTarget::Element(el) = parse_app_target(line_no, &tokens[3])? else {
-                return Err(operate_line_error(line_no, "app", "非法：getvalue 必须使用 el=<n> 指定控件（@x,y 坐标无法可靠定位读取目标）".to_string()));
-            };
-            parse_named_params(line_no, "app", &tokens[4..], &[])?;
-            Ok(DesktopScriptAction::App { line: line_no, window: window.clone(), action: AppScriptAction::GetValue { el }, post_delay: std::time::Duration::ZERO })
+            if tokens.len() != 3 {
+                return Err(operate_line_error(line_no, &var, "非法：格式应为 `w getvalue \"名\"`".to_string()));
+            }
+            let name_token = tokens[2].trim();
+            if name_token.starts_with('@') || name_token.to_ascii_lowercase().starts_with("el=") {
+                return Err(operate_line_error(line_no, &var, format!("getvalue {}", app_legacy_hint())));
+            }
+            let name = strip_quoted_value(name_token).unwrap_or_else(|| name_token.to_string());
+            if name.trim().is_empty() {
+                return Err(operate_line_error(line_no, &var, "非法：元素名不能为空".to_string()));
+            }
+            Ok(DesktopScriptAction::App { line: line_no, var, action: AppScriptAction::GetValue { name }, post_delay: std::time::Duration::ZERO })
         }
         "scroll_up" | "scroll_down" | "scroll_left" | "scroll_right" => {
-            let target = parse_app_target(line_no, &tokens[3])?;
-            let params = parse_named_params(line_no, "app", &tokens[4..], &["repeat", "delay", "pre_delay", "post_delay", "monitor"])?;
-            let repeat = params.get("repeat").map(|v| parse_repeat_token(line_no, "app", v)).transpose()?.unwrap_or(1);
-            let delay = params.get("delay").map(|v| parse_seconds_token(line_no, "app", v, "delay")).transpose()?.unwrap_or_default();
-            let pre_delay = params.get("pre_delay").map(|v| parse_seconds_token(line_no, "app", v, "pre_delay")).transpose()?.unwrap_or_default();
-            let monitor = params.get("monitor").map(|v| parse_monitor_token(line_no, "app", v)).transpose()?;
+            if tokens.len() < 3 {
+                return Err(operate_line_error(line_no, &var, format!("非法：格式应为 `w {verb} \"名\"|@x,y [参数]`")));
+            }
+            let target = parse_var_target(line_no, &var, &verb, &tokens[2])?;
+            let params = parse_named_params(line_no, &var, &tokens[3..], &["repeat", "delay", "pre_delay", "post_delay", "monitor"])?;
+            let repeat = params.get("repeat").map(|v| parse_repeat_token(line_no, &var, v)).transpose()?.unwrap_or(1);
+            let delay = params.get("delay").map(|v| parse_seconds_token(line_no, &var, v, "delay")).transpose()?.unwrap_or_default();
+            let pre_delay = params.get("pre_delay").map(|v| parse_seconds_token(line_no, &var, v, "pre_delay")).transpose()?.unwrap_or_default();
+            let monitor = params.get("monitor").map(|v| parse_monitor_token(line_no, &var, v)).transpose()?;
             let post_delay = parse_post_delay(&params)?;
             // 符号与 enigo 约定一致：垂直正=下、水平正=右
             let (horizontal, positive) = match verb.as_str() {
@@ -626,25 +692,30 @@ fn parse_app_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<Deskto
                 _ => (true, true),
             };
             let action = AppScriptAction::Scroll { target, monitor, horizontal, positive, repeat, delay, pre_delay };
-            Ok(DesktopScriptAction::App { line: line_no, window: window.clone(), action, post_delay })
+            Ok(DesktopScriptAction::App { line: line_no, var, action, post_delay })
         }
         "key" => {
-            if tokens.len() < 4 {
-                return Err(operate_line_error(line_no, "app", "非法：key 缺少按键组合，格式应为 `app <windowId> key <combo>`".to_string()));
+            if tokens.len() < 3 {
+                return Err(operate_line_error(line_no, &var, "非法：key 缺少按键组合，格式应为 `w key <combo>`".to_string()));
             }
-            let keys = parse_key_combo(&tokens[3]);
+            let keys = parse_key_combo(&tokens[2]);
             if keys.is_empty() {
-                return Err(operate_line_error(line_no, "app", "非法：缺少按键组合".to_string()));
+                return Err(operate_line_error(line_no, &var, "非法：缺少按键组合".to_string()));
             }
-            let params = parse_named_params(line_no, "app", &tokens[4..], &["repeat", "delay", "pre_delay", "post_delay"])?;
-            let repeat = params.get("repeat").map(|v| parse_repeat_token(line_no, "app", v)).transpose()?.unwrap_or(1);
-            let delay = params.get("delay").map(|v| parse_seconds_token(line_no, "app", v, "delay")).transpose()?.unwrap_or_default();
-            let pre_delay = params.get("pre_delay").map(|v| parse_seconds_token(line_no, "app", v, "pre_delay")).transpose()?.unwrap_or_default();
+            let params = parse_named_params(line_no, &var, &tokens[3..], &["repeat", "delay", "pre_delay", "post_delay"])?;
+            let repeat = params.get("repeat").map(|v| parse_repeat_token(line_no, &var, v)).transpose()?.unwrap_or(1);
+            let delay = params.get("delay").map(|v| parse_seconds_token(line_no, &var, v, "delay")).transpose()?.unwrap_or_default();
+            let pre_delay = params.get("pre_delay").map(|v| parse_seconds_token(line_no, &var, v, "pre_delay")).transpose()?.unwrap_or_default();
             let post_delay = parse_post_delay(&params)?;
-            Ok(DesktopScriptAction::App { line: line_no, window: window.clone(), action: AppScriptAction::Key { keys, repeat, delay, pre_delay }, post_delay })
+            Ok(DesktopScriptAction::App { line: line_no, var, action: AppScriptAction::Key { keys, repeat, delay, pre_delay }, post_delay })
         }
-        other => Err(operate_line_error(line_no, "app", format!("非法：暂只支持 click / setvalue / getvalue / scroll_up / scroll_down / scroll_left / scroll_right / key，当前为 `{other}`"))),
+        other => Err(operate_line_error(line_no, &var, format!("非法：暂只支持 click / setvalue / getvalue / scroll_up / scroll_down / scroll_left / scroll_right / key，当前为 `{other}`"))),
     }
+}
+
+/// 老 `app` 写法已退役：统一报错并给改写示例，不再接受任何参数。
+fn parse_app_line(line_no: usize, _tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
+    Err(operate_line_error(line_no, "app", app_legacy_hint()))
 }
 
 fn parse_key_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
@@ -882,8 +953,13 @@ fn parse_script_line(line_no: usize, raw_line: &str) -> DesktopToolResult<Option
         "window" => parse_window_line(line_no, &tokens).map(Some),
         "screenshot" => parse_screenshot_line(line_no, &tokens).map(Some),
         "clipboard" => parse_clipboard_line(line_no, &tokens).map(Some),
-        other => Err(operate_line_error(line_no, "脚本", format!("未知动作：{other}。可用动作：mouse、app、key、text、wait、window、screenshot、clipboard"))),
+        other => Err(operate_line_error(line_no, "脚本", format!("未知动作：{other}。可用动作：mouse、key、text、wait、window、screenshot、clipboard；后台操作先声明窗口变量（w = app \"窗口名\"），再用变量动作（w click \"名\"）"))),
     }
+}
+
+/// 是否为变量声明行：`w = app ...`（tokens[1] 为孤立 `=` 即可判定，形状由声明解析函数严格校验）
+fn is_declare_line(tokens: &[String]) -> bool {
+    tokens.len() >= 2 && tokens[1] == "="
 }
 
 fn parse_script(request: &OperateRequest) -> DesktopToolResult<Vec<DesktopScriptAction>> {
@@ -912,10 +988,28 @@ fn parse_script(request: &OperateRequest) -> DesktopToolResult<Vec<DesktopScript
         lines.push(current);
     }
     let mut actions = Vec::<DesktopScriptAction>::new();
+    // 脚本内窗口变量表：声明行登记，使用行校验先声明后使用；脚本结束即丢弃，不跨调用
+    let mut declared = std::collections::HashSet::<String>::new();
     for (idx, raw_line) in lines.iter().enumerate() {
-        if let Some(action) = parse_script_line(idx + 1, raw_line)? {
-            actions.push(action);
+        let trimmed = raw_line.trim();
+        if trimmed.is_empty() {
+            continue;
         }
+        let tokens = tokenize_script_line(trimmed).map_err(|err| operate_line_error(idx + 1, "脚本", err))?;
+        if tokens.is_empty() {
+            continue;
+        }
+        let action = if is_declare_line(&tokens) {
+            parse_var_declare_line(idx + 1, &tokens, &mut declared)?
+        } else if is_script_keyword(&tokens[0]) || !is_var_name(tokens[0].trim()) {
+            match parse_script_line(idx + 1, raw_line)? {
+                Some(action) => action,
+                None => continue,
+            }
+        } else {
+            parse_var_action_line(idx + 1, &tokens, &declared)?
+        };
+        actions.push(action);
     }
     if actions.is_empty() {
         return Err(operate_invalid("script 不能为空"));

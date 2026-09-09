@@ -502,7 +502,6 @@ fn scan_window(
                 width: w / primary_width,
                 height: h / primary_height,
                 focused: raw.focused,
-                element_ref: None,
             }
         })
         .collect()
@@ -669,8 +668,64 @@ fn verify_app_element(raw: &RawUiElement, el: u32, control_type: &str, name: &st
     Ok(())
 }
 
-/// 解析 app 目标：Element 按快照序号重扫核对；Point 命中包含该坐标的最小交互元素（无命中为 None）。
-/// 返回 (元素, 事件屏幕坐标)。
+/// 核对名字寻址元素的执行前状态：与解析时新鲜扫描的记录比对。
+/// 名字寻址每次执行都重新扫描，这里只防扫描与执行之间的竞态（页面恰好刷新），
+/// 所以不一致时建议重试一次，而不是重新截图。
+fn verify_named_element(raw: &RawUiElement, control_type: &str, name: &str, ordinal: usize) -> Result<(), String> {
+    if raw.type_name != control_type {
+        return Err(format!(
+            "元素 `{name}`（窗口内第 {} 项）已变化：现为 {}('{}')；页面可能刚刷新，请重试一次",
+            ordinal + 1,
+            raw.type_name,
+            raw.name
+        ));
+    }
+    if !name.is_empty() && raw.name != name {
+        return Err(format!(
+            "元素 `{name}`（窗口内第 {} 项）名称变为 '{}'；页面可能刚刷新，请重试一次",
+            ordinal + 1,
+            raw.name
+        ));
+    }
+    Ok(())
+}
+
+/// 按元素名解析窗口内控件（新鲜扫描、唯一命中）：返回 (窗口内序号, 类型, 全名)。
+/// 找不到或命中多个时列出候选，供模型自我纠正；无名元素请用窗口内坐标兜底。
+pub fn app_find_element_by_name(hwnd: usize, needle: &str) -> Result<(usize, String, String), String> {
+    with_uia_automation(|automation| {
+        let list = collect_raw_elements(automation, hwnd, MAX_ELEMENTS, false);
+        if list.is_empty() {
+            return Err(format!("窗口内没有可交互元素，无法按名查找 `{needle}`；请改用坐标兜底（w click @x,y）"));
+        }
+        let key = needle.to_lowercase();
+        let matched = list
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| !e.name.is_empty() && e.name.to_lowercase().contains(&key))
+            .collect::<Vec<_>>();
+        match matched.as_slice() {
+            [(ordinal, raw)] => Ok((*ordinal, raw.type_name.to_string(), raw.name.clone())),
+            [] => {
+                let mut names = list.iter().filter(|e| !e.name.is_empty()).take(12).map(|e| format!("{}('{}')", e.type_name, e.name)).collect::<Vec<_>>();
+                if names.is_empty() {
+                    return Err(format!("没有名为 `{needle}` 的元素：窗口内元素均无可读名；请改用坐标兜底（w click @x,y）"));
+                }
+                if list.len() > names.len() {
+                    names.push("…".to_string());
+                }
+                Err(format!("没有名为 `{needle}` 的元素；窗口内现有：{}；请检查名字或改用坐标兜底（w click @x,y）", names.join("、")))
+            }
+            many => {
+                let candidates = many.iter().take(8).map(|(_, e)| format!("{}('{}')", e.type_name, e.name)).collect::<Vec<_>>().join("、");
+                Err(format!("名为 `{needle}` 的元素有 {} 个：{}；请用更精确的名字，或改用坐标兜底（w click @x,y）", many.len(), candidates))
+            }
+        }
+    })
+}
+
+/// 解析 app 目标：Element 按快照序号重扫核对；NamedElement 按新鲜扫描序号核对（名字寻址）；
+/// Point 命中包含该坐标的最小交互元素（无命中为 None）。返回 (元素, 事件屏幕坐标)。
 fn resolve_app_target(
     automation: &IUIAutomation,
     hwnd: usize,
@@ -687,6 +742,18 @@ fn resolve_app_target(
                 )
             })?;
             verify_app_element(raw, *el, control_type, name, *ordinal)?;
+            let point = ((raw.rect.left + raw.rect.right) / 2, (raw.rect.top + raw.rect.bottom) / 2);
+            Ok((Some(raw.clone()), point))
+        }
+        AppTarget::NamedElement { ordinal, control_type, name } => {
+            let list = collect_raw_elements(automation, hwnd, MAX_ELEMENTS, false);
+            let raw = list.get(*ordinal).ok_or_else(|| {
+                format!(
+                    "元素 `{name}` 已消失：当前控件树共 {} 项，页面可能刚刷新，请重试一次（每次执行都会重新扫描）",
+                    list.len()
+                )
+            })?;
+            verify_named_element(raw, control_type, name, *ordinal)?;
             let point = ((raw.rect.left + raw.rect.right) / 2, (raw.rect.top + raw.rect.bottom) / 2);
             Ok((Some(raw.clone()), point))
         }
@@ -734,11 +801,11 @@ pub fn app_click(hwnd: usize, target: &AppTarget, repeat: u32, dblclick: bool) -
 /// 后台读值：ValuePattern.CurrentValue 读回目标文本控件当前值。无 PostMessage 降级。
 pub fn app_get_value(hwnd: usize, target: &AppTarget) -> Result<String, String> {
     with_uia_automation(|automation| {
-        let AppTarget::Element { .. } = target else {
-            return Err("getvalue 必须使用 el= 指定控件".to_string());
+        let (AppTarget::Element { .. } | AppTarget::NamedElement { .. }) = target else {
+            return Err("getvalue 必须使用元素名指定控件，例如：w getvalue \"用户名\"".to_string());
         };
         let (element, _) = resolve_app_target(automation, hwnd, target)?;
-        let raw = element.ok_or_else(|| "getvalue 必须使用 el= 指定控件".to_string())?;
+        let raw = element.ok_or_else(|| "getvalue 必须使用元素名指定控件，例如：w getvalue \"用户名\"".to_string())?;
         unsafe {
             let pattern_raw = raw
                 .element
@@ -799,11 +866,11 @@ pub fn app_focus_summary(hwnd: usize) -> Result<Option<(String, String)>, String
 /// 返回实际使用的投递方式："valuepattern"。
 pub fn app_set_value(hwnd: usize, target: &AppTarget, text: &str) -> Result<&'static str, String> {
     with_uia_automation(|automation| {
-        let AppTarget::Element { .. } = target else {
-            return Err("setvalue 必须使用 el= 指定文本控件".to_string());
+        let (AppTarget::Element { .. } | AppTarget::NamedElement { .. }) = target else {
+            return Err("setvalue 必须使用元素名指定文本控件，例如：w setvalue \"用户名\" = \"admin\"".to_string());
         };
         let (element, _) = resolve_app_target(automation, hwnd, target)?;
-        let raw = element.ok_or_else(|| "setvalue 必须使用 el= 指定文本控件".to_string())?;
+        let raw = element.ok_or_else(|| "setvalue 必须使用元素名指定文本控件，例如：w setvalue \"用户名\" = \"admin\"".to_string())?;
         unsafe {
             let pattern_raw = raw
                 .element
