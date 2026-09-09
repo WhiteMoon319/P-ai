@@ -362,8 +362,37 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/**
+ * modern-screenshot 会把元素的计算宽度内联成像素值。用户气泡是 fit-content，
+ * 冻结下来的宽度等于页面测量值、没有余量；导出时文本在 SVG 排版上下文里重排，
+ * 字形步进与页面存在亚像素差异（随 DPI 变化），一旦多出零点几像素就会重新折行。
+ * 这里在渲染前给用户气泡补一点余量。
+ */
+const SHARE_USER_BUBBLE_WIDTH_MARGIN_PX = 2;
+
+function applyShareUserBubbleWidthMargin(host: HTMLElement): void {
+  const surfaces = Array.from(
+    host.querySelectorAll<HTMLElement>(".ecall-chat-bubble-tone-user .ecall-chat-bubble-surface"),
+  );
+  let applied = 0;
+  for (const surface of surfaces) {
+    const measured = Number.parseFloat(getComputedStyle(surface).width);
+    if (!Number.isFinite(measured) || measured <= 0) continue;
+    surface.style.minWidth = `${measured + SHARE_USER_BUBBLE_WIDTH_MARGIN_PX}px`;
+    applied += 1;
+  }
+  if (applied > 0) {
+    console.info("[分享导出] 用户气泡已补宽度余量", {
+      task: "applyShareUserBubbleWidthMargin",
+      count: applied,
+      marginPx: SHARE_USER_BUBBLE_WIDTH_MARGIN_PX,
+    });
+  }
+}
+
 async function renderMountedShareToPng(host: HTMLElement): Promise<string> {
   await waitForImages(host);
+  applyShareUserBubbleWidthMargin(host);
   const page = host.querySelector("[data-share-document='1']") as HTMLElement | null;
   const target = page || host;
   const width = Math.max(SHARE_EXPORT_WIDTH, Math.ceil(target.scrollWidth || SHARE_EXPORT_WIDTH));
