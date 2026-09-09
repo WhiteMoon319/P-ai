@@ -593,7 +593,7 @@ const reviewGroups = computed<ToolReviewGroup[]>(() => {
       terminalItems.push(item);
       continue;
     }
-    if (!isFileChangeTool(item.toolName)) {
+    if (!isFileChangeTool(item.toolName) || item.isSuccess === false) {
       const toolName = String(item.toolName || "").trim() || t("chat.toolReview.otherGroup");
       const groupKey = `other:${toolName}`;
       const group = otherGroups.get(groupKey) || {

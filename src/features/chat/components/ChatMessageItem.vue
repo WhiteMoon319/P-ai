@@ -164,7 +164,7 @@
                             <pre
                               class="m-0 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded bg-base-200/60 p-2 text-xs leading-relaxed"
                               :class="activityItemDetailClass(item)"
-                            ><code>{{ activityToolArgsText(item) }}</code></pre>
+                            ><code>{{ activityToolDetailsText(item) }}</code></pre>
                           </div>
                         </details>
                         <div
@@ -522,7 +522,7 @@ import { hideIncompleteInlineMath } from "../markdown/streaming-math";
 import { normalizeLocalLinkHref } from "../utils/local-link";
 import { textContentSignature } from "../utils/text-signature";
 import { createToolCallPresentation } from "../utils/tool-call-presentation";
-import { buildToolcallPreviewMap } from "../utils/toolcall-preview";
+import { buildToolcallPreviewMap, parseToolCallResultStatus } from "../utils/toolcall-preview";
 import { generateShareFromMessageIds } from "../utils/share-generator";
 import { frontendDispatchElapsedByMessageId } from "../composables/use-chat-flow-frontend-dispatch";
 import { useCollapseTransition } from "../composables/use-collapse-transition";
@@ -1016,7 +1016,13 @@ function activityToolCountsLabel(block: ChatMessageBlock): string {
   const order: string[] = [];
   for (const item of block.activityItems) {
     if (item.kind !== "tool") continue;
-    const name = toolCallDisplayName(item.name);
+    let name = toolCallDisplayName(item.name);
+    const status = parseToolCallResultStatus(item.resultText);
+    if (status.isDenied) {
+      name = `${name}(${t("chat.toolReview.denied") || "已拒绝"})`;
+    } else if (status.isFailed) {
+      name = `${name}(${t("chat.toolReview.failed") || "失败"})`;
+    }
     if (!counts.has(name)) {
       counts.set(name, 0);
       order.push(name);
@@ -1129,6 +1135,11 @@ function activityItemNodeClass(item: ChatActivityItem): string {
     return props.markdownIsDark ? "ecall-activity-reasoning-dark" : "ecall-activity-reasoning";
   }
   if (item.kind === "content") return "text-base-content";
+  if (item.kind === "tool" && item.resultText) {
+    const status = parseToolCallResultStatus(item.resultText);
+    if (status.isDenied) return "text-warning";
+    if (status.isFailed) return "text-error";
+  }
   return props.markdownIsDark ? "ecall-activity-tool-dark" : "ecall-activity-tool";
 }
 
@@ -1137,6 +1148,11 @@ function activityItemTitleClass(item: ChatActivityItem): string {
     return props.markdownIsDark ? "italic ecall-activity-reasoning-dark" : "italic ecall-activity-reasoning";
   }
   if (item.kind === "content") return "text-base-content";
+  if (item.kind === "tool" && item.resultText) {
+    const status = parseToolCallResultStatus(item.resultText);
+    if (status.isDenied) return "text-warning";
+    if (status.isFailed) return "text-error";
+  }
   return props.markdownIsDark ? "ecall-activity-tool-dark" : "ecall-activity-tool";
 }
 
@@ -1152,10 +1168,18 @@ function activityItemTitle(item: ChatActivityItem): string {
   if (item.kind === "reasoning" || item.kind === "content") {
     return activityItemTextParts(item).summary;
   }
-  return joinNonEmpty([
+  const baseTitle = joinNonEmpty([
     toolCallDisplayName(item.name),
     toolCallSummaryText(item),
   ]);
+  const status = parseToolCallResultStatus(item.resultText);
+  if (status.isDenied) {
+    return `${baseTitle} (${t("chat.toolReview.denied") || "已拒绝"})`;
+  }
+  if (status.isFailed) {
+    return `${baseTitle} (${t("chat.toolReview.failed") || "失败"})`;
+  }
+  return baseTitle;
 }
 
 function countTextLines(text: string): number {
@@ -1164,7 +1188,13 @@ function countTextLines(text: string): number {
   return normalized.split("\n").length;
 }
 
-function toolCallDiffStats(toolCall: { name: string; argsText: string }): { adds: number; removes: number } {
+function toolCallDiffStats(toolCall: { name: string; argsText: string; resultText?: string }): { adds: number; removes: number } {
+  if (toolCall.resultText) {
+    const status = parseToolCallResultStatus(toolCall.resultText);
+    if (status.isDenied || status.isFailed) {
+      return { adds: 0, removes: 0 };
+    }
+  }
   const toolName = String(toolCall.name || "").trim();
   const args = normalizeToolCallArgs(toolCall.argsText);
   if (typeof args !== "object" || args === null) return { adds: 0, removes: 0 };
@@ -1189,15 +1219,34 @@ function toolCallDiffStats(toolCall: { name: string; argsText: string }): { adds
   return { adds: 0, removes: 0 };
 }
 
+function activityToolDetailsText(item: ChatActivityItem): string {
+  if (item.kind !== "tool") return "";
+  const args = activityToolArgsText(item);
+  if (!item.resultText) return args;
+  const status = parseToolCallResultStatus(item.resultText);
+  if (status.isDenied) {
+    const reason = status.blockedReason || status.message;
+    const label = reason
+      ? `\n\n[${t("chat.toolReview.denied") || "已拒绝"}]: ${reason}`
+      : `\n\n[${t("chat.toolReview.denied") || "已拒绝"}]`;
+    return `${args}${label}`;
+  }
+  if (status.isFailed) {
+    const reason = status.message || status.blockedReason;
+    const label = reason
+      ? `\n\n[${t("chat.toolReview.failed") || "执行失败"}]: ${reason}`
+      : `\n\n[${t("chat.toolReview.failed") || "执行失败"}]`;
+    return `${args}${label}`;
+  }
+  return args;
+}
+
 function activityItemDisplay(item: ChatActivityItem): { text: string; adds: number; removes: number } {
   if (item.kind !== "tool") {
     return { text: activityItemTitle(item), adds: 0, removes: 0 };
   }
   return {
-    text: joinNonEmpty([
-      toolCallDisplayName(item.name),
-      toolCallSummaryText(item),
-    ]),
+    text: activityItemTitle(item),
     ...toolCallDiffStats(item),
   };
 }

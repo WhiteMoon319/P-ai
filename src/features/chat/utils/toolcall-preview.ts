@@ -86,6 +86,47 @@ export function extractToolcallFilePath(toolName: string, argsText: string): str
   return "";
 }
 
+export type ToolCallResultStatus = {
+  isDenied: boolean;
+  isFailed: boolean;
+  blockedReason?: string;
+  message?: string;
+};
+
+export function parseToolCallResultStatus(resultText?: string): ToolCallResultStatus {
+  const text = String(resultText || "").trim();
+  if (!text) {
+    return { isDenied: false, isFailed: false };
+  }
+  try {
+    const data = JSON.parse(text);
+    if (typeof data === "object" && data !== null) {
+      const ok = data.ok;
+      const approved = data.approved;
+      const blockedReason = String(data.blockedReason || "");
+      const isDenied = approved === false
+        || blockedReason.includes("denied")
+        || blockedReason === "rejected"
+        || blockedReason.includes("refused");
+      const isFailed = ok === false
+        || isDenied
+        || !!data.error
+        || (typeof data.exitCode === "number" && data.exitCode !== 0);
+      return {
+        isDenied,
+        isFailed,
+        blockedReason: blockedReason || undefined,
+        message: String(data.message || data.error || "").trim() || undefined,
+      };
+    }
+  } catch {
+    if (text.startsWith("Error:") || text.startsWith("error:")) {
+      return { isDenied: false, isFailed: true, message: text };
+    }
+  }
+  return { isDenied: false, isFailed: false };
+}
+
 export function buildToolcallPreviewMap(
   activityItems: ChatActivityItem[],
   noArgsText: string,
@@ -96,11 +137,13 @@ export function buildToolcallPreviewMap(
     if (item.kind !== "tool") continue;
     const toolCallId = String(item.toolCallId || "").trim();
     if (!toolCallId) continue;
-    const title = String(item.name || "").trim();
+    const name = String(item.name || "").trim();
     const filePath = extractToolcallFilePath(item.name, String(item.argsText || ""));
+    const status = parseToolCallResultStatus(item.resultText);
+    const title = status.isDenied ? `${name} (已拒绝)` : (status.isFailed ? `${name} (失败)` : name);
     previews[toolCallId] = {
       title,
-      body: "",
+      body: status.message || "",
       filePath: filePath || undefined,
       fileLabel: filePath || undefined,
     };

@@ -2182,6 +2182,8 @@
       "evaluated": "Assessed",
       "evaluate": "Assess",
       "unevaluated": "Not assessed",
+      "denied": "Denied",
+      "failed": "Failed",
       "terminalGroup": "Terminal",
       "terminalCommand": "Command",
       "otherGroup": "Other tools",

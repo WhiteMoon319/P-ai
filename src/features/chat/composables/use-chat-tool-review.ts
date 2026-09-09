@@ -21,6 +21,9 @@ export type ToolReviewItemSummary = {
   finishedAt?: string;
   addedLines?: number;
   deletedLines?: number;
+  isSuccess?: boolean;
+  isDenied?: boolean;
+  blockedReason?: string;
 };
 
 export type ToolReviewReportRecord = {

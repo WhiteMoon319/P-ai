@@ -218,6 +218,60 @@ fn tool_review_extract_patch_paths_from_text(input: &str) -> Vec<String> {
     out
 }
 
+fn tool_review_is_item_denied(item: &ToolReviewCollectedItem) -> bool {
+    let Some(result) = &item.result_value else {
+        return false;
+    };
+    if let Some(approved) = result.get("approved").and_then(Value::as_bool) {
+        if !approved {
+            return true;
+        }
+    }
+    if let Some(blocked) = result.get("blockedReason").and_then(Value::as_str) {
+        let lower = blocked.to_ascii_lowercase();
+        if lower.contains("denied") || lower == "rejected" || lower.contains("refused") {
+            return true;
+        }
+    }
+    false
+}
+
+fn tool_review_is_item_successful(item: &ToolReviewCollectedItem) -> bool {
+    let Some(result) = &item.result_value else {
+        let text = item.result_text.trim();
+        if text.is_empty() {
+            return false;
+        }
+        return !text.starts_with("Error:") && !text.starts_with("error:");
+    };
+    if tool_review_is_item_denied(item) {
+        return false;
+    }
+    if let Some(ok) = result.get("ok").and_then(Value::as_bool) {
+        if !ok {
+            return false;
+        }
+    }
+    if let Some(blocked) = result.get("blockedReason").and_then(Value::as_str) {
+        if !blocked.is_empty() {
+            return false;
+        }
+    }
+    if result.get("error").is_some() {
+        return false;
+    }
+    if let Some(exit_code) = result
+        .get("exitCode")
+        .or_else(|| result.get("exit_code"))
+        .and_then(Value::as_i64)
+    {
+        if exit_code != 0 {
+            return false;
+        }
+    }
+    true
+}
+
 fn tool_review_patch_paths_for_item(item: &ToolReviewCollectedItem) -> Vec<String> {
     let mut out = Vec::<String>::new();
     if let Some(changed) = item
@@ -242,6 +296,13 @@ fn tool_review_patch_paths_for_item(item: &ToolReviewCollectedItem) -> Vec<Strin
                         out.push(path.to_string());
                     }
                 }
+            }
+        }
+    }
+    if out.is_empty() {
+        for key in ["path", "file", "target", "from", "to"] {
+            if let Some(path) = tool_review_json_string_field(&item.args_value, key) {
+                out.push(path.to_string());
             }
         }
     }
@@ -305,6 +366,15 @@ fn tool_review_patch_operation_for_item(item: &ToolReviewCollectedItem) -> Optio
             if let Some(operation) = operation {
                 operations.push(operation.to_string());
             }
+        }
+    }
+    if operations.is_empty() {
+        match item.tool_name.as_str() {
+            "write" => operations.push("add".to_string()),
+            "delete" => operations.push("delete".to_string()),
+            "update" => operations.push("update".to_string()),
+            "move" => operations.push("update".to_string()),
+            _ => {}
         }
     }
     operations.sort();
@@ -382,6 +452,16 @@ struct ToolReviewItemSummary {
     added_lines: usize,
     #[serde(default)]
     deleted_lines: usize,
+    #[serde(default = "tool_review_default_true")]
+    is_success: bool,
+    #[serde(default)]
+    is_denied: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    blocked_reason: Option<String>,
+}
+
+fn tool_review_default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1125,15 +1205,19 @@ fn tool_review_batch_summary_from_collected(batch: &ToolReviewCollectedBatch) ->
         .items
         .iter()
         .map(|item| {
+            let is_success = tool_review_is_item_successful(item);
+            let is_denied = tool_review_is_item_denied(item);
             let affected_paths = if matches!(item.tool_name.as_str(), "apply_patch" | "write" | "delete" | "update" | "move") {
                 tool_review_patch_paths_for_item(item)
             } else {
                 Vec::new()
             };
             let (added_lines, deleted_lines) = tool_review_diff_stats_for_item(item);
-            added_lines_total += added_lines;
-            deleted_lines_total += deleted_lines;
-            changed_paths.extend(affected_paths.iter().cloned());
+            if is_success {
+                added_lines_total += added_lines;
+                deleted_lines_total += deleted_lines;
+                changed_paths.extend(affected_paths.iter().cloned());
+            }
             ToolReviewItemSummary {
                 call_id: item.call_id.clone(),
                 tool_name: item.tool_name.clone(),
@@ -1159,6 +1243,21 @@ fn tool_review_batch_summary_from_collected(batch: &ToolReviewCollectedBatch) ->
                 finished_at: item.finished_at.clone(),
                 added_lines,
                 deleted_lines,
+                is_success,
+                is_denied,
+                blocked_reason: item
+                    .result_value
+                    .as_ref()
+                    .and_then(|value| value.get("blockedReason"))
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string)
+                    .or_else(|| {
+                        if is_denied {
+                            Some("user_denied".to_string())
+                        } else {
+                            None
+                        }
+                    }),
             }
         })
         .collect();
@@ -1180,6 +1279,9 @@ fn tool_review_batch_summary_from_collected(batch: &ToolReviewCollectedBatch) ->
 }
 
 fn tool_review_diff_stats_for_item(item: &ToolReviewCollectedItem) -> (usize, usize) {
+    if !tool_review_is_item_successful(item) {
+        return (0, 0);
+    }
     if !matches!(item.tool_name.as_str(), "apply_patch" | "write" | "delete" | "update" | "move") {
         return (0, 0);
     }
@@ -1985,6 +2087,9 @@ async fn get_tool_review_batch_details(
             let (_display_number, batch) = tool_review_find_batch_by_index(conversation, input.batch_index)?;
             let mut segments = Vec::<ToolReviewSegment>::new();
             for item in batch.items.iter() {
+                if !tool_review_is_item_successful(item) {
+                    continue;
+                }
                 if matches!(
                     item.tool_name.as_str(),
                     "apply_patch" | "write" | "delete" | "update" | "move"
@@ -2464,7 +2569,12 @@ async fn submit_tool_review_code_internal(
 
 #[cfg(test)]
 mod tool_review_tests {
-    use super::{tool_review_build_context, tool_review_preview_for_item, tool_review_prune_legacy_batch_report_records, tool_review_segments_for_item, ChatMessage, Conversation, MessagePart, ToolReviewCollectedItem, ToolReviewReportRecord};
+    use super::{
+        tool_review_build_context, tool_review_diff_stats_for_item, tool_review_is_item_denied,
+        tool_review_is_item_successful, tool_review_patch_paths_for_item,
+        tool_review_preview_for_item, tool_review_prune_legacy_batch_report_records,
+        tool_review_segments_for_item, ToolReviewCollectedItem, ToolReviewReportRecord,
+    };
     use crate::{app_root_from_data_path, ConversationCumulativeUsage, ASSISTANT_DEPARTMENT_ID, DEFAULT_AGENT_ID};
     use std::{env, fs};
     use uuid::Uuid;
@@ -2989,5 +3099,61 @@ mod tool_review_tests {
         assert_eq!(segments[2].diff_lines[0], "@@ -9,1 +9,1 @@");
         assert_eq!(segments[3].path, "src/c.ts");
         assert_eq!(segments[3].action, "add");
+    }
+
+    #[test]
+    fn tool_review_denied_tool_should_not_have_diff_stats_or_paths() {
+        let item = test_segment_item(
+            "write",
+            serde_json::json!({
+                "path": "cli2api/permission-test.md",
+                "content": "# 权限测试\n此文件用于验证当前工作目录的写入权限。\n创建时间: 2026-09-09"
+            }),
+            Some(serde_json::json!({
+                "ok": false,
+                "approved": false,
+                "blockedReason": "user_denied_apply_patch",
+                "message": "用户拒绝了本次变更应用。"
+            })),
+        );
+
+        assert!(!tool_review_is_item_successful(&item));
+        assert!(tool_review_is_item_denied(&item));
+        assert_eq!(tool_review_diff_stats_for_item(&item), (0, 0));
+        assert_eq!(tool_review_patch_paths_for_item(&item), vec!["cli2api/permission-test.md"]);
+    }
+
+    #[test]
+    fn tool_review_approved_false_without_blocked_reason_should_be_denied() {
+        let item = test_segment_item(
+            "write",
+            serde_json::json!({
+                "path": "cli2api/test.md",
+                "content": "test"
+            }),
+            Some(serde_json::json!({
+                "approved": false
+            })),
+        );
+
+        assert!(tool_review_is_item_denied(&item));
+        assert!(!tool_review_is_item_successful(&item));
+    }
+
+    #[test]
+    fn tool_review_nonzero_exit_code_should_be_failed() {
+        let item = test_segment_item(
+            "exec",
+            serde_json::json!({ "command": "false" }),
+            Some(serde_json::json!({
+                "command": "false",
+                "exitCode": 1,
+                "stdout": "",
+                "stderr": "error"
+            })),
+        );
+
+        assert!(!tool_review_is_item_successful(&item));
+        assert!(!tool_review_is_item_denied(&item));
     }
 }

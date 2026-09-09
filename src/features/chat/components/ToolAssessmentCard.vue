@@ -27,7 +27,11 @@
         </div>
         <span v-if="loading" class="loading loading-spinner loading-xs shrink-0 text-base-content/55"></span>
       </button>
-      <div v-if="item.hasReview" class="shrink-0 text-xs leading-5 text-base-content/45">
+      <div v-if="item.isSuccess === false" class="shrink-0">
+        <span v-if="isDenied" class="badge badge-warning badge-xs font-normal">{{ t("chat.toolReview.denied") }}</span>
+        <span v-else class="badge badge-error badge-xs font-normal">{{ t("chat.toolReview.failed") }}</span>
+      </div>
+      <div v-else-if="item.hasReview" class="shrink-0 text-xs leading-5 text-base-content/45">
         {{ t("chat.toolReview.evaluated") }}
       </div>
       <div
@@ -53,7 +57,7 @@
         <button
           type="button"
           class="btn btn-ghost btn-sm h-8 w-full justify-start px-2 text-sm font-normal"
-          :disabled="item.hasReview || loading || reviewing"
+          :disabled="item.hasReview || item.isSuccess === false || loading || reviewing"
           @click.stop="handleReviewAction"
         >
           <span v-if="reviewing" class="loading loading-spinner loading-xs"></span>
@@ -133,7 +137,26 @@ const title = computed(() => {
   return props.item.toolName;
 });
 
+const isDenied = computed(() => {
+  if (props.item.isDenied) return true;
+  if (props.item.isSuccess === false) {
+    const reason = String(props.item.blockedReason || "").toLowerCase();
+    return reason.includes("denied") || reason.includes("rejected") || reason.includes("refused") || reason === "user_denied";
+  }
+  return false;
+});
+
 const reviewOpinionText = computed(() => {
+  if (props.item.isSuccess === false) {
+    if (isDenied.value) {
+      return props.item.blockedReason === "user_denied_apply_patch"
+        ? "用户拒绝了本次变更应用"
+        : (props.item.blockedReason === "user_denied_command"
+          ? "用户拒绝了本次命令执行"
+          : t("chat.toolReview.denied"));
+    }
+    return props.item.blockedReason || t("chat.toolReview.failed");
+  }
   const direct = props.detail?.review?.reviewOpinion;
   if (direct && direct.trim()) return direct;
   const summaryOpinion = String(props.item.reviewOpinion || "").trim();
