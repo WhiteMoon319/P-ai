@@ -64,9 +64,18 @@ pub enum AppTarget {
 
 // ==================== app 后台动作（Windows 专用，其余平台明确报错） ====================
 
-/// 后台点击：UIA InvokePattern 优先（dblclick=true 时跳过 Invoke 直接 PostMessage 双击序列），PostMessage 兜底。返回实际使用的投递方式。
+/// 后台点击结果：method 为实际投递方式；downgrade 说明本次是否退化为坐标投递（结果不保证）；
+/// hit_control_type 为命中元素的控件类型（走坐标兜底时为 None），供上层判断跳转副作用。
+#[derive(Debug, Clone)]
+pub struct AppClickOutcome {
+    pub method: &'static str,
+    pub downgrade: Option<String>,
+    pub hit_control_type: Option<&'static str>,
+}
+
+/// 后台点击：UIA InvokePattern 优先（dblclick=true 时跳过 Invoke 直接 PostMessage 双击序列），PostMessage 兜底。
 #[cfg(target_os = "windows")]
-pub fn app_click(window_id: usize, target: &AppTarget, repeat: u32, dblclick: bool) -> Result<&'static str, String> {
+pub fn app_click(window_id: usize, target: &AppTarget, repeat: u32, dblclick: bool) -> Result<AppClickOutcome, String> {
     windows::app_click(window_id, target, repeat, dblclick)
 }
 
@@ -151,7 +160,7 @@ pub fn app_focus_summary(window_id: usize) -> Result<Option<(String, String)>, S
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn app_click(_window_id: usize, _target: &AppTarget, _repeat: u32, _dblclick: bool) -> Result<&'static str, String> {
+pub fn app_click(_window_id: usize, _target: &AppTarget, _repeat: u32, _dblclick: bool) -> Result<AppClickOutcome, String> {
     Err("app 后台操作当前仅在 Windows 平台可用；其他平台请改用前台动作（mouse/key/text）并先 window activate 把目标窗口切到前台".to_string())
 }
 

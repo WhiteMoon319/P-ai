@@ -80,6 +80,31 @@ struct LatestScreenshotInfo {
     tree: Option<Vec<UiElementInfo>>,
 }
 
+/// window list 的紧凑窗口条目：只留模型真正用得上的字段（按 id / 名字引用窗口、判断是否最小化）。
+/// 坐标、尺寸、进程号对 operate 动作没有用处，去掉后 22 个窗口不再一次吃掉两百行上下文。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WindowBrief {
+    window_id: usize,
+    title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    process_name: Option<String>,
+    focused: bool,
+    minimized: bool,
+}
+
+impl From<&WindowInfo> for WindowBrief {
+    fn from(window: &WindowInfo) -> Self {
+        Self {
+            window_id: window.window_id,
+            title: window.title.clone(),
+            process_name: window.process_name.clone(),
+            focused: window.focused,
+            minimized: window.minimized,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct OperateResponse {
@@ -100,9 +125,9 @@ struct OperateResponse {
     width: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     height: Option<u32>,
-    /// window list 动作返回的可见窗口列表（最近一次）
+    /// window list 动作返回的可见窗口列表（最近一次），紧凑字段
     #[serde(skip_serializing_if = "Option::is_none")]
-    windows: Option<Vec<WindowInfo>>,
+    windows: Option<Vec<WindowBrief>>,
     /// 不影响执行成功、但会改变坐标或输入可信度的环境提示（如 DPI 感知未生效）
     #[serde(skip_serializing_if = "Option::is_none")]
     warnings: Option<Vec<String>>,

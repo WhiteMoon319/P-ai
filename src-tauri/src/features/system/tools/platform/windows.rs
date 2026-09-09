@@ -5,7 +5,7 @@
 // - activate window：SW_RESTORE + Alt 键技巧 + SetForegroundWindow + 轮询验证
 // - 控件树：手写 UIA COM vtable 绑定（不引入 windows crate，仅 windows-core + windows-sys）
 
-use super::{AppTarget, MAX_ELEMENTS, UiElementInfo, WindowInfo};
+use super::{AppClickOutcome, AppTarget, MAX_ELEMENTS, UiElementInfo, WindowInfo};
 
 // ==================== UI Automation 最小绑定 ====================
 // 接口定义复制自 windows-0.61.3 生成代码（windows_core::imp::define_interface! 宏），
@@ -671,53 +671,102 @@ fn verify_app_element(raw: &RawUiElement, el: u32, control_type: &str, name: &st
 /// 核对名字寻址元素的执行前状态：与解析时新鲜扫描的记录比对。
 /// 名字寻址每次执行都重新扫描，这里只防扫描与执行之间的竞态（页面恰好刷新），
 /// 所以不一致时建议重试一次，而不是重新截图。
+/// 名字按归一后比对（解析时返回的也是归一后名字），展示同样用归一结果。
 fn verify_named_element(raw: &RawUiElement, control_type: &str, name: &str, ordinal: usize) -> Result<(), String> {
     if raw.type_name != control_type {
         return Err(format!(
             "元素 `{name}`（窗口内第 {} 项）已变化：现为 {}('{}')；页面可能刚刷新，请重试一次",
             ordinal + 1,
             raw.type_name,
-            raw.name
+            normalize_element_name(&raw.name)
         ));
     }
-    if !name.is_empty() && raw.name != name {
+    if !name.is_empty() && normalize_element_name(&raw.name) != name {
         return Err(format!(
             "元素 `{name}`（窗口内第 {} 项）名称变为 '{}'；页面可能刚刷新，请重试一次",
             ordinal + 1,
-            raw.name
+            normalize_element_name(&raw.name)
         ));
     }
     Ok(())
 }
 
+/// 元素名归一：首尾空白去掉、内部换行/制表/连续空白折成单个空格。
+/// 匹配与展示共用同一套归一，模型照抄展示出来的名字就能命中（否则差一个空格就找不到）。
+fn normalize_element_name(raw: &str) -> String {
+    raw.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// 未命中时的候选展示（P0-2）：按控件类型分组，每类最多 3 个、最多 6 类。
+/// 按类型分组而不是按扫描顺序取前 N 个，是为了让页面内容元素（Hyperlink/Button 等）
+/// 不会被窗口边框与工具栏元素挤掉——扫描顺序天然把框架元素排在最前面。
+/// 全部元素都没有可读名时返回 None，由调用方换成「均无可读名」的说明。
+fn render_candidate_groups(list: &[RawUiElement]) -> Option<String> {
+    render_candidate_groups_from(list.iter().map(|e| (e.type_name, e.name.as_str())))
+}
+
+/// 候选分组渲染的纯逻辑：输入 (控件类型, 原始名) 序列，输出分组文案。
+/// 与 UIA 扫描解耦，便于单测覆盖分组、每类上限与类型数上限。
+fn render_candidate_groups_from<'a>(elements: impl Iterator<Item = (&'static str, &'a str)>) -> Option<String> {
+    let mut groups = std::collections::BTreeMap::<&'static str, Vec<String>>::new();
+    for (type_name, raw_name) in elements {
+        let display = normalize_element_name(raw_name);
+        if display.is_empty() {
+            continue;
+        }
+        let names = groups.entry(type_name).or_default();
+        if names.len() < 3 {
+            names.push(display);
+        }
+    }
+    if groups.is_empty() {
+        return None;
+    }
+    let group_count = groups.len();
+    let rendered = groups
+        .iter()
+        .take(6)
+        .map(|(type_name, names)| format!("{type_name}：{}", names.join("、")))
+        .collect::<Vec<_>>()
+        .join("；");
+    let more = if group_count > 6 { format!("…（共 {group_count} 类）") } else { String::new() };
+    Some(format!("{rendered}{more}"))
+}
+
 /// 按元素名解析窗口内控件（新鲜扫描、唯一命中）：返回 (窗口内序号, 类型, 全名)。
 /// 找不到或命中多个时列出候选，供模型自我纠正；无名元素请用窗口内坐标兜底。
+/// 候选按控件类型分组展示（每类最多 3 个、最多 6 类），保证页面内容元素能进候选，
+/// 而不是被窗口边框与工具栏元素按扫描顺序挤掉。
 pub fn app_find_element_by_name(hwnd: usize, needle: &str) -> Result<(usize, String, String), String> {
     with_uia_automation(|automation| {
         let list = collect_raw_elements(automation, hwnd, MAX_ELEMENTS, false);
         if list.is_empty() {
             return Err(format!("窗口内没有可交互元素，无法按名查找 `{needle}`；请改用坐标兜底（w click @x,y）"));
         }
-        let key = needle.to_lowercase();
+        let key = normalize_element_name(needle).to_lowercase();
         let matched = list
             .iter()
             .enumerate()
-            .filter(|(_, e)| !e.name.is_empty() && e.name.to_lowercase().contains(&key))
+            .filter(|(_, e)| {
+                let display = normalize_element_name(&e.name);
+                !display.is_empty() && display.to_lowercase().contains(&key)
+            })
             .collect::<Vec<_>>();
         match matched.as_slice() {
-            [(ordinal, raw)] => Ok((*ordinal, raw.type_name.to_string(), raw.name.clone())),
+            [(ordinal, raw)] => Ok((*ordinal, raw.type_name.to_string(), normalize_element_name(&raw.name))),
             [] => {
-                let mut names = list.iter().filter(|e| !e.name.is_empty()).take(12).map(|e| format!("{}('{}')", e.type_name, e.name)).collect::<Vec<_>>();
-                if names.is_empty() {
-                    return Err(format!("没有名为 `{needle}` 的元素：窗口内元素均无可读名；请改用坐标兜底（w click @x,y）"));
+                match render_candidate_groups(&list) {
+                    Some(rendered) => return Err(format!("没有名为 `{needle}` 的元素；窗口内现有（按类型分组，每类最多 3 个）：{rendered}；请检查名字或改用坐标兜底（w click @x,y）")),
+                    None => return Err(format!("没有名为 `{needle}` 的元素：窗口内元素均无可读名；请改用坐标兜底（w click @x,y）")),
                 }
-                if list.len() > names.len() {
-                    names.push("…".to_string());
-                }
-                Err(format!("没有名为 `{needle}` 的元素；窗口内现有：{}；请检查名字或改用坐标兜底（w click @x,y）", names.join("、")))
             }
             many => {
-                let candidates = many.iter().take(8).map(|(_, e)| format!("{}('{}')", e.type_name, e.name)).collect::<Vec<_>>().join("、");
+                let candidates = many
+                    .iter()
+                    .take(8)
+                    .map(|(_, e)| format!("{}('{}')", e.type_name, normalize_element_name(&e.name)))
+                    .collect::<Vec<_>>()
+                    .join("、");
                 Err(format!("名为 `{needle}` 的元素有 {} 个：{}；请用更精确的名字，或改用坐标兜底（w click @x,y）", many.len(), candidates))
             }
         }
@@ -773,10 +822,11 @@ fn resolve_app_target(
 
 /// 后台点击：UIA InvokePattern 优先，元素不支持或坐标无元素命中时降级 PostMessage 投递鼠标消息。
 /// dblclick=true 时跳过 Invoke（Invoke 是语义激活，无双击概念）直接走 PostMessage 双击序列。
-/// 返回实际使用的投递方式："invoke" 或 "postmessage"。不移动全局光标、不抢焦点。
-pub fn app_click(hwnd: usize, target: &AppTarget, repeat: u32, dblclick: bool) -> Result<&'static str, String> {
+/// 不移动全局光标、不抢焦点。降级路径在 downgrade 里说明「消息发出去了，但未确认生效」。
+pub fn app_click(hwnd: usize, target: &AppTarget, repeat: u32, dblclick: bool) -> Result<AppClickOutcome, String> {
     with_uia_automation(|automation| {
         let (element, point) = resolve_app_target(automation, hwnd, target)?;
+        let hit_control_type = element.as_ref().map(|raw| raw.type_name);
         if let Some(raw) = &element {
             if !dblclick {
                 unsafe {
@@ -787,14 +837,19 @@ pub fn app_click(hwnd: usize, target: &AppTarget, repeat: u32, dblclick: bool) -
                             for _ in 0..repeat.max(1) {
                                 pattern.Invoke().map_err(|err| format!("Invoke 调用失败：{err}"))?;
                             }
-                            return Ok("invoke");
+                            return Ok(AppClickOutcome { method: "invoke", downgrade: None, hit_control_type });
                         }
                     }
                 }
             }
         }
         post_mouse_click(hwnd, point.0, point.1, repeat, dblclick)?;
-        Ok("postmessage")
+        let downgrade = match (&element, dblclick) {
+            (_, true) => "dblclick 走坐标投递，结果不保证".to_string(),
+            (Some(raw), false) => format!("{}('{}') 无 Invoke 支持，已退化为坐标投递，结果不保证", raw.type_name, raw.name),
+            (None, false) => "坐标未命中元素，已按坐标投递，结果不保证".to_string(),
+        };
+        Ok(AppClickOutcome { method: "postmessage", downgrade: Some(downgrade), hit_control_type })
     })
 }
 
@@ -1373,6 +1428,59 @@ mod windows_platform_tests {
         assert!(!is_interactive_control_type(UIA_CONTROLTYPE_ID(50001))); // unknown
         assert!(!is_interactive_control_type(UIA_CONTROLTYPE_ID(0)));
         assert!(!is_interactive_control_type(UIA_CustomControlTypeId));
+    }
+
+    #[test]
+    fn normalize_element_name_should_trim_and_fold_whitespace() {
+        // 实测 Chrome 元素名带尾空格 / 前导空格 / 内嵌换行（P2-4）
+        assert_eq!(normalize_element_name("赞同 14 "), "赞同 14");
+        assert_eq!(normalize_element_name(" 3 条评论"), "3 条评论");
+        assert_eq!(normalize_element_name("Adblock Plus\n可以访问此网站"), "Adblock Plus 可以访问此网站");
+        assert_eq!(normalize_element_name("  \t多  空白\n\n折行 "), "多 空白 折行");
+        assert_eq!(normalize_element_name(""), "");
+        // 归一后仍可做子串匹配：模型照抄展示名就能命中
+        assert!(normalize_element_name("赞同 14 ").contains("赞同"));
+    }
+
+    #[test]
+    fn candidate_groups_should_keep_page_elements_alongside_chrome() {
+        // 扫描顺序是窗口框架在前、页面内容在后：分组后每类都能进候选（P0-2）
+        let elements = vec![
+            ("Button", "最小化"),
+            ("Button", "恢复"),
+            ("Button", "关闭"),
+            ("Button", "写回答"),
+            ("Edit", "地址和搜索栏"),
+            ("Hyperlink", "赞同 14 "),
+            ("Hyperlink", " 3 条评论"),
+        ];
+        let rendered = render_candidate_groups_from(elements.into_iter()).expect("分组非空");
+        assert!(rendered.contains("Hyperlink：赞同 14、3 条评论"), "页面元素必须进候选：{rendered}");
+        assert!(rendered.contains("Button：最小化、恢复、关闭"), "每类最多 3 个：{rendered}");
+        assert!(!rendered.contains("写回答"), "同类超出 3 个应被截断：{rendered}");
+    }
+
+    #[test]
+    fn candidate_groups_should_cap_type_count_and_report_remainder() {
+        let elements = vec![
+            ("Button", "a"),
+            ("Edit", "b"),
+            ("Hyperlink", "c"),
+            ("ListItem", "d"),
+            ("TabItem", "e"),
+            ("MenuItem", "f"),
+            ("Document", "g"),
+        ];
+        let rendered = render_candidate_groups_from(elements.into_iter()).expect("分组非空");
+        // 最多 6 类，超出部分只报总数，不无限展开
+        assert!(rendered.contains("共 7 类"), "超出类型数上限应报总数：{rendered}");
+        assert_eq!(rendered.matches('：').count(), 6, "最多渲染 6 类：{rendered}");
+    }
+
+    #[test]
+    fn candidate_groups_should_return_none_when_all_names_blank() {
+        let elements = vec![("Button", ""), ("Edit", "   ")];
+        assert!(render_candidate_groups_from(elements.into_iter()).is_none());
     }
 
     #[test]
