@@ -2741,7 +2741,7 @@ mod terminal_exec_tests {
         .await?;
         assert_eq!(kill.get("killed").and_then(Value::as_bool), Some(true));
         assert_eq!(kill.get("confirmed").and_then(Value::as_bool), Some(true));
-        assert_eq!(kill.get("status").and_then(Value::as_str), Some("Killed"));
+        assert_eq!(kill.get("status").and_then(Value::as_str), Some("killed"));
 
         // 终态任务保留在登记表供对账。
         let status = {

@@ -2192,7 +2192,7 @@ async fn send_chat_message_inner(
         }
         let mut retry_budget = RetryBudget::default();
         let mut attempt: usize = 0;
-        let mut candidate_final_error: Option<String> = None;
+        let candidate_final_error: Option<String>;
         loop {
             attempt += 1;
             let request_start_stage = format!(

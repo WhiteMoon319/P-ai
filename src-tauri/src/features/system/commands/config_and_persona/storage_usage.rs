@@ -1542,10 +1542,10 @@ struct UsageTrailWallDay {
 
 /// 足迹墙 today 起点：凌晨 4 点分界（当前时刻往前推 4 小时所在分界日的 04:00）。
 /// 0:00-3:59 的使用属于前一个分界日，因此分界日由 now-4h 的日期决定。
-fn usage_trail_wall_today_start(now_local: OffsetDateTime) -> String {
+fn usage_trail_wall_business_day(now_local: OffsetDateTime) -> String {
     let shifted = now_local - time::Duration::hours(4);
     format!(
-        "{:04}-{:02}-{:02}T04:00:00",
+        "{:04}-{:02}-{:02}",
         shifted.year(),
         shifted.month() as u8,
         shifted.day()
@@ -1822,10 +1822,10 @@ fn build_usage_trail_wall(
         .cloned()
         .unwrap_or_else(|| format!("{:04}", now_local.year()));
     if view == "today" {
-        let bucket_start = usage_trail_wall_today_start(now_local);
+        let business_day = usage_trail_wall_business_day(now_local);
         let today_rows = window_rows
             .iter()
-            .filter(|row| row.bucket >= bucket_start)
+            .filter(|row| row.bucket.starts_with(&business_day))
             .cloned()
             .collect::<Vec<_>>();
         let totals = usage_trail_wall_totals_from_rows(&today_rows);
