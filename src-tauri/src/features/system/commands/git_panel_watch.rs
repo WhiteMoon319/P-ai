@@ -2,11 +2,11 @@
 // notify 递归监听 GitPanel 当前选中的仓库，让外部变化（编辑器保存、终端 git 操作、
 // 外部工具）能自动刷新面板。架构复刻参考项目 gitron 的 watcher 裁剪版：
 // - native watcher 优先（200ms 防抖），注册失败（含 Linux inotify 上限）回退 PollWatcher
-// - 事件按路径分类：.git/HEAD→head、.git/refs/**→refs、.git/index→workdir、
-//   其他 .git 内部→refs、非 .git→workdir
+// - 事件按路径分类：.git/HEAD→head、.git/index→workdir、其他 .git 内部→refs、非 .git→workdir
 // - 100ms 合并窗口把一批事件折叠为最多三个布尔信号，一次 emit
-// - refs 信号带指纹去重（HEAD + 全部 ref 的文件系统指纹），refs 未真变时折叠为 workdir，
-//   避免无谓的提交历史重建；指纹不走 git 命令读缓存，直接读文件元数据
+// - refs 信号带指纹去重（HEAD + 全部 ref 的文件系统指纹），指纹未真变即丢弃，
+//   避免 .git 内部噪音（index/index.lock/logs 等）触发无谓刷新；指纹不走 git 命令读缓存，
+//   直接读文件元数据
 // - 回调层 gitignore 过滤：第一版只解析仓库根 .gitignore，父目录命中即整棵子树丢弃
 // 自适应降级状态机（用户策略）：status 单次耗时 >200ms → 停止监听进入降级；
 // 降级中任意一次 status 调用（focus 刷新/手动刷新/操作收尾/tab 补载）<200ms → 恢复监听。
@@ -79,10 +79,12 @@ fn git_panel_watch_classify_path(path: &str) -> GitPanelWatchSignals {
     match after {
         // .git 目录自身变化或 HEAD 变化都意味着分支/检出状态可能变了
         "" | "/HEAD" => GitPanelWatchSignals { head_changed: true, ..Default::default() },
-        // 暂存区索引变化等价于工作区状态变化
+        // 暂存区索引变化等价于工作区状态变化（外部 git add/reset 等）
         "/index" => GitPanelWatchSignals { workdir_changed: true, ..Default::default() },
-        // 其他 .git 内部（COMMIT_EDITMSG/logs/packed-refs 等）保守按 refs 处理，
-        // 由指纹去重挡掉没有真实引用变化的噪音
+        // 其他 .git 内部（index.lock/logs/objects 等）不是工作区改动：按 refs 处理，
+        // 由指纹去重挡掉没有真实引用变化的噪音。
+        // 注意：本应用自己的 status 查询一律带 --no-optional-locks，不写索引，
+        // 否则这条链会自我触发
         _ => GitPanelWatchSignals { refs_changed: true, ..Default::default() },
     }
 }
@@ -232,10 +234,9 @@ async fn git_panel_watch_consumer(
             let fingerprint = git_panel_watch_compute_refs_fingerprint(&repo_root);
             let mut last = GIT_PANEL_LAST_REFS_FINGERPRINT.lock();
             if *last == fingerprint {
-                // 引用未真变：折叠为 workdir，仍会刷新更改区但不重建提交历史
+                // 引用未真变：是 .git 内部噪音（index/index.lock/logs 等），丢弃不推送
                 signals.head_changed = false;
                 signals.refs_changed = false;
-                signals.workdir_changed = true;
             } else {
                 *last = fingerprint;
             }
@@ -597,8 +598,13 @@ mod git_panel_watch_tests {
         let head = git_panel_watch_classify_path("E:/repo/.git/HEAD");
         assert!(head.head_changed && !head.workdir_changed && !head.refs_changed);
 
+        // index 变化等价于暂存区变化（外部 git add/reset 等），仍是工作区信号
         let index = git_panel_watch_classify_path("E:/repo/.git/index");
         assert!(index.workdir_changed && !index.head_changed && !index.refs_changed);
+
+        // index.lock 是 git 写索引的中间文件，不代表工作区改动：归 refs，由指纹去重挡掉
+        let index_lock = git_panel_watch_classify_path("E:/repo/.git/index.lock");
+        assert!(index_lock.refs_changed && !index_lock.head_changed && !index_lock.workdir_changed);
 
         let refs = git_panel_watch_classify_path("E:/repo/.git/refs/heads/main");
         assert!(refs.refs_changed && !refs.workdir_changed);

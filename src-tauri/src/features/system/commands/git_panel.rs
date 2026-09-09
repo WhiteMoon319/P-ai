@@ -354,9 +354,10 @@ async fn git_panel_status_inner(input: GitPanelWorkspaceInput) -> Result<GitPane
     let workspace_path = git_panel_validate_path(&input.workspace_path)?;
     let repo_root = git_panel_resolve_root(&workspace_path).await?;
     let branch = git_panel_current_branch(&repo_root).await;
+    // --no-optional-locks：只读查询不刷新索引，否则会写 .git/index.lock 触发面板自身的监视
     let stdout = git_executor().run_read(
         &repo_root,
-        &["status", "--porcelain=v1", "-z", "-uall"],
+        &["--no-optional-locks", "status", "--porcelain=v1", "-z", "-uall"],
     )
     .await?;
     let entries: Vec<GitPanelStatusEntry> = stdout
@@ -786,9 +787,10 @@ async fn git_panel_checkout_check(input: GitPanelCheckoutInput) -> Result<GitPan
     let reference = git_panel_validate_reference(&input.reference)?;
 
     // 工作区未提交/未跟踪文件（含重命名等，-z 按 NUL 分隔）
+    // --no-optional-locks：预检是只读查询，不刷新索引
     let status_stdout = git_executor().run_read(
         &repo_root,
-        &["status", "--porcelain=v1", "-z", "-uall"],
+        &["--no-optional-locks", "status", "--porcelain=v1", "-z", "-uall"],
     )
     .await?;
     let dirty_paths: Vec<String> = status_stdout
