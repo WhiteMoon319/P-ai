@@ -1,7 +1,6 @@
 #[derive(Debug, Clone)]
 enum ApplyPatchSafetyCheck {
     AutoApprove,
-    AskUser { existing_paths: Vec<PathBuf> },
     Reject { reason: String },
 }
 
@@ -711,80 +710,6 @@ fn apply_patch_resolve_ops(base: &Path, ops: Vec<ApplyPatchOp>) -> Result<Vec<Ap
 }
 
 
-fn apply_patch_collect_existing_paths(ops: &[ApplyPatchResolvedOp]) -> Vec<PathBuf> {
-    let mut out = Vec::<PathBuf>::new();
-    for op in ops {
-        match op {
-            ApplyPatchResolvedOp::Add { .. } => {}
-            ApplyPatchResolvedOp::Delete { path } => out.push(path.clone()),
-            ApplyPatchResolvedOp::Update { from, to, .. } => {
-                out.push(from.clone());
-                if let Some(next) = to {
-                    out.push(next.clone());
-                }
-            }
-        }
-    }
-    terminal_dedup_paths(out)
-}
-
-fn apply_patch_collect_target_paths(ops: &[ApplyPatchResolvedOp]) -> Vec<PathBuf> {
-    let mut out = Vec::<PathBuf>::new();
-    for op in ops {
-        match op {
-            ApplyPatchResolvedOp::Add { path, .. } | ApplyPatchResolvedOp::Delete { path } => {
-                out.push(path.clone());
-            }
-            ApplyPatchResolvedOp::Update { from, to, .. } => {
-                out.push(from.clone());
-                if let Some(next) = to {
-                    out.push(next.clone());
-                }
-            }
-        }
-    }
-    terminal_dedup_paths(out)
-}
-
-fn apply_patch_operation_summary(ops: &[ApplyPatchResolvedOp]) -> String {
-    let mut add_count = 0usize;
-    let mut delete_count = 0usize;
-    let mut update_count = 0usize;
-    let mut move_count = 0usize;
-    for op in ops {
-        match op {
-            ApplyPatchResolvedOp::Add { .. } => add_count += 1,
-            ApplyPatchResolvedOp::Delete { .. } => delete_count += 1,
-            ApplyPatchResolvedOp::Update { to, .. } => {
-                if to.is_some() {
-                    move_count += 1;
-                } else {
-                    update_count += 1;
-                }
-            }
-        }
-    }
-    let total = ops.len();
-    let mut parts = Vec::<String>::new();
-    if add_count > 0 {
-        parts.push(format!("新增 {add_count}"));
-    }
-    if update_count > 0 {
-        parts.push(format!("修改 {update_count}"));
-    }
-    if delete_count > 0 {
-        parts.push(format!("删除 {delete_count}"));
-    }
-    if move_count > 0 {
-        parts.push(format!("重命名 {move_count}"));
-    }
-    if parts.is_empty() {
-        "计划执行补丁操作。".to_string()
-    } else {
-        format!("计划执行 {total} 项补丁操作（{}）。", parts.join("，"))
-    }
-}
-
 fn apply_patch_assess_safety(
     state: &AppState,
     _session_id: &str,
@@ -837,14 +762,6 @@ fn apply_patch_assess_safety(
     }
     if let Some(reason) = terminal_worktree_write_rejection(state, _session_id, &target_paths)? {
         return Ok(ApplyPatchSafetyCheck::Reject { reason });
-    }
-    if effective_access == SHELL_WORKSPACE_ACCESS_APPROVAL {
-        return Ok(ApplyPatchSafetyCheck::AskUser {
-            existing_paths: apply_patch_collect_existing_paths(ops)
-                .into_iter()
-                .filter(|path| path.exists())
-                .collect::<Vec<_>>(),
-        });
     }
     Ok(ApplyPatchSafetyCheck::AutoApprove)
 }
@@ -1135,53 +1052,6 @@ fn apply_patch_similar_line_ranges(content: &str, old_string: &str, limit: usize
         .collect()
 }
 
-fn apply_patch_preview_lines(prefix: &str, text: &str, max_chars: usize) -> Vec<String> {
-    let preview = apply_patch_preview_text(text, max_chars);
-    if preview.is_empty() {
-        return Vec::new();
-    }
-    preview
-        .lines()
-        .map(|line| format!("{prefix}{line}"))
-        .collect()
-}
-
-fn apply_patch_build_preview(ops: &[ApplyPatchResolvedOp]) -> Result<String, String> {
-    let mut lines = Vec::<String>::new();
-    lines.push("*** Begin Patch".to_string());
-    for op in ops {
-        match op {
-            ApplyPatchResolvedOp::Add { path, content } => {
-                lines.push(format!("*** Add File: {}", terminal_path_for_user(path)));
-                lines.extend(apply_patch_preview_lines("+", content, 4_000));
-            }
-            ApplyPatchResolvedOp::Delete { path } => {
-                lines.push(format!("*** Delete File: {}", terminal_path_for_user(path)));
-                match apply_patch_read_text_file(path) {
-                    Ok(content) => lines.extend(apply_patch_preview_lines("-", &content, 4_000)),
-                    Err(err) => lines.push(format!("Error! 无法读取待删除文件内容：{err}")),
-                }
-            }
-            ApplyPatchResolvedOp::Update { from, to, old_string, new_string, .. } => {
-                if let Some(dest) = to {
-                    lines.push(format!("*** Update File: {}", terminal_path_for_user(from)));
-                    lines.push(format!("*** Move to: {}", terminal_path_for_user(dest)));
-                } else {
-                    lines.push(format!("*** Update File: {}", terminal_path_for_user(from)));
-                }
-                if old_string.is_empty() && new_string.is_empty() {
-                    lines.push("  move only".to_string());
-                } else {
-                    lines.extend(apply_patch_preview_lines("-", old_string, 4_000));
-                    lines.extend(apply_patch_preview_lines("+", new_string, 4_000));
-                }
-            }
-        }
-    }
-    lines.push("*** End Patch".to_string());
-    Ok(lines.join("\n"))
-}
-
 fn apply_patch_op_name(op: &ApplyPatchResolvedOp) -> &'static str {
     match op {
         ApplyPatchResolvedOp::Add { .. } => "add",
@@ -1230,8 +1100,7 @@ async fn apply_patch_execute_single_op(op: &ApplyPatchResolvedOp) -> Result<Valu
             if !metadata.is_file() {
                 return Err(format!("Delete File 失败，目标不是文件：{}", path.to_string_lossy()));
             }
-            tokio::fs::remove_file(path)
-                .await
+            trash::delete(path)
                 .map_err(|err| format!("删除文件失败（{}）：{err}", path.to_string_lossy()))?;
             Ok(serde_json::json!({
                 "op": "delete",
@@ -1342,315 +1211,25 @@ async fn apply_patch_execute_ops(
 async fn builtin_apply_patch_with_name(
     state: &AppState,
     session_id: &str,
-    tool_name: &str,
     args: ApplyPatchToolArgs,
 ) -> Result<Value, String> {
-    let tool_name = tool_name.trim();
-    let tool_name = if tool_name.is_empty() { "apply_patch" } else { tool_name };
     let normalized_session = normalize_terminal_tool_session_id(session_id);
     let cwd = resolve_terminal_cwd(state, &normalized_session, None)?;
     let raw_input = apply_patch_tool_args_to_raw_json(&args)?;
     let parsed = apply_patch_ops_from_tool_args(args)?;
     let resolved = apply_patch_resolve_ops(&cwd, parsed)?;
-    let preview = apply_patch_build_preview(&resolved)?;
     let target_paths = apply_patch_collect_target_paths(&resolved);
     android_workspace_ensure_paths_within_sandbox(state, &target_paths)?;
-    let existing_paths = apply_patch_collect_existing_paths(&resolved);
-    let summary = apply_patch_operation_summary(&resolved);
 
     let safety = apply_patch_assess_safety(state, &normalized_session, &cwd, &resolved)?;
-    let mut smart_review_unavailable_notice = None::<String>;
-    let mut smart_review_handled = false;
-    let mut smart_review_history = None::<Value>;
-    if matches!(safety, ApplyPatchSafetyCheck::AskUser { .. }) {
-        if let Some(review_api_config_id) = current_tool_review_api_config_id(state)? {
-            let context = serde_json::json!({
-                "cwd": terminal_path_for_user(&cwd),
-                "operation_summary": summary.clone(),
-                "target_paths": terminal_smart_review_paths(&target_paths),
-                "existing_paths": terminal_smart_review_paths(&existing_paths),
-                "patch_preview": preview.clone(),
-            });
-            match run_tool_smart_review(
-                state,
-                &review_api_config_id,
-                tool_name,
-                "Tool safety review",
-                context,
-                None,
-            )
-            .await
-            {
-                Ok(TerminalSmartReviewOutcome::Decision(review)) => {
-                    smart_review_history = Some(serde_json::json!({
-                        "kind": "decision",
-                        "allow": review.allow,
-                        "reviewOpinion": review.review_opinion,
-                        "modelName": review.model_name,
-                    }));
-                    if !review.allow {
-                        let mut lines = vec!["智能评估建议先由你确认后再执行。".to_string()];
-                        if !review.review_opinion.is_empty() {
-                            lines.push(format!("评估意见: {}", review.review_opinion));
-                        }
-                        if !state
-                            .delegate_active_ids
-                            .lock()
-                            .map(|ids| ids.is_empty())
-                            .unwrap_or(false)
-                        {
-                            return Ok(serde_json::json!({
-                                "ok": false,
-                                "approved": false,
-                                "blockedReason": "delegate_denied_ai_reviewed_patch",
-                                "message": "子代理工具调用被自动拒绝（智能评估不通过）。",
-                                "toolReview": smart_review_history.clone(),
-                                "cwd": terminal_path_for_user(&cwd),
-                            }));
-                        }
-                        let decision = match terminal_request_user_approval(
-                            state,
-                            "工具智能评估",
-                            &lines.join("\n"),
-                            &normalized_session,
-                            "ai_tool_review",
-                            Some(tool_name),
-                            None,
-                            Some(&preview),
-                            Some(&cwd),
-                            None,
-                            None,
-                            None,
-                            &existing_paths,
-                            &target_paths,
-                            (!review.review_opinion.is_empty()).then_some(review.review_opinion.as_str()),
-                            (!review.model_name.is_empty()).then_some(review.model_name.as_str()),
-                            None,
-                        )
-                        .await
-                        {
-                            Ok(v) => v,
-                            Err(err) => return Err(err),
-                        };
-                        if !decision.approved {
-                            return Ok(serde_json::json!({
-                                "ok": false,
-                                "approved": false,
-                                "blockedReason": "user_denied_ai_reviewed_patch",
-                                "message": format_terminal_denied_message("用户拒绝了智能评估后的补丁执行。", &decision),
-                                "toolReview": smart_review_history.clone(),
-                                "cwd": terminal_path_for_user(&cwd),
-                            }));
-                        }
-                    }
-                    smart_review_handled = true;
-                }
-                Ok(TerminalSmartReviewOutcome::RawJson {
-                    raw_json,
-                    model_name,
-                }) => {
-                    let review_note =
-                        "当前工具评估模型返回了不符合约定的结果，请直接查看原始返回内容后决定是否执行。";
-                    smart_review_history = Some(serde_json::json!({
-                        "kind": "raw_json",
-                        "allow": false,
-                        "reviewOpinion": review_note,
-                        "modelName": model_name,
-                        "rawContent": raw_json,
-                    }));
-                    if !state
-                        .delegate_active_ids
-                        .lock()
-                        .map(|ids| ids.is_empty())
-                        .unwrap_or(false)
-                    {
-                        return Ok(serde_json::json!({
-                            "ok": false,
-                            "approved": false,
-                            "blockedReason": "delegate_denied_ai_review_raw_patch",
-                        "message": "子代理工具调用被自动拒绝（智能评估返回了不符合约定的结果）。",
-                        "toolReview": smart_review_history.clone(),
-                        "cwd": terminal_path_for_user(&cwd),
-                    }));
-                }
-                    let decision = match terminal_request_user_approval(
-                        state,
-                        "工具智能评估",
-                        review_note,
-                        &normalized_session,
-                        "ai_tool_review_raw_json",
-                        Some(tool_name),
-                        Some(review_note),
-                        Some(&raw_json),
-                        Some(&cwd),
-                        None,
-                        None,
-                        None,
-                        &existing_paths,
-                        &target_paths,
-                        Some(review_note),
-                        Some(model_name.as_str()),
-                        None,
-                    )
-                    .await
-                    {
-                        Ok(v) => v,
-                        Err(err) => return Err(err),
-                    };
-                    if !decision.approved {
-                        return Ok(serde_json::json!({
-                            "ok": false,
-                            "approved": false,
-                            "blockedReason": "user_denied_ai_review_raw_patch",
-                            "message": format_terminal_denied_message("用户拒绝了查看原始评估结果后的补丁执行。", &decision),
-                            "toolReview": smart_review_history.clone(),
-                            "cwd": terminal_path_for_user(&cwd),
-                        }));
-                    }
-                    smart_review_handled = true;
-                }
-                Err(err) => {
-                    runtime_log_warn(format!(
-                        "[补丁审查] 失败 session={} err={:?}",
-                        normalized_session, err
-                    ));
-                    smart_review_unavailable_notice =
-                        Some("当前评估模型不可用，已降级为本地规则评估。".to_string());
-                }
-            }
-        }
-    }
-
-    if !smart_review_handled {
-        match safety {
-            ApplyPatchSafetyCheck::Reject { reason } => {
-                return Ok(serde_json::json!({
-                    "ok": false,
-                    "approved": false,
-                    "blockedReason": "rejected",
-                    "message": reason,
-                    "cwd": terminal_path_for_user(&cwd),
-                }));
-            }
-            ApplyPatchSafetyCheck::AskUser { existing_paths } => {
-                let mut lines = vec![
-                    "该补丁将在用户工具区执行，是否批准本次修改？".to_string(),
-                    format!("会话: {}", normalized_session),
-                    format!("工作目录: {}", terminal_path_for_user(&cwd)),
-                    "命中已有文件：".to_string(),
-                ];
-                if let Some(notice) = &smart_review_unavailable_notice {
-                    lines.insert(0, notice.clone());
-                }
-                if existing_paths.is_empty() {
-                    lines.push("- 未识别到已存在文件，但该区域仍需确认。".to_string());
-                } else {
-                    for path in existing_paths.iter().take(8) {
-                        lines.push(format!("- {}", terminal_path_for_user(path)));
-                    }
-                }
-                if !state
-                    .delegate_active_ids
-                    .lock()
-                    .map(|ids| ids.is_empty())
-                    .unwrap_or(false)
-                {
-                    return Ok(serde_json::json!({
-                        "ok": false,
-                        "approved": false,
-                        "blockedReason": "delegate_denied_apply_patch",
-                        "message": "子代理工具调用被自动拒绝（补丁执行需要审批）。",
-                        "cwd": terminal_path_for_user(&cwd),
-                    }));
-                }
-                let decision = match terminal_request_user_approval(
-                    state,
-                    "补丁执行审批",
-                    &lines.join("\n"),
-                    &normalized_session,
-                    "apply_patch_workspace_write",
-                    Some(tool_name),
-                    Some(&summary),
-                    Some(&preview),
-                    Some(&cwd),
-                    None,
-                    None,
-                    smart_review_unavailable_notice
-                        .as_deref()
-                        .or(Some("用户工具区修改需要审批")),
-                    &existing_paths,
-                    &target_paths,
-                    None,
-                    None,
-                    None,
-                )
-                .await
-                {
-                    Ok(v) => v,
-                    Err(err) => return Err(err),
-                };
-                if !decision.approved {
-                    return Ok(serde_json::json!({
-                        "ok": false,
-                        "approved": false,
-                        "blockedReason": "user_denied_apply_patch",
-                        "message": format_terminal_denied_message("用户拒绝了本次补丁执行。", &decision),
-                        "cwd": terminal_path_for_user(&cwd),
-                    }));
-                }
-            }
-            ApplyPatchSafetyCheck::AutoApprove => {
-                if let Some(notice) = &smart_review_unavailable_notice {
-                    if !state
-                        .delegate_active_ids
-                        .lock()
-                        .map(|ids| ids.is_empty())
-                        .unwrap_or(false)
-                    {
-                        return Ok(serde_json::json!({
-                            "ok": false,
-                            "approved": false,
-                            "blockedReason": "delegate_denied_apply_patch_after_review_fallback",
-                            "message": "子代理工具调用被自动拒绝（审查模型不可用，降级后仍需审批）。",
-                            "cwd": terminal_path_for_user(&cwd),
-                        }));
-                    }
-                    let decision = match terminal_request_user_approval(
-                        state,
-                        "补丁执行审批",
-                        notice,
-                        &normalized_session,
-                        "apply_patch_workspace_write",
-                        Some(tool_name),
-                        Some(&summary),
-                        Some(&preview),
-                        Some(&cwd),
-                        None,
-                        None,
-                        Some(notice.as_str()),
-                        &existing_paths,
-                        &target_paths,
-                        None,
-                        None,
-                        None,
-                    )
-                    .await
-                    {
-                        Ok(v) => v,
-                        Err(err) => return Err(err),
-                    };
-                    if !decision.approved {
-                        return Ok(serde_json::json!({
-                            "ok": false,
-                            "approved": false,
-                            "blockedReason": "user_denied_apply_patch_after_review_fallback",
-                            "message": format_terminal_denied_message("用户拒绝了降级后的补丁执行。", &decision),
-                            "cwd": terminal_path_for_user(&cwd),
-                        }));
-                    }
-                }
-            }
-        }
+    if let ApplyPatchSafetyCheck::Reject { reason } = safety {
+        return Ok(serde_json::json!({
+            "ok": false,
+            "approved": false,
+            "blockedReason": "rejected",
+            "message": reason,
+            "cwd": terminal_path_for_user(&cwd),
+        }));
     }
 
     let mut backup_record = apply_patch_empty_backup_record(
@@ -1703,7 +1282,6 @@ async fn builtin_apply_patch_with_name(
             "ok": false,
             "approved": true,
             "partial": !outcome.changed.is_empty(),
-            "toolReview": smart_review_history,
             "cwd": terminal_path_for_user(&cwd),
             "changed": outcome.changed,
             "changedCount": outcome.changed.len(),
@@ -1729,7 +1307,6 @@ async fn builtin_apply_patch_with_name(
     Ok(serde_json::json!({
         "ok": true,
         "approved": true,
-        "toolReview": smart_review_history,
         "cwd": terminal_path_for_user(&cwd),
         "changed": outcome.changed,
         "changedCount": outcome.changed.len(),
@@ -1761,7 +1338,6 @@ async fn builtin_write_file(
     builtin_apply_patch_with_name(
         state,
         session_id,
-        "write",
         ApplyPatchToolArgs {
             operations: vec![ApplyPatchToolOpArgs {
                 action,
@@ -1785,7 +1361,6 @@ async fn builtin_delete_file(
     builtin_apply_patch_with_name(
         state,
         session_id,
-        "delete",
         ApplyPatchToolArgs {
             operations: vec![ApplyPatchToolOpArgs {
                 action: "delete".to_string(),
@@ -1809,7 +1384,6 @@ async fn builtin_update_file(
     builtin_apply_patch_with_name(
         state,
         session_id,
-        "update",
         ApplyPatchToolArgs {
             operations: vec![ApplyPatchToolOpArgs {
                 action: "update".to_string(),
@@ -1833,7 +1407,6 @@ async fn builtin_move_file(
     builtin_apply_patch_with_name(
         state,
         session_id,
-        "move",
         ApplyPatchToolArgs {
             operations: vec![ApplyPatchToolOpArgs {
                 action: "move".to_string(),
@@ -1920,43 +1493,6 @@ mod apply_patch_tool_tests {
         let err = apply_patch_ops_from_tool_args(args).expect_err("delete with old_string should fail");
         assert!(err.contains("delete) 只会删除整个文件"));
         assert!(err.contains("如果你想删除文件中的部分内容，请改用 update"));
-    }
-
-    #[test]
-    fn build_preview_should_include_patch_content_for_review() {
-        let cwd = std::env::temp_dir().join(format!("eca-apply-patch-preview-{}", Uuid::new_v4()));
-        std::fs::create_dir_all(&cwd).expect("create cwd");
-        let delete_file = cwd.join("delete.txt");
-        std::fs::write(&delete_file, "obsolete\n").expect("seed delete file");
-        let update_file = cwd.join("update.rs");
-        let add_file = cwd.join("new.rs");
-        let ops = vec![
-            ApplyPatchResolvedOp::Update {
-                from: update_file,
-                to: None,
-                old_string: "let value = ;".to_string(),
-                new_string: "let value = 1;".to_string(),
-                replace_all: false,
-            },
-            ApplyPatchResolvedOp::Add {
-                path: add_file,
-                content: "pub fn added() {}\n".to_string(),
-            },
-            ApplyPatchResolvedOp::Delete { path: delete_file },
-        ];
-
-        let preview = apply_patch_build_preview(&ops).expect("build preview");
-
-        assert!(preview.contains("*** Begin Patch"));
-        assert!(preview.contains("*** Update File:"));
-        assert!(preview.contains("-let value = ;"));
-        assert!(preview.contains("+let value = 1;"));
-        assert!(preview.contains("*** Add File:"));
-        assert!(preview.contains("+pub fn added() {}"));
-        assert!(preview.contains("*** Delete File:"));
-        assert!(preview.contains("-obsolete"));
-        assert!(preview.contains("*** End Patch"));
-        let _ = std::fs::remove_dir_all(&cwd);
     }
 
     #[test]
@@ -2164,6 +1700,39 @@ mod apply_patch_tool_tests {
         assert_eq!(
             record.entries[0].expected_current_content.as_deref(),
             Some("new\ncontent\n")
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_ops_should_delete_file_via_trash_and_keep_blob_backup() {
+        let data_path = make_temp_data_path("apply-patch-trash");
+        let cwd = app_root_from_data_path(&data_path).join("workspace");
+        std::fs::create_dir_all(&cwd).expect("create cwd");
+        let file = cwd.join("trash.txt");
+        std::fs::write(&file, "to be trashed\n").expect("seed file");
+        let ops = vec![ApplyPatchResolvedOp::Delete { path: file.clone() }];
+        let mut record = apply_patch_empty_backup_record(&data_path, "s1", &cwd, "raw")
+            .expect("empty record");
+
+        let outcome = apply_patch_execute_ops(&data_path, &mut record, &ops)
+            .await
+            .expect("execute");
+
+        assert!(outcome.failure.is_none());
+        assert_eq!(outcome.changed.len(), 1);
+        assert_eq!(outcome.changed[0]["op"], "delete");
+        assert!(!file.exists(), "原文件应已移出原位");
+        assert_eq!(record.entries.len(), 1);
+        assert_eq!(record.entries[0].kind, ApplyPatchBackupKind::Delete);
+        let blob_file = record.entries[0]
+            .backup_blob_file
+            .as_deref()
+            .expect("delete entry should have blob");
+        let blob_path = apply_patch_blob_path(&data_path, blob_file);
+        assert!(blob_path.exists(), "删除前备份 blob 应存在");
+        assert_eq!(
+            std::fs::read(&blob_path).expect("read blob"),
+            b"to be trashed\n"
         );
     }
 

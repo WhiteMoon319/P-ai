@@ -635,14 +635,6 @@ fn terminal_smart_review_extract_json(raw: &str) -> &str {
     trimmed
 }
 
-fn terminal_smart_review_paths(paths: &[PathBuf]) -> Vec<String> {
-    paths
-        .iter()
-        .take(8)
-        .map(|path| terminal_path_for_user(path))
-        .collect()
-}
-
 fn tool_safety_review_system_prompt(language: &str) -> String {
     format!(
         "请使用{language}完成工具执行评估。\n\
