@@ -89,4 +89,31 @@ describe("useChatForegroundRuntime", () => {
   it("运行时不识别 Tauri 或 Web bridge，只使用统一传输门面", () => {
     expect(foregroundRuntimeSource).not.toMatch(/isTauriRuntimeAvailable|acquireVsCodeApi|__PAI_SIDEBAR_BRIDGE__/);
   });
+
+  it("当前会话处于活跃流式中且后端也在生成时，切勿打断或重新加载会话", async () => {
+    const switchUnarchivedConversation = vi.fn();
+    invokeTauriMock.mockImplementation((command: string) => {
+      if (command === "conversation.runtimeSnapshot") {
+        return Promise.resolve({ runtimeState: "assistant_streaming", isProcessing: true });
+      }
+      return Promise.resolve({});
+    });
+    const runtime = useChatForegroundRuntime({
+      viewMode: ref("chat"),
+      chatWindowActiveSynced: ref(null),
+      currentChatConversationId: ref("conversation-a"),
+      chatting: ref(true),
+      allMessages: ref([message("assistant-a", "正在生成中...")]),
+      getChatFlow: () => ({
+        frontendRoundPhase: ref("streaming"),
+        probeBoundChannel: vi.fn(async () => false),
+      }),
+      applyConversationRuntimeStateUpdated: vi.fn(),
+      syncUnarchivedConversationOverviewChangedSinceWatermark: vi.fn(async () => {}),
+      switchUnarchivedConversation,
+    });
+
+    await runtime.recoverForegroundConversation("focus");
+    expect(switchUnarchivedConversation).not.toHaveBeenCalled();
+  });
 });

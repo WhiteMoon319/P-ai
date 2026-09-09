@@ -72,6 +72,15 @@ export function useChatForegroundRuntime(bindings: Record<string, any>) {
   async function reconcileForegroundConversation(reason: string) {
     const conversationId = String(bindings.currentChatConversationId.value || "").trim();
     if (!conversationId) return;
+
+    // 当前会话若已在正常流式中，且后端也处于处理/推流态，绝不可介入打断正在运行的流式通道
+    if (frontendConversationIsStreaming()) {
+      const liveSnapshot = await requestRuntimeSnapshot(conversationId).catch(() => null);
+      if (liveSnapshot && (liveSnapshot.runtimeState === "assistant_streaming" || liveSnapshot.isProcessing || liveSnapshot.hasPendingQueue)) {
+        return;
+      }
+    }
+
     console.warn("[焦点恢复][入口] reconcile 开始", { conversationId, reason });
     // 输入面板忙碌（前端认为在流）但没有流式消息 → 流式投影已断，落后，直接 switch 当前会话接回。
     if (frontendConversationIsStreaming() && !hasStreamingAssistantMessage()) {

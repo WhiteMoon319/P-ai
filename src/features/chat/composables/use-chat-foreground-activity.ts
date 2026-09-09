@@ -129,7 +129,6 @@ export function useChatForegroundActivity(options: ChatForegroundActivityOptions
 
   function handleBlur() {
     options.onBackground?.("blur");
-    schedule("blur");
   }
 
   function handleVisibilityChange() {

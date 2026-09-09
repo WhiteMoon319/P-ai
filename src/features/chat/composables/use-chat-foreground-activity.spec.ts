@@ -194,4 +194,20 @@ describe("useChatForegroundActivity", () => {
     expect(onWake).toHaveBeenCalledTimes(1);
     activity.cleanup();
   });
+
+  it("失焦不应销毁前台同步状态：blur 仅通知后台事件，不触发下线或唤醒", async () => {
+    stubDocument("visible", true);
+    const activeSynced = ref<boolean | null>(true);
+    const onWake = vi.fn(async () => {});
+    const onBackground = vi.fn();
+    const activity = useChatForegroundActivity({ activeSynced, onWake, onBackground });
+
+    activity.handleBlur();
+    await flush();
+
+    expect(onBackground).toHaveBeenCalledWith("blur");
+    expect(activeSynced.value).toBe(true);
+    expect(onWake).not.toHaveBeenCalled();
+    activity.cleanup();
+  });
 });
