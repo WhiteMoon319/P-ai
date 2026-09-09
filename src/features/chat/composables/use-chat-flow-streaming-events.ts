@@ -82,23 +82,32 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
     };
   }
 
-  // ==================== 流式正文节流 ====================
-  // 单一有序日志：LLM 本体是线性流，但曾分 text/reasoning 双队列攒批，flush 时
-  // 先刷 reasoning 再刷 text，导致 100ms 窗内 textA->reasoning->textB 被重排为
-  // reasoning->textA+textB，正文被“吸”到思维链后。现改为单一有序队列按到达
-  // seq 保序 flush，渲染顺序恒等于到达顺序。
-  const STREAM_TEXT_FLUSH_INTERVAL_MS = 100;
+  // ==================== 流式平滑追赶缓冲 ====================
+  // 自适应追赶算法：按目标在 1 秒内清空剩余缓冲的速度平滑输出。
+  // 缓冲少时按打字机节奏逐字流出；突发激增时自动平滑提速，保证不累积延迟。
+  const STREAM_SMOOTH_CATCHUP_MS = 1000;
   type PendingOrderedItem = { kind: "text" | "reasoning"; delta: string };
   let pendingOrdered: PendingOrderedItem[] = [];
   let pendingStreamGen = 0;
   let pendingStreamMessageId = "";
-  let streamTextFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  let streamFlushFrameId: number | null = null;
+  let streamFlushLastAt = 0;
+  let streamFlushCarryChars = 0;
 
-  function flushStreamTextBuffer() {
-    if (streamTextFlushTimer) {
-      clearTimeout(streamTextFlushTimer);
-      streamTextFlushTimer = null;
+  function stopStreamFlushLoop() {
+    if (streamFlushFrameId !== null) {
+      if (typeof cancelAnimationFrame === "function") {
+        cancelAnimationFrame(streamFlushFrameId);
+      } else {
+        clearTimeout(streamFlushFrameId);
+      }
+      streamFlushFrameId = null;
     }
+    streamFlushLastAt = 0;
+    streamFlushCarryChars = 0;
+  }
+
+  function flushAllPendingOrdered() {
     const gen = pendingStreamGen;
     const messageId = pendingStreamMessageId;
     const ordered = pendingOrdered;
@@ -115,12 +124,116 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
     }
   }
 
-  function scheduleStreamTextFlush() {
-    if (streamTextFlushTimer) return;
-    streamTextFlushTimer = setTimeout(() => {
-      streamTextFlushTimer = null;
-      flushStreamTextBuffer();
-    }, STREAM_TEXT_FLUSH_INTERVAL_MS);
+  function flushStreamTextBuffer() {
+    stopStreamFlushLoop();
+    flushAllPendingOrdered();
+  }
+
+  function safeSliceCount(str: string, count: number): number {
+    if (count >= str.length) return str.length;
+    const code = str.charCodeAt(count - 1);
+    if (code >= 0xD800 && code <= 0xDBFF) {
+      return Math.min(str.length, count + 1);
+    }
+    return count;
+  }
+
+  function emitOrderedChars(count: number) {
+    let remaining = count;
+    const gen = pendingStreamGen;
+    const messageId = pendingStreamMessageId;
+    while (remaining > 0 && pendingOrdered.length > 0) {
+      const first = pendingOrdered[0];
+      if (!first.delta) {
+        pendingOrdered.shift();
+        continue;
+      }
+      const sliceLen = safeSliceCount(first.delta, remaining);
+      if (sliceLen >= first.delta.length) {
+        const chunk = first.delta;
+        remaining = Math.max(0, remaining - chunk.length);
+        pendingOrdered.shift();
+        if (first.kind === "reasoning" && messageId) {
+          options.applyAssistantEventToMessage(messageId, { kind: "activity_reasoning_delta", delta: chunk });
+        } else if (first.kind === "text" && gen) {
+          options.enqueueStreamDelta(gen, chunk);
+        }
+      } else {
+        const chunk = first.delta.slice(0, sliceLen);
+        first.delta = first.delta.slice(sliceLen);
+        remaining = 0;
+        if (first.kind === "reasoning" && messageId) {
+          options.applyAssistantEventToMessage(messageId, { kind: "activity_reasoning_delta", delta: chunk });
+        } else if (first.kind === "text" && gen) {
+          options.enqueueStreamDelta(gen, chunk);
+        }
+      }
+    }
+    if (pendingOrdered.length === 0) {
+      pendingStreamGen = 0;
+      pendingStreamMessageId = "";
+    }
+  }
+
+  function scheduleNextFrame() {
+    if (typeof requestAnimationFrame === "function") {
+      streamFlushFrameId = requestAnimationFrame(() => stepStreamSmoothFlush()) as unknown as number;
+    } else {
+      streamFlushFrameId = setTimeout(() => stepStreamSmoothFlush(), 16) as unknown as number;
+    }
+  }
+
+  function stepStreamSmoothFlush() {
+    streamFlushFrameId = null;
+    if (pendingOrdered.length === 0) {
+      stopStreamFlushLoop();
+      return;
+    }
+
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (streamFlushLastAt <= 0) {
+      streamFlushLastAt = now;
+    }
+    const elapsed = Math.min(100, Math.max(0, now - streamFlushLastAt));
+    streamFlushLastAt = now;
+
+    let totalBufferedChars = 0;
+    for (let i = 0; i < pendingOrdered.length; i++) {
+      totalBufferedChars += pendingOrdered[i].delta.length;
+    }
+
+    if (totalBufferedChars === 0) {
+      pendingOrdered = [];
+      stopStreamFlushLoop();
+      return;
+    }
+
+    // 基础速度：缓冲内字符在 1 秒内清空
+    // 当字数较少时提供保底打字速度（25 字/秒，即每字约 40ms 自然打字节奏），避免短句拖沓
+    const calculatedChars = (totalBufferedChars * elapsed) / STREAM_SMOOTH_CATCHUP_MS;
+    const floorChars = (25 * elapsed) / 1000;
+    streamFlushCarryChars += Math.max(calculatedChars, floorChars);
+    const emitCount = Math.floor(streamFlushCarryChars);
+
+    if (emitCount > 0) {
+      streamFlushCarryChars = Math.max(0, streamFlushCarryChars - emitCount);
+      emitOrderedChars(emitCount);
+    }
+
+    if (pendingOrdered.length === 0) {
+      stopStreamFlushLoop();
+      return;
+    }
+
+    scheduleNextFrame();
+  }
+
+  function ensureStreamFlushLoop() {
+    if (streamFlushFrameId !== null || pendingOrdered.length === 0) return;
+    streamFlushLastAt = 0;
+    // 首字立即响应：当队列从空转有内容时，赋予初始 1.0 carry，首字零延迟上屏
+    streamFlushCarryChars = 1;
+    scheduleNextFrame();
   }
 
   function bufferStreamText(input: { gen: number; messageId: string; text?: string; reasoning?: string }) {
@@ -141,7 +254,7 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
     }
     if (!pendingStreamGen) pendingStreamGen = input.gen;
     if (!pendingStreamMessageId) pendingStreamMessageId = input.messageId;
-    if (pendingOrdered.length > 0) scheduleStreamTextFlush();
+    if (pendingOrdered.length > 0) ensureStreamFlushLoop();
   }
 
   function handleStreamingEvent(currentGen: number, parsed: AssistantDeltaEvent) {
@@ -299,7 +412,7 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
     if (isActivityProjectionEvent) {
       if (delta && options.reasoningStartedAtMs.value === 0) options.reasoningStartedAtMs.value = Date.now();
       if (parsed.kind === "activity_reasoning_delta" && delta) {
-        // 思维链文本与正文一起 100ms 节流。
+        // 思维链文本与正文一起平滑追赶输出。
         if (currentRound.phase === "streaming" && !receivedCanonicalSnapshot) {
           bufferStreamText({ gen: currentGen, messageId: currentRound.messageId, reasoning: delta });
         }
