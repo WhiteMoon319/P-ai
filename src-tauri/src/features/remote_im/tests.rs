@@ -100,6 +100,7 @@
             .expect("read contact")
             .expect("contact exists");
         assert!(contact.allow_send_files, "微信渠道新建联系人应默认允许发送文件");
+
         // 非微信渠道仍保持默认关闭
         let state_qq = remote_im_test_state();
         let input_qq = RemoteImEnqueueInput {
@@ -113,6 +114,66 @@
             .expect("read qq contact")
             .expect("contact exists");
         assert!(!contact_qq.allow_send_files, "非微信渠道应保持默认关闭文件发送");
+    }
+
+    #[test]
+    fn validate_enqueue_input_should_accept_parts_with_attachment_when_receive_files_enabled() {
+        let mut config = AppConfig::default();
+        config.remote_im_channels.push(RemoteImChannelConfig {
+            id: "wx-ch".to_string(),
+            name: "微信渠道".to_string(),
+            platform: RemoteImPlatform::WeixinOc,
+            enabled: true,
+            credentials: serde_json::json!({}),
+            receive_files: true,
+            streaming_send: false,
+            show_tool_calls: false,
+            filter_markdown: false,
+            allow_send_files: false,
+            behavior_settings: RemoteImChannelBehaviorSettings::default(),
+        });
+        let input = RemoteImEnqueueInput {
+            channel_id: "wx-ch".to_string(),
+            platform: RemoteImPlatform::WeixinOc,
+            im_name: "weixin".to_string(),
+            remote_contact_type: "private".to_string(),
+            remote_contact_id: "wxid_user".to_string(),
+            remote_contact_name: Some("用户 (微信)".to_string()),
+            sender_id: "wxid_user".to_string(),
+            sender_name: "用户".to_string(),
+            sender_avatar_url: None,
+            platform_message_id: Some("m1".to_string()),
+            dingtalk_session_webhook: None,
+            dingtalk_session_webhook_expired_time: None,
+            session: SessionSelector {
+                api_config_id: None,
+                department_id: None,
+                agent_id: "agent".to_string(),
+                conversation_id: None,
+            },
+            payload: ChatInputPayload {
+                text: None,
+                display_text: None,
+                parts: Some(vec![ChatIngressPart::Attachment {
+                    path: None,
+                    bytes_base64: Some("aGVsbG8=".to_string()),
+                    mime: "image/jpeg".to_string(),
+                    name: "image.jpg".to_string(),
+                }]),
+                images: None,
+                audios: None,
+                attachments: None,
+                model: None,
+                extra_text_blocks: None,
+                mentions: None,
+                provider_meta: None,
+            },
+        };
+        let validated = validate_enqueue_input(&input, &config)
+            .expect("纯图片消息在开启 receive_files 时必须验证通过");
+        assert_eq!(validated.parts_image_count, 1);
+        assert_eq!(validated.parts_audio_count, 0);
+        assert_eq!(validated.parts_attachment_count, 0);
     }
 
     #[test]

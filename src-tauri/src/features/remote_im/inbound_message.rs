@@ -108,7 +108,42 @@ fn validate_enqueue_input(
     let images = validate_images(&channel, input);
     let audios = validate_audios(&channel, input);
     let attachments = validate_attachments(&channel, input);
-    if text.is_empty() && images.is_empty() && audios.is_empty() && attachments.is_empty() {
+
+    let mut parts_has_content = false;
+    let mut parts_image_count = 0usize;
+    let mut parts_audio_count = 0usize;
+    let mut parts_attachment_count = 0usize;
+    if let Some(parts) = input.payload.parts.as_ref() {
+        for part in parts {
+            match part {
+                ChatIngressPart::Text { text: t } => {
+                    if !t.trim().is_empty() {
+                        parts_has_content = true;
+                    }
+                }
+                ChatIngressPart::Attachment { mime, .. } => {
+                    if channel.receive_files {
+                        parts_has_content = true;
+                        let normalized_mime = mime.trim().to_ascii_lowercase();
+                        if normalized_mime.starts_with("image/") {
+                            parts_image_count += 1;
+                        } else if normalized_mime.starts_with("audio/") {
+                            parts_audio_count += 1;
+                        } else {
+                            parts_attachment_count += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if text.is_empty()
+        && images.is_empty()
+        && audios.is_empty()
+        && attachments.is_empty()
+        && !parts_has_content
+    {
         return Err("远程IM消息内容为空".to_string());
     }
 
@@ -117,6 +152,9 @@ fn validate_enqueue_input(
         images,
         audios,
         attachments,
+        parts_image_count,
+        parts_audio_count,
+        parts_attachment_count,
         channel,
     })
 }

@@ -1618,15 +1618,19 @@ pub(crate) async fn remote_im_enqueue_message_internal(
         contact_for_log.route_mode,
         contact_for_log.response_strategy
     ));
+    let total_image_count = images.len() + validated.parts_image_count;
+    let total_audio_count = audios.len() + validated.parts_audio_count;
+    let total_attachment_count = attachments.len() + validated.parts_attachment_count;
+
     runtime_log_info(format!(
         "[远程IM] 收到消息：渠道={}，联系人={}，发送人={}，内容={}，图片={}，音频={}，附件={}",
         channel_label,
         remote_im_contact_log_label(&contact_for_log),
         sender_label,
         remote_im_preview_text(&text, 100),
-        images.len(),
-        audios.len(),
-        attachments.len()
+        total_image_count,
+        total_audio_count,
+        total_attachment_count
     ));
     remote_im_append_contact_log(
         &contact_for_log,
@@ -1636,9 +1640,9 @@ pub(crate) async fn remote_im_enqueue_message_internal(
             channel_label,
             remote_im_contact_log_label(&contact_for_log),
             sender_label,
-            images.len(),
-            audios.len(),
-            attachments.len(),
+            total_image_count,
+            total_audio_count,
+            total_attachment_count,
             remote_im_preview_text(&text, 100)
         ),
     );

@@ -390,5 +390,8 @@ struct ValidatedEnqueueInput {
     images: Vec<BinaryPart>,
     audios: Vec<BinaryPart>,
     attachments: Vec<AttachmentMetaInput>,
+    parts_image_count: usize,
+    parts_audio_count: usize,
+    parts_attachment_count: usize,
     channel: RemoteImChannelConfig,
 }

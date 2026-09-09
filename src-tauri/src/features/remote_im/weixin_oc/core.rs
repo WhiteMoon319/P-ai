@@ -249,19 +249,22 @@ struct WeixinOcTextItem {
 #[derive(Debug, Clone, Deserialize)]
 struct WeixinOcImageItem {
     media: Option<WeixinOcMediaPayload>,
+    #[serde(default, alias = "aes_key", alias = "aesKey")]
     aeskey: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 struct WeixinOcMediaPayload {
+    #[serde(default, alias = "encryptQueryParam")]
     encrypt_query_param: Option<String>,
+    #[serde(default, alias = "aesKey", alias = "aeskey")]
     aes_key: Option<String>,
     /// 加密类型：0=只加密 fileid，1=打包缩略图/中图
-    #[serde(default)]
+    #[serde(default, alias = "encryptType")]
     encrypt_type: Option<i64>,
     /// 完整下载 URL（服务端直接返回，无需客户端拼接）
-    #[serde(default)]
+    #[serde(default, alias = "fullUrl")]
     full_url: Option<String>,
 }
 

@@ -1,10 +1,23 @@
+fn weixin_oc_local_user_name(state: &AppState) -> String {
+    state_read_agents_cached(state)
+        .ok()
+        .and_then(|agents| {
+            agents
+                .iter()
+                .find(|a| a.id == USER_PERSONA_ID || a.is_built_in_user)
+                .map(|a| a.name.trim().to_string())
+                .filter(|v| !v.is_empty())
+        })
+        .unwrap_or_else(default_user_alias)
+}
+
 fn weixin_oc_contact_display_name(
-    channel: &RemoteImChannelConfig,
+    user_name: &str,
     user_id: &str,
 ) -> String {
-    let channel_name = channel.name.trim();
-    if !channel_name.is_empty() {
-        return channel_name.to_string();
+    let normalized_user_name = user_name.trim();
+    if !normalized_user_name.is_empty() {
+        return format!("{} (微信)", normalized_user_name);
     }
     let normalized_user_id = user_id.trim();
     if !normalized_user_id.is_empty() {
@@ -18,6 +31,7 @@ async fn handle_weixin_oc_inbound_message(
     state: &AppState,
     msg: WeixinOcInboundMessage,
 ) -> Result<(), String> {
+    let local_user_name = weixin_oc_local_user_name(state);
     let from_user_id = msg
         .from_user_id
         .as_deref()
@@ -38,6 +52,15 @@ async fn handle_weixin_oc_inbound_message(
     } else {
         group_id.to_string()
     };
+    let item_list = msg.item_list.unwrap_or_default();
+    runtime_log_info(format!(
+        "[个人微信][入站] 收到消息: msg_id={:?}, from={}, to={:?}, group={:?}, item_count={}",
+        msg.message_id.as_ref().or(msg.msg_id.as_ref()),
+        from_user_id,
+        msg.to_user_id.as_deref(),
+        msg.group_id.as_deref(),
+        item_list.len()
+    ));
     if let Some(token) = msg
         .context_token
         .as_deref()
@@ -48,7 +71,6 @@ async fn handle_weixin_oc_inbound_message(
             .set_context_token(state, &channel.id, &contact_id, token)
             .await;
     }
-    let item_list = msg.item_list.unwrap_or_default();
     let creds = WeixinOcCredentials::from_value(&channel.credentials);
     let media = match build_weixin_oc_http_client(creds.normalized_api_timeout_ms()) {
         Ok(client) => weixin_oc_collect_media(&client, &creds, &item_list).await,
@@ -83,7 +105,38 @@ async fn handle_weixin_oc_inbound_message(
         ChatIngressPart::Text { text } => Some(text.trim()),
         ChatIngressPart::Attachment { .. } => None,
     }).filter(|text| !text.is_empty()).collect::<Vec<_>>().join("\n");
-    let display_name = weixin_oc_contact_display_name(channel, &contact_id);
+    let display_name = if contact_type == "private" {
+        state_service_find_remote_im_contact_by_identity(state, &channel.id, "private", &contact_id)
+            .ok()
+            .flatten()
+            .and_then(|c| {
+                let remark = c.remark_name.trim().to_string();
+                if !remark.is_empty() {
+                    Some(remark)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| weixin_oc_contact_display_name(&local_user_name, &contact_id))
+    } else {
+        let normalized = contact_id.trim();
+        if !normalized.is_empty() {
+            format!("微信群 ({normalized})")
+        } else {
+            "微信群聊".to_string()
+        }
+    };
+    let sender_name = if contact_type == "group" {
+        // 群聊中发送者是群成员，无独立昵称时用成员 id 标识
+        if from_user_id == contact_id {
+            display_name.clone()
+        } else {
+            from_user_id.to_string()
+        }
+    } else {
+        // 私聊场景下发言人即为本机用户本人
+        local_user_name.clone()
+    };
     let message_id = msg
         .message_id
         .or(msg.msg_id)
@@ -98,16 +151,7 @@ async fn handle_weixin_oc_inbound_message(
             remote_contact_id: contact_id.clone(),
             remote_contact_name: Some(display_name.clone()),
             sender_id: from_user_id.to_string(),
-            sender_name: if contact_type == "group" {
-                // 群聊中发送者是群成员，无独立昵称时用成员 id 标识
-                if from_user_id == contact_id {
-                    display_name.clone()
-                } else {
-                    from_user_id.to_string()
-                }
-            } else {
-                display_name
-            },
+            sender_name,
             sender_avatar_url: None,
             platform_message_id: Some(message_id),
             dingtalk_session_webhook: None,
@@ -218,7 +262,14 @@ async fn run_single_weixin_oc_poll_cycle(
             )?;
         }
     }
-    for msg in data.msgs.unwrap_or_default() {
+    let msgs = data.msgs.unwrap_or_default();
+    if !msgs.is_empty() {
+        runtime_log_info(format!(
+            "[个人微信][轮询] 收到服务器推送消息: count={}",
+            msgs.len()
+        ));
+    }
+    for msg in msgs {
         handle_weixin_oc_inbound_message(&channel, state, msg).await?;
     }
     Ok(())
@@ -230,7 +281,8 @@ fn upsert_weixin_oc_contact(
     user_id: &str,
 ) -> Result<(String, bool), String> {
     let normalized_user_id = user_id.trim();
-    let display_name = weixin_oc_contact_display_name(channel, normalized_user_id);
+    let local_user_name = weixin_oc_local_user_name(state);
+    let display_name = weixin_oc_contact_display_name(&local_user_name, normalized_user_id);
     if let Some(mut contact) = state_service_find_remote_im_contact_by_identity(
         state,
         &channel.id,
@@ -238,7 +290,12 @@ fn upsert_weixin_oc_contact(
         normalized_user_id,
     )? {
         let current_name = contact.remote_contact_name.trim();
-        if current_name.is_empty() || current_name == normalized_user_id {
+        if current_name.is_empty()
+            || current_name == normalized_user_id
+            || current_name == channel.name.trim()
+            || current_name == "微信"
+            || current_name == "个人微信"
+        {
             contact.remote_contact_name = display_name;
             state_service_upsert_remote_im_contact(state, &contact)?;
         }
@@ -291,24 +348,12 @@ mod weixin_oc_inbound_tests {
     use super::*;
 
     #[test]
-    fn weixin_oc_contact_display_name_prefers_channel_name() {
-        let channel = RemoteImChannelConfig {
-            id: "channel-1".to_string(),
-            name: "我的微信".to_string(),
-            platform: RemoteImPlatform::WeixinOc,
-            enabled: true,
-            credentials: serde_json::json!({}),
-            receive_files: true,
-            streaming_send: false,
-            show_tool_calls: false,
-            filter_markdown: false,
-            allow_send_files: false,
-            behavior_settings: RemoteImChannelBehaviorSettings::default(),
-        };
+    fn weixin_oc_contact_display_name_formats_user_name() {
+        let display_name = weixin_oc_contact_display_name("张三", "wxid_123");
+        assert_eq!(display_name, "张三 (微信)".to_string());
 
-        let display_name = weixin_oc_contact_display_name(&channel, "wxid_123");
-
-        assert_eq!(display_name, "我的微信".to_string());
+        let fallback_display = weixin_oc_contact_display_name("", "wxid_123");
+        assert_eq!(fallback_display, "wxid_123".to_string());
     }
 
     #[test]

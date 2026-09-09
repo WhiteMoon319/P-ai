@@ -119,27 +119,41 @@ fn weixin_oc_parse_media_aes_key(aes_key_value: &str) -> Result<Vec<u8>, String>
     if normalized.is_empty() {
         return Err("媒体 AES 密钥为空".to_string());
     }
+    // 1. 如果原始字符串是 32 字符十六进制，直接 Hex 解码成 16 字节
+    if normalized.len() == 32 && normalized.chars().all(|c| c.is_ascii_hexdigit()) {
+        return weixin_oc_decode_hex(normalized);
+    }
+    // 2. 如果原始字符串的 bytes 长度正好是 16 字节
+    if normalized.as_bytes().len() == 16 {
+        return Ok(normalized.as_bytes().to_vec());
+    }
+    // 3. 尝试 Base64 解码
     let padded = format!(
         "{}{}",
         normalized,
         "=".repeat((4usize.wrapping_sub(normalized.len() % 4)) % 4)
     );
-    let decoded = B64
-        .decode(padded.as_bytes())
-        .map_err(|err| format!("解析媒体 AES 密钥失败: {err}"))?;
-    if decoded.len() == 16 {
-        return Ok(decoded);
+    if let Ok(decoded) = B64.decode(padded.as_bytes()) {
+        if decoded.len() == 16 {
+            return Ok(decoded);
+        }
+        if decoded.len() == 32
+            && decoded.iter().all(|byte| (*byte as char).is_ascii_hexdigit())
+        {
+            if let Ok(hex_text) = std::str::from_utf8(&decoded) {
+                return weixin_oc_decode_hex(hex_text);
+            }
+        }
     }
-    if decoded.len() == 32
-        && decoded
-            .iter()
-            .all(|byte| (*byte as char).is_ascii_hexdigit())
-    {
-        let hex_text =
-            std::str::from_utf8(&decoded).map_err(|err| format!("解析媒体 AES 十六进制失败: {err}"))?;
-        return weixin_oc_decode_hex(hex_text);
-    }
-    Err("媒体 AES 密钥格式不支持".to_string())
+    Err(format!(
+        "媒体 AES 密钥格式不支持: len={}, preview={}",
+        normalized.len(),
+        if normalized.len() > 10 {
+            &normalized[..10]
+        } else {
+            normalized
+        }
+    ))
 }
 
 fn weixin_oc_decrypt_media_ecb(encrypted: &[u8], key: &[u8]) -> Result<Vec<u8>, String> {
@@ -172,17 +186,24 @@ async fn weixin_oc_download_image_bytes(
     encrypted_query_param: &str,
     aes_key_value: Option<&str>,
 ) -> Result<Vec<u8>, String> {
-    // 官方 2.x：服务端直接下发完整下载 URL，优先直下；自拼 URL 保留为回退
+    let started_at = std::time::Instant::now();
     let download_url = full_url
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToString::to_string)
         .unwrap_or_else(|| weixin_oc_cdn_download_url(cdn_base_url, encrypted_query_param));
+    runtime_log_info(format!(
+        "[个人微信媒体接收] 开始下载图片: url={}, has_full_url={}, param_len={}, has_aes_key={}",
+        download_url,
+        full_url.is_some(),
+        encrypted_query_param.len(),
+        aes_key_value.is_some()
+    ));
     let resp = client
-        .get(download_url)
+        .get(&download_url)
         .send()
         .await
-        .map_err(|err| format!("下载个人微信图片失败: {err}"))?;
+        .map_err(|err| format!("下载个人微信图片网络请求失败: {err}"))?;
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
@@ -191,10 +212,26 @@ async fn weixin_oc_download_image_bytes(
     let encrypted = resp
         .bytes()
         .await
-        .map_err(|err| format!("读取个人微信图片响应失败: {err}"))?;
+        .map_err(|err| format!("读取个人微信图片响应流失败: {err}"))?;
+    let download_ms = started_at.elapsed().as_millis();
+    runtime_log_info(format!(
+        "[个人微信媒体接收] 图片密文下载完成: status={}, cipher_bytes={}, download_ms={}",
+        status,
+        encrypted.len(),
+        download_ms
+    ));
     if let Some(value) = aes_key_value.map(str::trim).filter(|value| !value.is_empty()) {
-        let key = weixin_oc_parse_media_aes_key(value)?;
-        return weixin_oc_decrypt_media_ecb(encrypted.as_ref(), &key);
+        let decrypt_start = std::time::Instant::now();
+        let key = weixin_oc_parse_media_aes_key(value)
+            .map_err(|err| format!("解析图片 AES 密钥失败: {err}"))?;
+        let decrypted = weixin_oc_decrypt_media_ecb(encrypted.as_ref(), &key)
+            .map_err(|err| format!("解密个人微信图片失败: {err}"))?;
+        runtime_log_info(format!(
+            "[个人微信媒体接收] 图片解密完成: plain_bytes={}, decrypt_ms={}",
+            decrypted.len(),
+            decrypt_start.elapsed().as_millis()
+        ));
+        return Ok(decrypted);
     }
     Ok(encrypted.to_vec())
 }
@@ -288,8 +325,16 @@ async fn weixin_oc_collect_media(
 ) -> WeixinOcCollectedMedia {
     let mut parts = Vec::<ChatIngressPart>::new();
     let cdn_base_url = credentials.normalized_cdn_base_url();
-    for item in item_list {
+    runtime_log_info(format!(
+        "[个人微信媒体接收] 开始收集媒体: item_count={}",
+        item_list.len()
+    ));
+    for (idx, item) in item_list.iter().enumerate() {
         let item_type = item.item_type.unwrap_or(0);
+        runtime_log_info(format!(
+            "[个人微信媒体接收] 处理 item[{}]: item_type={}",
+            idx, item_type
+        ));
         if item_type == 1 {
             if let Some(text) = weixin_oc_format_quoted_text(item).or_else(|| {
                 item.text_item
@@ -322,7 +367,7 @@ async fn weixin_oc_collect_media(
                         .as_deref()
                         .map(str::trim)
                         .filter(|value| !value.is_empty())
-                        .map(|value| B64.encode(value)),
+                        .map(ToString::to_string),
                 )
             }
             WEIXIN_OC_VOICE_ITEM_TYPE => {
@@ -444,6 +489,10 @@ async fn weixin_oc_collect_media(
         } else {
             fallback_mime
         };
+        runtime_log_info(format!(
+            "[个人微信媒体接收] 附件收集成功: item_type={}, name={}, mime={}, raw_bytes={}",
+            item_type, file_name, mime, raw.len()
+        ));
         parts.push(ChatIngressPart::Attachment {
             path: None,
             bytes_base64: Some(B64.encode(raw)),
@@ -451,6 +500,10 @@ async fn weixin_oc_collect_media(
             name: file_name,
         });
     }
+    runtime_log_info(format!(
+        "[个人微信媒体接收] 媒体收集完成: parts_count={}",
+        parts.len()
+    ));
     WeixinOcCollectedMedia { parts }
 }
 
@@ -911,5 +964,24 @@ mod weixin_oc_media_tests {
             }
             ChatIngressPart::Attachment { .. } => {}
         }
+    }
+
+    #[test]
+    fn parse_media_aes_key_supports_hex_and_base64_and_nested() {
+        // 1. 32 字符 hex
+        let hex_key = "0123456789abcdef0123456789abcdef";
+        let parsed = weixin_oc_parse_media_aes_key(hex_key).unwrap();
+        assert_eq!(parsed.len(), 16);
+
+        // 2. 16 字节 Base64 (24 字符)
+        let raw_16 = b"0123456789abcdef";
+        let b64_key = B64.encode(raw_16);
+        let parsed = weixin_oc_parse_media_aes_key(&b64_key).unwrap();
+        assert_eq!(parsed, raw_16);
+
+        // 3. Base64 编码的 32 字符 hex
+        let nested = B64.encode(hex_key.as_bytes());
+        let parsed = weixin_oc_parse_media_aes_key(&nested).unwrap();
+        assert_eq!(parsed.len(), 16);
     }
 }
