@@ -1024,7 +1024,10 @@
       "previewSystemPrompt": "系统提示词",
       "desktopOperateTitle": "电脑使用",
       "desktopOperateEnabled": "允许操作电脑",
-      "desktopOperateEnabledHint": "关闭后，模型无法使用鼠标、键盘、截图等电脑操作能力。"
+      "desktopOperateEnabledHint": "关闭后，模型无法使用鼠标、键盘、截图等电脑操作能力。",
+      "desktopOperateBlockedApps": "禁止操作的应用",
+      "desktopOperateBlockedAppsHint": "一行一个窗口标题关键词，标题命中时模型无法向该窗口输入或激活它。截图与窗口列举不受影响。",
+      "desktopOperateBlockedAppsPlaceholder": "例如：\n密码\n银行\n证券"
     },
     "networkAccess": {
       "title": "网络访问",

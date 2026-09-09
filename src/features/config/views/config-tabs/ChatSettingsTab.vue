@@ -160,6 +160,22 @@
       </div>
     </template>
 
+    <template #row-desktop-operate-blocked>
+      <label class="grid min-w-0 gap-2">
+        <div>
+          <div class="text-sm">{{ t("config.chatSettings.desktopOperateBlockedApps") }}</div>
+          <p class="mt-1 text-xs text-base-content/60">{{ t("config.chatSettings.desktopOperateBlockedAppsHint") }}</p>
+        </div>
+        <textarea
+          v-model="blockedAppsText"
+          rows="3"
+          class="textarea textarea-bordered textarea-sm w-full"
+          :placeholder="t('config.chatSettings.desktopOperateBlockedAppsPlaceholder')"
+          @change="onBlockedAppsChange"
+        />
+      </label>
+    </template>
+
     <template #row-instruction-presets>
       <div class="grid min-w-0 gap-3">
         <div v-if="instructionPresetsDraft.length === 0" class="text-sm opacity-60">
@@ -551,6 +567,40 @@ async function onDesktopOperateChange(event: Event) {
   }
 }
 
+// 禁止操作名单：一行一个窗口标题关键词，失焦时解析保存，保存失败回滚文本。
+const blockedAppsText = ref((props.config.desktopOperateBlockedApps ?? []).join("\n"));
+watch(
+  () => props.config.desktopOperateBlockedApps,
+  (next) => {
+    blockedAppsText.value = (next ?? []).join("\n");
+  },
+);
+
+async function onBlockedAppsChange() {
+  const previous = [...(props.config.desktopOperateBlockedApps ?? [])];
+  const next = Array.from(
+    new Set(
+      blockedAppsText.value
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0),
+    ),
+  );
+  props.config.desktopOperateBlockedApps = next;
+  try {
+    const saved = await Promise.resolve(props.saveConfigAction());
+    if (!saved) {
+      props.config.desktopOperateBlockedApps = previous;
+      blockedAppsText.value = previous.join("\n");
+      console.warn("desktop operate blocked apps save rejected");
+    }
+  } catch {
+    props.config.desktopOperateBlockedApps = previous;
+    blockedAppsText.value = previous.join("\n");
+    console.warn("desktop operate blocked apps save failed");
+  }
+}
+
 function toolStatusById(id: string): ToolLoadStatus | undefined {
   return props.toolStatuses.find((s) => s.id === id);
 }
@@ -570,7 +620,10 @@ const templateGroups = computed<ConfigTemplateGroup[]>(() => [
   {
     key: "desktop-operate",
     title: t("config.chatSettings.desktopOperateTitle"),
-    rows: [{ key: "desktop-operate", items: [] }],
+    rows: [
+      { key: "desktop-operate", items: [] },
+      { key: "desktop-operate-blocked", items: [] },
+    ],
   },
   {
     key: "default-models",

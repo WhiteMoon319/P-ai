@@ -42,6 +42,7 @@ export function useChatWindowState(options: UseChatWindowStateOptions) {
     messageNotificationSoundEnabled: false,
     desktopOperationNoticeEnabled: true,
     desktopOperateEnabled: true,
+    desktopOperateBlockedApps: [],
     selectedApiConfigId: "",
     assistantDepartmentApiConfigId: "",
     visionApiConfigId: undefined,

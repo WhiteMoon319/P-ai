@@ -124,6 +124,11 @@ function mapDepartmentConfig(item: unknown): AppConfig["departments"][number] {
   };
 }
 
+function normalizeBlockedAppList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value.map((item) => String(item ?? "").trim()).filter(Boolean)));
+}
+
 function normalizeLlmRoundLogCapacity(value: unknown): 1 | 3 | 10 {
   const numeric = Math.round(Number(value));
   if (numeric === 1 || numeric === 3 || numeric === 10) return numeric;
@@ -306,6 +311,7 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     options.config.messageNotificationSoundEnabled = (cfg as { messageNotificationSoundEnabled?: unknown }).messageNotificationSoundEnabled === true;
     options.config.desktopOperationNoticeEnabled = (cfg as { desktopOperationNoticeEnabled?: unknown }).desktopOperationNoticeEnabled !== false;
     options.config.desktopOperateEnabled = (cfg as { desktopOperateEnabled?: unknown }).desktopOperateEnabled !== false;
+    options.config.desktopOperateBlockedApps = normalizeBlockedAppList((cfg as { desktopOperateBlockedApps?: unknown }).desktopOperateBlockedApps);
     options.config.selectedApiConfigId = cfg.selectedApiConfigId;
     options.config.assistantDepartmentApiConfigId = cfg.assistantDepartmentApiConfigId;
     options.config.visionApiConfigId = cfg.visionApiConfigId ?? undefined;
@@ -561,6 +567,7 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
       options.config.messageNotificationSoundEnabled = (saved as { messageNotificationSoundEnabled?: unknown }).messageNotificationSoundEnabled === true;
       options.config.desktopOperationNoticeEnabled = (saved as { desktopOperationNoticeEnabled?: unknown }).desktopOperationNoticeEnabled !== false;
       options.config.desktopOperateEnabled = (saved as { desktopOperateEnabled?: unknown }).desktopOperateEnabled !== false;
+      options.config.desktopOperateBlockedApps = normalizeBlockedAppList((saved as { desktopOperateBlockedApps?: unknown }).desktopOperateBlockedApps);
       options.config.selectedApiConfigId = saved.selectedApiConfigId;
       options.config.assistantDepartmentApiConfigId = saved.assistantDepartmentApiConfigId;
       options.config.visionApiConfigId = saved.visionApiConfigId ?? undefined;

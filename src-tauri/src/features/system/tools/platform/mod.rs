@@ -13,7 +13,7 @@ mod linux;
 mod macos;
 
 /// 控件树扫描的元素数量上限（三平台一致，防极端桌面卡死扫描）
-const MAX_ELEMENTS: usize = 500;
+pub const MAX_ELEMENTS: usize = 500;
 
 // ==================== 数据契约 ====================
 
@@ -91,6 +91,18 @@ pub fn app_key(window_id: usize, keys: &[String], repeat: u32) -> Result<&'stati
     windows::app_key(window_id, keys, repeat)
 }
 
+/// 当前平台的能力降级说明：仅在平台会静默失败或只报底层错误时返回，
+/// 供工具把「为什么没有结果」讲清楚，避免模型反复试错（H2）。
+#[cfg(target_os = "linux")]
+pub fn platform_capability_hint() -> Option<String> {
+    linux::platform_capability_hint()
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn platform_capability_hint() -> Option<String> {
+    None
+}
+
 /// 查询目标窗口线程当前内部焦点控件（type, name）；无内部焦点或查询失败返回 None。
 #[cfg(target_os = "windows")]
 pub fn app_focus_summary(window_id: usize) -> Result<Option<(String, String)>, String> {
@@ -99,27 +111,27 @@ pub fn app_focus_summary(window_id: usize) -> Result<Option<(String, String)>, S
 
 #[cfg(not(target_os = "windows"))]
 pub fn app_click(_window_id: usize, _target: &AppTarget, _repeat: u32, _dblclick: bool) -> Result<&'static str, String> {
-    Err("app 后台操作当前仅在 Windows 平台可用".to_string())
+    Err("app 后台操作当前仅在 Windows 平台可用；其他平台请改用前台动作（mouse/key/text）并先 window activate 把目标窗口切到前台".to_string())
 }
 
 #[cfg(not(target_os = "windows"))]
 pub fn app_set_value(_window_id: usize, _target: &AppTarget, _text: &str) -> Result<&'static str, String> {
-    Err("app 后台操作当前仅在 Windows 平台可用".to_string())
+    Err("app 后台操作当前仅在 Windows 平台可用；其他平台请改用前台动作（mouse/key/text）并先 window activate 把目标窗口切到前台".to_string())
 }
 
 #[cfg(not(target_os = "windows"))]
 pub fn app_get_value(_window_id: usize, _target: &AppTarget) -> Result<String, String> {
-    Err("app 后台操作当前仅在 Windows 平台可用".to_string())
+    Err("app 后台操作当前仅在 Windows 平台可用；其他平台请改用前台动作（mouse/key/text）并先 window activate 把目标窗口切到前台".to_string())
 }
 
 #[cfg(not(target_os = "windows"))]
 pub fn app_scroll(_window_id: usize, _target: &AppTarget, _up: bool, _small: bool, _repeat: u32) -> Result<&'static str, String> {
-    Err("app 后台操作当前仅在 Windows 平台可用".to_string())
+    Err("app 后台操作当前仅在 Windows 平台可用；其他平台请改用前台动作（mouse/key/text）并先 window activate 把目标窗口切到前台".to_string())
 }
 
 #[cfg(not(target_os = "windows"))]
 pub fn app_key(_window_id: usize, _keys: &[String], _repeat: u32) -> Result<&'static str, String> {
-    Err("app 后台操作当前仅在 Windows 平台可用".to_string())
+    Err("app 后台操作当前仅在 Windows 平台可用；其他平台请改用前台动作（mouse/key/text）并先 window activate 把目标窗口切到前台".to_string())
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -161,6 +173,7 @@ pub fn collect_ui_tree_for_windows(
     primary_origin_y: f64,
     primary_width: f64,
     primary_height: f64,
+    include_text: bool,
 ) -> Vec<UiElementInfo> {
     windows::collect_ui_tree_for_windows(
         windows,
@@ -168,6 +181,7 @@ pub fn collect_ui_tree_for_windows(
         primary_origin_y,
         primary_width,
         primary_height,
+        include_text,
     )
 }
 
@@ -179,6 +193,7 @@ pub fn collect_window_ui_elements(
     primary_origin_y: f64,
     primary_width: f64,
     primary_height: f64,
+    include_text: bool,
 ) -> Vec<UiElementInfo> {
     windows::collect_window_ui_elements(
         window_id,
@@ -186,6 +201,7 @@ pub fn collect_window_ui_elements(
         primary_origin_y,
         primary_width,
         primary_height,
+        include_text,
     )
 }
 
@@ -206,6 +222,7 @@ pub fn collect_ui_tree_for_windows(
     primary_origin_y: f64,
     primary_width: f64,
     primary_height: f64,
+    include_text: bool,
 ) -> Vec<UiElementInfo> {
     linux::collect_ui_tree_for_windows(
         windows,
@@ -213,6 +230,7 @@ pub fn collect_ui_tree_for_windows(
         primary_origin_y,
         primary_width,
         primary_height,
+        include_text,
     )
 }
 
@@ -223,6 +241,7 @@ pub fn collect_window_ui_elements(
     primary_origin_y: f64,
     primary_width: f64,
     primary_height: f64,
+    include_text: bool,
 ) -> Vec<UiElementInfo> {
     linux::collect_window_ui_elements(
         window_id,
@@ -230,6 +249,7 @@ pub fn collect_window_ui_elements(
         primary_origin_y,
         primary_width,
         primary_height,
+        include_text,
     )
 }
 
@@ -250,6 +270,7 @@ pub fn collect_ui_tree_for_windows(
     primary_origin_y: f64,
     primary_width: f64,
     primary_height: f64,
+    include_text: bool,
 ) -> Vec<UiElementInfo> {
     macos::collect_ui_tree_for_windows(
         windows,
@@ -257,6 +278,7 @@ pub fn collect_ui_tree_for_windows(
         primary_origin_y,
         primary_width,
         primary_height,
+        include_text,
     )
 }
 
@@ -267,6 +289,7 @@ pub fn collect_window_ui_elements(
     primary_origin_y: f64,
     primary_width: f64,
     primary_height: f64,
+    include_text: bool,
 ) -> Vec<UiElementInfo> {
     macos::collect_window_ui_elements(
         window_id,
@@ -274,6 +297,7 @@ pub fn collect_window_ui_elements(
         primary_origin_y,
         primary_width,
         primary_height,
+        include_text,
     )
 }
 
@@ -296,6 +320,7 @@ pub fn collect_ui_tree_for_windows(
     _primary_origin_y: f64,
     _primary_width: f64,
     _primary_height: f64,
+    _include_text: bool,
 ) -> Vec<UiElementInfo> {
     Vec::new()
 }
@@ -307,6 +332,7 @@ pub fn collect_window_ui_elements(
     _primary_origin_y: f64,
     _primary_width: f64,
     _primary_height: f64,
+    _include_text: bool,
 ) -> Vec<UiElementInfo> {
     Vec::new()
 }

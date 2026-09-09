@@ -42,6 +42,7 @@ enum DesktopScriptStepKind {
     Wait,
     Screenshot,
     App,
+    Window,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,6 +88,12 @@ struct OperateResponse {
     width: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     height: Option<u32>,
+    /// window list 动作返回的可见窗口列表（最近一次）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    windows: Option<Vec<WindowInfo>>,
+    /// 不影响执行成功、但会改变坐标或输入可信度的环境提示（如 DPI 感知未生效）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    warnings: Option<Vec<String>>,
 }
 
 /// 脚本中途失败的位置与原因；失败时 steps 仍返回已完成步骤，模型可据此从失败行重试（D1）
@@ -123,6 +130,18 @@ enum OperateMouseButton {
     Middle,
     Back,
     Forward,
+}
+
+/// 条件等待的默认超时（秒）：未显式给 timeout 时使用。
+const DEFAULT_WAIT_UNTIL_TIMEOUT_SECS: f64 = 30.0;
+
+/// 条件等待的目标条件（D2）
+#[derive(Debug, Clone)]
+enum WaitCondition {
+    /// 出现标题包含指定子串的可见窗口
+    Window { title: String },
+    /// 目标窗口（未指定时为当前前台窗口）内出现名称包含指定子串的可交互元素
+    Element { name: String, window_target: Option<ForegroundTarget> },
 }
 
 /// 前台动作的目标窗口声明：句柄或标题子串
@@ -188,11 +207,15 @@ enum DesktopScriptAction {
     MouseClick { line: usize, button: OperateMouseButton, target: NormalizedPoint, monitor: Option<u32>, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration, press: std::time::Duration, window_target: Option<ForegroundTarget>, focus: FocusPolicy },
     MouseDrag { line: usize, button: OperateMouseButton, from: NormalizedPoint, to: NormalizedPoint, monitor: Option<u32>, duration: Option<std::time::Duration>, pre_delay: std::time::Duration, window_target: Option<ForegroundTarget>, focus: FocusPolicy },
     MouseMove { line: usize, target: NormalizedPoint, monitor: Option<u32>, pre_delay: std::time::Duration, window_target: Option<ForegroundTarget>, focus: FocusPolicy },
+    MouseButtonState { line: usize, button: OperateMouseButton, pressed: bool, pre_delay: std::time::Duration, window_target: Option<ForegroundTarget>, focus: FocusPolicy },
     MouseScroll { line: usize, direction: i32, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration, window_target: Option<ForegroundTarget>, focus: FocusPolicy },
     Key { line: usize, keys: Vec<String>, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration, press: std::time::Duration, window_target: Option<ForegroundTarget>, focus: FocusPolicy },
     Text { line: usize, text: String, repeat: u32, delay: std::time::Duration, pre_delay: std::time::Duration, window_target: Option<ForegroundTarget>, focus: FocusPolicy },
     Wait { line: usize, duration: std::time::Duration },
-    Screenshot { line: usize, mode: ScreenshotModeSpec, save_path: Option<String>, quality: f32, elements: bool },
+    WaitUntil { line: usize, condition: WaitCondition, timeout: std::time::Duration },
+    WindowList { line: usize },
+    WindowActivate { line: usize, target: ForegroundTarget },
+    Screenshot { line: usize, mode: ScreenshotModeSpec, save_path: Option<String>, quality: f32, elements: bool, include_text: bool },
     App { line: usize, window_id: u32, action: AppScriptAction, post_delay: std::time::Duration },
 }
 
@@ -419,11 +442,20 @@ fn parse_mouse_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<Desk
         let (window_target, focus) = parse_foreground_params(line_no, "mouse", &params)?;
         return Ok(DesktopScriptAction::MouseMove { line: line_no, target, monitor, pre_delay, window_target, focus });
     }
-    if tokens.len() < 4 {
-        return Err(operate_line_error(line_no, "mouse", "非法：格式应为 `mouse <button> click @x,y` 或 `mouse <button> drag @x1,y1 @x2,y2`".to_string()));
+    if tokens.len() < 3 {
+        return Err(operate_line_error(line_no, "mouse", "非法：格式应为 `mouse <button> click @x,y` / `mouse <button> drag @x1,y1 @x2,y2` / `mouse <button> down|up`".to_string()));
     }
     let button = parse_mouse_button(line_no, &tokens[1])?;
     let verb = tokens[2].trim().to_ascii_lowercase();
+    if verb == "down" || verb == "up" {
+        let params = parse_named_params(line_no, "mouse", &tokens[3..], &["pre_delay", "target", "focus"])?;
+        let pre_delay = params.get("pre_delay").map(|v| parse_seconds_token(line_no, "mouse", v, "pre_delay")).transpose()?.unwrap_or_default();
+        let (window_target, focus) = parse_foreground_params(line_no, "mouse", &params)?;
+        return Ok(DesktopScriptAction::MouseButtonState { line: line_no, button, pressed: verb == "down", pre_delay, window_target, focus });
+    }
+    if tokens.len() < 4 {
+        return Err(operate_line_error(line_no, "mouse", "非法：格式应为 `mouse <button> click @x,y` 或 `mouse <button> drag @x1,y1 @x2,y2`".to_string()));
+    }
     if verb == "drag" {
         if tokens.len() < 5 {
             return Err(operate_line_error(line_no, "mouse", "非法：拖拽格式应为 `mouse <button> drag @x1,y1 @x2,y2 [duration=s]`".to_string()));
@@ -598,12 +630,70 @@ fn parse_text_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<Deskt
     Ok(DesktopScriptAction::Text { line: line_no, text, repeat, delay, pre_delay, window_target, focus })
 }
 
+fn parse_window_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
+    if tokens.len() < 2 {
+        return Err(operate_line_error(line_no, "window", "非法：格式应为 `window list` 或 `window activate <windowId|\"标题\">`".to_string()));
+    }
+    match tokens[1].trim().to_ascii_lowercase().as_str() {
+        "list" => {
+            if tokens.len() != 2 {
+                return Err(operate_line_error(line_no, "window", format!("非法参数 `{}`：window list 不接受参数", tokens[2])));
+            }
+            Ok(DesktopScriptAction::WindowList { line: line_no })
+        }
+        "activate" | "focus" => {
+            if tokens.len() != 3 {
+                return Err(operate_line_error(line_no, "window", "非法：格式应为 `window activate <windowId|\"标题\">`".to_string()));
+            }
+            Ok(DesktopScriptAction::WindowActivate { line: line_no, target: parse_foreground_target(line_no, "window", &tokens[2])? })
+        }
+        other => Err(operate_line_error(line_no, "window", format!("未知子动作：{other}。可用：list、activate"))),
+    }
+}
+
 fn parse_wait_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
+    if tokens.len() >= 2 && tokens[1].trim().eq_ignore_ascii_case("until") {
+        return parse_wait_until_line(line_no, tokens);
+    }
     if tokens.len() != 2 {
-        return Err(operate_line_error(line_no, "wait", "非法：格式应为 `wait <seconds>`".to_string()));
+        return Err(operate_line_error(line_no, "wait", "非法：格式应为 `wait <seconds>` 或 `wait until window|element \"值\" [timeout=s]`".to_string()));
     }
     let duration = parse_seconds_token(line_no, "wait", &tokens[1], "seconds")?;
     Ok(DesktopScriptAction::Wait { line: line_no, duration })
+}
+
+/// `wait until window "标题"` / `wait until element "名称" [target=...]` [timeout=s]
+fn parse_wait_until_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
+    if tokens.len() < 4 {
+        return Err(operate_line_error(line_no, "wait", "非法：格式应为 `wait until window \"标题\"` 或 `wait until element \"名称\"`".to_string()));
+    }
+    let kind = tokens[2].trim().to_ascii_lowercase();
+    let Some(needle) = strip_quoted_value(&tokens[3]) else {
+        return Err(operate_line_error(line_no, "wait", "非法：条件值必须用双引号包裹".to_string()));
+    };
+    if needle.trim().is_empty() {
+        return Err(operate_line_error(line_no, "wait", "非法：条件值不能为空".to_string()));
+    }
+    let params = parse_named_params(line_no, "wait", &tokens[4..], &["timeout", "target"])?;
+    let timeout = params
+        .get("timeout")
+        .map(|v| parse_seconds_token(line_no, "wait", v, "timeout"))
+        .transpose()?
+        .unwrap_or_else(|| std::time::Duration::from_secs_f64(DEFAULT_WAIT_UNTIL_TIMEOUT_SECS));
+    let condition = match kind.as_str() {
+        "window" => {
+            if params.contains_key("target") {
+                return Err(operate_line_error(line_no, "wait", "非法：wait until window 不接受 target".to_string()));
+            }
+            WaitCondition::Window { title: needle }
+        }
+        "element" => {
+            let window_target = params.get("target").map(|raw| parse_foreground_target(line_no, "wait", raw)).transpose()?;
+            WaitCondition::Element { name: needle, window_target }
+        }
+        other => return Err(operate_line_error(line_no, "wait", format!("未知条件：{other}。可用：window、element"))),
+    };
+    Ok(DesktopScriptAction::WaitUntil { line: line_no, condition, timeout })
 }
 
 fn parse_screenshot_line(line_no: usize, tokens: &[String]) -> DesktopToolResult<DesktopScriptAction> {
@@ -624,7 +714,7 @@ fn parse_screenshot_line(line_no: usize, tokens: &[String]) -> DesktopToolResult
             other => return Err(operate_line_error(line_no, "screenshot", format!("非法参数 `{other}`"))),
         }
     }
-    let params = parse_named_params(line_no, "screenshot", &named_tokens, &["region", "save", "quality", "elements", "window_id", "monitor"])?;
+    let params = parse_named_params(line_no, "screenshot", &named_tokens, &["region", "save", "quality", "elements", "text", "window_id", "monitor"])?;
     if let Some(raw) = params.get("window_id") {
         if !matches!(mode, ScreenshotModeSpec::Desktop) {
             return Err(operate_line_error(line_no, "screenshot", "非法：window_id 与 focused_window/region 不能同时出现".to_string()));
@@ -658,7 +748,17 @@ fn parse_screenshot_line(line_no: usize, tokens: &[String]) -> DesktopToolResult
             _ => Err(operate_line_error(line_no, "screenshot", format!("elements 非法：必须是 true 或 false，当前为 `{v}`"))),
         }
     }).transpose()?.unwrap_or(false);
-    Ok(DesktopScriptAction::Screenshot { line: line_no, mode, save_path, quality, elements })
+    let include_text = params.get("text").map(|v| {
+        match v.to_ascii_lowercase().as_str() {
+            "true" | "1" => Ok(true),
+            "false" | "0" => Ok(false),
+            _ => Err(operate_line_error(line_no, "screenshot", format!("text 非法：必须是 true 或 false，当前为 `{v}`"))),
+        }
+    }).transpose()?.unwrap_or(false);
+    if include_text && !elements {
+        return Err(operate_line_error(line_no, "screenshot", "非法：text=true 需要同时 elements=true，否则没有元素树可以附加文本标签".to_string()));
+    }
+    Ok(DesktopScriptAction::Screenshot { line: line_no, mode, save_path, quality, elements, include_text })
 }
 
 fn parse_script_line(line_no: usize, raw_line: &str) -> DesktopToolResult<Option<DesktopScriptAction>> {
@@ -676,8 +776,9 @@ fn parse_script_line(line_no: usize, raw_line: &str) -> DesktopToolResult<Option
         "key" => parse_key_line(line_no, &tokens).map(Some),
         "text" => parse_text_line(line_no, &tokens).map(Some),
         "wait" => parse_wait_line(line_no, &tokens).map(Some),
+        "window" => parse_window_line(line_no, &tokens).map(Some),
         "screenshot" => parse_screenshot_line(line_no, &tokens).map(Some),
-        other => Err(operate_line_error(line_no, "脚本", format!("未知动作：{other}。可用动作：mouse、app、key、text、wait、screenshot"))),
+        other => Err(operate_line_error(line_no, "脚本", format!("未知动作：{other}。可用动作：mouse、app、key、text、wait、window、screenshot"))),
     }
 }
 

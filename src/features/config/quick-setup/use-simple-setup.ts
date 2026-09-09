@@ -264,6 +264,7 @@ export function useSimpleSetup() {
       messageNotificationSoundEnabled: false,
       desktopOperationNoticeEnabled: true,
       desktopOperateEnabled: true,
+      desktopOperateBlockedApps: [],
       selectedApiConfigId: "",
       assistantDepartmentApiConfigId: "",
       toolReviewApiConfigId: "",

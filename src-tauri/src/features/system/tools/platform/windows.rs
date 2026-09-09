@@ -403,6 +403,7 @@ pub fn collect_ui_tree_for_windows(
     primary_origin_y: f64,
     primary_width: f64,
     primary_height: f64,
+    include_text: bool,
 ) -> Vec<UiElementInfo> {
     if windows.is_empty() || primary_width <= 0.0 || primary_height <= 0.0 {
         return Vec::new();
@@ -426,6 +427,7 @@ pub fn collect_ui_tree_for_windows(
             primary_width,
             primary_height,
             remaining,
+            include_text,
         );
         for elem in scanned.iter_mut() {
             elem.window_id = *hwnd as u32;
@@ -444,6 +446,7 @@ pub fn collect_window_ui_elements(
     primary_origin_y: f64,
     primary_width: f64,
     primary_height: f64,
+    include_text: bool,
 ) -> Vec<UiElementInfo> {
     collect_ui_tree_for_windows(
         &[(hwnd, String::new())],
@@ -451,6 +454,7 @@ pub fn collect_window_ui_elements(
         primary_origin_y,
         primary_width,
         primary_height,
+        include_text,
     )
 }
 
@@ -472,6 +476,7 @@ fn scan_window(
     primary_width: f64,
     primary_height: f64,
     max_elements: usize,
+    include_text: bool,
 ) -> Vec<UiElementInfo> {
     if hwnd == 0 || max_elements == 0 {
         return Vec::new();
@@ -482,7 +487,7 @@ fn scan_window(
             return Vec::new();
         }
     }
-    collect_raw_elements(automation, hwnd, max_elements)
+    collect_raw_elements(automation, hwnd, max_elements, include_text)
         .into_iter()
         .map(|raw| {
             let w = (raw.rect.right - raw.rect.left) as f64;
@@ -509,6 +514,7 @@ fn collect_raw_elements(
     automation: &IUIAutomation,
     hwnd: usize,
     max_elements: usize,
+    include_text: bool,
 ) -> Vec<RawUiElement> {
     let mut elements = Vec::with_capacity(max_elements.min(64));
     unsafe {
@@ -537,7 +543,9 @@ fn collect_raw_elements(
                 Ok(v) => v,
                 Err(_) => continue,
             };
-            if !is_interactive_control_type(ct) {
+            // 默认只保留可交互控件；text=true 时额外带上 Text 控件（界面文字标签），
+            // 供模型用上下文定位目标。app 动作的元素序号路径固定传 false，避免序号被文本撑变。
+            if !is_interactive_control_type(ct) && !(include_text && ct == UIA_TextControlTypeId) {
                 continue;
             }
             let enabled = elem.CurrentIsEnabled().unwrap_or(false);
@@ -670,7 +678,7 @@ fn resolve_app_target(
 ) -> Result<(Option<RawUiElement>, (i32, i32)), String> {
     match target {
         AppTarget::Element { el, ordinal, control_type, name } => {
-            let list = collect_raw_elements(automation, hwnd, MAX_ELEMENTS);
+            let list = collect_raw_elements(automation, hwnd, MAX_ELEMENTS, false);
             let raw = list.get(*ordinal).ok_or_else(|| {
                 format!(
                     "el={el}（窗口内第 {} 项）已消失：当前控件树共 {} 项，页面可能已刷新，请重新截图（elements=true）",
@@ -683,7 +691,7 @@ fn resolve_app_target(
             Ok((Some(raw.clone()), point))
         }
         AppTarget::Point { screen_x, screen_y } => {
-            let list = collect_raw_elements(automation, hwnd, MAX_ELEMENTS);
+            let list = collect_raw_elements(automation, hwnd, MAX_ELEMENTS, false);
             let hit = list
                 .iter()
                 .filter(|e| {
@@ -1238,9 +1246,9 @@ mod windows_platform_tests {
 
     #[test]
     fn zero_inputs_should_return_empty() {
-        assert!(collect_window_ui_elements(0, 0.0, 0.0, 1920.0, 1080.0).is_empty());
-        assert!(collect_window_ui_elements(123, 0.0, 0.0, 0.0, 1080.0).is_empty());
-        assert!(collect_window_ui_elements(123, 0.0, 0.0, 1920.0, 0.0).is_empty());
+        assert!(collect_window_ui_elements(0, 0.0, 0.0, 1920.0, 1080.0, false).is_empty());
+        assert!(collect_window_ui_elements(123, 0.0, 0.0, 0.0, 1080.0, false).is_empty());
+        assert!(collect_window_ui_elements(123, 0.0, 0.0, 1920.0, 0.0, false).is_empty());
     }
 
     /// 真实桌面冒烟测试：枚举窗口 + 激活前台窗口验证。
@@ -1283,6 +1291,7 @@ mod windows_platform_tests {
             bounds.y as f64,
             bounds.width as f64,
             bounds.height as f64,
+            false,
         );
         // 不强制非空（自绘窗口/游戏可能不暴露 UIA），但扫描本身不能 panic
         eprintln!("scanned {} elements from {} windows", elems.len(), targets.len());

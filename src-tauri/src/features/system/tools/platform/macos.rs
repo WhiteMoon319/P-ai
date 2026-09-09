@@ -318,6 +318,7 @@ pub fn collect_ui_tree_for_windows(
     primary_origin_y: f64,
     primary_width: f64,
     primary_height: f64,
+    _include_text: bool,
 ) -> Vec<UiElementInfo> {
     if windows.is_empty() || primary_width <= 0.0 || primary_height <= 0.0 {
         return Vec::new();
@@ -400,6 +401,7 @@ pub fn collect_window_ui_elements(
     primary_origin_y: f64,
     primary_width: f64,
     primary_height: f64,
+    include_text: bool,
 ) -> Vec<UiElementInfo> {
     if window_id == 0 {
         return Vec::new();

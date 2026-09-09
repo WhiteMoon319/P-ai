@@ -14,6 +14,25 @@ use atspi::proxy::accessible::ObjectRefExt;
 use std::future::Future;
 use std::pin::Pin;
 
+// ==================== 能力降级说明（H2） ====================
+
+/// Wayland 会话下 xcap 只能看到 XWayland 窗口，原生窗口枚举会返回空、截图会失败，
+/// 且底层错误不会说明原因。这里把限制讲清楚，让模型直接换路而不是反复试。
+pub fn platform_capability_hint() -> Option<String> {
+    if is_wayland_session() {
+        Some("当前是 Wayland 会话：原生窗口无法枚举、截图可能失败（仅 XWayland 窗口可见）；请在 X11 会话下使用，或改用 key/text 直接操作当前前台".to_string())
+    } else {
+        None
+    }
+}
+
+fn is_wayland_session() -> bool {
+    std::env::var_os("WAYLAND_DISPLAY").is_some()
+        || std::env::var("XDG_SESSION_TYPE")
+            .map(|value| value.eq_ignore_ascii_case("wayland"))
+            .unwrap_or(false)
+}
+
 // ==================== list windows（复用 xcap） ====================
 
 pub fn list_all_windows() -> Vec<WindowInfo> {
@@ -137,6 +156,7 @@ pub fn collect_ui_tree_for_windows(
     primary_origin_y: f64,
     primary_width: f64,
     primary_height: f64,
+    _include_text: bool,
 ) -> Vec<UiElementInfo> {
     if windows.is_empty() || primary_width <= 0.0 || primary_height <= 0.0 {
         return Vec::new();
@@ -171,6 +191,7 @@ pub fn collect_window_ui_elements(
     primary_origin_y: f64,
     primary_width: f64,
     primary_height: f64,
+    include_text: bool,
 ) -> Vec<UiElementInfo> {
     if window_id == 0 {
         return Vec::new();

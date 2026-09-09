@@ -103,7 +103,7 @@ fn llm_request_image_validate_dimensions(
     }
     if width > options.max_dimension || height > options.max_dimension {
         return Err(format!(
-            "图片分辨率过大（{}x{}），当前上限为 {}x{}。",
+            "图片分辨率过大（{}x{}），当前上限为 {}x{}；请缩小截取范围：operate 脚本里用 region=@x,y,w,h 只截目标区域、monitor=<id> 只截单块显示器，或用 window_id=<id> 只截目标窗口",
             width, height, options.max_dimension, options.max_dimension
         ));
     }
