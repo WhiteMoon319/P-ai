@@ -405,12 +405,14 @@
             :items="approvalQuestionItems"
             v-model="approvalQuestionAnswers"
             :submitting="!!terminalApprovalResolving"
+            :class="isWebRoundedMode ? 'pb-1' : 'px-4 pb-4 pt-1'"
             @submit="handleApprovalQuestionSubmit"
             @approve-for-workspace="handleApprovalQuestionWorkspaceRemember"
           />
           <div
             v-else-if="activeConversationRecipientMissing"
             class="rounded-box border border-warning/30 bg-warning/10 p-4 text-sm"
+            :class="isWebRoundedMode ? '' : 'm-4'"
           >
             <div class="flex flex-col gap-4">
               <!-- 信息区：图标锚点 + 标题 + 说明，独立成块不被操作区挤压 -->
@@ -1012,10 +1014,38 @@ const {
 
 // 提问卡：终端审批转 QuestionItems，一次性提交
 const approvalQuestionAnswers = ref<Record<string, { optionId: string; label: string; comment: string }>>({});
+
+function getApprovalPersonaName(item: TerminalApprovalConversationItem): string {
+  const convId = String(item.conversationId || item.sessionId || props.activeConversationId || "").trim();
+  const conv = (props.conversationItems || props.unarchivedConversationItems || []).find(
+    (c) => String(c.conversationId || "").trim() === convId,
+  ) || activeConversationSummary.value;
+  const agentId = conv?.agentId || props.activeAgentId;
+  if (agentId && props.personaNameMap?.[agentId]) {
+    return props.personaNameMap[agentId];
+  }
+  return String(props.personaName || "").trim() || t("archives.roleAssistant") || "助理";
+}
+
 const approvalQuestionItems = computed(() => {
   return activeConversationTerminalApprovals.value.map((item) => {
-    const title = String(item.summary || item.toolName || item.approvalKind || t("chat.toolReview.title") || "终端审批").trim() || "终端审批";
-    const desc = String(item.description || item.message || item.reason || "").trim();
+    const persona = getApprovalPersonaName(item);
+    const des = String(item.description || item.summary || "").trim();
+    let title = "";
+    let desc: string | undefined = undefined;
+
+    if (des) {
+      title = `${persona}想要${des}`;
+      const reason = String(item.reason || "").trim();
+      if (reason && reason !== des) {
+        desc = reason;
+      }
+    } else {
+      const fallbackSummary = String(item.toolName || item.approvalKind || "").trim();
+      title = fallbackSummary ? `${persona}想要${fallbackSummary}` : (t("chat.toolReview.title") || "终端审批");
+      desc = String(item.message || item.reason || "").trim() || undefined;
+    }
+
     const cmd = String(item.command || "").trim();
     const rawPreview = String(item.callPreview || "").trim();
     let preview = rawPreview || cmd;
@@ -1027,7 +1057,7 @@ const approvalQuestionItems = computed(() => {
     return {
       id: item.requestId,
       title,
-      description: desc || undefined,
+      description: desc,
       previewText: preview || undefined,
       canRememberWorkspace: !!item.canRememberWorkspace,
       workspaceLabel: workspaceLabel || undefined,

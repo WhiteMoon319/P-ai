@@ -1229,12 +1229,12 @@ async fn builtin_shell_exec(
 
         let decision = match terminal_request_user_approval(
             state,
-            "终端执行审批",
+            description,
             description,
             &normalized_session,
             "exec_command_approval",
             Some("shell_exec"),
-            Some("终端执行审批"),
+            Some(description),
             Some(cmd),
             Some(&cwd),
             Some(cmd),

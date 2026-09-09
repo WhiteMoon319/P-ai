@@ -314,8 +314,8 @@ function handleSubmitAll(overrideMap?: Record<string, QuestionAnswer>) {
             <!-- 题干：QuestionItem.title（审批 summary）+ description（审批 message/reason），目录全权随题干进面卡 -->
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0 flex-1">
-                <div class="text-sm font-medium leading-6 whitespace-pre-wrap break-words">{{ currentItem.title }}</div>
-                <div v-if="currentItem.description" class="whitespace-pre-wrap break-words text-xs leading-5 text-base-content/60">
+                <div class="text-sm font-semibold leading-6 whitespace-pre-wrap break-words">{{ currentItem.title }}</div>
+                <div v-if="currentItem.description" class="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-base-content/60">
                   {{ currentItem.description }}
                 </div>
               </div>
