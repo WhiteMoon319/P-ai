@@ -104,6 +104,7 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
   }
 
   async function finalizeDeferredRoundCompletion() {
+    bindings.flushStreamTextBuffer?.();
     const deferredRoundCompletion = bindings.getDeferredRoundCompletion();
     const round = bindings.getRound();
     if (!deferredRoundCompletion) return;
@@ -194,6 +195,7 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
       requestId?: string;
     },
   ) {
+    bindings.flushStreamTextBuffer?.();
     bindings.sendStartedAtMsByGen.delete(gen);
     const round = bindings.getRound();
     if (round.phase !== "queued" || round.gen !== gen) return;
@@ -249,6 +251,7 @@ export function useChatFlowRoundFinalizers(bindings: Record<string, any>) {
     error: unknown,
     identity?: { activationId?: string; requestId?: string },
   ) {
+    bindings.flushStreamTextBuffer?.();
     bindings.sendStartedAtMsByGen.delete(gen);
     const round = bindings.getRound();
     if (round.phase !== "queued" || round.gen !== gen) return;

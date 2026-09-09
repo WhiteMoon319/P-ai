@@ -72,6 +72,7 @@ type UseChatFlowRoundEventsOptions = {
   formatRequestFailed: (error: unknown) => string;
   onReloadMessages: () => Promise<void>;
   optionsT: (key: string, params?: Record<string, unknown>) => string;
+  flushStreamTextBuffer?: (gen?: number, messageId?: string) => void;
 };
 
 export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
@@ -139,6 +140,8 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
   ) {
     options.sendStartedAtMsByGen.delete(gen);
     const round = options.getRound();
+    const messageId = "messageId" in round ? round.messageId : undefined;
+    options.flushStreamTextBuffer?.(gen, messageId);
     if (round.phase === "queued" && round.gen === gen) {
       await options.finalizeQueuedRoundWithoutMessage(gen, result);
       return;
@@ -155,6 +158,8 @@ export function useChatFlowRoundEvents(options: UseChatFlowRoundEventsOptions) {
   ) {
     options.sendStartedAtMsByGen.delete(gen);
     const round = options.getRound();
+    const messageId = "messageId" in round ? round.messageId : undefined;
+    options.flushStreamTextBuffer?.(gen, messageId);
     if (round.phase === "queued" && round.gen === gen) {
       await options.failQueuedRoundWithoutMessage(gen, error, identity);
       return;

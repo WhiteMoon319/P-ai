@@ -107,26 +107,42 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
     streamFlushCarryChars = 0;
   }
 
-  function flushAllPendingOrdered() {
-    const gen = pendingStreamGen;
-    const messageId = pendingStreamMessageId;
+  function flushAllPendingOrdered(targetGen?: number, targetMessageId?: string) {
+    const round = options.getRound();
+    const gen = targetGen || pendingStreamGen || (round.phase === "streaming" || round.phase === "queued" ? round.gen : 0);
+    const messageId = targetMessageId || pendingStreamMessageId || (round.phase === "streaming" || round.phase === "queued" ? round.messageId : "");
     const ordered = pendingOrdered;
     pendingOrdered = [];
     pendingStreamGen = 0;
     pendingStreamMessageId = "";
+    if (ordered.length === 0) return;
+
+    let combinedReasoning = "";
+    let combinedText = "";
     for (const item of ordered) {
       if (!item.delta) continue;
-      if (item.kind === "reasoning" && messageId) {
-        options.applyAssistantEventToMessage(messageId, { kind: "activity_reasoning_delta", delta: item.delta });
-      } else if (item.kind === "text" && gen) {
-        options.enqueueStreamDelta(gen, item.delta);
+      if (item.kind === "reasoning") {
+        combinedReasoning += item.delta;
+      } else if (item.kind === "text") {
+        combinedText += item.delta;
+      }
+    }
+
+    if (combinedReasoning && messageId) {
+      options.applyAssistantEventToMessage(messageId, { kind: "activity_reasoning_delta", delta: combinedReasoning });
+    }
+    if (combinedText) {
+      if (gen && round.phase === "streaming" && round.gen === gen) {
+        options.enqueueStreamDelta(gen, combinedText);
+      } else if (messageId) {
+        options.applyAssistantEventToMessage(messageId, { delta: combinedText });
       }
     }
   }
 
-  function flushStreamTextBuffer() {
+  function flushStreamTextBuffer(targetGen?: number, targetMessageId?: string) {
     stopStreamFlushLoop();
-    flushAllPendingOrdered();
+    flushAllPendingOrdered(targetGen, targetMessageId);
   }
 
   function safeSliceCount(str: string, count: number): number {
@@ -260,7 +276,9 @@ export function useChatFlowStreamingEvents(options: UseChatFlowStreamingEventsOp
   function handleStreamingEvent(currentGen: number, parsed: AssistantDeltaEvent) {
     if (parsed.kind === "round_completed" || parsed.kind === "round_failed") {
       // 终态事件到达时先冲刷文本缓冲，避免最后一段正文/思维链丢失。
-      flushStreamTextBuffer();
+      const currentRound = options.getRound();
+      const messageId = "messageId" in currentRound ? currentRound.messageId : undefined;
+      flushStreamTextBuffer(currentGen, messageId);
     }
     if (parsed.kind === "context_usage_update") {
       const p = readContextUsageUpdatePayload(parsed.message);

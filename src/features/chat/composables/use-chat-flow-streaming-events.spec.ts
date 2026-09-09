@@ -4,7 +4,8 @@ import type { ContextUsageUpdatePayload } from "./use-chat-flow-events";
 import { useChatFlowStreamingEvents } from "./use-chat-flow-streaming-events";
 import type { RoundState } from "./use-chat-flow-types";
 
-function createRuntime(round: RoundState, activeActivationId = "activation-new") {
+function createRuntime(roundInput: RoundState | (() => RoundState), activeActivationId = "activation-new") {
+  const getRound = typeof roundInput === "function" ? roundInput : () => roundInput;
   const contextUsagePreview = ref<ContextUsageUpdatePayload | null>({
     conversationId: "conversation-1",
     contextUsagePercent: 10,
@@ -17,10 +18,12 @@ function createRuntime(round: RoundState, activeActivationId = "activation-new")
   const setPendingTerminalEvent = vi.fn();
   const clearConversationStreamCache = vi.fn();
   const setActiveActivationId = vi.fn();
+  const applyAssistantEventToMessage = vi.fn();
+  const enqueueStreamDelta = vi.fn();
   const runtime = useChatFlowStreamingEvents({
     contextUsagePreview,
     reasoningStartedAtMs: ref(0),
-    getRound: () => round,
+    getRound,
     getActiveActivationId: () => activeActivationId,
     promoteQueuedRoundToStreaming: vi.fn((gen: number) => gen),
     setPendingTerminalEvent,
@@ -30,8 +33,8 @@ function createRuntime(round: RoundState, activeActivationId = "activation-new")
     applyConversationStreamCacheSnapshotToDisplay: vi.fn(() => false),
     handleRoundCompleted,
     handleRoundFailed,
-    applyAssistantEventToMessage: vi.fn(),
-    enqueueStreamDelta: vi.fn(),
+    applyAssistantEventToMessage,
+    enqueueStreamDelta,
   });
 
   return {
@@ -42,6 +45,8 @@ function createRuntime(round: RoundState, activeActivationId = "activation-new")
     setPendingTerminalEvent,
     clearConversationStreamCache,
     setActiveActivationId,
+    applyAssistantEventToMessage,
+    enqueueStreamDelta,
   };
 }
 
@@ -185,5 +190,44 @@ describe("useChatFlowStreamingEvents terminal identity", () => {
     });
 
     expect(runtime.contextUsagePreview.value).toBe(before);
+  });
+
+  it("flushes remaining buffered text when round completes, avoiding truncation", () => {
+    const runtime = createRuntime({
+      phase: "streaming",
+      gen: 3,
+      messageId: "assistant-target",
+    });
+
+    runtime.handleStreamingEvent(3, { delta: "第一段内容，" } as any);
+    runtime.handleStreamingEvent(3, { delta: "最后一段内容" } as any);
+
+    runtime.handleStreamingEvent(3, {
+      kind: "round_completed",
+      message: JSON.stringify({
+        conversationId: "conversation-1",
+        assistantText: "完整文本",
+      }),
+    });
+
+    expect(runtime.enqueueStreamDelta).toHaveBeenCalledWith(3, "第一段内容，最后一段内容");
+  });
+
+  it("flushes remaining text directly to message when round phase is no longer streaming", () => {
+    let roundState: RoundState = {
+      phase: "streaming",
+      gen: 1,
+      messageId: "assistant-target",
+    };
+    const runtime = createRuntime(() => roundState);
+
+    runtime.handleStreamingEvent(1, { delta: "残余正文" } as any);
+    // 模拟 round 已经先转为 idle（例如被外部调度收尾提前置 idle）
+    roundState = { phase: "idle" };
+    runtime.flushStreamTextBuffer(1, "assistant-target");
+
+    expect(runtime.applyAssistantEventToMessage).toHaveBeenCalledWith("assistant-target", {
+      delta: "残余正文",
+    });
   });
 });

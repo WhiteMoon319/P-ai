@@ -61,6 +61,7 @@ type UseChatFlowExternalEventsOptions = {
   handleStreamingEvent: (gen: number, parsed: any) => void;
   syncStreamBlocksToMessage: (messageId: string) => void;
   updateMessageText: (messageId: string) => void;
+  flushStreamTextBuffer?: (gen?: number, messageId?: string) => void;
 };
 
 export function externalTerminalTargetsRound(
@@ -226,6 +227,7 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       return;
     }
     if (!terminalTargetsCurrentRound(terminalIdentity)) return;
+    options.flushStreamTextBuffer?.(round.gen, round.messageId);
     await options.handleRoundCompleted(round.gen, {
       assistantText: String(parsed.assistantText || ""),
       assistantMessage: parsed.assistantMessage,
@@ -278,6 +280,7 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       activationId: parsed?.activationId,
       requestId: parsed?.requestId,
     })) return;
+    options.flushStreamTextBuffer?.(round.gen, round.messageId);
     await options.handleRoundFailed(
       round.gen,
       parsed?.error || raw || String(raw),

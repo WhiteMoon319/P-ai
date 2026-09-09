@@ -216,6 +216,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     setChatErrorText,
     applyAssistantDeltaToMessage,
     submitPending,
+    flushStreamTextBuffer: () => streamingEvents.flushStreamTextBuffer(),
   });
   const streamingEvents = useChatFlowStreamingEvents({
     contextUsagePreview: options.contextUsagePreview,
@@ -357,6 +358,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     handleStreamingEvent,
     syncStreamBlocksToMessage,
     updateMessageText,
+    flushStreamTextBuffer: (gen, messageId) => streamingEvents.flushStreamTextBuffer(gen, messageId),
   });
   function handleExternalRoundFinished(payload: unknown) {
     const value = payload && typeof payload === "object" ? payload as Record<string, unknown> : null;
@@ -490,6 +492,7 @@ export function useChatFlow(options: UseChatFlowOptions) {
     formatRequestFailed: options.formatRequestFailed,
     onReloadMessages: options.onReloadMessages,
     optionsT: options.t,
+    flushStreamTextBuffer: (gen, messageId) => streamingEvents.flushStreamTextBuffer(gen, messageId),
   });
   const sendController = useChatFlowSendController({
     chatting: options.chatting,
