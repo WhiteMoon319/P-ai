@@ -149,9 +149,9 @@ Tauri 管理 3 个无边框窗口：`main`（配置，900×900）、`chat`（对
 - 当前仅支持 Windows 应用内自动更新；Linux 与 macOS 仍维护发布构建链路
 - `src-tauri/tauri.conf.json` 中的 `plugins.updater.pubkey` 只是启动期占位，真正使用的公钥由构建时 `TAURI_UPDATER_PUBLIC_KEY` 注入并在 Rust 侧覆盖
 - 便携版通过 `PORTABLE` 标记识别，自动更新走 `zip -> staging -> helper 替换 -> 备份回滚`
-- 修改版本号时，必须同步更新以下文件：`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.lock`，并新增/更新对应的 `docs/changelog/releases/vX.Y.Z.md` 后执行 `pnpm changelog:build`
+- 修改版本号时，必须同步更新以下文件：`package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.lock`，并新增对应的 `docs/changelog/releases/vX.Y.Z.md` 后执行 `pnpm changelog:build`
 - 每次提升版本号时，默认先清理一次本地 Cargo 构建缓存，避免增量缓存长期膨胀：先退出正在运行的应用，再执行 `cargo-reclaim src-tauri --all --yes`（trim，只回收过期产物，保留热缓存）；若缓存异常或磁盘紧张，再用 `pnpm clean:cargo-cache:all`
-- 日常变更更新 changelog 时，永远写入“未发布”条目；只有提升版本号时，才把“未发布”内容改归到对应版本号。
+- 开发阶段不写任何 changelog 文件，日常变更的唯一记录是 commit message；发布说明（`docs/changelog/releases/vX.Y.Z.md`）在发版时由发布流程根据上一个 tag 之后的 commit 汇总生成，面向用户。
 - 修改 `src-tauri/Cargo.lock` 时，只允许更新本项目包 `easy-call-ai` 的版本条目；禁止使用全局替换批量改第三方依赖版本号，避免引入错误 checksum
 
 ### 代码组织原则
@@ -213,9 +213,11 @@ Tauri 管理 3 个无边框窗口：`main`（配置，900×900）、`chat`（对
 - 采用约定式提交（Conventional Commits），推荐格式：`type(scope): 简要中文描述`。
 - 提交信息默认使用中文，便于与现有项目历史保持一致。
 - 常用类型：`feat`、`fix`、`perf`、`refactor`、`docs`、`chore`。
-- Changelog 采用“版本明细为源、脚本生成汇总”的方式维护：`docs/changelog/releases/*.md` 是唯一手工维护来源；`CHANGELOG.md`、`docs/changelog/latest.md`、`docs/changelog/remote.md`、`docs/changelog/index.json` 都由 `pnpm changelog:build` 生成，默认不要手改生成文件。
-- 每次 `git commit` 前默认跳过 changelog。`docs/changelog/releases/UNRELEASED.md` 只记录用户可感知的行为变化（新增、改变或修复面向用户的能力）；纯底层改动——重构、内部接口收敛、异步化、性能实现细节、测试修复、脚手架、文档、规则调整——默认不写 UNRELEASED，即使以 `fix`/`perf` 提交也只在 commit 里体现。若底层改动带来了用户可感知的体验变化（如切换会话不再卡顿、界面响应变快），才写 UNRELEASED，且必须写成用户口吻，不得描述实现手段。拿不准一条改动是否值得写时，默认不写。
-- Changelog 文案必须是用户视角的行为变化，禁止搬运 commit 的技术描述（变量名、函数名、机制细节）。commit 是给程序员看的日志，changelog 是给用户看的；同一改动可保留两套表述。不要把新变更追加到既有版本号文件；未提升版本号时，禁止执行 `pnpm changelog:build` 或更新生成文件；只有提升版本号、并把“未发布”内容改归到对应的 `docs/changelog/releases/vX.Y.Z.md` 时，才执行 `pnpm changelog:build`。
+- `fix` 提交必须写清楚修复的是哪个行为、由哪个 commit 引入：正文里注明引入提交的短哈希或标题，例如 `fix(chat): 修复 xxx 在流式渲染重构后未冲刷的问题（引入于 f8fefff28）`。发布流程据此区分「对旧版本真实 bug 的修复」与「本次发布范围内新功能开发中的中间修复」。
+- 开发阶段不维护任何 changelog 文件，变更记录一律以 commit message 为准。
+- Changelog 只在发版时生成：发布流程检查上一个 tag 到 HEAD 的全部 commit，按用户可感知的行为变化汇总为 `docs/changelog/releases/vX.Y.Z.md`。文案必须是用户视角，禁止搬运 commit 的技术描述（变量名、函数名、机制细节）。同一改动可保留 commit 与 changelog 两套表述。
+- 汇总 changelog 时，只写用户可感知的行为变化（新增、改变或修复面向用户的能力）；纯底层改动——重构、内部接口收敛、异步化、性能实现细节、测试修复、脚手架、文档、规则调整——默认不写。若底层改动带来了用户可感知的体验变化（如切换会话不再卡顿、界面响应变快），才写，且必须写成用户口吻，不得描述实现手段。拿不准一条改动是否值得写时，默认不写。
+- 不要把新变更追加到既有版本号文件；未提升版本号时，禁止执行 `pnpm changelog:build` 或更新生成文件；只有提升版本号并生成对应的 `docs/changelog/releases/vX.Y.Z.md` 时，才执行 `pnpm changelog:build`。
 - 每次 `git commit` 前必须先修复并跑通本次改动影响到的全部测试；存在失败项时禁止提交。
 - 不要把测试留到最后一次性再跑；开发过程中应边改边验证，尽早发现并修复失败。
 
