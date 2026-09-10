@@ -443,7 +443,6 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
       refreshMessageById,
       finalizeMessage: async () => {
         flow.clearForegroundRuntimeState();
-        await flow.unbindActiveConversationStream().catch(() => {});
         runtimeState.value = "idle";
       },
       applyBackgroundBusy: (snapshot) => {

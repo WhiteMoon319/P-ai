@@ -149,7 +149,6 @@ export function useChatForegroundRuntime(bindings: Record<string, any>) {
       finalizeMessage: async () => {
         const currentFlow = bindings.getChatFlow();
         currentFlow?.clearForegroundRuntimeState?.();
-        await Promise.resolve(currentFlow?.unbindActiveConversationStream?.()).catch(() => {});
         bindings.applyConversationRuntimeStateUpdated({ conversationId, runtimeState: "idle" });
       },
       applyBackgroundBusy: (runtimeSnapshot) => {

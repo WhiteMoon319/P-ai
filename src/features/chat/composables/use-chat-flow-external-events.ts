@@ -92,16 +92,31 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       && payloadConversationId === currentConversationId;
   }
 
-  function foregroundAlreadyHandlingCurrentConversation(): boolean {
-    const round = options.getRound();
-    if (round.phase === "queued" || round.phase === "streaming") {
-      return true;
+  /**
+   * 对账式确保流式订阅：本地无绑定 → 直接 bind；有绑定 → probe 验证
+   * channel 与后端登记健康，失败才覆盖式重建。健康时零动作。
+   * 同一会话的并发对账复用 in-flight promise，避免重复 bind。
+   */
+  async function ensureStreamBoundForRound(payloadConversationId: string): Promise<void> {
+    const currentTask = rebindInFlightByConversation.get(payloadConversationId);
+    if (currentTask) {
+      await currentTask;
+      return;
     }
-    if (options.hasStreamingAssistantMessageInMessages()) {
-      options.ensureForegroundStreamingRound();
-      return true;
-    }
-    return false;
+    const task = (async () => {
+      if (options.channelBinding.hasActiveBoundDeltaChannel(payloadConversationId)) {
+        const probeHealthy = await options.channelBinding.probeBoundChannel(payloadConversationId);
+        if (probeHealthy) {
+          return;
+        }
+        // probe 失败（channel 失效或后端登记已被清）→ 覆盖式重建，不打断现有显示
+      }
+      await options.channelBinding.bindActiveConversationStream(payloadConversationId, true);
+    })().finally(() => {
+      rebindInFlightByConversation.delete(payloadConversationId);
+    });
+    rebindInFlightByConversation.set(payloadConversationId, task);
+    await task;
   }
 
   function terminalTargetsCurrentRound(input: {
@@ -122,33 +137,18 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     if (!sameForegroundConversation(payloadConversationId)) {
       return;
     }
-    if (foregroundAlreadyHandlingCurrentConversation()) {
-      return;
-    }
     const now = Date.now();
     const lastAt = rebindCooldownByConversation.get(payloadConversationId) || 0;
     if (now - lastAt < STREAM_REBIND_COOLDOWN_MS) {
       return;
     }
-    const currentTask = rebindInFlightByConversation.get(payloadConversationId);
-    if (currentTask) {
-      await currentTask;
-      return;
-    }
-    const rebindTask = (async () => {
-      rebindCooldownByConversation.set(payloadConversationId, now);
-      if (options.channelBinding.hasActiveBoundDeltaChannel(payloadConversationId)) {
-        const probeHealthy = await options.channelBinding.probeBoundChannel(payloadConversationId);
-        if (probeHealthy || foregroundAlreadyHandlingCurrentConversation()) {
-          return;
-        }
-      }
-      await options.channelBinding.bindActiveConversationStream(payloadConversationId, true);
-    })().finally(() => {
-      rebindInFlightByConversation.delete(payloadConversationId);
+    rebindCooldownByConversation.set(payloadConversationId, now);
+    await ensureStreamBoundForRound(payloadConversationId).catch((err) => {
+      console.error("[聊天] streamRebindRequired 对账重建失败", {
+        conversationId: payloadConversationId,
+        message: String((err as { message?: string })?.message ?? err ?? ""),
+      });
     });
-    rebindInFlightByConversation.set(payloadConversationId, rebindTask);
-    await rebindTask;
   }
 
   async function handleExternalHistoryFlushed(payload: unknown) {
@@ -196,6 +196,14 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       return;
     }
     await options.markRoundStarted(gen);
+    // 对账式订阅：任何入口发起的轮次都在广播点确保本窗口绑定健康。
+    // 异步执行，不阻塞建气泡；失败由下轮 roundStarted / streamRebindRequired 重试。
+    void ensureStreamBoundForRound(payloadConversationId).catch((err) => {
+      console.error("[聊天] roundStarted 后流式绑定对账失败", {
+        conversationId: payloadConversationId,
+        message: String((err as { message?: string })?.message ?? err ?? ""),
+      });
+    });
   }
 
   async function handleExternalRoundCompleted(payload: unknown) {
