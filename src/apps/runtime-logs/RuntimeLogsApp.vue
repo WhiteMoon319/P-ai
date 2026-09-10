@@ -31,34 +31,46 @@
     </header>
 
     <div v-if="filteredLogs.length === 0" class="flex-1 border-t border-base-300 bg-base-100 p-3 text-xs opacity-50 [font-family:var(--app-code-font-family)]">{{ loading ? "正在加载..." : "暂无日志" }}</div>
-    <VList
+    <div
       v-else
-      ref="vlistRef"
-      :data="filteredLogs"
-      :item-size="ROW_HEIGHT"
-      class="flex-1 min-h-0 border-t border-base-300 bg-base-100 text-xs leading-5 [font-family:var(--app-code-font-family)]"
-      :on-scroll="handleVirtuaScroll"
-      v-slot="{ item, index }"
+      class="relative flex-1 min-h-0 border-t border-base-300"
+      @mouseenter="logScrollbarRef?.reveal()"
+      @mouseleave="logScrollbarRef?.hide()"
     >
       <div
-        class="overflow-hidden pr-3 pl-3 text-ellipsis whitespace-pre"
-        :class="levelClass(item.level)"
-        :title="item.message"
-        :style="{ height: `${ROW_HEIGHT}px`, lineHeight: `${ROW_HEIGHT}px` }"
-      >{{ formatLine(item) }}</div>
-    </VList>
+        ref="logScroller"
+        class="ecall-chat-scroll-container h-full overflow-y-auto bg-base-100 text-xs leading-5 [font-family:var(--app-code-font-family)]"
+        @scroll.passive="handleNativeScroll"
+      >
+        <Virtualizer
+          ref="vlistRef"
+          :data="filteredLogs"
+          :item-size="ROW_HEIGHT"
+          :scroll-ref="(logScroller as unknown as HTMLElement)"
+          v-slot="{ item, index }"
+        >
+          <div
+            class="overflow-hidden pr-3 pl-3 text-ellipsis whitespace-pre"
+            :class="levelClass(item.level)"
+            :title="item.message"
+            :style="{ height: `${ROW_HEIGHT}px`, lineHeight: `${ROW_HEIGHT}px` }"
+          >{{ formatLine(item) }}</div>
+        </Virtualizer>
+      </div>
+      <FloatingScrollbar ref="logScrollbarRef" :target="logScroller" persistent />
+    </div>
 
     <footer class="flex h-6 shrink-0 items-center gap-2 border-t border-base-300 bg-base-200 px-3 text-xs opacity-60">
       <span>显示 {{ filteredLogs.length }} / {{ logs.length }}</span>
       <span v-if="errorText" class="text-error">{{ errorText }}</span>
-      <span class="ml-auto">滚动到底部自动跟随</span>
+      <span class="ml-auto">{{ stickToBottom ? "滚动到底部自动跟随" : "已暂停跟随，滚回底部恢复" }}</span>
     </footer>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { VList } from "virtua/vue";
+import { Virtualizer } from "virtua/vue";
 import {
   hideCurrentTransportWindow,
   invokeTauri,
@@ -66,6 +78,7 @@ import {
   onTransportNotification,
 } from "../../services/tauri-api";
 import { useAppTheme } from "../../features/shell/composables/use-app-theme";
+import FloatingScrollbar from "../../features/shell/components/FloatingScrollbar.vue";
 import type { PersistedThemePreferences } from "../../features/shell/theme/theme-types";
 
 type RuntimeLogEntry = {
@@ -86,12 +99,18 @@ const loading = ref(false);
 const errorText = ref("");
 const selectedLevel = ref<"all" | string>("info");
 const selectedModule = ref("all");
-const vlistRef = ref<InstanceType<typeof VList> | null>(null);
+const vlistRef = ref<InstanceType<typeof Virtualizer> | null>(null);
+// 滚动容器由本组件持有并显式交给 Virtualizer：VList 只能把父元素当滚动容器，
+// 在本页布局下会认错容器，导致 onScroll 永不触发、跟随判定失效。
+const logScroller = ref<HTMLElement | null>(null);
+const logScrollbarRef = ref<InstanceType<typeof FloatingScrollbar> | null>(null);
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let lastCreatedAt = "";
 let unlistenTheme: (() => void) | null = null;
-let stickToBottom = true;
+// 程序化贴底会派发 scroll 事件，不能让它改写跟随状态，否则会覆盖用户刚做的上滚。
+let programmaticScroll = false;
+const stickToBottom = ref(true);
 
 const { applyTheme, restoreThemeFromStorage } = useAppTheme();
 
@@ -112,16 +131,19 @@ const filteredLogs = computed(() =>
   }),
 );
 
-function handleVirtuaScroll(offset: number) {
-  const handle = vlistRef.value as unknown as { scrollSize: number; viewportSize: number } | null;
-  if (!handle) return;
-  const distanceToBottom = handle.scrollSize - offset - handle.viewportSize;
-  stickToBottom = distanceToBottom <= BOTTOM_FOLLOW_THRESHOLD_PX;
+// 滚动判定直接读自建容器，不再依赖虚拟列表对滚动容器的推断。
+function handleNativeScroll() {
+  if (programmaticScroll) return;
+  const el = logScroller.value;
+  if (!el) return;
+  const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+  stickToBottom.value = distanceToBottom <= BOTTOM_FOLLOW_THRESHOLD_PX;
 }
 
 function scrollToBottom() {
   const handle = vlistRef.value as unknown as { scrollToIndex: (index: number, opts?: unknown) => void; scrollTo: (offset: number) => void; scrollSize: number } | null;
   if (!handle || filteredLogs.value.length === 0) return;
+  programmaticScroll = true;
   try {
     handle.scrollToIndex(filteredLogs.value.length - 1, { align: "end" });
   } catch {
@@ -131,10 +153,13 @@ function scrollToBottom() {
       // ignore
     }
   }
+  requestAnimationFrame(() => {
+    programmaticScroll = false;
+  });
 }
 
 watch(filteredLogs, () => {
-  if (stickToBottom) {
+  if (stickToBottom.value) {
     nextTick(() => {
       scrollToBottom();
     });

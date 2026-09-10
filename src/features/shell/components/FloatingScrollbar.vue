@@ -3,7 +3,7 @@
     v-if="canScroll"
     ref="trackRef"
     class="floating-scrollbar-track absolute z-20 transition-opacity"
-    :class="[trackClassName, scrollbarVisible || dragging ? 'opacity-100' : 'opacity-0']"
+    :class="[trackClassName, persistent || scrollbarVisible || dragging ? 'opacity-100' : 'opacity-0']"
     @mouseenter="reveal"
     @mouseleave="hide"
     @pointerdown="onTrackPointerDown"
@@ -25,6 +25,8 @@ const props = defineProps<{
   target: HTMLElement | null;
   variant?: "theme" | "code-dark";
   orientation?: "vertical" | "horizontal";
+  /** 常驻显示：有可滚动内容时不再随悬停淡出，用于日志等持续增长的列表。 */
+  persistent?: boolean;
 }>();
 
 const targetRef = toRef(props, "target") as Ref<HTMLElement | null>;
