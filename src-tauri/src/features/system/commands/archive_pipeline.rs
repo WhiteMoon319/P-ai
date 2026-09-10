@@ -1198,6 +1198,15 @@ fn apply_summary_context_result(
     } else {
         None
     };
+    if !agent_memory_recall_enabled(host_agent) {
+        runtime_log_info(format!(
+            "[SummaryContext] 完成，任务=归档记忆落库，结果=跳过，原因=回忆方式=完全关闭，agent_id={}，丢弃memory_actions={}，丢弃useful_memory_ids={}",
+            host_agent.id,
+            draft.memory_actions.len(),
+            draft.useful_memory_ids.len()
+        ));
+        return Ok(SummaryContextApplyReport::default());
+    }
     let memory_feedback =
         memory_store_apply_archive_feedback(data_path, recall_ids, &draft.useful_memory_ids)?;
     let memory_stats =
@@ -2156,6 +2165,42 @@ mod archive_pipeline_tests {
         );
 
         assert!(decorated.contains("可直接删除该会话"));
+    }
+
+    #[test]
+    fn off_memory_recall_mode_should_discard_archive_memory_actions() {
+        let root = std::env::temp_dir()
+            .join("easy_call_ai_tests")
+            .join(format!("archive_off_mode_{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create temp dir");
+        let data_path = root.join("config_mark");
+
+        let mut host_agent = default_agent();
+        host_agent.memory_recall_mode = MEMORY_RECALL_MODE_OFF.to_string();
+        let draft = MemoryCurationDraft {
+            title: String::new(),
+            summary: String::new(),
+            open_loops: Vec::new(),
+            useful_memory_ids: Vec::new(),
+            memory_actions: vec![ArchiveMemoryActionDraft {
+                action: ArchiveMemoryActionKind::Create,
+                source_memory_ids: Vec::new(),
+                memory: ArchiveMemoryDraft {
+                    memory_type: "knowledge".to_string(),
+                    judgment: "完全关闭模式下归档记忆不应落库".to_string(),
+                    reasoning: "回归测试".to_string(),
+                    tags: vec!["关闭模式".to_string(), "回归".to_string()],
+                },
+            }],
+        };
+
+        let report = apply_summary_context_result(&data_path, &host_agent, &[], &draft)
+            .expect("apply off mode report");
+
+        assert_eq!(report.merged_memories, 0);
+        assert_eq!(report.applied_profile_memories, 0);
+        let memories = memory_store_list_memories(&data_path).expect("list memories");
+        assert!(memories.is_empty());
     }
 
     #[test]

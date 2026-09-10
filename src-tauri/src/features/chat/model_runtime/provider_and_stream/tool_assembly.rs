@@ -662,10 +662,10 @@ fn runtime_tool_denied_reason(
             {
                 return Some("未选择多模态分析模型，read_media 工具不挂载".to_string());
             }
-            if tool_name == "recall"
+            if matches!(tool_name, "remember" | "recall")
                 && !memory_context.map(|context| context.recall_enabled).unwrap_or(false)
             {
-                return Some("当前人格未启用记忆召回".to_string());
+                return Some("当前人格记忆功能已关闭".to_string());
             }
             if matches!(tool_name, "remember" | "recall") && memory_context.is_none() {
                 return Some("当前人格记忆上下文不可用".to_string());
@@ -1851,7 +1851,7 @@ mod tool_assembly_permission_tests {
     }
 
     #[test]
-    fn legal_tool_resolver_should_remove_recall_when_agent_recall_is_disabled() {
+    fn legal_tool_resolver_should_remove_memory_tools_when_agent_memory_is_disabled() {
         let department = whitelist_department(&[]);
         let config = AppConfig {
             departments: vec![department.clone()],
@@ -1880,7 +1880,7 @@ mod tool_assembly_permission_tests {
             .iter()
             .map(|tool| tool.definition.name.as_str())
             .collect::<Vec<_>>();
-        assert_eq!(names, vec!["remember"]);
+        assert!(names.is_empty());
     }
 
     #[test]
