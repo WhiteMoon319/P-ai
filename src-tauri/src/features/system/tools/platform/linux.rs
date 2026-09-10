@@ -48,12 +48,13 @@ pub fn list_all_windows() -> Vec<WindowInfo> {
                 title: w.title().unwrap_or_default(),
                 process_name: if app_name.is_empty() { None } else { Some(app_name) },
                 process_id: w.pid().unwrap_or(0),
-            x: w.x().unwrap_or(0),
-            y: w.y().unwrap_or(0),
-            width: w.width().unwrap_or(0) as i32,
-            height: w.height().unwrap_or(0) as i32,
-            minimized: w.is_minimized().unwrap_or(false),
-            focused: w.is_focused().unwrap_or(false),
+                x: w.x().unwrap_or(0),
+                y: w.y().unwrap_or(0),
+                width: w.width().unwrap_or(0) as i32,
+                height: w.height().unwrap_or(0) as i32,
+                minimized: w.is_minimized().unwrap_or(false),
+                focused: w.is_focused().unwrap_or(false),
+            }
         })
         .collect()
 }
