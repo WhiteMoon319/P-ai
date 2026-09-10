@@ -957,6 +957,7 @@
       "permissionGroupDelegate": "委托协作",
       "permissionGroupMedia": "媒体创意",
       "permissionGroupOther": "其他",
+      "assigneeLabel": "负责人",
       "assignee": "任命",
       "assigneePrimaryHint": "所选人格将作为当前部门的主执行人格。",
       "assigneePlaceholder": "暂不指定",

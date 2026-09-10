@@ -105,6 +105,7 @@
             </div>
 
             <div class="px-4 py-4">
+              <div class="mb-2 text-sm font-medium">{{ t("config.department.assigneeLabel") }}</div>
               <div class="grid gap-2">
                 <div v-if="availableAssigneePersonas.length === 0" class="text-sm opacity-60">
                   {{ t("config.department.assigneePlaceholder") }}

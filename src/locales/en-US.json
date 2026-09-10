@@ -957,6 +957,7 @@
       "permissionGroupDelegate": "Delegation",
       "permissionGroupMedia": "Media & Creative",
       "permissionGroupOther": "Other",
+      "assigneeLabel": "Assignees",
       "assignee": "Assignee",
       "assigneePrimaryHint": "The selected persona will act as the primary executor for this department.",
       "assigneePlaceholder": "Not assigned",
