@@ -10,20 +10,14 @@
     <template #trailing>
       <span class="shrink-0 text-xs text-base-content/45">{{ summary }}</span>
     </template>
-    <div v-if="changes.length" class="flex min-h-0 flex-col overflow-hidden">
-      <div v-for="change in visibleChanges" :key="change.path" class="flex min-w-0 items-center gap-2 text-xs leading-4">
-        <span class="ecall-home-status w-2.5" :class="statusClass(change.status)">{{ statusLabel(change.status) }}</span>
-        <span class="min-w-0 flex-1 truncate text-base-content/80" :title="change.path">{{ baseName(change.path) }}</span>
-      </div>
-      <button
-        v-if="hiddenChangeCount > 0"
-        type="button"
-        class="min-w-0 truncate text-left text-xs leading-4 text-base-content/45 transition-colors hover:text-base-content/80"
-        @click.stop="emit('openChanges')"
-      >
-        {{ t("chat.homePanel.gitMoreFiles", { n: hiddenChangeCount }) }}
-      </button>
-    </div>
+    <ul v-if="changes.length" class="menu menu-xs w-full gap-0.5 p-0">
+      <li v-for="change in visibleChanges" :key="change.path">
+        <div class="min-w-0 gap-2 font-normal" :title="change.path">
+          <span class="ecall-home-status w-2.5" :class="statusClass(change.status)">{{ statusLabel(change.status) }}</span>
+          <span class="min-w-0 flex-1 truncate text-base-content/80">{{ baseName(change.path) }}</span>
+        </div>
+      </li>
+    </ul>
     <div v-else class="flex flex-1 items-center justify-center text-xs text-base-content/40">
       {{ workspaceRootPath ? t("chat.homePanel.noChanges") : t("chat.homePanel.noWorkspace") }}
     </div>
@@ -57,12 +51,6 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const visibleChanges = computed(() => props.changes.slice(0, MAX_VISIBLE));
-/** 卡片只显示前 4 条，剩余条数按总数减已显示算，截断的大仓库也成立 */
-const hiddenChangeCount = computed(() => {
-  const total = Number(props.changeCount || 0) || props.changes.length;
-  return Math.max(total - visibleChanges.value.length, 0);
-});
-
 const summary = computed(() => {
   if (!props.workspaceRootPath) return "";
   if (!Number(props.changeCount || 0)) return t("chat.homePanel.cleanWorktree");

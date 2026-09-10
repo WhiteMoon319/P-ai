@@ -6,7 +6,7 @@
     interactive
     @select="emit('open')"
   >
-    <span class="line-clamp-2 text-sm leading-snug text-base-content/85">{{ title }}</span>
+    <span class="line-clamp-2 text-xs leading-snug text-base-content/85">{{ title }}</span>
     <ArrowUpRight class="mt-auto size-3.5 self-end text-base-content/25" aria-hidden="true" />
   </CardShell>
 </template>

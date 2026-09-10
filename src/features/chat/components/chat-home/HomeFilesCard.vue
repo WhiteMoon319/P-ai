@@ -7,24 +7,21 @@
     interactive
     @select="emit('openPanel')"
   >
-    <template #trailing>
-      <span class="shrink-0 text-xs text-base-content/45">{{ summary }}</span>
-    </template>
-    <div v-if="files.length" class="flex min-h-0 flex-col gap-0.5 overflow-hidden">
-      <button
-        v-for="file in visibleFiles"
-        :key="file.path"
-        type="button"
-        class="flex min-w-0 items-center gap-2 rounded-md px-1 py-0.5 text-left text-xs transition-colors hover:bg-base-content/5"
-        :title="file.path"
-        @click.stop="emit('openFile', file.path)"
-      >
-        <span class="ecall-home-dot" :class="file.path === activePath ? 'bg-info' : 'bg-base-content/25'"></span>
-        <span class="min-w-0 flex-1 truncate" :class="file.path === activePath ? 'text-base-content/90' : 'text-base-content/70'">
-          {{ file.label }}
-        </span>
-      </button>
-    </div>
+    <ul v-if="files.length" class="menu menu-xs w-full gap-0.5 p-0">
+      <li v-for="file in visibleFiles" :key="file.path">
+        <button
+          type="button"
+          class="min-w-0 gap-2 font-normal"
+          :title="file.path"
+          @click.stop="emit('openFile', file.path)"
+        >
+          <span class="ecall-home-dot" :class="file.path === activePath ? 'bg-info' : 'bg-base-content/25'"></span>
+          <span class="min-w-0 flex-1 truncate" :class="file.path === activePath ? 'text-base-content/90' : 'text-base-content/70'">
+            {{ file.label }}
+          </span>
+        </button>
+      </li>
+    </ul>
     <div v-else class="flex flex-1 items-center justify-center text-xs text-base-content/40">
       {{ t("chat.homePanel.noOpenFile") }}
     </div>
@@ -57,7 +54,6 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const visibleFiles = computed(() => props.files.slice(0, MAX_VISIBLE));
-const summary = computed(() => (props.itemCount ? t("chat.homePanel.openFileCount", { n: props.itemCount }) : ""));
 </script>
 
 <style scoped>

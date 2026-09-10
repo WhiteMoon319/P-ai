@@ -1,6 +1,6 @@
 <template>
   <div
-    class="ecall-home-card flex min-w-0 flex-col gap-2 overflow-hidden rounded-box bg-base-100 p-2.5 shadow transition-colors duration-200"
+    class="ecall-home-card flex min-w-0 flex-col gap-3 overflow-hidden rounded-box bg-base-100 p-3.5 shadow-md transition-colors duration-200"
     :class="[
       variant === 'wide' ? 'ecall-home-card-wide' : 'ecall-home-card-small',
       layout === 'tile' ? 'ecall-home-card-tile' : '',
@@ -15,18 +15,16 @@
     @keydown.space.prevent="handleSelect"
   >
     <template v-if="layout === 'tile'">
-      <span class="ecall-home-card-icon ecall-home-card-icon-tile" :class="toneClass">
+      <span class="ecall-home-card-icon ecall-home-card-icon-tile text-base-content/70">
         <component :is="icon" class="size-5" aria-hidden="true" />
       </span>
       <span class="min-w-0 max-w-full text-sm font-medium text-base-content/85">{{ label }}</span>
       <slot />
     </template>
     <template v-else>
-      <div class="flex min-w-0 shrink-0 items-center gap-2">
-        <span class="ecall-home-card-icon" :class="toneClass">
-          <component :is="icon" class="size-3.5" aria-hidden="true" />
-        </span>
-        <span class="min-w-0 flex-1 truncate text-xs font-medium text-base-content/70">{{ label }}</span>
+      <div class="flex min-w-0 shrink-0 items-center gap-1.5">
+        <component :is="icon" class="size-3.5 shrink-0 text-base-content/55" aria-hidden="true" />
+        <span class="min-w-0 flex-1 truncate text-xs font-medium text-base-content/55">{{ label }}</span>
         <slot name="trailing" />
       </div>
       <div class="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -37,7 +35,6 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
 import type { Component } from "vue";
 
 const props = withDefaults(defineProps<{
@@ -60,17 +57,6 @@ const emit = defineEmits<{
   (e: "select"): void;
 }>();
 
-const TONE_CLASS: Record<string, string> = {
-  primary: "bg-primary/15 text-primary",
-  secondary: "bg-secondary/15 text-secondary",
-  info: "bg-info/15 text-info",
-  success: "bg-success/15 text-success",
-  warning: "bg-warning/18 text-warning",
-  neutral: "bg-base-content/10 text-base-content/70",
-};
-
-const toneClass = computed(() => TONE_CLASS[props.tone] || TONE_CLASS.neutral);
-
 function handleSelect() {
   if (!props.interactive) return;
   emit("select");
@@ -78,18 +64,16 @@ function handleSelect() {
 </script>
 
 <style scoped>
-/* 小卡：固定 1×1 方形；大卡：横跨两格长条，窄面板时收窄到整行 */
+/* 宽度固定两档（1 列 / 2 列），高度交给内容撑开 */
 .ecall-home-card-small {
   width: var(--ecall-home-tile, 8.75rem);
   max-width: 100%;
-  height: var(--ecall-home-tile, 8.75rem);
   flex: 0 0 auto;
 }
 
 .ecall-home-card-wide {
-  width: calc(var(--ecall-home-tile, 8.75rem) * 2 + 0.625rem);
+  width: calc(var(--ecall-home-tile, 8.75rem) * 2 + var(--ecall-home-gap, 1rem));
   max-width: 100%;
-  height: var(--ecall-home-tile, 8.75rem);
   flex: 0 0 auto;
 }
 

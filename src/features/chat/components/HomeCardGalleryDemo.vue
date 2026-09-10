@@ -1,32 +1,29 @@
 <template>
-  <div class="space-y-5">
-    <p class="text-sm text-base-content/70">
-      每张卡单独放进首页流式布局里；卡片尺寸固定（小卡 140px 见方、大卡横跨两格），面板变宽只会多排几张，不会把卡片拉大。模拟数据只为看样式，点击不产生副作用。
-    </p>
-
-    <section v-for="section in sections" :key="section.key" class="space-y-2">
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="text-sm font-medium">{{ section.title }}</span>
-        <span class="text-xs text-base-content/50">{{ section.hint }}</span>
+  <div class="space-y-3">
+    <div class="flex flex-wrap items-center gap-2">
+      <span class="text-sm font-medium">画布宽度</span>
+      <div class="join">
+        <button
+          v-for="preset in widthPresets"
+          :key="preset.key"
+          type="button"
+          class="join-item btn btn-sm"
+          :class="activeWidth === preset.key ? 'btn-active' : ''"
+          @click="activeWidth = preset.key"
+        >
+          {{ preset.label }}
+        </button>
       </div>
-      <div class="ecall-gallery-panel" :style="{ height: section.height }">
-        <ChatHomePanel v-bind="section.data" />
-      </div>
-    </section>
-
-    <section class="space-y-2">
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="text-sm font-medium">全部卡片</span>
-        <span class="text-xs text-base-content/50">真实首页：大卡横跨整行，小卡按方形两两排开</span>
-      </div>
-      <div class="ecall-gallery-panel" style="height: 680px">
-        <ChatHomePanel v-bind="allCards" />
-      </div>
-    </section>
+      <span class="text-xs text-base-content/50">{{ currentPreset.width }}px</span>
+    </div>
+    <div class="ecall-gallery-wall" :style="{ width: currentPreset.width + 'px' }">
+      <ChatHomePanel v-bind="wallCards" />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from "vue";
 import type { BackgroundShellTaskSummary, ConversationDelegateStatusSummary } from "../../../types/app";
 import type { TaskEntry } from "../../config/views/config-tabs/task-editor";
 import type { ToolReviewBatchSummary } from "../composables/use-chat-tool-review";
@@ -37,7 +34,7 @@ const MOCK_WORKSPACE = "E:/github/easy_call_ai";
 const MOCK_GIT = {
   workspaceRootPath: MOCK_WORKSPACE,
   branch: "main",
-  changes: [
+  gitChanges: [
     { path: "src/features/chat/components/ChatHomePanel.vue", status: "M" },
     { path: "src/features/chat/components/chat-home/CardShell.vue", status: "M" },
     { path: "src/features/chat/components/chat-home/HomeWorkspaceCard.vue", status: "A" },
@@ -60,20 +57,8 @@ const MOCK_FILES = {
   openFileCount: 6,
 };
 
-const MOCK_SIDE_CHATS = {
-  sideChats: [{ id: "demo-side-1", title: "压缩重开后收尾标识为什么会对不上？" }],
-};
-
 const MOCK_SHELLS = {
   shells: [makeShell(0, "ready in 1243 ms\nLocal: http://localhost:1420/")],
-};
-
-const MOCK_DELEGATES = {
-  delegates: [makeDelegate(0, "running")],
-};
-
-const MOCK_TASKS = {
-  runningTasks: [makeTask(0)],
 };
 
 const MOCK_SIDE_CHAT_ENABLED = { sideChatEnabled: true };
@@ -130,8 +115,8 @@ function makeBatch(
       affectedPaths: [path],
       patchOperation: "update",
       isSuccess: true,
-      addedLines: 0,
-      deletedLines: 0,
+      addedLines: 6 + pathIndex * 11,
+      deletedLines: 2 + pathIndex * 5,
     })),
   };
 }
@@ -152,7 +137,7 @@ function makeShell(index: number, outputTail: string): BackgroundShellTaskSummar
   };
 }
 
-function makeDelegate(index: number, status: string): ConversationDelegateStatusSummary {
+function makeDelegate(index: number, status: string, active = true): ConversationDelegateStatusSummary {
   return {
     delegateId: `demo-delegate-${index}`,
     kind: "delegate",
@@ -160,9 +145,9 @@ function makeDelegate(index: number, status: string): ConversationDelegateStatus
     rootConversationId: "demo",
     title: "排查后台任务页加载失败并补齐回归测试",
     status,
-    active: true,
+    active,
     startedAt: new Date(Date.now() - 62000).toISOString(),
-    updatedAt: new Date().toISOString(),
+    updatedAt: new Date(Date.now() - index * 60000).toISOString(),
     elapsedMs: 62000,
     requestCount: 12,
     toolCallCount: 34,
@@ -187,41 +172,36 @@ function makeTask(index: number): TaskEntry {
   };
 }
 
-const sections = [
-  { key: "git", title: "Git 更改大卡", hint: "横跨 2 列、占 1 行，点击进阅读面板", height: "200px", data: MOCK_GIT },
-  { key: "files", title: "已打开文件大卡", hint: "横跨 2 列、占 1 行，行内点击直接打开文件", height: "200px", data: MOCK_FILES },
-  { key: "workspace", title: "工作目录小卡", hint: "1×1 方形，进入工作区目录树；有工作区时 Git 大卡会一起出现", height: "340px", data: MOCK_GIT },
-  { key: "side-chat-create", title: "新建追问小卡", hint: "1×1 方形，进追问新建页", height: "200px", data: MOCK_SIDE_CHAT_ENABLED },
-  { key: "side-chat", title: "追问小卡", hint: "1×1 方形，切到该追问会话", height: "200px", data: MOCK_SIDE_CHATS },
-  { key: "shell", title: "后台终端小卡", hint: "1×1 方形，仅展示不可点", height: "200px", data: MOCK_SHELLS },
-  { key: "delegate", title: "委托小卡", hint: "1×1 方形，进监控面板委托页", height: "200px", data: MOCK_DELEGATES },
-  { key: "task", title: "任务小卡", hint: "1×1 方形，进监控面板任务页", height: "200px", data: MOCK_TASKS },
-  { key: "tool", title: "最近工具大卡", hint: "横跨 2 列、占 1 行，只讲最近一轮工具调用；无工具调用时整张不出现", height: "260px", data: MOCK_TOOL_BATCHES },
+const widthPresets = [
+  { key: "phone", label: "手机", width: 390 },
+  { key: "tablet", label: "平板", width: 768 },
+  { key: "pc", label: "PC", width: 1200 },
 ];
+const activeWidth = ref("pc");
+const currentPreset = computed(
+  () => widthPresets.find((preset) => preset.key === activeWidth.value) || widthPresets[0],
+);
 
-const allCards = {
+const wallCards = {
   ...MOCK_GIT,
   ...MOCK_FILES,
   ...MOCK_SIDE_CHAT_ENABLED,
   sideChats: [
-    ...MOCK_SIDE_CHATS.sideChats,
+    { id: "demo-side-1", title: "压缩重开后收尾标识为什么会对不上？" },
     { id: "demo-side-2", title: "右侧主页网格的列宽是怎么算出来的" },
     { id: "demo-side-3", title: "日志窗滚动条为什么改成常驻" },
   ],
   shells: MOCK_SHELLS.shells,
-  delegates: [
-    ...MOCK_DELEGATES.delegates,
-    makeDelegate(1, "delivered"),
-  ],
+  delegates: [makeDelegate(0, "running"), makeDelegate(1, "delivered"), makeDelegate(2, "completed", false)],
   runningTasks: [makeTask(0), makeTask(1)],
   toolBatches: MOCK_TOOL_BATCHES.toolBatches,
 };
 </script>
 
 <style scoped>
-.ecall-gallery-panel {
-  width: 320px;
+.ecall-gallery-wall {
   max-width: 100%;
+  height: 1000px;
   overflow: hidden;
   border-radius: 0.75rem;
   border: 1px solid var(--color-base-300);

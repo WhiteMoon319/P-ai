@@ -1,6 +1,6 @@
 <template>
   <div class="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-base-200">
-    <OverlayScrollArea class="relative min-h-0 flex-1" scroller-class="ecall-chat-scroll-container min-h-0 h-full p-3">
+    <OverlayScrollArea class="relative min-h-0 flex-1" scroller-class="ecall-chat-scroll-container min-h-0 h-full p-4">
       <div v-if="hasAnyCard" class="ecall-home-flow">
         <HomeGitCard
           v-if="workspaceRootPath"
@@ -54,6 +54,13 @@
           :request-count="delegate.requestCount"
           :token-count="delegate.tokenCount"
           :last-tool-name="delegate.lastToolName"
+          @open="emit('openMonitorTab', 'delegate')"
+        />
+        <HomeDelegateCard
+          v-if="latestFinishedDelegate"
+          :key="`finished-delegate-${latestFinishedDelegate.delegateId}`"
+          :title="latestFinishedDelegate.title || latestFinishedDelegate.delegateId"
+          :meta-label="finishedDelegateMeta"
           @open="emit('openMonitorTab', 'delegate')"
         />
         <HomeTaskCard
@@ -147,6 +154,27 @@ const runningDelegates = computed(() =>
   }),
 );
 
+/** 最近一条已结束的委托：跑完不消失，像「最近工具」那样留一张卡 */
+const latestFinishedDelegate = computed<ConversationDelegateStatusSummary | null>(() => {
+  const finished = props.delegates.filter((delegate) => !delegate.active);
+  if (!finished.length) return null;
+  return finished
+    .slice()
+    .sort((left, right) => timestampMs(right.updatedAt) - timestampMs(left.updatedAt))[0] || null;
+});
+
+const finishedDelegateMeta = computed(() => {
+  const status = String(latestFinishedDelegate.value?.status || "").trim();
+  if (status === "failed") return "已失败";
+  if (status === "completed") return "已完成";
+  return "被中断";
+});
+
+function timestampMs(value: unknown) {
+  const ms = Date.parse(String(value || ""));
+  return Number.isFinite(ms) ? ms : 0;
+}
+
 /** 没有工具调用的轮次不构成卡片：红豆口径是「没工具自然就不显示」 */
 const activeToolBatches = computed(() =>
   props.toolBatches.filter((batch) => Number(batch.itemCount || 0) > 0),
@@ -201,10 +229,13 @@ onBeforeUnmount(() => {
 /* 卡片固定尺寸、按行流式换行：面板变宽只会多排几张，不会把卡片拉大 */
 .ecall-home-flow {
   --ecall-home-tile: 8.75rem;
+  /* 卡片间距与圆角（--radius-box: 1rem）对齐；宽卡尺寸也引用这个值，避免两处各写一份 */
+  --ecall-home-gap: 1rem;
   display: flex;
   flex-wrap: wrap;
   align-content: flex-start;
-  gap: 0.625rem;
+  align-items: flex-start;
+  gap: var(--ecall-home-gap);
 }
 
 /* 回到预览：卡片从略小处放大进入；时长与曲线复用侧栏 push 动画的 220ms 同参 */
