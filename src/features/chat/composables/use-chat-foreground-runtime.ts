@@ -74,7 +74,6 @@ export function useChatForegroundRuntime(bindings: Record<string, any>) {
     const conversationId = String(bindings.currentChatConversationId.value || "").trim();
     if (!conversationId) return;
 
-    console.warn("[焦点恢复][入口] reconcile 开始", { conversationId, reason });
     // 输入面板忙碌（前端认为在流）但没有流式消息 → 流式投影已断，落后，直接 switch 当前会话接回。
     if (frontendConversationIsStreaming() && !hasStreamingAssistantMessage()) {
       console.warn("[焦点恢复] 输入面板忙碌但无流式消息，判定落后，switch 当前会话", {
@@ -94,10 +93,6 @@ export function useChatForegroundRuntime(bindings: Record<string, any>) {
     }
     if (String(bindings.currentChatConversationId.value || "").trim() !== conversationId) return;
     const snapshot = await requestRuntimeSnapshot(conversationId);
-    console.warn("[焦点恢复][入口] runtimeSnapshot 读取完成", {
-      conversationId,
-      runtimeState: String(snapshot?.runtimeState || ""),
-    });
     if (String(bindings.currentChatConversationId.value || "").trim() !== conversationId) return;
     const flow = bindings.getChatFlow();
     const frontendStreamCache = flow?.readConversationStreamCache?.(conversationId);
