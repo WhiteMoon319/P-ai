@@ -328,6 +328,30 @@ struct DepartmentConfig {
     permission_control: DepartmentPermissionControl,
 }
 
+/// 配置自修复分类：内置部门成员列表为空时，按部门预设恢复默认人格。
+const CONFIG_REPAIR_KIND_BUILTIN_DEPARTMENT_AGENT: &str = "builtinDepartmentAgentRestored";
+
+/// 一条配置自修复记录：归一化替用户补上的内容。
+/// 自修复本身是允许的，但这些记录必须沿保存链路显式上报给调用方，不做静默修改。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ConfigRepairNotice {
+    kind: String,
+    department_id: String,
+    department_name: String,
+    /// 被恢复的默认人格 id
+    agent_id: String,
+}
+
+/// 保存配置的结果：归一化后的配置本体，加上本次保存发生的自修复清单。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveConfigOutput {
+    config: AppConfig,
+    #[serde(default)]
+    repairs: Vec<ConfigRepairNotice>,
+}
+
 fn default_main_source() -> String {
     "main_config".to_string()
 }

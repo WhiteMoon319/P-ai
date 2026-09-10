@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ApiConfigItem, DepartmentConfig, PersonaProfile } from "../../types/app";
-import { buildDepartmentPersonaOptions } from "./department-persona-options";
+import { buildDepartmentPersonaOptions, resolvePersonaDepartmentIds } from "./department-persona-options";
 
 const departments = [
   {
@@ -80,5 +80,21 @@ describe("buildDepartmentPersonaOptions", () => {
     const ghost = options[0];
     expect(ghost.personaMissing).toBe(true);
     expect(ghost.agentId).toBe("no-such-persona");
+  });
+});
+
+describe("resolvePersonaDepartmentIds", () => {
+  it("returns every department whose members include the persona", () => {
+    const shared = [
+      { id: "research", name: "研究部", agentIds: ["alice"], apiConfigId: "role:expert" },
+      { id: "ops", name: "运维部", agentIds: ["bob", "alice"], apiConfigId: "model-ops" },
+    ] as DepartmentConfig[];
+    expect(resolvePersonaDepartmentIds(shared, "alice")).toEqual(["research", "ops"]);
+  });
+
+  it("returns an empty list when the persona has no department", () => {
+    expect(resolvePersonaDepartmentIds(departments, "eve")).toEqual([]);
+    expect(resolvePersonaDepartmentIds(departments, "")).toEqual([]);
+    expect(resolvePersonaDepartmentIds(null, "alice")).toEqual([]);
   });
 });

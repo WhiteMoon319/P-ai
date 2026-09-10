@@ -307,7 +307,7 @@
     }
 
     #[test]
-    fn resolve_department_agent_pair_should_validate_explicit_pair_and_keep_legacy_department_fallback() {
+    fn resolve_department_agent_pair_should_tolerate_membership_and_fall_back_when_binding_is_gone() {
         let mut api = ApiConfig::default();
         api.id = "api-a".to_string();
         api.enable_text = true;
@@ -336,14 +336,34 @@
             .expect("legacy department-only binding should be solidified");
         assert_eq!(legacy, ("dept-a".to_string(), "agent-a".to_string()));
 
-        let err = resolve_department_agent_pair(
+        // 部门成员列表只是归属配置，不作为路由资格：显式配对原样使用
+        let tolerance = resolve_department_agent_pair(
             &state,
             Some("dept-a"),
             Some("agent-b"),
             &config,
         )
-        .expect_err("mismatched explicit pair should fail");
-        assert!(err.contains("agentId 与部门不匹配"));
+        .expect("membership is not a routing gate");
+        assert_eq!(tolerance, ("dept-a".to_string(), "agent-b".to_string()));
+
+        // 绑定的部门已被删除时回落到助理部门，而不是让这条路由断掉
+        let fell_back = resolve_department_agent_pair(
+            &state,
+            Some("dept-removed"),
+            Some("agent-a"),
+            &config,
+        )
+        .expect("missing department should fall back");
+        assert_eq!(fell_back, ("dept-a".to_string(), "agent-a".to_string()));
+
+        // 部门成员被清空时回落到当前助理人格
+        let mut emptied_config = config.clone();
+        emptied_config.departments[0].agent_ids.clear();
+        let default_agent_id = state_service_get_assistant_department_agent_id(&state)
+            .expect("runtime default persona");
+        let emptied = resolve_department_agent_pair(&state, Some("dept-a"), None, &emptied_config)
+            .expect("empty members should fall back to the current assistant persona");
+        assert_eq!(emptied, ("dept-a".to_string(), default_agent_id));
     }
 
     #[test]

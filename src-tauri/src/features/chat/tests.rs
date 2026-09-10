@@ -5612,6 +5612,67 @@
     }
 
     #[test]
+    fn conversation_service_v2_should_create_draft_with_current_assistant_persona_outside_department() {
+        let state = test_chat_runtime_state();
+        let git_init = std::process::Command::new("git")
+            .args(["init", "--quiet"])
+            .current_dir(&state.llm_workspace_path)
+            .output()
+            .expect("initialize git workspace");
+        assert!(git_init.status.success(), "git init should succeed");
+
+        // 助理部门成员只有 default-agent，当前助理人格刻意留在成员列表之外
+        let mut config = AppConfig::default();
+        for department in &mut config.departments {
+            if department.id == ASSISTANT_DEPARTMENT_ID || department.is_built_in_assistant {
+                department.agent_ids = vec![DEFAULT_AGENT_ID.to_string()];
+            }
+        }
+        write_config(&state.config_path, &config).expect("write config");
+        state_write_agents_cached(
+            &state,
+            &[
+                {
+                    let mut agent = default_agent();
+                    agent.id = "persona-outside-department".to_string();
+                    agent.name = "游离人格".to_string();
+                    agent
+                },
+                default_agent(),
+                default_user_persona(),
+            ],
+        )
+        .expect("write agents");
+        state_service_set_assistant_department_agent_id(&state, "persona-outside-department")
+            .expect("write assistant department agent id");
+
+        let created = conversation_service_v2()
+            .create_conversation(
+                &state,
+                &CreateUnarchivedConversationInput {
+                    api_config_id: None,
+                    agent_id: None,
+                    department_id: None,
+                    title: None,
+                    copy_source_conversation_id: None,
+                    shell_workspaces: None,
+                    shell_work_mode: None,
+                    shell_work_branch: None,
+                    shell_autonomous_mode: None,
+                    is_draft: Some(true),
+                },
+            )
+            .expect("create draft with current assistant persona");
+
+        let draft = state_read_conversation_cached(&state, &created.conversation_id)
+            .expect("draft conversation should exist");
+        assert_eq!(
+            draft.agent_id, "persona-outside-department",
+            "draft must use the current assistant persona even when it is not a member of the assistant department"
+        );
+    }
+
+    #[test]
     fn conversation_service_v2_should_keep_normal_create_non_draft() {
         let state = test_chat_runtime_state();
         let git_init = std::process::Command::new("git")

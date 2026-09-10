@@ -78,6 +78,7 @@ export function useChatServiceAssemblies(bindings: Record<string, any>) {
     normalizeApiBindingsLocal: bindings.normalizeApiBindingsLocal,
     savePersonas: configPersistence.savePersonas,
     saveChatPreferences: configPersistence.saveChatPreferences,
+    saveConfig: configPersistence.saveConfig,
   });
 
   const chatRuntime = useChatRuntime({

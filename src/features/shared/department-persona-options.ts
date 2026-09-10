@@ -109,6 +109,25 @@ export function departmentPersonaOptionId(departmentId: string, agentId: string)
   return `${trimText(departmentId)}::${trimText(agentId)}`;
 }
 
+/** 反查某个人格当前归属的部门 id 列表（只按成员关系，与运行时人格无关）。 */
+export function resolvePersonaDepartmentIds(
+  departments: DepartmentConfig[] | null | undefined,
+  personaId: string | null | undefined,
+): string[] {
+  const target = trimText(personaId);
+  if (!target) return [];
+  const found: string[] = [];
+  for (const department of departments || []) {
+    const departmentId = trimText(department?.id);
+    if (!departmentId) continue;
+    const memberIds = Array.isArray(department.agentIds) ? department.agentIds : [];
+    if (memberIds.some((id) => trimText(id) === target)) {
+      found.push(departmentId);
+    }
+  }
+  return found;
+}
+
 export function buildDepartmentPersonaOptions(
   input: BuildDepartmentPersonaOptionsInput,
 ): DepartmentPersonaOption[] {

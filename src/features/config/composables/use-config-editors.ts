@@ -17,7 +17,17 @@ type UseConfigEditorsOptions = {
   normalizeApiBindingsLocal: () => void;
   savePersonas: () => Promise<boolean>;
   saveChatPreferences: () => Promise<void>;
+  saveConfig: () => Promise<boolean>;
 };
+
+export type PersonaDepartmentToggleStatus =
+  | "applied"
+  | "unchanged"
+  | "overridden"
+  | "failed"
+  | "rejected";
+
+export type PersonaDepartmentToggleResult = { status: PersonaDepartmentToggleStatus };
 
 export function useConfigEditors(options: UseConfigEditorsOptions) {
   function firstActiveApiConfigId(): string {
@@ -132,6 +142,47 @@ export function useConfigEditors(options: UseConfigEditorsOptions) {
     await options.saveChatPreferences();
   }
 
+  /**
+   * 勾选/取消人格与部门的归属关系，立即落盘。
+   * 私域部门由私有工作区文件维护，不在这里改。
+   *
+   * 返回结构化结果：后端在保存时会自修复（内置部门缺人格回默认人格），
+   * 那种情况下用户请求的状态不会落地，调用方必须能区分，不能一律当成已生效。
+   */
+  async function togglePersonaDepartmentMember(input: {
+    agentId: string;
+    departmentId: string;
+    member: boolean;
+  }): Promise<PersonaDepartmentToggleResult> {
+    const agentId = String(input?.agentId || "").trim();
+    const departmentId = String(input?.departmentId || "").trim();
+    if (!agentId || !departmentId) return { status: "rejected" };
+    const department = (options.config.departments || []).find(
+      (item) => String(item.id || "").trim() === departmentId,
+    );
+    if (!department || String(department.source || "").trim() === "private_workspace") {
+      return { status: "rejected" };
+    }
+    const previousAgentIds = Array.isArray(department.agentIds) ? [...department.agentIds] : [];
+    const isMember = previousAgentIds.some((id) => String(id || "").trim() === agentId);
+    if (isMember === !!input.member) return { status: "unchanged" };
+    department.agentIds = input.member
+      ? [...previousAgentIds, agentId]
+      : previousAgentIds.filter((id) => String(id || "").trim() !== agentId);
+    const saved = await options.saveConfig();
+    if (!saved) {
+      department.agentIds = previousAgentIds;
+      return { status: "failed" };
+    }
+    // 保存会把归一化后的配置回写进来，据此确认请求的状态是否真的落地
+    const savedDepartment = (options.config.departments || []).find(
+      (item) => String(item.id || "").trim() === departmentId,
+    );
+    const appliedAgentIds = Array.isArray(savedDepartment?.agentIds) ? savedDepartment.agentIds : [];
+    const applied = appliedAgentIds.some((id) => String(id || "").trim() === agentId);
+    return { status: applied === !!input.member ? "applied" : "overridden" };
+  }
+
   function removeSelectedPersona() {
     if (options.assistantPersonas.value.length <= 1) return;
     const target = options.selectedPersonaEditor.value;
@@ -148,6 +199,7 @@ export function useConfigEditors(options: UseConfigEditorsOptions) {
     addApiConfig,
     removeSelectedApiConfig,
     addPersona,
+    togglePersonaDepartmentMember,
     removeSelectedPersona,
   };
 }

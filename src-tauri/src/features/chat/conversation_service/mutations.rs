@@ -431,12 +431,10 @@ fn create_unarchived_conversation_shared(
     let agent_id = match requested_agent_id {
         Some(value) => value.to_string(),
         None if is_draft => {
+            // 草稿是系统自建的助理会话，人格直接取当前助理人格；
+            // 不要求它挂在部门成员列表里，成员列表只约束用户手选的部门+人格组合。
             let preferred = assistant_department_agent_id.trim();
             if !preferred.is_empty()
-                && department
-                    .agent_ids
-                    .iter()
-                    .any(|id| id.trim() == preferred)
                 && agents
                     .iter()
                     .any(|agent| agent.id == preferred && !agent.is_built_in_user)
@@ -460,12 +458,7 @@ fn create_unarchived_conversation_shared(
             ))
         }
     };
-    if !department.agent_ids.iter().any(|id| id.trim() == agent_id) {
-        return Err(format!(
-            "新建会话的人格不属于所选部门: department_id={}，agent_id={}",
-            department.id, agent_id
-        ));
-    }
+    // 部门成员列表只描述归属配置，不作为人格资格；人格本身不存在或不可用才拒绝。
     if !agents
         .iter()
         .any(|agent| agent.id == agent_id && !agent.is_built_in_user)

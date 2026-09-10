@@ -52,24 +52,8 @@ export function useAppWatchers(options: UseAppWatchersOptions) {
     },
   );
 
-  watch(
-    () => {
-      const assistantDepartment = options.config.departments.find(
-        (item) => item.id === "assistant-department" || item.isBuiltInAssistant,
-      );
-      return {
-        agentId: assistantDepartment?.agentIds?.[0] || "",
-        apiConfigId: assistantDepartment?.apiConfigId || "",
-      };
-    },
-    ({ agentId, apiConfigId }) => {
-      if (agentId && options.assistantDepartmentAgentId.value !== agentId) {
-        options.assistantDepartmentAgentId.value = agentId;
-      }
-    },
-    { deep: true },
-  );
-
+  // 当前助理人格只由运行时状态（chat settings）决定，不再从部门成员列表的首位反推，
+  // 避免部门里调整成员顺序时把当前助理人格一并改掉。
   watch(
     () => options.assistantDepartmentAgentId.value,
     (id) => {

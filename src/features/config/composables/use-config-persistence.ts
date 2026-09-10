@@ -11,14 +11,14 @@ import type {
   ChatSettingsPatch,
   RecordHotkeyUpdateResult,
   CodexAuthMode,
+  ConfigRepairNotice,
   ConversationApiSettings,
   ConversationApiSettingsPatch,
   PdfReadMode,
   PersonaProfile,
   PromptCommandPreset,
   RemoteImChannelConfig,
-} from "../../../types/app";
-import type { SupportedLocale } from "../../../i18n";
+} from "../../../types/app";import type { SupportedLocale } from "../../../i18n";
 import { normalizeApiRequestFormat } from "../utils/api-request-format";
 import { normalizeDepartmentChildIds } from "../utils/department-graph";
 import {
@@ -38,6 +38,27 @@ export type ConfigSaveErrorInfo = {
   errorText: string;
   hotkey: string;
 };
+
+/** 把后端上报的自修复记录描述成一句可读提示；没有修复时返回空串。 */
+function describeConfigRepairs(
+  repairs: ConfigRepairNotice[],
+  t: TrFn,
+  personas: PersonaProfile[],
+): string {
+  if (!repairs.length) return "";
+  const agentName = (agentId: string) => {
+    const target = String(agentId || "").trim();
+    const matched = personas.find((persona) => String(persona.id || "").trim() === target);
+    return String(matched?.name || target).trim();
+  };
+  const details = repairs
+    .map((repair) => t("status.configRepairDepartmentAgent", {
+      department: String(repair.departmentName || repair.departmentId || "").trim(),
+      persona: agentName(repair.agentId),
+    }))
+    .join("；");
+  return t("status.configSavedWithRepairs", { details });
+}
 
 type UseConfigPersistenceOptions = {
   t: TrFn;
@@ -538,7 +559,9 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     options.setStatus(options.t("status.savingConfig"));
     try {
       console.info("[配置] save_config invoked");
-      const saved = await invokeTauri<AppConfig>("save_config", { config: options.buildConfigPayload() });
+      const saveResult = await invokeTauri<{ config: AppConfig; repairs?: ConfigRepairNotice[] }>("save_config", { config: options.buildConfigPayload() });
+      const saved = saveResult.config;
+      const repairs = Array.isArray(saveResult.repairs) ? saveResult.repairs : [];
       options.config.hotkey = saved.hotkey;
       options.config.uiLanguage = options.normalizeLocale(saved.uiLanguage);
       options.config.uiFont = String((saved as { uiFont?: unknown }).uiFont ?? "");
@@ -658,7 +681,8 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
       options.normalizeApiBindingsLocal();
       options.lastSavedConfigJson.value = options.buildConfigSnapshotJson();
       console.info("[配置] save_config success");
-      options.setStatus(options.t("status.configSaved"));
+      const repairMessage = describeConfigRepairs(repairs, (key, params) => options.t(key, params ?? {}), options.personas.value);
+      options.setStatus(repairMessage || options.t("status.configSaved"));
       return true;
     } catch (e) {
       const saveError = classifySaveConfigError(e);

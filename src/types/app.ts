@@ -692,6 +692,14 @@ export type RuntimeLogEntry = {
 
 export type MemoryRecallMode = "auto" | "manual" | "off";
 
+/** 保存配置时后端归一化自动补上的内容（自修复记录），由保存结果显式回报。 */
+export type ConfigRepairNotice = {
+  kind: string;
+  departmentId: string;
+  departmentName: string;
+  agentId: string;
+};
+
 export type PersonaProfile = {
   id: string;
   name: string;

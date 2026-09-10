@@ -166,15 +166,14 @@ fn task_default_department_agent_for_write(state: &AppState) -> Result<(String, 
     let assistant_department_id = assistant_department(&runtime_snapshot.config)
         .map(|department| department.id.clone())
         .unwrap_or_else(|| ASSISTANT_DEPARTMENT_ID.to_string());
+    // 当前助理人格是唯一权威：部门成员列表只描述归属配置，不再要求它出现在成员里
     let runtime_agent_id = state_service_get_assistant_department_agent_id(state)?;
-    if !runtime_agent_id.is_empty() {
-        if let Ok(pair) = task_resolve_department_agent_pair_for_write(
-            state,
-            &assistant_department_id,
-            Some(&runtime_agent_id),
-        ) {
-            return Ok(pair);
-        }
+    if !runtime_agent_id.is_empty()
+        && runtime_snapshot.agents.iter().any(|agent| {
+            agent.id == runtime_agent_id && !agent.is_built_in_user && !agent.is_built_in_system
+        })
+    {
+        return Ok((assistant_department_id, runtime_agent_id));
     }
     task_resolve_department_agent_pair_for_write(state, &assistant_department_id, None)
         .map_err(|err| format!("任务缺少默认执行人格：{err}"))

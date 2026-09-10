@@ -125,6 +125,9 @@
                     <span class="min-w-0 truncate text-sm">{{ persona.name || persona.id }}</span>
                   </label>
                 </div>
+                <div v-if="selectedDepartmentAssigneeIds.length === 0" class="text-xs leading-snug text-warning">
+                  {{ t("config.department.assigneeWarning") }}
+                </div>
               </div>
             </div>
 
@@ -304,14 +307,9 @@ const props = defineProps<{
   config: AppConfig;
   apiConfigs: ApiConfigItem[];
   personas: PersonaProfile[];
-  assistantDepartmentAgentId: string;
   savingConfig: boolean;
   saveConfigAction: () => Promise<boolean> | boolean;
   setStatusAction: (text: string) => void;
-}>();
-
-const emit = defineEmits<{
-  (e: "update:assistantDepartmentAssigneeId", value: string): void;
 }>();
 
 const { t } = useI18n();
@@ -1022,11 +1020,6 @@ function switchSelectedDepartment(nextId: string) {
   selectedDepartmentId.value = trimmedId;
 }
 
-function resolveAssistantDepartmentAgentId(departments: DepartmentConfig[]) {
-  const assistant = departments.find((item) => item.id === "assistant-department" || item.isBuiltInAssistant);
-  return String(assistant?.agentIds?.[0] || "").trim();
-}
-
 function applyUpdatedAtToChangedDepartments(
   nextDepartments: DepartmentConfig[],
   previousDepartments: DepartmentConfig[],
@@ -1067,7 +1060,6 @@ async function saveDepartments() {
   if (!selectedDepartment.value || departmentValidationMessage.value) return;
 
   const previousDepartments = cloneDepartmentList(props.config.departments || []);
-  const previousAssistantAgentId = String(props.assistantDepartmentAgentId || "").trim();
   const nextDrafts = cloneDepartmentList(departmentDrafts.value);
   const nextDepartments = applyUpdatedAtToChangedDepartments(
     mergeDepartmentChildIdsFromSource(
@@ -1077,20 +1069,12 @@ async function saveDepartments() {
     ),
     previousDepartments,
   );
-  const assistantAgentId = resolveAssistantDepartmentAgentId(nextDepartments);
 
   props.config.departments = nextDepartments;
-
-  if (assistantAgentId && assistantAgentId !== previousAssistantAgentId) {
-    emit("update:assistantDepartmentAssigneeId", assistantAgentId);
-  }
 
   const saved = await Promise.resolve(props.saveConfigAction());
   if (!saved) {
     props.config.departments = previousDepartments;
-    if (assistantAgentId && assistantAgentId !== previousAssistantAgentId) {
-      emit("update:assistantDepartmentAssigneeId", previousAssistantAgentId);
-    }
     return;
   }
 

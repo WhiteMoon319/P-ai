@@ -86,7 +86,6 @@ fn save_agents_inner(
         agents: state_read_agents_cached(&state)?,
         ..Default::default()
     };
-    let assistant_department_agent_id = state_service_get_assistant_department_agent_id(&state)?;
     let previous_agents = data.agents.clone();
     let existing_user_persona = data
         .agents
@@ -243,27 +242,12 @@ fn save_agents_inner(
         .map(|a| a.id.clone())
         .collect::<std::collections::HashSet<_>>();
     let mut runtime_config = runtime_config_with_private_organization(&state, &config, &data)?;
+    // 只清理已被删除人格留下的悬挂 id；成员归属由用户在部门页自行维护，
+    // 保存人格时不再替用户补齐（部门缺成员时由配置归一化按内置预设兜底）。
     let mut config_changed = false;
     for dept in &mut runtime_config.departments {
         let original_agent_ids = dept.agent_ids.clone();
         dept.agent_ids.retain(|id| valid_agent_ids.contains(id));
-        let assistant_agent_valid = !assistant_department_agent_id.trim().is_empty()
-            && valid_agent_ids.contains(&assistant_department_agent_id);
-        if dept.id == ASSISTANT_DEPARTMENT_ID
-            && assistant_agent_valid
-            && !dept
-                .agent_ids
-                .iter()
-                .any(|id| id.trim() == assistant_department_agent_id)
-        {
-            dept.agent_ids.push(assistant_department_agent_id.clone());
-        } else if !original_agent_ids.is_empty()
-            && dept.agent_ids.is_empty()
-            && assistant_agent_valid
-        {
-            // 部门人格被删空时回退到助理人格，避免部门从选项列表消失
-            dept.agent_ids.push(assistant_department_agent_id.clone());
-        }
         if dept.agent_ids != original_agent_ids {
             config_changed = true;
             dept.updated_at = now_iso();

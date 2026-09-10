@@ -71,7 +71,6 @@
       @update:config-tab="updateConfigTab"
       @update:ui-language="setUiLanguage"
       @update:persona-editor-id="updatePersonaEditorId"
-      @update:assistant-department-agent-id="updateSelectedPersonaId"
       @update:response-style-id="updateSelectedResponseStyleId"
       @update:pdf-read-mode="updateSelectedPdfReadMode"
       @update:background-voice-screenshot-keywords="updateBackgroundVoiceScreenshotKeywords"
@@ -767,7 +766,6 @@ const props = defineProps<{
   updateConfigTab: (value: "hotkey" | "api" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "networkAccess" | "remoteIm" | "memory" | "task" | "logs" | "appearance" | "about") => void;
   setUiLanguage: (value: string) => void;
   updatePersonaEditorId: (value: string) => void;
-  updateSelectedPersonaId: (value: string) => void;
   updateSelectedResponseStyleId: (value: string) => void;
   updateSelectedPdfReadMode: (value: "text" | "image") => void;
   updateBackgroundVoiceScreenshotKeywords: (value: string) => void;

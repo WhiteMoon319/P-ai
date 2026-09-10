@@ -676,7 +676,7 @@ fn save_config(
     app: AppHandle,
     state: State<'_, AppState>,
     ide_context_runtime: State<'_, IdeContextRuntime>,
-) -> Result<AppConfig, String> {
+) -> Result<SaveConfigOutput, String> {
     save_config_inner(config, &app, &state, &ide_context_runtime)
 }
 
@@ -744,12 +744,22 @@ fn save_config_inner(
     app: &AppHandle,
     state: &AppState,
     ide_context_runtime: &IdeContextRuntime,
-) -> Result<AppConfig, String> {
+) -> Result<SaveConfigOutput, String> {
     if config.api_configs.is_empty() {
         return Err("至少需要配置一个 API 配置。".to_string());
     }
     let mut config = config;
-    normalize_app_config(&mut config);
+    let repairs = normalize_app_config(&mut config);
+    if !repairs.is_empty() {
+        runtime_log_info(format!(
+            "[配置] 保存自修复完成: count={}, departments={:?}",
+            repairs.len(),
+            repairs
+                .iter()
+                .map(|item| format!("{}:{}->{}", item.department_id, item.department_name, item.agent_id))
+                .collect::<Vec<_>>()
+        ));
+    }
     remote_im_migrate_channel_private_states(&state, &mut config)?;
     let _ = ensure_default_shell_workspace_in_config(&mut config, &state);
     set_record_hotkey_probe_background_wake_enabled(config.record_background_wake_enabled);
@@ -855,7 +865,10 @@ fn save_config_inner(
         broadcast_sidebar_provider_changed();
     }
     stop_removed_remote_im_channel_runtimes(state.clone(), removed_remote_im_channels);
-    Ok(runtime_config)
+    Ok(SaveConfigOutput {
+        config: runtime_config,
+        repairs,
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -595,8 +595,8 @@ export function useSimpleSetup() {
 
   async function saveConfigOnly() {
     try {
-      const saved = await invokeTauri<AppConfig>("save_config", { config: { ...config } });
-      Object.assign(config, saved);
+      const result = await invokeTauri<{ config: AppConfig }>("save_config", { config: { ...config } });
+      Object.assign(config, result.config);
     } catch (error) {
       throw new Error(t("sidebar.quickSetupSaveFailed", { error: String(error ?? "unknown") }));
     }

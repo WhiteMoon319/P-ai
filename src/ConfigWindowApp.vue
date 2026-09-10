@@ -113,7 +113,6 @@
         @update:simple-setup-mode="setSimpleSetupMode"
         @update:ui-language="setUiLanguage"
         @update:persona-editor-id="updatePersonaEditorIdWithNotice"
-        @update:assistant-department-agent-id="updateAssistantDepartmentAgentId"
         @update:response-style-id="(value) => { selectedResponseStyleId = value; }"
         @update:pdf-read-mode="(value) => { selectedPdfReadMode = value; }"
         @update:background-voice-screenshot-keywords="(value) => { backgroundVoiceScreenshotKeywords = String(value || '').replace(/，/g, ','); }"
@@ -138,6 +137,7 @@
         @remove-selected-persona="removeSelectedPersona"
         @reset-personas="loadPersonas"
         @save-personas="savePersonas"
+        @toggle-persona-department-member="handleTogglePersonaDepartmentMember"
         @convert-private-persona-to-public="convertPrivatePersonaToPublic"
         @import-persona-memories="importPersonaMemories"
         @open-conversation-list="openConversationList"
@@ -725,6 +725,7 @@ const {
   addApiConfig,
   removeSelectedApiConfig,
   addPersona,
+  togglePersonaDepartmentMember,
   removeSelectedPersona,
 } = useConfigEditors({
   t: tr,
@@ -739,6 +740,7 @@ const {
   normalizeApiBindingsLocal,
   savePersonas,
   saveChatPreferences,
+  saveConfig,
 });
 
 const {
@@ -880,8 +882,17 @@ function updatePersonaEditorIdWithNotice(value: string) {
   personaEditorId.value = nextId;
 }
 
-function updateAssistantDepartmentAgentId(value: string) {
-  assistantDepartmentAgentId.value = String(value || "").trim();
+async function handleTogglePersonaDepartmentMember(payload: { agentId: string; departmentId: string; member: boolean }) {
+  const result = await togglePersonaDepartmentMember(payload);
+  if (result.status === "failed") {
+    setStatus(tr("config.persona.bindDepartmentFailed"));
+    return;
+  }
+  if (result.status === "applied") {
+    setStatus(tr("config.persona.bindDepartmentSuccess"));
+  }
+  // unchanged / rejected 不提示；overridden 表示请求的状态没落地（后端自修复），
+  // 那条说明已由保存链路写进状态栏，这里不得覆盖。
 }
 
 function updateInstructionPresets(value: PromptCommandPreset[]) {

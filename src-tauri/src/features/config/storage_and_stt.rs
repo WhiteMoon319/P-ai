@@ -60,7 +60,17 @@ fn read_config(path: &PathBuf) -> Result<AppConfig, String> {
         ));
         format!("Parse config failed ({}): {err}", resolved_path.display())
     })?;
-    normalize_app_config(&mut parsed);
+    let repairs = normalize_app_config(&mut parsed);
+    if !repairs.is_empty() {
+        runtime_log_info(format!(
+            "[配置] 加载自修复完成: count={}, departments={:?}",
+            repairs.len(),
+            repairs
+                .iter()
+                .map(|item| format!("{}:{}->{}", item.department_id, item.department_name, item.agent_id))
+                .collect::<Vec<_>>()
+        ));
+    }
     let persist_target = if resolved_path != *path {
         Some(path)
     } else if missing_enable_audio {
@@ -924,7 +934,11 @@ fn startup_window_label_for_config(config: &AppConfig) -> &'static str {
     }
 }
 
-fn normalize_departments(config: &mut AppConfig) {
+/// 归一化部门配置；返回本次发生的自修复记录，供保存链路显式上报。
+fn normalize_departments(config: &mut AppConfig) -> Vec<ConfigRepairNotice> {
+    if config.api_configs.is_empty() {
+        return Vec::new();
+    }
     let fallback_api_id = config
         .api_configs
         .iter()
@@ -1079,27 +1093,15 @@ fn normalize_departments(config: &mut AppConfig) {
                 item.name = default_assistant_department_name(&config.ui_language);
             }
             normalize_department_api_bindings(item, &valid_text_chat_api_ids);
-            if item.agent_ids.is_empty() {
-                item.agent_ids = vec![DEFAULT_AGENT_ID.to_string()];
-            }
         } else if item.id == DEPUTY_DEPARTMENT_ID {
             item.is_deputy = false;
             normalize_department_api_bindings(item, &valid_text_chat_api_ids);
-            if item.agent_ids.is_empty() {
-                item.agent_ids = vec![DEPUTY_AGENT_ID.to_string()];
-            }
         } else if item.id == REVIEWER_DEPARTMENT_ID {
             item.is_deputy = false;
             normalize_department_api_bindings(item, &valid_text_chat_api_ids);
-            if item.agent_ids.is_empty() {
-                item.agent_ids = vec![DEFAULT_AGENT_ID.to_string()];
-            }
         } else if item.id == SADDLER_DEPARTMENT_ID {
             item.is_deputy = false;
             normalize_department_api_bindings(item, &valid_text_chat_api_ids);
-            if item.agent_ids.is_empty() {
-                item.agent_ids = vec![DEFAULT_AGENT_ID.to_string()];
-            }
         } else if item.id == LEADER_DEPARTMENT_ID {
             item.is_deputy = false;
             let defaults = default_leader_department(MODEL_ROLE_EXPERT_API_CONFIG_ID);
@@ -1113,9 +1115,6 @@ fn normalize_departments(config: &mut AppConfig) {
                 item.guide = defaults.guide;
             }
             normalize_department_api_bindings(item, &valid_text_chat_api_ids);
-            if item.agent_ids.is_empty() {
-                item.agent_ids = vec![DEFAULT_AGENT_ID.to_string()];
-            }
         } else if item.id == REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID {
             item.is_deputy = false;
             if item.name.trim().is_empty() {
@@ -1128,9 +1127,6 @@ fn normalize_departments(config: &mut AppConfig) {
                 item.guide = REMOTE_CUSTOMER_SERVICE_DEPARTMENT_GUIDE.to_string();
             }
             normalize_department_api_bindings(item, &valid_text_chat_api_ids);
-            if item.agent_ids.is_empty() {
-                item.agent_ids = vec![DEFAULT_AGENT_ID.to_string()];
-            }
         } else if item.id == HR_DEPARTMENT_ID {
             item.is_deputy = false;
             // 人力部是内置冻结部门：name/summary/guide/permission_control 强制以编译期预设覆盖，仅 agent_ids 可写
@@ -1140,9 +1136,6 @@ fn normalize_departments(config: &mut AppConfig) {
             item.guide = defaults.guide;
             item.permission_control = DepartmentPermissionControl::default();
             normalize_department_api_bindings(item, &valid_text_chat_api_ids);
-            if item.agent_ids.is_empty() {
-                item.agent_ids = vec![DEFAULT_AGENT_ID.to_string()];
-            }
         }
     }
     for item in &mut out {
@@ -1151,12 +1144,8 @@ fn normalize_departments(config: &mut AppConfig) {
             &item.child_department_ids,
             &item.id,
         );
-        if (item.id == ASSISTANT_DEPARTMENT_ID || item.is_built_in_assistant)
-            && item.agent_ids.is_empty()
-        {
-            item.agent_ids = vec![DEFAULT_AGENT_ID.to_string()];
-        }
     }
+    let repairs = repair_builtin_department_agent_ids(&mut out);
     let removed_cyclic_edges = remove_cyclic_department_child_ids(&mut out);
     if !removed_cyclic_edges.is_empty() {
         let edges = removed_cyclic_edges
@@ -1176,12 +1165,60 @@ fn normalize_departments(config: &mut AppConfig) {
         item.order_index = (idx as i64) + 1;
     }
     config.departments = out;
+    repairs
 }
 
-fn normalize_app_config(config: &mut AppConfig) {
+/// 内置部门的默认负责人格：成员列表被清空时按此恢复。
+fn builtin_department_default_agent_id(department_id: &str) -> Option<&'static str> {
+    match department_id {
+        DEPUTY_DEPARTMENT_ID => Some(DEPUTY_AGENT_ID),
+        ASSISTANT_DEPARTMENT_ID
+        | REVIEWER_DEPARTMENT_ID
+        | SADDLER_DEPARTMENT_ID
+        | LEADER_DEPARTMENT_ID
+        | REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID
+        | HR_DEPARTMENT_ID => Some(DEFAULT_AGENT_ID),
+        _ => None,
+    }
+}
+
+/// 部门成员自修复：内置部门成员被清空时，按部门自身的预设恢复默认人格。
+/// 自定义部门不回填，空就是空。返回的修复项由保存链路显式上报，避免静默改配置。
+fn repair_builtin_department_agent_ids(
+    departments: &mut [DepartmentConfig],
+) -> Vec<ConfigRepairNotice> {
+    let mut repairs = Vec::new();
+    for item in departments.iter_mut() {
+        if !item.agent_ids.is_empty() {
+            continue;
+        }
+        let is_built_in_assistant = item.id == ASSISTANT_DEPARTMENT_ID || item.is_built_in_assistant;
+        let default_agent_id = builtin_department_default_agent_id(&item.id).or({
+            if is_built_in_assistant {
+                Some(DEFAULT_AGENT_ID)
+            } else {
+                None
+            }
+        });
+        let Some(default_agent_id) = default_agent_id else {
+            continue;
+        };
+        item.agent_ids = vec![default_agent_id.to_string()];
+        repairs.push(ConfigRepairNotice {
+            kind: CONFIG_REPAIR_KIND_BUILTIN_DEPARTMENT_AGENT.to_string(),
+            department_id: item.id.clone(),
+            department_name: item.name.clone(),
+            agent_id: default_agent_id.to_string(),
+        });
+    }
+    repairs
+}
+
+/// 归一化整份配置；返回本次发生的自修复记录，由调用方决定是否上报（保存路径必须上报）。
+fn normalize_app_config(config: &mut AppConfig) -> Vec<ConfigRepairNotice> {
     if config.api_configs.is_empty() && config.api_providers.is_empty() {
         *config = AppConfig::default();
-        return;
+        return Vec::new();
     }
     migrate_legacy_api_configs_into_providers(config);
     expand_api_configs_from_providers(config);
@@ -1286,8 +1323,9 @@ fn normalize_app_config(config: &mut AppConfig) {
     normalize_mcp_servers(config);
     normalize_remote_im_channels(config);
     normalize_provider_non_stream_base_urls(config);
-    normalize_departments(config);
+    let repairs = normalize_departments(config);
     normalize_image_generation_config(config);
+    repairs
 }
 
 fn normalize_app_config_and_detect_changes(config: &mut AppConfig) -> bool {

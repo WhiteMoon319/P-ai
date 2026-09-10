@@ -1431,23 +1431,20 @@ fn validate_draft_agent_for_department(
 ) -> Result<(), String> {
     let app_config = state_read_config_cached(state)?;
     let agents = state_read_agents_cached(state)?;
-    let Some(department) = app_config
+    if !app_config
         .departments
         .iter()
-        .find(|department| department.id.trim() == department_id.trim())
-    else {
+        .any(|department| department.id.trim() == department_id.trim())
+    {
         return Err(format!("Department '{department_id}' not found."));
-    };
+    }
+    // 部门成员列表只描述归属配置，不作为人格资格；这里只校验人格存在且可用。
     let agent_exists = agents
         .iter()
         .any(|agent| agent.id == agent_id.trim() && !agent.is_built_in_user);
-    let agent_in_department = department
-        .agent_ids
-        .iter()
-        .any(|id| id.trim() == agent_id.trim());
-    if !agent_exists || !agent_in_department {
+    if !agent_exists {
         return Err(format!(
-            "会话草稿的人格不属于所选部门: department_id={department_id}，agent_id={agent_id}"
+            "会话草稿的人格不存在或不可用: department_id={department_id}，agent_id={agent_id}"
         ));
     }
     Ok(())

@@ -783,6 +783,57 @@
     }
 
     #[test]
+    fn normalize_departments_should_restore_builtin_members_and_report_repairs() {
+        // 内置部门成员被清空时按自身预设恢复，并把每条修复记录上报给保存链路（允许自修复，不允许静默）
+        let mut config = AppConfig::default();
+        for department in &mut config.departments {
+            department.agent_ids.clear();
+        }
+        let repairs = normalize_departments(&mut config);
+
+        assert!(!repairs.is_empty(), "内置部门回填必须产生修复记录");
+        for department in &config.departments {
+            assert!(
+                !department.agent_ids.is_empty(),
+                "内置部门成员不得为空：department_id={}",
+                department.id
+            );
+        }
+        let deputy = config
+            .departments
+            .iter()
+            .find(|department| department.id == DEPUTY_DEPARTMENT_ID)
+            .expect("deputy department");
+        assert_eq!(deputy.agent_ids, vec![DEPUTY_AGENT_ID.to_string()]);
+        assert!(repairs
+            .iter()
+            .any(|repair| repair.department_id == DEPUTY_DEPARTMENT_ID
+                && repair.agent_id == DEPUTY_AGENT_ID));
+    }
+
+    #[test]
+    fn normalize_departments_should_leave_custom_empty_department_untouched() {
+        // 自定义部门缺就缺：不回填，也不产生修复记录
+        let mut config = AppConfig::default();
+        let mut custom = default_deputy_department(MODEL_ROLE_QUICK_API_CONFIG_ID);
+        custom.id = "custom-dept".to_string();
+        custom.is_built_in_assistant = false;
+        custom.agent_ids.clear();
+        config.departments.push(custom);
+
+        let repairs = normalize_departments(&mut config);
+        let stored = config
+            .departments
+            .iter()
+            .find(|department| department.id == "custom-dept")
+            .expect("custom department");
+        assert!(stored.agent_ids.is_empty());
+        assert!(!repairs
+            .iter()
+            .any(|repair| repair.department_id == "custom-dept"));
+    }
+
+    #[test]
     fn app_data_default_should_include_deputy_agent() {
         let data = AppData::default();
         assert!(data.agents.iter().any(|agent| agent.id == DEPUTY_AGENT_ID));

@@ -107,6 +107,39 @@
           </div>
         </template>
 
+        <template #row-persona-departments>
+          <div class="grid min-w-0 gap-2">
+            <div class="text-sm font-medium">{{ t('config.persona.departments') }}</div>
+            <div v-if="!selectedPersonaCanJoinDepartment" class="text-xs leading-snug text-base-content/60">
+              {{ t('config.persona.departmentsUnavailable') }}
+            </div>
+            <template v-else>
+              <div v-if="joinableDepartments.length === 0" class="text-sm opacity-60">
+                {{ t('config.persona.departmentsEmpty') }}
+              </div>
+              <div v-else class="flex flex-wrap gap-y-2">
+                <label
+                  v-for="department in joinableDepartments"
+                  :key="department.id"
+                  class="mr-3 flex min-h-6 max-w-full cursor-pointer items-center gap-1.5 last:mr-0"
+                >
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-primary checkbox-sm"
+                    :checked="selectedPersonaDepartmentIds.includes(String(department.id || '').trim())"
+                    :disabled="configSaving"
+                    @change="togglePersonaDepartment(department.id, ($event.target as HTMLInputElement).checked)"
+                  />
+                  <span class="min-w-0 truncate text-sm">{{ department.name || department.id }}</span>
+                </label>
+              </div>
+              <div v-if="selectedPersonaDepartmentIds.length === 0" class="text-xs leading-snug text-warning">
+                {{ t('config.persona.departmentsWarning') }}
+              </div>
+            </template>
+          </div>
+        </template>
+
         <template #row-private-memory>
           <div class="grid min-w-0 gap-2">
             <div>
@@ -206,8 +239,9 @@
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { Plus, RotateCcw, Save, Trash2 } from "@lucide/vue";
-import type { MemoryRecallMode, PersonaProfile } from "../../../../types/app";
+import type { DepartmentConfig, MemoryRecallMode, PersonaProfile } from "../../../../types/app";
 import { exportTransportAgentPrivateMemories, invokeTauri } from "../../../../services/tauri-api";
+import { resolvePersonaDepartmentIds } from "../../../shared/department-persona-options";
 import SegmentedControl from "../../components/SegmentedControl.vue";
 import ConfigTemplate from "../../components/ConfigTemplate.vue";
 import type { ConfigTemplateGroup } from "../../components/config-template";
@@ -219,14 +253,17 @@ const props = defineProps<{
   personaEditorId: string;
   selectedPersona: PersonaProfile | null;
   selectedPersonaAvatarUrl: string;
+  departments: DepartmentConfig[];
   avatarSaving: boolean;
   avatarError: string;
   personaSaving: boolean;
   personaDirty: boolean;
+  configSaving: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: "update:personaEditorId", value: string): void;
+  (e: "togglePersonaDepartmentMember", value: { agentId: string; departmentId: string; member: boolean }): void;
   (e: "addPersona"): void;
   (e: "removeSelectedPersona"): void;
   (e: "resetPersonas"): void;
@@ -246,6 +283,7 @@ const templateGroups = computed<ConfigTemplateGroup[]>(() => {
       rows: [
         { key: "persona-name", items: [] },
         { key: "persona-avatar", items: [] },
+        { key: "persona-departments", items: [] },
         { key: "persona-prompt", items: [] },
       ],
     },
@@ -287,6 +325,36 @@ const pendingDisableAgentId = ref("");
 const selectedPersonaIsPrivateWorkspace = computed(
   () => props.selectedPersona?.source === "private_workspace",
 );
+const selectedPersonaDepartmentIds = computed(() =>
+  resolvePersonaDepartmentIds(props.departments, props.selectedPersona?.id),
+);
+// 内置用户人格与内置系统人格不能作为部门成员，与部门页的候选规则保持一致
+const selectedPersonaCanJoinDepartment = computed(() => {
+  const persona = props.selectedPersona;
+  if (!persona) return false;
+  const id = String(persona.id || "").trim();
+  if (!id || id === "user-persona" || persona.isBuiltInUser) return false;
+  return id === "deputy-agent" || !persona.isBuiltInSystem;
+});
+// 可勾选的部门：私域部门由私有工作区文件维护，不在人格页改动
+const joinableDepartments = computed(() =>
+  (props.departments || []).filter((department) => {
+    const departmentId = String(department.id || "").trim();
+    if (!departmentId) return false;
+    return String(department.source || "").trim() !== "private_workspace";
+  }),
+);
+
+function togglePersonaDepartment(departmentId: string, member: boolean) {
+  const agentId = String(props.selectedPersona?.id || "").trim();
+  const targetDepartmentId = String(departmentId || "").trim();
+  if (!agentId || !targetDepartmentId) return;
+  emit("togglePersonaDepartmentMember", {
+    agentId,
+    departmentId: targetDepartmentId,
+    member: !!member,
+  });
+}
 const selectedPersonaIsPreset = computed(
   () => isPresetPersona(props.selectedPersona),
 );

@@ -800,6 +800,12 @@
     "persona": {
       "title": "人格",
       "hint": "定義 AI 的人格，告訴他的自我認知該是什麼。",
+      "departments": "歸屬部門",
+      "departmentsUnavailable": "內置人格不作為部門成員。",
+      "departmentsEmpty": "暫無可歸屬的部門。",
+      "departmentsWarning": "此人格尚未歸屬任何部門，勾選後才會出現在委託與新建會話的部門選項裡。",
+      "bindDepartmentSuccess": "已更新歸屬關係。",
+      "bindDepartmentFailed": "歸屬關係更新失敗",
       "settings": "人格設定",
       "userTag": "用戶",
       "systemTag": "預設",
@@ -952,6 +958,7 @@
       "assignee": "任命",
       "assigneePrimaryHint": "所選人格將作為當前部門的主執行人格。",
       "assigneePlaceholder": "暫不指定",
+      "assigneeWarning": "此部門尚未勾選任何人格。",
       "selectHint": "請從左側選擇一個部門"
     },
     "departmentTree": {
@@ -2409,6 +2416,8 @@
     "configLoaded": "配置已加载。",
     "savingConfig": "正在保存配置...",
     "configSaved": "配置已保存。",
+    "configSavedWithRepairs": "配置已保存，並自動修復：{details}",
+    "configRepairDepartmentAgent": "「{department}」缺少負責人格，已恢復預設人格「{persona}」",
     "saved": "已儲存。",
     "saveConfigBackend404": "保存失败：后端命令不可达（404）。请使用 `pnpm tauri dev` 启动桌面端。",
     "saveConfigFailed": "保存失败: {err}",

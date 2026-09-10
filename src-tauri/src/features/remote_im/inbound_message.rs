@@ -58,41 +58,55 @@ fn resolve_department_agent_pair(
         .map(ToOwned::to_owned)
         .unwrap_or_default();
     let default_agent_id = state_service_get_assistant_department_agent_id(state)?;
-    let department = if let Some(department_id) = requested_department_id.as_deref() {
-        department_by_id(config, department_id)
-            .ok_or_else(|| format!("路由部门不存在: {department_id}"))?
+    let hint_agent_id = if !requested_agent_id.is_empty() {
+        requested_agent_id.as_str()
     } else {
-        let agent_id = if !requested_agent_id.is_empty() {
-            requested_agent_id.clone()
-        } else {
-            default_agent_id.clone()
-        };
-        department_for_agent_id(config, &agent_id)
+        default_agent_id.as_str()
+    };
+
+    // 部门：显式绑定的部门已被删除时回落到助理部门，不让这条路由直接断掉
+    let requested_department = requested_department_id
+        .as_deref()
+        .and_then(|department_id| department_by_id(config, department_id));
+    if requested_department_id.is_some() && requested_department.is_none() {
+        runtime_log_warn(format!(
+            "[远程IM] 路由部门已不存在，回落到助理部门: department_id={}",
+            requested_department_id.as_deref().unwrap_or("")
+        ));
+    }
+    let department = if let Some(department) = requested_department {
+        department
+    } else {
+        department_for_agent_id(config, hint_agent_id)
             .or_else(|| assistant_department(config))
             .ok_or_else(|| "路由部门不存在".to_string())?
     };
+
+    // 人格：显式请求的按原样使用（部门成员列表只是归属配置，不作为路由资格）；
+    // 只给了部门时取该部门第一个成员；该部门没有可用成员则回落到当前助理人格。
     let agent_id = if !requested_agent_id.is_empty() {
         requested_agent_id
     } else if requested_department_id.is_some() {
-        department
+        match department
             .agent_ids
             .iter()
             .map(|id| id.trim())
             .find(|id| !id.is_empty())
-            .map(ToOwned::to_owned)
-            .ok_or_else(|| format!("部门没有可用人格：{}", department.id))?
+        {
+            Some(member_id) => member_id.to_string(),
+            None => {
+                runtime_log_warn(format!(
+                    "[远程IM] 路由部门没有可用人格，回落到当前助理人格: department_id={}",
+                    department.id
+                ));
+                default_agent_id.clone()
+            }
+        }
     } else {
-        default_agent_id
+        default_agent_id.clone()
     };
-    if !department
-        .agent_ids
-        .iter()
-        .any(|id| id.trim() == agent_id)
-    {
-        return Err(format!(
-            "agentId 与部门不匹配: agentId={}, departmentId={}",
-            agent_id, department.id
-        ));
+    if agent_id.is_empty() {
+        return Err(format!("路由人格为空: departmentId={}", department.id));
     }
     department_primary_chat_api_config_id(config, department)
         .ok_or_else(|| format!("部门模型未配置或不可用于聊天: {}", department.id))?;

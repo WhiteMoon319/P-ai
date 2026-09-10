@@ -802,6 +802,12 @@
     "persona": {
       "title": "Persona",
       "hint": "Define the AI persona and tell it what its self-understanding should be.",
+      "departments": "Departments",
+      "departmentsUnavailable": "Built-in personas do not join departments.",
+      "departmentsEmpty": "No department available to join.",
+      "departmentsWarning": "This persona does not belong to any department yet. Select a department to make it appear in delegation and new-conversation options.",
+      "bindDepartmentSuccess": "Membership updated.",
+      "bindDepartmentFailed": "Failed to update membership",
       "settings": "Persona Settings",
       "userTag": "User",
       "systemTag": "Preset",
@@ -954,6 +960,7 @@
       "assignee": "Assignee",
       "assigneePrimaryHint": "The selected persona will act as the primary executor for this department.",
       "assigneePlaceholder": "Not assigned",
+      "assigneeWarning": "No persona is selected for this department yet.",
       "selectHint": "Please select a department from the left"
     },
     "departmentTree": {
@@ -2411,6 +2418,8 @@
     "configLoaded": "Config loaded.",
     "savingConfig": "Saving config...",
     "configSaved": "Config saved.",
+    "configSavedWithRepairs": "Config saved with automatic fixes: {details}",
+    "configRepairDepartmentAgent": "\"{department}\" had no persona, default persona \"{persona}\" was restored",
     "saved": "Saved.",
     "saveConfigBackend404": "Save failed: backend command not reachable (404). Please run `pnpm tauri dev`.",
     "saveConfigFailed": "Save failed: {err}",
