@@ -1,12 +1,5 @@
 <template>
   <div class="absolute inset-0 z-10 flex items-center justify-center overflow-hidden bg-base-100/85 backdrop-blur-sm">
-    <div class="pointer-events-none absolute inset-0" aria-hidden="true">
-      <div class="absolute -top-16 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-primary/5 blur-3xl"></div>
-      <div class="absolute bottom-8 left-1/5 h-80 w-80 rounded-full bg-secondary/5 blur-3xl"></div>
-      <div class="absolute -bottom-24 right-1/6 h-72 w-72 rounded-full bg-accent/3 blur-3xl"></div>
-    </div>
-    <div class="pointer-events-none absolute left-1/2 top-1/2 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/5 blur-3xl" />
-
     <div class="relative m-auto flex max-h-full w-full flex-col items-center gap-8 overflow-y-auto overscroll-contain px-6 pb-32 pt-8">
       <div class="flex items-center gap-1.5">
         <template v-if="titleEditing">
@@ -35,21 +28,30 @@
       </div>
 
       <div class="flex flex-col items-center gap-3">
-        <div class="avatar">
+        <div class="relative">
+          <!-- 头像身后的扁椭圆辉光：取当前人格头像主色，取不到时降级到主题色 -->
           <div
-            class="h-28 w-28 rounded-full shadow-2xl ring-4 ring-primary/60 ring-offset-4 ring-offset-base-100/50"
-          >
-            <img
-              v-if="selectedOption && resolveAvatarUrl(selectedOption.agentId)"
-              :src="resolveAvatarUrl(selectedOption.agentId)"
-              :alt="selectedOption.agentName"
-              class="h-28 w-28 rounded-full object-cover"
-            />
+            class="pointer-events-none absolute left-1/2 top-1/2 h-[280px] w-[560px] max-w-[85vw] -translate-x-1/2 -translate-y-1/2 rounded-[100%] blur-3xl transition-colors"
+            :class="glowColor ? '' : 'bg-primary/[0.05]'"
+            :style="glowColor ? { backgroundColor: glowColor } : undefined"
+            aria-hidden="true"
+          ></div>
+          <div class="avatar">
             <div
-              v-else
-              class="flex h-28 w-28 items-center justify-center rounded-full bg-primary text-4xl font-semibold text-primary-content"
+              class="h-28 w-28 rounded-full shadow-2xl ring-4 ring-primary/60 ring-offset-4 ring-offset-base-100/50"
             >
-              {{ selectedOption ? agentInitials(selectedOption.agentName) : "?" }}
+              <img
+                v-if="selectedOption && resolveAvatarUrl(selectedOption.agentId)"
+                :src="resolveAvatarUrl(selectedOption.agentId)"
+                :alt="selectedOption.agentName"
+                class="h-28 w-28 rounded-full object-cover"
+              />
+              <div
+                v-else
+                class="flex h-28 w-28 items-center justify-center rounded-full bg-primary text-4xl font-semibold text-primary-content"
+              >
+                {{ selectedOption ? agentInitials(selectedOption.agentName) : "?" }}
+              </div>
             </div>
           </div>
         </div>
@@ -331,6 +333,7 @@ import WorkspaceDirectoryPickerDialog from "../../shared/components/WorkspaceDir
 import type { ShellWorkspace, ShellWorkMode } from "../../../types/app";
 import { stripExtendedPathPrefix } from "../../../utils/shell-workspaces";
 import { pushRecentWorkspacePath } from "../../../utils/recent-workspaces";
+import { extractAvatarGlowColor } from "../../shared/utils/avatar-glow-color";
 
 interface RecentRecipientGroup {
   agentId: string;
@@ -932,6 +935,24 @@ const allGroups = computed<RecentRecipientGroup[]>(() => {
 function resolveAvatarUrl(agentId: string): string {
   return props.avatarUrlMap?.[agentId] || "";
 }
+
+// 背景光斑从当前人格头像取主色：头像换色时重新取一次，取不到就交给模板降级到主题色
+const glowColor = ref<string | null>(null);
+let glowToken = 0;
+const selectedAvatarUrl = computed(() => {
+  const option = selectedOption.value;
+  return option ? resolveAvatarUrl(option.agentId) : "";
+});
+watch(
+  selectedAvatarUrl,
+  async (url) => {
+    const token = ++glowToken;
+    const color = await extractAvatarGlowColor(url);
+    if (token !== glowToken) return;
+    glowColor.value = color;
+  },
+  { immediate: true },
+);
 
 function agentInitials(name: string): string {
   const text = String(name || "").trim();
