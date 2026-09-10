@@ -1,56 +1,13 @@
 <template>
   <aside class="conversation-time-container flex h-full w-full shrink-0 flex-col border-r border-base-300 bg-base-200">
-    <div class="flex items-center gap-2 p-2 pb-0">
-      <div role="tablist" class="tabs tabs-border min-w-0 shrink-0">
-        <button
-          type="button"
-          role="tab"
-          class="tab h-8 px-3 transition-[color,border-color,background-color] duration-200 ease-out"
-          :class="activeConversationTab === 'local' ? 'tab-active font-semibold' : ''"
-          @click="requestConversationTabChange('local')"
-        >
-          {{ t('chat.localConversationTab') }}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          class="tab h-8 px-3 transition-[color,border-color,background-color] duration-200 ease-out"
-          :class="activeConversationTab === 'contact' ? 'tab-active font-semibold' : ''"
-          @click="requestConversationTabChange('contact')"
-        >
-          {{ t('chat.contactConversationTab') }}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          class="tab h-8 px-3 transition-[color,border-color,background-color] duration-200 ease-out"
-          :class="activeConversationTab === 'task' ? 'tab-active font-semibold' : ''"
-          @click="requestConversationTabChange('task')"
-        >
-          {{ t('chat.taskConversationTab') }}
-        </button>
-      </div>
-      <button
-        type="button"
-        class="btn btn-ghost btn-xs h-7 min-h-7 w-7 min-w-7 p-0 ml-auto"
-        :class="showSearch ? 'text-primary' : 'text-base-content/55'"
-        :title="searchPlaceholder"
-        @click="showSearch = !showSearch"
-      >
-        <Search class="h-4 w-4" />
-      </button>
-    </div>
-    <div v-if="showSearch" class="shrink-0 px-2 pt-1 pb-1">
-      <label class="input input-bordered input-sm flex h-8 min-w-0 items-center gap-2 bg-base-100">
-        <Search class="h-3.5 w-3.5 opacity-60" />
-        <input
-          ref="searchInputRef"
-          v-model="conversationSearchQuery"
-          type="text"
-          class="w-full bg-transparent outline-none"
-          :placeholder="searchPlaceholder"
-        />
-      </label>
+    <div class="flex items-center p-2 pb-0">
+      <SegmentedControl
+        v-model="activeConversationTab"
+        :options="conversationTabOptions"
+        size="sm"
+        full-width
+        surface-class="bg-base-300"
+      />
     </div>
     <ChatConversationFloatingScroll ref="conversationFloatingScrollRef" class="flex-1 min-h-0">
       <Transition :name="conversationTabTransitionName" mode="out-in" @after-enter="handleConversationTabTransitionSettled">
@@ -154,6 +111,18 @@
       </Transition>
     </ChatConversationFloatingScroll>
     <div class="shrink-0 px-2 py-2">
+      <div v-if="showSearch" class="pb-1.5">
+        <label class="input input-bordered input-sm flex h-8 min-w-0 items-center gap-2 bg-base-100">
+          <Search class="h-3.5 w-3.5 opacity-60" />
+          <input
+            ref="searchInputRef"
+            v-model="conversationSearchQuery"
+            type="text"
+            class="w-full bg-transparent outline-none"
+            :placeholder="searchPlaceholder"
+          />
+        </label>
+      </div>
       <div class="flex items-center justify-between gap-2">
         <div class="dropdown dropdown-top dropdown-start">
           <div
@@ -187,6 +156,15 @@
             </li>
           </ul>
         </div>
+        <button
+          type="button"
+          class="btn btn-ghost btn-xs h-7 min-h-7 w-7 min-w-7 p-0"
+          :class="showSearch ? 'text-primary' : 'text-base-content/55'"
+          :title="searchPlaceholder"
+          @click="showSearch = !showSearch"
+        >
+          <Search class="h-4 w-4" />
+        </button>
       </div>
     </div>
     <dialog ref="batchArchiveDialogRef" class="modal" @close="closeBatchArchiveCard" @cancel.prevent="closeBatchArchiveCard">
@@ -342,6 +320,7 @@ import { resolveConversationDisplayTitle } from "../utils/conversation-title";
 import { simpleConversationItemLevel } from "../utils/conversation-item-display";
 import ChatConversationFloatingScroll from "./ChatConversationFloatingScroll.vue";
 import ChatTaskSidebarPanel from "./ChatTaskSidebarPanel.vue";
+import SegmentedControl, { type SegmentedControlOption } from "../../config/components/SegmentedControl.vue";
 
 type ConversationSidebarTab = "local" | "contact" | "task";
 type DisplayConversationSection = ConversationSection & {
@@ -445,6 +424,11 @@ const activeConversationTab = computed({
   },
   set: (value: ConversationSidebarTab) => emit("update:activeTab", value),
 });
+const conversationTabOptions: Array<SegmentedControlOption<ConversationSidebarTab>> = [
+  { value: "local", label: t("chat.localConversationTab") },
+  { value: "contact", label: t("chat.contactConversationTab") },
+  { value: "task", label: t("chat.taskConversationTab") },
+];
 const { conversationStatusById, markConversationRead } = usePipelineStatus({
   activeConversationId: computed(() => String(props.activeConversationId || "").trim()),
 });
@@ -923,14 +907,6 @@ function conversationTabOrder(value: ConversationSidebarTab): number {
   return 0;
 }
 
-function requestConversationTabChange(value: ConversationSidebarTab) {
-  if (value === activeConversationTab.value) return;
-  conversationTabTransitionName.value = conversationTabOrder(value) > conversationTabOrder(activeConversationTab.value)
-    ? "conversation-tab-slide-left"
-    : "conversation-tab-slide-right";
-  emit("update:activeTab", value);
-}
-
 function requestTaskEdit(task: TaskEntry) {
   emit("editTask", task);
 }
@@ -1116,8 +1092,8 @@ function formatConversationTime(value?: string): string {
 .conversation-tab-slide-right-enter-active,
 .conversation-tab-slide-right-leave-active {
   transition:
-    opacity 120ms ease,
-    transform 120ms cubic-bezier(0.22, 1, 0.36, 1);
+    opacity 200ms ease,
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .conversation-tab-slide-left-enter-from,
