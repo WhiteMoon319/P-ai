@@ -18,6 +18,13 @@
 :root {
   --app-code-font-family: "Easy Call JetBrains Mono", var(--app-font-family, system-ui, sans-serif);
   --app-chat-message-text-size: var(--app-text-sm-size, 0.875rem);
+  /* 行内 code 用色：在红里掺入正文色 —— 浅色主题的正文色是黑，红被压深；
+     深色主题的正文色是白，红被提亮。一个声明同时适配全部主题，不必逐个写死 */
+  --ecall-md-inline-code-color: color-mix(in oklab, var(--color-error) 70%, var(--color-base-content));
+  /* 链接用色：与行内 code 同一套混色。主色在深色主题下对比度不足
+     （内置主色压在内置深色气泡底上只有 2.4:1），掺入正文色后
+     浅色主题得到更深的海军蓝、深色主题得到更亮的蓝，两端自动适配 */
+  --ecall-md-link-color: color-mix(in oklab, var(--color-primary) 70%, var(--color-base-content));
 }
 
 .ecall-shimmer-text {

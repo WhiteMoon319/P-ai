@@ -124,7 +124,8 @@ const Inline = defineComponent({
   line-height: 1.5;
 }
 .ecall-timeline-preview-markdown :deep(.ecall-timeline-inline-code) {
-  background: var(--color-base-300);
+  color: var(--ecall-md-inline-code-color);
+  background: transparent;
   border-radius: 0.35rem;
   padding: 0.06rem 0.28rem;
   line-height: 1.4;

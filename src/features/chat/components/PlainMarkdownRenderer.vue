@@ -693,7 +693,8 @@ ol.ecall-plain-markdown-list {
 
 .ecall-plain-markdown-inline-code {
   border-radius: 0.28rem;
-  background: color-mix(in srgb, currentColor 10%, transparent);
+  color: var(--ecall-md-inline-code-color);
+  background: transparent;
   padding: 0.08rem 0.28rem;
   font-family: var(--app-code-font-family);
   font-weight: var(--ecall-md-code-weight-setting, var(--app-font-medium-weight, 500));
@@ -702,7 +703,7 @@ ol.ecall-plain-markdown-list {
 }
 
 .ecall-plain-markdown-link {
-  color: var(--color-primary);
+  color: var(--ecall-md-link-color);
   text-decoration: underline;
   text-decoration-thickness: 0.08em;
   text-underline-offset: 0.18em;
