@@ -1957,6 +1957,8 @@ function toggleActiveRawMode() {
 function openOrActivatePath(path: string) {
   const normalizedPath = normalizePath(path);
   if (!normalizedPath) return;
+  // 树内点击已打开的文件走 setActiveTab，不经过 openPath，这里同样要收起覆盖模式下的目录
+  collapseDirectoryTreeForOverlayOpen();
   const existing = tabs.value.some((tab) => tab.path === normalizedPath);
   if (existing) {
     setActiveTab(normalizedPath);
@@ -2031,6 +2033,8 @@ async function scrollActiveFileToLine(line: number) {
 async function openPath(path: string, options: { reuseActiveTab?: boolean; targetLine?: number; revealInDirectoryTree?: boolean } = {}) {
   const normalizedPath = normalizePath(path);
   if (!normalizedPath) return;
+  // revealInDirectoryTree 需要在目录树中定位，此时不能收起目录
+  if (!options.revealInDirectoryTree) collapseDirectoryTreeForOverlayOpen();
   const shouldResetScrollAfterOpen = !sameNormalizedPath(activePath.value, normalizedPath);
   const current = tabs.value.find((tab) => tab.path === normalizedPath);
   if (current?.loading) {
@@ -2553,6 +2557,13 @@ async function revealPathInDirectoryTree(path: string) {
 function closeDirectoryTree() {
   directoryRootPath.value = "";
   directoryTreeFilter.value = "";
+}
+
+// 覆盖模式（浮层）下目录树会占满面板、内容区被隐藏，打开或切换文件后收起目录，避免新文件看不到。
+function collapseDirectoryTreeForOverlayOpen() {
+  if (props.narrowOverlay !== true) return;
+  if (!directoryRootPath.value) return;
+  closeDirectoryTree();
 }
 
 // ==================== Hover Directory Tree ====================
