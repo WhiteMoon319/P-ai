@@ -51,8 +51,8 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
 
   const conversationListTab = ref<ChatLeftPanelMode>(loadStoredConversationListTab());
   const chatLeftPanelMode = ref<ChatLeftPanelMode>(loadStoredChatLeftPanelMode());
-  const chatRightPanelMode = ref<ChatRightPanelMode>("reader");
-  const chatMonitorPanelMode = ref<ChatMonitorPanelMode>("overview");
+  const chatRightPanelMode = ref<ChatRightPanelMode>("home");
+  const chatMonitorPanelMode = ref<ChatMonitorPanelMode>("delegate");
   const sideConversationListVisible = ref(loadStoredChatSidePanelVisibility("left"));
   const toolReviewPanelOpenVisible = ref(loadStoredChatSidePanelVisibility("right"));
   const chatSidePanelWidths = ref(loadStoredChatSidePanelWidths());
@@ -226,7 +226,7 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
   }
 
   function updateChatRightPanelMode(value: ChatRightPanelMode) {
-    const nextMode = normalizeChatRightPanelMode(value, "reader");
+    const nextMode = normalizeChatRightPanelMode(value, "home");
     chatRightPanelMode.value = nextMode;
     const conversationId = String(bindings.currentChatConversationId.value || "").trim();
     if (conversationId) {
@@ -256,7 +256,7 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
   }
 
   function updateChatMonitorPanelMode(value: ChatMonitorPanelMode) {
-    const nextMode = normalizeChatMonitorPanelMode(value, "overview");
+    const nextMode = normalizeChatMonitorPanelMode(value, "delegate");
     chatMonitorPanelMode.value = nextMode;
     const conversationId = String(bindings.currentChatConversationId.value || "").trim();
     if (conversationId) {
@@ -291,11 +291,11 @@ export function useChatUiStateOrchestrator(bindings: ChatUiStateBindings) {
     (conversationId) => {
       selectedChatMentions.value = [];
       chatRightPanelMode.value = conversationId
-        ? loadStoredChatRightPanelMode("reader", conversationId)
-        : "reader";
+        ? loadStoredChatRightPanelMode("home", conversationId)
+        : "home";
       const storedMonitorPanelMode = conversationId
-        ? loadStoredChatMonitorPanelMode("overview", conversationId)
-        : "overview";
+        ? loadStoredChatMonitorPanelMode("delegate", conversationId)
+        : "delegate";
       chatMonitorPanelMode.value = storedMonitorPanelMode;
       if (conversationId) storeChatMonitorPanelMode(storedMonitorPanelMode, conversationId);
     },

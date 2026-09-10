@@ -2752,11 +2752,8 @@ async function toggleFilesPanel() {
   asideMode.value = "files";
 }
 
-async function toggleGitPanel() {
-  if (directoryTreeRoot.value && asideMode.value === "git") {
-    closeDirectoryTree();
-    return;
-  }
+async function openGitPanel() {
+  if (directoryTreeRoot.value && asideMode.value === "git") return;
   if (!directoryTreeRoot.value) {
     const path = directoryToggleTargetPath.value;
     if (path) {
@@ -2776,6 +2773,14 @@ async function toggleGitPanel() {
     }
   }
   asideMode.value = "git";
+}
+
+async function toggleGitPanel() {
+  if (directoryTreeRoot.value && asideMode.value === "git") {
+    closeDirectoryTree();
+    return;
+  }
+  await openGitPanel();
 }
 
 function readStoredDirectoryOpenTargetKind() {
@@ -3096,6 +3101,7 @@ defineExpose({
   closeOtherTabs,
   openDirectoryTree,
   closeDirectoryTree,
+  openGitPanel,
   whenSessionRestored,
   tabs,
   activePath,

@@ -7,7 +7,8 @@ const PANE_COLLAPSE_EDGE_RATIO = 0.1;
 
 export const PANE_WIDTH_LIMITS = {
   left: { min: 200, max: 360, default: 320 },
-  right: { min: 260, max: 10000, default: 320 },
+  // 主页是固定尺寸的卡片墙：窄于 320px 时放不下两张小卡（140×2 + 卡片间距 + 面板内边距 24）
+  right: { min: 320, max: 10000, default: 320 },
 } as const;
 
 export const PANE_CENTER_MIN_WIDTH = 350;

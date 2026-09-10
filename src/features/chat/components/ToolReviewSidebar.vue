@@ -134,15 +134,6 @@
         :conversation-id="activeConversationId"
         active
       />
-
-      <MonitorOverview
-        v-else-if="activeTab === 'overview'"
-        :delegate-statuses="delegateStatuses"
-        :running-tasks="runningTasks"
-        :background-shells="backgroundShells"
-        :latest-batches="overviewLatestBatches"
-        @switch-panel-tab="(tab) => emit('switchPanelTab', tab)"
-      />
     </div>
     <div
       v-if="activeTab === 'tools' && currentBatch && props.batches.length > 1"
@@ -229,14 +220,11 @@ import { resolveShikiLanguage, extensionFromPath } from "../../file-reader/utils
 import TaskListItem from "./TaskListItem.vue";
 import TaskCreateCard from "./dialogs/TaskCreateCard.vue";
 import FastRequestTurnsPanel from "./FastRequestTurnsPanel.vue";
-import MonitorOverview from "./MonitorOverview.vue";
 import type { TaskEntry } from "../../config/views/config-tabs/task-editor";
 
 initKatex();
 
-type ToolReviewSidebarTab = "overview" | "tools" | "delegates" | "tasks" | "fastRequests";
-
-type MonitorPanelTabKey = "overview" | "delegate" | "tasks" | "tools" | "fastRequests";
+type ToolReviewSidebarTab = "tools" | "delegates" | "tasks" | "fastRequests";
 
 const props = defineProps<{
   activeTab: ToolReviewSidebarTab;
@@ -257,8 +245,6 @@ const props = defineProps<{
   departmentOptions: Array<{ id: string; name: string; ownerName: string; providerName?: string; modelName?: string }>;
   delegateStatuses: ConversationDelegateStatusSummary[];
   delegateStatusesErrorText: string;
-  backgroundShells: BackgroundShellTaskSummary[];
-  backgroundShellsErrorText: string;
   personaAvatarUrlMap: Record<string, string>;
 }>();
 
@@ -269,7 +255,6 @@ const emit = defineEmits<{
   (e: "reviewBatch", batchKey: string): void;
   (e: "openDelegateDetail", status: ConversationDelegateStatusSummary): void;
   (e: "abortDelegate", status: ConversationDelegateStatusSummary): void;
-  (e: "switchPanelTab", tab: MonitorPanelTabKey): void;
   (e: "assistantLinkClick", event: MouseEvent): void;
 }>();
 
@@ -345,7 +330,6 @@ const delegateStatusSections = computed<DelegateStatusSection[]>(() => {
 
 const canEditTaskInSidebar = computed(() => true);
 
-const runningTasks = computed(() => taskSections.value.find((section) => section.key === "active")?.items || []);
 const currentConversationTasks = computed(() => {
   const conversationId = String(props.activeConversationId || "").trim();
   if (!conversationId) return [];
@@ -511,32 +495,6 @@ const currentBatch = computed(() => {
   const currentKey = String(props.currentBatchKey || "").trim();
   if (!currentKey) return null;
   return props.batches.find((batch) => batch.batchKey === currentKey) || null;
-});
-
-// 概览的「最近更改」锁定时间最新的最多三批，不跟随用户当前浏览位置
-const OVERVIEW_LATEST_BATCH_LIMIT = 3;
-
-function batchLatestFinishedAtMs(batch: ToolReviewBatchSummary): number {
-  let latest = NaN;
-  for (const item of batch.items || []) {
-    const ms = Date.parse(String(item.finishedAt || ""));
-    if (Number.isFinite(ms) && (!Number.isFinite(latest) || ms > latest)) latest = ms;
-  }
-  return latest;
-}
-
-const overviewLatestBatches = computed<ToolReviewBatchSummary[]>(() => {
-  if (props.batches.length === 0) return [];
-  const sorted = [...props.batches].sort((a, b) => {
-    const aMs = batchLatestFinishedAtMs(a);
-    const bMs = batchLatestFinishedAtMs(b);
-    const aValid = Number.isFinite(aMs);
-    const bValid = Number.isFinite(bMs);
-    if (aValid && bValid && aMs !== bMs) return bMs - aMs;
-    if (aValid !== bValid) return aValid ? -1 : 1;
-    return 0;
-  });
-  return sorted.slice(0, OVERVIEW_LATEST_BATCH_LIMIT);
 });
 
 const previousBatch = computed(() => {
@@ -813,11 +771,11 @@ onMounted(() => {
   });
 });
 
-// 任务列表懒加载：切到 tasks/overview 标签才拉取（overview 需要运行中任务快照），避免监控面板挂载时白读全局任务
+// 任务列表懒加载：切到 tasks 标签才拉取，避免监控面板挂载时白读全局任务
 watch(
   () => props.activeTab,
   (tab) => {
-    if (tab === "tasks" || tab === "overview") {
+    if (tab === "tasks") {
       void loadConversationTasks();
     }
   },

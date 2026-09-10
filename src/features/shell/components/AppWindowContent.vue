@@ -208,6 +208,9 @@
         :chat-right-panel-mode="chatRightPanelMode"
         :chat-monitor-panel-mode="chatMonitorPanelMode"
         :side-chat-panel-enabled="true"
+        :side-chat-items="sideChatItems"
+        @open-side-chat-conversation="openSideChatFromHome"
+        @open-side-chat-new-page="openSideChatNewPage?.()"
         @update:chat-input="updateChatInput"
         @add-mention="addChatMention"
         @remove-mention="removeChatMention"
@@ -289,11 +292,7 @@
               @close-other-tabs="closeOtherSideChatTabs"
             >
               <template #leading>
-                <ChatRightPanelSwitcher
-                  :model-value="chatRightPanelMode"
-                  :side-chat-enabled="true"
-                  @update:model-value="updateChatRightPanelMode"
-                />
+                <ChatRightPanelSwitcher @select-home="updateChatRightPanelMode('home')" />
               </template>
               <template #tabTrailing>
                 <button
@@ -912,6 +911,19 @@ const sideChatTabs = computed(() => (props.sideConversations || []).map((convers
   icon: MessageSquareMore,
   closeable: true,
 })));
+
+/** 右侧主页「追问」卡片数据：当前打开的追问会话 */
+const sideChatItems = computed(() =>
+  sideChatTabs.value.map((tab) => ({ id: String(tab.key || "").trim(), title: String(tab.label || "").trim() })),
+);
+
+/** 主页点某张追问小卡：切到追问面板并激活对应会话 */
+function openSideChatFromHome(conversationId: string) {
+  const id = String(conversationId || "").trim();
+  if (!id) return;
+  props.updateChatRightPanelMode("sideChat");
+  props.selectSideChatConversation?.(id);
+}
 
 function closeSideChatTab(conversationId: string) {
   return props.closeSideChatConversations?.([conversationId]);

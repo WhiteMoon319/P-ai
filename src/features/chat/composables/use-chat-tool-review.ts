@@ -140,6 +140,8 @@ type UseChatToolReviewOptions = {
   refreshTick: Ref<number>;
   initialPanelOpen?: Ref<boolean>;
   activeTab?: Ref<string>;
+  /** 右侧主页可见时为真：主页的「最近工具」卡片复用同一份批次列表，需要在这里补一次加载 */
+  homePreviewActive?: Ref<boolean>;
   t: (key: string, params?: Record<string, unknown>) => string;
   onRefreshMessage?: (input: { conversationId: string; messageId: string }) => void | Promise<void>;
 };
@@ -548,8 +550,10 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
     { immediate: true },
   );
 
-  // 工具评审批列表只在监控面板打开且 tools 标签激活时加载（懒加载），避免切换会话时白读
+  // 工具评审批列表在监控面板打开且 tools 标签激活时加载（懒加载），避免切换会话时白读；
+  // 右侧主页也展示批次摘要，因此主页可见时一并放行，否则首页那张卡永远没有数据。
   function shouldLoadToolReviewBatches(): boolean {
+    if (options.homePreviewActive?.value) return true;
     if (!toolReviewPanelOpen.value) return false;
     if (options.activeTab && options.activeTab.value !== "tools") return false;
     return true;
@@ -563,6 +567,19 @@ export function useChatToolReview(options: UseChatToolReviewOptions) {
         if (conversationId && shouldLoadToolReviewBatches()) {
           void refreshToolReviewBatches();
         }
+      },
+    );
+  }
+
+  // 主页每次显示时刷新一次批次列表：批次随对话推进变化，缓存旧值会显示过期摘要
+  if (options.homePreviewActive) {
+    watch(
+      () => Boolean(options.homePreviewActive?.value),
+      (visible) => {
+        if (!visible) return;
+        const conversationId = String(options.activeConversationId.value || "").trim();
+        if (!conversationId) return;
+        void refreshToolReviewBatches();
       },
     );
   }

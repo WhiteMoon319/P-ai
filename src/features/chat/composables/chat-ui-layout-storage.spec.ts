@@ -3,6 +3,7 @@ import { normalizeChatMonitorPanelMode, normalizeChatRightPanelMode } from "./ch
 
 describe("normalizeChatRightPanelMode", () => {
   it("preserves top-level panel modes", () => {
+    expect(normalizeChatRightPanelMode("home")).toBe("home");
     expect(normalizeChatRightPanelMode("sideChat")).toBe("sideChat");
     expect(normalizeChatRightPanelMode("monitor")).toBe("monitor");
   });
@@ -19,8 +20,9 @@ describe("normalizeChatMonitorPanelMode", () => {
     expect(normalizeChatMonitorPanelMode("review")).toBe("tools");
   });
 
-  it("migrates removed tabs to overview and falls back to overview", () => {
-    expect(normalizeChatMonitorPanelMode("backgroundShells")).toBe("overview");
-    expect(normalizeChatMonitorPanelMode("unknown")).toBe("overview");
+  it("migrates removed tabs to delegate and falls back to delegate", () => {
+    expect(normalizeChatMonitorPanelMode("overview")).toBe("delegate");
+    expect(normalizeChatMonitorPanelMode("backgroundShells")).toBe("delegate");
+    expect(normalizeChatMonitorPanelMode("unknown")).toBe("delegate");
   });
 });

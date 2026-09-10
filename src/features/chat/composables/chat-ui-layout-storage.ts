@@ -1,6 +1,6 @@
 export type ChatLeftPanelMode = "local" | "contact" | "task";
-export type ChatRightPanelMode = "reader" | "monitor" | "sideChat";
-export type ChatMonitorPanelMode = "overview" | "delegate" | "tasks" | "tools" | "fastRequests";
+export type ChatRightPanelMode = "home" | "reader" | "monitor" | "sideChat";
+export type ChatMonitorPanelMode = "delegate" | "tasks" | "tools" | "fastRequests";
 export type ChatSidePanelSide = "left" | "right";
 export type ChatSidePanelWidths = { leftWidth: number; rightWidth: number };
 
@@ -34,15 +34,16 @@ export function normalizeChatLeftPanelMode(value: string): ChatLeftPanelMode {
   return "local";
 }
 
-export function normalizeChatRightPanelMode(value: string, fallback: ChatRightPanelMode = "reader"): ChatRightPanelMode {
-  if (value === "reader" || value === "monitor" || value === "sideChat") return value;
+export function normalizeChatRightPanelMode(value: string, fallback: ChatRightPanelMode = "home"): ChatRightPanelMode {
+  if (value === "home" || value === "reader" || value === "monitor" || value === "sideChat") return value;
   if (value === "delegate" || value === "tools" || value === "fastRequests" || value === "tasks" || value === "review") return "monitor";
   return fallback;
 }
 
-export function normalizeChatMonitorPanelMode(value: string, fallback: ChatMonitorPanelMode = "overview"): ChatMonitorPanelMode {
-  if (value === "overview" || value === "delegate" || value === "tasks" || value === "tools" || value === "fastRequests") return value;
-  if (value === "backgroundShells") return "overview";
+export function normalizeChatMonitorPanelMode(value: string, fallback: ChatMonitorPanelMode = "delegate"): ChatMonitorPanelMode {
+  if (value === "delegate" || value === "tasks" || value === "tools" || value === "fastRequests") return value;
+  // 概览已迁移到右侧主页，旧存储的 overview 与更早的 backgroundShells 一并回落到委托
+  if (value === "overview" || value === "backgroundShells") return "delegate";
   if (value === "review") return "tools";
   return fallback;
 }
@@ -92,7 +93,7 @@ function chatMonitorPanelModeConversationStorageKey(conversationId: string) {
   return normalizedId ? `${CHAT_MONITOR_PANEL_MODE_BY_CONVERSATION_STORAGE_PREFIX}${normalizedId}` : "";
 }
 
-export function loadStoredChatRightPanelMode(fallback: ChatRightPanelMode = "reader", conversationId = ""): ChatRightPanelMode {
+export function loadStoredChatRightPanelMode(fallback: ChatRightPanelMode = "home", conversationId = ""): ChatRightPanelMode {
   if (typeof window === "undefined") return fallback;
   const conversationKey = chatRightPanelModeConversationStorageKey(conversationId);
   if (conversationKey) {

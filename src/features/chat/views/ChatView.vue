@@ -627,10 +627,34 @@
           @keydown.left.prevent="adjustPaneWidthByKeyboard('right', 24)"
           @keydown.right.prevent="adjustPaneWidthByKeyboard('right', -24)"
         ></div>
-        <FileReaderPanel
-          v-if="chatRightPanelMode === 'reader'"
-          ref="chatReaderPanelRef"
+        <ChatHomePanel
+          v-if="chatRightPanelMode === 'home'"
           class="h-full w-full"
+          :workspace-root-path="currentWorkspaceRootPath"
+          :branch="homeFilePreview.branch"
+          :git-changes="homeFilePreview.changes"
+          :change-count="homeFilePreview.changeCount"
+          :open-files="homeFilePreview.openFiles"
+          :active-path="homeFilePreview.activePath"
+          :open-file-count="homeFilePreview.openFileCount"
+          :side-chats="sideChatItems"
+          :side-chat-enabled="Boolean(sideChatPanelEnabled)"
+          :delegates="delegateStatuses"
+          :running-tasks="homePanelRunningTasks"
+          :shells="backgroundShells"
+          :tool-batches="toolReviewBatches"
+          @select-panel="selectChatRightPanelMode"
+          @open-file="openHomeFile"
+          @open-side-chat="openHomeSideChat"
+          @create-side-chat="openHomeSideChatNewPage"
+          @open-workspace="openHomeWorkspaceDirectory"
+          @open-git-changes="openHomeGitChanges"
+          @open-monitor-tab="openMonitorTabFromHome"
+        />
+        <FileReaderPanel
+          v-else-if="chatRightPanelMode === 'reader'"
+          ref="chatReaderPanelRef"
+          class="ecall-panel-enter h-full w-full"
           :narrow-overlay="rightPaneOverlay"
           :initial-root-path="effectiveFileReaderRootPath"
           :session-key="chatFileReaderSessionKey"
@@ -646,11 +670,7 @@
           @clear-context-references="clearFileReaderContextReferences"
         >
           <template #tabLeadingActions>
-            <ChatRightPanelSwitcher
-              :model-value="chatRightPanelMode"
-              :side-chat-enabled="sideChatPanelEnabled"
-              @update:model-value="selectChatRightPanelMode"
-            />
+            <ChatRightPanelSwitcher @select-home="selectChatRightPanelMode('home')" />
           </template>
           <template #empty>
             <div class="space-y-2 px-5 text-center">
@@ -659,10 +679,10 @@
             </div>
           </template>
         </FileReaderPanel>
-        <div v-else-if="chatRightPanelMode === 'sideChat'" class="flex h-full min-h-0 w-full flex-col bg-base-200">
+        <div v-else-if="chatRightPanelMode === 'sideChat'" class="ecall-panel-enter flex h-full min-h-0 w-full flex-col bg-base-200">
           <slot name="side-chat-panel" />
         </div>
-        <div v-else-if="chatRightPanelMode === 'monitor'" class="flex h-full min-h-0 w-full flex-col bg-base-200">
+        <div v-else-if="chatRightPanelMode === 'monitor'" class="ecall-panel-enter flex h-full min-h-0 w-full flex-col bg-base-200">
           <PanelTabStrip
             :tabs="monitorPanelTabs"
             :active-key="chatMonitorPanelMode"
@@ -671,11 +691,7 @@
             @select-tab="selectMonitorPanelTab"
           >
             <template #leading>
-              <ChatRightPanelSwitcher
-                :model-value="chatRightPanelMode"
-                :side-chat-enabled="sideChatPanelEnabled"
-                @update:model-value="selectChatRightPanelMode"
-              />
+              <ChatRightPanelSwitcher @select-home="selectChatRightPanelMode('home')" />
             </template>
           </PanelTabStrip>
           <ToolReviewSidebar class="min-h-0 flex-1"
@@ -692,9 +708,6 @@
             :department-options="toolReviewDepartmentOptions"
             :delegate-statuses="delegateStatuses"
             :delegate-statuses-error-text="delegateStatusesErrorText"
-            :background-shells="backgroundShells"
-            :background-shells-error-text="backgroundShellsErrorText"
-            @switch-panel-tab="selectMonitorPanelTab"
             :persona-avatar-url-map="personaAvatarUrlMap"
             @select-batch="setToolReviewCurrentBatchKey" @load-item-detail="loadToolReviewItemDetail"
             @review-item="runToolReviewForCall" @review-batch="runToolReviewForBatch"
@@ -719,12 +732,13 @@ import {
   useChatComposerAppearance,
   visibleChatComposerContextGroups,
 } from "../../shell/composables/use-chat-composer-appearance";
-import { ArrowDownToLine, Check, CircleAlert, Copy, GanttChart, History, Inbox, LayoutDashboard, ListTodo, Network, Trash2, Undo2, Wrench, X } from "@lucide/vue";
+import { ArrowDownToLine, Check, CircleAlert, Copy, GanttChart, History, Inbox, ListTodo, Network, Trash2, Undo2, Wrench, X } from "@lucide/vue";
 import {
   copyTransportChatImageToClipboard,
   getTransportHostContext,
   invokeTauri,
   isDesktopTauriHost,
+  gitPanelStatus,
   onTransportNotification,
   onTransportRecovered,
   openTransportExternalUrl,
@@ -748,6 +762,7 @@ import TimelineSnakeBoard from "../components/TimelineSnakeBoard.vue";
 import ChatConversationSidebar from "../components/ChatConversationSidebar.vue";
 import ChatWorkspaceToolbar from "../components/ChatWorkspaceToolbar.vue";
 import ToolReviewSidebar from "../components/ToolReviewSidebar.vue";
+import ChatHomePanel from "../components/ChatHomePanel.vue";
 import ChatRightPanelSwitcher from "../components/ChatRightPanelSwitcher.vue";
 import ToolReviewTargetDialog from "../components/ToolReviewTargetDialog.vue";
 import FileReaderPanel from "../../file-reader/components/FileReaderPanel.vue";
@@ -828,6 +843,8 @@ const props = defineProps<{
   chatRightPanelMode: ChatRightPanelMode;
   chatMonitorPanelMode: ChatMonitorPanelMode;
   sideChatPanelEnabled?: boolean;
+  /** 右侧主页「追问」卡片数据；追问会话由宿主容器持有 */
+  sideChatItems?: Array<{ id: string; title: string }>;
   createConversationDepartmentOptions: DepartmentPersonaOption[];
   recipientOptionsReady?: boolean;
   defaultCreateConversationDepartmentId: string;
@@ -849,6 +866,8 @@ const emit = defineEmits<{
   (e: "toolReviewPanelOpenChange", value: boolean): void;
   (e: "openChatReaderFile", path: string, line?: number): void;
   (e: "openChatReaderDirectory", path: string, line?: number): void;
+  (e: "openSideChatConversation", conversationId: string): void;
+  (e: "openSideChatNewPage"): void;
   (e: "sidePanelWidthsChange", value: { leftWidth: number; rightWidth: number }): void;
   (e: "sidePanelWidthsCommit", value: { leftWidth: number; rightWidth: number }): void;
   (e: "update:conversation-list-tab", value: "local" | "contact" | "task"): void;
@@ -933,10 +952,9 @@ const commitTotal = ref(0);
 const commitPage = ref(1);
 const commitPageSize = ref(5);
 
-type ToolReviewSidebarTab = "overview" | "tools" | "delegates" | "tasks" | "fastRequests";
+type ToolReviewSidebarTab = "tools" | "delegates" | "tasks" | "fastRequests";
 
 const monitorPanelTabs = computed<Array<{ key: ChatMonitorPanelMode; label: string; icon: typeof Network; closeable: false }>>(() => [
-  { key: "overview", label: t("chat.toolReview.overviewTab"), icon: LayoutDashboard, closeable: false },
   { key: "delegate", label: t("chat.toolReview.delegatesTab"), icon: Network, closeable: false },
   { key: "tasks", label: t("chat.toolReview.tasksTab"), icon: ListTodo, closeable: false },
   { key: "tools", label: t("chat.toolReview.toolsTab"), icon: Wrench, closeable: false },
@@ -946,9 +964,8 @@ const monitorPanelTabs = computed<Array<{ key: ChatMonitorPanelMode; label: stri
 const toolReviewSidebarActiveTab = computed<ToolReviewSidebarTab>(() => {
   if (props.chatMonitorPanelMode === "tools") return "tools";
   if (props.chatMonitorPanelMode === "tasks") return "tasks";
-  if (props.chatMonitorPanelMode === "delegate") return "delegates";
   if (props.chatMonitorPanelMode === "fastRequests") return "fastRequests";
-  return "overview";
+  return "delegates";
 });
 // ==================== messages / audio ====================
 
@@ -2217,6 +2234,7 @@ const {
   departmentOptions: toolReviewDepartmentOptions,
   initialPanelOpen: toRef(props, "initialToolReviewPanelOpen"),
   activeTab: toolReviewSidebarActiveTab,
+  homePreviewActive: computed(() => props.chatRightPanelMode === "home"),
   t, syncViewportMetrics,
   onRefreshMessage: (payload) => emit("refreshToolReviewMessage", payload),
   onToolReviewPanelOpenChange: (open) => emit("toolReviewPanelOpenChange", open),
@@ -2279,9 +2297,166 @@ watch(
 );
 
 function selectMonitorPanelTab(key: string) {
-  if (key !== "overview" && key !== "delegate" && key !== "tasks" && key !== "tools" && key !== "fastRequests") return;
+  if (key !== "delegate" && key !== "tasks" && key !== "tools" && key !== "fastRequests") return;
   emit("update:chatMonitorPanelMode", key);
 }
+
+const sideChatItems = computed(() =>
+  (Array.isArray(props.sideChatItems) ? props.sideChatItems : [])
+    .map((item) => ({ id: String(item?.id || "").trim(), title: String(item?.title || "").trim() }))
+    .filter((item) => item.id),
+);
+
+/** 主页「追问」小卡：切到该追问会话（追问面板与会话激活都由宿主持有） */
+function openHomeSideChat(conversationId: string) {
+  const id = String(conversationId || "").trim();
+  if (!id) return;
+  emit("update:chatRightPanelMode", "sideChat");
+  emit("openSideChatConversation", id);
+}
+
+/** 主页「新建追问」入口卡：与追问面板右上角 ＋ 同一行为，进新建选择页（追问会话由宿主创建） */
+function openHomeSideChatNewPage() {
+  emit("update:chatRightPanelMode", "sideChat");
+  emit("openSideChatNewPage");
+}
+
+/** 主页「工作目录」入口卡：切到阅读器面板并展开工作区目录树 */
+async function openHomeWorkspaceDirectory() {
+  const workspaceRootPath = String(props.currentWorkspaceRootPath || "").trim();
+  if (!workspaceRootPath) return;
+  selectChatRightPanelMode("reader");
+  await nextTick();
+  await nextTick();
+  await openDirectoryInReader(workspaceRootPath);
+}
+
+/** 主页「已打开文件」大卡里的文件：切到阅读器面板并打开该文件 */
+async function openHomeFile(path: string) {
+  const target = String(path || "").trim();
+  if (!target) return;
+  selectChatRightPanelMode("reader");
+  await nextTick();
+  const panel = chatReaderPanelRef.value;
+  if (!panel) return;
+  // 面板首次挂载会异步恢复上次会话，等它完成再打开目标文件，避免被旧会话覆盖
+  await panel.whenSessionRestored?.();
+  await panel.openPath(target);
+  panel.closeDirectoryTree();
+}
+
+/** 主页 Git 卡的「查看剩余 N 个文件」：切到阅读器面板并打开 Git 更改列表 */
+async function openHomeGitChanges() {
+  selectChatRightPanelMode("reader");
+  await nextTick();
+  await nextTick();
+  const panel = chatReaderPanelRef.value;
+  if (!panel) return;
+  await panel.whenSessionRestored?.();
+  await panel.openGitPanel();
+}
+
+/** 主页监控卡片里的概览条目点击后：切到监控面板的对应 tab。 */
+function openMonitorTabFromHome(tab: ChatMonitorPanelMode) {
+  emit("update:chatMonitorPanelMode", tab);
+  selectChatRightPanelMode("monitor");
+}
+
+// ==================== 右侧主页预览 ====================
+
+/** 大卡一屏最多展示的条目数，超出交给卡片显示「还有 N 项」 */
+const HOME_CARD_ITEM_LIMIT = 6;
+
+type HomeFileItem = { path: string; label: string };
+
+const EMPTY_HOME_FILE_PREVIEW = {
+  openFiles: [] as HomeFileItem[],
+  activePath: "",
+  openFileCount: 0,
+};
+
+/** 文件项：path 保留完整路径用于打开，label 只用于展示 */
+function toHomeFileItem(path: string): HomeFileItem {
+  const normalized = String(path || "").replace(/\\/g, "/").trim();
+  const parts = normalized.split("/").filter(Boolean);
+  return { path: normalized, label: parts.pop() || normalized };
+}
+
+/** 已打开文件与会话级持久化同步，主页不常驻阅读器面板，直接读它的会话状态 */
+function readHomeOpenFiles(): { openFiles: HomeFileItem[]; activePath: string; openFileCount: number } {
+  const sessionKey = String(chatFileReaderSessionKey.value || "").trim();
+  if (!sessionKey || typeof window === "undefined") return { ...EMPTY_HOME_FILE_PREVIEW };
+  try {
+    const legacyKey = String(legacyChatFileReaderSessionKey.value || "").trim();
+    const raw = window.localStorage.getItem(sessionKey)
+      || (legacyKey ? window.localStorage.getItem(legacyKey) : "")
+      || "{}";
+    const state = JSON.parse(raw) as { tabs?: unknown; activePath?: unknown };
+    const tabs = (Array.isArray(state.tabs) ? state.tabs : [])
+      .map((item) => String(item || "").replace(/\\/g, "/").trim())
+      .filter((path) => path && !path.startsWith("git-diff:"));
+    const activeRaw = String(state.activePath || "").replace(/\\/g, "/").trim();
+    const activePath = activeRaw && !activeRaw.startsWith("git-diff:") ? activeRaw : "";
+    const ordered = activePath ? [activePath, ...tabs.filter((path) => path !== activePath)] : tabs;
+    return {
+      openFiles: ordered.slice(0, HOME_CARD_ITEM_LIMIT).map(toHomeFileItem),
+      activePath,
+      openFileCount: ordered.length,
+    };
+  } catch {
+    return { ...EMPTY_HOME_FILE_PREVIEW };
+  }
+}
+
+const homeFilePreview = ref({
+  openFiles: [] as HomeFileItem[],
+  activePath: "",
+  openFileCount: 0,
+  branch: "",
+  changes: [] as Array<{ path: string; status: string }>,
+  changeCount: 0,
+});
+let homeGitRequestSeq = 0;
+
+async function refreshHomeGitPreview() {
+  const workspacePath = String(props.currentWorkspaceRootPath || "").trim();
+  const seq = ++homeGitRequestSeq;
+  if (!workspacePath) {
+    homeFilePreview.value = { ...homeFilePreview.value, branch: "", changes: [], changeCount: 0 };
+    return;
+  }
+  try {
+    const status = await gitPanelStatus(workspacePath);
+    if (seq !== homeGitRequestSeq) return;
+    const entries = Array.isArray(status?.entries) ? status.entries : [];
+    homeFilePreview.value = {
+      ...homeFilePreview.value,
+      branch: String(status?.branch || ""),
+      changes: entries.map((entry) => ({
+        path: String(entry?.path || ""),
+        status: String(entry?.unstagedStatus || entry?.stagedStatus || ""),
+      })),
+      changeCount: entries.length || (Number(status?.stagedTotal || 0) + Number(status?.unstagedTotal || 0)),
+    };
+  } catch {
+    if (seq !== homeGitRequestSeq) return;
+    homeFilePreview.value = { ...homeFilePreview.value, branch: "", changes: [], changeCount: 0 };
+  }
+}
+
+watch(
+  () => [
+    String(props.activeConversationId || "").trim(),
+    props.chatRightPanelMode,
+    String(props.currentWorkspaceRootPath || "").trim(),
+  ] as const,
+  ([, mode]) => {
+    if (mode !== "home") return;
+    homeFilePreview.value = { ...homeFilePreview.value, ...readHomeOpenFiles() };
+    void refreshHomeGitPreview();
+  },
+  { immediate: true },
+);
 
 // ==================== delegate status ====================
 
@@ -2298,7 +2473,7 @@ const {
 // ==================== background shell status ====================
 
 const {
-  backgroundShells, backgroundShellsErrorText,
+  backgroundShells,
 } = useBackgroundShell({
   activeConversationId: toRef(props, "activeConversationId"),
   // 后台任务：工作区监控 bar 常驻展示运行数量，靠事件广播驱动刷新
@@ -2312,6 +2487,8 @@ const runningShellCount = computed(() =>
 // ==================== running task count for monitor bar ====================
 
 const runningTaskCount = ref(0);
+/** 主页监控卡片预览用的运行中任务条目，与计数复用同一次 task.list 请求 */
+const homePanelRunningTasks = ref<TaskEntry[]>([]);
 let runningTaskRequestSeq = 0;
 let runningTaskRequestConversationId = "";
 
@@ -2321,20 +2498,24 @@ async function refreshRunningTaskCount() {
     runningTaskRequestSeq += 1;
     runningTaskRequestConversationId = "";
     runningTaskCount.value = 0;
+    homePanelRunningTasks.value = [];
     return;
   }
   const seq = ++runningTaskRequestSeq;
   runningTaskRequestConversationId = conversationId;
   try {
-    const tasks = await invokeTauri<Array<{ completionState?: string; conversationId?: string }>>("task.list", {});
+    const tasks = await invokeTauri<TaskEntry[]>("task.list", {});
     if (seq !== runningTaskRequestSeq || runningTaskRequestConversationId !== String(props.activeConversationId || "").trim()) return;
-    runningTaskCount.value = (Array.isArray(tasks) ? tasks : []).filter((task) =>
+    const activeTasks = (Array.isArray(tasks) ? tasks : []).filter((task) =>
       String(task?.completionState || "").trim() === "active"
       && String(task?.conversationId || "").trim() === conversationId,
-    ).length;
+    );
+    runningTaskCount.value = activeTasks.length;
+    homePanelRunningTasks.value = activeTasks;
   } catch {
     if (seq !== runningTaskRequestSeq || runningTaskRequestConversationId !== String(props.activeConversationId || "").trim()) return;
     runningTaskCount.value = 0;
+    homePanelRunningTasks.value = [];
   }
 }
 
@@ -2973,6 +3154,28 @@ onBeforeUnmount(() => {
 <style scoped>
 .ecall-chat-scroll-container {
   overflow-anchor: none;
+}
+
+/* 打开右侧面板：像手机应用那样从略小放大进入；时长与曲线复用侧栏 push 动画的 220ms 同参 */
+.ecall-panel-enter {
+  animation: ecall-panel-enter 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes ecall-panel-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ecall-panel-enter {
+    animation: none;
+  }
 }
 
 .chat-conversation-switch-enter-active,

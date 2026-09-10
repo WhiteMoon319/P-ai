@@ -14,10 +14,12 @@ function createOptions() {
   const activeConversationId = ref("");
   const refreshTick = ref(0);
   const activeTab = ref("delegates");
+  const homePreviewActive = ref(false);
   return {
     activeConversationId,
     refreshTick,
     activeTab,
+    homePreviewActive,
     t: (key: string) => key,
   };
 }
@@ -86,5 +88,47 @@ describe("useChatToolReview 批列表懒加载", () => {
     expect(mockInvoke).toHaveBeenCalledWith("list_tool_review_batches", expect.objectContaining({
       conversationId: "conversation-a",
     }));
+  });
+
+  it("主页可见时即使面板没打开也拉批列表", async () => {
+    const options = createOptions();
+    options.homePreviewActive.value = true;
+    useChatToolReview(options);
+    await flushWatchers();
+
+    options.activeConversationId.value = "conversation-a";
+    await flushWatchers();
+
+    expect(mockInvoke).toHaveBeenCalledWith("list_tool_review_batches", expect.objectContaining({
+      conversationId: "conversation-a",
+    }));
+  });
+
+  it("主页由不可见变可见时刷新一次批列表", async () => {
+    const options = createOptions();
+    useChatToolReview(options);
+    options.activeConversationId.value = "conversation-a";
+    await flushWatchers();
+
+    expect(mockInvoke).not.toHaveBeenCalledWith("list_tool_review_batches", expect.anything());
+
+    mockInvoke.mockClear();
+    options.homePreviewActive.value = true;
+    await flushWatchers();
+
+    expect(mockInvoke).toHaveBeenCalledWith("list_tool_review_batches", expect.objectContaining({
+      conversationId: "conversation-a",
+    }));
+  });
+
+  it("主页不可见且无会话时切到可见不拉批列表", async () => {
+    const options = createOptions();
+    useChatToolReview(options);
+    await flushWatchers();
+
+    options.homePreviewActive.value = true;
+    await flushWatchers();
+
+    expect(mockInvoke).not.toHaveBeenCalledWith("list_tool_review_batches", expect.anything());
   });
 });
