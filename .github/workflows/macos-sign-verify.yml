@@ -1,0 +1,115 @@
+name: macOS Signing Verify
+
+# 仅供验证 macOS 代码签名链路：导入 APPLE_CERTIFICATE 里的自签名证书，
+# 构建一次 .app，输出 codesign 的 designated requirement 与 identifier。
+# 不创建 Release、不上传产物，可与正式发布流程并存。
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify macOS code signing
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Probe imported certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APPLE_CERTIFICATE:-}" ]; then
+            echo "::error::APPLE_CERTIFICATE secret 未设置"
+            exit 1
+          fi
+          PROBE_KC="$RUNNER_TEMP/probe.keychain-db"
+          PROBE_PW="$(openssl rand -hex 24)"
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$PROBE_PW" "$PROBE_KC"
+          security unlock-keychain -p "$PROBE_PW" "$PROBE_KC"
+          security import "$RUNNER_TEMP/cert.p12" -k "$PROBE_KC" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$PROBE_PW" "$PROBE_KC"
+          echo "=== find-identity 宽松（含未受信任证书）==="
+          security find-identity -p codesigning "$PROBE_KC" || true
+          echo "=== find-identity 严格 -v ==="
+          security find-identity -v -p codesigning "$PROBE_KC" || true
+          security delete-keychain "$PROBE_KC"
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+      - name: Build signed macOS app
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          pnpm exec tauri build --target universal-apple-darwin --bundles app \
+            --config src-tauri/tauri.macos.conf.json \
+            --config src-tauri/tauri.no-updater.conf.json
+
+      - name: Inspect produced signature
+        run: |
+          set -euo pipefail
+          APP="$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -maxdepth 1 -name '*.app' | head -1)"
+          if [ -z "$APP" ]; then
+            echo "::error::未找到构建产物 .app"
+            exit 1
+          fi
+          echo "APP=$APP" >> "$GITHUB_ENV"
+
+          echo "=== codesign -dv ==="
+          codesign -dv --verbose=4 "$APP" 2>&1 || true
+
+          echo "=== designated requirement ==="
+          codesign -d -r- "$APP" 2>&1 || true
+
+          echo "=== codesign --verify --deep --strict ==="
+          codesign --verify --deep --strict --verbose=2 "$APP" 2>&1 || true
+
+          echo "=== 内嵌 CFBundleIdentifier ==="
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist" 2>&1 || true
+
+      - name: Smoke launch
+        run: |
+          set -euo pipefail
+          APP="${APP:?APP 未设置}"
+          open "$APP" || true
+          sleep 8
+          if pgrep -f "$APP/Contents/MacOS/" > /dev/null; then
+            echo "[ok] app 启动成功"
+          else
+            echo "::warning::app 未在 8 秒内启动，需人工确认是否受 hardened runtime 影响"
+          fi
+          pkill -f "$APP/Contents/MacOS/" || true
