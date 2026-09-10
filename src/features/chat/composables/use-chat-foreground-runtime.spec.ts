@@ -103,7 +103,7 @@ describe("useChatForegroundRuntime", () => {
       chatWindowActiveSynced: ref(null),
       currentChatConversationId: ref("conversation-a"),
       chatting: ref(true),
-      allMessages: ref([message("assistant-a", "正在生成中...")]),
+      allMessages: ref([{ ...message("assistant-a", "正在生成中..."), providerMeta: { _streaming: true } }]),
       getChatFlow: () => ({
         frontendRoundPhase: ref("streaming"),
         probeBoundChannel: vi.fn(async () => false),

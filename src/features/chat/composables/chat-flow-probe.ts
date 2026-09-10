@@ -13,7 +13,12 @@ export function probeChatFlow(tag: string, data?: Record<string, unknown>): void
       detail = " [unserializable]";
     }
   }
-  void invokeTauri<boolean>("append_runtime_log_probe", {
-    message: `[聊天流诊断] ${tag}${detail}`,
-  }).catch(() => {});
+  // 探针只用于排障，任何环境（含 invoke 未接线的测试/纯浏览器）都不能反过来影响链路
+  try {
+    void invokeTauri<boolean>("append_runtime_log_probe", {
+      message: `[聊天流诊断] ${tag}${detail}`,
+    }).catch(() => {});
+  } catch {
+    // 忽略：诊断探针失败不得影响主链路
+  }
 }
