@@ -52,11 +52,9 @@ pub struct UiElementInfo {
     pub focused: bool,
 }
 
-/// app 后台动作目标：按快照序号定位元素，或屏幕物理坐标定位
+/// app 后台动作目标：按元素名寻址，或屏幕物理坐标定位
 #[derive(Debug, Clone)]
 pub enum AppTarget {
-    /// el：模型侧元素引用编号（仅用于 stale 报错文案，指向模型能认识的 ref）
-    Element { el: u32, ordinal: usize, control_type: String, name: String },
     /// 元素名寻址：ordinal 为执行前新鲜扫描的窗口内序号，报错文案按名字讲，不提编号
     NamedElement { ordinal: usize, control_type: String, name: String },
     Point { screen_x: i32, screen_y: i32 },
