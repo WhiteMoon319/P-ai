@@ -1,6 +1,6 @@
 name: macOS Signing Verify
 
-# 仅供验证 macOS 代码签名链路：导入 APPLE_CERTIFICATE 里的自签名证书，
+# 仅供验证 macOS 代码签名链路：把自签名证书导入 CI 的临时 keychain 并设为可信根，
 # 构建一次 .app，输出 codesign 的 designated requirement 与 identifier。
 # 不创建 Release、不上传产物，可与正式发布流程并存。
 
@@ -43,7 +43,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Probe imported certificate
+      # 自签名证书默认不受信任，会被 Tauri 的身份解析过滤掉，报
+      # "failed to resolve signing identity"。这里自己管 keychain、把证书设为可信根，
+      # 再让 Tauri 直接按证书名签名。
+      - name: Set up self-signed signing keychain
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -53,26 +56,40 @@ jobs:
             echo "::error::APPLE_CERTIFICATE secret 未设置"
             exit 1
           fi
-          PROBE_KC="$RUNNER_TEMP/probe.keychain-db"
-          PROBE_PW="$(openssl rand -hex 24)"
-          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
-          security create-keychain -p "$PROBE_PW" "$PROBE_KC"
-          security unlock-keychain -p "$PROBE_PW" "$PROBE_KC"
-          security import "$RUNNER_TEMP/cert.p12" -k "$PROBE_KC" \
-            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+
+          KEYCHAIN="$RUNNER_TEMP/pai-signing.keychain-db"
+          KEYCHAIN_PWD="$(openssl rand -hex 24)"
+          CERT_P12="$RUNNER_TEMP/pai-signing.p12"
+          CERT_PEM="$RUNNER_TEMP/pai-signing.pem"
+
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$CERT_P12"
+
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN"
+          security set-keychain-settings "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN"
+          security import "$CERT_P12" -P "$APPLE_CERTIFICATE_PASSWORD" -A \
+            -t cert -f pkcs12 -k "$KEYCHAIN" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: \
-            -s -k "$PROBE_PW" "$PROBE_KC"
-          echo "=== find-identity 宽松（含未受信任证书）==="
-          security find-identity -p codesigning "$PROBE_KC" || true
-          echo "=== find-identity 严格 -v ==="
-          security find-identity -v -p codesigning "$PROBE_KC" || true
-          security delete-keychain "$PROBE_KC"
-          rm -f "$RUNNER_TEMP/cert.p12"
+            -s -k "$KEYCHAIN_PWD" "$KEYCHAIN"
+
+          security list-keychains -d user -s "$KEYCHAIN"
+          security default-keychain -d user -s "$KEYCHAIN"
+
+          security find-certificate -c "PAI Self-Signed" -p "$KEYCHAIN" > "$CERT_PEM"
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign \
+            -k /Library/Keychains/System.keychain "$CERT_PEM"
+
+          echo "=== 设为可信根后的有效签名身份 ==="
+          security find-identity -v -p codesigning "$KEYCHAIN"
+          if ! security find-identity -v -p codesigning "$KEYCHAIN" | grep -q "PAI Self-Signed"; then
+            echo "::error::证书设为可信根后仍不是有效签名身份"
+            exit 1
+          fi
+          rm -f "$CERT_P12"
 
       - name: Build signed macOS app
         env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: "PAI Self-Signed"
         run: |
           set -euo pipefail
           pnpm exec tauri build --target universal-apple-darwin --bundles app \
