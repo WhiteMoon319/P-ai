@@ -421,6 +421,7 @@ pub fn collect_window_ui_elements(
         primary_origin_y,
         primary_width,
         primary_height,
+        include_text,
     )
 }
 
@@ -598,8 +599,8 @@ mod macos_platform_tests {
 
     #[test]
     fn zero_inputs_should_return_empty() {
-        assert!(collect_window_ui_elements(0, 0.0, 0.0, 1920.0, 1080.0).is_empty());
-        assert!(collect_ui_tree_for_windows(&[], 0.0, 0.0, 1920.0, 1080.0).is_empty());
+        assert!(collect_window_ui_elements(0, 0.0, 0.0, 1920.0, 1080.0, false).is_empty());
+        assert!(collect_ui_tree_for_windows(&[], 0.0, 0.0, 1920.0, 1080.0, false).is_empty());
     }
 
     /// 真实桌面冒烟测试：枚举窗口 + 激活前台 + 控件树扫描。
@@ -631,7 +632,7 @@ mod macos_platform_tests {
             .take(3)
             .map(|w| (w.window_id, w.title.clone()))
             .collect();
-        let elems = collect_ui_tree_for_windows(&targets, 0.0, 0.0, 1920.0, 1080.0);
+        let elems = collect_ui_tree_for_windows(&targets, 0.0, 0.0, 1920.0, 1080.0, false);
         eprintln!(
             "[probe] scanned {} elements from {} windows",
             elems.len(),
