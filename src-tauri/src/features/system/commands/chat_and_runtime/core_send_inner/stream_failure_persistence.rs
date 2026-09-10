@@ -204,6 +204,10 @@ fn persist_aborted_chat_partial_result(
         remote_im_reply_decision: None,
         remote_im_reply_target: None,
         usage: None,
+        activation_request_id: {
+            let value = stream_cache.request_id.trim();
+            (!value.is_empty()).then(|| value.to_string())
+        },
     }))
 }
 

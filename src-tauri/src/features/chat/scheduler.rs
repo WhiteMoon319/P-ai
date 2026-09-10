@@ -1292,6 +1292,7 @@ async fn process_conversation_batch(
                 remote_im_reply_decision: remote_im_skip_decision,
                 remote_im_reply_target: None,
                 usage: None,
+                activation_request_id: None,
             },
         )?;
     }
@@ -1672,10 +1673,21 @@ async fn activate_main_assistant(
         ));
     }
 
-    result.map(|result| ActivatedAssistantResult {
-        result,
-        activation_id,
-        request_id: trace_id,
+    result.map(|result| {
+        // 压缩重开会为新一轮重新生成 request_id，并用它发轮次开始事件；
+        // 收尾事件必须沿用同一个标识，否则前端按「标识必须相等」判定时会丢弃终态。
+        let final_activation_id = result
+            .activation_request_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| activation_id.clone());
+        ActivatedAssistantResult {
+            result,
+            activation_id: final_activation_id.clone(),
+            request_id: final_activation_id,
+        }
     })
 }
 

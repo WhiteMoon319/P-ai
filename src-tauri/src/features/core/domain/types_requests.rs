@@ -156,6 +156,9 @@ struct SendChatResult {
     remote_im_reply_target: Option<RemoteImReplyTarget>,
     #[serde(skip_serializing_if = "Option::is_none")]
     usage: Option<Value>,
+    /// 本轮调度实际使用的激活标识：压缩重开会换新标识，收尾事件必须与轮次开始事件一致。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    activation_request_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

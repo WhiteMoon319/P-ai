@@ -3002,6 +3002,7 @@ async fn send_chat_message_inner(
                 .map(|item| item.action.clone()),
             remote_im_reply_target: remote_im_reply_decision.and_then(|item| item.target),
             usage: last_model_usage.clone(),
+            activation_request_id: runtime_context.request_id.clone(),
         });
     }
     };
