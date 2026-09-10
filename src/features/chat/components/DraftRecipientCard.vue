@@ -1,5 +1,14 @@
 <template>
   <div class="absolute inset-0 z-10 flex items-center justify-center overflow-hidden bg-base-100/85 backdrop-blur-sm">
+    <!-- 头像身后的扁椭圆辉光：取当前人格头像主色，取不到时降级到主题色。
+         必须挂在卡片视口层；放进下面的滚动容器会被其 overflow 裁出硬边断层。
+         垂直位置按「头像中心约在内容块中心上方 8rem」做补偿。 -->
+    <div
+      class="pointer-events-none absolute left-1/2 top-1/2 h-[280px] w-[560px] max-w-[85vw] -translate-x-1/2 -translate-y-[calc(50%+8rem)] rounded-[100%] blur-3xl transition-colors"
+      :class="glowColor ? '' : 'bg-primary/[0.05]'"
+      :style="glowColor ? { backgroundColor: glowColor } : undefined"
+      aria-hidden="true"
+    ></div>
     <div class="relative m-auto flex max-h-full w-full flex-col items-center gap-8 overflow-y-auto overscroll-contain px-6 pb-32 pt-8">
       <div class="flex items-center gap-1.5">
         <template v-if="titleEditing">
@@ -28,30 +37,21 @@
       </div>
 
       <div class="flex flex-col items-center gap-3">
-        <div class="relative">
-          <!-- 头像身后的扁椭圆辉光：取当前人格头像主色，取不到时降级到主题色 -->
+        <div class="avatar">
           <div
-            class="pointer-events-none absolute left-1/2 top-1/2 h-[280px] w-[560px] max-w-[85vw] -translate-x-1/2 -translate-y-1/2 rounded-[100%] blur-3xl transition-colors"
-            :class="glowColor ? '' : 'bg-primary/[0.05]'"
-            :style="glowColor ? { backgroundColor: glowColor } : undefined"
-            aria-hidden="true"
-          ></div>
-          <div class="avatar">
+            class="h-28 w-28 rounded-full shadow-2xl ring-4 ring-primary/60 ring-offset-4 ring-offset-base-100/50"
+          >
+            <img
+              v-if="selectedOption && resolveAvatarUrl(selectedOption.agentId)"
+              :src="resolveAvatarUrl(selectedOption.agentId)"
+              :alt="selectedOption.agentName"
+              class="h-28 w-28 rounded-full object-cover"
+            />
             <div
-              class="h-28 w-28 rounded-full shadow-2xl ring-4 ring-primary/60 ring-offset-4 ring-offset-base-100/50"
+              v-else
+              class="flex h-28 w-28 items-center justify-center rounded-full bg-primary text-4xl font-semibold text-primary-content"
             >
-              <img
-                v-if="selectedOption && resolveAvatarUrl(selectedOption.agentId)"
-                :src="resolveAvatarUrl(selectedOption.agentId)"
-                :alt="selectedOption.agentName"
-                class="h-28 w-28 rounded-full object-cover"
-              />
-              <div
-                v-else
-                class="flex h-28 w-28 items-center justify-center rounded-full bg-primary text-4xl font-semibold text-primary-content"
-              >
-                {{ selectedOption ? agentInitials(selectedOption.agentName) : "?" }}
-              </div>
+              {{ selectedOption ? agentInitials(selectedOption.agentName) : "?" }}
             </div>
           </div>
         </div>
