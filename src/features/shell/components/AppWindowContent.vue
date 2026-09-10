@@ -338,25 +338,27 @@
               :create-conversation-branch-from-turn="(payload) => createSideConversationBranchFromTurn?.({ ...payload, sourceConversationId: sideConversationId })"
             />
             <div v-else class="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-5 overflow-hidden px-6">
-              <div class="pointer-events-none absolute inset-0" aria-hidden="true">
-                <div class="absolute -top-16 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-primary/5 blur-3xl"></div>
-                <div class="absolute bottom-8 left-1/5 h-80 w-80 rounded-full bg-secondary/5 blur-3xl"></div>
-                <div class="absolute -bottom-24 right-1/6 h-72 w-72 rounded-full bg-accent/3 blur-3xl"></div>
+              <div class="relative flex w-full max-w-80 flex-col items-center gap-5">
+                <!-- 按钮身后的主题色辉光：替代原先三团散在四角的写死光斑 -->
+                <div
+                  class="pointer-events-none absolute left-1/2 top-1/2 h-56 w-[420px] max-w-[85vw] -translate-x-1/2 -translate-y-1/2 rounded-[100%] bg-primary/10 blur-3xl"
+                  aria-hidden="true"
+                ></div>
+                <button
+                  type="button"
+                  class="btn btn-lg btn-primary z-10 h-16 w-full max-w-80 rounded-2xl text-base shadow-lg"
+                  @click="createSideChatConversation?.(true)"
+                >
+                  {{ t('chat.sideChat.newPageInContext', { persona: selectedPersonaName }) }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-lg z-10 h-16 w-full max-w-80 rounded-2xl border-base-300 bg-base-100 text-base shadow-lg hover:bg-base-200"
+                  @click="createSideChatConversation?.(false)"
+                >
+                  {{ t('chat.sideChat.newPageBlank', { persona: selectedPersonaName }) }}
+                </button>
               </div>
-              <button
-                type="button"
-                class="btn btn-lg btn-primary z-10 h-16 w-full max-w-80 rounded-2xl text-base shadow-lg"
-                @click="createSideChatConversation?.(true)"
-              >
-                {{ t('chat.sideChat.newPageInContext', { persona: selectedPersonaName }) }}
-              </button>
-              <button
-                type="button"
-                class="btn btn-lg btn-outline z-10 h-16 w-full max-w-80 rounded-2xl text-base shadow-lg"
-                @click="createSideChatConversation?.(false)"
-              >
-                {{ t('chat.sideChat.newPageBlank', { persona: selectedPersonaName }) }}
-              </button>
             </div>
           </div>
         </template>
