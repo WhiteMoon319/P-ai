@@ -160,7 +160,7 @@
           <div class="grid min-w-0 gap-2">
             <div>
               <div class="text-sm">{{ t('config.persona.memoryRecallMode') }}</div>
-              <div class="mt-1 text-xs leading-snug text-base-content/60">{{ t('config.persona.memoryRecallModeHint') }}</div>
+              <div class="mt-1 text-xs leading-snug text-base-content/60">{{ memoryRecallModeHint }}</div>
             </div>
             <SegmentedControl
               :model-value="selectedPersonaMemoryRecallMode"
@@ -362,6 +362,15 @@ const sortedPersonas = computed(() => sortPersonasForSelect(props.personas));
 const selectedPersonaMemoryRecallMode = computed(() =>
   normalizeMemoryRecallMode(props.selectedPersona?.memoryRecallMode),
 );
+const memoryRecallModeHint = computed(() => {
+  if (selectedPersonaMemoryRecallMode.value === "manual") {
+    return t("config.persona.memoryRecallModeHintManual");
+  }
+  if (selectedPersonaMemoryRecallMode.value === "off") {
+    return t("config.persona.memoryRecallModeHintOff");
+  }
+  return t("config.persona.memoryRecallModeHintAuto");
+});
 
 type PersonaDefaultSeed = Pick<PersonaProfile, "systemPrompt">;
 
