@@ -965,8 +965,8 @@ function agentInitials(name: string): string {
 }
 
 function handleSelectFromAll(option: DepartmentPersonaOption) {
+  // 切换人格后保持全量卡片墙展开，不自动收起，方便连续比较与再切换
   emit("change", { departmentId: option.departmentId, agentId: option.agentId });
-  expanded.value = false;
 }
 </script>
 
