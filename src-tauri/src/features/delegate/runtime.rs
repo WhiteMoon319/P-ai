@@ -438,6 +438,8 @@ fn abort_delegate_runtime_thread(
     let Some(thread) = thread else {
         return Ok(false);
     };
+    // 委托被中断时其调用方不会走到正常释放分支，这里补一次深度回忆内存索引释放。
+    deep_recall_index_release(normalized_delegate_id);
     let chat_key = delegate_thread_chat_key(&thread);
     let aborted_chat = {
         let mut inflight = app_state

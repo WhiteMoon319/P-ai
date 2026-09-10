@@ -71,7 +71,7 @@ fn ide_chat_search_chat_history_slices_for_web_settings(
     params: Value,
 ) -> Result<Value, String> {
     let input = ide_chat_parse_param_field::<ChatHistorySearchInput>(params, "input")?;
-    ide_chat_serialize(chat_history_search_for_agent(state, &input)?)
+    ide_chat_serialize(chat_history_search_slices(state, &input)?)
 }
 
 fn ide_chat_get_memory_provider_bindings_for_web_settings(

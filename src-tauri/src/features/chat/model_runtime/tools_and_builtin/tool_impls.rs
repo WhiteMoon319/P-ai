@@ -1526,6 +1526,33 @@ impl RuntimeToolMetadata for BuiltinDeviceControlTool {
     }
 }
 
+// ==================== deeprecall 深度回忆工具 ====================
+
+/// deeprecall 主入口：对主对话可见，效果是发起一次同步委托，让发起者自己去回忆。
+#[derive(Debug, Clone)]
+struct BuiltinDeepRecallTool {
+    app_state: AppState,
+    session_id: String,
+    source_agent_id: String,
+    source_department_id: String,
+}
+
+impl RuntimeToolMetadata for BuiltinDeepRecallTool {
+    fn provider_tool_definition(&self) -> ProviderToolDefinition {
+        ProviderToolDefinition::new(
+            "deeprecall",
+            "深度回忆：从你自己过去全部聊天记录中找回某个话题的来龙去脉。它会委托你自己的分身，在只读的历史记忆里多轮检索、核对上下文，最后交回一份带来源坐标的回忆报告。适合「当初是怎么定下来的」「那段讨论的前因后果」这类需要串联多次对话、跨越较长时间的问题；当前上下文里已经说清楚的事情不要用它。",
+            serde_json::json!({
+              "type": "object",
+              "properties": {
+                "query": { "type": "string", "description": "要回忆什么，用一句自然语言说清楚。时间、人物、话题范围等约束都写进这句话里，例如「上个月我们讨论过的部署方案是怎么定下来的」。" }
+              },
+              "required": ["query"]
+            }),
+        )
+    }
+}
+
 impl RuntimeValueTool for BuiltinDeviceControlTool {
     const NAME: &'static str = "device_control";
     type Args = DeviceControlToolArgs;
@@ -1546,6 +1573,40 @@ impl RuntimeValueTool for BuiltinDeviceControlTool {
             Err(err) => runtime_log_error(format!("[工具执行] 内置工具 device_control 执行失败: 错误={err}")),
         }
         result
+        })
+    }
+}
+
+impl RuntimeValueTool for BuiltinDeepRecallTool {
+    const NAME: &'static str = "deeprecall";
+    type Args = DeepRecallToolArgs;
+    type Error = ToolInvokeError;
+
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
+        Box::pin(async move {
+            runtime_log_debug(format!(
+                "[工具调试] 内置工具执行开始 name=deeprecall args={}",
+                debug_value_snippet(&serde_json::to_value(&args).unwrap_or(Value::Null), 240)
+            ));
+            let result = builtin_deep_recall(
+                &self.app_state,
+                &self.session_id,
+                &self.source_agent_id,
+                &self.source_department_id,
+                args,
+            )
+            .await
+            .map_err(ToolInvokeError::from);
+            match &result {
+                Ok(value) => runtime_log_debug(format!(
+                    "[工具调试] 内置工具执行完成 name=deeprecall result={}",
+                    debug_value_snippet(value, 240)
+                )),
+                Err(err) => runtime_log_error(format!(
+                    "[工具执行] 内置工具 deeprecall 执行失败: 错误={err}"
+                )),
+            }
+            result
         })
     }
 }
@@ -1711,10 +1772,111 @@ fn require_tool_u32(value: &Option<u32>, name: &str) -> Result<u32, ToolInvokeEr
         .ok_or_else(|| ToolInvokeError::from(format!("缺少参数 {name}")))
 }
 
+/// deeprecall_search：仅委托会话可见，供回忆分身做多轮定位检索。
+#[derive(Debug, Clone)]
+struct BuiltinDeepRecallSearchTool {
+    app_state: AppState,
+    session_id: String,
+    agent_id: String,
+}
+
+impl RuntimeToolMetadata for BuiltinDeepRecallSearchTool {
+    fn provider_tool_definition(&self) -> ProviderToolDefinition {
+        ProviderToolDefinition::new(
+            "deeprecall_search",
+            "在发起者全部历史聊天正文里做关键词检索，只返回命中位置，不返回上下文。每个命中给出「会话序号 / 消息序号」坐标，用 deeprecall_context 展开那段真实对话。检索工具已自动跳过工具调用等非正文内容。",
+            serde_json::json!({
+              "type": "object",
+              "properties": {
+                "query": { "type": "string", "description": "检索关键词或短语。可换不同说法、同义词、时间线索多次检索。" },
+                "limit": { "type": "integer", "description": "返回命中数量上限，默认 10，最大 50。", "minimum": 1, "maximum": 50 }
+              },
+              "required": ["query"]
+            }),
+        )
+    }
+}
+
+impl RuntimeValueTool for BuiltinDeepRecallSearchTool {
+    const NAME: &'static str = "deeprecall_search";
+    type Args = DeepRecallSearchToolArgs;
+    type Error = ToolInvokeError;
+
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
+        Box::pin(async move {
+            let result = deep_recall_search(
+                &self.app_state,
+                &self.session_id,
+                &self.agent_id,
+                &args.query,
+                args.limit,
+            )
+            .map_err(ToolInvokeError::from);
+            if let Err(err) = &result {
+                runtime_log_error(format!(
+                    "[工具执行] 内置工具 deeprecall_search 执行失败: 错误={err}"
+                ));
+            }
+            result
+        })
+    }
+}
+
+/// deeprecall_context：仅委托会话可见，按坐标展开真实上下文。
+#[derive(Debug, Clone)]
+struct BuiltinDeepRecallContextTool {
+    app_state: AppState,
+    session_id: String,
+    agent_id: String,
+}
+
+impl RuntimeToolMetadata for BuiltinDeepRecallContextTool {
+    fn provider_tool_definition(&self) -> ProviderToolDefinition {
+        ProviderToolDefinition::new(
+            "deeprecall_context",
+            "按「会话序号 + 起止消息序号」展开那段真实对话，用于核对命中消息的来龙去脉。消息序号来自 deeprecall_search 的命中结果，从 1 开始，闭区间。",
+            serde_json::json!({
+              "type": "object",
+              "properties": {
+                "conversation_index": { "type": "integer", "description": "会话序号，来自 deeprecall_search 命中结果，从 1 开始。", "minimum": 1 },
+                "start_index": { "type": "integer", "description": "起始消息序号（含），从 1 开始。想看命中的前因就把起点往前放。", "minimum": 1 },
+                "end_index": { "type": "integer", "description": "结束消息序号（含）。必须不小于 start_index；超出会话末尾会自动截断。单次最多返回 100 条消息。", "minimum": 1 }
+              },
+              "required": ["conversation_index", "start_index", "end_index"]
+            }),
+        )
+    }
+}
+
+impl RuntimeValueTool for BuiltinDeepRecallContextTool {
+    const NAME: &'static str = "deeprecall_context";
+    type Args = DeepRecallContextToolArgs;
+    type Error = ToolInvokeError;
+
+    fn call_typed(&self, args: Self::Args) -> RuntimeToolValueFuture<'_, Self::Error> {
+        Box::pin(async move {
+            let result = deep_recall_context(
+                &self.app_state,
+                &self.session_id,
+                &self.agent_id,
+                args.conversation_index,
+                args.start_index,
+                args.end_index,
+            )
+            .map_err(ToolInvokeError::from);
+            if let Err(err) = &result {
+                runtime_log_error(format!(
+                    "[工具执行] 内置工具 deeprecall_context 执行失败: 错误={err}"
+                ));
+            }
+            result
+        })
+    }
+}
+
 #[cfg(test)]
 mod tool_impls_tests {
     use super::config_tool_command_is_readonly;
-
     #[test]
     fn config_tool_readonly_command_detection() {
         assert!(config_tool_command_is_readonly("help"));

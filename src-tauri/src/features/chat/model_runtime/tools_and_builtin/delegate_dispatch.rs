@@ -505,6 +505,7 @@ async fn builtin_delegate(
             session_id,
             Some(source_agent_id.as_str()),
             source_department_id,
+            DELEGATE_TOOL_KIND_DELEGATE,
             args,
         )
         .await;
@@ -578,6 +579,7 @@ async fn delegate_execute_sync(
     session_id: &str,
     source_agent_id: Option<&str>,
     source_department_id: Option<&str>,
+    kind: &str,
     args: DelegateToolArgs,
 ) -> Result<Value, String> {
     let validated = match validate_delegate_args(&args) {
@@ -618,7 +620,7 @@ async fn delegate_execute_sync(
         .map(|thread| thread.delegate_id.clone());
     let delegate = delegate_create_record(
         app_state,
-        DELEGATE_TOOL_KIND_DELEGATE,
+        kind,
         &preflight.root_conversation_id,
         parent_delegate_id,
         &preflight.source_department.id,

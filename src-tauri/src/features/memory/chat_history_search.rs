@@ -5,13 +5,15 @@ const CHAT_HISTORY_INDEX_META_FILE_NAME: &str = "metadata.json";
 const CHAT_HISTORY_INDEX_TMP_DIR_NAME: &str = "chat-history-tantivy.tmp";
 const CHAT_HISTORY_FIELD_SLICE_IDX: &str = "slice_idx";
 const CHAT_HISTORY_FIELD_CONTENT: &str = "content";
-const CHAT_HISTORY_FIELD_VISIBLE_AGENT_IDS: &str = "visible_agent_ids";
+const CHAT_HISTORY_FIELD_OWNER_AGENT_ID: &str = "owner_agent_id";
+/// 索引口径版本：切片归属口径变化时必须提升，强制废弃旧索引。
+const CHAT_HISTORY_SIGNATURE_VERSION: &str = "v2-owner-agent-scope";
 
 #[derive(Clone)]
 struct ChatHistoryIndexFields {
     slice_idx: tantivy::schema::Field,
     content: tantivy::schema::Field,
-    visible_agent_ids: tantivy::schema::Field,
+    owner_agent_id: tantivy::schema::Field,
 }
 
 struct CachedChatHistoryIndex {
@@ -40,7 +42,9 @@ fn chat_history_index_cache() -> &'static std::sync::Mutex<Option<CachedChatHist
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ChatHistorySearchInput {
-    agent_id: String,
+    /// 可选的归属人格筛选：给值只返回该人格归属的会话，不给则全库检索。
+    #[serde(default)]
+    agent_id: Option<String>,
     query: String,
     #[serde(default)]
     limit: Option<usize>,
@@ -66,13 +70,14 @@ struct ChatHistorySearchHit {
 #[serde(rename_all = "camelCase")]
 struct ChatHistorySearchStats {
     total_slices: usize,
-    visible_slices: usize,
     index_storage_bytes: u64,
     cached_slice_bytes: u64,
     indexed_conversations: usize,
     skipped_delegate_conversations: usize,
     skipped_live_blocks: usize,
-    skipped_no_agent_segments: usize,
+    /// 归属人格为空的孤儿会话：不进索引，需先指定接管人格。
+    #[serde(default)]
+    skipped_orphan_conversations: usize,
     local_conversation_slices: usize,
     archive_slices: usize,
     contact_slices: usize,
@@ -89,7 +94,8 @@ struct ChatHistorySlice {
     slice_index: usize,
     content: String,
     speakers: Vec<String>,
-    visible_agent_ids: Vec<String>,
+    /// 会话归属人格：检索按它筛选，孤儿会话（空）不入索引。
+    owner_agent_id: String,
     time_start: String,
     time_end: String,
     message_start_id: String,
@@ -100,7 +106,6 @@ struct ChatHistorySlice {
 struct ChatHistoryRenderedMessage {
     message_id: String,
     speaker_name: String,
-    speaker_agent_id: Option<String>,
     created_at: String,
     rendered: String,
 }
@@ -120,6 +125,8 @@ fn chat_history_index_signature(
     user_alias: &str,
 ) -> String {
     let mut hasher = Sha256::new();
+    hasher.update(CHAT_HISTORY_SIGNATURE_VERSION.as_bytes());
+    hasher.update(b"\x1f");
     hasher.update(user_alias.as_bytes());
     hasher.update(b"\x1f");
     for agent in agents {
@@ -252,7 +259,6 @@ fn chat_history_render_message(
     let speaker_name = chat_history_speaker_name(message, agents, user_alias);
     Some(ChatHistoryRenderedMessage {
         message_id: message.id.clone(),
-        speaker_agent_id: message.speaker_agent_id.clone(),
         created_at: message.created_at.clone(),
         rendered: format!("[{}]: {}", speaker_name, text.trim()),
         speaker_name,
@@ -265,19 +271,6 @@ fn chat_history_unique_push(out: &mut Vec<String>, value: impl Into<String>) {
         return;
     }
     out.push(value);
-}
-
-fn chat_history_visible_agent_ids(messages: &[ChatHistoryRenderedMessage]) -> Vec<String> {
-    let mut out = Vec::<String>::new();
-    for message in messages {
-        if let Some(agent_id) = message.speaker_agent_id.as_deref() {
-            let trimmed = agent_id.trim();
-            if !trimmed.is_empty() {
-                chat_history_unique_push(&mut out, trimmed.to_string());
-            }
-        }
-    }
-    out
 }
 
 fn chat_history_split_long_rendered_message(
@@ -305,7 +298,7 @@ fn chat_history_build_slice(
     slice_index: usize,
     content: String,
     messages: &[ChatHistoryRenderedMessage],
-    visible_agent_ids: &[String],
+    owner_agent_id: &str,
 ) -> ChatHistorySlice {
     let mut speakers = Vec::<String>::new();
     for message in messages {
@@ -336,7 +329,7 @@ fn chat_history_build_slice(
         slice_index,
         content,
         speakers,
-        visible_agent_ids: visible_agent_ids.to_vec(),
+        owner_agent_id: owner_agent_id.to_string(),
         time_start,
         time_end,
         message_start_id,
@@ -348,14 +341,14 @@ fn chat_history_slices_from_segment(
     segment: &ChatHistorySegment,
     agents: &[AgentProfile],
     user_alias: &str,
+    owner_agent_id: &str,
 ) -> Vec<ChatHistorySlice> {
     let rendered = segment
         .messages
         .iter()
         .filter_map(|message| chat_history_render_message(message, agents, user_alias))
         .collect::<Vec<_>>();
-    let visible_agent_ids = chat_history_visible_agent_ids(&rendered);
-    if rendered.is_empty() || visible_agent_ids.is_empty() {
+    if rendered.is_empty() || owner_agent_id.trim().is_empty() {
         return Vec::new();
     }
 
@@ -377,7 +370,7 @@ fn chat_history_slices_from_segment(
             slices.len(),
             content,
             current_messages,
-            &visible_agent_ids,
+            owner_agent_id,
         );
         slices.push(slice);
         current_lines.clear();
@@ -393,7 +386,7 @@ fn chat_history_slices_from_segment(
                     slices.len(),
                     part,
                     &[message.clone()],
-                    &visible_agent_ids,
+                    owner_agent_id,
                 ));
             }
             continue;
@@ -506,6 +499,12 @@ fn chat_history_collect_slices_for_state(
             stats.skipped_delegate_conversations += 1;
             continue;
         };
+        // 归属人格即会话记忆的归属者；孤儿会话（归属为空）不入索引。
+        let owner_agent_id = conversation_meta.agent_id.trim().to_string();
+        if owner_agent_id.is_empty() {
+            stats.skipped_orphan_conversations += 1;
+            continue;
+        }
         let conversation = Conversation {
             id: conversation_meta.id.clone(),
             title: conversation_meta.title.clone(),
@@ -552,9 +551,9 @@ fn chat_history_collect_slices_for_state(
         stats.indexed_conversations += 1;
         for segment in segments {
             let before = slices.len();
-            let built = chat_history_slices_from_segment(&segment, &agents, &user_alias);
+            let built =
+                chat_history_slices_from_segment(&segment, &agents, &user_alias, &owner_agent_id);
             if built.is_empty() {
-                stats.skipped_no_agent_segments += 1;
                 continue;
             }
             slices.extend(built);
@@ -625,7 +624,7 @@ fn chat_history_estimate_slice_cache_bytes(slices: &[ChatHistorySlice]) -> u64 {
                 + chat_history_string_bytes(&slice.segment_id)
                 + chat_history_string_bytes(&slice.content)
                 + chat_history_vec_string_bytes(&slice.speakers)
-                + chat_history_vec_string_bytes(&slice.visible_agent_ids)
+                + chat_history_string_bytes(&slice.owner_agent_id)
                 + chat_history_string_bytes(&slice.time_start)
                 + chat_history_string_bytes(&slice.time_end)
                 + chat_history_string_bytes(&slice.message_start_id)
@@ -644,20 +643,20 @@ fn chat_history_build_schema() -> (Schema, ChatHistoryIndexFields) {
         .set_indexing_options(indexing)
         .set_stored();
     let content_field = schema_builder.add_text_field(CHAT_HISTORY_FIELD_CONTENT, text_options);
-    let visible_options = TextOptions::default().set_indexing_options(
+    let owner_options = TextOptions::default().set_indexing_options(
         TextFieldIndexing::default()
             .set_tokenizer("raw")
             .set_index_option(IndexRecordOption::Basic),
     );
-    let visible_field =
-        schema_builder.add_text_field(CHAT_HISTORY_FIELD_VISIBLE_AGENT_IDS, visible_options);
+    let owner_field =
+        schema_builder.add_text_field(CHAT_HISTORY_FIELD_OWNER_AGENT_ID, owner_options);
     let schema = schema_builder.build();
     (
         schema,
         ChatHistoryIndexFields {
             slice_idx: slice_idx_field,
             content: content_field,
-            visible_agent_ids: visible_field,
+            owner_agent_id: owner_field,
         },
     )
 }
@@ -669,13 +668,13 @@ fn chat_history_fields_from_schema(schema: &Schema) -> Result<ChatHistoryIndexFi
     let content = schema
         .get_field(CHAT_HISTORY_FIELD_CONTENT)
         .map_err(|err| format!("Read chat history content field failed: {err}"))?;
-    let visible_agent_ids = schema
-        .get_field(CHAT_HISTORY_FIELD_VISIBLE_AGENT_IDS)
-        .map_err(|err| format!("Read chat history visible_agent_ids field failed: {err}"))?;
+    let owner_field = schema
+        .get_field(CHAT_HISTORY_FIELD_OWNER_AGENT_ID)
+        .map_err(|err| format!("Read chat history owner_agent_id field failed: {err}"))?;
     Ok(ChatHistoryIndexFields {
         slice_idx,
         content,
-        visible_agent_ids,
+        owner_agent_id: owner_field,
     })
 }
 
@@ -699,8 +698,8 @@ fn chat_history_write_index_documents(
             continue;
         }
         let mut document = doc!(fields.slice_idx => idx as u64, fields.content => tokenized);
-        for agent_id in &slice.visible_agent_ids {
-            document.add_text(fields.visible_agent_ids, agent_id);
+        if !slice.owner_agent_id.trim().is_empty() {
+            document.add_text(fields.owner_agent_id, &slice.owner_agent_id);
         }
         writer
             .add_document(document)
@@ -869,7 +868,7 @@ fn chat_history_cached_index_for_state(state: &AppState) -> Result<(), String> {
 
 fn chat_history_tantivy_search(
     cached: &CachedChatHistoryIndex,
-    agent_id: &str,
+    owner_agent_id: Option<&str>,
     query_text: &str,
     limit: usize,
 ) -> Result<Vec<(usize, f64, f64)>, String> {
@@ -887,15 +886,19 @@ fn chat_history_tantivy_search(
     let content_query = qp
         .parse_query(&query)
         .map_err(|err| format!("Parse chat history query failed: {err}"))?;
-    let visible_term = tantivy::Term::from_field_text(cached.fields.visible_agent_ids, agent_id);
-    let visible_query: Box<dyn tantivy::query::Query> = Box::new(tantivy::query::TermQuery::new(
-        visible_term,
-        IndexRecordOption::Basic,
-    ));
-    let parsed = tantivy::query::BooleanQuery::new(vec![
-        (tantivy::query::Occur::Must, visible_query),
-        (tantivy::query::Occur::Must, content_query),
-    ]);
+    let mut clauses: Vec<(tantivy::query::Occur, Box<dyn tantivy::query::Query>)> = Vec::new();
+    if let Some(owner) = owner_agent_id.map(str::trim).filter(|value| !value.is_empty()) {
+        let owner_term = tantivy::Term::from_field_text(cached.fields.owner_agent_id, owner);
+        clauses.push((
+            tantivy::query::Occur::Must,
+            Box::new(tantivy::query::TermQuery::new(
+                owner_term,
+                IndexRecordOption::Basic,
+            )),
+        ));
+    }
+    clauses.push((tantivy::query::Occur::Must, content_query));
+    let parsed = tantivy::query::BooleanQuery::new(clauses);
     let hits = searcher
         .search(&parsed, &TopDocs::with_limit(limit).order_by_score())
         .map_err(|err| format!("Search chat history bm25 failed: {err}"))?;
@@ -924,15 +927,16 @@ fn chat_history_tantivy_search(
     Ok(out)
 }
 
-fn chat_history_search_for_agent(
+fn chat_history_search_slices(
     state: &AppState,
     input: &ChatHistorySearchInput,
 ) -> Result<ChatHistorySearchResult, String> {
     let started = std::time::Instant::now();
-    let agent_id = input.agent_id.trim();
-    if agent_id.is_empty() {
-        return Err("agentId is required".to_string());
-    }
+    let owner_filter = input
+        .agent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
     let query = input.query.trim();
     let limit = input.limit.unwrap_or(20).clamp(1, 100);
     chat_history_cached_index_for_state(state)?;
@@ -943,11 +947,6 @@ fn chat_history_search_for_agent(
         .as_ref()
         .ok_or_else(|| "Chat history index cache is empty".to_string())?;
     let mut stats = cached.stats.clone();
-    stats.visible_slices = cached
-        .slices
-        .iter()
-        .filter(|slice| slice.visible_agent_ids.iter().any(|id| id == agent_id))
-        .count();
     stats.index_storage_bytes = chat_history_directory_size(&chat_history_index_root(&state.data_path));
     stats.cached_slice_bytes = chat_history_estimate_slice_cache_bytes(&cached.slices);
 
@@ -955,7 +954,10 @@ fn chat_history_search_for_agent(
         cached
             .slices
             .iter()
-            .filter(|slice| slice.visible_agent_ids.iter().any(|id| id == agent_id))
+            .filter(|slice| match owner_filter {
+                Some(owner) => slice.owner_agent_id.as_str() == owner,
+                None => true,
+            })
             .take(limit)
             .cloned()
             .map(|slice| ChatHistorySearchHit {
@@ -965,7 +967,7 @@ fn chat_history_search_for_agent(
             })
             .collect::<Vec<_>>()
     } else {
-        chat_history_tantivy_search(cached, agent_id, query, limit)?
+        chat_history_tantivy_search(cached, owner_filter, query, limit)?
             .into_iter()
             .filter_map(|(idx, raw, normalized)| {
                 cached.slices.get(idx).cloned().map(|slice| ChatHistorySearchHit {

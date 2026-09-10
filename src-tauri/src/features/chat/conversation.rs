@@ -3033,6 +3033,7 @@ fn build_builtin_tool_general_rule_block() -> String {
 
 const EXEC_TOOL_RULE_SHELL_MD: &str = include_str!("../../../resources/prompts/exec-tool-rule-shell.md");
 const EXEC_TOOL_RULE_RG_MD: &str = include_str!("../../../resources/prompts/exec-tool-rule-rg.md");
+const DEEP_RECALL_TOOL_RULE_MD: &str = include_str!("../../../resources/prompts/deep-recall-tool-rule.md");
 
 fn build_builtin_tool_rule_block(tool_id: &str, rg_installed: bool) -> Option<String> {
     let (block_name, body) = match tool_id.trim() {
@@ -3044,6 +3045,7 @@ fn build_builtin_tool_rule_block(tool_id: &str, rg_installed: bool) -> Option<St
             }
             return Some(prompt_xml_block("exec tool rule", body));
         }
+        "deeprecall" => ("deep recall tool rule", DEEP_RECALL_TOOL_RULE_MD.trim()),
         "todo" => (
             "todo tool rule",
             "## 何时使用\n\

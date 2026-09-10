@@ -2429,6 +2429,7 @@ async fn submit_tool_review_code_internal(
             &session_id,
             Some(source_agent_id_owned.as_str()),
             Some(source_department_id_owned.as_str()),
+            DELEGATE_TOOL_KIND_DELEGATE,
             delegate_args,
         )
         .await

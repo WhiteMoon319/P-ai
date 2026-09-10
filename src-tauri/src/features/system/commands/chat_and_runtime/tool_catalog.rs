@@ -158,6 +158,31 @@ async fn builtin_tool_definitions_for_frontend(
             .provider_tool_definition(),
         ),
         frontend_tool_definition(
+            BuiltinDeepRecallTool {
+                app_state: state.clone(),
+                session_id: preview_session_id.clone(),
+                source_agent_id: preview_agent_id.clone(),
+                source_department_id: String::new(),
+            }
+            .provider_tool_definition(),
+        ),
+        frontend_tool_definition(
+            BuiltinDeepRecallSearchTool {
+                app_state: state.clone(),
+                session_id: preview_session_id.clone(),
+                agent_id: preview_agent_id.clone(),
+            }
+            .provider_tool_definition(),
+        ),
+        frontend_tool_definition(
+            BuiltinDeepRecallContextTool {
+                app_state: state.clone(),
+                session_id: preview_session_id.clone(),
+                agent_id: preview_agent_id.clone(),
+            }
+            .provider_tool_definition(),
+        ),
+        frontend_tool_definition(
             BuiltinDelegateTool {
                 app_state: state.clone(),
                 session_id: preview_session_id,

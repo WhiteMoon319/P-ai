@@ -75,7 +75,7 @@
       <template #group-actions-chat-history>
         <div v-if="chatHistoryStats" class="flex flex-wrap items-center justify-end gap-2 text-xs opacity-70">
           <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeAll') }} {{ chatHistoryStats.totalSlices }}</span>
-          <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeVisible') }} {{ chatHistoryStats.visibleSlices }}</span>
+          <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeOrphan') }} {{ chatHistoryStats.skippedOrphanConversations }}</span>
           <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeLocal') }} {{ chatHistoryStats.localConversationSlices }}</span>
           <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeArchive') }} {{ chatHistoryStats.archiveSlices }}</span>
           <span class="badge badge-sm badge-ghost">{{ t('config.memory.badgeContact') }} {{ chatHistoryStats.contactSlices }}</span>
@@ -88,7 +88,7 @@
         <div class="grid min-w-0 gap-3">
           <div class="grid grid-cols-1 gap-2 md:grid-cols-[180px_minmax(0,1fr)_auto]">
             <select v-model="chatHistoryAgentId" class="select select-bordered select-sm" :disabled="chatHistoryLoading">
-              <option value="">{{ t('config.memory.selectPersona') }}</option>
+              <option value="">{{ t('config.memory.filterPersonaOptional') }}</option>
               <option v-for="agent in personaOptions" :key="agent.id" :value="agent.id">
                 {{ agent.name || agent.id }}
               </option>
@@ -102,7 +102,7 @@
             />
             <button
               class="btn btn-sm btn-primary"
-              :disabled="chatHistoryLoading || !chatHistoryAgentId || !chatHistoryQuery"
+              :disabled="chatHistoryLoading || !chatHistoryQuery"
               @click="searchChatHistory"
             >
               <span v-if="chatHistoryLoading" class="loading loading-spinner loading-xs"></span>
@@ -514,7 +514,7 @@ type ChatHistorySlice = {
   sliceIndex: number;
   content: string;
   speakers: string[];
-  visibleAgentIds: string[];
+  ownerAgentId: string;
   timeStart: string;
   timeEnd: string;
   messageStartId: string;
@@ -529,13 +529,12 @@ type ChatHistorySearchHit = {
 
 type ChatHistorySearchStats = {
   totalSlices: number;
-  visibleSlices: number;
   indexStorageBytes: number;
   cachedSliceBytes: number;
   indexedConversations: number;
   skippedDelegateConversations: number;
   skippedLiveBlocks: number;
-  skippedNoAgentSegments: number;
+  skippedOrphanConversations: number;
   localConversationSlices: number;
   archiveSlices: number;
   contactSlices: number;
@@ -888,9 +887,10 @@ function chatHistorySourceLabel(sourceKind: string): string {
 }
 
 async function searchChatHistory() {
+  // 人格为可选筛选：不选即全库检索（主人手动翻库不受归属限制）。
   const agentId = chatHistoryAgentId.value.trim();
   const query = chatHistoryQuery.value.trim();
-  if (!agentId || !query || chatHistoryLoading.value) return;
+  if (!query || chatHistoryLoading.value) return;
   chatHistoryLoading.value = true;
   chatHistoryMessage.value = t('sidebar.memorySearching');
   try {
@@ -900,7 +900,7 @@ async function searchChatHistory() {
       elapsedMs: number;
     }>("search_chat_history_slices", {
       input: {
-        agentId,
+        agentId: agentId || null,
         query,
         limit: 30,
       },

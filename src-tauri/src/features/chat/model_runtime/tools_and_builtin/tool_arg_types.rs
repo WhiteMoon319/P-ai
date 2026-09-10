@@ -122,6 +122,28 @@ struct DelegateToolArgs {
     focus: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct DeepRecallToolArgs {
+    query: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct DeepRecallSearchToolArgs {
+    query: String,
+    #[serde(default)]
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct DeepRecallContextToolArgs {
+    conversation_index: usize,
+    start_index: usize,
+    end_index: usize,
+}
+
 fn delegate_arg_new_or_legacy(new_value: &Option<String>, legacy_value: &Option<String>) -> String {
     new_value
         .as_deref()

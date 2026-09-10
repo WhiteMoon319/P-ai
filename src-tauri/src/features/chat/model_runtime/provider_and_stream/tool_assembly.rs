@@ -370,6 +370,25 @@ fn build_global_tool_schema_cache(state: &AppState) -> Vec<CachedRuntimeToolSche
             executor_agent_id: preview_agent_id.clone(),
         }
         .provider_tool_definition(),
+        BuiltinDeepRecallTool {
+            app_state: state.clone(),
+            session_id: preview_session_id.clone(),
+            source_agent_id: preview_agent_id.clone(),
+            source_department_id: String::new(),
+        }
+        .provider_tool_definition(),
+        BuiltinDeepRecallSearchTool {
+            app_state: state.clone(),
+            session_id: preview_session_id.clone(),
+            agent_id: preview_agent_id.clone(),
+        }
+        .provider_tool_definition(),
+        BuiltinDeepRecallContextTool {
+            app_state: state.clone(),
+            session_id: preview_session_id.clone(),
+            agent_id: preview_agent_id.clone(),
+        }
+        .provider_tool_definition(),
         BuiltinDelegateTool {
             app_state: state.clone(),
             session_id: preview_session_id.clone(),
@@ -480,6 +499,8 @@ struct RuntimeToolPolicy {
     remote_reply_delegate: bool,
     contact_send_files_allowed: bool,
     origin_scope: RuntimeToolOriginScope,
+    /// 当前会话是否为 deeprecall 发起的深度回忆委托（决定检索工具是否挂载）。
+    deep_recall_delegate: bool,
 }
 
 impl RuntimeToolPolicy {
@@ -500,6 +521,7 @@ impl RuntimeToolPolicy {
             } else {
                 RuntimeToolOriginScope::Unknown
             },
+            deep_recall_delegate: false,
         }
     }
 
@@ -512,7 +534,20 @@ impl RuntimeToolPolicy {
             self.delegate_conversation,
             self.remote_reply_delegate,
             self.contact_send_files_allowed,
+            self.deep_recall_delegate,
         )
+    }
+}
+
+/// 判定委托会话是否由 deeprecall 发起：只有深度回忆委托才挂载检索工具。
+fn deep_recall_delegate_conversation(state: &AppState, conversation_id: &str) -> bool {
+    let delegate_id = conversation_id.trim();
+    if delegate_id.is_empty() {
+        return false;
+    }
+    match delegate_store_get_delegate(&state.data_path, delegate_id) {
+        Ok(entry) => entry.kind.trim() == DELEGATE_TOOL_KIND_DEEP_RECALL,
+        Err(_) => false,
     }
 }
 
@@ -542,6 +577,7 @@ fn runtime_tool_policy_from_session(
                 remote_reply_delegate: delegate_session_is_remote_reply_delegate(tool_session_id)
                     && conversation_kind == CONVERSATION_KIND_REMOTE_IM_CONTACT,
                 contact_send_files_allowed: false,
+                deep_recall_delegate: false,
                 origin_scope: if matches!(
                     conversation_kind,
                     CONVERSATION_KIND_CHAT | CONVERSATION_KIND_SIDE_CHAT
@@ -564,6 +600,10 @@ fn runtime_tool_policy_from_session(
             conversation.and_then(|conversation| conversation.root_conversation_id),
         )
     };
+    // 委托会话按委托记录 kind 细分：只有 deeprecall 发起的委托才挂载检索工具。
+    if policy.delegate_conversation {
+        policy.deep_recall_delegate = deep_recall_delegate_conversation(state, &conversation_id);
+    }
     let bound_contact = remote_im_bound_contact_context_from_runtime(state, tool_session_id).ok();
     if let Some((_channel, contact)) = bound_contact.as_ref() {
         let resolved_scope = runtime_tool_origin_scope_from_contact_type(&contact.remote_contact_type);
@@ -1151,6 +1191,22 @@ fn build_builtin_runtime_tool_executor(
             session_id: tool_session_id.to_string(),
             source_agent_id: agent.id.trim().to_string(),
             source_department_id: executor_department_id.to_string(),
+        }),
+        "deeprecall" => Box::new(BuiltinDeepRecallTool {
+            app_state: state.clone(),
+            session_id: tool_session_id.to_string(),
+            source_agent_id: agent.id.trim().to_string(),
+            source_department_id: executor_department_id.to_string(),
+        }),
+        "deeprecall_search" => Box::new(BuiltinDeepRecallSearchTool {
+            app_state: state.clone(),
+            session_id: tool_session_id.to_string(),
+            agent_id: agent.id.trim().to_string(),
+        }),
+        "deeprecall_context" => Box::new(BuiltinDeepRecallContextTool {
+            app_state: state.clone(),
+            session_id: tool_session_id.to_string(),
+            agent_id: agent.id.trim().to_string(),
         }),
         "meme" => Box::new(BuiltinMemeTool { app_state: state.clone() }),
         "image_generate" => Box::new(BuiltinImageGenerateTool { app_state: state.clone() }),

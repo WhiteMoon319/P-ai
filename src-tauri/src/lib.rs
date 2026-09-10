@@ -113,6 +113,7 @@ include!("features/system/updater_android_stub.rs");
 include!("features/memory/store.rs");
 include!("features/memory/matcher.rs");
 include!("features/memory/chat_history_search.rs");
+include!("features/memory/deep_recall.rs");
 include!("features/memory/providers.rs");
 
 // ==================== MCP ====================

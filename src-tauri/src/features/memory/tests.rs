@@ -556,12 +556,13 @@
             &segment,
             &[test_chat_agent("agent-a", "小夏")],
             "用户",
+            "agent-a",
         );
 
         assert_eq!(slices.len(), 1);
         assert!(slices[0].content.contains("[用户]: 我喜欢深色主题"));
         assert!(slices[0].content.contains("[小夏]: 我记住了"));
-        assert_eq!(slices[0].visible_agent_ids, vec!["agent-a".to_string()]);
+        assert_eq!(slices[0].owner_agent_id, "agent-a");
     }
 
     #[test]
@@ -578,6 +579,7 @@
             &segment,
             &[test_chat_agent("agent-a", "小夏")],
             "用户",
+            "agent-a",
         );
 
         assert!(slices.len() >= 2);
@@ -596,7 +598,7 @@
     }
 
     #[test]
-    fn chat_history_tantivy_search_should_only_search_visible_agent_slices() {
+    fn chat_history_tantivy_search_should_filter_by_owner_agent() {
         let slices = vec![
             ChatHistorySlice {
                 id: "s1".to_string(),
@@ -607,7 +609,7 @@
                 slice_index: 0,
                 content: "[小夏]: 用户喜欢深色主题".to_string(),
                 speakers: vec!["小夏".to_string()],
-                visible_agent_ids: vec!["agent-a".to_string()],
+                owner_agent_id: "agent-a".to_string(),
                 time_start: now_iso(),
                 time_end: now_iso(),
                 message_start_id: "m1".to_string(),
@@ -622,7 +624,7 @@
                 slice_index: 0,
                 content: "[小秋]: 用户喜欢深色主题".to_string(),
                 speakers: vec!["小秋".to_string()],
-                visible_agent_ids: vec!["agent-b".to_string()],
+                owner_agent_id: "agent-b".to_string(),
                 time_start: now_iso(),
                 time_end: now_iso(),
                 message_start_id: "m2".to_string(),
@@ -639,10 +641,16 @@
             reader,
             fields,
         };
-        let hits = chat_history_tantivy_search(&cached, "agent-a", "深色主题", 10).expect("search");
+        let filtered = chat_history_tantivy_search(&cached, Some("agent-a"), "深色主题", 10)
+            .expect("search");
 
-        assert_eq!(hits.len(), 1);
-        assert_eq!(cached.slices[hits[0].0].id, "s1");
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(cached.slices[filtered[0].0].id, "s1");
+
+        let unfiltered =
+            chat_history_tantivy_search(&cached, None, "深色主题", 10).expect("search");
+
+        assert_eq!(unfiltered.len(), 2);
     }
 
     #[test]

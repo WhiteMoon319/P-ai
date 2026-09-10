@@ -1381,7 +1381,7 @@ fn search_chat_history_slices(
     input: ChatHistorySearchInput,
     state: State<'_, AppState>,
 ) -> Result<ChatHistorySearchResult, String> {
-    chat_history_search_for_agent(state.inner(), &input)
+    chat_history_search_slices(state.inner(), &input)
 }
 
 #[tauri::command]

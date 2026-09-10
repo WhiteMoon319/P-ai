@@ -12,6 +12,7 @@ enum BuiltinToolPermissionClass {
 enum BuiltinToolRuntimeScope {
     Any,
     LocalConversation,
+    DeepRecallDelegate,
     ResolvedTaskConversation,
     BoundContactWithFileSending,
     NotRemoteGroup,
@@ -122,6 +123,27 @@ const BUILTIN_TOOL_POLICY_TABLE: &[BuiltinToolPolicy] = &[
         id: "delegate",
         prompt_rule_id: Some("delegate"),
         ..DEFAULT_BUILTIN_TOOL_POLICY
+    },
+    BuiltinToolPolicy {
+        id: "deeprecall",
+        permission_class: BuiltinToolPermissionClass::SystemExempt,
+        runtime_scope: BuiltinToolRuntimeScope::LocalConversation,
+        prompt_rule_id: None,
+        visible_in_department_permissions: false,
+    },
+    BuiltinToolPolicy {
+        id: "deeprecall_search",
+        permission_class: BuiltinToolPermissionClass::SystemExempt,
+        runtime_scope: BuiltinToolRuntimeScope::DeepRecallDelegate,
+        prompt_rule_id: Some("deeprecall"),
+        visible_in_department_permissions: false,
+    },
+    BuiltinToolPolicy {
+        id: "deeprecall_context",
+        permission_class: BuiltinToolPermissionClass::SystemExempt,
+        runtime_scope: BuiltinToolRuntimeScope::DeepRecallDelegate,
+        prompt_rule_id: Some("deeprecall"),
+        visible_in_department_permissions: false,
     },
     BuiltinToolPolicy {
         id: "meme",
@@ -287,12 +309,17 @@ fn builtin_tool_runtime_unavailable_reason(
     delegate_conversation: bool,
     remote_reply_delegate: bool,
     contact_send_files_allowed: bool,
+    deep_recall_delegate: bool,
 ) -> Option<String> {
     match builtin_tool_policy(tool_id).runtime_scope {
         BuiltinToolRuntimeScope::Any => None,
         BuiltinToolRuntimeScope::LocalConversation if local_conversation => None,
         BuiltinToolRuntimeScope::LocalConversation => {
             Some("plan 仅在本地会话中可用".to_string())
+        }
+        BuiltinToolRuntimeScope::DeepRecallDelegate if deep_recall_delegate => None,
+        BuiltinToolRuntimeScope::DeepRecallDelegate => {
+            Some("深度回忆检索工具仅在深度回忆委托会话中可用".to_string())
         }
         BuiltinToolRuntimeScope::ResolvedTaskConversation if !conversation_resolved => {
             Some("无法确认当前会话类型，任务工具已安全跳过".to_string())
@@ -335,6 +362,7 @@ fn builtin_tool_prompt_rule_allowed_in_origin(
         false,
         false,
         true,
+        false,
     )
 }
 
@@ -346,6 +374,7 @@ fn builtin_tool_prompt_rule_allowed_in_runtime(
     delegate_conversation: bool,
     remote_reply_delegate: bool,
     contact_send_files_allowed: bool,
+    deep_recall_delegate: bool,
 ) -> bool {
     BUILTIN_TOOL_POLICY_TABLE.iter().any(|policy| {
         policy.prompt_rule_id == Some(prompt_rule_id)
@@ -357,6 +386,7 @@ fn builtin_tool_prompt_rule_allowed_in_runtime(
                 delegate_conversation,
                 remote_reply_delegate,
                 contact_send_files_allowed,
+                deep_recall_delegate,
             )
             .is_none()
     })

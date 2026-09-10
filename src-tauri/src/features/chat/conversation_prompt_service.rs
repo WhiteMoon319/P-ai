@@ -701,9 +701,24 @@ impl ConversationPromptService {
             prompt_runtime_policy.delegate_conversation,
             prompt_runtime_policy.remote_reply_delegate,
             prompt_runtime_policy.contact_send_files_allowed,
+            prompt_runtime_policy.deep_recall_delegate,
         ) {
             if let Some(task_block) = task_block {
                 tool_rule_blocks.push(task_block);
+            }
+        }
+        if builtin_tool_prompt_rule_allowed_in_runtime(
+            "deeprecall",
+            prompt_runtime_policy.origin_scope,
+            prompt_runtime_policy.conversation_resolved,
+            prompt_runtime_policy.local_conversation,
+            prompt_runtime_policy.delegate_conversation,
+            prompt_runtime_policy.remote_reply_delegate,
+            prompt_runtime_policy.contact_send_files_allowed,
+            prompt_runtime_policy.deep_recall_delegate,
+        ) {
+            if let Some(block) = build_builtin_tool_rule_block("deeprecall", true) {
+                tool_rule_blocks.push(block);
             }
         }
         if builtin_tool_prompt_rule_allowed_in_origin("goal", prompt_origin_scope) {
@@ -719,6 +734,7 @@ impl ConversationPromptService {
             prompt_runtime_policy.delegate_conversation,
             prompt_runtime_policy.remote_reply_delegate,
             prompt_runtime_policy.contact_send_files_allowed,
+            prompt_runtime_policy.deep_recall_delegate,
         );
         tool_rule_blocks.push(build_question_and_planning_rule_block(
             state,

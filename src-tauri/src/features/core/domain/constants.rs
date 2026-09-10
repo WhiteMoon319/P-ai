@@ -27,6 +27,8 @@ const REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID: &str = "remote-customer-service-dep
 const HR_DEPARTMENT_ID: &str = "hr-department";
 const DELEGATE_TOOL_KIND_DELEGATE: &str = "delegate";
 const DELEGATE_TOOL_KIND_USER_MENTION: &str = "user_async_delegate";
+/// 深度回忆委托：仅此类委托会话挂载 deeprecall_search / deeprecall_context。
+const DELEGATE_TOOL_KIND_DEEP_RECALL: &str = "deeprecall";
 const SYSTEM_NOTIFICATION_CONVERSATION_ID: &str = "system-notification-conversation";
 const CONVERSATION_KIND_CHAT: &str = "chat";
 const CONVERSATION_KIND_SIDE_CHAT: &str = "side_chat";
