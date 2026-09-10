@@ -2200,28 +2200,7 @@ async fn send_chat_message_inner(
                 candidate_selected_api.id, attempt
             );
             log_run_stage(&request_start_stage);
-            // 调度事件：模型轮次开始
-            {
-                let elapsed_ms = chat_started_at
-                    .elapsed()
-                    .as_millis()
-                    .min(u128::from(u64::MAX)) as u64;
-                let _ = schedule_event_push_if_delegate(
-                    &state,
-                    &runtime_context,
-                    conversation_id.as_str(),
-                    &trace_id_for_run,
-                    "model_round_start",
-                    elapsed_ms,
-                    None,
-                    serde_json::json!({
-                        "candidateApiId": candidate_selected_api.id,
-                        "attempt": attempt + 1,
-                        "modelName": candidate_model_name,
-                        "providerName": candidate_selected_api.name,
-                    }),
-                );
-            }
+            // 调度事件：模型轮次改由工具循环逐轮打点（tool_loop），此处不再产生聚合轮次。
             let chat_round_execution = call_model_dispatch(
                 &candidate_resolved_api,
                 &app_config,
@@ -2238,64 +2217,11 @@ async fn send_chat_message_inner(
                 Some(&conversation_id),
             )
             .await;
-            // 调度事件：模型轮次结束（含思考与正文摘要）
-            {
-                let elapsed_ms = chat_started_at
-                    .elapsed()
-                    .as_millis()
-                    .min(u128::from(u64::MAX)) as u64;
-                let success = chat_round_execution.result.is_ok();
-                let error_text = chat_round_execution.result.as_ref().err().cloned();
-                let (assistant_len, reasoning_len, reasoning_preview, tool_calls_len, text_preview, usage_for_detail) =
-                    if let Ok(reply) = chat_round_execution.result.as_ref() {
-                        let raw_text = if reply.assistant_text.trim().is_empty() && !reply.final_response_text.trim().is_empty() {
-                            reply.final_response_text.as_str()
-                        } else {
-                            reply.assistant_text.as_str()
-                        };
-                        let a_len = raw_text.chars().count();
-                        let r_len = reply.activity_reasoning_text.chars().count();
-                        let r_preview: Option<String> = {
-                            let trimmed = reply.activity_reasoning_text.trim();
-                            if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
-                        };
-                        let t_len = reply.tool_history_events.len();
-                        let preview = raw_text.to_string();
-                        let usage = reply.usage.clone();
-                        (Some(a_len), Some(r_len), r_preview, Some(t_len), if preview.trim().is_empty() { None } else { Some(preview) }, usage)
-                    } else {
-                        (None, None, None, None, None, None)
-                    };
-                if let Some(usage) = usage_for_detail.clone() {
+            // 调度事件：模型轮次改由工具循环逐轮打点，这里只保留本轮 usage 供收口使用。
+            if let Ok(reply) = chat_round_execution.result.as_ref() {
+                if let Some(usage) = reply.usage.clone() {
                     last_model_usage = Some(usage);
                 }
-                let mut detail = serde_json::json!({
-                    "candidateApiId": candidate_selected_api.id,
-                    "attempt": attempt,
-                    "modelName": candidate_model_name,
-                    "providerName": candidate_selected_api.name,
-                    "elapsedMs": chat_round_execution.log_parts.elapsed_ms,
-                    "hasError": error_text.is_some(),
-                    "error": error_text,
-                });
-                if let Some(obj) = detail.as_object_mut() {
-                    if let Some(v) = assistant_len { obj.insert("assistantTextLength".to_string(), serde_json::json!(v)); }
-                    if let Some(v) = reasoning_len { obj.insert("reasoningLength".to_string(), serde_json::json!(v)); }
-                    if let Some(v) = reasoning_preview { obj.insert("reasoningPreview".to_string(), serde_json::json!(v)); }
-                    if let Some(v) = tool_calls_len { obj.insert("toolCallCount".to_string(), serde_json::json!(v)); }
-                    if let Some(v) = text_preview { obj.insert("textPreview".to_string(), serde_json::json!(v)); }
-                    if let Some(v) = usage_for_detail { obj.insert("usage".to_string(), v); }
-                }
-                let _ = schedule_event_push_if_delegate(
-                    &state,
-                    &runtime_context,
-                    conversation_id.as_str(),
-                    &trace_id_for_run,
-                    "model_round_end",
-                    elapsed_ms,
-                    Some(success),
-                    detail,
-                );
             }
             let restart_after_compaction = matches!(
                 &chat_round_execution.result,

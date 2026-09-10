@@ -189,17 +189,88 @@ fn tool_loop_round_response_value(
     response
 }
 
-fn push_tool_loop_round_log(
-    _state: Option<&AppState>,
-    _chat_session_key: &str,
-    _selected_api: &ApiConfig,
-    _api_config: &ResolvedApiConfig,
-    _model_name: &str,
-    _tool_assembly: &RuntimeToolAssembly,
-    _response: Value,
-    _elapsed_ms: u64,
+// 调度事件：工具循环每一轮模型请求开始。逐轮打点，LogTab 才能按轮拆开。
+fn push_tool_loop_round_start(
+    state: Option<&AppState>,
+    chat_session_key: &str,
+    provider_name: &str,
+    model_name: &str,
 ) {
-    // 已切换至调度事件：旧 chat 单轮日志不再写入
+    let Some(state) = state else {
+        return;
+    };
+    let detail = serde_json::json!({
+        "modelName": model_name,
+        "providerName": provider_name,
+    });
+    let _ = schedule_event_push_to_latest_run(
+        state,
+        chat_session_key,
+        "model_round_start",
+        0,
+        None,
+        detail,
+    );
+}
+
+// 调度事件：工具循环每一轮模型响应结束。只带该轮自己的正文/思考/工具，不做累计。
+fn push_tool_loop_round_log(
+    state: Option<&AppState>,
+    chat_session_key: &str,
+    model_name: &str,
+    response: Value,
+    elapsed_ms: u64,
+) {
+    let Some(state) = state else {
+        return;
+    };
+    let assistant_text = response
+        .get("assistantText")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let reasoning_text = response
+        .get("reasoningContent")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let tool_calls = response.get("toolCalls").and_then(Value::as_array);
+    let tool_call_count = tool_calls.map(Vec::len).unwrap_or(0);
+    let mut detail = serde_json::json!({
+        "modelName": model_name,
+        "elapsedMs": elapsed_ms,
+        "assistantTextLength": assistant_text.chars().count(),
+        "reasoningLength": reasoning_text.chars().count(),
+        "toolCallCount": tool_call_count,
+    });
+    if let Some(obj) = detail.as_object_mut() {
+        if !assistant_text.trim().is_empty() {
+            obj.insert("textPreview".to_string(), serde_json::json!(assistant_text));
+        }
+        if !reasoning_text.trim().is_empty() {
+            obj.insert("reasoningPreview".to_string(), serde_json::json!(reasoning_text));
+        }
+        if let Some(usage) = response.get("usage") {
+            obj.insert("usage".to_string(), usage.clone());
+        }
+        if let Some(calls) = tool_calls {
+            let mut names: Vec<String> = Vec::new();
+            for call in calls {
+                if let Some(name) = log_tool_call_name(call) {
+                    push_unique_log_name(&mut names, name);
+                }
+            }
+            if !names.is_empty() {
+                obj.insert("toolCallNames".to_string(), log_tool_call_names_value(names));
+            }
+        }
+    }
+    let _ = schedule_event_push_to_latest_run(
+        state,
+        chat_session_key,
+        "model_round_end",
+        0,
+        Some(true),
+        detail,
+    );
 }
 
 #[derive(Debug, Clone)]
@@ -456,6 +527,12 @@ async fn run_genai_tool_loop(
             model_name,
             selected_api.id,
         ));
+        push_tool_loop_round_start(
+            tool_abort_state,
+            chat_session_key,
+            selected_api.name.as_str(),
+            model_name,
+        );
         let round_output = async {
             let _provider_concurrency_guard = maybe_acquire_provider_concurrency_guard(
                 tool_abort_state,
@@ -634,10 +711,7 @@ async fn run_genai_tool_loop(
         push_tool_loop_round_log(
             tool_abort_state,
             chat_session_key,
-            selected_api,
-            &api_config,
             model_name,
-            &tool_assembly,
             tool_loop_round_response_value(&turn_text, &turn_reasoning, &turn_tool_calls, round_usage.as_ref()),
             round_elapsed_ms,
         );
@@ -1121,6 +1195,12 @@ async fn run_genai_tool_loop_non_stream(
             model_name,
             selected_api.id,
         ));
+        push_tool_loop_round_start(
+            tool_abort_state,
+            chat_session_key,
+            selected_api.name.as_str(),
+            model_name,
+        );
         let round = {
             let mut request = genai::chat::ChatRequest::from_messages(
                 sanitize_genai_messages_before_request(messages.clone(), "genai_tool_loop_non_stream"),
@@ -1200,10 +1280,7 @@ async fn run_genai_tool_loop_non_stream(
         push_tool_loop_round_log(
             tool_abort_state,
             chat_session_key,
-            selected_api,
-            &api_config,
             model_name,
-            &tool_assembly,
             tool_loop_round_response_value(&turn_text, &turn_reasoning, &raw_turn_tool_calls, round_usage.as_ref()),
             round_elapsed_ms,
         );

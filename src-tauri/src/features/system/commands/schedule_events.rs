@@ -742,6 +742,35 @@ fn schedule_run_from_persisted_conversation(conversation: &Conversation) -> Opti
                     let reasoning = event.get("reasoning_content").and_then(Value::as_str).unwrap_or("");
                     let content = event.get("content").and_then(Value::as_str).unwrap_or("");
                     let calls = event.get("tool_calls").and_then(Value::as_array).cloned().unwrap_or_default();
+                    let mut round_tool_names: Vec<String> = Vec::new();
+                    for call in &calls {
+                        if let Some(name) = log_tool_call_name(call) {
+                            push_unique_log_name(&mut round_tool_names, name);
+                        }
+                    }
+                    // 与实时路径逐轮配对一致：每轮先 model_round_start 再 model_round_end，才配得出轮次。
+                    events.push(schedule_run_persisted_event(
+                        &run_id,
+                        &conversation_id,
+                        delegate_id.clone(),
+                        root_conversation_id.clone(),
+                        "model_round_start",
+                        created_at,
+                        None,
+                        serde_json::json!({}),
+                    ));
+                    let mut round_end_detail = serde_json::json!({
+                        "reasoningPreview": reasoning,
+                        "textPreview": content,
+                        "assistantTextLength": content.chars().count(),
+                        "reasoningLength": reasoning.chars().count(),
+                        "toolCallCount": calls.len(),
+                    });
+                    if !round_tool_names.is_empty() {
+                        if let Some(obj) = round_end_detail.as_object_mut() {
+                            obj.insert("toolCallNames".to_string(), log_tool_call_names_value(round_tool_names));
+                        }
+                    }
                     events.push(schedule_run_persisted_event(
                         &run_id,
                         &conversation_id,
@@ -750,13 +779,7 @@ fn schedule_run_from_persisted_conversation(conversation: &Conversation) -> Opti
                         "model_round_end",
                         created_at,
                         Some(true),
-                        serde_json::json!({
-                            "reasoningPreview": reasoning,
-                            "textPreview": content,
-                            "assistantTextLength": content.chars().count(),
-                            "reasoningLength": reasoning.chars().count(),
-                            "toolCallCount": calls.len(),
-                        }),
+                        round_end_detail,
                     ));
                     for call in &calls {
                         let call_id = call.get("id").and_then(Value::as_str).unwrap_or("").trim().to_string();
@@ -1009,6 +1032,19 @@ fn schedule_run_to_llm_entry(run: &ScheduleRun) -> LlmRoundLogEntry {
                 j += 1;
             }
             if let Some(end) = end_opt {
+                // 逐轮打点后，model_round_end 先于该轮工具事件落库，区间扫描扫不到工具，
+                // 因此以 end.detail 携带的该轮计数与名称为准，缺省时才用扫描结果。
+                if let Some(explicit) = end.detail.get("toolCallCount").and_then(Value::as_u64) {
+                    tool_count = explicit as usize;
+                }
+                if let Some(names) = end.detail.get("toolCallNames").and_then(Value::as_array) {
+                    tool_names.clear();
+                    for name in names {
+                        if let Some(name) = name.as_str() {
+                            push_unique_log_name(&mut tool_names, name);
+                        }
+                    }
+                }
                 let round_id = format!("{}-round-{}", run.run_id, round_entries.len() + 1);
                 let assistant_text = end.detail.get("textPreview").and_then(Value::as_str).unwrap_or("").to_string();
                 let reasoning_text = end.detail.get("reasoningPreview").and_then(Value::as_str).unwrap_or("").to_string();

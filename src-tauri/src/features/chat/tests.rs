@@ -13590,18 +13590,18 @@
         assert_eq!(run.elapsed_ms, 1_777_000);
 
         let phases: Vec<&str> = run.events.iter().map(|event| event.phase.as_str()).collect();
-        assert_eq!(phases, vec!["dispatch_start", "model_round_end", "tool_call", "tool_call", "tool_result", "tool_result", "dispatch_end"]);
+        assert_eq!(phases, vec!["dispatch_start", "model_round_start", "model_round_end", "tool_call", "tool_call", "tool_result", "tool_result", "dispatch_end"]);
         assert!(run.events.iter().all(|event| event.elapsed_ms == 0));
         assert_eq!(run.events[0].detail["textPreview"], "执行委托任务");
-        assert_eq!(run.events[1].detail["toolCallCount"], 2);
-        assert_eq!(run.events[1].detail["reasoningPreview"], "先看目录");
-        assert_eq!(run.events[2].detail["toolName"], "exec");
-        assert_eq!(run.events[2].detail["argPreview"], "{\"command\":\"ls\"}");
+        assert_eq!(run.events[2].detail["toolCallCount"], 2);
+        assert_eq!(run.events[2].detail["reasoningPreview"], "先看目录");
+        assert_eq!(run.events[3].detail["toolName"], "exec");
+        assert_eq!(run.events[3].detail["argPreview"], "{\"command\":\"ls\"}");
         // tool_result 按 tool_call_id 配对回工具名
-        assert_eq!(run.events[4].detail["toolName"], "exec");
-        assert_eq!(run.events[5].detail["toolName"], "read_file");
-        assert_eq!(run.events[6].detail["textPreview"], "委托完成。");
-        assert_eq!(run.events[6].detail["usage"]["providerPromptTokens"], 1234);
+        assert_eq!(run.events[5].detail["toolName"], "exec");
+        assert_eq!(run.events[6].detail["toolName"], "read_file");
+        assert_eq!(run.events[7].detail["textPreview"], "委托完成。");
+        assert_eq!(run.events[7].detail["usage"]["providerPromptTokens"], 1234);
     }
 
     #[test]
