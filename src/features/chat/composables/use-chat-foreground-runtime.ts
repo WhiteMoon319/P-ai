@@ -2,9 +2,10 @@ import { invokeTauri } from "../../../services/tauri-api";
 import type { ChatMessage } from "../../../types/app";
 import { mergeAuthoritativeConversationMessages } from "./chat-message-state-machine";
 import { createForegroundTailWatermarkCoordinator, createLatestTaskRunner } from "./chat-foreground-coordinator";
-import { reconcileForegroundRuntime, type ForegroundRuntimeSnapshot } from "./foreground-recovery-state-machine";
+import { classifyForegroundRuntime, reconcileForegroundRuntime, type ForegroundRuntimeSnapshot } from "./foreground-recovery-state-machine";
 import { useChatForegroundActivity } from "./use-chat-foreground-activity";
 import { formalizeMessages } from "./use-chat-flow-utils";
+import { probeChatFlow } from "./chat-flow-probe";
 
 /**
  * 主聊天的唯一前台运行时。APP 与 Web 都从 main-chat 进入这里；
@@ -73,14 +74,6 @@ export function useChatForegroundRuntime(bindings: Record<string, any>) {
     const conversationId = String(bindings.currentChatConversationId.value || "").trim();
     if (!conversationId) return;
 
-    // 当前会话若已在正常流式中，且后端也处于处理/推流态，绝不可介入打断正在运行的流式通道
-    if (frontendConversationIsStreaming()) {
-      const liveSnapshot = await requestRuntimeSnapshot(conversationId).catch(() => null);
-      if (liveSnapshot && (liveSnapshot.runtimeState === "assistant_streaming" || liveSnapshot.isProcessing || liveSnapshot.hasPendingQueue)) {
-        return;
-      }
-    }
-
     console.warn("[焦点恢复][入口] reconcile 开始", { conversationId, reason });
     // 输入面板忙碌（前端认为在流）但没有流式消息 → 流式投影已断，落后，直接 switch 当前会话接回。
     if (frontendConversationIsStreaming() && !hasStreamingAssistantMessage()) {
@@ -108,6 +101,24 @@ export function useChatForegroundRuntime(bindings: Record<string, any>) {
     if (String(bindings.currentChatConversationId.value || "").trim() !== conversationId) return;
     const flow = bindings.getChatFlow();
     const frontendStreamCache = flow?.readConversationStreamCache?.(conversationId);
+    const frontendStreamingNow = frontendConversationIsStreaming();
+    const backendKind = classifyForegroundRuntime(snapshot);
+    if (frontendStreamingNow !== (backendKind === "assistant_streaming")) {
+      probeChatFlow("焦点对账不一致", {
+        conversationId,
+        reason,
+        frontendStreaming: frontendStreamingNow,
+        backendKind,
+        runtimeState: String(snapshot?.runtimeState || ""),
+        isProcessing: !!snapshot?.isProcessing,
+        hasPendingQueue: !!snapshot?.hasPendingQueue,
+        hasStreamingMessage: hasStreamingAssistantMessage(),
+        chatting: !!bindings.chatting?.value,
+        frontendRoundPhase: String(flow?.frontendRoundPhase?.value || ""),
+        backendMessageId: String(snapshot?.streamCache?.persistedAssistantMessageId || ""),
+        frontendMessageId: String(frontendStreamCache?.persistedAssistantMessageId || ""),
+      });
+    }
     const outcome = await reconcileForegroundRuntime({
       conversationId,
       runtimeSnapshot: snapshot,

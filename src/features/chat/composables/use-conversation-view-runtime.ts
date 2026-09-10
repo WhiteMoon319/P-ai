@@ -4,6 +4,7 @@ import {
   chatStreamNeedsFrontendBind,
   invokeTauri,
   onTransportNotification,
+  PROBE_NOTIFICATION_METHODS,
   probeTransportConversationStream,
   unbindTransportConversationStream,
 } from "../../../services/tauri-api";
@@ -36,6 +37,7 @@ import {
   removeBinaryPlaceholders,
 } from "../../../utils/chat-message";
 import { CHAT_QUEUE_OUT_OF_SYNC_EVENT } from "./use-chat-queue";
+import { probeChatFlow } from "./chat-flow-probe";
 
 type ConversationViewRuntimeOptions = {
   conversationId: Ref<string>;
@@ -320,7 +322,21 @@ export function useConversationViewRuntime(options: ConversationViewRuntimeOptio
     latestUserImages,
     subscribeExternalEvents: (method, handler) => onTransportNotification(method, (payload) => {
       if (method === "chat.roundStarted") runtimeState.value = "assistant_streaming";
-      void Promise.resolve().then(() => handler(payload)).finally(() => {
+      if (PROBE_NOTIFICATION_METHODS.has(method)) {
+        const record = payload && typeof payload === "object" ? payload as Record<string, unknown> : null;
+        probeChatFlow("事件到达", {
+          method,
+          payloadConversationId: String(record?.conversationId || ""),
+          currentConversationId: currentConversationId(),
+        });
+      }
+      void Promise.resolve().then(() => handler(payload)).catch((error) => {
+        probeChatFlow("事件处理异常", {
+          method,
+          error: String((error as { message?: unknown })?.message || error || ""),
+          stack: String((error as { stack?: unknown })?.stack || "").slice(0, 800),
+        });
+      }).finally(() => {
         if (method === "chat.roundFinished" && !frontendConversationIsStreaming()) {
           runtimeState.value = "idle";
         }

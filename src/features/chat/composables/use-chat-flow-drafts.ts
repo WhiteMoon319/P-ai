@@ -10,6 +10,7 @@ import {
 } from "../../../utils/chat-message-semantics";
 import { readMessagePlainText, messageHasVisibleContent } from "./use-chat-flow-utils";
 import { messageWithStableRenderId } from "../utils/stable-render-id";
+import { probeChatFlow } from "./chat-flow-probe";
 import {
   assistantMessageHasCanonicalVisibleContent,
   createChatMessageState,
@@ -108,7 +109,10 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
     identity?: Partial<RoundStartedPayload>,
   ) {
     const normalizedMessageId = String(messageId || "").trim();
-    if (!normalizedMessageId) return;
+    if (!normalizedMessageId) {
+      probeChatFlow("建气泡跳过", { reason: "empty_message_id", phase });
+      return;
+    }
     synchronizeMachineInput();
     if (messageState.round.phase !== "idle" && messageState.round.assistantMessageId !== normalizedMessageId) {
       dispatchMessageEvent({
@@ -128,7 +132,14 @@ export function useChatFlowDrafts(options: UseChatFlowDraftsOptions) {
         statusText,
         phase,
       });
-      if (event) dispatchMessageEvent(event);
+      if (event) {
+        dispatchMessageEvent(event);
+        probeChatFlow("建气泡", {
+          messageId: normalizedMessageId,
+          phase,
+          total: options.allMessages.value.length,
+        });
+      }
     }
   }
 

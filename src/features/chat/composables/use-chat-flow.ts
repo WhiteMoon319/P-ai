@@ -31,6 +31,7 @@ import { useChatFlowRoundEvents } from "./use-chat-flow-round-events";
 import { useChatFlowForegroundReset } from "./use-chat-flow-foreground-reset";
 import { useChatFlowRoundFinalizers } from "./use-chat-flow-round-finalizers";
 import { useChatFlowForegroundRounds } from "./use-chat-flow-foreground-rounds";
+import { probeChatFlow } from "./chat-flow-probe";
 import {
   normalizeConversationId,
 } from "./use-chat-flow-utils";
@@ -382,6 +383,11 @@ export function useChatFlow(options: UseChatFlowOptions) {
       for (const unsubscribe of externalEventUnsubscribers) unsubscribe();
     });
   }
+  probeChatFlow("订阅注册", {
+    hasSubscribe: !!options.subscribeExternalEvents,
+    count: externalEventUnsubscribers.length,
+    conversationId: String(options.getConversationId ? options.getConversationId() : ""),
+  });
   const stopController = useChatFlowStop({
     chatting: options.chatting,
     allMessages: options.allMessages,
@@ -671,7 +677,16 @@ export function useChatFlow(options: UseChatFlowOptions) {
   }
 
   function beginAssistantActivationFromEvent(payload: RoundStartedPayload): number {
-    return foregroundRounds?.beginAssistantActivationFromEvent(payload) ?? 0;
+    const gen = foregroundRounds?.beginAssistantActivationFromEvent(payload) ?? 0;
+    probeChatFlow("激活轮次返回", {
+      gen,
+      hasForegroundRounds: !!foregroundRounds,
+      payloadConversationId: String(payload?.conversationId || ""),
+      assistantMessageId: String(payload?.assistantMessageId || ""),
+      currentConversationId: String(options.getConversationId ? options.getConversationId() : ""),
+      roundPhase: round.phase,
+    });
+    return gen;
   }
 
   function ensureForegroundWaitingRound(statusText = options.t("chat.statusWaitingReply")) {

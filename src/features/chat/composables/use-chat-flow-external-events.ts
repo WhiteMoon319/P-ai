@@ -9,6 +9,7 @@ import {
 } from "./use-chat-flow-events";
 import type { RoundState } from "./use-chat-flow-types";
 import { stringifyExternalEventPayload } from "./use-chat-flow-utils";
+import { probeChatFlow } from "./chat-flow-probe";
 
 type UseChatFlowExternalEventsOptions = {
   debug?: boolean;
@@ -178,25 +179,36 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
   async function handleExternalRoundStarted(payload: unknown) {
     const raw = stringifyExternalEventPayload(payload, "round_started");
     const parsed = readRoundStartedPayload(raw);
-    if (!parsed) return;
+    if (!parsed) {
+      probeChatFlow("轮次开始丢弃", { reason: "payload_unparsable", raw: raw.slice(0, 200) });
+      return;
+    }
     const currentConversationId = options.getCurrentConversationId();
     const payloadConversationId = String(parsed.conversationId || "").trim();
     if (currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId) {
+      probeChatFlow("轮次开始丢弃", { reason: "conversation_mismatch", currentConversationId, payloadConversationId });
       return;
     }
     options.clearRecentlyCompletedRoundIds();
     const gen = options.beginAssistantActivationFromEvent(parsed);
-    if (!gen) return;
+    if (!gen) {
+      probeChatFlow("轮次开始丢弃", { reason: "gen_zero", payloadConversationId });
+      return;
+    }
     await options.markRoundStarted(gen);
   }
 
   async function handleExternalRoundCompleted(payload: unknown) {
     const raw = stringifyExternalEventPayload(payload, "round_completed");
     const parsed = readRoundCompletedPayload(raw);
-    if (!parsed) return;
+    if (!parsed) {
+      probeChatFlow("轮次结束丢弃", { reason: "payload_unparsable", raw: raw.slice(0, 200) });
+      return;
+    }
     const currentConversationId = options.getCurrentConversationId();
     const payloadConversationId = String(parsed.conversationId || "").trim();
     if (currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId) {
+      probeChatFlow("轮次结束丢弃", { reason: "conversation_mismatch", currentConversationId, payloadConversationId });
       options.clearConversationStreamCache(payloadConversationId);
       return;
     }
@@ -226,7 +238,18 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
       }
       return;
     }
-    if (!terminalTargetsCurrentRound(terminalIdentity)) return;
+    if (!terminalTargetsCurrentRound(terminalIdentity)) {
+      probeChatFlow("轮次结束丢弃", {
+        reason: "terminal_target_mismatch",
+        roundPhase: round.phase,
+        roundMessageId: round.messageId,
+        incomingMessageId: String(terminalIdentity.assistantMessageId || ""),
+        incomingActivationId: String(terminalIdentity.activationId || ""),
+        incomingRequestId: String(terminalIdentity.requestId || ""),
+        currentActivationId: options.getActiveActivationId(),
+      });
+      return;
+    }
     options.flushStreamTextBuffer?.(round.gen, round.messageId);
     await options.handleRoundCompleted(round.gen, {
       assistantText: String(parsed.assistantText || ""),
@@ -242,6 +265,7 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     const currentConversationId = options.getCurrentConversationId();
     const payloadConversationId = String(parsed?.conversationId || "").trim();
     if (currentConversationId && payloadConversationId && currentConversationId !== payloadConversationId) {
+      probeChatFlow("轮次失败丢弃", { reason: "conversation_mismatch", currentConversationId, payloadConversationId });
       const errorDetail = parsed?.error || raw || String(raw);
       options.setChatErrorText(options.formatRequestFailed(errorDetail), payloadConversationId);
       options.clearConversationStreamCache(payloadConversationId);
@@ -279,7 +303,17 @@ export function useChatFlowExternalEvents(options: UseChatFlowExternalEventsOpti
     if (!terminalTargetsCurrentRound({
       activationId: parsed?.activationId,
       requestId: parsed?.requestId,
-    })) return;
+    })) {
+      probeChatFlow("轮次失败丢弃", {
+        reason: "terminal_target_mismatch",
+        roundPhase: round.phase,
+        roundMessageId: round.messageId,
+        incomingActivationId: String(parsed?.activationId || ""),
+        incomingRequestId: String(parsed?.requestId || ""),
+        currentActivationId: options.getActiveActivationId(),
+      });
+      return;
+    }
     options.flushStreamTextBuffer?.(round.gen, round.messageId);
     await options.handleRoundFailed(
       round.gen,

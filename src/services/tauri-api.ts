@@ -2042,12 +2042,37 @@ function onLocalTransportNotification<T>(method: string, handler: (payload: T) =
 }
 
 /** 统一事件订阅；Tauri event 与 Web bridge notification 的名字映射只在此处维护。 */
+function probeTransportLog(tag: string, data?: Record<string, unknown>): void {
+  let detail = "";
+  if (data) {
+    try {
+      detail = ` ${JSON.stringify(data)}`;
+    } catch {
+      detail = " [unserializable]";
+    }
+  }
+  void invokeTauri<boolean>("append_runtime_log_probe", {
+    message: `[聊天流诊断] ${tag}${detail}`,
+  }).catch(() => {});
+}
+
+// 只对链路关键事件打诊断日志：这几个事件是定位流式链路断点的锚点，
+// 其余高频事件（状态推送、队列快照等）逐条记录会淹没日志。
+export const PROBE_NOTIFICATION_METHODS = new Set([
+  "chat.roundStarted",
+  "chat.roundFinished",
+  "chat.roundFailed",
+  "chat.streamRebindRequired",
+  "chat.historyFlushed",
+]);
+
 export function onTransportNotification<T = unknown>(
   method: string,
   handler: (payload: T) => void,
 ): () => void {
   const canonicalMethod = canonicalTransportNotificationMethod(method);
   if (!isTauriRuntimeAvailable()) {
+    probeTransportLog("监听降级", { method: canonicalMethod, reason: "not_tauri" });
     const stopLocal = onLocalTransportNotification(canonicalMethod, handler);
     const stopBridge = onWebBridgeNotification(canonicalMethod, (payload) => handler(payload as T));
     return () => {
@@ -2060,6 +2085,9 @@ export function onTransportNotification<T = unknown>(
   const eventNames = transportNotificationEventNames(canonicalMethod);
   for (const eventName of eventNames) {
     void listenTauriEvent<T>(eventName, (event) => {
+      if (PROBE_NOTIFICATION_METHODS.has(canonicalMethod)) {
+        probeTransportLog("事件回调", { method: canonicalMethod, event: eventName });
+      }
       handler(event.payload);
     }).then((stop) => {
       if (!active) {
@@ -2067,8 +2095,12 @@ export function onTransportNotification<T = unknown>(
         return;
       }
       unlisteners.add(stop);
-    }).catch(() => {
-      // 事件监听是可选的；请求/Channel 仍由统一适配器负责。
+    }).catch((error: unknown) => {
+      probeTransportLog("监听失败", {
+        method: canonicalMethod,
+        event: eventName,
+        error: String((error as { message?: unknown })?.message || error || ""),
+      });
     });
   }
   return () => {
