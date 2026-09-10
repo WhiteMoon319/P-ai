@@ -161,19 +161,44 @@
     </template>
 
     <template #row-desktop-operate-blocked>
-      <label class="grid min-w-0 gap-2">
+      <div class="grid min-w-0 gap-2">
         <div>
           <div class="text-sm">{{ t("config.chatSettings.desktopOperateBlockedApps") }}</div>
           <p class="mt-1 text-xs text-base-content/60">{{ t("config.chatSettings.desktopOperateBlockedAppsHint") }}</p>
         </div>
-        <textarea
-          v-model="blockedAppsText"
-          rows="3"
-          class="textarea textarea-bordered textarea-sm w-full"
-          :placeholder="t('config.chatSettings.desktopOperateBlockedAppsPlaceholder')"
-          @change="onBlockedAppsChange"
-        />
-      </label>
+        <div class="flex flex-wrap items-center gap-2">
+          <template v-for="(item, index) in blockedAppsDraft" :key="`blocked-app-${index}`">
+            <input
+              v-if="blockedAppEditingIndex === index"
+              :ref="setBlockedAppInputRef"
+              v-model="blockedAppEditingText"
+              type="text"
+              class="input input-bordered input-sm w-36"
+              :placeholder="t('config.chatSettings.desktopOperateBlockedAppsPlaceholder')"
+              @keydown.enter.prevent="commitBlockedAppEdit"
+              @keydown.esc.prevent="cancelBlockedAppEdit"
+              @blur="commitBlockedAppEdit"
+            />
+            <button
+              v-else
+              type="button"
+              class="badge badge-lg max-w-full cursor-pointer truncate border border-base-300 bg-base-200 font-normal hover:bg-base-300"
+              @click="startBlockedAppEdit(index)"
+            >
+              {{ item }}
+            </button>
+          </template>
+          <button
+            type="button"
+            class="btn btn-sm btn-ghost btn-circle shrink-0"
+            :title="t('config.chatSettings.desktopOperateBlockedAppsAdd')"
+            :aria-label="t('config.chatSettings.desktopOperateBlockedAppsAdd')"
+            @click="startBlockedAppAppend"
+          >
+            <Plus class="h-4 w-4" />
+          </button>
+        </div>
+      </div>
     </template>
 
     <template #row-instruction-presets>
@@ -268,7 +293,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { Plus, Trash2 } from "@lucide/vue";
 import SegmentedControl from "../../components/SegmentedControl.vue";
@@ -567,37 +592,118 @@ async function onDesktopOperateChange(event: Event) {
   }
 }
 
-// 禁止操作名单：一行一个窗口标题关键词，失焦时解析保存，保存失败回滚文本。
-const blockedAppsText = ref((props.config.desktopOperateBlockedApps ?? []).join("\n"));
+// 禁止操作名单：数组里的每个关键词就是一颗可编辑胶囊，末尾加号新增，提交即保存。
+// 删除即清空：编辑态里把内容删空后提交，等同移除该条；Esc 还原（新增的空胶囊直接撤销）。
+const blockedAppsDraft = ref<string[]>([...(props.config.desktopOperateBlockedApps ?? [])]);
+const blockedAppEditingIndex = ref<number | null>(null);
+const blockedAppEditingText = ref("");
+const blockedAppInputRef = ref<HTMLInputElement | null>(null);
+const blockedAppSaving = ref(false);
+// 每次提交都会整份保存配置，串行排队避免两次保存交错回写（后一次响应被前一次覆盖）。
+let blockedAppSaveChain: Promise<unknown> = Promise.resolve();
+
 watch(
   () => props.config.desktopOperateBlockedApps,
   (next) => {
-    blockedAppsText.value = (next ?? []).join("\n");
+    // 编辑中、保存中都不覆盖草稿：保存回写可能晚于用户刚点开的空胶囊，
+    // 或带着上一轮的旧名单回来，覆盖会让刚加的那颗凭空消失。
+    if (blockedAppEditingIndex.value !== null || blockedAppSaving.value) return;
+    blockedAppsDraft.value = [...(next ?? [])];
   },
 );
 
-async function onBlockedAppsChange() {
-  const previous = [...(props.config.desktopOperateBlockedApps ?? [])];
-  const next = Array.from(
-    new Set(
-      blockedAppsText.value
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0),
-    ),
-  );
-  props.config.desktopOperateBlockedApps = next;
-  try {
-    const saved = await Promise.resolve(props.saveConfigAction());
-    if (!saved) {
-      props.config.desktopOperateBlockedApps = previous;
-      blockedAppsText.value = previous.join("\n");
-      console.warn("desktop operate blocked apps save rejected");
+function setBlockedAppInputRef(el: unknown) {
+  blockedAppInputRef.value = el instanceof HTMLInputElement ? el : null;
+}
+
+async function focusBlockedAppInput() {
+  await nextTick();
+  blockedAppInputRef.value?.focus();
+  // 关键词通常整体替换，进入编辑态即全选，改一个字就能覆盖（要追加按 End 即可）。
+  blockedAppInputRef.value?.select();
+}
+
+function sameBlockedAppList(a: string[], b: string[]) {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+function hasBlockedAppDuplicate(list: string[], index: number, value: string) {
+  const needle = value.toLowerCase();
+  return list.some((item, itemIndex) => itemIndex !== index && item.toLowerCase() === needle);
+}
+
+async function persistBlockedApps(next: string[]) {
+  blockedAppsDraft.value = next;
+  const run = blockedAppSaveChain.then(async () => {
+    // 排在链上时才写 config：若上一次保存刚好回写旧值，这里再复位一次，避免把新条目挤掉。
+    const previous = [...(props.config.desktopOperateBlockedApps ?? [])];
+    blockedAppSaving.value = true;
+    props.config.desktopOperateBlockedApps = next;
+    try {
+      const saved = await Promise.resolve(props.saveConfigAction());
+      if (saved) return;
+    } catch {
+      // 异常与拒绝同路：回滚到本次提交前的名单
+    } finally {
+      blockedAppSaving.value = false;
     }
-  } catch {
     props.config.desktopOperateBlockedApps = previous;
-    blockedAppsText.value = previous.join("\n");
+    blockedAppsDraft.value = previous;
     console.warn("desktop operate blocked apps save failed");
+  });
+  blockedAppSaveChain = run.catch(() => {});
+  await run;
+}
+
+async function startBlockedAppEdit(index: number) {
+  if (blockedAppEditingIndex.value !== null) await commitBlockedAppEdit();
+  const current = blockedAppsDraft.value;
+  if (index < 0 || index >= current.length) return;
+  blockedAppEditingIndex.value = index;
+  blockedAppEditingText.value = current[index];
+  await focusBlockedAppInput();
+}
+
+async function startBlockedAppAppend() {
+  if (blockedAppEditingIndex.value !== null) await commitBlockedAppEdit();
+  blockedAppsDraft.value = [...blockedAppsDraft.value, ""];
+  blockedAppEditingIndex.value = blockedAppsDraft.value.length - 1;
+  blockedAppEditingText.value = "";
+  await focusBlockedAppInput();
+}
+
+async function commitBlockedAppEdit() {
+  const index = blockedAppEditingIndex.value;
+  if (index === null) return;
+  blockedAppEditingIndex.value = null;
+  const text = blockedAppEditingText.value.trim();
+  blockedAppEditingText.value = "";
+  const current = blockedAppsDraft.value;
+  if (index >= current.length) return;
+  const next = [...current];
+  if (!text) {
+    // 清空即删除：编辑态里把内容删光后提交，等同移除该条
+    next.splice(index, 1);
+  } else if (!hasBlockedAppDuplicate(current, index, text)) {
+    next[index] = text;
+  } else {
+    // 与已有关键词重复（忽略大小写）：丢弃本次编辑，保留原值，不写盘
+    next[index] = current[index];
+  }
+  if (sameBlockedAppList(current, next)) return;
+  await persistBlockedApps(next);
+}
+
+function cancelBlockedAppEdit() {
+  const index = blockedAppEditingIndex.value;
+  if (index === null) return;
+  blockedAppEditingIndex.value = null;
+  blockedAppEditingText.value = "";
+  // 新增的空胶囊在编辑态里没有承载任何内容，取消即撤掉它
+  if (blockedAppsDraft.value[index] === "") {
+    const next = [...blockedAppsDraft.value];
+    next.splice(index, 1);
+    blockedAppsDraft.value = next;
   }
 }
 

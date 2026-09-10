@@ -1032,8 +1032,9 @@
       "desktopOperateEnabled": "允許操作電腦",
       "desktopOperateEnabledHint": "關閉後，模型無法使用滑鼠、鍵盤、截圖等電腦操作能力。",
       "desktopOperateBlockedApps": "禁止操作的應用",
-      "desktopOperateBlockedAppsHint": "一行一個視窗標題關鍵詞，標題命中時模型無法向該視窗輸入或啟用它。截圖與視窗列舉不受影響。",
-      "desktopOperateBlockedAppsPlaceholder": "例如：\n密碼\n銀行\n證券"
+      "desktopOperateBlockedAppsHint": "視窗標題關鍵詞，標題命中時模型無法向該視窗輸入或啟用它。截圖與視窗列舉不受影響。",
+      "desktopOperateBlockedAppsPlaceholder": "視窗標題關鍵詞",
+      "desktopOperateBlockedAppsAdd": "新增應用"
     },
     "networkAccess": {
       "title": "網路訪問",
