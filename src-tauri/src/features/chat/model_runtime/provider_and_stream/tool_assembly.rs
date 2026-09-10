@@ -1317,16 +1317,12 @@ impl RuntimeValueTool for BuiltinOperateTool {
             }
             // 截图始终可执行：驱动模型不支持图片时仍返回保存路径，
             // 是否携带 base64 由模型能力决定（不支持时跳过编码省 CPU）。
-            // 敏感应用门控名单随配置读取：模型不可见、不可覆盖
-            let blocked_apps = state_read_config_cached(&app_state)
-                .map(|config| config.desktop_operate_blocked_apps.clone())
-                .unwrap_or_default();
             let args_value = serde_json::to_value(&args).unwrap_or(Value::Null);
             runtime_log_debug(format!(
                 "[工具调试] 内置工具执行开始 name=operate args={}",
                 debug_value_snippet(&args_value, 240)
             ));
-            let result = run_operate_tool(args, &screenshots_root, model_supports_image, &blocked_apps)
+            let result = run_operate_tool(args, &screenshots_root, model_supports_image)
                 .await
                 .map_err(|err| ToolInvokeError::from(err.message))
                 .and_then(|output| {

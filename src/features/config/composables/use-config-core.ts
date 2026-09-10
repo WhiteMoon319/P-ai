@@ -25,11 +25,6 @@ function normalizeSkippedGithubUpdateVersion(value: unknown): string {
   return String(value || "").trim();
 }
 
-function normalizeDesktopOperateBlockedApps(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((item) => String(item ?? "").trim()).filter((item) => item.length > 0);
-}
-
 function normalizeWebAccessPort(value: unknown): number {
   const parsed = Math.round(Number(value));
   if (Number.isFinite(parsed) && parsed >= 1024 && parsed <= 65535) {
@@ -373,7 +368,6 @@ export function useConfigCore(options: UseConfigCoreOptions) {
       messageNotificationSoundEnabled: !!options.config.messageNotificationSoundEnabled,
       desktopOperationNoticeEnabled: !!options.config.desktopOperationNoticeEnabled,
       desktopOperateEnabled: !!options.config.desktopOperateEnabled,
-      desktopOperateBlockedApps: normalizeDesktopOperateBlockedApps(options.config.desktopOperateBlockedApps),
       selectedApiConfigId: options.config.selectedApiConfigId,
       assistantDepartmentApiConfigId: options.config.assistantDepartmentApiConfigId,
       ...(options.config.visionApiConfigId ? { visionApiConfigId: options.config.visionApiConfigId } : {}),
@@ -529,7 +523,6 @@ export function useConfigCore(options: UseConfigCoreOptions) {
       messageNotificationSoundEnabled: !!options.config.messageNotificationSoundEnabled,
       desktopOperationNoticeEnabled: !!options.config.desktopOperationNoticeEnabled,
       desktopOperateEnabled: !!options.config.desktopOperateEnabled,
-      desktopOperateBlockedApps: normalizeDesktopOperateBlockedApps(options.config.desktopOperateBlockedApps),
       selectedApiConfigId: options.config.selectedApiConfigId,
       assistantDepartmentApiConfigId: options.config.assistantDepartmentApiConfigId,
       visionApiConfigId: options.config.visionApiConfigId,

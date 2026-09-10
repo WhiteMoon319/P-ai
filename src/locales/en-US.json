@@ -1032,11 +1032,7 @@
       "previewSystemPrompt": "System Prompt",
       "desktopOperateTitle": "Desktop Control",
       "desktopOperateEnabled": "Allow controlling your computer",
-      "desktopOperateEnabledHint": "When off, the model cannot use mouse, keyboard, screenshot or other desktop operations.",
-      "desktopOperateBlockedApps": "Blocked apps",
-      "desktopOperateBlockedAppsHint": "Window title keywords. The model cannot type into or activate a window whose title matches. Screenshots and window listing are unaffected.",
-      "desktopOperateBlockedAppsPlaceholder": "Window title keyword",
-      "desktopOperateBlockedAppsAdd": "Add app"
+      "desktopOperateEnabledHint": "When off, the model cannot use mouse, keyboard, screenshot or other desktop operations."
     },
     "networkAccess": {
       "title": "Network Access",
