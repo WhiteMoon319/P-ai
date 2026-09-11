@@ -14,6 +14,7 @@
             <option value="templates">ConfigTemplate</option>
             <option value="overview">监控概览（MonitorOverview）</option>
             <option value="home-cards">预览卡画廊</option>
+          <option value="conversation-list">列表卡画廊</option>
             <option value="composer">输入面板新结构</option>
             <option value="double-deck">双层卡（DoubleDeck）</option>
           </select>
@@ -112,6 +113,16 @@
           <p class="text-sm text-base-content/70">右侧主页的每张卡单独展示一次，面板宽度按聊天窗口右侧还原；模拟数据只用于看样式。</p>
         </div>
         <HomeCardGalleryDemo />
+      </div>
+    </div>
+
+    <div v-if="demoComponentKey === 'conversation-list'" class="card border border-base-300 bg-base-100">
+      <div class="card-body gap-3 p-4">
+        <div class="space-y-1">
+          <h3 class="card-title text-base">列表卡画廊</h3>
+          <p class="text-sm text-base-content/70">左侧会话列表条目（ChatConversationItem）的分组与状态样本，直接渲染真实组件；切换视图模式与预设查看不同层级、不同状态。</p>
+        </div>
+        <ChatConversationListGalleryDemo />
       </div>
     </div>
 
@@ -388,6 +399,7 @@ import MonitorOverview from "../../../chat/components/MonitorOverview.vue";
 import ChatComposerStructureDemo from "../../../chat/components/ChatComposerStructureDemo.vue";
 import DoubleDeckCardDemo from "../../../chat/components/DoubleDeckCardDemo.vue";
 import HomeCardGalleryDemo from "../../../chat/components/HomeCardGalleryDemo.vue";
+import ChatConversationListGalleryDemo from "../../../chat/components/ChatConversationListGalleryDemo.vue";
 import SessionControlPanel from "../../../chat/components/SessionControlPanel.vue";
 import type { AppConfig, BackgroundShellTaskSummary, ConversationDelegateStatusSummary, PersonaProfile } from "../../../../types/app";
 import type { ToolReviewBatchSummary } from "../../../chat/composables/use-chat-tool-review";
@@ -455,10 +467,11 @@ const configTemplateDemo = ref<Record<string, unknown>>({
   homepage: "https://pai.example.com",
   browserNote: "",
 });
-const demoComponentKey = ref<"question" | "bubbles" | "delegates" | "templates" | "overview" | "home-cards" | "composer" | "double-deck">("question");
+const demoComponentKey = ref<"question" | "bubbles" | "delegates" | "templates" | "overview" | "home-cards" | "conversation-list" | "composer" | "double-deck">("question");
 const demoComponentLabel = computed(() => {
   if (demoComponentKey.value === "double-deck") return "双层卡";
   if (demoComponentKey.value === "home-cards") return "预览卡画廊";
+  if (demoComponentKey.value === "conversation-list") return "列表卡画廊";
   if (demoComponentKey.value === "composer") return "输入面板新结构";
   if (demoComponentKey.value === "question") return "提问卡";
   if (demoComponentKey.value === "bubbles") return "自研气泡";
