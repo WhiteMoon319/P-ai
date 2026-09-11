@@ -7,8 +7,6 @@
       :current-theme="currentTheme"
       :title-text="titleText"
       :chat-usage-percent="chatUsagePercent"
-      :trimming="trimming"
-      :chatting="chatting"
       :current-persona-name="String(currentForegroundPersona?.name || '').trim() || t('archives.roleAssistant')"
       :side-conversation-list-visible="sideConversationListVisible"
       :tool-review-panel-open-visible="toolReviewPanelOpenVisible"

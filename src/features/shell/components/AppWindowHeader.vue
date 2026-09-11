@@ -73,7 +73,6 @@
         </button>
         <button
           class="btn btn-ghost btn-sm btn-square h-8 min-h-8 w-8 shrink-0"
-          :disabled="trimming || chatting"
           :title="`${t('chat.contextUsageTitle', { percent: normalizedChatUsagePercent })} · ${trimTip}`"
           @click.stop="$emit('trimConversation')"
         >
@@ -325,8 +324,6 @@ const props = withDefaults(defineProps<{
   currentTheme: string;
   titleText: string;
   chatUsagePercent: number;
-  trimming: boolean;
-  chatting: boolean;
   currentPersonaName: string;
   sideConversationListVisible: boolean;
   toolReviewPanelOpenVisible: boolean;

@@ -5,8 +5,6 @@
       :current-theme="currentTheme"
       :title-text="t('window.archivesTitle')"
       :chat-usage-percent="0"
-      :trimming="false"
-      :chatting="false"
       :current-persona-name="t('archives.roleAssistant')"
       :side-conversation-list-visible="false"
       :tool-review-panel-open-visible="false"
