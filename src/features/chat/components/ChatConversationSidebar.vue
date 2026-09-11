@@ -100,7 +100,7 @@
               >
                 <ChevronDown class="h-3.5 w-3.5 opacity-60 transition-transform duration-200 group-hover:translate-y-0.5 group-hover:opacity-100" />
                 <span>{{ t("chat.loadMore") }}</span>
-                <span class="rounded-full bg-base-300/60 px-1.5 py-0.5 text-[10px] font-medium leading-tight tabular-nums text-base-content/50 group-hover:bg-base-content/10 group-hover:text-base-content/75">
+                <span class="rounded-full bg-base-300/60 px-1.5 py-0.5 text-caption font-medium leading-tight tabular-nums text-base-content/50 group-hover:bg-base-content/10 group-hover:text-base-content/75">
                   {{ section.hiddenItemCount }}
                 </span>
               </button>
