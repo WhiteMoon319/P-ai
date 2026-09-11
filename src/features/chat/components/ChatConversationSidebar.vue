@@ -91,13 +91,18 @@
                 />
               </template>
             </template>
-            <div v-if="section.hiddenItemCount > 0" class="px-3 pb-2 pt-1">
+            <div v-if="section.hiddenItemCount > 0" class="mx-1 pb-1.5 pt-0.5">
               <button
                 type="button"
-                class="btn btn-ghost btn-xs h-7 min-h-7 w-full justify-center text-base-content/65 hover:text-base-content"
+                class="group flex h-7.5 w-full items-center justify-center gap-1.5 rounded-lg px-2 text-xs text-base-content/50 transition-colors hover:bg-base-300/50 hover:text-base-content active:bg-base-300/80"
+                :title="t('chat.loadMore')"
                 @click.stop="loadMoreConversationsInSection(section.key)"
               >
-                {{ t("chat.loadMore") }}
+                <ChevronDown class="h-3.5 w-3.5 opacity-60 transition-transform duration-200 group-hover:translate-y-0.5 group-hover:opacity-100" />
+                <span>{{ t("chat.loadMore") }}</span>
+                <span class="rounded-full bg-base-300/60 px-1.5 py-0.5 text-[10px] font-medium leading-tight tabular-nums text-base-content/50 group-hover:bg-base-content/10 group-hover:text-base-content/75">
+                  {{ section.hiddenItemCount }}
+                </span>
               </button>
             </div>
             </CollapsibleGroup>
@@ -306,7 +311,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Archive, LayoutList, List, Search, Settings, SquarePen } from "@lucide/vue";
+import { Archive, ChevronDown, LayoutList, List, Search, Settings, SquarePen } from "@lucide/vue";
 import CollapsibleGroup from "./CollapsibleGroup.vue";
 import ChatConversationItem from "./ChatConversationItem.vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
