@@ -1803,6 +1803,8 @@
       "toolLabel": "Recent tools",
       "toolChangedFiles": "{n} files changed",
       "toolMoreFiles": "{n} more files changed",
+      "planLabel": "Recent Plan",
+      "planLoading": "Loading plan…",
       "emptyAll": "Nothing in progress"
     },
     "sideChat": {

@@ -1925,6 +1925,8 @@
       "toolLabel": "最近工具",
       "toolChangedFiles": "修改了 {n} 個檔案",
       "toolMoreFiles": "還有 {n} 個檔案被修改",
+      "planLabel": "最近計劃",
+      "planLoading": "正在載入計劃…",
       "emptyAll": "尚無進行中的內容"
     },
     "sideChat": {

@@ -630,6 +630,8 @@
         <ChatHomePanel
           v-if="chatRightPanelMode === 'home'"
           class="h-full w-full"
+          :conversation-id="activeConversationId"
+          :latest-plan="latestHomePlan"
           :workspace-root-path="currentWorkspaceRootPath"
           :branch="homeGitBranch"
           :git-changes="homeGitChanges"
@@ -762,6 +764,7 @@ import ChatConversationSidebar from "../components/ChatConversationSidebar.vue";
 import ChatWorkspaceToolbar from "../components/ChatWorkspaceToolbar.vue";
 import ToolReviewSidebar from "../components/ToolReviewSidebar.vue";
 import ChatHomePanel from "../components/ChatHomePanel.vue";
+import type { LatestPlanSummary } from "../components/chat-home/HomePlanCard.vue";
 import ChatRightPanelSwitcher from "../components/ChatRightPanelSwitcher.vue";
 import ToolReviewTargetDialog from "../components/ToolReviewTargetDialog.vue";
 import FileReaderPanel from "../../file-reader/components/FileReaderPanel.vue";
@@ -2412,6 +2415,19 @@ const homeFilePreview = ref({
   openFiles: [] as HomeFileItem[],
   activePath: "",
   openFileCount: 0,
+});
+
+/** 主页预览计划卡：列出当前会话最后呈现过的计划 */
+const latestHomePlan = computed<LatestPlanSummary | null>(() => {
+  const blocks = props.messageBlocks || [];
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const block = blocks[i];
+    if (block.isExtraTextBlock) continue;
+    const path = String(block.planCard?.path || "").trim();
+    if (!path) continue;
+    return { path };
+  }
+  return null;
 });
 
 // 卡片墙的 Git 卡与文件阅读器 Git 面板共用同一份状态：仓库由面板选定，卡片墙跟着变

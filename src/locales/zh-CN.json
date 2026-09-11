@@ -1930,6 +1930,8 @@
       "toolLabel": "最近工具",
       "toolChangedFiles": "修改了 {n} 个文件",
       "toolMoreFiles": "还有 {n} 个文件被修改",
+      "planLabel": "最近计划",
+      "planLoading": "正在加载计划…",
       "emptyAll": "暂无进行中的内容"
     },
     "sideChat": {

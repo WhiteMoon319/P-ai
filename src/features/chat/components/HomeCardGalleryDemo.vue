@@ -57,6 +57,20 @@ const MOCK_FILES = {
   openFileCount: 6,
 };
 
+const MOCK_PLAN = {
+  latestPlan: {
+    path: `${MOCK_WORKSPACE}/.pai/plan/chat/20260911_预览幕墙计划卡.md`,
+    markdownContent: `# 侧边预览幕墙计划卡开发计划
+
+## 核心任务
+- [x] 解析计划 Markdown 结构
+- [x] 设计并构建 HomePlanCard 组件
+- [ ] 接入 ChatView 与 ChatHomePanel
+- [ ] 单元测试与端到端验证
+- [ ] 完善国际化与暗黑模式适配`,
+  },
+};
+
 const MOCK_SHELLS = {
   shells: [makeShell(0, "ready in 1243 ms\nLocal: http://localhost:1420/")],
 };
@@ -184,6 +198,7 @@ const currentPreset = computed(
 
 const wallCards = {
   ...MOCK_GIT,
+  ...MOCK_PLAN,
   ...MOCK_FILES,
   ...MOCK_SIDE_CHAT_ENABLED,
   sideChats: [

@@ -10,6 +10,12 @@
           :change-count="changeCount"
           @open-changes="emit('openGitChanges')"
         />
+        <HomePlanCard
+          v-if="latestPlan"
+          :plan="latestPlan"
+          :conversation-id="conversationId"
+          @open="(path) => emit('openFile', path)"
+        />
         <HomeFilesCard
           v-if="openFiles.length"
           :files="openFiles"
@@ -96,8 +102,11 @@ import HomeSideChatCard from "./chat-home/HomeSideChatCard.vue";
 import HomeShellCard from "./chat-home/HomeShellCard.vue";
 import HomeDelegateCard from "./chat-home/HomeDelegateCard.vue";
 import HomeTaskCard from "./chat-home/HomeTaskCard.vue";
+import HomePlanCard, { type LatestPlanSummary } from "./chat-home/HomePlanCard.vue";
 
 const props = withDefaults(defineProps<{
+  conversationId?: string;
+  latestPlan?: LatestPlanSummary | null;
   workspaceRootPath?: string;
   branch?: string;
   gitChanges?: Array<{ path: string; status: string }>;
@@ -116,6 +125,8 @@ const props = withDefaults(defineProps<{
   /** 工具评审批次；只传有工具调用的批次（由 ChatHomePanel 过滤） */
   toolBatches?: ToolReviewBatchSummary[];
 }>(), {
+  conversationId: "",
+  latestPlan: null,
   workspaceRootPath: "",
   branch: "",
   gitChanges: () => [],
@@ -183,6 +194,7 @@ const activeToolBatches = computed(() =>
 const hasAnyCard = computed(
   () =>
     Boolean(String(props.workspaceRootPath || "").trim())
+    || Boolean(props.latestPlan)
     || props.sideChatEnabled
     || props.openFiles.length > 0
     || props.sideChats.length > 0
