@@ -226,19 +226,17 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* 卡片固定尺寸、按行流式换行：面板变宽只会多排几张，不会把卡片拉大 */
+/* 固定网格：列宽固定、宽卡跨两格，同一行的卡片自动等高 */
 .ecall-home-flow {
   --ecall-home-tile: 8.75rem;
-  /* 卡片间距与圆角（--radius-box: 1rem）对齐；宽卡尺寸也引用这个值，避免两处各写一份 */
+  /* 卡片间距与圆角（--radius-box: 1rem）对齐 */
   --ecall-home-gap: 1rem;
-  display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--ecall-home-tile), 1fr));
   gap: var(--ecall-home-gap);
+  align-content: start;
 }
 
-/* 回到预览：卡片从略小处放大进入；时长与曲线复用侧栏 push 动画的 220ms 同参 */
 .ecall-home-flow > * {
   animation: ecall-home-card-enter 220ms cubic-bezier(0.2, 0, 0, 1);
 }

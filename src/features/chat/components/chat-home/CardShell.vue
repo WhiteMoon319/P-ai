@@ -64,17 +64,14 @@ function handleSelect() {
 </script>
 
 <style scoped>
-/* 宽度固定两档（1 列 / 2 列），高度交给内容撑开 */
+/* 宽度由所在网格列决定；宽卡跨两格 */
 .ecall-home-card-small {
-  width: var(--ecall-home-tile, 8.75rem);
-  max-width: 100%;
-  flex: 0 0 auto;
+  width: 100%;
 }
 
 .ecall-home-card-wide {
-  width: calc(var(--ecall-home-tile, 8.75rem) * 2 + var(--ecall-home-gap, 1rem));
-  max-width: 100%;
-  flex: 0 0 auto;
+  grid-column: span 2;
+  width: 100%;
 }
 
 .ecall-home-card-icon {
