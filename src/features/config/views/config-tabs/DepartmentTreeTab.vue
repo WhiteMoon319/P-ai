@@ -54,7 +54,7 @@
     </template>
 
     <div class="flex min-h-full flex-col gap-3">
-      <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
+      <ConfigCard flush>
         <div v-if="relationValidationMessage" class="border-b border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-content">
           {{ relationValidationMessage }}
         </div>
@@ -108,7 +108,7 @@
             </button>
           </div>
         </div>
-      </div>
+      </ConfigCard>
 
       <Teleport to="body" :disabled="!isFlowFullscreen">
         <div
@@ -223,6 +223,7 @@ import "@vue-flow/controls/dist/style.css";
 import { Check, Maximize2, Minimize2, RotateCcw, Save, User } from "@lucide/vue";
 import type { AppConfig, DepartmentConfig, PersonaProfile } from "../../../../types/app";
 import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
+import ConfigCard from "../../components/ConfigCard.vue";
 import {
   departmentAncestorIds,
   departmentDirectChildIds,

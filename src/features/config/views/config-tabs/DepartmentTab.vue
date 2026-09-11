@@ -69,7 +69,7 @@
     </template>
 
     <div v-if="selectedDepartment" class="grid gap-3">
-        <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
+      <ConfigCard flush>
           <div v-if="departmentValidationMessage" class="border-b border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-content">
             {{ departmentValidationMessage }}
           </div>
@@ -269,13 +269,15 @@
                 </template>
               </div>
             </div>
-          </div>
         </div>
-      </div>
-
-    <div v-else class="rounded-box border border-base-300 bg-base-100 p-12 text-center">
-      <div class="text-sm opacity-40">{{ t("config.department.selectHint") }}</div>
+      </ConfigCard>
     </div>
+
+    <ConfigCard v-else flush>
+      <div class="p-12 text-center text-sm opacity-40">
+        {{ t("config.department.selectHint") }}
+      </div>
+    </ConfigCard>
   </SettingsStickyLayout>
 </template>
 
@@ -303,6 +305,7 @@ import { normalizeDepartmentChildIds } from "../../utils/department-graph";
 import { MODEL_ROLE_EXPERT_API_CONFIG_ID, MODEL_ROLE_QUICK_API_CONFIG_ID } from "../../utils/model-role-options";
 import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
 import ApiConfigPicker from "../../components/ApiConfigPicker.vue";
+import ConfigCard from "../../components/ConfigCard.vue";
 
 const props = defineProps<{
   config: AppConfig;
