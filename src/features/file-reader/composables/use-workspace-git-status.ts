@@ -1,0 +1,236 @@
+// 工作区 Git 状态共享源（模块级单例）
+// 目的：文件阅读器 Git 面板与右栏卡片墙的 Git 卡共用同一份更改数据，避免两边各存一份导致显示漂移。
+// 职责：
+// - 独占 git_panel_status 取数与刷新冷却：两个消费方同时触发也只发一次请求
+// - 独占仓库监听（git_panel_watch_start / git_panel_watch_stop）的启停，按消费方引用计数
+// - 独占 gitPanel.watchChanged 订阅，过滤出属于当前仓库的事件后驱动刷新，并转发给订阅者
+// 共享范围只到「分支 + 更改列表」这一层；history / stashes / branches / diff 仍由 Git 面板自理。
+import { ref } from "vue";
+import {
+  gitPanelDiscover,
+  gitPanelStatus,
+  gitPanelWatchStart,
+  gitPanelWatchStop,
+  onTransportNotification,
+  type GitPanelStatusEntry,
+  type GitPanelStatusOutput,
+  type GitPanelWatchEventPayload,
+} from "../../../services/tauri-api";
+
+/** 自动刷新冷却：1 秒内重复触发只发一次请求；force 可穿透 */
+const REFRESH_CD_MS = 1000;
+
+// ==================== 共享状态 ====================
+/** 当前仓库根：由 Git 面板选中决定，其他消费方跟随 */
+const repoRoot = ref("");
+const currentBranch = ref("");
+const statusEntries = ref<GitPanelStatusEntry[]>([]);
+/** 变更条目超过后端返回上限（1000）时为 true */
+const statusTruncated = ref(false);
+const stagedTotal = ref(0);
+const unstagedTotal = ref(0);
+const statusLoaded = ref(false);
+const statusError = ref("");
+
+/** 需要实时数据的消费方数量，归零时关闭仓库监听与事件订阅 */
+let consumerCount = 0;
+/** Git 面板挂载数量：面板在时仓库根由面板决定，其他消费方只跟随 */
+let panelCount = 0;
+/** 当前已向后端注册监听的仓库 */
+let watchedRoot = "";
+let unlistenWatch: (() => void) | null = null;
+let lastStatusLoad = 0;
+let loadSeq = 0;
+const externalChangeHandlers = new Set<(payload: GitPanelWatchEventPayload) => void>();
+
+function normalizeRepoPath(path: string): string {
+  return String(path || "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+/** 同一仓库仅大小写或斜杠差异时视为同一个 */
+export function isSameRepoPath(a: string, b: string): boolean {
+  const left = normalizeRepoPath(a);
+  const right = normalizeRepoPath(b);
+  return !!left && !!right && left === right;
+}
+
+// ==================== 状态读写 ====================
+function clearStatus() {
+  statusEntries.value = [];
+  statusTruncated.value = false;
+  stagedTotal.value = 0;
+  unstagedTotal.value = 0;
+  currentBranch.value = "";
+  statusLoaded.value = false;
+  statusError.value = "";
+}
+
+/** 切换当前仓库；数据清空后若已有消费方则立即重载 */
+function setRepoRoot(root: string) {
+  const next = String(root || "").trim();
+  if (!next) {
+    if (!repoRoot.value) return;
+    loadSeq += 1;
+    repoRoot.value = "";
+    clearStatus();
+    lastStatusLoad = 0;
+    syncWatcher();
+    return;
+  }
+  if (isSameRepoPath(next, repoRoot.value)) {
+    repoRoot.value = next;
+    return;
+  }
+  loadSeq += 1;
+  repoRoot.value = next;
+  clearStatus();
+  // 新仓库的首次加载不受冷却拦截
+  lastStatusLoad = 0;
+  syncWatcher();
+  if (consumerCount > 0) void loadStatus(true);
+}
+
+/** 用一次 git_panel_status 的结果回填共享状态（stage / unstage 等写操作后可直接复用返回值） */
+function applyStatus(root: string, result: GitPanelStatusOutput) {
+  if (root && repoRoot.value && !isSameRepoPath(root, repoRoot.value)) return;
+  statusEntries.value = result.entries || [];
+  statusTruncated.value = !!result.truncated;
+  stagedTotal.value = result.stagedTotal ?? 0;
+  unstagedTotal.value = result.unstagedTotal ?? 0;
+  currentBranch.value = result.branch || "";
+  statusLoaded.value = true;
+  statusError.value = "";
+  // 后端可能返回规范化后的仓库根（大小写 / 分隔符差异），仅在真正不同时切换
+  if (result.repoRoot && !isSameRepoPath(result.repoRoot, repoRoot.value)) {
+    setRepoRoot(result.repoRoot);
+  }
+}
+
+async function loadStatus(force = false) {
+  const root = repoRoot.value;
+  if (!root) return;
+  const now = Date.now();
+  if (!force && now - lastStatusLoad < REFRESH_CD_MS) return;
+  lastStatusLoad = now;
+  const seq = ++loadSeq;
+  try {
+    const result = await gitPanelStatus(root);
+    if (seq !== loadSeq) return;
+    applyStatus(root, result);
+  } catch (error) {
+    if (seq !== loadSeq) return;
+    statusError.value = error instanceof Error ? error.message : String(error);
+  }
+}
+
+/** 按当前工作区探测默认仓库根（走后端缓存，不强制重扫） */
+async function discoverRepoRoot(workspacePath: string): Promise<string> {
+  const workspace = String(workspacePath || "").trim();
+  if (!workspace) return "";
+  try {
+    const result = await gitPanelDiscover(workspace, false);
+    return String(result?.defaultRepoRoot || "");
+  } catch (error) {
+    console.warn("[Git状态] 探测默认仓库失败", error);
+    return "";
+  }
+}
+
+// ==================== 仓库监听与事件 ====================
+function subscribeWatch() {
+  if (unlistenWatch) return;
+  unlistenWatch = onTransportNotification<GitPanelWatchEventPayload>(
+    "gitPanel.watchChanged",
+    handleWatchEvent,
+  );
+}
+
+function unsubscribeWatch() {
+  unlistenWatch?.();
+  unlistenWatch = null;
+}
+
+function handleWatchEvent(payload: GitPanelWatchEventPayload) {
+  if (!repoRoot.value || !isSameRepoPath(payload?.workspacePath || "", repoRoot.value)) return;
+  void loadStatus(true);
+  for (const handler of externalChangeHandlers) handler(payload);
+}
+
+/** 让后端监听跟随「是否有消费方 + 当前仓库」，两者都变了才重启 */
+function syncWatcher() {
+  const target = consumerCount > 0 ? repoRoot.value : "";
+  if (!target && !watchedRoot) return;
+  if (target && isSameRepoPath(target, watchedRoot)) {
+    watchedRoot = target;
+    return;
+  }
+  const prev = watchedRoot;
+  watchedRoot = target;
+  if (prev) {
+    gitPanelWatchStop(prev).catch((error) => console.warn("[Git状态] 停止仓库监听失败", error));
+  }
+  if (target) {
+    gitPanelWatchStart(target).catch((error) => console.warn("[Git状态] 开启仓库监听失败", error));
+    subscribeWatch();
+  } else {
+    unsubscribeWatch();
+  }
+}
+
+/** 订阅「当前仓库有外部变化」信号；返回取消订阅函数 */
+function onExternalChange(handler: (payload: GitPanelWatchEventPayload) => void): () => void {
+  externalChangeHandlers.add(handler);
+  return () => {
+    externalChangeHandlers.delete(handler);
+  };
+}
+
+/** 普通消费方（卡片墙等）声明需要实时数据 */
+function acquire() {
+  consumerCount += 1;
+  syncWatcher();
+}
+
+function release() {
+  consumerCount = Math.max(0, consumerCount - 1);
+  syncWatcher();
+}
+
+/** Git 面板声明占用：面板在时仓库根由面板控制 */
+function acquirePanel() {
+  panelCount += 1;
+  acquire();
+}
+
+function releasePanel() {
+  panelCount = Math.max(0, panelCount - 1);
+  release();
+}
+
+/** 是否已有 Git 面板在控制仓库根 */
+function isPanelActive(): boolean {
+  return panelCount > 0;
+}
+
+export function useWorkspaceGitStatus() {
+  return {
+    repoRoot,
+    currentBranch,
+    statusEntries,
+    statusTruncated,
+    stagedTotal,
+    unstagedTotal,
+    statusLoaded,
+    statusError,
+    setRepoRoot,
+    applyStatus,
+    loadStatus,
+    discoverRepoRoot,
+    onExternalChange,
+    acquire,
+    release,
+    acquirePanel,
+    releasePanel,
+    isPanelActive,
+  };
+}

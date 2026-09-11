@@ -631,9 +631,9 @@
           v-if="chatRightPanelMode === 'home'"
           class="h-full w-full"
           :workspace-root-path="currentWorkspaceRootPath"
-          :branch="homeFilePreview.branch"
-          :git-changes="homeFilePreview.changes"
-          :change-count="homeFilePreview.changeCount"
+          :branch="homeGitBranch"
+          :git-changes="homeGitChanges"
+          :change-count="homeGitChangeCount"
           :open-files="homeFilePreview.openFiles"
           :active-path="homeFilePreview.activePath"
           :open-file-count="homeFilePreview.openFileCount"
@@ -738,7 +738,6 @@ import {
   getTransportHostContext,
   invokeTauri,
   isDesktopTauriHost,
-  gitPanelStatus,
   onTransportNotification,
   onTransportRecovered,
   openTransportExternalUrl,
@@ -766,6 +765,7 @@ import ChatHomePanel from "../components/ChatHomePanel.vue";
 import ChatRightPanelSwitcher from "../components/ChatRightPanelSwitcher.vue";
 import ToolReviewTargetDialog from "../components/ToolReviewTargetDialog.vue";
 import FileReaderPanel from "../../file-reader/components/FileReaderPanel.vue";
+import { useWorkspaceGitStatus } from "../../file-reader/composables/use-workspace-git-status";
 import PanelTabStrip from "../../shared/components/PanelTabStrip.vue";
 import ChatImagePreviewDialog from "../components/dialogs/ChatImagePreviewDialog.vue";
 import ChatGoalTaskDialog from "../components/dialogs/ChatGoalTaskDialog.vue";
@@ -2412,36 +2412,61 @@ const homeFilePreview = ref({
   openFiles: [] as HomeFileItem[],
   activePath: "",
   openFileCount: 0,
-  branch: "",
-  changes: [] as Array<{ path: string; status: string }>,
-  changeCount: 0,
 });
-let homeGitRequestSeq = 0;
 
-async function refreshHomeGitPreview() {
-  const workspacePath = String(props.currentWorkspaceRootPath || "").trim();
-  const seq = ++homeGitRequestSeq;
-  if (!workspacePath) {
-    homeFilePreview.value = { ...homeFilePreview.value, branch: "", changes: [], changeCount: 0 };
-    return;
-  }
-  try {
-    const status = await gitPanelStatus(workspacePath);
-    if (seq !== homeGitRequestSeq) return;
-    const entries = Array.isArray(status?.entries) ? status.entries : [];
-    homeFilePreview.value = {
-      ...homeFilePreview.value,
-      branch: String(status?.branch || ""),
-      changes: entries.map((entry) => ({
-        path: String(entry?.path || ""),
-        status: String(entry?.unstagedStatus || entry?.stagedStatus || ""),
-      })),
-      changeCount: entries.length || (Number(status?.stagedTotal || 0) + Number(status?.unstagedTotal || 0)),
-    };
-  } catch {
-    if (seq !== homeGitRequestSeq) return;
-    homeFilePreview.value = { ...homeFilePreview.value, branch: "", changes: [], changeCount: 0 };
-  }
+// 卡片墙的 Git 卡与文件阅读器 Git 面板共用同一份状态：仓库由面板选定，卡片墙跟着变
+const {
+  currentBranch: homeGitBranch,
+  statusEntries: homeGitStatusEntries,
+  stagedTotal: homeGitStagedTotal,
+  unstagedTotal: homeGitUnstagedTotal,
+  setRepoRoot: setHomeGitRepoRoot,
+  loadStatus: loadHomeGitStatus,
+  discoverRepoRoot: discoverHomeGitRepoRoot,
+  acquire: acquireHomeGitStatus,
+  release: releaseHomeGitStatus,
+  isPanelActive: isHomeGitPanelActive,
+} = useWorkspaceGitStatus();
+
+const homeGitChanges = computed(() =>
+  homeGitStatusEntries.value.map((entry) => ({
+    path: String(entry?.path || ""),
+    status: String(entry?.unstagedStatus || entry?.stagedStatus || ""),
+  })),
+);
+const homeGitChangeCount = computed(() => {
+  const visible = homeGitStatusEntries.value.length;
+  return visible || homeGitStagedTotal.value + homeGitUnstagedTotal.value;
+});
+
+let homeGitConsuming = false;
+
+/** 只在右栏卡片墙模式占用共享状态源：离开时归还，避免空挂仓库监听 */
+function syncHomeGitConsume(mode: string) {
+  const consuming = mode === "home";
+  if (consuming === homeGitConsuming) return;
+  homeGitConsuming = consuming;
+  if (consuming) acquireHomeGitStatus();
+  else releaseHomeGitStatus();
+}
+
+let homeGitWorkspaceKey = "";
+
+/**
+ * 卡片墙的仓库来源：Git 面板在场时完全跟随面板（它负责选定仓库与刷新）；
+ * 面板不在场时按当前会话工作区解析默认仓库——切会话或换工作区要重解析，
+ * 仅切换右栏模式则保留面板最后选中的仓库，避免切回来又跳回默认仓库。
+ */
+async function syncHomeGitRepo() {
+  if (isHomeGitPanelActive()) return;
+  const workspace = String(props.currentWorkspaceRootPath || "").trim();
+  const workspaceChanged = workspace !== homeGitWorkspaceKey;
+  homeGitWorkspaceKey = workspace;
+  if (!workspaceChanged) return;
+  const root = await discoverHomeGitRepoRoot(workspace);
+  if (!homeGitConsuming) return;
+  setHomeGitRepoRoot(root);
+  if (root) void loadHomeGitStatus();
 }
 
 watch(
@@ -2451,9 +2476,10 @@ watch(
     String(props.currentWorkspaceRootPath || "").trim(),
   ] as const,
   ([, mode]) => {
+    syncHomeGitConsume(mode);
     if (mode !== "home") return;
     homeFilePreview.value = { ...homeFilePreview.value, ...readHomeOpenFiles() };
-    void refreshHomeGitPreview();
+    void syncHomeGitRepo();
   },
   { immediate: true },
 );

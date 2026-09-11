@@ -565,12 +565,8 @@ import {
   gitPanelStashFiles,
   gitPanelStashList,
   gitPanelStashPop,
-  gitPanelStatus,
   gitPanelSync,
   gitPanelUnstage,
-  gitPanelWatchStart,
-  gitPanelWatchStop,
-  onTransportNotification,
   type GitPanelBranchEntry,
   type GitPanelCommitFileEntry,
   type GitPanelLogEntry,
@@ -578,10 +574,10 @@ import {
   type GitPanelRepoEntry,
   type GitPanelRunOutput,
   type GitPanelStashEntry,
-  type GitPanelStatusEntry,
   type GitPanelWatchEventPayload,
 } from "../../../services/tauri-api";
 import { decideGitPanelRefreshTargets } from "../git-panel-watch-refresh";
+import { useWorkspaceGitStatus } from "../composables/use-workspace-git-status";
 import GitChangesGroup from "./GitChangesGroup.vue";
 import CommitGraphLine from "./CommitGraphLine.vue";
 import GitResizeHandle from "./GitResizeHandle.vue";
@@ -670,8 +666,22 @@ let toastTimer: number | undefined;
 const gitAvailable = ref(false);
 const detectChecked = ref(false);
 const detectError = ref("");
-const repoRoot = ref("");
-const currentBranch = ref("");
+// 仓库根与更改状态来自共享状态源（与右栏卡片墙的 Git 卡同一份）：面板负责选定仓库，其他消费方跟随
+const {
+  repoRoot,
+  currentBranch,
+  statusEntries,
+  statusTruncated,
+  stagedTotal,
+  unstagedTotal,
+  statusLoaded,
+  statusError,
+  setRepoRoot,
+  loadStatus,
+  onExternalChange,
+  acquirePanel,
+  releasePanel,
+} = useWorkspaceGitStatus();
 
 // 当前仓库名（仓库栏折叠条标题）：repoRoot 最后一段
 const currentRepoName = computed(() => {
@@ -681,13 +691,6 @@ const currentRepoName = computed(() => {
 });
 
 // ==================== 数据 ====================
-const statusEntries = ref<GitPanelStatusEntry[]>([]);
-/** 变更条目超过后端返回上限（1000）时为 true，前端显示 1000+ 而非全量加载 */
-const statusTruncated = ref(false);
-/** 截断前暂存组实际数量（折叠条尾部显示，可能大于展示上限） */
-const stagedTotal = ref(0);
-/** 截断前更改组实际数量（折叠条尾部显示，可能大于展示上限） */
-const unstagedTotal = ref(0);
 const branches = ref<GitPanelBranchEntry[]>([]);
 const remotes = ref<GitPanelRemoteEntry[]>([]);
 const stashList = ref<GitPanelStashEntry[]>([]);
@@ -883,10 +886,14 @@ function appendOutput(command: string, result: GitPanelRunOutput | null, error: 
   }
 }
 
+// 共享状态源的取数失败，沿用面板原有的报错出口
+watch(statusError, (message) => {
+  if (message) appendOutput("status", null, new Error(message));
+});
+
 // ==================== 数据加载 ====================
 // 按需懒加载：上栏展开才拉更改/暂存，下栏切到对应 tab 才拉历史/存储/分支；
-// 各数据首次加载成功置标记，折叠/切走不重复拉取
-const statusLoaded = ref(false);
+// 各数据首次加载成功置标记，折叠/切走不重复拉取（更改/暂存的标记在共享状态源里）
 const historyLoaded = ref(false);
 const stashesLoaded = ref(false);
 const branchesLoaded = ref(false);
@@ -929,7 +936,8 @@ async function loadDiscover(force = false) {
     detectChecked.value = !!result.checked;
     repos.value = result.repos || [];
     reposLoaded.value = true;
-    repoRoot.value = result.defaultRepoRoot || "";
+    // 默认仓库交给共享状态源，面板自身跟随
+    setRepoRoot(result.defaultRepoRoot || "");
     detectError.value =
       result.error ||
       (!result.gitAvailable
@@ -960,23 +968,22 @@ function isCurrentRepo(path: string): boolean {
   return norm(path) === norm(repoRoot.value);
 }
 
-// 切换仓库：更新 repoRoot，重置各数据加载标记后按当前可见区域重载
+// 切换仓库：把共享状态源切到新仓库，重置各数据加载标记后按当前可见区域重载
 function switchRepo(path: string) {
   if (!path || isCurrentRepo(path) || busy.value) return;
-  repoRoot.value = path;
   branchPickerOpen.value = false;
   commitCard.value = { entry: null, x: 0, y: 0 };
   lastClickedDiffPath.value = "";
   commitFilesMap.value = {};
-  statusLoaded.value = false;
   historyLoaded.value = false;
   stashesLoaded.value = false;
   branchesLoaded.value = false;
   // 重置加载冷却时间戳：否则新仓库的首次加载会被 1 秒冷却拦截，面板下方无数据
-  lastStatusLoad.value = 0;
   lastHistoryLoad.value = 0;
   lastStashesLoad.value = 0;
   lastBranchesLoad.value = 0;
+  // 仓库根切换、更改数据清空与 status 冷却重置都在共享状态源里统一处理
+  setRepoRoot(path);
   ensureVisibleData();
 }
 
@@ -992,31 +999,11 @@ watch(
   { immediate: true },
 );
 
-/** 数据加载冷却：自动触发 1 秒内不重复请求；写操作后的刷新与用户主动刷新可穿透 */
+/** 其余数据的加载冷却：自动触发 1 秒内不重复请求；写操作后的刷新与用户主动刷新可穿透 */
 const REFRESH_CD_MS = 1000;
-const lastStatusLoad = ref(0);
 const lastBranchesLoad = ref(0);
 const lastStashesLoad = ref(0);
 const lastHistoryLoad = ref(0);
-
-async function loadStatus(force = false) {
-  if (!repoRoot.value) return;
-  const now = Date.now();
-  if (!force && now - lastStatusLoad.value < REFRESH_CD_MS) return;
-  lastStatusLoad.value = now;
-  try {
-    const result = await gitPanelStatus(repoRoot.value);
-    statusEntries.value = result.entries || [];
-    statusTruncated.value = !!result.truncated;
-    stagedTotal.value = result.stagedTotal ?? 0;
-    unstagedTotal.value = result.unstagedTotal ?? 0;
-    currentBranch.value = result.branch || "";
-    if (result.repoRoot) repoRoot.value = result.repoRoot;
-    statusLoaded.value = true;
-  } catch (error) {
-    appendOutput("status", null, error);
-  }
-}
 
 async function refreshChanges() {
   changesRefreshing.value = true;
@@ -1792,9 +1779,10 @@ function openDiff(payload: { path: string; staged: boolean; untracked?: boolean 
 
 // ==================== 提交框自适应高度 ====================
 // ==================== 外部变化自动刷新 ====================
-// 后端 watcher 事件订阅 + focus 兜底：编辑器/终端/外部工具改动仓库时面板自动刷新。
-// 刷新粒度：workdir 只刷更改/暂存区；head/refs 额外刷可见的提交历史/分支/储藏。
-let unlistenGitPanelWatch: (() => void) | null = null;
+// 仓库监听的启停与 gitPanel.watchChanged 订阅都在共享状态源里（与卡片墙共用一份）；
+// 面板只订阅「当前仓库有变化」这一层，用来补刷 head/refs 相关的区域。
+// 刷新粒度：workdir 只刷更改/暂存区（共享状态源负责）；head/refs 额外刷可见的提交历史/分支/储藏。
+let unlistenExternalChange: (() => void) | null = null;
 
 function refreshRefsDependentVisibleArea() {
   if (!repoRoot.value || historyCollapsed.value) return;
@@ -1807,10 +1795,12 @@ function refreshRefsDependentVisibleArea() {
   }
 }
 
-function refreshBySignals(payload: GitPanelWatchEventPayload) {
+// 共享状态源已过滤出属于当前仓库的外部变化，并已刷新 status；
+// 这里只负责 head/refs 信号下的提交历史 / 储藏 / 分支（含 remotes）刷新
+function handleExternalChange(payload: GitPanelWatchEventPayload) {
   const targets = decideGitPanelRefreshTargets({
     hasRepoRoot: !!repoRoot.value,
-    isCurrentRepo: isCurrentRepo(payload?.workspacePath || ""),
+    isCurrentRepo: true,
     historyCollapsed: historyCollapsed.value,
     activeGitTab: activeGitTab.value,
     workdirChanged: !!payload?.workdirChanged,
@@ -1818,9 +1808,7 @@ function refreshBySignals(payload: GitPanelWatchEventPayload) {
     refsChanged: !!payload?.refsChanged,
   });
   for (const target of targets) {
-    if (target === "status") {
-      void loadStatus(true);
-    } else if (target === "history") {
+    if (target === "history") {
       void loadHistory(true);
     } else if (target === "stashes") {
       void loadStashes(true);
@@ -1835,22 +1823,6 @@ function handleWindowFocusRefresh() {
   void loadStatus(true);
   refreshRefsDependentVisibleArea();
 }
-
-// watcher 跟随仓库选择：repoRoot 就绪/切换时开启（后端幂等），清空时用旧仓库停止
-watch(
-  () => repoRoot.value,
-  (root, prevRoot) => {
-    if (root) {
-      gitPanelWatchStart(root).catch((error) => {
-        console.warn("[Git面板] 开启仓库监听失败", error);
-      });
-    } else if (prevRoot) {
-      gitPanelWatchStop(prevRoot).catch((error) => {
-        console.warn("[Git面板] 停止仓库监听失败", error);
-      });
-    }
-  },
-);
 
 // ==================== 生命周期 ====================
 const commitInputRef = ref<HTMLTextAreaElement | null>(null);
@@ -1871,10 +1843,9 @@ function resetCommitInputHeight() {
 onMounted(() => {
   restoreGitTab();
   restoreChangesViewMode();
-  unlistenGitPanelWatch = onTransportNotification<GitPanelWatchEventPayload>(
-    "gitPanel.watchChanged",
-    refreshBySignals,
-  );
+  // 声明面板占用：仓库根由面板控制，并让共享状态源开启仓库监听
+  acquirePanel();
+  unlistenExternalChange = onExternalChange(handleExternalChange);
   window.addEventListener("focus", handleWindowFocusRefresh);
   void loadDiscover().then(() => {
     if (repoRoot.value) {
@@ -1893,16 +1864,11 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  unlistenGitPanelWatch?.();
-  unlistenGitPanelWatch = null;
+  unlistenExternalChange?.();
+  unlistenExternalChange = null;
   window.removeEventListener("focus", handleWindowFocusRefresh);
-  // 携带当前仓库根停止：后端仅在仓库匹配时递减引用计数，避免卸载本实例误杀其他并存实例的监听
-  const stopRoot = repoRoot.value;
-  if (stopRoot) {
-    gitPanelWatchStop(stopRoot).catch((error) => {
-      console.warn("[Git面板] 停止仓库监听失败", error);
-    });
-  }
+  // 释放面板占用：共享状态源按引用计数决定是否停止仓库监听，其他消费方（卡片墙）仍在时继续
+  releasePanel();
   logObserver?.disconnect();
   logObserver = undefined;
   branchesObserver?.disconnect();
