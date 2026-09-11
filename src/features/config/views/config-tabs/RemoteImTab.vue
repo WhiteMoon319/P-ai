@@ -13,7 +13,7 @@
       <div v-if="channels.length === 0" class="text-xs italic opacity-60 py-4 text-center">
         {{ t("config.remoteIm.empty") }}
       </div>
-      <div v-else class="flex-1 overflow-y-auto py-3">
+      <div v-else class="flex-1 overflow-y-auto px-3 py-3">
         <div class="flex flex-wrap gap-3">
           <div
             v-for="ch in channels"
@@ -98,15 +98,15 @@
         {{ contactsDisabledReason }}
       </div>
       <ul class="w-full flex-1 overflow-y-auto px-0">
-        <li v-if="contactsError" class="menu-title">
+        <li v-if="contactsError" class="menu-title px-3 py-1">
           <span class="text-xs text-error">{{ contactsError }}</span>
         </li>
-        <li v-if="currentChannelContacts.length === 0" class="menu-title">
+        <li v-if="currentChannelContacts.length === 0" class="menu-title px-3 py-4 text-center">
           <span class="text-xs italic opacity-60">{{ t("config.remoteIm.contactsEmpty") }}</span>
         </li>
         <template v-else>
           <template v-for="group in groupedContacts" :key="group.mode">
-            <li class="menu-title text-base-content">
+            <li class="menu-title text-base-content px-3 pt-3 pb-1">
               <span class="text-sm font-bold">{{ group.label }}（{{ group.items.length }}）</span>
             </li>
             <li
