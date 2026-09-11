@@ -1941,6 +1941,8 @@
     },
     "rightSidebarToggle": "右侧栏",
     "conversationSearchPlaceholder": "搜索会话标题或最近两条消息",
+    "switchToCompactView": "切换到精简视图",
+    "switchToCompositeView": "切换到综合视图",
     "conversationSearchEmpty": "没有匹配的会话",
     "userAvatarAlt": "我",
     "pinConversation": "移动到置顶分组",

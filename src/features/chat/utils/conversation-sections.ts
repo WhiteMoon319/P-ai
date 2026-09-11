@@ -31,6 +31,8 @@ export function buildConversationSections(
     locale?: string | string[];
     currentWorkspaceRootPath?: string;
     activeConversationId?: string;
+    /** 精简模式：忽略置顶 / 当前项目 / 最近，全部会话统一按工作区（本地）或渠道（联系人）分组 */
+    compact?: boolean;
   },
 ): ConversationSection[] {
   const { tab, titles, locale } = options;
@@ -48,6 +50,19 @@ export function buildConversationSections(
     }
     return true;
   });
+  // 精简模式：忽略置顶 / 当前项目 / 最近，全部会话统一按工作区（本地）或渠道（联系人）分组
+  if (options.compact) {
+    if (tab === "contact") {
+      return buildRemoteConversationSections(visibleItems, {
+        fallbackTitle: titles.other,
+        locale,
+      });
+    }
+    return buildWorkspaceConversationSections(visibleItems, {
+      defaultWorkspaceTitle: titles.defaultWorkspace,
+      locale,
+    });
+  }
   const draftActiveItems = visibleItems.filter((item) => !!item.isDraft);
   const regularItems = visibleItems.filter((item) => !item.isDraft);
   const pinned = regularItems.filter((item) => !!item.isPinned || !!item.isSystemNotificationConversation);

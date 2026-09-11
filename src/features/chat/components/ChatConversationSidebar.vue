@@ -53,7 +53,7 @@
             <template v-for="item in section.visibleItems" :key="item.conversationId">
               <ChatConversationItem
                 :item="item"
-                level="full"
+                :level="compactConversationList ? simpleConversationItemLevel(item) : 'full'"
                 :active-conversation-id="props.activeConversationId"
                 :user-alias="props.userAlias"
                 :user-avatar-url="props.userAvatarUrl"
@@ -61,6 +61,7 @@
                 :persona-avatar-url-map="props.personaAvatarUrlMap"
                 :pipeline-status-by-id="conversationStatusById"
                 :show-source-badge="isRecentConversationSection(section.key)"
+                :compact-indicator="compactConversationList"
                 @select="(payload) => emit('select', payload)"
                 @rename="(payload) => emit('rename', payload)"
                 @toggle-pin-conversation="(conversationId) => emit('togglePinConversation', conversationId)"
@@ -156,15 +157,28 @@
             </li>
           </ul>
         </div>
-        <button
-          type="button"
-          class="btn btn-ghost btn-xs h-7 min-h-7 w-7 min-w-7 p-0"
-          :class="showSearch ? 'text-primary' : 'text-base-content/55'"
-          :title="searchPlaceholder"
-          @click="showSearch = !showSearch"
-        >
-          <Search class="h-4 w-4" />
-        </button>
+        <div class="flex items-center gap-1">
+          <button
+            v-if="activeConversationTab !== 'task'"
+            type="button"
+            class="btn btn-ghost btn-xs h-7 min-h-7 w-7 min-w-7 p-0"
+            :class="compactConversationList ? 'text-primary' : 'text-base-content/55'"
+            :title="compactConversationList ? t('chat.switchToCompositeView') : t('chat.switchToCompactView')"
+            @click="compactConversationList = !compactConversationList"
+          >
+            <List v-if="compactConversationList" class="h-4 w-4" />
+            <LayoutList v-else class="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs h-7 min-h-7 w-7 min-w-7 p-0"
+            :class="showSearch ? 'text-primary' : 'text-base-content/55'"
+            :title="searchPlaceholder"
+            @click="showSearch = !showSearch"
+          >
+            <Search class="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </div>
     <dialog ref="batchArchiveDialogRef" class="modal" @close="closeBatchArchiveCard" @cancel.prevent="closeBatchArchiveCard">
@@ -292,7 +306,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Archive, Search, Settings, SquarePen } from "@lucide/vue";
+import { Archive, LayoutList, List, Search, Settings, SquarePen } from "@lucide/vue";
 import CollapsibleGroup from "./CollapsibleGroup.vue";
 import ChatConversationItem from "./ChatConversationItem.vue";
 import type { ApiConfigItem, ChatConversationOverviewItem, ConversationPreviewMessage } from "../../../types/app";
@@ -342,6 +356,13 @@ const CONVERSATION_SECTION_UNUSED_DAYS = 7;
 const CONVERSATION_SECTION_MIN_VISIBLE = 5;
 const CONVERSATION_SECTION_LOAD_MORE_STEP = 10;
 const CONVERSATION_SECTION_RESET_DELAY_MS = 30_000;
+const COMPACT_CONVERSATION_VIEW_STORAGE_KEY = "easy-call.chat.conversation-compact-view.v1";
+
+/** 读「精简视图」偏好：无记录时默认综合视图 */
+function readCompactConversationViewPreference(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(COMPACT_CONVERSATION_VIEW_STORAGE_KEY) === "1";
+}
 
 const props = defineProps<{
   items: ChatConversationOverviewItem[];
@@ -388,6 +409,7 @@ function handleOpenBatchArchive(event: MouseEvent) {
 
 const conversationSearchQuery = ref("");
 const showSearch = ref(false);
+const compactConversationList = ref(readCompactConversationViewPreference());
 const searchInputRef = ref<HTMLInputElement | null>(null);
 const batchArchiveDialogRef = ref<HTMLDialogElement | null>(null);
 const batchArchiveCardOpen = ref(false);
@@ -450,6 +472,7 @@ const conversationSections = computed<ConversationSection[]>(() =>
     locale: locale.value,
     currentWorkspaceRootPath: props.currentWorkspaceRootPath,
     activeConversationId: props.activeConversationId,
+    compact: compactConversationList.value,
   }),
 );
 
@@ -755,8 +778,19 @@ function conversationSectionLoadMoreKey(
 }
 
 function buildDisplayedConversationSection(section: ConversationSection): DisplayConversationSection {
-  const stateKey = conversationSectionLoadMoreKey(section.key);
   const items = Array.isArray(section.items) ? section.items : [];
+  // 精简模式：不做 full 聚合，全部会话以简单条目平铺
+  if (compactConversationList.value) {
+    return {
+      ...section,
+      visibleItems: items,
+      simpleFollowers: {},
+      visibleCount: items.length,
+      hiddenItemCount: 0,
+      totalItemCount: items.length,
+    };
+  }
+  const stateKey = conversationSectionLoadMoreKey(section.key);
   const baseVisibleCount = defaultVisibleConversationCount(section);
   const extraVisibleCount = Math.max(0, Number(conversationSectionLoadMoreCounts.value[stateKey] || 0));
   const visibleCount = Math.min(items.length, baseVisibleCount + extraVisibleCount);
@@ -817,6 +851,15 @@ watch(showSearch, async (visible) => {
     searchInputRef.value?.focus();
   } else {
     conversationSearchQuery.value = "";
+  }
+});
+
+watch(compactConversationList, (enabled) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(COMPACT_CONVERSATION_VIEW_STORAGE_KEY, enabled ? "1" : "0");
+  } catch {
+    // 存储不可用（如隐私模式）时仅内存生效
   }
 });
 

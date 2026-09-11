@@ -1814,6 +1814,8 @@
     },
     "rightSidebarToggle": "Right Sidebar",
     "conversationSearchPlaceholder": "Search title or last two messages",
+    "switchToCompactView": "Switch to compact view",
+    "switchToCompositeView": "Switch to composite view",
     "conversationSearchEmpty": "No matching conversations",
     "userAvatarAlt": "Me",
     "pinConversation": "Move to pinned group",

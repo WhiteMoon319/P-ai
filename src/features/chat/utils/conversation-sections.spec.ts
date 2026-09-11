@@ -168,6 +168,36 @@ describe("buildConversationSections", () => {
     expect(sections.some((section) => section.key.startsWith("workspace:"))).toBe(true);
   });
 
+  it("精简模式下忽略置顶/当前项目/最近，全部会话只按工作区分组", () => {
+    const items = [
+      item({ conversationId: "pinned", isPinned: true, workspaceRootPath: "E:/work/proj", lastMessageAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" }),
+      item({ conversationId: "cur", workspaceRootPath: "E:/work/proj", lastMessageAt: "2026-08-01T00:00:00Z", updatedAt: "2026-08-01T00:00:00Z" }),
+      item({ conversationId: "other", workspaceRootPath: "E:/work/other", lastMessageAt: "2026-07-01T00:00:00Z", updatedAt: "2026-07-01T00:00:00Z" }),
+    ];
+    const sections = buildConversationSections(items, {
+      tab: "local",
+      titles,
+      locale: "zh-CN",
+      currentWorkspaceRootPath: "E:/work/proj",
+      compact: true,
+    });
+    expect(sections.every((section) => section.key.startsWith("workspace:"))).toBe(true);
+    expect(sections.some((section) => section.key === "pinned")).toBe(false);
+    expect(sections.some((section) => section.key === "recent")).toBe(false);
+    expect(sections.some((section) => section.key === "current-project")).toBe(false);
+    expect(ids(sections).sort()).toEqual(["cur", "other", "pinned"]);
+  });
+
+  it("精简模式下 contact 标签按渠道分组且不单列置顶", () => {
+    const items = [
+      item({ conversationId: "r1", kind: "remote_im_contact", channelName: "频道A", isPinned: true, lastMessageAt: "2026-08-02T00:00:00Z", updatedAt: "2026-08-02T00:00:00Z" }),
+      item({ conversationId: "r2", kind: "remote_im_contact", channelName: "频道A", lastMessageAt: "2026-08-01T00:00:00Z", updatedAt: "2026-08-01T00:00:00Z" }),
+    ];
+    const sections = buildConversationSections(items, { tab: "contact", titles, locale: "zh-CN", compact: true });
+    expect(sections).toHaveLength(1);
+    expect(sections[0].items.map((entry) => entry.conversationId).sort()).toEqual(["r1", "r2"]);
+  });
+
   it("最近会话分组包含全部候选条目，可持续加载更多直到展开完毕", () => {
     const items = Array.from({ length: 12 }, (_, index) =>
       item({

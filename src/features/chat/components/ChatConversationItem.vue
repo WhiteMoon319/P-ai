@@ -64,7 +64,7 @@
           </div>
         </div>
       </template>
-      <span v-else class="relative w-10 shrink-0 self-stretch" aria-hidden="true">
+      <span v-else class="relative shrink-0 self-stretch" :class="compactIndicator ? 'w-4' : 'w-10'" aria-hidden="true">
         <span
           class="absolute right-0 top-1 bottom-1 w-1 rounded-full transition-colors"
           :class="simpleIndicatorClass"
@@ -107,13 +107,19 @@
           </div>
 
           <div v-if="level !== 'mini'" class="mt-1 flex items-center justify-between gap-2 text-xs">
-            <span class="min-w-0 truncate opacity-60">
-              {{ latestPreviewLine }}
-            </span>
+            <div class="flex min-w-0 items-center gap-1.5">
+              <span
+                v-if="busy"
+                class="ecall-conv-dot shrink-0 rounded-full bg-base-content"
+                aria-hidden="true"
+              ></span>
+              <span class="min-w-0 truncate" :class="busy ? 'ecall-conv-typing' : 'opacity-60'">
+                {{ latestPreviewLine }}
+              </span>
+            </div>
             <div class="flex shrink-0 items-center gap-2">
-              <span v-if="busy" class="loading loading-spinner loading-xs text-primary" :title="statusText"></span>
-              <span v-else-if="pipelineStatus === 'error'" class="badge badge-error badge-xs">{{ t("common.failed") }}</span>
-              <span v-else-if="statusText" class="text-xs text-base-content/60">{{ statusText }}</span>
+              <span v-if="pipelineStatus === 'error'" class="badge badge-error badge-xs">{{ t("common.failed") }}</span>
+              <span v-else-if="busyDetailText" class="text-xs text-base-content/60">{{ busyDetailText }}</span>
               <span
                 v-if="unreadBadge"
                 class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-error px-1.5 text-xs font-medium text-error-content"
@@ -221,8 +227,11 @@ const props = withDefaults(defineProps<{
   pipelineStatusById: Record<string, ConversationPipelineStatus>;
   /** recent 分组下显示来源徽章（仅 full 项） */
   showSourceBadge?: boolean;
+  /** 精简模式：小卡左侧不预留头像宽度，指示条贴左 */
+  compactIndicator?: boolean;
 }>(), {
   showSourceBadge: false,
+  compactIndicator: false,
 });
 
 const emit = defineEmits<{
@@ -297,12 +306,12 @@ function runtimeStateText(runtimeState?: ChatConversationOverviewItem["runtimeSt
   return t("chat.runtimeIdle");
 }
 
-const statusText = computed(() => {
-  if (props.item.runtimeState && props.item.runtimeState !== "idle") {
-    return runtimeStateText(props.item.runtimeState);
+// 运行中：通用流式由摘要行的「正在输入…」承担，这里只补充更具体的阶段
+const busyDetailText = computed(() => {
+  const runtimeState = props.item.runtimeState;
+  if (runtimeState && runtimeState !== "idle" && runtimeState !== "assistant_streaming") {
+    return runtimeStateText(runtimeState);
   }
-  if (pipelineStatus.value === "busy") return t("chat.runtimeStreaming");
-  if (pipelineStatus.value === "error") return t("common.failed");
   return "";
 });
 
@@ -567,5 +576,48 @@ onBeforeUnmount(() => {
 <style scoped>
 .conversation-time-label {
   /* 容器宽度过窄时由父容器 @container 规则隐藏 */
+}
+
+/* 运行中：摘要行文字扫光——浅色主题黑光、深色主题白光，配一枚呼吸光点 */
+.ecall-conv-typing {
+  font-weight: 500;
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--color-base-content) 50%, transparent) 0%,
+    var(--color-base-content) 50%,
+    color-mix(in oklab, var(--color-base-content) 50%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: ecall-conv-typing 1.8s ease-in-out infinite;
+}
+
+@keyframes ecall-conv-typing {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.ecall-conv-dot {
+  width: 6px;
+  height: 6px;
+  animation: ecall-conv-dot 1.6s ease-in-out infinite;
+}
+
+@keyframes ecall-conv-dot {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 </style>

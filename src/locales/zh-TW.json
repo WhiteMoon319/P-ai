@@ -1936,6 +1936,8 @@
     },
     "rightSidebarToggle": "右側欄",
     "conversationSearchPlaceholder": "搜尋會話標題或最近兩條訊息",
+    "switchToCompactView": "切換到精簡檢視",
+    "switchToCompositeView": "切換到綜合檢視",
     "conversationSearchEmpty": "沒有符合的會話",
     "userAvatarAlt": "我",
     "pinConversation": "置頂會話",
