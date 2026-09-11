@@ -138,4 +138,86 @@ describe("useConversationMaintenanceDialog", () => {
     expect(flow.trimCompactionPreview.value?.tokenBreakdown?.toolsTokens).toBeUndefined();
     expect(flow.trimCompactionPreview.value?.tokenBreakdown?.messageTokens).toBeGreaterThan(0);
   });
+
+  it("压缩点之后未产生新账单时不再回退压缩前的旧值", async () => {
+    const messages = [
+      {
+        id: "message-0",
+        role: "user",
+        parts: [{ type: "text", text: "旧对话" }],
+        providerMeta: undefined,
+      },
+      {
+        id: "message-1",
+        role: "assistant",
+        parts: [{ type: "text", text: "旧回复" }],
+        providerMeta: {
+          contextBreakdown: { systemTokens: 12000, toolsTokens: 4000, messageTokens: 150000 },
+          contextWindowTokens: 256000,
+        },
+      },
+      {
+        id: "message-2",
+        role: "assistant",
+        parts: [{ type: "text", text: "（上下文已整理）" }],
+        providerMeta: { message_meta: { kind: "context_compaction" } },
+      },
+    ];
+    invokeTauriMock.mockResolvedValue({ selectedBlockId: 1, messages });
+    const flow = useConversationMaintenanceDialog({
+      t: (key) => key,
+      currentConversationId: ref("conversation-d"),
+      conversationSummaries: ref([{
+        conversationId: "conversation-d",
+        messageCount: 3,
+        bodyMessageCount: 3,
+        hasAssistantReply: true,
+        runtimeState: "idle",
+      }]),
+      chatUsagePercent: ref(26),
+      trimCompactNow: vi.fn(async () => {}),
+      trimNow: vi.fn(async () => {}),
+      deleteConversation: vi.fn(async () => {}),
+      setStatus: vi.fn(),
+      setStatusError: vi.fn(),
+    });
+
+    await flow.openTrimActionDialog();
+
+    expect(flow.trimCompactionPreview.value?.tokenBreakdown).toBeUndefined();
+  });
+
+  it("会话忙碌时压缩按钮置灰，但不叠加文字说明", async () => {
+    invokeTauriMock.mockResolvedValue({
+      selectedBlockId: 1,
+      messages: Array.from({ length: 12 }, (_, index) => ({
+        id: `message-${index}`,
+        role: index % 2 === 0 ? "user" : "assistant",
+        parts: [{ type: "text", text: `text-${index}` }],
+        providerMeta: undefined,
+      })),
+    });
+    const flow = useConversationMaintenanceDialog({
+      t: (key) => key,
+      currentConversationId: ref("conversation-e"),
+      conversationSummaries: ref([{
+        conversationId: "conversation-e",
+        messageCount: 12,
+        bodyMessageCount: 12,
+        hasAssistantReply: true,
+        runtimeState: "assistant_streaming",
+      }]),
+      chatUsagePercent: ref(60),
+      trimCompactNow: vi.fn(async () => {}),
+      trimNow: vi.fn(async () => {}),
+      deleteConversation: vi.fn(async () => {}),
+      setStatus: vi.fn(),
+      setStatusError: vi.fn(),
+    });
+
+    await flow.openTrimActionDialog();
+
+    expect(flow.trimCompactionPreview.value?.canCompact).toBe(false);
+    expect(flow.trimCompactionPreview.value?.compactionDisabledReason).toBeNull();
+  });
 });

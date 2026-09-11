@@ -1756,7 +1756,7 @@
     "todoCollapse": "收起待办列表",
     "todoIntentionWithPersona": "{name} 打算{todo}",
     "todoIntention": "打算{todo}",
-    "loadMore": "加载更多...",
+    "loadMore": "加载更多",
     "noMoreHistory": "已经没有更多消息",
     "recipientMissingTitle": "当前会话接管人不可用",
     "recipientMissingHint": "保存的部门或人格已不存在，请选择新的接管人，或删除此会话。",
@@ -2959,8 +2959,8 @@
       "breakdownAvailable": "剩余可用",
       "breakdownReserved": "保留（整理阈值预留）",
       "breakdownContextWindow": "当前模型最大上下文",
-      "fixedCost": "固定成本",
-      "compressionEstimate": "整理后预计占用 ~{percent}%，可释放 {tokens} 词元（系统提示词与工具 schema 不释放）"
+      "breakdownEmpty": "整理后暂无账单",
+      "compressionEstimate": "整理后预计占用 ~{percent}%，可释放 {tokens} 词元"
     }
   },
   "about": {

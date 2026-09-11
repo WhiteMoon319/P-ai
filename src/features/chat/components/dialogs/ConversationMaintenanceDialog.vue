@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import ChartView from "../../../config/views/config-tabs/ChartView.vue";
 import type {
   TrimCompactionPreviewResult,
   TrimPreviewResult,
@@ -67,7 +66,6 @@ type BreakdownEntry = {
   label: string;
   tokens: number | undefined;
   color: string;
-  fixed: boolean;
 };
 
 /** 压缩阈值：超过 82% 触发压缩，18% 为预留给压缩的保留区。 */
@@ -81,21 +79,18 @@ const breakdownEntries = computed<BreakdownEntry[]>(() => {
       label: t("dialogs.trim.breakdownSystem"),
       tokens: breakdown?.systemTokens,
       color: "var(--color-primary)",
-      fixed: true,
     },
     {
       key: "tools",
       label: t("dialogs.trim.breakdownTools"),
       tokens: breakdown?.toolsTokens,
       color: "var(--color-secondary)",
-      fixed: true,
     },
     {
       key: "message",
       label: t("dialogs.trim.breakdownMessage"),
       tokens: breakdown?.messageTokens,
       color: "var(--color-accent)",
-      fixed: false,
     },
   ];
   const windowTokens = Math.max(0, Number(breakdown?.contextWindowTokens) || 0);
@@ -107,7 +102,6 @@ const breakdownEntries = computed<BreakdownEntry[]>(() => {
     label: t("dialogs.trim.breakdownReserved"),
     tokens: reservedTokens,
     color: "var(--color-warning)",
-    fixed: true,
   });
   // 剩余可用 = 总 - 已用 - 保留
   entries.push({
@@ -115,7 +109,6 @@ const breakdownEntries = computed<BreakdownEntry[]>(() => {
     label: t("dialogs.trim.breakdownAvailable"),
     tokens: Math.max(0, windowTokens - usedTokens - reservedTokens),
     color: "var(--color-base-300)",
-    fixed: false,
   });
   return entries;
 });
@@ -132,40 +125,13 @@ const breakdownTotal = computed(() =>
   breakdownEntries.value.reduce((sum, entry) => sum + Math.max(0, Number(entry.tokens) || 0), 0),
 );
 
-/** Chart.js doughnut 配置：按 token 占比绘制上下文窗口构成。 */
-const pieChartConfig = computed(() => ({
-  type: "doughnut",
-  data: {
-    labels: breakdownEntries.value.map((entry) => entry.label),
-    datasets: [
-      {
-        data: breakdownEntries.value.map((entry) => Math.max(0, Number(entry.tokens) || 0)),
-        backgroundColor: breakdownEntries.value.map((entry) => entry.color),
-        borderWidth: 0,
-        hoverOffset: 2,
-      },
-    ],
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    cutout: "55%",
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        callbacks: {
-          label: (context: { parsed?: { x?: number; y?: number }; label?: string; raw?: unknown }) => {
-            const tokens = Math.max(0, Number(context.raw) || 0);
-            const percent = contextWindowTokens.value > 0
-              ? Math.round((tokens / contextWindowTokens.value) * 100)
-              : 0;
-            return ` ${context.label}：${formatTokens(tokens)}（${percent}%）`;
-          },
-        },
-      },
-    },
-  },
-}));
+/** 比例条各分段的宽度：占上下文窗口总量的百分比。 */
+function barWidthOf(entry: BreakdownEntry): string {
+  const total = breakdownTotal.value;
+  const tokens = Math.max(0, Number(entry.tokens) || 0);
+  if (total <= 0) return "0%";
+  return `${(tokens / total) * 100}%`;
+}
 
 const hasAnyBreakdown = computed(() => breakdownTotal.value > 0);
 
@@ -199,7 +165,7 @@ const compressionEstimatePercent = computed(() => {
 
 <template>
   <dialog ref="dialogRef" class="modal" @close="onDialogClose" @cancel.prevent="onDialogClose">
-    <div v-if="open" class="modal-box w-[min(80vw,48rem)] max-w-[48rem]">
+    <div v-if="open" class="modal-box w-[min(80vw,40rem)] max-w-[40rem]">
       <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <h3 class="font-semibold text-base">{{ t("dialogs.trim.title") }}</h3>
         <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs opacity-60">
@@ -210,42 +176,48 @@ const compressionEstimatePercent = computed(() => {
 
       <div v-if="loading" class="mt-4 text-sm opacity-70">{{ t("dialogs.trim.loading") }}</div>
 
-      <!-- 词元账单：饼图 + 明细 + 压缩预期，直接平铺 -->
-      <div v-else-if="hasAnyBreakdown" class="mt-4 flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-6">
-        <div class="h-48 w-48 shrink-0">
-          <ChartView :config="pieChartConfig" />
+      <!-- 词元账单：比例条 + 明细 + 压缩预期，直接平铺 -->
+      <div v-else-if="hasAnyBreakdown" class="mt-4 space-y-3">
+        <div class="flex h-3 w-full overflow-hidden rounded-full bg-base-300/30">
+          <span
+            v-for="entry in breakdownEntries"
+            :key="entry.key"
+            class="block h-full"
+            :style="{ width: barWidthOf(entry), backgroundColor: entry.color }"
+          />
         </div>
-        <div class="w-full min-w-0 flex-1 space-y-1.5 text-sm">
+        <div class="space-y-1.5 text-sm">
           <div
             v-for="entry in breakdownEntries"
             :key="entry.key"
-            class="flex items-center justify-between gap-3"
+            class="grid grid-cols-[minmax(0,1fr)_5rem_3.5rem] items-center gap-3"
           >
             <span class="flex min-w-0 items-center gap-2">
               <span class="h-2.5 w-2.5 shrink-0 rounded-full" :style="{ backgroundColor: entry.color }" />
               <span class="truncate">{{ entry.label }}</span>
-              <span
-                v-if="entry.fixed"
-                class="shrink-0 rounded-full bg-base-300/60 px-1.5 py-0.5 text-caption text-base-content/60"
-              >{{ t("dialogs.trim.fixedCost") }}</span>
             </span>
-            <span class="shrink-0 tabular-nums text-base-content/80">
-              {{ formatTokens(entry.tokens) }}<template v-if="contextWindowTokens > 0 && entry.tokens">（{{ percentOfWindow(entry.tokens) }}%）</template>
+            <span class="text-right tabular-nums text-base-content/80">{{ formatTokens(entry.tokens) }}</span>
+            <span class="text-right tabular-nums text-base-content/60">
+              <template v-if="contextWindowTokens > 0 && entry.tokens">{{ percentOfWindow(entry.tokens) }}%</template>
             </span>
           </div>
-          <div class="flex items-center justify-between gap-3 border-t border-base-300/60 pt-1.5 text-xs text-base-content/60">
+          <div class="grid grid-cols-[minmax(0,1fr)_5rem_3.5rem] items-center gap-3 border-t border-base-300/60 pt-1.5 text-xs text-base-content/60">
             <span>{{ t("dialogs.trim.breakdownUsed") }}</span>
-            <span class="tabular-nums">{{ formatTokens(breakdownUsedTotal) }}</span>
+            <span class="text-right tabular-nums">{{ formatTokens(breakdownUsedTotal) }}</span>
+            <span />
           </div>
           <div
             v-if="contextWindowTokens > 0"
-            class="flex items-center justify-between gap-3 text-xs text-base-content/60"
+            class="grid grid-cols-[minmax(0,1fr)_5rem_3.5rem] items-center gap-3 text-xs text-base-content/60"
           >
             <span>{{ t("dialogs.trim.breakdownContextWindow") }}</span>
-            <span class="tabular-nums">{{ formatTokens(contextWindowTokens) }}</span>
+            <span class="text-right tabular-nums">{{ formatTokens(contextWindowTokens) }}</span>
+            <span />
           </div>
         </div>
       </div>
+
+      <div v-else class="mt-4 text-sm opacity-70">{{ t("dialogs.trim.breakdownEmpty") }}</div>
 
       <div
         v-if="compressionEstimate"
@@ -263,35 +235,17 @@ const compressionEstimatePercent = computed(() => {
         {{ compactionPreview.compactionDisabledReason }}
       </div>
 
-      <div class="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <div class="flex items-center gap-2">
-          <button
-            class="btn btn-sm btn-error"
-            :disabled="loading || !preview?.canDropConversation || running"
-            @click="emit('confirmDelete')"
-          >
-            {{ t("dialogs.trim.deleteTitle") }}
-          </button>
-          <button
-            class="btn btn-sm btn-secondary"
-            :disabled="loading || !preview?.canArchive || running"
-            @click="emit('confirmArchive')"
-          >
-            {{ t("dialogs.trim.archiveTitle") }}
-          </button>
-        </div>
-        <div class="flex items-center gap-2">
-          <button
-            class="btn btn-sm btn-primary"
-            :disabled="loading || !compactionPreview?.canCompact || running"
-            @click="emit('confirmCompaction')"
-          >
-            {{ t("dialogs.trim.compactTitle") }}
-          </button>
-          <button class="btn btn-sm" :disabled="loading || running" @click="emit('close')">
-            {{ t("common.cancel") }}
-          </button>
-        </div>
+      <div class="mt-5 flex items-center justify-end gap-2">
+        <button
+          class="btn btn-sm btn-primary"
+          :disabled="loading || !compactionPreview?.canCompact || running"
+          @click="emit('confirmCompaction')"
+        >
+          {{ t("dialogs.trim.compactTitle") }}
+        </button>
+        <button class="btn btn-sm" :disabled="loading || running" @click="emit('close')">
+          {{ t("common.cancel") }}
+        </button>
       </div>
     </div>
     <form method="dialog" class="modal-backdrop">

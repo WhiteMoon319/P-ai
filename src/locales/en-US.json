@@ -1756,7 +1756,7 @@
     "todoCollapse": "Collapse todo list",
     "todoIntentionWithPersona": "{name} plans to {todo}",
     "todoIntention": "Plans to {todo}",
-    "loadMore": "Load more...",
+    "loadMore": "Load more",
     "noMoreHistory": "No more messages",
     "recipientMissingTitle": "This conversation needs a new owner",
     "recipientMissingHint": "The saved department or persona no longer exists. Choose a takeover recipient or delete this conversation.",
@@ -2959,8 +2959,8 @@
       "breakdownAvailable": "Available",
       "breakdownReserved": "Reserved (tidying threshold)",
       "breakdownContextWindow": "Model context window",
-      "fixedCost": "Fixed cost",
-      "compressionEstimate": "After tidying ~{percent}% context usage, {tokens} tokens released (system prompt and tool schema are retained)"
+      "breakdownEmpty": "No token breakdown after tidying",
+      "compressionEstimate": "After tidying ~{percent}% context usage, {tokens} tokens released"
     }
   },
   "about": {

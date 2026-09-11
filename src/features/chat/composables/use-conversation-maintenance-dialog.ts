@@ -1,7 +1,8 @@
 import { ref, type Ref } from "vue";
 import { invokeTauri } from "../../../services/tauri-api";
-import type { ChatMessage } from "../../../types/app";
+import type { ChatConversationOverviewItem, ChatMessage } from "../../../types/app";
 import { estimateConversationTokens } from "../../../utils/chat-message";
+import { conversationRuntimeBusy } from "../utils/conversation-item-display";
 
 export type ConversationMaintenanceSummary = {
   conversationId: string;
@@ -9,7 +10,7 @@ export type ConversationMaintenanceSummary = {
   bodyMessageCount?: number;
   bodyTextLength?: number;
   hasAssistantReply?: boolean;
-  runtimeState?: string;
+  runtimeState?: ChatConversationOverviewItem["runtimeState"];
   isSystemNotificationConversation?: boolean;
 };
 
@@ -93,23 +94,49 @@ export function useConversationMaintenanceDialog(options: UseConversationMainten
     return messages.some((message) => String(message.role || "").trim().toLowerCase() === "assistant");
   }
 
+  /** 压缩/摘要消息：它是上下文的新起点，词元账单不应再回退到它之前。 */
+  function isCompactionMessage(message: ChatMessage | undefined): boolean {
+    const providerMeta = (message?.providerMeta || {}) as Record<string, unknown>;
+    const messageMeta = (
+      providerMeta.message_meta
+      || providerMeta.messageMeta
+      || {}
+    ) as Record<string, unknown>;
+    const kind = String(messageMeta.kind || providerMeta.messageKind || "").trim();
+    return kind === "context_compaction" || kind === "summary_context_seed";
+  }
+
   function readTokenBreakdown(messages: ChatMessage[]): TrimCompactionPreviewResult["tokenBreakdown"] {
-    const meta = (() => {
-      for (let index = messages.length - 1; index >= 0; index -= 1) {
-        const message = messages[index];
-        if (String(message.role || "").trim().toLowerCase() !== "assistant") continue;
-        const providerMeta = (message.providerMeta || {}) as Record<string, unknown>;
-        const breakdown = providerMeta.contextBreakdown;
-        if (breakdown && typeof breakdown === "object") {
-          return breakdown as Record<string, unknown>;
-        }
-      }
-      return undefined;
-    })();
     const readTokens = (value: unknown): number | undefined => {
       const next = Math.round(Number(value) || 0);
       return next > 0 ? next : undefined;
     };
+    let meta: Record<string, unknown> | undefined;
+    let contextWindowTokens: number | undefined;
+    let sawCompactionBoundary = false;
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      // 压缩点是新起点：撞到即停止回退，避免把压缩前的旧账单当成现值。
+      if (isCompactionMessage(message)) {
+        sawCompactionBoundary = true;
+        break;
+      }
+      if (String(message.role || "").trim().toLowerCase() !== "assistant") continue;
+      const providerMeta = (message.providerMeta || {}) as Record<string, unknown>;
+      if (!meta) {
+        const breakdown = providerMeta.contextBreakdown;
+        if (breakdown && typeof breakdown === "object") {
+          meta = breakdown as Record<string, unknown>;
+        }
+      }
+      // 上下文窗口大小与账单取同一段，避免两者来自不同轮次。
+      if (contextWindowTokens == null && providerMeta.contextWindowTokens != null) {
+        contextWindowTokens = readTokens(providerMeta.contextWindowTokens);
+      }
+      if (meta && contextWindowTokens != null) break;
+    }
+    // 压缩之后尚未产生新账单：宁可不展示，也不回退旧值造成与占用率对不上。
+    if (!meta && sawCompactionBoundary) return undefined;
     const backendMessageTokens = readTokens(meta?.messageTokens);
     const breakdown: NonNullable<TrimCompactionPreviewResult["tokenBreakdown"]> = {
       systemTokens: readTokens(meta?.systemTokens),
@@ -117,18 +144,6 @@ export function useConversationMaintenanceDialog(options: UseConversationMainten
       messageTokens:
         backendMessageTokens ?? Math.max(0, Math.ceil(estimateConversationTokens(messages))),
     };
-    // 上下文窗口大小取自最后一条 assistant 消息的 providerMeta（后端落库）。
-    const contextWindowTokens = readTokens(
-      (() => {
-        for (let index = messages.length - 1; index >= 0; index -= 1) {
-          const message = messages[index];
-          if (String(message.role || "").trim().toLowerCase() !== "assistant") continue;
-          const providerMeta = (message.providerMeta || {}) as Record<string, unknown>;
-          if (providerMeta.contextWindowTokens != null) return providerMeta.contextWindowTokens;
-        }
-        return undefined;
-      })(),
-    );
     if (contextWindowTokens != null) {
       breakdown.contextWindowTokens = contextWindowTokens;
     }
@@ -146,21 +161,23 @@ export function useConversationMaintenanceDialog(options: UseConversationMainten
     const contextUsagePercent = Math.min(100, Math.max(0, Math.round(Number(options.chatUsagePercent.value || 0))));
     const conversationLongEnough = messageCount >= SHORT_CONVERSATION_COMPACTION_THRESHOLD;
     const contextUsageHighEnough = contextUsagePercent >= 10;
+    // 会话忙碌时只置灰压缩按钮，不再叠加文字说明。
+    const conversationBusy = conversationRuntimeBusy(summary?.runtimeState);
     let compactionDisabledReason: string | null = null;
-    if (summary?.runtimeState === "organizing_context" || summary?.runtimeState === "compacting") {
-      compactionDisabledReason = options.t("sidebar.compactRunning");
-    } else if (isEmpty) {
-      compactionDisabledReason = options.t("sidebar.compactEmpty");
-    } else if (!assistantReplyPresent) {
-      compactionDisabledReason = options.t("sidebar.compactNoAssistant");
-    } else if (!conversationLongEnough && !contextUsageHighEnough) {
-      compactionDisabledReason = contextUsagePercent > 0
-        ? options.t("sidebar.compactShortWithUsage", { count: messageCount, percent: contextUsagePercent })
-        : options.t("sidebar.compactShort", { count: messageCount });
+    if (!conversationBusy) {
+      if (isEmpty) {
+        compactionDisabledReason = options.t("sidebar.compactEmpty");
+      } else if (!assistantReplyPresent) {
+        compactionDisabledReason = options.t("sidebar.compactNoAssistant");
+      } else if (!conversationLongEnough && !contextUsageHighEnough) {
+        compactionDisabledReason = contextUsagePercent > 0
+          ? options.t("sidebar.compactShortWithUsage", { count: messageCount, percent: contextUsagePercent })
+          : options.t("sidebar.compactShort", { count: messageCount });
+      }
     }
     return {
       conversationId,
-      canCompact: !compactionDisabledReason,
+      canCompact: !conversationBusy && !compactionDisabledReason,
       messageCount,
       hasAssistantReply: assistantReplyPresent,
       isEmpty,
