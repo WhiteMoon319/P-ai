@@ -2097,6 +2097,25 @@ function openAttachmentPath(path: string) {
   min-width: 0;
 }
 
+/* 隐藏气泡背景：每个气泡各补一条顶边线当分隔；线贯穿消息内容区并与正文左右对齐，不占高度 */
+.ecall-assistant-bubble[data-bubble-background="off"] .ecall-assistant-segment {
+  position: relative;
+  width: 100%;
+}
+
+.ecall-assistant-bubble[data-bubble-background="off"] .ecall-assistant-segment::before {
+  position: absolute;
+  top: 0;
+  right: 1rem;
+  left: 1rem;
+  height: 1px;
+  background: color-mix(in srgb, var(--color-base-content) 14%, transparent);
+  content: "";
+  pointer-events: none;
+  transform: scaleY(0.5);
+  transform-origin: center;
+}
+
 .ecall-assistant-segment-text {
   display: inline-block;
   width: fit-content;
