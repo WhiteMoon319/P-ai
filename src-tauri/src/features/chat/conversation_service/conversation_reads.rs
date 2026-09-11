@@ -276,19 +276,20 @@ impl ConversationServiceV2 {
         state: &AppState,
         conversation_id: &str,
     ) -> Result<ConversationBlockPageResult, String> {
-        self.get_conversation_block(state, conversation_id, 0)
+        // 传 None 让存储层选最新块；块号从 0 开始编号，传具体数字 0 会命中第一块。
+        self.get_conversation_block(state, conversation_id, None)
     }
 
     fn get_conversation_block(
         &self,
         state: &AppState,
         conversation_id: &str,
-        block_id: u32,
+        block_id: Option<u32>,
     ) -> Result<ConversationBlockPageResult, String> {
         self.with_unarchived_conversation_by_id_fast(state, conversation_id, |conversation| {
             let store_paths = message_store::message_store_paths(&state.data_path, &conversation.id)?;
             if let Some(page) =
-                message_store::chat_store_read_block_page(&store_paths, Some(block_id))?
+                message_store::chat_store_read_block_page(&store_paths, block_id)?
             {
                 let mut messages = page.messages;
                 materialize_chat_message_parts_from_media_refs(&mut messages, &state.data_path);

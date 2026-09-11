@@ -153,7 +153,7 @@ async fn ide_chat_conversation_block_page(state: &AppState, params: Value) -> Re
     let app_state = state.clone();
     tokio::task::spawn_blocking(move || {
         let page = if let Some(block_id) = block_id {
-            conversation_service_v2().get_conversation_block(&app_state, &conversation_id, block_id)?
+            conversation_service_v2().get_conversation_block(&app_state, &conversation_id, Some(block_id))?
         } else {
             conversation_service_v2().get_conversation_last_block(&app_state, &conversation_id)?
         };
