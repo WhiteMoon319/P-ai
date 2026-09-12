@@ -104,6 +104,7 @@ include!("features/system/sandbox.rs");
 include!("features/system/host_terminal_exec.rs");
 include!("features/system/local_port_service.rs");
 include!("features/system/tools.rs");
+include!("features/system/headless_cli.rs");
 #[cfg(not(target_os = "android"))]
 include!("features/system/updater.rs");
 #[cfg(target_os = "android")]
