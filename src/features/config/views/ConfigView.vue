@@ -395,7 +395,7 @@ import StorageTab from "./config-tabs/StorageTab.vue";
 import AboutTab from "./config-tabs/AboutTab.vue";
 import SimpleSetupPanel from "./config-tabs/SimpleSetupPanel.vue";
 import { toErrorMessage } from "../../../utils/error";
-import { ArrowLeftRight, Beaker, Bell, Building2, ClipboardList, Code, Cpu, Database, Home, Info, Keyboard, Menu, Network, Palette, Puzzle, Radio, ScrollText, Star, User, Wifi } from "@lucide/vue";
+import { ArrowLeftRight, Beaker, Bell, Building2, ClipboardList, Code, Cpu, Database, Home, Info, Keyboard, Menu, Network, Palette, Puzzle, Radio, ScrollText, Smartphone, Star, User, Wifi } from "@lucide/vue";
 import OverlayScrollArea from "../../shared/components/OverlayScrollArea.vue";
 
 type ConfigTab = "welcome" | "hotkey" | "api" | "android" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "networkAccess" | "remoteIm" | "usage" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
