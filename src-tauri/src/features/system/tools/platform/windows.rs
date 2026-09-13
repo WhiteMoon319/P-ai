@@ -1480,35 +1480,8 @@ mod windows_platform_tests {
         }
     }
 
-    /// 真实桌面冒烟测试：对本机主屏可见窗口扫一次控件树。
-    /// 依赖真实 Windows 桌面，CI/无头环境不可用，默认忽略，手动 `--ignored` 跑。
-    #[test]
-    #[ignore = "需要真实 Windows 桌面"]
-    fn real_desktop_should_scan_window_tree() {
-        // window_list / primary_monitor_bounds 是 crate root（main include）私有函数
-        let windows = crate::window_list().expect("list windows");
-        let targets: Vec<(usize, String)> = windows
-            .iter()
-            .take(3)
-            .map(|w| (w.id().unwrap_or(0) as usize, w.title().unwrap_or_default()))
-            .collect();
-        assert!(!targets.is_empty(), "桌面应有可见窗口");
-        let bounds = crate::primary_monitor_bounds().expect("primary bounds");
-        eprintln!("primary bounds: x={} y={} w={} h={}", bounds.x, bounds.y, bounds.width, bounds.height);
-        let elems = collect_ui_tree_for_windows(
-            &targets,
-            bounds.x as f64,
-            bounds.y as f64,
-            bounds.width as f64,
-            bounds.height as f64,
-            false,
-        );
-        // 不强制非空（自绘窗口/游戏可能不暴露 UIA），但扫描本身不能 panic
-        eprintln!("scanned {} elements from {} windows", elems.len(), targets.len());
-        for e in elems.iter().take(5) {
-            eprintln!("  {}({}) at {}x{}", e.control_type, e.name, e.x, e.y);
-        }
-    }
+    /// Android 分支以 stub 替代桌面窗口枚举实现，crate::window_list /
+    /// crate::primary_monitor_bounds 不再存在，依赖真实桌面的冒烟测试随实现移除。
 
     /// 记事本 UIA 树探针：拉起记事本，不做类型白名单过滤，打印全部元素的
     /// 控件类型 ID/名称，用于确认编辑区是否因白名单（如 Document 类型）被滤掉。

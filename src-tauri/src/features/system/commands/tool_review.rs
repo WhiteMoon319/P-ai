@@ -2576,7 +2576,10 @@ mod tool_review_tests {
         tool_review_preview_for_item, tool_review_prune_legacy_batch_report_records,
         tool_review_segments_for_item, ToolReviewCollectedItem, ToolReviewReportRecord,
     };
-    use crate::{app_root_from_data_path, ConversationCumulativeUsage, ASSISTANT_DEPARTMENT_ID, DEFAULT_AGENT_ID};
+    use crate::{
+        app_root_from_data_path, ChatMessage, Conversation, ConversationCumulativeUsage,
+        MessagePart, ASSISTANT_DEPARTMENT_ID, DEFAULT_AGENT_ID,
+    };
     use std::{env, fs};
     use uuid::Uuid;
 
@@ -2633,6 +2636,7 @@ mod tool_review_tests {
             shell_workspaces: Vec::new(),
             shell_autonomous_mode: false,
             shell_work_mode: "directory".to_string(),
+            shell_work_branch: String::new(),
             archived_at: None,
             messages,
             fast_request_turns: Vec::new(),
@@ -2644,6 +2648,7 @@ mod tool_review_tests {
             auto_push_remote_contact_id: None,
             active_goal: None,
             cumulative_usage: ConversationCumulativeUsage::default(),
+            last_error: None,
         }
     }
 
