@@ -2,6 +2,21 @@ const MODELS_DEV_CACHE_FILE_NAME: &str = "models_dev_api_cache.json";
 const MODELS_DEV_CACHE_MAX_AGE_MS: i64 = 24 * 60 * 60 * 1000;
 const MODELS_DEV_API_URL: &str = "https://models.dev/api.json";
 
+// Android 上 reqwest 默认走 rustls-platform-verifier，未初始化会 panic
+// （Expect rustls-platform-verifier to be initialized），系统根证书也不可用，
+// 必须注入 webpki 静态根证书。OpenAI / Gemini / Anthropic / genai 四条模型
+// 列表获取路径统一收敛到这里（上游 cherry-pick 会覆盖，勿再退回裸 builder）。
+fn build_models_refresh_http_client() -> Result<reqwest::Client, String> {
+    let mut builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(20));
+    #[cfg(target_os = "android")]
+    {
+        builder = android_workspace_apply_static_webpki_roots(builder)?;
+    }
+    builder
+        .build()
+        .map_err(|err| format!("Build HTTP client failed: {err}"))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ModelsDevCacheFile {
     updated_at: String,
@@ -126,10 +141,7 @@ async fn fetch_models_gemini_native(input: &RefreshModelsInput) -> Result<Vec<St
     let api_key_header = HeaderValue::from_str(api_key)
         .map_err(|err| format!("Build x-goog-api-key header failed: {err}"))?;
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(20))
-        .build()
-        .map_err(|err| format!("Build HTTP client failed: {err}"))?;
+    let client = build_models_refresh_http_client()?;
 
     let resp = client
         .get(&url)
@@ -185,10 +197,7 @@ async fn fetch_models_anthropic(input: &RefreshModelsInput) -> Result<Vec<String
         .map_err(|err| format!("Build x-api-key header failed: {err}"))?;
     let anthropic_version = HeaderValue::from_static("2023-06-01");
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(20))
-        .build()
-        .map_err(|err| format!("Build HTTP client failed: {err}"))?;
+    let client = build_models_refresh_http_client()?;
 
     let resp = client
         .get(&url)
@@ -352,6 +361,7 @@ async fn fetch_models_genai(
     }
     let client = genai::Client::builder()
         .with_adapter_kind(adapter_kind)
+        .with_reqwest(build_models_refresh_http_client()?)
         .build()
         .map_err(|err| format!("构建 genai 客户端失败: {err}"))?;
     let mut models = tokio::time::timeout(
@@ -1113,10 +1123,7 @@ async fn test_voice_connection_inner(input: TestVoiceConnectionInput) -> Result<
             format!("{base}/v1/models")
         }
     };
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|err| format!("Build HTTP client failed: {err}"))?;
+    let client = build_models_refresh_http_client()?;
     let started = std::time::Instant::now();
     let resp = client
         .get(&models_url)
