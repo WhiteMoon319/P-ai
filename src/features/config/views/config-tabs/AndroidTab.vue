@@ -54,7 +54,7 @@
           <button class="link link-primary mt-1 block break-all text-left" type="button" @click="openAndroidWorkspaceRootfsDownloadUrl">
             {{ t('config.tools.androidWorkspaceRootfsDownloadLink') }}：{{ ANDROID_WORKSPACE_ROOTFS_DOWNLOAD_URL }}
           </button>
-          <div class="mt-1 font-mono text-[11px] break-all opacity-70">
+          <div class="mt-1 font-mono text-caption break-all opacity-70">
             SHA256: {{ ANDROID_WORKSPACE_ROOTFS_SHA256 }}
           </div>
         </div>

@@ -1516,6 +1516,7 @@ const WEB_BRIDGE_NATIVE_ONLY_COMMANDS = new Set([
   "open_file_reader_window_command",
   "read_local_binary_file",
   "set_chat_window_side_expanded",
+  "demo_test_notification",
 ]);
 
 // 业务层使用同一组可读的协议方法名；桌面端的 Tauri command 名称由适配器

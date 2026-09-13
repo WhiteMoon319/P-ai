@@ -63,7 +63,7 @@ const nativeOnlyCommands = adapterNativeOnlyCommands();
 function dispatcherNativeOnlyCommands(): string[] {
   const dispatcherSource = readFileSync(webDispatcherPath, "utf8");
   const block = dispatcherSource.match(
-    /fn ide_chat_web_native_only_method\(method: &str\) -> bool \{[\s\S]*?matches!\([\s\S]*?method,([\s\S]*?)\n\s*\)\n\}/,
+    /fn ide_chat_web_native_only_method\(method: &str\) -> bool \{[\s\S]*?matches!\([\s\S]*?method,([\s\S]*?)\r?\n\s*\)\r?\n\}/,
   );
   if (!block?.[1]) throw new Error("无法读取 Web dispatcher 的 native-only 命令清单");
   return Array.from(block[1].matchAll(/"([^"]+)"/g), (match) => match[1]);
