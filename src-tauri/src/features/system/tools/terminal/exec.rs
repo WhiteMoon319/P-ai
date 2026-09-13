@@ -1284,7 +1284,7 @@ async fn builtin_shell_exec(
             // token（含管道/分号后拼接），命中即需用户确认；允许正常 shell 语法
             //（用户显式切换 Android 域 = 明确授权提权 shell）
             if android_domain_command_is_dangerous(&android_cmd) {
-                let approved = terminal_request_user_approval(
+                let decision = terminal_request_user_approval(
                     state,
                     "Android 域危险命令确认",
                     "该命令将以提权身份在 Android 域执行，属于卸载/冻结/安装/删除类危险操作。",
@@ -1301,9 +1301,10 @@ async fn builtin_shell_exec(
                     &[],
                     None,
                     None,
+                    Some("Android 域提权危险命令"),
                 )
                 .await?;
-                if !approved {
+                if !decision.approved {
                     return Ok(serde_json::json!({
                         "ok": false,
                         "approved": false,

@@ -1100,7 +1100,13 @@ async fn apply_patch_execute_single_op(op: &ApplyPatchResolvedOp) -> Result<Valu
             if !metadata.is_file() {
                 return Err(format!("Delete File 失败，目标不是文件：{}", path.to_string_lossy()));
             }
+            #[cfg(not(target_os = "android"))]
             trash::delete(path)
+                .map_err(|err| format!("删除文件失败（{}）：{err}", path.to_string_lossy()))?;
+            // Android 无系统回收站，trash 依赖在 Android 目标无 platform 实现，直接删除
+            #[cfg(target_os = "android")]
+            tokio::fs::remove_file(path)
+                .await
                 .map_err(|err| format!("删除文件失败（{}）：{err}", path.to_string_lossy()))?;
             Ok(serde_json::json!({
                 "op": "delete",
@@ -1218,7 +1224,18 @@ async fn builtin_apply_patch_with_name(
     let raw_input = apply_patch_tool_args_to_raw_json(&args)?;
     let parsed = apply_patch_ops_from_tool_args(args)?;
     let resolved = apply_patch_resolve_ops(&cwd, parsed)?;
-    let target_paths = apply_patch_collect_target_paths(&resolved);
+    // Android 沙盒防护：patch 操作的所有目标路径必须落在应用私有沙盒内
+    let target_paths: Vec<PathBuf> = resolved
+        .iter()
+        .flat_map(|op| match op {
+            ApplyPatchResolvedOp::Add { path, .. } => vec![path.clone()],
+            ApplyPatchResolvedOp::Delete { path } => vec![path.clone()],
+            ApplyPatchResolvedOp::Update { from, to, .. } => match to {
+                Some(dest) => vec![from.clone(), dest.clone()],
+                None => vec![from.clone()],
+            },
+        })
+        .collect();
     android_workspace_ensure_paths_within_sandbox(state, &target_paths)?;
 
     let safety = apply_patch_assess_safety(state, &normalized_session, &cwd, &resolved)?;

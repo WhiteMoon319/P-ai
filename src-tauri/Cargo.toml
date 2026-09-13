@@ -78,10 +78,11 @@ notify = "7"
 notify-debouncer-mini = "0.5"
 gix-ignore = "0.22"
 bstr = "1"
-trash = "5.2.8"
 
 # 桌面专属依赖（Android 构建时排除）
 [target.'cfg(not(target_os = "android"))'.dependencies]
+# trash 在 Android 目标无 platform 模块实现，无法交叉编译；Android 分支直接 std::fs 删除。
+trash = "5.2.8"
 # hickory-dns 纯 Rust 解析器依赖 /etc/resolv.conf，Android 上无此文件会导致 DNS 解析卡死；
 # 仅桌面启用，Android 退回系统默认 getaddrinfo 解析器。
 reqwest = { version = "0.13.4", default-features = false, features = ["hickory-dns"] }
@@ -133,12 +134,15 @@ windows-sys = { version = "0.61.2", features = [
   "Win32_System_DataExchange",
   "Win32_System_Diagnostics_ToolHelp",
   "Win32_System_JobObjects",
+  "Win32_System_Memory",
+  "Win32_System_Ole",
   "Win32_System_Threading",
   "Win32_Graphics_Gdi",
   "Win32_System_Registry",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
 ] }
+windows-core = "0.61.2"
 rdev = "0.5"
 
 [target.'cfg(target_os = "linux")'.dependencies]

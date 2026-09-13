@@ -76,6 +76,7 @@ async fn run_operate_tool(
     _input: OperateRequest,
     _screenshots_root: &std::path::Path,
     _include_base64: bool,
+    _blocked_apps: &[String],
 ) -> DesktopToolResult<OperateResponse> {
     Err(desktop_tool_unsupported_error("operate"))
 }

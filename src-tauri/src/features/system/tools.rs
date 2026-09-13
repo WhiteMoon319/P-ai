@@ -1,3 +1,6 @@
+#[path = "tools/platform/mod.rs"]
+mod platform;
+use crate::platform::WindowInfo;
 include!("tools/types.rs");
 include!("tools/image_normalizer_for_llm_request.rs");
 include!("tools/operate_parser.rs");

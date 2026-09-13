@@ -218,6 +218,51 @@ async fn apply_prepared_github_update(_app: AppHandle) -> Result<(), String> {
     Err(ANDROID_UPDATE_UNSUPPORTED.to_string())
 }
 
+// Android 无便携版（portable）更新机制，仅保留与桌面命令签名一致的占位类型
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct PortableUpdatePlan {
+    target_dir: String,
+    target_exe_name: String,
+    staging_dir: String,
+    backup_root: String,
+    temp_root: String,
+    zip_path: String,
+    log_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    parent_pid: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    target_version: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct PortablePendingManualReplace {
+    plan: PortableUpdatePlan,
+    backup_dir: String,
+    failure_reason: String,
+    created_at: String,
+}
+
+// Android 无便携版（portable）更新机制，pending 手动替换相关命令统一返回不支持
+#[tauri::command]
+async fn get_portable_pending_manual_replace() -> Result<Option<PortablePendingManualReplace>, String> {
+    Err(ANDROID_UPDATE_UNSUPPORTED.to_string())
+}
+
+#[tauri::command]
+async fn dismiss_portable_pending_manual_replace() -> Result<(), String> {
+    Err(ANDROID_UPDATE_UNSUPPORTED.to_string())
+}
+
+#[tauri::command]
+async fn retry_portable_pending_manual_replace(_app: AppHandle) -> Result<(), String> {
+    Err(ANDROID_UPDATE_UNSUPPORTED.to_string())
+}
+
+#[tauri::command]
+async fn open_portable_pending_dir(_kind: String) -> Result<(), String> {
+    Err(ANDROID_UPDATE_UNSUPPORTED.to_string())
+}
+
 fn maybe_run_portable_update_helper_from_args() -> Result<bool, String> {
     Ok(false)
 }
