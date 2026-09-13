@@ -1,4 +1,5 @@
 <template>
+  <SettingsStickyLayout>
   <div class="grid gap-3">
     <ConfigCard :title="t('config.tools.androidWorkspaceTitle')">
       <template #actions>
@@ -219,6 +220,7 @@
       </form>
     </dialog>
   </div>
+  </SettingsStickyLayout>
 </template>
 
 <script setup lang="ts">
@@ -226,6 +228,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { FolderOpen } from "@lucide/vue";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useI18n } from "vue-i18n";
+import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
 import type { AppConfig } from "../../../../types/app";
 import {
   createTransportChannel,
