@@ -652,6 +652,21 @@ fn resolve_provider_genai_adapter_kind(
     .adapter_kind
 }
 
+/// LLM 对话请求的 HTTP 客户端：Android 上 reqwest 默认走 rustls-platform-verifier，
+/// 未初始化会 panic（Expect rustls-platform-verifier to be initialized），必须注入
+/// webpki 静态根证书。上游 genai 升级去掉 with_reqwest 注入后即为此症状，勿再退回裸 builder。
+fn build_llm_genai_http_client() -> Result<reqwest::Client, String> {
+    let mut builder = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(15));
+    #[cfg(target_os = "android")]
+    {
+        builder = android_workspace_apply_static_webpki_roots(builder)?;
+    }
+    builder
+        .build()
+        .map_err(|err| format!("构建 LLM HTTP 客户端失败: {err}"))
+}
+
 fn build_provider_genai_client_and_model_spec_from_target(
     api_config: &ResolvedApiConfig,
     model_name: &str,
@@ -676,6 +691,7 @@ fn build_provider_genai_client_and_model_spec_from_target(
         };
         let client = genai::Client::builder()
             .with_adapter_kind(adapter_kind)
+            .with_reqwest(build_llm_genai_http_client()?)
             .build()
             .map_err(|err| format!("构建 genai 客户端失败: {err}"))?;
         Ok((
@@ -684,6 +700,7 @@ fn build_provider_genai_client_and_model_spec_from_target(
         ))
     } else {
         let client = genai::Client::builder()
+            .with_reqwest(build_llm_genai_http_client()?)
             .build()
             .map_err(|err| format!("构建 genai 客户端失败: {err}"))?;
         Ok((client, genai::ModelSpec::from_target(service_target)))
