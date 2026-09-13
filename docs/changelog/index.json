@@ -1,7 +1,27 @@
 {
-  "generatedAt": "2026-09-03T20:19:43.224Z",
-  "latestVersion": "v0.82.0",
+  "generatedAt": "2026-09-13T10:16:29.279Z",
+  "latestVersion": "v0.88.0",
   "releases": [
+    {
+      "version": "v0.88.0",
+      "path": "docs/changelog/releases/v0.88.0.md",
+      "summary": "桌面操作新增后台操作模式与「移动鼠标」动作：助手无需切换窗口、不抢焦点即可对指定后台窗口截图、点击（含双击）、填文本、读文本、滚动与发按键，找不到目标时给出候选清单；脚本中途出错会说明已执行到哪一步。"
+    },
+    {
+      "version": "v0.87.0",
+      "path": "docs/changelog/releases/v0.87.0.md",
+      "summary": "右侧栏改为工作区预览卡片墙：左上角下拉按钮变成预览入口，Git 更改、已打开文件、工作目录、新建追问、追问会话、后台终端、委托、任务、最近工具各成一张卡片，没有内容就不占位；右侧栏同时加宽以容纳两列。"
+    },
+    {
+      "version": "v0.86.0",
+      "path": "docs/changelog/releases/v0.86.0.md",
+      "summary": "AI 操作桌面应用更可靠：支持等待窗口或元素出现、副屏窗口寻址、拖拽、剪贴板读写，后台点击改按窗口名和元素名定位，找不到时给出候选清单，脚本中途出错也会说明已执行到哪一步。"
+    },
+    {
+      "version": "v0.84.0",
+      "path": "docs/changelog/releases/v0.84.0.md",
+      "summary": "后台任务监控面板：AI 启动的后台命令可以在侧边栏实时查看运行状态、持续时长和输出进展。"
+    },
     {
       "version": "v0.82.0",
       "path": "docs/changelog/releases/v0.82.0.md",
@@ -1075,7 +1095,7 @@
     {
       "version": "UNRELEASED",
       "path": "docs/changelog/releases/UNRELEASED.md",
-      "summary": ""
+      "summary": "终端命令执行审批卡中新增展示操作用途说明，审批时不再调用快速模型预审，流程更直接透明"
     }
   ]
 }
