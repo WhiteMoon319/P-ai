@@ -72,7 +72,6 @@
             app_state: AppState::new().expect("create test app state"),
             session_id: "chat:test".to_string(),
             api_config_id: "api".to_string(),
-            executor_department_id: "assistant".to_string(),
             executor_agent_id: "assistant".to_string(),
         };
         let definition = tool.provider_tool_definition();
@@ -181,7 +180,6 @@
         let input = TaskCreateInput {
             goal: "跟进并发会话".to_string(),
             conversation_id: Some("conversation-a".to_string()),
-            department_id: None,
             agent_id: None,
             target_scope: Some(TASK_TARGET_SCOPE_DESKTOP.to_string()),
             why: String::new(),
@@ -209,7 +207,6 @@
         let input = TaskCreateInput {
             goal: "系统任务".to_string(),
             conversation_id: None,
-            department_id: None,
             agent_id: None,
             target_scope: Some(TASK_TARGET_SCOPE_DESKTOP.to_string()),
             why: String::new(),
@@ -243,7 +240,6 @@
         let input = TaskCreateInput {
             goal: "跳过后重试".to_string(),
             conversation_id: Some("conversation-a".to_string()),
-            department_id: None,
             agent_id: None,
             target_scope: Some(TASK_TARGET_SCOPE_DESKTOP.to_string()),
             why: String::new(),
@@ -304,7 +300,6 @@
         let input = TaskCreateInput {
             goal: "一次性调度".to_string(),
             conversation_id: Some("conversation-a".to_string()),
-            department_id: None,
             agent_id: None,
             target_scope: Some(TASK_TARGET_SCOPE_DESKTOP.to_string()),
             why: String::new(),
@@ -349,7 +344,6 @@
         let input = TaskCreateInput {
             goal: "结束时间自动完成".to_string(),
             conversation_id: Some("conversation-a".to_string()),
-            department_id: None,
             agent_id: None,
             target_scope: Some(TASK_TARGET_SCOPE_DESKTOP.to_string()),
             why: String::new(),
@@ -385,7 +379,6 @@
         let input = TaskCreateInput {
             goal: "历史一次性任务".to_string(),
             conversation_id: Some("conversation-a".to_string()),
-            department_id: None,
             agent_id: None,
             target_scope: Some(TASK_TARGET_SCOPE_DESKTOP.to_string()),
             why: String::new(),
@@ -428,7 +421,6 @@
         let input = TaskCreateInput {
             goal: "未来一次性任务".to_string(),
             conversation_id: Some("conversation-a".to_string()),
-            department_id: None,
             agent_id: None,
             target_scope: Some(TASK_TARGET_SCOPE_DESKTOP.to_string()),
             why: String::new(),
@@ -467,7 +459,6 @@
         let input = TaskCreateInput {
             goal: "定时任务".to_string(),
             conversation_id: Some("conversation-a".to_string()),
-            department_id: None,
             agent_id: None,
             target_scope: Some(TASK_TARGET_SCOPE_DESKTOP.to_string()),
             why: String::new(),
@@ -484,7 +475,6 @@
         let err = task_store_update_task(&data_path, &TaskUpdateInput {
             task_id: created.task_id.clone(),
             conversation_id: Some("conversation-a".to_string()),
-            department_id: None,
             agent_id: None,
             target_scope: Some(TASK_TARGET_SCOPE_DESKTOP.to_string()),
             goal: Some("定时任务".to_string()),
@@ -513,7 +503,6 @@
         let input = TaskCreateInput {
             goal: "兼容旧调度".to_string(),
             conversation_id: Some("conversation-a".to_string()),
-            department_id: None,
             agent_id: None,
             target_scope: Some(TASK_TARGET_SCOPE_DESKTOP.to_string()),
             why: String::new(),
@@ -567,7 +556,6 @@
         let input = TaskCreateInput {
             goal: "保留旧间隔".to_string(),
             conversation_id: Some("conversation-a".to_string()),
-            department_id: None,
             agent_id: None,
             target_scope: Some(TASK_TARGET_SCOPE_DESKTOP.to_string()),
             why: String::new(),
@@ -655,7 +643,6 @@
         let mut main = build_conversation_record(
             api_id,
             agent_id,
-            ASSISTANT_DEPARTMENT_ID,
             "main",
             CONVERSATION_KIND_CHAT,
             None,
@@ -665,7 +652,6 @@
         let mut side = build_conversation_record(
             api_id,
             agent_id,
-            REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID,
             "side",
             CONVERSATION_KIND_CHAT,
             None,
@@ -715,7 +701,6 @@
         let mut main = build_conversation_record(
             api_id,
             agent_id,
-            ASSISTANT_DEPARTMENT_ID,
             "main",
             CONVERSATION_KIND_CHAT,
             None,
@@ -744,7 +729,6 @@
             mute_duration_seconds: default_remote_im_contact_mute_duration_seconds(),
             activation_cooldown_seconds: 0,
             route_mode: "dedicated_contact_conversation".to_string(),
-            bound_department_id: Some(REMOTE_CUSTOMER_SERVICE_DEPARTMENT_ID.to_string()),
             bound_agent_id: None,
             bound_conversation_id: Some("missing-contact-conversation".to_string()),
             processing_mode: "continuous".to_string(),

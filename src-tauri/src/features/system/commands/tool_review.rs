@@ -408,8 +408,6 @@ struct ToolReviewCodeReviewInput {
     #[serde(default)]
     target: Option<String>,
     #[serde(default)]
-    department_id: Option<String>,
-    #[serde(default)]
     agent_id: Option<String>,
 }
 
@@ -474,8 +472,6 @@ struct ToolReviewReportRecord {
     status: String,
     scope: String,
     target: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    department_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     agent_id: Option<String>,
     workspace_path: String,
@@ -1723,7 +1719,6 @@ fn tool_review_create_pending_report(
     conversation_id: &str,
     scope: &str,
     target: &str,
-    department_id: Option<&str>,
     agent_id: Option<&str>,
     workspace_path: &str,
 ) -> Result<ToolReviewReportRecord, String> {
@@ -1736,10 +1731,6 @@ fn tool_review_create_pending_report(
         status: "pending".to_string(),
         scope: scope.trim().to_string(),
         target: target.trim().to_string(),
-        department_id: department_id
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned),
         agent_id: agent_id
             .map(str::trim)
             .filter(|value| !value.is_empty())
@@ -2281,42 +2272,13 @@ async fn submit_tool_review_code_internal(
     } else {
         conversation.agent_id.trim().to_string()
     };
-    let source_department_id = if conversation.department_id.trim().is_empty() {
-        ASSISTANT_DEPARTMENT_ID.to_string()
-    } else {
-        conversation.department_id.trim().to_string()
-    };
-    let requested_department_id = input
-        .department_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
     let requested_agent_id = input
         .agent_id
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
-    let target_department_id = if let Some(department_id) = requested_department_id {
-        department_id.to_string()
-    } else if conversation.department_id.trim().is_empty() {
-        ASSISTANT_DEPARTMENT_ID.to_string()
-    } else {
-        conversation.department_id.trim().to_string()
-    };
     let runtime_snapshot = load_runtime_organization_snapshot(&app_state)?;
-    let target_department = runtime_department_by_id(&runtime_snapshot, &target_department_id)
-        .ok_or_else(|| format!("代码审查目标部门不存在，departmentId={target_department_id}"))?;
     let target_agent_id = if let Some(agent_id) = requested_agent_id {
-        if !target_department
-            .agent_ids
-            .iter()
-            .any(|item| item.trim() == agent_id)
-        {
-            return Err(format!(
-                "代码审查目标人格不属于目标部门，departmentId={}，agentId={}",
-                target_department_id, agent_id
-            ));
-        }
         runtime_snapshot
             .agents
             .iter()
@@ -2324,26 +2286,13 @@ async fn submit_tool_review_code_internal(
             .map(|agent| agent.id.clone())
             .ok_or_else(|| format!("代码审查目标人格不存在或不可用，agentId={agent_id}"))?
     } else {
-        target_department
-            .agent_ids
-            .iter()
-            .map(|item| item.trim())
-            .find(|agent_id| {
-                !agent_id.is_empty()
-                    && runtime_snapshot
-                        .agents
-                        .iter()
-                        .any(|agent| agent.id == *agent_id && !agent.is_built_in_user)
-            })
-            .map(ToOwned::to_owned)
-            .ok_or_else(|| format!("代码审查目标部门没有可用人格，departmentId={target_department_id}"))?
+        REVIEWER_AGENT_ID.to_string()
     };
     let pending_report = tool_review_create_pending_report(
         &app_state.data_path,
         conversation_id,
         scope,
         &target_text,
-        Some(&target_department_id),
         Some(&target_agent_id),
         &workspace_text,
     )
@@ -2365,8 +2314,6 @@ async fn submit_tool_review_code_internal(
     let scope_owned = scope.to_string();
     let target_owned = if target_text.trim().is_empty() { None } else { Some(target_text.clone()) };
     let source_agent_id_owned = source_agent_id.clone();
-    let source_department_id_owned = source_department_id.clone();
-    let target_department_id_owned = target_department_id.clone();
     let target_agent_id_owned = target_agent_id.clone();
     tauri::async_runtime::spawn(async move {
         runtime_log_info(format!(
@@ -2404,8 +2351,7 @@ async fn submit_tool_review_code_internal(
             &skill,
         );
         let delegate_args = DelegateToolArgs {
-            department_id: target_department_id_owned.clone(),
-            target_agent_id: Some(target_agent_id_owned.clone()),
+            agent_id: target_agent_id_owned.clone(),
             mode: Some("wait".to_string()),
             why: Some(tool_review_delegate_background(&scope_owned, target_owned.as_deref())),
             goal: Some(instruction),
@@ -2416,19 +2362,18 @@ async fn submit_tool_review_code_internal(
         };
         let session_id = format!("{}::{}", source_agent_id_owned, conversation_id_owned);
         runtime_log_info(format!(
-            "[工具审查][后端] 发起代码审查委托 conversation_id={} scope={} report_id={} session_id={} source_agent_id={} target_department_id={}",
+            "[工具审查][后端] 发起代码审查委托 conversation_id={} scope={} report_id={} session_id={} source_agent_id={} target_agent_id={}",
             conversation_id_owned,
             scope_owned,
             report_id,
             session_id,
             source_agent_id_owned,
-            target_department_id_owned
+            target_agent_id_owned
         ));
         let delegate_result = match delegate_execute_sync(
             &app_state,
             &session_id,
             Some(source_agent_id_owned.as_str()),
-            Some(source_department_id_owned.as_str()),
             DELEGATE_TOOL_KIND_DELEGATE,
             delegate_args,
         )
@@ -2493,7 +2438,7 @@ async fn submit_tool_review_code_internal(
         {
             Some(text) => text.to_string(),
             None => {
-                let err = "下级部门未返回代码审查结果。".to_string();
+                let err = "下级人格未返回代码审查结果。".to_string();
                 let _ = tool_review_update_report_record(
                     &app_state.data_path,
                     &conversation_id_owned,
@@ -2532,7 +2477,6 @@ async fn submit_tool_review_code_internal(
                 if let Err(err) = conversation_service_v2().enqueue_delegate_completion_notification(
                     &app_state,
                     &conversation_id_owned,
-                    &target_department_id_owned,
                     &target_agent_id_owned,
                     &report_title,
                     &report_text,
@@ -2763,7 +2707,7 @@ mod tool_review_tests {
     }
 
     #[test]
-    fn tool_review_report_record_should_deserialize_without_department_id() {
+    fn tool_review_report_record_should_tolerate_legacy_department_id() {
         let record = serde_json::from_str::<ToolReviewReportRecord>(
             r#"{
                 "id":"report-1",
@@ -2772,15 +2716,17 @@ mod tool_review_tests {
                 "status":"success",
                 "scope":"commit",
                 "target":"HEAD",
+                "departmentId":"legacy-department",
                 "workspacePath":"E:/workspace",
                 "createdAt":"2026-05-05T00:00:00.000Z",
                 "updatedAt":"2026-05-05T00:00:00.000Z",
                 "reportText":"ok"
             }"#,
         )
-        .expect("legacy report record should deserialize");
+        .expect("legacy report record with departmentId should deserialize");
 
-        assert_eq!(record.department_id, None);
+        assert_eq!(record.id, "report-1");
+        assert_eq!(record.agent_id, None);
     }
 
     #[test]

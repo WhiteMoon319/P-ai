@@ -53,7 +53,6 @@
     :current-workspace-root-path="workspaceRootPath"
     :workspaces="workspaces"
     :current-workspace-autonomous-mode="false"
-    :current-department-id="departmentId"
     :active-agent-id="agentId"
     :active-conversation-id="conversationId"
     :current-todos="runtime.currentTodos.value"
@@ -67,8 +66,8 @@
     :chat-left-panel-mode="'local'"
     :chat-right-panel-mode="'reader'"
     :chat-monitor-panel-mode="'delegate'"
-    :create-conversation-department-options="[]"
-    :default-create-conversation-department-id="departmentId"
+    :create-conversation-agent-options="[]"
+    :default-create-conversation-agent-id="agentId"
     :ide-context-groups="[]"
     :terminal-approvals="terminalApprovals"
     :terminal-approval-resolving="terminalApprovalResolving"
@@ -126,7 +125,6 @@ const props = defineProps<{
   subscriptionSlot?: ExclusiveChatViewSubscriptionSlot;
   apiConfigId: string;
   agentId: string;
-  departmentId: string;
   personaName: string;
   userAlias: string;
   userAvatarUrl: string;
@@ -160,12 +158,10 @@ let unlistenGoalUpdated: (() => void) | null = null;
 const conversationId = toRef(props, "conversationId");
 const apiConfigId = toRef(props, "apiConfigId");
 const agentId = toRef(props, "agentId");
-const departmentId = toRef(props, "departmentId");
 const runtime = useConversationViewRuntime({
   conversationId,
   apiConfigId,
   agentId,
-  departmentId,
   subscriptionSlot: props.subscriptionSlot,
   requestRecallMode: props.requestRecallMode,
   t,
@@ -221,7 +217,6 @@ const conversationItems = computed(() => conversationId.value ? [{
   kind: "local_unarchived" as const,
   messageCount: runtime.allMessages.value.length,
   agentId: agentId.value,
-  departmentId: departmentId.value,
 }] : []);
 
 function updateChatInput(value: string) {

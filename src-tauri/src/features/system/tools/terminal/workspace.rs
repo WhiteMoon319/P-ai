@@ -1450,7 +1450,6 @@ mod terminal_workspace_tests {
         let mut conversation = build_conversation_record(
             "api-1",
             DEFAULT_AGENT_ID,
-            ASSISTANT_DEPARTMENT_ID,
             conversation_id,
             CONVERSATION_KIND_CHAT,
             None,
@@ -1584,7 +1583,7 @@ mod terminal_workspace_tests {
             .expect("write archived conversation");
         state_service_set_message_store_migration_version(
             &state,
-            DATA_MIGRATION_CURRENT_VERSION,
+            MESSAGE_STORE_MIGRATION_CURRENT_VERSION,
         )
         .expect("mark message store migration complete");
 
@@ -1804,7 +1803,6 @@ mod terminal_workspace_tests {
             id: "conv-1".to_string(),
             title: "Conversation".to_string(),
             agent_id: "agent-1".to_string(),
-            department_id: String::new(),
             bound_conversation_id: None,
             parent_conversation_id: None,
             child_conversation_ids: Vec::new(),
@@ -1887,7 +1885,6 @@ mod terminal_workspace_tests {
             id: "conv-1".to_string(),
             title: "Conversation".to_string(),
             agent_id: "agent-1".to_string(),
-            department_id: String::new(),
             bound_conversation_id: None,
             parent_conversation_id: None,
             child_conversation_ids: Vec::new(),
@@ -1976,7 +1973,6 @@ mod terminal_workspace_tests {
         let mut conversation = build_conversation_record(
             "api-1",
             "agent-1",
-            ASSISTANT_DEPARTMENT_ID,
             "Conversation",
             CONVERSATION_KIND_CHAT,
             None,

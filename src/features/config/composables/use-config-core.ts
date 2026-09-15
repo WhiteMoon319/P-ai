@@ -369,7 +369,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
       desktopOperationNoticeEnabled: !!options.config.desktopOperationNoticeEnabled,
       desktopOperateEnabled: !!options.config.desktopOperateEnabled,
       selectedApiConfigId: options.config.selectedApiConfigId,
-      assistantDepartmentApiConfigId: options.config.assistantDepartmentApiConfigId,
+      expertApiConfigId: options.config.expertApiConfigId,
       ...(options.config.visionApiConfigId ? { visionApiConfigId: options.config.visionApiConfigId } : {}),
       ...(imageGenerationModelId ? { imageGenerationModelId } : {}),
       ...(options.config.toolReviewApiConfigId ? { toolReviewApiConfigId: options.config.toolReviewApiConfigId } : {}),
@@ -379,7 +379,6 @@ export function useConfigCore(options: UseConfigCoreOptions) {
       terminalEnvironment: normalizeTerminalEnvironment(options.config.terminalEnvironment),
       simpleSetupMode: options.config.simpleSetupMode !== false,
       shellWorkspaces: [...(options.config.shellWorkspaces || [])],
-      departments: [...(options.config.departments || [])],
       // `cachedTools` is runtime-derived and should not be client-controlled on save.
       mcpServers: (options.config.mcpServers || []).map((item) => ({
         id: item.id,
@@ -524,7 +523,7 @@ export function useConfigCore(options: UseConfigCoreOptions) {
       desktopOperationNoticeEnabled: !!options.config.desktopOperationNoticeEnabled,
       desktopOperateEnabled: !!options.config.desktopOperateEnabled,
       selectedApiConfigId: options.config.selectedApiConfigId,
-      assistantDepartmentApiConfigId: options.config.assistantDepartmentApiConfigId,
+      expertApiConfigId: options.config.expertApiConfigId,
       visionApiConfigId: options.config.visionApiConfigId,
       imageGenerationModelId: normalizeImageGenerationModelId(
         options.config.imageGenerationModelId,
@@ -537,7 +536,6 @@ export function useConfigCore(options: UseConfigCoreOptions) {
       terminalEnvironment: normalizeTerminalEnvironment(options.config.terminalEnvironment),
       simpleSetupMode: options.config.simpleSetupMode !== false,
       shellWorkspaces: [...(options.config.shellWorkspaces || [])],
-      departments: [...(options.config.departments || [])],
       mcpServers: [...(options.config.mcpServers || [])],
       remoteImChannels: [...(options.config.remoteImChannels || [])],
       apiProviders: [...(options.config.apiProviders || [])],

@@ -163,28 +163,6 @@
         />
       </div>
 
-      <div v-else-if="props.configTab === 'department'" class="flex-1 min-h-0">
-        <DepartmentTab
-          :config="config"
-          :api-configs="config.apiConfigs"
-          :personas="personas"
-          :saving-config="savingConfig"
-          :save-config-action="saveConfigAction"
-          :set-status-action="setStatusAction"
-        />
-      </div>
-
-      <div v-else-if="props.configTab === 'departmentTree'" class="flex-1 min-h-0">
-        <DepartmentTreeTab
-          :config="config"
-          :personas="personas"
-          :saving-config="savingConfig"
-          :save-config-action="saveConfigAction"
-          :set-status-action="setStatusAction"
-          @open-persona-page="handleOpenPersonaPage"
-        />
-      </div>
-
       <div v-else-if="props.configTab === 'mcp'" class="flex-1 min-h-0">
         <McpTab @open-catalog="$emit('update:configTab', 'catalog')" />
       </div>
@@ -205,7 +183,6 @@
           :persona-editor-id="personaEditorId"
           :selected-persona="selectedPersona"
           :selected-persona-avatar-url="selectedPersonaAvatarUrl"
-          :departments="config.departments"
           :avatar-saving="avatarSaving"
           :avatar-error="avatarError"
           :persona-saving="personaSaving"
@@ -218,7 +195,7 @@
           @open-avatar-editor="openAvatarEditorForSelected"
           @import-persona-memories="$emit('importPersonaMemories', $event)"
           @save-personas="$emit('savePersonas')"
-          @toggle-persona-department-member="$emit('togglePersonaDepartmentMember', $event)"
+          @set-persona-child-agents="$emit('setPersonaChildAgents', $event)"
           @convert-private-persona-to-public="$emit('convertPrivatePersonaToPublic', $event)"
         />
       </div>
@@ -228,7 +205,7 @@
           :config="config"
           :personas="personas"
           :persona-avatar-url-map="props.personaAvatarUrlMap"
-          :assistant-department-agent-id="assistantDepartmentAgentId"
+          :assistant-agent-id="assistantAgentId"
           @update:config-tab="$emit('update:configTab', $event)"
           @update:persona-editor-id="$emit('update:personaEditorId', $event)"
         />
@@ -453,8 +430,6 @@ import McpTab from "./config-tabs/McpTab.vue";
 import SkillTab from "./config-tabs/SkillTab.vue";
 import CatalogTab from "./config-tabs/CatalogTab.vue";
 import PersonaTab from "./config-tabs/PersonaTab.vue";
-import DepartmentTab from "./config-tabs/DepartmentTab.vue";
-import DepartmentTreeTab from "./config-tabs/DepartmentTreeTab.vue";
 import DemoTab from "./config-tabs/DemoTab.vue";
 import ChatSettingsTab from "./config-tabs/ChatSettingsTab.vue";
 import AndroidTab from "./config-tabs/AndroidTab.vue";
@@ -473,7 +448,7 @@ import { toErrorMessage } from "../../../utils/error";
 import { ArrowLeftRight, Beaker, Bell, Building2, ChevronRight, ClipboardList, Code, Cpu, Database, Home, Info, Keyboard, Menu, Network, Palette, Puzzle, Radio, ScrollText, Smartphone, Star, Store, User, Wifi } from "@lucide/vue";
 import OverlayScrollArea from "../../shared/components/OverlayScrollArea.vue";
 
-type ConfigTab = "welcome" | "hotkey" | "api" | "android" | "mcp" | "skill" | "catalog" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "networkAccess" | "remoteIm" | "usage" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
+type ConfigTab = "welcome" | "hotkey" | "api" | "android" | "mcp" | "skill" | "catalog" | "persona" | "demo" | "chatSettings" | "notification" | "networkAccess" | "remoteIm" | "usage" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
 type AvatarTarget = { agentId: string };
 type ConfigNavItem = {
   tab: ConfigTab;
@@ -521,8 +496,6 @@ const CONFIG_NAV_GROUPS: ConfigNavGroup[] = [
     titleKey: "config.navGroups.agents",
     items: [
       { tab: "persona", icon: User, labelKey: "config.tabs.persona" },
-      { tab: "department", icon: Building2, labelKey: "config.tabs.department" },
-      { tab: "departmentTree", icon: Network, labelKey: "config.tabs.departmentTree" },
     ],
   },
   {
@@ -589,7 +562,7 @@ const props = defineProps<{
   assistantPersonas: PersonaProfile[];
   userPersona: PersonaProfile | null;
   personaEditorId: string;
-  assistantDepartmentAgentId: string;
+  assistantAgentId: string;
   responseStyleOptions: ResponseStyleOption[];
   responseStyleId: string;
   pdfReadMode: "text" | "image";
@@ -655,7 +628,7 @@ const emit = defineEmits<{
   (e: "removeSelectedPersona"): void;
   (e: "resetPersonas"): void;
   (e: "savePersonas"): void;
-  (e: "togglePersonaDepartmentMember", value: { agentId: string; departmentId: string; member: boolean }): void;
+  (e: "setPersonaChildAgents", value: { agentId: string; childAgentIds: string[] }): void;
   (e: "convertPrivatePersonaToPublic", agentId: string): void;
   (e: "importPersonaMemories", value: { agentId: string; file: File }): void;
   (e: "openConversationList"): void;
@@ -935,10 +908,6 @@ function requestTabChange(nextTab: ConfigTab) {
     return;
   }
   emit("update:configTab", nextTab);
-}
-
-function handleOpenPersonaPage() {
-  requestTabChange("persona");
 }
 
 function onMemorySyncLockChange(locked: boolean) {

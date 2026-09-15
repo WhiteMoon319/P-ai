@@ -1,144 +1,123 @@
-# P-ai (PAI) — Android 移植版
+# P-ai (PAI)
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8D8?logo=tauri)](https://tauri.app)
 [![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js)](https://vuejs.org)
 [![Rust](https://img.shields.io/badge/Rust-000000?logo=rust)](https://www.rust-lang.org)
-[![Android](https://img.shields.io/badge/Android-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
-[![Release v0.74.3](https://img.shields.io/badge/Release-v0.74.3-6366f1)](https://github.com/WhiteMoon319/P-ai/releases)
+[![Release](https://img.shields.io/badge/Release-0.11.6-6366f1)](https://github.com/kawayiYokami/P-ai/releases)
 
-> 本仓库是 **PAI 的 Android 移植版**，基于桌面版 P-AI 二次开发，面向移动端重构。
-> 桌面版原仓库（持续更新、功能最全）：**[kawayiYokami/P-ai](https://github.com/kawayiYokami/P-ai)**
-
----
-
-> **A self-growing AI work system on Android — agent delegation, long-term memory, tool review, MCP, and sandboxed Linux workspace, all on your phone.**
+**Languages / 语言**  
+[简体中文](docs/readme/README.zh-CN.md) | [繁體中文](docs/readme/README.zh-TW.md) | [English](README.md) | [日本語](docs/readme/README.ja-JP.md)
 
 ---
 
-PAI 是一个持续进化的 AI 工作系统，不只是聊天客户端。它围绕对话、任务、记忆、部门、工具、审查与远程消息组织成一套完整系统。Android 版将桌面端核心能力搬进移动端：
+> **A self-growing desktop AI work system — ready-to-use, with agent delegation, long-term memory, tool review, MCP, and high-concurrency workspace automation.**
 
-- **Rust 异步后端**（tokio + Tauri 2），响应快、本地运行，Rust 核心以原生库（`staticlib`）形式打进 APK
-- **Vue 3 + DaisyUI** 移动端 UI（复用 sidebar 页面），经 WebSocket 与本机 Rust 后端通信
-- **全部数据本地存储**，无中间服务器，API Key 不出设备
+---
 
-### 核心能力
+PAI is an actively evolving desktop AI work system. It is not a chat client — it is a complete desktop system organized around conversations, tasks, memory, persona organization, tools, review, and remote messaging. The backend uses Rust async concurrency and streaming architecture to guarantee response speed; the frontend uses Vue 3 + DaisyUI for a clean interface. All data is stored locally, with no intermediate servers.
 
-- **对话与任务**：本地会话、远程会话（微信/飞书/钉钉/OneBot）、多会话并行、会话自动压缩归档
-- **部门与人格**：多部门、多人格独立配置，各带独立头像与私有记忆；本地会话支持多智能体群聊
-- **工具与审查**：内置 Skill 体系、MCP 支持、工具执行审查链，AI 可自主管理 MCP/Skill/人格/部门
-- **记忆与上下文**：长对话动态压缩归档，SQLite + tantivy 混合检索的低成本记忆系统，越用越懂你
-- **Android 沙盒工作区**：内置 proot Linux 运行环境（arm64），支持 Ubuntu Base rootfs 下载/导入，
-  在手机上跑 Linux 命令与脚本；`llm-workspace` 直接映射为 Linux `/workspace` 与 `/root/.pai`
-- **远程前端模式**：输入电脑 PAI 的地址与端口，手机即成为电脑 PAI 的远程前端，
-  实时同步聊天与设置界面；电脑 PAI 回复时手机仍收到通知
-- **设备控制（Shizuku/root 提权）**：通过 Shizuku（首选）或 root（兜底）提权执行有限设备控制，
-  包括冻结/解冻/卸载/安装应用、删除受限文件、注入式触控（tap/swipe/key）与截屏；
-  能力开关默认关闭，危险操作二次确认，命令白名单防注入
-- **移动端细节**：内嵌 WebView 单窗口架构、设置页可滚动、录音权限适配、安全区适配、
-  IME 输入法弹起避让、系统分享导出沙盒文件、content URI 文件导入
+### Entry & Efficiency
 
-### 技术架构
+Global hotkey summon, voice wakeup, background voice input, quick screenshot — PAI brings desktop AI access to "summon anytime, handle anything, continue anywhere." Supports local sessions, remote sessions, and multiple parallel sessions; quick commands can trigger common operations in one keystroke.
 
-Android 端复用项目自带的移动端访问页面 `sidebar.html`（原本用于手机浏览器远程访问桌面端 / VS Code 侧边栏），
-**不依赖桌面端多窗口 IPC 体系**，通信链路为：
+### Organization & Personas
 
-```
-Tauri Android WebView（加载打包资产 sidebar.html?chatUrl=ws://127.0.0.1:8429/chat）
-  └─ WebSocket 连接本机 web access 服务（默认端口 8429，回环连接自动免密）
-       └─ Rust 后端（bridge_server → 各功能域命令）
-```
+Multiple personas can be independently configured, each with its own avatar and private memory, and they form an organization through parent-child relationships. Tasks and sessions are separated by persona, identity, and responsibility. Local sessions support multi-agent group chat; remote sessions support WeChat, Feishu, DingTalk, OneBot, and other protocols.
 
-- web access 服务默认开启（`default_web_access_enabled() = true`），默认端口 `8429`，可配置
-- 回环地址（`127.0.0.1`）WebSocket 连接**自动免密**，局域网/外网访问 `/chat` 需访问密码
-- 前后端传输差异全部收敛在 `tauri-api` 传输适配层，聊天运行时语义双端一致
+### Interface & Interaction
 
-### 下载与安装
+UI, chat style, colors, and fonts are all customizable, with multiple windows running in parallel. Fast response, clean but not bare-bones.
 
-APK 发布在 [GitHub Releases](https://github.com/WhiteMoon319/P-ai/releases)：
+### Capabilities & Tools
 
-- 推送 `v*` tag 触发 **Android Release** 构建：release 包 + secrets 签名后发布到 Release
-- 推送 `dev` 分支触发 **Android Build (Debug)** 构建：debug APK 上传到 Actions artifact
+A complete capability set is pre-built: LLM can execute operation scripts to control the computer and send reactions proactively; common Skills are built-in; full image-to-text, native PDF and Office reading are supported; tool modifications are reversible; tool execution and code changes can undergo multi-angle AI review. API provider onboarding is streamlined and ready to use.
 
-安装后在应用内配置 LLM API Key 即可开始使用；如需语音输入、记忆检索等能力，
-可在「设置 → LLM」补充 STT、Embedding、Rerank 等模型。
+### Memory & Context
 
-### 构建与开发
+Long conversations are dynamically compressed and archived; a single session can persist indefinitely, with context staying effective through continuous compression and organization. The memory system is low-cost and comprehensive — the more you use it, the better the AI understands you.
 
-环境要求：Node.js（pnpm）、Rust 工具链、Android SDK + NDK（建议 r27+）。
+### Engineering & Reliability
 
-```bash
-# 前端依赖
-pnpm install
+High performance, concurrent, fast to respond. Local sessions support message delivery, session branching, and manual delegation; remote sessions support sending and receiving files and images. Built-in proactive planning mode, delegation system, and persona system; LLM can autonomously manage MCP, skills, personas, and the organization. Tool execution has a review chain; code changes can be validated from multiple angles.
 
-# 首次或上游结构变化后生成 Android 工程
-pnpm tauri android init
+---
 
-# 类型检查
-pnpm typecheck
-cd src-tauri && cargo check --target aarch64-linux-android
+### Real Usage Scenarios
 
-# 构建 Android APK（aarch64）
-pnpm tauri android build --apk --target aarch64 --debug   # debug 包
-pnpm tauri android build --apk --target aarch64           # release 包
-```
+The following are not hypotheticals — they actually happened:
 
-> 注：CI 构建会额外执行 `scripts/patch-android-project.sh`（权限、通知图标、IME 适配、MainActivity 生成）
-> 与 `scripts/patch-android-version.sh`（git 派生 versionCode/versionName）等补丁，
-> 并开启 WebView 的 cleartext 流量以支持 `ws://127.0.0.1` WebSocket；
-> 若全局 Cargo 配置了 `rustc-wrapper=sccache` 或特定镜像源，构建 Android target 时
-> 可能需要用 `--config` 覆盖（见 [docs/android-development-guide.md](docs/android-development-guide.md)）。
+- Starting from v0.8, PAI has been used to develop PAI itself for over 1 month, producing 407 commits and 496 file changes
+- Users have been using PAI continuously for financial analysis and news monitoring for over 3 months
+- Users have been using PAI via WeChat remote contacts to produce Xiaohongshu content for over 3 months, with over a thousand published posts
+- Users have been using PAI to analyze research papers for over 2 months and published multiple papers based on it
+- Users have been using PAI for scheduled web scraping, accumulating over 500M of data
+- A user ran PAI continuously for 20 hours on a programming task — it reviewed, resolved, researched online, and passed on its own
+- Users have been using PAI long-term to create game guides
+- Users have been using PAI long-term to operate games and complete daily tasks
+- Users run dozens of sessions simultaneously, using PAI to monitor multiple online channels at once
+- After extended use, users consistently report it gets smoother over time — the AI understands them better
 
-### CI 构建
+---
 
-GitHub Actions（[.github/workflows](.github/workflows)）：
+### Project Stats
 
-- **Android Build (Debug)**（`android-build.yml`）：`dev` 分支推送或手动触发，构建 debug APK，
-  版本号由 git 派生（`versionCode` = 提交总数，`versionName` = `git describe` 派生），
-  上传签名后的 `P-ai-<分支名>-aarch64.apk` 到 artifact
-- **Android Release**（`android-release.yml`）：推送 `v*` tag 或手动触发，release 构建 + secrets 签名
-  （`KEYSTORE_BASE64` / `KEYSTORE_PASSWORD` / `KEY_ALIAS` / `KEY_PASSWORD`），
-  发布签名 APK 到 GitHub Release
-- **Static Guards**（`static-guards.yml`）：静态守卫检查（i18n 键、硬编码中文、运行时日志审计等）
+- 872 commits, 116 releases
+- 79 plan documents
+- Full-stack evolution across Vue, Rust, and Tauri 2
+- Local sessions, remote sessions, memory, review, delegation, multi-window, and workspace capabilities all shipped
 
-### 项目结构
+---
 
-```
-apps/android/            本地构建产物（Tauri Android Gradle 工程，gitignore 不提交）
-src/                     Vue 3 前端
-  entries/               多 HTML 入口：index / chat / archives / sidebar / settings /
-                         file-reader / runtime-logs
-  features/              功能域：sidebar（移动端入口）/ chat / config / archive /
-                         memory / shell / shared / file-reader
-src-tauri/               Rust 后端（Tauri 2，features 按功能域组织）
-  src/features/          核心功能域：chat / config / core / memory / remote_im /
-                         mcp / skill / delegate / task / goal / image_generation /
-                         system（含 android_workspace / sandbox / web access 桥）
-  vendor/                本地插件：tauri-plugin-device-control /
-                         tauri-plugin-notification / tauri-plugin-workspace-io
-  capabilities/          平台权限：default / desktop-only（Android 构建需平台隔离）
-  tauri.android.conf.json Android 平台窗口配置（sidebar + 本机 WebSocket 桥）
-docs/                    开发指南、架构设计、changelog
-scripts/                 构建补丁与工具脚本
-.github/workflows/       Android Debug/Release 构建、静态守卫
-```
+## Tech Stack
 
-### 文档
+- Desktop shell: Tauri 2
+- Backend: Rust (async, tokio)
+- Frontend: Vue 3 + TypeScript + Vite
+- UI: DaisyUI + Tailwind CSS
+- Package manager: pnpm
 
-- [Android 开发指南](docs/android-development-guide.md)：Android 移植分支的构建、调试与发布说明
-- [更新日志](docs/changelog/)：按版本维护的 changelog（`CHANGELOG.md` 由脚本生成）
-- 桌面版完整文档见上游仓库 [kawayiYokami/P-ai](https://github.com/kawayiYokami/P-ai)
+## Platform & Updates
 
-### 致谢
+Current release strategy:
 
-本项目是 **[kawayiYokami/P-ai](https://github.com/kawayiYokami/P-ai)**（桌面版 P-AI）的 Android 移植，
-感谢原作者与上游社区。技术栈依赖：Tauri 2 · Vue 3 · DaisyUI · Tailwind CSS · tokio · reqwest ·
-rusqlite · tantivy · proot（Termux）等优秀开源项目。
+- Windows: NSIS installer + zip portable (`PORTABLE` marker), in-app auto-update
+- Linux: `.deb` / `AppImage`, release pipeline maintained
+- macOS: universal DMG for Intel and Apple Silicon, release pipeline maintained
 
-特别感谢 **[Aliothmoon/MAA-Meow](https://github.com/Aliothmoon/MAA-Meow)**：
-本项目设备控制的**注入式触控**（Shizuku UserService 进程内反射 `injectInputEvent`，
-tap/swipe/key 事件语义）与提权命令执行的 UserService 模式，均参考其 `InputControlUtils` /
-`RemoteServiceImpl` 实现，并沿用其技术思路（Shizuku 授权 + shell 身份服务进程）。
+## Data & Privacy
+
+- API keys are stored locally, never passing through any intermediate server
+- Conversations, tasks, archives, memory, and media are all stored locally
+- Portable version data lives in `data/` next to the executable — plug-and-play from a USB drive
+- You can manage, export, and clean up all your data yourself
+
+## Who It Is For
+
+- Developers who want AI truly embedded in their desktop workflow
+- People not satisfied with AI tools that "can only chat"
+- People who need long-running task execution, not one-shot Q&A
+- People who want AI with review capability, not blind delegation
+- People with imagination for AI organizational collaboration
+
+## Quick Start
+
+Download the installer or portable version from [Releases](https://github.com/kawayiYokami/P-ai/releases).
+
+Main file locations after installation:
+
+- Executable: `/usr/bin/p-ai`
+- Desktop entry: `/usr/share/applications/p-ai.desktop`
+- Icon: `/usr/share/pixmaps/p-ai.png`
+- Default data directory: `~/.config/p-ai/`
+
+## Acknowledgments
+
+This project relies on these excellent upstream projects and communities: [Tauri](https://tauri.app/) · [Vue 3](https://vuejs.org/) · [DaisyUI](https://daisyui.com/) · [Tailwind CSS](https://tailwindcss.com/) · [rust-genai](https://github.com/jeremychone/rust-genai) · [rmcp](https://github.com/modelcontextprotocol/rust-sdk) · [Shiki](https://shiki.style/) · [Mermaid](https://mermaid.js.org/) · [KaTeX](https://katex.org/) · [markstream-vue](https://www.npmjs.com/package/markstream-vue) · [tokio](https://tokio.rs/) · [reqwest](https://github.com/seanmonstar/reqwest) · [rusqlite](https://github.com/rusqlite/rusqlite) · [tantivy](https://github.com/quickwit-oss/tantivy) · [AstrBot](https://github.com/AstrBotDevs/AstrBot)
+
+The project author has also developed three plugins for the AstrBot ecosystem: [AngelHeart](https://github.com/kawayiYokami/astrbot_plugin_angel_heart) (intelligent group chat) · [AngelMemory](https://github.com/kawayiYokami/astrbot_plugin_angel_memory) (hierarchical memory retrieval) · [AngelSmile](https://github.com/kawayiYokami/astrbot_plugin_angel_smile) (sticker management)
+
+Thanks to everyone who has contributed ideas, testing, feedback, and code to this project.
 
 ## License
 

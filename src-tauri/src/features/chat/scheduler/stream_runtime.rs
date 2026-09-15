@@ -210,7 +210,7 @@ fn assistant_delta_broadcast_event(event: &AssistantDeltaEvent) -> AssistantDelt
 }
 
 /// 广播 chat.assistantDelta 时附加会话标题，供远程前端（手机壳层）通知对齐本地标题。
-/// 标题来源与本地 live update 通知一致：会话 meta 标题 + 部门名 + 失败标记。
+/// 标题来源与本地 live update 通知一致：会话 meta 标题 + 失败标记。
 fn assistant_delta_broadcast_conversation_title(
     state: &AppState,
     conversation_id: &str,
@@ -223,7 +223,6 @@ fn assistant_delta_broadcast_conversation_title(
         return None;
     }
     Some(notification_title_for_conversation_meta(
-        state,
         &meta,
         local_chat_notification_settings(state, conversation_id).ui_language,
         false,
@@ -555,7 +554,6 @@ mod scheduler_stream_block_tests {
         ConversationStreamRuntimeCacheSnapshot {
             activation_id: "request-1".to_string(),
             request_id: "request-1".to_string(),
-            department_id: "department-1".to_string(),
             agent_id: "agent-1".to_string(),
             assistant_text: "assistant text".to_string(),
             tool_status_text: "running".to_string(),
@@ -898,7 +896,6 @@ fn reset_conversation_stream_runtime_cache(
     conversation_id: &str,
     activation_id: &str,
     request_id: &str,
-    department_id: &str,
     agent_id: &str,
     assistant_message_id: &str,
     started_at: &str,
@@ -909,7 +906,6 @@ fn reset_conversation_stream_runtime_cache(
     slot.stream_cache = ConversationStreamRuntimeCache {
         activation_id: activation_id.trim().to_string(),
         request_id: request_id.trim().to_string(),
-        department_id: department_id.trim().to_string(),
         agent_id: agent_id.trim().to_string(),
         persisted_assistant_message_id: assistant_message_id.trim().to_string(),
         started_at: started_at.trim().to_string(),
@@ -961,7 +957,6 @@ fn conversation_stream_runtime_cache_snapshot(
     ConversationStreamRuntimeCacheSnapshot {
         activation_id: stream_cache.activation_id,
         request_id: stream_cache.request_id,
-        department_id: stream_cache.department_id,
         agent_id: stream_cache.agent_id,
         assistant_text: stream_cache.assistant_text,
         tool_status_text: stream_cache.tool_status_text,

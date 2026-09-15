@@ -326,45 +326,14 @@ export type McpServerConfig = {
   updatedAt?: string;
 };
 
-export type DepartmentConfig = {
-  id: string;
-  name: string;
-  summary: string;
-  guide: string;
-  apiConfigId: string;
-  apiConfigIds: string[];
-  modelFailureFallbackEnabled: boolean;
-  agentIds: string[];
-  childDepartmentIds: string[];
-  createdAt: string;
-  updatedAt: string;
-  orderIndex: number;
-  isBuiltInAssistant?: boolean;
-  source?: string;
-  scope?: string;
-  permissionControl?: DepartmentPermissionControl;
-};
+export type AgentPermissionMode = "whitelist" | "blacklist";
 
-export type DepartmentPermissionMode = "whitelist" | "blacklist";
-
-export type DepartmentPermissionControl = {
+export type AgentPermissionControl = {
   enabled: boolean;
-  mode: DepartmentPermissionMode;
+  mode: AgentPermissionMode;
   builtinToolNames: string[];
   skillNames: string[];
   mcpToolNames: string[];
-};
-
-export type DepartmentPermissionCatalogItem = {
-  name: string;
-  description: string;
-  group?: string;
-};
-
-export type DepartmentPermissionCatalog = {
-  builtinTools: DepartmentPermissionCatalogItem[];
-  skills: DepartmentPermissionCatalogItem[];
-  mcpTools: DepartmentPermissionCatalogItem[];
 };
 
 export type DeviceControlConfig = {
@@ -376,7 +345,6 @@ export type DeviceControlConfig = {
   allowTouch: boolean;
   allowScreenshot: boolean;
 };
-
 export type AppConfig = {
   hotkey: string;
   uiLanguage: "zh-CN" | "en-US" | "zh-TW";
@@ -399,7 +367,7 @@ export type AppConfig = {
   desktopOperateEnabled: boolean;
   selectedApiConfigId: string;
   // Active chat LLM provider config id (kept as legacy key name for storage compatibility).
-  assistantDepartmentApiConfigId: string;
+  expertApiConfigId: string;
   visionApiConfigId?: string;
   imageGenerationModelId?: string;
   toolReviewApiConfigId?: string;
@@ -412,7 +380,6 @@ export type AppConfig = {
   shellWorkspaces: ShellWorkspace[];
   mcpServers: McpServerConfig[];
   remoteImChannels: RemoteImChannelConfig[];
-  departments: DepartmentConfig[];
   apiProviders: ApiProviderConfigItem[];
   imageProviders: ImageGenerationProviderConfigItem[];
   apiConfigs: ApiConfigItem[];
@@ -493,7 +460,6 @@ export type RemoteImContact = {
   blockedMessagePrefixes: string[];
   groupReplyPacing?: RemoteImGroupReplyPacing;
   routeMode?: "main_session" | "dedicated_contact_conversation";
-  boundDepartmentId?: string;
   boundAgentId?: string;
   boundConversationId?: string;
   processingMode?: "qa" | "continuous";
@@ -517,7 +483,6 @@ export type RemoteImContactConversationSummary = {
   channelEnabled?: boolean;
   platform: RemoteImPlatform;
   contactDisplayName: string;
-  boundDepartmentId?: string;
   boundAgentId?: string;
   processingMode: "qa" | "continuous";
   previewMessages?: ConversationPreviewMessage[];
@@ -694,8 +659,6 @@ export type RefreshMcpAndSkillsResult = {
   skillSummary: string;
   privateAgentsLoaded: string[];
   privateAgentsFailed: WorkspaceLoadError[];
-  privateDepartmentsLoaded: string[];
-  privateDepartmentsFailed: WorkspaceLoadError[];
   loadedGroups: WorkspaceLoadedGroup[];
   failedGroups: WorkspaceFailedGroup[];
   totalLoaded: number;
@@ -753,8 +716,6 @@ export type MemoryRecallMode = "auto" | "manual" | "off";
 /** 保存配置时后端归一化自动补上的内容（自修复记录），由保存结果显式回报。 */
 export type ConfigRepairNotice = {
   kind: string;
-  departmentId: string;
-  departmentName: string;
   agentId: string;
 };
 
@@ -762,6 +723,12 @@ export type PersonaProfile = {
   id: string;
   name: string;
   systemPrompt: string;
+  summary?: string;
+  residentSkillNames?: string[];
+  optionalSkillNames?: string[];
+  apiConfigIds?: string[];
+  childAgentIds?: string[];
+  permissionControl?: AgentPermissionControl;
   tools: ApiToolItem[];
   privateMemoryEnabled?: boolean;
   memoryRecallMode?: MemoryRecallMode;
@@ -969,7 +936,6 @@ export type ChatPersonaPresenceChip = {
   id: string;
   name: string;
   avatarUrl: string;
-  departmentName: string;
   isFrontSpeaking: boolean;
   hasBackgroundTask: boolean;
 };
@@ -977,8 +943,6 @@ export type ChatPersonaPresenceChip = {
 export type ChatMentionTarget = {
   agentId: string;
   agentName: string;
-  departmentId: string;
-  departmentName: string;
   avatarUrl?: string;
 };
 
@@ -986,9 +950,6 @@ export type ChatMentionEntry = {
   agentId: string;
   agentName: string;
   avatarUrl?: string;
-  departmentId?: string;
-  departmentName: string;
-  departmentNames: string[];
   isFrontSpeaking: boolean;
   hasBackgroundTask: boolean;
   mentionable: boolean;
@@ -1065,8 +1026,6 @@ export type UnarchivedConversationSummary = {
   hasAssistantReply?: boolean;
   unreadCount: number;
   agentId: string;
-  departmentId: string;
-  departmentName: string;
   conversationKind?: string;
   childConversationIds?: string[];
   childConversations?: ChildConversationSummary[];
@@ -1145,8 +1104,6 @@ export type ChatConversationOverviewItem = {
   hasAssistantReply?: boolean;
   unreadCount?: number;
   agentId?: string;
-  departmentId?: string;
-  departmentName?: string;
   parentConversationId?: string;
   forkMessageCursor?: string;
   updatedAt?: string;
@@ -1299,7 +1256,7 @@ export type PromptCommandPreset = {
 };
 
 export type ChatSettings = {
-  assistantDepartmentAgentId: string;
+  assistantAgentId: string;
   userAlias: string;
   responseStyleId: string;
   pdfReadMode: PdfReadMode;
@@ -1309,7 +1266,7 @@ export type ChatSettings = {
 };
 
 export type ChatSettingsPatch = {
-  assistantDepartmentAgentId?: string;
+  assistantAgentId?: string;
   userAlias?: string;
   responseStyleId?: string;
   pdfReadMode?: PdfReadMode;
@@ -1319,7 +1276,7 @@ export type ChatSettingsPatch = {
 };
 
 export type ConversationApiSettings = {
-  assistantDepartmentApiConfigId: string;
+  expertApiConfigId: string;
   visionApiConfigId?: string;
   toolReviewApiConfigId?: string;
   sttApiConfigId?: string;
@@ -1327,7 +1284,7 @@ export type ConversationApiSettings = {
 };
 
 export type ConversationApiSettingsPatch = {
-  assistantDepartmentApiConfigId?: string;
+  expertApiConfigId?: string;
   visionApiConfigId?: string | null;
   toolReviewApiConfigId?: string | null;
   sttApiConfigId?: string | null;
@@ -1408,8 +1365,6 @@ export type UsageConversationItem = {
   archivedAt?: string | null;
   agentId: string;
   agentName: string;
-  departmentId: string;
-  departmentName: string;
   avatarPath?: string;
   avatarUpdatedAt?: string;
   apiConfigId: string;
@@ -1436,6 +1391,5 @@ export type UsageOverview = {
   byModel: UsageAggregateItem[];
   byApiConfig: UsageAggregateItem[];
   byAgent: UsageAggregateItem[];
-  byDepartment: UsageAggregateItem[];
   byKind: UsageAggregateItem[];
 };
