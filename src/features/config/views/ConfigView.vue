@@ -186,11 +186,15 @@
       </div>
 
       <div v-else-if="props.configTab === 'mcp'" class="flex-1 min-h-0">
-        <McpTab />
+        <McpTab @open-catalog="$emit('update:configTab', 'catalog')" />
       </div>
 
       <div v-else-if="props.configTab === 'skill'" class="flex-1 min-h-0">
-        <SkillTab />
+        <SkillTab @open-catalog="$emit('update:configTab', 'catalog')" />
+      </div>
+
+      <div v-else-if="props.configTab === 'catalog'" class="flex-1 min-h-0">
+        <CatalogTab />
       </div>
 
       <div v-else-if="props.configTab === 'persona'" class="flex-1 min-h-0">
@@ -447,6 +451,7 @@ import HotkeyTab from "./config-tabs/HotkeyTab.vue";
 import ApiTab from "./config-tabs/ApiTab.vue";
 import McpTab from "./config-tabs/McpTab.vue";
 import SkillTab from "./config-tabs/SkillTab.vue";
+import CatalogTab from "./config-tabs/CatalogTab.vue";
 import PersonaTab from "./config-tabs/PersonaTab.vue";
 import DepartmentTab from "./config-tabs/DepartmentTab.vue";
 import DepartmentTreeTab from "./config-tabs/DepartmentTreeTab.vue";
@@ -465,10 +470,10 @@ import StorageTab from "./config-tabs/StorageTab.vue";
 import AboutTab from "./config-tabs/AboutTab.vue";
 import SimpleSetupPanel from "./config-tabs/SimpleSetupPanel.vue";
 import { toErrorMessage } from "../../../utils/error";
-import { ArrowLeftRight, Beaker, Bell, Building2, ChevronRight, ClipboardList, Code, Cpu, Database, Home, Info, Keyboard, Menu, Network, Palette, Puzzle, Radio, ScrollText, Smartphone, Star, User, Wifi } from "@lucide/vue";
+import { ArrowLeftRight, Beaker, Bell, Building2, ChevronRight, ClipboardList, Code, Cpu, Database, Home, Info, Keyboard, Menu, Network, Palette, Puzzle, Radio, ScrollText, Smartphone, Star, Store, User, Wifi } from "@lucide/vue";
 import OverlayScrollArea from "../../shared/components/OverlayScrollArea.vue";
 
-type ConfigTab = "welcome" | "hotkey" | "api" | "android" | "mcp" | "skill" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "networkAccess" | "remoteIm" | "usage" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
+type ConfigTab = "welcome" | "hotkey" | "api" | "android" | "mcp" | "skill" | "catalog" | "persona" | "department" | "departmentTree" | "demo" | "chatSettings" | "notification" | "networkAccess" | "remoteIm" | "usage" | "memory" | "task" | "logs" | "appearance" | "migration" | "about";
 type AvatarTarget = { agentId: string };
 type ConfigNavItem = {
   tab: ConfigTab;
@@ -508,6 +513,7 @@ const CONFIG_NAV_GROUPS: ConfigNavGroup[] = [
       { tab: "api", icon: Cpu, labelKey: "config.tabs.api" },
       { tab: "mcp", icon: Puzzle, labelKey: "config.tabs.mcp" },
       { tab: "skill", icon: Code, labelKey: "config.tabs.skill" },
+      { tab: "catalog", icon: Store, labelKey: "config.tabs.catalog" },
     ],
   },
   {
