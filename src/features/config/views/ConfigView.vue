@@ -212,6 +212,16 @@
         />
       </div>
 
+      <div v-else-if="props.configTab === 'remoteIm'" class="flex-1 min-h-0">
+        <RemoteImTab
+          :config="config"
+          :personas="personas"
+          :persona-avatar-url-map="props.personaAvatarUrlMap"
+          :save-config-action="saveConfigAction"
+          :set-status-action="setStatusAction"
+        />
+      </div>
+
       <SettingsStickyLayout v-else>
           <WelcomeTab
             v-if="props.configTab === 'welcome'"
@@ -277,15 +287,6 @@
             :save-config-action="saveConfigAction"
             :last-saved-config-json="lastSavedConfigJson"
           />
-          <RemoteImTab
-            v-else-if="props.configTab === 'remoteIm'"
-            :config="config"
-            :personas="personas"
-            :persona-avatar-url-map="props.personaAvatarUrlMap"
-            :save-config-action="saveConfigAction"
-            :set-status-action="setStatusAction"
-          />
-
           <UsageTab
             v-else-if="props.configTab === 'usage'"
           />

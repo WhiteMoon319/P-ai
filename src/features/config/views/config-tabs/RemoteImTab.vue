@@ -1,34 +1,43 @@
 <template>
-  <SettingsPageShell :breadcrumb="remoteImBreadcrumb" header-class="">
-    <template #left>
-      <ChannelBehaviorSettingsModal
-        v-if="inDetailMode && selectedChannel"
-        :channel="selectedChannel"
-        :save-config-action="props.saveConfigAction"
-        :set-status-action="props.setStatusAction"
-      />
-      <div v-else class="relative w-full min-w-0 sm:w-60 sm:min-w-60 sm:flex-none">
-        <input
-          v-model="channelSearchQuery"
-          type="text"
-          class="input input-bordered input-sm h-9 w-full pl-8 pr-8 text-xs"
-          :placeholder="t('config.remoteIm.searchPlaceholder')"
-        />
-        <Search class="absolute left-2.5 top-2.5 h-4 w-4 opacity-50 pointer-events-none" />
-        <button
-          v-if="channelSearchQuery"
-          type="button"
-          class="btn btn-ghost btn-xs btn-circle absolute right-1 top-1 h-7 w-7 min-h-[1.75rem] opacity-60 hover:opacity-100"
-          :title="t('common.clear')"
-          @click="channelSearchQuery = ''"
-        >
-          ✕
-        </button>
+  <SettingsStickyLayout>
+    <template #header>
+      <!-- 面包屑：常驻；一级仅「联系人」，进入详情后在原位追加渠道名 -->
+      <div class="breadcrumbs mb-2.5 min-w-0 p-0 text-xl sm:mb-3">
+        <ul class="flex flex-wrap items-center">
+          <li v-if="inDetailMode && selectedChannel">
+            <a
+              class="cursor-pointer py-1 text-base-content/50 transition-colors hover:text-base-content"
+              :title="t('config.remoteIm.backToChannels')"
+              @click="backToChannels"
+            >
+              {{ t("config.tabs.remoteIm") }}
+            </a>
+          </li>
+          <li v-else class="py-1 font-semibold text-base-content">{{ t("config.tabs.remoteIm") }}</li>
+          <li v-if="inDetailMode && selectedChannel" class="flex min-w-0 items-center gap-2 py-1">
+            <span class="max-w-[14rem] truncate font-semibold text-base-content sm:max-w-xs md:max-w-md">
+              {{ selectedChannel.name || platformLabelText(selectedChannel.platform) }}
+            </span>
+            <span class="badge badge-xs shrink-0 flex items-center gap-1.5" :class="selectedChannel.enabled ? 'badge-neutral' : 'badge-ghost opacity-60'">
+              <span class="size-2 rounded-full shrink-0" :class="getChannelStatusInfo(selectedChannel).dot"></span>
+              <span>{{ getChannelStatusInfo(selectedChannel).text }}</span>
+            </span>
+            <span v-if="channelDirty" class="badge badge-warning badge-xs shrink-0">
+              {{ t("config.skill.unsaved") }}
+            </span>
+          </li>
+        </ul>
       </div>
-    </template>
 
-    <template #actions>
-      <div v-if="inDetailMode && selectedChannel" class="flex flex-wrap items-center gap-2">
+      <Transition name="ecall-config-content" mode="out-in">
+        <!-- 二级菜单头部：渠道操作 -->
+        <div v-if="inDetailMode && selectedChannel" key="detail-hdr" class="flex flex-wrap items-center justify-between gap-3">
+          <ChannelBehaviorSettingsModal
+            :channel="selectedChannel"
+            :save-config-action="props.saveConfigAction"
+            :set-status-action="props.setStatusAction"
+          />
+          <div class="flex flex-wrap items-center gap-2">
             <button
               class="btn btn-sm min-h-[2.25rem] bg-base-100 gap-1.5 px-3"
               type="button"
@@ -61,7 +70,31 @@
               <span>{{ t("common.save") }}</span>
             </button>
           </div>
-      </template>
+        </div>
+
+        <!-- 一级概览头部：渠道搜索 -->
+        <div v-else key="overview-hdr" class="flex flex-wrap items-center gap-3">
+          <div class="relative w-full min-w-0 sm:w-60 sm:min-w-60 sm:flex-none">
+            <input
+              v-model="channelSearchQuery"
+              type="text"
+              class="input input-bordered input-sm h-9 w-full pl-8 pr-8 text-xs"
+              :placeholder="t('config.remoteIm.searchPlaceholder')"
+            />
+            <Search class="absolute left-2.5 top-2.5 h-4 w-4 opacity-50 pointer-events-none" />
+            <button
+              v-if="channelSearchQuery"
+              type="button"
+              class="btn btn-ghost btn-xs btn-circle absolute right-1 top-1 h-7 w-7 min-h-[1.75rem] opacity-60 hover:opacity-100"
+              :title="t('common.clear')"
+              @click="channelSearchQuery = ''"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      </Transition>
+    </template>
 
     <!-- 主体区域切换：一级卡片列表 ↔ 二级详情页 -->
     <Transition name="ecall-config-content" mode="out-in">
@@ -86,7 +119,7 @@
             </button>
           </div>
 
-          <div class="rounded-box border border-base-300 bg-base-100 p-4 space-y-4">
+          <div class="rounded-box border border-base-200/80 bg-base-100 p-4 space-y-4">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div class="flex flex-col gap-1.5">
                 <label class="text-caption font-semibold opacity-60 uppercase">{{ t("config.remoteIm.channelName") }}</label>
@@ -104,7 +137,7 @@
             </div>
 
             <!-- 过滤 Markdown 开关 -->
-            <div class="flex items-center justify-between rounded-field border border-base-300 bg-base-200/30 p-3">
+            <div class="flex items-center justify-between rounded-field border border-base-200 bg-base-200/30 p-3">
               <div class="flex flex-col gap-0.5 min-w-0 pr-2">
                 <span class="text-xs font-semibold">{{ t("config.remoteIm.filterMarkdown") }}</span>
                 <span class="text-caption opacity-60">{{ t("config.remoteIm.filterMarkdownHint") }}</span>
@@ -114,7 +147,7 @@
 
             <!-- OneBot 凭证配置 -->
             <template v-if="selectedChannel.platform === 'onebot_v11'">
-              <div class="rounded-field border border-base-300 bg-base-200/20 p-3 space-y-3">
+              <div class="rounded-field border border-base-200 bg-base-200/20 p-3 space-y-3">
                 <div class="text-xs font-bold">{{ t("config.remoteIm.napcatConfig") }}</div>
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   <div>
@@ -135,7 +168,7 @@
 
             <!-- 钉钉凭证 -->
             <template v-else-if="selectedChannel.platform === 'dingtalk'">
-              <div class="rounded-field border border-base-300 bg-base-200/20 p-3 space-y-3">
+              <div class="rounded-field border border-base-200 bg-base-200/20 p-3 space-y-3">
                 <div class="text-xs font-bold">{{ t("config.remoteIm.dingtalkCredentials") }}</div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
@@ -166,7 +199,7 @@
 
             <!-- 微信扫码登录 -->
             <template v-else-if="selectedChannel.platform === 'weixin_oc'">
-              <div class="rounded-field border border-base-300 bg-base-200/20 p-3 space-y-3">
+              <div class="rounded-field border border-base-200 bg-base-200/20 p-3 space-y-3">
                 <div class="text-xs font-bold">{{ t('config.remoteIm.weixinScanLogin') }}</div>
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <div class="flex flex-col gap-1 min-w-0">
@@ -186,7 +219,7 @@
 
             <!-- 飞书凭证 JSON -->
             <template v-else>
-              <div class="rounded-field border border-base-300 bg-base-200/20 p-3 space-y-2">
+              <div class="rounded-field border border-base-200 bg-base-200/20 p-3 space-y-2">
                 <div class="text-xs font-bold">{{ t("config.remoteIm.credentialsJson") }}</div>
                 <textarea
                   v-model="credentialDrafts[selectedChannel.id]"
@@ -248,7 +281,7 @@
                 <div
                   v-for="item in group.items"
                   :key="item.id"
-                  class="rounded-box border border-base-300 bg-base-100 p-3.5 hover:border-base-300 hover:bg-base-200/30 transition-all flex items-start gap-3.5"
+                  class="rounded-box border border-base-200/80 bg-base-100 p-3.5 hover:border-base-300 hover:bg-base-200/30 transition-all flex items-start gap-3.5"
                 >
                   <div class="avatar placeholder shrink-0">
                     <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-base-300 bg-base-200 text-xs font-semibold leading-none text-base-content/70">
@@ -394,7 +427,7 @@
             :key="ch.id"
             role="button"
             tabindex="0"
-            class="rounded-box border border-base-300 bg-base-100 p-4 hover:border-primary/50 transition-all duration-150 cursor-pointer flex flex-col justify-between gap-3 select-none active:scale-[0.99] group"
+            class="rounded-box border border-base-200/80 bg-base-100 p-4 hover:border-primary/50 transition-all duration-150 cursor-pointer flex flex-col justify-between gap-3 select-none active:scale-[0.99] group"
             @click="enterChannel(ch.id)"
             @keydown.enter.prevent="enterChannel(ch.id)"
             @keydown.space.prevent="enterChannel(ch.id)"
@@ -427,7 +460,7 @@
             </div>
 
             <!-- 底栏：在线状态 + 联系人计数 + 进入箭头 -->
-            <div class="flex items-center justify-between border-t border-base-300 pt-2.5 text-caption">
+            <div class="flex items-center justify-between border-t border-base-200/80 pt-2.5 text-caption">
               <div class="flex items-center gap-1.5">
                 <span class="size-2 rounded-full shrink-0" :class="getChannelStatusInfo(ch).dot"></span>
                 <span class="opacity-70">{{ getChannelStatusInfo(ch).text }}</span>
@@ -993,7 +1026,7 @@
         <button @click.prevent="closeContactConfigModal">close</button>
       </form>
     </dialog>
-  </SettingsPageShell>
+  </SettingsStickyLayout>
 </template>
 
 <script setup lang="ts">
@@ -1018,8 +1051,7 @@ import {
 } from "@lucide/vue";
 import { invokeTauri, openTransportFileDialog } from "../../../../services/tauri-api";
 import type { AppConfig, PersonaProfile, RemoteImChannelConfig, RemoteImContact, RemoteImPlatform, ShellWorkspace } from "../../../../types/app";
-import SettingsPageShell from "../../components/SettingsPageShell.vue";
-import type { SettingsBreadcrumbBadge, SettingsBreadcrumbItem } from "../../components/SettingsBreadcrumb.vue";
+import SettingsStickyLayout from "../../components/SettingsStickyLayout.vue";
 import AgentPersonaSelect from "../../../shared/components/AgentPersonaSelect.vue";
 import ChannelBehaviorSettingsModal from "./remote-im/ChannelBehaviorSettingsModal.vue";
 import type { ChannelConnectionStatus, ChannelLogEntry, WeixinLoginStatus } from "./remote-im/types";
@@ -1357,23 +1389,6 @@ const channelSnapshot = computed(() => {
 });
 const lastSavedChannelSnapshot = ref(channelSnapshot.value);
 const channelDirty = computed(() => channelSnapshot.value !== lastSavedChannelSnapshot.value);
-
-const remoteImBreadcrumb = computed<SettingsBreadcrumbItem[]>(() => {
-  const channel = selectedChannel.value;
-  if (!inDetailMode.value || !channel) return [{ label: t("config.tabs.remoteIm") }];
-  const badges: SettingsBreadcrumbBadge[] = [];
-  const status = getChannelStatusInfo(channel);
-  badges.push({
-    text: status.text,
-    class: channel.enabled ? "badge-neutral" : "badge-ghost opacity-60",
-    dotClass: status.dot,
-  });
-  if (channelDirty.value) badges.push({ text: t("config.skill.unsaved") });
-  return [
-    { label: t("config.tabs.remoteIm"), title: t("config.remoteIm.backToChannels"), onClick: backToChannels },
-    { label: channel.name || platformLabelText(channel.platform), badges },
-  ];
-});
 
 function isChannelOperationBusy(channelId: string): boolean {
   return !!channelOperationIds.value[channelId];
