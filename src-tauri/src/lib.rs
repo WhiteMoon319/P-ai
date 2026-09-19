@@ -97,6 +97,12 @@ include!("features/remote_im_adapters.rs");
 
 // ==================== 系统窗口与命令 ====================
 include!("features/system/windowing.rs");
+// WebView2 进程失败监控只在 Windows 有宿主能力，整块在非 Windows 下不参与编译；
+// test 下保留编译，以便校验其中的纯逻辑（失败种类映射与恢复分档）。
+#[cfg(any(target_os = "windows", test))]
+mod webview_health {
+    include!("features/system/webview_health.rs");
+}
 include!("features/system/record_hotkey_probe.rs");
 include!("features/system/windows_job.rs");
 #[cfg(target_os = "android")]
