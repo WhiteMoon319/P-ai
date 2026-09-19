@@ -290,7 +290,6 @@ fn live_update_chat_meta_title(
         return None;
     }
     Some(notification_title_for_conversation_meta(
-        state,
         &meta,
         ui_language,
         failed,

@@ -66,6 +66,7 @@ include!("features/core/time_semantics.rs");
 // ==================== 配置与存储 ====================
 include!("features/config/storage_and_stt.rs");
 include!("features/config/app_data_layout.rs");
+include!("features/config/agent_org_migration.rs");
 include!("features/state/mod.rs");
 include!("features/chat/message_store/mod.rs");
 
@@ -120,6 +121,7 @@ include!("features/memory/providers.rs");
 // ==================== MCP ====================
 include!("features/mcp.rs");
 include!("features/skill.rs");
+include!("features/catalog.rs");
 include!("features/goal.rs");
 include!("features/task.rs");
 include!("features/delegate.rs");
@@ -1375,7 +1377,6 @@ pub fn run() {
             sync_tray_icon,
             save_conversation_api_settings,
             patch_conversation_api_settings,
-            set_department_primary_api_config,
             get_chat_snapshot,
             list_unarchived_conversations,
             list_unarchived_conversations_changed_since,
@@ -1519,7 +1520,6 @@ pub fn run() {
             codex_logout,
             check_tools_status,
             list_tool_catalog,
-            list_department_permission_catalog,
             get_image_text_cache_stats,
             clear_image_text_cache,
             list_recent_llm_round_logs,
@@ -1547,7 +1547,6 @@ pub fn run() {
             remote_im_update_contact_activation,
             remote_im_update_contact_remark,
             remote_im_update_contact_route_mode,
-            remote_im_update_contact_department_binding,
             remote_im_update_contact_processing_mode,
             remote_im_update_contact_workspace,
             remote_im_delete_contact,

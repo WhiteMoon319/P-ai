@@ -733,7 +733,6 @@ const visibleConfigNavGroups = computed(() =>
 const visibleConfigNavItems = computed(() =>
   visibleConfigNavGroups.value.flatMap((group) => group.items),
 );
-);
 const activeConfigNavItem = computed(() =>
   visibleConfigNavItems.value.find((item) => item.tab === props.configTab)
   ?? visibleConfigNavItems.value.find((item) => item.tab === "welcome")

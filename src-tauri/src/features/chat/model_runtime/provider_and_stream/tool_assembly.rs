@@ -1203,7 +1203,7 @@ fn build_builtin_runtime_tool_executor(
             tool_name: tool_name.clone(),
             tool_session_id: tool_session_id.to_string(),
 executor_agent_id: executor_agent_id.clone(),
-        })) as Box<dyn RuntimeToolDyn>
+        }) as Box<dyn RuntimeToolDyn>
     } else {
         tool
     };

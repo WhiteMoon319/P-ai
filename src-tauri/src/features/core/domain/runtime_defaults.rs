@@ -369,16 +369,5 @@ fn fill_missing_conversation_metadata(data: &mut AppData) -> bool {
             changed = true;
         }
     }
-    for archive in &mut data.archived_conversations {
-        if archive
-            .source_conversation
-            .conversation_kind
-            .trim()
-            .is_empty()
-        {
-            archive.source_conversation.conversation_kind = CONVERSATION_KIND_CHAT.to_string();
-            changed = true;
-        }
-    }
     changed
 }
