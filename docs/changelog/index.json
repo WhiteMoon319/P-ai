@@ -1,7 +1,12 @@
 {
-  "generatedAt": "2026-09-19T13:28:13.261Z",
-  "latestVersion": "v0.92.0",
+  "generatedAt": "2026-09-20T09:34:24.569Z",
+  "latestVersion": "v0.92.1",
   "releases": [
+    {
+      "version": "v0.92.1",
+      "path": "docs/changelog/releases/v0.92.1.md",
+      "summary": "修复 Android 端「设备控制」总开关打开后，退出设置再进来又显示为关闭的问题（开关值这次能正确读回）。"
+    },
     {
       "version": "v0.92.0",
       "path": "docs/changelog/releases/v0.92.0.md",
