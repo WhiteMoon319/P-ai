@@ -158,11 +158,14 @@ const BUILTIN_TOOL_POLICY_TABLE: &[BuiltinToolPolicy] = &[
         id: "image_edit",
         ..DEFAULT_BUILTIN_TOOL_POLICY
     },
-    // Android 端 Shizuku/root 设备控制（action 分发）：受人格权限控制，
-    // 能力开关在「设置 → Android 专属」另行校验（关闭时执行期返回结构化错误）。
-    // 上游 cherry-pick 会覆盖 tool_policy.rs，登记需一并恢复。
+    // Android 端 Shizuku/root 设备控制（action 分发）：门控是「设置 → Android 专属」里的
+    // 总开关 + 分项开关（AppConfig.device_control），不参与人格权限清单。
+    // 登记为强制挂载档：人格权限白名单（内置人格默认带白名单，组织迁移也会把旧部门权限
+    // 并成人格白名单）不含它时，会把它整只工具拒掉，表现为模型调用报「未找到工具」。
     BuiltinToolPolicy {
         id: "device_control",
+        permission_class: BuiltinToolPermissionClass::SystemExempt,
+        visible_in_permission_lists: false,
         ..DEFAULT_BUILTIN_TOOL_POLICY
     },
     BuiltinToolPolicy {
