@@ -291,6 +291,19 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
     options.config.sttApiConfigId = cfg.sttApiConfigId ?? undefined;
     options.config.sttAutoSend = !!cfg.sttAutoSend;
     options.config.terminalShellKind = String((cfg as AppConfig).terminalShellKind ?? "");
+    options.config.terminalEnvironment = (cfg as AppConfig).terminalEnvironment === "android" ? "android" : "linux";
+    // 设备控制开关：从后端配置映射到前端 config（字段白名单加载，缺了会显示关闭）
+    if ((cfg as AppConfig).deviceControl) {
+      options.config.deviceControl = {
+        enabled: !!(cfg as AppConfig).deviceControl?.enabled,
+        allowFreeze: !!(cfg as AppConfig).deviceControl?.allowFreeze,
+        allowUninstall: !!(cfg as AppConfig).deviceControl?.allowUninstall,
+        allowInstall: !!(cfg as AppConfig).deviceControl?.allowInstall,
+        allowDeleteFile: !!(cfg as AppConfig).deviceControl?.allowDeleteFile,
+        allowTouch: !!(cfg as AppConfig).deviceControl?.allowTouch,
+        allowScreenshot: !!(cfg as AppConfig).deviceControl?.allowScreenshot,
+      };
+    }
     options.config.simpleSetupMode = (cfg as { simpleSetupMode?: unknown }).simpleSetupMode !== false;
     options.config.shellWorkspaces = Array.isArray(cfg.shellWorkspaces)
       ? cfg.shellWorkspaces
@@ -532,6 +545,19 @@ export function useConfigPersistence(options: UseConfigPersistenceOptions) {
       options.config.sttApiConfigId = saved.sttApiConfigId ?? undefined;
       options.config.sttAutoSend = !!saved.sttAutoSend;
       options.config.terminalShellKind = String((saved as AppConfig).terminalShellKind ?? "");
+      options.config.terminalEnvironment = (saved as AppConfig).terminalEnvironment === "android" ? "android" : "linux";
+      // 设备控制开关从后端保存结果回写（字段存在时）
+      if ((saved as AppConfig).deviceControl) {
+        options.config.deviceControl = {
+          enabled: !!saved.deviceControl?.enabled,
+          allowFreeze: !!saved.deviceControl?.allowFreeze,
+          allowUninstall: !!saved.deviceControl?.allowUninstall,
+          allowInstall: !!saved.deviceControl?.allowInstall,
+          allowDeleteFile: !!saved.deviceControl?.allowDeleteFile,
+          allowTouch: !!saved.deviceControl?.allowTouch,
+          allowScreenshot: !!saved.deviceControl?.allowScreenshot,
+        };
+      }
       options.config.shellWorkspaces = Array.isArray(saved.shellWorkspaces)
         ? saved.shellWorkspaces
             .map((v) => ({

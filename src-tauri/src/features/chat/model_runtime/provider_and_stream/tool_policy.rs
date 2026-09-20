@@ -158,6 +158,13 @@ const BUILTIN_TOOL_POLICY_TABLE: &[BuiltinToolPolicy] = &[
         id: "image_edit",
         ..DEFAULT_BUILTIN_TOOL_POLICY
     },
+    // Android 端 Shizuku/root 设备控制（action 分发）：受人格权限控制，
+    // 能力开关在「设置 → Android 专属」另行校验（关闭时执行期返回结构化错误）。
+    // 上游 cherry-pick 会覆盖 tool_policy.rs，登记需一并恢复。
+    BuiltinToolPolicy {
+        id: "device_control",
+        ..DEFAULT_BUILTIN_TOOL_POLICY
+    },
     BuiltinToolPolicy {
         id: "remember",
         permission_class: BuiltinToolPermissionClass::SystemExempt,
